@@ -72,11 +72,38 @@ Everything below was verified against the real store, not asserted from intent.
 They are the regression gate for the pi-main link as well as for feature work
 (D17). All 17 pass on the current tree.
 
+## Research review (2026-10-10)
+
+`docs/Patterns_and_Pitfalls_of_LLM_Agents.txt` (MAST failure taxonomy, Anthropic's
+production and swarm research, practitioner consensus) was reviewed against the
+implementation; D23 records the conclusion and ROADMAP.md carries the full gap
+table. Short version: **the architecture is on the right side of the evidence and
+is not changing.** Loss of conversation history, silent shared-state corruption and
+the absence of a coordination substrate are impossible or already answered here by
+construction, and observability — the part practitioners call hard — is where durig
+over-invested.
+
+The gaps the research exposes are **protocol, not structure**: `complete_work` is
+self-declared with no evidence and no verifier step (MAST FC3); there are no
+termination conditions (FC1, 12.4%) and nothing detects step repetition (FC1, the
+most frequent mode at 15.7%); there is no verb by which a seat can defer a decision
+to a human (FC2, 6.8%); and all 13 seats resolve to one model while per-seat models
+are already supported, so a bias is systemic rather than isolated. The roadmap was
+re-ordered accordingly, and the one item that needs no new code — verifier model
+diversity — now leads it.
+
+The document itself was corrected: the leftover chat preamble was removed, as were
+six unexplained percentages beside the reference list, and its MAST dataset size
+was updated from an earlier revision (the paper now reports 1600+ traces across 7
+frameworks, not 150+ across 5). Both load-bearing citations were fetched and
+confirmed rather than taken on trust.
+
 ## Decisions needed from the operator
 
 1. **Scope of M3 (seats with real tools).** Read-only corpus access first, or file
    edits plus a test runner? This is the blocking gap: seats can coordinate but
-   cannot read the textbook, run a check, or produce a grounded answer.
+   cannot read the textbook, run a check, or produce a grounded answer, and it is
+   the same work item as adding a verification loop (D23).
 2. **TUI or browser for the interactive client (M4).** Deferred by D21. Collapsing
    a turn in place requires owning the terminal screen; a read-only browser client
    over SSE avoids that trade entirely.
@@ -89,6 +116,10 @@ They are the regression gate for the pi-main link as well as for feature work
   `send_work`, `claim_work`, `complete_work`, `peek_queue`. A live worker seat
   reported itself blocked and refused to claim a completed deliverable, which is
   the P1 honesty rule working correctly on top of a missing capability.
+- **Nothing in the rig verifies anything.** A grep for `verif|escalat|deadline|`
+  `retry|budget|veto|reputation` across `src/*.mjs` and `cli.mjs` returns only the
+  CLI poll loops, so our pair-review and Ledger norms are enforced by convention
+  alone (D23).
 - **`log --follow` renders inconsistently**: the backfill is one call and each
   later entry its own, so column alignment and turn grouping differ between them.
 - **Cross-process updates are polled** at 750 ms; SQLite has no cross-process

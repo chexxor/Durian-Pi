@@ -66,6 +66,7 @@ src/watchview.mjs     render a rig snapshot for a human (TUI pair to watch)
 src/chatview.mjs      render one seat's conversation for a human
 demo/chatlog.test.mjs  chat rendering + --follow streaming
 docs/STATUS.md        start here: current state, decisions needed, resume facts
+docs/ROADMAP.md       milestones + the research gap analysis
 scripts/sync-pi.mjs   build + link pi's main branch at a pinned commit
 pi-main.pin.json      the pinned upstream commit durig is validated against
 src/seatmodel.mjs     per-seat {provider}/{modelId} resolution
@@ -87,7 +88,7 @@ demo/eval.test.mjs    mechanics test for the guard and judge
 scripts/from-openrig.mjs   OpenRig rig.yaml -> durig v2 converter (pods, skills, guidance)
 rigs/tutor-pi.rig.json    the migrated 13-seat tutor-pi rig
 test-fixture-rig.yaml      sample OpenRig-style input for the converter
-docs/                 QUICKSTART, MVP burn-down, decisions D1-D12, research
+docs/                 QUICKSTART, MVP burn-down, STATUS, ROADMAP, decisions D1-D23, research
 ```
 
 ## Status

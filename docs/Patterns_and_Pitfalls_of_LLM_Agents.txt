@@ -1,4 +1,4 @@
-I'll research this thoroughly — both the academic literature and current practitioner/community discussion.# Multi-Agent LLM Systems: Research vs. Crowd Wisdom
+# Multi-Agent LLM Systems: Research vs. Crowd Wisdom
 
 Short version: the research and the practitioner crowd have converged on remarkably similar conclusions, but they frame the problem differently. Researchers describe **failure taxonomies and coordination dynamics**; practitioners describe **state management and orchestration discipline**. Both agree the bottleneck is almost never the model — it's the organization around it.
 
@@ -8,7 +8,7 @@ Short version: the research and the practitioner crowd have converged on remarka
 
 ### The headline finding: gains are often minimal
 
-The most-cited study here is **"Why Do Multi-Agent LLM Systems Fail?"** (Cemri et al., 2025), which introduced **MAST**, an empirically grounded failure taxonomy built from 150+ tasks across five popular MAS frameworks and six human annotators [^1]. Its blunt premise: *"Despite the increasing adoption of MAS, their performance gains often remain minimal compared to single-agent frameworks or simple baselines like best-of-N sampling"* [^1].
+The most-cited study here is **"Why Do Multi-Agent LLM Systems Fail?"** (Cemri et al., 2025), which introduced **MAST**, an empirically grounded failure taxonomy built from 1600+ annotated traces across seven popular MAS frameworks [^1] (dataset size per the current revision; the per-mode frequencies quoted below come from the paper itself and are not pinned to a revision). Its blunt premise: *"Despite the increasing adoption of MAS, their performance gains often remain minimal compared to single-agent frameworks or simple baselines like best-of-N sampling"* [^1].
 
 The paper's central thesis is that **failures come from organizational design, not individual model capability**: *"many MAS failures arise from the challenges in organizational design and agent coordination rather than the limitations of individual agents"* [^1].
 
@@ -113,9 +113,9 @@ The bottom line: the research-backed view and the crowd's hard-won intuition are
 
 **References**
 
-[^1]: [[2503.13657] Why Do Multi-Agent LLM Systems Fail?](https://arxiv.org/abs/2503.13657) (15%)
-[^2]: [How we built our multi-agent research system \ Anthropic](https://www.anthropic.com/engineering/multi-agent-research-system) (25%)
-[^3]: [Patterns and problems in multiagent systems \ Anthropic](https://www.anthropic.com/research/multiagent-systems) (28%)
-[^4]: [[2501.06322] Multi-Agent Collaboration Mechanisms: A Survey of LLMs](https://arxiv.org/abs/2501.06322) (14%)
-[^5]: [Why 'don't build multi-agent systems' keeps winning the argument on Hacker News · Crail](https://www.crail.ai/blog/dont-build-multi-agent-systems-hn-debate/) (4%)
-[^6]: [Patterns and problems in emerging multi-agent systems | Hacker News](https://news.ycombinator.com/item?id=49316271) (12%)
+[^1]: [[2503.13657] Why Do Multi-Agent LLM Systems Fail?](https://arxiv.org/abs/2503.13657)
+[^2]: [How we built our multi-agent research system \ Anthropic](https://www.anthropic.com/engineering/multi-agent-research-system)
+[^3]: [Patterns and problems in multiagent systems \ Anthropic](https://www.anthropic.com/research/multiagent-systems)
+[^4]: [[2501.06322] Multi-Agent Collaboration Mechanisms: A Survey of LLMs](https://arxiv.org/abs/2501.06322)
+[^5]: [Why 'don't build multi-agent systems' keeps winning the argument on Hacker News · Crail](https://www.crail.ai/blog/dont-build-multi-agent-systems-hn-debate/)
+[^6]: [Patterns and problems in emerging multi-agent systems | Hacker News](https://news.ycombinator.com/item?id=49316271)

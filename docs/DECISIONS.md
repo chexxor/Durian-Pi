@@ -320,3 +320,50 @@ TUI, actively fights copy-mode and resize.
 
 **Evidence:** grep for `pty|spawn|fork|conpty|terminal` across `cli.mjs` and
 `src/*.mjs` returns nothing; `docs/RESEARCH.md`, "Live delivery of seat activity".
+
+## D23 — The research gaps are protocol, not architecture (2026-10-10)
+
+**Finding:** reviewed `docs/Patterns_and_Pitfalls_of_LLM_Agents.txt` (the MAST
+failure taxonomy, Anthropic's production and swarm research, and the practitioner
+consensus) against what durig actually implements. Both load-bearing citations
+were verified by fetching them: arXiv 2503.13657 and Anthropic's "Patterns and
+problems in emerging multiagent systems" (2026-08-13) exist and support the claims
+made from them.
+
+Several named failure modes turn out to be **absent by construction rather than
+mitigated**: loss of conversation history (conversations are durable rows), silent
+shared-state corruption — the failure practitioners call under-appreciated most
+often — (one writer, atomic document revisions, no shared scratchpad; seats enqueue
+items instead of mutating shared state), and the coordination substrate the swarm
+paper says agents lack (a constitution, restrictive-by-default edges, an
+append-only transition trail). Observability, which practitioners call the hard
+part, is where durig over-invested.
+
+**Gap:** a grep for `verif|escalat|deadline|retry|budget|veto|reputation` across
+`src/*.mjs` and `cli.mjs` returns only the two CLI poll loops. So `complete_work`
+is self-declared, with no evidence attached and no verifier step (MAST FC3 — the
+category the paper's own intervention improved by 15.6%); there are no termination
+conditions (FC1, 12.4%); no clarification or deferral path (FC2, 6.8%); and nothing
+detects step repetition (FC1, the single most frequent mode at 15.7%). Separately,
+all 13 seats in `rigs/tutor-pi.rig.json` resolve to one model while per-seat models
+are already supported (D-per-seat), so a model-level bias is systemic rather than
+isolated — the correlated-failure mode Anthropic's swarm work describes.
+
+**Decision:** no architectural change. The durable single-writer store, the
+orchestrator-worker topology, the explicit edge permissions and the audit trail are
+the remedies the literature converges on, and they are already the foundation. What
+is missing is **protocol**: verification with evidence, termination and attempt
+semantics, and a deferral verb. These are additions inside the existing design, and
+they are the content of milestone M3 — giving seats real tools and giving the rig a
+verification loop are the same work item, because a check needs something runnable.
+Verifier model diversity is enabled first, as a configuration change, to
+de-correlate verification at no build cost.
+
+**Not adopted:** reputation systems, veto/quorum arbitration, and flat peer swarms
+(deferred with reasons in ROADMAP.md). Seats get **no polling tool** when they get
+real tools: the swarm paper's stampede — 2.4 M requests, 117 accepted — is exactly
+what that produces.
+
+**Evidence:** both citations fetched 2026-10-10; the capability grep; a `node -e`
+pass over `rigs/tutor-pi.rig.json` reporting 13 seats and 1 distinct model. Full gap
+table in ROADMAP.md, "Gap analysis vs the research".
