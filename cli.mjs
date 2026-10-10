@@ -278,6 +278,23 @@ async function buildSeatPrompt(models, seat, providerId) {
 // Edges and the constitution are always re-applied from the spec.
 async function cmdUp(rigFile, refresh = false) {
   const spec = JSON.parse(await readFile(rigFile, "utf8"));
+  // A spec carries its constitution either inline (what the OpenRig converter
+  // emits, since the text it read has no file on disk beside the spec) or as a
+  // path. Reading only `constitution` silently dropped the text for every
+  // converted rig, so both forms resolve here; inline wins on the ambiguity.
+  // Resolved before the commit because the transactor may retry its action,
+  // and a note printed inside it would appear once per attempt.
+  const constitutionText =
+    typeof spec.constitutionInline === "string"
+      ? spec.constitutionInline
+      : spec.constitution
+        ? await readFile(spec.constitution, "utf8")
+        : undefined;
+  if (typeof spec.constitutionInline === "string" && spec.constitution) {
+    console.error(
+      `note: ${rigFile} sets both constitutionInline and constitution; using the inline text`,
+    );
+  }
   const { harness, models, providerId } = await openHarness();
   try {
     const created = [];
@@ -329,10 +346,9 @@ async function cmdUp(rigFile, refresh = false) {
         const edgesDoc = await tx.doc(Edges);
         edgesDoc.edges = spec.edges;
       }
-      if (spec.constitution) {
-        const text = await readFile(spec.constitution, "utf8");
+      if (constitutionText !== undefined) {
         const cDoc = await tx.doc(Constitution);
-        cDoc.text = text;
+        cDoc.text = constitutionText;
       }
       // Materialize the queue even when empty: otherwise it comes into
       // existence only at the first enqueue, and a freshly bootstrapped rig
