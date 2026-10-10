@@ -1,5 +1,10 @@
 node_modules/
 *.sqlite
+# SQLite sidecars: opening a rig database creates them, and a -wal can hold
+# committed transactions that are not yet checkpointed, so they must never be
+# committed and never deleted while a database might be open.
+*.sqlite-wal
+*.sqlite-shm
 durig.config.json
 .durig/
 # built upstream tree, reproducible from pi-main.pin.json
