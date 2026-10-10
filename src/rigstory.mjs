@@ -1,0 +1,70 @@
+// Reading a seat's recent activity straight from storage is what lets `watch`
+// show what each seat is saying without going through the harness: opening a
+// harness resumes background work, and a process whose only job is to observe
+// must not schedule anything (D11). Entries are reachable because they are the
+// same records the transcript is built from.
+
+// Tailing more than a handful of entries costs a scan per seat per render, and
+// both facts we need (the newest assistant text and the newest tool call)
+// always come from near the top of the transcript. The bound is generous
+// because a turn that only calls tools produces several entries with no prose,
+// and "what it last said" should look past those to the previous message.
+const SCAN_LIMIT = 24;
+
+// An entry stores its provider message under `model`, and the content shape
+// differs by kind: user and system carry a plain string, assistant and tool
+// results carry typed parts. Normalizing here keeps every caller from having
+// to know that.
+export function extractEntryText(entry) {
+	const message = Array.isArray(entry?.model) ? entry.model[0] : null;
+	if (!message) return null;
+	if (typeof message.content === "string") {
+		return { role: message.role, text: message.content, toolName: null, isError: message.isError === true };
+	}
+	const parts = Array.isArray(message.content) ? message.content : [];
+	const text = parts
+		.filter((part) => part?.type === "text")
+		.map((part) => part.text ?? "")
+		.join("");
+	return { role: message.role, text, toolName: message.toolName ?? null, isError: message.isError === true };
+}
+
+// Entries arrive newest-first. "Saying" means the newest assistant utterance;
+// the system prompt is deliberately excluded because it is durig's own
+// scaffolding, not the seat speaking, and an empty assistant turn (pure tool
+// call with no prose) must not overwrite a real message.
+export function summarizeEntries(entries) {
+	let says = null;
+	let toolName = null;
+	for (const entry of entries ?? []) {
+		if (entry?.kind === "pi.assistant" && says === null) {
+			const parsed = extractEntryText(entry);
+			if (parsed?.text.trim()) says = parsed.text.trim();
+		}
+		if (entry?.kind === "pi.tool-result" && toolName === null) {
+			toolName = extractEntryText(entry)?.toolName ?? null;
+		}
+		if (says !== null && toolName !== null) break;
+	}
+	return { says, toolName };
+}
+
+// Read fresh every time. An earlier version cached each seat's summary against
+// the newest submission id, but that signal is wrong: a submission records a
+// submitted INPUT, so assistant turns append entries without moving it, and the
+// cache then pinned the first (empty) reading forever. Measured: entries grew
+// 2 -> 5 while the submission id stayed put. A bounded scan per render is cheap
+// and cannot go stale.
+export async function readSeatHighlights(storage, context, seats) {
+	const highlights = {};
+	for (const seat of seats) {
+		const page = await storage.scanEntries(
+			{ conversationId: seat.conversationId, order: "descending" },
+			SCAN_LIMIT,
+			undefined,
+			context,
+		);
+		highlights[seat.name] = summarizeEntries(page.items);
+	}
+	return highlights;
+}

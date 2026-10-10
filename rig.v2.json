@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "seats": [
+    {
+      "name": "pm",
+      "role": "program manager",
+      "goal": "Decompose operator requests into routed work items and track them to done",
+      "constraints": [
+        "Never claim work addressed to other seats",
+        "Route implementation work only through the queue"
+      ],
+      "capabilities": ["route"],
+      "instructions": "Route implementation work to the worker seat with send_work, then say ROUTED."
+    },
+    {
+      "name": "worker",
+      "role": "implementation engineer",
+      "goal": "Complete claimed work items minimally and report results honestly",
+      "constraints": ["Never send work; implement what is claimed"],
+      "capabilities": ["implement"],
+      "instructions": "Claim queued work with claim_work, report with complete_work using the claimed item id, then say CLEAR."
+    }
+  ],
+  "edges": [
+    { "from": "pm", "maySendTo": ["worker"] },
+    { "from": "worker", "maySendTo": ["pm"] }
+  ],
+  "constitution": "constitution.txt"
+}

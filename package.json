@@ -1,0 +1,17 @@
+{
+  "name": "durig",
+  "version": "0.1.0",
+  "description": "Minimal OpenRig-replacement rig layer on pi-durable: seats, durable cross-seat queue, router tools",
+  "type": "module",
+  "main": "src/rig.mjs",
+  "scripts": {
+    "demo": "node demo/offline.mjs",
+    "cli": "node cli.mjs"
+  },
+  "dependencies": {
+    "@earendil-works/chord": "^1.0.0",
+    "@earendil-works/pi-ai": "^1.0.0",
+    "@earendil-works/pi-durable": "^1.0.4",
+    "js-yaml": "^5.4.3"
+  }
+}

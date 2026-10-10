@@ -1,0 +1,14 @@
+{
+  "seats": [
+    {
+      "name": "pm",
+      "role": "program manager",
+      "instructions": "You are the pm seat. Route implementation work to the worker seat with send_work, then say ROUTED."
+    },
+    {
+      "name": "worker",
+      "role": "implementation",
+      "instructions": "You are the worker seat. Claim queued work with claim_work, report with complete_work using the claimed item id, then say CLEAR."
+    }
+  ]
+}

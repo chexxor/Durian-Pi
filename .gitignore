@@ -1,0 +1,6 @@
+node_modules/
+*.sqlite
+durig.config.json
+.durig/
+# built upstream tree, reproducible from pi-main.pin.json
+vendor/pi-main/
