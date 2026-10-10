@@ -64,13 +64,13 @@ Everything below was verified against the real store, not asserted from intent.
 
 ## Test surface
 
-17 offline demo tests, each run as `node demo/<name>.test.mjs` (exit 0 = pass):
+18 offline demo tests, each run as `node demo/<name>.test.mjs` (exit 0 = pass):
 `cli`, `chatlog`, `watchview`, `streamcli`, `streamview`, `syncpi`, `config`,
 `refresh`, `seatmodel`, `eval`, `optimizer`, `singleflight`, `blocked`, `watch`,
-`race`, `persistence`, `repeat-call`.
+`race`, `persistence`, `repeat-call`, `constitution`.
 
 They are the regression gate for the pi-main link as well as for feature work
-(D17). All 17 pass on the current tree.
+(D17). All 18 pass on the current tree.
 
 ## Research review (2026-10-10)
 
@@ -109,6 +109,12 @@ confirmed rather than taken on trust.
    over SSE avoids that trade entirely.
 3. **Pods design** — namespace-scoped queues vs a flat queue with pod tags
    (deferred twice; the OpenRig converter currently drops pods with a warning).
+4. **Apply the corrected constitution to the live tutor-pi rig** — the converter's
+   inline text was being dropped, so `tutor-pi.sqlite` holds the generic
+   411-byte `constitution.txt` instead of the team culture. The defect is fixed;
+   re-running `up rigs/tutor-pi.rig.json` is what changes the stored text, which
+   changes all 13 seats' system prompts on their next request. Wants an explicit
+   go-ahead rather than happening as a side effect.
 
 ## Known gaps worth remembering
 

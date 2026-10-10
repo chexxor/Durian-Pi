@@ -65,6 +65,7 @@ src/rigstory.mjs      read each seat's latest words + tool call from storage
 src/watchview.mjs     render a rig snapshot for a human (TUI pair to watch)
 src/chatview.mjs      render one seat's conversation for a human
 demo/chatlog.test.mjs  chat rendering + --follow streaming
+demo/constitution.test.mjs  a spec's constitution reaches the rig (inline or file)
 docs/STATUS.md        start here: current state, decisions needed, resume facts
 docs/ROADMAP.md       milestones + the research gap analysis
 scripts/sync-pi.mjs   build + link pi's main branch at a pinned commit

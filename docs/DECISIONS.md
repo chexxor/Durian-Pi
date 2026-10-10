@@ -367,3 +367,41 @@ what that produces.
 **Evidence:** both citations fetched 2026-10-10; the capability grep; a `node -e`
 pass over `rigs/tutor-pi.rig.json` reporting 13 seats and 1 distinct model. Full gap
 table in ROADMAP.md, "Gap analysis vs the research".
+
+## D24 — The research concerns are measured, not just listed (2026-10-10)
+
+**Finding:** D23's gap table is a snapshot. It cannot answer whether an instance is
+drifting worse, or whether a configuration change helped. It is affordable to
+answer that here because the store already holds every message, every tool call with
+its arguments, and every queue transition — so each concern is a **read-only query
+over data already persisted**, not a new instrumentation surface.
+
+**Decision:** each named concern gets a measure (`cli.mjs metrics`), and each
+measure declares three things in its output rather than in documentation: its
+**evidence class** (direct / proxy / config-derived), its **direction** (what a
+rising value means), and its **blind spot** — because a clean reading can mean the
+capability is missing. Verification is the example that matters: it reads "no
+independent checks" today precisely because nothing can check, and a measure that
+reported an all-clear would be a lie.
+
+**Decision (the review loop):** a configuration change is a hypothesis with a
+direction, recorded **before** the change — what changed, which measure should
+move, and which way — and re-measured after. A change whose measure does not move
+as predicted is a candidate for reverting. This is D14's preservation guard applied
+to configuration instead of instructions. The predicted direction is recorded first
+deliberately: without it, any later movement can be rationalised after the fact.
+
+**Decision (honest denominators):** a window over real usage confounds "the rig got
+worse" with "the work changed", so passive windows are labelled **confounded** and
+a *drill* against a fixed task set is what makes two configurations comparable.
+Neither is presented as the other.
+
+**Not adopted:** telemetry or egress of measures (it would also require a
+`security.sec` consult before shipping), a new table or write path for the first
+cut, and any dashboard. Measurement reads through the same shared read API as
+`watch`, `log` and `status` (near-term 8).
+
+**Evidence:** `src/rigstory.mjs` already reads transcripts storage-direct with no
+harness (D-view); queue items carry `from`/`to` and transition history
+(`src/rig.mjs`); entries carry no `usage` field, checked before claiming a cost
+measure could be direct. Table in ROADMAP.md, "Measuring the research concerns".
