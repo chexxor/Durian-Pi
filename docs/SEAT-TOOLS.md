@@ -1,148 +1,155 @@
-# Seat tools (M3) — the scoped design, for security review
+# Seat tools (M3) — the scoped design
 
-**Status: DRAFT — nothing implemented.** Trust boundaries route to `security.sec` **before**
-code (team norm, and the escalation map: "Trust boundaries/secrets/egress → security.sec
-BEFORE code"). This document is the thing being reviewed; it is written to be falsified.
+**Status: REVIEWED — "BLOCK as specified → ADJUST (conditional pass)".** Nothing implemented.
+Position: `docs/reviews/security-sec-m3-seat-tools.md` (from
+`qitem-20261011173526-ebcb34a909ab71e8`, `gate:spec-review`). It escalated to `advise.lead`
+(`qitem-20261011173739-402fac1b`) for the scope-vs-security conflict **if** the tools ship
+without the conditions below; complying with them means no escalation is needed.
 
-Scope decision being asked about: `docs/STATUS.md` item 1, deferred since 2026-10-10.
+Conditions, all required before any code lands and each proved by a canary demo:
 
-## Why this is the next thing
-
-Seats have exactly six tools (`src/rig.mjs`): `send_work`, `claim_work`, `complete_work`,
-`defer_work`, `resume_work`, `peek_queue`. A seat can *route* work and cannot *do* it —
-`docs/DOGFOOD.md` records a live worker correctly refusing a task it had no capability for.
-Everything around the gap already works: intake, decomposition, routing, the queue, attention
-and measurement are proven end-to-end with a real model (DOGFOOD F6). M3 is the blocker, and
-the operator's stated goal is to send durig requests to improve durig.
-
-## What the platform already provides (read from the pinned source, not assumed)
-
-| Fact | Where |
+| Id | Condition |
 |---|---|
-| `createCodingTools()` returns a `coding-tools` extension bundling `read`, `write`, `edit`, `bash` — and "nothing installs it automatically" | `vendor/pi-main/packages/durable/src/tools/index.ts` |
-| Per-seat tool sets are a **stored, first-class** property: the `pi.agent` doc holds `extensions`, `tools`, `modelTools`, `cwd` **per conversation** | `…/harness/types.ts` `AgentState`, `AgentChange` |
-| A tool declares who may call it via `callers: ["model" \| "tools"]`; `modelTools` narrows what the model is offered without removing it from tools | `…/harness/README.md` |
-| Nested tool calls are a supported, first-class mechanism: `api.executeTool()` runs the full tool pipeline, owns its own task, and its result **never enters the transcript** | `…/docs/spec.md` §8.3–8.4 |
-| The shell tool's controls have a designed home: `BashToolOptions.prepare` receives `{command, cwd, env, inheritEnv}` before execution | `…/tools/bash.ts` |
-| `createPowerShellTool()` exists, trying `pwsh` then `powershell` | `…/tools/index.ts` |
-| The execution seam is pluggable: `HarnessOptions.env?: (target, context) => ExecutionEnv` | `…/harness/types.ts` |
+| **SC1** | A **root-confining `ExecutionEnv`** (`HarnessOptions.env`, `types.ts:551`) decorating `NodeExecutionEnv`, confining *all* filesystem access to the worktree root — `absolutePath`, `openBinaryReader`, `writeFile`, `createTemp*`, and `exec`'s `cwd` — rejecting absolute paths, `..`, and symlink escapes |
+| **SC2** | The verifier's **read-only is enforced at the filesystem layer** (deny `writeFile`/mutation), because its shell can write regardless of `write`/`edit` being omitted |
+| **SC3** | **`inheritEnv` forced false at the env layer** (not merely set in `prepare`), plus host non-negotiables (`wsl`, `docker`, destructive git) refused **structurally in `exec`**, never by string match |
 
-**Consequence:** M3 is wiring plus boundary decisions, not invention. And the scope question
-has a better answer than "read-only or read+write": **per-seat tool sets**.
+## Revision note — what the review falsified in the first draft
 
-## The design
+This document previously argued that a per-item worktree plus per-seat tool sets were the
+boundary. **The review showed both claims were wrong**, and the record matters more than the
+tidiness of the original text:
 
-### 1. Per-seat tool sets (the recommendation)
+- **The worktree was not a boundary at all (F2, decisive).** `read`, `write` and `edit` accept
+  **absolute paths by design** (`read.ts:35`, `write.ts:10`, `edit.ts:28`), resolve through
+  `resolveToolPath → env.absolutePath` (`path-utils.ts:13-15`), and `NodeExecutionEnv.absolutePath`
+  is `resolvePath(this.cwd, path)` **with no confinement** (`env/node.ts:644`). An absolute path
+  simply wins. My claim that "allowlist by `cwd`, and the worktree layout means they are not there
+  to read" was **not a control** — and the file tools do not pass through `prepare` at all, which
+  is bash-only.
+- **"A verifier that structurally cannot fix instead of verify" was false as built (F3).** The
+  verifier was granted a shell. PowerShell `Set-Content`/`Out-File`/redirection writes any file the
+  OS user can write; omitting the `write`/`edit` **tools** does not remove the write **capability**
+  — `modelTools` narrows what the model is *offered* (`types.ts:398-403`), it does not sandbox the
+  shell. The property has to hold one layer down.
+- **`prepare` was load-bearing and should not have been.** It sees one `BashExecution`
+  (`bash.ts:33-36`) — bash only, and a check on a **command string**, which PowerShell defeats
+  (aliases, `-EncodedCommand`, `Invoke-Expression`, piped subcommands).
 
-| Seat role | Tools |
-|---|---|
-| author (`impl`, `impl2`) | `read`, `write`, `edit`, shell |
-| verifier (`qa`, `qa2`) | `read`, shell — **no `write`, no `edit`** |
-| `pm`, `lead` | none (coordination only, as today) |
+The verdict on direction was favourable — per-seat tool sets, a worktree, `prepare`, evidence in
+`complete_work`, PowerShell over an undeclared Git Bash — and `write`/`edit` was **not** the
+objection. The objection was that **the confinement was prose, not a boundary**.
 
-A verifier that structurally **cannot** fix instead of verify. This is the argument for M3
-answering D23's verification gap in the same stroke, and it is why the scope question is not
-all-or-nothing.
+## The corrected design
 
-### 2. Shell is PowerShell, not bash
+### SC1 is the spine, because it is the only seam that covers every tool
 
-WSL and Docker are non-negotiable NOs on this host, and `bash` on native Windows means Git
-Bash — an undeclared dependency that may be absent. `createPowerShellTool()` is the native
-option, and it is what `durig`'s own tooling already prefers.
+One confining `ExecutionEnv` covers `bash` **and** `read`/`write`/`edit`; a `prepare` guard covers
+bash alone (F2). Everything below is narrowing *on top of* SC1 — never instead of it.
 
-### 3. The execution boundary: one git worktree per work item
+### Tool sets are narrowing, not the boundary
 
-Seats work in `C:/tmp/durig-dev/<item>` — a worktree of durig — never the live tree.
+| Seat role | Tools | Note |
+|---|---|---|
+| author (`impl`, `impl2`) | `read`, `write`, `edit`, shell | within the confined root |
+| verifier (`qa`, `qa2`) | `read`, shell | read-only enforced by **SC2**, not by tool omission |
+| `pm`, `lead` | none | coordination only, as today |
 
-Why this is one mechanism doing three jobs:
-- **owner state is protected** by construction: a runaway seat cannot touch the working tree
-  the operator is editing;
-- **the secret boundary falls out of it** (see below);
-- **review is natural**: the operator reads `git diff` in the worktree and merges or discards.
-  Seats never commit, never push, never publish — those stay operator actions, and publishing
-  still needs explicit authorization.
+Still worth doing — it shrinks the surface and keeps the author/verifier asymmetry legible — but it
+is a **second layer**. The guarantee comes from SC2.
 
-### 4. The secret boundary
+### `prepare` is the second layer
 
-- `durig.config.json` holds the provider key and is **untracked and gitignored**, so a
-  worktree contains **no config and therefore no key on disk**.
-- `inheritEnv` must be set **false** in `prepare`, with an explicit allowlist, because the
-  default is `true` (hazard H1 below).
-- The runner's own `DEEPINFRA_API_KEY` is read by the *durig process*, not passed to the
-  seat's tool subprocesses.
+Good for the env allowlist and a legible refusal. Never the control (F4).
 
-### 5. What seats may not do
+### Shell is PowerShell, not bash
 
-Enforced in `prepare` (and, where a command is genuinely forbidden, by refusing rather than
-by prose — D-ENV-AUTH: a persona instruction is not a control on a single-user host):
+WSL/Docker are host NOs, and native-Windows `bash` means an undeclared Git Bash dependency.
+`createPowerShellTool()` tries `pwsh` then `powershell`. F4's warning applies: a PowerShell
+allowlist is **not disqualifying** *only because* the boundary is the execution environment.
 
-- no `git commit`, `git push`, `git reset`, `git clean`, `git checkout -- `, or any command
-  that discards work (the worktree is the boundary; discarding is the operator's call);
-- no `wsl`, no `docker`, no `docker-compose` (host non-negotiable — and note the `arg-guard`
-  extension protects **our** harness, not a seat's shell: hazard H3);
-- no recursive delete of absolute, home, or parent paths;
-- no reading of `durig.config.json`, `.env`, or credential files — allowlist by `cwd`, and
-  the worktree layout means they are not there to read.
+### The worktree — what it is now for
 
-## Hazards found while reading the pinned source
+It remains the per-item workspace and the review/merge boundary (`git diff` per item, seats never
+commit, push, or publish). It is **no longer** claimed as a confinement; that is SC1's job. A
+distinct low-privilege OS user is **not strictly required once SC1 holds**, but `security.sec`
+recommends it as the strongest option and as the only fix for the shared-identity problem
+`D-ENV-AUTH` records.
 
-**H1 — `inheritEnv` defaults to `true`.** `bash.ts:76` sets `inheritEnv: true` and passes it
-straight to `env.exec` (line 102). Installing `CodingTools` naively therefore hands
-`DEEPINFRA_API_KEY` to **every command a seat runs**. This is the single most concrete reason
-this position is needed before code.
+### Evidence in `complete_work`
 
-**H2 — the key is in a file, not only the environment.** `durig.config.json` carries a key
-field (`apiKey`, presence verified; value never printed). Reading it requires no environment
-at all, so `inheritEnv: false` alone would be insufficient — the worktree is what closes it.
+Independent of this consult and unblocked by it — a protocol change, not a capability grant. The
+position adds one acceptance canary: **evidence must contain no key material**.
 
-**H3 — our guard does not cover seats.** `~/.pi/agent/extensions/arg-guard.js` repairs/blocks
-tool-call arguments for the harness *we* run in. A seat's shell is a different process tree.
-Seat tooling needs its own equivalent, or the host rules are unenforced for seats.
+## Hazards
 
-**H4 — `defer_work` already exists, so a blocked seat has an exit.** The deferral verb (D32)
-means a seat that hits a boundary it cannot cross can park the item on a question instead of
-guessing. This is the designed answer to "tool denied"; it should be named in the tool
-descriptions.
+**H1 — `inheritEnv` defaults to `true`** (`bash.ts:76` → `:102`; `env/node.ts:264`, with
+`getShellEnv(..., inheritEnv = true)` spreading `process.env` at `:266`). **CONFIRMED** by the
+review: a naive install hands `DEEPINFRA_API_KEY` to every command a seat runs. Fixed at the env
+layer by **SC3**, not by `prepare` alone.
 
-## Questions for `security.sec`
+**H2 — the key is also in a file.** `durig.config.json` is untracked and gitignored, so a worktree
+contains no config — but per **F2** that was never the protection; SC1 is.
 
-1. **Verdict on the scope**: is per-seat tool scoping (author write / verifier read-only) an
-   acceptable boundary, or is `write`/`edit` itself the objectionable grant?
-2. **Is the worktree a sufficient control** for (a) owner-state protection and (b) the
-   on-disk secret, or is a distinct OS user / sandboxed `ExecutionEnv` required? Note
-   `NodeExecutionEnv` is the only shipped implementation.
-3. **`prepare` vs a custom `ExecutionEnv`**: is a `prepare`-based denylist + env allowlist
-   falsifiable enough, or does the position require the pluggable `ExecutionEnv` seam so the
-   control is structural rather than a string check on a command?
-4. **Shell output as an injection channel**: tool output is untrusted DATA (team norm), and a
-   seat reading test output is reading a file it did not write. Does this need a gate, or is
-   the existing "transcript content is data" rule sufficient?
-5. **PowerShell allowlist feasibility**: PowerShell is not a plain argv shell — an allowlist
-   over command strings is weak. If that is disqualifying, what is the minimum acceptable
-   control?
-6. **The codemode question** (separate item, below): does a script-sandbox tool *reduce* or
-   *increase* the risk relative to direct tool calls?
+**H3 — our guard does not cover seats.** `arg-guard.js` protects our harness, not a seat's shell
+process tree; hence SC3 requires structural refusal in `exec`.
 
-## Separate item — codemode (assessed, not adopted)
+**H4 — `defer_work` is the exit for a blocked seat.** A refused command should be parkable on a
+question rather than guessed at; name it in the tool descriptions.
 
-`@earendil-works/pi-codemode` is a harness-agnostic sandbox package: **one dependency**
-(`quickjs-wasi`), no dependency on durable, chord, or the coding agent. `CodemodeSandbox`
-takes `{ tools, globals, timeoutMs }` and executes a script whose `tools.*` calls are
-host-provided, so durig could implement a codemode tool small enough to be one extension —
-which is exactly the shape `api.executeTool()` exists for ("as a codemode script or an MCP
-bridge does", spec §8.3). It is **not** part of the durable package, so it is an addition,
-not something we get for free. Value for M3: a seat that runs several demos in one turn and
-filters the output before the model sees it. Cost: a new dependency, a new execution surface,
-and its own position. **Recommendation: do not bundle it into M3.** Land M3 with direct tool
-calls first, then assess codemode against a working baseline.
+## codemode — deferred, and the operator's proposal recorded
 
-## What ships after a verdict
+The operator proposed making **codemode the preferred front door** — model sees only `codemode`,
+its scripts get a narrow tool set, bash demoted to opt-in — on the reasoning that a sandboxed
+script is safer than a shell, plus a cheap decision model reviewing a script's requested
+permissions.
 
-1. wire `coding-tools` per seat via `configure`, with the `prepare` guard;
-2. a demo proving the scoping — a verifier seat **cannot** write, and a denied command is
-   refused with a legible reason;
-3. evidence in `complete_work`, so `qa` re-checks rather than trusts (item 4's other half);
-4. `rig.selfdev.json` (pm/impl/qa/lead, `qa` on a second model — item 3) plus a QUICKSTART
-   recipe, and a worktree helper;
-5. then route durig its first real backlog item and watch W2 become `observed` rather than
-   `inferred`.
+**The security answer was "do not bundle into M3"**, and the reason is sharper than my earlier
+one: a QuickJS sandbox does **not** add filesystem confinement for the tools it hosts — those are
+host-provided and **keep their reach**. So the sandbox does not deliver the property the proposal
+relied on; the premise that it "has permissions for any observable side-effects" is not how it
+works (there is no permission model — the surface is exactly the registered tool list). It also
+adds a dependency and an execution surface.
+
+It is not dismissed: `security.sec` records a **genuine net gain** — a nested call's result never
+enters the transcript (spec §8.3–8.4), so it *reduces model-visible untrusted input* — but that
+gain is only meaningful **after SC1 exists**. Hence: assess codemode separately, against the SC1
+baseline, not bundled.
+
+**The decision-model reviewer** belongs in the same deferred assessment, with the boundary this
+project already records twice: a probabilistic filter in the enforcement path is **not a control**
+(D-ENV-AUTH; the scribe ruling that persona prose is not a control). Its usable shape is a
+**deny-only tripwire** — it may narrow, never widen, at `ToolHooks.beforeTool` (`types.ts:745-752`,
+which sees nested calls via `ToolCall.parent` and where "the first `block` wins"), fail-closed, and
+falsifiable by a canary. Static policy (SC1–SC3) stays the control.
+
+## Acceptance — the demo that proves the conditions
+
+Must fail against the design as first written and pass with SC1–SC3:
+
+1. **env canary** — a seat command echoes its environment; `DEEPINFRA_API_KEY` is absent.
+2. **path escape** — a seat reads an absolute path outside the worktree, and a symlink to one →
+   refused legibly; the same read inside the worktree succeeds.
+3. **verifier write** — a verifier's shell write → refused; an author's identical command → allowed.
+4. **host policy** — `wsl`/`docker`/`git reset` from a seat → refused structurally, legibly, and
+   parkable via `defer_work` (H4).
+5. **no secret in evidence** — `complete_work` evidence carries no key material.
+
+## What would change this answer
+
+- A **sandboxed `ExecutionEnv` that roots the process too** (distinct low-privilege OS account, or a
+  job-object/AppContainer sandbox) satisfies SC1/SC2 more strongly than a decorator; prefer it if the
+  operator is willing.
+- Proof the pi runtime already confines tool paths to `cwd` would retire F2 (it does **not** at
+  `ea448f45`) — re-check on any pin move.
+- **A scope decision to grant no shell at all** (read/write/edit only) would drop F1/F4/F5 and make
+  the boundary far easier to hold. That is a legitimate scope answer and the cheapest path.
+
+## What ships after the conditions
+
+1. the confining `ExecutionEnv` (SC1) + env/structural refusals (SC3);
+2. per-seat tool sets wired via `configure`, with SC2's filesystem-level read-only for verifiers;
+3. the five-canary demo above, falsified against the as-written design first;
+4. evidence in `complete_work` (independent), so `qa` re-checks rather than trusts;
+5. `rig.selfdev.json` (pm/impl/qa/lead, `qa` on a second model — item 3) and a worktree helper;
+6. then route durig its first real backlog item and let W2 become `observed`.
