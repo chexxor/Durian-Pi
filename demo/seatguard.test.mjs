@@ -75,6 +75,41 @@ try {
 		`env="${envReason}" guard="${guardRefusal?.block}"`,
 	);
 
+	console.log("\nPublishing is refused unless the OPERATOR granted it, which a seat cannot forge");
+	const pushCall = (command, id) => ({ type: "toolCall", id, name: "powershell", arguments: { command } });
+	const push = beforeTool(pushCall("git push origin main", "7"));
+	check("git push is refused by default", push?.block?.includes("operator's authorization"), JSON.stringify(push));
+
+	// The exemption reads durig's OWN environment, so an assignment the seat makes inside its own
+	// command changes only that child process. This is the assertion that makes the grant worth
+	// having: without it, "permissioned" would mean "a seat can permit itself".
+	const forged = beforeTool(pushCall("$env:DURIG_ALLOW_PUSH=1; git push origin main", "8"));
+	check(
+		"an inline assignment in the seat's own command does NOT grant it",
+		forged?.block?.includes("refused by durig"),
+		JSON.stringify(forged),
+	);
+
+	const priorGrant = process.env.DURIG_ALLOW_PUSH;
+	process.env.DURIG_ALLOW_PUSH = "1";
+	try {
+		const granted = beforeTool(pushCall("git push origin main", "9"));
+		check("the operator's grant, set in durig's environment, allows it", granted === undefined, JSON.stringify(granted));
+		// Everything else stays refused whatever the grant says: it is a push exemption, not a
+		// general amnesty, and a grant that widened a different rule would be a silent hole.
+		const stillRefused = beforeTool(pushCall("wsl ls", "10"));
+		check("the grant does not widen any other rule", stillRefused?.block?.includes("WSL is unsupported"));
+	} finally {
+		// Restore rather than delete: if the operator really had launched with the grant, a test
+		// that cleared it would change the environment it ran in.
+		if (priorGrant === undefined) delete process.env.DURIG_ALLOW_PUSH;
+		else process.env.DURIG_ALLOW_PUSH = priorGrant;
+	}
+	check(
+		"and the refusal returns once the grant is gone",
+		beforeTool(pushCall("git push origin main", "11"))?.block?.includes("operator's authorization"),
+	);
+
 	console.log(failures === 0 ? "\nPASS — the guard holds" : `\nFAIL — ${failures} assertion(s) failed`);
 } finally {
 	await rm(root, { recursive: true, force: true });

@@ -22,6 +22,14 @@ import { ExecutionError, FileError, err, ok } from "@earendil-works/pi-durable/e
  * removes the escape hatches that would leave it entirely. WSL and Docker are unsupported on
  * this host by policy; the destructive git forms are refused because they discard exactly the
  * work the worktree boundary exists to protect.
+ *
+ * `unless` is the one exemption mechanism, and it may only consult durig's OWN process
+ * environment. That is deliberate: every in-repo channel is seat-forgeable (D-ENV-AUTH - one OS
+ * user, and a seat can write files), so a grant stored in the rig, the store or a config file
+ * would be a grant the seat could write for itself. A seat's command environment is the
+ * allowlist-filtered set from `pickEnv`, and an inline assignment inside its own command affects
+ * only that child process - never this one - so reading `process.env` here is the only gate a
+ * seat cannot reach.
  */
 const DENIED_COMMANDS = [
 	{ re: /(^|[\s;&|"'()])wsl(\.exe)?([\s"'()]|$)/i, why: "WSL is unsupported on this host" },
@@ -29,7 +37,17 @@ const DENIED_COMMANDS = [
 	{ re: /git\s+reset\s+--hard/i, why: "would discard uncommitted work" },
 	{ re: /git\s+clean\s+-[a-z]*f/i, why: "would discard untracked work" },
 	{ re: /git\s+checkout\s+--(\s|$)/i, why: "would discard uncommitted work" },
+	{
+		re: /git\s+push(\s|$)/i,
+		why: "publishing needs the operator's authorization; ask with defer_work, or have the operator relaunch durig with DURIG_ALLOW_PUSH=1",
+		unless: () => operatorGranted("DURIG_ALLOW_PUSH"),
+	},
 ];
+
+/** True only when the operator set this in durig's own environment, which a seat cannot reach. */
+function operatorGranted(name) {
+	return process.env[name] === "1";
+}
 
 /**
  * Environment a seat's command may see.
@@ -77,8 +95,10 @@ function pickEnv(requested, allowlist) {
 /** The refusal a seat sees, phrased so it can act on it rather than retry blindly. */
 function refusalFor(command) {
 	const text = Array.isArray(command) ? command.join(" ") : String(command);
-	for (const { re, why } of DENIED_COMMANDS) {
-		if (re.test(text)) return `refused by durig: ${why} (${re.source})`;
+	for (const { re, why, unless } of DENIED_COMMANDS) {
+		if (!re.test(text)) continue;
+		if (unless?.() === true) continue;
+		return `refused by durig: ${why}`;
 	}
 	return null;
 }
