@@ -72,7 +72,7 @@ each labelling its evidence class.
 | Information withholding (FC2) | completions whose claimer made no retrieval call | entries | direct, and reads 1.0 today because no retrieval tool exists |
 | Correlated failure (swarm) | distinct models per seat; author and reviewer sharing one | rig spec + seats doc | config-derived, not a rate |
 | Resource stampede (swarm) | tool calls per minute per seat, and the peak | entries | direct |
-| Cost (~15x tokens) | tokens per completed item | entries | proxy — entries carry no usage field, so turns / tool calls / prompt size today; exact tokens need the provider seam the live view and generation slots already tap |
+| Cost (~15x tokens) | tokens per completed item | entries | **direct** — corrected 2026-10-11: entries DO carry `usage` (input/output/cacheRead/cacheWrite) and a `cost` breakdown; the provider seam is not needed (F4, `docs/DOGFOOD.md`) |
 | Deferral to humans | escalations raised, and time until answered | queue | direct, reads 0 until the deferral verb lands |
 | Collusion / sabotage | — | — | not applicable: no adversarial objective, no scarce shared resource |
 | Observability | — | `watch`, `log` | already the strength; a check, not a rate |
@@ -199,11 +199,11 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    skipped: it needs a task set hard enough to move the measures, which is a
    content decision, not a code one.
    → *Caveman (20) forward-note:* the drill is also the only instrument that could
-   verify caveman's own claims. The vendor reports token savings we cannot check,
-   because no measure reads tokens or cost — so if the drill grows a token counter
-   it must feed `computeMetrics` as another evidence source rather than printing
-   its own report, or caveman can never be judged by the same loop as everything
-   else.
+   verify caveman's own claims. **Correction 2026-10-11 (F4):** a token counter is
+   now known to be possible and direct-class, because entries DO carry `usage` and
+   a `cost` breakdown — so build it to feed `computeMetrics` as another evidence
+   source rather than printing its own report, or caveman can never be judged by
+   the same loop as everything else.
 3. **Verifier model diversity.** All 14 seats resolve to one model while per-seat
    models are already supported (`resolveSeatModel`), so a bias is systemic rather
    than isolated (Anthropic swarm). Give the verifier roles (`qa`, `qa2`) a
@@ -254,6 +254,15 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     mechanism. The finding must name the seat and be honest that clearing it is a
     store rebuild or an explicit removal, not a spec edit. Found while measuring
     the metrics cost; requested by the operator.
+10b. **Dogfood durig for our own work.** Agreed by the operator 2026-10-11: run our
+    own coordination through durig so the obvious problems surface through ordinary
+    use rather than through a test written to look for them. The first session
+    routed a real backlog item `pm` → `worker` and found six things, including a
+    **wrong documented fact** (F4: entries do carry `usage`), and the running log is
+    `docs/DOGFOOD.md`. Seats have four tools and no file access, so dogfood
+    coordination now and expect grounded content work to stay blocked on item 4.
+    Findings F1–F3 are small fixes worth taking early, precisely because use found
+    them and the suite did not.
 
 ## Mid-term
 
@@ -343,8 +352,10 @@ surface. A feature that is off must therefore cost nothing — not "little".
    **before** adoption under our own norms. (iii) **Scope it by seat role**: terse
    is fine for seat-to-seat coordination and wrong for a textbook tutor's
    student-facing explanation — the same seat-role axis `check`'s verifier rule
-   already reasons about. And we cannot yet verify the savings ourselves: there is
-   no token or cost measure, because entries carry no `usage` field (D24 evidence).
+   already reasons about. **Correction 2026-10-11:** the savings ARE verifiable —
+   entries carry `usage` and a `cost` breakdown (F4, `docs/DOGFOOD.md`), so a
+   token/cost measure is direct class and caveman can be judged by the same loop
+   as everything else once that measure exists.
    **Security position in (2026-10-11).** Split verdict, and the split is the point:
    the **skill half PASSES, conditional on being vendored as prompt text rather
    than installed** — it is ordinary persona content otherwise. The **proxy half is
@@ -365,6 +376,22 @@ surface. A feature that is off must therefore cost nothing — not "little".
    WORKFLOWS.md` naming 3–5 workflows — who, trigger, the loop that must never
    break, what "done" means, which capability it needs — after which
    "recommended" is derivable instead of taste.
+
+## Sharing publicly
+
+22. **Publish durig as its own repository — no releases yet.** The operator wants
+    the work and the intentions visible, partly so the pi-durable team can see what
+    people are building on it, and so improvements can arrive from others later.
+    Shape: `git subtree split --prefix=durig` keeps the history built here (the
+    decision log, the 21 demos) instead of starting fresh, and the code is already
+    nearly self-contained — `@earendil-works/pi-durable` and `pi-ai` are **public on
+    npm** (1.1.0, MIT), and the only two couplings out of the tree are imports of
+    `../vendor/pi-deepinfra/models.ts` (`cli.mjs`, `demo/optimizer-eval.mjs`).
+    Clear before pushing: vendor that provider catalogue with provenance (or make
+    it optional), pick a licence (the platform is MIT), re-run the secret scan, and
+    add a README written for a stranger. No release, no npm publish, no tag — a
+    readable `main` plus the docs. **Requires the operator's authorization to
+    push**, and a GitHub remote added alongside the existing LAN Gitea one.
 
 ## Explicitly deferred (with reasons)
 

@@ -217,6 +217,11 @@ singleflight · streamcli · streamview · syncpi · watch · watchview
 Pointers, not promises — each is an item in `docs/ROADMAP.md`.
 
 - **A hardened starter rig** so a new user gets a spec that passes `check` (item 1)
+- **Dogfood durig on our own work** — run our coordination through it, log what
+  breaks in `docs/DOGFOOD.md`, fix or backlog; six findings from the first session
+  (item 10b, D31)
+- **Publish durig as its own repository** — `git subtree split`, vendor the
+  DeepInfra catalogue, pick a licence; repo only, no releases (item 22)
 - **A `stray-seat` `check` rule** — the store holds a seat the spec does not declare,
   and `up` never removes one (item 10a)
 - **An extension registry with named profiles** — one artifact, `core` / `recommended`

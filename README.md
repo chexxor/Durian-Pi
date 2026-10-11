@@ -125,6 +125,7 @@ docs/STATUS.md        start here: current state, decisions needed, resume facts
 docs/FEATURES.md      what durig does today, where each piece lives, and its proof
 docs/ROADMAP.md       milestones + the research gap analysis
 docs/METRICS.md       metrics design: measures, surfacing, scope, traps (first cut built)
+docs/DOGFOOD.md       dogfooding log: what we ran on durig, what broke, where it lands
 scripts/sync-pi.mjs   build + link pi's main branch at a pinned commit
 pi-main.pin.json      the pinned upstream commit durig is validated against
 src/seatmodel.mjs     per-seat {provider}/{modelId} resolution

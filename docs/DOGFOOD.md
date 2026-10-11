@@ -1,0 +1,135 @@
+# Dogfooding durig
+
+We use durig for our own work, so the obvious problems surface through ordinary
+use rather than through a test we wrote to look for them. This file is the
+running log: what we ran, what broke, and what it implies.
+
+**Why a log and not just issues.** The first session produced a finding that
+*corrected a documented fact* (F4 below), which is the kind of thing that gets
+lost if it lives only in someone's memory. A finding here is not a bug report to
+file elsewhere; it is evidence to act on, and each one names where it lands.
+
+## How to dogfood it today
+
+```powershell
+cd durig
+$env:DURIG_DB="./dogfood.sqlite"          # keep it off the live tutor-pi store
+node cli.mjs up rig.v2.json               # a 2-seat rig: pm + worker
+node cli.mjs send pm "<a real task>"      # must be work we actually want
+node cli.mjs status                       # attention + measures
+node cli.mjs queue                        # did it route?
+node cli.mjs log worker 20                # what actually happened
+```
+
+Isolate the database. The live `tutor-pi.sqlite` holds the real rig, and dogfood
+runs are noisy by nature.
+
+**Prefer a file for the prompt.** `send` takes text inline only, and a backtick in
+a shell argument is command substitution — see F1.
+
+## What it cannot do yet
+
+Seats have **four tools and no file access**: `send_work`, `claim_work`,
+`complete_work`, `peek_queue` (`src/rig.mjs`). So a seat can *describe* a change,
+*route* it, and *claim* it, but it cannot read the repo, run a test, or write a
+file. That is ROADMAP item 4 (M3), and it is why a job like "read seven seats'
+transcripts and write a position document" still has to run on OpenRig.
+
+Dogfood what exists — coordination, routing, queue semantics, attention,
+measurement, and the human views — and expect grounded content work to be
+blocked until M3.
+
+## Findings
+
+### F1 — `send` has no file/stdin input, so prompts are shell-fragile
+
+**Observed:** `node cli.mjs send pm "...`log <seat> --follow`..."` — the backticks
+were command-substituted by bash, `seat` was run as a command, and the prompt
+arrived with that section silently replaced by nothing. The model still answered,
+which is worse than a failure: the run looked fine and was not the run we asked
+for.
+
+**Contrast:** OpenRig's `rig queue create` has `--body-file` explicitly to kill
+"the backtick-shell-corruption class". durig has no equivalent on `send`.
+
+**Lands:** a `send --body-file <path>` (and `-` for stdin) flag. Small, and it
+removes a whole class of silent wrong-input runs rather than documenting it.
+
+### F2 — an empty seat's log is indistinguishable from a hang
+
+**Observed:** `node cli.mjs log sec --follow` on a seat with no entries prints
+nothing and then waits. `log sec` prints `"entries": []`.
+
+**Why it matters:** METRICS.md's "silence must be legible" rule applies to the
+views, not only to measures — "no entries yet" and "broken" must not look alike,
+the same reasoning as the empty-rig guardrail that names `node cli.mjs config`.
+
+**Lands:** one line on stderr for an empty transcript, in both the plain and
+`--follow` forms.
+
+### F3 — `last_run_failed` reports the category and hides the cause
+
+**Observed:** attention said `{"kind":"last_run_failed","detail":"model_error"}`.
+The actual cause was in the entry and never reached the operator:
+`429: {"message":"Model busy, retry later"}`.
+
+**Why it matters:** a transient rate-limit and a genuine fault are the same notice
+to a reader, and they call for opposite responses — wait, or investigate. The
+detail field exists precisely to carry the reason (`computeAttention` already
+passes `latest.reason`), so the cause is being dropped somewhere between the entry
+and the notice.
+
+**Lands:** carry a bounded `errorMessage` into the attention detail. Pairs with F5.
+
+### F4 — D24's "entries carry no `usage` field" is false
+
+**Observed:** successful assistant entries carry `usage` with `input`, `output`,
+`cacheRead`, `cacheWrite` and a `cost` breakdown. Verified at the **storage**
+level, not just in the log view, because a measure reading storage is the thing
+that matters:
+
+```
+pm:     entries=6 withUsage=3 nonzeroTokens=2 withCost=3
+worker: entries=6 withUsage=4 nonzeroTokens=0 withCost=4   (all four were 429s)
+```
+
+**Why it matters:** D24 recorded that claim as checked evidence and used it to rule
+a cost measure out of the direct evidence class; METRICS.md and ROADMAP item 20
+both repeat that we "cannot verify caveman's savings". All three are stale. A
+token/cost measure is a **direct** measure, so:
+caveman's claimed savings become verifiable with our own numbers, and the drill's
+token counter (item 2's forward-note) is unblocked.
+
+**Lands:** correct D24 with a dated correction rather than an edit, update item
+2 and item 20, and add the cost measure when the drill lands.
+
+### F5 — a shared model produces `429 "Model busy"` failures, retried then abandoned
+
+**Observed:** the worker's run failed as `unanswered (model_error)`. The entries
+show three attempts, roughly 2 s and 4 s apart, each returning
+`429: {"message":"Model busy, retry later"}`, then settling.
+
+**Why it matters:** this is an operational property of running many seats against
+one hosted model, and it looks identical to a code fault from the outside (F3).
+It will recur under load, and it is a reason to keep per-seat model diversity
+(item 3) honest — a shared model shares its rate limit too.
+
+**Lands:** note it in the research/ops material; decide later whether a backoff
+knob is worth it. Do not paper over it with an unbounded retry.
+
+### F6 — the Router protocol works with a real model (regression marker)
+
+**Observed:** `pm` was given a real backlog item, decomposed it, and `send_work`
+created item #1 addressed to `worker` with a body carrying the problem and a
+verification step; `worker` then had it visible in the queue. Attention then
+reported the worker's failure correctly, and `metrics` computed a live window from
+the new entries.
+
+**Why it is recorded:** positive results are how we notice a regression later.
+The end-to-end path — decompose, route, queue, attention, measure — works.
+
+## Session log
+
+| Date | Rig | What we ran | Findings |
+|---|---|---|---|
+| 2026-10-11 | `rig.v2.json` in `dogfood.sqlite` | Routed a real backlog item (empty-transcript fix) through `pm` → `worker`; inspected queue, status, metrics, log | F1, F2, F3, F4, F5, F6 |

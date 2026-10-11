@@ -414,6 +414,16 @@ harness (D-view); queue items carry `from`/`to` and transition history
 (`src/rig.mjs`); entries carry no `usage` field, checked before claiming a cost
 measure could be direct. Table in ROADMAP.md, "Measuring the research concerns".
 
+**Correction 2026-10-11 (F4, `docs/DOGFOOD.md`):** that check was wrong. Stored
+assistant entries DO carry `usage` with `input`, `output`, `cacheRead`,
+`cacheWrite` and a per-field `cost` breakdown, verified through
+`storage.scanEntries` — the same path a measure reads, not the `log` view. The
+original check must have looked at a different entry kind or predated the field.
+Consequence: the cost measure is **direct** class, item 2's token counter is
+unblocked, and caveman's claimed savings are verifiable with our own numbers. The
+claim is left standing above rather than edited away, because the interesting part
+is that a "checked" fact stayed wrong for weeks and ordinary use found it.
+
 **Design:** how these measures reach a human — surfacing tiers, scope, notice
 lifecycle, and the traps — is `docs/METRICS.md`.
 
@@ -693,3 +703,26 @@ authentication; and D24's prediction record stays. This turns a deferred write p
 **Standing consequence:** measurement may not add telemetry, egress or a write path
 without this consult — and the answer here was "don't add one, use git", which is
 now the precedent to cite rather than re-litigating.
+
+## D31 — We dogfood durig on our own work (2026-10-11)
+
+**Decision (operator):** run our own coordination through durig, not only through
+OpenRig, so problems surface through use rather than through tests we wrote to look
+for them.
+
+**Why it is a decision and not a habit.** It changes where findings come from. The
+first session produced six, and one matters more than the rest: a fact D24
+recorded as *checked* — that entries carry no `usage` field — is false, and it had
+propagated into ROADMAP's gap table, METRICS.md and item 20's "we cannot verify
+caveman's savings". Ordinary use found it in one session; three documents repeating
+it did not. That is the argument for dogfooding in one example.
+
+**What it does not change.** It is not a substitute for the suite (D17's regression
+gate), and it is not licence to ship rough edges: findings are logged in
+`docs/DOGFOOD.md`, then fixed or backlogged like anything else. Seats still have no
+file access, so dogfooding is scoped to coordination, queue semantics, attention,
+measurement and the human views until item 4 lands.
+
+**Evidence:** `docs/DOGFOOD.md`, findings F1–F6. F6 is deliberately positive — a
+regression marker for the end-to-end path that worked (decompose → route → queue →
+attention → measure).
