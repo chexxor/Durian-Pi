@@ -68,6 +68,7 @@ One vocabulary for both the environment and the config file, resolved
 | `DURIG_MODEL` | Default model for seats without their own |
 | `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent generations rig-wide (unset = unlimited) |
 | `DURIG_OPTIMIZE` | `on`: run each persona through the optimizer during `up` |
+| `DURIG_EXTENSIONS` | Comma-separated pi-durable extension modules to install. A path that cannot load **fails the command** rather than being skipped, and `up` reports the names it installed. Proof: `demo/extensions.test.mjs` |
 | `DEEPINFRA_API_KEY` | Ambient credential, read from env/config, never stored or printed |
 
 Discovery order: `$DURIG_CONFIG`, then `./durig.config.json`, then
@@ -196,12 +197,12 @@ an unresolvable one is warned about rather than dropped in silence;
 The entire check surface is the demos plus `node --check`; there is no build or
 lint step.
 
-**21 offline tests** — one runnable proof per guarantee, each exit 0 on success:
+**22 offline tests** — one runnable proof per guarantee, each exit 0 on success:
 
 ```
 blocked · chatlog · check · cli · config · constitution · converter · eval
-metrics · optimizer · persistence · race · refresh · repeat-call · seatmodel
-singleflight · streamcli · streamview · syncpi · watch · watchview
+extensions · metrics · optimizer · persistence · race · refresh · repeat-call
+seatmodel · singleflight · streamcli · streamview · syncpi · watch · watchview
 ```
 
 **4 runnable demo programs:**
@@ -228,10 +229,6 @@ Pointers, not promises — each is an item in `docs/ROADMAP.md`.
 - **An extension registry with named profiles** — one artifact, `core` / `recommended`
   / custom as configuration, each extension declaring its cost and blind spot
   (item 18), which is also what makes an extension toggle measurable (item 19)
-- **Load extensions from config** — an `extensions` list of module paths, installed
-  into the registry durig already owns; this loads pi-**durable** extensions, not
-  pi-coding-agent plugins, which need an interactive agent durig does not have
-  (item 23)
 - **Caveman as an optional extension** — a skill and a proxy for token reduction;
   a spike must first settle whether either applies to an in-process harness, and
   a `security.sec` position precedes its telemetry default (item 20)

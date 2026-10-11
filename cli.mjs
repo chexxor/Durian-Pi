@@ -55,6 +55,7 @@ import { optimizeInstruction } from "./src/optimizer.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
 import { computeMetrics, formatMetrics } from "./src/metrics.mjs";
+import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat } from "./src/chatview.mjs";
 import { auditRig, formatCheck } from "./src/checkup.mjs";
 import { createWatchScreen, formatSnapshot } from "./src/watchview.mjs";
@@ -223,20 +224,22 @@ function buildModels(live = null) {
 
 async function openHarness({ resume = true, live = null } = {}) {
   const { models, providerId } = buildModels(live);
+  // createRegistry() holds only built-in tasks; without installing the Router
+  // extension no seat conversation ever sees the durig tools
+  // (send_work/claim_work/...) and real models narrate work as chat text
+  // instead of routing it (root cause of the 2026-10-09 bug).
+  const registry = createRegistry();
+  registry.install(Router);
+  // Configured extensions install on top of the core. Loading is eager and fatal
+  // on error, because a declared extension that cannot load must never be
+  // skipped quietly - the rig would look configured and run without it (see
+  // src/extensions.mjs). A conversation that stores no selection follows the
+  // host, so everything installed here is active for every seat.
+  const extensions = await loadExtensions(parseExtensionList(CFG.DURIG_EXTENSIONS));
+  for (const { extension } of extensions) registry.install(extension);
   const harness = await Harness.open(
     await openNodeSqliteStorage(DB_PATH),
-    {
-      models,
-      // createRegistry() holds only built-in tasks; without installing the
-      // Router extension no seat conversation ever sees the durig tools
-      // (send_work/claim_work/...) and real models narrate work as chat
-      // text instead of routing it (root cause of the 2026-10-09 bug).
-      registry: (() => {
-        const registry = createRegistry();
-        registry.install(Router);
-        return registry;
-      })(),
-    },
+    { models, registry },
     BACKGROUND_CONTEXT,
   );
   // Persisted storage restarts idle; resume() re-arms task scheduling so
@@ -244,7 +247,7 @@ async function openHarness({ resume = true, live = null } = {}) {
   // Viewers skip it: enabling scheduling is a write-side act and would let
   // a passive `watch` kick the very queue it is observing.
   if (resume) harness.resume();
-  return { harness, models, providerId };
+  return { harness, models, providerId, extensions: extensionNames(extensions) };
 }
 
 // The stored system prompt for one seat: compiled persona plus the durig
@@ -311,7 +314,7 @@ async function cmdUp(rigFile, refresh = false) {
       `note: ${rigFile} sets both constitutionInline and constitution; using the inline text`,
     );
   }
-  const { harness, models, providerId } = await openHarness();
+  const { harness, models, providerId, extensions } = await openHarness();
   try {
     const created = [];
     const existing = [];
@@ -371,7 +374,9 @@ async function cmdUp(rigFile, refresh = false) {
       // has nothing for `watch` to observe.
       await tx.doc(RigQueue);
     }, BACKGROUND_CONTEXT);
-    out({ ok: true, command: "up", db: DB_PATH, created, existing, refreshed });
+    // Report the extensions this process installed: they are active for every
+    // seat, and a set the operator forgot they configured is worth seeing.
+    out({ ok: true, command: "up", db: DB_PATH, created, existing, refreshed, extensions });
   } finally {
     await harness.close(BACKGROUND_CONTEXT);
   }

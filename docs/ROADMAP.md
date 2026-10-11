@@ -272,6 +272,14 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     coordination now and expect grounded content work to stay blocked on item 4.
     Findings F1–F3 are small fixes worth taking early, precisely because use found
     them and the suite did not.
+10c. **Test temp-dir cleanup actually runs.** Twelve demos call `process.exit(0)`
+    from inside the `try` whose `finally` removes their temp dir, so the `finally`
+    never runs and each test leaves a directory and a SQLite file behind. Harmless
+    today because they live in the OS temp dir — which is exactly why it went
+    unnoticed. Found while writing `demo/extensions.test.mjs`, which is now the one
+    test that does clean up. Fix: move the pass message and the exit to AFTER the
+    try/finally, in each of the twelve. Mechanical, and the proof is that a full
+    suite run leaves the temp dir unchanged.
 
 ## Mid-term
 
@@ -414,6 +422,18 @@ surface. A feature that is off must therefore cost nothing — not "little".
     coding-agent plugin is not portable to it. That distinction is the fact behind
     item 20's split verdict, and getting it wrong is how someone spends a week
     trying to load caveman's plugin as-is.
+    **✅ done (2026-10-11).** `src/extensions.mjs` loads module paths from
+    `DURIG_EXTENSIONS`, `openHarness` installs them on top of Router, and `up`
+    reports the names. `demo/extensions.test.mjs` is the 22nd demo, and it proves
+    the part that matters: a configured extension's section reaches a seat's
+    `pi.system` entry — with a control asserting the section is absent when it is
+    *not* installed, so the assertion cannot pass for an unrelated reason. Six ways
+    an extension can be wrong each fail loudly with the path named (absent file,
+    no usable export, non-object export, no `name`, nothing declared, throws on
+    import), plus two sharing a name — which pi-durable would otherwise resolve by
+    silently replacing the first with the second. No auto-discovery, deliberately:
+    an extension runs in-process with the harness API, so listing a path is trusting
+    it.
 
 ## Sharing publicly
 

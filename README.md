@@ -97,6 +97,54 @@ the admission criteria for the ambient tier: `docs/METRICS.md`.
 | `DEEPINFRA_API_KEY` | Ambient credential; read from env only, never stored |
 | `DURIG_OPTIMIZE` | `on`: `up` runs each seat's persona through the instruction optimizer (one model call per seat) before storing; provenance recorded. See D13. |
 | `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent GENERATIONS across all seats (unset = unlimited). `1` serializes them so one local model (e.g. Qwen on a 24 GB GPU) can serve the whole rig. Waiting-vs-stuck is surfaced via lease files: `status`/`watch` report `generation_in_flight` (holder seat + since) or `generation_stale` (dead holder). See DECISIONS D12. |
+| `DURIG_EXTENSIONS` | Comma-separated module paths to install as extensions. See "Extensions" below. |
+
+## Extensions
+
+durig installs its own Router as a **pi-durable extension**, so extensions are not
+a new mechanism — they are the one this already uses. Point `DURIG_EXTENSIONS` at
+modules that export an extension:
+
+```jsonc
+// durig.config.json
+{
+  "DURIG_EXTENSIONS": "./extensions/timing.ts,./extensions/redact.ts"
+}
+```
+
+```js
+// extensions/timing.ts — a complete, working extension
+import { defineExtension, section } from "@earendil-works/pi-durable";
+
+export default defineExtension({
+  name: "timing",
+  // sections reach every request's system prompt
+  sections: [section("timing-note", () => "Report elapsed ms for slow tools.")],
+});
+```
+
+`demo/fixtures/echo-extension.mjs` is a real one of these, and
+`demo/extensions.test.mjs` loads it and proves its section reaches a seat's model.
+An extension may declare `sections`, `tools`, `hooks`, `tasks` and `wraps` — see
+[Pi Durable's write-up](https://earendil.com/posts/pi-durable/) for what each does.
+
+Because a seat conversation stores **no** selection, everything installed is active
+for every seat; per-seat tool scoping is a planned refinement (ROADMAP item 18).
+`node cli.mjs up <rig.json>` reports the names it installed.
+
+Two things to know before you add one:
+
+- **It is code, running in-process.** An extension gets the harness API — commits,
+tasks, conversations, prompts — and its tools inherit this process's OS
+permissions. Paths are never discovered automatically; listing one is trusting it,
+exactly as you would a dependency.
+- **This is a pi-*durable* extension, not a pi *coding-agent* one.** Those target
+the interactive agent (slash commands, a TUI, project-trust prompts) and cannot
+load here: durig does not depend on `pi-coding-agent` and has no such surface (D21).
+
+A path that cannot load **fails the command** rather than being skipped. A declared
+extension quietly missing is the same failure shape as a dropped constitution: the
+rig looks configured and runs as something else.
 
 Provider options are imported from `src/providers/deepinfra-models.ts` — a vendored
 copy of the module the pi-deepinfra extension feeds to pi, so catalog and

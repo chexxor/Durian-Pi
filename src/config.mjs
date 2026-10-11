@@ -20,6 +20,7 @@ export const CONFIG_KEYS = [
 	"DURIG_MODEL",
 	"DURIG_MAX_CONCURRENT_SEATS",
 	"DURIG_OPTIMIZE",
+	"DURIG_EXTENSIONS",
 	"DEEPINFRA_API_KEY",
 ];
 
@@ -93,6 +94,7 @@ export function describeConfig({ config, source }) {
 		DURIG_MODEL: config.DURIG_MODEL ?? "zai-org/GLM-5.3-Flash",
 		DURIG_MAX_CONCURRENT_SEATS: config.DURIG_MAX_CONCURRENT_SEATS ?? null,
 		DURIG_OPTIMIZE: config.DURIG_OPTIMIZE ?? null,
+		DURIG_EXTENSIONS: config.DURIG_EXTENSIONS ?? null,
 		DEEPINFRA_API_KEY: config.DEEPINFRA_API_KEY ? "set" : "unset",
 	};
 }

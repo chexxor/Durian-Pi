@@ -6,5 +6,6 @@
   "DURIG_MODEL": "zai-org/GLM-5.3-Flash",
   "DURIG_MAX_CONCURRENT_SEATS": 1,
   "DURIG_OPTIMIZE": "off",
+  "DURIG_EXTENSIONS": "",
   "DEEPINFRA_API_KEY": "put-your-key-here"
 }
