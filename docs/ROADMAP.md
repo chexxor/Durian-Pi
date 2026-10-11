@@ -713,6 +713,43 @@ surface. A feature that is off must therefore cost nothing — not "little".
     posture is **fail-closed, not correct**: we are protected from a wrong file, not from a
     confusing refusal.
 
+35. **A skill loader — inject the skills a seat or a task actually needs.** Today skills are
+    inlined into instruction text at `up`: `scripts/from-openrig.mjs` reads
+    `agents/shared/skills/<name>/SKILL.md`, records `seat.skills` names, and appends a
+    `## Skill: …` block — and the converter says why in one line: *"durig has no separate skill
+    loader yet"*. So every seat carries every skill its profile names, for the whole run, whether
+    or not the work needs it.
+    *The mechanism already exists.* pi-durable's `PromptSection` renders *"in order before each
+    request"* and an extension can contribute sections (`Extension.sections`, `wrapSection`), so a
+    loader is an extension plus a selection rule rather than new plumbing. `AgentState.instructions`
+    is already per conversation, so a seat-scoped choice is expressible today.
+    *Selection is the design problem, not injection.* To weigh: declared per seat in the rig
+    (static, cheap, no surprise), selected at routing time from the item (dynamic, needs an
+    auditable rule), or both — the rig declaring what may be selected and routing choosing among
+    it. Whichever wins, **"load everything" must not be the fallback**: a skill nobody applies is
+    prompt weight on every turn.
+    *The tension to design against, and it is not small:* item 33 established that the prompt
+    prefix must be **byte-stable** for prefix caching, and a per-request section that changes
+    silently zeroes the cache hit rate. So a skill section has to be stable **per item or per
+    seat**, never per request — the selection is made once and held.
+    *Proof:* a demo where two seats in one rig carry different skills, and a seat whose work does
+    not match a skill does not carry it.
+36. **Tell the operator when a rig should have skills — as a `check` rule, not a measure.** The
+    question "should durig nudge the user to write a skill?" has a cheap and principled answer,
+    and the precedent fixes its shape: `shared-reviewer-model` is a config-derived property that
+    is deliberately a **`check` rule**, and it is **kept out of the metric notices precisely
+    because it is already visible as a rule**. Skill coverage is the same kind of thing — a
+    property of a rig file, not a quantity that moves — so a measure would be a config value
+    dressed as a measurement, against D24's "measures are measured, not listed".
+    *Deliverable:* a rule with a stable id (e.g. `no-skills-declared`) that fires when a rig
+    declares **specialised seats and no skills**, at `fix-now` severity: a rig whose seats have real
+    capabilities but no written procedure is the same smell as one with no verifier. Its fix text
+    should name the mechanism — where a skill lives, how a seat declares one — so the guidance
+    arrives *with the finding* rather than in a document the operator has to go and find.
+    *Guard against the failure mode:* it must not fire on the minimal or starter rig, or on seats
+    that only route work. A rule that nags every new rig teaches the operator to ignore findings,
+    which costs more than the skill it is asking for.
+
 ## Sharing publicly
 
 22. **Publish durig as its own repository — no releases yet.** The operator wants
