@@ -112,7 +112,7 @@ The gaps the research exposes are **protocol, not structure**: `complete_work` i
 self-declared with no evidence and no verifier step (MAST FC3); there are no
 termination conditions (FC1, 12.4%) and nothing detects step repetition (FC1, the
 most frequent mode at 15.7%); there is no verb by which a seat can defer a decision
-to a human (FC2, 6.8%); and all 14 seats resolve to one model while per-seat models
+to a human (FC2, 6.8%); and all 15 seats resolve to one model while per-seat models
 are already supported, so a bias is systemic rather than isolated. The roadmap was
 re-ordered accordingly: measurement first (now built, D28), then the one item that
 needs no new code — verifier model diversity — and the measures exist to judge it.

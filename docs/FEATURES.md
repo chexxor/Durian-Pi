@@ -238,7 +238,7 @@ requires each rule to fire. It also asserts the inline constitution still matche
 | Feature | What it does | Where | Proof |
 |---|---|---|---|
 | **OpenRig converter** | `rig.yaml` → durig v2 spec: seats, personas, skills, guidance, pod edges, **rig-level cross-pod edges**, coordinator send permissions, and the culture file as `constitutionInline` | `scripts/from-openrig.mjs` | `demo/converter.test.mjs` |
-| **Migrated rig** | The 14-seat tutor-pi rig, generated and committed | `rigs/tutor-pi.rig.json` | `node cli.mjs check rigs/tutor-pi.rig.json` |
+| **Migrated rig** | The 15-seat tutor-pi rig, generated and committed | `rigs/tutor-pi.rig.json` | `node cli.mjs check rigs/tutor-pi.rig.json` |
 | **Pods** | Converted with a warning; pod **structure** is dropped — **limited** (deferred, ROADMAP item 11) | `scripts/from-openrig.mjs` | converter stderr warnings |
 | **Persona and skill mapping** | name, role, model, skills, guidance and `delegates_to` map into the v2 spec without hand-editing | `scripts/from-openrig.mjs` | `docs/ACCEPTANCE.md` UAR-5 |
 

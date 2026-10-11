@@ -215,7 +215,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    a `cost` breakdown — so build it to feed `computeMetrics` as another evidence
    source rather than printing its own report, or caveman can never be judged by
    the same loop as everything else.
-3. **Verifier model diversity.** All 14 seats resolve to one model while per-seat
+3. **Verifier model diversity.** All 15 seats resolve to one model while per-seat
    models are already supported (`resolveSeatModel`), so a bias is systemic rather
    than isolated (Anthropic swarm). Give the verifier roles (`qa`, `qa2`) a
    different model family from the authors they check. Configuration-only, and the
@@ -678,6 +678,28 @@ surface. A feature that is off must therefore cost nothing — not "little".
     `description` does not, so the honest options are generating bullets plus keeping
     the advice, or extracting signatures from the parameters schema. The cheap half is
     already doing the work; this removes the class rather than the instance.
+
+## Workflow research
+
+26. **Survey what competing platforms advertise as supported workflows.**
+    Raised by the operator when the `workflows.advocate` seat was created, and it is the
+    right way to widen the set: `docs/WORKFLOWS.md`'s five workflows were derived from
+    what *we* run, which keeps them honest but also narrow. Candidate sources are the
+    agent-orchestration frameworks, durable-workflow engines and multi-agent product
+    suites that publish an opinion about the workflows they serve — crew/role pipelines,
+    graph-and-state machines, supervisor/worker hierarchies, human-in-the-loop approval
+    gates, scheduled and event-triggered runs, long-running background jobs with retries
+    and compensation, and durable task queues.
+    **The output is candidates, not users.** Every workflow found this way arrives
+    labelled `advertised-elsewhere` and only graduates to `observed` when somebody here
+    runs it, because a list grown from a competitor's feature page is a list of
+    hypotheses. The deliverable is therefore: a short survey naming each platform and
+    the workflow it claims (with the URL, per the web-research rule), a diff against our
+    five, and — for each candidate worth keeping — the must-not-break loop and the
+    capability it would need. Anything that survives goes into `WORKFLOWS.md` under its
+    class, and anything that needs work becomes a roadmap item rather than a wish.
+    Cost note: this is paid web research, so it is timeboxed and cited rather than
+    open-ended browsing.
 
 ## Explicitly deferred (with reasons)
 

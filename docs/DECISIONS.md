@@ -883,3 +883,55 @@ where the workflow is rather than in a footnote.
 
 **Evidence:** `docs/WORKFLOWS.md` (the workflows and the capability matrix),
 `docs/ROADMAP.md` item 21, and the demos each workflow cites.
+
+## D36 — A workflow advocate owns the workflow set, and labels its provenance (2026-10-11)
+
+**Decision (operator):** the rig gains a `workflows` pod with one seat, `advocate`
+(`openrig/rigs/tutor-pi/agents/advocate`). It advocates for the people who use durig,
+owns `durig/docs/WORKFLOWS.md` and its workflow set, questions any durig change for
+workflow impact, and collects feedback. Rig: 15 seats / 10 pods, regenerated spec.
+
+**Why a new pod rather than an existing seat.** `design.ux` already exists and might look
+like this role, but it owns the *tutor's* learner-facing surface (math legibility,
+accessibility, honest states) — a different product with different users. `scribe` owns
+the feature inventory: what durig *does*. The advocate owns what durig is *for* and who
+uses it. Three different documents, one concern each, and the same reasoning D27 used to
+give `scribe` its own pod.
+
+**The hard part, and the operator named it:** how does a persona collect feedback from
+users of a workflow when it may not have any? The answer is to **label provenance rather
+than guess**. Every workflow carries one of three classes, permanently:
+
+- **observed** — we ran it (a dogfood session, a demo, an operator report)
+- **advertised-elsewhere** — a competing platform documents supporting it, which makes it
+  a *candidate*: the workflow is real, but nobody here has asked for it
+- **inferred** — reasoned from our own design, labelled as reasoning
+
+**The first honest scoreboard is uncomfortable, deliberately.** Of the five workflows plus
+the operator loop, only one (W4, intake/decomposition/tracking) is `observed` in a **live
+multi-seat run**, because seats still cannot do real work (item 4). W1 is observed via a
+dogfood finding and the walkthrough, W5 and the operator loop are observed through
+everyday use, W3 is observed offline only — no live item has been deferred yet — and W2
+is **inferred**, since its evidence half does not exist. Writing that down is what stops a
+plausible workflow list from reading as a satisfied user base.
+
+**Inventing a user is the cardinal sin here.** A fabricated citation misleads a reader; a
+fabricated user need *moves design*. So the role doc forbids it explicitly, and the
+practical substitute is that feedback has exactly two real sources today — the operator's
+reports and our own dogfood findings, both already recorded — plus roadmap item 26 for
+widening the candidate set from competitors' advertised workflows.
+
+**Edges follow one rule**, as D27's did: the advocate reads and questions the seat that
+builds durig (`dev`) and the seats whose *work* durig's workflows govern (the build seats,
+where delegation and pair review actually run, so their friction is the feedback signal);
+it collaborates with `scribe` and `pm` as the adjacent owners; it escalates scope
+conflicts to `lead`; and it assigns no work. It deliberately does not observe the content
+producers or `sec`.
+
+**Immediate evidence the rig agrees:** `check` against the live store now reports
+`store-missing-seat: scribe, advocate` — seat drift found by the rule built yesterday,
+which is exactly the class of thing that used to be invisible.
+
+**Evidence:** `openrig/rigs/tutor-pi/{rig.yaml,agents/advocate/**,guidance/pod-workflows.md,workflows-pod.fragment.yaml}`,
+`durig/rigs/tutor-pi.rig.json` (15 seats / 15 edge groups, 0 converter warnings),
+`docs/WORKFLOWS.md`'s ownership section.

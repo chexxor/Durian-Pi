@@ -17,6 +17,13 @@ something we already run or already built — a demo, a rig we operate, or a nor
 actually follows — rather than invented for this document. Where a workflow is not
 supported yet, it says so and names the item that would.
 
+**Owner:** the `workflows.advocate` seat (`openrig/rigs/tutor-pi/agents/advocate`). It
+owns this document and the workflow set, questions durig changes for workflow impact, and
+labels every workflow with the evidence class described under "Who owns this". It is
+deliberately not the tutor's learner-facing UX seat (`design.ux`) — that one owns the
+tutor's surface, this one owns durig's workflows — and it differs from the docs seat
+(`scribe`) by owning the *workflow set* rather than the feature inventory.
+
 ## How to read a workflow
 
 - **must-not-break** is the honest centre. A workflow can be slow, awkward or verbose and
@@ -218,6 +225,47 @@ Status is today's, not the wish:
 | **A drill task set** | operator loop | **absent** — item 2's other half |
 | Attempt/deadline semantics | W4 | **absent** — item 6 |
 | Whole-workflow phases | W4 | **absent** — item 12 |
+
+## Who owns this, and where the workflow set comes from
+
+The `workflows.advocate` seat owns this document. Its hardest job is one the operator
+named when the seat was created: **how do you collect feedback from the users of a
+workflow when you may not have any?** The answer is not to guess. It is to label where
+each workflow came from, permanently, and grow the honest set deliberately.
+
+Three admissible classes:
+
+- **observed** — we ran it. A dogfood session, a demo, an operator report. This is the
+  only class that means "somebody here actually uses this".
+- **advertised-elsewhere** — another platform documents supporting it. That makes it a
+  **candidate**: it says the workflow is real and worth considering, not that anyone here
+  wants it.
+- **inferred** — reasoned from our own design, and labelled as reasoning.
+
+Today, honestly:
+
+| Workflow | Class | Why |
+|---|---|---|
+| W1 routed delegation | **observed** | dogfood finding F6 ran the full loop; QUICKSTART steps 4–6 |
+| W2 independent verification | **inferred** + advertised-elsewhere | the team norm and the pair-review contract, but **not yet observed under durig** — and its evidence half does not exist (item 4) |
+| W3 blocked on a question | **observed (offline only)** | `demo/defer.test.mjs` drives the real tools; no live run has deferred an item yet |
+| W4 intake / decomposition / tracking | **observed** | the first dogfood session routed a real backlog item `pm` → `worker` |
+| W5 human oversight | **observed** | the operator reads `status`/`watch`/`log` against the live store routinely |
+| Operator loop (rig change) | **observed** | run on the live rig, e.g. the `DURIG_STREAM_TIMEOUT_MS` change |
+
+That table is the honest scoreboard, and it is uncomfortable in the right way: **only one
+workflow is observed in a live multi-seat run**, because seats still cannot do real work
+(item 4). It also means "collect feedback" has a concrete meaning today — the operator's
+reports and our own dogfood findings, both already recorded — rather than a survey nobody
+can run.
+
+**Widening the set.** The operator's suggestion, and a good one: derive candidate
+workflows from **what competing platforms advertise supporting** (agent-orchestration
+frameworks, durable-workflow engines, multi-agent product suites). Each candidate arrives
+labelled `advertised-elsewhere` and graduates to `observed` only when somebody here runs
+it. That is roadmap item 26, and it is the right order — observed first, candidates
+second — because a workflow list that grows from a competitor's feature page is a list of
+hypotheses, not of users.
 
 ## Deriving "recommended" (the point of this document)
 
