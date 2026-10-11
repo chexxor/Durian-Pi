@@ -128,8 +128,35 @@ the new entries.
 **Why it is recorded:** positive results are how we notice a regression later.
 The end-to-end path — decompose, route, queue, attention, measure — works.
 
+### F7 — an unanswered run could report a PREVIOUS send's reply
+
+**Observed:** with two prior successful sends on the same seat, a third send that
+could not pick a model (a faux seat with the provider switched to deepinfra)
+settled as `unanswered (no_model)` and *still* returned
+`reply: [{type:"text",text:"(faux) acknowledged."}]` with `stopReason: "stop"` —
+the first send's reply, presented as this run's.
+
+**Cause:** the settle identified "the reply this run produced" by diffing against
+the newest **assistant** entry id captured before the run (`e.id !==
+priorAssistantId`). A run that produces nothing leaves older assistant entries
+that also differ from that id, so the newest-first scan falls through to one of
+them. With exactly one prior assistant entry the scan finds nothing and the bug is
+invisible — which is why the existing test passed: its seat had one prior reply,
+and this session's new `--body-file` send made it two.
+
+**Why it matters:** a failed run reporting a confident reply is the worst shape of
+this bug — the operator sees `unanswered` *and* a reply together, and the reply
+belongs to a different task. It also silently degrades `reply` for any seat with
+history, which is every seat in real use.
+
+**Lands:** diff against a watermark of the newest **entry** id rather than the
+newest assistant id — entry ids increase, so "this run created it" is exactly
+"id > watermark". Regression test added for the two-prior-replies case, which is
+the case the old test could not reach.
+
 ## Session log
 
 | Date | Rig | What we ran | Findings |
 |---|---|---|---|
 | 2026-10-11 | `rig.v2.json` in `dogfood.sqlite` | Routed a real backlog item (empty-transcript fix) through `pm` → `worker`; inspected queue, status, metrics, log | F1, F2, F3, F4, F5, F6 |
+| 2026-10-11 | same | Fixed F1–F3 and wrote their tests; F7 surfaced while writing the F1 test | F7 |

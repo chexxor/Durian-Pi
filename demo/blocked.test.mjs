@@ -19,6 +19,7 @@ import {
 import { configure, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { RigQueue, Router, registerSeat } from "../src/rig.mjs";
+import { computeAttention, summarizeError } from "../src/attention.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
 const dir = mkdtempSync(join(tmpdir(), "durig-blocked-"));
@@ -122,7 +123,35 @@ try {
 
 	assert.ok(!Object.keys(bySeat).some((k) => k.startsWith("healthy/")), `healthy seat must be silent; attention=${JSON.stringify(report.attention)}`);
 
-	console.log(`BLOCKED OK: notices=${JSON.stringify(report.attention.map((n) => `${n.seat}/${n.kind}`))}`);
+	// The failure CAUSE must reach the notice, not only its category. A submission
+// record says "model_error" and nothing else, while the entry knows it was a 429;
+// a reader who cannot tell a transient rate limit from a real fault investigates
+// the wrong thing, or waits when they should not. Pure, so no store or provider.
+const failedSeat = [{ name: "impl", conversationId: 7 }];
+const failedLatest = new Map([[7, { status: "unanswered", reason: "model_error" }]]);
+assert.equal(
+	computeAttention(failedSeat, [], failedLatest)[0].detail,
+	"model_error",
+	"the category alone when no cause is known",
+);
+assert.equal(
+	computeAttention(
+		failedSeat,
+		[],
+		failedLatest,
+		new Map([[7, '429: {"message":"Model busy, retry later","type":"invalid_request_error"}']]),
+	)[0].detail,
+	"model_error: 429: Model busy, retry later",
+	"the provider message is extracted from the entry and carried in the notice",
+);
+assert.equal(summarizeError(""), "", "no error message yields no cause");
+assert.equal(
+	summarizeError("x".repeat(400)).length,
+	160,
+	"an unparseable error string is bounded, never concatenated whole",
+);
+
+console.log(`BLOCKED OK: notices=${JSON.stringify(report.attention.map((n) => `${n.seat}/${n.kind}`))}`);
 	console.log("BLOCKED TEST PASS");
 	process.exit(0);
 } finally {

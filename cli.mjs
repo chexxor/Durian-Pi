@@ -114,6 +114,13 @@ function fail(error) {
   process.exit(1);
 }
 
+/** Whole of stdin as text, for `send --body-file -`. */
+async function readStdin() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 // Generation-slot cap across ALL seats (MVP #6): unset or <=0 means no
 // limit; 1 serializes generations so one local model can serve everyone.
 function maxSeats() {
@@ -439,12 +446,22 @@ async function cmdSend(seatName, text, { stream = false } = {}) {
     }
     let submission;
     try {
-      // Identify the newest assistant entry BEFORE the run: a settle that
-      // produced nothing must not report a reply from an earlier send as if
-      // it belonged to this one.
+      // Identify a watermark BEFORE the run, so a settle that produced nothing
+      // cannot report a reply from an earlier send as if it belonged to this
+      // one.
+      //
+      // The watermark is the newest ENTRY id, not the newest ASSISTANT id.
+      // Diffing against the newest assistant id looks equivalent and is not: a
+      // run that produces nothing leaves older assistant entries that also
+      // differ from the newest one, so the scan below falls through to a
+      // previous send's reply. That only stayed hidden because the test's seat
+      // had exactly one prior assistant entry (dogfood F7). Entry ids increase,
+      // so "this run created it" is exactly "id > watermark".
       const prior = await conv.entries({}, 20, undefined, BACKGROUND_CONTEXT);
-      const priorAssistantId =
-        prior.items.find((e) => e.kind === "pi.assistant")?.id ?? null;
+      const priorMaxId = prior.items.reduce(
+        (max, e) => Math.max(max, Number(e.id) || 0),
+        0,
+      );
       submission = await conv.submit(
         { type: "input", content: text },
         BACKGROUND_CONTEXT,
@@ -460,10 +477,10 @@ async function cmdSend(seatName, text, { stream = false } = {}) {
         );
       }
       const pg = await conv.entries({}, 50, undefined, BACKGROUND_CONTEXT);
-      // Entries come newest-first; the latest assistant entry this run
-      // produced is the first one that differs from the pre-run entry.
+      // Entries come newest-first; the newest assistant entry this run created
+      // is the first one past the watermark.
       const lastAssistant = pg.items.find(
-        (e) => e.kind === "pi.assistant" && e.id !== priorAssistantId,
+        (e) => e.kind === "pi.assistant" && Number(e.id) > priorMaxId,
       );
       const msg = lastAssistant?.model?.[0];
       out({
@@ -506,6 +523,15 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
     model: entry.model?.[0] ?? null,
   });
   const print = (entries) => {
+    // An empty transcript must SAY it is empty. Printing nothing - and then
+    // waiting forever under --follow - makes "has never run" look identical to
+    // "broken", the same reasoning as the empty-rig guardrail. Dogfood F2.
+    // stderr, so the JSON contract on stdout is untouched.
+    if (entries.length === 0) {
+      console.error(
+        `note: ${seatName} has no entries yet - it has never run, or its transcript is empty${follow ? " (still watching for new turns)" : ""}. Check with: node cli.mjs ps`,
+      );
+    }
     if (human) {
       const text = formatChat(entries, {
         seat: seatName,
@@ -642,6 +668,20 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
     // "bounded" is a fact about this reading rather than a standing claim.
     bounded: Object.values(pages).some((items) => items.length >= entryLimit),
   });
+  // The failure CAUSE is in the entry, not in the submission record: the record
+  // carries a category ("model_error"), the entry carries the provider's
+  // message. Collected here because the page is already in hand, so surfacing
+  // it costs nothing extra (dogfood F3).
+  const errorByConv = new Map();
+  for (const seat of seats) {
+    for (const entry of pages[seat.name] ?? []) {
+      const msg = Array.isArray(entry?.model) ? entry.model[0] : null;
+      if (msg?.errorMessage) {
+        errorByConv.set(seat.conversationId, msg.errorMessage);
+        break; // newest first, so the first hit is the most recent failure
+      }
+    }
+  }
   return {
     seats,
     queueItems: queueVal.items ?? [],
@@ -649,7 +689,7 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
     latestByConv: Object.fromEntries(latestByConv),
     metrics,
     attention: [
-      ...computeAttention(seats, queueVal.items ?? [], latestByConv),
+      ...computeAttention(seats, queueVal.items ?? [], latestByConv, errorByConv),
       ...slotNotices,
       // Metric notices join the attention channel instead of claiming a screen
       // of their own: same slot, same rendering, and signal only when a measure
@@ -946,6 +986,7 @@ usages:
   node cli.mjs up <rig.json> [--refresh]   create seats (--refresh re-applies prompts)
   node cli.mjs ps              list seats
   node cli.mjs send <seat> <text> [--stream]   steer a seat and wait for its reply
+  node cli.mjs send <seat> --body-file <path>  the same, prompt from a file (- = stdin)
   node cli.mjs send <seat> <text> --no-stream   the same, without the live view
   node cli.mjs queue           dump the work queue
   node cli.mjs log <seat> [limit] [--follow] [--full] [--tool-bg] [--theme dark|light]
@@ -963,10 +1004,33 @@ try {
   if (cmd === "up") await cmdUp(rest[0], rest.includes("--refresh"));
   else if (cmd === "ps") await cmdPs();
   else if (cmd === "send") {
-    if (!rest[0] || !rest[1]) fail("send needs <seat> <text>");
-    const stream = rest.includes("--stream") || (process.stderr.isTTY && !rest.includes("--no-stream"));
-    const text = rest.slice(1).filter((a) => a !== "--stream" && a !== "--no-stream").join(" ");
-    await cmdSend(rest[0], text, { stream });
+    // --body-file (or `-` for stdin) exists because a prompt is shell input: a
+    // backtick inside an inline argument is command substitution, so the text
+    // arrives silently mangled AND the run still succeeds. OpenRig's queue has
+    // --body-file for exactly this class. Found by dogfooding, F1.
+    const fileAt = rest.indexOf("--body-file");
+    let fromFile = null;
+    if (fileAt >= 0) {
+      const path = rest[fileAt + 1];
+      if (!path) fail("send --body-file needs a path (or - for stdin)");
+      try {
+        fromFile = path === "-" ? await readStdin() : await readFile(path, "utf8");
+      } catch (err) {
+        fail(`cannot read ${path === "-" ? "stdin" : path}: ${err?.message ?? err}`);
+      }
+    }
+    // Only drop the path argument when there WAS a --body-file; with fileAt = -1
+    // the index below would be 0 and would swallow the seat name.
+    const args = rest.filter(
+      (a, i) => a !== "--body-file" && !(fileAt >= 0 && i === fileAt + 1),
+    );
+    if (!args[0]) fail("send needs <seat> <text>, or --body-file <path>");
+    const stream =
+      args.includes("--stream") || (process.stderr.isTTY && !args.includes("--no-stream"));
+    const inline = args.slice(1).filter((a) => a !== "--stream" && a !== "--no-stream").join(" ");
+    const text = fromFile !== null ? fromFile : inline;
+    if (!text.trim()) fail("send needs <seat> <text>, or --body-file <path>");
+    await cmdSend(args[0], text, { stream });
   } else if (cmd === "queue") await cmdQueue();
   else if (cmd === "watch") {
     // Same precedence as `send --stream`: an explicit flag wins, otherwise a

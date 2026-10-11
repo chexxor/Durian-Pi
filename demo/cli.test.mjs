@@ -113,6 +113,51 @@ try {
 		"the assistant reply is in the transcript",
 	);
 
+	// --- send --body-file: the prompt must arrive VERBATIM --------------------
+	// A backtick in an inline shell argument is command substitution, so text can
+	// arrive silently mangled while the run still looks fine (dogfood F1). The
+	// file form exists to remove that class, so the proof is that the STORED
+	// prompt equals the file byte for byte - not merely that the send succeeded.
+	const promptText =
+		"Backtick `echo hi` plus $HOME and $(whoami) must survive.\nSecond line.";
+	const promptFile = join(dir, "prompt.txt");
+	writeFileSync(promptFile, promptText);
+	const viaFile = cli(["send", "alpha", "--body-file", promptFile]);
+	assert.equal(
+		viaFile.code,
+		0,
+		`send --body-file exit 0 (stderr: ${viaFile.stderr.slice(0, 200)})`,
+	);
+	const afterFile = json(cli(["log", "alpha", "5"]));
+	const lastUser = [...afterFile.entries].reverse().find((e) => e.kind === "pi.user");
+	assert.equal(
+		lastUser?.text,
+		promptText,
+		"the prompt must be stored verbatim, not shell-mangled",
+	);
+
+	// --- log on an empty transcript must SAY it is empty ----------------------
+	// Otherwise "has never run" and "broken" look identical, and --follow waits
+	// forever in silence (dogfood F2). The note goes on stderr so the JSON
+	// contract on stdout is unchanged.
+	const emptyLog = cli(["log", "beta", "5"]);
+	assert.equal(emptyLog.code, 0, "an empty transcript is not an error");
+	assert.deepEqual(
+		json(emptyLog).entries,
+		[],
+		"the JSON contract still reports an empty array",
+	);
+	assert.match(
+		emptyLog.stderr,
+		/beta has no entries yet/,
+		"the CLI says the transcript is empty rather than printing nothing",
+	);
+
+	// --body-file needs a path when it is given at all.
+	const noPath = cli(["send", "alpha", "--body-file"]);
+	assert.equal(noPath.code, 1, "--body-file without a path exits 1");
+	assert.match(json(noPath).error, /--body-file needs a path/);
+
 	// --- config: reports the effective database ----------------------------
 	const cfg = json(cli(["config"]));
 	assert.equal(cfg.ok, true);
@@ -141,6 +186,23 @@ try {
 		noModel.stderr,
 		/note: alpha finished as unanswered \(no_model\)/,
 		"a non-done settle is announced on stderr instead of looking idle",
+	);
+
+	// ...and a SECOND unanswered send must not resurrect an earlier reply. The
+	// seat now holds two assistant entries, which is exactly what exposes the
+	// watermark bug: diffing against the newest assistant id finds an OLDER one
+	// that also differs, and reports it as this run's reply (dogfood F7).
+	const noModel2 = cli(["send", "alpha", "again", "--stream"], {
+		...process.env,
+		DURIG_PROVIDER: "deepinfra",
+		DURIG_DB: db,
+		DEEPINFRA_API_KEY: "unused-because-no-generation-happens",
+	});
+	assert.equal(json(noModel2).settledReason, "no_model");
+	assert.equal(
+		json(noModel2).reply,
+		null,
+		"an unanswered run must never report an earlier send's reply",
 	);
 
 	console.log("--- wrong-database guardrail ---");
