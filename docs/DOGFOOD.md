@@ -220,6 +220,28 @@ it has to be the caller's habit.
 **Lands:** no code change. Use `--request-id` on any send that may be retried - a caught failure is
 precisely when to use it - and say so in the skill, because a failed send is not free.
 
+### F11 — a send killed mid-run leaves an admitted submission that only a write-side command schedules
+
+**Observed:** after a `send` was killed by a shell timeout, pm's transcript ended with a `pi.user`
+entry and NO assistant entry after it. Re-running every viewer command changed nothing: no new
+assistant text, and the queue stayed empty. No generation slot was held (`selfdev.sqlite.genlock.*`
+was absent), so the run was not waiting on concurrency.
+
+**Cause:** the submission was **admitted durably** before the process died, but nothing scheduled
+it. Viewer commands do not open a harness at all - `log`, `status` and `queue` read storage
+directly - and `openHarness` deliberately skips `resume()` for viewers, because enabling
+scheduling is a write-side act that would let a passive `watch` kick the very queue it is
+observing. So an admitted-but-unscheduled submission waits for the next write-side command.
+
+**Why it matters:** the operator's natural reaction to a stalled run is to LOOK at it, and looking
+can never advance it. Worse, my first instinct - re-send - would have duplicated the request
+(which is F10). The correct move is to re-send with the SAME `--request-id`: it reuses the admitted
+submission, schedules it, and waits for the reply. D34's idempotency turns out to be the resume
+mechanism as well.
+
+**Lands:** no code change. Worth saying in the skill: to resume a run that was interrupted, repeat
+the send with the same request id rather than a new one.
+
 ## Session log
 
 | Date | Rig | What we ran | Findings |
