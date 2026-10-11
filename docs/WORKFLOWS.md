@@ -77,6 +77,25 @@ silence is not a sign-off. This is exactly the team norm the tutor-pi rig alread
 encodes for its 2-member pods, and the reason `check` has a `no-verifier-seat` rule and a
 `single-model-rig` rule.
 
+**Two relationship shapes, one loop — and the operator asked which a "verifier" is.** W2 is the
+same loop whether the reviewer is a *peer* or a *verifier*; what differs is the relationship, and
+it changes what the reviewer needs:
+
+| | Peer review | Verification |
+|---|---|---|
+| Relationship | symmetric — same craft, two seats in a pod reviewing each other's work | asymmetric — a seat whose role *is* checking |
+| Covers | reasoning, notation, convention, whether the argument holds | that the claim is **reproducible** |
+| Needs | the artifact itself, and the craft to judge it | a **different model family** (a shared model shares the blind spot) and **evidence it can re-run** |
+| Example here | `theorist`→`editor`, `pedagogue`→`student` (the tutor-pi 2-member pods) | `impl`→`qa`, `impl2`→`qa2` |
+
+So "the verifier runs the tests" is right for the verification shape: re-running the oracle on a
+snapshot is exactly what makes verification independent rather than a second opinion. A peer
+reviewer may also run them, but that is not what makes the review a control. Both shapes are
+served by the same tool need — **an artifact the reviewer can reproduce** — which is why the
+snapshot in `docs/SEAT-TOOLS.md` (the verifier's environment is rooted at a disposable copy, so
+it can execute freely without altering what it verifies) serves both rather than being verifier-
+specific machinery.
+
 **Done:** an explicit reviewer ack, or a flagged defect with the fix, recorded where the
 item can be read.
 
