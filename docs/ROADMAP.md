@@ -220,6 +220,14 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
 10. **`log --follow` consistency** — it prints the backfill as one block and each
     later entry on its own, so column alignment and turn grouping differ between
     them. Small, self-contained.
+10a. **A `stray-seat` rule in `check`.** The store can hold a seat the spec does not
+    declare: the live `tutor-pi.sqlite` carries a `worker` left over from an
+    earlier `up` of `rig.v2.json`, and `up` only ever adds or refreshes, so it
+    stays and nothing says so. `check` already reads both sides in one pass, which
+    is exactly this class of disagreement, so the rule is a fit rather than a new
+    mechanism. The finding must name the seat and be honest that clearing it is a
+    store rebuild or an explicit removal, not a spec edit. Found while measuring
+    the metrics cost; requested by the operator.
 
 ## Mid-term
 
@@ -243,6 +251,67 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     `@earendil-works/pi-tui` (already a dependency of `pi-coding-agent@1.1.0`, so
     it is in-stack) over adopting a new framework; the browser/SSE client is the
     cheaper option if the interaction set stays small.
+
+## Extensibility and distribution
+
+From the operator: should durig ship as two editions (`durig-core` and `durig`),
+or as one system with well-considered optional extras — and does the measure layer
+make an extension's effect visible? The answers below are the argument, not yet a
+ruling.
+
+**The cost model first, because it decides the whole question.** For durig the
+burden of an unused feature is *not* disk and *not* speed: the per-seat scan
+measures 0.9–1.4 ms, so runtime cost is negligible. The binding costs are (a)
+prompt tokens on every request, (b) **which tools the model sees**, which changes
+seat behaviour rather than just its bill, and (c) the test and documentation
+surface. A feature that is off must therefore cost nothing — not "little".
+
+18. **An extension registry with named profiles — not two editions.** Two
+distributions means two test surfaces, and our own evidence says the untested one
+rots: a committed converter fixture that crashed on contact was cited as proof by
+three documents, one of them an acceptance item marked PASS. A profile is *data*
+(`{"profile":"recommended"}` or an explicit enable list); an edition is an
+artifact to build, publish, and forget. So: one artifact, one suite, and `core` /
+`recommended` / custom as configuration. Each extension declares its own cost
+(prompt tokens, tools added), its default, and its **blind spot** — the same
+discipline `check` and `metrics` already follow, since a declaration that travels
+with the thing is the only kind that stays true. Open question for the operator:
+which workflows define "recommended" (see 21).
+19. **Extension provenance, so a measure can be attributed to a change.** Today the
+   answer is **no**: entries carry a model and a timestamp and nothing about which
+   extensions were active, so `metrics` can see that `step-repetition` moved but
+   not that an extension was enabled when it did. The seam already exists — D24's
+   review loop records a prediction before a config change and re-measures after.
+   Cheapest correct version: a rig is driven by a committed spec, so **git is
+   already the append-only change log**, and `metrics` only needs to report the
+   active set for the reader to line the two up. That may remove the need for the
+   deferred write-path change-log entirely, which would also retire the
+   `security.sec` debt D24 and D27 carry. Verify before believing it.
+20. **Caveman as an optional extension — spike first.** `juliusbrussee/caveman`
+   is two things: a **skill** (output voice, ~1,160 prompt tokens/request, ~3% 
+   median output saving on top of "be concise", much more for `/ultracave`) and a
+   **proxy** (compressing what the agent *reads*: logs, CSV, YAML, JSON, test
+   output; vendor-reported 33.2% session input-token reduction). Three things to
+   settle before any of it ships: (i) **it may not apply to us** — durig does not
+   run the `pi` CLI, it drives pi-durable in-process, so `caveman pi` cannot wrap
+   it and only the middleware path could; that is exactly a timeboxed spike, not
+   an assumption. (ii) **Telemetry is on by default** (`caveman telemetry off`,
+   `DO_NOT_TRACK=1`), which is network egress, so a `security.sec` position comes
+   **before** adoption under our own norms. (iii) **Scope it by seat role**: terse
+   is fine for seat-to-seat coordination and wrong for a textbook tutor's
+   student-facing explanation — the same seat-role axis `check`'s verifier rule
+   already reasons about. And we cannot yet verify the savings ourselves: there is
+   no token or cost measure, because entries carry no `usage` field (D24 evidence).
+21. **Target workflows, written down.** Honest answer to "have we considered
+   that": **partially, and never in one place.** The MVP bar, the feature
+   inventory, the gap table and `RESEARCH.md`'s topology notes each carry a piece,
+   but nothing names the workflows we intend to support and their must-work loops.
+   Consequence: "recommended extensions" (18) and build order are decided without
+   that frame, and D21 (non-interactive CLI), D22 (no per-seat terminal) and D24
+   (measurement) are workflow decisions taken ad hoc. Deliverable: `docs/
+   WORKFLOWS.md` naming 3–5 workflows — who, trigger, the loop that must never
+   break, what "done" means, which capability it needs — after which
+   "recommended" is derivable instead of taste.
 
 ## Explicitly deferred (with reasons)
 

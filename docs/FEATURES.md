@@ -217,6 +217,16 @@ singleflight · streamcli · streamview · syncpi · watch · watchview
 Pointers, not promises — each is an item in `docs/ROADMAP.md`.
 
 - **A hardened starter rig** so a new user gets a spec that passes `check` (item 1)
+- **A `stray-seat` `check` rule** — the store holds a seat the spec does not declare,
+  and `up` never removes one (item 10a)
+- **An extension registry with named profiles** — one artifact, `core` / `recommended`
+  / custom as configuration, each extension declaring its cost and blind spot
+  (item 18), which is also what makes an extension toggle measurable (item 19)
+- **Caveman as an optional extension** — a skill and a proxy for token reduction;
+  a spike must first settle whether either applies to an in-process harness, and
+  a `security.sec` position precedes its telemetry default (item 20)
+- **Target workflows, written down** — who, trigger, the loop that must never break,
+  what "done" means; without it "recommended" is taste (item 21)
 - **A drill task set** so two configurations are comparable, which is what makes
   item 3's before/after measurement comparable rather than confounded (item 2)
 - **Verifier model diversity** — give `qa`/`qa2` a different model family (item 3)
