@@ -229,6 +229,14 @@ and on pinned main.
 ~40 s (36 s cold, 24 s warm); durig's suite passes 12/12 both on released
 packages and on the linked main build (tool.js byte-identical to the built tree).
 
+**Pin moves:** `42a3497d` (2026-10-10) → `ea448f45` (2026-10-11), which carries
+"the scheduler no longer visits every live task on each pass",
+`TaskRuntime.ownedTasks()`, and one document per nested call. Rebuilt and
+relinked; all 18 demos pass on the new pin without a code change, so the move
+needed no compat shim. Upstream is re-checked at the start of a session rather
+than mid-task: an API rename landing underneath work in progress is the failure
+the pin exists to prevent, and moving it deliberately costs one suite run.
+
 ## D18 — Read commands must name the database they used (2026-10-10)
 
 **Finding:** a second terminal that omits `DURIG_DB` silently opens the default

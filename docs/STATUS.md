@@ -4,6 +4,10 @@ Written **2026-10-10** at the operator's request, pausing after the
 viewing/formatting milestone. Read this first when resuming; `docs/ROADMAP.md`
 holds the ordered next work and `docs/DECISIONS.md` the reasoning.
 
+Updated **2026-10-11**: the pi pin moved to `main`'s tip and the tuios patch was
+rebased onto upstream `main` — both rebuilt and re-verified (D17, and
+`docs/TUIOS-PRS.md` at the repo root). No durig code changed.
+
 ## Where we stopped
 
 Milestone **M2 (operator can see the rig)** is finished and verified. Work pauses
@@ -22,7 +26,7 @@ Everything below was verified against the real store, not asserted from intent.
 | `log <seat>` | turn-grouped transcript with timestamps and elapse deltas; `--follow` tails new turns |
 | `send` | streams the live generation to stderr; non-`done` settles explain themselves |
 | Failure honesty | wrong database is announced, never silently empty (D18) |
-| Dependencies | released `@earendil-works/*` 1.1.0 are the default; pi `main` is pinned and available via `scripts/sync-pi.mjs` |
+| Dependencies | released `@earendil-works/*` 1.1.0 are the default; pi `main` is pinned (`ea448f45`) and linked via `scripts/sync-pi.mjs` |
 
 ## Architecture: what changed, and what deliberately did not
 
@@ -55,10 +59,13 @@ Everything below was verified against the real store, not asserted from intent.
   `DEEPINFRA_API_KEY`); offline mode needs nothing (`DURIG_PROVIDER=faux`).
 - `DURIG_DB` selects the store; without it the default is `./rig.sqlite`. Use
   `node cli.mjs config` to see what is actually in effect.
-- Dependency state at the pause: `node_modules` is **linked to pinned pi `main`**
-  (`--link`), pin `42a3497d`, drift `false`. A fresh clone is on the 1.1.0
-  releases; re-run `node scripts/sync-pi.mjs --sync --link` to reproduce the
-  linked state.
+- Dependency state: `node_modules` is **linked to pinned pi `main`** (`--link`),
+  pin `ea448f45`, drift `false`, all 18 demos passing on it. A fresh clone is on
+  the 1.1.0 releases; re-run `node scripts/sync-pi.mjs --sync --link` to
+  reproduce the linked state.
+- The tuios patch is rebased onto upstream `main` as `6160892d` on branch
+  `rebase/conpty-main` in `C:/tmp/tuios-rebase`; it is **not pushed**, because
+  updating PR #596 needs a force-push and has not been authorized.
 - No build or lint step exists in `durig/package.json`. The check surface is the
   demo suite plus `node --check`.
 
