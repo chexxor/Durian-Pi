@@ -70,6 +70,7 @@ One vocabulary for both the environment and the config file, resolved
 | `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent generations rig-wide (unset = unlimited) |
 | `DURIG_OPTIMIZE` | `on`: run each persona through the optimizer during `up` |
 | `DURIG_EXTENSIONS` | Comma-separated pi-durable extension modules to install. A path that cannot load **fails the command** rather than being skipped, and `up` reports the names it installed. Proof: `demo/extensions.test.mjs` |
+| `DURIG_STREAM_TIMEOUT_MS` | Total request timeout for one generation attempt. Unset = platform default (`openai` SDK, 600000 ms). The only harness setting durig exposes, because it is the only one with no default and a real reason to move in both directions. Proof: `demo/config.test.mjs` |
 | `DEEPINFRA_API_KEY` | Ambient credential, read from env/config, never stored or printed |
 
 Discovery order: `$DURIG_CONFIG`, then `./durig.config.json`, then

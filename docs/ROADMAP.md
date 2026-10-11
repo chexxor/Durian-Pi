@@ -280,13 +280,14 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    repetition detection: the two most common MAST design failures (step repetition
    15.7%, unaware of termination 12.4%) are both unaddressed. Subsumes the
    block/park/wake-after semantics raised against Core_Ideas layer 7.
-   → *From the demos (24a, 24e):* part of this is platform support durig switches off
-   — `HarnessSettings` (stream timeout, retries, compaction, steering/follow-up) and
-   `harness.resume()`, which continues recovered work instead of reporting it as a
-   failure. The other part is `defineTask` phases with checkpoints, which is what makes
-   a multi-step task resumable at all. Note the honest split the review records: the
-   demo recovers a turn but cannot report the recovery, while durig reports it and
-   cannot recover.
+   → *From the demos (24a, 24e), corrected:* the review first claimed this was platform
+   support durig "switches off". It is not: `resolveSettings` and the `openai` SDK
+   already supply retry, compaction and timeout defaults, and durig already calls
+   `harness.resume()`. What was genuinely missing was the ability to *tune* the stream
+   timeout (now `DURIG_STREAM_TIMEOUT_MS`). The real platform contribution to this item
+   is `defineTask` **phases with checkpoints** (vacation.ts), which is what makes a
+   multi-step task resumable at all — and `resume()` only becomes load-bearing once
+   durig has tasks for the scheduler to pick up.
 7. **Extract the view model and peer navigation graph (D21).** Pure functions:
    turns, collapse state, and "which seat sent to / received from this seat",
    derivable from queue items' `from`/`to` and the Router tools. Unblocks both
@@ -571,14 +572,31 @@ surface. A feature that is off must therefore cost nothing — not "little".
     `main.ts` and `tui.ts` with the coding agent at identical blob shas — so the
     transferable surface is `runtime.ts` and `vacation.ts`. Six independently takeable
     pieces, each naming the file that shows it:
-    24a. **Pass `HarnessSettings`, and call `harness.resume()`.** durig opens the
-    harness with no settings at all, so it has no stream timeout, no retry policy, no
-    compaction config and no steering/follow-up mode — platform support for the
-    termination half of item 6 that is simply switched off (`harness-setup.ts`, and
-    `harness.resume()` in `runtime.ts`: "Recovered work from an interrupted turn
-    continues now"). durig instead leaves a killed run `unanswered` and reports it
-    forever. Spike first: durig's workers are per-invocation processes, not a
-    long-lived TUI.
+    24a. **The harness settings knob — mostly a correction, one real fix.**
+    **✅ done (2026-10-11), and it shrank on inspection.** The review claimed durig
+    "has no stream timeout, no retry policy, no compaction config and no steering or
+    follow-up mode" and "never calls `harness.resume()`". Both were **wrong**, and
+    wrong the same way: the demo's side was read while durig's side was described from
+    memory. Checked against the platform: `resolveSettings` merges retry (3 attempts,
+    2 s base, 60 s agent delay), compaction, progress, `toolExecution`, both queue modes
+    and `contextRetentionMs` over built-in defaults, so durig already had all of them;
+    the provider path is the `openai` SDK, whose defaults are `maxRetries: 2` and a
+    600000 ms total request timeout, so it could not hang forever either; and durig
+    **already calls** `harness.resume()` in `openHarness`, with viewers excluded so a
+    passive `watch` cannot kick the queue it observes.
+    The one real gap was a **knob**: `stream` is the single field with no default
+    (`{ ...settings?.stream }` → `{}`), so durig could not raise the timeout for the
+    slow single-model rig that `DURIG_MAX_CONCURRENT_SEATS=1` exists to support, nor
+    lower it to fail fast instead of waiting out ten minutes on a stalled endpoint.
+    `DURIG_STREAM_TIMEOUT_MS` now reaches `Harness.open`, rejects a bad value loudly
+    rather than silently taking the default, and is **unset by default** so the platform
+    timeout stands rather than a number durig invented. `resume()` needs nothing until
+    durig has durable tasks — it enables the scheduler, and durig has none to resume —
+    so the remaining half belongs to 24e.
+    *The lesson, recorded because it is the reusable part:* a review that reads one side
+    carefully and the other from memory produces confident, wrong gap claims, and a
+    wrong gap is worse than no gap. Corrections are marked in place in
+    `docs/REVIEW-pi-durable-demos.md` rather than quietly edited away.
     24b. **Spike the HTTP dispatcher.** `configureHarnessHttp` exists because "without
     it, some provider streams break off". durig configures none. This is listed as a
     **possible** live defect, not a confirmed one — it needs an hour to rule in or out,

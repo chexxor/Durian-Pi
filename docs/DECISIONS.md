@@ -801,3 +801,14 @@ dead-pid lease evidence rather than a 10-second staleness timeout.
 **Evidence:** `docs/REVIEW-pi-durable-demos.md` (ideas, gap table, patterns, hazards,
 and the "does not transfer" boundary), ROADMAP items 24–25 with 24a–24g,
 `demo/primer.test.mjs`, and the falsified primer regression.
+
+**Correction (2026-10-11), same day: two of the gap claims in that review were wrong.**
+It said durig "has no stream timeout, no retry policy, no compaction config" and
+"never calls `harness.resume()`". Checked against the platform: `resolveSettings`
+supplies retry/compaction/progress/queue-mode/context-retention defaults; the `openai`
+SDK supplies a 600000 ms timeout and 2 retries; and `cli.mjs` **already calls**
+`resume()`. The failure mode is worth more than the fix — the demo's source was read
+carefully while durig's own side was described from memory, which is how a review
+manufactures gaps. Only the *knob* was real (`stream` has no default), and
+`DURIG_STREAM_TIMEOUT_MS` now reaches `Harness.open`. Corrections are marked in place in
+the review rather than edited away, because a silently corrected finding teaches nothing.

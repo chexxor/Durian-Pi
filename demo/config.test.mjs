@@ -3,7 +3,7 @@
 // Run: node demo/config.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,6 +11,7 @@ import {
 	describeConfig,
 	loadConfig,
 	mergeConfig,
+	streamSettings,
 } from "../src/config.mjs";
 
 // --- unit: merge precedence -------------------------------------------------
@@ -89,9 +90,12 @@ console.log("DISCOVERY + REDACTION OK");
 // --- integration: the real CLI honors a real config file -------------------
 const dir = mkdtempSync(join(tmpdir(), "durig-config-"));
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
-const runConfig = (env) =>
+const runConfig = (env) => runCli(["config"], env);
+
+/** Run any CLI verb with an explicit env, for the wiring proofs below. */
+const runCli = (args, env) =>
 	new Promise((resolve) => {
-		const child = spawn(process.execPath, [join(durigDir, "cli.mjs"), "config"], {
+		const child = spawn(process.execPath, [join(durigDir, "cli.mjs"), ...args], {
 			cwd: dir,
 			env,
 			stdio: ["ignore", "pipe", "pipe"],
@@ -138,6 +142,64 @@ try {
 	assert.match(c.error, /missing file/, "and names the problem");
 
 	console.log("CLI INTEGRATION OK (file, env override, error contract)");
+
+	/* ------------------- the stream timeout: the one setting durig could not reach */
+
+	// Nothing set means no override, so the platform default stands rather than a
+	// made-up durig number. This is the assertion that keeps the default honest.
+	assert.deepEqual(streamSettings({}), {}, "an unset timeout must not invent a value");
+	assert.deepEqual(streamSettings({ DURIG_STREAM_TIMEOUT_MS: "" }), {}, "an empty value is unset");
+	assert.deepEqual(
+		streamSettings({ DURIG_STREAM_TIMEOUT_MS: "900000" }),
+		{ stream: { timeoutMs: 900000 } },
+		"a set timeout reaches pi-durable's stream options",
+	);
+	// A bad value must fail rather than quietly fall back: a timeout that was set and
+	// silently ignored is worse than one never set, and it would only show under load.
+	for (const bad of ["soon", "-5", "0", "NaN"]) {
+		assert.throws(
+			() => streamSettings({ DURIG_STREAM_TIMEOUT_MS: bad }),
+			/must be a positive number of milliseconds/,
+			`${JSON.stringify(bad)} must be rejected, not ignored`,
+		);
+	}
+
+	// The wiring, not just the function: a settings builder nothing calls is the
+	// defect this project keeps finding. Read cli.mjs and require that the value
+	// actually reaches Harness.open.
+	const cliSource = readFileSync(join(durigDir, "cli.mjs"), "utf8");
+	assert.match(
+		cliSource,
+		/settings:\s*streamSettings\(CFG\)/,
+		"openHarness must pass streamSettings(CFG) as the harness settings",
+	);
+
+	// And through the real open path: a bad value must surface at Harness.open,
+	// which is what proves this is in the path rather than merely exported.
+	const badOpen = await runCli(["ps"], {
+		...cleanEnv,
+		DURIG_PROVIDER: "faux",
+		DURIG_DB: join(dir, "stream.sqlite"),
+		DURIG_STREAM_TIMEOUT_MS: "soon",
+	});
+	assert.equal(badOpen.code, 1, "an invalid stream timeout must fail the command, not be ignored");
+	assert.match(
+		`${badOpen.stdout}${badOpen.stderr}`,
+		/DURIG_STREAM_TIMEOUT_MS must be a positive number/,
+		"and it must name the setting",
+	);
+
+	// A valid one opens the harness normally, so the check above is not failing for
+	// an unrelated reason.
+	const goodOpen = await runCli(["ps"], {
+		...cleanEnv,
+		DURIG_PROVIDER: "faux",
+		DURIG_DB: join(dir, "stream.sqlite"),
+		DURIG_STREAM_TIMEOUT_MS: "900000",
+	});
+	assert.equal(goodOpen.code, 0, `a valid stream timeout must open fine: ${goodOpen.stderr.slice(0, 200)}`);
+	console.log("STREAM TIMEOUT OK (default stands, override reaches Harness.open, bad value fails)");
+
 	console.log("CONFIG TEST PASS");
 } finally {
 	try {

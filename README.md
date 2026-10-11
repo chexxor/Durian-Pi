@@ -124,6 +124,7 @@ append-only change log, so this adds no write path and no stored state.
 | `DURIG_OPTIMIZE` | `on`: `up` runs each seat's persona through the instruction optimizer (one model call per seat) before storing; provenance recorded. See D13. |
 | `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent GENERATIONS across all seats (unset = unlimited). `1` serializes them so one local model (e.g. Qwen on a 24 GB GPU) can serve the whole rig. Waiting-vs-stuck is surfaced via lease files: `status`/`watch` report `generation_in_flight` (holder seat + since) or `generation_stale` (dead holder). See DECISIONS D12. |
 | `DURIG_EXTENSIONS` | Comma-separated module paths to install as extensions. See "Extensions" below. |
+| `DURIG_STREAM_TIMEOUT_MS` | Total request timeout for one generation attempt, in milliseconds. Unset = the platform default (the `openai` SDK's 600000 ms). Raise it for a slow local model, or lower it to fail fast instead of waiting out ten minutes on a stalled endpoint. A non-positive or non-numeric value **fails the command** rather than silently taking the default. |
 
 ## Extensions
 

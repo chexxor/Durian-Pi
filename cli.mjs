@@ -45,7 +45,7 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { describeConfig, loadConfig } from "./src/config.mjs";
+import { describeConfig, loadConfig, streamSettings } from "./src/config.mjs";
 import { computeAttention } from "./src/attention.mjs";
 import {
 	readGenerationSlots,
@@ -240,7 +240,14 @@ async function openHarness({ resume = true, live = null } = {}) {
   for (const { extension } of extensions) registry.install(extension);
   const harness = await Harness.open(
     await openNodeSqliteStorage(DB_PATH),
-    { models, registry },
+    {
+      models,
+      registry,
+      // Only `stream` is configurable here; the rest of pi-durable's settings keep
+      // their built-in defaults, which were chosen deliberately and which nothing
+      // in durig's use argues against. See `streamSettings` for why this one matters.
+      settings: streamSettings(CFG),
+    },
     BACKGROUND_CONTEXT,
   );
   // Persisted storage restarts idle; resume() re-arms task scheduling so

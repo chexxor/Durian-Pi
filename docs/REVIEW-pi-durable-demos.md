@@ -82,40 +82,56 @@ SQLite and the TUI), while durig is deliberately multi-process — seats in sepa
 terminals, cross-process polling, file leases (D11, D12, D22). Several of the best
 ideas here are the ones that survive that difference.
 
-### 1. `HarnessSettings` — config the harness already supports, that durig never passes
+### 1. `HarnessSettings` — one knob durig could not reach
 
 `harness-setup.ts` builds a settings object with **getters**, read at every use:
+stream timeout and retries, compaction, retry policy, steering and follow-up modes.
 
-```ts
-get stream() { /* timeoutMs, maxRetryDelayMs, maxRetries */ }
-get compaction() { /* … */ }
-get retry() { /* … */ }
-get steeringMode() { /* … */ }
-get followUpMode() { /* … */ }
-```
+durig passed no settings before this review. **Correction (2026-10-11): that does NOT
+mean it had none**, and the original text here claimed it did. Reading the platform
+instead of assuming:
 
-durig calls `Harness.open(storage, { models, registry }, ctx)` — **no settings at
-all**. So durig has no stream timeout, no retry policy, no compaction configuration,
-no steering or follow-up mode. This is item 6's subject matter half-delivered by the
-platform and switched off, which is the cheapest possible way to close part of a
-12.4% research gap.
+- `resolveSettings` (`dist/harness/agent.js`) merges every field over a built-in
+  default — retry (3 attempts, 2 s base delay, 60 s agent delay), compaction (reserve
+  16 384 / keep-recent 20 000 tokens), progress intervals, `toolExecution`, both queue
+  modes, and `contextRetentionMs` (10 minutes). durig already had all of it.
+- the provider path is the **`openai` SDK**, whose own defaults are `maxRetries: 2` and
+  `DEFAULT_TIMEOUT = 600000` — a real 10-minute total request timeout. durig could not
+  hang forever either, and `openai-completions` sets `timeout` *only* when
+  `options?.timeoutMs !== undefined`.
+- `stream` is the one field with **no** default: it is spread as `{ ...settings?.stream }`,
+  so unset means `{}`.
 
-**Transfers: yes, directly.**
+So the real gap was a **knob, not a hole**: durig could not tune the timeout or the SDK
+retries at all. It matters in both directions — `DURIG_MAX_CONCURRENT_SEATS=1` exists so
+one slow local model can serve the whole rig, and a generation slower than ten minutes
+could not be granted more time; equally an operator may want to fail fast rather than
+wait out ten minutes on a stalled endpoint, three durable attempts running.
 
-### 2. `harness.resume()` — recovered work continues instead of failing
+**Transfers: yes, and it is done** — `DURIG_STREAM_TIMEOUT_MS` now reaches `Harness.open`,
+fails loudly on a bad value, and defaults to *nothing* so the platform default stands.
+
+### 2. `harness.resume()` — durig already did this
 
 `runtime.ts` calls `harness.resume()` at startup with the comment *"Recovered work
-from an interrupted turn continues now."* Combined with the README's durability
-claim — kill the process mid-tool-call, restart with `--continue`, the interrupted
-call gets an **interrupted result** and the turn finishes — this is what "unaware of
-termination" (MAST 12.4%) looks like when it is solved.
+from an interrupted turn continues now."*
 
-durig never calls `resume()`. A killed durig run settles `unanswered` and attention
-reports `last_run_failed` forever. durig is *honest* about that failure, which is
-genuinely better than silence — but it is a failure durig could recover from.
+**Correction (2026-10-11): durig already calls it.** `cli.mjs`'s `openHarness` does so,
+with the comment *"Persisted storage restarts idle; resume() re-arms task scheduling so
+queued work and interrupted runs continue"* and a deliberate exclusion for viewers, so a
+passive `watch` cannot kick the very queue it is observing. The original claim that it is
+*"never called"* was wrong — wrong because durig's own side was described from memory
+while the demo's side was actually read.
 
-**Transfers: yes.** Worth a spike first, because durig's workers are invoked per
-`send`/`watch` process rather than living in a long-lived TUI.
+What `resume()` does is also narrower than the name suggests: it *"Enable[s] task
+scheduling"*, and `TaskScheduler.open()` marks surviving `running` tasks back to
+`pending` and **dispatches nothing**. durig has no durable tasks (it never calls
+`createTask`/`defineTask`), so it has nothing for the scheduler to resume — calling it is
+correct and currently a no-op. It becomes load-bearing with item 24e, which is the honest
+place to leave it. The demo's own recovery claim rests on **tasks plus `requestId`s**, not
+on `resume()` alone.
+
+**Transfers: already present; no gap.**
 
 ### 3. The HTTP dispatcher, which is not optional
 
@@ -310,8 +326,8 @@ should not mistake for a gap: not every demo feature is a deficiency in durig.
 
 | Idea | durig today | Gap | Action |
 | --- | --- | --- | --- |
-| `HarnessSettings` | `Harness.open(storage, { models, registry }, ctx)` — no settings argument (`cli.mjs`) | no stream timeout, retry policy, compaction config, steering/follow-up mode | 24a |
-| `harness.resume()` | never called; a killed run stays `unanswered` and is reported forever | interrupted work is reported as a failure instead of continuing | 24a |
+| `HarnessSettings` | passed no settings before this review; `resolveSettings` and the `openai` SDK supply every default, and `stream` (no default) is now configurable via `DURIG_STREAM_TIMEOUT_MS` | **was:** the timeout and SDK retries could not be tuned at all. **Not** a missing timeout (SDK: 600000 ms) and **not** missing retry/compaction defaults | done |
+| `harness.resume()` | **already called** in `cli.mjs`'s `openHarness`, with viewers excluded on purpose | none today: `resume()` enables task scheduling and durig has no tasks | 24e |
 | HTTP dispatcher | none configured | *possible* truncated provider streams (unverified) | 24b |
 | Per-conversation extensions | every installed extension is active for every seat | no role scoping; recursion hazard | 18, 24c |
 | `requestId` | no request identity | a crash or retry during `send` can double-deliver; F7 was this family | 24d |

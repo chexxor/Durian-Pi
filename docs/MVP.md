@@ -528,6 +528,51 @@ annotated rather than duplicated. What was declined on purpose — the TUI, a se
 picker, the in-process view subscription — is in D33 with its reasons, so a considered
 no is not later mistaken for an oversight.
 
+## Review recipe — the stream timeout, and a correction (item 24a, 2026-10-11)
+
+This item turned out to be mostly a **correction**. Two gap claims in
+`docs/REVIEW-pi-durable-demos.md` were wrong, because the demo's source was read
+carefully while durig's own side was described from memory. The one real gap was a knob.
+
+```powershell
+cd durig
+node cli.mjs config                        # DURIG_STREAM_TIMEOUT_MS: null = platform default
+$env:DURIG_STREAM_TIMEOUT_MS = "1800000"   # 30 min, for a slow local model
+node cli.mjs ps                            # opens fine
+$env:DURIG_STREAM_TIMEOUT_MS = "soon"
+node cli.mjs ps                            # fails loudly, naming the setting
+node demo/config.test.mjs
+```
+
+What is actually true, checked against the platform rather than assumed:
+
+- `resolveSettings` (`vendor/pi-main/packages/durable/dist/harness/agent.js`) merges
+  retry (3 attempts, 2 s base, 60 s agent delay), compaction (reserve 16 384 /
+  keep-recent 20 000), progress intervals, `toolExecution`, both queue modes and
+  `contextRetentionMs` (10 minutes) over built-in defaults. durig already had all of it.
+- the provider path is the `openai` SDK: `maxRetries: 2` and `DEFAULT_TIMEOUT = 600000`,
+  so durig could not hang forever either.
+- `stream` is the only field with **no** default, so `streamOptions` was `{}` and
+  `openai-completions` sets `timeout` only when it is given one.
+- durig **already called** `harness.resume()` (`cli.mjs`'s `openHarness`, viewers
+  excluded on purpose). `resume()` enables task scheduling and durig has no durable
+  tasks, so it is correct and currently a no-op until item 24e.
+
+So the fix is `DURIG_STREAM_TIMEOUT_MS`, and it **defaults to unset** — the platform
+number stands rather than one durig invented. It is the only harness setting durig
+exposes, because it is the only one with no default and a real reason to move in either
+direction: `DURIG_MAX_CONCURRENT_SEATS=1` exists so a single slow local model can serve
+the whole rig and ten minutes may not be enough, while the reverse operator would rather
+fail fast than wait out ten minutes on a stalled endpoint three durable attempts running.
+
+A bad value **fails the command**, which is asserted against the real open path rather
+than as a unit test of the parser: a timeout that was set and silently ignored is worse
+than one never set, and it would only surface under load.
+
+The corrections are marked in place in the review doc rather than edited away. The
+reusable lesson: reading one side of a comparison carefully and the other from memory
+produces confident, wrong gap claims, and a wrong gap is worse than no gap.
+
 ## Review recipe — a seat can stop and ask (item 5, 2026-10-11)
 
 Before this, a seat that could not proceed had two options: invent an answer or go
