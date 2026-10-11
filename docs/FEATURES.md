@@ -135,16 +135,18 @@ gate on it), `fix-now` never does. A rule that cannot be judged is reported
 
 | Feature | What it does | Where | Proof |
 |---|---|---|---|
-| **OpenRig converter** | `rig.yaml` → durig v2 spec: seats, personas, skills, guidance, pod edges, coordinator send permissions, and the culture file as `constitutionInline` | `scripts/from-openrig.mjs` | run it on `test-fixture-rig.yaml` (`docs/ACCEPTANCE.md` UAR-5) |
+| **OpenRig converter** | `rig.yaml` → durig v2 spec: seats, personas, skills, guidance, pod edges, **rig-level cross-pod edges**, coordinator send permissions, and the culture file as `constitutionInline` | `scripts/from-openrig.mjs` | `demo/converter.test.mjs` |
 | **Migrated rig** | The 13-seat tutor-pi rig, generated and committed | `rigs/tutor-pi.rig.json` | `node cli.mjs check rigs/tutor-pi.rig.json` |
 | **Pods** | Converted with a warning; pod **structure** is dropped — **limited** (deferred, ROADMAP item 11) | `scripts/from-openrig.mjs` | converter stderr warnings |
 | **Persona and skill mapping** | name, role, model, skills, guidance and `delegates_to` map into the v2 spec without hand-editing | `scripts/from-openrig.mjs` | `docs/ACCEPTANCE.md` UAR-5 |
 
-**Known gap, documented (D26):** the converter never reads OpenRig's **rig-level**
-`edges:` list, so `escalates_to` / `collaborates_with` / `can_observe` entries
-never reach the spec. `ux`, `sec` and `dev` therefore have no outgoing edge at
-all, and `qa`/`qa2`/`student` lose their declared escalation path. `check`
-reports this as `unreachable-seat`. Fix is ROADMAP item 1a.
+**Converter gap (D26) — fixed.** The converter used to ignore OpenRig's
+rig-level `edges:` list, so `ux`, `sec` and `dev` had no outgoing edge at all and
+`qa`/`qa2`/`student` lost their declared escalation path (`check` reported
+`unreachable-seat`). Rig-level `escalates_to` / `collaborates_with` /
+`can_observe` entries now reach the spec, pod-qualified ids are normalised, and
+an unresolvable one is warned about rather than dropped in silence;
+`demo/converter.test.mjs` proves it.
 
 ## 9. Upstream tracking
 

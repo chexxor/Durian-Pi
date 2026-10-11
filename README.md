@@ -91,6 +91,7 @@ src/chatview.mjs      render one seat's conversation for a human
 demo/chatlog.test.mjs  chat rendering + --follow streaming
 demo/constitution.test.mjs  a spec's constitution reaches the rig (inline or file)
 demo/check.test.mjs   rig audit rules + the drift regression + CLI exit codes
+demo/converter.test.mjs  OpenRig rig.yaml -> v2 spec: rig-level edges, ids, personas
 docs/STATUS.md        start here: current state, decisions needed, resume facts
 docs/FEATURES.md      what durig does today, where each piece lives, and its proof
 docs/ROADMAP.md       milestones + the research gap analysis
@@ -113,9 +114,8 @@ demo/offline*.mjs     faux-model delegation loops (no keys needed)
 demo/online.mjs       real DeepInfra end-to-end test
 demo/optimizer-eval.mjs    optimizer effectiveness benchmark (guard + blind judge)
 demo/eval.test.mjs    mechanics test for the guard and judge
-scripts/from-openrig.mjs   OpenRig rig.yaml -> durig v2 converter (pods, skills, guidance)
+scripts/from-openrig.mjs   OpenRig rig.yaml -> durig v2 converter (pods, skills, guidance, rig-level edges)
 rigs/tutor-pi.rig.json    the migrated 13-seat tutor-pi rig
-test-fixture-rig.yaml      sample OpenRig-style input for the converter
 docs/                 QUICKSTART, FEATURES, MVP burn-down, STATUS, ROADMAP, METRICS, decisions D1-D26, research
 ```
 

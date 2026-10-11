@@ -11,12 +11,18 @@
 //   rig startup.files guidance/team-norms.md     -> inlined into EVERY seat
 //                                                   (rig-layer delivery)
 //   culture_file                                 -> constitution text inlined
-//   delegates_to / pod edges                     -> send-permission edges;
+//   delegates_to / pod edges / rig-level edges   -> send-permission edges;
 //                                                   absent = open comms
 //
 // Skill and guidance CONTENT is inlined because durig has no separate skill
 // loader yet; the optimizer (DURIG_OPTIMIZE=on at `up`) compresses the
 // combined prompt. Total volume is bounded (~500 lines across all files).
+//
+// Rig-level edges are where CROSS-POD relationships live (escalates_to,
+// collaborates_with, can_observe); pod-level edges only ever describe a pod's
+// own members. This list used to be ignored entirely, which silently dropped
+// every cross-pod permission - sec/dev/ux ended up with no outgoing edge at
+// all and qa/qa2/student lost their declared escalation path (D26).
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { load } from "js-yaml";
@@ -34,6 +40,53 @@ const seats = [];
 const edges = [];
 const warnings = [];
 
+// The pod shape is not optional: an older flat `agents:` rig deserializes
+// `pods` as something uniterable, which used to surface as a bare TypeError.
+// Name the expected shape instead - this converter is an entry point, and a
+// stack trace tells the operator nothing about what to fix.
+if (!Array.isArray(doc.pods)) {
+  console.error(
+    `error: ${inputPath} has no pods[] array. This converter reads OpenRig's pod shape ` +
+      `(pods[].members[].agent_ref), not the older flat agents[] format.`,
+  );
+  process.exit(2);
+}
+const pods = doc.pods;
+
+/** member id -> owning pod id, for resolving "pod.member" references. */
+const memberPod = new Map();
+for (const pod of pods) {
+  for (const member of pod.members ?? []) memberPod.set(member.id, pod.id);
+}
+
+/**
+ * Resolve an edge endpoint to a bare seat name.
+ *
+ * Rig-level edges address seats as "pod.member" while the spec keys seats by
+ * bare member id, so the prefix is stripped - but only when it names the pod
+ * that actually holds that member, so a stale prefix is caught instead of
+ * quietly pointing at the wrong seat. Returns null for anything unknown: a
+ * dropped permission must be a warning, never silence.
+ */
+function seatName(ref) {
+  const name = String(ref ?? "");
+  const dot = name.indexOf(".");
+  if (dot < 0) return memberPod.has(name) ? name : null;
+  const pod = name.slice(0, dot);
+  const member = name.slice(dot + 1);
+  return memberPod.get(member) === pod ? member : null;
+}
+
+/** Add a from->to send permission once; repeats collapse. */
+function addEdge(from, to) {
+  const existing = edges.find((e) => e.from === from);
+  if (existing) {
+    if (!existing.to.includes(to)) existing.to.push(to);
+  } else {
+    edges.push({ from, to: [to] });
+  }
+}
+
 const rigGuidance = [];
 for (const f of doc.startup?.files ?? []) {
   if (f.delivery_hint === "guidance_merge") {
@@ -43,7 +96,7 @@ for (const f of doc.startup?.files ?? []) {
   }
 }
 
-for (const pod of doc.pods ?? []) {
+for (const pod of pods) {
   const podGuidance = [];
   for (const f of pod.startup?.files ?? []) {
     if (f.delivery_hint === "send_text" || f.delivery_hint === "guidance_merge") {
@@ -109,20 +162,37 @@ for (const pod of doc.pods ?? []) {
     for (const target of agent.delegates_to ?? []) {
       const to = typeof target === "string" ? target : target?.name;
       if (!to) continue;
-      const existing = edges.find((e) => e.from === member.id);
-      if (existing) existing.to.push(to);
-      else edges.push({ from: member.id, to: [to] });
+      const resolved = seatName(to);
+      if (!resolved) warnings.push(`${member.id}: delegates_to "${to}" is not a seat, dropped`);
+      else addEdge(member.id, resolved);
     }
   }
 
   for (const e of pod.edges ?? []) {
-    const from = typeof e === "string" ? e : e?.from;
-    const to = typeof e === "string" ? null : e?.to;
-    if (!from || !to) continue;
-    const existing = edges.find((x) => x.from === from);
-    if (existing && !existing.to.includes(to)) existing.to.push(to);
-    else if (!existing) edges.push({ from, to: [to] });
+    if (typeof e === "string") {
+      warnings.push(`pod ${pod.id} edge "${e}" ignored: string form carries no target`);
+      continue;
+    }
+    const from = seatName(e?.from);
+    const to = seatName(e?.to);
+    if (!from || !to) {
+      warnings.push(`pod ${pod.id} edge ${e?.kind ?? "?"} ${e?.from} -> ${e?.to}: unknown seat, dropped`);
+      continue;
+    }
+    addEdge(from, to);
   }
+}
+
+// Cross-pod edges live at rig level, not inside a pod (D26). Read after the
+// pods so member ids are known and duplicates collapse.
+for (const e of doc.edges ?? []) {
+  const from = seatName(e?.from);
+  const to = seatName(e?.to);
+  if (!from || !to) {
+    warnings.push(`rig edge ${e?.kind ?? "?"} ${e?.from} -> ${e?.to}: unknown seat, dropped`);
+    continue;
+  }
+  addEdge(from, to);
 }
 
 // OpenRig expresses the PM's routing authority implicitly (intake +
@@ -132,12 +202,7 @@ for (const pod of doc.pods ?? []) {
 for (const coord of ["pm", "lead"]) {
   if (!seats.some((s) => s.name === coord)) continue;
   const targets = seats.map((s) => s.name).filter((n) => n !== coord);
-  const existing = edges.find((e) => e.from === coord);
-  if (existing) {
-    for (const t of targets) if (!existing.to.includes(t)) existing.to.push(t);
-  } else {
-    edges.push({ from: coord, to: targets });
-  }
+  for (const t of targets) addEdge(coord, t);
 }
 
 let constitution;
@@ -149,11 +214,15 @@ const result = { version: 2, seats };
 if (edges.length > 0) result.edges = edges.map((e) => ({ from: e.from, maySendTo: e.to }));
 if (constitution !== undefined) result.constitutionInline = constitution;
 
+// Warnings go to stderr on both paths. They were only printed when an output
+// file was named, so piping the spec to stdout - the interactive way to use
+// this - silently dropped every "edge ignored" notice.
+for (const w of warnings) console.error(`WARNING: ${w}`);
+
 if (outArg) {
   const { writeFile } = await import("node:fs/promises");
   await writeFile(outArg, JSON.stringify(result, null, 2), "utf8");
-  for (const w of warnings) console.error(`WARNING: ${w}`);
-  console.log(`wrote ${outArg}: ${seats.length} seats, ${edges.length} edge groups, constitution ${constitution ? "inlined" : "absent"}, ${warnings.length} warnings`);
+  console.error(`wrote ${outArg}: ${seats.length} seats, ${edges.length} edge groups, constitution ${constitution ? "inlined" : "absent"}, ${warnings.length} warnings`);
 } else {
   console.log(JSON.stringify(result, null, 2));
 }

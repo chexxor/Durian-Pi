@@ -34,8 +34,9 @@ Persona, capabilities, org position, culture, collaboration rules, workflow.
 
 ## UAR-5 — Migration path for OpenRig users
 An OpenRig rig.yaml converts into a durig v2 spec without hand-editing.
-- Converter maps name/role/model/skills/instructions/delegates_to. **PASS**
-  (test-fixture-rig.yaml → version 2 spec with edgeGroups)
+- Converter maps name/role/model/skills/instructions/delegates_to, pod edges
+  **and rig-level edges** (cross-pod escalates_to / collaborates_with /
+  can_observe). **PASS** (`demo/converter.test.mjs`, 20th demo)
 - Pods grouping: converted with a warning, structure dropped. **OPEN**
   (accepted loss until pods are designed)
 

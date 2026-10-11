@@ -139,13 +139,15 @@
     {
       "from": "theorist",
       "maySendTo": [
-        "editor"
+        "editor",
+        "impl"
       ]
     },
     {
       "from": "editor",
       "maySendTo": [
-        "theorist"
+        "theorist",
+        "pedagogue"
       ]
     },
     {
@@ -165,14 +167,16 @@
       "from": "qa",
       "maySendTo": [
         "impl",
-        "impl2"
+        "impl2",
+        "lead"
       ]
     },
     {
       "from": "qa2",
       "maySendTo": [
         "impl2",
-        "impl"
+        "impl",
+        "lead"
       ]
     },
     {
@@ -184,41 +188,68 @@
     {
       "from": "student",
       "maySendTo": [
-        "pedagogue"
+        "pedagogue",
+        "lead"
+      ]
+    },
+    {
+      "from": "lead",
+      "maySendTo": [
+        "impl",
+        "impl2",
+        "pedagogue",
+        "theorist",
+        "ux",
+        "sec",
+        "dev",
+        "pm",
+        "editor",
+        "qa",
+        "qa2",
+        "student"
+      ]
+    },
+    {
+      "from": "ux",
+      "maySendTo": [
+        "pedagogue",
+        "impl"
       ]
     },
     {
       "from": "pm",
       "maySendTo": [
         "lead",
+        "impl",
+        "qa",
+        "pedagogue",
+        "sec",
+        "dev",
         "theorist",
         "editor",
+        "impl2",
+        "qa2",
+        "ux",
+        "student"
+      ]
+    },
+    {
+      "from": "sec",
+      "maySendTo": [
+        "lead",
         "impl",
         "impl2",
         "qa",
         "qa2",
-        "ux",
-        "pedagogue",
-        "student",
-        "sec",
         "dev"
       ]
     },
     {
-      "from": "lead",
+      "from": "dev",
       "maySendTo": [
-        "pm",
-        "theorist",
-        "editor",
+        "lead",
         "impl",
-        "impl2",
-        "qa",
-        "qa2",
-        "ux",
-        "pedagogue",
-        "student",
-        "sec",
-        "dev"
+        "qa2"
       ]
     }
   ],
