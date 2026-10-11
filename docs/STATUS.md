@@ -42,7 +42,7 @@ Everything below was verified against the real store, not asserted from intent.
 | `log <seat>` | turn-grouped transcript with timestamps and elapse deltas; `--follow` tails new turns |
 | `send` | streams the live generation to stderr; non-`done` settles explain themselves |
 | Failure honesty | wrong database is announced, never silently empty (D18) |
-| `check` | audits a rig file **and** the store; six rules with stable ids, severity by who can fix it, and any rule it cannot judge reported as skipped-with-reason, never a pass (D25) |
+| `check` | audits a rig file **and** the store; eight rules with stable ids, severity by who can fix it, and any rule it cannot judge reported as skipped-with-reason, never a pass (D25) |
 | Dependencies | released `@earendil-works/*` 1.1.0 are the default; pi `main` is pinned (`ea448f45`) and linked via `scripts/sync-pi.mjs` |
 
 ## Architecture: what changed, and what deliberately did not

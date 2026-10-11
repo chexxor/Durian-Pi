@@ -277,8 +277,8 @@ node cli.mjs up rig.starter.json          # created: pm, impl, qa, lead
 node cli.mjs check rig.starter.json --human
 ```
 
-Expected: `PASS  0 error · 0 fix-now · 6 passed`, exit 0 — and specifically not
-"0 findings with every rule skipped". All six rules genuinely run (the store is
+Expected: `PASS  0 error · 0 fix-now · 8 passed`, exit 0 — and specifically not
+"0 findings with every rule skipped". All eight rules genuinely run (the store is
 read), which is exactly the failure mode the test exists to exclude.
 
 Four generic seats, so no corpus is baked in. The constitution is inline, because
@@ -398,3 +398,49 @@ Two design details worth knowing before you read a value:
 
 Nothing is stored and nothing is written — git is already the append-only change
 log, which is why the security position chose this over a store write path.
+
+## Review recipe — the rig file and the store must agree on who exists (item 10a, 2026-10-11)
+
+`check` already read both sides in one pass, so seat drift is a fit rather than a
+new mechanism. Both directions ship, because the live rig has both at once.
+
+```powershell
+cd durig
+node cli.mjs check rigs/tutor-pi.rig.json --human
+```
+
+Live proof against `tutor-pi.sqlite` (verified 2026-10-11):
+
+```
+      scribe: the rig file declares a seat this store does not hold, so a send to it fails at runtime with "unknown seat"
+      fix: create it in this store: DURIG_DB=<this store> node cli.mjs up rigs/tutor-pi.rig.json
+      worker: this store holds a seat the rig file does not declare, so it keeps a conversation, a stored persona and an address nothing in the file accounts for
+      fix: declare it in rigs/tutor-pi.rig.json, or start from a fresh store: up adds and refreshes seats but never removes one
+FAIL  1 error · 2 fix-now · 5 passed
+```
+
+(The third finding is `single-model-rig`, which is ROADMAP item 3.)
+
+Two rules rather than one, because the two directions are different failures:
+
+- `store-missing-seat` is an **error**: a seat the file declares and the store lacks
+  cannot receive work at all — a send fails with `unknown seat` — and the fix is
+  `up`, exactly like an unapplied constitution.
+- `stray-seat` is **fix-now**: a seat the store holds and the file does not declare
+  keeps a conversation, a stored persona and a working address, and `up` never
+  removes one, so clearing it is a store rebuild rather than a spec edit. There is
+  no removal command yet, and the finding says so instead of implying one.
+
+Both are reported as **skipped, with the reason**, when the store cannot be read —
+never as a pass.
+
+A useful side effect: this makes `check` a wrong-database detector. Run
+`node cli.mjs check rig.v2.json` against a store holding a different rig and every
+seat reports as missing, which is the D18 trap made visible rather than silent.
+
+```powershell
+node demo/check.test.mjs    # both directions, matching seats, skipped-when-unread
+```
+
+Falsified before it was trusted: with stray-seat detection disabled by hand, the
+test fails with `a seat the store holds and the file does not declare is reported`.

@@ -451,8 +451,9 @@ A rule `check` cannot judge (no declared text to compare, an unreadable store) i
 reported **skipped with its reason** — never as a pass. Silence that reads as
 health is the failure mode this whole feature exists to remove.
 
-Six rules: `constitution-missing`, `constitution-not-applied`,
-`unreachable-seat`, `dangling-edge`, `no-verifier-seat`, `single-model-rig`.
+Eight rules: `constitution-missing`, `constitution-not-applied`,
+`unreachable-seat`, `dangling-edge`, `store-missing-seat`, `stray-seat`,
+`no-verifier-seat`, `single-model-rig`.
 
 **Not adopted:**
 - A third `code-gated` severity for gaps no rig edit closes (verification

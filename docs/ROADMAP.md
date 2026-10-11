@@ -132,7 +132,8 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    seats it must work with (the D16 bug class); a constitution is present at all
    (catches 0); no seat holds a polling tool. Each finding carries a severity and
    the exact fix. Paired with a starter rig whose defaults are the hardened ones.
-   **✅ done (2026-10-11)** — six rules with stable ids, severity by *who can fix
+   **✅ done (2026-10-11)** — eight rules with stable ids (six when this landed;
+   `store-missing-seat` and `stray-seat` came with 10a), severity by *who can fix
    it* (`error` exits nonzero, `fix-now` never does), and any rule it cannot judge
    reported as skipped-with-reason rather than a pass (D25). Built as a pure
    module plus a CLI wrapper; `demo/check.test.mjs` is the 19th demo. The
@@ -273,6 +274,22 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     mechanism. The finding must name the seat and be honest that clearing it is a
     store rebuild or an explicit removal, not a spec edit. Found while measuring
     the metrics cost; requested by the operator.
+    **✅ done (2026-10-11), and widened deliberately.** `stray-seat` ships, plus
+    `store-missing-seat` for the mirror direction, because checking the live rig
+    showed BOTH at once: the store held a stray `worker` **and** was missing
+    `scribe`, which the spec declares. Reporting one direction would have reported
+    half a real problem while looking complete. They get different severities
+    because they are different failures: a declared-but-absent seat cannot receive
+    work at all (a send fails with `unknown seat`) and the fix is `up`, so it is an
+    `error` like an unapplied constitution; a stray seat still has a working
+    address, and `up` never removes one, so it is `fix-now`. This also makes
+    `check` a wrong-database detector: pointing it at a rig file that is not the
+    store's reports every seat as missing. The finding names the seats and the
+    exact command, and is honest that clearing a stray is a store rebuild, not a
+    spec edit — there is no removal command yet. Both are asserted in
+    `demo/check.test.mjs`, including that they are SKIPPED (not passed) when the
+    store cannot be read, and the whole test was falsified by disabling the rule
+    and watching it fail.
 10b. **Dogfood durig for our own work.** Agreed by the operator 2026-10-11: run our
     own coordination through durig so the obvious problems surface through ordinary
     use rather than through a test written to look for them. The first session

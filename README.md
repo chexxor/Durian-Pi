@@ -55,9 +55,15 @@ says **who can fix it**: `error` means the rig cannot do its job until the file
 changes, and `check` exits nonzero so a script can gate on it; `fix-now` is a gap
 the operator can close, and never fails a run. Rules: `constitution-missing`,
 `constitution-not-applied`, `unreachable-seat`, `dangling-edge`,
-`no-verifier-seat`, `single-model-rig`. A rule it cannot judge (no store to
-declare whether a matched, or an unread database) is reported as **skipped with
-its reason**, never as a pass.
+`store-missing-seat`, `stray-seat`, `no-verifier-seat`, `single-model-rig`. A
+rule it cannot judge (no store to declare whether a matched, or an unread
+database) is reported as **skipped with its reason**, never as a pass.
+
+The two seat rules are the two directions of one disagreement, and they are not
+symmetric. `store-missing-seat` is an `error` because a seat the file declares
+and the store does not hold cannot receive work at all. `stray-seat` is
+`fix-now` because a seat the store holds and the file does not declare still has
+an address, and `up` never removes one.
 
 Start from `rig.starter.json` rather than an empty file. It is the rig those
 rules describe — four seats, an inline constitution, a verifier on a second model

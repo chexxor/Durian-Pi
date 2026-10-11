@@ -55,6 +55,16 @@ export const RULES = [
     what: "an edge names a seat that does not exist",
   },
   {
+    id: "store-missing-seat",
+    severity: "error",
+    what: "the rig file declares a seat the store does not hold",
+  },
+  {
+    id: "stray-seat",
+    severity: "fix-now",
+    what: "the store holds a seat the rig file does not declare",
+  },
+  {
     id: "no-verifier-seat",
     severity: "fix-now",
     what: "no seat is an independent verifier",
@@ -88,10 +98,11 @@ export function seatsAreVerifier(seat) {
  * @param {object} input.spec           parsed rig file
  * @param {string|undefined} input.specConstitution  resolved constitution text, if the spec declares one
  * @param {{reason:"read",text:string}|{reason:"absent"}|{reason:"unreadable",error:string}} input.stored
+ * @param {string[]|null} [input.storedSeats]  seat names the store holds, or null when it was not read
  * @param {Record<string,string>} [input.modelsBySeat]  seat name -> "provider/modelId"
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, modelsBySeat = {} }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {} }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -194,7 +205,48 @@ export function auditRig({ rig, spec, specConstitution, stored, modelsBySeat = {
     );
   }
 
-  // 5. Independent verification (MAST FC3) needs a seat whose job is checking
+  // 5. Whichever way the store's seat set and the rig file disagree. Both
+  //    directions were found live at once (2026-10-11: the tutor-pi store held a
+  //    stray `worker` AND was missing `scribe`), and they are not symmetric:
+  //      - a seat the rig file declares and the store lacks cannot receive work
+  //        at all — a send fails with "unknown seat" — and the fix is `up`,
+  //        exactly like an unapplied constitution, so it is an error;
+  //      - a seat the store holds and the file does not declare keeps a
+  //        conversation, a stored persona and a working address, and `up` never
+  //        removes one, so it is a gap the operator closes by editing the file.
+  //    Reporting only the stray direction would have reported half a real
+  //    problem while looking complete, which is the failure this whole module is
+  //    written against.
+  if (!Array.isArray(storedSeats)) {
+    for (const id of ["store-missing-seat", "stray-seat"]) {
+      skipped.push({
+        id,
+        why: "the store could not be read, so its seats cannot be compared with the rig file",
+      });
+    }
+  } else {
+    const storedNames = new Set(storedSeats);
+    const missing = seats.map((s) => s.name).filter((name) => !storedNames.has(name));
+    const stray = storedSeats.filter((name) => !names.has(name));
+    if (missing.length > 0) {
+      add(
+        "store-missing-seat",
+        missing.join(", "),
+        `the rig file declares ${missing.length === 1 ? "a seat" : `${missing.length} seats`} this store does not hold, so a send to ${missing.length === 1 ? "it" : "them"} fails at runtime with "unknown seat"`,
+        `create ${missing.length === 1 ? "it" : "them"} in this store: DURIG_DB=<this store> node cli.mjs up ${rig}`,
+      );
+    }
+    if (stray.length > 0) {
+      add(
+        "stray-seat",
+        stray.join(", "),
+        `this store holds ${stray.length === 1 ? "a seat" : `${stray.length} seats`} the rig file does not declare, so ${stray.length === 1 ? "it keeps" : "they keep"} a conversation, a stored persona and an address nothing in the file accounts for`,
+        `declare ${stray.length === 1 ? "it" : "them"} in ${rig}, or start from a fresh store: up adds and refreshes seats but never removes one`,
+      );
+    }
+  }
+
+  // 6. Independent verification (MAST FC3) needs a seat whose job is checking
   //    someone else's work. A heuristic over name+role text, so it is fix-now
   //    and prints the basis it used.
   if (seats.length < 2) {
@@ -214,7 +266,7 @@ export function auditRig({ rig, spec, specConstitution, stored, modelsBySeat = {
     }
   }
 
-  // 6. One model for every seat makes correlated failure systemic rather than
+  // 7. One model for every seat makes correlated failure systemic rather than
   //    isolated (Anthropic swarm). Exact: it counts resolved models.
   const resolved = Object.values(modelsBySeat).filter(Boolean);
   if (seats.length >= 2 && resolved.length === seats.length) {

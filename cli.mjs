@@ -955,6 +955,11 @@ async function cmdCheck(rigFile, human) {
   // An absent database is a fact worth reporting, not an error: check still
   // audits the file, and the store-dependent rules are skipped with their why.
   let stored;
+  // Seat names the store holds, for the two directions of seat drift. Null until
+  // the store is actually read, because "could not read" must stay distinguishable
+  // from "read and empty" - an empty store is a real, reportable disagreement
+  // with a rig file that declares seats.
+  let storedSeats = null;
   if (!DB_EXISTED_AT_START) {
     stored = { reason: "absent" };
   } else {
@@ -970,6 +975,16 @@ async function cmdCheck(rigFile, human) {
           ? ((await storage.document(rec.id, "current", BACKGROUND_CONTEXT))?.value?.text ?? "")
           : "";
         stored = { reason: "read", text };
+
+        const seatsRec = await storage.findDocument(
+          { kind: Seats.definition.kind, scope: { kind: "session" } },
+          "current",
+          BACKGROUND_CONTEXT,
+        );
+        const seatsVal = seatsRec
+          ? ((await storage.document(seatsRec.id, "current", BACKGROUND_CONTEXT))?.value ?? {})
+          : {};
+        storedSeats = Object.keys(seatsVal.seats ?? {});
       } finally {
         await storage.close(BACKGROUND_CONTEXT);
       }
@@ -977,7 +992,7 @@ async function cmdCheck(rigFile, human) {
       stored = { reason: "unreadable", error: String(err?.message ?? err) };
     }
   }
-  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, modelsBySeat });
+  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, storedSeats, modelsBySeat });
   const seatCount = (spec.seats ?? []).length;
   if (human) {
     console.log(

@@ -68,6 +68,7 @@ try {
     spec: naiveSpec(),
     specConstitution: undefined,
     stored: { reason: "read", text: "" },
+    storedSeats: ["alpha", "beta"],
     modelsBySeat: { alpha: "deepinfra/one", beta: "deepinfra/one" },
   });
   for (const id of ["constitution-missing", "no-verifier-seat", "single-model-rig"]) {
@@ -83,6 +84,7 @@ try {
     spec: hardenedSpec(),
     specConstitution: CONSTITUTION,
     stored: { reason: "read", text: CONSTITUTION },
+    storedSeats: ["alpha", "verifier"],
     modelsBySeat: { alpha: "faux/model-a", verifier: "faux/model-b" },
   });
   assert.deepEqual(ids(hardened), [], `hardened rig has no findings; got ${ids(hardened).join(", ")}`);
@@ -219,7 +221,54 @@ try {
   assert.match(danglingFinding.subject, /wrker \(as a recipient\)/, "the recipient typo is named");
   assert.match(danglingFinding.subject, /ghost \(as a sender\)/, "the sender typo is named");
 
-  // 7. Silence must be legible: an unread store yields "skipped with a reason",
+  // 7. Seat drift, in BOTH directions, because both were live at once on the real
+  //    rig (verified 2026-10-11: the tutor-pi store held a stray `worker` and was
+  //    missing `scribe`). They are not symmetric - a declared-but-absent seat
+  //    cannot receive work at all, while a stray seat still has a working address
+  //    - so a rule that reported only one direction would have reported half a
+  //    real problem while looking complete.
+  const seatDrift = auditRig({
+    rig: "rigs/tutor-pi.rig.json",
+    spec: {
+      version: 2,
+      seats: [
+        { name: "pm", role: "Program manager" },
+        { name: "scribe", role: "Documentation seat" },
+      ],
+      edges: [
+        { from: "pm", maySendTo: ["scribe"] },
+        { from: "scribe", maySendTo: ["pm"] },
+      ],
+    },
+    specConstitution: CONSTITUTION,
+    stored: { reason: "read", text: CONSTITUTION },
+    storedSeats: ["pm", "worker"],
+    modelsBySeat: { pm: "a/x", scribe: "b/y" },
+  });
+  const missingSeat = seatDrift.findings.find((f) => f.id === "store-missing-seat");
+  const straySeat = seatDrift.findings.find((f) => f.id === "stray-seat");
+  assert.ok(missingSeat, "a seat the rig file declares and the store lacks is reported");
+  assert.equal(missingSeat.subject, "scribe", "the absent seat is named");
+  assert.equal(missingSeat.severity, "error", "an absent seat cannot receive work at all");
+  assert.match(missingSeat.fix, /cli\.mjs up/, "and the fix is the command that creates it");
+  assert.ok(straySeat, "a seat the store holds and the file does not declare is reported");
+  assert.equal(straySeat.subject, "worker", "the stray seat is named");
+  assert.equal(straySeat.severity, "fix-now", "a stray seat still has a working address");
+  assert.equal(seatDrift.summary.error, 1, "only the missing seat is an error here");
+
+  // A store whose seats match the file reports neither direction.
+  const seatMatch = auditRig({
+    rig: "x",
+    spec: hardenedSpec(),
+    specConstitution: CONSTITUTION,
+    stored: { reason: "read", text: CONSTITUTION },
+    storedSeats: ["alpha", "verifier"],
+    modelsBySeat: { alpha: "a/x", verifier: "b/y" },
+  });
+  assert.ok(!ids(seatMatch).includes("store-missing-seat"), "matching seats are not drift");
+  assert.ok(!ids(seatMatch).includes("stray-seat"), "and neither direction fires");
+
+  // 8. Silence must be legible: an unread store yields "skipped with a reason",
   //    never a pass and never a finding.
   const unread = auditRig({
     rig: "x",
@@ -228,7 +277,7 @@ try {
     stored: { reason: "absent" },
     modelsBySeat: { alpha: "a/x", beta: "b/y" },
   });
-  for (const id of ["constitution-missing", "constitution-not-applied"]) {
+  for (const id of ["constitution-missing", "constitution-not-applied", "store-missing-seat", "stray-seat"]) {
     const check = unread.checks.find((c) => c.id === id);
     assert.equal(check.status, "skipped", `${id} is skipped when the store cannot be read`);
     assert.ok(check.why, `${id} says why it was skipped`);
@@ -236,7 +285,7 @@ try {
   assert.ok(!ids(unread).includes("constitution-missing"), "an unread store is not reported as missing");
   assert.ok(!ids(unread).includes("constitution-not-applied"));
 
-  // 8. Rendering is plain text unless color is asked for, and always carries the
+  // 9. Rendering is plain text unless color is asked for, and always carries the
   //    rule id and the fix an operator needs.
   const plain = formatCheck(naive, { rigDisplay: "naive.rig.json", seats: 2, storeReason: "read" });
   assert.ok(!plain.includes("\x1b["), "no ANSI when color is off");
@@ -248,7 +297,7 @@ try {
   const clean = formatCheck(hardened, { rigDisplay: "hardened.rig.json", seats: 2, storeReason: "read" });
   assert.match(clean, /no findings/, "a clean rig says so rather than printing nothing");
 
-  // 9. CLI wiring + the linter contract: the same rig file, audited twice, once
+  // 10. CLI wiring + the linter contract: the same rig file, audited twice, once
   //    against an empty store (errors -> exit 1) and once after `up` applied the
   //    declared constitution (errors clear -> exit 0).
   const naivePath = join(dir, "naive.rig.json");

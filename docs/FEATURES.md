@@ -179,7 +179,7 @@ the file can be running something else — the tutor-pi spec declared its
 constitution inline while the store held a different one, so 13 seats ran without
 their team culture and no command said so (D25).
 
-Six rules with stable ids, each with a subject and the exact fix:
+Eight rules with stable ids, each with a subject and the exact fix:
 
 | Rule | Severity |
 |---|---|
@@ -187,8 +187,21 @@ Six rules with stable ids, each with a subject and the exact fix:
 | `constitution-not-applied` | error |
 | `unreachable-seat` | error |
 | `dangling-edge` | error |
+| `store-missing-seat` | error |
+| `stray-seat` | fix-now |
 | `no-verifier-seat` | fix-now |
 | `single-model-rig` | fix-now |
+
+`store-missing-seat` and `stray-seat` are the two directions of one disagreement
+between the rig file and the store, and they are not symmetric. A seat the file
+declares and the store does not hold **cannot receive work at all** (a send fails
+with `unknown seat`), and the fix is `up` — so it is an `error`, like an
+unapplied constitution. A seat the store holds and the file does not declare
+still has a conversation, a stored persona and a working address, and `up` never
+removes one, so it is a gap the operator closes by editing the file. Both
+directions were found live at once on the tutor-pi rig (a stray `worker`, a
+missing `scribe`), which is why the rule covers both rather than reporting half a
+real problem while looking complete.
 
 Severity means **who can fix it**: `error` fails the run (exit 1, so a script can
 gate on it), `fix-now` never does. A rule that cannot be judged is reported
