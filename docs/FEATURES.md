@@ -164,6 +164,28 @@ Severity means **who can fix it**: `error` fails the run (exit 1, so a script ca
 gate on it), `fix-now` never does. A rule that cannot be judged is reported
 **skipped with its reason** — never as a pass. Proof: `demo/check.test.mjs`.
 
+### The hardened starter (`rig.starter.json`)
+
+Rules with no passing rig to copy only tell a new user what they did wrong.
+`rig.starter.json` is the configuration the rules describe, so a fresh copy of it
+reports **no findings**:
+
+- four generic seats (`pm`, `impl`, `qa`, `lead`) — no corpus or domain baked in,
+  because swapping the textbook is meant to be a config change, and a starter that
+  mentioned TAPL would contradict that
+- an inline constitution, so the file is self-contained (`constitution` resolves
+  against the CWD, so a path would only work from durig's own directory)
+- a verifier seat on a **second model family** (`qa`), because one model for every
+  seat makes a shared blind spot systemic — and a verifier is where that costs most
+- an outgoing edge for every seat: work down, reports back, escalation to `lead`
+
+`demo/starter.test.mjs` is the proof, and its controls are the point: "0 findings"
+is also what `check` reports when every rule is *skipped*, so the test breaks a copy
+of the starter five ways (the second model removed, a seat left stranded, an edge to
+a nonexistent seat, the verifier renamed, and a store created but never `up`-ed) and
+requires each rule to fire. It also asserts the inline constitution still matches
+`constitution.txt`, so the two copies cannot drift apart.
+
 ## 8. Migration and interoperability
 
 | Feature | What it does | Where | Proof |
@@ -197,12 +219,13 @@ an unresolvable one is warned about rather than dropped in silence;
 The entire check surface is the demos plus `node --check`; there is no build or
 lint step.
 
-**22 offline tests** — one runnable proof per guarantee, each exit 0 on success:
+**23 offline tests** — one runnable proof per guarantee, each exit 0 on success:
 
 ```
 blocked · chatlog · check · cli · config · constitution · converter · eval
 extensions · metrics · optimizer · persistence · race · refresh · repeat-call
-seatmodel · singleflight · streamcli · streamview · syncpi · watch · watchview
+seatmodel · singleflight · starter · streamcli · streamview · syncpi · watch
+watchview
 ```
 
 **4 runnable demo programs:**

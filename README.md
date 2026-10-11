@@ -59,6 +59,12 @@ the operator can close, and never fails a run. Rules: `constitution-missing`,
 declare whether a matched, or an unread database) is reported as **skipped with
 its reason**, never as a pass.
 
+Start from `rig.starter.json` rather than an empty file. It is the rig those
+rules describe — four seats, an inline constitution, a verifier on a second model
+family, an outgoing edge on every seat — so `check` reports no findings on a fresh
+copy. Without it the rules only tell you what you did wrong, which is the half of
+the job this file exists to close.
+
 ## Measuring drift
 
 `check` is a pre-flight linter: you run it because you were already about to
@@ -89,7 +95,8 @@ the admission criteria for the ambient tier: `docs/METRICS.md`.
 
 | File / env | Purpose |
 |---|---|
-| `rig.v2.json` | Rig spec: seats (`name`, `role`, `goal`, `constraints`, `backstory`, `capabilities`, `model` — bare id or `{provider}/{modelId}`, e.g. `deepinfra/meta-llama/Llama-3.3-70B-Instruct`; a leading segment is the provider only when it names a registered provider, so slash-containing ids like `zai-org/GLM-5.3-Flash` work bare —, `instructions`), `edges` (send permissions), `constitution` (file path) |
+| `rig.starter.json` | **Start here for a real rig.** The hardened 4-seat starter: inline constitution, a verifier seat on a different model family, and an outgoing edge on every seat — so `check` reports no findings on a fresh copy. Generic by design; no corpus is baked in. Proof: `demo/starter.test.mjs` |
+| `rig.v2.json` | Rig spec: seats (`name`, `role`, `goal`, `constraints`, `backstory`, `capabilities`, `model` — bare id or `{provider}/{modelId}`, e.g. `deepinfra/meta-llama/Llama-3.3-70B-Instruct`; a leading segment is the provider only when it names a registered provider, so slash-containing ids like `zai-org/GLM-5.3-Flash` work bare —, `instructions`), `edges` (send permissions), `constitution` (file path) or `constitutionInline` (text; wins if both are set) |
 | `constitution.txt` | Priority-ordered team rules; highest applicable rule governs |
 | `DURIG_DB` | Storage path (default `./rig.sqlite`) |
 | `DURIG_PROVIDER` | `deepinfra` (default) or `faux` for offline runs |

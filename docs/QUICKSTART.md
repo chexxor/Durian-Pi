@@ -79,6 +79,15 @@ The spec declares two seats (a program manager and an implementation
 engineer), org edges allowing pm↔worker mail, and a constitution file that
 is injected into both seats' system prompts.
 
+> **Building your own rig? Start from `rig.starter.json` instead.** It is the
+> hardened version of the same thing — four seats (`pm`, `impl`, `qa`, `lead`),
+> an inline constitution, a verifier seat on a *different model family*, and an
+> outgoing edge on every seat — so `node cli.mjs check rig.starter.json` reports no
+> findings on a fresh copy. `rig.v2.json` stays the two-seat spec this walkthrough
+> uses, because four seats make the output longer to read and the loop is the same.
+> `demo/starter.test.mjs` proves the starter clears every rule, and that each rule
+> fails when the starter is broken.
+
 ## Step 3 — look around
 
 ```powershell

@@ -264,3 +264,92 @@ either state or a store-derived series, and the small change-log that
 config-derived trends would need is a new write path — owed a `security.sec`
 position before it ships (D24, D27). Pair attribution for a shared reviewer model
 stays `check`'s finding to raise.
+
+## Review recipe — the hardened starter rig (item 1, 2026-10-11)
+
+`check` could already tell you what you did wrong. `rig.starter.json` is the
+configuration it describes, so a new rig can start from one that passes.
+
+```powershell
+cd durig
+$env:DURIG_DB = "$PWD\scratch-starter.sqlite"
+node cli.mjs up rig.starter.json          # created: pm, impl, qa, lead
+node cli.mjs check rig.starter.json --human
+```
+
+Expected: `PASS  0 error · 0 fix-now · 6 passed`, exit 0 — and specifically not
+"0 findings with every rule skipped". All six rules genuinely run (the store is
+read), which is exactly the failure mode the test exists to exclude.
+
+Four generic seats, so no corpus is baked in. The constitution is inline, because
+`constitution` resolves against the CWD and the starter is meant to be copied
+elsewhere. `qa` is on a second model family, because one model for every seat
+makes a shared blind spot systemic and a verifier is where that costs most. Every
+seat has an outgoing edge: work down, reports back, escalation to `lead`.
+
+```powershell
+node demo/starter.test.mjs
+```
+
+It does not stop at asserting a clean report. "0 findings" is also what `check`
+prints when every rule is skipped, so the test breaks a copy of the starter five
+ways — the second model removed, a seat left stranded, an edge to a nonexistent
+seat, the verifier renamed, and a store created but never `up`-ed — and requires
+each rule to fire. Observed failure when the second model is removed:
+
+```
+AssertionError: starter has fix-now findings: [{"id":"single-model-rig", ...
+```
+
+It also asserts the inline constitution still matches `constitution.txt`, so the
+two copies cannot drift apart.
+
+Worth knowing before you rely on it: `check` against a rig whose store does not
+exist yet **passes**. Absence is not a defect until there is a store to compare
+against, and it reports `constitution-not-applied` as *skipped*, not as a pass. A
+store that exists and was never `up`-ed is the error. The test asserts both cases
+separately so they cannot be collapsed into one.
+
+## Review recipe — load extensions from config (item 23, 2026-10-11)
+
+An extension is a plain module, because pi-durable's registry already *is* the
+extension system — durig installs its own Router through it.
+
+```jsonc
+// durig.config.json
+{ "DURIG_EXTENSIONS": "./extensions/timing.ts" }
+```
+
+```js
+// extensions/timing.ts
+import { defineExtension, section } from "@earendil-works/pi-durable";
+export default defineExtension({
+  name: "timing",
+  sections: [section("timing-note", () => "Report elapsed ms for slow tools.")],
+});
+```
+
+```powershell
+cd durig
+node cli.mjs config                 # shows the effective extension list
+node cli.mjs up rig.v2.json         # reports the names it installed
+node demo/extensions.test.mjs
+```
+
+The proof that matters is that a configured extension's section reaches a seat's
+model — read back from the `pi.system` entry's `sections` map — with a **control**
+asserting the same key is absent when it is not installed, so the assertion cannot
+pass for an unrelated reason. The test also drives the real `cli.mjs`, because a
+loader that works is not the same as durig using it.
+
+Every wrong way to declare one fails the command and names the path: absent file,
+no usable export, non-object export, no `name`, nothing declared, and a throw on
+import. Two extensions sharing a name is refused as well, because pi-durable
+resolves that by silently replacing the first with the second — that is the
+live-reload behaviour, and in a single config list it is a copy-paste error.
+
+This loads pi-**durable** extensions. pi *coding-agent* plugins — slash commands, a
+TUI, project-trust prompts — cannot load here: durig does not depend on
+`pi-coding-agent` and has no such surface (D21). And a declared path is trusted
+code, running in-process with the harness API, whose tools inherit this process's
+OS permissions; there is no auto-discovery, deliberately.

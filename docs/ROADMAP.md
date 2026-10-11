@@ -140,8 +140,18 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    *Found by it:* the converter never reads OpenRig's rig-level `edges:` list
    (D26), so `ux`, `sec` and `dev` cannot initiate a send and qa/qa2/student lose
    their declared escalation path.
-   *Still open:* the hardened starter rig — the rules exist, but nothing yet hands
-   a new user a spec that passes them.
+   **✅ done (2026-10-11), both halves.** The rules were the first; the starter is
+   the second: `rig.starter.json` is that spec — four generic seats
+   (`pm`, `impl`, `qa`, `lead`), an inline constitution so the file is
+   self-contained, a verifier seat on a second model family, and an outgoing edge
+   for every seat. `demo/starter.test.mjs` is the 23rd demo, and it does not stop
+   at asserting a clean report: "0 findings" is also what `check` prints when every
+   rule is skipped, so the test breaks a copy of the starter five ways and requires
+   each rule to fire — the second model removed, a seat left stranded, an edge to a
+   nonexistent seat, the verifier renamed, and a store created but never `up`-ed.
+   Named `rig.starter.json` rather than a second template so there is one obvious
+   place to start; the delivery half of this goal — proven with a demo on Windows,
+   recorded in `docs/MVP.md` — is still owed (item 22 covers publishing).
 1a. **Fix the converter's dropped rig-level edges (D26).** `scripts/from-openrig.mjs`
    derives edges from `agent.delegates_to` and each pod's `edges:` block only, so
    the rig-level list (`escalates_to`, `collaborates_with`, `can_observe`) never
