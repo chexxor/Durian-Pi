@@ -1,13 +1,12 @@
 # durig — roadmap
 
 Ordered by operator value; each item names its motivating finding.
-State as of **2026-10-11**: the constitution fix (item 0) is applied to the live
-tutor-pi rig, and item 1 (`check`) is built and passing; the converter defect it
-uncovered (item 1a) leads the remaining work. `docs/STATUS.md` is the handoff
-record; `docs/DECISIONS.md` holds the reasoning, and D23 records how this roadmap
-was re-ordered by the research. Gap-table handlings name their item rather than
-numbering it: the numbers had already gone stale once when item 0 and 1 were
-added.
+State as of **2026-10-11**: items 0, 1 and 1a are done; the docs pod (`scribe`)
+was added to the rig on top of 1a. Work continues at item 2. `docs/STATUS.md` is
+the handoff record; `docs/DECISIONS.md` holds the reasoning, and D23 records how
+this roadmap was re-ordered by the research. Gap-table handlings name their item
+rather than numbering it: the numbers had already gone stale once when item 0 and
+1 were added.
 
 ## Milestones
 
@@ -42,7 +41,7 @@ Sources and reasoning: D23.
 | Unaware of termination conditions (FC1, 12.4%) | no deadline, no attempt cap | termination and attempt semantics |
 | Fail to ask for clarification (FC2, 6.8%) | no verb that blocks on a decision; a seat in doubt writes prose | a deferral verb |
 | Information withholding (FC2) | role prompt only — a seat cannot retrieve the corpus | real seat tools (M3) |
-| Correlated failure / low variance (Anthropic swarm) | 13 seats, 1 distinct model, 1 constitution | verifier model diversity |
+| Correlated failure / low variance (Anthropic swarm) | 14 seats, 1 distinct model, 1 constitution | verifier model diversity |
 | Resource stampede (Anthropic swarm) | agents hold no polling tool | keep it that way — real seat tools (M3) |
 | Collusion / sabotage (Anthropic swarm) | cooperative by construction; no adversarial objective, no shared market | monitor only |
 | Cost, ~15x tokens (Anthropic production) | cheap model by default; offline faux provider for tests | keep — a reason not to default to frontier models |
@@ -149,6 +148,15 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    names (`qa`), then re-run the converter so `check` reports a clean rig. One
    concern, one test: the demo suite gains a converter case asserting the
    rig-level edges land.
+   **✅ done (2026-10-11)** — rig-level edges are read, `pod.member` ids are
+   resolved (and a stale prefix is caught rather than resolving to the bare
+   name), unresolvable endpoints warn instead of vanishing, and warnings now
+   print on stderr even when the spec goes to stdout. `demo/converter.test.mjs`
+   is the 20th demo. Regenerating restored every lost permission: `check`
+   reports no `unreachable-seat`, and the only finding left is
+   `single-model-rig` (item 3). The stale `test-fixture-rig.yaml` — which
+   crashed the converter while three docs cited it as proof — is deleted.
+   *Added on top:* the `docs` pod with the `scribe` seat (D27).
 2. **The measurement scorecard, and the surface that makes it used.** Two halves of
    one item: the measures themselves (`metrics`, the declared direction and blind
    spot per measure, and a drill task set so two configurations are comparable), and
@@ -160,7 +168,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    *before* the change, and a measure that arrives after it can only rationalise.
    `docs/METRICS.md`'s first cut already includes `shared-reviewer-model`, the
    measure item 3 turns on.
-3. **Verifier model diversity.** All 13 seats resolve to one model while per-seat
+3. **Verifier model diversity.** All 14 seats resolve to one model while per-seat
    models are already supported (`resolveSeatModel`), so a bias is systemic rather
    than isolated (Anthropic swarm). Give the verifier roles (`qa`, `qa2`) a
    different model family from the authors they check. Configuration-only, and the

@@ -4,7 +4,7 @@
 // Run: node demo/refresh.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -22,6 +22,10 @@ const dir = mkdtempSync(join(tmpdir(), "durig-refresh-"));
 const db = join(dir, "rig.sqlite");
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const rigFile = join(durigDir, "rigs", "tutor-pi.rig.json");
+// Read the expected seat set from the spec rather than hard-coding it: the rig
+// grows (the docs pod added a 14th seat), and a count baked into a test turns
+// every legitimate addition into a false failure.
+const expectedSeats = JSON.parse(readFileSync(rigFile, "utf8")).seats.length;
 
 const up = (args) =>
 	new Promise((resolve) => {
@@ -74,13 +78,13 @@ try {
 	const first = await up([]);
 	assert.equal(first.code, 0, `first up failed: ${first.stderr.slice(0, 200)}`);
 	const a = JSON.parse(first.stdout);
-	assert.equal(a.created.length, 13, "first run creates all seats");
+	assert.equal(a.created.length, expectedSeats, "first run creates all seats");
 	assert.equal(a.existing.length, 0);
 
 	const second = await up([]);
 	const b = JSON.parse(second.stdout);
 	assert.equal(b.created.length, 0, "plain rerun creates nothing");
-	assert.equal(b.existing.length, 13, "plain rerun reports existing");
+	assert.equal(b.existing.length, expectedSeats, "plain rerun reports existing");
 	assert.equal(b.refreshed.length, 0, "plain rerun refreshes nothing");
 
 	for (const [name, instructions] of await readPrompts()) {
@@ -105,7 +109,7 @@ try {
 	const c = JSON.parse(refreshed.stdout);
 	assert.equal(c.created.length, 0, "refresh creates nothing");
 	assert.equal(c.existing.length, 0, "refresh moves every seat to the refreshed bucket");
-	assert.equal(c.refreshed.length, 13, "refresh re-applies all 13 seats");
+	assert.equal(c.refreshed.length, expectedSeats, "refresh re-applies every seat");
 
 	const after = await readPrompts();
 	for (const [name, instructions] of after) {

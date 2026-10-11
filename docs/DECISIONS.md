@@ -496,3 +496,62 @@ list requires normalising `pod.seat` to `seat`.
 **Status:** recorded, not yet fixed — it is a converter concern (one per change)
 and the next item in the roadmap. Evidence: `openrig/rigs/tutor-pi/rig.yaml`
 lines 220+ versus the generated spec's edge list; `durig/docs/ROADMAP.md`.
+
+## D27 — A `docs` pod, and how its edges were decided (2026-10-11)
+
+**Finding:** nothing in the rig owned documentation, and the drift was already
+visible: `openrig/README.md` described "10 Pi seats across 5 pods" for a 13-seat,
+8-pod rig, and a committed converter fixture that crashed on contact was cited as
+proof by three documents — including an acceptance item marked PASS. Documents
+decay silently unless somebody's job is to read the artifact.
+
+**Decision:** a ninth pod, `docs`, with one seat — `scribe` — whose mandate is the
+feature inventory and a doc per capability, kept true as it changes. Persona:
+`documentation` + `grounding` + `rig-membership` skills, a role guidance file, and
+a pod SOP. The load-bearing rules are that it **reads the work rather than asking
+for a summary** (its incoming `can_observe` edges are the evidence) and that
+**verification is the boundary of what it may claim**: a capability is documented
+as working when its proving test passes, otherwise it is marked `unverified`
+rather than omitted.
+
+**Edge design — one rule instead of seat-by-seat.** A documentation seat is
+horizontal by nature, so drawing 17 edges by hand invites both gaps and cruft. The
+rule applied:
+
+- **Reads and questions** every seat that ships a *user-visible capability*
+  (`impl`, `impl2`, `ux`, `pedagogue`, `dev`) or *verifies* one (`qa`, `qa2`) —
+  `can_observe` one way, `collaborates_with` back.
+- **Takes assignments** from `program.pm` (delivery) and `advise.lead`
+  (`delegates_to`), and **escalates** to `advise.lead` when the code and the docs
+  disagree.
+- **Delegates to nobody.** Documentation is written, not assigned onward.
+- **Deliberately not connected** to the seats that produce taught *content*
+  (`theorist`, `editor`) or *assurance* (`sec`): those are not capabilities. If
+  that changes, the rule above says exactly which list to extend.
+
+The reverse edges are not symmetry for its own sake: the feature's author is who
+closes a doc, mirroring the pair-review rule that an item is not done on the
+author's word alone — here the doc is not done until the author of the code
+confirms it.
+
+**Finding while doing it — edge kinds flatten.** OpenRig distinguishes
+`delegates_to`, `collaborates_with`, `escalates_to` and `can_observe`; the
+converter emits all four as one `maySendTo` permission. So in durig "may read
+this seat's work" and "may assign this seat work" are the same bit. It is
+harmless here — durig needed the read permission to carry a question anyway — but
+it is lossy, and if durig's edge model ever grows a kind, this is the mapping to
+revisit.
+
+**Security — consult pending, not skipped.** The scribe reads other seats'
+transcripts and republishes into documents, which is an untrusted-input and
+exfiltration surface, and the team norms require a `security.sec` position
+*before* code for exactly that. The rig daemon was down, so the consult could not
+be taken; it is recorded as owed rather than dropped. Mitigation already in the
+persona: the `documentation` skill forbids copying credentials, tokens or
+personal data out of a transcript, on top of the culture's "no secrets in git".
+
+**Also noted (not fixed):** the three older pod fragments carry no `startup:`
+block while their `rig.yaml` pods do, so a pod added with `rig expand` is not
+delivered its pod SOP and differs from the same pod built by a full rig. The new
+`docs-pod.fragment.yaml` includes its startup block; the earlier three should get
+theirs.
