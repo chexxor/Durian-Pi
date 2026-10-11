@@ -248,6 +248,22 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    ten lines — `NodeExecutionEnv` keyed by cwd, handed to the harness as `env`, with an
    explicit `cleanup()` somebody has to call. Still the scope ruling that gates it, not
    the code.
+   **✅ the tools half landed (2026-10-11); the evidence half is what remains.** Conditions
+   SC1–SC3 are implemented and proved (`src/confine.mjs`, `demo/confine.test.mjs`): a
+   root-confining `ExecutionEnv` covering bash AND the file tools, `inheritEnv` forced false with
+   an allowlist, and a verifier's read-only file API. `src/seatguard.mjs` adds the `beforeTool`
+   guard — the control D38's risk acceptance had assumed existed — including a `git push` refusal
+   whose only exemption is a grant the operator sets in durig's own environment, which a seat
+   cannot forge. `src/seattools.mjs` installs read/write/edit/PowerShell per seat (no bash:
+   native-Windows bash is an undeclared Git Bash dependency) and removes write/edit from verifier
+   seats; `openHarness` supplies the confining environment and the roster, and `up` scopes the
+   verifiers. `src/worktree.mjs` + `node cli.mjs worktree` gives an item its own checkout, which is
+   what stops seats editing the live tree.
+   **Still open — the evidence half:** `complete_work` carries a `resultSummary` string, which is a
+   claim, not evidence. Until it carries something a reviewer can **re-run**, a verifier checks a
+   sentence and W2 stays `inferred`. That is the next thing, and it is a protocol change rather
+   than a capability grant, so no security position gates it (see `docs/SEAT-TOOLS.md` for what is
+   built and `docs/CODEMODE.md` for what lands on top).
 5. **A deferral verb.** Today a seat that needs a decision can only emit prose.
    Add a way to raise a question that blocks the item and hands it to the seat or
    human who can answer — the "reason to defer to humans" the swarm paper leaves
