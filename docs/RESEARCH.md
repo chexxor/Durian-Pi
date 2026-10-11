@@ -1,8 +1,9 @@
 # durig — research log
 
-Primary comparative research lives in `../../docs/ORCHESTRATION-COMPARISON.md`
-(feature matrix F1–F12 across OpenRig, agent-fleet+pi-durable, tuios,
-hermes-agent; augmented-stack variants V1/V2; spike execution log). This file
+Primary comparative research lives in the project workspace,
+`docs/ORCHESTRATION-COMPARISON.md` (feature matrix F1–F12 across OpenRig,
+agent-fleet+pi-durable, tuios, hermes-agent; augmented-stack variants V1/V2; spike
+execution log) — published separately from this repository. This file
 records durig-specific findings made while building it.
 
 ## Spike findings (offline, faux provider)

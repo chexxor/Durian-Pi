@@ -98,9 +98,10 @@ the admission criteria for the ambient tier: `docs/METRICS.md`.
 | `DURIG_OPTIMIZE` | `on`: `up` runs each seat's persona through the instruction optimizer (one model call per seat) before storing; provenance recorded. See D13. |
 | `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent GENERATIONS across all seats (unset = unlimited). `1` serializes them so one local model (e.g. Qwen on a 24 GB GPU) can serve the whole rig. Waiting-vs-stuck is surfaced via lease files: `status`/`watch` report `generation_in_flight` (holder seat + since) or `generation_stale` (dead holder). See DECISIONS D12. |
 
-Provider options are imported from `../vendor/pi-deepinfra/models.ts` — the
-same module the pi-deepinfra extension feeds to pi — so catalog and serializer
-compat stay single-sourced. Node 24 type-strips that TS module on import.
+Provider options are imported from `src/providers/deepinfra-models.ts` — a vendored
+copy of the module the pi-deepinfra extension feeds to pi, so catalog and
+serializer compat stay single-sourced. Node 24 type-strips that TS module on
+import. See `src/providers/PROVENANCE.md` for the source, version and licence.
 
 ## Layout
 

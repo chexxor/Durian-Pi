@@ -6,7 +6,7 @@ holds the ordered next work and `docs/DECISIONS.md` the reasoning.
 
 Updated **2026-10-11**: the pi pin moved to `main`'s tip and the tuios patch was
 rebased onto upstream `main` — both rebuilt and re-verified (D17, and
-`docs/TUIOS-PRS.md` at the repo root). Later the same day `check` shipped (D25)
+`docs/TUIOS-PRS.md` in the project workspace). Later the same day `check` shipped (D25)
 and found that the converter was dropping OpenRig's rig-level `edges:` list (D26);
 the fix restored every lost send permission, the docs pod joined the rig (D27),
 and the corrected constitution was applied to the live tutor-pi store (backup:

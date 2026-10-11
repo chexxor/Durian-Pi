@@ -73,8 +73,9 @@ One vocabulary for both the environment and the config file, resolved
 Discovery order: `$DURIG_CONFIG`, then `./durig.config.json`, then
 `./.durig/config.json`. `node cli.mjs config` prints the effective values and the
 source; the API key is reduced to `set`/`unset` so it is always safe to log.
-Provider options are imported from `../vendor/pi-deepinfra/models.ts` — the same
-module the pi extension uses — so the catalog is single-sourced.
+Provider options are imported from `src/providers/deepinfra-models.ts` — a vendored
+copy of the module the pi extension uses — so the catalog is single-sourced and
+durig stands alone (see `src/providers/PROVENANCE.md`).
 
 ## 4. Seats and models
 

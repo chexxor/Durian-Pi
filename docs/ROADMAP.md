@@ -385,11 +385,13 @@ surface. A feature that is off must therefore cost nothing — not "little".
     Shape: `git subtree split --prefix=durig` keeps the history built here (the
     decision log, the 21 demos) instead of starting fresh, and the code is already
     nearly self-contained — `@earendil-works/pi-durable` and `pi-ai` are **public on
-    npm** (1.1.0, MIT), and the only two couplings out of the tree are imports of
-    `../vendor/pi-deepinfra/models.ts` (`cli.mjs`, `demo/optimizer-eval.mjs`).
-    Clear before pushing: vendor that provider catalogue with provenance (or make
-    it optional), pick a licence (the platform is MIT), re-run the secret scan, and
-    add a README written for a stranger. No release, no npm publish, no tag — a
+    npm** (1.1.0, MIT). **The coupling is already cut:** the two imports of
+    `../vendor/pi-deepinfra/models.ts` are now `src/providers/deepinfra-models.ts`,
+    vendored with provenance — the tree shares no path with its former parent.
+    Done before pushing: vendor the catalogue, re-run the secret scan (clean — no
+    keys, no absolute local paths in the published tree).
+    Still to decide: a licence (the platform is MIT) and a README written for a
+    stranger. No release, no npm publish, no tag — a
     readable `main` plus the docs. **Requires the operator's authorization to
     push**, and a GitHub remote added alongside the existing LAN Gitea one.
 
