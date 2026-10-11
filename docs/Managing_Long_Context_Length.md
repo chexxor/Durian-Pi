@@ -256,3 +256,118 @@ If you tell me your serving stack (vLLM, TensorRT-LLM, MLX, hosted APIs) and the
 [^8]: [Model or Harness? An Interaction-Centric Taxonomy ...](https://arxiv.org/html/2607.28802v1) (0%)
 [^9]: [ai-boost/awesome-harness-engineering: Awesome list for AI agent...](https://github.com/ai-boost/awesome-harness-engineering) (1%)
 [^10]: [Context Compaction Pattern for Long-Running Agents (2026)](https://www.agentnative.dev/patterns/context-compaction-pattern-for-long-running-agents) (1%)
+
+
+I'll research DeepInfra's actual infrastructure and what the low-cost inference-provider segment runs on.Key finding: DeepInfra does **not** run vLLM — they're on TensorRT-LLM + NVIDIA Dynamo with NVFP4 quantization. Let me confirm details and map the wider low-cost provider landscape.Now let me pull the DeepInfra-specific knobs you can actually exploit, plus the quantization caveat that affects measurement.Let me round out the provider-stack landscape and the quantization-accuracy question that directly affects your measurements.You've hit the key issue: with DeepInfra you can't see the stack, but it's knowable — and it materially changes what you should measure. Here's the picture.
+
+## What DeepInfra actually runs (not vLLM)
+
+DeepInfra is an exception to the "low-cost = vLLM" rule. They run on **Blackwell-generation GPUs (B300s)** with an inference stack built on **TensorRT-LLM + NVIDIA Dynamo** for distributed serving (KV-aware routing, disaggregated prefill/decode), quantizing models to **NVFP4 weights via ModelOpt** [^1]. They report a day-one frontier-model deployment running 4× faster on a single B300 than 4×H200s [^1]. Their own blog frames the market as "vLLM, SGLang, and TensorRT-LLM make different tradeoffs in continuous batching, KV-cache management, and prefill scheduling" [^2] — i.e., they benchmarked all three and chose TRT-LLM/Dynamo.
+
+## What the broader low-cost segment uses
+
+| Family | Who | What they run | Consequence for you |
+|---|---|---|---|
+| **Open-source GPU servers** | Most serverless providers, Together, Baseten, Novita | **vLLM** (PagedAttention, most mature ecosystem) or **SGLang** (RadixAttention, prefix reuse) [^3][^4]; Novita explicitly partners with SGLang [^5] | Prefix caching behavior differs; SGLang wins on prefix-heavy workloads (~29% on cache-heavy traffic) [^6] |
+| **Custom-tuned GPU stacks** | **DeepInfra** (TensorRT-LLM + Dynamo + NVFP4), **Fireworks** (FireAttention custom CUDA kernels) [^7] | Higher throughput per GPU → lower price | More aggressive quantization, more variance from model-card numbers |
+| **Custom silicon** | **Groq** (LPU), **Cerebras** (WSE-3), **SambaNova** (RDU) | On-chip SRAM, 400–2,200 tok/s on 70B models [^8][^9] | Fast but narrow model catalog; fine-tunes/custom models live on GPU providers [^10] |
+| **Research-optimized** | **Together** | Claims up to 2.75× faster serverless on GPT-OSS/Qwen/Kimi/DeepSeek [^11] | — |
+
+**The near-universal common denominators for low cost:** aggressive quantization (FP8/FP4), continuous batching, prefix/KV caching, and packing many users per GPU. Together/DeepInfra explicitly bill by packing users onto shared hardware [^12].
+
+## The three ways the hidden stack corrupts your measurements
+
+This is the part that matters for your harness. You're not measuring the model on the card — you're measuring **DeepInfra's served variant**.
+
+**1. Quantization changes long-context accuracy.** DeepInfra serves **FP4 by default on flagship serverless models** [^13][^14]. Independent research finds 4-bit quantization causes long-context retrieval drops **up to 59%**, while 8-bit preserves ~0.8% — and degradation worsens for non-English input [^15][^16]. NVFP4 is better than naive INT4 (NVIDIA claims <1% loss including Ruler 64K [^17]), but FP4 errors are documented to **compound through reasoning chains** [^18], and an independent NVFP4 study found FP8/FP16 weights give only modest gains under the same NVFP4 activation [^19]. Net: **your measured effective context will likely be smaller than any FP16/FP8 number in a paper.** Measure the served variant.
+
+**2. Served context ≠ native context.** This is the biggest trap. DeepInfra serves **66K on DeepSeek V4 Pro against a 1M native window** in its own benchmark [^13]. Long-context agent runs "truncate silently unless you check the served window." So your per-model table must record the **served** window from each model page, never the native one. Their docs note a 400 error only when the *total context* is exceeded [^20], but don't document intermediate truncation behavior — so test overflow explicitly.
+
+**3. Shared-pool batching and KV-cache quantization add latency variance.** Throughput is ~33 tok/s on V4 Pro FP4 with 1.19s TTFT [^13]. Your account cap is **200 concurrent requests**, and that concurrency ceiling — not a token/rate cap — is the binding constraint [^13][^21]. So latency is a *load-dependent* variable, not a fixed property of the model.
+
+**Practical consequence:** your profile is really per-**（model × provider × quantization × served-context）**, not per-model. Re-profile when DeepInfra changes the served variant or you switch providers for the same model.
+
+## DeepInfra-specific knobs you can exploit
+
+This is where your project gets leverage the generic advice can't give you.
+
+| Knob | What it does | How to use it in your harness |
+|---|---|---|
+| **Automatic prefix caching** | Matches the longest common prefix of any request, automatically; no code changes [^22][^21] | **Cache-align your compaction**: keep system prompt + tool schemas byte-identical so the stable prefix stays hot |
+| **Cached-token measurement** | Usage returns `prompt_tokens_details.cached_tokens` [^22] | **Instrument this** — it's a free, live cache-hit-rate metric. A compaction that drops it is cache-hostile |
+| **Cached-input discount** | Cached input billed at **~0.2×** fresh (80% off), typically 3–5× cheaper [^21][^13] | Verify your cache hit rate is 30–50%+ of input tokens; if not, your prefix isn't stable [^21] |
+| **Prompt cache retention** | Explicit `prompt_cache_key` + `prompt_cache_options` with `ttl: "5m"`/`"1h"` guarantees reuse; write premium **1.25× (5m) / 2.0× (1h)**, reads at **0.2×** [^23][^23] | For long agent sessions, retain the system prompt + tools + document so compaction rebuilds don't evict your hot prefix [^23] |
+| **Service tiers** | Standard 1×, **Priority 1.5×**, **Flex 0.8×** [^20][^13] | **Run all offline profiling on Flex** (20% off) [^20]; use Priority for interactive agents |
+| **`fail_fast`** | Returns HTTP 429 instead of queueing at capacity [^20] | Use for backpressure in measurement runs so load doesn't distort latency |
+| **Logprobs** | `logprobs: true, top_logprobs: N` on all request modes [^24] | **Confidence-based scoring** — measure per-token retrieval confidence without an LLM judge |
+| **Structured outputs** | JSON mode [^25] | For deterministic scoring; but note models may hallucinate values rather than say "I don't know" when forced [^25] |
+
+**Flex is your secret weapon for the profiling pipeline.** Running RULER/NoLiMa/your own NIAH harness on the 0.8× Flex tier cuts the cost of measuring every model — and it's explicitly intended for "model evaluations, data enrichment, and asynchronous workloads" [^20]. Flex may wait up to 10 minutes for capacity, so use it for offline profiling, not interactive tests.
+
+## Updated recipe for your DeepInfra setup
+
+| Step | Action |
+|---|---|
+| 1. Read served context | Scrape each model page for the **served** window (not native) — e.g. V4 Pro = 66K served [^13] |
+| 2. Profile on Flex | Run RULER + NoLiMa + your NIAH harness at 0.8× cost; treat results as the **FP4 variant's** effective length, not the model card's [^15] |
+| 3. Set trigger per model | ~60–70% of the *measured served* effective length, per model |
+| 4. Cache-align compaction | Byte-stable prefix; summarize only the middle; monitor `cached_tokens` to confirm the prefix stayed hot [^22] |
+| 5. Retain hot prefixes | Use `prompt_cache_key` + `prompt_cache_options` so long sessions keep the system prompt/tools warm [^23] |
+| 6. Score with logprobs | Use token logprobs for retrieval-confidence measurement instead of an LLM judge [^24] |
+| 7. Pin & monitor | DeepInfra adds/deprecates open models frequently — pin versions and re-profile on change [^13] |
+| 8. Handle backpressure | Track the 200-concurrent cap; use `fail_fast` in measurement runs [^13][^20] |
+
+## Other things worth knowing
+
+- **Migration is trivial**: OpenAI-compatible at `https://api.deepinfra.com/v1/openai` — same schema, function calling, streaming, vision, JSON mode [^26][^c7b87a#60]. Your harness can swap providers with a `base_url` change, which makes **cross-provider A/B of the same model** easy — worth doing, since the served variant differs by provider.
+- **Provider choice is a first-class quality variable.** Fireworks is stronger on quantized inference (FP8/AWQ) with longer context; DeepInfra is stronger on raw cost and day-one availability [^21]. For a mixed fleet, you may want to route quality-critical long-context agents to a higher-precision host and cost-sensitive ones to DeepInfra.
+- **`max_tokens` is hard-capped at 16,384** for most models; longer output requires response continuation, which cannot exceed the total context [^20]. Budget for this in long-generation agents.
+- **Tokenizer differences** mean context limits and truncation are per-model, and DeepInfra doesn't document overflow handling — so test it explicitly rather than assuming [^21].
+- **Parasail comparison for context**: GLM-5.2 at 1M and Kimi K2.6 at 256K on DeepInfra's pages; on some shared models the rate is identical across providers ($0.75/$3.50 on Kimi K2.6) [^27]. Worth benchmarking DeepInfra vs one alternative on your actual task mix before committing.
+
+**The headline for your project:** the hidden stack doesn't block you — it just means your per-model numbers are per-**served-variant** numbers. Profile on Flex, read the served window, expect FP4 to shave your effective context below the model card, and lean on DeepInfra's automatic prefix caching + `cached_tokens` telemetry as both a cost lever and a live signal that your compaction is preserving the right prefix.
+
+**References**
+
+[^1]: [How DeepInfra Built on NVIDIA's Inference Stack and Why It Paid Off](https://deepinfra.com/blog/deepinfra-nvidia-inference-stack) (6%)
+[^2]: [Best AI Inference Platforms for Speed & Cost in 2026](https://deepinfra.com/blog/best-ai-inference-platforms) (1%)
+[^3]: [Best Open-Source LLM Inference Servers 2026 | Awesome Agents](https://awesomeagents.ai/tools/best-open-source-llm-inference-servers-2026/) (1%)
+[^4]: [SGLang vs vLLM (2026): Speed, Memory and When to Use ...](https://kanerika.com/blogs/sglang-vs-vllm/) (2%)
+[^5]: [Novita AI Partners with SGLang to Power Next‐Gen AI Inference](https://novita.ai/blog/novita-ai-partners-with-sglang/) (1%)
+[^6]: [The LLM Inference Stack in 2026 — vLLM, SGLang, TensorRT ... - LinkedIn](https://www.linkedin.com/pulse/llm-inference-stack-2026-vllm-sglang-tensorrt-llm-works-panthangi-1o9kc/) (1%)
+[^7]: [Best LLM API Providers in 2026: We Reviewed 8 Options](https://fireworks.ai/blog/best-llm-api-providers) (1%)
+[^8]: [Fastest LLM Inference 2026: Groq, Cerebras, SambaNova Ranked by Speed](https://costbench.com/best/fastest-llm-inference/) (3%)
+[^9]: [Groq vs Cerebras vs SambaNova: The Race for Faster-Than-GPU...](https://dreaming.press/posts/groq-vs-cerebras-vs-sambanova-fast-inference.html) (3%)
+[^10]: [AI Inference Speed 2026: Fastest Providers Compared](https://alatirok.com/ai-inference-speed-2026/) (3%)
+[^11]: [Serverless Inference](https://www.together.ai/serverless-inference) (2%)
+[^12]: [Modal vs DeepInfra (2026): GPU Seconds vs Per-Token ...](https://www.morphllm.com/comparisons/modal-vs-deepinfra) (1%)
+[^13]: [DeepInfra Pricing (October 2026): Per-Token Rates, GPU Cost & Serving Caveats | Morph](https://www.morphllm.com/deepinfra-pricing) (11%)
+[^14]: [DeepSeek V4 Pro Is Now Available on DeepInfra](https://deepinfra.com/blog/deepseek-v4-pro-deepinfra) (1%)
+[^15]: [Does quantization affect models' performance on long-context tasks?](https://arxiv.org/abs/2505.20276) (1%)
+[^16]: [Does quantization affect models’ performance on long-context tasks?](https://arxiv.org/html/2505.20276v3) (1%)
+[^17]: [Optimizing Inference for Long Context and Large Batch ...](https://developer.nvidia.com/blog/optimizing-inference-for-long-context-and-large-batch-sizes-with-nvfp4-kv-cache/) (3%)
+[^18]: [FP4 vs FP8 vs FP16 LLM Inference: Quality and Speed Tradeoffs](https://ifactoryapp.com/sap-integration/on-prem-ai/fp4-vs-fp8-vs-fp16-llm-inference) (2%)
+[^19]: [Characterizing the Impact of NVFP4 Quantization for Low ...](https://arxiv.org/html/2606.06527v2) (1%)
+[^20]: [Chat Completions - DeepInfra](https://docs.deepinfra.com/chat/overview) (17%)
+[^21]: [DeepInfra 2026: Open-Source GPU Cloud API Review | APIRank](https://apirank.vip/tutorials/deepinfra-api-review/) (16%)
+[^22]: [Prompt Caching - DeepInfra](https://docs.deepinfra.com/chat/prompt-caching) (4%)
+[^23]: [Prompt Cache Retention - DeepInfra](https://docs.deepinfra.com/chat/prompt-cache-retention) (9%)
+[^24]: [Log Probabilities](https://docs.deepinfra.com/chat/log-probs) (4%)
+[^25]: [Structured Outputs](https://docs.deepinfra.com/chat/structured-outputs) (1%)
+[^26]: [API Reference - DeepInfra](https://docs.deepinfra.com/api-reference/introduction) (1%)
+[^27]: [Parasail vs. DeepInfra: Pricing, latency, and support](https://www.parasail.io/blog/parasail-vs-deepinfra) (2%)
+
+
+
+[^1]: [[Bug]: GLM-5.3-Flash long-decode degeneration after accumulated reasoning decode · Issue #56868 · vllm-project/vllm · GitHub](https://github.com/vllm-project/vllm/issues/56868) (72%)
+[^2]: [GLM-5.3-Flash Documentation & Integration Guide](https://deepinfra.com/blog/glm-5-3-flash-documentation-integration-guide) (11%)
+[^3]: [DeepSeek-V4.1-Flash: Model Overview & Integration](https://deepinfra.com/blog/deepseek-v4-1-flash-model-overview-integration) (5%)
+[^4]: [GLM 5.3 Flash API - Demo - DeepInfra](https://deepinfra.com/zai-org/GLM-5.3-Flash) (4%)
+[^5]: [GLM-5.3-Flash API Is Now on DeepInfra](https://deepinfra.com/blog/glm-5-3-flash-deepinfra) (3%)
+[^6]: [DeepSeek-V4.1-Flash Is Now on DeepInfra](https://deepinfra.com/blog/deepseek-v4-1-flash-deepinfra) (2%)
+[^7]: [GLM-5.3 Is Now Available on DeepInfra](https://deepinfra.com/blog/glm-5-3-deepinfra) (1%)
+[^8]: [zai-org/GLM-5.3-Flash · Hugging Face : r/LocalLLaMA](https://www.reddit.com/r/LocalLLaMA/comments/1vyyesk/zaiorgglm53flash_hugging_face/) (1%)
+[^9]: [DeepSeek-V4.1-Flash Explained: The Causal Encoder-Decoder Architecture ...](https://miraflow.ai/blog/deepseek-v4-1-flash-causal-encoder-decoder-2026) (1%)
+[^10]: [DeepSeek-V4.1-Flash: Frontier Agents on a Smaller ...](https://andlukyane.com/blog/paper-review-deepseek-v41-flash) (1%)
+
+
