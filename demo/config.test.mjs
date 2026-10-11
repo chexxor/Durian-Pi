@@ -139,7 +139,6 @@ try {
 
 	console.log("CLI INTEGRATION OK (file, env override, error contract)");
 	console.log("CONFIG TEST PASS");
-	process.exit(0);
 } finally {
 	try {
 		rmSync(dir, { recursive: true, force: true });
@@ -147,3 +146,6 @@ try {
 		console.error(`CLEANUP WARNING (temp dir kept): ${err?.message ?? err}`);
 	}
 }
+
+// After the finally: an exit inside the try would skip cleanup entirely.
+process.exit(0);

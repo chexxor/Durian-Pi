@@ -121,7 +121,6 @@ try {
 
 	console.log(`WATCH OK: snapshot(seq1)=["First item"] live-update(seq${update.seq})=["First item","Second item"] attention=${JSON.stringify(update.attention.map((n) => n.kind))}`);
 	console.log("WATCH TEST PASS");
-	process.exit(0);
 } finally {
 	// Cleanup must not mask a test failure with its own EPERM: report and move on.
 	try {
@@ -130,3 +129,6 @@ try {
 		console.error(`CLEANUP WARNING (temp dir kept): ${err?.message ?? err}`);
 	}
 }
+
+// After the finally: an exit inside the try would skip cleanup entirely.
+process.exit(0);

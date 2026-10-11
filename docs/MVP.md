@@ -444,3 +444,40 @@ node demo/check.test.mjs    # both directions, matching seats, skipped-when-unre
 
 Falsified before it was trusted: with stray-seat detection disabled by hand, the
 test fails with `a seat the store holds and the file does not declare is reported`.
+
+## Review recipe — the suite must not leak (item 10c, 2026-10-11)
+
+Twelve demos called `process.exit(0)` from inside the `try` whose `finally` removes
+their temp dir. An exit inside a try skips the finally, so the cleanup never ran and
+every test run left a directory and a SQLite file in `$TMPDIR`.
+
+The proof is a measurement, not an exit code — and that distinction is the point,
+because a leaking test still prints `PASS`:
+
+```powershell
+cd durig
+$t = [System.IO.Path]::GetTempPath()
+"before: " + (Get-ChildItem $t -Filter 'durig-*' -Directory).Count
+foreach ($f in Get-ChildItem demo -Filter '*.test.mjs') { node $f.FullName | Out-Null }
+"after:  " + (Get-ChildItem $t -Filter 'durig-*' -Directory).Count
+```
+
+Expected: the two numbers are equal. Before the fix the count grew by one per test.
+
+The failure mode to know about: the `finally` reports a failed cleanup as
+`CLEANUP WARNING` on **stderr** while the test still prints `PASS` on stdout, so
+grepping output for `PASS` calls a leak a success. Count directories instead.
+
+Fixing the exit bug uncovered a second, real defect. Once the `finally` ran for the
+first time, `constitution`'s cleanup failed with `EPERM`: its `readConstitution()`
+helper opened SQLite storage and never closed it, and on Windows an open handle
+keeps the `-wal`/`-shm` files locked so the directory cannot be removed. The exit
+bug had been hiding it for as long as both existed. So "make the cleanup run" and
+"make the cleanup succeed" are two different checks, and only running it reveals the
+second.
+
+Known residue, deliberately not touched: `$TMPDIR` holds ~550 `durig-*` directories
+from before this fix. They are in the OS temp directory, which is designed for this
+and cleaned by the OS, and removing them would mean a recursive delete on an
+absolute temp path — which this project bans. Delete them by hand if they bother
+you.

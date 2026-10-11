@@ -260,7 +260,6 @@ try {
 	assert.match(bogusJson.usage, /node cli\.mjs up/, "usage is returned to the caller");
 
 	console.log("CLI TEST PASS (contracts, exit codes, stderr, error surface)");
-	process.exit(0);
 } finally {
 	try {
 		rmSync(dir, { recursive: true, force: true });
@@ -268,3 +267,6 @@ try {
 		console.error(`CLEANUP WARNING (temp dir kept): ${err?.message ?? err}`);
 	}
 }
+
+// After the finally: an exit inside the try would skip cleanup entirely.
+process.exit(0);

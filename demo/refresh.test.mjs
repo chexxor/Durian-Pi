@@ -121,7 +121,6 @@ try {
 	);
 
 	console.log("REFRESH TEST PASS (create, idempotent rerun, --refresh repairs stale prompts)");
-	process.exit(0);
 } finally {
 	try {
 		rmSync(dir, { recursive: true, force: true });
@@ -129,3 +128,6 @@ try {
 		console.error(`CLEANUP WARNING (temp dir kept): ${err?.message ?? err}`);
 	}
 }
+
+// After the finally: an exit inside the try would skip cleanup entirely.
+process.exit(0);

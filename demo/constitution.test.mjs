@@ -73,13 +73,21 @@ const up = (rigFile) =>
 // prompt section would receive, and that is the stored document's text.
 async function readConstitution() {
 	const storage = await openNodeSqliteStorage(db);
-	const rec = await storage.findDocument(
-		{ kind: "durig.constitution", scope: { kind: "session" } },
-		"current",
-		BACKGROUND_CONTEXT,
-	);
-	if (!rec) return null;
-	return (await storage.document(rec.id, "current", BACKGROUND_CONTEXT))?.value?.text ?? "";
+	// Closing matters on Windows: an open handle keeps the -wal/-shm files locked,
+	// so the temp dir cannot be removed and cleanup fails with EPERM. This helper
+	// leaked a handle until the exit-before-finally bug was fixed and the cleanup
+	// finally ran for the first time, which is when the failure became visible.
+	try {
+		const rec = await storage.findDocument(
+			{ kind: "durig.constitution", scope: { kind: "session" } },
+			"current",
+			BACKGROUND_CONTEXT,
+		);
+		if (!rec) return null;
+		return (await storage.document(rec.id, "current", BACKGROUND_CONTEXT))?.value?.text ?? "";
+	} finally {
+		await storage.close(BACKGROUND_CONTEXT);
+	}
 }
 
 try {
@@ -124,7 +132,6 @@ try {
 	assert.equal(await readConstitution(), INLINE_TEXT, "inline wins when both are present");
 
 	console.log("CONSTITUTION TEST PASS (inline applied, file preserved, absent kept, ambiguity reported)");
-	process.exit(0);
 } finally {
 	try {
 		rmSync(dir, { recursive: true, force: true });
@@ -132,3 +139,6 @@ try {
 		console.error(`CLEANUP WARNING (temp dir kept): ${err?.message ?? err}`);
 	}
 }
+
+// After the finally: an exit inside the try would skip cleanup entirely.
+process.exit(0);

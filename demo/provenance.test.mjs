@@ -103,7 +103,10 @@ try {
 
 	/* ---------------------------------- absence of evidence is not cleanliness */
 
-	const notARepo = mkdtempSync(join(tmpdir(), "durig-not-a-repo-"));
+	// Inside `dir` so the finally removes it. It must not be a repository, and the
+	// OS temp dir is not, so nesting it here keeps the property under test.
+	const notARepo = join(dir, "not-a-repo");
+	mkdirSync(notARepo, { recursive: true });
 	const unknown = gitProvenance(notARepo);
 	assert.equal(unknown.revision, null, "no repository means no revision");
 	assert.equal(unknown.dirty, null, "no repository must be UNKNOWN, never false");

@@ -177,7 +177,6 @@ try {
   assert.ok(!/TypeError/.test(flat.stderr), "no bare stack trace");
 
   console.log("CONVERTER TEST PASS (rig-level edges, id normalisation, bad prefix, persona assembly, old format)");
-  process.exit(0);
 } finally {
   try {
     rmSync(dir, { recursive: true, force: true });
@@ -185,3 +184,6 @@ try {
     console.error(`CLEANUP WARNING (temp dir kept): ${err?.message ?? err}`);
   }
 }
+
+// After the finally: an exit inside the try would skip cleanup entirely.
+process.exit(0);

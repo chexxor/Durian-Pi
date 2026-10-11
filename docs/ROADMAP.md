@@ -307,6 +307,21 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     test that does clean up. Fix: move the pass message and the exit to AFTER the
     try/finally, in each of the twelve. Mechanical, and the proof is that a full
     suite run leaves the temp dir unchanged.
+    **✅ done (2026-10-11).** Eleven files (the twelfth, `extensions`, was already
+    fixed when it was written), with only the `process.exit(0)` moved so the success
+    output is unchanged and a thrown assertion still propagates; the rewrite refused
+    to touch any file without exactly one matching site. Proof is the measurement,
+    not the edit: `$TMPDIR/durig-*` went from 545 to 547 across a full suite run,
+    and after the two remaining causes were fixed, a run left it at 548 → 548.
+    **The fix uncovered a second, real defect.** Once the `finally` actually ran,
+    `constitution`'s cleanup failed with `EPERM` — its `readConstitution()` helper
+    opened SQLite storage and never closed it, and on Windows an open handle keeps
+    the `-wal`/`-shm` files locked so the directory cannot be removed. The exit bug
+    had been hiding it. Both are fixed and the handle-closing reason is written in
+    the helper. Note the asymmetry worth remembering: the `finally` printed
+    `CLEANUP WARNING` to stderr while the test still printed `PASS`, so a runner
+    that greps stdout calls a leak a success — which is why the check here is a
+    temp-dir count rather than an exit code.
 
 ## Mid-term
 
