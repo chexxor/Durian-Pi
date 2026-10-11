@@ -351,7 +351,12 @@ async function cmdUp(rigFile, refresh = false) {
         // A rig may point its seats at an isolated tree: `seat.cwd` overrides `spec.cwd`, and with
         // neither the seat keeps the harness default. Recorded per conversation because that is
         // what the env function consults, so a renewal cannot silently widen the boundary.
-        const seatCwd = seat.cwd ?? spec.cwd;
+        //
+        // `DURIG_SEAT_ROOT` is the last fallback, and it exists so a rig file can stay portable:
+        // a committed rig that named `C:/tmp/...` would persist a host-absolute path in git, which
+        // is exactly what ROADMAP item 34 warns against - and it would be wrong on any other
+        // machine. The operator points the run at a worktree instead.
+        const seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT;
         if (seatsDoc.seats[seat.name]) {
           if (!refresh) {
             existing.push(seat.name);

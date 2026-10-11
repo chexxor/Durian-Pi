@@ -96,7 +96,16 @@ try {
 	console.log("\ncli.mjs reaches the helper and points seats at a declared cwd");
 	const cli = await readFile(new URL("../cli.mjs", import.meta.url), "utf8");
 	check("the command is dispatched", cli.includes('cmd === "worktree"') && cli.includes("async function cmdWorktree"));
-	check("`up` records a declared cwd on the seat", cli.includes("const seatCwd = seat.cwd ?? spec.cwd;") && cli.includes("{ cwd: seatCwd }"));
+	check(
+		"`up` records a declared cwd on the seat",
+		cli.includes("const seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT;") && cli.includes("{ cwd: seatCwd }"),
+	);
+	// The env fallback is what lets a committed rig stay portable: without it, pointing seats at a
+	// worktree would mean writing a host path into the rig file, which item 34 warns against.
+	check(
+		"the seat root can come from the environment, so a rig file need not name a host path",
+		cli.includes("?? CFG.DURIG_SEAT_ROOT") && (await readFile(new URL("../src/config.mjs", import.meta.url), "utf8")).includes('"DURIG_SEAT_ROOT"'),
+	);
 	check(
 		"a seat without a declared cwd keeps the harness default rather than guessing one",
 		cli.includes("seatCwd === undefined ? {} : { cwd: seatCwd }"),
