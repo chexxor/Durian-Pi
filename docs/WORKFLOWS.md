@@ -83,8 +83,11 @@ item can be read.
 **Capability:** a verifier seat (name/role matching the verifier vocabulary) on a
 **different model family** from the authors it checks; and — this is the part that is not
 built — **evidence a reviewer can re-check**. `complete_work` currently carries a
-`resultSummary` string, which is a claim, not evidence. That is ROADMAP item 4 (M3), and
-until it lands, W2 holds only for work whose artifact is *text the reviewer can read in
+`resultSummary` string, which is a claim, not evidence (ROADMAP item 4). **This half is not
+gated on the M3 security ruling**: evidence is a protocol change, not a capability grant — it
+gives a seat no new power, only something checkable to report, so it can land before the tools
+do. The tools are the gated half, and they carry conditions SC1–SC3 (`docs/SEAT-TOOLS.md`).
+Until evidence lands, W2 holds only for work whose artifact is *text the reviewer can read in
 the transcript*.
 
 **Evidence:** `demo/check.test.mjs` (the verifier rule, including that a capability named
@@ -220,7 +223,7 @@ Status is today's, not the wish:
 | Constitution | all | rig file; `check` catches declared-but-not-applied |
 | Read commands + attention vocabulary | W5, operator loop | seed — D11, D18 |
 | `check` + `metrics` + provenance | operator loop | seed — D24, D25, D28 |
-| **Evidence in `complete_work`** | W2 | **absent** — item 4 (M3), blocked on loop #5 |
+| **Evidence in `complete_work`** | W2 | **absent** — a protocol change, NOT gated on loop #5 (SC1–SC3 gate the tools, not this) |
 | **Retrieval / corpus tools** | W2 | **absent** — item 4 (M3) |
 | **A drill task set** | operator loop | **absent** — item 2's other half |
 | Attempt/deadline semantics | W4 | **absent** — item 6 |
