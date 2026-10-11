@@ -662,6 +662,41 @@ surface. A feature that is off must therefore cost nothing — not "little".
     per-seat key; a measured hit rate on the real models; and an explicit decision on both traps,
     including whether a model swap is warranted to make retention reachable at all.
 
+34. **Platform-independent paths — a canonical form, and never persisting a host path.** Raised by
+    the operator with `docs/Pi_Platform_Independent_Filepaths.md`, which is the right analysis and
+    whose central claim holds: one canonical form, one ingress function, one egress function, and
+    — the part that matters most for pi-durable — **never persist a host-absolute path in durable
+    state**, because a checkpoint written on one platform must replay on another.
+    *What I checked against our runtime, rather than accepting the doc's premises:*
+    - **A Git-Bash-style path is silently mis-resolved.** `resolve('/c/Users/x')` is
+      `C:\c\Users\x` on this host, so the MSYS form the doc recommends as canonical is **not**
+      something our `ExecutionEnv` speaks. The saving grace is that containment then **fails
+      closed**: that path resolves outside the worktree root and is refused, so the failure is a
+      confusing refusal rather than a wrong file. That is the right direction to fail, and the
+      test that proves it should be written before the form is ever adopted.
+    - **Containment is already case-insensitive here** — `relative('C:\\Work', 'c:\\work\\a.ts')`
+      is `a.ts`, not `..` — which is what identity on Windows requires. `confine.mjs` gets this
+      right by using `relative` rather than a string prefix.
+    - **Forward slashes and UNC already work** for native paths (`C:/x` → `C:\x`;
+      `//server/share` → `\\server\\share`), so the practical gap is the *MSYS* form, not slashes.
+    - **We DO persist a host-absolute path.** `AgentState.cwd` holds one, and `up` now writes
+      `seat.cwd ?? spec.cwd` into it, so the doc's warning applies to code shipped the same day.
+      A store carried to another machine resolves a root that does not exist; the failure is
+      confined rather than escaped, but it is wrong and silent. The fix is the doc's: keep the
+      absolute root as **configuration** and persist a **root token plus a relative path**.
+    - **`MAX_PATH` is a live risk for worktrees**, since `C:/tmp/durig-dev/<item>` plus a
+      `node_modules` tree is deep by construction, and the doc's `toNamespacedPath` is the known
+      answer.
+    *Shape, when it is done:* `toCanonical`/`toHost` as the only platform-aware pair in the tree,
+    canonical at every tool boundary, canonicalization at the `ExecutionEnv` boundary, and
+    property tests for idempotence plus a cross-platform resume test — a path resolution is an
+    effect whose inputs must replay to the same decision.
+    *Review trigger, so this is not only read once:* re-open when (a) a store is moved between
+    machines or a remote/containerised execution environment is used, (b) a second platform runs
+    the suite, or (c) the worktree path depth starts hitting `MAX_PATH`. Until then the current
+    posture is **fail-closed, not correct**: we are protected from a wrong file, not from a
+    confusing refusal.
+
 ## Sharing publicly
 
 22. **Publish durig as its own repository — no releases yet.** The operator wants

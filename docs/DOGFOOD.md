@@ -155,6 +155,33 @@ newest assistant id — entry ids increase, so "this run created it" is exactly
 "id > watermark". Regression test added for the two-prior-replies case, which is
 the case the old test could not reach.
 
+### F8 — a worktree junction, deleted recursively, emptied the real `node_modules` and the vendored packages
+
+**Observed:** a worktree was created through the new `node cli.mjs worktree` verb and removed
+with `git worktree remove --force`. Removal followed the `node_modules` **junction** into its
+target and deleted through it: `durig/node_modules` was left empty (52 of 92 packages' worth) and
+`vendor/pi-main/packages/{ai,chord,durable,telemetry}` were emptied entirely - **654 tracked files**.
+The very next suite run went from 30/30 to 3/30 as `ERR_MODULE_NOT_FOUND`, in the same command
+that committed.
+
+**Why it matters:** this is the classic Windows junction hazard, and the helper I had just
+written created the hazard itself. It also landed on the *vendored* tree, because
+`node_modules/@earendil-works/*` were themselves junctions pointing into `vendor/pi-main` - so one
+delete reached two trees. Nothing tracked in durig was touched (`node_modules` and `vendor/` are
+gitignored), which is the only reason recovery was cheap.
+
+**Recovery, for the record:** `git -C vendor/pi-main restore packages/` restored all 654 tracked
+files from the vendored clone, then `node scripts/sync-pi.mjs --sync --link` rebuilt and relinked
+at the pin. 30/30 afterwards. `npm install` alone was NOT enough: it restores the released
+packages, not the linked pin.
+
+**Lands:** `removeWorktree` must **unlink the junction first** (non-recursively, which drops only
+the link), then remove the worktree - and the demo must carry a canary proving the junction's
+**target survives removal**, since the current test asserted only that the worktree was gone.
+Until that lands the verb is unsafe to use on a real repository. This is also why the
+junction-vs-symlink question in ROADMAP item 34 is not only about path syntax: a link changes what
+a delete does.
+
 ## Session log
 
 | Date | Rig | What we ran | Findings |
