@@ -416,3 +416,83 @@ measure could be direct. Table in ROADMAP.md, "Measuring the research concerns".
 
 **Design:** how these measures reach a human — surfacing tiers, scope, notice
 lifecycle, and the traps — is `docs/METRICS.md`.
+
+## D25 — `check` is a linter, and severity says who can fix it (2026-10-11)
+
+**Finding:** D23 lists the research gaps and ROADMAP turns them into work, but
+nothing evaluates *a given rig* against them, so a new user cannot tell whether
+their configuration has a verifier, whether author and verifier share a model,
+or whether a seat can send anything at all. The constitution defect proved the
+sharper version: the rig file and the store disagreed, every command reported
+`ok`, and 13 seats ran without their team culture. A config auditor had to read
+both sides.
+
+**Decision:** `node cli.mjs check <rig.json> [--human]` audits the rig file and
+the store in one read each, and reports findings with a **stable rule id**, a
+subject, and the exact fix. Severity expresses **who can fix it**, which is the
+only distinction that changes what an operator does:
+
+- `error` — the rig cannot do its job until the file changes; `check` exits
+  nonzero so a script can gate on it.
+- `fix-now` — a real gap the operator can close; the rig still runs, so it never
+  fails a run and never blocks a script.
+
+A rule `check` cannot judge (no declared text to compare, an unreadable store) is
+reported **skipped with its reason** — never as a pass. Silence that reads as
+health is the failure mode this whole feature exists to remove.
+
+Six rules: `constitution-missing`, `constitution-not-applied`,
+`unreachable-seat`, `dangling-edge`, `no-verifier-seat`, `single-model-rig`.
+
+**Not adopted:**
+- A third `code-gated` severity for gaps no rig edit closes (verification
+  evidence, a deferral verb, termination semantics). `check` cannot know about
+  them without hand-mirroring the tool surface, which is precisely the drift that
+  produced the constitution bug. They stay in ROADMAP items 4-6, where they
+  change when the code does — not in a linter that would report them forever.
+- `--fix`. D24 makes a config change a hypothesis whose direction is recorded
+  *before* the edit; a fixer would apply changes nobody predicted.
+- A composite rig score (Goodhart; `docs/METRICS.md`) and interactive prompts
+  (D21 — the CLI stays non-interactive).
+
+**Deliberate imprecision, stated in the code.** `no-verifier-seat` is a
+heuristic over seat *name and role* text, so it is `fix-now` and prints the
+vocabulary it used. Matching on advertised `capabilities` was rejected: tutor-pi's
+own implementers advertise `peer-review`, so a capability match would classify
+the authors as verifiers and report an all-clear on the exact gap the rule
+exists to catch. A false all-clear is the one failure an audit tool must not
+have. The stranded-seat rule is likewise broad — *any* seat with no outgoing
+target — rather than the sharper "is a target but cannot reply", because
+`complete_work` enqueues its DONE notice without the edge gate, so the sharp form
+would miss the D16 coordinator case the rule is named after.
+
+**Evidence:** `demo/check.test.mjs` (the 19th demo) covers every rule, the drift
+regression, the capability false-all-clear case, open-vs-restrictive edges,
+skipped-with-reason, the render, and the CLI exit codes; 19/19 demos pass. Run
+against the live tutor-pi store it found a real, unmasked defect — see D26.
+
+**Cleanup alongside it:** the two view modules each carried their own ANSI
+palette (chatview had magenta and no yellow, watchview the reverse), now
+`src/ansi.mjs`. `truncate` was left duplicated on purpose: the two copies
+disagree on the `width <= 1` edge case, so unifying them is a behavior change and
+belongs with the view-model extraction (ROADMAP item 7).
+
+## D26 — The converter drops OpenRig's rig-level `edges:` list (2026-10-11)
+
+**Finding:** found by `check` on its first real run. `scripts/from-openrig.mjs`
+derives send permission from `agent.delegates_to` and each pod's `edges:` block,
+but never reads the **rig-level** `edges:` list at the end of `rig.yaml`. That
+list carries `escalates_to` (qa, qa2, student, sec, dev → lead), `collaborates_with`
+(ux → pedagogue, pm → lead, pm → sec) and `can_observe` entries. The generated
+`rigs/tutor-pi.rig.json` gives `ux`, `sec` and `dev` **no outgoing edge at all**,
+and qa/qa2/student lose their declared escalation path; `check` reports
+`unreachable-seat` for the three. The D16 fix (blanket edges for pm/lead) masked
+most of the loss, which is why nothing caught it.
+
+A second defect rides along: pod-level edges use bare names (`from: impl`) while
+rig-level edges use qualified ids (`from: build.qa`), so reading the rig-level
+list requires normalising `pod.seat` to `seat`.
+
+**Status:** recorded, not yet fixed — it is a converter concern (one per change)
+and the next item in the roadmap. Evidence: `openrig/rigs/tutor-pi/rig.yaml`
+lines 220+ versus the generated spec's edge list; `durig/docs/ROADMAP.md`.

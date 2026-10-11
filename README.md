@@ -31,10 +31,32 @@ node cli.mjs status                    # per-seat health + attention notices
 node cli.mjs watch                     # live NDJSON stream of queue + attention
 node cli.mjs watch --once              # one snapshot line, then exit
 node cli.mjs log pm 20                 # tail a seat transcript
+node cli.mjs check rig.v2.json         # audit a rig against the research gaps
 
 # real model traffic (needs DEEPINFRA_API_KEY in env)
 node demo/online.mjs
 ```
+
+## Auditing a rig
+
+`check` reads the rig file **and** the store, because a rig that looks right in
+the file can still be running something else: the tutor-pi spec declared its
+constitution inline while the store held a different one, so all 13 seats ran
+without the team culture and nothing anywhere reported it.
+
+```powershell
+node cli.mjs check rigs/tutor-pi.rig.json --human   # readable report
+node cli.mjs check rigs/tutor-pi.rig.json           # JSON (the contract)
+```
+
+Every finding carries a stable rule id, a subject, and the exact fix. Severity
+says **who can fix it**: `error` means the rig cannot do its job until the file
+changes, and `check` exits nonzero so a script can gate on it; `fix-now` is a gap
+the operator can close, and never fails a run. Rules: `constitution-missing`,
+`constitution-not-applied`, `unreachable-seat`, `dangling-edge`,
+`no-verifier-seat`, `single-model-rig`. A rule it cannot judge (no store to
+declare whether a matched, or an unread database) is reported as **skipped with
+its reason**, never as a pass.
 
 ## Configuration
 
@@ -58,6 +80,8 @@ compat stay single-sourced. Node 24 type-strips that TS module on import.
 ```
 src/rig.mjs           core: Seats/Edges/Constitution/RigQueue docs + Router tools
 src/attention.mjs     pure blocked-seat detection (feeds status + watch)
+src/checkup.mjs       pure rig audit rules + the human report (`cli.mjs check`)
+src/ansi.mjs          the one ANSI palette the human views share
 src/config.mjs        env > durig.config.json > defaults; `cli.mjs config`
 demo/cli.test.mjs     the CLI contract: every command, exit code, error path
 demo/watchview.test.mjs  the human watch view: extraction, layout, wiring
@@ -66,6 +90,7 @@ src/watchview.mjs     render a rig snapshot for a human (TUI pair to watch)
 src/chatview.mjs      render one seat's conversation for a human
 demo/chatlog.test.mjs  chat rendering + --follow streaming
 demo/constitution.test.mjs  a spec's constitution reaches the rig (inline or file)
+demo/check.test.mjs   rig audit rules + the drift regression + CLI exit codes
 docs/STATUS.md        start here: current state, decisions needed, resume facts
 docs/ROADMAP.md       milestones + the research gap analysis
 docs/METRICS.md       metrics design: measures, surfacing, scope, traps (not built)
@@ -90,7 +115,7 @@ demo/eval.test.mjs    mechanics test for the guard and judge
 scripts/from-openrig.mjs   OpenRig rig.yaml -> durig v2 converter (pods, skills, guidance)
 rigs/tutor-pi.rig.json    the migrated 13-seat tutor-pi rig
 test-fixture-rig.yaml      sample OpenRig-style input for the converter
-docs/                 QUICKSTART, MVP burn-down, STATUS, ROADMAP, METRICS, decisions D1-D24, research
+docs/                 QUICKSTART, MVP burn-down, STATUS, ROADMAP, METRICS, decisions D1-D25, research
 ```
 
 ## Status

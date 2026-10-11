@@ -173,3 +173,30 @@ node demo/chatlog.test.mjs           # rendering, contract, follow (offline)
 Cross-process follow is polled at the same 750 ms interval as `watch`; SQLite
 has no cross-process notification, so polling is the mechanism (see
 docs/RESEARCH.md, "Live delivery of seat activity").
+
+## Review recipe — audit a rig before you run it (2026-10-11)
+
+`node cli.mjs check <rig.json>` reads the rig file **and** the store in one pass
+each, and reports what is structurally wrong with the exact fix. It reads both
+because a rig that looks right in the file can be running something else: the
+tutor-pi spec declared its constitution inline while the store held a different
+one, so 13 seats ran without the team culture and no command said so.
+
+Severity says **who can fix it**. `error` means the rig cannot do its job until
+the file changes, and `check` exits nonzero so a script can gate on it.
+`fix-now` is a gap the operator can close and never fails a run. A rule `check`
+cannot judge is reported **skipped with its reason**, never as a pass.
+
+```powershell
+cd durig
+node cli.mjs check rigs/tutor-pi.rig.json --human   # readable report
+node cli.mjs check rigs/tutor-pi.rig.json           # JSON contract; exit 1 on errors
+node demo/check.test.mjs                            # every rule + the CLI, offline
+```
+
+Live proof: against the live tutor-pi store it reports `unreachable-seat` for
+`ux`, `sec` and `dev` — the converter never reads OpenRig's rig-level `edges:`
+list, so three seats cannot initiate a send (D26) — and `single-model-rig` for
+all 13 seats, which is ROADMAP item 3's motivating finding. The
+`constitution-not-applied` rule is the regression it was built from: that same
+mismatch is now a finding with the exact command instead of a silent no-op.

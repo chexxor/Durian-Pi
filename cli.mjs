@@ -55,6 +55,7 @@ import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.m
 import { readSeatHighlights } from "./src/rigstory.mjs";
 import { extractEntryText } from "./src/rigstory.mjs";
 import { formatChat } from "./src/chatview.mjs";
+import { auditRig, formatCheck } from "./src/checkup.mjs";
 import { createWatchScreen, formatSnapshot } from "./src/watchview.mjs";
 
 // Effective configuration for this process: environment over
@@ -753,6 +754,90 @@ async function cmdConfig() {
   });
 }
 
+// check <rig.json> [--json|--human]: audit a rig file against the research
+// gaps. Non-interactive like every other command (D21): the JSON contract on a
+// pipe, the readable report on a terminal. Exit code follows a linter's
+// convention - nonzero when the rig has `error` findings - so a script can gate
+// on it; `ok` stays true because the audit itself ran.
+//
+// It reads BOTH sides deliberately. The rig file is what the operator intends
+// and the store is what the seats actually run; the constitution defect existed
+// precisely because those two disagreed while every command reported ok.
+async function cmdCheck(rigFile, human) {
+  if (!rigFile) fail("check needs <rig.json>");
+  let spec;
+  try {
+    spec = JSON.parse(await readFile(rigFile, "utf8"));
+  } catch (err) {
+    fail(`cannot read rig file ${rigFile}: ${err?.message ?? err}`);
+  }
+  // Resolve the declared constitution through the same two forms `up` accepts,
+  // so check and up can never disagree about what the rig declares.
+  const specConstitution =
+    typeof spec.constitutionInline === "string"
+      ? spec.constitutionInline
+      : spec.constitution
+        ? await readFile(spec.constitution, "utf8")
+        : undefined;
+  // Resolve seat models through the same helper `up` uses (src/seatmodel.mjs).
+  const { models, providerId } = buildModels();
+  const modelsBySeat = {};
+  for (const seat of spec.seats ?? []) {
+    const r = resolveSeatModel(models, seat.model, providerId, MODEL_ID);
+    modelsBySeat[seat.name] = `${r.provider}/${r.modelId}`;
+  }
+  // An absent database is a fact worth reporting, not an error: check still
+  // audits the file, and the store-dependent rules are skipped with their why.
+  let stored;
+  if (!DB_EXISTED_AT_START) {
+    stored = { reason: "absent" };
+  } else {
+    try {
+      const storage = await openNodeSqliteStorage(DB_PATH);
+      try {
+        const rec = await storage.findDocument(
+          { kind: Constitution.definition.kind, scope: { kind: "session" } },
+          "current",
+          BACKGROUND_CONTEXT,
+        );
+        const text = rec
+          ? ((await storage.document(rec.id, "current", BACKGROUND_CONTEXT))?.value?.text ?? "")
+          : "";
+        stored = { reason: "read", text };
+      } finally {
+        await storage.close(BACKGROUND_CONTEXT);
+      }
+    } catch (err) {
+      stored = { reason: "unreadable", error: String(err?.message ?? err) };
+    }
+  }
+  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, modelsBySeat });
+  const seatCount = (spec.seats ?? []).length;
+  if (human) {
+    console.log(
+      formatCheck(result, {
+        rigDisplay: rigFile,
+        color: true,
+        seats: seatCount,
+        storeReason: stored.reason,
+      }),
+    );
+  } else {
+    out({
+      ok: true,
+      command: "check",
+      rig: rigFile,
+      db: DB_PATH,
+      store: stored.reason,
+      seats: seatCount,
+      ...result,
+    });
+  }
+  // Set the code rather than exiting: a piped JSON payload may still be
+  // draining, and process.exit would truncate it mid-write.
+  process.exitCode = result.exitCode;
+}
+
 const USAGE = `
 usages:
   node cli.mjs up <rig.json> [--refresh]   create seats (--refresh re-applies prompts)
@@ -764,6 +849,7 @@ usages:
                           a seat's conversation (--follow = live, --full = whole tool output)
   node cli.mjs watch [--once] [--json|--human]   follow rig state (human on a terminal)
   node cli.mjs status           per-seat health + attention notices
+  node cli.mjs check <rig.json> [--human]   audit a rig against the research gaps
   node cli.mjs optimize <text>  rewrite a draft instruction via the optimizer
   node cli.mjs config          show effective settings and their source
 `;
@@ -784,6 +870,10 @@ try {
     const human = rest.includes("--human") || (Boolean(process.stdout.isTTY) && !rest.includes("--json"));
     await cmdWatch(rest.includes("--once"), human);
   } else if (cmd === "status") await cmdStatus();
+  else if (cmd === "check") {
+    const human = rest.includes("--human") || (Boolean(process.stdout.isTTY) && !rest.includes("--json"));
+    await cmdCheck(rest.find((a) => !a.startsWith("--")), human);
+  }
   else if (cmd === "optimize") await cmdOptimize(rest);
   else if (cmd === "config") await cmdConfig();
   else if (cmd === "log") {

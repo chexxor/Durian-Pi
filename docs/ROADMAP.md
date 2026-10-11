@@ -1,9 +1,13 @@
 # durig — roadmap
 
 Ordered by operator value; each item names its motivating finding.
-State as of **2026-10-10**: work is paused at the end of the viewing/formatting
-milestone. `docs/STATUS.md` is the handoff record; `docs/DECISIONS.md` holds the
-reasoning, and D23 records how this roadmap was re-ordered by the research.
+State as of **2026-10-11**: the constitution fix (item 0) is applied to the live
+tutor-pi rig, and item 1 (`check`) is built and passing; the converter defect it
+uncovered (item 1a) leads the remaining work. `docs/STATUS.md` is the handoff
+record; `docs/DECISIONS.md` holds the reasoning, and D23 records how this roadmap
+was re-ordered by the research. Gap-table handlings name their item rather than
+numbering it: the numbers had already gone stale once when item 0 and 1 were
+added.
 
 ## Milestones
 
@@ -33,18 +37,18 @@ Sources and reasoning: D23.
 | Loss of conversation history (MAST FC1) | impossible — conversations are durable rows | nothing to do |
 | Orchestration topology | orchestrator-worker (`pm` decomposes, workers claim), not a flat swarm | matches the strongest takeaway |
 | Agents lack social technology (Anthropic swarm) | thin substrate exists: constitution, restrictive-by-default edges, append-only transitions | extend, not build |
-| No / incomplete verification (MAST FC3) | `complete_work` self-declared; no evidence, no verifier step | near-term 2 |
-| Step repetition (FC1, 15.7% — most frequent) | undetected | near-term 4 |
-| Unaware of termination conditions (FC1, 12.4%) | no deadline, no attempt cap | near-term 4 |
-| Fail to ask for clarification (FC2, 6.8%) | no verb that blocks on a decision; a seat in doubt writes prose | near-term 3 |
-| Information withholding (FC2) | role prompt only — a seat cannot retrieve the corpus | near-term 2 |
-| Correlated failure / low variance (Anthropic swarm) | 13 seats, 1 distinct model, 1 constitution | near-term 1 |
-| Resource stampede (Anthropic swarm) | agents hold no polling tool | keep it that way — near-term 2 |
+| No / incomplete verification (MAST FC3) | `complete_work` self-declared; no evidence, no verifier step | real seat tools + verification evidence (M3) |
+| Step repetition (FC1, 15.7% — most frequent) | undetected | termination and attempt semantics |
+| Unaware of termination conditions (FC1, 12.4%) | no deadline, no attempt cap | termination and attempt semantics |
+| Fail to ask for clarification (FC2, 6.8%) | no verb that blocks on a decision; a seat in doubt writes prose | a deferral verb |
+| Information withholding (FC2) | role prompt only — a seat cannot retrieve the corpus | real seat tools (M3) |
+| Correlated failure / low variance (Anthropic swarm) | 13 seats, 1 distinct model, 1 constitution | verifier model diversity |
+| Resource stampede (Anthropic swarm) | agents hold no polling tool | keep it that way — real seat tools (M3) |
 | Collusion / sabotage (Anthropic swarm) | cooperative by construction; no adversarial objective, no shared market | monitor only |
 | Cost, ~15x tokens (Anthropic production) | cheap model by default; offline faux provider for tests | keep — a reason not to default to frontier models |
 | Observability (practitioners: "state, coordination, failure isolation, observability") | strong: `watch`, `log`, turn-grouped transcripts, per-seat highlights | nothing to do |
 | Reputation / veto rights (practitioners) | edges only; no veto, no quorum, no arbitration | deferred |
-| A reason to defer to humans (Anthropic: open problem) | none | mid-term 16, promoted |
+| A reason to defer to humans (Anthropic: open problem) | none | human approval gate hook, promoted |
 
 ## Measuring the research concerns
 
@@ -111,9 +115,16 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    the rig's own grounding rule while appearing correctly configured. Fixed in
    `cmdUp`, with `demo/constitution.test.mjs` covering inline, file, absent and
    both-set specs, shown to fail against the old behaviour before it passed.
-   *Follow-up:* the existing `tutor-pi.sqlite` still holds the generic text, so
-   re-running `up rigs/tutor-pi.rig.json` is what applies the team culture — and
-   that changes all 13 seats' prompts, so it waits on an operator go-ahead.
+   *Applied 2026-10-11:* `DURIG_DB=./tutor-pi.sqlite node cli.mjs up
+   rigs/tutor-pi.rig.json`, after backing the store up to
+   `C:/tmp/tutor-pi.sqlite.bak-2026-10-11`; the stored text is now byte-identical to
+   the spec's `constitutionInline` (1094 bytes, `# tutor-pi team culture`).
+   *Open design question it exposed:* a rig constitution **replaces** the generic
+   default rather than augmenting it, so those seats no longer carry the generic
+   P1/P2/P3 priority framing. The team culture restates all four rules, so nothing
+   load-bearing was lost here — but a rig culture that did *not* restate them would
+   silently drop durig's own norms, and nothing today would say so. A candidate
+   `check` rule.
 1. **`check` — audit a rig against the research gaps, and a hardened starter.**
    Non-interactive (D21): JSON when piped, human on a TTY. Reports per concern —
    independent verifier seat present; author and reviewer on different models;
@@ -121,19 +132,40 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    seats it must work with (the D16 bug class); a constitution is present at all
    (catches 0); no seat holds a polling tool. Each finding carries a severity and
    the exact fix. Paired with a starter rig whose defaults are the hardened ones.
-2. **Verifier model diversity.** All 13 seats resolve to one model while per-seat
-   models are already supported (`resolveSeatModel`), so a bias is systemic rather
-   than isolated (Anthropic swarm). Give the verifier roles (`qa`, `qa2`) a
-   different model family from the authors they check. Configuration-only; the first
-   change the measurement in 3 should judge.
-3. **The measurement scorecard, and the surface that makes it used.** Two halves of
+   **✅ done (2026-10-11)** — six rules with stable ids, severity by *who can fix
+   it* (`error` exits nonzero, `fix-now` never does), and any rule it cannot judge
+   reported as skipped-with-reason rather than a pass (D25). Built as a pure
+   module plus a CLI wrapper; `demo/check.test.mjs` is the 19th demo. The
+   `constitution-not-applied` rule is the regression it was built from.
+   *Found by it:* the converter never reads OpenRig's rig-level `edges:` list
+   (D26), so `ux`, `sec` and `dev` cannot initiate a send and qa/qa2/student lose
+   their declared escalation path.
+   *Still open:* the hardened starter rig — the rules exist, but nothing yet hands
+   a new user a spec that passes them.
+1a. **Fix the converter's dropped rig-level edges (D26).** `scripts/from-openrig.mjs`
+   derives edges from `agent.delegates_to` and each pod's `edges:` block only, so
+   the rig-level list (`escalates_to`, `collaborates_with`, `can_observe`) never
+   reaches the spec. Read it and normalise qualified ids (`build.qa`) to seat
+   names (`qa`), then re-run the converter so `check` reports a clean rig. One
+   concern, one test: the demo suite gains a converter case asserting the
+   rig-level edges land.
+2. **The measurement scorecard, and the surface that makes it used.** Two halves of
    one item: the measures themselves (`metrics`, the declared direction and blind
    spot per measure, and a drill task set so two configurations are comparable), and
    the UX that makes them ambient rather than dead code — notices riding the
    existing attention channel in `status`/`watch`, seat-scoped or rig-scoped as the
    measure declares. Design settled in `docs/METRICS.md`, including the open
-   questions to answer when work starts. Build it before the M3 work so the big
-   change has a baseline.
+   questions to answer when work starts. It must land **before** the changes it is
+   meant to judge — item 3 and the M3 work — because D24's loop takes the baseline
+   *before* the change, and a measure that arrives after it can only rationalise.
+   `docs/METRICS.md`'s first cut already includes `shared-reviewer-model`, the
+   measure item 3 turns on.
+3. **Verifier model diversity.** All 13 seats resolve to one model while per-seat
+   models are already supported (`resolveSeatModel`), so a bias is systemic rather
+   than isolated (Anthropic swarm). Give the verifier roles (`qa`, `qa2`) a
+   different model family from the authors they check. Configuration-only, and the
+   first change item 2 should judge: write the predicted direction for
+   `shared-reviewer-model` down **before** the edit, then re-measure.
 4. **Real seat tools plus verification evidence (M3, and the largest item).** A
    live worker seat reported "no codebase visible … no file system access, no code
    execution" and correctly refused to claim a finished deliverable — the

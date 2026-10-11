@@ -6,7 +6,10 @@ holds the ordered next work and `docs/DECISIONS.md` the reasoning.
 
 Updated **2026-10-11**: the pi pin moved to `main`'s tip and the tuios patch was
 rebased onto upstream `main` — both rebuilt and re-verified (D17, and
-`docs/TUIOS-PRS.md` at the repo root). No durig code changed.
+`docs/TUIOS-PRS.md` at the repo root). Later the same day `check` shipped as the
+19th demo (D25), the roadmap was re-ordered so measurement precedes the change it
+judges, and the corrected constitution was applied to the live tutor-pi store
+(backup: `C:/tmp/tutor-pi.sqlite.bak-2026-10-11`).
 
 ## Where we stopped
 
@@ -26,6 +29,7 @@ Everything below was verified against the real store, not asserted from intent.
 | `log <seat>` | turn-grouped transcript with timestamps and elapse deltas; `--follow` tails new turns |
 | `send` | streams the live generation to stderr; non-`done` settles explain themselves |
 | Failure honesty | wrong database is announced, never silently empty (D18) |
+| `check` | audits a rig file **and** the store; six rules with stable ids, severity by who can fix it, and any rule it cannot judge reported as skipped-with-reason, never a pass (D25) |
 | Dependencies | released `@earendil-works/*` 1.1.0 are the default; pi `main` is pinned (`ea448f45`) and linked via `scripts/sync-pi.mjs` |
 
 ## Architecture: what changed, and what deliberately did not
@@ -60,7 +64,7 @@ Everything below was verified against the real store, not asserted from intent.
 - `DURIG_DB` selects the store; without it the default is `./rig.sqlite`. Use
   `node cli.mjs config` to see what is actually in effect.
 - Dependency state: `node_modules` is **linked to pinned pi `main`** (`--link`),
-  pin `ea448f45`, drift `false`, all 18 demos passing on it. A fresh clone is on
+  pin `ea448f45`, drift `false`, all 19 demos passing on it. A fresh clone is on
   the 1.1.0 releases; re-run `node scripts/sync-pi.mjs --sync --link` to
   reproduce the linked state.
 - The tuios patch is rebased onto upstream `main` as `6160892d` on branch
@@ -71,13 +75,13 @@ Everything below was verified against the real store, not asserted from intent.
 
 ## Test surface
 
-18 offline demo tests, each run as `node demo/<name>.test.mjs` (exit 0 = pass):
+19 offline demo tests, each run as `node demo/<name>.test.mjs` (exit 0 = pass):
 `cli`, `chatlog`, `watchview`, `streamcli`, `streamview`, `syncpi`, `config`,
 `refresh`, `seatmodel`, `eval`, `optimizer`, `singleflight`, `blocked`, `watch`,
-`race`, `persistence`, `repeat-call`, `constitution`.
+`race`, `persistence`, `repeat-call`, `constitution`, `check`.
 
 They are the regression gate for the pi-main link as well as for feature work
-(D17). All 18 pass on the current tree.
+(D17). All 19 pass on the current tree.
 
 ## Research review (2026-10-10)
 
