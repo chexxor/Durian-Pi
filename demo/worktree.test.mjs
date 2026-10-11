@@ -81,6 +81,18 @@ try {
 	await removeWorktree({ source, worktree: target, force: true });
 	check("a forced removal succeeds when the caller said so", !existsSync(target));
 
+	// The canary F8 demands: the point of unlinking the bridge first is that the TARGET survives.
+	// Asserting only that the worktree is gone is what the earlier version did, and it passed while
+	// the recursion was deleting the real node_modules.
+	check(
+		"the junction's TARGET survived removal (the failure that emptied a real node_modules)",
+		existsSync(join(source, "node_modules", "dep.js")),
+		"removal followed the bridge into its target",
+	);
+
+	// And the bridge really was dropped first, rather than the removal merely happening to work.
+	check("the worktree's own node_modules bridge is gone with the worktree", !existsSync(join(target, "durig", "node_modules")));
+
 	console.log("\ncli.mjs reaches the helper and points seats at a declared cwd");
 	const cli = await readFile(new URL("../cli.mjs", import.meta.url), "utf8");
 	check("the command is dispatched", cli.includes('cmd === "worktree"') && cli.includes("async function cmdWorktree"));

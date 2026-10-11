@@ -9,7 +9,7 @@
 
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { symlink } from "node:fs/promises";
+import { readlink, rmdir, symlink, unlink } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -63,6 +63,45 @@ export async function createWorktree({ source, target, ref = "HEAD" }) {
  */
 export async function removeWorktree({ source, worktree, force = false }) {
 	const root = await repoRoot(source);
+	// The bridge goes first, and this is not tidiness. A recursive delete of a worktree FOLLOWS a
+	// junction into its target on Windows, so removing a worktree with a node_modules bridge
+	// deletes durig's real node_modules - and, because those packages are themselves junctions
+	// into vendor/pi-main, it reached the vendored tree as well (docs/DOGFOOD.md F8).
+	await unlinkModulesBridge(root, source, worktree);
 	const args = ["-C", root, "worktree", "remove", ...(force ? ["--force"] : []), worktree];
 	await run("git", args);
+}
+
+/**
+ * Drop the node_modules LINK, leaving its target alone.
+ *
+ * Refuses to continue if the link cannot be dropped, because proceeding to a recursive delete is
+ * the one outcome worse than failing: the safe direction is to leave the worktree in place.
+ */
+async function unlinkModulesBridge(root, source, worktree) {
+	const inside = relative(root, resolve(source));
+	const cwd = inside === "" ? worktree : join(worktree, inside);
+	const modules = join(cwd, "node_modules");
+	try {
+		await readlink(modules);
+	} catch {
+		// Absent, or a real directory that this module did not create. Either way there is no link
+		// to drop, and deleting a real directory here would be the very hazard being avoided.
+		return false;
+	}
+	const failures = [];
+	// `unlink` removes a file link, `rmdir` a directory one (a junction is a directory): which one
+	// applies depends on what the link is, so both are tried rather than guessed.
+	for (const drop of [() => unlink(modules), () => rmdir(modules)]) {
+		try {
+			await drop();
+			return true;
+		} catch (error) {
+			failures.push(error?.message ?? String(error));
+		}
+	}
+	throw new Error(
+		`refusing to remove ${worktree}: cannot unlink the node_modules bridge at ${modules} ` +
+			`(${failures.join("; ")}) - removing the worktree now could delete that link's TARGET`,
+	);
 }
