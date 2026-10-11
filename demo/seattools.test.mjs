@@ -8,7 +8,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { VERIFIER_REMOVALS, SeatTools, fillRoster, makeSeatEnv } from "../src/seattools.mjs";
+import { COORDINATOR_REMOVALS, VERIFIER_REMOVALS, SeatTools, fillRoster, makeSeatEnv, toolRemovalsFor } from "../src/seattools.mjs";
 
 let failures = 0;
 function check(label, condition, detail = "") {
@@ -37,10 +37,31 @@ try {
 		["the seat tools are installed", "registry.install(SeatTools);"],
 		["the harness is given the confining environment", "env: makeSeatEnv(seatRoster),"],
 		["the roster is filled from the store", "fillRoster(seatRoster, rosterDoc?.value?.seats);"],
-		["verifier seats are scoped at `up`", "scopeVerifierTools(configure, tx, seatsDoc.seats);"],
+		["seat tools are scoped at `up`", "scopeSeatTools(configure, tx, seatsDoc.seats);"],
 	]) {
 		check(label, cli.includes(needle), `cli.mjs does not contain ${JSON.stringify(needle)}`);
 	}
+
+	console.log("\nThe tool set follows each seat's DECLARED CAPABILITIES, so routing is enforced by capability (F9)");
+	const removalNames = (removals) => removals.map((t) => t.name).sort();
+	check(
+		"an implementer keeps every working tool",
+		toolRemovalsFor({ name: "impl", role: "implementation engineer", capabilities: ["implement", "code"] }).length === 0,
+	);
+	check(
+		"a coordinator loses read, write, edit AND the shell, so it can only route",
+		JSON.stringify(removalNames(toolRemovalsFor({ name: "pm", role: "program manager", capabilities: ["route", "plan"] }))) ===
+			JSON.stringify(["edit", "powershell", "read", "write"]),
+	);
+	check(
+		"a verifier loses write and edit but keeps read and the shell, so it can still re-run",
+		JSON.stringify(removalNames(toolRemovalsFor({ name: "qa", role: "independent verifier", capabilities: ["verify", "review"] }))) ===
+			JSON.stringify(["edit", "write"]),
+	);
+	check(
+		"a seat declaring NOTHING is treated as a coordinator - fail closed for tools, and check reports it",
+		toolRemovalsFor({ name: "mystery", role: "unknown", capabilities: [] }).length === COORDINATOR_REMOVALS.length,
+	);
 
 	console.log("\nThe environment chosen per seat — and it fails CLOSED");
 	const roster = new Map([

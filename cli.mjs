@@ -61,7 +61,7 @@ import { formatChat } from "./src/chatview.mjs";
 import { createWorktree } from "./src/worktree.mjs";
 import { auditRig, formatCheck } from "./src/checkup.mjs";
 import { SeatGuard } from "./src/seatguard.mjs";
-import { SeatTools, fillRoster, makeSeatEnv, scopeVerifierTools } from "./src/seattools.mjs";
+import { SeatTools, fillRoster, makeSeatEnv, scopeSeatTools } from "./src/seattools.mjs";
 import { createWatchScreen, formatSnapshot } from "./src/watchview.mjs";
 
 // Effective configuration for this process: environment over
@@ -405,11 +405,12 @@ async function cmdUp(rigFile, refresh = false) {
         const cDoc = await tx.doc(Constitution);
         cDoc.text = constitutionText;
       }
-      // A verifier seat loses the tools that let it "fix" instead of verify. Done here rather
-      // than at install time because one tool set is installed for every seat and scoping is a
-      // per-conversation decision - and after the loop, so it covers the create and the refresh
-      // paths alike.
-      await scopeVerifierTools(configure, tx, seatsDoc.seats);
+      // A seat is given only the tools its capabilities justify: one that neither implements nor
+      // verifies keeps no working tools, so "route it" is enforced by capability rather than by
+      // the sentence (F9). Done here rather than at install time because one tool set is installed
+      // for every seat and scoping is a per-conversation decision - and after the loop, so it
+      // covers the create and the refresh paths alike.
+      await scopeSeatTools(configure, tx, seatsDoc.seats);
       // Materialize the queue even when empty: otherwise it comes into
       // existence only at the first enqueue, and a freshly bootstrapped rig
       // has nothing for `watch` to observe.

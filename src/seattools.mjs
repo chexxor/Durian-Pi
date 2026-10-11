@@ -42,6 +42,34 @@ export const SeatTools = defineExtension({
 export const VERIFIER_REMOVALS = [seatTools.write, seatTools.edit];
 
 /**
+ * A seat that neither produces nor checks an artifact keeps no working tools at all.
+ *
+ * This is what F9 needed. "Never do implementation work yourself; route it" was enforced by pm
+ * having no file tools - not by the sentence - and giving every seat the same tools removed that
+ * enforcement without replacing it, so pm investigated the repository instead of routing the
+ * request. Removing the tools restores what prose could not.
+ */
+export const COORDINATOR_REMOVALS = [seatTools.read, seatTools.write, seatTools.edit, seatTools.shell];
+
+/** Capabilities that mean a seat produces or checks something, so it needs the working tools. */
+const WORKING_CAPABILITIES = ["implement", "code", "verify", "review"];
+
+/**
+ * What a seat loses, decided by its own declared capabilities rather than by its name.
+ *
+ * A seat that declares NO capabilities loses everything, deliberately: the alternative is to hand
+ * an unknown role the full working set, which is the F9 failure. A rig whose seats declare nothing
+ * therefore gets coordinators, and `check` reports `seat-without-capabilities` so that can never
+ * happen silently.
+ */
+export function toolRemovalsFor(seat) {
+	const capabilities = (seat?.capabilities ?? []).map((c) => String(c).toLowerCase());
+	const works = capabilities.some((c) => WORKING_CAPABILITIES.includes(c));
+	if (!works) return COORDINATOR_REMOVALS;
+	return seatsAreVerifier({ name: seat?.name, role: seat?.role }) ? VERIFIER_REMOVALS : [];
+}
+
+/**
  * Build the `HarnessOptions.env` function.
  *
  * `roster` is a live Map consulted per call, not a snapshot: the seat list is read through the
@@ -72,16 +100,17 @@ export function fillRoster(roster, seats) {
 }
 
 /**
- * Give every verifier seat its narrowed tool set.
+ * Give every seat its narrowed tool set.
  *
- * Applied at `up` rather than at install time because one tool set is installed for every seat
- * and scoping is a per-conversation decision, and applied after the seat loop so it covers the
- * create and the refresh paths alike. Requires the `configure` import to be the same function
- * durig already uses, so this cannot write an agent state by a second route.
+ * Applied at `up` rather than at install time because one tool set is installed for every seat and
+ * scoping is a per-conversation decision, and applied after the seat loop so it covers the create
+ * and the refresh paths alike. Requires the `configure` import to be the same function durig
+ * already uses, so this cannot write an agent state by a second route.
  */
-export async function scopeVerifierTools(configureFn, tx, seats) {
+export async function scopeSeatTools(configureFn, tx, seats) {
 	for (const [name, seat] of Object.entries(seats ?? {})) {
-		if (!seatsAreVerifier({ name, role: seat.role })) continue;
-		await configureFn(tx, seat.conversationId, { tools: { remove: VERIFIER_REMOVALS } });
+		const remove = toolRemovalsFor({ name, role: seat.role, capabilities: seat.capabilities });
+		if (remove.length === 0) continue;
+		await configureFn(tx, seat.conversationId, { tools: { remove } });
 	}
 }

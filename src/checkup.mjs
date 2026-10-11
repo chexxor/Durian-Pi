@@ -74,6 +74,11 @@ export const RULES = [
     severity: "fix-now",
     what: "every seat resolves to one model",
   },
+  {
+    id: "seat-without-capabilities",
+    severity: "fix-now",
+    what: "a seat declares no capabilities, so per-seat tool scoping gives it no working tools",
+  },
 ];
 
 const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
@@ -284,6 +289,21 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       id: "single-model-rig",
       why: "seat models could not all be resolved in this process",
     });
+  }
+
+  // 8. Tool scoping is derived from each seat's declared capabilities, so a seat that declares NONE
+  //    silently becomes a coordinator with no file or shell tools - it cannot do work at all. That
+  //    is a rig-file omission almost every time, and it is invisible from the outside (the seat just
+  //    defers everything), so it is reported rather than inferred. Same reasoning as `no-verifier-seat`:
+  //    a heuristic with a printed basis beats a silent absence.
+  const capless = seats.filter((s) => !(s.capabilities ?? []).length).map((s) => s.name);
+  if (capless.length > 0) {
+    add(
+      "seat-without-capabilities",
+      "rig",
+      `${capless.join(", ")} - no capabilities declared, so per-seat tool scoping gives these seats no working tools and they cannot do work`,
+      "declare what each seat does - \"implement\"/\"code\" to produce, \"verify\"/\"review\" to check, or \"route\"/\"plan\"/\"decide\" for coordination - so the tool set matches the role",
+    );
   }
 
   const summary = { error: 0, "fix-now": 0, total: findings.length };
