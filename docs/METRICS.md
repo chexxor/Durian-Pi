@@ -3,8 +3,9 @@
 Status: **design note only; nothing is built.** The policy that motivates this is
 D24 (what gets measured, evidence classes, the review loop). This file holds the
 design that follows from it — how measures reach a human, where they live, and the
-traps that would make them useless. Roadmap: near-term 3. Details deliberately left
-open are in the last section.
+traps that would make them useless. Roadmap: near-term 2. Details deliberately left
+open are in the last section, which is now a decision brief: each question carries
+its options, a recommendation, and the evidence behind it.
 
 ## The problem metrics have that `check` does not
 
@@ -155,6 +156,18 @@ advances**, never against a proxy signal: the removed seat-highlight cache pinne
 stale reading forever because it keyed on submission id while assistant turns kept
 appending entries.
 
+**Measured, not assumed** (2026-10-11, live `tutor-pi.sqlite`, 14 seats): one full
+per-seat page scan of 24 entries each takes **0.9–1.4 ms**. `watch` polls every
+750 ms, so this is ~0.15% of the render interval — and it is not a new scan:
+`watch` already runs exactly this page fetch per render (`readSeatHighlights`), so
+deriving a measure from that page adds arithmetic, not I/O. The paragraph above
+asserted "cheap enough"; it now has a number.
+
+The same run exposed the fact that matters most for scope (question 3): **13 of the
+14 seats in the live store have zero entries**, and the only populated one is `pm`
+(17). Every seat-scoped rate on the real rig is therefore unmeasurable today —
+"Small N per seat" is the current state, not a hypothetical.
+
 ## Trends without opening a write path
 
 The store is append-only and durable, so history already exists and a trend is a
@@ -176,14 +189,89 @@ step-repetition (direct), unverified-completions (code-gated baseline), and
 shared-reviewer-model (config-derived) — chosen so all three evidence classes are
 exercised by the first cut.
 
-## Open questions (settle when work starts)
+## Open questions — decision brief (settle when work starts)
 
-1. **Which measures ship first** — the three above, or a different split.
-2. **May `watch` spend a bounded scan per render** on this, or should the ambient
-   tier ride the attention computation it already does and leave rates to `metrics`?
-3. **All four scopes in the first cut, or seat + rig only**, leaving edge/queue until
-   `check` exists (pair findings are arguably `check`'s to raise anyway)?
-4. **Contract shape** — additive `scope` field with `seat` retained, or a deliberate
-   version bump.
-5. **Hysteresis values**, per measure, and whether "since" plus hysteresis is enough
-   without acknowledgement.
+Each question now carries its options, a recommendation and the evidence behind it,
+so a ruling is one line each. Question 2 is already answered by measurement; the
+rest are the operator's call.
+
+### 1. Which measures ship first
+
+| measure | evidence class | why it is a candidate for the first cut |
+|---|---|---|
+| step-repetition | direct (counted from entries) | the MAST failure with the largest published rate (15.7%) and nothing detects it today |
+| unverified-completions | code-gated baseline | the FC3 gap; the baseline is knowable because "did it retrieve?" is a fact about the turn |
+| shared-reviewer-model | config-derived | item 3 turns on it, so it must exist *before* that change to be able to judge it |
+
+**Options:** (a) those three; (b) one measure plus the machinery; (c) a different
+set.
+
+**Recommendation: (a).** It exercises all three evidence classes in one cut, and
+two of the three are consumed by roadmap items that come after this one. Option (b)
+leaves item 3 unjudgeable; (c) risks building machinery nothing downstream reads.
+
+### 2. May `watch` spend a bounded scan per render? — settled by measurement
+
+**Measured:** a full per-seat scan (24 entries × 14 seats) costs **0.9–1.4 ms** on
+the live store, against a 750 ms poll. It is also not a *new* cost — `watch`
+already performs exactly this page fetch per render.
+
+**Recommendation:** derive measures from the page already fetched and add no second
+scan. The stated fallback ("ride the attention computation") is *more* expensive,
+not less: attention does no entry scan at all today, so it would introduce one.
+
+### 3. All four scopes in the first cut, or seat + rig only?
+
+**Evidence that changes the shape of this answer:** 13 of 14 seats in the live
+store have zero entries. Seat-scoped measures are silent on the real rig *today*.
+
+**Options:** (a) all four scopes; (b) seat + rig; (c) **rig + queue first**, with
+the seat path written but self-gating.
+
+**Recommendation: (c).** It passes the ambient admission test on a rig that is
+currently idle instead of drawing nothing, and it keeps the minimum-observation
+rule ("Small N per seat") load-bearing rather than decorative — seat scope switches
+itself on once a seat has enough turns. It also defers the **edge/pair** scope,
+which is genuinely `check`'s finding to raise: `shared-reviewer-model` is already a
+`check` rule, and a config fact is not a trend.
+
+### 4. Contract shape — additive `scope`, or a version bump?
+
+**Options:** (a) add `scope`, keep `seat`; (b) bump the contract version.
+
+**Recommendation: (a).** Existing consumers key on `seat` — `watchview.mjs:32`
+filters `a.seat === seat.name` and the footer maps `a.seat` — and D19 governs
+*breaking* changes: a field old readers ignore is not breaking. A bump is warranted
+only if `seat` had to disappear, which rig- and queue-scoped notices do not force
+(the field can hold the owning seat where there is one).
+
+**The one place this can bite:** the per-seat glyph path must exclude rig-scoped
+notices **explicitly**, not by the field being absent or null — otherwise a footer
+notice either vanishes or renders against a seat row at random.
+
+### 5. Hysteresis values, and whether "since" suffices without acknowledgement
+
+**Options:** (a) per-measure absolute thresholds; (b) one relative rule (enter at
+k× baseline, exit at 1×); (c) ship without hysteresis and add it when flapping is
+observed.
+
+**Recommendation: (b) for the rule, (c) for the sequence.** Ship with hysteresis
+implemented but its thresholds left at defaults (enter 2×, exit 1×) and named per
+measure, so tuning is one line rather than a redesign. Acknowledging needs a write
+path, which D24 defers — so it stays deferred, and "since" plus hysteresis is
+declared sufficient until evidence says otherwise. If it turns out insufficient,
+that is a `security.sec` consult first, not a quiet new file write.
+
+**Owed regardless of these answers:** the small tracked change-log. Config-derived
+measures cannot be windowed from the store, so they need history written down, and
+that is a **new write path** — which the security norms and D24 both gate behind a
+`security.sec` position *before* it ships. Flagged in D24 and D27; the rig daemon
+was down both times, so it is owed rather than settled.
+
+### Not a question, but adjacent
+
+Running the measurement opened a separate concern worth its own item: the live
+store contains a seat the rig spec does not declare (`worker`, left over from an
+earlier `up` of `rig.v2.json`), and `up` only ever adds or refreshes, so it will
+remain. `check` already reads both sides and is the natural place for a
+`stray-seat` rule — spec and store disagreeing is exactly the class it exists for.
