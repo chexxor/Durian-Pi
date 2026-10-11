@@ -766,3 +766,38 @@ run that created it and is visible without anyone asking.
 **Evidence:** `demo/defer.test.mjs` (parks, is visible, resumes, asks a seat, is
 edge-gated, refuses a foreign item), `demo/watchview.test.mjs` (parked rendering
 and the footer count). Falsified by disabling the edge gate and watching it fail.
+
+## D33 — What we take from the pi-durable demos, and what we decline (2026-10-11)
+
+**Decision:** the two example projects the Pi Durable post points at were reviewed at
+durig's pin (`docs/REVIEW-pi-durable-demos.md`). Adopt: harness settings and
+`harness.resume()`; per-conversation extension scoping together with the recursion
+hazard; submission `requestId`s; durable task phases with checkpoints and conversation
+ownership; structured tool results (`api.details`); render coalescing. Decline, with
+reasons: the TUI, a session picker, the in-process view subscription, and prompt
+tool-sections generated wholesale.
+
+**The review immediately found a defect in our own code**, which is why it was worth
+doing: `defer_work`/`resume_work` shipped in D32 while the `PROTOCOL` primer kept
+describing four tools, so no seat in the real CLI was ever told it could defer. The
+feature was unreachable outside the test that drove it directly — a green suite over a
+dead feature. The demo's `prompt.ts` is the reason it was visible: it builds the system
+prompt *from the active tool set*, so a tool cannot exist undocumented. durig's
+hand-written primer makes that drift inevitable.
+
+**Why the declines matter as much as the adopts.** Most of the demo architecture
+assumes one process owns the model runtime, the harness, storage and the UI. durig is
+multi-process by decision (D11, D12, D22), so its view subscription is in-process and
+cannot replace durig's cross-process poll, and its TUI would need a `pi-coding-agent`
+dependency durig deliberately does not have. Recording the declines is what keeps a
+future reader from re-litigating them or mistaking a considered no for an oversight.
+
+**Where durig is ahead, stated so the gap list is not read as failures:** cross-process
+coordination; org-edge and capability authorization (the demos have no authorization
+layer at all); a constitution the store must be checked against; measurement, attention
+and a linter; an appended queue audit trail; refusals as first-class output; and
+dead-pid lease evidence rather than a 10-second staleness timeout.
+
+**Evidence:** `docs/REVIEW-pi-durable-demos.md` (ideas, gap table, patterns, hazards,
+and the "does not transfer" boundary), ROADMAP items 24–25 with 24a–24g,
+`demo/primer.test.mjs`, and the falsified primer regression.

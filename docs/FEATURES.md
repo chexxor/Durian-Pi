@@ -263,12 +263,12 @@ an unresolvable one is warned about rather than dropped in silence;
 The entire check surface is the demos plus `node --check`; there is no build or
 lint step.
 
-**25 offline tests** — one runnable proof per guarantee, each exit 0 on success:
+**26 offline tests** — one runnable proof per guarantee, each exit 0 on success:
 
 ```
 blocked · chatlog · check · cli · config · constitution · converter · defer
-eval · extensions · metrics · optimizer · persistence · provenance · race
-refresh · repeat-call · seatmodel · singleflight · starter · streamcli
+eval · extensions · metrics · optimizer · persistence · primer · provenance
+race · refresh · repeat-call · seatmodel · singleflight · starter · streamcli
 streamview · syncpi · watch · watchview
 ```
 

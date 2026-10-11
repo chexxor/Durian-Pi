@@ -264,6 +264,8 @@ async function buildSeatPrompt(models, seat, providerId) {
     "- claim_work: claim the oldest queued item addressed to you; it returns subject and body.",
     "- complete_work(itemId, resultSummary): mark your claimed item done; it notifies the sender automatically.",
     "- send_work(to, subject, body[, requires]): delegate to another seat by putting an item in its queue. Route work, do not narrate it.",
+    "- defer_work(itemId, question[, to]): stop and ask instead of guessing, or instead of going quiet. Parks the item you hold on the question; omit `to` to defer to the human operator, pass `to` to ask another seat as well.",
+    "- resume_work(itemId): take back a deferred item once the answer has arrived, then finish it with complete_work.",
     "- peek_queue: inspect all queue items read-only.",
     "When asked to decompose or route a task, CREATE QUEUE ITEMS with send_work - do not merely describe them in your reply.",
   ].join("\n");

@@ -244,6 +244,10 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    operator's machine is arbitrary code execution, which is exactly why loop #5 is
    open and why a `security.sec` position comes first — and the **evidence** half,
    `complete_work` carrying something a verifier can re-check.
+   → *From the demos (24c):* `ExecutionEnvs` in `harness-setup.ts` is this wiring in
+   ten lines — `NodeExecutionEnv` keyed by cwd, handed to the harness as `env`, with an
+   explicit `cleanup()` somebody has to call. Still the scope ruling that gates it, not
+   the code.
 5. **A deferral verb.** Today a seat that needs a decision can only emit prose.
    Add a way to raise a question that blocks the item and hands it to the seat or
    human who can answer — the "reason to defer to humans" the swarm paper leaves
@@ -276,10 +280,25 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    repetition detection: the two most common MAST design failures (step repetition
    15.7%, unaware of termination 12.4%) are both unaddressed. Subsumes the
    block/park/wake-after semantics raised against Core_Ideas layer 7.
+   → *From the demos (24a, 24e):* part of this is platform support durig switches off
+   — `HarnessSettings` (stream timeout, retries, compaction, steering/follow-up) and
+   `harness.resume()`, which continues recovered work instead of reporting it as a
+   failure. The other part is `defineTask` phases with checkpoints, which is what makes
+   a multi-step task resumable at all. Note the honest split the review records: the
+   demo recovers a turn but cannot report the recovery, while durig reports it and
+   cannot recover.
 7. **Extract the view model and peer navigation graph (D21).** Pure functions:
    turns, collapse state, and "which seat sent to / received from this seat",
    derivable from queue items' `from`/`to` and the Router tools. Unblocks both
    interactive asks without committing to a screen model.
+   → *From the demos (24f, 24g):* the platform already exposes most of this shape —
+   `Conversation.viewState()` is a reactive structural view including the built-in
+   documents, and `harness.taskGraph()` is a live graph of what waits on what and
+   which conversations a task owns. Both are in-process, so neither replaces the
+   cross-process read (D11); the question this item should answer is how much of the
+   view model durig can *take* from `viewState()` rather than derive by hand. Also:
+   `api.details({ conversationId })` is how a tool result points at the conversation
+   that produced it, which is the peer-navigation half.
 8. **One shared read API.** `watch`, `log`, `status`, `check` and `metrics` each
    re-implement seat, health and queue reading today; that duplication is the real
    refactor smell, ahead of any formatting concern. It now has five consumers, so
@@ -354,6 +373,10 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     before implementation (the converter currently drops pods with a warning).
 12. **Workflow task type** — SOP-style phases enqueueing queue items and waiting on
     DONE notices, built on PD's durable task graph (Core_Ideas layer 7).
+    → *From the demos (24e):* `vacation.ts` is a working two-phase `defineTask` — each
+    phase returns `{ status: "running", checkpoint: { phase, … } }` so the intermediate
+    result survives a crash between steps, and the task's `abort` writes a terminal
+    outcome rather than leaving it dangling. Read it before designing this.
 13. **Seat handover on context exhaustion** — PD has compaction; the OpenRig
     handover-packet flow does not exist yet.
 14. **Measurement history** — persisting scorecard snapshots per config revision so
@@ -399,6 +422,11 @@ surface. A feature that is off must therefore cost nothing — not "little".
    same discipline `check` and `metrics` already follow, since a declaration that
    travels with the thing is the only kind that stays true. Open question for the
    operator: which workflows define "recommended" (see 21).
+   → *From the demos (24c):* the selection idiom is `configure(tx, convId,
+   { extensions: [Ext] })` to restrict and `{ extensions: { remove: [Ext] } }` to
+   exclude — and the hazard is real: a child conversation inherits its parent's agent,
+   so a recursive tool must be removed explicitly or subagents recurse (`subagent.ts`
+   says so in a comment).
    → *Caveman (20) forward-note:* caveman is the registry's first real test case
    and it arrives on **both axes at once** — a prompt-section extension (its skill)
    and a provider/model-call wrapper (its proxy). The registry must therefore
@@ -532,6 +560,72 @@ surface. A feature that is off must therefore cost nothing — not "little".
     stranger. No release, no npm publish, no tag — a
     readable `main` plus the docs. **Requires the operator's authorization to
     push**, and a GitHub remote added alongside the existing LAN Gitea one.
+
+## Prior art — the pi-durable example projects (reviewed 2026-10-11)
+
+24. **Adopt what the pi-durable demos show, and record what they don't.** The Pi
+    Durable post points at two examples (`experimental/durable`, `experimental/vacation`
+    in the pi repo at durig's pin). Their sources had **never** been read; the review is
+    `docs/REVIEW-pi-durable-demos.md` and it found one shipped defect immediately (item
+    25). The demos turn out to be *one* project — the vacation planner shares
+    `main.ts` and `tui.ts` with the coding agent at identical blob shas — so the
+    transferable surface is `runtime.ts` and `vacation.ts`. Six independently takeable
+    pieces, each naming the file that shows it:
+    24a. **Pass `HarnessSettings`, and call `harness.resume()`.** durig opens the
+    harness with no settings at all, so it has no stream timeout, no retry policy, no
+    compaction config and no steering/follow-up mode — platform support for the
+    termination half of item 6 that is simply switched off (`harness-setup.ts`, and
+    `harness.resume()` in `runtime.ts`: "Recovered work from an interrupted turn
+    continues now"). durig instead leaves a killed run `unanswered` and reports it
+    forever. Spike first: durig's workers are per-invocation processes, not a
+    long-lived TUI.
+    24b. **Spike the HTTP dispatcher.** `configureHarnessHttp` exists because "without
+    it, some provider streams break off". durig configures none. This is listed as a
+    **possible** live defect, not a confirmed one — it needs an hour to rule in or out,
+    and it would present as an occasional truncated stream that looks like a provider
+    fault.
+    24c. **Per-conversation extension scoping, using the demo's idiom — including its
+    hazard.** `configure(tx, child, { extensions: [Search] })` for a restricted child
+    and `{ extensions: { remove: [Subagent] } }` to stop recursion; a child inherits
+    everything its parent had unless it is removed explicitly (`vacation.ts`,
+    `subagent.ts`). This is item 18's mechanism demonstrated, and `ExecutionEnvs`
+    (`harness-setup.ts`) is item 4's wiring in ten lines including the disposal nobody
+    remembers. Both still gated on loop #5 and a `security.sec` position.
+    24d. **Give submissions a request identity.** `requestId` makes a rerun after a
+    crash find and reuse the same submission rather than sending twice
+    (`vacation.ts`). durig has none, and dogfood F7 was a settle-logic bug in this exact
+    family.
+    24e. **Durable task phases with checkpoints, and conversation ownership.**
+    `defineTask` with `phases` returning `{ status: "running", checkpoint: { phase, … } }
+    survives a crash between its steps, and `ownership` makes aborting a parent abort
+    what it owns (`vacation.ts`). durig's queue items carry a transition trail but no
+    phases and no ownership, so aborting a seat does not stop what it started. This is
+    the substance of item 12 and the other half of item 6.
+    24f. **Structured tool results and progress: `api.details()` and `api.output()`.**
+    A tool can hand the view a `{ conversationId }` to link to, and can emit progress
+    so a slow call does not look hung (`subagent.ts`, `vacation.ts`). durig's tools
+    return one final string; `context.abortSignal` support transfers outright and long
+    operations should honour it.
+    24g. **Coalesce renders per burst.** Commit listeners plus a `setImmediate` guard
+    render once per burst of real change (`runtime.ts`). The subscription itself is
+    in-process only and cannot replace durig's cross-process poll (D11) — but the
+    coalescing can: durig redraws on a timer whether or not anything changed.
+    *Deliberately not taken:* the TUI (no `pi-coding-agent` dependency, and D21/D22
+    keep durig non-interactive), a session picker (a rig already *is* a database), and
+    the view subscription. Recorded in the review so a gap is never confused with a
+    declined feature.
+25. **Derive the protocol primer from the registry.** `prompt.ts` builds pi's system
+    prompt from `input.agent.tools`, so a tool cannot exist without being documented.
+    durig's `PROTOCOL` primer is hand-written text beside the registry, and the drift
+    was realised: `defer_work`/`resume_work` shipped in item 5 while the primer kept
+    describing four tools, so no seat in the real CLI was ever told it could defer.
+    **Fixed immediately** (both lines added, and `demo/primer.test.mjs` holds the prose
+    to the registry in both directions, falsified by deleting a line). This item is the
+    structural half: generate the list from the tool objects. Tradeoff to settle when
+    it starts — the primer carries argument signatures and routing advice that a tool's
+    `description` does not, so the honest options are generating bullets plus keeping
+    the advice, or extracting signatures from the parameters schema. The cheap half is
+    already doing the work; this removes the class rather than the instance.
 
 ## Explicitly deferred (with reasons)
 

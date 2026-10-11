@@ -482,6 +482,52 @@ and cleaned by the OS, and removing them would mean a recursive delete on an
 absolute temp path — which this project bans. Delete them by hand if they bother
 you.
 
+## Review recipe — learning from the pi-durable example projects (2026-10-11)
+
+The Pi Durable post points at two examples (`experimental/durable` and
+`experimental/vacation` in the pi repo). Their **sources had never been read**; the
+full review is `docs/REVIEW-pi-durable-demos.md`.
+
+```powershell
+cd durig
+node demo/primer.test.mjs      # the defect this review found, and its guard
+```
+
+The headline: **the review found a shipped defect in durig's own source.** `defer_work`
+and `resume_work` shipped in item 5 while the `PROTOCOL` primer in `cli.mjs` kept
+describing four tools, so no seat in the real CLI was ever told it could defer — the
+feature was unreachable outside the test that drove it directly. A green suite over a
+dead feature. The demo's `prompt.ts` is why it was visible: it builds the system prompt
+from the active tool set, so a tool cannot exist undocumented.
+
+Fixed, and held by a test in both directions:
+
+```
+$ node demo/primer.test.mjs
+PRIMER TEST PASS (all 6 registered tools are documented, and the primer documents nothing else)
+```
+
+Falsified before being trusted: delete the `resume_work` line and it fails with
+`tool "resume_work" is registered but not in the protocol primer, so no seat would ever
+be told it exists`.
+
+To re-read the demos at durig's **own pin** — so the comparison is against what durig is
+validated against, not today's `main` — take the sha from `pi-main.pin.json` and fetch:
+
+```
+<pin>/packages/coding-agent/src/experimental/durable/runtime.ts
+<pin>/packages/coding-agent/src/experimental/vacation/vacation.ts
+```
+
+Most of the value is in those two files: the `DurableView`/`DurableController` boundary,
+and durable task phases with checkpoints. `main.ts` and `tui.ts` are **byte-identical
+blob shas between the two demos**, so this is one project, not two — budget accordingly.
+
+Where the findings went: ROADMAP items 24a–24g and 25, with items 4, 6, 7, 12 and 18
+annotated rather than duplicated. What was declined on purpose — the TUI, a session
+picker, the in-process view subscription — is in D33 with its reasons, so a considered
+no is not later mistaken for an oversight.
+
 ## Review recipe — a seat can stop and ask (item 5, 2026-10-11)
 
 Before this, a seat that could not proceed had two options: invent an answer or go
