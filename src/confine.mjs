@@ -1,0 +1,300 @@
+// confine.mjs — the M3 boundary: a confining ExecutionEnv (security conditions SC1-SC3).
+//
+// Why the ENVIRONMENT and not the tools. `read`, `write` and `edit` accept absolute paths by
+// design and resolve them through `env.absolutePath`, which is plain `resolvePath(this.cwd, path)`
+// with no confinement at all (pi-durable env/node.ts:644) - and they never pass through bash's
+// `prepare` hook, which only ever sees one shell command (bash.ts:33-36). So the environment is
+// the single seam that covers bash AND the file tools, and the only place a verifier's read-only
+// can hold while it also holds a shell: omitting the `write`/`edit` tools does not remove the
+// write CAPABILITY, because PowerShell can write whatever the OS user can. See
+// docs/reviews/security-sec-m3-seat-tools.md (F2, F3) and docs/SEAT-TOOLS.md (SC1-SC3).
+
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { ExecutionError, FileError, err, ok } from "@earendil-works/pi-durable/env";
+
+/**
+ * Commands a seat may never run, whatever else it is allowed.
+ *
+ * This is a NARROWING layer, not the boundary. A string check against a shell is unsound by
+ * nature - PowerShell defeats any allowlist through aliases, `-EncodedCommand` and piped
+ * subcommands - which is why the boundary is the path confinement below, and this list only
+ * removes the escape hatches that would leave it entirely. WSL and Docker are unsupported on
+ * this host by policy; the destructive git forms are refused because they discard exactly the
+ * work the worktree boundary exists to protect.
+ */
+const DENIED_COMMANDS = [
+	{ re: /(^|[\s;&|"'()])wsl(\.exe)?([\s"'()]|$)/i, why: "WSL is unsupported on this host" },
+	{ re: /(^|[\s;&|"'()])docker(-compose)?(\.exe)?([\s"'()]|$)/i, why: "Docker is unsupported on this host" },
+	{ re: /git\s+reset\s+--hard/i, why: "would discard uncommitted work" },
+	{ re: /git\s+clean\s+-[a-z]*f/i, why: "would discard untracked work" },
+	{ re: /git\s+checkout\s+--(\s|$)/i, why: "would discard uncommitted work" },
+];
+
+/**
+ * Environment a seat's command may see.
+ *
+ * `inheritEnv: false` alone is not enough: a caller can hand its own map, so the allowlist is
+ * what makes "the seat's environment" a closed set rather than whatever was last requested. The
+ * list is the minimum a command needs to resolve an executable and write its own scratch, and
+ * nothing else - anything secret-shaped is refused even if a caller asks for it by name.
+ */
+const ENV_ALLOWLIST = [
+	"PATH",
+	"PATHEXT",
+	"SystemRoot",
+	"SystemDrive",
+	"ComSpec",
+	"TEMP",
+	"TMP",
+	"HOME",
+	"USERPROFILE",
+	"LANG",
+	"LC_ALL",
+	"TERM",
+];
+
+/** A name that looks like a credential never crosses, whatever allowlist was configured. */
+const SECRET_NAME = /(key|token|secret|password|passwd|credential|cookie|authorization)/i;
+
+function pickEnv(requested, allowlist) {
+	const kept = {};
+	// `inheritEnv` is forced false, so the allowlisted baseline has to be supplied here or a
+	// command could not resolve an executable at all. The allowlist is exactly the selection from
+	// durig's own environment that a seat is permitted to see.
+	for (const name of allowlist) {
+		const value = process.env[name];
+		if (value !== undefined && !SECRET_NAME.test(name)) kept[name] = value;
+	}
+	for (const [name, value] of Object.entries(requested ?? {})) {
+		if (SECRET_NAME.test(name)) continue;
+		if (allowlist.length > 0 && !allowlist.includes(name)) continue;
+		kept[name] = value;
+	}
+	return kept;
+}
+
+/** The refusal a seat sees, phrased so it can act on it rather than retry blindly. */
+function refusalFor(command) {
+	const text = Array.isArray(command) ? command.join(" ") : String(command);
+	for (const { re, why } of DENIED_COMMANDS) {
+		if (re.test(text)) return `refused by durig: ${why} (${re.source})`;
+	}
+	return null;
+}
+
+/**
+ * Is `target` inside `root`?
+ *
+ * `relative` is the check rather than a string prefix, because a prefix test accepts siblings
+ * that merely share a name (`/work/x` vs `/work/xy`) and mishandles the separator on Windows.
+ */
+export function isInside(root, target) {
+	const rel = relative(root, target);
+	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+/**
+ * Wrap `base` so every filesystem path it touches resolves inside `root`, and (with
+ * `readOnly`) so no mutation is possible through it.
+ *
+ * The methods are wrapped from one table rather than hand-written one by one, so a member that
+ * takes a path cannot be added to the environment without appearing in `PATH_METHODS` - a
+ * hand-maintained list of 25 wrappers is exactly where a hole would go unnoticed.
+ */
+export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_ALLOWLIST } = {}) {
+	const confinedRoot = resolve(root ?? base.cwd);
+	const allowlist = envAllowlist;
+
+	const denied = (what, target, why) =>
+		err(new FileError("permission_denied", `refused by durig: ${what} ${target} ${why}`, target));
+
+	/**
+	 * Resolve `p` exactly as the base environment would - so `~`, `file://` and absolute paths
+	 * behave as the tools expect - and then require the result to be under the root.
+	 */
+	const check = async (p, context) => {
+		const resolved = await base.absolutePath(p, context);
+		if (!resolved.ok) return resolved;
+		if (!isInside(confinedRoot, resolved.value)) {
+			return denied("path", resolved.value, `is outside the seat's worktree (${confinedRoot})`);
+		}
+		// A symlink that lives inside the root can still point outside it, and the base follows
+		// links, so an existing path is canonicalised before it is trusted. A path that does not
+		// exist yet has no link to follow, and is covered by the check above.
+		const canonical = await base.canonicalPath(resolved.value, context);
+		if (canonical.ok && !isInside(confinedRoot, canonical.value)) {
+			return denied("symlink", canonical.value, `escapes the seat's worktree (${confinedRoot})`);
+		}
+		return resolved;
+	};
+
+	/** Run `fn` only after every path argument it takes has been confined. */
+	const withPaths = (fn, pathIndexes, contextIndex) =>
+		async (...args) => {
+			const context = args[contextIndex];
+			const confined = [...args];
+			for (const index of pathIndexes) {
+				const checked = await check(args[index], context);
+				if (!checked.ok) return checked;
+				confined[index] = checked.value;
+			}
+			return fn.apply(base, confined);
+		};
+
+	/** Refuse before touching `base`, so a read-only environment cannot mutate even by accident. */
+	const readOnlyGuard = () =>
+		async (...args) => denied("write", String(args[0]), "(this seat's environment is read-only)");
+
+	// name -> [indexes of path arguments, index of the context argument]
+	const PATH_METHODS = {
+		// `absolutePath` is the primitive every other resolution goes through, so it is confined
+		// here and not delegated: an unconfined absolute path escaping this method is precisely the
+		// F2 hole the security position found.
+		absolutePath: [[0], 1],
+		canonicalPath: [[0], 1],
+		readTextFile: [[0], 1],
+		openTextLineReader: [[0], 1],
+		readTextLines: [[0], 2],
+		readBinaryFile: [[0], 1],
+		openBinaryReader: [[0], 2],
+		fileInfo: [[0], 1],
+		listDir: [[0], 1],
+		openDirReader: [[0], 1],
+		exists: [[0], 1],
+		writeFile: [[0], 2],
+		appendFile: [[0], 2],
+		truncateFile: [[0], 2],
+		flushFile: [[0], 1],
+		renameFile: [[0, 1], 2],
+		createDir: [[0], 2],
+		remove: [[0], 2],
+	};
+
+	const MUTATING = new Set([
+		"writeFile",
+		"appendFile",
+		"truncateFile",
+		"flushFile",
+		"renameFile",
+		"createDir",
+		"remove",
+	]);
+
+	const wrapper = {
+		// Identity and `cwd` pass through: `cwd` is the base's, and every path is resolved
+		// against the root regardless of what it says, so a changed cwd cannot widen the boundary.
+		get id() {
+			return base.id;
+		},
+		get cwd() {
+			return base.cwd;
+		},
+		set cwd(value) {
+			base.cwd = value;
+		},
+
+		// `joinPath` touches nothing; confining is the resolve step, not the join.
+		joinPath: (...args) => base.joinPath(...args),
+
+		/**
+		 * The base creates temp entries in the operating system's temp directory, which is
+		 * outside any worktree by definition, so temp creation is reimplemented here instead of
+		 * delegated - a seat's scratch space has to live inside the boundary it is confined to.
+		 */
+		createTempDir: async (prefix, _context) => {
+			if (readOnly) return denied("write", "(temp dir)", "(this seat's environment is read-only)");
+			try {
+				return ok(await mkdtemp(join(confinedRoot, `${prefix ?? "durig"}-`)));
+			} catch (cause) {
+				return err(new FileError("unknown", `cannot create a temp dir inside ${confinedRoot}`, confinedRoot, cause));
+			}
+		},
+		createTempFile: async (options, _context) => {
+			if (readOnly) return denied("write", "(temp file)", "(this seat's environment is read-only)");
+			try {
+				const directory = await mkdtemp(join(confinedRoot, `${options?.prefix ?? "durig"}-`));
+				const file = join(directory, `tmp${options?.suffix ?? ""}`);
+				await writeFile(file, "");
+				return ok(file);
+			} catch (cause) {
+				return err(new FileError("unknown", `cannot create a temp file inside ${confinedRoot}`, confinedRoot, cause));
+			}
+		},
+
+		watch: async (targets, onChange, context) => {
+			const confined = [];
+			for (const target of targets) {
+				const checked = await check(target.path, context);
+				if (!checked.ok) return checked;
+				confined.push({ ...target, path: checked.value });
+			}
+			return base.watch(confined, onChange, context);
+		},
+
+		cleanup: (...args) => base.cleanup(...args),
+
+		/**
+		 * A command that leaves the boundary is refused before it is spawned. It reports the
+		 * `spawn_error` code because that is literally what happened - nothing started - and
+		 * there is no `denied` code in `ExecutionErrorCode`; the message names the policy so the
+		 * seat can `defer_work` on it instead of retrying variants.
+		 */
+		exec: async (command, options, context) => {
+			const refusal = refusalFor(command);
+			if (refusal) return err(new ExecutionError("spawn_error", refusal));
+			// A read-only seat may still RUN things - that is how a verifier reproduces a claim -
+			// but it must not write, so its cwd is pinned to the root and its environment is
+			// stripped (SC3). Its copy of the work is disposable, which is what makes the
+			// read-only claim true without an OS-level sandbox.
+			// `inheritEnv: false` stops the process environment from reaching the command; the
+			// allowlist stops a caller from re-supplying one. A caller that asks for `inheritEnv: true`
+			// is overridden deliberately - "the seat asked for the key" is not a reason to hand it over
+			// (SC3: an explicit allowlist, applied at the environment layer).
+			return base.exec(
+				command,
+				{ ...options, cwd: confinedRoot, inheritEnv: false, env: pickEnv(options?.env, allowlist) },
+				context,
+			);
+		},
+	};
+
+	for (const [name, [pathIndexes, contextIndex]] of Object.entries(PATH_METHODS)) {
+		const fn = base[name];
+		if (typeof fn !== "function") continue;
+		wrapper[name] = readOnly && MUTATING.has(name)
+			? readOnlyGuard()
+			: withPaths(fn, pathIndexes, contextIndex);
+	}
+
+	return wrapper;
+}
+
+/**
+ * The author's environment: confined to one worktree, and able to write inside it.
+ *
+ * `inheritEnv` is forced false by `exec` above, so the provider key in durig's own process
+ * environment never reaches a seat's command (the `inheritEnv: true` default at bash.ts:76 is
+ * exactly the leak SC3 exists to close).
+ */
+export function authorEnv(base, root) {
+	return confinedEnv(base, { root, readOnly: false });
+}
+
+/**
+ * The verifier's environment: confined to a DISPOSABLE COPY of the worktree, and unable to
+ * mutate through the file API.
+ *
+ * This is SC2 resolved by filesystem semantics rather than by OS identity. A verifier needs to
+ * run the suite - that is what makes its verdict independent - but a shell cannot be made
+ * read-only (writes are arbitrary), so instead the verifier works on a snapshot: whatever it
+ * writes lands in the throwaway copy and is discarded. It therefore cannot alter the artifact it
+ * is verifying, which is the property that was actually wanted.
+ */
+export function verifierEnv(base, snapshotRoot) {
+	return confinedEnv(base, { root: snapshotRoot, readOnly: true });
+}
+
+/** Exported for the demo, which must be able to prove the denial list can fire. */
+export { DENIED_COMMANDS };
+

@@ -12,6 +12,28 @@ waived**, and D38 records why: the acceptance had assumed pi's `arg-guard`/`guar
 seats, and they do not (they are pi-coding-agent extensions; durig passes no `hooks` at all).
 A durig-side `beforeTool` guard therefore lands **with** the tools, not after them.
 
+**SC1–SC3 implemented and proved (2026-10-11):** `src/confine.mjs` + `demo/confine.test.mjs` (the
+27th demo). Every canary is paired with its *unguarded control*, because a denial that also
+denies without the boundary proves nothing: the raw environment reads a file outside the root
+while the confined one refuses it. Covered: path confinement via `absolutePath` (absolute, `~`,
+`..`, and — where the host permits creating a symlink — a link escape), the environment (no
+credential-shaped variable reaches a command even when the caller asks for it by name, with
+`inheritEnv: true` deliberately requested), the host refusals (`wsl`, `docker`, destructive git),
+and the verifier's read-only file API while it can still read and still run a command.
+
+*Writing the test found two real defects in the module's first draft, which is the argument for
+canaries rather than a review:* `absolutePath` was delegated **unconfined** — the F2 hole itself,
+since every other tool resolves through it — and forcing `inheritEnv: false` without supplying an
+allowlisted baseline would have left a seat's command with **no `PATH`** at all.
+
+*One canary reports itself skipped rather than passing quietly:* creating a symlink can need a
+privilege this Windows host withholds, and a silently dropped escape check is worse than a
+reported one.
+
+**Still to land, and deliberately as one unit:** the wiring that makes it live
+(`HarnessOptions.env`, per-seat author/verifier roots), the `beforeTool` guard, and
+`coding-tools` per seat.
+
 Conditions, all required before any code lands and each proved by a canary demo:
 
 | Id | Condition |
