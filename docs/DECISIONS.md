@@ -996,3 +996,51 @@ seat's life"), and the F4 correction above (entries carry `usage`). The claims i
 what the harness records and exposes were read from the pinned source under
 `vendor/pi-main/packages/durable/src/` (`entries.ts`, `harness/types.ts`,
 `harness/compaction.ts`), not inferred from the research digest.
+
+## D38 — Full shell accepted; the guard is durig's to build, not pi's (2026-10-11)
+
+**Decision (operator).** Verbatim: *"If the seats are using pi-warden extension to protect us
+from dangerous tool-calls, I can accept a level of risk with using full-shell initially while
+codemode with permissions is developed."* Scope answer = **(a) full shell**, with the M3
+conditions SC1–SC3 still required and codemode-with-permissions as the follow-on mitigation.
+
+**The premise is false, and the record must not rest on it.** durig seats do **not** get pi's
+guards. Three mechanisms exist in the operator's pi and none of them reaches a seat:
+
+- `arg-guard.js` is a **pi-coding-agent** extension — `pi.on('tool_call', …)`
+  (`~/.pi/agent/extensions/arg-guard.js`). durig loads **pi-durable** extensions only; durig's
+  own loader says so at `src/extensions.mjs:17`. It also repairs *malformed arguments* rather
+  than policing dangerous ones, so it was never the control this decision assumed.
+- `guardrails.json` configures `@aliou/pi-guardrails` (path access, a permission gate, patterns
+  such as `rm -rf`, `sudo`, `dd of=`, `mkfs.`, `chmod -R 777`). Also pi-coding-agent.
+- The harness durig opens passes **no `hooks`** at all (`cli.mjs:241` passes only
+  `{models, registry, settings}`), and `HarnessOptions.hooks` exists to carry them
+  (`types.ts:356`).
+
+So at the moment of acceptance the risk was backed by **nothing**.
+
+**What the acceptance therefore requires.** A durig-side guard is a precondition, not a
+nice-to-have. `ToolHooks.beforeTool` (`types.ts:745-752`) can block or rewrite a call, throws as
+blocking, and sees nested calls through `ToolCall.parent` — strictly stronger than `arg-guard`.
+It must land **with** the tools, never after them.
+
+**Risk accepted, stated so it is bounded.** Full shell for author seats means arbitrary code
+execution as this OS user *inside a path-confined worktree*. Residuals accepted knowingly: a
+command-string allowlist is unsound under PowerShell (so the allowlist only narrows; the
+`ExecutionEnv` is the boundary); a seat may defeat confinement by editing what it runs; and the
+shared-identity problem `D-ENV-AUTH` remains.
+
+**Not accepted, and not implied: unconfined filesystem access.** Without SC1 a seat can read
+`durig.config.json`, `~/.pi`, and `~/.ssh` — credential disclosure, not "a level of risk". SC1 is
+therefore treated as **required, not waived**, and the same goes for SC2 (the verifier's
+read-only must hold at the filesystem layer, since a shell can write regardless of which tools
+it is offered).
+
+**Recorded at the operator's direction and quoting them verbatim.** `security.sec` requires a
+non-forgeable operator artifact for a risk acceptance (D-ENV-AUTH); this entry is written by the
+operator's assistant on their instruction, which is the strongest artifact this workflow
+provides. If it must be genuinely non-forgeable later, re-issue it as an operator-authored
+commit.
+
+**Effect on the position:** `security.sec`'s dissent is preserved for the residual shell risk
+(`docs/reviews/security-sec-m3-seat-tools.md`); SC1–SC3 are **adopted**, not skipped.

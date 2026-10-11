@@ -6,6 +6,12 @@ Position: `docs/reviews/security-sec-m3-seat-tools.md` (from
 (`qitem-20261011173739-402fac1b`) for the scope-vs-security conflict **if** the tools ship
 without the conditions below; complying with them means no escalation is needed.
 
+**Operator scope ruling (2026-10-11, D38): option (a) — full shell to author seats**, accepting
+the residual shell risk while codemode-with-permissions is developed. SC1–SC3 are **adopted, not
+waived**, and D38 records why: the acceptance had assumed pi's `arg-guard`/`guardrails` covered
+seats, and they do not (they are pi-coding-agent extensions; durig passes no `hooks` at all).
+A durig-side `beforeTool` guard therefore lands **with** the tools, not after them.
+
 Conditions, all required before any code lands and each proved by a canary demo:
 
 | Id | Condition |
