@@ -812,3 +812,38 @@ carefully while durig's own side was described from memory, which is how a revie
 manufactures gaps. Only the *knob* was real (`stream` has no default), and
 `DURIG_STREAM_TIMEOUT_MS` now reaches `Harness.open`. Corrections are marked in place in
 the review rather than edited away, because a silently corrected finding teaches nothing.
+
+## D34 — A request id is caller-supplied, and the answer pointer beats the watermark (2026-10-11)
+
+**Decision:** `send` accepts an optional `--request-id`. A duplicate id reuses the
+existing submission (the platform's `admitSubmission` returns the existing id when
+`submissionByRequest` finds one), so a retry generates nothing and returns the original
+reply. The id is **never derived from the prompt text**. When an id is supplied and the
+answer already existed before this invocation, the reply is read from the submission's
+own answer pointer; otherwise the watermark scan (F7) stays in charge.
+
+**Why the caller supplies it.** An id means "this is the same request as before", and
+only the caller knows that. Hashing the text would make two deliberate identical sends
+collide into one — silent data loss, which is a worse failure than the duplicate it
+prevents. The CLI is driven by LLM operators (D21) and `SENDEXIT=124` is a real outcome,
+so "retry this same request" is a thing an operator needs to be able to say.
+
+**Why the answer pointer is not a nicety.** The F7 fix resolves a reply by finding the
+newest assistant entry *past* a watermark taken before the run, which is what stops a run
+that produced nothing from echoing an earlier send's reply. A reused submission inverts
+that assumption: its answer was committed *before* this invocation, so the scan finds
+nothing and would report `reply: null` for a request that has a reply. With an explicit
+id the submission is unambiguous, so its own pointer is authoritative. The two mechanisms
+answer different questions and both are needed — identity when the caller provides it, a
+watermark when they do not.
+
+**Pattern worth noticing:** this is the third bug in the same family — F7, this reused-
+submission interaction, and the 24a corrections. All three were about *reporting*, or
+failing to report, a result that belonged to a different run. The settle/report path is
+where durig's subtle defects live, and it deserves the suspicion a shared mutable
+watermark naturally attracts.
+
+**Evidence:** `demo/cli.test.mjs` (first use, retry with no second entry and the same
+reply, a different id, no id at all, `--request-id` with no value, and no id leakage into
+the prompt), falsified by dropping `requestId` from the submission and watching it fail
+with `the retry must report that it reused the submission`.

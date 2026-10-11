@@ -22,7 +22,7 @@ import {
   fauxAssistantMessage,
   fauxProvider,
 } from "@earendil-works/pi-ai/providers/faux";
-import { configure, createRegistry, Harness } from "@earendil-works/pi-durable";
+import { AssistantEntry, configure, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -431,7 +431,7 @@ async function cmdQueue() {
 // can read the outcome in the same invocation (LLM-friendly: no polling
 // loop needed). With a live view (default when stderr is a terminal) the
 // generation streams to stderr, labelled per seat; stdout stays one JSON doc.
-async function cmdSend(seatName, text, { stream = false } = {}) {
+async function cmdSend(seatName, text, { stream = false, requestId = null } = {}) {
   const live = stream ? createLiveRenderer({ color: Boolean(process.stderr.isTTY) && !process.env.NO_COLOR }) : null;
   const { harness, providerId } = await openHarness({ live });
   {
@@ -478,7 +478,11 @@ async function cmdSend(seatName, text, { stream = false } = {}) {
         0,
       );
       submission = await conv.submit(
-        { type: "input", content: text },
+        {
+          type: "input",
+          content: text,
+          ...(requestId === null ? {} : { requestId }),
+        },
         BACKGROUND_CONTEXT,
       );
       const settled = await submission.wait(BACKGROUND_CONTEXT);
@@ -491,13 +495,40 @@ async function cmdSend(seatName, text, { stream = false } = {}) {
           `note: ${seatName} finished as ${settled.status}${settled.reason ? ` (${settled.reason})` : ""} - no reply was produced`,
         );
       }
-      const pg = await conv.entries({}, 50, undefined, BACKGROUND_CONTEXT);
-      // Entries come newest-first; the newest assistant entry this run created
-      // is the first one past the watermark.
-      const lastAssistant = pg.items.find(
-        (e) => e.kind === "pi.assistant" && Number(e.id) > priorMaxId,
-      );
-      const msg = lastAssistant?.model?.[0];
+      // Resolving the reply takes one of two routes, and the choice is the whole
+      // point of --request-id:
+      //  - WITHOUT one, only a run that produced something may speak, so the
+      //    newest assistant entry past the watermark is the reply. A run that
+      //    produced nothing leaves older entries that also differ from the newest,
+      //    which is how an earlier send's reply got reported as this one's (F7).
+      //  - WITH one, the submission is identified by that id, so the platform's own
+      //    answer pointer is authoritative. That is not a nicety: a retry carrying
+      //    an id already used gets the EXISTING submission back, whose answer was
+      //    committed before this invocation's watermark - so the scan would find
+      //    nothing and report `reply: null` for a request that has a reply.
+      const answerExisted =
+        requestId !== null &&
+        settled.status === "done" &&
+        settled.type === "input" &&
+        Number(settled.answer) <= priorMaxId;
+      let msg;
+      if (answerExisted) {
+        // By id: the answer is deliberately older than the watermark and may be
+        // older than the 50-entry page below.
+        const rec = await conv.commit(
+          (tx) => tx.entry(AssistantEntry, settled.answer),
+          BACKGROUND_CONTEXT,
+        );
+        msg = rec?.model?.[0];
+      } else {
+        const pg = await conv.entries({}, 50, undefined, BACKGROUND_CONTEXT);
+        // Entries come newest-first; the newest assistant entry this run created
+        // is the first one past the watermark.
+        const lastAssistant = pg.items.find(
+          (e) => e.kind === "pi.assistant" && Number(e.id) > priorMaxId,
+        );
+        msg = lastAssistant?.model?.[0];
+      }
       out({
         ok: true,
         command: "send",
@@ -506,6 +537,10 @@ async function cmdSend(seatName, text, { stream = false } = {}) {
         settledReason: settled.reason ?? null,
         reply: msg?.content ?? null,
         stopReason: msg?.stopReason ?? null,
+        // Only meaningful with an id: it says this invocation did not generate,
+        // it re-read a reply that already existed. Without one the field would be
+        // a claim about a submission nobody asked to identify.
+        ...(requestId === null ? {} : { requestId, reused: answerExisted }),
       });
     } finally {
       delete process.env.DURIG_ACTIVE_SEAT;
@@ -1074,10 +1109,33 @@ try {
     if (!args[0]) fail("send needs <seat> <text>, or --body-file <path>");
     const stream =
       args.includes("--stream") || (process.stderr.isTTY && !args.includes("--no-stream"));
-    const inline = args.slice(1).filter((a) => a !== "--stream" && a !== "--no-stream").join(" ");
-    const text = fromFile !== null ? fromFile : inline;
+    // --request-id makes one send idempotent: a retry carrying the same id reuses
+    // the existing submission instead of starting a second generation. Optional
+    // and never invented for the operator, because an id means "this is the same
+    // request as before" and only the caller knows that - deriving one from the
+    // text would silently collapse two deliberate identical sends into one.
+    const reqAt = args.indexOf("--request-id");
+    let requestId = null;
+    if (reqAt >= 0) {
+      requestId = args[reqAt + 1];
+      if (!requestId || requestId.startsWith("--")) fail("send --request-id needs a value");
+    }
+    // Walked rather than filtered, so the value after --request-id is dropped
+    // wherever it sits instead of leaking into the prompt.
+    const inline = [];
+    const textArgs = args.slice(1);
+    for (let i = 0; i < textArgs.length; i += 1) {
+      const a = textArgs[i];
+      if (a === "--stream" || a === "--no-stream") continue;
+      if (a === "--request-id") {
+        i += 1;
+        continue;
+      }
+      inline.push(a);
+    }
+    const text = fromFile !== null ? fromFile : inline.join(" ");
     if (!text.trim()) fail("send needs <seat> <text>, or --body-file <path>");
-    await cmdSend(args[0], text, { stream });
+    await cmdSend(args[0], text, { stream, requestId });
   } else if (cmd === "queue") await cmdQueue();
   else if (cmd === "watch") {
     // Same precedence as `send --stream`: an explicit flag wins, otherwise a

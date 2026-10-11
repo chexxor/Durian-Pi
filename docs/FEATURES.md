@@ -38,7 +38,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 |---|---|---|
 | `up <rig.json>` | Create/refresh seats, edges and constitution from a spec; idempotent | `--refresh` re-applies stored prompts and models |
 | `ps` | Seat roster with conversation ids and roles | |
-| `send <seat> <text>` | Steer a seat, wait for its reply, return it inline | `--stream` / `--no-stream` |
+| `send <seat> <text>` | Steer a seat, wait for its reply, return it inline | `--stream` / `--no-stream`, `--body-file <path>` (or `-`), `--request-id <id>` (retry-safe) |
 | `queue` | Dump every work item with status and transitions | |
 | `log <seat> [limit]` | A seat's conversation, turn-grouped | `--follow`, `--full`, `--tool-bg`, `--theme dark\|light`, `--human`/`--json` |
 | `watch` | Follow rig state — human dashboard on a TTY, NDJSON when piped | `--once`, `--human`/`--json` |
@@ -102,6 +102,7 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Restart re-arm** | `harness.resume()` re-arms scheduling so queued work continues after a process restart | `cli.mjs` `openHarness` | `demo/persistence.test.mjs` |
 | **Race safety** | Concurrent claims yield one winner and no double assignment | queue transitions | `demo/race.test.mjs` |
 | **Repeat-call tolerance** | A replayed tool call returns current state instead of erroring on a settled overlay | `src/rig.mjs` | `demo/repeat-call.test.mjs` |
+| **Request-idempotent send** | `send --request-id` makes one send one submission: a retry carrying the same id reuses the existing submission rather than generating again, and returns the original reply. The id is never derived from the text, because two deliberate identical sends are two requests | `cli.mjs` `cmdSend` | `demo/cli.test.mjs` |
 | **Zero durig SQL** | durig imports one storage opener and runs no SQL of its own | `cli.mjs:26` | architecture note, `docs/STATUS.md` |
 
 ## 6. Observability
@@ -112,7 +113,6 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Watch dashboard** | Per-seat human view — who, current work, last words — with glyphs and colour; an empty dashboard can never look healthy | `src/watchview.mjs` | `demo/watchview.test.mjs` |
 | **Seat highlights** | Reads each seat's latest words and tool call **storage-direct**, never opening a harness | `src/rigstory.mjs` | `demo/watchview.test.mjs` |
 | **Cross-process live stream** | `watch` polls storage at 750 ms because SQLite has no cross-process notification | `cli.mjs` `cmdWatch` | `demo/watch.test.mjs` |
-| **Turn-grouped transcript** | `log` groups entries into turns with timestamps and elapse deltas; tool output collapses to one line | `src/chatview.mjs` | `demo/chatlog.test.mjs` |
 | **Drift metrics** | Four measures over data already persisted, each declaring its band, evidence class and blind spot | `src/metrics.mjs`, `cli.mjs` `cmdMetrics` | `demo/metrics.test.mjs` |
 | **Config provenance** | `metrics` reports the revision it ran at, whether the tree was dirty, and the active extension set — so a movement can be attributed to a change | `src/provenance.mjs` | `demo/provenance.test.mjs` |
 

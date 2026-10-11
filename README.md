@@ -26,6 +26,7 @@ node demo/offline-v2.mjs     # edge + capability gate
 node cli.mjs up rig.v2.json            # bootstrap seats (idempotent)
 node cli.mjs ps                        # roster
 node cli.mjs send pm "hello"           # steer a seat; waits; returns reply
+node cli.mjs send pm "hello" --request-id r-1   # retry-safe: same id, one submission
 node cli.mjs queue                     # dump work queue
 node cli.mjs status                    # per-seat health + attention notices
 node cli.mjs watch                     # live NDJSON stream of queue + attention
@@ -125,6 +126,12 @@ append-only change log, so this adds no write path and no stored state.
 | `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent GENERATIONS across all seats (unset = unlimited). `1` serializes them so one local model (e.g. Qwen on a 24 GB GPU) can serve the whole rig. Waiting-vs-stuck is surfaced via lease files: `status`/`watch` report `generation_in_flight` (holder seat + since) or `generation_stale` (dead holder). See DECISIONS D12. |
 | `DURIG_EXTENSIONS` | Comma-separated module paths to install as extensions. See "Extensions" below. |
 | `DURIG_STREAM_TIMEOUT_MS` | Total request timeout for one generation attempt, in milliseconds. Unset = the platform default (the `openai` SDK's 600000 ms). Raise it for a slow local model, or lower it to fail fast instead of waiting out ten minutes on a stalled endpoint. A non-positive or non-numeric value **fails the command** rather than silently taking the default. |
+
+The `send` path is **retry-safe**: `node cli.mjs send <seat> <text> --request-id <id>` makes
+one send one submission, so a retry carrying the same id reuses the existing submission
+instead of starting a second generation and returns the original reply (`reused: true`).
+An id is never derived from the text, because two deliberate identical sends are two
+requests. Without an id nothing changes.
 
 ## Extensions
 

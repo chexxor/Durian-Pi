@@ -573,6 +573,50 @@ The corrections are marked in place in the review doc rather than edited away. T
 reusable lesson: reading one side of a comparison carefully and the other from memory
 produces confident, wrong gap claims, and a wrong gap is worse than no gap.
 
+## Review recipe — a retry must not generate twice (item 24d, 2026-10-11)
+
+The demo's `requestId` is the one finding the platform check did not refute, and it is
+about the crash/retry story: an operator that dies mid-send and retries must not start a
+second generation.
+
+```powershell
+cd durig
+$env:DURIG_PROVIDER = "faux"; $env:DURIG_DB = "$PWD\scratch-rid.sqlite"
+node cli.mjs up rig.v2.json
+node cli.mjs send pm "hello there" --request-id r-1   # reused: false, reply present
+node cli.mjs send pm "hello there" --request-id r-1   # reused: true, SAME reply
+node cli.mjs log pm 50                                # exactly ONE user entry
+```
+
+The third line is the whole feature: the retry reports `"reused": true` and returns the
+original reply, and `log` shows one user entry rather than two. Bounds worth checking
+while you are there:
+
+- a **different** id is a different request (`reused: false`) — this is why an id is
+  never derived from the text, since two deliberate identical sends are two requests
+- **no** id changes nothing at all: no `requestId`/`reused` fields, and it generates
+- `--request-id` with no value exits 1 with `send --request-id needs a value`
+- the id never reaches the prompt
+
+```powershell
+node demo/cli.test.mjs
+```
+
+The trap uncovered on the way, which is the interesting part: the reply is normally
+resolved by scanning for the newest assistant entry *past* a pre-run watermark — that is
+the F7 fix, and it is what stops a run that produced nothing from echoing an earlier
+send's reply. A **reused** submission inverts that assumption, because its answer was
+committed *before* this invocation's watermark: the scan finds nothing and would report
+`reply: null` for a request that plainly has a reply. With an id, the submission's own
+answer pointer is authoritative; without one, the watermark scan is unchanged. Both
+mechanisms are needed because they answer different questions.
+
+That is the third defect in this family (F7, this, and the 24a corrections), which is
+recorded in D34 as a pattern: the settle/report path is where durig's subtle bugs live.
+
+Falsified by dropping `requestId` from the submission and watching the test fail with
+`the retry must report that it reused the submission`.
+
 ## Review recipe — a seat can stop and ask (item 5, 2026-10-11)
 
 Before this, a seat that could not proceed had two options: invent an answer or go

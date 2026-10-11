@@ -259,7 +259,70 @@ try {
 	assert.equal(bogusJson.ok, false);
 	assert.match(bogusJson.usage, /node cli\.mjs up/, "usage is returned to the caller");
 
-	console.log("CLI TEST PASS (contracts, exit codes, stderr, error surface)");
+	// -- request-id: one send, one submission, however many times it is retried --
+	// The crash/retry story: an LLM operator (or a script) that dies mid-send and
+	// retries must not start a second generation. A duplicate requestId returns the
+	// existing submission instead of admitting a new one.
+
+	const userEntries = () =>
+		json(cli(["log", "alpha", "50"])).entries.filter((e) => e.kind === "pi.user").map((e) => e.text);
+
+	const before = userEntries().length;
+	const first = cli(["send", "alpha", "hello there", "--request-id", "r-1"]);
+	assert.equal(first.code, 0, `send with a request id failed: ${first.stderr.slice(0, 200)}`);
+	const firstJson = json(first);
+	assert.equal(firstJson.reused, false, "a first use of an id is not a reuse");
+	assert.equal(firstJson.requestId, "r-1", "the id is echoed so a caller can correlate");
+	assert.ok(firstJson.reply, "and the reply is there");
+	assert.equal(userEntries().length, before + 1, "one send makes one user entry");
+
+	// The retry: same id, so the existing submission is reused. This is the case
+	// that would otherwise report `reply: null`, because a reused submission's
+	// answer was committed BEFORE this invocation's watermark and the ordinary
+	// scan therefore finds nothing (the F7 family).
+	const retry = cli(["send", "alpha", "hello there", "--request-id", "r-1"]);
+	assert.equal(retry.code, 0, `retry failed: ${retry.stderr.slice(0, 200)}`);
+	const retryJson = json(retry);
+	assert.equal(retryJson.reused, true, "the retry must report that it reused the submission");
+	assert.deepEqual(
+		retryJson.reply,
+		firstJson.reply,
+		"a retry returns the original reply rather than nothing",
+	);
+	assert.equal(
+		userEntries().length,
+		before + 1,
+		"the retry must NOT generate again: still one user entry",
+	);
+
+	// A different id is a different request, so it must generate again. Deriving
+	// an id from the text instead would silently collapse two deliberate sends.
+	const other = cli(["send", "alpha", "hello there", "--request-id", "r-2"]);
+	assert.equal(json(other).reused, false, "a different id is a new request");
+	assert.equal(userEntries().length, before + 2, "and it generates");
+
+	// Without an id nothing changes, including the absence of the new fields.
+	const plain = cli(["send", "alpha", "no id here"]);
+	const plainJson = json(plain);
+	assert.equal("requestId" in plainJson, false, "no id means no id fields in the contract");
+	assert.equal("reused" in plainJson, false);
+	assert.ok(plainJson.reply, "and a plain send still replies");
+
+	// The id is metadata, not prompt text. `log`'s `text` is already the extracted
+	// text rather than the raw model array, so the whole entry is the prompt.
+	cli(["send", "alpha", "text only", "--request-id", "r-3"]);
+	assert.equal(
+		userEntries().at(-1),
+		"text only",
+		"the request id must never reach the prompt",
+	);
+
+	// A flag with no value must fail rather than submit an unidentified request.
+	const noValue = cli(["send", "alpha", "x", "--request-id"]);
+	assert.equal(noValue.code, 1, "--request-id without a value exits nonzero");
+	assert.match(json(noValue).error, /--request-id needs a value/);
+
+	console.log("CLI TEST PASS (contracts, exit codes, stderr, error surface, request-id idempotency)");
 } finally {
 	try {
 		rmSync(dir, { recursive: true, force: true });

@@ -611,8 +611,21 @@ surface. A feature that is off must therefore cost nothing — not "little".
     remembers. Both still gated on loop #5 and a `security.sec` position.
     24d. **Give submissions a request identity.** `requestId` makes a rerun after a
     crash find and reuse the same submission rather than sending twice
-    (`vacation.ts`). durig has none, and dogfood F7 was a settle-logic bug in this exact
-    family.
+    (`vacation.ts`).
+    **✅ done (2026-10-11).** `send --request-id <id>`; a duplicate id returns the
+    existing submission, so a retry generates nothing and returns the original reply
+    (`reused: true` in the JSON). The id is **never derived from the text** — two
+    deliberate identical sends are two requests, and collapsing them would be a silent
+    data-loss bug — so it is opt-in and the caller supplies it. Uncovering it also
+    exposed an interaction worth recording: the reply is resolved by scanning for the
+    newest assistant entry past a pre-run watermark (the F7 fix), and a **reused**
+    submission's answer was committed *before* that watermark, so the scan would find
+    nothing and report `reply: null` for a request that plainly has a reply. With an id
+    the submission's own answer pointer is authoritative instead; without one the
+    watermark scan stays as it was. `demo/cli.test.mjs` covers first-use, retry
+    (no second entry, same reply), a different id, no id, `--request-id` with no value,
+    and that the id never reaches the prompt. Falsified by dropping `requestId` from the
+    submission and watching it fail.
     24e. **Durable task phases with checkpoints, and conversation ownership.**
     `defineTask` with `phases` returning `{ status: "running", checkpoint: { phase, … } }
     survives a crash between its steps, and `ownership` makes aborting a parent abort
