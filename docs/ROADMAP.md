@@ -618,6 +618,50 @@ surface. A feature that is off must therefore cost nothing — not "little".
     *Proof:* a demo where one escape is denied by the grant predicate and another independently by
     the environment, so neither layer is load-bearing alone.
 
+33. **Prompt-cache effectiveness — are durig's seats actually getting cache hits?** Raised by the
+    operator with `docs/Prompt_Caching_Research.md` and DeepInfra's
+    [prompt cache retention](https://docs.deepinfra.com/chat/prompt-cache-retention). Cost is a
+    standing measure (item 20's neighbourhood) and cache is the largest single lever on it, so
+    the question is not "can we cache" but "are we, and how much".
+    *The seam already exists and durig exposes none of it.* `ConversationStreamOptions.cacheRetention`
+    is a real field (`durable/src/harness/types.ts:461`), and pi-ai's OpenAI-compatible provider —
+    the path durig's DeepInfra traffic takes — already resolves it and can send prompt-cache
+    fields and session-affinity headers (`ai/src/api/openai-completions.ts:294-363, 763-781`).
+    durig deliberately exposes only one harness setting today (`stream`, per 24a), so this is the
+    same shape of work as `DURIG_STREAM_TIMEOUT_MS`: decide whether a second knob is justified,
+    and why.
+    *What DeepInfra actually requires* (cited, from the retention doc): `prompt_cache_key` with
+    every request — **a stable identifier for the context, "for example a session or agent id"**,
+    which is exactly what a durig seat is — plus `prompt_cache_options{mode:"explicit",
+    ttl:"5m"|"1h"}` to open the window, and an optional `prompt_cache_breakpoint` marking where
+    the reusable prefix ends. Reads bill at **0.2×** input on Nemotron-3-Ultra, writes at **1.25×**
+    (5m) or **2.0×** (1h); reuse without a `ttl` does **not** extend the deadline; after expiry it
+    falls back to standard pricing rather than silently charging.
+    *Two traps that could make this a no-op, and both are checkable before building:*
+    (a) **granularity** — the retained portion is rounded **down** to a whole cacheable increment,
+    and "a breakpoint shorter than one increment retains nothing" (8,192 tokens on
+    Nemotron-3-Ultra). A seat's reusable prefix is constitution + persona + primer + tool
+    declarations, which may sit *under* one increment — in which case retention would retain
+    nothing and only the write premium would be paid; (b) **model support is narrow** — only
+    `nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B` and `moonshotai/Kimi-K2.7-Code` today, and neither
+    is durig's default model, so on `zai-org/GLM-5.3-Flash` the parameter is **ignored** and billed
+    as standard input. Ordinary best-effort caching still applies there.
+    *Measure from data already persisted, no new instrumentation.* Assistant entries already carry
+    `usage` including `cacheRead`/`cacheWrite` (F4), which is precisely DeepInfra's
+    `usage.prompt_tokens_details.{cached_tokens,cache_write_tokens}` — so a hit-rate measure is
+    direct class, feeding `computeMetrics` like every other measure (D24).
+    *Prompt stability is a lever durig controls, and this is the non-obvious half.* The
+    constitution is read **per request** so one edit re-arms every seat — and, unnoticed until
+    now, invalidates **every seat's cached prefix at once**. `up --refresh` and the optimizer
+    rewrite prompts by design. The long-context research names this failure directly: a
+    cache-hostile rebuild silently zeroes the prefix-cache hit rate. So a measure and the
+    rebuild paths have to be looked at together.
+    *Deliverable:* a timeboxed spike establishing **what our provider path actually emits**
+    (pi-ai's retention shapes are Anthropic/OpenAI-shaped while DeepInfra's `prompt_cache_options`
+    is provider-specific, so a mapping gap is likely and must not be assumed away); a stable
+    per-seat key; a measured hit rate on the real models; and an explicit decision on both traps,
+    including whether a model swap is warranted to make retention reachable at all.
+
 ## Sharing publicly
 
 22. **Publish durig as its own repository — no releases yet.** The operator wants
