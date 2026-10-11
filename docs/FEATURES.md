@@ -206,7 +206,7 @@ the file can be running something else — the tutor-pi spec declared its
 constitution inline while the store held a different one, so 13 seats ran without
 their team culture and no command said so (D25).
 
-Eight rules with stable ids, each with a subject and the exact fix:
+Nine rules with stable ids, each with a subject and the exact fix:
 
 | Rule | Severity |
 |---|---|
@@ -218,6 +218,7 @@ Eight rules with stable ids, each with a subject and the exact fix:
 | `stray-seat` | fix-now |
 | `no-verifier-seat` | fix-now |
 | `single-model-rig` | fix-now |
+| `seat-without-capabilities` | fix-now |
 
 `store-missing-seat` and `stray-seat` are the two directions of one disagreement
 between the rig file and the store, and they are not symmetric. A seat the file
@@ -251,10 +252,16 @@ reports **no findings**:
 
 `demo/starter.test.mjs` is the proof, and its controls are the point: "0 findings"
 is also what `check` reports when every rule is *skipped*, so the test breaks a copy
-of the starter five ways (the second model removed, a seat left stranded, an edge to
-a nonexistent seat, the verifier renamed, and a store created but never `up`-ed) and
-requires each rule to fire. It also asserts the inline constitution still matches
-`constitution.txt`, so the two copies cannot drift apart.
+of the starter six ways (the second model removed, a seat left stranded, an edge to
+a nonexistent seat, the verifier renamed, a store created but never `up`-ed, and a seat
+left without capabilities) and requires each rule to fire. It also asserts the inline
+constitution still matches `constitution.txt`, so the two copies cannot drift apart.
+
+It also carries a **coverage ledger**: every rule in `RULES` must name the control that
+exercises it, so a rule can no longer arrive uncovered - which is how
+`seat-without-capabilities` first shipped with only an ad-hoc manual check - and an entry for
+a rule that no longer exists fails too, so a renamed rule cannot leave its control orphaned
+while still reading as coverage.
 
 ## 8. Migration and interoperability
 

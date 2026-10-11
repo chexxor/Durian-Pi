@@ -750,6 +750,29 @@ surface. A feature that is off must therefore cost nothing — not "little".
     that only route work. A rule that nags every new rig teaches the operator to ignore findings,
     which costs more than the skill it is asking for.
 
+37. **A run that never starts must not look idle.** This is F11, and it is the worst SHAPE rather
+    than a bad outcome: a `send` killed mid-run leaves a submission admitted but unscheduled, and
+    nothing in the platform says so - `status` reported no attention, `queue` was empty, and the rig
+    read as idle-healthy while a request sat unprocessed. That is the failure this project treats as
+    cardinal everywhere else (the empty-rig guardrail, the empty-transcript note): an empty surface
+    must never be indistinguishable from a healthy one.
+    *(a) Detect it, from data already persisted.* A submission admitted more than N seconds ago with
+    no attempt started is a derived fact, so it can be an attention notice carrying the `scope` and
+    declared blind spot every other notice carries - no new write path (D24), same channel as
+    `idle_with_queued_work` and `deferred_awaiting_answer`. As with `check`'s findings, the notice
+    must name the fix rather than only the symptom.
+    *(b) Give the operator a deliberate way to advance it.* Viewers do not schedule **by design** -
+    a passive `watch` must not kick the queue it is observing - so the escape hatch has to be an
+    explicit verb (`resume` or `doctor`) that opens the harness, re-arms scheduling and reports what
+    it found. Today the only route is to repeat the send with the same request id, which works
+    (D34's idempotency doubles as the resume mechanism) but is a trick rather than a command.
+    *(c) Make it terminal, which is item 6's real answer.* A submission that never ran, or a run that
+    never settles, should reach a legible terminal state - abandoned, with a reason - instead of
+    resting invisibly. Item 6 was written about deadlines and attempt caps; F11 shows it also needs
+    an **admission** deadline.
+    *Proof:* a demo that admits a submission without scheduling it, asserts the notice appears, and
+    asserts the verb clears it - falsifiable by disabling the notice.
+
 ## Sharing publicly
 
 22. **Publish durig as its own repository — no releases yet.** The operator wants

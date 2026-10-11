@@ -14,6 +14,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { RULES } from "../src/checkup.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const durigDir = join(here, "..");
@@ -158,6 +159,45 @@ try {
 		}));
 	});
 	mustFind("no verifier", cli(["check", unverified], "unverified"), "no-verifier-seat");
+
+	// 6. A seat that declares no capabilities. Per-seat tool scoping is derived from capabilities,
+	//    so such a seat silently becomes a coordinator with no file or shell tools - it cannot work,
+	//    and from outside it just looks like a seat deferring everything.
+	const capless = broken("capless.json", (s) => {
+		delete s.seats.find((x) => x.name === "impl").capabilities;
+	});
+	mustFind("seat with no capabilities", cli(["check", capless], "capless"), "seat-without-capabilities");
+
+	/* ------------------------- coverage: no rule may go uncontrolled */
+
+	// The whole point of the controls above is that "0 findings" means nothing unless every rule can
+	// be shown to fail. That was true for FIVE of the eight rules when this file was written, and a
+	// rule added afterwards was covered by nothing - which is how `seat-without-capabilities` arrived
+	// with only an ad-hoc manual check. This ledger makes the gap impossible to miss: a new rule in
+	// RULES with no control recorded here fails the suite and names itself.
+	const CONTROL_FOR = {
+		"constitution-missing": "demo/check.test.mjs",
+		"constitution-not-applied": "this file, control 1",
+		"unreachable-seat": "this file, control 3",
+		"dangling-edge": "this file, control 4",
+		"store-missing-seat": "demo/check.test.mjs",
+		"stray-seat": "demo/check.test.mjs",
+		"no-verifier-seat": "this file, control 5",
+		"single-model-rig": "this file, control 2",
+		"seat-without-capabilities": "this file, control 6",
+	};
+	for (const rule of RULES) {
+		assert.ok(
+			CONTROL_FOR[rule.id],
+			`rule "${rule.id}" has no negative control anywhere; add one and record it in CONTROL_FOR`,
+		);
+	}
+	// ...and the other direction: an entry for an id that is no longer a rule means a rule was
+	// RENAMED and its control silently orphaned, which would read as coverage while proving nothing.
+	const knownRules = new Set(RULES.map((r) => r.id));
+	for (const id of Object.keys(CONTROL_FOR)) {
+		assert.ok(knownRules.has(id), `CONTROL_FOR names "${id}", which is not a rule any more`);
+	}
 } finally {
 	try {
 		rmSync(dir, { recursive: true, force: true });
