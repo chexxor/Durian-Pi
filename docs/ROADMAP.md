@@ -595,6 +595,29 @@ surface. A feature that is off must therefore cost nothing — not "little".
     *Proof:* a demo that fails against the unguarded design (a dangerous call goes through)
     and passes with the guard.
 
+32. **Codemode with JavaScript for seats — planned, gated on the boundary.** The operator decided
+    to develop it and asked that the plan review the runtime library and cooperate with it;
+    the plan is `docs/CODEMODE.md`, and this item is the roadmap half.
+    *The library review is an acceptance criterion, not a step skipped later.* Checking the
+    operator's review against source found four things to correct, two of which are must-sets:
+    `CodemodeSandboxOptions.memoryLimitBytes` defaults to **no limit beyond wasm32's 4 GiB** (the
+    familiar 256 MB is a *pi-tool* choice, not a library default), and `timeoutMs` defaults to
+    **300 000 ms** (`runtime/host.js:5,302`) rather than being unset. Also: the sandbox is a
+    `node:worker_threads` **thread in the same process** (`host.js:1,147`), so language isolation
+    is not process isolation; and the operator's `runScript` sketch targets
+    `quickjs-emscripten`, while pi's library is `quickjs-wasi` with `CodemodeSandbox` — we build
+    on the latter. Verified as stated: no Node APIs/fs/net/timers, output capped at 16 MB /
+    100 000 items, store at 256 KB / 1 MB, and `CodemodeExecuteOptions` carries an `AbortSignal`.
+    *How it cooperates with the boundary:* minted per-script capabilities replace the ambient
+    `tools`/`ALL_TOOLS` surface, and every executor delegates to the confined `ExecutionEnv`
+    (SC1) — so path confinement is enforced twice and **SC1–SC3 land first**. `proc.exec`, if
+    exposed, is a narrowing layer and never the boundary (F4's finding, the same reason a
+    PowerShell allowlist is unsound). **No network capability is minted in the first cut**, so no
+    egress is added.
+    *Gate:* a `security.sec` position (new dependency, new execution surface, its own audit sink).
+    *Proof:* a demo where one escape is denied by the grant predicate and another independently by
+    the environment, so neither layer is load-bearing alone.
+
 ## Sharing publicly
 
 22. **Publish durig as its own repository — no releases yet.** The operator wants

@@ -64,6 +64,16 @@ bash alone (F2). Everything below is narrowing *on top of* SC1 — never instead
 Still worth doing — it shrinks the surface and keeps the author/verifier asymmetry legible — but it
 is a **second layer**. The guarantee comes from SC2.
 
+**SC2 resolved as a snapshot, not a read-only shell (agreed 2026-10-11).** The position asked the
+verifier's environment to deny "any `exec` that writes", which is **undecidable for a shell** —
+and is why its own strongest option was a separate low-privilege OS account. Instead the verifier's
+environment is rooted at a **disposable snapshot** of the author's worktree: writes land in the
+throwaway copy and are discarded, so the verifier **cannot alter the artifact it is verifying**,
+and it can still run the tests, which is its whole job. Read-only by filesystem semantics rather
+than by OS identity, and implementable in `confine.mjs` alone. The stronger option — a distinct OS
+account or an AppContainer/job-object sandbox — remains an operator call if the snapshot is judged
+insufficient.
+
 ### `prepare` is the second layer
 
 Good for the env allowlist and a legible refusal. Never the control (F4).
@@ -103,31 +113,29 @@ process tree; hence SC3 requires structural refusal in `exec`.
 **H4 — `defer_work` is the exit for a blocked seat.** A refused command should be parkable on a
 question rather than guessed at; name it in the tool descriptions.
 
-## codemode — deferred, and the operator's proposal recorded
+## codemode — planned separately: see `docs/CODEMODE.md`
 
-The operator proposed making **codemode the preferred front door** — model sees only `codemode`,
-its scripts get a narrow tool set, bash demoted to opt-in — on the reasoning that a sandboxed
-script is safer than a shell, plus a cheap decision model reviewing a script's requested
-permissions.
+The operator decided (2026-10-11) to develop **codemode with JavaScript** for seats, and asked
+for the plan to review the runtime library and cooperate with it. That plan is
+`docs/CODEMODE.md`; this section keeps only what the boundary depends on.
 
-**The security answer was "do not bundle into M3"**, and the reason is sharper than my earlier
-one: a QuickJS sandbox does **not** add filesystem confinement for the tools it hosts — those are
-host-provided and **keep their reach**. So the sandbox does not deliver the property the proposal
-relied on; the premise that it "has permissions for any observable side-effects" is not how it
-works (there is no permission model — the surface is exactly the registered tool list). It also
-adds a dependency and an execution surface.
+**The security verdict stands.** A QuickJS sandbox does **not** add filesystem confinement for
+the tools it hosts — they are host-provided and keep their reach — so the sandbox does not
+deliver the property the "preferred front door" idea rested on, and there is **no permission
+model** to configure (the surface is exactly the registered tool list). Its one genuine net gain
+is that a nested result never enters the transcript (spec §8.3–8.4), which reduces
+model-visible untrusted input — and that gain only exists **after SC1 does**.
 
-It is not dismissed: `security.sec` records a **genuine net gain** — a nested call's result never
-enters the transcript (spec §8.3–8.4), so it *reduces model-visible untrusted input* — but that
-gain is only meaningful **after SC1 exists**. Hence: assess codemode separately, against the SC1
-baseline, not bundled.
+**What that means for the boundary:** codemode is a *narrower front door*, not a replacement for
+confinement. It holds only if the capability set minted per script is narrower than the shell,
+and the executors delegate to the confined `ExecutionEnv` (SC1) either way. So SC1–SC3 land
+**first**, and codemode's script tools are built on top of them.
 
-**The decision-model reviewer** belongs in the same deferred assessment, with the boundary this
-project already records twice: a probabilistic filter in the enforcement path is **not a control**
-(D-ENV-AUTH; the scribe ruling that persona prose is not a control). Its usable shape is a
-**deny-only tripwire** — it may narrow, never widen, at `ToolHooks.beforeTool` (`types.ts:745-752`,
-which sees nested calls via `ToolCall.parent` and where "the first `block` wins"), fail-closed, and
-falsifiable by a canary. Static policy (SC1–SC3) stays the control.
+**The decision-model reviewer** stays a **deny-only tripwire**, never the control — a
+probabilistic filter in the enforcement path is not a control (D-ENV-AUTH; the scribe ruling).
+Its usable shape: narrow-never-widen at `ToolHooks.beforeTool` (`types.ts:745-752`, which sees
+nested calls via `ToolCall.parent` and where "the first `block` wins"), fail-closed, and
+falsifiable by a canary.
 
 ## Acceptance — the demo that proves the conditions
 
