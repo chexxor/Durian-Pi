@@ -353,3 +353,48 @@ TUI, project-trust prompts — cannot load here: durig does not depend on
 `pi-coding-agent` and has no such surface (D21). And a declared path is trusted
 code, running in-process with the harness API, whose tools inherit this process's
 OS permissions; there is no auto-discovery, deliberately.
+
+## Review recipe — say what was live when a reading was made (item 19, 2026-10-11)
+
+`metrics` can see that a measure moved; provenance is what lets you say *why*.
+The reading now carries the revision it ran at, whether the tree was dirty, and
+the active extension set.
+
+```powershell
+cd durig
+node cli.mjs metrics rigs/tutor-pi.rig.json --human    # first line is provenance
+node cli.mjs metrics rigs/tutor-pi.rig.json            # provenance in the JSON contract
+node demo/provenance.test.mjs
+```
+
+Expected first line, clean tree:
+
+```
+config  rev fb0007e clean · active: durig.router
+```
+
+and with an extension declared:
+
+```
+config  rev fb0007e clean · active: durig.router, ./extensions/timing.ts
+```
+
+Live proof that it is not vacuous: run it with uncommitted changes and the same
+line reads
+`config  rev fb0007e DIRTY (uncommitted changes: this revision does not describe what ran) · active: durig.router`.
+That is the condition `security.sec` asked for — a dirty tree is a flag, because
+the revision then does not describe what ran.
+
+Two design details worth knowing before you read a value:
+
+- **No repository reads as `unknown`, never `clean`.** A published or vendored copy
+  of durig is absence of evidence; reporting it as clean would be a claim nothing
+  supports.
+- **The status is scoped to durig's own subtree** (`git status -- .`). durig usually
+  lives inside a larger repository: unscoped, this repository reported 92 changed
+  paths while durig's own subtree had 0. Untracked files count as dirty (a new
+  extension module is part of the active set and absent from the revision);
+  gitignored ones do not, so rig databases never make a reading dirty.
+
+Nothing is stored and nothing is written — git is already the append-only change
+log, which is why the security position chose this over a store write path.

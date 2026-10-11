@@ -55,6 +55,7 @@ import { optimizeInstruction } from "./src/optimizer.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
 import { computeMetrics, formatMetrics } from "./src/metrics.mjs";
+import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat } from "./src/chatview.mjs";
 import { auditRig, formatCheck } from "./src/checkup.mjs";
@@ -870,6 +871,15 @@ async function cmdMetrics(rigFile, human, windowArg) {
       fail(`cannot read rig file ${rigFile}: ${err?.message ?? err}`);
     }
   }
+  // What was live when these numbers were made (ROADMAP item 19). Gathered per
+  // invocation and only reported, because persisting it would be the write path
+  // D24 and the security position both declined to add. `active` is the declared
+  // set, not the loaded one: loading a module executes it, and a read-only query
+  // must not run arbitrary code to describe what it would have run.
+  const provenance = {
+    ...gitProvenance(process.cwd()),
+    active: activeSet(parseExtensionList(CFG.DURIG_EXTENSIONS ?? "")),
+  };
   const storage = await openNodeSqliteStorage(DB_PATH);
   try {
     const health = await readRigHealth(storage, DB_PATH, maxSeats(), {
@@ -879,9 +889,10 @@ async function cmdMetrics(rigFile, human, windowArg) {
     noteEmptyRig(health.seats.length);
     if (human) {
       process.stdout.write(
-        `${formatMetrics(health.metrics, {
-          color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR,
-        })}\n`,
+        `${formatProvenance(provenance, provenance.active)}\n` +
+          `${formatMetrics(health.metrics, {
+            color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR,
+          })}\n`,
       );
       if (!spec) {
         console.error(
@@ -890,7 +901,14 @@ async function cmdMetrics(rigFile, human, windowArg) {
       }
       return;
     }
-    out({ ok: true, command: "metrics", db: DB_PATH, rig: rigFile ?? null, ...health.metrics });
+    out({
+      ok: true,
+      command: "metrics",
+      db: DB_PATH,
+      rig: rigFile ?? null,
+      provenance,
+      ...health.metrics,
+    });
   } finally {
     await storage.close(BACKGROUND_CONTEXT);
   }

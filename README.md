@@ -91,6 +91,19 @@ The rig file is optional but makes the config-derived measure judgeable, since
 the store does not record which model a seat runs. Design, the honesty traps and
 the admission criteria for the ambient tier: `docs/METRICS.md`.
 
+A reading also says **what was live when it was made** — the revision, whether the
+tree was dirty, and the active extension set:
+
+```
+config  rev fb0007e clean · active: durig.router, ./extensions/timing.ts
+```
+
+That is what makes "the config changed and this measure moved" an inference
+rather than a coincidence. A dirty tree is called out rather than hidden, because
+the revision then does not describe what ran, and no repository at all reads as
+`unknown` rather than `clean`. Provenance is only *reported*: git is already the
+append-only change log, so this adds no write path and no stored state.
+
 ## Configuration
 
 | File / env | Purpose |

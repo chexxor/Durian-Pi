@@ -375,6 +375,20 @@ surface. A feature that is off must therefore cost nothing — not "little".
    and **flag a dirty tree**; git authorship is not authentication; and D24's
    prediction record stays. Full position:
    `docs/reviews/security-sec-deferred-three-items.md`.
+   **✅ done (2026-10-11).** `src/provenance.mjs` reads the revision, the dirty
+   flag and the active set; `metrics` reports them in its JSON contract and as one
+   line above the table. Conditions met: the committed active set is reported
+   (builtin `durig.router` first, then the declared `DURIG_EXTENSIONS` paths —
+   paths, not names, because loading a module executes it and a read-only query
+   must not run code to describe what it would have run), and a dirty tree is
+   flagged with why it matters rather than printed as a bare hash. Two things the
+   implementation had to get right that the position did not anticipate: the status
+   must be scoped to `-- .`, because durig normally sits inside a larger repository
+   and an unscoped check reported 92 changed paths where durig's own subtree had 0
+   (a flag that is always true is worse than no flag); and "no repository" reads as
+   `unknown` rather than `clean`, which is the difference between evidence and its
+   absence. `demo/provenance.test.mjs` is the 24th demo and proves the dirty flag
+   moves by `git init`-ing a throwaway repo rather than asserting a stub.
 20. **Caveman as an optional extension — spike first.** `juliusbrussee/caveman`
    is two things: a **skill** (output voice, ~1,160 prompt tokens/request, ~3% 
    median output saving on top of "be concise", much more for `/ultracave`) and a

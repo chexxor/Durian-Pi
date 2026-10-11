@@ -112,6 +112,7 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Cross-process live stream** | `watch` polls storage at 750 ms because SQLite has no cross-process notification | `cli.mjs` `cmdWatch` | `demo/watch.test.mjs` |
 | **Turn-grouped transcript** | `log` groups entries into turns with timestamps and elapse deltas; tool output collapses to one line | `src/chatview.mjs` | `demo/chatlog.test.mjs` |
 | **Drift metrics** | Four measures over data already persisted, each declaring its band, evidence class and blind spot | `src/metrics.mjs`, `cli.mjs` `cmdMetrics` | `demo/metrics.test.mjs` |
+| **Config provenance** | `metrics` reports the revision it ran at, whether the tree was dirty, and the active extension set — so a movement can be attributed to a change | `src/provenance.mjs` | `demo/provenance.test.mjs` |
 
 ### Drift metrics (`metrics`)
 
@@ -141,6 +142,35 @@ the per-seat glyph path excludes rig- and queue-scoped notices explicitly.
 Cost: one scan shared with the watch highlights (0.9–1.4 ms for 14 seats × 24
 entries, against a 750 ms poll). `--window all` widens the scan deliberately.
 Proof: `demo/metrics.test.mjs`.
+
+#### Provenance: what was live when these numbers were made
+
+A movement is only attributable if the reading names the configuration that
+produced it, so `metrics` also reports **the revision it ran at**, **whether the
+tree was dirty**, and **the active extension set** (ROADMAP item 19).
+
+```
+config  rev fb0007e DIRTY (uncommitted changes: this revision does not describe what ran) · active: durig.router
+```
+
+Git is already the append-only change log — a rig is driven by a committed spec —
+so this reads it instead of adding a store write path. `security.sec` preferred
+exactly that, because a write path would add a mutable, untrusted attribution
+surface while git is hash-chained and append-only. Two honesty rules it asked
+for, and both are the load-bearing assertions in the test:
+
+- **A dirty tree is a flag, not a footnote.** The revision then does not describe
+  what ran, so printing the hash alone would imply more than it can support.
+- **No repository is `unknown`, never `clean`.** A published or vendored copy of
+  durig is absence of evidence, not evidence of cleanliness.
+
+Scoping is deliberate: `git status -- .` counts only durig's own subtree, because
+the usual layout has durig inside a larger repository — measured here, an
+unscoped check reported 92 changed paths where durig's own subtree had 0, and a
+flag that is always true is worse than no flag. Untracked files **do** count (a
+new extension module is genuinely part of the active set and genuinely absent
+from the revision); gitignored ones do not, which is why rig databases and
+`node_modules` never make a reading dirty.
 
 ## 7. Auditing a rig (`check`)
 
