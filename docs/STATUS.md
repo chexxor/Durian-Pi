@@ -149,6 +149,12 @@ confirmed rather than taken on trust.
    `gate:spec-review`). Nothing is applied to the live rig yet, so this is a
    go/no-go on the *first* application, not a rollback. Declining is a legitimate
    answer; the dissent is recorded either way.
+   **Sharpened 2026-10-11:** the M3 tools (item 4) are `registry.install(CodingTools)`
+   — read, write, edit and **bash** on this machine. That is arbitrary code
+   execution handed to seats, so the M3 scope ruling is the security-relevant
+   decision it was always going to be, and it wants the same treatment as this item
+   (a `security.sec` position before it lands) rather than being read as "just add
+   tools".
 
 ## Known gaps worth remembering
 

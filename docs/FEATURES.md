@@ -228,6 +228,10 @@ Pointers, not promises — each is an item in `docs/ROADMAP.md`.
 - **An extension registry with named profiles** — one artifact, `core` / `recommended`
   / custom as configuration, each extension declaring its cost and blind spot
   (item 18), which is also what makes an extension toggle measurable (item 19)
+- **Load extensions from config** — an `extensions` list of module paths, installed
+  into the registry durig already owns; this loads pi-**durable** extensions, not
+  pi-coding-agent plugins, which need an interactive agent durig does not have
+  (item 23)
 - **Caveman as an optional extension** — a skill and a proxy for token reduction;
   a spike must first settle whether either applies to an in-process harness, and
   a `security.sec` position precedes its telemetry default (item 20)

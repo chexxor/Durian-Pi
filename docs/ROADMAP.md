@@ -224,6 +224,15 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    tool format its own output — a proxy cannot be inserted later if there are
    twenty places to insert it. It is also where role scoping becomes real: not
    every seat gets corpus access, which is the same axis caveman needs.
+   → *Grounded 2026-10-11:* this is much cheaper than this item assumed. Pi Durable
+   ships the tools as an extension — `registry.install(CodingTools)` gives read,
+   write, edit and bash — plus a Node execution environment
+   (`@earendil-works/pi-durable/env/node`, passed to `Harness.open` as `env`). So
+   "seats can read and run things" is two lines of wiring, not a subsystem. What
+   stays hard is what the item is really about: the **scope ruling** — bash on the
+   operator's machine is arbitrary code execution, which is exactly why loop #5 is
+   open and why a `security.sec` position comes first — and the **evidence** half,
+   `complete_work` carrying something a verifier can re-check.
 5. **A deferral verb.** Today a seat that needs a decision can only emit prose.
    Add a way to raise a question that blocks the item and hands it to the seat or
    human who can answer — the "reason to defer to humans" the swarm paper leaves
@@ -322,6 +331,15 @@ surface. A feature that is off must therefore cost nothing — not "little".
    support both, and must be able to enable one **per seat role**, or its first
    user forces a redesign. Build the seam so a wrapper can be inserted between
    provider and harness the way `wrapProviderWithSlots` already is.
+   → *Grounded 2026-10-11 (Pi Durable's own account of extensions):* the registry
+   durig installs `Router` into **is** the extension mechanism, so the model this
+   item proposes already exists. Two things it gets for free: a conversation
+   "selects which extensions and tools it uses, and stores only their names", so
+   per-seat-role selection is `configure(tx, convId, { tools: { remove: [...] } })`
+   rather than a new concept; and installing under an existing name **replaces it in
+   one step**, which is both the live-reload story and how a version gets pinned.
+   So the missing piece is only the **loader** (23) — each extension still declares
+   its cost, default and blind spot as this item says.
 19. **Extension provenance, so a measure can be attributed to a change.** Today the
    answer is **no**: entries carry a model and a timestamp and nothing about which
    extensions were active, so `metrics` can see that `step-repetition` moved but
@@ -344,10 +362,13 @@ surface. A feature that is off must therefore cost nothing — not "little".
    median output saving on top of "be concise", much more for `/ultracave`) and a
    **proxy** (compressing what the agent *reads*: logs, CSV, YAML, JSON, test
    output; vendor-reported 33.2% session input-token reduction). Three things to
-   settle before any of it ships: (i) **it may not apply to us** — durig does not
-   run the `pi` CLI, it drives pi-durable in-process, so `caveman pi` cannot wrap
-   it and only the middleware path could; that is exactly a timeboxed spike, not
-   an assumption. (ii) **Telemetry is on by default** (`caveman telemetry off`,
+   settle before any of it ships: (i) **the shape it has to arrive in** — caveman
+   ships as a pi coding-agent plugin, and durig hosts neither that plugin form nor
+   the `pi` CLI (see 23), so its two halves must be re-expressed on native seams:
+   the *skill* is a prompt `section` and the *proxy* is a `wrapTool` decorating tool
+   results. Both are ordinary pi-durable concepts, so "does it even apply to us" is
+   answered — what remains is the spike confirming the seams carry it, not a
+   question of whether a plugin loads. (ii) **Telemetry is on by default** (`caveman telemetry off`,
    `DO_NOT_TRACK=1`), which is network egress, so a `security.sec` position comes
    **before** adoption under our own norms. (iii) **Scope it by seat role**: terse
    is fine for seat-to-seat coordination and wrong for a textbook tutor's
@@ -376,6 +397,23 @@ surface. A feature that is off must therefore cost nothing — not "little".
    WORKFLOWS.md` naming 3–5 workflows — who, trigger, the loop that must never
    break, what "done" means, which capability it needs — after which
    "recommended" is derivable instead of taste.
+
+23. **Load extensions from config — the "support pi extensions" item.** Small,
+    now that 18 is grounded. `durig.config.json` (and the rig spec) gains an
+    `extensions` list of module paths; `openHarness` imports each and installs it
+    into the registry it already builds for `Router`. A pi-durable extension is a
+    plain module exporting `defineExtension({name, sections, tools, hooks, tasks,
+    wraps})`, and Node 24 type-strips TypeScript, so there is no build step and no
+    new runtime dependency. Per-seat selection rides `configure`'s tool add/remove
+    rather than a new concept.
+
+    **Deliberately not the same thing as a pi *coding-agent* extension.** Those
+    target the interactive agent — slash commands, a TUI, project-trust prompts —
+    and durig neither depends on `pi-coding-agent` nor has such a surface (D21
+    keeps the CLI non-interactive). So the loader loads *this* kind, and a
+    coding-agent plugin is not portable to it. That distinction is the fact behind
+    item 20's split verdict, and getting it wrong is how someone spends a week
+    trying to load caveman's plugin as-is.
 
 ## Sharing publicly
 

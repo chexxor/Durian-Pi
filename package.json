@@ -2,6 +2,7 @@
   "name": "durig",
   "version": "0.1.0",
   "description": "Minimal OpenRig-replacement rig layer on pi-durable: seats, durable cross-seat queue, router tools",
+  "license": "MIT",
   "type": "module",
   "main": "src/rig.mjs",
   "scripts": {

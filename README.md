@@ -184,3 +184,13 @@ reverts to the released packages.
 
 The tool-result field is returned as **both** `content` (1.1.0) and `output`
 (current main) by `toolText()` in `src/rig.mjs`, so durig is correct on either.
+
+## Licence
+
+MIT — see `LICENSE`. The same licence Pi and Pi Durable are under, since durig is
+built on them.
+
+Vendored third-party code keeps its own notice:
+`src/providers/LICENSE.pi-deepinfra` (MIT, © 2026 puetsua) covers the DeepInfra
+catalogue copied into `src/providers/deepinfra-models.ts`; the source, version and
+the exact local changes are recorded in `src/providers/PROVENANCE.md`.
