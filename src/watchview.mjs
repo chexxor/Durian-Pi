@@ -28,6 +28,10 @@ export function seatActivity(seat, health, highlight) {
 	const items = health?.queueItems ?? [];
 	const claimed = items.find((it) => it.to === seat.name && it.status === "claimed");
 	const queued = items.find((it) => it.to === seat.name && it.status === "queued");
+	// Work the seat explicitly parked on an unanswered question. Rendered
+	// separately because it is not idleness and not work in progress: the seat is
+	// held by a question, and the row should say which one.
+	const deferred = items.find((it) => it.to === seat.name && it.status === "deferred");
 	const routed = items.find((it) => it.from === seat.name && it.status !== "done");
 	// Rig- and queue-scoped notices carry a null seat, so they are excluded
 	// EXPLICITLY rather than by the field being absent - otherwise a rig-wide
@@ -53,6 +57,12 @@ export function seatActivity(seat, health, highlight) {
 		glyph = "●";
 		tone = "green";
 		state = "working";
+	} else if (deferred) {
+		// After `claimed`: a seat that is also working on something else should
+		// read as working, not as parked.
+		glyph = "◌";
+		tone = "yellow";
+		state = "parked";
 	} else if (notices.length) {
 		glyph = "!";
 		tone = "yellow";
@@ -61,6 +71,8 @@ export function seatActivity(seat, health, highlight) {
 
 	let focus;
 	if (claimed) focus = `working on #${claimed.id} ${claimed.subject}`;
+	else if (deferred)
+		focus = `parked on #${deferred.id} waiting on ${deferred.deferredTo ?? "an answer"}`;
 	else if (queued) focus = `has #${queued.id} queued: ${queued.subject}`;
 	else if (routed) focus = `sent #${routed.id}: ${routed.subject}`;
 	else if (highlight?.toolName) focus = `last action: ${highlight.toolName}`;
@@ -109,7 +121,11 @@ export function formatSnapshot({ db, health, highlights = {}, seq = 1, width = 1
 		lines.push(paint("dim", `      ↳ ${quote}`));
 	}
 
-	const counts = { queued: 0, claimed: 0, done: 0 };
+	// A parked item is counted, not just listed in the notice line: a deferred item
+	// that appears in none of these totals makes the footer read "0 queued, 0
+	// claimed, 0 done" while work sits parked, which looks like an idle rig.
+	// Shown only when non-zero so the footer stays stable for rigs that never defer.
+	const counts = { queued: 0, claimed: 0, deferred: 0, done: 0 };
 	for (const item of health.queueItems ?? []) {
 		if (counts[item.status] !== undefined) counts[item.status] += 1;
 	}
@@ -119,6 +135,7 @@ export function formatSnapshot({ db, health, highlights = {}, seq = 1, width = 1
 		paint(
 			"dim",
 			`queue ${counts.queued} queued · ${counts.claimed} claimed · ${counts.done} done` +
+				(counts.deferred > 0 ? ` · ${counts.deferred} deferred` : "") +
 				`  |  attention: ${attention.length ? attention.join(", ") : "none"}`,
 		),
 	);

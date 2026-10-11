@@ -248,6 +248,30 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    Add a way to raise a question that blocks the item and hands it to the seat or
    human who can answer — the "reason to defer to humans" the swarm paper leaves
    open, and the mechanism our own pair-review and Ledger norms currently assume.
+   **✅ done (2026-10-11).** Two tools, because one would have been a trap:
+   `defer_work(itemId, question[, to])` parks a claimed item (`status: deferred`,
+   recording the question and who is expected to answer) and `resume_work(itemId)`
+   takes it back. Deferring without a resume path would turn "I need an answer"
+   into "this item is silently dead", which is worse than the prose it replaces.
+   The two destinations are genuinely different, so they are different code paths:
+   omitting `to` defers to the **human operator** and enqueues nothing, because
+   the operator's channel is `status`/`watch` attention, not the queue (a machine
+   must not launder a human decision into seat-to-seat traffic); passing `to` asks
+   a seat and **enqueues the question as real work**, which is also why it goes
+   through `assertSendAllowed` — a deferral is a send, and a seat must not use it
+   to reach a seat its org edges forbid. The visible half is
+   `deferred_awaiting_answer` on the attention channel, which is the actual gap:
+   before this, a blocked seat's reason was prose, and prose appears nowhere an
+   operator looks. `demo/defer.test.mjs` is the 25th demo; it drives the real
+   Router tools on a harness with scripted faux responses, so the tool wrappers,
+   the commit boundaries and the edge gate are all exercised rather than
+   re-implemented. Falsified before being trusted: with the edge gate disabled by
+   hand it fails with "a seat with no edge cannot use a deferral to reach a seat it
+   may not send to". *Found while building it:* the watch footer counted only
+   queued/claimed/done, so a parked item appeared in none of its totals and the
+   footer read "0 queued, 0 claimed, 0 done" while work sat parked — an idle-looking
+   rig holding unfinished business. Counted now (and only when non-zero, so the
+   footer is unchanged for rigs that never defer).
 6. **Termination and attempt semantics.** No deadline, no attempt cap, no
    repetition detection: the two most common MAST design failures (step repetition
    15.7%, unaware of termination 12.4%) are both unaddressed. Subsumes the
@@ -295,7 +319,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     use rather than through a test written to look for them. The first session
     routed a real backlog item `pm` → `worker` and found six things, including a
     **wrong documented fact** (F4: entries do carry `usage`), and the running log is
-    `docs/DOGFOOD.md`. Seats have four tools and no file access, so dogfood
+    `docs/DOGFOOD.md`. Seats have six tools and no file access, so dogfood
     coordination now and expect grounded content work to stay blocked on item 4.
     Findings F1–F3 are small fixes worth taking early, precisely because use found
     them and the suite did not.

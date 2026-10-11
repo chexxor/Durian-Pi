@@ -3,12 +3,15 @@
 // `durig status` (one-shot) and the `durig watch` stream, and so the
 // proving test can drive it without a live model.
 //
-// Blocked means one of two things an operator must hear about:
+// Blocked means one of three things an operator must hear about:
 // - "idle_with_queued_work": work is addressed to the seat but nothing of
 //   theirs is in flight and their last run settled — nobody will pick it
 //   up until something wakes the seat.
 // - "last_run_failed": the seat's most recent run ended unanswered (crash,
 //   abort, provider error). The reason travels with the notice.
+// - "deferred_awaiting_answer": the seat parked an item on a question and is
+//   waiting for the answer. A deferred item is a fact, not an inference from
+//   idleness, so it is reported even when the run also failed.
 
 /**
  * The reason a run failed, plus the CAUSE when the entry knows it.
@@ -50,6 +53,7 @@ export function summarizeError(errorMessage) {
 /**
  * @param {Array<{name:string, conversationId:number|string, role?:string}>} seats
  * @param {Array<{to:string, status:string}>} queueItems
+ *        items may also carry `deferredTo` (which seat, or "human", an item is parked on)
  * @param {Map<number|string, {status:string, reason?:string}|undefined>} latestByConv
  *        latest submission record per conversation id (any status)
  * @returns {Array<{scope:string, seat:string, kind:string, detail:string}>}
@@ -65,6 +69,22 @@ export function computeAttention(seats, queueItems, latestByConv, errorByConv = 
 	const notices = [];
 	for (const seat of seats) {
 		const queued = queueItems.filter((it) => it.to === seat.name && it.status === "queued");
+		// Work explicitly parked on an unanswered question. This is the visible half
+		// of deferring to a human (MAST: no reason to defer to humans, 6.8%): before
+		// it, a seat that needed a decision could only say so in prose, and prose
+		// appears nowhere an operator looks. Reported before the failed-run check
+		// and without `continue`, because a parked item is a durable fact rather
+		// than an inference from idleness - a failed run does not unpark it.
+		const deferred = queueItems.filter((it) => it.to === seat.name && it.status === "deferred");
+		if (deferred.length > 0) {
+			const held = deferred[0];
+			notices.push({
+				scope: "seat",
+				seat: seat.name,
+				kind: "deferred_awaiting_answer",
+				detail: `${deferred.length} item(s) parked on a question; #${held.id} waiting on ${held.deferredTo ?? "an answer"}`,
+			});
+		}
 		const latest = latestByConv.get(seat.conversationId);
 		if (latest?.status === "unanswered") {
 			notices.push({

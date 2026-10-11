@@ -18,8 +18,9 @@ Section 11 is planned, section 12 is deliberately absent.
 | **Capability tags** | Seats advertise tags; `send_work` can require one, and the refusal names what the target actually has | `src/rig.mjs` `assertSendAllowed` | `demo/offline-v2.mjs` |
 | **Constitution** | One text injected into every seat's system prompt, read **per request** so a single edit re-arms all seats | `src/rig.mjs` `Constitution`, `section("durig-constitution", …)` | `demo/constitution.test.mjs`, `demo/offline-v2.mjs` |
 | **Persona compilation** | `role`/`goal`/`backstory`/`constraints`/`capabilities`/`instructions` compile into one prompt | `src/rig.mjs` `compilePersona` | `demo/refresh.test.mjs` |
-| **Work queue** | Cross-seat queue with an append-only transition trail and DONE notices back to the sender | `src/rig.mjs` `RigQueue`, `enqueueItem` | `demo/race.test.mjs`, `demo/persistence.test.mjs` |
-| **Router tools** | The four tools every seat gets: `send_work`, `claim_work`, `complete_work`, `peek_queue` | `src/rig.mjs` `Router` | `demo/offline.mjs`, `demo/repeat-call.test.mjs` |
+| **Work queue** | Cross-seat queue with an append-only transition trail and DONE notices back to the sender; `queued → claimed → done`, plus `claimed ↔ deferred` | `src/rig.mjs` `RigQueue`, `enqueueItem` | `demo/race.test.mjs`, `demo/persistence.test.mjs` |
+| **Router tools** | The six tools every seat gets: `send_work`, `claim_work`, `complete_work`, `defer_work`, `resume_work`, `peek_queue` | `src/rig.mjs` `Router` | `demo/offline.mjs`, `demo/repeat-call.test.mjs`, `demo/defer.test.mjs` |
+| **Deferral** | A seat parks a claimed item on a question instead of guessing or going quiet: to the human operator (visible in `status`/`watch`, nothing enqueued) or to a seat (edge-gated, enqueued as real work), then `resume_work` takes it back. Not terminal — an item parked with no way back would be worse than the prose it replaces | `src/rig.mjs` `defer_work`/`resume_work`, `src/attention.mjs` `deferred_awaiting_answer` | `demo/defer.test.mjs`, `demo/watchview.test.mjs` |
 | **Protocol primer** | A short protocol section appended to every seat prompt, so a migrated persona knows the tools exist | `cli.mjs` `buildSeatPrompt` | `demo/refresh.test.mjs` |
 
 The rig defines **four pi-durable documents** — `durig.seats`, `durig.edges`,
@@ -262,13 +263,13 @@ an unresolvable one is warned about rather than dropped in silence;
 The entire check surface is the demos plus `node --check`; there is no build or
 lint step.
 
-**23 offline tests** — one runnable proof per guarantee, each exit 0 on success:
+**25 offline tests** — one runnable proof per guarantee, each exit 0 on success:
 
 ```
-blocked · chatlog · check · cli · config · constitution · converter · eval
-extensions · metrics · optimizer · persistence · race · refresh · repeat-call
-seatmodel · singleflight · starter · streamcli · streamview · syncpi · watch
-watchview
+blocked · chatlog · check · cli · config · constitution · converter · defer
+eval · extensions · metrics · optimizer · persistence · provenance · race
+refresh · repeat-call · seatmodel · singleflight · starter · streamcli
+streamview · syncpi · watch · watchview
 ```
 
 **4 runnable demo programs:**

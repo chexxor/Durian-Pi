@@ -184,7 +184,8 @@ work-request bodies only. Effectiveness benchmark (D14) is the arbiter.
 
 **Finding:** `cli.mjs` opened its harness with a bare `createRegistry()`, which holds
 only built-in tasks. The Router extension (send_work/claim_work/complete_work/
-peek_queue) was never installed, so NO seat conversation ever had the durig tools.
+defer_work/resume_work/peek_queue) was never installed, so NO seat conversation ever
+had the durig tools.
 Faux demos passed anyway because they install Router themselves and script tool
 calls — masking the gap. Real models (Qwen3-32B, GLM-5.3-Flash) therefore narrated
 work as chat text instead of routing it.
@@ -727,3 +728,41 @@ measurement and the human views until item 4 lands.
 **Evidence:** `docs/DOGFOOD.md`, findings F1–F6. F6 is deliberately positive — a
 regression marker for the end-to-end path that worked (decompose → route → queue →
 attention → measure).
+
+## D32 — Deferring is reversible, and the human is not a queue (2026-10-11)
+
+**Decision:** a seat that cannot proceed parks the item it holds on a question
+rather than guessing or going quiet. Two tools: `defer_work(itemId, question[, to])`
+sets `status: deferred` and records the question and the expected answerer;
+`resume_work(itemId)` puts it back to `claimed`. Omitting `to` defers to the human
+operator and **enqueues nothing**; passing `to` asks a seat and enqueues the
+question as real work, gated by the same org edges and capability rules as
+`send_work`.
+
+**Why deferring must be reversible.** An item parked with no way back is a silent
+death, which is strictly worse than the prose it replaces — at least prose can be
+read. So `claimed ↔ deferred` is a cycle, not a one-way exit, and `complete_work`
+still refuses a deferred item (you must resume first) rather than letting a seat
+finish work it said it could not do.
+
+**Why the human is not a queue.** There is no seat named `human`, and creating one
+would be a lie: the operator does not read the queue, they read `status` and
+`watch`. So a human deferral produces an attention notice
+(`deferred_awaiting_answer`) and no queue item, and `DEFERRED_TO_HUMAN` is a
+distinct value from a seat name so a renderer can say *a person* is the blocker.
+This is the concrete form of a rule worth keeping: never let a machine launder a
+human decision into seat-to-seat traffic, where it would look answered.
+
+**Why a deferral is treated as a send.** The obvious shortcut — route the question
+without consulting the edge gate — would hand every seat an unlogged channel to
+any other seat, which is exactly what restrictive-by-default edges exist to
+prevent. It is checked *before* any state changes, so a forbidden question cannot
+leave an item half-parked.
+
+**Reported, not inferred.** MAST puts "no reason to defer to humans" at 6.8%.
+The notice is the mitigation: a parked item is durable state, so it survives the
+run that created it and is visible without anyone asking.
+
+**Evidence:** `demo/defer.test.mjs` (parks, is visible, resumes, asks a seat, is
+edge-gated, refuses a foreign item), `demo/watchview.test.mjs` (parked rendering
+and the footer count). Falsified by disabling the edge gate and watching it fail.

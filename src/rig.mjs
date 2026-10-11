@@ -68,7 +68,13 @@ export async function assertSendAllowed(tx, from, to, requires) {
 
 /**
  * Cross-seat work queue.
- status flow: queued -> claimed -> done.
+ *
+ * Status flow: queued -> claimed -> done, plus claimed <-> deferred: a seat that
+ * cannot proceed without an answer parks the item it holds (`defer_work`) and
+ * takes it back once the answer arrives (`resume_work`). Deferring is not a third
+ * terminal state on purpose - an item parked forever with no way back would be
+ * worse than the prose it replaces.
+ *
  * Transitions are appended (audit trail), never mutated in place.
  */
 export const RigQueue = defineDoc({
@@ -77,6 +83,16 @@ export const RigQueue = defineDoc({
 	scope: "session",
 	initial: () => ({ nextId: 1, items: [] }),
 });
+
+/**
+ * The `deferredTo` value meaning "parked on a question for the human operator".
+ *
+ * Deliberately not a seat: the operator's channel is `status`/`watch` attention,
+ * not the queue, so nothing is enqueued for this. Naming it explicitly is what
+ * lets the attention layer say a seat is waiting on a person rather than
+ * laundering the question back into seat-to-seat traffic.
+ */
+export const DEFERRED_TO_HUMAN = "human";
 
 /** Resolve a seat name to its conversation id; throws on unknown seat. */
 export async function seatId(tx, name) {
@@ -264,7 +280,92 @@ const Router = defineExtension({
 				return toolText(out);
 			},
 		}),
-defineTool({
+		defineTool({
+			name: "defer_work",
+			description:
+				"Stop and ask instead of guessing, or instead of silently stopping. Parks one of your claimed items on a question. Omit `to` to defer to the human operator, who sees it in `status`; pass `to` to also ask another seat. The item stays yours - call resume_work once you have the answer.",
+			parameters: Type.Object({
+				itemId: Type.Number(),
+				question: Type.String({
+					description: "the specific question that blocks the item",
+				}),
+				to: Type.Optional(Type.String({
+					description:
+						"seat to ask as well as deferring; omit to defer to the human operator",
+				})),
+			}),
+			replay: "safe",
+			execute: async (args, api, context) => {
+				try {
+					const me = await mySeatName(api, context);
+					const out = await api.commit(async (tx) => {
+						const queue = await tx.doc(RigQueue);
+						const item = queue.items.find((it) => it.id === args.itemId);
+						if (!item) return `unknown item #${args.itemId}`;
+						if (item.to !== me)
+							return `item #${args.itemId} is addressed to ${item.to}, not you`;
+						if (item.status !== "claimed")
+							return `item #${args.itemId} is not claimed by you (status=${item.status})`;
+						// Asking a seat IS a send, so the org-edge and capability gates apply
+						// to it exactly as they do to send_work. Checked BEFORE any state
+						// changes, so a forbidden question cannot leave the item half-parked.
+						if (args.to) await assertSendAllowed(tx, me, args.to);
+						item.status = "deferred";
+						item.question = args.question;
+						item.deferredTo = args.to ?? DEFERRED_TO_HUMAN;
+						item.transitions.push({
+							at: new Date().toISOString(),
+							event: "deferred",
+							by: me,
+							to: item.deferredTo,
+						});
+						if (args.to) {
+							await enqueueItem(
+								tx,
+								me,
+								args.to,
+								`QUESTION #${item.id}: ${item.subject}`,
+								args.question,
+							);
+						}
+						return args.to
+							? `item #${item.id} deferred to ${args.to}; that seat has the question. Resume your own item with resume_work(${item.id}) once it answers.`
+							: `item #${item.id} deferred to the human operator, who sees it on the status line. Resume it with resume_work(${item.id}) once you have the answer.`;
+					}, context);
+					return toolText(out);
+				} catch (err) {
+					return toolText(`DEFER_WORK_ERROR: ${err && err.stack ? err.stack : String(err)}`);
+				}
+			},
+		}),
+		defineTool({
+			name: "resume_work",
+			description:
+				"Take back one of your deferred items once the answer has arrived, so complete_work can finish it.",
+			parameters: Type.Object({ itemId: Type.Number() }),
+			replay: "safe",
+			execute: async (args, api, context) => {
+				const me = await mySeatName(api, context);
+				const out = await api.commit(async (tx) => {
+					const queue = await tx.doc(RigQueue);
+					const item = queue.items.find((it) => it.id === args.itemId);
+					if (!item) return `unknown item #${args.itemId}`;
+					if (item.to !== me)
+						return `item #${args.itemId} is addressed to ${item.to}, not you`;
+					if (item.status !== "deferred")
+						return `item #${args.itemId} is not deferred (status=${item.status})`;
+					item.status = "claimed";
+					item.transitions.push({
+						at: new Date().toISOString(),
+						event: "resumed",
+						by: me,
+					});
+					return `item #${item.id} resumed; finish it with complete_work or revise it and defer again.`;
+				}, context);
+				return toolText(out);
+			},
+		}),
+		defineTool({
 			name: "peek_queue",
 			description:
 				"List every queue item (any status). Use for oversight and debugging.",

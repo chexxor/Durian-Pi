@@ -481,3 +481,57 @@ from before this fix. They are in the OS temp directory, which is designed for t
 and cleaned by the OS, and removing them would mean a recursive delete on an
 absolute temp path — which this project bans. Delete them by hand if they bother
 you.
+
+## Review recipe — a seat can stop and ask (item 5, 2026-10-11)
+
+Before this, a seat that could not proceed had two options: invent an answer or go
+quiet. Both are invisible. MAST puts "no reason to defer to humans" at 6.8%, and the
+mechanism durig already assumed — pair review, the Compromise Ledger — was doing it
+in prose.
+
+The feature is two halves and both are asserted: the item is **parked** (durable
+state, so it cannot be forgotten) and the wait is **visible** (an attention notice,
+because prose appears nowhere an operator looks).
+
+```powershell
+cd durig
+node demo/defer.test.mjs     # drives the real tools on a harness, no database
+node demo/watchview.test.mjs # parked rendering + the footer count
+```
+
+Nothing to run by hand here: the test uses `MemoryStorage` and scripted faux
+responses, so it needs no database, no key and no temp directory.
+
+What the two destinations mean, because they are genuinely different paths:
+
+- **Omit `to` — defer to the human operator.** Nothing is enqueued. The operator's
+  channel is `status`/`watch` attention, and `DEFERRED_TO_HUMAN` is a distinct value
+  from a seat name so the notice can say *a person* is the blocker. A machine must
+  not launder a human decision into seat-to-seat traffic, where it would look
+  answered.
+- **Pass `to` — ask a seat.** The question is enqueued as real work, so it goes
+  through the same org-edge and capability gate as `send_work`. A deferral is a
+  send; the shortcut would hand every seat an unlogged channel to any other seat.
+
+`resume_work(itemId)` takes the item back, and `complete_work` still refuses a
+deferred item, so a seat cannot finish work it said it could not do. Deferring is a
+cycle (`claimed ↔ deferred`), never a one-way exit — an item parked with no way back
+would be a silent death, which is worse than the prose it replaces.
+
+Watch it in the dashboard: a seat holding a parked item shows `◌` and
+`parked on #1 waiting on human`, and the footer counts it:
+
+```
+queue 0 queued · 0 claimed · 0 done · 1 deferred  |  attention: worker deferred_awaiting_answer
+```
+
+That footer line is a fix found while building this. It counted only
+queued/claimed/done, so a parked item appeared in none of its totals and the footer
+read "0 queued, 0 claimed, 0 done" while work sat parked — an idle-looking rig
+holding unfinished business. Shown only when non-zero, so rigs that never defer see
+the footer they always saw.
+
+Known scope, stated rather than implied: `queue-ageing` measures **queued** items
+only, so deferring an item clears its ageing signal. The parked item stays visible
+through attention instead. Widening that measure to include parked items is a
+separate decision and is not made here.

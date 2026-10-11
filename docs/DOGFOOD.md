@@ -29,11 +29,12 @@ a shell argument is command substitution — see F1.
 
 ## What it cannot do yet
 
-Seats have **four tools and no file access**: `send_work`, `claim_work`,
-`complete_work`, `peek_queue` (`src/rig.mjs`). So a seat can *describe* a change,
-*route* it, and *claim* it, but it cannot read the repo, run a test, or write a
-file. That is ROADMAP item 4 (M3), and it is why a job like "read seven seats'
-transcripts and write a position document" still has to run on OpenRig.
+Seats have **six tools and no file access**: `send_work`, `claim_work`,
+`complete_work`, `defer_work`, `resume_work`, `peek_queue` (`src/rig.mjs`). So a
+seat can *describe* a change, *route* it, *claim* it, and *park* it on a question,
+but it cannot read the repo, run a test, or write a file. That is ROADMAP item 4
+(M3), and it is why a job like "read seven seats' transcripts and write a position
+document" still has to run on OpenRig.
 
 Dogfood what exists — coordination, routing, queue semantics, attention,
 measurement, and the human views — and expect grounded content work to be

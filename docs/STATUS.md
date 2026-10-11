@@ -88,14 +88,14 @@ Everything below was verified against the real store, not asserted from intent.
 
 ## Test surface
 
-23 offline demo tests, each run as `node demo/<name>.test.mjs` (exit 0 = pass):
+25 offline demo tests, each run as `node demo/<name>.test.mjs` (exit 0 = pass):
 `cli`, `chatlog`, `watchview`, `streamcli`, `streamview`, `syncpi`, `config`,
 `refresh`, `seatmodel`, `eval`, `optimizer`, `singleflight`, `blocked`, `watch`,
 `race`, `persistence`, `repeat-call`, `constitution`, `check`, `converter`,
-`metrics`, `provenance`, `extensions`, `starter`.
+`metrics`, `provenance`, `extensions`, `starter`, `defer`.
 
 They are the regression gate for the pi-main link as well as for feature work
-(D17). All 24 pass on the current tree.
+(D17). All 25 pass on the current tree.
 
 ## Research review (2026-10-10)
 
@@ -158,8 +158,9 @@ confirmed rather than taken on trust.
 
 ## Known gaps worth remembering
 
-- **Seats have no working tools.** `src/rig.mjs` registers exactly four:
-  `send_work`, `claim_work`, `complete_work`, `peek_queue`. A live worker seat
+- **Seats have no working tools.** `src/rig.mjs` registers exactly six:
+  `send_work`, `claim_work`, `complete_work`, `defer_work`, `resume_work`,
+  `peek_queue`. A live worker seat
   reported itself blocked and refused to claim a completed deliverable, which is
   the P1 honesty rule working correctly on top of a missing capability.
 - **Nothing in the rig verifies anything.** A grep for `verif|escalat|deadline|`

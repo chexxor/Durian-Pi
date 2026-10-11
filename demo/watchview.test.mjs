@@ -78,6 +78,28 @@ assert.equal(
 	seatActivity(seat, healthWith([item({ to: "pm" })], [{ scope: "seat", seat: "pm", kind: "idle_with_queued_work" }])).state,
 	"waiting",
 );
+
+// A parked item is its own state, not generic waiting: the seat is held by a
+// question and the row has to name the blocker.
+const parked = seatActivity(
+	seat,
+	healthWith([item({ to: "pm", status: "deferred", deferredTo: "human" })], [
+		{ scope: "seat", seat: "pm", kind: "deferred_awaiting_answer", detail: "#1 waiting on human" },
+	]),
+);
+assert.equal(parked.state, "parked", "a seat holding a deferred item is parked, not merely waiting");
+assert.match(parked.focus, /waiting on human/, "and the row names what it is waiting for");
+// Working beats parked: a seat also on another item is working, not parked.
+assert.equal(
+	seatActivity(
+		seat,
+		healthWith([
+			item({ id: 1, to: "pm", status: "deferred", deferredTo: "human" }),
+			item({ id: 2, to: "pm", status: "claimed" }),
+		]),
+	).state,
+	"working",
+);
 assert.equal(
 	seatActivity(seat, healthWith([], [{ scope: "seat", seat: "pm", kind: "last_run_failed" }])).state,
 	"failed",
@@ -122,6 +144,24 @@ assert.match(snapshot, /pm\s+program manager/);
 assert.match(snapshot, /Queueing that for worker now/, "the seat's words are shown");
 assert.match(snapshot, /queue 1 queued · 0 claimed · 0 done/);
 assert.match(snapshot, /attention: pm idle_with_queued_work/);
+
+// A parked item must appear in the footer totals. Before this it was counted in
+// none of them, so the footer read "0 queued, 0 claimed, 0 done" while work sat
+// parked - an idle-looking rig holding unfinished business.
+const parkedSnapshot = formatSnapshot({
+	db: "./rig.sqlite",
+	health: healthWith([item({ to: "pm", status: "deferred", deferredTo: "human" })], [
+		{ scope: "seat", seat: "pm", kind: "deferred_awaiting_answer", detail: "#1 waiting on human" },
+	]),
+	width: 90,
+	at: "12:00:00",
+});
+assert.match(
+	parkedSnapshot,
+	/queue 0 queued · 0 claimed · 0 done · 1 deferred/,
+	"a parked item is counted, or the footer reads as an idle rig",
+);
+assert.match(parkedSnapshot, /◌/, "and its row carries the parked glyph");
 assert.ok(!snapshot.includes("\x1b["), "no colour unless asked for");
 assert.match(formatSnapshot({ db: "x", health: healthWith([]), highlights: {}, color: true }).includes("\x1b[") ? "y" : "n", /^y$/);
 
