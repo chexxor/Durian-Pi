@@ -29,7 +29,12 @@ export function seatActivity(seat, health, highlight) {
 	const claimed = items.find((it) => it.to === seat.name && it.status === "claimed");
 	const queued = items.find((it) => it.to === seat.name && it.status === "queued");
 	const routed = items.find((it) => it.from === seat.name && it.status !== "done");
-	const notices = (health?.attention ?? []).filter((a) => a.seat === seat.name);
+	// Rig- and queue-scoped notices carry a null seat, so they are excluded
+	// EXPLICITLY rather than by the field being absent - otherwise a rig-wide
+	// notice lands on whichever seat row happens to match.
+	const notices = (health?.attention ?? []).filter(
+		(a) => a.scope === "seat" && a.seat === seat.name,
+	);
 	const failed = notices.find((a) => a.kind === "last_run_failed");
 	const generating = notices.find((a) => a.kind === "generation_in_flight");
 
@@ -108,7 +113,7 @@ export function formatSnapshot({ db, health, highlights = {}, seq = 1, width = 1
 	for (const item of health.queueItems ?? []) {
 		if (counts[item.status] !== undefined) counts[item.status] += 1;
 	}
-	const attention = (health.attention ?? []).map((a) => `${a.seat} ${a.kind}`);
+	const attention = (health.attention ?? []).map((a) => `${a.seat ?? a.scope} ${a.kind}`);
 	lines.push(rule);
 	lines.push(
 		paint(

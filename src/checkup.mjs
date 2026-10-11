@@ -74,7 +74,10 @@ function firstLine(text, limit = 96) {
   return line.length > limit ? `${line.slice(0, limit - 1)}…` : line;
 }
 
-function seatsAreVerifier(seat) {
+/** A seat counts as a verifier when its name or role says so. Exported because
+ * the config-derived metrics measure needs the same judgement `check`'s
+ * no-verifier-seat rule makes, and two definitions would drift. */
+export function seatsAreVerifier(seat) {
   const haystack = `${seat.name ?? ""} ${seat.role ?? ""}`.toLowerCase();
   return VERIFIER_TERMS.some((term) => haystack.includes(term));
 }

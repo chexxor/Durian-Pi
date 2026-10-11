@@ -52,8 +52,8 @@ import {
 } from "./src/genlock.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
-import { readSeatHighlights } from "./src/rigstory.mjs";
-import { extractEntryText } from "./src/rigstory.mjs";
+import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
+import { computeMetrics, formatMetrics } from "./src/metrics.mjs";
 import { formatChat } from "./src/chatview.mjs";
 import { auditRig, formatCheck } from "./src/checkup.mjs";
 import { createWatchScreen, formatSnapshot } from "./src/watchview.mjs";
@@ -97,8 +97,15 @@ function noteEmptyRig(seatCount) {
 // scripted responses drain per process, and each CLI call is one process.
 let FAUX = null;
 
+// Leading-underscore keys are internals (a scan shared between two views) and
+// are never part of the contract, so one replacer keeps them out of every JSON
+// path rather than each caller remembering to strip them.
+function dropInternals(key, value) {
+  return key.startsWith("_") ? undefined : value;
+}
+
 function out(p) {
-  console.log(JSON.stringify(p, null, 2));
+  console.log(JSON.stringify(p, dropInternals, 2));
 }
 
 function fail(error) {
@@ -577,7 +584,7 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
 // the latest submission per seat conversation. Reads committed state
 // straight from sqlite (same reasoning as `watch`: session replication is
 // in-process only, and a viewer must not resume scheduling).
-async function readRigHealth(storage, dbPath, slots) {
+async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryLimit = SCAN_LIMIT } = {}) {
   const seatsRec = await storage.findDocument(
     { kind: Seats.definition.kind, scope: { kind: "session" } },
     "current",
@@ -613,21 +620,43 @@ async function readRigHealth(storage, dbPath, slots) {
   // GPU is busy (healthy waiting), a dead holder means a wedged generation.
   const slotNotices = Number.isFinite(slots)
     ? readGenerationSlots(dbPath, slots).map((g) => ({
+        scope: "seat",
         seat: g.generatingSeat ?? `slot-${g.slotIndex}`,
         kind: g.name,
         detail:
           g.name === "generation_in_flight" ? `generating since ${g.since}` : g.detail,
       }))
     : [];
+  // One bounded page per seat, shared: highlights and metrics both read these
+  // entries, so a render makes a single pass over the transcripts. Measured at
+  // 0.9-1.4 ms for 14 seats x 24 entries against a 750 ms poll (METRICS.md).
+  const pages = await readSeatPages(storage, BACKGROUND_CONTEXT, seats, entryLimit);
+  const metrics = computeMetrics({
+    pages,
+    queueItems: queueVal.items ?? [],
+    seats,
+    modelsBySeat,
+    nowMs: Date.now(),
+    // Say the window was cut only when a page actually hit the limit, so
+    // "bounded" is a fact about this reading rather than a standing claim.
+    bounded: Object.values(pages).some((items) => items.length >= entryLimit),
+  });
   return {
     seats,
     queueItems: queueVal.items ?? [],
     // Maps serialize as {} in JSON; flatten so watch/status output stays legible.
     latestByConv: Object.fromEntries(latestByConv),
+    metrics,
     attention: [
       ...computeAttention(seats, queueVal.items ?? [], latestByConv),
       ...slotNotices,
+      // Metric notices join the attention channel instead of claiming a screen
+      // of their own: same slot, same rendering, and signal only when a measure
+      // has actually moved (METRICS.md, "the move").
+      ...metrics.notices,
     ],
+    // Internal: watch derives highlights from these instead of re-scanning.
+    _pages: pages,
   };
 }
 // watch [--once] [--json|--human]: stream rig state - an initial snapshot,
@@ -667,10 +696,14 @@ async function cmdWatch(once, human) {
   const render = async (health) => {
     seq += 1;
     if (!human) {
-      console.log(JSON.stringify({ ok: true, command: "watch", db: DB_PATH, seq, ...health }));
+      console.log(JSON.stringify({ ok: true, command: "watch", db: DB_PATH, seq, ...health }, dropInternals));
       return;
     }
-    const highlights = await readSeatHighlights(storage, BACKGROUND_CONTEXT, health.seats);
+    // Derived from the scan readRigHealth already did, so the human view costs
+    // no second pass. See src/rigstory.mjs on why neither is cached.
+    const highlights = Object.fromEntries(
+      Object.entries(health._pages ?? {}).map(([name, items]) => [name, summarizeEntries(items)]),
+    );
     screen.render(
       formatSnapshot({
         db: DB_PATH,
@@ -738,6 +771,80 @@ async function cmdStatus() {
     const health = await readRigHealth(storage, DB_PATH, maxSeats());
     noteEmptyRig(health.seats.length);
     out({ ok: true, command: "status", db: DB_PATH, ...health });
+    // `status` is the one-shot surface, so this is where the metrics command is
+    // discovered - and only when a measure has actually moved, because a
+    // pointer that prints every time stops being read.
+    const outOfBand = health.metrics.measures.filter((m) => m.state === "warn").length;
+    if (outOfBand > 0) {
+      console.error(`note: ${outOfBand} measure(s) out of band - see: node cli.mjs metrics`);
+    }
+  } finally {
+    await storage.close(BACKGROUND_CONTEXT);
+  }
+}
+
+/** Every seat's resolved model, from the spec. One definition so `check`'s
+ * single-model rule and the config-derived metrics measure cannot disagree. */
+function resolveModelsBySeat(spec) {
+  const { models, providerId } = buildModels();
+  const modelsBySeat = {};
+  for (const seat of spec?.seats ?? []) {
+    const r = resolveSeatModel(models, seat.model, providerId, MODEL_ID);
+    modelsBySeat[seat.name] = `${r.provider}/${r.modelId}`;
+  }
+  return modelsBySeat;
+}
+
+/** --window N turns, or `all`. The default is the ambient scan bound, because a
+ * bounded window is what keeps the reading cheap; widening it is deliberate. */
+function parseWindow(arg) {
+  if (arg === "all") return 100000;
+  if (arg === undefined || arg === "") return SCAN_LIMIT;
+  const n = Number(arg);
+  if (!Number.isFinite(n) || n < 1) {
+    fail(`--window must be a positive turn count or "all", got: ${arg}`);
+  }
+  return Math.floor(n);
+}
+
+// metrics [rig.json] [--window N|all] [--human|--json]: the deliberate view. One
+// table, each measure carrying its band, baseline, evidence class and blind
+// spot. Colour is a convenience - every state is legible as a word.
+//
+// The rig file is how the config-derived measures become judgeable, because the
+// store does not record which model a seat runs. Without it they report
+// "unjudgeable" rather than guessing, which is the same reason `check` reads
+// both sides.
+async function cmdMetrics(rigFile, human, windowArg) {
+  let spec = null;
+  if (rigFile) {
+    try {
+      spec = JSON.parse(await readFile(rigFile, "utf8"));
+    } catch (err) {
+      fail(`cannot read rig file ${rigFile}: ${err?.message ?? err}`);
+    }
+  }
+  const storage = await openNodeSqliteStorage(DB_PATH);
+  try {
+    const health = await readRigHealth(storage, DB_PATH, maxSeats(), {
+      modelsBySeat: spec ? resolveModelsBySeat(spec) : {},
+      entryLimit: parseWindow(windowArg),
+    });
+    noteEmptyRig(health.seats.length);
+    if (human) {
+      process.stdout.write(
+        `${formatMetrics(health.metrics, {
+          color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR,
+        })}\n`,
+      );
+      if (!spec) {
+        console.error(
+          "note: no rig file given, so config-derived measures are unjudgeable - pass one: node cli.mjs metrics <rig.json>",
+        );
+      }
+      return;
+    }
+    out({ ok: true, command: "metrics", db: DB_PATH, rig: rigFile ?? null, ...health.metrics });
   } finally {
     await storage.close(BACKGROUND_CONTEXT);
   }
@@ -780,12 +887,7 @@ async function cmdCheck(rigFile, human) {
         ? await readFile(spec.constitution, "utf8")
         : undefined;
   // Resolve seat models through the same helper `up` uses (src/seatmodel.mjs).
-  const { models, providerId } = buildModels();
-  const modelsBySeat = {};
-  for (const seat of spec.seats ?? []) {
-    const r = resolveSeatModel(models, seat.model, providerId, MODEL_ID);
-    modelsBySeat[seat.name] = `${r.provider}/${r.modelId}`;
-  }
+  const modelsBySeat = resolveModelsBySeat(spec);
   // An absent database is a fact worth reporting, not an error: check still
   // audits the file, and the store-dependent rules are skipped with their why.
   let stored;
@@ -849,6 +951,7 @@ usages:
                           a seat's conversation (--follow = live, --full = whole tool output)
   node cli.mjs watch [--once] [--json|--human]   follow rig state (human on a terminal)
   node cli.mjs status           per-seat health + attention notices
+  node cli.mjs metrics [rig.json] [--window N|all]   drift measures, with bands and blind spots
   node cli.mjs check <rig.json> [--human]   audit a rig against the research gaps
   node cli.mjs optimize <text>  rewrite a draft instruction via the optimizer
   node cli.mjs config          show effective settings and their source
@@ -870,6 +973,14 @@ try {
     const human = rest.includes("--human") || (Boolean(process.stdout.isTTY) && !rest.includes("--json"));
     await cmdWatch(rest.includes("--once"), human);
   } else if (cmd === "status") await cmdStatus();
+  else if (cmd === "metrics") {
+    // Same precedence as watch/check: an explicit flag wins, otherwise a
+    // terminal gets the readable table and a pipe keeps the JSON contract (D19).
+    const human = rest.includes("--human") || (Boolean(process.stdout.isTTY) && !rest.includes("--json"));
+    const rigFile = rest.find((a) => !a.startsWith("--"));
+    const at = rest.indexOf("--window");
+    await cmdMetrics(rigFile, human, at >= 0 ? rest[at + 1] : undefined);
+  }
   else if (cmd === "check") {
     const human = rest.includes("--human") || (Boolean(process.stdout.isTTY) && !rest.includes("--json"));
     await cmdCheck(rest.find((a) => !a.startsWith("--")), human);

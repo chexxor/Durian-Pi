@@ -15,7 +15,14 @@
  * @param {Array<{to:string, status:string}>} queueItems
  * @param {Map<number|string, {status:string, reason?:string}|undefined>} latestByConv
  *        latest submission record per conversation id (any status)
- * @returns {Array<{seat:string, kind:string, detail:string}>}
+ * @returns {Array<{scope:string, seat:string, kind:string, detail:string}>}
+ *
+ * Every notice carries a `scope`, added alongside `seat` rather than replacing
+ * it (additive, so an existing reader keying on `seat` keeps working). Seat
+ * notices are `scope:"seat"`; the metrics layer contributes rig- and
+ * queue-scoped notices with a null seat, and a per-seat renderer must exclude
+ * those EXPLICITLY - filtering on the seat field alone would put a rig-wide
+ * notice on whichever seat row happened to match.
  */
 export function computeAttention(seats, queueItems, latestByConv) {
 	const notices = [];
@@ -24,6 +31,7 @@ export function computeAttention(seats, queueItems, latestByConv) {
 		const latest = latestByConv.get(seat.conversationId);
 		if (latest?.status === "unanswered") {
 			notices.push({
+				scope: "seat",
 				seat: seat.name,
 				kind: "last_run_failed",
 				detail: String(latest.reason ?? "unknown reason"),
@@ -34,6 +42,7 @@ export function computeAttention(seats, queueItems, latestByConv) {
 			latest?.status === "queued" || latest?.status === "placed";
 		if (queued.length > 0 && !inFlight) {
 			notices.push({
+				scope: "seat",
 				seat: seat.name,
 				kind: "idle_with_queued_work",
 				detail: `${queued.length} queued item(s), last submission ${

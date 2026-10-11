@@ -9,7 +9,7 @@
 // always come from near the top of the transcript. The bound is generous
 // because a turn that only calls tools produces several entries with no prose,
 // and "what it last said" should look past those to the previous message.
-const SCAN_LIMIT = 24;
+export const SCAN_LIMIT = 24;
 
 // An entry stores its provider message under `model`, and the content shape
 // differs by kind: user and system carry a plain string, assistant and tool
@@ -56,15 +56,28 @@ export function summarizeEntries(entries) {
 // 2 -> 5 while the submission id stayed put. A bounded scan per render is cheap
 // and cannot go stale.
 export async function readSeatHighlights(storage, context, seats) {
+	const pages = await readSeatPages(storage, context, seats);
 	const highlights = {};
+	for (const [name, items] of Object.entries(pages)) {
+		highlights[name] = summarizeEntries(items);
+	}
+	return highlights;
+}
+
+/** One bounded page per seat, newest first. This is THE scan: highlights and
+ * metrics are both derived from these entries, so a render pays for one pass
+ * over the transcripts rather than one per consumer. Measured at 0.9-1.4 ms for
+ * 14 seats x 24 entries, against a 750 ms watch poll (docs/METRICS.md). */
+export async function readSeatPages(storage, context, seats, limit = SCAN_LIMIT) {
+	const pages = {};
 	for (const seat of seats) {
 		const page = await storage.scanEntries(
 			{ conversationId: seat.conversationId, order: "descending" },
-			SCAN_LIMIT,
+			limit,
 			undefined,
 			context,
 		);
-		highlights[seat.name] = summarizeEntries(page.items);
+		pages[seat.name] = page.items;
 	}
-	return highlights;
+	return pages;
 }

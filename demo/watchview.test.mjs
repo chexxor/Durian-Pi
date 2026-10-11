@@ -75,17 +75,25 @@ const healthWith = (queueItems, attention = []) => ({ seats: [seat], queueItems,
 assert.equal(seatActivity(seat, healthWith([]), {}).state, "idle");
 assert.equal(seatActivity(seat, healthWith([item({ to: "pm", status: "claimed" })]), {}).state, "working");
 assert.equal(
-	seatActivity(seat, healthWith([item({ to: "pm" })], [{ seat: "pm", kind: "idle_with_queued_work" }])).state,
+	seatActivity(seat, healthWith([item({ to: "pm" })], [{ scope: "seat", seat: "pm", kind: "idle_with_queued_work" }])).state,
 	"waiting",
 );
 assert.equal(
-	seatActivity(seat, healthWith([], [{ seat: "pm", kind: "last_run_failed" }])).state,
+	seatActivity(seat, healthWith([], [{ scope: "seat", seat: "pm", kind: "last_run_failed" }])).state,
 	"failed",
 	"a failed run outranks an idle reading",
 );
 assert.equal(
-	seatActivity(seat, healthWith([], [{ seat: "pm", kind: "generation_in_flight" }])).state,
+	seatActivity(seat, healthWith([], [{ scope: "seat", seat: "pm", kind: "generation_in_flight" }])).state,
 	"generating",
+);
+// A rig- or queue-scoped notice carries a null seat and must never land on a
+// seat row. Filtering on the seat field alone would be enough today only by
+// accident, so the exclusion is asserted rather than assumed.
+assert.equal(
+	seatActivity(seat, healthWith([], [{ scope: "rig", seat: null, kind: "step-repetition" }])).state,
+	"idle",
+	"a rig-scoped notice must not leak onto a seat row",
 );
 
 // A seat that routed work is not "awaiting" it - the verb must match who holds
@@ -103,7 +111,7 @@ console.log("--- snapshot layout ---");
 
 const snapshot = formatSnapshot({
 	db: "./rig.sqlite",
-	health: healthWith([item({ to: "pm" })], [{ seat: "pm", kind: "idle_with_queued_work" }]),
+	health: healthWith([item({ to: "pm" })], [{ scope: "seat", seat: "pm", kind: "idle_with_queued_work" }]),
 	highlights: { pm: { says: "Queueing that for worker now", toolName: "send_work" } },
 	seq: 2,
 	width: 90,

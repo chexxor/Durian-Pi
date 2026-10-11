@@ -84,7 +84,7 @@ try {
 	// The seeded worker has queued work and has never run: that IS a blocked
 	// seat, and the stream must say so from the very first snapshot.
 	assert.deepEqual(snap.attention,
-		[{ seat: "worker", kind: "idle_with_queued_work", detail: snap.attention[0]?.detail }],
+		[{ scope: "seat", seat: "worker", kind: "idle_with_queued_work", detail: snap.attention[0]?.detail }],
 		"seeded idle seat must surface as attention from snapshot one");
 
 	// While the watcher holds its handle, a SECOND process writes to the same
@@ -105,7 +105,7 @@ try {
 		"live update for Second item",
 	);
 	assert.ok(update.queueItems.some((i) => i.subject === "First item"), "earlier items persist in streamed state");
-	assert.deepEqual(update.attention, [{ seat: "worker", kind: "idle_with_queued_work", detail: update.attention[0]?.detail }],
+	assert.deepEqual(update.attention, [{ scope: "seat", seat: "worker", kind: "idle_with_queued_work", detail: update.attention[0]?.detail }],
 		"a queued item nobody claims must surface as attention in the stream");
 
 	child.kill(); // SIGTERM on win32 maps to terminate; watcher has no cleanup debt
