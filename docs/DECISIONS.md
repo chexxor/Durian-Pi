@@ -555,3 +555,59 @@ block while their `rig.yaml` pods do, so a pod added with `rig expand` is not
 delivered its pod SOP and differs from the same pod built by a full rig. The new
 `docs-pod.fragment.yaml` includes its startup block; the earlier three should get
 theirs.
+
+## D28 — Measurement ships, and what a reading refuses to claim (2026-10-11)
+
+**Context:** D24 decided the research concerns are *measured*; `docs/METRICS.md`
+designed how. Both ended with open questions, so the design note was rewritten as
+a decision brief (options, a recommendation, and the evidence behind each), the
+operator agreed to all five, and this records what was built from them.
+
+**Decision (the split between `check` and `metrics`).** `check` is a pre-flight
+linter: you run it because you were already about to change something. Metrics are
+**ambient** — their value is noticing something without having asked. So metrics
+join `computeAttention` rather than inventing a surface, and the doc's admission
+test decides who may be ambient: actionable, rare when abnormal, and *not already
+visible*. `shared-reviewer-model` fails the third test, because it is already a
+`check` rule, so it appears in `metrics` only.
+
+**Decision (four measures, not three).** The ruling put the queue scope in the
+first cut, and a scope with no measure is not shipped — so `queue-ageing` joins
+`step-repetition` (direct), `unverified-completions` (proxy) and
+`shared-reviewer-model` (config-derived). All three of D24's evidence classes are
+exercised, which was the point of the original three.
+
+**Decision (evidence-class naming: D24 wins).** `METRICS.md` called
+unverified-completions "code-gated baseline"; D24 names the classes `direct` /
+`proxy` / `config-derived`. They are not competing taxonomies — "code-gated"
+describes where that measure's *baseline* comes from, not a fourth class. The
+implementation follows the decision record (`proxy`), and the code-gated fact
+survives as the written reason that this proxy can never read clean on a rig whose
+seats have no read tool. Recorded because a design note silently redefining a
+decision's vocabulary is how the two drift apart.
+
+**Decision (what a reading must refuse to claim).** This is the load-bearing part,
+because every alternative produces a false all-clear: no tool calls is `null`, not
+"0% repetition"; no completions is `null`, not "0% unverified"; a page that starts
+mid-turn drops its leading partial turn rather than calling a completion
+unverified because its retrieval fell off the scan edge; no baseline reads
+`unknown`, never `ok`; a zero baseline cannot silence movement off zero (k × 0 is
+0, so the relative rule would never fire); a config-derived value draws no trend
+arrow; and a window that was bounded, or a rig with no new data, says so — absence
+of activity is not improvement.
+
+**Decision (deferrals, each with its reason, none half-built).** Cross-render
+hysteresis needs either stored state or a series derived from the window, and the
+threshold values were the ruled deliverable — so the values ship and the
+statefulness does not. The one-shot deadband a zero baseline needs IS implemented,
+because it is derivable in-window. The small tracked change-log is a **new write
+path**, so it stays owed to a `security.sec` position (D24, D27); the consequence
+is that config-derived measures have no trend, which the renderer enforces rather
+than fakes. Acknowledgement stays deferred, as ruled.
+
+**Evidence:** `src/metrics.mjs` (pure), `metrics` in `cli.mjs`, notices through
+`computeAttention` with `scope` added alongside `seat`; `demo/metrics.test.mjs` is
+the 21st demo. Measured cost of the shared scan: 0.9–1.4 ms for 14 seats × 24
+entries against `watch`'s 750 ms poll, so the ambient tier adds arithmetic and no
+I/O. Live reading is in `docs/MVP.md`, "measure drift instead of listing
+concerns".

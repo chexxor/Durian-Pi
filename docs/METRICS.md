@@ -1,11 +1,20 @@
 # Metrics — design note: measurement and UX
 
-Status: **design note only; nothing is built.** The policy that motivates this is
-D24 (what gets measured, evidence classes, the review loop). This file holds the
-design that follows from it — how measures reach a human, where they live, and the
-traps that would make them useless. Roadmap: near-term 2. Details deliberately left
-open are in the last section, which is now a decision brief: each question carries
-its options, a recommendation, and the evidence behind it.
+Status: **first cut built (2026-10-11)** — the `metrics` command, four measures,
+and metric notices riding the attention channel; `demo/metrics.test.mjs` is the
+21st demo. What is live and what was deferred *with reasons* is under "Built"
+below; the design that produced it is the rest of this file. The policy that
+motivates it is D24 (what gets measured, evidence classes, the review loop).
+Roadmap: near-term 2.
+
+**Evidence-class naming, reconciled.** D24 names three classes: `direct`,
+`proxy`, `config-derived`. This file described unverified-completions as
+"code-gated baseline", which is a statement about where that measure's *baseline*
+comes from — what the tool surface allows — not a fourth class. The
+implementation follows D24: the class is `proxy`, and "code-gated" survives as
+the reason that proxy can never read clean on a rig whose seats have no read
+tool. Nothing else in this file is reworded to match; the drift was in one label,
+and the decision record wins.
 
 ## The problem metrics have that `check` does not
 
@@ -188,6 +197,46 @@ command with `--window`; the small tracked change log. Suggested first measures 
 step-repetition (direct), unverified-completions (code-gated baseline), and
 shared-reviewer-model (config-derived) — chosen so all three evidence classes are
 exercised by the first cut.
+
+### Built (2026-10-11)
+
+Shipped, against the five rulings:
+
+- **`src/metrics.mjs`**, pure: entries, queue items and resolved models in;
+  values carrying their band, baseline, direction, evidence class and blind spot
+  out. Every surface renders this one computation, so a number cannot disagree
+  with itself between views.
+- **Four measures**, not three: the queue scope was ruled in, and a scope with no
+  measure is not shipped — hence `queue-ageing` alongside `step-repetition`,
+  `unverified-completions` and `shared-reviewer-model`.
+- **`metrics [rig.json] [--window N|all]`**, human on a terminal and JSON on a
+  pipe (D19). The rig file is what makes the config-derived measure judgeable,
+  because the store does not record which model a seat runs; without it the
+  measure reports unjudgeable rather than guessing.
+- **Ambient notices** in `status` and the `watch` footer, riding `computeAttention`
+  rather than a new surface. `readSeatPages` is the single scan, so highlights and
+  metrics come from one pass. `status` prints the `metrics` pointer only when a
+  measure has moved.
+- **`scope` added alongside `seat`** (question 4, additive). The per-seat glyph
+  path excludes rig- and queue-scoped notices **explicitly**, and the exclusion is
+  asserted rather than assumed.
+- **Relative bands with named defaults** (question 5): enter 2x, exit 1x, per
+  measure, with an absolute band where a baseline makes no sense (ageing).
+
+Not built, deliberately:
+
+- **Cross-render hysteresis.** The deadband is what stops a notice flapping, and
+  computing it across renders needs either stored state or a series derived from
+  the window. The *threshold values* ship; the statefulness does not, because the
+  alternative was inventing persistence to support a detail. The one-shot deadband
+  that a zero baseline needs IS implemented, since it is derivable in-window.
+- **The small tracked change-log**, per the ruling: it is a new write path, so it
+  is owed a `security.sec` position before it ships (D24, D27). Consequence:
+  config-derived measures have no trend, which the renderer already enforces.
+- **Acknowledgement**, as ruled — it needs a write path, so "since" plus
+  hysteresis stays the declared boundary until evidence says otherwise.
+- **Edge/pair scope.** `shared-reviewer-model` reports at rig scope; naming the
+  specific pair stays `check`'s finding, because a config fact is not a trend.
 
 ## Open questions — decision brief (settle when work starts)
 

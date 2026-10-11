@@ -1,12 +1,13 @@
 # durig — roadmap
 
 Ordered by operator value; each item names its motivating finding.
-State as of **2026-10-11**: items 0, 1 and 1a are done; the docs pod (`scribe`)
-was added to the rig on top of 1a. Work continues at item 2. `docs/STATUS.md` is
-the handoff record; `docs/DECISIONS.md` holds the reasoning, and D23 records how
-this roadmap was re-ordered by the research. Gap-table handlings name their item
-rather than numbering it: the numbers had already gone stale once when item 0 and
-1 were added.
+State as of **2026-10-11**: items 0, 1, 1a are done and item 2's measures and
+surface are built (its *drill* is not — see 2 below); the docs pod (`scribe`) was
+added to the rig on top of 1a. Work continues at item 2's drill, then item 3.
+`docs/STATUS.md` is the handoff record; `docs/DECISIONS.md` holds the reasoning,
+and D23 records how this roadmap was re-ordered by the research. Gap-table
+handlings name their item rather than numbering it: the numbers had already gone
+stale once when item 0 and 1 were added.
 
 ## Milestones
 
@@ -168,6 +169,21 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    *before* the change, and a measure that arrives after it can only rationalise.
    `docs/METRICS.md`'s first cut already includes `shared-reviewer-model`, the
    measure item 3 turns on.
+   **✅ done (2026-10-11): the measures and the surface.** `src/metrics.mjs` is the
+   pure scorecard; `metrics [rig.json] [--window N|all]` is the deliberate view;
+   notices ride the existing attention channel in `status`/`watch` with `scope`
+   added alongside `seat`, and only when a measure has moved. Four measures, so the
+   queue scope the ruling added is real rather than declared. `demo/metrics.test.mjs`
+   is the 21st demo, and most of it asserts what a reading *refuses* to claim
+   (D28). One scan shared with the watch highlights: 0.9–1.4 ms for 14 seats × 24
+   entries against a 750 ms poll.
+   **Still open: the drill.** The item's other half is a fixed task set that makes
+   two configurations comparable — D24 labels a passive window **confounded**,
+   because it cannot separate "the rig got worse" from "the work changed". Until
+   the drill exists, `metrics` is honest but only correlational, and item 3's
+   before/after comparison is confounded by construction. Deliberately not
+   skipped: it needs a task set hard enough to move the measures, which is a
+   content decision, not a code one.
 3. **Verifier model diversity.** All 14 seats resolve to one model while per-seat
    models are already supported (`resolveSeatModel`), so a bias is systemic rather
    than isolated (Anthropic swarm). Give the verifier roles (`qa`, `qa2`) a

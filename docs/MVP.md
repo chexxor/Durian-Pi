@@ -194,9 +194,73 @@ node cli.mjs check rigs/tutor-pi.rig.json           # JSON contract; exit 1 on e
 node demo/check.test.mjs                            # every rule + the CLI, offline
 ```
 
-Live proof: against the live tutor-pi store it reports `unreachable-seat` for
-`ux`, `sec` and `dev` — the converter never reads OpenRig's rig-level `edges:`
-list, so three seats cannot initiate a send (D26) — and `single-model-rig` for
-all 13 seats, which is ROADMAP item 3's motivating finding. The
-`constitution-not-applied` rule is the regression it was built from: that same
+Live proof: against the live tutor-pi store it reports `single-model-rig` for all
+14 seats, which is ROADMAP item 3's motivating finding. It used to report
+`unreachable-seat` for `ux`, `sec` and `dev` as well - the converter never read
+OpenRig's rig-level `edges:` list, so three seats could not initiate a send (D26)
+- and that finding going clean is what confirmed the converter fix.
+The `constitution-not-applied` rule is the regression it was built from: that same
 mismatch is now a finding with the exact command instead of a silent no-op.
+
+## Review recipe — measure drift instead of listing concerns (D24, 2026-10-11)
+
+`node cli.mjs metrics <rig.json>` answers "is this rig getting worse?" from data
+the store already holds — every message, every tool call with its arguments, and
+every queue transition — so it is a read-only query, not a new instrumentation
+surface. No telemetry, no egress, no table, no write path.
+
+Four measures ship, chosen so all three of D24's evidence classes are exercised by
+the first cut:
+
+| measure | class | reads |
+|---|---|---|
+| `step-repetition` | direct | a tool call repeating one the seat made within its last 3 calls |
+| `unverified-completions` | proxy | `complete_work` with no retrieval call in the same turn |
+| `queue-ageing` | direct | minutes since the oldest queued item last changed state |
+| `shared-reviewer-model` | config-derived | a verifier seat sharing an author's model |
+
+```powershell
+cd durig
+node cli.mjs metrics rigs/tutor-pi.rig.json --human        # the deliberate table
+node cli.mjs metrics rigs/tutor-pi.rig.json                # JSON contract
+node cli.mjs metrics rigs/tutor-pi.rig.json --window all   # widen past the scan bound
+node cli.mjs status                                        # the ambient pointer, if anything moved
+node demo/metrics.test.mjs                                 # every measure + honesty state, offline
+```
+
+**What the reading refuses to claim** is the part worth reviewing, because it is
+the part that would otherwise become a false all-clear:
+
+- no tool calls is `null`, not "0% repetition"; no completions is `null`, not
+  "0% unverified" (`no data` is a state, not a pass);
+- a page that starts mid-turn drops its leading partial turn, so a completion
+  near the scan edge is not called unverified because its retrieval fell off it;
+- no baseline reads `unknown`, never `ok`;
+- a zero baseline cannot silence a climb off zero (`k × 0` is 0, so the relative
+  rule would never fire — movement off zero is itself the signal);
+- a config-derived value draws **no trend arrow**, because a property of the spec
+  is not a rate over time;
+- a bounded window says it was bounded, and a rig with no new data says so —
+  absence of activity is not improvement.
+
+Ambient placement follows the doc's admission test. `watch`'s footer and
+`status` carry a metric notice **only when a measure has moved**, and
+`shared-reviewer-model` never goes ambient because it is already visible as a
+`check` rule. `status` prints the pointer to `metrics` only when something is out
+of band — a pointer that prints every time stops being read.
+
+Live proof: against the live store it reports `queue-ageing` 1508 min (one queued
+item has sat for 25 hours), `shared-reviewer-model` 3/3 (every verifier shares the
+authors' model — item 3's finding, now measurable), `step-repetition` `unknown`
+(no baseline yet) and `unverified-completions` `silent` (no completions), plus the
+honesty line `! no new data for 25h - rates below are still, not necessarily
+good`. `status` then adds `note: 1 measure(s) out of band` on stderr.
+
+Cost: metrics and the watch highlights are derived from ONE per-seat page scan,
+measured at 0.9–1.4 ms for 14 seats × 24 entries against `watch`'s 750 ms poll.
+
+Deferred, with reasons rather than half-built: cross-render hysteresis needs
+either state or a store-derived series, and the small change-log that
+config-derived trends would need is a new write path — owed a `security.sec`
+position before it ships (D24, D27). Pair attribution for a shared reviewer model
+stays `check`'s finding to raise.

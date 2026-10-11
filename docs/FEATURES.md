@@ -43,6 +43,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | `watch` | Follow rig state — human dashboard on a TTY, NDJSON when piped | `--once`, `--human`/`--json` |
 | `status` | One-shot per-seat health plus attention notices | |
 | `check <rig.json>` | Audit a rig file **and** the store against the research gaps | `--human`/`--json` |
+| `metrics [rig.json]` | Drift measures, each with its band, baseline and blind spot | `--window N\|all`, `--human`/`--json` |
 | `optimize <text>` | Rewrite a draft instruction through the optimizer | |
 | `config` | Show the effective settings and which source supplied each | |
 
@@ -108,6 +109,36 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Seat highlights** | Reads each seat's latest words and tool call **storage-direct**, never opening a harness | `src/rigstory.mjs` | `demo/watchview.test.mjs` |
 | **Cross-process live stream** | `watch` polls storage at 750 ms because SQLite has no cross-process notification | `cli.mjs` `cmdWatch` | `demo/watch.test.mjs` |
 | **Turn-grouped transcript** | `log` groups entries into turns with timestamps and elapse deltas; tool output collapses to one line | `src/chatview.mjs` | `demo/chatlog.test.mjs` |
+| **Drift metrics** | Four measures over data already persisted, each declaring its band, evidence class and blind spot | `src/metrics.mjs`, `cli.mjs` `cmdMetrics` | `demo/metrics.test.mjs` |
+
+### Drift metrics (`metrics`)
+
+`check` asks "is this rig structurally wrong?"; `metrics` asks "is it getting
+worse?" — from the messages, tool calls and queue transitions the store already
+holds, so it is a read-only query rather than new instrumentation (D24). It writes
+nothing, opens no socket and adds no table.
+
+| Measure | Evidence class | Reads |
+|---|---|---|
+| `step-repetition` | direct | a tool call repeating one the seat made within its last 3 calls |
+| `unverified-completions` | proxy | `complete_work` with no retrieval call in the same turn |
+| `queue-ageing` | direct | minutes since the oldest queued item last changed state |
+| `shared-reviewer-model` | config-derived | a verifier seat sharing an author's model |
+
+Every value travels with its band, baseline, unit and blind spot, and a reading
+that cannot be judged says so rather than guessing: `no data`, `no baseline yet`,
+`silent`, `unknown`. No tool calls is not "0% repetition"; no completions is not
+"0% unverified".
+
+Notices ride the attention channel above rather than claiming a surface: they
+reach `status` and the `watch` footer **only when a measure has moved**, and only
+for the three admissible measures — `shared-reviewer-model` stays out because it
+is already visible as a `check` rule. Notices carry `scope` alongside `seat`, and
+the per-seat glyph path excludes rig- and queue-scoped notices explicitly.
+
+Cost: one scan shared with the watch highlights (0.9–1.4 ms for 14 seats × 24
+entries, against a 750 ms poll). `--window all` widens the scan deliberately.
+Proof: `demo/metrics.test.mjs`.
 
 ## 7. Auditing a rig (`check`)
 
@@ -164,12 +195,12 @@ an unresolvable one is warned about rather than dropped in silence;
 The entire check surface is the demos plus `node --check`; there is no build or
 lint step.
 
-**19 offline tests** — one runnable proof per guarantee, each exit 0 on success:
+**21 offline tests** — one runnable proof per guarantee, each exit 0 on success:
 
 ```
-blocked · chatlog · check · cli · config · constitution · eval · optimizer
-persistence · race · refresh · repeat-call · seatmodel · singleflight
-streamcli · streamview · syncpi · watch · watchview
+blocked · chatlog · check · cli · config · constitution · converter · eval
+metrics · optimizer · persistence · race · refresh · repeat-call · seatmodel
+singleflight · streamcli · streamview · syncpi · watch · watchview
 ```
 
 **4 runnable demo programs:**
@@ -186,9 +217,9 @@ streamcli · streamview · syncpi · watch · watchview
 Pointers, not promises — each is an item in `docs/ROADMAP.md`.
 
 - **A hardened starter rig** so a new user gets a spec that passes `check` (item 1)
-- **The converter's rig-level edges** (item 1a, D26)
+- **A drill task set** so two configurations are comparable, which is what makes
+  item 3's before/after measurement comparable rather than confounded (item 2)
 - **Verifier model diversity** — give `qa`/`qa2` a different model family (item 3)
-- **`metrics`** — the measurement scorecard and the surface that makes it used (item 2, design in `docs/METRICS.md`)
 - **Real seat tools** — read-only corpus access or edits plus a test runner, and `complete_work` carrying evidence a verifier can re-check (item 4, M3)
 - **A deferral verb** — raise a blocking question and hand it to whoever can answer (item 5)
 - **Termination and attempt semantics** — deadline, attempt cap, repetition detection (item 6)

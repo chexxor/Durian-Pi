@@ -32,6 +32,7 @@ node cli.mjs watch                     # live NDJSON stream of queue + attention
 node cli.mjs watch --once              # one snapshot line, then exit
 node cli.mjs log pm 20                 # tail a seat transcript
 node cli.mjs check rig.v2.json         # audit a rig against the research gaps
+node cli.mjs metrics rig.v2.json       # drift measures (bands, baselines, blind spots)
 
 # real model traffic (needs DEEPINFRA_API_KEY in env)
 node demo/online.mjs
@@ -58,6 +59,32 @@ the operator can close, and never fails a run. Rules: `constitution-missing`,
 declare whether a matched, or an unread database) is reported as **skipped with
 its reason**, never as a pass.
 
+## Measuring drift
+
+`check` is a pre-flight linter: you run it because you were already about to
+change something. Metrics are **ambient** - their value is noticing something
+without having asked - so they ride the attention channel `status` and `watch`
+already use instead of claiming a screen of their own. Nothing is drawn while
+everything is in band, because nine measures permanently on screen stop being
+read by the second day.
+
+```powershell
+node cli.mjs metrics rigs/tutor-pi.rig.json --human      # the deliberate table
+node cli.mjs metrics rigs/tutor-pi.rig.json              # JSON (the contract)
+node cli.mjs metrics rigs/tutor-pi.rig.json --window all # widen past the scan bound
+```
+
+Four measures ship: `step-repetition` (direct), `unverified-completions` (proxy),
+`queue-ageing` (direct) and `shared-reviewer-model` (config-derived). Every value
+travels with its band, baseline, evidence class and **blind spot**, because a
+clean reading whose blind spot is unwritten reads as a pass. A value it cannot
+judge says so rather than guessing: `no baseline yet` and `no data` are states of
+their own, and no tool calls is not "0% repetition".
+
+The rig file is optional but makes the config-derived measure judgeable, since
+the store does not record which model a seat runs. Design, the honesty traps and
+the admission criteria for the ambient tier: `docs/METRICS.md`.
+
 ## Configuration
 
 | File / env | Purpose |
@@ -81,6 +108,7 @@ compat stay single-sourced. Node 24 type-strips that TS module on import.
 src/rig.mjs           core: Seats/Edges/Constitution/RigQueue docs + Router tools
 src/attention.mjs     pure blocked-seat detection (feeds status + watch)
 src/checkup.mjs       pure rig audit rules + the human report (`cli.mjs check`)
+src/metrics.mjs       pure drift measures + the deliberate table (`cli.mjs metrics`)
 src/ansi.mjs          the one ANSI palette the human views share
 src/config.mjs        env > durig.config.json > defaults; `cli.mjs config`
 demo/cli.test.mjs     the CLI contract: every command, exit code, error path
@@ -91,11 +119,12 @@ src/chatview.mjs      render one seat's conversation for a human
 demo/chatlog.test.mjs  chat rendering + --follow streaming
 demo/constitution.test.mjs  a spec's constitution reaches the rig (inline or file)
 demo/check.test.mjs   rig audit rules + the drift regression + CLI exit codes
+demo/metrics.test.mjs  drift measures + what a reading refuses to claim
 demo/converter.test.mjs  OpenRig rig.yaml -> v2 spec: rig-level edges, ids, personas
 docs/STATUS.md        start here: current state, decisions needed, resume facts
 docs/FEATURES.md      what durig does today, where each piece lives, and its proof
 docs/ROADMAP.md       milestones + the research gap analysis
-docs/METRICS.md       metrics design: measures, surfacing, scope, traps (not built)
+docs/METRICS.md       metrics design: measures, surfacing, scope, traps (first cut built)
 scripts/sync-pi.mjs   build + link pi's main branch at a pinned commit
 pi-main.pin.json      the pinned upstream commit durig is validated against
 src/seatmodel.mjs     per-seat {provider}/{modelId} resolution
@@ -110,6 +139,7 @@ demo/*.test.mjs       one runnable proof per guarantee:
                         watch.test.mjs          cross-process live stream works
                         blocked.test.mjs        idle-with-work and failed runs surface as attention
                         singleflight.test.mjs   generation cap holds across concurrent seats
+                        metrics.test.mjs        drift measures + the honesty states of a reading
 demo/offline*.mjs     faux-model delegation loops (no keys needed)
 demo/online.mjs       real DeepInfra end-to-end test
 demo/optimizer-eval.mjs    optimizer effectiveness benchmark (guard + blind judge)

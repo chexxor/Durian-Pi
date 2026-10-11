@@ -6,16 +6,26 @@ holds the ordered next work and `docs/DECISIONS.md` the reasoning.
 
 Updated **2026-10-11**: the pi pin moved to `main`'s tip and the tuios patch was
 rebased onto upstream `main` — both rebuilt and re-verified (D17, and
-`docs/TUIOS-PRS.md` at the repo root). Later the same day `check` shipped as the
-19th demo (D25), the roadmap was re-ordered so measurement precedes the change it
-judges, and the corrected constitution was applied to the live tutor-pi store
-(backup: `C:/tmp/tutor-pi.sqlite.bak-2026-10-11`).
+`docs/TUIOS-PRS.md` at the repo root). Later the same day `check` shipped (D25)
+and found that the converter was dropping OpenRig's rig-level `edges:` list (D26);
+the fix restored every lost send permission, the docs pod joined the rig (D27),
+and the corrected constitution was applied to the live tutor-pi store (backup:
+`C:/tmp/tutor-pi.sqlite.bak-2026-10-11`). Finally, measurement shipped (D28):
+`metrics`, four measures, metric notices on the attention channel — 21 demos.
 
 ## Where we stopped
 
-Milestone **M2 (operator can see the rig)** is finished and verified. Work pauses
-before **M3 (seats can actually do work)**, which the last session identified as
-the gap that matters more than any remaining viewer feature.
+Milestone **M2 (operator can see the rig)** is finished and verified, and the
+measurement layer that was made to precede the change it judges is built (D28):
+`metrics` reports four measures with their bands, baselines, evidence classes and
+blind spots, and the out-of-band ones ride the attention channel in `status` and
+`watch`.
+
+Work pauses between **item 2's drill** and **M3 (seats can actually do work)**,
+the gap that matters more than any remaining viewer feature. The drill is the half
+of measurement that is not code: a fixed task set that makes two configurations
+comparable, without which the before/after comparison the roadmap wants is
+confounded by construction (D24).
 
 Everything below was verified against the real store, not asserted from intent.
 
@@ -75,13 +85,14 @@ Everything below was verified against the real store, not asserted from intent.
 
 ## Test surface
 
-19 offline demo tests, each run as `node demo/<name>.test.mjs` (exit 0 = pass):
+21 offline demo tests, each run as `node demo/<name>.test.mjs` (exit 0 = pass):
 `cli`, `chatlog`, `watchview`, `streamcli`, `streamview`, `syncpi`, `config`,
 `refresh`, `seatmodel`, `eval`, `optimizer`, `singleflight`, `blocked`, `watch`,
-`race`, `persistence`, `repeat-call`, `constitution`, `check`.
+`race`, `persistence`, `repeat-call`, `constitution`, `check`, `converter`,
+`metrics`.
 
 They are the regression gate for the pi-main link as well as for feature work
-(D17). All 19 pass on the current tree.
+(D17). All 21 pass on the current tree.
 
 ## Research review (2026-10-10)
 
@@ -100,8 +111,8 @@ termination conditions (FC1, 12.4%) and nothing detects step repetition (FC1, th
 most frequent mode at 15.7%); there is no verb by which a seat can defer a decision
 to a human (FC2, 6.8%); and all 14 seats resolve to one model while per-seat models
 are already supported, so a bias is systemic rather than isolated. The roadmap was
-re-ordered accordingly, and the one item that needs no new code — verifier model
-diversity — now leads it.
+re-ordered accordingly: measurement first (now built, D28), then the one item that
+needs no new code — verifier model diversity — and the measures exist to judge it.
 
 The document itself was corrected: the leftover chat preamble was removed, as were
 six unexplained percentages beside the reference list, and its MAST dataset size
@@ -120,12 +131,12 @@ confirmed rather than taken on trust.
    over SSE avoids that trade entirely.
 3. **Pods design** — namespace-scoped queues vs a flat queue with pod tags
    (deferred twice; the OpenRig converter currently drops pods with a warning).
-4. **Apply the corrected constitution to the live tutor-pi rig** — the converter's
-   inline text was being dropped, so `tutor-pi.sqlite` holds the generic
-   411-byte `constitution.txt` instead of the team culture. The defect is fixed;
-   re-running `up rigs/tutor-pi.rig.json` is what changes the stored text, which
-   changes all 13 seats' system prompts on their next request. Wants an explicit
-   go-ahead rather than happening as a side effect.
+4. **The drill task set** (item 2's remaining half). A fixed set of tasks hard
+   enough to move the measures, so two configurations are comparable. D24 labels a
+   passive window **confounded**, so without this the before/after comparison
+   item 3 wants measures "the rig got changed" and "the work changed" together.
+   This is a content decision — which tasks, and what counts as done — not a code
+   one, and `metrics` is built and waiting for it.
 
 ## Known gaps worth remembering
 
