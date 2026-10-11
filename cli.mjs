@@ -59,6 +59,8 @@ import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat } from "./src/chatview.mjs";
 import { auditRig, formatCheck } from "./src/checkup.mjs";
+import { SeatGuard } from "./src/seatguard.mjs";
+import { SeatTools, fillRoster, makeSeatEnv, scopeVerifierTools } from "./src/seattools.mjs";
 import { createWatchScreen, formatSnapshot } from "./src/watchview.mjs";
 
 // Effective configuration for this process: environment over
@@ -231,6 +233,11 @@ async function openHarness({ resume = true, live = null } = {}) {
   // instead of routing it (root cause of the 2026-10-09 bug).
   const registry = createRegistry();
   registry.install(Router);
+  // The guard and the seat tools go in for every seat; which of them a given seat may actually
+  // call is narrowed per conversation (see `scopeVerifierTools`). The guard is installed next to
+  // the Router so no seat is ever given a tool without the policy that governs it.
+  registry.install(SeatGuard);
+  registry.install(SeatTools);
   // Configured extensions install on top of the core. Loading is eager and fatal
   // on error, because a declared extension that cannot load must never be
   // skipped quietly - the rig would look configured and run without it (see
@@ -238,11 +245,16 @@ async function openHarness({ resume = true, live = null } = {}) {
   // host, so everything installed here is active for every seat.
   const extensions = await loadExtensions(parseExtensionList(CFG.DURIG_EXTENSIONS));
   for (const { extension } of extensions) registry.install(extension);
+  // The roster is consulted per tool call, so it is filled once the harness exists: the seat
+  // list is read through that harness, and `env` is an argument to opening it. Until the fill
+  // runs, `makeSeatEnv` fails closed (read-only), so the gap is safe rather than open.
+  const seatRoster = new Map();
   const harness = await Harness.open(
     await openNodeSqliteStorage(DB_PATH),
     {
       models,
       registry,
+      env: makeSeatEnv(seatRoster),
       // Only `stream` is configurable here; the rest of pi-durable's settings keep
       // their built-in defaults, which were chosen deliberately and which nothing
       // in durig's use argues against. See `streamSettings` for why this one matters.
@@ -255,6 +267,8 @@ async function openHarness({ resume = true, live = null } = {}) {
   // Viewers skip it: enabling scheduling is a write-side act and would let
   // a passive `watch` kick the very queue it is observing.
   if (resume) harness.resume();
+  const rosterDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+  fillRoster(seatRoster, rosterDoc?.value?.seats);
   return { harness, models, providerId, extensions: extensionNames(extensions) };
 }
 
@@ -379,6 +393,11 @@ async function cmdUp(rigFile, refresh = false) {
         const cDoc = await tx.doc(Constitution);
         cDoc.text = constitutionText;
       }
+      // A verifier seat loses the tools that let it "fix" instead of verify. Done here rather
+      // than at install time because one tool set is installed for every seat and scoping is a
+      // per-conversation decision - and after the loop, so it covers the create and the refresh
+      // paths alike.
+      await scopeVerifierTools(configure, tx, seatsDoc.seats);
       // Materialize the queue even when empty: otherwise it comes into
       // existence only at the first enqueue, and a freshly bootstrapped rig
       // has nothing for `watch` to observe.

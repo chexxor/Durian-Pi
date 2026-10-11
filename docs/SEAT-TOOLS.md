@@ -43,11 +43,22 @@ guard that blocks everything is an outage; that a non-shell tool is not inspecte
 and the guard give the **identical** reason for the same command, so the one shared policy list
 cannot drift into a hole.
 
-**Still to land, and deliberately as one unit:** the wiring that makes both live —
-`registry.install(SeatGuard)` and the coding tools in `openHarness`, `HarnessOptions.env` with
-per-seat author/verifier roots, and `configure`-based tool scoping that removes `write`/`edit`
-from verifier seats. Nothing installs either module yet, so seats are **not** confined and **not**
-guarded until that lands; both are proved, neither is wired.
+**Wired (2026-10-11):** `src/seattools.mjs` + `demo/seattools.test.mjs` (the 29th demo).
+`openHarness` installs `SeatGuard` next to the Router with the seat tools beside it, supplies
+`HarnessOptions.env` from `makeSeatEnv`, and fills the roster from the store; `up` narrows
+verifier seats through `scopeVerifierTools`. The test opens by asserting that **cli.mjs contains
+those calls**, because a module that is never installed protects nothing while looking finished,
+and only then proves behaviour: the tool set is read/write/edit/PowerShell with **no bash**, an
+author can write inside its root, a verifier **cannot** write whatever tools it was offered, an
+**unknown conversation fails closed** rather than open, and an escape is refused even for an
+author. A live scratch `up` / `check` / `ps` on a throwaway store confirms the real path still
+works with the wiring in place.
+
+*The residual, stated plainly:* a verifier's **shell can still write**, because a shell cannot be
+made read-only. What closes it is rooting the verifier at a disposable snapshot (SC2 above), which
+is **not built** - it needs a worktree strategy, since copying a tree that contains `node_modules`
+would be worse than the problem it solves. Until then: the verifier's file API is read-only and
+its shell is not, and it is a narrowing guard rather than a boundary there.
 
 Conditions, all required before any code lands and each proved by a canary demo:
 

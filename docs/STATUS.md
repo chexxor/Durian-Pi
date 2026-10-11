@@ -88,15 +88,15 @@ Everything below was verified against the real store, not asserted from intent.
 
 ## Test surface
 
-28 offline demo tests, each run as `node demo/<name>.test.mjs` (exit 0 = pass):
+29 offline demo tests, each run as `node demo/<name>.test.mjs` (exit 0 = pass):
 `cli`, `chatlog`, `watchview`, `streamcli`, `streamview`, `syncpi`, `config`,
 `refresh`, `seatmodel`, `eval`, `optimizer`, `singleflight`, `blocked`, `watch`,
 `race`, `persistence`, `repeat-call`, `constitution`, `check`, `converter`,
 `metrics`, `provenance`, `extensions`, `starter`, `defer`, `primer`, `confine`,
-`seatguard`.
+`seatguard`, `seattools`.
 
 They are the regression gate for the pi-main link as well as for feature work
-(D17). All 28 pass on the current tree.
+(D17). All 29 pass on the current tree.
 
 ## Research review (2026-10-10)
 
