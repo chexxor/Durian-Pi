@@ -565,6 +565,36 @@ surface. A feature that is off must therefore cost nothing — not "little".
     an extension runs in-process with the harness API, so listing a path is trusting
     it.
 
+31. **Port pi-warden's action guard and done-check into durig seats.** Vendored to
+    `durig/vendor/pi-warden/` (v1.4.0, MIT) — **untracked**, per the root `.gitignore`'s
+    `vendor/` convention for reproducible upstreams; the tracked record is
+    `durig/docs/PROVENANCE-pi-warden.md`. **Port source, not a dependency: nothing imports it
+    yet, so it protects nothing yet.** It cannot be a
+    dependency: it peer-depends on `@earendil-works/pi-coding-agent` and binds that host's
+    ExtensionAPI (`pi.on` across **17 events** + 3 `registerTool`s), while durig installs
+    pi-durable extensions (`defineExtension`/`hook`/`ToolHooks`). Only `extension.js` and
+    `load.js` touch the host; the other 60 modules are host-agnostic policy logic.
+    *Two halves fit durig directly:* **action-guard** (`evaluateAction`) — the control that
+    makes "full shell" defensible before codemode-with-permissions exists (D38) — and
+    **done-check** (`needsDoneCheck`, `evaluateDone`, `projectCheckCommand`), which is
+    precisely the W2 gap: `complete_work` carrying a claim with no evidence.
+    *Measured cost, not estimated:* a reachability pass shows **no judge-free subset** —
+    rooting at `redact`+`shell-writes`+`tools`+`holds` still reaches `guard` → `conscience` →
+    `backend` → `pi-typesafe` (19 modules, 495 KB, one external dep), and the action-guard
+    path alone is 18 modules / 482 KB. The **adapter is the work**, and durig's hooks are
+    stronger than what pi-warden binds to: `beforeTool` blocks *or rewrites*, first block
+    wins, and `ToolCall.parent` exposes nested calls (so it would cover codemode scripts too).
+    *Gates before it is trusted:* (a) the judge is **network egress with a third-party
+    credential** (`pi-typesafe` → typesafe.ai), so it ships **disabled** until a `security.sec`
+    position, and even then it is a **deny-only tripwire, never the boundary** — SC1–SC3 stay
+    the boundary, because pi-warden's own field numbers describe steering a *cooperative*
+    agent; (b) a **timeboxed spike** mapping the 17 host events onto pi-durable hooks, because
+    a wrong mapping silently weakens the guard — the events with no 1:1 analogue
+    (`message_update`, `turn_end`, `agent_settled`, `input`) are where that risk sits; (c) it
+    lands **with** the tools, never after them (D38).
+    *Proof:* a demo that fails against the unguarded design (a dangerous call goes through)
+    and passes with the guard.
+
 ## Sharing publicly
 
 22. **Publish durig as its own repository — no releases yet.** The operator wants
