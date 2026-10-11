@@ -26,15 +26,16 @@ import { configure, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-// Single source of truth for DeepInfra provider options: the same module
-// the pi-deepinfra extension feeds to pi. Node 24 type-strips it on
-// import, so durig tracks the extension catalog/compat without a copy.
+// Single source of truth for DeepInfra provider options, vendored into this tree
+// so durig is self-contained and publishable on its own
+// (src/providers/PROVENANCE.md records the source, version and licence). Node 24
+// type-strips the TypeScript on import, so there is no build step.
 import {
   BASE_URL,
   DEEPINFRA_COMPAT,
   PROVIDER_ID,
   fallbackModels,
-} from "../vendor/pi-deepinfra/models.ts";
+} from "./src/providers/deepinfra-models.ts";
 import {
   Constitution,
   Edges,

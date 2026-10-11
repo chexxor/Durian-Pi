@@ -30,7 +30,7 @@ import {
 	DEEPINFRA_COMPAT,
 	PROVIDER_ID,
 	fallbackModels,
-} from "../../vendor/pi-deepinfra/models.ts";
+} from "../src/providers/deepinfra-models.ts";
 import { analyzePreservation, optimizeInstruction } from "../src/optimizer.mjs";
 import { judgePair } from "../src/judge.mjs";
 
