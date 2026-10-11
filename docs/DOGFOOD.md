@@ -204,6 +204,22 @@ caught this. Same axis as verifier scoping: the tool set is part of the role, no
 and a real model making tool calls can exceed any patience a shell timeout has. The run is durable
 and continues - `node cli.mjs watch` and `node cli.mjs log pm --follow` are how to follow it.
 
+### F10 — a FAILED send still adds a user entry, so retrying duplicates the request
+
+**Observed:** pm's transcript holds the same intake request **three times** (entries 30, 33, 41).
+The first two sends failed at the model level (429 engine_overloaded, F5) and produced no reply, but
+each still appended a `pi.user` entry. pm's first successful run therefore began with the request
+already stated twice before it.
+
+**Why it matters:** `--request-id` exists for exactly this - D34: a retry carrying the same id
+reuses the existing submission - and I retried without one, so the rig recorded three requests where
+the operator made one. A seat reading its own history sees duplicates it has to reason about. The
+id is deliberately NEVER derived from the text, so this cannot be fixed by making the CLI clever;
+it has to be the caller's habit.
+
+**Lands:** no code change. Use `--request-id` on any send that may be retried - a caught failure is
+precisely when to use it - and say so in the skill, because a failed send is not free.
+
 ## Session log
 
 | Date | Rig | What we ran | Findings |
