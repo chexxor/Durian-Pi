@@ -182,6 +182,28 @@ Until that lands the verb is unsafe to use on a real repository. This is also wh
 junction-vs-symlink question in ROADMAP item 34 is not only about path syntax: a link changes what
 a delete does.
 
+### F9 — with real tools, pm investigates instead of routing
+
+**Observed:** the first self-development item was sent to `pm` asking it to decompose and route.
+pm read the docs (confirming ROADMAP item 10 from the file), then began running PowerShell on its
+own - listing `demo/`, `docs/`, `node_modules` and reading line-numbered output - and the queue was
+still **EMPTY** when the send timed out after about fifteen minutes.
+
+**Why it matters:** pm's own constraint says "Never do implementation work yourself; route it", and
+until this session that was enforced by *capability*: pm held six router tools and no file access,
+so it could not investigate even if it wanted to. Granting every seat the same tools removed that
+implicit constraint without replacing it, and a coordinator that can read the repository will read
+the repository. The delegation the rig exists to exercise simply does not happen.
+
+**Lands:** either pm keeps no file tools - the narrowest reading of the role, which per-seat tool
+scoping already supports - or its instructions must say what to hand to whom *before* it looks. Note
+that `check` has no rule for "a coordinator that works instead of routing", so nothing would have
+caught this. Same axis as verifier scoping: the tool set is part of the role, not a uniform grant.
+
+**Also worth recording: the timeout was OURS, not the rig's.** `send` waits for the run to settle,
+and a real model making tool calls can exceed any patience a shell timeout has. The run is durable
+and continues - `node cli.mjs watch` and `node cli.mjs log pm --follow` are how to follow it.
+
 ## Session log
 
 | Date | Rig | What we ran | Findings |
