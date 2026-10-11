@@ -92,6 +92,7 @@ demo/chatlog.test.mjs  chat rendering + --follow streaming
 demo/constitution.test.mjs  a spec's constitution reaches the rig (inline or file)
 demo/check.test.mjs   rig audit rules + the drift regression + CLI exit codes
 docs/STATUS.md        start here: current state, decisions needed, resume facts
+docs/FEATURES.md      what durig does today, where each piece lives, and its proof
 docs/ROADMAP.md       milestones + the research gap analysis
 docs/METRICS.md       metrics design: measures, surfacing, scope, traps (not built)
 scripts/sync-pi.mjs   build + link pi's main branch at a pinned commit
@@ -115,7 +116,7 @@ demo/eval.test.mjs    mechanics test for the guard and judge
 scripts/from-openrig.mjs   OpenRig rig.yaml -> durig v2 converter (pods, skills, guidance)
 rigs/tutor-pi.rig.json    the migrated 13-seat tutor-pi rig
 test-fixture-rig.yaml      sample OpenRig-style input for the converter
-docs/                 QUICKSTART, MVP burn-down, STATUS, ROADMAP, METRICS, decisions D1-D25, research
+docs/                 QUICKSTART, FEATURES, MVP burn-down, STATUS, ROADMAP, METRICS, decisions D1-D26, research
 ```
 
 ## Status
