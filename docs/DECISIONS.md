@@ -405,3 +405,6 @@ cut, and any dashboard. Measurement reads through the same shared read API as
 harness (D-view); queue items carry `from`/`to` and transition history
 (`src/rig.mjs`); entries carry no `usage` field, checked before claiming a cost
 measure could be direct. Table in ROADMAP.md, "Measuring the research concerns".
+
+**Design:** how these measures reach a human — surfacing tiers, scope, notice
+lifecycle, and the traps — is `docs/METRICS.md`.

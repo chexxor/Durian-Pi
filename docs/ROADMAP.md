@@ -98,6 +98,9 @@ written down first, any later movement can be rationalised after the fact.
 write path, no dashboards. `metrics` and the `check` audit share the read API with
 `watch`/`log`/`status` (near-term 8) — one reader, several views.
 
+Where these measures reach a human, and the traps that make them useless if
+gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.md`.
+
 ## Near-term
 
 0. **Fix the dropped constitution. ✅ done.** `scripts/from-openrig.mjs` emits
@@ -123,9 +126,14 @@ write path, no dashboards. `metrics` and the `check` audit share the read API wi
    than isolated (Anthropic swarm). Give the verifier roles (`qa`, `qa2`) a
    different model family from the authors they check. Configuration-only; the first
    change the measurement in 3 should judge.
-3. **The measurement scorecard** (see above): `metrics`, the declared direction and
-   blind spot per measure, and a drill task set so two configurations are
-   comparable. Build it before the M3 work so the big change has a baseline.
+3. **The measurement scorecard, and the surface that makes it used.** Two halves of
+   one item: the measures themselves (`metrics`, the declared direction and blind
+   spot per measure, and a drill task set so two configurations are comparable), and
+   the UX that makes them ambient rather than dead code — notices riding the
+   existing attention channel in `status`/`watch`, seat-scoped or rig-scoped as the
+   measure declares. Design settled in `docs/METRICS.md`, including the open
+   questions to answer when work starts. Build it before the M3 work so the big
+   change has a baseline.
 4. **Real seat tools plus verification evidence (M3, and the largest item).** A
    live worker seat reported "no codebase visible … no file system access, no code
    execution" and correctly refused to claim a finished deliverable — the
