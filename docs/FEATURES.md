@@ -176,6 +176,29 @@ new extension module is genuinely part of the active set and genuinely absent
 from the revision); gitignored ones do not, which is why rig databases and
 `node_modules` never make a reading dirty.
 
+### Context growth over a seat's life (long context)
+
+A seat is a **persistent conversation**: created once at `up` and reused for every
+`send`, so its context accumulates across the whole project while its identity stays
+fixed. Model accuracy degrades well before a context window is full, so "how long
+has this seat been running" is a durability property, not a display detail.
+
+What durig does today, stated as it actually is (ROADMAP items 27–30):
+
+| Property | State | Where |
+|---|---|---|
+| Compaction | **Inherited and unexposed.** The platform compacts automatically and records each one as a `pi.compaction` entry carrying `reason ∈ {manual, threshold, overflow}`, and it also offers manual `Conversation.compact()` — but durig exposes no verb, so an operator can neither trigger one nor see that one happened. It deliberately does not override the automatic settings: `stream` is the only harness setting exposed, because it is the only one with no default | `src/config.mjs` `streamSettings` (24a); harness `types.ts` (items 27, 28a) |
+| Duplicate turns on a retry | **Avoided.** A retry carrying `--request-id` reuses the existing submission, so it adds no second turn to the seat's context | `cli.mjs` `cmdSend` (24d) |
+| Context pressure | **Not visible.** Nothing reports how full a seat's context is; the first signal is a seat behaving worse. Both inputs already exist in storage — per-entry `usage`, and `pi.compaction` markers that carry the reason | — (item 27) |
+| Starting a fresh conversation | **Not possible.** Eleven commands, none of which resets a conversation, and `up --refresh` re-applies the prompt without touching it | — (item 28b) |
+
+The honest summary: growth is *inherited and unexposed* rather than managed. The
+measure is feasible without new instrumentation — assistant entries already carry
+`usage` and a `cost` breakdown through `storage.scanEntries` — and a trigger belongs
+per model, set from a *measured* effective window, because an advertised window is
+not a usable one. Until items 27–28 land, read this section as the gap, not the
+feature.
+
 ## 7. Auditing a rig (`check`)
 
 `check` reads the rig file **and** the store, because a rig that looks correct in
@@ -311,6 +334,14 @@ Pointers, not promises — each is an item in `docs/ROADMAP.md`.
 - **A deferral verb** — raise a blocking question and hand it to whoever can answer (item 5)
 - **Termination and attempt semantics** — deadline, attempt cap, repetition detection (item 6)
 - **Extracted view model and one shared read API** (items 7-8)
+- **Context pressure visibility** — per-seat tokens against the seat's model, plus the
+  compactions the harness already records with a reason, feeding `computeMetrics` (item 27)
+- **A context-reduction surface** — expose the manual compaction the harness already
+  provides and records (28a), then a fresh-conversation verb that keeps the seat's identity,
+  carries the persona and any claimed item across, and never deletes the old transcript
+  (28b)
+- **The fresh-session practice** — when compacting is enough and when to start fresh, who
+  decides, and what the operator sees (item 29)
 - **Pods design** (item 11) and an **interactive client** (item 17, M4)
 
 ## 12. Deliberately not built

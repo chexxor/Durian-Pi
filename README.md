@@ -213,6 +213,8 @@ docs/REVIEW-pi-durable-demos.md  what the two pi-durable example projects show
                         durig: ideas, gap analysis, patterns and hazards
 docs/WORKFLOWS.md     what durig is for: the workflows, their must-not-break loops,
                         and the capability each one needs
+docs/Managing_Long_Context_Length.md  long-context research: context rot, effective
+                        windows, when to compact — the basis of ROADMAP 27-30
 scripts/sync-pi.mjs   build + link pi's main branch at a pinned commit
 pi-main.pin.json      the pinned upstream commit durig is validated against
 src/seatmodel.mjs     per-seat {provider}/{modelId} resolution
@@ -234,7 +236,7 @@ demo/optimizer-eval.mjs    optimizer effectiveness benchmark (guard + blind judg
 demo/eval.test.mjs    mechanics test for the guard and judge
 scripts/from-openrig.mjs   OpenRig rig.yaml -> durig v2 converter (pods, skills, guidance, rig-level edges)
 rigs/tutor-pi.rig.json    the migrated 15-seat tutor-pi rig
-docs/                 QUICKSTART, FEATURES, MVP burn-down, STATUS, ROADMAP, METRICS, decisions D1-D26, research
+docs/                 QUICKSTART, FEATURES, MVP burn-down, STATUS, ROADMAP, METRICS, decisions D1-D37, research
 ```
 
 ## Status

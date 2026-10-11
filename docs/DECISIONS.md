@@ -332,7 +332,7 @@ TUI, actively fights copy-mode and resize.
 
 ## D23 — The research gaps are protocol, not architecture (2026-10-10)
 
-**Finding:** reviewed `docs/Patterns_and_Pitfalls_of_LLM_Agents.txt` (the MAST
+**Finding:** reviewed `docs/Patterns_and_Pitfalls_of_LLM_Agents.md` (the MAST
 failure taxonomy, Anthropic's production and swarm research, and the practitioner
 consensus) against what durig actually implements. Both load-bearing citations
 were verified by fetching them: arXiv 2503.13657 and Anthropic's "Patterns and
@@ -935,3 +935,64 @@ which is exactly the class of thing that used to be invisible.
 **Evidence:** `openrig/rigs/tutor-pi/{rig.yaml,agents/advocate/**,guidance/pod-workflows.md,workflows-pod.fragment.yaml}`,
 `durig/rigs/tutor-pi.rig.json` (15 seats / 15 edge groups, 0 converter warnings),
 `docs/WORKFLOWS.md`'s ownership section.
+
+## D37 — Long context is a measured durability concern, and a fresh session is not a deletion (2026-10-11)
+
+**Decision (operator):** `docs/Managing_Long_Context_Length.md` is taken as the basis for a
+new roadmap section (items 27–30). Three research findings become durig decisions rather
+than notes in a digest:
+
+**1. Context pressure is a measure, not new instrumentation.** A seat is a pi-durable
+conversation created at `up` and reused for every `send` (`src/rig.mjs`, the Seats doc), so
+its context is durable state that nothing watches. It is measurable with **no new write
+path**, because stored assistant entries already carry `usage` (`input`/`output`/`cacheRead`/
+`cacheWrite`) and a `cost` breakdown through `storage.scanEntries` — the F4 correction that
+made the cost measure direct-class. So it extends item 2's token counter and feeds
+`computeMetrics`; D24's rule applies unchanged, and a *stored* pressure value would be a new
+write path needing a `security.sec` position first.
+
+**2. The trigger is per-model and must be measured, not inherited.** The evidence separates
+the *mechanism* (a property of the agent design) from the *threshold* (per model), and
+shipped defaults (~90%) sit later than the research recommends (~60–70% of the **effective**
+window). Two constraints follow, and both are honesty rules rather than preferences: a
+percentage-of-window reading taken against an **advertised** window is false precision and
+must not be printed as though it measured usable capacity; and where the harness records
+nothing, the honest output is a **declared blind spot** rather than an inferred signal — the
+same rule `metrics` already follows when it refuses to judge what it cannot see.
+*Checked against the pinned source rather than assumed:* here it **does** record something.
+A `pi.compaction` entry carries `reason ∈ {manual, threshold, overflow}`, so a compaction is
+observable and attributable rather than a blind spot, and the platform also exposes manual
+`Conversation.compact(instructions?, context)`. The unmeasurable part is not the event but
+the *effective window*, which is a property of weights and therefore takes a measurement.
+
+**3. A fresh session is a new conversation, never a deletion.** There are two ways to reduce
+a seat's context and they are different operations: compaction summarizes in place and
+leaves a summary that can be pointed at, while a fresh conversation drops the history
+entirely. The platform provides the first — `Conversation.compact()`, recorded as a
+`pi.compaction` entry with `reason: "manual"` — and durig exposes neither (`USAGE` lists
+eleven commands; `up --refresh` re-applies the prompt without touching the conversation).
+The design's main risk, and the reason a fresh conversation is the *expensive* lever, is
+that a seat's conversation **is** its
+working memory of the item — a naive reset silently loses the task, which is the
+literature's summary-induced amnesia and "drops the reasoning, keeps the surface action"
+failure modes. Two invariants therefore bind it: what is carried across must be *defined*
+(the stored persona, and any item the seat has `claimed`), and the previous conversation is
+**retained** — transcript destruction is a named failure mode and a transcript is exactly
+what `log`/`watch` read (D-view). A fresh session adds a conversation; it never removes one.
+
+**Why it lives in `FEATURES.md`'s durability section and not observability:** the fact being
+managed is that a seat's state accumulates, which is a property of the seat. The display is
+the delivery, not the concern.
+
+**Honest state, recorded so the advert cannot drift:** compaction is inherited and
+**unexposed** rather than chosen and managed — the mechanism and its record both exist, and
+the verb does not — and there is no pressure measure and no fresh-conversation verb. Item 30
+is the standing obligation to move `FEATURES.md` section 5's rows from "inherited" to
+"managed" as 27–28 land, with the proof column pointing at a demo rather than at prose.
+
+**Evidence:** `docs/Managing_Long_Context_Length.md` (the survey), `ROADMAP.md`
+("Long-context management", items 27–30), `FEATURES.md` section 5 ("Context growth over a
+seat's life"), and the F4 correction above (entries carry `usage`). The claims in 27–28 about
+what the harness records and exposes were read from the pinned source under
+`vendor/pi-main/packages/durable/src/` (`entries.ts`, `harness/types.ts`,
+`harness/compaction.ts`), not inferred from the research digest.

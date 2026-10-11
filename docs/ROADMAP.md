@@ -701,6 +701,109 @@ surface. A feature that is off must therefore cost nothing — not "little".
     Cost note: this is paid web research, so it is timeboxed and cited rather than
     open-ended browsing.
 
+## Long-context management (raised 2026-10-11)
+
+Raised by the operator with `docs/Managing_Long_Context_Length.md`, which surveys the
+evidence: accuracy degrades as input grows *well before* the window fills ("context rot"),
+the usable window is a fraction of the advertised one, the trigger should come from each
+model's *measured* effective length (~60–70% of it) rather than being inherited, and the
+cheapest first lever is masking stale tool output, not summarizing.
+
+What makes this ours rather than general: **a seat is a pi-durable conversation**
+(`src/rig.mjs`, the Seats doc) created once at `up` and reused for every `send`, so a seat's
+context accumulates across the whole project, and nothing in durig observes or controls that
+growth. Compaction is the platform's automatic behaviour, inherited rather than chosen (24a
+found `stream` is the only `HarnessSettings` field with no default), and there is no way to
+start a seat a fresh conversation. Item 13 names the exhausted handover; 27–29 are its three
+missing halves, and 30 is the honest advert.
+
+27. **Make context pressure visible, per seat and per model.** Today a seat's context only
+    ever grows, and the first signal an operator gets is a seat behaving worse. The measure:
+    tokens consumed against the seat's model window, per seat, read from assistant entries'
+    `usage` (`input`/`output`/`cacheRead`/`cacheWrite`) through `storage.scanEntries` — the
+    same storage-direct path `metrics` already reads, and the F4 correction that made the
+    cost measure direct-class. It extends item 2's token counter and must **feed
+    `computeMetrics` as an evidence source** rather than printing its own report, or the
+    long-context question cannot be judged by the same loop as everything else.
+    *Resolved by reading the pinned source rather than assuming:* compaction **is**
+    observable. A `pi.compaction` entry is written into the stream carrying
+    `reason ∈ {manual, threshold, overflow}` (`vendor/pi-main/packages/durable/src/entries.ts`,
+    `harness/types.ts`), so the measure can report compactions per seat and can separate an
+    operator's compaction from one the platform triggered. The genuinely unknown part is not
+    in source at all: a model's *effective* window is a property of weights, so it takes a
+    measurement — which is what item 2's drill and the per-model profiling in
+    `Managing_Long_Context_Length.md` are for.
+    *Communicate* by riding the existing attention channel in `status`/`watch` (D28), with
+    the measure's declared direction and blind spot, counted only when it has moved. The
+    wording must not claim precision the instrument lacks: a percentage-of-window display
+    that is really a token sum against an *advertised* (not effective) window is false
+    precision, and the research is explicit that advertised ≠ usable.
+    *Constraint:* this adds no table, no write path and no egress — it reads fields already
+    persisted. If an implementation ever wants to *store* a pressure value, that is a new
+    write path and needs a `security.sec` position first.
+    *Acceptance:* a demo proving the measure over a fixture transcript, and the notice
+    appearing in `status`/`watch`.
+
+28. **A context-reduction surface: the `compact` verb the platform already has, and the
+    fresh conversation it does not.** The research's strongest and least intuitive finding is
+    that compaction helps *even when the window never fills* — stale exploration impairs
+    reasoning regardless of length — and that the best moment is a **phase transition**, not
+    mid-reasoning. A durig team working item after item needs that lever.
+    *Two levers, and they are not the same operation:* **compaction** summarizes in place and
+    leaves a summary that can be pointed at; a **fresh conversation** drops the history
+    entirely and leaves nothing to point at. The platform already provides the first —
+    `Conversation.compact(instructions?, context)` (`harness/types.ts`), recorded as a
+    `pi.compaction` entry with `reason: "manual"` — and durig exposes neither: `USAGE` lists
+    eleven commands, none of which compacts or resets a conversation, and `up --refresh`
+    re-applies the stored prompt *without* touching it.
+    *28a, the cheap half — expose compaction.* The mechanism exists, so this is exposure and
+    honesty rather than invention: a verb, a record of who asked, and the `reason` field
+    distinguishing an operator's compaction from the platform's threshold or overflow. The
+    entry is already the audit trail, so this half adds no new storage concept.
+    *28b, the expensive half — a fresh conversation.* A verb that gives a seat a **new
+    conversation** while keeping the registry entry (name, role, capabilities): it rewrites
+    one mapping, in one storage transaction, and must not let a seat's name and conversation
+    id disagree (`src/rig.mjs`'s stated invariant, and what `check`'s `store-missing-seat`/
+    `stray-seat` rules police).
+    *The risk that decides 28b's design:* a seat's conversation **is** its working memory of
+    the item. A naive reset silently loses the task — the literature's "summary-induced
+    amnesia" and "drops the reasoning, keeps the surface action" failure modes. So what is
+    carried across must be defined: the stored persona re-applied at open, and the open item
+    the seat had `claimed` re-surfaced, so a seat cannot end up holding a claim it can no
+    longer remember. *Acceptance:* a demo where a seat takes a fresh session and still
+    completes the item it had claimed.
+    *Never delete the old conversation.* Audit-trail destruction is a named failure mode, and
+    a transcript is exactly what `log` and `watch` read (D-view). A fresh session **adds** a
+    conversation; it never removes one, and the seats doc records the change.
+    *Ordering:* 28a before 28b, because a compaction leaves a summary behind and a fresh
+    conversation is a discontinuity the operator should be told about — so the cheaper,
+    auditable lever should exist first and set the vocabulary.
+
+29. **Make taking a fresh session a team practice, not a judgement call.** A verb nobody
+    knows when to call is a verb that gets called at the wrong moment, which the evidence
+    says is worse than not calling it. Owned by `workflows.advocate` with `docs.scribe`:
+    `docs/WORKFLOWS.md` gains the ritual — *when* compacting is enough and when a seat should
+    start fresh (at an item boundary, after the current item is closed, never
+    mid-investigation), *who* decides (the `pm` at intake, the same place it assigns work),
+    and *what the operator sees*. Its
+    evidence class starts `inferred` and graduates to `observed` only when we run it (the
+    advocate's rule, D36) — a practice written down is not a practice that works.
+    *Acceptance:* the workflow is in `WORKFLOWS.md` with its class; if it proves out, the
+    starter rig's intake step encodes it so a new rig does not have to reinvent it.
+30. **Advertise the honest state of context management, then keep the advert true.** The
+    operator asked that `docs/FEATURES.md` advertise responsible context management. Today
+    the honest version is short: compaction is the platform's automatic behaviour and durig
+    **deliberately does not override it** (24a: one `HarnessSettings` field exposed, and the
+    reason), and a retry carrying `--request-id` reuses the existing submission so it does
+    not add a duplicate turn to a seat's context (24d) — but there is **no pressure measure
+    and no fresh-session verb**, and the advert must say so. `FEATURES.md` section 5 carries
+    that table now, under "Context growth over a seat's life", with the gap named and the
+    blind spot declared; this item is the standing
+    obligation to move a row from "inherited" to "managed" as 27–28 land, and to keep the
+    proof column pointing at the demo that proves it rather than at this paragraph. A feature
+    list that describes the roadmap as though it were shipped is the same defect as a
+    citation that points at nothing.
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for
@@ -721,4 +824,4 @@ surface. A feature that is off must therefore cost nothing — not "little".
   and tailite are catalogued in RESEARCH.md but Windows support is unverified.
 - Constitutional-evolution search, Big-Five trait injection, FIPA-ACL performatives,
   Contract-Net auctions, dynamic persona generation, blackboard architecture —
-  evaluated against Core_Ideas.txt; rationales in DECISIONS.md.
+  evaluated against Core_Ideas.md; rationales in DECISIONS.md.
