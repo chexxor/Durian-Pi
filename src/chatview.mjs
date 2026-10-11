@@ -14,16 +14,9 @@ import { extractEntryText } from "./rigstory.mjs";
 
 // The system entry carries durig's own constitution and prompt scaffolding.
 // Rendering it would bury the conversation under the rig's plumbing.
-const NOT_CONVERSATION = new Set(["pi.system"]);
+import { ANSI } from "./ansi.mjs";
 
-const ANSI = {
-	reset: "\x1b[0m",
-	dim: "\x1b[2m",
-	red: "\x1b[31m",
-	green: "\x1b[32m",
-	cyan: "\x1b[36m",
-	magenta: "\x1b[35m",
-};
+const NOT_CONVERSATION = new Set(["pi.system"]);
 
 // A background tint reads wrong on an unknown terminal background, which is why
 // hard-coding one is the field's clearest cautionary tale; it is therefore opt-in

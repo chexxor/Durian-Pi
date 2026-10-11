@@ -4,14 +4,7 @@
 // contract for scripts; this is the same snapshot rendered for eyes (see
 // docs/RESEARCH.md for the conventions borrowed from comparable systems).
 
-const ANSI = {
-	reset: "\x1b[0m",
-	dim: "\x1b[2m",
-	green: "\x1b[32m",
-	yellow: "\x1b[33m",
-	red: "\x1b[31m",
-	cyan: "\x1b[36m",
-};
+import { ANSI } from "./ansi.mjs";
 
 // Collapse whitespace before truncating: model prose arrives with newlines and
 // indentation that would otherwise break the one-line-per-seat layout.
