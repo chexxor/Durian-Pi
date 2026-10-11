@@ -542,11 +542,14 @@ harmless here — durig needed the read permission to carry a question anyway �
 it is lossy, and if durig's edge model ever grows a kind, this is the mapping to
 revisit.
 
-**Security — consult pending, not skipped.** The scribe reads other seats'
-transcripts and republishes into documents, which is an untrusted-input and
-exfiltration surface, and the team norms require a `security.sec` position
-*before* code for exactly that. The rig daemon was down, so the consult could not
-be taken; it is recorded as owed rather than dropped. Mitigation already in the
+**Security — consult taken 2026-10-11, and it did not pass as scoped.** The scribe
+reads other seats' transcripts and republishes into documents, which is an
+untrusted-input and exfiltration surface, and the team norms require a
+`security.sec` position *before* code for exactly that. The rig daemon was down
+(2026-10-06 → 2026-10-11) when this was written, so the consult was recorded as
+owed rather than dropped; it has since been taken, and the verdict is **FAIL as
+scoped → adopt-with-conditions** (D30). The persona mitigation below is a norm,
+not a mechanism. Mitigation already in the
 persona: the `documentation` skill forbids copying credentials, tokens or
 personal data out of a transcript, on top of the culture's "no secrets in git".
 
@@ -611,3 +614,82 @@ the 21st demo. Measured cost of the shared scan: 0.9–1.4 ms for 14 seats × 24
 entries against `watch`'s 750 ms poll, so the ambient tier adds arithmetic and no
 I/O. Live reading is in `docs/MVP.md`, "measure drift instead of listing
 concerns".
+
+## D29 — One distribution, and extensions chosen by workflow (2026-10-11)
+
+**Question (operator):** should durig ship as two editions (`durig-core` and
+`durig` with recommended extensions), or one system with well-considered optional
+extras — and is the feature set bloated with things only some users want?
+
+**Decision (operator, ruled):** **one distribution, no editions.** Extensions are
+chosen one at a time against the workflows we intend to support, and the workflow
+frame (`docs/WORKFLOWS.md`, ROADMAP item 21) is what decides "recommended" rather
+than taste.
+
+**Why editions are the wrong shape.** An edition is an artifact to build, publish
+and forget; a profile is *data*. Two editions means two test surfaces, and our own
+evidence is that the untested one rots: a committed converter fixture that crashed
+on contact was cited as proof by three documents, including an acceptance item
+marked PASS. `durig-core` would have been exactly that path. So: one artifact, one
+suite, and `core` / `recommended` / custom as configuration (ROADMAP item 18).
+
+**The cost model, because it decides the balance question.** For durig the burden
+of an unused feature is *not* disk and *not* speed — the per-seat scan is 0.9–1.4
+ms. The binding costs are: (a) **prompt tokens on every request**, (b) **which
+tools the model sees**, which changes seat behaviour rather than just the bill, and
+(c) the test and documentation surface. So the standard is stronger than "not
+bloated": **a feature that is off must cost nothing at all** — lazy, declared, and
+invisible until enabled. That is also why "useful for most users" is the right bar
+for a default and "useful for some" is fine for an opt-in, provided it is truly
+inert when off.
+
+**Consequence for how extensions are declared.** Each one declares its own cost
+(prompt tokens, tools added), its default, and its blind spot — the discipline
+`check` and `metrics` already follow, because a declaration that travels with the
+thing is the only kind that stays true.
+
+**Not decided:** which workflows define "recommended" (blocked on item 21), and
+which extensions those are. Caveman is far from the only candidate.
+
+## D30 — The security positions that came back (2026-10-11)
+
+**Context:** three items were put to `security.sec` as one consult, because the rig
+daemon had been down 2026-10-06 → 2026-10-11 and they had accumulated: the scribe
+seat (D27), caveman (ROADMAP item 20), and the measurement change-log debt (D24).
+Full position: `docs/reviews/security-sec-deferred-three-items.md`; the row is
+`qitem-20261011052207-47265aa238cc43b5`.
+
+**1. Scribe read-all-transcripts grant — FAIL as scoped → adopt-with-conditions.**
+The decisive reasoning: every seat runs as the **same Windows user** (D-ENV-AUTH),
+so "never copy a secret out of a transcript" is a norm, not a control, and the
+scribe would read seven seats' transcripts including `devtools.dev`, which handles
+credentials. Required before it goes live: a fail-closed secret/PII gate on what
+may be republished that a **canary can falsify**, plus an explicit republish
+allowlist. Its stated cheaper alternative: drop the `devtools.dev` edge. This is a
+scope-vs-security conflict, so it escalated to `advise.lead`
+(`qitem-20261011052428-c1e0716d`, urgent, `gate:spec-review`), and **the security
+dissent is preserved** if the conditions are skipped. Nothing has been applied to
+the live rig, so this gates the first application rather than a rollback. Ordered
+as ROADMAP item 1b.
+
+**2. Caveman — split verdict, and the split is the useful part.** The **skill**
+half (plain prompt text) **passes, conditional on being vendored as text rather
+than installed**; it is ordinary persona content otherwise, needing no new
+mechanism. The **proxy** half is **rejected as specified**: opt-out-by-default
+telemetry is necessary but not sufficient, because the proxy reads raw tool output
+(which carries secrets) and rewrites the model's view inside the call path. Its
+conditions: the prior spike, a runtime **no-egress canary**, redaction, and role
+scoping. So caveman is not one adoption decision but two, with very different
+costs — which is why item 20 keeps them separate.
+
+**3. The measurement change-log — ADOPT-WITH-CONDITIONS, and the debt is retired.**
+`security.sec` prefers **git as the append-only record** over a new store write
+path, because the write path would *add* a mutable, untrusted attribution surface
+while git is already append-only and hash-chained. Its conditions: `metrics` must
+report the committed active set and **flag a dirty tree**; git authorship is not
+authentication; and D24's prediction record stays. This turns a deferred write path
+(D24, D27, item 14) into a read-only reporting task.
+
+**Standing consequence:** measurement may not add telemetry, egress or a write path
+without this consult — and the answer here was "don't add one, use git", which is
+now the precedent to cite rather than re-litigating.

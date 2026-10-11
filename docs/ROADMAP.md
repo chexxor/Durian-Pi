@@ -158,6 +158,20 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    `single-model-rig` (item 3). The stale `test-fixture-rig.yaml` — which
    crashed the converter while three docs cited it as proof — is deleted.
    *Added on top:* the `docs` pod with the `scribe` seat (D27).
+1b. **The scribe's security conditions, before it is applied anywhere.** The
+   position is in (2026-10-11, `docs/reviews/security-sec-deferred-three-items.md`)
+   and it is a **FAIL as scoped**: the persona's prose prohibition is not a
+   control, because every seat runs as the same Windows user (D-ENV-AUTH) — so
+   "never copy a secret out of a transcript" is a norm, not a mechanism, and the
+   scribe would read seven seats' transcripts including `devtools.dev`, which
+   handles credentials. Required before it goes live: a fail-closed secret/PII
+   gate on what may be republished that a **canary can falsify**, plus an explicit
+   republish allowlist. Cheaper alternative it offers: drop the `devtools.dev`
+   observation edge. This is a scope-vs-security conflict, so `security.sec`
+   escalated it to `advise.lead` (`qitem-20261011052428-c1e0716d`, urgent,
+   `gate:spec-review`), and its dissent is preserved if the conditions are
+   skipped. Nothing here is applied to the live rig, so this gates the *first*
+   application rather than rolling anything back.
 2. **The measurement scorecard, and the surface that makes it used.** Two halves of
    one item: the measures themselves (`metrics`, the declared direction and blind
    spot per measure, and a drill task set so two configurations are comparable), and
@@ -184,6 +198,12 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    before/after comparison is confounded by construction. Deliberately not
    skipped: it needs a task set hard enough to move the measures, which is a
    content decision, not a code one.
+   → *Caveman (20) forward-note:* the drill is also the only instrument that could
+   verify caveman's own claims. The vendor reports token savings we cannot check,
+   because no measure reads tokens or cost — so if the drill grows a token counter
+   it must feed `computeMetrics` as another evidence source rather than printing
+   its own report, or caveman can never be judged by the same loop as everything
+   else.
 3. **Verifier model diversity.** All 14 seats resolve to one model while per-seat
    models are already supported (`resolveSeatModel`), so a bias is systemic rather
    than isolated (Anthropic swarm). Give the verifier roles (`qa`, `qa2`) a
@@ -198,6 +218,12 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    Whichever is chosen, `complete_work` should carry evidence a verifier can
    re-check, which is what turns MAST FC3 from a norm into a mechanism. Seats must
    get **no polling tool** in the process.
+   → *Caveman (20) forward-note:* this item adds the read tools whose output a
+   compressor would rewrite, so keep tool results flowing through **one seam**
+   (`toolText()` in `src/rig.mjs` is already that seam) instead of letting each
+   tool format its own output — a proxy cannot be inserted later if there are
+   twenty places to insert it. It is also where role scoping becomes real: not
+   every seat gets corpus access, which is the same axis caveman needs.
 5. **A deferral verb.** Today a seat that needs a decision can only emit prose.
    Add a way to raise a question that blocks the item and hands it to the seat or
    human who can answer — the "reason to defer to humans" the swarm paper leaves
@@ -242,6 +268,8 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     the before/after comparison in the review loop is a lookup rather than a
     re-run. Deliberately not in the first cut: it adds a write path, which is why
     it waits until passive windows have proven useful.
+    **Status 2026-10-11: the write path is no longer the plan** — see 19, where
+    `security.sec` prefers git as the append-only record and retires the debt.
 15. **Drill harness** — the fixed task set plus faux-provider replay, if the
     benchmark half of 3 turns out to need more than a script.
 16. **Human approval gate hook** — PD hooks can block tool calls pending an
@@ -254,10 +282,12 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
 
 ## Extensibility and distribution
 
-From the operator: should durig ship as two editions (`durig-core` and `durig`),
-or as one system with well-considered optional extras — and does the measure layer
-make an extension's effect visible? The answers below are the argument, not yet a
-ruling.
+**Ruled 2026-10-11 (operator): one distribution, no editions** — chosen extension
+by extension against the workflows we intend to support (21). The argument that
+produced the ruling is below, and it is also the shape the work should take rather
+than two artifacts. Still open: which workflows define "recommended", and whether
+the measure layer can make an extension's effect visible (19 — now answered as
+"possible, and git is the change log").
 
 **The cost model first, because it decides the whole question.** For durig the
 burden of an unused feature is *not* disk and *not* speed: the per-seat scan
@@ -267,16 +297,22 @@ seat behaviour rather than just its bill, and (c) the test and documentation
 surface. A feature that is off must therefore cost nothing — not "little".
 
 18. **An extension registry with named profiles — not two editions.** Two
-distributions means two test surfaces, and our own evidence says the untested one
-rots: a committed converter fixture that crashed on contact was cited as proof by
-three documents, one of them an acceptance item marked PASS. A profile is *data*
-(`{"profile":"recommended"}` or an explicit enable list); an edition is an
-artifact to build, publish, and forget. So: one artifact, one suite, and `core` /
-`recommended` / custom as configuration. Each extension declares its own cost
-(prompt tokens, tools added), its default, and its **blind spot** — the same
-discipline `check` and `metrics` already follow, since a declaration that travels
-with the thing is the only kind that stays true. Open question for the operator:
-which workflows define "recommended" (see 21).
+   distributions means two test surfaces, and our own evidence says the untested
+   one rots: a committed converter fixture that crashed on contact was cited as
+   proof by three documents, one of them an acceptance item marked PASS. A profile
+   is *data* (`{"profile":"recommended"}` or an explicit enable list); an edition
+   is an artifact to build, publish, and forget. So: one artifact, one suite, and
+   `core` / `recommended` / custom as configuration. Each extension declares its
+   own cost (prompt tokens, tools added), its default, and its **blind spot** — the
+   same discipline `check` and `metrics` already follow, since a declaration that
+   travels with the thing is the only kind that stays true. Open question for the
+   operator: which workflows define "recommended" (see 21).
+   → *Caveman (20) forward-note:* caveman is the registry's first real test case
+   and it arrives on **both axes at once** — a prompt-section extension (its skill)
+   and a provider/model-call wrapper (its proxy). The registry must therefore
+   support both, and must be able to enable one **per seat role**, or its first
+   user forces a redesign. Build the seam so a wrapper can be inserted between
+   provider and harness the way `wrapProviderWithSlots` already is.
 19. **Extension provenance, so a measure can be attributed to a change.** Today the
    answer is **no**: entries carry a model and a timestamp and nothing about which
    extensions were active, so `metrics` can see that `step-repetition` moved but
@@ -287,6 +323,13 @@ which workflows define "recommended" (see 21).
    active set for the reader to line the two up. That may remove the need for the
    deferred write-path change-log entirely, which would also retire the
    `security.sec` debt D24 and D27 carry. Verify before believing it.
+   **Verified 2026-10-11: adopt-with-conditions, and the debt is retired.**
+   `security.sec` prefers git over a store write path, because the write path would
+   *add* a mutable, untrusted attribution surface while git is already append-only
+   and hash-chained. Its conditions: `metrics` must report the committed active set
+   and **flag a dirty tree**; git authorship is not authentication; and D24's
+   prediction record stays. Full position:
+   `docs/reviews/security-sec-deferred-three-items.md`.
 20. **Caveman as an optional extension — spike first.** `juliusbrussee/caveman`
    is two things: a **skill** (output voice, ~1,160 prompt tokens/request, ~3% 
    median output saving on top of "be concise", much more for `/ultracave`) and a
@@ -302,6 +345,16 @@ which workflows define "recommended" (see 21).
    student-facing explanation — the same seat-role axis `check`'s verifier rule
    already reasons about. And we cannot yet verify the savings ourselves: there is
    no token or cost measure, because entries carry no `usage` field (D24 evidence).
+   **Security position in (2026-10-11).** Split verdict, and the split is the point:
+   the **skill half PASSES, conditional on being vendored as prompt text rather
+   than installed** — it is ordinary persona content otherwise. The **proxy half is
+   REJECTED as specified**; opt-out-by-default telemetry is necessary but not
+   sufficient, because it reads raw tool output (which carries secrets) and rewrites
+   the model's view inside the call path. Its conditions: the prior spike, a
+   runtime **no-egress canary**, redaction, and role scoping. So the skill half is
+   cheap and the proxy half is not, and the spike must answer the security
+   conditions as well as the integration question. Full position:
+   `docs/reviews/security-sec-deferred-three-items.md`.
 21. **Target workflows, written down.** Honest answer to "have we considered
    that": **partially, and never in one place.** The MVP bar, the feature
    inventory, the gap table and `RESEARCH.md`'s topology notes each carry a piece,

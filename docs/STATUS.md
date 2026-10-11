@@ -11,7 +11,10 @@ and found that the converter was dropping OpenRig's rig-level `edges:` list (D26
 the fix restored every lost send permission, the docs pod joined the rig (D27),
 and the corrected constitution was applied to the live tutor-pi store (backup:
 `C:/tmp/tutor-pi.sqlite.bak-2026-10-11`). Finally, measurement shipped (D28):
-`metrics`, four measures, metric notices on the attention channel — 21 demos.
+`metrics`, four measures, metric notices on the attention channel — 21 demos. The
+OpenRig daemon was also recovered (dead since 2026-10-06, and reported as a
+starved event loop because a recycled PID was trusted as the daemon), and the
+owed `security.sec` consult was finally taken (D30).
 
 ## Where we stopped
 
@@ -137,6 +140,15 @@ confirmed rather than taken on trust.
    item 3 wants measures "the rig got changed" and "the work changed" together.
    This is a content decision — which tasks, and what counts as done — not a code
    one, and `metrics` is built and waiting for it.
+5. **The scribe's security conditions, before it goes live (item 1b).**
+   `security.sec` ruled the docs-pod seat **FAIL as scoped**: on a single-user host
+   its read-all-transcripts grant is not controlled by persona prose, so it needs a
+   fail-closed secret/PII gate (canary-falsifiable) plus a republish allowlist
+   before it may be applied — or drop the `devtools.dev` observation edge. It
+   escalated to `advise.lead` (`qitem-20261011052428-c1e0716d`, urgent,
+   `gate:spec-review`). Nothing is applied to the live rig yet, so this is a
+   go/no-go on the *first* application, not a rollback. Declining is a legitimate
+   answer; the dissent is recorded either way.
 
 ## Known gaps worth remembering
 
