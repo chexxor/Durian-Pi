@@ -221,7 +221,7 @@ export function auditRig({ rig, spec, specConstitution, stored, modelsBySeat = {
         "single-model-rig",
         "rig",
         `all ${seats.length} seats resolve to ${distinct[0]}, so a shared blind spot is systemic; per-seat models are already supported`,
-        "give verifier seats (qa/qa2 or their equivalent) a different model family from the authors they check, then re-measure with: node cli.mjs metrics",
+        "give verifier seats (qa/qa2 or their equivalent) a different model family from the authors they check, then re-run: node cli.mjs check " + rig,
       );
     }
   } else if (seats.length >= 2) {

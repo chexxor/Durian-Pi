@@ -9,7 +9,7 @@
 // Run: node demo/check.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { auditRig, formatCheck, VERIFIER_TERMS } from "../src/checkup.mjs";
@@ -280,7 +280,30 @@ try {
     "the hardened report narrows against the naive one",
   );
 
-  console.log("CHECK TEST PASS (rules, drift regression, verifier heuristic, edges, skipped, render, CLI)");
+  // Every finding's fix must name a command that actually exists. `check`
+  // shipped telling the operator to "re-measure with: node cli.mjs metrics",
+  // and there is no metrics command, so the advice was unrunnable - the exact
+  // class of defect an audit is supposed to catch, in its own output. Read the
+  // dispatch chain out of cli.mjs and hold the fixes to it.
+  const cliSource = readFileSync(join(durigDir, "cli.mjs"), "utf8");
+  const dispatched = new Set(
+    [...cliSource.matchAll(/cmd === "([a-z][a-z-]*)"/g)].map((m) => m[1]),
+  );
+  assert.ok(dispatched.has("check"), "sanity: the dispatch chain is being read");
+  for (const payload of [naivePayload, hardPayload]) {
+    for (const finding of payload.findings) {
+      for (const [, verb] of (finding.fix ?? "").matchAll(
+        /node cli\.mjs\s+([a-z][a-z-]*)/g,
+      )) {
+        assert.ok(
+          dispatched.has(verb),
+          `${finding.id}: fix names "node cli.mjs ${verb}", which is not a command cli.mjs dispatches`,
+        );
+      }
+    }
+  }
+
+  console.log("CHECK TEST PASS (rules, drift regression, verifier heuristic, edges, skipped, render, CLI, fix commands)");
   process.exit(0);
 } finally {
   try {
