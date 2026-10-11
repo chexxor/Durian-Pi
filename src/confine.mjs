@@ -295,6 +295,9 @@ export function verifierEnv(base, snapshotRoot) {
 	return confinedEnv(base, { root: snapshotRoot, readOnly: true });
 }
 
-/** Exported for the demo, which must be able to prove the denial list can fire. */
-export { DENIED_COMMANDS };
+/**
+ * Exported so the guard (`src/seatguard.mjs`) refuses the same commands the environment does:
+ * one policy list, because two lists would drift and the drift would be a hole.
+ */
+export { refusalFor };
 

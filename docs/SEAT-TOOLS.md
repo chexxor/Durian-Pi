@@ -30,9 +30,24 @@ allowlisted baseline would have left a seat's command with **no `PATH`** at all.
 privilege this Windows host withholds, and a silently dropped escape check is worse than a
 reported one.
 
-**Still to land, and deliberately as one unit:** the wiring that makes it live
-(`HarnessOptions.env`, per-seat author/verifier roots), the `beforeTool` guard, and
-`coding-tools` per seat.
+**The `beforeTool` guard is implemented and proved too:** `src/seatguard.mjs` +
+`demo/seatguard.test.mjs` (the 28th demo). Its first assertion is **structural**, because the
+failure that matters for a guard is not a wrong answer but a guard that silently never fires: a
+hook registered against a mistyped task name blocks nothing while looking installed. So the test
+holds the extension's hook to the real `pi.tool` task and to this module's handler before it
+tests any behaviour. It then checks that `wsl`/`docker`/`docker-compose` and the three
+destructive git forms are blocked with the policy in the block text; that ordinary work
+(`node demo/x.test.mjs`, `git status`, `git diff`, `npm test`, `rg`) is **not** blocked, since a
+guard that blocks everything is an outage; that a non-shell tool is not inspected; that a
+**nested** call — how a codemode script reaches a tool — is covered; and that the environment
+and the guard give the **identical** reason for the same command, so the one shared policy list
+cannot drift into a hole.
+
+**Still to land, and deliberately as one unit:** the wiring that makes both live —
+`registry.install(SeatGuard)` and the coding tools in `openHarness`, `HarnessOptions.env` with
+per-seat author/verifier roots, and `configure`-based tool scoping that removes `write`/`edit`
+from verifier seats. Nothing installs either module yet, so seats are **not** confined and **not**
+guarded until that lands; both are proved, neither is wired.
 
 Conditions, all required before any code lands and each proved by a canary demo:
 
