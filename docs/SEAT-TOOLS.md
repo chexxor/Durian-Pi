@@ -55,10 +55,28 @@ author. A live scratch `up` / `check` / `ps` on a throwaway store confirms the r
 works with the wiring in place.
 
 *The residual, stated plainly:* a verifier's **shell can still write**, because a shell cannot be
-made read-only. What closes it is rooting the verifier at a disposable snapshot (SC2 above), which
-is **not built** - it needs a worktree strategy, since copying a tree that contains `node_modules`
-would be worse than the problem it solves. Until then: the verifier's file API is read-only and
-its shell is not, and it is a narrowing guard rather than a boundary there.
+made read-only - but it is now **bounded by the worktree below**, since the only tree a verifier
+can reach is the disposable copy it was pointed at.
+
+**The worktree exists now, which was the safety gate (2026-10-11):** `src/worktree.mjs`,
+`node cli.mjs worktree <path>` and `demo/worktree.test.mjs` (the 30th demo). Before this the
+boundary confined seats to *durig's live tree*, because nothing ever set a seat's `cwd` - so an
+author seat could overwrite uncommitted operator work while every control looked satisfied. The
+verb adds a detached worktree and **bridges `node_modules` with a junction**, without which a
+fresh worktree cannot run the demo suite at all (`node_modules` is gitignored, and a directory
+symlink on Windows needs elevation a junction does not). `up` now records `seat.cwd ?? spec.cwd`
+per conversation, and leaves it alone when neither is declared.
+
+*Proved on the real repository, not only a throwaway one:* the verb resolved the repo to durig's
+**parent** project, and in the resulting worktree the demo suite ran, `node_modules` was bridged,
+and **`durig.config.json` was absent** - the key is gitignored, so a worktree has no key on disk
+and no seat can read one. Removal requires `force: true` explicitly, so the safe default fails
+loudly instead of discarding work.
+
+*Two defects the worktree test found, both mine:* `repoRoot` returned git's forward-slash path,
+which no caller could compare or join; and the first version asserted that an *unforced* removal
+would be refused, when a worktree holding only untracked-but-ignored content is not dirty to git
+at all - the removal simply succeeded. The test now dirties a tracked file before asserting.
 
 Conditions, all required before any code lands and each proved by a canary demo:
 

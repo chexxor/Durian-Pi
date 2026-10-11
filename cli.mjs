@@ -58,6 +58,7 @@ import { computeMetrics, formatMetrics } from "./src/metrics.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat } from "./src/chatview.mjs";
+import { createWorktree } from "./src/worktree.mjs";
 import { auditRig, formatCheck } from "./src/checkup.mjs";
 import { SeatGuard } from "./src/seatguard.mjs";
 import { SeatTools, fillRoster, makeSeatEnv, scopeVerifierTools } from "./src/seattools.mjs";
@@ -347,6 +348,10 @@ async function cmdUp(rigFile, refresh = false) {
       const seatsDoc = await tx.doc(Seats);
       for (const seat of spec.seats) {
         const prompt = await buildSeatPrompt(models, seat, providerId);
+        // A rig may point its seats at an isolated tree: `seat.cwd` overrides `spec.cwd`, and with
+        // neither the seat keeps the harness default. Recorded per conversation because that is
+        // what the env function consults, so a renewal cannot silently widen the boundary.
+        const seatCwd = seat.cwd ?? spec.cwd;
         if (seatsDoc.seats[seat.name]) {
           if (!refresh) {
             existing.push(seat.name);
@@ -358,6 +363,7 @@ async function cmdUp(rigFile, refresh = false) {
               modelId: prompt.seatModel.modelId,
             },
             instructions: prompt.instructions,
+            ...(seatCwd === undefined ? {} : { cwd: seatCwd }),
           });
           if (prompt.optimizedVia) {
             seatsDoc.seats[seat.name].instructionsOptimizedVia = prompt.optimizedVia;
@@ -374,6 +380,7 @@ async function cmdUp(rigFile, refresh = false) {
             modelId: prompt.seatModel.modelId,
           },
           instructions: prompt.instructions,
+          ...(seatCwd === undefined ? {} : { cwd: seatCwd }),
         });
         if (prompt.optimizedVia) {
           const seatsDoc2 = await tx.doc(Seats);
@@ -408,6 +415,24 @@ async function cmdUp(rigFile, refresh = false) {
     out({ ok: true, command: "up", db: DB_PATH, created, existing, refreshed, extensions });
   } finally {
     await harness.close(BACKGROUND_CONTEXT);
+  }
+}
+
+// worktree: an isolated checkout for one work item.
+//
+// Seats are confined to their `cwd`, so a rig that declares none leaves them in durig's live
+// tree - where an author seat can overwrite the operator's uncommitted work. This is how the
+// operator gets a tree to point them at instead, with node_modules bridged so the suite runs.
+async function cmdWorktree(args) {
+  const target = args.find((a) => !a.startsWith("--"));
+  if (!target) fail("worktree needs a path, e.g. node cli.mjs worktree C:/tmp/durig-dev/item-1");
+  const sourceAt = args.indexOf("--source");
+  const source = sourceAt >= 0 ? args[sourceAt + 1] : process.cwd();
+  if (sourceAt >= 0 && !source) fail("worktree --source needs a directory");
+  try {
+    out({ ok: true, command: "worktree", ...(await createWorktree({ source, target })) });
+  } catch (error) {
+    fail(`cannot create worktree: ${error?.message ?? error}`);
   }
 }
 
@@ -1098,11 +1123,13 @@ usages:
   node cli.mjs check <rig.json> [--human]   audit a rig against the research gaps
   node cli.mjs optimize <text>  rewrite a draft instruction via the optimizer
   node cli.mjs config          show effective settings and their source
+  node cli.mjs worktree <path> [--source <dir>]   isolate a work item in its own checkout
 `;
 
 const [, , cmd, ...rest] = process.argv;
 try {
   if (cmd === "up") await cmdUp(rest[0], rest.includes("--refresh"));
+  else if (cmd === "worktree") await cmdWorktree(rest);
   else if (cmd === "ps") await cmdPs();
   else if (cmd === "send") {
     // --body-file (or `-` for stdin) exists because a prompt is shell input: a
