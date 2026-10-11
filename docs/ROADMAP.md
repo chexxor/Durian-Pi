@@ -514,6 +514,27 @@ surface. A feature that is off must therefore cost nothing — not "little".
    WORKFLOWS.md` naming 3–5 workflows — who, trigger, the loop that must never
    break, what "done" means, which capability it needs — after which
    "recommended" is derivable instead of taste.
+   **✅ done (2026-10-11).** `docs/WORKFLOWS.md` names five workflows (routed
+   delegation; independent verification; blocked on a question; intake/
+   decomposition/tracking; human oversight) plus the operator loop for a rig change
+   under measurement, each with who/trigger/**must-not-break**/done/capability. Two
+   results worth the document on their own:
+   (i) **"recommended" is mostly rig shape, not extensions.** Every workflow is
+   served by the seed tools — one extension — so what varies between a rig that
+   works and one that does not is the seats, their models and their edges, which is
+   exactly what `check` already fails a rig for. Item 18's profiles should therefore
+   be a preset rig file plus a seed list (core / recommended / opt-in / off), not a
+   bundle of extensions the user must reason about. The first genuine "opt-in"
+   candidate is retrieval, and that is an operator ruling, not a default.
+   (ii) **D21, D22 and D24 now have workflow reasons** rather than being ad hoc: D21
+   is W5 plus the operator loop (an interactive prompt would be a blocking gate in
+   W1's must-not-break path), D22 is W1–W4 (a seat is a queue participant, and the
+   unit of attention is the rig's state, not a seat's screen), and D24's
+   must-not-break is the baseline-before-change rule.
+   It also states a limit plainly rather than burying it: **W2 is not fully
+   supported.** Verification holds today only for artifacts a reviewer can read in a
+   transcript, because `complete_work` carries a claim (`resultSummary`) and not
+   evidence — item 4 (M3). Naming the loop is what makes that limit visible.
 
 23. **Load extensions from config — the "support pi extensions" item.** Small,
     now that 18 is grounded. `durig.config.json` (and the rig spec) gains an

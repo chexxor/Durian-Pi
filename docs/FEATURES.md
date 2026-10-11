@@ -2,8 +2,10 @@
 
 What durig does **today**, where each piece lives, and what proves it. This is
 the "what exists" reference: `docs/ROADMAP.md` is what comes next,
-`docs/DECISIONS.md` is why, `docs/MVP.md` is how to demo anything here, and
-`docs/QUICKSTART.md` is how to start from nothing.
+`docs/DECISIONS.md` is why, `docs/MVP.md` is how to demo anything here,
+`docs/QUICKSTART.md` is how to start from nothing, and `docs/WORKFLOWS.md` is
+what the whole thing is *for* — the workflows each feature serves, and the loop in
+each that must never break.
 
 Sections 1-10 describe what is **built**, each with the test or run that proves
 it; anything carrying a stated limitation is marked **limited** in place.

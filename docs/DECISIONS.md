@@ -847,3 +847,39 @@ watermark naturally attracts.
 reply, a different id, no id at all, `--request-id` with no value, and no id leakage into
 the prompt), falsified by dropping `requestId` from the submission and watching it fail
 with `the retry must report that it reused the submission`.
+
+## D35 — The workflows are named, so "recommended" is derived (2026-10-11)
+
+**Decision:** `docs/WORKFLOWS.md` names five workflows — routed delegation, independent
+verification, blocked on a question, intake/decomposition/tracking, human oversight — plus
+the operator loop for a rig change under measurement. Each states **who**, the trigger,
+the **loop that must never break**, what **done** means in observable state, and the
+capability it needs. These loops were implicit across the MVP bar, the feature inventory,
+the gap table and `RESEARCH.md`; now they are in one place and each can be argued with
+individually.
+
+**What it settles.** Two things, and neither was the document's stated purpose.
+
+1. **"Recommended" is mostly rig shape, not extensions.** Every workflow is served by
+   the Router — one extension — so what separates a rig that works from one that does not
+   is the seats, their models and their edges, which is precisely what `check` already
+   fails a rig for. Item 18's profiles should therefore be a preset rig file plus a seed
+   list, not a bundle of extensions a user must reason about, and the first genuine
+   opt-in candidate is retrieval (item 4, an operator ruling rather than a default).
+2. **D21, D22 and D24 were workflow decisions, not architecture decisions.** The roadmap
+   flagged them as taken ad hoc; the workflows give each a reason. D21 is W5 plus the
+   operator loop — an interactive prompt would be a blocking gate inside W1's
+   must-not-break path. D22 is W1–W4 — a seat is a queue participant, and the unit of
+   attention is the rig's state rather than a seat's screen. D24's must-not-break is the
+   baseline-before-change rule.
+
+**Why "must-not-break" is the load-bearing field.** A workflow can be slow, awkward or
+verbose and still be worth running; these are the failures a person cannot recover from
+by noticing. Writing them down also forced an unwelcome one to the surface: **W2 is not
+fully supported.** Verification holds today only for artifacts a reviewer can read in a
+transcript, because `complete_work` carries a `resultSummary` claim rather than evidence.
+That is item 4 (M3), and it is a limit on what the tutor rig can be trusted to do, stated
+where the workflow is rather than in a footnote.
+
+**Evidence:** `docs/WORKFLOWS.md` (the workflows and the capability matrix),
+`docs/ROADMAP.md` item 21, and the demos each workflow cites.

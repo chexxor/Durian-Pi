@@ -211,6 +211,8 @@ docs/METRICS.md       metrics design: measures, surfacing, scope, traps (first c
 docs/DOGFOOD.md       dogfooding log: what we ran on durig, what broke, where it lands
 docs/REVIEW-pi-durable-demos.md  what the two pi-durable example projects show
                         durig: ideas, gap analysis, patterns and hazards
+docs/WORKFLOWS.md     what durig is for: the workflows, their must-not-break loops,
+                        and the capability each one needs
 scripts/sync-pi.mjs   build + link pi's main branch at a pinned commit
 pi-main.pin.json      the pinned upstream commit durig is validated against
 src/seatmodel.mjs     per-seat {provider}/{modelId} resolution

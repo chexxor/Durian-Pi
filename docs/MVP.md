@@ -617,6 +617,38 @@ recorded in D34 as a pattern: the settle/report path is where durig's subtle bug
 Falsified by dropping `requestId` from the submission and watching the test fail with
 `the retry must report that it reused the submission`.
 
+## Review recipe — what durig is for (item 21, 2026-10-11)
+
+A document, so the recipe is how to read it and what it changes rather than how to run it.
+
+```powershell
+cd durig
+cat docs/WORKFLOWS.md       # five workflows + the operator loop, then the matrix
+```
+
+Read `docs/WORKFLOWS.md` in this order: the five workflows (each is who / trigger /
+**must-not-break** / done / capability), then **the capability matrix**, then **deriving
+"recommended"**. The last section is the payoff — it is what item 18 was waiting for — and
+the matrix is what makes it checkable rather than a matter of taste.
+
+The one-line result: **"recommended" is mostly rig shape, not extensions.** All five
+workflows are served by the Router, which is one extension, so what separates a rig that
+works from one that does not is the seats, their models and their edges — exactly what
+`check` already fails a rig for. So item 18's profiles should be a preset *rig file* plus a
+seed list, and the first genuine opt-in candidate is retrieval (item 4, an operator
+ruling).
+
+It also re-reads three decisions as workflow decisions, which the roadmap had flagged as
+taken ad hoc: D21 is W5 plus the operator loop (an interactive prompt would be a blocking
+gate inside W1's must-not-break path), D22 is W1–W4 (a seat is a queue participant; the
+unit of attention is the rig's state, not a seat's screen), and D24's must-not-break is
+the baseline-before-change rule.
+
+And it states a limit plainly: **W2 (independent verification) is not fully supported.**
+It holds only for artifacts a reviewer can read in a transcript, because `complete_work`
+carries a `resultSummary` claim and not evidence — item 4 (M3). Naming the loop is what
+made that visible rather than a footnote in a gap table.
+
 ## Review recipe — a seat can stop and ask (item 5, 2026-10-11)
 
 Before this, a seat that could not proceed had two options: invent an answer or go
