@@ -61,7 +61,7 @@ appears (see repeat-call recipe in the session log / README examples).
 
 ## Explicitly out of MVP scope
 
-Deferred from Core_Ideas.txt as before: constitutional-evolution search,
+Deferred from Core_Ideas.md as before: constitutional-evolution search,
 Big-Five injection, FIPA-ACL performatives, Contract Net auctions, dynamic
 personas, blackboard architecture.
 

@@ -50,7 +50,7 @@ Conclusion informing D9: durig v2 adopts CrewAI/MetaGPT field names for the
 persona layer so migration from either is mechanical; OpenRig gets a dedicated
 converter (`../scripts/from-openrig.mjs`) since that is our incumbent.
 
-## Core_Ideas.txt layer mapping
+## Core_Ideas.md layer mapping
 
 Six layers from the operator's research digest map to durig as:
 identity/persona → rig.json persona fields + compilePersona;

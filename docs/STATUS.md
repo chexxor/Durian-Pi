@@ -99,7 +99,7 @@ They are the regression gate for the pi-main link as well as for feature work
 
 ## Research review (2026-10-10)
 
-`docs/Patterns_and_Pitfalls_of_LLM_Agents.txt` (MAST failure taxonomy, Anthropic's
+`docs/Patterns_and_Pitfalls_of_LLM_Agents.md` (MAST failure taxonomy, Anthropic's
 production and swarm research, practitioner consensus) was reviewed against the
 implementation; D23 records the conclusion and ROADMAP.md carries the full gap
 table. Short version: **the architecture is on the right side of the evidence and
