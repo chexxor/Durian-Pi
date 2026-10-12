@@ -36,6 +36,31 @@ architecture delegates elsewhere (pi sessions + disk + herdr). The project's own
 ("agent-fleet over pi-durable") is *assembly we would own*, not an existing
 integration, because AF runs specialists as plain pi sessions today.
 
+### Process model — does each agent get a new shell? (asked by the operator)
+
+**No shell; a new `pi` child process.** Every native specialist, research helper
+and nested delegate is spawned directly as a `pi` process with piped stdio and no
+shell (evidence: `.pi/harnesses/agent-hub/spawn.ts`):
+
+- `spawn.ts:257` — `const launchCommand = isolation?.command ?? "pi";`
+- `spawn.ts:274` — `spawn(launchCommand, launchArgs, { stdio: ["pipe","pipe","pipe"], detached: true })`,
+  with the prompt written to stdin (`proc.stdin.end(opts.prompt)`); `shell: true`
+  appears nowhere in agent-hub.
+- The **hub itself is one pi process** — agent-hub is a `pi-coding-agent`
+  extension (`import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"`).
+
+So the OpenRig pattern — one **shell / terminal pane per agent**, the thing the
+operator rejected — is **not** agent-fleet's native model: no tty, no tmux/psmux
+pane, no interactive shell. Two caveats that keep this honest:
+
+- **Opt-in peers** (`--peers`; `docs/ARCHITECTURE.md` "Peer topology") *are*
+  separate processes in **herdr panes** — a terminal per peer — but peers are
+  opt-in, not the default.
+- It is still **one OS process per agent** (a child `pi`), whereas durig is
+  lighter still: every seat is a conversation in **one** harness process. The
+  docs call the specialists "in-process"; the code spawns child `pi` processes,
+  so treat "one `pi` process per agent" as the fact and "in-process" as loose wording.
+
 ## 2. Goal-by-goal — what agent-fleet covers, and where it does not
 
 Legend: **✔** covered · **⊕** covered *better than durig* · **◐** partial / different shape · **✘** absent.
