@@ -51,6 +51,7 @@ import {
 	readGenerationSlots,
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
+import { driveOnce } from "./src/driver.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
@@ -546,6 +547,49 @@ async function cmdResume() {
     }
 
     out({ ok: true, command: "resume", db: DB_PATH, found: stranded.length, actions });
+  } finally {
+    await harness.close(BACKGROUND_CONTEXT);
+  }
+}
+
+// run [--watch]: drive the rig to quiescence (ROADMAP 38). Opens the harness
+// WITH resume() so queued work is scheduled, then repeatedly wakes any seat that
+// has queued work and nothing advancing it (src/driver.mjs) and waits for the
+// rig to go idle, until a pass changes nothing. This is the clock the queue was
+// missing: one `send` to route, then `run` finishes the chain without a second
+// external send. `--watch` stays resident instead of exiting.
+async function cmdRun({ watch = false } = {}) {
+  const { harness } = await openHarness();
+  try {
+    const maxPasses = watch ? Infinity : 200;
+    let passes = 0;
+    for (;;) {
+      const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+      const queueDoc = await harness.documentState(RigQueue, undefined, BACKGROUND_CONTEXT);
+      const inspection = await harness.inspect(BACKGROUND_CONTEXT);
+      const pendingConvIds = new Set((inspection.submissions ?? []).map((s) => s.conversationId));
+      // A live generation lease means the seat is already advancing; a dead one
+      // does not, so only LIVE holders are treated as busy (same rule as the
+      // stranded notice and the resume verb).
+      const slots = maxSeats();
+      const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
+      const busySeats = new Set(genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat));
+      const actioned = await driveOnce(harness, {
+        seats: seatsDoc?.value?.seats,
+        items: queueDoc?.value?.items,
+        pendingConvIds,
+        busySeats,
+        context: BACKGROUND_CONTEXT,
+      });
+      // Hold the harness open until every run this pass started has settled;
+      // closing first would abandon them (the F11 class).
+      await harness.waitForIdle(BACKGROUND_CONTEXT);
+      passes++;
+      if (!watch && actioned === 0) break;
+      if (passes >= maxPasses) break;
+      if (watch) await new Promise((r) => setTimeout(r, 750));
+    }
+    out({ ok: true, command: "run", db: DB_PATH, passes });
   } finally {
     await harness.close(BACKGROUND_CONTEXT);
   }
@@ -1249,6 +1293,7 @@ usages:
   node cli.mjs send <seat> <text> --no-stream   the same, without the live view
   node cli.mjs queue           dump the work queue
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
+  node cli.mjs run             drive the rig to quiescence (wake seats with queued work; --watch stays resident)
   node cli.mjs log <seat> [limit] [--follow] [--full] [--tool-bg] [--theme dark|light]
                           a seat's conversation (--follow = live, --full = whole tool output)
   node cli.mjs watch [--once] [--json|--human]   follow rig state (human on a terminal)
@@ -1318,6 +1363,7 @@ try {
     await cmdSend(args[0], text, { stream, requestId });
   } else if (cmd === "queue") await cmdQueue();
   else if (cmd === "resume" || cmd === "doctor") await cmdResume();
+  else if (cmd === "run") await cmdRun({ watch: rest.includes("--watch") });
   else if (cmd === "watch") {
     // Same precedence as `send --stream`: an explicit flag wins, otherwise a
     // terminal gets the readable view and a pipe keeps the JSON contract.
