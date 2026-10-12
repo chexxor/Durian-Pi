@@ -45,7 +45,7 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { describeConfig, loadConfig, streamSettings } from "./src/config.mjs";
+import { describeConfig, loadConfig, strandedMsSetting, streamSettings } from "./src/config.mjs";
 import { computeAttention } from "./src/attention.mjs";
 import {
 	readGenerationSlots,
@@ -622,6 +622,37 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
     toolName: extractEntryText(entry)?.toolName ?? null,
     model: entry.model?.[0] ?? null,
   });
+  // Lines of the human transcript already emitted. Kept so the follow renderer
+  // can re-run the whole transcript through the SAME grouping path and emit only
+  // what has not been shown yet, instead of formatting each later turn as its own
+  // isolated block with its own column width and delta (the backfill/later-turn
+  // inconsistency ROADMAP item 10 fixes). The whole accumulated transcript goes
+  // through one formatChat call, so column alignment and turn grouping match the
+  // backfill exactly and a reader cannot tell where the backfill ended.
+  let humanLines = [];
+  const renderHuman = (entries) => {
+    const text = formatChat(entries, {
+      seat: seatName,
+      color,
+      width: process.stdout.columns ?? 100,
+      full,
+      toolBg,
+      theme,
+    });
+    if (!text) return;
+    const lines = text.split("\n");
+    // Re-rendering the full transcript is prefix-stable unless a turn regroups
+    // (a tool result arriving after the call that produced it folds back into
+    // the same turn), so walk from the first divergence rather than trusting the
+    // line count: the corrected tail is re-emitted even when an earlier line
+    // changes character.
+    let i = 0;
+    while (i < humanLines.length && i < lines.length && humanLines[i] === lines[i]) i++;
+    for (let k = i; k < lines.length; k++) console.log(lines[k]);
+    humanLines = lines;
+  };
+  // Follow keeps one continuous transcript: accumulate, then render it whole.
+  const allEntries = [];
   const print = (entries) => {
     // An empty transcript must SAY it is empty. Printing nothing - and then
     // waiting forever under --follow - makes "has never run" look identical to
@@ -633,15 +664,12 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
       );
     }
     if (human) {
-      const text = formatChat(entries, {
-        seat: seatName,
-        color,
-        width: process.stdout.columns ?? 100,
-        full,
-        toolBg,
-        theme,
-      });
-      if (text) console.log(text);
+      if (follow) {
+        for (const e of entries) allEntries.push(e);
+        renderHuman(allEntries);
+      } else {
+        renderHuman(entries);
+      }
       return;
     }
     out({
@@ -745,19 +773,36 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
   }
   // Slot-file notices ride alongside seat notices: a live holder means the
   // GPU is busy (healthy waiting), a dead holder means a wedged generation.
-  const slotNotices = Number.isFinite(slots)
-    ? readGenerationSlots(dbPath, slots).map((g) => ({
-        scope: "seat",
-        seat: g.generatingSeat ?? `slot-${g.slotIndex}`,
-        kind: g.name,
-        detail:
-          g.name === "generation_in_flight" ? `generating since ${g.since}` : g.detail,
-      }))
-    : [];
+  // A LIVE slot for a seat also means that seat's queued submission is
+  // legitimately waiting behind a genuine run, so those seat names feed the
+  // admitted_not_started suppression (ROADMAP 37a): a dead holder's slot does
+  // NOT suppress it, because a gone run means nothing is advancing the
+  // submission and it IS stranded.
+  const genSlots = Number.isFinite(slots) ? readGenerationSlots(dbPath, slots) : [];
+  const seatsWithSlot = new Set(genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat));
+  const slotNotices = genSlots.map((g) => ({
+    scope: "seat",
+    seat: g.generatingSeat ?? `slot-${g.slotIndex}`,
+    kind: g.name,
+    detail:
+      g.name === "generation_in_flight" ? `generating since ${g.since}` : g.detail,
+  }));
   // One bounded page per seat, shared: highlights and metrics both read these
   // entries, so a render makes a single pass over the transcripts. Measured at
   // 0.9-1.4 ms for 14 seats x 24 entries against a 750 ms poll (METRICS.md).
   const pages = await readSeatPages(storage, BACKGROUND_CONTEXT, seats, entryLimit);
+  // The submission record carries no admission timestamp (scanSubmissions
+  // returns id/status/entry only), so recover it from the admitted input
+  // ENTRY's timestamp for the admitted_not_started notice; left undefined when
+  // that entry has fallen off the bounded page (ROADMAP 37a).
+  for (const seat of seats) {
+    const latest = latestByConv.get(seat.conversationId);
+    const entryId = latest?.entry;
+    if (!latest || entryId == null) continue;
+    const admitted = (pages[seat.name] ?? []).find((e) => e.id === entryId);
+    const ts = admitted?.model?.[0]?.timestamp;
+    if (Number.isFinite(ts)) latest.admittedAt = ts;
+  }
   const metrics = computeMetrics({
     pages,
     queueItems: queueVal.items ?? [],
@@ -782,6 +827,9 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
       }
     }
   }
+  // Admission age beyond which an unstarted submission is surfaced as stranded
+  // (ROADMAP 37a); null means the module default in src/attention.mjs stands.
+  const strandedMs = strandedMsSetting(CFG);
   return {
     seats,
     queueItems: queueVal.items ?? [],
@@ -789,7 +837,11 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
     latestByConv: Object.fromEntries(latestByConv),
     metrics,
     attention: [
-      ...computeAttention(seats, queueVal.items ?? [], latestByConv, errorByConv),
+      ...computeAttention(seats, queueVal.items ?? [], latestByConv, errorByConv, {
+        nowMs: Date.now(),
+        seatsWithSlot,
+        ...(strandedMs === null ? {} : { strandedMs }),
+      }),
       ...slotNotices,
       // Metric notices join the attention channel instead of claiming a screen
       // of their own: same slot, same rendering, and signal only when a measure

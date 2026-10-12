@@ -78,6 +78,21 @@ export const DEEPINFRA_COMPAT = {
 	supportsReasoningEffort: true,
 } as const;
 
+/**
+ * Compatibility for one DeepInfra model. `thinkingFormat: "deepseek"` is
+ * required for DeepSeek models (DeepInfra's Pi integration docs): without it Pi
+ * sends the wrong thinking parameter and does not recognise DeepSeek's reasoning
+ * stream (sent as `reasoning_content`), so reasoning and tool-call markup can
+ * leak into the visible message text instead of the reasoning channel. Applied
+ * only to DeepSeek ids, because the flag changes the request shape
+ * (`thinking: { type }`) and is not meaningful for other vendors' models.
+ */
+function compatFor(id: string) {
+	return id.startsWith("deepseek-ai/")
+		? { ...DEEPINFRA_COMPAT, thinkingFormat: "deepseek" as const }
+		: DEEPINFRA_COMPAT;
+}
+
 export function mapCatalogModel(raw: DeepInfraCatalogModel): Model<"openai-completions"> {
 	const metadata = raw.metadata ?? {};
 	const tags = metadata.tags ?? [];
@@ -100,7 +115,7 @@ export function mapCatalogModel(raw: DeepInfraCatalogModel): Model<"openai-compl
 		cost: { input: inputPrice, output: outputPrice, cacheRead, cacheWrite: 0 },
 		contextWindow: metadata.context_length ?? 128_000,
 		maxTokens: metadata.max_tokens ?? 4096,
-		compat: DEEPINFRA_COMPAT,
+		compat: compatFor(raw.id),
 	};
 }
 
@@ -133,6 +148,21 @@ export function fallbackModels(): Model<"openai-completions">[] {
 	const entries: Array<[string, number, number, number, number, boolean, boolean]> = [
 		// id, ctx, max, $in, $out, reasoning, vision
 		["deepseek-ai/DeepSeek-V4-Flash-0731", 1_048_576, 1_048_576, 0.09, 0.18, true, false],
+		// Operator-designated worker model for the selfdev rig. It is absent from the
+		// captured catalog and the live catalog fetch (`fetchDeepInfraModels`) is not
+		// wired into `buildModels`, so without this fallback entry a seat that names it
+		// resolves to `no_model` before any request is made. Priced alongside its
+		// V4-Flash sibling until the live catalog is wired in.
+		["deepseek-ai/DeepSeek-V4.1-Flash", 1_048_576, 1_048_576, 0.14, 0.28, true, false],
+		// Operator-designated verifier model (selfdev qa), chosen for DeepInfra uptime
+		// after `zai-org/GLM-5.3-Flash` returned persistent 429 engine_overloaded. Values
+		// fetched from the live catalogue (2026-10-11): 1M ctx, $0.14/$0.28, reasoning,
+		// vision. A different family from the DeepSeek authors, so item 3 diversity holds.
+		["XiaomiMiMo/MiMo-V2.6-Flash", 1_048_576, 1_048_576, 0.14, 0.28, true, true],
+		// Operator-designated verifier model (selfdev qa), replacing MiMo after it
+		// wandered off-task. Values from the live catalogue (2026-10-11): 262K ctx,
+		// $0.10/$0.95, reasoning, vision. A different family from the DeepSeek authors.
+		["Qwen/Qwen3.6-35B-A3B", 262_144, 262_144, 0.1, 0.95, true, true],
 		["zai-org/GLM-5.3-Flash", 1_048_576, 1_048_576, 0.15, 0.5, true, true],
 		["deepseek-ai/DeepSeek-V3-0324", 163_840, 163_840, 0.24, 0.9, false, false],
 		["deepseek-ai/DeepSeek-R1-0528", 163_840, 163_840, 0.5, 2.15, true, false],
@@ -162,6 +192,6 @@ export function fallbackModels(): Model<"openai-completions">[] {
 		},
 		contextWindow,
 		maxTokens,
-		compat: DEEPINFRA_COMPAT,
+		compat: compatFor(id),
 	}));
 }

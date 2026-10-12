@@ -12,6 +12,20 @@
 // - "deferred_awaiting_answer": the seat parked an item on a question and is
 //   waiting for the answer. A deferred item is a fact, not an inference from
 //   idleness, so it is reported even when the run also failed.
+// - "admitted_not_started": a submission was admitted durably (the input
+//   committed) but nothing has started a run for it - the `send` was killed
+//   mid-flight (dogfood F11), so the rig reads idle-healthy while a request sits
+//   unprocessed. Derived from already-persisted data only (no new write path,
+//   D24).
+
+// How long an admitted submission may sit unstarted before it is judged
+// stranded. The submission record carries NO admission timestamp of its own
+// (scanSubmissions returns only conversationId/type/status/entry/id), so the
+// age is recovered from the admitted input ENTRY's timestamp, attached by the
+// caller as `admittedAt`. The threshold separates a submission a live harness
+// is about to schedule (fresh, under the wire) from one nothing is driving
+// (aged past it).
+export const STRANDED_ADMITTED_MS = 30_000;
 
 /**
  * The reason a run failed, plus the CAUSE when the entry knows it.
@@ -54,8 +68,11 @@ export function summarizeError(errorMessage) {
  * @param {Array<{name:string, conversationId:number|string, role?:string}>} seats
  * @param {Array<{to:string, status:string}>} queueItems
  *        items may also carry `deferredTo` (which seat, or "human", an item is parked on)
- * @param {Map<number|string, {status:string, reason?:string}|undefined>} latestByConv
- *        latest submission record per conversation id (any status)
+ * @param {Map<number|string, {status:string, reason?:string, admittedAt?:number}|undefined>} latestByConv
+ *        latest submission record per conversation id (any status). `admittedAt`
+ *        is the timestamp of the submission's admitted input entry, recovered
+ *        by the caller from the entry because the record itself has none.
+ * @param {Map<number|string, string>} [errorByConv] latest provider error per conversation
  * @returns {Array<{scope:string, seat:string, kind:string, detail:string}>}
  *
  * Every notice carries a `scope`, added alongside `seat` rather than replacing
@@ -64,8 +81,20 @@ export function summarizeError(errorMessage) {
  * queue-scoped notices with a null seat, and a per-seat renderer must exclude
  * those EXPLICITLY - filtering on the seat field alone would put a rig-wide
  * notice on whichever seat row happened to match.
+ *
+ * `nowMs`, `seatsWithSlot` and `strandedMs` pin the facts behind the stranded
+ * rule: the submission record and its entry timestamp are persisted, but
+ * whether a harness is presently driving the submission is NOT, so "started"
+ * is inferred from a live generation slot plus the admission age - passed in
+ * here rather than fabricated.
  */
-export function computeAttention(seats, queueItems, latestByConv, errorByConv = new Map()) {
+export function computeAttention(
+	seats,
+	queueItems,
+	latestByConv,
+	errorByConv = new Map(),
+	{ nowMs = Date.now(), seatsWithSlot = new Set(), strandedMs = STRANDED_ADMITTED_MS } = {},
+) {
 	const notices = [];
 	for (const seat of seats) {
 		const queued = queueItems.filter((it) => it.to === seat.name && it.status === "queued");
@@ -97,6 +126,36 @@ export function computeAttention(seats, queueItems, latestByConv, errorByConv = 
 		}
 		const inFlight =
 			latest?.status === "queued" || latest?.status === "placed";
+		// A submission admitted but never started is the rig reading idle-healthy
+		// while a request sits unprocessed (dogfood F11): `send` was killed, the
+		// submission stayed "queued"/"placed", and until now the inFlight guard
+		// suppressed every notice. Detect it from the already-persisted admission
+		// age plus the absence of a live generation slot (nothing is running, so
+		// nothing will advance it).
+		//
+		// BLIND SPOT: a viewer never opens a harness (D11), so this cannot tell
+		// "no harness will ever drive this submission" from "a live harness is
+		// momentarily between scheduling passes"; strandage is inferred from the
+		// admission age exceeding the threshold AND the seat holding no LIVE
+		// generation slot. A live slot means a run is genuinely ahead of it and the
+		// submission is legitimately waiting (backpressure), so it is not flagged;
+		// a DEAD slot (stale holder) is treated as nothing running, so the
+		// submission IS flagged stranded and the generation_stale notice separately
+		// explains the wedged slot.
+		if (latest && inFlight) {
+			const age = Number.isFinite(latest.admittedAt) ? nowMs - latest.admittedAt : null;
+			const seatHasSlot = seatsWithSlot.has(seat.name);
+			if (age !== null && age > strandedMs && !seatHasSlot) {
+				notices.push({
+					scope: "seat",
+					seat: seat.name,
+					kind: "admitted_not_started",
+					detail: `submission #${latest.id ?? latest.entry ?? "?"} admitted ${Math.round(
+						age / 1000,
+					)}s ago, no run started and no slot held; re-arm it with the resume/doctor verb (item 37(b))`,
+				});
+			}
+		}
 		if (queued.length > 0 && !inFlight) {
 			notices.push({
 				scope: "seat",

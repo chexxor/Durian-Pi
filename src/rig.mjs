@@ -110,10 +110,35 @@ export async function registerSeat(tx, name, conversationId, role) {
 }
 
 /**
+ * Is this queue item a DONE acknowledgement rather than work? Completing a
+ * notice must not enqueue another notice, or every ack spawns an ack and the
+ * chain (#3 "DONE #1" -> #5 "DONE #3: DONE #1" -> #9 ...) grows without bound,
+ * burning a seat turn per hop (ROADMAP 39). The structural `notice` flag is the
+ * real mechanism, set at enqueue time; the subject shape is only a LEGACY
+ * fallback for DONE items already in a store that predates the flag, which
+ * would otherwise keep looping. Matching exactly the shape complete_work
+ * enqueues ("DONE #<id>: <subject>") keeps the fallback from catching real work.
+ */
+export function isDoneNotice(item) {
+	return item?.notice === true || /^DONE #\d+: /.test(String(item?.subject ?? ""));
+}
+
+/**
  * Enqueue work. Called inside a transaction; returns the assigned item id.
  * `transitions` records who did what and when for the audit trail.
+ *
+ * `notice` marks a protocol acknowledgement (a DONE notice) rather than work, so
+ * completing it can be recognised structurally instead of by its subject.
  */
-export async function enqueueItem(tx, from, to, subject, body, optimizedVia = null) {
+export async function enqueueItem(
+	tx,
+	from,
+	to,
+	subject,
+	body,
+	optimizedVia = null,
+	notice = false,
+) {
 	const queue = await tx.doc(RigQueue);
 	const id = queue.nextId++;
 	queue.items.push({
@@ -125,6 +150,8 @@ export async function enqueueItem(tx, from, to, subject, body, optimizedVia = nu
 		// Provenance: non-null means the body was machine-optimized before
 		// enqueue; names the model that did it. Null = human-written.
 		optimizedVia,
+		// A protocol notice (a DONE ack), not work: completing it enqueues nothing.
+		notice,
 		status: "queued",
 		transitions: [{ at: new Date().toISOString(), event: "queued", by: from }],
 	});
@@ -268,13 +295,21 @@ const Router = defineExtension({
 						event: "done",
 						by: me,
 					});
-					await enqueueItem(
-						tx,
-						me,
-						item.from,
-						`DONE #${item.id}: ${item.subject}`,
-						args.resultSummary,
-					);
+					// A DONE notice is an acknowledgement, not work: only real work gets
+					// a DONE notice back, or the chain never ends (ROADMAP 39).
+					// `isDoneNotice` also covers flag-less DONE items already in the
+					// store that predate the structural flag.
+					if (!isDoneNotice(item)) {
+						await enqueueItem(
+							tx,
+							me,
+							item.from,
+							`DONE #${item.id}: ${item.subject}`,
+							args.resultSummary,
+							null,
+							true,
+						);
+					}
 					return `ok`;
 				}, context);
 				return toolText(out);

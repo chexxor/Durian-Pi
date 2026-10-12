@@ -772,6 +772,164 @@ surface. A feature that is off must therefore cost nothing — not "little".
     an **admission** deadline.
     *Proof:* a demo that admits a submission without scheduling it, asserts the notice appears, and
     asserts the verb clears it - falsifiable by disabling the notice.
+    **Status 2026-10-11:** (a) detected — `admitted_not_started` was added to
+    `src/attention.mjs` (age from the admitted entry's timestamp, beyond a
+    threshold, with no live generation slot) with `demo/stranded.test.mjs`
+    (positive + two negative controls + an end-to-end `status` check), pending
+    qa verification. (b) the `resume`/`doctor` verb is still queued. **The F11
+    remedy as written is false:** re-sending with the same `--request-id` does NOT
+    re-arm a stranded submission — pi-durable's `admitSubmission` returns the
+    existing submission for a known id *without scheduling it*, so `submission.wait()`
+    hangs (reproduced). Recovery today means `harness.abortSubmission(id)` then a
+    fresh send; the verb must do that deliberately.
+
+38. **Self-driving queue: wake the seat when work is enqueued, instead of an external clock**
+    (raised by the operator 2026-10-11). Today **only `send` ever starts a run** — `conv.submit`
+    appears exactly once in the whole tree, in `cmdSend`. `send_work` and `complete_work` write
+    queue rows but wake nobody, and viewers deliberately do not schedule (D11), so a chain
+    (`pm → impl → qa → pm`) dies after the first hop and an external actor is the clock. The
+    operator's ask: let a seat be woken by its own queue rather than by something outside the rig.
+    *Honest constraint:* an LLM cannot be woken by a database change on its own — delivering a
+    notification needs a running process. But that process does not have to be external: **the act
+    of enqueuing can be the wake.**
+    *(a) Wake-on-enqueue — preferred, smallest.* `send_work`/`complete_work`/`defer_work` also
+    `conversation.submit()` a short, stable "you have queued work" input to the recipient inside the
+    same commit, so the recipient's run starts as part of the durable chain. This keeps D11 (viewers
+    still never schedule), inherits the genlock concurrency cap, and lets pi-durable's inbox queue
+    the input when the recipient is already busy. Constraints: (i) it must be edge-gated like any
+    send, so a seat cannot wake a seat it may not reach; (ii) it must not wake anyone for a notice
+    once 39 lands; (iii) item 33 — the wake input mutates the conversation prefix, so it must be
+    byte-stable per wake and not per request or it zeroes the cache; (iv) bound the recursion.
+    *(b) A resident `durig run` process — the platform-native model, not a fallback.* One long-lived
+    process holding a harness with `resume()`, scanning the queue and driving recipients (this is
+    also the only place item 6's deadlines and retries can live). pi-durable's "Multiplayer" post
+    reports this as its intended shape, not a workaround: *"everything a UI needs is committed
+    state, so any number of clients can attach to any conversation in the harness"*, the initial view
+    already carries *"the answer being streamed"*, and *"`thread.watch()` delivers the exact
+    operations of every commit, small enough to send over a socket."* So the resident process is a
+    **server** (item 40(a)); the clock is the harness itself, and clients are subscribers rather than
+    storage pollers.
+    *Proof:* a demo where one `send` to `pm` causes `pm` to route, `impl` to run and complete, and
+    `pm` to receive the DONE — with no second external send; falsifiable by disabling the wake.
+    *Dependency:* 39 must land first, or wake-on-enqueue turns a single item into an unbounded wake
+    storm across the DONE ack chain.
+
+39. **A DONE notice must not generate a DONE notice.** Found by reading the live selfdev queue
+    (2026-10-11): `complete_work` always enqueues `DONE #<id>` back to `item.from`, *including when
+    the completed item is itself a DONE notice*. The queue grew `#3 = DONE #1`, `#5 = DONE #3:
+    DONE #1`, `#9 = DONE #5: DONE #3: DONE #1 …` — an unbounded acknowledgement chain that burns a
+    seat turn per hop and grows the subject without bound. It is a protocol defect, not seat
+    misbehaviour: every seat did exactly what the tool tells it to. Fix: mark notice items at
+    enqueue (`isNotice: true`) rather than string-matching the subject, and have `complete_work`
+    suppress the notification for a notice; or make notices non-claimable (cleared by `status` or a
+    verb instead of by `claim_work`). *Proof:* a demo that completes a DONE notice and asserts no
+    new item is enqueued; falsifiable by reverting the suppression.
+
+40. **Live token streaming into a follower window** (raised by the operator 2026-10-11). `log <seat>
+    --follow` reads **committed** storage entries, and an assistant turn is committed as one entry
+    only when the run settles — so a reader watching a seat sees the reply appear whole at the end,
+    never as it arrives. The partial `text_delta`/`thinking_delta` events do exist and are rendered
+    live, but only inside the process driving the generation: `send --stream` writes them to stderr
+    through `createLiveRenderer`/`wrapProviderWithLiveView` (`src/streamview.mjs`). A separate
+    `--follow` window therefore cannot see them. **Corrected 2026-10-11:** the claim that nothing
+    publishes partial output cross-process was wrong — the in-flight message is persisted in the
+    `pi.live` document (see (c)). Options, in order of preference:
+    *(a) A resident harness server with `viewState()`/`watch()` clients — platform-native.* This is
+    what the "Multiplayer" post describes: one process owns the harness, a client calls
+    `thread.viewState(context)` for *"the transcript, the answer being streamed, running tools and
+    their output, queued messages, the agent, and usage"*, then `thread.watch()` (compact commit ops,
+    socket-friendly) or `watchEvents()` (friendlier, more bytes) for changes; a late/reconnecting
+    client simply starts from the current view. It is the same resident process as item 38(b),
+    which is why 38 and 40 are one architectural decision: build the server once and both the queue
+    driver and live streaming fall out. durig's `log --follow`/`watch` become clients instead of
+    storage pollers.
+    *(b) Publish progress to a sidecar.* The driving process writes deltas to an ephemeral artifact
+    beside the store (like `genlock`'s slot files) that `log --follow` tails. Cheap and local, but it
+    is a new write path and a new artifact to bound and clean up, and it must not be replayed as
+    history.
+    *(c) Read the persisted in-flight message — now the cheapest, and already available.* pi-durable
+    **commits** the in-flight assistant message to the `pi.live` document during the run
+    (`docs.pi.live.generation.message`; `PARTIAL_PATH` in `harness/events.ts`), and
+    `ConversationViews.#build` hydrates its initial view from storage
+    (`conversationDocumentOnLine`). So a viewer that already reads storage can poll the `pi.live`
+    document for the seat's conversation and render the partial answer as it grows — **no new write
+    path** (D24), no harness, D11 intact. This answers the operator's "the examples stream, why
+    can't we": they can because their **viewer is the driver** (in-process commit subscription,
+    `watchEvents`/`CommittedWatch`), and `send --stream` already does the same in-process; the
+    follower process simply never read the `pi.live` document it already has access to. Prefer this
+    over (a)/(b); (a) becomes an optimisation (no poll latency) rather than the enabling step.
+    *D11 tension — revisit its conclusion, not its evidence.* D11 established that sqlite has no
+    cross-process change notification and concluded that durig's viewers must read storage directly
+    and never attach a harness. The **evidence** holds; the **conclusion** was too strong. The
+    platform's answer is one resident writer/server whose clients subscribe — which keeps the
+    single-writer discipline intact while making streaming and multiplayer possible. A viewer opening
+    a harness was the thing to avoid; a single long-lived writer that *is* the harness is the thing
+    to build. Record that when 38(b) lands.
+    *Constraints that decide the shape:* partial output is **not** committed state, so it must never
+    masquerade as an entry or be replayed as history (the single-writer discipline, D24); a follower
+    must visibly distinguish "streaming now" from "committed"; and a crashed driver must leave no
+    half-line that a later reader mistakes for the reply.
+    *Proof:* a demo where a follower process receives partial assistant text **before** the run
+    settles, and the settled entry then supersedes it — falsifiable by disabling the publication.
+
+41. **Emergency stop: cancel a seat's run and halt its loop** (raised by the operator 2026-10-11).
+    While operating, the operator needs a way to STOP an agent in an emergency — when it has entered
+    a degenerate loop (dogfood F9/F5: a coordinator that investigates instead of routing; a model
+    that emits tool calls as text and burns turns) or is behaving harmfully. Today there is no such
+    verb: the only ways to stop a run are to kill the driving `send` process (which leaves an
+    admitted-but-unscheduled submission — F11) or to kill a pid read off the generation lease, both
+    crude and neither recording why.
+    *The platform has the primitive.* `harness.abortSubmission(id)`, `harness.abortTask(id)` and
+    `conversation.abort()` exist; what is missing is a durable, deliberate operator surface and the
+    guarantee that it actually halts a process that will not cooperate.
+    *Design constraints that decide the shape:*
+    (i) **It must not depend on the agent cooperating.** A seat in a degenerate loop must be stopped
+    by the harness/CLI, not by asking it to stop in prose — so the stop is enforced by the driver
+    that holds the generation lease, not by a message into the conversation.
+    (ii) **It must reach a run in another process.** The driver may be a separate invocation, so the
+    stop travels through durable state (a control document the driver checks between turns) or
+    through the lease (signal/kill the holder pid); a stop that only works in-process is useless.
+    (iii) **Fail closed and legible.** The halted item/submission reaches a terminal state with a
+    recorded reason (`aborted: operator stop`), surfaced on the attention channel — not left as a
+    silent strand.
+    (iv) **It must not destroy durable work.** Halting stops the loop; the queue item, the transcript
+    and the task checkpoints stay recoverable (resume is item 37(b)'s verb), so an emergency stop is
+    not the same as losing the task.
+    (v) **Idempotent and bounded.** Stopping an already-stopped seat is a no-op, and one command
+    halts one seat without touching others (or a `--all` for the whole rig, explicit).
+    *Shape:* `node cli.mjs stop <seat> [reason]` (and later a rig-wide `stop --all`), which aborts the
+    in-flight submission/task, releases the generation lease, and records the reason.
+    *Proof:* a demo that starts a run, stops it mid-flight, asserts the run reaches a terminal
+    `aborted` state with the reason, that the lease is released, and that the item is recoverable —
+    falsifiable by disabling the stop hook.
+
+42. **A supervisor: derive stalled work and decide to step in — and decide whether it is still
+    needed.** Raised by the operator 2026-10-11 after observing that liveness currently depends on
+    every seat *cooperating*: nothing observes a seat that has stopped and acts. Our own run is the
+    evidence — a policy-compliant team still stalled (F9 pm investigating instead of routing; the
+    DONE-of-DONE loop; F11's stranded submission; a model emitting tool calls as text; MiMo
+    wandering). In none of those did a member neglect its policy; the **substrate** failed to notice
+    or act. What pushed the operator to choose the DONE fix (39) was `queue-ageing`/`admitted_not_
+    started`/`idle_with_queued_work` — derived state, not diligence.
+    *The shape, if built.* One always-on observer (the resident harness of 38(b), or a loop beside
+    it) that reads the attention notices already derived from durable state
+    (`idle_with_queued_work`, `queue-ageing`, `admitted_not_started`, `deferred_awaiting_answer`,
+    `last_run_failed`, `generation_stale`, `step-repetition`) and *acts*: wake the seat (the 38
+    driver), escalate to PM or the human (the 37 `defer_work` channel), or reassign/close. It is
+    **push, not pull**: PM gets a notice only when there is something to act on — PM must not hold a
+    polling tool (item 4 excluded polling; it invites stampedes and correlated checks). Prior art:
+    OpenRig's parked/stuck sweep (its F8) and wake timers (F9).
+    *The evaluation gate, which is the point of recording it now.* 37 (37a notice, 37b verb), 38
+    (self-driving queue) and 39 (no DONE loop) already remove the main stall classes, and 6 adds
+    deadlines/terminal states. So do **not** build a separate supervisor until dogfooding with those
+    landed shows residual stalls the driver + notices cannot handle. The item exists so that
+    question is asked on evidence, not assumed either way: keep a running list of stalls observed
+    after 37/38/39 are live, and if the driver + attention channel cover them, **close this item as
+    unnecessary** (recording why); if a class remains that only a cross-seat observer can catch,
+    build the narrow supervisor for exactly that class.
+    *Proof (if built):* a demo where a seat is left stalled by durable state and the supervisor,
+    without any human action, either wakes it or raises an escalation within a bounded time —
+    falsifiable by disabling the supervisor.
 
 ## Sharing publicly
 

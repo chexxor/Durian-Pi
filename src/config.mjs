@@ -22,6 +22,7 @@ export const CONFIG_KEYS = [
 	"DURIG_OPTIMIZE",
 	"DURIG_EXTENSIONS",
 	"DURIG_STREAM_TIMEOUT_MS",
+	"DURIG_STRANDED_MS",
 	"DURIG_SEAT_ROOT",
 	"DEEPINFRA_API_KEY",
 ];
@@ -124,6 +125,29 @@ export function streamSettings(config) {
 }
 
 /**
+ * The "admitted but not started" strandage threshold (ROADMAP 37a). Returns
+ * `null` when unset, in which case computeAttention falls back to
+ * src/attention.mjs's STRANDED_ADMITTED_MS; overridable so a test (and an
+ * operator chasing a live stall) can tighten it without waiting out the default.
+ *
+ * @param {Record<string, unknown>} [config]
+ * @returns {number|null} milliseconds an admitted submission may sit unstarted
+ *   before it is surfaced as stranded, or null when unset.
+ */
+export function strandedMsSetting(config) {
+	const raw = config?.DURIG_STRANDED_MS;
+	if (raw === undefined || raw === null || raw === "") return null;
+	const ms = Number(raw);
+	// Fail loudly rather than silently ignoring a mistyped value.
+	if (!Number.isFinite(ms) || ms <= 0) {
+		throw new Error(
+			`DURIG_STRANDED_MS must be a positive number of milliseconds, got: ${raw}`,
+		);
+	}
+	return ms;
+}
+
+/**
  * Human/LLM-readable summary of the effective configuration, with secrets
  * reduced to a boolean so this is always safe to print or log.
  */
@@ -139,6 +163,8 @@ export function describeConfig({ config, source }) {
 		// null means the platform default stands: the `openai` SDK's 600000 ms total
 		// request timeout, which durig cannot otherwise raise or lower.
 		DURIG_STREAM_TIMEOUT_MS: config.DURIG_STREAM_TIMEOUT_MS ?? null,
+		// null means src/attention.mjs's STRANDED_ADMITTED_MS (30 s) stands.
+		DURIG_STRANDED_MS: config.DURIG_STRANDED_MS ?? null,
 		DEEPINFRA_API_KEY: config.DEEPINFRA_API_KEY ? "set" : "unset",
 	};
 }
