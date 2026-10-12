@@ -1301,6 +1301,50 @@ missing halves, and 30 is the honest advert.
     its next item and still completes that item, and a seat idle under the threshold does
     not; the previous conversation is never deleted (28b).
 
+## Deadlock and liveness prevention (raised 2026-10-12)
+
+**What we observed.** Live selfdev runs deadlocked in ways the design did not stop:
+`#37→#44→#45→#49→#50` — a seat deferred a shape question it could resolve, and the
+ruling circle took many turns; `#55`/`#79`/`#100` sat `deferred` indefinitely with no
+deadline; and the `run` driver **exited/died while `claimed` and `deferred` work
+existed**, so the stall was invisible until a human looked. None of these was a seat
+failing its policy — the **substrate** did not notice or act, which is the class
+durig's own attention channel already detects but nothing consumes.
+
+**What the research says (this is D23's list, not a new one).** D23 reviewed
+`docs/Patterns_and_Pitfalls_of_LLM_Agents.md` and the two load-bearing citations,
+**MAST (arXiv 2503.13657)** and **Anthropic's "Patterns and problems in emerging
+multiagent systems"**: the convergent remedies (durable single-writer store,
+orchestrator-worker, explicit edges, audit trail) are already durig's foundation, and
+what is missing is **protocol** — *verification with evidence, termination/attempt
+semantics, and a deferral verb*. Our deadlocks landed exactly on the named categories:
+**FC1 termination** (a park with no deadline), **FC2 inter-agent misalignment** (a
+clarification loop), and **observability without an actor** (attention fired; nothing
+acted).
+
+**Prevention, in priority order** (each is a discrete item; none is started by this
+paragraph):
+
+- **P1 — Termination semantics for a defer (item 6).** Every `defer_work` carries a
+  **deadline** and an escalation target; a park past its deadline is surfaced *to an
+  actor*, not merely noticed. This is the single biggest cause and the research named
+  it first.
+- **P2 — Make deferring exceptional and reasoned.** A defer needs a stated reason, and
+  "I could decide this myself" is not one (mirrors the ratcheting tier, 30b/`#60`).
+- **P3 — A narrow supervisor that acts (item 42).** Consume the notices durig already
+  derives (`deferred_awaiting_answer`, `idle_with_queued_work`, `admitted_not_started`,
+  `stalled-after-claim`) and re-wake, escalate, or reassign — push, not a new polling
+  tool. This is the first piece to build, and it is what converts observability into
+  liveness.
+- **P4 — Deadlock detection.** A wait-for graph over `deferred-to` edges, so A→B→A is
+  caught. Nothing detects a cycle today.
+- **P5 — Driver liveness.** The `run` driver must refuse to exit while non-terminal
+  `claimed`/`deferred` work exists (distinguish *quiescent* from *stalled*), and a
+  driver that has died must be noticed; both bit us this cycle.
+
+**Evidence class:** P1–P3 are `advertised-elsewhere` (D23's citations); P4–P5 are
+`observed` (this cycle's runs). Managed by the advocate's rule (D36).
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for
