@@ -242,9 +242,36 @@ mechanism as well.
 **Lands:** no code change. Worth saying in the skill: to resume a run that was interrupted, repeat
 the send with the same request id rather than a new one.
 
+### F12 — a seat's `cwd` is fixed at `up` time, so `DURIG_SEAT_ROOT` alone does not move it
+
+**Observed:** a selfdev run was pointed at a fresh worktree with
+`DURIG_SEAT_ROOT=<path>/durig` on `send` and `run`, expecting the seats to write
+there. They did not: `impl` wrote item 41's implementation into a *different,
+stale* worktree (the one from a previous item). The work was real and its test
+passed — but it landed on a base that predated several merged commits, so it had
+to be ported by hand.
+
+**Cause:** `up` resolves each seat's `cwd` once and stores it on the
+conversation (`cli.mjs` `cmdUp`: `seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT`,
+then `configure(tx, convId, { cwd })`). `send`/`run` read the cwd from the
+conversation config, not from the environment, so changing `DURIG_SEAT_ROOT`
+after `up` changes nothing. The `rig.selfdev.json` readme says to "point the run
+at a worktree with `DURIG_SEAT_ROOT`"; it omits that an existing seat must be
+re-pointed with `up --refresh`.
+
+**Why it matters:** the isolation the worktree is supposed to provide is silently
+absent — a seat writes to a tree the operator did not name, and the mistake looks
+like success (the run completes; only the base is wrong).
+
+**Lands:** either (a) document `up --refresh` as the re-pointing step, plus a
+`check`/`run` warning when `DURIG_SEAT_ROOT` differs from the persisted seat cwd;
+or (b) have `run`/`send` adopt `DURIG_SEAT_ROOT` when set, so the environment is
+authoritative. Decide which and record it.
+
 ## Session log
 
 | Date | Rig | What we ran | Findings |
 |---|---|---|---|
 | 2026-10-11 | `rig.v2.json` in `dogfood.sqlite` | Routed a real backlog item (empty-transcript fix) through `pm` → `worker`; inspected queue, status, metrics, log | F1, F2, F3, F4, F5, F6 |
 | 2026-10-11 | same | Fixed F1–F3 and wrote their tests; F7 surfaced while writing the F1 test | F7 |
+| 2026-10-11 | `rig.selfdev.json` in `selfdev.sqlite` | Drove ROADMAP item 41 through `durig run`; the item-44 merge had clobbered the driver verb, and the seat cwd was pinned to a stale worktree | F12 |
