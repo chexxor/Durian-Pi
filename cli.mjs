@@ -418,6 +418,7 @@ async function cmdUp(rigFile, refresh = false) {
             },
             instructions: prompt.instructions,
             ...(seatCwd === undefined ? {} : { cwd: seatCwd }),
+            ...(seat.thinkingLevel === undefined ? {} : { thinkingLevel: seat.thinkingLevel }),
           });
           if (prompt.optimizedVia) {
             seatsDoc.seats[seat.name].instructionsOptimizedVia = prompt.optimizedVia;
@@ -435,6 +436,7 @@ async function cmdUp(rigFile, refresh = false) {
           },
           instructions: prompt.instructions,
           ...(seatCwd === undefined ? {} : { cwd: seatCwd }),
+          ...(seat.thinkingLevel === undefined ? {} : { thinkingLevel: seat.thinkingLevel }),
         });
         if (prompt.optimizedVia) {
           const seatsDoc2 = await tx.doc(Seats);

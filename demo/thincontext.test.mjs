@@ -95,13 +95,16 @@ try {
 		/\.durig[\\\/]/.test(largeResult) && largeResult.includes(`item #${largeId}`),
 		`over-threshold claim must return a PATH, not the body; got: ${largeResult.slice(0, 120)}`,
 	);
-	// A coordinator seat (pm) has no read tool, so a bounded preview must travel
-	// with the path or the item is unreadable to it (#100). Assert the preview's
-	// head is present AND the result stays bounded - the full body is NOT inlined.
-	assert.ok(largeResult.includes("LARGE_"), "the preview carries the body's head");
+	// A coordinator seat (pm) has no read tool, so the over-threshold RETURN must
+	// carry a DELIBERATE STRUCTURED HEADER (item id + subject + from + status), not a
+	// mid-body byte cut — the body itself stays on disk (#118 half 2, lead #125).
+	// Assert the structured head is present AND the result stays bounded (the full
+	// body is NOT inlined).
+	assert.ok(largeResult.includes("Big task"), "the structured header carries the subject");
+	assert.ok(largeResult.includes(`item #${largeId}`), "the structured header carries the item id");
 	assert.ok(
 		largeResult.length < INLINE_LIMIT + 400,
-		`the result must stay BOUNDED (a preview), not the full body; got ${largeResult.length} chars`,
+		`the result must stay BOUNDED (a structured head), not the full body; got ${largeResult.length} chars`,
 	);
 	const largeFile = join(cwd, ".durig", `${largeId}.md`);
 	assert.ok(existsSync(largeFile), "the body file was written to cwd/.durig/<id>.md");
@@ -119,13 +122,20 @@ try {
 	const smallFile = join(cwd, ".durig", `${smallId}.md`);
 	assert.ok(!existsSync(smallFile), "under-threshold body is not written to disk");
 
-	// --- (c) idempotent: no more queued items -> a further claim is a no-op.
+	// --- (c) idempotent legal move: no QUEUED items remain, but the seat still
+	// holds CLAIMED work (large + small). claim_work now reveals the seat's OLDEST
+	// claimed-by-me item (the stalled-claim legal move, #118) instead of returning
+	// NO_QUEUED_WORK — so a seat that still holds un-finished work is never left
+	// without a legal move.
 	faux.setResponses([
 		fauxAssistantMessage([fauxToolCall("claim_work", {})], { stopReason: "toolUse" }),
 		fauxAssistantMessage(fauxText("handled")),
 	]);
 	const noOp = await driveClaim();
-	assert.equal(noOp, "NO_QUEUED_WORK", "re-claim with nothing queued is a bounded no-op");
+	assert.ok(
+		noOp.includes(`STALLED_CLAIM #${largeId}`),
+		`re-claim with nothing queued reveals the seat's oldest claimed item (got: ${noOp.slice(0, 120)})`,
+	);
 
 	console.log(
 		"THINCONTEXT TEST PASS (over-threshold claim_work returns a path to cwd/.durig/<id>.md whose file contains the body; small claims stay inline; idempotent)",

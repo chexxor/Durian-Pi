@@ -185,30 +185,42 @@ export const TOOL_RESULT_INLINE_LIMIT = 2000;
 
 /**
  * Write an over-threshold tool result body to the seat's disk workspace and
- * return A PATH, per the thin-context return contract. Under the threshold (or
- * when there is no usable seat workspace) the original text is returned
- * unchanged, so small/short results stay byte-identical and the coordinator's
- * context stays thin only for the large dump. The coordinator reads the body
- * back with its EXISTING read tools (confined to its cwd); no auto-read.
+ * return the INLINE STRUCTURED HEADER per the thin-context return contract
+ * (RANK-1 / #59) plus the truncation-usability ruling (ROADMAP 42 / #118 half 2,
+ * lead #125). Under the threshold (or when there is no usable seat workspace)
+ * the original text is returned unchanged, so small/short results stay
+ * byte-identical and the coordinator's context stays thin only for the large
+ * dump.
+ *
+ * Over threshold: the FULL body still goes to cwd/.durig/<itemId>.md (body on
+ * disk; small results inline — RANK-1/#59 is preserved), but the RETURN is a
+ * DELIBERATE STRUCTURED HEADER (item id + path + the decision-relevant fields
+ * from/to/subject/status supplied by the caller) — NOT a mid-body byte
+ * truncation. A no-read-tool coordinator seat can act on the head, and a seat
+ * with a read tool opens the file for the whole body. The path is always
+ * present so the body stays retrievable. No new egress surface; no fork of the
+ * contract by seat class.
  * @param {{cwd?: string}|undefined} env the executing conversation's ExecutionEnv
  * @param {string} text the full tool-result text
  * @param {number|string} itemId the queue item id (deterministic file name)
- * @returns {string} a path (over threshold) or the original text (under)
+ * @param {string|undefined} head the structured header (id + decision fields);
+ *   used verbatim over the threshold so the action survives the deferral
+ * @returns {string} a structured header (over threshold) or the original text (under)
  */
-export function thinResultText(env, text, itemId) {
+export function thinResultText(env, text, itemId, head) {
 	if (typeof text !== "string" || text.length <= TOOL_RESULT_INLINE_LIMIT) return text;
 	const cwd = env?.cwd;
 	if (!cwd) return text; // no workspace to defer to: keep the inline contract
 	const file = join(cwd, ".durig", `${itemId}.md`);
 	mkdirSync(join(cwd, ".durig"), { recursive: true });
 	writeFileSync(file, text, "utf8");
-	// A bounded PREVIEW travels with the path: a coordinator seat (pm) has NO read
-	// tool (COORDINATOR_REMOVALS), so a path alone made the item unreadable to it -
-	// found live on #100, where pm deferred rather than guess. The preview keeps the
-	// result bounded (thin-context's goal) while every seat can still act; a seat
-	// with a read tool opens the file for the full body.
-	const preview = text.slice(0, TOOL_RESULT_INLINE_LIMIT);
-	return `${preview}\n\n[item #${itemId}: truncated at ${TOOL_RESULT_INLINE_LIMIT} chars; full text at ${file} - read it with your read tool if you have one.]`;
+	// A coordinator seat (pm) has NO read tool (COORDINATOR_REMOVALS), so a bare
+	// path made the item unreadable to it — found live on #100, where pm deferred
+	// rather than guess. Lead #125: the over-threshold return must be a DELIBERATE
+	// STRUCTURED SELECTION of the decision-relevant fields (id + path + the
+	// from/to/subject/status head the caller supplies), NOT a mid-body byte cut.
+	const structuredHead = head ? head : `[item #${itemId}]`;
+	return `${structuredHead}\n\n[item #${itemId}: full text at ${file} - open it with a read tool when you need the whole body.]`;
 }
 
 const Router = defineExtension({
@@ -285,36 +297,70 @@ const Router = defineExtension({
 			replay: "safe",
 			execute: async (_args, api, context) => {
 				const me = await mySeatName(api, context);
-				const claimed = await api.commit(async (tx) => {
+				const found = await api.commit(async (tx) => {
 					const queue = await tx.doc(RigQueue);
-					const item = queue.items.find(
+					// Normal claim: the oldest QUEUED item addressed to me.
+					const queued = queue.items.find(
 						(it) => it.to === me && it.status === "queued",
 					);
-					if (!item) return null;
-					item.status = "claimed";
-					item.transitions.push({
-						at: new Date().toISOString(),
-						event: "claimed",
-						by: me,
-					});
-					// Snapshot plain values before returning: the commit
-					// releases its overlay after settlement, and a proxy that
-					// escapes the callback throws "Cannot use a settled
-					// overlay" the moment its properties are read.
-					return {
-						id: item.id,
-						from: item.from,
-						subject: item.subject,
-						body: item.body,
-					};
+					if (queued) {
+						queued.status = "claimed";
+						queued.transitions.push({
+							at: new Date().toISOString(),
+							event: "claimed",
+							by: me,
+						});
+						// Snapshot plain values before returning: the commit
+						// releases its overlay after settlement, and a proxy that
+						// escapes the callback throws "Cannot use a settled
+						// overlay" the moment its properties are read.
+						return {
+							kind: "claimed",
+							id: queued.id,
+							from: queued.from,
+							subject: queued.subject,
+							body: queued.body,
+						};
+					}
+					// Stalled-claim legal move (ROADMAP 42 / #118): no queued work, but
+					// I already hold a CLAIMED item whose run died and the wake told me
+					// to claim. Reveal my OLDEST claimed-by-me item (a PURE READ - status
+					// unchanged) so I can advance it with complete_work/defer_work instead
+					// of looping on NO_QUEUED_WORK. Only CLAIMED items are revealed:
+					// deferred/held/stopped items are untouched, so an operator-stopped
+					// item is never resurrected (selectWakes never wakes a stopped seat,
+					// so this path is never reached for one).
+					const stalled = queue.items.find(
+						(it) => it.to === me && it.status === "claimed",
+					);
+					if (stalled) {
+						return {
+							kind: "stalled",
+							id: stalled.id,
+							from: stalled.from,
+							subject: stalled.subject,
+							body: stalled.body,
+						};
+					}
+					return null;
 				}, context);
-				if (!claimed) {
+				if (!found) {
 					return toolText("NO_QUEUED_WORK");
 				}
-				const claimText = `ITEM #${claimed.id} | from=${claimed.from} | subject=${claimed.subject}\n${claimed.body}`;
+				// Build the INLINE STRUCTURED HEADER: item id + the decision-relevant
+				// fields (from / subject / status) that a no-read-tool coordinator seat
+				// can act on (#118 half 2, lead #125). The full body still travels inline
+				// for small claims; over the threshold it goes to disk and the RETURN is
+				// this head + the path (see thinResultText).
+				const head =
+					found.kind === "stalled"
+						? `STALLED_CLAIM #${found.id} | from=${found.from} | subject=${found.subject} | status=claimed`
+						: `ITEM #${found.id} | from=${found.from} | subject=${found.subject} | status=claimed`;
+				const claimText = `${head}\n${found.body}`;
 				// Thin-context return contract: an over-threshold body goes to disk and
-				// the tool returns a PATH, not the dump (see thinResultText / RANK-1).
-				return toolText(await thinResultText(api.env, claimText, claimed.id));
+				// the tool returns the structured head + a path, not the dump (see
+				// thinResultText / RANK-1 / #118 half 2).
+				return toolText(await thinResultText(api.env, claimText, found.id, head));
 			},
 		}),
 		defineTool({

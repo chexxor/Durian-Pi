@@ -84,7 +84,13 @@ console.log("--- tool-result entries found:", toolTexts.length);
 for (const t of toolTexts) console.log("ENTRY:", t.slice(0, 300));
 assert(!joined.includes("settled"), "no tool result may mention a settled transaction");
 assert(!joined.includes("SETTLED") && !joined.includes("TRANSACTION_ERROR"), "no transaction error markers allowed");
-assert(joined.includes("NO_QUEUED_WORK"), "second claim_work must return NO_QUEUED_WORK");
+// A second claim_work in one turn: nothing is QUEUED, but the seat now holds a
+// CLAIMED item (it claimed it in the first call). The stalled-claim legal move
+// (#118) makes the second call a pure read that REVEALS the seat's oldest
+// claimed-by-me item instead of a dead-end NO_QUEUED_WORK — still no crash, no
+// double-claim (claimed-events stays 1), no settled/error marker.
+assert(joined.includes("STALLED_CLAIM"), "second claim_work must reveal the seat's held claim (stalled-claim legal move)");
+assert(!joined.includes("NO_QUEUED_WORK"), "a seat holding a claimed item must not get NO_QUEUED_WORK");
 const items = q.items ?? [];
 assert(items.length === 1, `expected 1 item, got ${items.length}`);
 assert(items[0].status === "claimed", `item should be claimed, got ${items[0].status}`);
