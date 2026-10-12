@@ -25,6 +25,8 @@ counterpart it should change or inform.
   methodology (`docs/PHILOSOPHY.md`). It is the *source* of the **AF+PD** column
   in `docs/ORCHESTRATION-COMPARISON.md` (AF over pi-durable); the integration is
   assembly we would own, not an existing stack.
+- **Adopt-or-build analysis:** `ARCH-COMPARISON-agent-fleet.md` (layer map,
+  goal-by-goal, and why adopting it would not replace durig).
 
 | What it does | Why it is worth learning from | durig counterpart |
 |---|---|---|
