@@ -672,6 +672,36 @@ async function cmdReset(seatName, handoff) {
 async function cmdRun({ watch = false } = {}) {
   const { harness } = await openHarness({ enforceSeatRoot: true });
   try {
+    // A claimed item whose seat's latest submission was operator-stopped
+    // (`aborted:<reason>`) must never be re-woken (ROADMAP 42; lead ruling #45/
+    // #50). Read that abort fact READ-ONLY off the settled submission that `stop`
+    // already writes (settleSubmission -> unanswered/"aborted:<reason>") — no new
+    // write path, no queue-item annotation. Computed once before the loop because
+    // the stopped fact is durable and stable across passes.
+    const seatsDoc0 = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+    const stoppedConvIds = new Set();
+    {
+      const storage = await openNodeSqliteStorage(DB_PATH);
+      try {
+        for (const s of Object.values(seatsDoc0?.value?.seats ?? {})) {
+          const page = await storage.scanSubmissions(
+            { conversationId: s.conversationId, order: "descending" },
+            1,
+            undefined,
+            BACKGROUND_CONTEXT,
+          );
+          const latest = page.items[0];
+          if (
+            latest?.status === "unanswered" &&
+            String(latest.reason ?? "").startsWith("aborted:")
+          ) {
+            stoppedConvIds.add(s.conversationId);
+          }
+        }
+      } finally {
+        await storage.close(BACKGROUND_CONTEXT);
+      }
+    }
     const maxPasses = watch ? Infinity : 200;
     let passes = 0;
     for (;;) {
@@ -690,6 +720,7 @@ async function cmdRun({ watch = false } = {}) {
         items: queueDoc?.value?.items,
         pendingConvIds,
         busySeats,
+        stoppedConvIds,
         context: BACKGROUND_CONTEXT,
       });
       // Hold the harness open until every run this pass started has settled;
