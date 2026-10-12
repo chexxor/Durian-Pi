@@ -4,56 +4,52 @@
 `docs/ROADMAP.md` is the ordered backlog; `docs/SELFDEV.md` is the runbook. Update this file at the
 end of every session and keep it to one screen.
 
-_Last refreshed: 2026-10-12, after the #117/#118 run and integration (operator's assistant)._
+_Last refreshed: 2026-10-12, after implementing #144 B / #146 / #147 (operator's assistant)._
 
 ## Where main is
 
-**`main` is `d66737dc` and green: `demo/*.test.mjs` 45/45, `node --check` clean.** It contains:
-- `1639a3be` — #110 fix (driver probes a seat's `pi.live` through a raw handle; survives F14).
-- `a07816df` — #110 failing-first control, committed and self-contained.
-- `b040bc1a` — `peek_queue` scoped to the seat (+ `all:true`) and routed through `thinResultText`.
-- `90caa998` + `d66737dc` — the selfdev team's #117/#118 work, merged in:
-  - #117 per-seat `thinkingLevel` reaches the harness AgentState (`demo/thinkinglevel.test.mjs`);
-  - #118 half 1 `claim_work` returns the oldest claimed-by-me item (`demo/rearmclaim.test.mjs`);
-  - #118 half 2 structured thin header, not a mid-body byte cut (`demo/structuredhead.test.mjs`).
+**`main` is `6da82fff` and green: `demo/*.test.mjs` 45/45, `node --check` clean.** Recent commits:
+- `1639a3be` #110 driver survival; `a07816df` its failing-first control.
+- `b040bc1a` `peek_queue` scoped + thinned.
+- `90caa998` / `d66737dc` selfdev #117 (per-seat `thinkingLevel`), #118 half 1 (`claim_work`'s legal
+  move), #118 half 2 (structured thin header).
+- `e1b4f22e` NEXT pointer; **`6da82fff` #144 B + #146 + #147** (this session):
+  - **#144 B** — a seat with NO read tool gets an over-threshold tool result **inline**; a seat
+    that can read gets the structured head + path. Predicate is capability (`seatHasReadTool` in
+    `src/seattools.mjs`), wired through `thinResultText`, `claim_work`, `peek_queue`.
+    `demo/structuredhead.test.mjs` proves both sides.
+  - **#146** — state-mutating git is blocked at the guard (`src/confine.mjs`): commit/reset/
+    checkout/restore/revert/clean/stash/branch -D; read-only git still runs.
+    `demo/confine.test.mjs`.
+  - **#147** — `run --max-duration <s>` bounds the run, SIGINT/SIGTERM lets the pass settle, and
+    `run` reports `stoppedBy`; a stopped run does not strand submissions. `demo/cli.test.mjs`.
 
-**#110 is CLOSED by operator ruling** (#113 settled closed). Nothing is pushed — the operator pushes
-at end of day.
+Nothing is pushed — the operator pushes at end of day.
 
-## Current priority (routed, waiting on implementation)
+## Still open (and why they are NOT small)
 
-`lead` has ruled the critical path; these are the next work items:
-
-- **#144 — coordinator read gap. `lead` ruled B:** inline the body for a seat that has NO read tool;
-  F9's `COORDINATOR_REMOVALS` (`src/seattools.mjs:52`) stay. Reconciles with #124(b): a seat that can
-  dereference gets path + structured header, a seat that cannot gets the body inline — a capability
-  predicate, not a role-name fork. This is what unblocks `pm`'s own #131/#134 deferrals.
-- **#146 — block state-mutating git at the guard layer** (`commit`/`push`/`reset`/`checkout <path>`/
-  `restore`/`revert`/`clean`/`stash`/`branch -D`), keep read-only git. Failing-first acceptance.
-- **#145 — split into two:** escalation-on-repeated-failure lives in the **supervisor, not the
-  driver** (+ a `repeated_failure` notice class); malformed-tool-call classification is separate.
-- **#147** bounded `run` with graceful shutdown; **#148** item-43 family (wake has a legal move but
-  the model runs `git status` instead of claiming); **#149** verify `peek_queue`.
+- **#145 — failure recovery vs diagnosis.** `lead` split it: escalation lives in the **supervisor**,
+  malformed-tool-call classification is separate. **There is no supervisor component on `main`** —
+  only the driver's re-wake and the `status`/`watch` notices. Escalation-on-repeated-failure needs
+  that host (or a decision to put it elsewhere) plus a `repeated_failure` notice class. Not started.
+- **#148 — item-43 family (DeepSeek reasoning/termination).** `thinkingLevel` is now wired
+  (`cli.mjs` passes `seat.thinkingLevel` through `configure`), but DeepInfra's `reasoning_effort` is
+  an integer 1–100 and the model map only carries `{off:"none"}`, so setting a level today sends a
+  string the provider does not define. Needs item 43(a)'s effort mapping **and** a `step-repetition`
+  measurement before a level is chosen. Not started.
+- **#149 — verify `peek_queue`.** Self-verified: `demo/peekqueue.test.mjs` (scoping + `all` +
+  over-threshold deferral). Independent `qa` verification not run.
 
 ## Known trap (do not repeat)
 
-**The worktree `.worktrees/selfdev-110` is DIRTY and is NOT the source of truth.** Its
-`src/rig.mjs` was reverted by a seat and lost the `peek_queue` scoping. `main` is correct. Before the
-next team run, point seats at a **fresh worktree from `main`** (the runbook in `docs/SELFDEV.md`),
-or re-sync that file deliberately — do not run the team against the diverged tree.
+**`.worktrees/selfdev-110` is DIRTY and diverged** (a seat reverted `src/rig.mjs`; now blocked by
+#146). `main` is correct. Before the next team run, point seats at a **fresh worktree from `main`**
+(`docs/SELFDEV.md`).
 
-## Unexpected events this session (registered, #146–#149)
+## Lesson from this session
 
-1. A seat mutated git state in its worktree (reverted committed code) — #146.
-2. `run` to quiescence is unbounded in wall-clock: it hit a 3000 s cap **twice**; each kill stranded
-   submissions (`admitted_not_started`) and left a stale generation lease (`generation_stale`), both
-   cleared with `node cli.mjs doctor` — #147.
-3. The stalled-claim badgering persisted after the fix because the model did not call `claim_work` —
-   #148.
-4. `qa` twice failed to reproduce #110's negative control (wrong git path, then a bad substitution);
-   the committed fixture (`demo/driversurvive-pre.test.mjs`) removes that dependency.
-
-## Open operator decision
-
-- **Push** the local `main` (`d66737dc`) at end of day — the operator holds that grant.
-- **Next team run:** start from a fresh worktree off `main`; expect `run` to be long (see #147).
+`npm`-style "drive the team" runs are **expensive and non-converging** here: `run` hit a 3000 s cap
+twice (now boundable with #147), the worktree diverged, and the model did not always take the wake's
+legal move. The operator's agent implementing directly on `main` (with a demo per change) was the
+faster, verifiable path for these protocol fixes; the team remains right for larger, decomposable
+work.
