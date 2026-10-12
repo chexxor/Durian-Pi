@@ -77,7 +77,12 @@ for (const e of pg.items) {
 assert.equal(claimResults.length, 2, `expected 2 claim_work results, got ${claimResults.length}`);
 
 const winners = claimResults.filter((r) => r.text.startsWith("ITEM #"));
-const losers = claimResults.filter((r) => r.text === "NO_QUEUED_WORK");
+// The losing run, with nothing queued but the seat now holding the claim, is
+// told the seat's held claim (STALLED_CLAIM #...) — the stalled-claim legal move
+// (#118): a friendly non-error read, never a crash and never a double-claim.
+const losers = claimResults.filter(
+	(r) => r.text === "NO_QUEUED_WORK" || r.text.startsWith("STALLED_CLAIM #"),
+);
 assert.equal(winners.length, 1, `exactly one winner expected, got ${winners.length}`);
 assert.equal(losers.length, 1, `exactly one friendly loser expected, got ${losers.length}`);
 assert.equal(losers[0].isError, false, "the losing claim must not be an error");
@@ -95,6 +100,6 @@ assert.equal(
 	"exactly one claimed transition allowed",
 );
 
-console.log(`RACE OK: winner="${winners[0].text.split("\n")[0]}" loser=NO_QUEUED_WORK(isError:${losers[0].isError}) claimed-events=1`);
+console.log(`RACE OK: winner="${winners[0].text.split("\n")[0]}" loser="${losers[0].text.split("\n")[0]}"(isError:${losers[0].isError}) claimed-events=1`);
 console.log("RACE TEST PASS");
 process.exit(0);
