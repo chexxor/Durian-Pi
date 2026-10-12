@@ -782,6 +782,15 @@ surface. A feature that is off must therefore cost nothing — not "little".
     existing submission for a known id *without scheduling it*, so `submission.wait()`
     hangs (reproduced). Recovery today means `harness.abortSubmission(id)` then a
     fresh send; the verb must do that deliberately.
+    **Refined 2026-10-11 (observed live):** `abortSubmission` returns `already_placed`
+    for a submission whose run already STARTED (status `placed`) — it withdraws only
+    `queued` inputs. When an aborted `send` left impl's submission #1122 `placed`
+    with its process dead, the verb could not clear it that way. So 37(b) must also
+    handle the placed case: cancel the run via `harness.abortTask`/
+    `conversation.abort()` (or re-drive it under a live harness), not just abort
+    queued submissions. The live rig surfaced the state correctly throughout
+    (`admitted_not_started` for #1122, `generation_stale` for the dead lease), so
+    37(a) did its job; the gap is only in the recovery verb.
 
 38. **Self-driving queue: wake the seat when work is enqueued, instead of an external clock**
     (raised by the operator 2026-10-11). Today **only `send` ever starts a run** — `conv.submit`
@@ -930,6 +939,38 @@ surface. A feature that is off must therefore cost nothing — not "little".
     *Proof (if built):* a demo where a seat is left stalled by durable state and the supervisor,
     without any human action, either wakes it or raises an escalation within a bounded time —
     falsifiable by disabling the supervisor.
+
+43. **Degenerate-loop mitigation for DeepSeek seats — reasoning effort + structural termination.**
+    Observed 2026-10-11: on a long agentic turn, `impl` (DeepSeek-V4.1-Flash) emitted a "OK. Let me
+    call write." repetition *hundreds* of times and never called the tool, then dumped the tool
+    call as text — the same class as the earlier `<parameter name=...>` leak. `thinkingFormat:
+    "deepseek"` (item 38 notes) fixed the *simple* tool-call-as-text case but not this one.
+    *Ruled out — do not retry:* request-level sampling penalties. `temperature: 0.3` + penalties
+    were tried and reverted: a repetition loop is a low-entropy rut, so lowering temperature makes
+    it stickier, and DeepSeek's own docs say thinking mode ignores `temperature`/
+    `frequency_penalty`/`presence_penalty` while clamping `top_p` up to 0.95; `repetition_penalty`
+    is not in DeepInfra's documented set. (Recorded here so the next session does not re-propose
+    it — see the 2026-10-11 review of that patch.)
+    *Candidate levers, best first:*
+    (a) **Expose reasoning effort.** DeepInfra's V4.1-Flash doc lists `reasoning_effort` as an
+    integer 1–100, but durig exposes no reasoning-effort control at all, so the model always runs
+    with thinking `disabled` (our compat sends `thinking: {type:"disabled"}`). If the "let me do
+    it" monologue is thinking that has nowhere to go but content, routing it to
+    `reasoning_content` is the fix. Wire a per-seat/per-rig reasoning effort into the model or
+    settings and measure `step-repetition`.
+    (b) **Structural termination, not statistics.** A deliberate per-run `maxTokens` cap and the
+    `terminate: true` tool-result lever bound a runaway turn where sampling cannot; this is the
+    same seam as item 6 (deadlines / attempt caps).
+    (c) **Verify the reasoning-content path.** Dump the outgoing payload on a *second* tool-call
+    turn and confirm `reasoning_content` carries real thinking rather than `""` — the leading
+    hypothesis is reasoning-history contamination, and it is cheap to check before building (a).
+    (d) **Fallback:** substitute the worker model for long tasks (Qwen3.6 stayed on task where
+    V4.1-Flash looped) or shrink items; record which, so it is a decision and not a habit.
+    *Predicted direction, written before the change (item 2's loop):* (a)/(c) should move
+    `step-repetition` down; (b) should make "unaware of termination" measurable as a bound rather
+    than a hope.
+    *Proof:* reproduce the loop deterministically (a scripted fixture), then show the chosen lever
+    prevents it — falsifiable by disabling the lever.
 
 ## Sharing publicly
 

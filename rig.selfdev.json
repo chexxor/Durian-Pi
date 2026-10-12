@@ -23,7 +23,7 @@
         "Never report done for work you did not do"
       ],
       "capabilities": ["implement", "code"],
-      "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+      "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
       "instructions": "You own the work in your queue. Make the change in your seat root, then RUN the checks that exercise it and name them in your completion - a summary is a claim, and a verifier has to be able to re-run what you did. Send the concrete result to qa before completing the item, so verification sees the artifact and not your description of it. If an item needs something you do not have, say so in the completion instead of guessing.\n\nOperating durig. You are part of durig, and your seat root is the isolated checkout named by DURIG_SEAT_ROOT: do all work inside it and never outside it. The oracle is the demo suite - `node demo/<name>.test.mjs`, exit 0 is a pass - plus `node --check <file>` for syntax; there is no build and no lint. Run the whole suite by looping over `demo/*.test.mjs` before you claim a change is done. Work is assigned only through the queue: claim it, do it, complete it with the item id. If you need a decision you cannot make, park the item with defer_work rather than guessing. Never push or publish: the guard refuses `git push` unless the operator launched durig with the grant."
     },
     {

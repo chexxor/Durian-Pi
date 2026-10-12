@@ -476,6 +476,81 @@ async function cmdQueue() {
   }
 }
 
+// resume (alias: doctor): the deliberate way to advance admitted-but-not-progressing
+// submissions (ROADMAP 37b). Opens the harness WITH resume() (re-arming scheduling,
+// exactly like `send` and `up`), scans the store for submissions a seat admitted but
+// is not advancing, and reconciles each stranded one to a terminal state. A seat with
+// a LIVE generation lease is legitimately generating behind that lease, so its
+// submission is progressing - not stranded - and is left alone. A submission whose
+// conversation belongs to no registered seat is out of scope for the verb.
+//   - `queued` (never started): harness.abortSubmission() withdraws it -> `unanswered`.
+//   - `placed` (a run started whose process is gone): abortSubmission() returns
+//     "already_placed" (the run already picked it up), so cancel the run instead via
+//     conversation.abort(), which withdraws queued inputs and aborts the ordinary
+//     ownership scope, settling the submissions terminal.
+// Reports what it found and what it did to each, in the one-JSON-doc contract.
+async function cmdResume() {
+  const { harness } = await openHarness();
+  try {
+    const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+    const seatsVal = seatsDoc?.value?.seats ?? {};
+    const seats = Object.entries(seatsVal);
+    const convToSeat = new Map(seats.map(([name, s]) => [s.conversationId, name]));
+    noteEmptyRig(seats.length);
+
+    // A seat with a LIVE generation lease is currently generating behind that lease,
+    // so its submission is advancing, not stranded (same seatsWithSlot guard the
+    // stranded notice computes in readRigHealth / ROADMAP 37a). Only consulted when
+    // genlock is actually configured (a finite max-concurrent-seats cap).
+    const slots = maxSeats();
+    const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
+    const seatsWithLiveSlot = new Set(
+      genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat),
+    );
+
+    // The harness's own unsettled submissions (queued + placed, in id order)
+    // restricted to conversations that belong to a registered seat.
+    const inspection = await harness.inspect(BACKGROUND_CONTEXT);
+    const stranded = (inspection.submissions ?? []).filter(
+      (s) =>
+        convToSeat.has(s.conversationId) &&
+        !seatsWithLiveSlot.has(convToSeat.get(s.conversationId)),
+    );
+
+    const actions = [];
+    for (const sub of stranded) {
+      const seatName = convToSeat.get(sub.conversationId);
+      const row = {
+        seat: seatName,
+        submission: sub.id,
+        status: sub.status,
+        action: null,
+      };
+      if (sub.status === "queued") {
+        // Never started: withdrawing it is enough to clear the stranded state.
+        const r = await harness.abortSubmission(sub.id, BACKGROUND_CONTEXT, sub.conversationId);
+        row.action = r === "aborted" ? "withdrawn" : `abortSubmission:${r}`;
+      } else {
+        // placed: a run started but its process is gone. abortSubmission() returns
+        // "already_placed" because the run already has it, so cancel the run instead.
+        const r = await harness.abortSubmission(sub.id, BACKGROUND_CONTEXT, sub.conversationId);
+        if (r === "already_placed") {
+          const conv = await harness.conversation(sub.conversationId, BACKGROUND_CONTEXT);
+          if (conv) await conv.abort(BACKGROUND_CONTEXT);
+          row.action = "run-cancelled";
+        } else {
+          row.action = r === "aborted" ? "withdrawn" : `abortSubmission:${r}`;
+        }
+      }
+      actions.push(row);
+    }
+
+    out({ ok: true, command: "resume", db: DB_PATH, found: stranded.length, actions });
+  } finally {
+    await harness.close(BACKGROUND_CONTEXT);
+  }
+}
+
 // send <seat> <text> [--stream|--no-stream]: operator steering. Submits input
 // to the seat's conversation and waits for the run to settle so the caller
 // can read the outcome in the same invocation (LLM-friendly: no polling
@@ -1173,6 +1248,7 @@ usages:
   node cli.mjs send <seat> --body-file <path>  the same, prompt from a file (- = stdin)
   node cli.mjs send <seat> <text> --no-stream   the same, without the live view
   node cli.mjs queue           dump the work queue
+  node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs log <seat> [limit] [--follow] [--full] [--tool-bg] [--theme dark|light]
                           a seat's conversation (--follow = live, --full = whole tool output)
   node cli.mjs watch [--once] [--json|--human]   follow rig state (human on a terminal)
@@ -1241,6 +1317,7 @@ try {
     if (!text.trim()) fail("send needs <seat> <text>, or --body-file <path>");
     await cmdSend(args[0], text, { stream, requestId });
   } else if (cmd === "queue") await cmdQueue();
+  else if (cmd === "resume" || cmd === "doctor") await cmdResume();
   else if (cmd === "watch") {
     // Same precedence as `send --stream`: an explicit flag wins, otherwise a
     // terminal gets the readable view and a pipe keeps the JSON contract.
