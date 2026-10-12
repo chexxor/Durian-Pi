@@ -38,9 +38,14 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 
 | Command | Does | Flags |
 |---|---|---|
-| `up <rig.json>` | Create/refresh seats, edges and constitution from a spec; idempotent | `--refresh` re-applies stored prompts and models |
+| `up <rig.json>` | Create/refresh seats, edges and constitution from a spec; idempotent | `--refresh` re-applies stored prompts, models **and** each seat's working directory |
+| `worktree <path>` | Create an isolated per-item checkout for seats to write in, with a `node_modules` junction so the demos can run there | `--source <dir>` |
 | `ps` | Seat roster with conversation ids and roles | |
 | `send <seat> <text>` | Steer a seat, wait for its reply, return it inline | `--stream` / `--no-stream`, `--body-file <path>` (or `-`), `--request-id <id>` (retry-safe) |
+| `resume` | (alias `doctor`) advance admitted-but-not-progressing submissions — a run admitted but never scheduled | |
+| `run` | Drive the rig to quiescence: wake each seat that has queued work and nothing advancing it, hold the harness until the runs settle; exits at quiescence | `--watch` stays resident |
+| `reset <seat> [handoff]` | (alias `clean`) break a seat out of a degenerate context by writing a `pi.reset` boundary; the durable transcript is preserved | |
+| `stop <seat> [reason]` | Emergency-stop: halt a seat's in-flight run across processes, settle it terminal as `aborted: <reason>`, release the lease | |
 | `queue` | Dump every work item with status and transitions | |
 | `log <seat> [limit]` | A seat's conversation, turn-grouped | `--follow`, `--full`, `--tool-bg`, `--theme dark\|light`, `--human`/`--json` |
 | `watch` | Follow rig state — human dashboard on a TTY, NDJSON when piped | `--once`, `--human`/`--json` |
@@ -50,7 +55,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | `optimize <text>` | Rewrite a draft instruction through the optimizer | |
 | `config` | Show the effective settings and which source supplied each | |
 
-Two operator-facing behaviours are load-bearing:
+Three operator-facing behaviours are load-bearing:
 
 - **Wrong-database guard** — read commands name the resolved database and warn
   when it holds no seats, because a missing `DURIG_DB` otherwise looks exactly
@@ -58,6 +63,11 @@ Two operator-facing behaviours are load-bearing:
 - **Failure honesty** — errors come back as `{ok:false,error}` with a nonzero
   exit instead of a stack trace; a `send` that does not settle as `done` says so
   on stderr.
+- **Seat-root guard** — a write-side `send`/`run` whose `DURIG_SEAT_ROOT`
+  disagrees with a seat's persisted working directory **fails closed**, naming
+  both paths and the fix. A seat's cwd is resolved once at `up` time and
+  persisted; without this guard an operator who re-points a run at a new worktree
+  silently writes into the old one and sees success (dogfood F12).
 
 ## 3. Configuration
 
@@ -67,6 +77,7 @@ One vocabulary for both the environment and the config file, resolved
 | Key | Meaning |
 |---|---|
 | `DURIG_DB` | Storage path (default `./rig.sqlite`) |
+| `DURIG_SEAT_ROOT` | Fallback working directory for seats at `up` time (keeps a rig file portable by naming no host path). Persisted per seat, so a later write-side `send`/`run` with a different value **fails closed** rather than silently using the old tree |
 | `DURIG_PROVIDER` | `deepinfra` (default) or `faux` for offline runs |
 | `DURIG_MODEL` | Default model for seats without their own |
 | `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent generations rig-wide (unset = unlimited) |
@@ -105,13 +116,19 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Race safety** | Concurrent claims yield one winner and no double assignment | queue transitions | `demo/race.test.mjs` |
 | **Repeat-call tolerance** | A replayed tool call returns current state instead of erroring on a settled overlay | `src/rig.mjs` | `demo/repeat-call.test.mjs` |
 | **Request-idempotent send** | `send --request-id` makes one send one submission: a retry carrying the same id reuses the existing submission rather than generating again, and returns the original reply. The id is never derived from the text, because two deliberate identical sends are two requests | `cli.mjs` `cmdSend` | `demo/cli.test.mjs` |
+| **Self-driving queue** (`run`) | Wakes each seat that has queued work and nothing advancing it, holds the harness open until the runs it started settle, and exits at quiescence — the clock the queue was missing. A driver, not a wake inside the Router tools, because a stateless `send` closes its harness before a tool-woken run could finish (F11) | `src/driver.mjs`, `cli.mjs` `cmdRun` | `demo/run.test.mjs` |
+| **Emergency stop** (`stop`) | Halts a seat's in-flight run across processes by killing the live generation-lease holder, settles the submission terminal as `aborted: <reason>`, aborts the run's task, and releases the lease; a second stop is a no-op | `cli.mjs` `cmdStop` | `demo/stop.test.mjs` |
+| **Context reset** (`reset`/`clean`) | Writes a `pi.reset` boundary so prior turns leave a seat's context without deleting the durable transcript — the fix for a degenerate turn that has self-conditioned the history | `cli.mjs` `cmdReset` | `demo/reset.test.mjs` |
+| **Resume a stranded run** (`resume`/`doctor`) | Advances admitted-but-not-progressing submissions, so a run that was admitted but never scheduled is re-armed instead of looking idle (F11) | `cli.mjs` `cmdResume` | `demo/resume.test.mjs` |
+| **No DONE-of-DONE** | A DONE notice cannot generate another DONE notice, so the notice chain terminates instead of echoing | `src/rig.mjs` `isDoneNotice` | `demo/notices.test.mjs` |
+| **Seat-root guard** | A write-side `send`/`run` whose `DURIG_SEAT_ROOT` disagrees with a seat's persisted cwd fails closed, naming both paths and the fix; view-only commands and `up --refresh` are unaffected (dogfood F12) | `cli.mjs` `openHarness` | `demo/seatroot.test.mjs` |
 | **Zero durig SQL** | durig imports one storage opener and runs no SQL of its own | `cli.mjs:26` | architecture note, `docs/STATUS.md` |
 
 ## 6. Observability
 
 | Feature | What it does | Where | Proof |
 |---|---|---|---|
-| **Attention** | Derives operator-visible notices from durable state: `idle_with_queued_work`, `last_run_failed` | `src/attention.mjs` | `demo/blocked.test.mjs` |
+| **Attention** | Derives operator-visible notices from durable state: `idle_with_queued_work`, `last_run_failed`, `admitted_not_started` (a submission admitted but never scheduled), `deferred_awaiting_answer` | `src/attention.mjs` | `demo/blocked.test.mjs`, `demo/stranded.test.mjs` |
 | **Watch dashboard** | Per-seat human view — who, current work, last words — with glyphs and colour; an empty dashboard can never look healthy | `src/watchview.mjs` | `demo/watchview.test.mjs` |
 | **Seat highlights** | Reads each seat's latest words and tool call **storage-direct**, never opening a harness | `src/rigstory.mjs` | `demo/watchview.test.mjs` |
 | **Cross-process live stream** | `watch` polls storage at 750 ms because SQLite has no cross-process notification | `cli.mjs` `cmdWatch` | `demo/watch.test.mjs` |
@@ -296,14 +313,14 @@ an unresolvable one is warned about rather than dropped in silence;
 The entire check surface is the demos plus `node --check`; there is no build or
 lint step.
 
-**30 offline tests** — one runnable proof per guarantee, each exit 0 on success:
+**37 offline tests** — one runnable proof per guarantee, each exit 0 on success:
 
 ```
 blocked · chatlog · check · cli · config · confine · constitution · converter
-defer · eval · extensions · metrics · optimizer · persistence · primer
-provenance · race · refresh · repeat-call · seatguard · seatmodel · seattools
-singleflight · starter · streamcli · streamview · syncpi · watch · watchview
-worktree
+defer · eval · extensions · metrics · notices · optimizer · persistence · primer
+provenance · race · refresh · repeat-call · reset · resume · run · seatguard
+seatmodel · seatroot · seattools · singleflight · starter · stop · stranded
+streamcli · streamview · syncpi · watch · watchview · worktree
 ```
 
 **4 runnable demo programs:**
@@ -319,27 +336,21 @@ worktree
 
 Pointers, not promises — each is an item in `docs/ROADMAP.md`.
 
-- **A hardened starter rig** so a new user gets a spec that passes `check` (item 1)
 - **Dogfood durig on our own work** — run our coordination through it, log what
-  breaks in `docs/DOGFOOD.md`, fix or backlog; six findings from the first session
+  breaks in `docs/DOGFOOD.md`, fix or backlog; twelve findings (F1–F12) so far
   (item 10b, D31)
 - **Publish durig as its own repository** — `git subtree split`, vendor the
   DeepInfra catalogue, pick a licence; repo only, no releases (item 22)
-- **A `stray-seat` `check` rule** — the store holds a seat the spec does not declare,
-  and `up` never removes one (item 10a)
 - **An extension registry with named profiles** — one artifact, `core` / `recommended`
   / custom as configuration, each extension declaring its cost and blind spot
   (item 18), which is also what makes an extension toggle measurable (item 19)
 - **Caveman as an optional extension** — a skill and a proxy for token reduction;
   a spike must first settle whether either applies to an in-process harness, and
   a `security.sec` position precedes its telemetry default (item 20)
-- **Target workflows, written down** — who, trigger, the loop that must never break,
-  what "done" means; without it "recommended" is taste (item 21)
 - **A drill task set** so two configurations are comparable, which is what makes
   item 3's before/after measurement comparable rather than confounded (item 2)
 - **Verifier model diversity** — give `qa`/`qa2` a different model family (item 3)
 - **Real seat tools** — read-only corpus access or edits plus a test runner, and `complete_work` carrying evidence a verifier can re-check (item 4, M3)
-- **A deferral verb** — raise a blocking question and hand it to whoever can answer (item 5)
 - **Termination and attempt semantics** — deadline, attempt cap, repetition detection (item 6)
 - **Extracted view model and one shared read API** (items 7-8)
 - **Context pressure visibility** — per-seat tokens against the seat's model, plus the
