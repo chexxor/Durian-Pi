@@ -181,3 +181,27 @@ Not adopted, with reasons: alternate screen (breaks scrollback and tmux, and tmu
 defeats every rendering strategy in the dataset), spinners and shimmer (a REPL has
 nothing to repaint), and hard-coded brand palettes (Crush's light-mode issue has
 been open since July 2025).
+
+## Formalising the queue protocol (Quint / TLA+) — fit assessment (2026-10-12)
+
+Reviewed `https://quint.sh/docs/getting-started` and `.../use-cases`, fetched
+2026-10-12 (web content used as data). Quint is a modern TLA+ successor: a spec
+language with an executable REPL, `quint run` (simulator) and `quint verify`
+(model checker via Apalache, needing JDK >= 17), first-class invariants, and
+model-based testing (`--mbt`) that emits traces usable as tests. Its production
+use-cases are consensus/BFT protocols (Tendermint, CometBFT, Alpenglow, MonadBFT),
+DB transactions, governance (ZKSync's spec carries 50+ invariants) and access
+control.
+
+**Fit for durig.** The queue item lifecycle crossed with the generation
+lease/genlock and the wake/admission sub-states is a concurrent state machine
+whose failures we currently find empirically — `admitted_not_started`,
+`generation_stale`, a claimed item never re-woken. Those are liveness/safety
+violations of the protocol, which is what Quint checks. **Not a fit for the data
+layer**: the `pi.live` missing-base corruption (DOGFOOD F14) is a data-modelling
+bug, outside a protocol model's reach.
+
+**Cost and limits.** A JDK 17 dependency for the model checker (the simulator
+needs only node); and the value is bounded to the **protocol core** — modelling
+the model's behaviour or the storage invariants would cost more than it returns.
+Recorded as backlog ROADMAP P6; not built.

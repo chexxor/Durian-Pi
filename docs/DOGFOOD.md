@@ -295,3 +295,23 @@ being built as #90.
 | 2026-10-11 | `rig.v2.json` in `dogfood.sqlite` | Routed a real backlog item (empty-transcript fix) through `pm` → `worker`; inspected queue, status, metrics, log | F1, F2, F3, F4, F5, F6 |
 | 2026-10-11 | same | Fixed F1–F3 and wrote their tests; F7 surfaced while writing the F1 test | F7 |
 | 2026-10-11 | `rig.selfdev.json` in `selfdev.sqlite` | Drove ROADMAP item 41 through `durig run`; the item-44 merge had clobbered the driver verb, and the seat cwd was pinned to a stale worktree | F12 |
+
+## F14 — a `pi.live` document with an empty base and orphaned appends
+
+The `run --watch` driver exited **1 on its first pass, 6/6 attempts**, with
+`{"ok":false,"error":"unresolvable path: [\"generation\",\"message\",\"content\",0]"}`.
+With the new `DURIG_DEBUG=1` stack path the call site was pi-chord `PathError` →
+`applyOps` → `SqliteStorage.materializeDocument` → `#loadDocument`/`#acquire`. The
+same error also killed `send impl`, so the seat was unreachable and the whole queue
+stalled while every seat read as merely "held".
+
+Cause: document 10 (`pi.live`, conversation 9) had a **base** revision of `{}`
+followed by 21 `["a",["generation","message","content",0,"text"], ...]` deltas —
+appends computed against a previous, non-empty state and replayed onto an empty
+base. `pi.live` is transient live state (conversation content lives in `entries`),
+and the stream was a degenerate repetition loop.
+
+Repaired by dropping the 21 orphaned deltas, leaving the base at `{}`;
+`run --watch` then survived its first pass. Two follow-ups: the driver must not die
+on one bad document (ROADMAP P5 / #110), and `fail()` discarding the stack is why
+this was untraceable for several cycles (fixed — `DURIG_DEBUG=1`).

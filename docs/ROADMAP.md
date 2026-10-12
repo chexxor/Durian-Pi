@@ -1342,7 +1342,21 @@ paragraph):
   `claimed`/`deferred` work exists (distinguish *quiescent* from *stalled*), and a
   driver that has died must be noticed; both bit us this cycle.
 
-**Evidence class:** P1–P3 are `advertised-elsewhere` (D23's citations); P4–P5 are
+- **P6 — Model the protocol in Quint (candidate, not started).** The queue item
+  lifecycle (`queued`/`claimed`/`deferred`/`done`/HELD) crossed with the
+  generation lease/genlock and the wake/admission sub-states
+  (`admitted`/`placed`/in-flight/`settled`) is a concurrent state machine, and the
+  failures we keep finding empirically are liveness/safety violations of it: an
+  item `admitted_not_started`, a `generation_stale` slot, a claimed item never
+  re-woken. Quint (a TLA+ successor: executable specs, a simulator, a model
+  checker, and model-based tests) is built for exactly that class — its production
+  use-cases are consensus/BFT protocols, DB transactions and access control. A spec
+  of the **protocol core** would let us model-check "no non-terminal item is ever
+  permanently unwoken" instead of discovering it live. **Not a substitute** for the
+  data-layer work: the `pi.live` missing-base corruption (DOGFOOD F14) is a
+  data-modelling bug, not a protocol one, and a protocol model would not catch it.
+
+**Evidence class:** P1–P3 are `advertised-elsewhere` (D23's citations); P4–P6 are
 `observed` (this cycle's runs). Managed by the advocate's rule (D36).
 
 ## Explicitly deferred (with reasons)

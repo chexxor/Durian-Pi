@@ -385,3 +385,13 @@ reader does not mistake absence for an oversight.
 - **A `--fix` mode for `check`** — a config change is a hypothesis whose direction
   is recorded first (D24/D25)
 - **A composite rig score** — Goodhart; no single number may gate a change
+
+## Diagnostics
+
+- **`DURIG_DEBUG=1` prints the error stack** on a CLI failure; the default output
+  stays the byte-stable one-line message. Added because `fail()` discarded the
+  stack, which made the `run --watch` crash untraceable across several cycles.
+- **Thin-context returns carry a bounded preview plus a path.** A claim over the
+  inline limit returns the head (<= `TOOL_RESULT_INLINE_LIMIT` chars) *and* the path
+  to `cwd/.durig/<id>.md`, because a coordinator seat has no read tool and a bare
+  path made the body unreadable to it (found live on #100).
