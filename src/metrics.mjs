@@ -18,6 +18,7 @@
 // Nothing here writes, opens a socket, or creates a table.
 
 import { ANSI } from "./ansi.mjs";
+import { countMalformedToolCalls } from "./attention.mjs";
 import { seatsAreVerifier } from "./checkup.mjs";
 
 /**
@@ -66,6 +67,17 @@ export const MEASURES = {
 		blind:
 			`a legitimate identical call (re-reading a file after editing it) counts as a repeat, and only repeats within ${REPEAT_HORIZON} calls are seen`,
 	},
+	"malformed-tool-call": {
+		scope: "rig",
+		klass: "direct",
+		direction: "up-worse",
+		unit: "tool calls rejected as malformed arguments",
+		band: { kind: "absolute", enter: 2, exit: 0 },
+		ambient: true,
+		what: "a seat emitting tool-call arguments the harness rejects (a cause, not a domain error)",
+		blind:
+			"reads the harness's validation text on the entry because the structured diagnostic code is not persisted; a differently-worded rejection is missed",
+	},
 	"unverified-completions": {
 		scope: "rig",
 		klass: "proxy",
@@ -113,6 +125,16 @@ function canonical(value) {
 	if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
 	const keys = Object.keys(value).sort();
 	return `{${keys.map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(",")}}`;
+}
+
+/**
+ * Malformed-argument tool calls across the rig's pages. Direct: counted from persisted entries via
+ * the same predicate the attention notice uses, so the measure and the notice cannot disagree.
+ */
+export function measureMalformedToolCalls(pages) {
+	let value = 0;
+	for (const items of Object.values(pages ?? {})) value += countMalformedToolCalls(items);
+	return { value };
 }
 
 function messageOf(entry) {
@@ -349,11 +371,14 @@ export function computeMetrics({
 	const repsPrev = measureStepRepetition(previous);
 	const unver = measureUnverifiedCompletions(current);
 	const unverPrev = measureUnverifiedCompletions(previous);
+	const malformed = measureMalformedToolCalls(current);
+	const malformedPrev = measureMalformedToolCalls(previous);
 	const ageing = measureQueueAgeing(queueItems, nowMs);
 	const shared = measureSharedReviewerModel({ seats, modelsBySeat });
 
 	const measures = [
 		row("step-repetition", reps, repsPrev.value ?? null),
+		row("malformed-tool-call", malformed, malformedPrev.value ?? null),
 		row("unverified-completions", unver, unverPrev.value ?? null),
 		row("queue-ageing", ageing, undefined, {
 			detail:

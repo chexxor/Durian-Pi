@@ -46,7 +46,7 @@ import {
   registerSeat,
 } from "./src/rig.mjs";
 import { describeConfig, loadConfig, strandedMsSetting, streamSettings } from "./src/config.mjs";
-import { computeAttention } from "./src/attention.mjs";
+import { computeAttention, countMalformedToolCalls } from "./src/attention.mjs";
 import { applyEscalations, failureStreak, planEscalations } from "./src/supervisor.mjs";
 import {
 	readGenerationSlots,
@@ -1322,6 +1322,10 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
       }
     }
   }
+  const malformedCountByConv = new Map();
+  for (const seat of seats) {
+    malformedCountByConv.set(seat.conversationId, countMalformedToolCalls(pages[seat.name] ?? []));
+  }
   // Admission age beyond which an unstarted submission is surfaced as stranded
   // (ROADMAP 37a); null means the module default in src/attention.mjs stands.
   const strandedMs = strandedMsSetting(CFG);
@@ -1336,6 +1340,7 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
         nowMs: Date.now(),
         seatsWithSlot,
         failureStreakByConv,
+        malformedCountByConv,
         ...(strandedMs === null ? {} : { strandedMs }),
       }),
       ...slotNotices,

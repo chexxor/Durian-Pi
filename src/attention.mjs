@@ -34,6 +34,36 @@ export const STRANDED_ADMITTED_MS = 30_000;
  */
 export const REPEATED_FAILURE_STREAK = 3;
 
+/** Rejected-malformed-arguments tool calls after which a seat is surfaced as `malformed_tool_call`. */
+export const MALFORMED_TOOL_CALL_NOTICE = 2;
+
+/**
+ * The harness's marker for a tool call whose ARGUMENTS failed schema validation (`invalid_arguments`
+ * in pi-durable's tool.ts). This is a CAUSE, not a symptom: a file-not-found or an edit's oldText
+ * mismatch is the model's normal feedback loop and must NOT count. The structured diagnostic code
+ * is not persisted on the entry (only its text is), so this reads the one marker the harness emits
+ * for the malformed-arguments cause — recorded as the blind spot rather than hidden.
+ */
+const MALFORMED_ARGUMENTS_MARKER = /\[error\] Validation failed for tool "/;
+
+/** Did this entry record a tool call the harness rejected as malformed arguments? */
+export function isMalformedToolResult(entry) {
+	const message = Array.isArray(entry?.model) ? entry.model[0] : entry?.model;
+	if (message?.isError !== true) return false;
+	const parts = Array.isArray(message.content) ? message.content : [];
+	return MALFORMED_ARGUMENTS_MARKER.test(parts.map((part) => part?.text ?? "").join("\n"));
+}
+
+/** How many malformed-argument tool calls are in a seat's entry page. */
+export function countMalformedToolCalls(entries) {
+	let count = 0;
+	for (const entry of entries ?? []) {
+		if (entry?.kind !== "pi.tool-result") continue;
+		if (isMalformedToolResult(entry)) count++;
+	}
+	return count;
+}
+
 /**
  * The reason a run failed, plus the CAUSE when the entry knows it.
  *
@@ -100,7 +130,7 @@ export function computeAttention(
 	queueItems,
 	latestByConv,
 	errorByConv = new Map(),
-	{ nowMs = Date.now(), seatsWithSlot = new Set(), strandedMs = STRANDED_ADMITTED_MS, failureStreakByConv = new Map(), repeatedFailureStreak = REPEATED_FAILURE_STREAK } = {},
+	{ nowMs = Date.now(), seatsWithSlot = new Set(), strandedMs = STRANDED_ADMITTED_MS, failureStreakByConv = new Map(), repeatedFailureStreak = REPEATED_FAILURE_STREAK, malformedCountByConv = new Map(), malformedToolCallNotice = MALFORMED_TOOL_CALL_NOTICE } = {},
 ) {
 	const notices = [];
 	for (const seat of seats) {
@@ -128,6 +158,15 @@ export function computeAttention(
 				seat: seat.name,
 				kind: "repeated_failure",
 				detail: `${streak} consecutive failed runs; the supervisor escalates it to the human`,
+			});
+		}
+		const malformed = malformedCountByConv.get(seat.conversationId) ?? 0;
+		if (malformed >= malformedToolCallNotice) {
+			notices.push({
+				scope: "seat",
+				seat: seat.name,
+				kind: "malformed_tool_call",
+				detail: `${malformed} tool call(s) rejected as malformed arguments; the seat is emitting invalid argument shapes`,
 			});
 		}
 		const latest = latestByConv.get(seat.conversationId);
