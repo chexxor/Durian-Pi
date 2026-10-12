@@ -259,6 +259,16 @@ try {
 	assert.equal(bogusJson.ok, false);
 	assert.match(bogusJson.usage, /node cli\.mjs up/, "usage is returned to the caller");
 
+	// run must stay a known command (ROADMAP 38). The item 44 merge silently
+	// dropped it from the dispatch and the suite still passed, because
+	// run.test.mjs exercises the driver module rather than the CLI verb. Assert
+	// the verb exists and reaches quiescence on a rig with no queued work, so the
+	// driver cannot be unwired again without a failing test.
+	const run = cli(["run"]);
+	assert.equal(run.code, 0, `run must be a known command: ${run.stderr.slice(0, 200)}`);
+	assert.equal(json(run).command, "run", "run reports its own command");
+	assert.equal(typeof json(run).passes, "number", "run reports how many passes it made");
+
 	// -- request-id: one send, one submission, however many times it is retried --
 	// The crash/retry story: an LLM operator (or a script) that dies mid-send and
 	// retries must not start a second generation. A duplicate requestId returns the
