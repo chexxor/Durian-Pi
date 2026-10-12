@@ -61,6 +61,30 @@ pane, no interactive shell. Two caveats that keep this honest:
   docs call the specialists "in-process"; the code spawns child `pi` processes,
   so treat "one `pi` process per agent" as the fact and "in-process" as loose wording.
 
+**Concurrency — one process is not one agent at a time.** Two mechanisms run seats
+at once:
+
+- **Async inside one harness process.** pi-durable's `TaskScheduler` runs multiple
+task invocations concurrently (`packages/durable/src/harness/scheduler.ts`: an
+`#invocations` map with a per-invocation abort controller, awaited as a group).
+Generations await network I/O, so one Node event loop interleaves many seats;
+`driver.mjs` submits wakes to several seats per pass and `pendingConvIds` is a
+*set* of in-flight conversations.
+- **Across processes.** Every `send`/`run` is its own CLI process, which is why
+the genlock exists (`src/genlock.mjs`: "an in-process semaphore would only police
+one process against itself"). `DURIG_MAX_CONCURRENT_SEATS` caps concurrent
+generations rig-wide; **unset = unlimited** (`maxSeats()` → `Infinity`).
+
+Proof: `demo/singleflight.test.mjs` runs two seats concurrently and asserts both
+finish (capping in-flight at 1 only when the cap is set to 1).
+
+So the single process is for **single-writer correctness** (D24) and for the
+driver owning the run lifetime (item 38) — not serialization. The honest
+trade-off is **fault isolation**: agent-fleet's per-agent process contains a
+crash to one agent, while durig's shared process means a crash (the disk-full V8
+OOM we hit) kills every in-flight generation in it; the durable store + `resume`
+recovers the *state*, but the in-flight turns restart.
+
 ## 2. Goal-by-goal — what agent-fleet covers, and where it does not
 
 Legend: **✔** covered · **⊕** covered *better than durig* · **◐** partial / different shape · **✘** absent.
