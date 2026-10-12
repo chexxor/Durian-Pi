@@ -25,7 +25,7 @@ import {
 import { AssistantEntry, configure, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 // Single source of truth for DeepInfra provider options, vendored into this tree
 // so durig is self-contained and publishable on its own
 // (src/providers/PROVENANCE.md records the source, version and licence). Node 24
@@ -656,6 +656,134 @@ async function cmdRun({ watch = false } = {}) {
       if (watch) await new Promise((r) => setTimeout(r, 750));
     }
     out({ ok: true, command: "run", db: DB_PATH, passes });
+  } finally {
+    await harness.close(BACKGROUND_CONTEXT);
+  }
+}
+
+// stop <seat> [reason] (emergency-stop): a deliberate operator surface that halts
+// a seat's in-flight run across processes (ROADMAP 41). A seat that has entered a
+// degenerate loop, or is behaving harmfully, can be stopped WITHOUT killing the
+// driving `send` process in a way that silently strands an admitted-but-unscheduled
+// submission (dogfood F11). Enforcement is by the driver/lease, not by a message to
+// the agent: `stop` finds the seat's live generation-lease holder (the cross-process
+// driver) and kills it, then settles the run's submission to a terminal
+// `aborted: <reason>` state (which the attention channel surfaces as
+// `last_run_failed`) and aborts the run's task so resume won't resurrect it.
+//   - (i)  no agent cooperation required: the halt is the lease holder's pid kill.
+//   - (ii) reaches a run in ANOTHER process: the lease (signal/kill the holder pid).
+//   - (iii) fail closed: the pending submission reaches terminal `unanswered` with
+//          reason `aborted: <reason>`, never a silent strand.
+//   - (iv) durable work preserved: the queue item, transcript and checkpoints stay
+//          in the store; resume (item 37(b)) is unaffected.
+//   - (v)  idempotent and bounded: no live holder AND no pending submission means
+//          the seat is already stopped -> a no-op; one command halves one seat.
+async function cmdStop(seatName, reason) {
+  const stopReason =
+    reason !== undefined && reason.trim() !== "" ? reason.trim() : "operator stop";
+  const { harness } = await openHarness({ resume: false });
+  try {
+    const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+    const seatsVal = seatsDoc?.value?.seats ?? {};
+    const seat = seatsVal[seatName];
+    if (!seat) {
+      noteEmptyRig(Object.keys(seatsVal).length);
+      fail(`unknown seat: ${seatName}`);
+    }
+    const convId = seat.conversationId;
+
+    // The cross-process holder is the seat's LIVE generation-lease slot: that is
+    // how durig knows WHO is driving a run (D12). Consulted only when genlock is
+    // actually configured (a finite max-concurrent-seats cap).
+    const slots = maxSeats();
+    const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
+    const holder = genSlots.find((g) => g.generatingSeat === seatName);
+
+    // The pending run is the seat's latest queued (never started) or placed (a run
+    // started) submission. From the harness's own unsettled-submissions view.
+    const inspection = await harness.inspect(BACKGROUND_CONTEXT);
+    const pending = (inspection.submissions ?? []).find(
+      (s) => s.conversationId === convId && (s.status === "queued" || s.status === "placed"),
+    );
+
+    // (v) idempotence: no live holder AND no pending run means the seat is already
+    // stopped (or never running) - one command halts one seat, a second is a no-op.
+    if (!holder && !pending) {
+      out({
+        ok: true,
+        command: "stop",
+        seat: seatName,
+        reason: stopReason,
+        alreadyStopped: true,
+        db: DB_PATH,
+      });
+      return;
+    }
+
+    // (ii) guarantee the halt: kill the cross-process driver that holds the lease.
+    let killed = null;
+    let killError = null;
+    let slotPath = null;
+    if (holder && Number.isFinite(holder.pid)) {
+      killed = holder.pid;
+      slotPath = `${DB_PATH}.genlock.${holder.slotIndex}`;
+      try {
+        process.kill(killed, "SIGKILL");
+      } catch (err) {
+        // The holder may already have died, which only helps the stop; the reason is
+        // captured and reported so a failed kill against a LIVE pid is not swallowed.
+        killError = String(err?.message ?? err);
+      }
+    }
+
+    // (iii) settle the pending submission to terminal `aborted: <reason>`, and
+    // abort the run's task so a later resume does not resurrect it. settleSubmission
+    // is called while the submission is non-terminal so the custom reason carries
+    // onto the record; abortTask is the durable abort mark that stops re-running.
+    let settled = false;
+    if (pending) {
+      await harness.commit(
+        (tx) => {
+          tx.settleSubmission(pending.id, {
+            status: "unanswered",
+            reason: `aborted: ${stopReason}`,
+          });
+        },
+        BACKGROUND_CONTEXT,
+      );
+      settled = true;
+    }
+    const runTask = (inspection.tasks ?? []).find((t) => t.record.conversationId === convId);
+    if (runTask) {
+      await harness.abortTask(runTask.record.id, BACKGROUND_CONTEXT);
+    }
+
+    // Release the lease slot the killed holder held, so `status`/`watch` no longer
+    // report a wedged generation for it.
+    if (slotPath) {
+      try {
+        unlinkSync(slotPath);
+      } catch (err) {
+        // ENOENT means another process already released the slot; any other failure
+        // must stay visible, because the lease would otherwise remain wedged.
+        if (err?.code !== "ENOENT") {
+          console.error(
+            JSON.stringify({ ok: false, command: "stop", note: "lease release failed", slot: slotPath, error: String(err) }),
+          );
+        }
+      }
+    }
+
+    out({
+      ok: true,
+      command: "stop",
+      seat: seatName,
+      reason: stopReason,
+      killed,
+      killError,
+      aborted: settled,
+      db: DB_PATH,
+    });
   } finally {
     await harness.close(BACKGROUND_CONTEXT);
   }
@@ -1361,6 +1489,7 @@ usages:
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs reset <seat> [handoff]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary)
   node cli.mjs run             drive the rig to quiescence (wake seats with queued work; --watch stays resident)
+  node cli.mjs stop <seat> [reason]      emergency-stop: halts a seat's in-flight run across processes
   node cli.mjs log <seat> [limit] [--follow] [--full] [--tool-bg] [--theme dark|light]
                           a seat's conversation (--follow = live, --full = whole tool output)
   node cli.mjs watch [--once] [--json|--human]   follow rig state (human on a terminal)
@@ -1431,6 +1560,10 @@ try {
   } else if (cmd === "queue") await cmdQueue();
   else if (cmd === "resume" || cmd === "doctor") await cmdResume();
   else if (cmd === "run") await cmdRun({ watch: rest.includes("--watch") });
+  else if (cmd === "stop") {
+    if (!rest[0]) fail("stop needs <seat> [reason]");
+    await cmdStop(rest[0], rest.slice(1).join(" "));
+  }
   else if (cmd === "reset" || cmd === "clean") {
     if (!rest[0]) fail("reset needs <seat> [handoff]");
     await cmdReset(rest[0], rest.slice(1).join(" "));
