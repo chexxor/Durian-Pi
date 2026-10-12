@@ -202,7 +202,13 @@ export function thinResultText(env, text, itemId) {
 	const file = join(cwd, ".durig", `${itemId}.md`);
 	mkdirSync(join(cwd, ".durig"), { recursive: true });
 	writeFileSync(file, text, "utf8");
-	return `claimed item #${itemId} - full body written to ${file}; read it with your read tool.`;
+	// A bounded PREVIEW travels with the path: a coordinator seat (pm) has NO read
+	// tool (COORDINATOR_REMOVALS), so a path alone made the item unreadable to it -
+	// found live on #100, where pm deferred rather than guess. The preview keeps the
+	// result bounded (thin-context's goal) while every seat can still act; a seat
+	// with a read tool opens the file for the full body.
+	const preview = text.slice(0, TOOL_RESULT_INLINE_LIMIT);
+	return `${preview}\n\n[item #${itemId}: truncated at ${TOOL_RESULT_INLINE_LIMIT} chars; full text at ${file} - read it with your read tool if you have one.]`;
 }
 
 const Router = defineExtension({

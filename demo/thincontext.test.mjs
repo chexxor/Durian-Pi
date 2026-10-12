@@ -95,7 +95,14 @@ try {
 		/\.durig[\\\/]/.test(largeResult) && largeResult.includes(`item #${largeId}`),
 		`over-threshold claim must return a PATH, not the body; got: ${largeResult.slice(0, 120)}`,
 	);
-	assert.ok(!largeResult.includes("LARGE_"), "the body must NOT be inlined over the threshold");
+	// A coordinator seat (pm) has no read tool, so a bounded preview must travel
+	// with the path or the item is unreadable to it (#100). Assert the preview's
+	// head is present AND the result stays bounded - the full body is NOT inlined.
+	assert.ok(largeResult.includes("LARGE_"), "the preview carries the body's head");
+	assert.ok(
+		largeResult.length < INLINE_LIMIT + 400,
+		`the result must stay BOUNDED (a preview), not the full body; got ${largeResult.length} chars`,
+	);
 	const largeFile = join(cwd, ".durig", `${largeId}.md`);
 	assert.ok(existsSync(largeFile), "the body file was written to cwd/.durig/<id>.md");
 	assert.ok(readFileSync(largeFile, "utf8").includes("LARGE_"), "the file at the path contains the full body");
