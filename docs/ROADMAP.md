@@ -1102,6 +1102,35 @@ surface. A feature that is off must therefore cost nothing — not "little".
     the advice, or extracting signatures from the parameters schema. The cheap half is
     already doing the work; this removes the class rather than the instance.
 
+## Borrowed from agent-fleet (raised 2026-10-12)
+
+Prior art: `docs/ARCH-COMPARISON-agent-fleet.md` (layer map + adopt-or-build),
+`docs/BORROW-FROM-agent-fleet.md` (inventory → filter), `docs/COMPETITORS.md`,
+and `docs/SELF-ADMIN.md` (the improvement register). Six mechanisms, ranked;
+each is `advertised-elsewhere` evidence, grounded per claim in the agent-fleet
+clone. Deliberately **not** numbered into the 0–44 sequence, to avoid the
+collision the team hit when it invented `#45`.
+
+- **RANK 1 — thin-context return contract.** A claim's result returns a PATH past
+  a threshold, not an inline body. **✅ done (2026-10-12)** (`src/rig.mjs`
+  `thinResultText`, `demo/thincontext.test.mjs`; qa-verified, suite 39/39).
+- **RANK 2 — ratcheting task tier.** The PM task tier latches per task; raising it
+  needs a stated reason (agent-fleet's 13-minute/47-hour post-mortem).
+- **RANK 3 — Verification Contract result shape.** `complete_work` carries an
+  orthogonal execution/changes/verification/acceptance result bound to revision,
+  command, exit status and evidence, so a completion cannot read as a pass.
+- **RANK 4 — ordered context-pressure guard.** warn → preserve-and-settle → one
+  compaction; the *ordering* is the invariant. Feeds items 27/28.
+- **RANK 5 — drift watchdog.** deterministic-first in-flight observation that can
+  terminate as `drift_stop`. Feeds items 42/43.
+- **RANK 6 — independent runtime axes** (work mode × roster × peer topology).
+
+**Root causes found while doing RANK 1** (see `docs/DOGFOOD.md` F13): (a) the queue
+has no non-claimable **held/registered** state, so "registered, do not start" is
+expressed as `queued` and gets claimed; (b) the stalled-claim re-wake carries a
+queued-oriented message, so a seat holding claimed work self-reports "no work"
+and idles. Registered as selfdev backlog #86/#87; (a) is being built as #90.
+
 ## Workflow research
 
 26. **Survey what competing platforms advertise as supported workflows.**

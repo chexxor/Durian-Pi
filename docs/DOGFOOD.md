@@ -268,6 +268,26 @@ like success (the run completes; only the base is wrong).
 or (b) have `run`/`send` adopt `DURIG_SEAT_ROOT` when set, so the environment is
 authoritative. Decide which and record it.
 
+### F13 — `claimed` is not a substitute for a "held" state, and the stalled-claim wake lies
+
+**Observed:** six backlog items are registered; the PM, told to start only rank 1
+and hold the rest, marks the held five `queued` — because the queue has no other
+state. `impl` then claims them (the queue says "claim the oldest item"), defers
+three back to pm, then `resume_work`s them — leaving them `claimed` while idle.
+The queue shows four `claimed` items; `impl` reports "no queued work". Both are
+literally true: `claim_work` takes only **queued** items, and none are queued.
+
+**Why it matters:** "held / registered, do not start" has no representation, so
+the only way to express it is a state the seat will act on. And the driver's
+stalled-claim re-wake cannot break the loop: it submits `WAKE_CONTENT` ("You have
+queued work. Call `claim_work`…") to a seat whose work is **claimed**, not queued,
+so the seat finds nothing and idles again.
+
+**Lands:** (a) a non-claimable **held/registered** state (or a claim guard);
+(b) a claim-aware stalled-claim wake message ("continue your claimed item"),
+distinct from the queued wake. Registered as selfdev backlog #86/#87; (a) is
+being built as #90.
+
 ## Session log
 
 | Date | Rig | What we ran | Findings |

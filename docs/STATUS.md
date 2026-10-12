@@ -77,7 +77,7 @@ Everything below was verified against the real store, not asserted from intent.
 - `DURIG_DB` selects the store; without it the default is `./rig.sqlite`. Use
   `node cli.mjs config` to see what is actually in effect.
 - Dependency state: `node_modules` is **linked to pinned pi `main`** (`--link`),
-  pin `42705224`, drift `false`, all 38 demos passing on it. A fresh clone is on
+  pin `42705224`, drift `false`, all 39 demos passing on it. A fresh clone is on
   the 1.1.0 releases; re-run `node scripts/sync-pi.mjs --sync --link` to
   reproduce the linked state.
 - The tuios patch is rebased onto upstream `main` as `6160892d` on branch
