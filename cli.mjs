@@ -116,7 +116,10 @@ function out(p) {
 }
 
 function fail(error) {
-  out({ ok: false, error: String(error?.message ?? error) });
+  // The stack is the only thing that names the call site, and losing it is how a
+  // crash like the driver's `unresolvable path` became untraceable. Keep the
+  // one-line message by default (byte-stable for callers), full stack on request.
+  out({ ok: false, error: process.env.DURIG_DEBUG ? (error?.stack ?? String(error)) : String(error?.message ?? error) });
   process.exit(1);
 }
 
