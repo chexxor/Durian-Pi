@@ -972,6 +972,22 @@ surface. A feature that is off must therefore cost nothing — not "little".
     *Proof:* reproduce the loop deterministically (a scripted fixture), then show the chosen lever
     prevents it — falsifiable by disabling the lever.
 
+44. **A `reset`/`clean` verb for a seat whose context has degenerated.** Found 2026-10-11 while
+    pushing `impl` through item 37(b): after the model emitted a 16 KB "OK. Let me call write."
+    repetition (item 43), **every** subsequent turn degenerated the same way — including on
+    DeepSeek-V4-Flash-0731, which had completed an earlier item cleanly. That proved the cause was
+    **context contamination** (the model self-conditioning on its own degenerate turn in history),
+    not the model. `conversation.reset(handoff)` in pi-durable fixes it: it writes a `pi.reset`
+    boundary so prior turns leave the context without deleting the durable transcript, and 37(b)
+    then completed in one clean run. durig has **no verb** for this — it had to be done with a
+    one-off script (the same one-off that recovered the stranded submission, which is 37(b)'s job).
+    *Shape:* `node cli.mjs reset <seat> [handoff]` that calls `conversation.reset()`, reports the
+    entry id it wrote, and refuses (or warns) when the seat holds a live generation lease. Related
+    to 41 (emergency stop): 41 halts a runaway run, this clears the poisoned history after it.
+    *Proof:* a demo where a seat's transcript contains a degenerate turn, `reset` is run, and a
+    subsequent turn demonstrably excludes the prior turns (assert the reset boundary is the
+    context head) — falsifiable by disabling the reset.
+
 ## Sharing publicly
 
 22. **Publish durig as its own repository — no releases yet.** The operator wants
