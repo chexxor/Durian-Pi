@@ -11,6 +11,8 @@
 //   directions flow through one durable queue.
 import { defineDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 /** Seat roster: name -> conversation id + role text. Session singleton. */
 export const Seats = defineDoc({
@@ -167,6 +169,42 @@ function toolText(text) {
 	return { content, output: content };
 }
 
+// Thin-context return contract (agent-fleet borrow, ROADMAP RANK 1; source of
+// truth: vendor/eval/agent-fleet @ 7c34dde, docs/ARCHITECTURE.md "Research
+// helpers write findings to disk; the hub resumes specialists with paths, not
+// raw dumps"; durig shape per docs/COMPETITORS.md "durig seats already write to
+// disk, but our tool results still return bodies; the lesson is the return
+// contract"). CONTRACT (verbatim): for claim_work (and any toolText result over
+// the threshold), the tool returns a PATH; the full body is written to
+// cwd/.durig/<itemId>.md and read back via existing read tools. Results under
+// the threshold are unchanged (inline, byte-identical). Additive opt-in seam at
+// toolText: small bodies stay inline; only the large claim body is deferred to
+// disk. Deterministic per-item path so the demo can assert it and the body is
+// idempotently re-readable (re-claim rewrites the same file).
+export const TOOL_RESULT_INLINE_LIMIT = 2000;
+
+/**
+ * Write an over-threshold tool result body to the seat's disk workspace and
+ * return A PATH, per the thin-context return contract. Under the threshold (or
+ * when there is no usable seat workspace) the original text is returned
+ * unchanged, so small/short results stay byte-identical and the coordinator's
+ * context stays thin only for the large dump. The coordinator reads the body
+ * back with its EXISTING read tools (confined to its cwd); no auto-read.
+ * @param {{cwd?: string}|undefined} env the executing conversation's ExecutionEnv
+ * @param {string} text the full tool-result text
+ * @param {number|string} itemId the queue item id (deterministic file name)
+ * @returns {string} a path (over threshold) or the original text (under)
+ */
+export function thinResultText(env, text, itemId) {
+	if (typeof text !== "string" || text.length <= TOOL_RESULT_INLINE_LIMIT) return text;
+	const cwd = env?.cwd;
+	if (!cwd) return text; // no workspace to defer to: keep the inline contract
+	const file = join(cwd, ".durig", `${itemId}.md`);
+	mkdirSync(join(cwd, ".durig"), { recursive: true });
+	writeFileSync(file, text, "utf8");
+	return `claimed item #${itemId} - full body written to ${file}; read it with your read tool.`;
+}
+
 const Router = defineExtension({
 	name: "durig.router",
 	sections: [
@@ -267,7 +305,10 @@ const Router = defineExtension({
 				if (!claimed) {
 					return toolText("NO_QUEUED_WORK");
 				}
-				return toolText(`ITEM #${claimed.id} | from=${claimed.from} | subject=${claimed.subject}\n${claimed.body}`);
+				const claimText = `ITEM #${claimed.id} | from=${claimed.from} | subject=${claimed.subject}\n${claimed.body}`;
+				// Thin-context return contract: an over-threshold body goes to disk and
+				// the tool returns a PATH, not the dump (see thinResultText / RANK-1).
+				return toolText(await thinResultText(api.env, claimText, claimed.id));
 			},
 		}),
 		defineTool({
