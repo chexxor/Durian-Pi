@@ -1,18 +1,17 @@
-// ROADMAP 42 / item #118 HALF 2 — truncation-usability.
-// The truncation defect: TOOL_RESULT_INLINE_LIMIT=2000 (src/rig.mjs). An
-// over-threshold tool result body went to cwd/.durig/<itemId>.md and the RETURN
-// was a MID-BODY BYTE TRUNCATION (text.slice(0,2000)) + the path — so a
-// read-tool-less coordinator seat (pm, lead) had to rule on a byte cut that
-// severed the head from the tail (it truncated lead's #106/#116). Lead #125:
-// the over-threshold RETURN must be a DELIBERATE STRUCTURED HEADER — item id +
-// path + the decision-relevant fields (from/to/subject/status) — NOT a byte cut.
-// This proves:
-//   (a) an over-threshold claim_work returns an INLINE STRUCTURED HEADER
-//       (id + path + from/subject/status) a no-read-tool seat can ACT on, and
-//       does NOT inline the raw mid-body bytes;
-//   (b) the full body is still written to cwd/.durig/<itemId>.md (RANK-1/#59:
-//       body on disk), so a read-tool seat retrieves it;
-//   (c) regression: a small claim stays FULLY inline (byte-identical), no path.
+// ROADMAP 42 / #118 half 2 + #144 B — a tool result a seat can actually act on.
+//
+// Two adjacent rulings, reconciled by capability (not by seat name):
+//   - a seat that CAN read the deferred file gets the STRUCTURED HEADER (id + path +
+//     from/to/subject/status) and the body stays on disk (thin-context, RANK-1/#59);
+//   - a seat that CANNOT read (a coordinator: `COORDINATOR_REMOVALS` strips read) gets
+//     the FULL BODY INLINE, because a path it cannot open is an item it cannot act on
+//     (lead #144 B). Before this, coordinators were handed a mid-body byte cut.
+//
+// Proves:
+//   (a) a READ-TOOL seat over threshold: structured header + path, bounded, body NOT inline,
+//       and the full body on disk;
+//   (b) a NO-READ-TOOL seat over threshold: the FULL BODY inline (no truncation);
+//   (c) a small claim stays fully inline for a read-tool seat, no file written.
 // Run: node demo/structuredhead.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -38,72 +37,78 @@ const dir = mkdtempSync(join(tmpdir(), "durig-structuredhead-"));
 const cwd = join(dir, "seat-workspace");
 
 let harness;
-let roster;
 try {
-	({ harness, roster } = await (async () => {
-		const roster = new Map();
-		const storage = new MemoryStorage();
-		const harness = await Harness.open(storage, { models, registry, env: makeSeatEnv(roster) }, ctx);
-		return { harness, roster };
-	})());
+	const roster = new Map();
+	const storage = new MemoryStorage();
+	harness = await Harness.open(storage, { models, registry, env: makeSeatEnv(roster) }, ctx);
 
-	let workerId;
+	const ids = {};
 	await harness.commit(async (tx) => {
-		const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
-		await configure(tx, conv.id, { model: { provider: "faux", modelId: "faux-seat" }, cwd });
-		await registerSeat(tx, "worker", conv.id, "implementation");
-		workerId = conv.id;
+		const mk = async (name, role, capabilities) => {
+			const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
+			await configure(tx, conv.id, { model: { provider: "faux", modelId: "faux-seat" }, cwd });
+			await registerSeat(tx, name, conv.id, role);
+			if (capabilities) (await tx.doc(Seats)).seats[name].capabilities = capabilities;
+			return conv.id;
+		};
+		ids.worker = await mk("worker", "implementation", ["implement"]);
+		ids.coordinator = await mk("coordinator", "program manager", []);
 	}, ctx);
+
 	const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
 	fillRoster(roster, seats);
-	const conv = await harness.conversation(workerId, ctx);
 
-	const driveClaim = async () => {
+	const driveClaim = async (conversationId) => {
+		const conv = await harness.conversation(conversationId, ctx);
 		const before = await conv.submit({ type: "input", content: "go" }, ctx);
 		faux.setResponses([
 			fauxAssistantMessage([fauxToolCall("claim_work", {})], { stopReason: "toolUse" }),
 			fauxAssistantMessage(fauxText("claim handled")),
 		]);
 		await before.wait(ctx);
-		const pg = await conv.entries({}, 50, undefined, ctx);
-		const result = pg.items.find(
+		const page = await conv.entries({}, 50, undefined, ctx);
+		const result = page.items.find(
 			(e) => e.kind === "pi.tool-result" && String(e.model?.[0]?.toolName) === "claim_work",
 		);
 		return result?.model?.[0]?.content?.[0]?.text ?? "";
 	};
 
-	// (a)+(b): an OVER-threshold item -> the RETURN must be a STRUCTURED HEADER
-	// (id + path + from/subject/status), not a mid-body byte cut; the body stays
-	// on disk at cwd/.durig/<id>.md.
-	const LARGE_BODY = "LARGE_".repeat(INLINE_LIMIT); // over the threshold
-	const largeId = await harness.commit(async (tx) =>
-		enqueueItem(tx, "boss", "worker", "Big task", LARGE_BODY), ctx);
-	const result = await driveClaim();
+	const LARGE_BODY = "LARGE_".repeat(INLINE_LIMIT); // comfortably over the threshold
 
-	// It must carry the structured header fields (id, from, subject, status):
-	assert.ok(result.includes(`item #${largeId}`), `result must carry the item id+path (got: ${result.slice(0, 120)})`);
-	assert.ok(result.includes("from=boss"), "structured header carries `from`");
-	assert.ok(result.includes("subject=Big task"), "structured header carries the subject (`subject=...`)");
-	assert.ok(result.includes("status=claimed"), "structured header carries the status (`status=...`)");
-	// And it must NOT inline the raw mid-body bytes (no `LARGE_` repeated dump).
-	assert.ok(!result.includes("LARGE_"), "the result must NOT inline the mid-body bytes (a byte cut)");
-	// It stays bounded (thin-context's goal): well under the full body.
-	assert.ok(result.length < INLINE_LIMIT + 400, `result stays bounded; got ${result.length} chars`);
+	// (a) READ-TOOL seat: structured header + path, body on disk, NOT inline.
+	const workerItem = await harness.commit(async (tx) =>
+		enqueueItem(tx, "boss", "worker", "Big task for worker", LARGE_BODY), ctx);
+	const workerResult = await driveClaim(ids.worker);
+	assert.ok(workerResult.includes(`item #${workerItem}`), `worker result carries the id+path (got: ${workerResult.slice(0, 120)})`);
+	assert.ok(workerResult.includes("subject=Big task for worker"), "worker header carries the subject");
+	assert.ok(workerResult.includes("status=claimed"), "worker header carries the status");
+	assert.ok(!workerResult.includes("LARGE_"), "a read-tool seat does NOT get the body inline (it has the path)");
+	assert.ok(workerResult.length < INLINE_LIMIT + 400, `worker result stays bounded; got ${workerResult.length}`);
+	const workerFile = join(cwd, ".durig", `${workerItem}.md`);
+	assert.ok(existsSync(workerFile), "the full body is written to cwd/.durig/<id>.md for the read-tool seat");
+	assert.ok(readFileSync(workerFile, "utf8").includes("LARGE_"), "the file holds the full body");
 
-	// (b) the full body is still on disk at the deterministic path.
-	const largeFile = join(cwd, ".durig", `${largeId}.md`);
-	assert.ok(existsSync(largeFile), "the body file was still written to cwd/.durig/<id>.md");
-	assert.ok(readFileSync(largeFile, "utf8").includes("LARGE_"), "the file at the path holds the full body");
+	// (b) NO-READ-TOOL seat: the full body arrives inline, because a path is unreadable to it.
+	const coordItem = await harness.commit(async (tx) =>
+		enqueueItem(tx, "boss", "coordinator", "Big task for coordinator", LARGE_BODY), ctx);
+	const coordResult = await driveClaim(ids.coordinator);
+	assert.ok(coordResult.includes(`#${coordItem}`), "coordinator result identifies the item");
+	assert.ok(coordResult.includes("LARGE_"), "a no-read-tool seat gets the BODY inline (no blind path)");
+	assert.ok(
+		coordResult.includes(LARGE_BODY),
+		"and the body is not truncated — the whole thing arrives (#144 B)",
+	);
 
-	// (c) a SMALL item stays fully INLINE (byte-identical), no path, no deferral.
+	// (c) a SMALL item stays fully inline for a read-tool seat, no file written.
 	const smallId = await harness.commit(async (tx) =>
 		enqueueItem(tx, "boss", "worker", "Small task", "small inline body"), ctx);
-	const small = await driveClaim();
-	assert.ok(small.includes("small inline body"), `small claim must stay fully inline; got: ${small.slice(0, 120)}`);
-	const smallFile = join(cwd, ".durig", `${smallId}.md`);
-	assert.ok(!existsSync(smallFile), "under-threshold body is not written to disk");
+	const small = await driveClaim(ids.worker);
+	assert.ok(small.includes("small inline body"), `small claim stays fully inline; got: ${small.slice(0, 120)}`);
+	assert.ok(!existsSync(join(cwd, ".durig", `${smallId}.md`)), "under-threshold body is not written to disk");
 
-	console.log("STRUCTUREDHEAD TEST PASS (over-threshold claim_work returns an inline structured header with id + path + from/subject/status a no-read-tool seat can act on, not a mid-body byte cut; full body stays on disk; small claims stay inline)");
+	console.log(
+		"STRUCTUREDHEAD TEST PASS (read-tool seat gets the structured head + path with the body on disk; no-read-tool seat gets the full body inline, not a byte cut; small claims stay inline)",
+	);
 } finally {
 	if (harness) await harness.close(ctx);
 	try {

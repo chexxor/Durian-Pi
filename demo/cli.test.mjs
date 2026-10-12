@@ -269,6 +269,14 @@ try {
 	assert.equal(json(run).command, "run", "run reports its own command");
 	assert.equal(typeof json(run).passes, "number", "run reports how many passes it made");
 
+	// #147: a run is bounded. An external kill cannot be caught and strands submissions, so
+	// --max-duration stops the loop itself and reports why. --watch keeps it resident, so the
+	// duration is what ends it.
+	const bounded = cli(["run", "--watch", "--max-duration", "0.2"]);
+	assert.equal(bounded.code, 0, `a bounded run exits 0: ${bounded.stderr.slice(0, 200)}`);
+	assert.equal(json(bounded).command, "run");
+	assert.equal(json(bounded).stoppedBy, "max-duration", "a bounded run reports why it stopped");
+
 	// -- request-id: one send, one submission, however many times it is retried --
 	// The crash/retry story: an LLM operator (or a script) that dies mid-send and
 	// retries must not start a second generation. A duplicate requestId returns the

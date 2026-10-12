@@ -51,6 +51,9 @@ try {
 		workerId = await mk("worker", "implementation");
 		await mk("other", "implementation");
 		await mk("boss", "program manager");
+		// The calling seat keeps the read tool only with a working capability (`seatHasReadTool`),
+		// so declare one: this demo is about the path the readable seat gets over threshold.
+		(await tx.doc(Seats)).seats.worker.capabilities = ["implement"];
 	}, ctx);
 
 	const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;

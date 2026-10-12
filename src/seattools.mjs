@@ -70,6 +70,16 @@ export function toolRemovalsFor(seat) {
 }
 
 /**
+ * Does this seat keep the read tool? A coordinator (no working capability) loses it
+ * (`COORDINATOR_REMOVALS`), so an over-threshold tool result must arrive INLINE or the item is
+ * unreadable to it (lead #144 B, reconciled with #124 b: a seat that can dereference gets the
+ * structured head + path; a seat that cannot gets the body).
+ */
+export function seatHasReadTool(seat) {
+	return !toolRemovalsFor(seat).includes(seatTools.read);
+}
+
+/**
  * Build the `HarnessOptions.env` function.
  *
  * `roster` is a live Map consulted per call, not a snapshot: the seat list is read through the

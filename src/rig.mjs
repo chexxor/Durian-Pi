@@ -13,6 +13,7 @@ import { defineDoc, defineExtension, defineTool, section } from "@earendil-works
 import { Type } from "@earendil-works/pi-ai";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { seatHasReadTool } from "./seattools.mjs";
 
 /** Seat roster: name -> conversation id + role text. Session singleton. */
 export const Seats = defineDoc({
@@ -207,8 +208,12 @@ export const TOOL_RESULT_INLINE_LIMIT = 2000;
  *   used verbatim over the threshold so the action survives the deferral
  * @returns {string} a structured header (over threshold) or the original text (under)
  */
-export function thinResultText(env, text, itemId, head) {
-	if (typeof text !== "string" || text.length <= TOOL_RESULT_INLINE_LIMIT) return text;
+export function thinResultText(env, text, itemId, head, { inlineBody = false } = {}) {
+	if (typeof text !== "string") return text;
+	// A seat with no read tool cannot open the returned path, so an over-threshold body must
+	// arrive inline or the item is unreadable to it (lead #144 B). Thin-context still holds for
+	// every seat that has a read tool: it gets the structured head + the path.
+	if (inlineBody || text.length <= TOOL_RESULT_INLINE_LIMIT) return text;
 	const cwd = env?.cwd;
 	if (!cwd) return text; // no workspace to defer to: keep the inline contract
 	const file = join(cwd, ".durig", `${itemId}.md`);
@@ -296,7 +301,7 @@ const Router = defineExtension({
 			parameters: Type.Object({}),
 			replay: "safe",
 			execute: async (_args, api, context) => {
-				const me = await mySeatName(api, context);
+				const { name: me, hasReadTool } = await mySeatReadability(api, context);
 				const found = await api.commit(async (tx) => {
 					const queue = await tx.doc(RigQueue);
 					// Normal claim: the oldest QUEUED item addressed to me.
@@ -360,7 +365,7 @@ const Router = defineExtension({
 				// Thin-context return contract: an over-threshold body goes to disk and
 				// the tool returns the structured head + a path, not the dump (see
 				// thinResultText / RANK-1 / #118 half 2).
-				return toolText(await thinResultText(api.env, claimText, found.id, head));
+				return toolText(await thinResultText(api.env, claimText, found.id, head, { inlineBody: !hasReadTool }));
 			},
 		}),
 		defineTool({
@@ -500,7 +505,7 @@ const Router = defineExtension({
 			parameters: Type.Object({ all: Type.Optional(Type.Boolean()) }),
 			replay: "safe",
 			execute: async (args, api, context) => {
-				const me = args.all ? null : await mySeatName(api, context);
+				const { name: me, hasReadTool } = await mySeatReadability(api, context);
 				// Default to the seat's own non-terminal work: the whole queue is a ~20 KB
 				// context write on a live rig, and it makes "what is mine?" an inference
 				// over other seats' history. all=true is the opt-in team-wide view.
@@ -512,10 +517,17 @@ const Router = defineExtension({
 						)
 						.map((it) => `#${it.id} ${it.status} from=${it.from} to=${it.to} subj=${it.subject}`);
 				}, context);
-				// A large all=true dump defers to disk like every other over-threshold
-				// result; a seat reads it back with its read tool, or acts on the preview.
+				const scope = args.all ? "all" : me;
+				// An over-threshold dump defers to disk for a seat that can read the path; a seat
+				// with no read tool gets it inline, or the queue is invisible to it (#144 B).
 				return toolText(
-					await thinResultText(api.env, lines.length ? lines.join("\n") : "(empty)", `queue-${me ?? "all"}`),
+					await thinResultText(
+						api.env,
+						lines.length ? lines.join("\n") : "(empty)",
+						`queue-${scope}`,
+						`QUEUE (${scope})`,
+						{ inlineBody: !hasReadTool },
+					),
 				);
 			},
 }),
@@ -528,6 +540,31 @@ async function mySeatName(api, context) {
 		const seats = await tx.doc(Seats);
 		for (const [name, seat] of Object.entries(seats.seats)) {
 			if (seat.conversationId === api.conversationId) return name;
+		}
+		throw new Error("this conversation is not a registered seat");
+	}, context);
+}
+
+/**
+ * The calling seat's name, plus whether it keeps the read tool. A coordinator does not
+ * (`COORDINATOR_REMOVALS`), so this is the predicate that decides whether an over-threshold tool
+ * result arrives as the structured head + path (a seat that can read the file) or inline (a seat
+ * that cannot) — lead #144 B. The record is snapshotted to plain fields because the commit
+ * releases its overlay and a proxy read after settlement throws.
+ */
+async function mySeatReadability(api, context) {
+	return api.commit(async (tx) => {
+		const seats = await tx.doc(Seats);
+		for (const [name, seat] of Object.entries(seats.seats)) {
+			if (seat.conversationId !== api.conversationId) continue;
+			return {
+				name,
+				hasReadTool: seatHasReadTool({
+					name,
+					role: seat.role,
+					capabilities: seat.capabilities ? [...seat.capabilities] : [],
+				}),
+			};
 		}
 		throw new Error("this conversation is not a registered seat");
 	}, context);

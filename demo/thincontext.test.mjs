@@ -60,6 +60,9 @@ try {
 		const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
 		await configure(tx, conv.id, { model: { provider: "faux", modelId: "faux-seat" }, cwd });
 		await registerSeat(tx, "worker", conv.id, "implementation");
+		// A working capability is what keeps the read tool (`seatHasReadTool`), so this seat is the
+		// one the thin path is FOR: over threshold it gets the head + path, not the body (#144 B).
+		(await tx.doc(Seats)).seats.worker.capabilities = ["implement"];
 		workerId = conv.id;
 	}, ctx);
 	const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;

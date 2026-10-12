@@ -123,6 +123,30 @@ try {
 		"destructive git is refused",
 		destructive.ok === false && /discard/.test(destructive.error?.message ?? ""),
 	);
+	// Every state-mutating git form is refused at the guard layer (ROADMAP 42 / #146), so a seat
+	// cannot diverge its worktree from the reviewed source; read-only git still runs.
+	for (const command of [
+		"git commit -m x",
+		"git checkout main",
+		"git restore src/rig.mjs",
+		"git revert HEAD",
+		"git clean -fd",
+		"git stash",
+		"git branch -D foo",
+	]) {
+		const refused = await author.exec(command, {}, context);
+		check(
+			`${command} is refused`,
+			refused.ok === false && /refused by durig/.test(refused.error?.message ?? ""),
+			JSON.stringify(refused.ok ? refused.value : refused.error?.message),
+		);
+	}
+	const readOnlyGit = await author.exec("git status --short", {}, context);
+	check(
+		"read-only git is not refused",
+		!/refused by durig/.test(readOnlyGit.error?.message ?? ""),
+		JSON.stringify(readOnlyGit.ok ? "ran" : readOnlyGit.error?.message),
+	);
 
 	console.log("\nSC2 — the verifier cannot mutate what it verifies");
 	const authorWrite = await author.writeFile(join(root, "author.txt"), "ok", context);

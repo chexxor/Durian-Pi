@@ -34,9 +34,18 @@ import { ExecutionError, FileError, err, ok } from "@earendil-works/pi-durable/e
 const DENIED_COMMANDS = [
 	{ re: /(^|[\s;&|"'()])wsl(\.exe)?([\s"'()]|$)/i, why: "WSL is unsupported on this host" },
 	{ re: /(^|[\s;&|"'()])docker(-compose)?(\.exe)?([\s"'()]|$)/i, why: "Docker is unsupported on this host" },
-	{ re: /git\s+reset\s+--hard/i, why: "would discard uncommitted work" },
-	{ re: /git\s+clean\s+-[a-z]*f/i, why: "would discard untracked work" },
-	{ re: /git\s+checkout\s+--(\s|$)/i, why: "would discard uncommitted work" },
+	// State-mutating git is the operator's to do: a seat produces files in its worktree and the
+	// operator integrates them. A seat that commits, re-checks-out, stashes or resets diverges
+	// the tree from the reviewed source (observed: a seat reverted an integrated change in its
+	// worktree). Read-only git (status/log/diff/show/rev-parse) is deliberately NOT matched.
+	{ re: /git\s+commit(\s|$)/i, why: "committing is the operator's integration step; leave the change for review" },
+	{ re: /git\s+reset(\s|$)/i, why: "would restage or discard work a seat did not integrate" },
+	{ re: /git\s+checkout(\s|$)/i, why: "would change the seat's working tree or HEAD" },
+	{ re: /git\s+restore(\s|$)/i, why: "would discard uncommitted work" },
+	{ re: /git\s+revert(\s|$)/i, why: "would rewrite committed work" },
+	{ re: /git\s+clean(\s|$)/i, why: "would discard untracked work" },
+	{ re: /git\s+stash(\s|$)/i, why: "would move uncommitted work out of the tree" },
+	{ re: /git\s+branch\s+(-D|-d|--delete)(\s|$)/i, why: "would delete a branch" },
 	{
 		re: /git\s+push(\s|$)/i,
 		why: "publishing needs the operator's authorization; ask with defer_work, or have the operator relaunch durig with DURIG_ALLOW_PUSH=1",

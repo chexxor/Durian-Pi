@@ -668,19 +668,45 @@ async function cmdReset(seatName, handoff) {
   }
 }
 
-// run [--watch]: drive the rig to quiescence (ROADMAP 38). Opens the harness
+/** Parse `--max-duration <seconds>` (or `--max-duration=<seconds>`) into milliseconds; 0 = unbounded. */
+function parseMaxDuration(args) {
+  const at = args.findIndex((a) => a === "--max-duration" || a.startsWith("--max-duration="));
+  if (at < 0) return 0;
+  const raw = args[at].includes("=") ? args[at].slice(args[at].indexOf("=") + 1) : args[at + 1];
+  const seconds = Number(raw);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds * 1000) : 0;
+}
+
+// run [--watch] [--max-duration <s>]: drive the rig to quiescence (ROADMAP 38). Opens the harness
 // WITH resume() so queued work is scheduled, then repeatedly wakes any seat that
 // has queued work and nothing advancing it (src/driver.mjs) and waits for the
 // rig to go idle, until a pass changes nothing. This is the clock the queue was
 // missing: one `send` to route, then `run` finishes the chain without a second
 // external send. `--watch` stays resident instead of exiting.
-async function cmdRun({ watch = false } = {}) {
+//
+// A run is BOUNDED (ROADMAP 42 / #147): an external kill cannot be caught and
+// strands admitted submissions and the generation lease. `--max-duration` stops
+// the loop at the deadline, and a SIGINT/SIGTERM handler lets the current pass
+// settle before the finally closes the harness, so a stopped run does not leave
+// `admitted_not_started` behind.
+async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
   const { harness } = await openHarness({ enforceSeatRoot: true });
   // A raw read-only handle for probing seat documents. The driving harness fails
   // its whole session on the first storage error, so an unreadable `pi.live` must
   // be detected through this handle BEFORE the harness opens that conversation
   // (P5 / #110). One handle for the run; closed with the harness.
   const probeStorage = await openNodeSqliteStorage(DB_PATH);
+  // Bounded-run state (#147): `startedAt` drives --max-duration; `stopping` is set by a signal
+  // so the loop breaks AFTER the pass in flight settles (waitForIdle), never mid-run. Declared
+  // here, not inside the try, because the finally removes the handlers and reports `stoppedBy`.
+  const startedAt = Date.now();
+  let stoppedBy = null;
+  let stopping = false;
+  const onSignal = () => {
+    stopping = true;
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
   try {
     // A claimed item whose seat's latest submission was operator-stopped
     // (`aborted:<reason>`) must never be re-woken (ROADMAP 42; lead ruling #45/
@@ -711,6 +737,14 @@ async function cmdRun({ watch = false } = {}) {
     // `run` can report them instead of dying, and never silently drops the work.
     const failedSeats = new Set();
     for (;;) {
+      if (stopping) {
+        stoppedBy = "signal";
+        break;
+      }
+      if (maxDurationMs > 0 && Date.now() - startedAt >= maxDurationMs) {
+        stoppedBy = "max-duration";
+        break;
+      }
       const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
       const queueDoc = await harness.documentState(RigQueue, undefined, BACKGROUND_CONTEXT);
       const inspection = await harness.inspect(BACKGROUND_CONTEXT);
@@ -751,8 +785,10 @@ async function cmdRun({ watch = false } = {}) {
       if (passes >= maxPasses) break;
       if (watch) await new Promise((r) => setTimeout(r, 750));
     }
-    out({ ok: true, command: "run", db: DB_PATH, passes, failedSeats: [...failedSeats] });
+    out({ ok: true, command: "run", db: DB_PATH, passes, failedSeats: [...failedSeats], stoppedBy });
   } finally {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
     await harness.close(BACKGROUND_CONTEXT);
     await probeStorage.close(BACKGROUND_CONTEXT);
   }
@@ -1585,7 +1621,7 @@ usages:
   node cli.mjs queue           dump the work queue
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs reset <seat> [handoff]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary)
-  node cli.mjs run             drive the rig to quiescence (wake seats with queued work; --watch stays resident)
+  node cli.mjs run [--watch] [--max-duration <seconds>]   drive to quiescence; --watch resident; --max-duration bounds it
   node cli.mjs stop <seat> [reason]      emergency-stop: halts a seat's in-flight run across processes
   node cli.mjs log <seat> [limit] [--follow] [--full] [--tool-bg] [--theme dark|light]
                           a seat's conversation (--follow = live, --full = whole tool output)
@@ -1656,7 +1692,7 @@ try {
     await cmdSend(args[0], text, { stream, requestId });
   } else if (cmd === "queue") await cmdQueue();
   else if (cmd === "resume" || cmd === "doctor") await cmdResume();
-  else if (cmd === "run") await cmdRun({ watch: rest.includes("--watch") });
+  else if (cmd === "run") await cmdRun({ watch: rest.includes("--watch"), maxDurationMs: parseMaxDuration(rest) });
   else if (cmd === "stop") {
     if (!rest[0]) fail("stop needs <seat> [reason]");
     await cmdStop(rest[0], rest.slice(1).join(" "));
