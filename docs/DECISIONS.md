@@ -1051,3 +1051,26 @@ commit.
 
 **Effect on the position:** `security.sec`'s dissent is preserved for the residual shell risk
 (`docs/reviews/security-sec-m3-seat-tools.md`); SC1–SC3 are **adopted**, not skipped.
+
+## D39 — The driver probes seat documents through a raw handle, because a harness session fails closed (2026-10-12)
+
+**Decision:** before waking a candidate seat, `run` probes that seat's `pi.live`
+document through a **raw storage handle**, not through the driving harness. A seat
+whose document cannot be materialized is reported (exact error and path) and
+skipped; the remaining seats are still woken, and the next pass re-probes it.
+`driveOnce` also keeps a per-wake guard as a second line of defence.
+**Rationale:** pi-durable fails a **whole Session** on its first storage error
+("Session failed after a storage error; close and reopen it"). The DOGFOOD F14
+corruption (`pi.live` with an empty base and orphaned appends) therefore killed
+`run` before any wake was delivered, and catching the `PathError` per wake was not
+enough: the bad seat poisoned the session, and every healthy seat after it failed
+too. A raw storage read throws the same `PathError` **without failing any
+session**, so the unreadable seat can be excluded before the harness opens it.
+**Alternatives:** (a) repair the producing op / rewrite the corrupt base on read —
+rejected: a new write path, and #110 forbids one; (b) catch per wake and reopen
+the harness — rejected: the bad seat still poisons the session before the healthy
+seats are reached, so no work advances; (c) fix the producer inside vendored
+`pi-main` — out of scope (pinned vendor, synced by `sync-pi.mjs`). **Status:**
+adopted. **Evidence:** `demo/driversurvive.test.mjs` reproduces the exact failure
+failing-first (`unresolvable path: ["generation","message","content",0]`, exit 1
+against the committed driver) and passes after; full `demo/*.test.mjs` loop 40/40.

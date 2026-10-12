@@ -68,21 +68,83 @@ export function selectWakes({
 }
 
 /**
+ * Which candidate wakes are safe to deliver. Probing through the DRIVING harness
+ * would fail its whole session on the first storage error (pi-durable already-
+ * stored-error discipline: one bad read closes the session), so this reads each
+ * `pi.live` document through the raw storage handle the caller owns. A seat whose
+ * live document cannot be materialized is returned as unreadable, not woken.
+ *
+ * Pure read: no write path, no repair. Returns the actual error so the caller can
+ * report the exact unresolvable path.
+ *
+ * @param {{scanDocuments:Function, document:Function}} storage
+ * @param {Array<{name:string, conversationId:number|string}>} candidates
+ * @returns {Promise<{wakeable:Array, unreadable:Array<{name:string, conversationId:number|string, error:Error}>}>}
+ */
+export async function probeSeatReadability(storage, candidates, context) {
+  const wakeable = [];
+  const unreadable = [];
+  for (const wake of candidates) {
+    try {
+      const page = await storage.scanDocuments(
+        { scope: { kind: "conversation", conversationId: wake.conversationId }, at: "current", kind: "pi.live" },
+        1,
+        undefined,
+        context,
+      );
+      const liveId = page.items[0]?.id;
+      // A conversation with no live document yet is readable (the harness will
+      // initialize an empty one); only a present-but-unresolvable one is bad.
+      if (liveId !== undefined) await storage.document(liveId, "current", context);
+      wakeable.push(wake);
+    } catch (error) {
+      unreadable.push({ name: wake.name, conversationId: wake.conversationId, error });
+    }
+  }
+  return { wakeable, unreadable };
+}
+
+/**
  * Submit one wake per selected seat. Returns how many were woken. The wake is
  * admitted durably; the caller is responsible for waiting for the rig to go idle
  * before closing the harness, or the run it started is abandoned.
+ *
+ * P5 (#110): one unreadable conversation must never kill the driver. A corrupt
+ * `pi.live` document (DOGFOOD F14) makes materialization throw
+ * `unresolvable path: [...]`; before this guard that exception escaped `run`, so
+ * the pass died before delivering any wake and every claimed item was stranded.
+ *
+ * When a raw `storage` handle is supplied, candidate seats whose live document is
+ * unreadable are reported through `onError` and skipped BEFORE the driving
+ * harness reads them (opening the corrupt conversation would fail the harness's
+ * whole session, stranding every other seat too). The remaining seats are still
+ * woken, and a later pass re-probes the bad one. Without `storage`, a per-wake
+ * guard still keeps an unexpected single-conversation failure from killing the pass.
  */
 export async function driveOnce(
   harness,
-  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context },
+  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError },
 ) {
-  const wakes = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds });
+  const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds });
+  let wakes = candidates;
+  if (storage !== undefined && candidates.length > 0) {
+    const { wakeable, unreadable } = await probeSeatReadability(storage, candidates, context);
+    for (const failure of unreadable) onError?.(failure);
+    const allowed = new Set(wakeable.map((w) => w.name));
+    wakes = candidates.filter((w) => allowed.has(w.name));
+  }
   let actioned = 0;
   for (const wake of wakes) {
-    const conv = await harness.conversation(wake.conversationId, context);
-    if (!conv) continue;
-    await conv.submit({ type: "input", content: WAKE_CONTENT }, context);
-    actioned++;
+    try {
+      const conv = await harness.conversation(wake.conversationId, context);
+      if (!conv) continue;
+      await conv.submit({ type: "input", content: WAKE_CONTENT }, context);
+      actioned++;
+    } catch (error) {
+      // Belt and braces: even a probed-readable seat can fail here. Report and
+      // continue rather than abandon the pass.
+      onError?.({ name: wake.name, conversationId: wake.conversationId, error });
+    }
   }
   return actioned;
 }

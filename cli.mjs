@@ -674,6 +674,11 @@ async function cmdReset(seatName, handoff) {
 // external send. `--watch` stays resident instead of exiting.
 async function cmdRun({ watch = false } = {}) {
   const { harness } = await openHarness({ enforceSeatRoot: true });
+  // A raw read-only handle for probing seat documents. The driving harness fails
+  // its whole session on the first storage error, so an unreadable `pi.live` must
+  // be detected through this handle BEFORE the harness opens that conversation
+  // (P5 / #110). One handle for the run; closed with the harness.
+  const probeStorage = await openNodeSqliteStorage(DB_PATH);
   try {
     // A claimed item whose seat's latest submission was operator-stopped
     // (`aborted:<reason>`) must never be re-woken (ROADMAP 42; lead ruling #45/
@@ -683,30 +688,26 @@ async function cmdRun({ watch = false } = {}) {
     // the stopped fact is durable and stable across passes.
     const seatsDoc0 = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
     const stoppedConvIds = new Set();
-    {
-      const storage = await openNodeSqliteStorage(DB_PATH);
-      try {
-        for (const s of Object.values(seatsDoc0?.value?.seats ?? {})) {
-          const page = await storage.scanSubmissions(
-            { conversationId: s.conversationId, order: "descending" },
-            1,
-            undefined,
-            BACKGROUND_CONTEXT,
-          );
-          const latest = page.items[0];
-          if (
-            latest?.status === "unanswered" &&
-            String(latest.reason ?? "").startsWith("aborted:")
-          ) {
-            stoppedConvIds.add(s.conversationId);
-          }
-        }
-      } finally {
-        await storage.close(BACKGROUND_CONTEXT);
+    for (const s of Object.values(seatsDoc0?.value?.seats ?? {})) {
+      const page = await probeStorage.scanSubmissions(
+        { conversationId: s.conversationId, order: "descending" },
+        1,
+        undefined,
+        BACKGROUND_CONTEXT,
+      );
+      const latest = page.items[0];
+      if (
+        latest?.status === "unanswered" &&
+        String(latest.reason ?? "").startsWith("aborted:")
+      ) {
+        stoppedConvIds.add(s.conversationId);
       }
     }
     const maxPasses = watch ? Infinity : 200;
     let passes = 0;
+    // Seats whose wake could not be delivered (P5 / #110). Tracked across passes so
+    // `run` can report them instead of dying, and never silently drops the work.
+    const failedSeats = new Set();
     for (;;) {
       const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
       const queueDoc = await harness.documentState(RigQueue, undefined, BACKGROUND_CONTEXT);
@@ -725,6 +726,20 @@ async function cmdRun({ watch = false } = {}) {
         busySeats,
         stoppedConvIds,
         context: BACKGROUND_CONTEXT,
+        storage: probeStorage,
+        onError: ({ name, conversationId, error }) => {
+          failedSeats.add(name);
+          console.error(
+            JSON.stringify({
+              ok: false,
+              command: "run",
+              driver: "wake-failed",
+              seat: name,
+              conversationId,
+              error: String(error?.message ?? error),
+            }),
+          );
+        },
       });
       // Hold the harness open until every run this pass started has settled;
       // closing first would abandon them (the F11 class).
@@ -734,9 +749,10 @@ async function cmdRun({ watch = false } = {}) {
       if (passes >= maxPasses) break;
       if (watch) await new Promise((r) => setTimeout(r, 750));
     }
-    out({ ok: true, command: "run", db: DB_PATH, passes });
+    out({ ok: true, command: "run", db: DB_PATH, passes, failedSeats: [...failedSeats] });
   } finally {
     await harness.close(BACKGROUND_CONTEXT);
+    await probeStorage.close(BACKGROUND_CONTEXT);
   }
 }
 
