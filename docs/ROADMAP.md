@@ -1256,6 +1256,40 @@ missing halves, and 30 is the honest advert.
     list that describes the roadmap as though it were shipped is the same defect as a
     citation that points at nothing.
 
+30b. **Start a fresh conversation automatically when the cache is cold, or at a task boundary.**
+    Raised by the operator. The idea: when a seat's thread will not be reused for the next
+    task — or when the last request to it is older than the provider's prompt-cache TTL — its
+    context is a cost with no cache benefit, so a fresh conversation (28b) is at least as
+    cheap and usually cheaper than carrying it forward.
+    *The premise, corrected with sources.* The common **default** cache TTL is **5–10 minutes**
+    of inactivity, not one hour. Anthropic's default is 5 min (1 h is an optional tier, ~2×
+    write cost); OpenAI is automatic ~5–10 min, hard-capped near 1 h; **DeepInfra — our
+    provider — is explicitly 5 min or 1 h** (`cache_retention` / `prompt_cache_options`), and
+    durig requests neither today (`docs/Prompt_Caching_Research.md`; item 33). So "1 hour" is
+    the *maximum/optional* window, not the default, and the threshold must be
+    **provider-aware**, keyed to the retention we actually request — otherwise the heuristic
+    fires on the wrong clock (5 min vs 1 h is a 12× difference in idle tolerance).
+    *The unanswerable part, named honestly.* We cannot know whether a context will be useful
+    for the next task. Two observable proxies, in order of confidence:
+    1. **Idle time** — the gap since the seat's last request, read from the queue's transition
+       timestamps (`RigQueue`), so it is a read, not new instrumentation. Past the cache TTL
+       the cache is cold, so the context's only remaining effect is a long prompt prefilled
+       at full price; a fresh conversation then strictly dominates.
+    2. **A task boundary** — the previous item is `done` and the next item addressed to the
+       seat is a *different* task. `reset` (item 44) exists; this makes it automatic.
+    *Configuration, defaulting to the most affordable option.* Because usefulness is
+    unanswerable, this is a knob with an affordable default — fresh when idle exceeds the
+    provider's **shorter** retention window (DeepInfra 5 min), and **never mid-item**: a
+    `claimed` item must survive the transition or the seat loses the task (28b's carry-across
+    rule; the F13 `#90` HELD-state work is what makes a held item distinguishable from a
+    claimed one, so a held item may be dropped but a claimed one may not).
+    *Ordering:* depends on 28b (the fresh-conversation verb) and 33 (the retention we pick —
+    the threshold must match it). The advocate owns the practice (29); this item is the
+    automatic trigger, and `designer` owns whether the default is legible to a user.
+    *Acceptance:* a demo where a seat idle beyond the threshold takes a fresh conversation on
+    its next item and still completes that item, and a seat idle under the threshold does
+    not; the previous conversation is never deleted (28b).
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for
