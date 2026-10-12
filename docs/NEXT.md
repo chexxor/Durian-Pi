@@ -4,59 +4,56 @@
 `docs/ROADMAP.md` is the ordered backlog; `docs/SELFDEV.md` is the runbook. Update this file at the
 end of every session and keep it to one screen.
 
-_Last refreshed: 2026-10-12, #110 driver-survival fix (operator's assistant)._
+_Last refreshed: 2026-10-12, after the #117/#118 run and integration (operator's assistant)._
 
-## Current priority
+## Where main is
 
-**Queue item #110 — P5: the `run` driver must survive an unresolvable path.** The fix is
-**implemented and self-verified** (see evidence below), but the queue row is still `queued`:
-the assistant did the work directly because the driver was the blocker; **independent `qa`
-verification and `pm` closure are still owed.**
+**`main` is `d66737dc` and green: `demo/*.test.mjs` 45/45, `node --check` clean.** It contains:
+- `1639a3be` — #110 fix (driver probes a seat's `pi.live` through a raw handle; survives F14).
+- `a07816df` — #110 failing-first control, committed and self-contained.
+- `b040bc1a` — `peek_queue` scoped to the seat (+ `all:true`) and routed through `thinResultText`.
+- `90caa998` + `d66737dc` — the selfdev team's #117/#118 work, merged in:
+  - #117 per-seat `thinkingLevel` reaches the harness AgentState (`demo/thinkinglevel.test.mjs`);
+  - #118 half 1 `claim_work` returns the oldest claimed-by-me item (`demo/rearmclaim.test.mjs`);
+  - #118 half 2 structured thin header, not a mid-body byte cut (`demo/structuredhead.test.mjs`).
 
-- **What was wrong:** a corrupt `pi.live` document (DOGFOOD F14) made `run --watch` throw
-  `unresolvable path: ["generation","message","content",0]` on its first pass. Every claimed
-  item (#60–#63, #90, #101) was stranded. A pi-durable Session fails **closed** on its first
-  storage error, so guarding one wake was not enough — the bad seat poisoned every later wake.
-- **The fix:** `src/driver.mjs` `driveOnce` now probes each candidate seat's `pi.live` through a
-  **raw storage handle** (`probeSeatReadability`) and skips the unreadable seat before the
-  harness opens it; `cli.mjs` `cmdRun` supplies the handle and reports skipped seats in
-  `failedSeats` plus a stderr `wake-failed` line. A per-wake guard remains. Rationale: D39.
-- **Evidence (re-run these):**
-  - `node demo/driversurvive.test.mjs` → exit 0 (with the fix).
-  - Failing-first: the same demo against the committed driver → exit 1,
-    `PathError: unresolvable path: ["generation","message","content",0]`.
-  - `node --check` clean on `cli.mjs`, `src/driver.mjs`, `demo/driversurvive.test.mjs`.
-  - full `demo/*.test.mjs` loop → 40/40 exit 0.
-- **Still owed:** `qa` re-runs the named checks independently; `pm` closes #110. Do **not**
-  re-implement it — the fix is in the tree.
+**#110 is CLOSED by operator ruling** (#113 settled closed). Nothing is pushed — the operator pushes
+at end of day.
 
-## Then
+## Current priority (routed, waiting on implementation)
 
-- **#108 / #105 — P3:** escalate a `deferred_awaiting_answer` item to the human, one pass inside
-  `run --watch`, bounded and idempotent. Lead's ruling is **#107**; its full text is at
-  `<seat-root>/.durig/107.md`. Unblocked now that the driver survives.
+`lead` has ruled the critical path; these are the next work items:
 
-## Known non-terminal queue state (`selfdev.sqlite`)
+- **#144 — coordinator read gap. `lead` ruled B:** inline the body for a seat that has NO read tool;
+  F9's `COORDINATOR_REMOVALS` (`src/seattools.mjs:52`) stay. Reconciles with #124(b): a seat that can
+  dereference gets path + structured header, a seat that cannot gets the body inline — a capability
+  predicate, not a role-name fork. This is what unblocks `pm`'s own #131/#134 deferrals.
+- **#146 — block state-mutating git at the guard layer** (`commit`/`push`/`reset`/`checkout <path>`/
+  `restore`/`revert`/`clean`/`stash`/`branch -D`), keep read-only git. Failing-first acceptance.
+- **#145 — split into two:** escalation-on-repeated-failure lives in the **supervisor, not the
+  driver** (+ a `repeated_failure` notice class); malformed-tool-call classification is separate.
+- **#147** bounded `run` with graceful shutdown; **#148** item-43 family (wake has a legal move but
+  the model runs `git status` instead of claiming); **#149** verify `peek_queue`.
 
-| id | status | from→to | what |
-|---|---|---|---|
-| #110 | queued (fixed in tree) | pm→impl | P5 driver survival — **verify + close** |
-| #108 | queued | pm→impl | P3 escalate `deferred_awaiting_answer` |
-| #60–#63 | claimed | pm→impl | agent-fleet borrow RANK 2–5 |
-| #90 | claimed | pm→impl | non-claimable `held` queue state |
-| #101 | claimed | pm→impl | #60 shape ruled + explicit order |
+## Known trap (do not repeat)
 
-The claimed items were stranded by #110. With the driver fixed they should be re-woken on the next
-`run`; verify rather than assume.
+**The worktree `.worktrees/selfdev-110` is DIRTY and is NOT the source of truth.** Its
+`src/rig.mjs` was reverted by a seat and lost the `peek_queue` scoping. `main` is correct. Before the
+next team run, point seats at a **fresh worktree from `main`** (the runbook in `docs/SELFDEV.md`),
+or re-sync that file deliberately — do not run the team against the diverged tree.
 
-## Registered backlog (pending routing)
+## Unexpected events this session (registered, #146–#149)
 
-Roadmap *"New-session onboarding for seats"* gained **O1–O4** on 2026-10-12, registered but not yet
-in the queue. `pm` should route them after #110 is closed.
+1. A seat mutated git state in its worktree (reverted committed code) — #146.
+2. `run` to quiescence is unbounded in wall-clock: it hit a 3000 s cap **twice**; each kill stranded
+   submissions (`admitted_not_started`) and left a stale generation lease (`generation_stale`), both
+   cleared with `node cli.mjs doctor` — #147.
+3. The stalled-claim badgering persisted after the fix because the model did not call `claim_work` —
+   #148.
+4. `qa` twice failed to reproduce #110's negative control (wrong git path, then a bad substitution);
+   the committed fixture (`demo/driversurvive-pre.test.mjs`) removes that dependency.
 
 ## Open operator decision
 
-**Which worktree, and whether the #110 fix is committed.** The assistant committed the fix locally
-on `main` (no push). The seats previously rooted in `.worktrees/selfdev-borrow/durig` (stale HEAD,
-uncommitted WIP). Decide whether the next team run continues there or branches a fresh worktree
-from current HEAD. See `docs/SELFDEV.md`.
+- **Push** the local `main` (`d66737dc`) at end of day — the operator holds that grant.
+- **Next team run:** start from a fresh worktree off `main`; expect `run` to be long (see #147).
