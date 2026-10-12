@@ -1359,6 +1359,67 @@ paragraph):
 **Evidence class:** P1–P3 are `advertised-elsewhere` (D23's citations); P4–P6 are
 `observed` (this cycle's runs). Managed by the advocate's rule (D36).
 
+## New-session onboarding for seats (raised 2026-10-12)
+
+**What raised it.** A delegate of the operator — an agent external to the team, not a seat — sat in
+the operator's chair for the first time and burned ~20 discovery calls before it could name the
+next item. Its post-mortem, and a second agent's read of it against the wider literature, are
+`docs/Agent_Onboarding_Research.md`. The finding turns inward: a durig **seat** that begins a new
+session (created at `up`, resumed by 37(b), reset by 44, or moved to a fresh conversation by 28b)
+has no deterministic way to learn what it was doing, what the team is doing now, or what "done"
+meant. Every mechanism we have moves *state* across a boundary — 28b re-surfaces a claimed item,
+44 writes a reset boundary, 35 injects skills — but none **orients** the session that wakes on the
+other side, so a fresh conversation starts amnesiac and re-derives.
+
+**The pattern the research converged on.** The agent is amnesiac; the filesystem is not. The
+recurring answer is an always-on entry context, a clock-in/clock-out ritual, a bounded handoff
+artifact, and the done-condition written down before work starts — over a plain filesystem, not a
+memory engine, because durig is already SQLite + files and the gap is a read/index layer over what
+we have. The delegate half of this is `docs/SELFDEV.md` + `docs/NEXT.md`; the items below are the
+seat half.
+
+O1. **A seat boot contract: the clock-in routine, stated once and run on every new session.**
+    A created, resumed, or reset conversation must orient before it acts: read its claimed item(s)
+    and the rig handoff (O2), then state a short plan naming the item and the oracle. Today the
+    state is carried (13, 28b, 44) but the orientation is not — F13's "idle with claimed work" is
+    exactly what an unoriented session looks like.
+    *Mechanism:* a shared primer section contributed by 35's loader, plus a first-turn contract on
+    a created/resumed/reset conversation. No new tool, and no polling (item 4 keeps polling out).
+    *Acceptance:* a demo where a freshly created seat is handed a claimed item and its first turn
+    names the item and the oracle with no human prompt, and a control where a seat with no claimed
+    work does not invent one.
+
+O2. **A rig handoff the seats are *pushed* at, never poll.** The roadmap↔queue priority split is the
+    same root cause the delegate hit: `ROADMAP.md` says "ordered by operator value" while the live
+    next step sits inside a queue subject. A seat needs the pointer on the push channel — the primer
+    at boot and an attention notice at runtime (D28 / P3) — because item 4 forbids a polling tool.
+    *Evidence:* the delegate post-mortem; P3's "observability without an actor"; item 4.
+    *Mechanism:* a bounded, committed handoff (the delegate's `NEXT.md`, or a per-rig equivalent)
+    named in the primer, plus an attention notice when it disagrees with the queue.
+    *Acceptance:* a demo where a new seat's primer names the current priority and its source file,
+    and the notice fires when the file and the queue disagree.
+
+O3. **Intake writes the done-condition, and the session that resumes re-reads it.** A priority that
+    is not a done-condition drifts; the research's highest-leverage move for a long run is explicit,
+    testable completion criteria in an external file, so the agent cannot quietly redefine *done*
+    mid-run. The selfdev items already carry acceptance — the shape exists, it is just not a rule.
+    *Mechanism:* a `check` rule that a routed item carries a testable done-condition, and
+    `complete_work` requiring the completion to name the acceptance it met.
+    *Acceptance:* a demo where an item with no done-condition is flagged, and a completion naming an
+    unmet criterion is refused.
+
+O4. **A seat's root and oracle are derived from configuration, never hand-copied into the persona.**
+    `rig.selfdev.json` inlines the same operating paragraph in all nine seats because "durig has no
+    skill loader yet" (35). Changing the oracle or the root is a nine-place edit and a drift is
+    invisible — the exact class 34 warns about for host paths.
+    *Mechanism:* 35's loader supplies the operating section from one source; a `check` rule fires
+    when a persona hardcodes a host path or an oracle that belongs in configuration.
+    *Acceptance:* a demo where one rig change updates every seat's boot text, and the check rule
+    fires on an inlined host path.
+
+**Evidence class:** O1–O4 are `advertised-elsewhere` (the research doc's citations) for the pattern
+and `observed` for the delegate miss and F13. Managed by the advocate's rule (D36).
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for

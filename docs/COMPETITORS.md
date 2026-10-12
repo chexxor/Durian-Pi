@@ -7,7 +7,7 @@ in that project's own tree.
 
 The deep feature matrix over our substrate candidates (OpenRig, agent-fleet +
 pi-durable, tuios, hermes-agent) lives in the project workspace,
-`docs/ORCHESTRATION-COMPARISON.md`; this file records the *reusable lessons*.
+`../docs/ORCHESTRATION-COMPARISON.md`; this file records the *reusable lessons*.
 
 **How to add an entry.** Clone the project read-only under
 `../vendor/eval/<name>/` (the project already keeps comparators there), pin the
@@ -23,7 +23,7 @@ counterpart it should change or inform.
 - **What it is:** pi-first multi-agent fleet — a thin dispatcher over specialist
   personas, an on-disk **Verification Contract**, and a documented engineering
   methodology (`docs/PHILOSOPHY.md`). It is the *source* of the **AF+PD** column
-  in `docs/ORCHESTRATION-COMPARISON.md` (AF over pi-durable); the integration is
+  in `../docs/ORCHESTRATION-COMPARISON.md` (AF over pi-durable); the integration is
   assembly we would own, not an existing stack.
 - **Adopt-or-build analysis:** `ARCH-COMPARISON-agent-fleet.md` (layer map,
   goal-by-goal, and why adopting it would not replace durig).
@@ -47,4 +47,4 @@ axes") and `docs/PHILOSOPHY.md` ("Deterministic process, room for judgment",
 
 **What it does not give us:** it is pi-coding-agent-side (harnesses/extensions),
 not a durable-queue substrate, so the AF+PD integration is work we would own; and
-its Windows posture is unverified (`docs/ORCHESTRATION-COMPARISON.md` footnote [2]).
+its Windows posture is unverified (`../docs/ORCHESTRATION-COMPARISON.md` footnote [2]).

@@ -32,7 +32,7 @@ queue/audit/restart guarantees durig exists to provide. What is worth doing is
 **Consequence.** Adopting agent-fleet does not give us a durable queue, a
 cross-seat audit trail, or restart-safe work items — those are exactly what its
 architecture delegates elsewhere (pi sessions + disk + herdr). The project's own
-`docs/ORCHESTRATION-COMPARISON.md` already reached this: the **AF+PD** column
+`../docs/ORCHESTRATION-COMPARISON.md` already reached this: the **AF+PD** column
 ("agent-fleet over pi-durable") is *assembly we would own*, not an existing
 integration, because AF runs specialists as plain pi sessions today.
 
