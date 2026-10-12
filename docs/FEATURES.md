@@ -43,7 +43,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | `ps` | Seat roster with conversation ids and roles | |
 | `send <seat> <text>` | Steer a seat, wait for its reply, return it inline | `--stream` / `--no-stream`, `--body-file <path>` (or `-`), `--request-id <id>` (retry-safe) |
 | `resume` | (alias `doctor`) advance admitted-but-not-progressing submissions — a run admitted but never scheduled | |
-| `run` | Drive the rig to quiescence: wake each seat that has queued work and nothing advancing it, hold the harness until the runs settle; exits at quiescence | `--watch` stays resident |
+| `run` | Drive the rig to quiescence: wake each seat that has queued work OR a stalled claim (a claimed item whose run died), hold the harness until the runs settle; exits at quiescence | `--watch` stays resident |
 | `reset <seat> [handoff]` | (alias `clean`) break a seat out of a degenerate context by writing a `pi.reset` boundary; the durable transcript is preserved | |
 | `stop <seat> [reason]` | Emergency-stop: halt a seat's in-flight run across processes, settle it terminal as `aborted: <reason>`, release the lease | |
 | `queue` | Dump every work item with status and transitions | |
@@ -117,6 +117,7 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Repeat-call tolerance** | A replayed tool call returns current state instead of erroring on a settled overlay | `src/rig.mjs` | `demo/repeat-call.test.mjs` |
 | **Request-idempotent send** | `send --request-id` makes one send one submission: a retry carrying the same id reuses the existing submission rather than generating again, and returns the original reply. The id is never derived from the text, because two deliberate identical sends are two requests | `cli.mjs` `cmdSend` | `demo/cli.test.mjs` |
 | **Self-driving queue** (`run`) | Wakes each seat that has queued work and nothing advancing it, holds the harness open until the runs it started settle, and exits at quiescence — the clock the queue was missing. A driver, not a wake inside the Router tools, because a stateless `send` closes its harness before a tool-woken run could finish (F11) | `src/driver.mjs`, `cli.mjs` `cmdRun` | `demo/run.test.mjs` |
+| **Stalled-claim re-wake** | Also wakes a seat holding a `claimed` item whose run died (no in-flight submission, no live lease), so an abandoned claim is re-driven with no human send. An operator-`stop`ped claim is never re-woken — the guard reads, read-only, the abort fact `stop` already writes — and a live/in-flight run is never double-woken | `src/driver.mjs` `selectWakes`, `cli.mjs` `cmdRun` | `demo/stalledclaim.test.mjs` |
 | **Emergency stop** (`stop`) | Halts a seat's in-flight run across processes by killing the live generation-lease holder, settles the submission terminal as `aborted: <reason>`, aborts the run's task, and releases the lease; a second stop is a no-op | `cli.mjs` `cmdStop` | `demo/stop.test.mjs` |
 | **Context reset** (`reset`/`clean`) | Writes a `pi.reset` boundary so prior turns leave a seat's context without deleting the durable transcript — the fix for a degenerate turn that has self-conditioned the history | `cli.mjs` `cmdReset` | `demo/reset.test.mjs` |
 | **Resume a stranded run** (`resume`/`doctor`) | Advances admitted-but-not-progressing submissions, so a run that was admitted but never scheduled is re-armed instead of looking idle (F11) | `cli.mjs` `cmdResume` | `demo/resume.test.mjs` |
@@ -313,14 +314,14 @@ an unresolvable one is warned about rather than dropped in silence;
 The entire check surface is the demos plus `node --check`; there is no build or
 lint step.
 
-**37 offline tests** — one runnable proof per guarantee, each exit 0 on success:
+**38 offline tests** — one runnable proof per guarantee, each exit 0 on success:
 
 ```
 blocked · chatlog · check · cli · config · confine · constitution · converter
 defer · eval · extensions · metrics · notices · optimizer · persistence · primer
 provenance · race · refresh · repeat-call · reset · resume · run · seatguard
-seatmodel · seatroot · seattools · singleflight · starter · stop · stranded
-streamcli · streamview · syncpi · watch · watchview · worktree
+seatmodel · seatroot · seattools · singleflight · stalledclaim · starter · stop
+stranded · streamcli · streamview · syncpi · watch · watchview · worktree
 ```
 
 **4 runnable demo programs:**
