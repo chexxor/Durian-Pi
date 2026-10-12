@@ -117,8 +117,11 @@ export function ensureBuildTree(pin) {
 		git(BUILD_DIR, ["init", "--quiet"]);
 		git(BUILD_DIR, ["remote", "add", "origin", pin.repo]);
 		git(BUILD_DIR, ["sparse-checkout", "init", "--cone"]);
-		git(BUILD_DIR, ["sparse-checkout", "set", ...dirs]);
 	}
+	// Re-applied on EVERY sync, not only at init: upstream splits new workspaces
+	// out of existing ones (pi-codemode became a pi-durable dependency), and an
+	// existing build tree would otherwise never check the new one out.
+	git(BUILD_DIR, ["sparse-checkout", "set", ...dirs]);
 	// Fetch the exact commit rather than the branch tip: the pin must win even
 	// after upstream moves, which is the whole point of pinning.
 	git(BUILD_DIR, ["fetch", "--depth", "1", "origin", pin.sha]);
