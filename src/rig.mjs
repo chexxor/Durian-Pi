@@ -450,17 +450,27 @@ const Router = defineExtension({
 		defineTool({
 			name: "peek_queue",
 			description:
-				"List every queue item (any status). Use for oversight and debugging.",
-			parameters: Type.Object({}),
+				"List your queue work: non-terminal items addressed to or sent by you. Pass all=true for every item (any status, any seat) — oversight and debugging.",
+			parameters: Type.Object({ all: Type.Optional(Type.Boolean()) }),
 			replay: "safe",
-			execute: async (_args, api, context) => {
+			execute: async (args, api, context) => {
+				const me = args.all ? null : await mySeatName(api, context);
+				// Default to the seat's own non-terminal work: the whole queue is a ~20 KB
+				// context write on a live rig, and it makes "what is mine?" an inference
+				// over other seats' history. all=true is the opt-in team-wide view.
 				const lines = await api.commit(async (tx) => {
 					const queue = await tx.doc(RigQueue);
-					return queue.items.map((it) =>
-						`#${it.id} ${it.status} from=${it.from} to=${it.to} subj=${it.subject}`,
-					);
+					return queue.items
+						.filter((it) =>
+							args.all ? true : it.status !== "done" && (it.to === me || it.from === me),
+						)
+						.map((it) => `#${it.id} ${it.status} from=${it.from} to=${it.to} subj=${it.subject}`);
 				}, context);
-				return toolText(lines.length ? lines.join("\n") : "(empty)");
+				// A large all=true dump defers to disk like every other over-threshold
+				// result; a seat reads it back with its read tool, or acts on the preview.
+				return toolText(
+					await thinResultText(api.env, lines.length ? lines.join("\n") : "(empty)", `queue-${me ?? "all"}`),
+				);
 			},
 }),
 ],
