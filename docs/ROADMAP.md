@@ -1283,6 +1283,17 @@ missing halves, and 30 is the honest advert.
     `claimed` item must survive the transition or the seat loses the task (28b's carry-across
     rule; the F13 `#90` HELD-state work is what makes a held item distinguishable from a
     claimed one, so a held item may be dropped but a claimed one may not).
+    *Naming the config (operator note): the two cache choices trade **response speed
+    against token cost**, and the knob must be named for the outcome, not the mechanism.*
+    A long retention (DeepInfra 1 h) keeps the prefix warm so the next request prefills
+    cheaply *and fast* — **speed-optimized** — at a higher write premium (1.25×→2.0× input).
+    A short window (5 min) or a fresh thread past the cold point is **cost-optimized** — no
+    write premium and no carrying a cold context — at the cost of a full prefill (a slower
+    first token) *if* the context is reused after all. So the setting should express the
+    outcome (e.g. a policy of `latency | cost`, defaulting to `cost` = the affordable
+    option) with the retention and idle-threshold derived from it, rather than exposing raw
+    TTLs the user can mismatch. The default stays `cost`; `latency` is the deliberate
+    override.
     *Ordering:* depends on 28b (the fresh-conversation verb) and 33 (the retention we pick —
     the threshold must match it). The advocate owns the practice (29); this item is the
     automatic trigger, and `designer` owns whether the default is legible to a user.
