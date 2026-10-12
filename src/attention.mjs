@@ -28,6 +28,13 @@
 export const STRANDED_ADMITTED_MS = 30_000;
 
 /**
+ * Consecutive failed runs after which a seat is surfaced as `repeated_failure`. The driver
+ * retries and re-wakes, but a run that keeps failing is a DIAGNOSIS gap: only a human read of the
+ * cause breaks the loop, so the supervisor escalates it (ROADMAP 42 / P3).
+ */
+export const REPEATED_FAILURE_STREAK = 3;
+
+/**
  * The reason a run failed, plus the CAUSE when the entry knows it.
  *
  * A submission record carries a category - "model_error" - and nothing else,
@@ -93,7 +100,7 @@ export function computeAttention(
 	queueItems,
 	latestByConv,
 	errorByConv = new Map(),
-	{ nowMs = Date.now(), seatsWithSlot = new Set(), strandedMs = STRANDED_ADMITTED_MS } = {},
+	{ nowMs = Date.now(), seatsWithSlot = new Set(), strandedMs = STRANDED_ADMITTED_MS, failureStreakByConv = new Map(), repeatedFailureStreak = REPEATED_FAILURE_STREAK } = {},
 ) {
 	const notices = [];
 	for (const seat of seats) {
@@ -112,6 +119,15 @@ export function computeAttention(
 				seat: seat.name,
 				kind: "deferred_awaiting_answer",
 				detail: `${deferred.length} item(s) parked on a question; #${held.id} waiting on ${held.deferredTo ?? "an answer"}`,
+			});
+		}
+		const streak = failureStreakByConv.get(seat.conversationId) ?? 0;
+		if (streak >= repeatedFailureStreak) {
+			notices.push({
+				scope: "seat",
+				seat: seat.name,
+				kind: "repeated_failure",
+				detail: `${streak} consecutive failed runs; the supervisor escalates it to the human`,
 			});
 		}
 		const latest = latestByConv.get(seat.conversationId);

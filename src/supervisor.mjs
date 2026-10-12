@@ -1,0 +1,127 @@
+// supervisor.mjs — the narrow supervisor's ESCALATION pass (ROADMAP 42 / P3).
+//
+// Why this exists at all: the driver recovers mechanically (provider retry, re-wake, `doctor`
+// re-arm) but nothing ESCALATES a persistent problem to the human. ROADMAP item 42 left an
+// evaluation gate — build the supervisor only if dogfooding shows a residual class the driver +
+// notices cannot handle. This run met it: a seat failed run after run (tool-call failures,
+// `model_error`) and a question sat parked on a seat for 78 minutes, and neither reached the human.
+// So this builds the narrow supervisor for exactly that class: consume the notices durig already
+// derives and, for the two that need a human, park the item on the human.
+//
+// It is an OBSERVER, not a participant: it writes only through the EXISTING defer representation
+// (`status:"deferred"`, `deferredTo:"human"`) that `defer_work` already uses, so there is no new
+// write path and no new polling tool (D23/D24: push, not pull). The driver stays mechanical;
+// escalation lives here. `run --watch` runs this as a pass (bounded, idempotent).
+
+import { REPEATED_FAILURE_STREAK } from "./attention.mjs";
+import { DEFERRED_TO_HUMAN, RigQueue } from "./rig.mjs";
+
+/** How long a question parked on another SEAT waits before the human is escalated. */
+export const DEFERRED_TO_SEAT_MS = 15 * 60_000;
+
+/**
+ * The leading run of failed submissions in a newest-first page. Pure, so the planner can be
+ * tested without a harness. A `done` run ends the streak — the seat did make progress.
+ */
+export function failureStreak(submissions) {
+  let streak = 0;
+  for (const submission of submissions ?? []) {
+    if (submission?.status !== "unanswered") break;
+    streak++;
+  }
+  return streak;
+}
+
+/** Milliseconds since the item was last deferred, or null when it carries no deferral time. */
+function deferredAgeMs(item, nowMs) {
+  const last = (item?.transitions ?? []).filter((t) => t.event === "deferred").at(-1);
+  const at = Date.parse(last?.at ?? "");
+  return Number.isFinite(at) ? nowMs - at : null;
+}
+
+/**
+ * The human escalations to apply this pass. Pure: it decides, `applyEscalations` writes.
+ *
+ * Two classes, both ending in "a human must decide":
+ *   - a seat that has failed `repeatedFailureStreak` runs in a row and still holds a non-terminal
+ *     item — its run cannot make progress, so the item is parked on the human;
+ *   - a question parked on ANOTHER SEAT beyond `deferredToSeatMs` without an answer — the edge
+ *     that was supposed to answer is not, so it is escalated to the human.
+ * Idempotent by construction: an item already owned by the human (`deferredTo === "human"`) is
+ * never re-planned, so repeated passes are harmless.
+ *
+ * @param {{seats: Array<{name:string, conversationId:number|string}>, queueItems: Array, failureStreakByConv: Map<number|string, number>, nowMs?: number, repeatedFailureStreak?: number, deferredToSeatMs?: number}} input
+ * @returns {Array<{seat:string, itemId:number, reason:string, question:string}>}
+ */
+export function planEscalations({
+  seats,
+  queueItems,
+  failureStreakByConv,
+  nowMs = Date.now(),
+  repeatedFailureStreak = REPEATED_FAILURE_STREAK,
+  deferredToSeatMs = DEFERRED_TO_SEAT_MS,
+}) {
+  const plans = [];
+  const escalatedItemIds = new Set();
+  for (const seat of seats ?? []) {
+    const streak = failureStreakByConv?.get(seat.conversationId) ?? 0;
+    if (streak < repeatedFailureStreak) continue;
+    // The item a human can actually decide on: the seat's oldest non-terminal one. A `deferred`
+    // item is excluded here — the queue scan below covers the ones parked on a seat.
+    const held = (queueItems ?? [])
+      .filter((it) => it.to === seat.name && (it.status === "claimed" || it.status === "queued"))
+      .sort((a, b) => a.id - b.id)[0];
+    if (!held || held.deferredTo === DEFERRED_TO_HUMAN) continue;
+    escalatedItemIds.add(held.id);
+    plans.push({
+      seat: seat.name,
+      itemId: held.id,
+      reason: "repeated_failure",
+      question: `supervisor escalation: ${seat.name} has failed ${streak} runs in a row and still holds #${held.id} (${held.subject}). It cannot make progress without a human decision.`,
+    });
+  }
+  for (const item of queueItems ?? []) {
+    if (item.status !== "deferred") continue;
+    if (escalatedItemIds.has(item.id)) continue;
+    // Already on the human, or on a seat with no recorded deferral time to measure.
+    if (!item.deferredTo || item.deferredTo === DEFERRED_TO_HUMAN) continue;
+    const age = deferredAgeMs(item, nowMs);
+    if (age === null || age < deferredToSeatMs) continue;
+    escalatedItemIds.add(item.id);
+    plans.push({
+      seat: item.to,
+      itemId: item.id,
+      reason: "deferred_awaiting_answer",
+      question: `supervisor escalation: #${item.id} (${item.subject}) has waited on ${item.deferredTo} for ${Math.round(age / 60_000)} min with no answer. Escalated to the human.`,
+    });
+  }
+  return plans;
+}
+
+/**
+ * Apply the plans through the defer representation `defer_work` already uses. One commit, so the
+ * queue is never half-updated; returns the plans actually applied (an item that vanished or was
+ * completed between planning and applying is skipped, not forced).
+ */
+export async function applyEscalations(harness, plans, context) {
+  if (!plans || plans.length === 0) return [];
+  return harness.commit(async (tx) => {
+    const queue = await tx.doc(RigQueue);
+    const applied = [];
+    for (const plan of plans) {
+      const item = queue.items.find((it) => it.id === plan.itemId);
+      if (!item || item.status === "done") continue;
+      item.status = "deferred";
+      item.question = plan.question;
+      item.deferredTo = DEFERRED_TO_HUMAN;
+      item.transitions.push({
+        at: new Date().toISOString(),
+        event: "deferred",
+        by: "supervisor",
+        to: DEFERRED_TO_HUMAN,
+      });
+      applied.push(plan);
+    }
+    return applied;
+  }, context);
+}

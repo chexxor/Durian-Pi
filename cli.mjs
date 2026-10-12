@@ -47,6 +47,7 @@ import {
 } from "./src/rig.mjs";
 import { describeConfig, loadConfig, strandedMsSetting, streamSettings } from "./src/config.mjs";
 import { computeAttention } from "./src/attention.mjs";
+import { applyEscalations, failureStreak, planEscalations } from "./src/supervisor.mjs";
 import {
 	readGenerationSlots,
 	wrapProviderWithSlots,
@@ -668,6 +669,29 @@ async function cmdReset(seatName, handoff) {
   }
 }
 
+/**
+ * One supervisor pass (ROADMAP 42 / P3). Observe the seats' failure streaks and the questions
+ * parked on other seats, decide the human escalations, and apply them through the existing defer
+ * channel. Bounded and idempotent, so `run --watch` can call it every pass.
+ */
+async function superviseOnce(harness, probeStorage, context) {
+  const seatsDoc = await harness.documentState(Seats, undefined, context);
+  const queueDoc = await harness.documentState(RigQueue, undefined, context);
+  const seatList = Object.entries(seatsDoc?.value?.seats ?? {}).map(([name, seat]) => ({ name, ...seat }));
+  const failureStreakByConv = new Map();
+  for (const seat of seatList) {
+    const page = await probeStorage.scanSubmissions(
+      { conversationId: seat.conversationId, order: "descending" },
+      5,
+      undefined,
+      context,
+    );
+    failureStreakByConv.set(seat.conversationId, failureStreak(page.items));
+  }
+  const plans = planEscalations({ seats: seatList, queueItems: queueDoc?.value?.items, failureStreakByConv });
+  return applyEscalations(harness, plans, context);
+}
+
 /** Parse `--max-duration <seconds>` (or `--max-duration=<seconds>`) into milliseconds; 0 = unbounded. */
 function parseMaxDuration(args) {
   const at = args.findIndex((a) => a === "--max-duration" || a.startsWith("--max-duration="));
@@ -736,6 +760,9 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
     // Seats whose wake could not be delivered (P5 / #110). Tracked across passes so
     // `run` can report them instead of dying, and never silently drops the work.
     const failedSeats = new Set();
+    // Items the supervisor escalated to the human this run (ROADMAP 42 / P3). Measured, not
+    // asserted: a pass that escalates nothing adds nothing.
+    const escalations = [];
     for (;;) {
       if (stopping) {
         stoppedBy = "signal";
@@ -783,9 +810,27 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
       passes++;
       if (!watch && actioned === 0) break;
       if (passes >= maxPasses) break;
+      if (watch) {
+        // Supervisor pass (ROADMAP 42 / P3): persistent failures and questions parked on an
+        // unanswering seat are escalated to the human through the existing defer channel.
+        const escalated = await superviseOnce(harness, probeStorage, BACKGROUND_CONTEXT);
+        for (const plan of escalated) {
+          console.error(
+            JSON.stringify({
+              ok: false,
+              command: "run",
+              supervisor: "escalated",
+              seat: plan.seat,
+              itemId: plan.itemId,
+              reason: plan.reason,
+            }),
+          );
+        }
+        escalations.push(...escalated);
+      }
       if (watch) await new Promise((r) => setTimeout(r, 750));
     }
-    out({ ok: true, command: "run", db: DB_PATH, passes, failedSeats: [...failedSeats], stoppedBy });
+    out({ ok: true, command: "run", db: DB_PATH, passes, failedSeats: [...failedSeats], stoppedBy, escalated: escalations.length });
   } finally {
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
@@ -1208,14 +1253,18 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
     role: s.role,
   }));
   const latestByConv = new Map();
+  const failureStreakByConv = new Map();
   for (const seat of seats) {
     const page = await storage.scanSubmissions(
       { conversationId: seat.conversationId, order: "descending" },
-      1,
+      // A bounded page, not just the latest: the repeated_failure notice needs the LEADING run of
+      // failures, and a streak of three is what makes a seat a diagnosis problem (ROADMAP 42).
+      5,
       undefined,
       BACKGROUND_CONTEXT,
     );
     latestByConv.set(seat.conversationId, page.items[0]);
+    failureStreakByConv.set(seat.conversationId, failureStreak(page.items));
   }
   // Slot-file notices ride alongside seat notices: a live holder means the
   // GPU is busy (healthy waiting), a dead holder means a wedged generation.
@@ -1286,6 +1335,7 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
       ...computeAttention(seats, queueVal.items ?? [], latestByConv, errorByConv, {
         nowMs: Date.now(),
         seatsWithSlot,
+        failureStreakByConv,
         ...(strandedMs === null ? {} : { strandedMs }),
       }),
       ...slotNotices,
