@@ -238,6 +238,13 @@ needed no compat shim. Upstream is re-checked at the start of a session rather
 than mid-task: an API rename landing underneath work in progress is the failure
 the pin exists to prevent, and moving it deliberately costs one suite run.
 
+**Pin move:** `ea448f45` → `42705224` (2026-10-12), the durable **code mode** tranche
+(`pi-durable` now depends on a new workspace package `@earendil-works/pi-codemode`, so
+the pin's package set grew from four to five and `sync-pi.mjs` now re-applies
+`sparse-checkout` on every sync, not only at init — an existing build tree would
+otherwise never check the new package out). Rebuilt all five packages; the pinned
+sha is upstream tip and **all 38 demos pass on it with no durig code change**.
+
 ## D18 — Read commands must name the database they used (2026-10-10)
 
 **Finding:** a second terminal that omits `DURIG_DB` silently opens the default

@@ -43,7 +43,7 @@ Everything below was verified against the real store, not asserted from intent.
 | `send` | streams the live generation to stderr; non-`done` settles explain themselves |
 | Failure honesty | wrong database is announced, never silently empty (D18) |
 | `check` | audits a rig file **and** the store; eight rules with stable ids, severity by who can fix it, and any rule it cannot judge reported as skipped-with-reason, never a pass (D25) |
-| Dependencies | released `@earendil-works/*` 1.1.0 are the default; pi `main` is pinned (`ea448f45`) and linked via `scripts/sync-pi.mjs` |
+| Dependencies | released `@earendil-works/*` 1.1.0 are the default; pi `main` is pinned (`42705224`) and linked via `scripts/sync-pi.mjs` |
 
 ## Architecture: what changed, and what deliberately did not
 
@@ -77,7 +77,7 @@ Everything below was verified against the real store, not asserted from intent.
 - `DURIG_DB` selects the store; without it the default is `./rig.sqlite`. Use
   `node cli.mjs config` to see what is actually in effect.
 - Dependency state: `node_modules` is **linked to pinned pi `main`** (`--link`),
-  pin `ea448f45`, drift `false`, all 19 demos passing on it. A fresh clone is on
+  pin `42705224`, drift `false`, all 38 demos passing on it. A fresh clone is on
   the 1.1.0 releases; re-run `node scripts/sync-pi.mjs --sync --link` to
   reproduce the linked state.
 - The tuios patch is rebased onto upstream `main` as `6160892d` on branch
