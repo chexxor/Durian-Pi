@@ -4,45 +4,48 @@
 `docs/ROADMAP.md` is the ordered backlog; `docs/SELFDEV.md` is the runbook. Update this file at the
 end of every session and keep it to one screen.
 
-_Last refreshed: 2026-10-12, after #145 (both halves) (operator's assistant)._
+_Last refreshed: 2026-10-13, after the impl model swap and the #148 start (operator's delegate)._
 
 ## Where main is
 
-**`main` is `ef244f70` and green: `demo/*.test.mjs` 47/47, `node --check` clean.** Recent commits:
-- `1639a3be` #110 driver survival; `a07816df` its failing-first control.
-- `b040bc1a` `peek_queue` scoped + thinned.
-- `90caa998`/`d66737dc` selfdev #117 (`thinkingLevel`), #118 half 1 (`claim_work`'s legal move),
-  #118 half 2 (structured thin header).
-- `6da82fff` #144 B (coordinator inline), #146 (block state-mutating git), #147 (bounded run).
-- `ee35b693` **#145(i)** — `src/supervisor.mjs`: a narrow ESCALATION supervisor + `repeated_failure`
-  notice. Parks a persistently-failing seat's item, and a question on an unanswering seat past 15
-  min, on the **human** via the existing defer channel. Idempotent; a pass inside `run --watch`.
-- `ef244f70` **#145(ii)** — `malformed_tool_call` classified by CAUSE (the harness's
-  `invalid_arguments` marker, not a domain error) and surfaced per-seat + as an ambient measure.
-
+**`main` is `a076b816`** — `chore(selfdev): impl seat runs XiaomiMiMo/MiMo-V2.6-Flash` on top of
+`e678d125`/`ef244f70` (the #145 pair; `demo/*.test.mjs` green 47/47, `node --check` clean).
 Nothing is pushed — the operator pushes at end of day.
 
-## Still open
+## Current priority — **#148 (+ #154 amendment) IN PROGRESS on impl**
 
-- **#148 — item-43 family (DeepSeek reasoning).** `thinkingLevel` is wired (#117) but DeepInfra's
-  `reasoning_effort` is an integer 1–100 and the model map only carries `{off:"none"}`, so a level
-  today sends an undefined string. Needs item 43(a)'s effort mapping **and** a `step-repetition`
-  measurement before a level is chosen.
-- **#149 — verify `peek_queue`.** Self-verified (`demo/peekqueue.test.mjs`); independent `qa`
-  verification not run.
+- **Operator order:** start #148 (item-43 "model/reasoning wiring"); #154 is folded in, not split.
+  pm registered **#170** ("#148 START NOW") and the "do NOT start now" sequencing is superseded.
+- **impl now runs `XiaomiMiMo/MiMo-V2.6-Flash`** (was `deepseek-ai/DeepSeek-V4-Flash-0731`; commit
+  `a076b816` + `up --refresh`). Context reset + handoff written per the #154 decision (switch
+  reported, claimed items #60–#63/#90/#101/#110/#139 carried). Runtime-verified: agent-config
+  revision and generation entries both serve MiMo — verify at the generation record, not the config.
+- **Seat root `C:/tmp/durig-dev/148/durig`** — fresh worktree from `main`. NOT
+  `.worktrees/selfdev-110` (dirty, diverged, not source of truth).
+- In flight (uncommitted, worktree): `durig/demo/reasoningeffort.test.mjs` (new, failing-first),
+  `durig/src/modelswitch.mjs` (new, the model-change reset/report), `durig/cli.mjs`,
+  `durig/src/providers/deepinfra-models.ts`. `node --check` + demo-loop runs already visible.
+- **Next command:**
+  `cd durig && DURIG_SEAT_ROOT=C:/tmp/durig-dev/148/durig DURIG_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`
+  — repeat until impl completes; `node cli.mjs resume` after any killed run; then verify
+  claim → complete → artifact to `qa`. Open: **#149** (independent `peek_queue` verify, do not re-implement).
 
-## Known trap (do not repeat)
+## Blockers / traps (do not repeat)
 
-**`.worktrees/selfdev-110` is DIRTY and diverged**, and it predates #144 B — so `lead`, running
-from it, still has no read tool and cannot open `.durig/<id>.md` (it said so while ruling). A team
-run must start from a **fresh worktree from `main`** (`docs/SELFDEV.md`); #146 then blocks the git
-mutation that caused the divergence.
+- **A `send`/`run` killed by the harness tool cap strands the seat mid-generation** (pi.live left
+  in flight; slots leak). Recover with `node cli.mjs resume`, then drive SHORT `run --max-duration`
+  chunks under the tool cap. A stale `selfdev.sqlite.genlock.<i>` (dead pid) is stolen by the next
+  acquire — do not hand-edit it.
+- **impl has not yet formally claimed #148/#154** (queue still `queued`) — the very wake/claim gap
+  is #148's B5 half. #170 tells it to claim.
+- impl on MiMo miscalled `powerShell` (case) and tried to move uncommitted work out of the tree;
+  the seatguard refused (correct). Keep changes in the seat root; send the artifact to `qa`.
 
-## Operational flag (from `lead`)
+## Operational flag (updated)
 
-`lead`'s sends to `pm` are backing up (#150–#153 queued) and **#131 is `deferred` from lead to
-pm**. If `pm` is not claiming them, rulings are not reaching registration. Worth eyes before the
-next team run.
+`lead`→`pm` backlog **drained 2026-10-13**: #150–#153 and #131 registered as **#156** (B1 inline
+bodies), **#164–#166**, **#171–#175**. pm's B1 readability gap stays until #156 lands (it could not
+read lead's #131 text at all).
 
 ## Lesson (unchanged)
 
