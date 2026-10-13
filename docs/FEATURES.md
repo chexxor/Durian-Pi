@@ -286,10 +286,10 @@ while still reading as coverage.
 
 | Feature | What it does | Where | Proof |
 |---|---|---|---|
-| **OpenRig converter** | `rig.yaml` → durig v2 spec: seats, personas, skills, guidance, pod edges, **rig-level cross-pod edges**, coordinator send permissions, and the culture file as `constitutionInline` | `scripts/from-openrig.mjs` | `demo/converter.test.mjs` |
+| **OpenRig converter** | `rig.yaml` → durig v2 spec: seats, personas (each seat's `guidance/role.md`), skills, guidance, pod edges, **rig-level cross-pod edges**, coordinator send permissions, and the culture file as `constitutionInline` | `scripts/from-openrig.mjs` | `demo/converter.test.mjs` |
 | **Migrated rig** | The 15-seat tutor-pi rig, generated and committed | `rigs/tutor-pi.rig.json` | `node cli.mjs check rigs/tutor-pi.rig.json` |
 | **Pods** | Converted with a warning; pod **structure** is dropped — **limited** (deferred, ROADMAP item 11) | `scripts/from-openrig.mjs` | converter stderr warnings |
-| **Persona and skill mapping** | name, role, model, skills, guidance and `delegates_to` map into the v2 spec without hand-editing | `scripts/from-openrig.mjs` | `docs/ACCEPTANCE.md` UAR-5 |
+| **Persona and skill mapping** | name, role, **`resources.guidance` (`guidance/role.md`) inlined as `# Role`**, model, skills (names + content), pod/team guidance and `delegates_to` map into the v2 spec without hand-editing | `scripts/from-openrig.mjs` | `demo/converter.test.mjs`, `docs/ACCEPTANCE.md` UAR-5 |
 
 **Converter gap (D26) — fixed.** The converter used to ignore OpenRig's
 rig-level `edges:` list, so `ux`, `sec` and `dev` had no outgoing edge at all and
@@ -298,6 +298,14 @@ rig-level `edges:` list, so `ux`, `sec` and `dev` had no outgoing edge at all an
 `can_observe` entries now reach the spec, pod-qualified ids are normalised, and
 an unresolvable one is warned about rather than dropped in silence;
 `demo/converter.test.mjs` proves it.
+
+**Converter role.md gap — fixed.** The converter inlined the pod SOP, the rig
+norms and the shared skills but **dropped each seat's `guidance/role.md`**, so
+the migrated spec carried no per-seat persona. It now reads the agent's declared
+`resources.guidance` and inlines the file(s) as a `# Role` block ahead of the pod
+context; `demo/converter.test.mjs` asserts the persona text reaches the spec, and
+the committed `rigs/tutor-pi.rig.json` was regenerated (`up --refresh` re-applies
+it to the live store).
 
 ## 9. Upstream tracking
 

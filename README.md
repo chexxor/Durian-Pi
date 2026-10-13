@@ -234,7 +234,7 @@ demo/offline*.mjs     faux-model delegation loops (no keys needed)
 demo/online.mjs       real DeepInfra end-to-end test
 demo/optimizer-eval.mjs    optimizer effectiveness benchmark (guard + blind judge)
 demo/eval.test.mjs    mechanics test for the guard and judge
-scripts/from-openrig.mjs   OpenRig rig.yaml -> durig v2 converter (pods, skills, guidance, rig-level edges)
+scripts/from-openrig.mjs   OpenRig rig.yaml -> durig v2 converter (pods, per-seat role.md, skills, guidance, rig-level edges)
 rigs/tutor-pi.rig.json    the migrated 15-seat tutor-pi rig
 docs/                 QUICKSTART, FEATURES, MVP burn-down, STATUS, ROADMAP, METRICS, decisions D1-D37, research
 ```

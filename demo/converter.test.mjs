@@ -161,6 +161,7 @@ try {
   //    content, capabilities, and the culture as an inline constitution.
   assert.equal(spec.seats.find((s) => s.name === "alpha").role, "Seat role: Alpha");
   const instr = spec.seats.find((s) => s.name === "alpha").instructions;
+  assert.match(instr, /# Role\nYou are Alpha\./, "the seat's role.md persona is inlined");
   assert.match(instr, /Pod SOP — Alpha/, "pod guidance is inlined");
   assert.match(instr, /One concern per change/, "rig norms are inlined");
   assert.match(instr, /Retrieve first/, "skill content is inlined");

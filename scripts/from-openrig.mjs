@@ -3,6 +3,8 @@
 // Handles the REAL OpenRig topology (tutor-pi shape), not a flat agents[]:
 //   pods[].members[].agent_ref (local:./agents/X) -> seats[]
 //   agents/X/agent.yaml description              -> seats[].role
+//   agents/X/guidance/role.md (resources.guidance) -> inlined as the seat's
+//                                                   `# Role` persona text
 //   profiles.default.uses.skills [shared:S]      -> seats[].skills (names)
 //                                                   + SKILL.md content inlined
 //                                                   into instructions
@@ -116,6 +118,20 @@ for (const pod of pods) {
     const agentDir = join(rigDir, "agents", m[1]);
     const agent = load(await readFile(join(agentDir, "agent.yaml"), "utf8"));
 
+    // Role guidance: OpenRig delivers agents/<seat>/guidance/role.md at launch;
+    // durig has no separate guidance loader, so inline it as the seat's
+    // `# Role` persona. This is distinct from the pod SOP and the shared skills
+    // and was previously dropped entirely.
+    const roleBlocks = [];
+    for (const g of agent.resources?.guidance ?? []) {
+      if (!g?.path) continue;
+      try {
+        roleBlocks.push(await readFile(join(agentDir, g.path), "utf8"));
+      } catch (err) {
+        warnings.push(`${member.id}: guidance ${g.path} unreadable: ${err?.message ?? err}`);
+      }
+    }
+
     // Skills: names go to capabilities; CONTENT is inlined so the seat can
     // actually follow the procedure without a loader durig does not have.
     const skillNames = [];
@@ -139,6 +155,9 @@ for (const pod of pods) {
     }
 
     const instructionParts = [];
+    if (roleBlocks.length > 0) {
+      instructionParts.push(`# Role\n${roleBlocks.join("\n")}`);
+    }
     if (podGuidance.length > 0) {
       instructionParts.push(`# Pod context (${pod.id}: ${pod.label})\n${pod.summary ?? ""}\n${podGuidance.join("\n")}`);
     }
