@@ -84,6 +84,26 @@ export function formatArgsFull(args) {
 		.join(", ");
 }
 
+// Runs of identical non-blank lines are one fact with a multiplier: a runaway
+// command prints the same line thousands of times (a stuck loop, a retry
+// storm), and rendering each copy buries the two lines that matter while
+// carrying no information the count does not. Blank lines are spacing, not
+// data, so they never collapse.
+function collapseRuns(lines) {
+	const runs = [];
+	for (const line of lines) {
+		const last = runs[runs.length - 1];
+		if (last && line !== "" && last.text === line) last.repeats += 1;
+		else runs.push({ text: line, repeats: 1 });
+	}
+	return runs;
+}
+
+function repeatMarker(repeats) {
+	const n = repeats - 1;
+	return `×${n} more identical line${n === 1 ? "" : "s"}`;
+}
+
 function clockOf(ms) {
 	if (!Number.isFinite(ms)) return "";
 	const d = new Date(ms);
@@ -238,7 +258,10 @@ export function formatChat(entries, options = {}) {
 			if (!full && rest.length) {
 				lines.push(paint("dim", `${gutter}⎿ (${rest.length} more line${rest.length === 1 ? "" : "s"} — --full to expand)`));
 			} else if (full) {
-				for (const extra of rest) lines.push(paint("dim", `${gutter}${extra}`));
+				for (const extra of collapseRuns(rest)) {
+					lines.push(paint("dim", `${gutter}${extra.text}`));
+					if (extra.repeats > 1) lines.push(paint("dim", `${gutter}${repeatMarker(extra.repeats)}`));
+				}
 			}
 			continue;
 		}
@@ -263,8 +286,9 @@ export function formatChat(entries, options = {}) {
 			if (!full && rest.length) {
 				lines.push(paint("dim", `${gutter}⎿ (${rest.length} more line${rest.length === 1 ? "" : "s"} — --full to expand)`));
 			} else if (full) {
-				for (const extra of rest) {
-					lines.push(tint(`${gutter}${paint("dim", "⎿ ")}${paint("dim", extra)}`));
+				for (const extra of collapseRuns(rest)) {
+					lines.push(tint(`${gutter}${paint("dim", "⎿ ")}${paint("dim", extra.text)}`));
+					if (extra.repeats > 1) lines.push(paint("dim", `${gutter}⎿ ${repeatMarker(extra.repeats)}`));
 				}
 			}
 			continue;

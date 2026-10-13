@@ -319,6 +319,52 @@ const bigResultEntry = {
 const fullResult = formatChat([bigResultEntry], { seat: "impl", width: 100, full: true });
 assert.ok(fullResult.includes("y".repeat(300)), "--full output is not truncated either");
 
+console.log("--- identical output lines collapse with their count ---");
+
+// A runaway command prints one line thousands of times (a seat once looped
+// `i=135` as a condition and returned 2000 identical rows). Rendering every
+// copy buries the two lines that matter while adding no fact the count does
+// not carry, so identical runs collapse to one row plus the exact multiplier.
+const floodText = `command output:\n${"136: undefined\n".repeat(49)}harness aborted`;
+const floodEntry = {
+	kind: "pi.tool-result",
+	model: [{ role: "toolResult", toolName: "powershell", content: [{ type: "text", text: floodText }], isError: false, ...at(0) }],
+};
+const floodFull = formatChat([floodEntry], { seat: "impl", width: 140, full: true });
+assert.match(floodFull, /136: undefined/, "the repeated line still shows");
+assert.match(floodFull, /×48 more identical lines/, "the repeat count is preserved and visible");
+assert.equal(
+	floodFull.split("\n").filter((l) => l.includes("136: undefined")).length,
+	1,
+	"identical copies collapse to a single row",
+);
+assert.ok(
+	floodFull.indexOf("136: undefined") < floodFull.indexOf("×48") && floodFull.indexOf("×48") < floodFull.indexOf("harness aborted"),
+	"the multiplier sits after its run, before the output that follows",
+);
+
+// Mixed output keeps every distinct line in order; only runs repeat-collapse.
+const mixedEntry = {
+	kind: "pi.tool-result",
+	model: [
+		{
+			role: "toolResult",
+			toolName: "powershell",
+			content: [{ type: "text", text: "a\nb\nb\nb\nc" }],
+			isError: false,
+			...at(0),
+		},
+	],
+};
+const mixedFull = formatChat([mixedEntry], { seat: "impl", width: 140, full: true });
+assert.match(mixedFull, /✓ a/, "the first output line rides the tool's header row");
+assert.match(mixedFull, /⎿ b/);
+assert.match(mixedFull, /×2 more identical lines/);
+assert.ok(
+	mixedFull.indexOf("✓ a") < mixedFull.indexOf("⎿ b") && mixedFull.indexOf("⎿ b") < mixedFull.indexOf("×2") && mixedFull.indexOf("×2") < mixedFull.indexOf("⎿ c"),
+);
+assert.match(mixedFull, /⎿ c/, "a distinct line after a run is never swallowed");
+
 console.log("--- CLI: history, contract, follow ---");
 
 const dir = mkdtempSync(join(tmpdir(), "durig-chatlog-"));
