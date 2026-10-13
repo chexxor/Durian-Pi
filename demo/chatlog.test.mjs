@@ -219,6 +219,106 @@ assert.match(
 	"the call is visible, not just the result",
 );
 
+console.log("--- thinking rendering ---");
+
+// The model's reasoning arrives as thinking blocks in the same content array as
+// the text it produced. The log used to drop them on the floor: the operator
+// could not see WHY the seat acted, only that it did.
+const thinkingEntry = {
+	kind: "pi.assistant",
+	model: [
+		{
+			role: "assistant",
+			content: [
+				{ type: "thinking", thinking: "first thought\nsecond thought" },
+				{ type: "text", text: "the answer" },
+			],
+			...at(0),
+		},
+	],
+};
+const thinkingCollapsed = formatChat([thinkingEntry], { seat: "impl", width: 100 });
+assert.match(thinkingCollapsed, /first thought/, "thinking is rendered");
+assert.match(thinkingCollapsed, /thinking/, "thinking is labelled as thinking, not as prose");
+assert.match(thinkingCollapsed, /1 more line — --full to expand/, "collapsing is signposted like tool output");
+assert.ok(!thinkingCollapsed.includes("second thought"), "collapsed by default");
+assert.match(thinkingCollapsed, /the answer/, "the text turn still renders");
+
+const thinkingFull = formatChat([thinkingEntry], { seat: "impl", width: 100, full: true });
+assert.match(thinkingFull, /second thought/, "--full shows every thinking line");
+assert.ok(!thinkingFull.includes("more lines"), "nothing hidden when expanded");
+
+// A reasoning turn that only went on to call a tool must still show its thinking.
+const thinkCallEntry = {
+	kind: "pi.assistant",
+	model: [
+		{
+			role: "assistant",
+			content: [
+				{ type: "thinking", thinking: "pondering the queue" },
+				{ type: "toolCall", id: "c9", name: "claim_work", arguments: {} },
+			],
+			...at(0),
+		},
+	],
+};
+assert.deepEqual(buildTurns([thinkCallEntry]).map((t) => t.kind), ["thinking", "tools"]);
+assert.match(formatChat([thinkCallEntry], { seat: "impl", width: 100 }), /pondering the queue/);
+
+// Redacted thinking leaves an empty body behind; silence there would read as
+// "the model said nothing", which is the wrong fact to report.
+const redactedEntry = {
+	kind: "pi.assistant",
+	model: [
+		{
+			role: "assistant",
+			content: [
+				{ type: "thinking", thinking: "", redacted: true },
+				{ type: "text", text: "fine" },
+			],
+			...at(0),
+		},
+	],
+};
+assert.match(formatChat([redactedEntry], { seat: "impl", width: 100 }), /redacted/, "redaction is reported, not passed over");
+
+console.log("--- --full shows the whole call and output ---");
+
+const longCommand = `cd C:/tmp/durig-dev/148/durig; node cli.mjs run --max-duration 240 --watch --json ${"x".repeat(220)}`;
+const bigCallEntry = {
+	kind: "pi.assistant",
+	model: [
+		{
+			role: "assistant",
+			content: [
+				{
+					type: "toolCall",
+					id: "c3",
+					name: "powershell",
+					arguments: { command: longCommand, timeout: 240, second: 2, third: 3 },
+				},
+			],
+			...at(0),
+		},
+	],
+};
+const compactCall = formatChat([bigCallEntry], { seat: "impl", width: 100 });
+assert.ok(compactCall.includes("…"), "the compact header still summarises");
+const fullCall = formatChat([bigCallEntry], { seat: "impl", width: 100, full: true });
+assert.ok(fullCall.includes("x".repeat(220)), "--full carries the ENTIRE command, tail and all");
+assert.ok(fullCall.includes("timeout=240") && fullCall.includes("second=2") && fullCall.includes("third=3"), "every argument is shown, not just the first two");
+assert.ok(!/powershell\([^)]*…/.test(fullCall), "no ellipsis inside the expanded call");
+
+// A long unbroken output line survives --full verbatim: the terminal can wrap
+// what the renderer must never silently cut.
+const longLine = `result ${"y".repeat(300)}`;
+const bigResultEntry = {
+	kind: "pi.tool-result",
+	model: [{ role: "toolResult", toolName: "powershell", content: [{ type: "text", text: `ok\n${longLine}` }], isError: false, ...at(0) }],
+};
+const fullResult = formatChat([bigResultEntry], { seat: "impl", width: 100, full: true });
+assert.ok(fullResult.includes("y".repeat(300)), "--full output is not truncated either");
+
 console.log("--- CLI: history, contract, follow ---");
 
 const dir = mkdtempSync(join(tmpdir(), "durig-chatlog-"));

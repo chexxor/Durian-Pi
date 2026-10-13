@@ -103,8 +103,12 @@ export function createLiveRenderer({ write = (s) => process.stderr.write(s), col
 				case "toolcall_end": {
 					finishLine(ctx);
 					const name = ev.toolCall?.name ?? "tool";
+					// Not clipped: this line is the only record of what was commanded
+					// while the call runs, and a capped argument is exactly what an
+					// operator cannot act on when a tool misbehaves. The terminal wraps
+					// the excess.
 					const args = JSON.stringify(ev.toolCall?.arguments ?? {});
-					write(`  ${paint("yellow", `⚙ ${name}`)} ${paint("dim", args.length > 200 ? `${args.slice(0, 200)}…` : args)}\n`);
+					write(`  ${paint("yellow", `⚙ ${name}`)} ${paint("dim", args)}\n`);
 					break;
 				}
 				case "error":

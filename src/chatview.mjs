@@ -68,6 +68,22 @@ export function formatArgs(args, width = 48) {
 	return truncate(parts.join(", "), width);
 }
 
+// The whole call for --full: every key, nothing elided. Newlines inside a
+// string become \n escapes so one call still renders as one command shape; the
+// text itself is never cut, because a command the operator cannot see whole
+// cannot be re-run when it misbehaves.
+export function formatArgsFull(args) {
+	if (!args || typeof args !== "object" || Array.isArray(args)) return "";
+	const keys = Object.keys(args).filter((k) => args[k] !== null && args[k] !== undefined);
+	return keys
+		.map((k) => {
+			const value = args[k];
+			const shown = typeof value === "string" ? value.replace(/\r?\n/g, "\\n") : JSON.stringify(value);
+			return `${k}=${shown}`;
+		})
+		.join(", ");
+}
+
 function clockOf(ms) {
 	if (!Number.isFinite(ms)) return "";
 	const d = new Date(ms);
@@ -98,6 +114,25 @@ export function extractToolCalls(entry) {
 		.map((part) => ({ id: part.id ?? part.toolCallId ?? null, name: part.name ?? "tool", args: part.arguments }));
 }
 
+// The model's reasoning is stored as thinking blocks beside the text it
+// produced. It is the seat's travelogue, never its speech, so it renders
+// labelled and dim rather than as prose. A safety filter can empty the body
+// while keeping the block (`redacted`), in which case the block's existence is
+// itself the fact to report - "no thinking" and "thinking withheld" are
+// different facts to an operator reading a transcript.
+export function extractThinking(entry) {
+	const message = Array.isArray(entry?.model) ? entry.model[0] : null;
+	if (!Array.isArray(message?.content)) return null;
+	const parts = message.content.filter((part) => part?.type === "thinking");
+	if (!parts.length) return null;
+	const text = parts
+		.map((part) => part.thinking ?? "")
+		.join("")
+		.trim();
+	const redacted = parts.some((part) => part.redacted === true);
+	return text || redacted ? { text, redacted } : null;
+}
+
 export function buildTurns(entries) {
 	const ordered = (entries ?? []).filter((e) => e && !NOT_CONVERSATION.has(e.kind));
 	const resultsById = new Map();
@@ -115,6 +150,13 @@ export function buildTurns(entries) {
 			continue;
 		}
 		if (entry.kind === "pi.assistant") {
+			const thinking = extractThinking(entry);
+			if (thinking) {
+				// Before the act it explains: thinking comes first in the content
+				// array, and reordering it after would read as justification written
+				// afterwards rather than the reasoning that preceded the act.
+				turns.push({ kind: "thinking", ts: stampOf(entry), text: thinking.text, redacted: thinking.redacted });
+			}
 			const parsed = extractEntryText(entry);
 			if (parsed?.text.trim()) turns.push({ kind: "agent", ts: stampOf(entry), entries: [entry], text: parsed.text.trim() });
 			for (const call of extractToolCalls(entry)) {
@@ -154,7 +196,10 @@ export function formatChat(entries, options = {}) {
 	// and name, so padding them into the same column would just add ragged space.
 	const labelWidth = Math.min(
 		12,
-		Math.max(...turns.filter((t) => t.kind !== "tools").map((t) => (t.kind === "operator" ? 3 : seat.length)), 1),
+		Math.max(
+			...turns.filter((t) => t.kind === "operator" || t.kind === "agent").map((t) => (t.kind === "operator" ? 3 : seat.length)),
+			1,
+		),
 	);
 	const timeWidth = time ? TIME_COL + 2 + DELTA_COL + 2 : 0;
 	const gutter = " ".repeat(timeWidth + MARKER_COL + labelWidth + CONTENT_GAP);
@@ -179,25 +224,47 @@ export function formatChat(entries, options = {}) {
 		}
 		if (turn.ts !== null) previous = turn.ts;
 
+		if (turn.kind === "thinking") {
+			// Its own row, dim, before the seat speaks: merging it into the seat's
+			// prose would attribute the reasoning as something the seat said. The
+			// collapse rule matches tool results - legible default, nothing lost
+			// under --full.
+			if (turn.redacted && !turn.text) {
+				lines.push(`${head}${paint("dim", "⋯")} ${paint("dim", "thinking (redacted by the provider)")}`);
+				continue;
+			}
+			const [first, ...rest] = turn.text.split("\n");
+			lines.push(`${head}${paint("dim", "⋯")} ${paint("dim", "thinking ›")} ${paint("dim", first)}`);
+			if (!full && rest.length) {
+				lines.push(paint("dim", `${gutter}⎿ (${rest.length} more line${rest.length === 1 ? "" : "s"} — --full to expand)`));
+			} else if (full) {
+				for (const extra of rest) lines.push(paint("dim", `${gutter}${extra}`));
+			}
+			continue;
+		}
+
 		if (turn.kind === "tools") {
 			const message = turn.result?.model?.[0];
 			const failed = message?.isError === true;
 			const name = turn.call?.name ?? message?.toolName ?? "tool";
-			const args = formatArgs(turn.call?.args);
+			const args = full ? formatArgsFull(turn.call?.args) : formatArgs(turn.call?.args);
 			const mark = failed ? paint("red", "✗") : paint("green", "✓");
 			const label = paint(failed ? "red" : "green", `${name}(${args})`);
 			const output = (extractEntryText(turn.result)?.text ?? "").replace(/\s+$/, "");
 			// One line only, then the remainder is summarized below: flattening the
 			// whole result into the header would defeat the point of collapsing it.
 			const [preview, ...rest] = output.split("\n");
-			lines.push(tint(`${head}${paint("dim", "⚙")} ${label} ${mark}${preview.trim() ? ` ${truncate(preview, bodyWidth)}` : ""}`));
+			// --full shows the preview line verbatim too; the terminal wraps what
+			// exceeds the width. Capping here is what hid the command's output tail.
+			const shown = full ? preview.trim() : truncate(preview, bodyWidth);
+			lines.push(tint(`${head}${paint("dim", "⚙")} ${label} ${mark}${shown ? ` ${shown}` : ""}`));
 			// Truncation is always signposted: a silently capped result reads as data
 			// loss, and the reader needs to know the escape hatch exists.
 			if (!full && rest.length) {
 				lines.push(paint("dim", `${gutter}⎿ (${rest.length} more line${rest.length === 1 ? "" : "s"} — --full to expand)`));
 			} else if (full) {
 				for (const extra of rest) {
-					lines.push(tint(`${gutter}${paint("dim", "⎿ ")}${paint("dim", truncate(extra, bodyWidth))}`));
+					lines.push(tint(`${gutter}${paint("dim", "⎿ ")}${paint("dim", extra)}`));
 				}
 			}
 			continue;

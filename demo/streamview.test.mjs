@@ -41,7 +41,7 @@ import {
 	assert.ok(!buf.includes("\x1b["), "colour disabled means no ANSI escapes");
 }
 
-// --- renderer: colour on / long tool args clipped / error branch -----------
+// --- renderer: colour on / long tool args complete / error branch ----------
 {
 	let buf = "";
 	const r = createLiveRenderer({ write: (s) => (buf += s), color: true });
@@ -56,7 +56,10 @@ import {
 	r.end(ctx, { type: "error", reason: "error" });
 
 	assert.ok(buf.includes("\x1b[36m"), "seat label coloured when enabled");
-	assert.match(buf, /…/, "very long tool arguments are clipped");
+	assert.ok(
+		buf.includes("x".repeat(500)),
+		"tool arguments are never clipped: a live viewer must see the whole command too",
+	);
 	assert.match(buf, /✖ error \(error\)/, "error event rendered");
 	assert.match(buf, /── qa error \(error\)/, "error footer rendered");
 }
