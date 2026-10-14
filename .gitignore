@@ -9,3 +9,18 @@ durig.config.json
 .durig/
 # built upstream tree, reproducible from pi-main.pin.json
 vendor/pi-main/
+# Operational exhaust from driving seats: stdout/stderr captures and scratch logs.
+.impl.log
+.*.out
+.*.err
+impl-*.out
+impl-*.err
+pm-*.out
+pm-*.err
+# Generated rig state: stale database backups, the broker's log/state, and generation leases.
+*.sqlite.bak-*
+*.sqlite-wal.bak-*
+*.sqlite-shm.bak-*
+*.sqlite.broker.log
+*.sqlite.broker.json
+*.sqlite.genlock.*
