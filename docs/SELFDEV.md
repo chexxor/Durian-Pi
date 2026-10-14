@@ -109,6 +109,11 @@ dies, no claimed work is re-woken and nothing downstream can progress. Fix #110 
   START-NOW work runs via a direct `send` but stays `queued` (dogfood F18/F20).
 - **A seat's worktree is not the live tree.** `ps`/`status` now show each seat's
   `root` (#261) — read it before trusting a "live" claim (dogfood F21).
+- **Never mutate the shared working tree.** The tree holds other seats' and the operator's
+  uncommitted work; running `git stash`, `git reset`, `git checkout --`, `git restore`,
+  or `git clean` destroys work that may not be recoverable. For failing-first verification,
+  run the test RED BEFORE the code change (order of operations), or use a throwaway detached
+  worktree / temp copy (see `docs/failing-first-recipe.md`).
 - **When `edit` misses, re-read the exact region — do not shell-edit source.** The
   tool requires an exact match including newlines, and `src/rig.mjs` is CRLF-only, so
   an LF `oldText` never matches; a seat that then patches with PowerShell/Python makes

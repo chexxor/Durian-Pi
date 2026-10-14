@@ -148,6 +148,41 @@ try {
 		JSON.stringify(readOnlyGit.ok ? "ran" : readOnlyGit.error?.message),
 	);
 
+	// Failing-first canaries — these commands bypassed the old guard (\s|$) because the
+	// match ended in whitespace or end-of-string, so trailing punctuation and separators
+	// defeated it. The fixed guard uses \b (word boundary) and -C <path> forms. These
+	// assert the guard CATCHES what used to slip through (RD #257).
+	for (const command of [
+		"git stash;",
+		"git commit;",
+		"git reset;",
+		"git checkout;",
+		"git restore;",
+		"git clean;",
+		"git revert;",
+		"git branch -D foo;",
+		"git -C . stash",
+		"git -C /a/path commit -m x",
+		"git -C . reset --hard HEAD~1",
+	]) {
+		const refused = await author.exec(command, {}, context);
+		check(
+			`${command} is refused (old bypass class)`,
+			refused.ok === false && /refused by durig/.test(refused.error?.message ?? ""),
+			JSON.stringify(refused.ok ? refused.value : refused.error?.message),
+		);
+	}
+
+	// The read-only controls must still pass through after the fix.
+	for (const command of ["git status", "git log --oneline -3", "git diff HEAD", "git show HEAD", "git rev-parse HEAD"]) {
+		const allowed = await author.exec(command, {}, context);
+		check(
+			`${command} is not refused (read-only)`,
+			!/refused by durig/.test(allowed.error?.message ?? ""),
+			JSON.stringify(allowed.ok ? "ran" : allowed.error?.message),
+		);
+	}
+
 	console.log("\nSC2 — the verifier cannot mutate what it verifies");
 	const authorWrite = await author.writeFile(join(root, "author.txt"), "ok", context);
 	check("an author can write inside the worktree", authorWrite.ok === true);

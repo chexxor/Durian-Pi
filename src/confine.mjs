@@ -38,19 +38,36 @@ const DENIED_COMMANDS = [
 	// operator integrates them. A seat that commits, re-checks-out, stashes or resets diverges
 	// the tree from the reviewed source (observed: a seat reverted an integrated change in its
 	// worktree). Read-only git (status/log/diff/show/rev-parse) is deliberately NOT matched.
-	{ re: /git\s+commit(\s|$)/i, why: "committing is the operator's integration step; leave the change for review" },
-	{ re: /git\s+reset(\s|$)/i, why: "would restage or discard work a seat did not integrate" },
-	{ re: /git\s+checkout(\s|$)/i, why: "would change the seat's working tree or HEAD" },
-	{ re: /git\s+restore(\s|$)/i, why: "would discard uncommitted work" },
-	{ re: /git\s+revert(\s|$)/i, why: "would rewrite committed work" },
-	{ re: /git\s+clean(\s|$)/i, why: "would discard untracked work" },
-	{ re: /git\s+stash(\s|$)/i, why: "would move uncommitted work out of the tree" },
-	{ re: /git\s+branch\s+(-D|-d|--delete)(\s|$)/i, why: "would delete a branch" },
+	// Bypass prevention: each pattern ends in \b (word boundary) or an explicit separator
+	// class so trailing punctuation (git stash;) or separators (&&, |) cannot defeat the
+	// match — the whole class of bug that caused a seat to wipe the shared tree (RD #257).
+	// The -C <path> forms cover the case where a seat tries to redirect git into another
+	// checkout; refuse them the same way (RD #257).
+	{ re: /git\s+commit\b/i, why: "committing is the operator's integration step; leave the change for review" },
+	{ re: /git\s+reset\b/i, why: "would restage or discard work a seat did not integrate" },
+	{ re: /git\s+checkout\b/i, why: "would change the seat's working tree or HEAD" },
+	{ re: /git\s+restore\b/i, why: "would discard uncommitted work" },
+	{ re: /git\s+revert\b/i, why: "would rewrite committed work" },
+	{ re: /git\s+clean\b/i, why: "would discard untracked work" },
+	{ re: /git\s+stash\b/i, why: "would move uncommitted work out of the tree" },
+	{ re: /git\s+branch\s+(-D|-d|--delete)\b/i, why: "would delete a branch" },
 	{
-		re: /git\s+push(\s|$)/i,
+		re: /git\s+push\b/i,
 		why: "publishing needs the operator's authorization; ask with defer_work, or have the operator relaunch durig with DURIG_ALLOW_PUSH=1",
 		unless: () => operatorGranted("DURIG_ALLOW_PUSH"),
 	},
+	// git -C <path> <verb> redirects the git operation to another directory. Even when
+	// the target looks "safe," the seat cannot verify that it is the right directory
+	// (a redirecting seat cannot validate git identity; that is the operator's job).
+	{ re: /git\s+-C\s+\S+\s+commit\b/i, why: "same as `git commit` — the operator integrates" },
+	{ re: /git\s+-C\s+\S+\s+reset\b/i, why: "same as `git reset` — discards or restages work" },
+	{ re: /git\s+-C\s+\S+\s+checkout\b/i, why: "same as `git checkout` — changes the working tree" },
+	{ re: /git\s+-C\s+\S+\s+restore\b/i, why: "same as `git restore` — discards uncommitted work" },
+	{ re: /git\s+-C\s+\S+\s+revert\b/i, why: "same as `git revert` — rewrites committed work" },
+	{ re: /git\s+-C\s+\S+\s+clean\b/i, why: "same as `git clean` — discards untracked work" },
+	{ re: /git\s+-C\s+\S+\s+stash\b/i, why: "same as `git stash` — moves uncommitted work out of the tree" },
+	{ re: /git\s+-C\s+\S+\s+branch\s+(-D|-d|--delete)\b/i, why: "same as `git branch -D` — deletes a branch" },
+	{ re: /git\s+-C\s+\S+\s+push\b/i, why: "same as `git push` — needs operator authorization" },
 ];
 
 /** True only when the operator set this in durig's own environment, which a seat cannot reach. */
@@ -107,7 +124,7 @@ function refusalFor(command) {
 	for (const { re, why, unless } of DENIED_COMMANDS) {
 		if (!re.test(text)) continue;
 		if (unless?.() === true) continue;
-		return `refused by durig: ${why}`;
+		return `refused by durig: ${why} — to test without your change, run the test RED BEFORE the fix, or use a throwaway detached worktree / temp copy (never revert the shared tree)`;
 	}
 	return null;
 }
