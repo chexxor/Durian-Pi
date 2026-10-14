@@ -63,6 +63,20 @@ current `main` as one-concern items (author=impl, verifier=qa):
 All recovered files: `src/{rig,worktree,broker}.mjs`, `cli.mjs`, NEW `src/{storewrite,eventfeed}.mjs`,
 demos `{rearmclaim,worktree,defer,storewrite,events,peekqueue,f34}.test.mjs`, plus the doc truth-up.
 
+## Branch audit — DONE (delegate, 2026-10-14)
+
+Full audit: **`docs/BRANCH-AUDIT-2026-10-14.md`**. Outcome:
+
+- `selfdev-f12`, `selfdev-item10`, `selfdev-stall` — **fully integrated** into `main`; local branches
+  DELETED (origin keeps them). `selfdev-110` — superseded regression; deleted.
+- **`pi-rebase` — fully recovered; local branch deleted.** Its one lost artifact,
+  **`demo/pitui.test.mjs`** (the #192 pi-tui dependency proof, blob `36d97417`), was landed by impl
+  via item **#339 (DONE)** and verifies green. `origin/pi-rebase` remains as backup until the operator
+  commits the working tree.
+- **`item-148` stays untouched** (operator paused #148 per #180; it also carries the still-missing
+  #43(a) reasoning-effort map). **`selfdev-borrow`** ratchet stays with deferred #60.
+- Remaining local branches: `main`, `item-148`, `selfdev-borrow`.
+
 ## Safety backups from the stash incident
 
 - `.spike/delegate/recovery-WIP.patch` — full tracked-WIP diff (859 lines).
@@ -71,7 +85,9 @@ demos `{rearmclaim,worktree,defer,storewrite,events,peekqueue,f34}.test.mjs`, pl
 
 ## Open backlog (ids)
 
-- **F35 #300** (broker stop) · **#325/#313/#315/#317/#319/#321/#323** (qa artifacts).
+- **F35 #300 / #251 DONE this session** (verified). Open: **#325/#313/#315/#317/#319/#321/#323**
+  (qa artifacts) — note `#327` is a duplicate safety item already delivered by `#329`; pm should
+  cancel/ack it (`cancel_work`).
 - **Long waits / context:** #289 + #290. **Seat ergonomics:** #291 (LF/CRLF), #292 (doc-proxy).
 - **Earlier:** #251, #252, #253, #254, #258, #275, #156.
 - **Stale queue rows:** #287 (obsolete doc item) and ~40 old DONE acks; a `pm` triage with
@@ -91,7 +107,24 @@ demos `{rearmclaim,worktree,defer,storewrite,events,peekqueue,f34}.test.mjs`, pl
 
 ## Where main is
 
-`main` is `762d95f`; the tracked tree is dirty with the recovered tranche + doc truth-up (uncommitted
-by design — the operator integrates and commits; seats are guard-blocked from committing). Untracked:
-`.spike/`, `AGENTS.md`, `pi-warden.md`, `vendor/`, `docs/LLM_Agent_Long_Term_Memory_Strategies.md`,
-`src/{storewrite,eventfeed}.mjs`, and several new demos. Nothing was pushed.
+`main` is `b27955b` ("docs(durig): session truth-up and shared-tree safety research") — the recovered
+tranche (#307–#312) is now COMMITTED; `origin/main` is still `762d95f`, so local `main` is ahead and
+**unpushed** (the operator holds push). Untracked remains: `.spike/`, `AGENTS.md`, `pi-warden.md`,
+`vendor/`, `docs/LLM_Agent_Long_Term_Memory_Strategies.md`, and the branch-audit scratch. Nothing was
+pushed.
+
+**Uncommitted team work in the tree (verified by the delegate; the operator integrates/commits):**
+
+- **#300 (F35)** — `src/broker.mjs`, `cli.mjs`, NEW `demo/stoprequest.test.mjs`: cooperative
+  `.stop` file, pass-settling stop. DONE; `demo/stoprequest.test.mjs` green, `demo/broker.test.mjs` green.
+- **#251** — `scripts/sync-pi.mjs`, `demo/syncpi.test.mjs`: pin-guard `JSON.parse`. DONE; demo green.
+- **#330** — `src/worktree.mjs`, `demo/worktree.test.mjs`: node_modules junction removed (Git 2.42
+  hazard). DONE; demo 19/19.
+- **#339** — NEW `demo/pitui.test.mjs` (blob `36d97417`). DONE; `node demo/pitui.test.mjs` exit 0.
+
+Full suite after all four: **56/57 pass**; the single failure is the pre-existing
+`demo/starter.test.mjs` LF/CRLF drift (#328/#291, out of scope).
+
+Two `run` attempts hit harness problems: the first was killed at the tool cap (stranded submissions),
+the second hung on a stale `pid: undefined` genlock and was stopped. Both were recovered with
+`node cli.mjs resume`; no strands remain. **Never kill a run/send mid-generation.**
