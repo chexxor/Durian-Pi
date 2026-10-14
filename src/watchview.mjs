@@ -117,6 +117,14 @@ export function formatSnapshot({ db, health, highlights = {}, seq = 1, width = 1
 		const head = `${paint(activity.tone, activity.glyph)} ${pad(seat.name, nameCol)}${pad(role, roleCol)}`;
 		lines.push(`${head}${truncate(activity.focus, width - focusAt)}`);
 		const says = highlights[seat.name]?.says;
+		// The in-flight partial is shown on its own line, never merged into the "says"
+		// quote: that quote is committed history, and this text may be rewritten or
+		// withdrawn by the next poll (ROADMAP 40c).
+		const stream = health.streaming?.[seat.name];
+		if (stream) {
+			const live = stream.text || stream.thinking || stream.tools.map((t) => t.name).join(", ") || "…";
+			lines.push(paint("cyan", `      ⟳ streaming: ${truncate(live, width - 20)}`));
+		}
 		const quote = says ? truncate(says, width - 14) : "(nothing said yet)";
 		lines.push(paint("dim", `      ↳ ${quote}`));
 	}

@@ -47,8 +47,7 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { describeConfig, loadConfig, strandedMsSetting, streamSettings } from "./src/config.mjs";
-import { computeAttention, countMalformedToolCalls } from "./src/attention.mjs";
+import { describeConfig, loadConfig, streamSettings } from "./src/config.mjs";
 import { applyEscalations, failureStreak, planEscalations } from "./src/supervisor.mjs";
 import {
 	readGenerationSlots,
@@ -58,11 +57,13 @@ import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
 import { brokerAlive, clearBrokerState, drivePass, readBrokerState, runWakeLoop, writeBrokerState } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
-import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
-import { computeMetrics, formatMetrics } from "./src/metrics.mjs";
+import { SCAN_LIMIT, extractEntryText, summarizeEntries } from "./src/rigstory.mjs";
+import { formatMetrics } from "./src/metrics.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
-import { formatChat } from "./src/chatview.mjs";
+import { formatChat, formatPartial } from "./src/chatview.mjs";
+import { readLiveState, readRigHealth, readSeatList } from "./src/readapi.mjs";
+import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree } from "./src/worktree.mjs";
 import { auditRig, formatCheck } from "./src/checkup.mjs";
 import { SeatGuard } from "./src/seatguard.mjs";
@@ -1315,6 +1316,40 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
     humanLines = lines;
   };
   // Follow keeps one continuous transcript: accumulate, then render it whole.
+  // The in-flight partial is read separately and never enters this transcript: it
+  // has no entry id, the platform deletes it when the run settles, and a later
+  // reader must not be able to replay it as history (ROADMAP 40c).
+  let streamingCount = 0;
+  let lastPartial = null;
+  const renderStreaming = (partial) => {
+    const text = formatPartial(partial, { seat: seatName, color });
+    const lines = text ? text.split("\n") : [];
+    // Erase the previous streaming block first: it is a snapshot, not history, so
+    // leaving it above the new one would append each rewrite and read as turns.
+    if (streamingCount > 0) process.stdout.write(`\x1b[${streamingCount}A\x1b[J`);
+    streamingCount = lines.length;
+    if (!lines.length) return;
+    if (!interactive) {
+      // A pipe cannot retract a half-written line, and a half line that reads as
+      // the reply is the exact hazard this item names; only a terminal gets it.
+      streamingCount = 0;
+      return;
+    }
+    process.stdout.write(`${lines.join("\n")}\n`);
+  };
+  const pollPartial = async (conversationId) => {
+    const partial = partialView(await readLiveState(storage, conversationId));
+    if (human) {
+      renderStreaming(partial);
+      return;
+    }
+    // JSON followers get a snapshot with a `partial` key and never `entries`, so a
+    // consumer can tell a transient partial from committed history by shape alone.
+    const sig = partial ? JSON.stringify(partial) : null;
+    if (sig === lastPartial) return;
+    lastPartial = sig;
+    out({ ok: true, command: "log", seat: seatName, db: DB_PATH, partial });
+  };
   const allEntries = [];
   const print = (entries) => {
     // An empty transcript must SAY it is empty. Printing nothing - and then
@@ -1344,17 +1379,10 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
     });
   };
   try {
-    const seatsRec = await storage.findDocument(
-      { kind: Seats.definition.kind, scope: { kind: "session" } },
-      "current",
-      BACKGROUND_CONTEXT,
-    );
-    const seatsVal = seatsRec
-      ? (await storage.document(seatsRec.id, "current", BACKGROUND_CONTEXT))?.value ?? {}
-      : {};
-    const seat = seatsVal.seats?.[seatName];
+    const seats = await readSeatList(storage);
+    const seat = seats.find((s) => s.name === seatName);
     if (!seat) {
-      noteEmptyRig(Object.keys(seatsVal.seats ?? {}).length);
+      noteEmptyRig(seats.length);
       fail(`unknown seat: ${seatName}`);
     }
 
@@ -1371,8 +1399,15 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
     if (!follow) return;
 
     let lastId = history.reduce((max, e) => Math.max(max, e.id ?? 0), 0);
+    await pollPartial(seat.conversationId);
     while (!stopping) {
       await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
+      // Clear the streaming block before committed output so a committed turn can
+      // never end up above the partial it supersedes on screen.
+      if (streamingCount > 0) {
+        process.stdout.write(`\x1b[${streamingCount}A\x1b[J`);
+        streamingCount = 0;
+      }
       let next;
       try {
         next = await storage.scanEntries(
@@ -1392,6 +1427,7 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
         lastId = entry.id;
         print([entry]);
       }
+      await pollPartial(seat.conversationId);
     }
   } finally {
     await storage.close(BACKGROUND_CONTEXT);
@@ -1402,129 +1438,6 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
 // the latest submission per seat conversation. Reads committed state
 // straight from sqlite (same reasoning as `watch`: session replication is
 // in-process only, and a viewer must not resume scheduling).
-async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryLimit = SCAN_LIMIT } = {}) {
-  const seatsRec = await storage.findDocument(
-    { kind: Seats.definition.kind, scope: { kind: "session" } },
-    "current",
-    BACKGROUND_CONTEXT,
-  );
-  const queueRec = await storage.findDocument(
-    { kind: RigQueue.definition.kind, scope: { kind: "session" } },
-    "current",
-    BACKGROUND_CONTEXT,
-  );
-  const seatsVal = seatsRec
-    ? (await storage.document(seatsRec.id, "current", BACKGROUND_CONTEXT))?.value ?? {}
-    : {};
-  const queueVal = queueRec
-    ? (await storage.document(queueRec.id, "current", BACKGROUND_CONTEXT))?.value ?? {}
-    : {};
-  const seats = Object.entries(seatsVal.seats ?? {}).map(([name, s]) => ({
-    name,
-    conversationId: s.conversationId,
-    role: s.role,
-  }));
-  const latestByConv = new Map();
-  const failureStreakByConv = new Map();
-  for (const seat of seats) {
-    const page = await storage.scanSubmissions(
-      { conversationId: seat.conversationId, order: "descending" },
-      // A bounded page, not just the latest: the repeated_failure notice needs the LEADING run of
-      // failures, and a streak of three is what makes a seat a diagnosis problem (ROADMAP 42).
-      5,
-      undefined,
-      BACKGROUND_CONTEXT,
-    );
-    latestByConv.set(seat.conversationId, page.items[0]);
-    failureStreakByConv.set(seat.conversationId, failureStreak(page.items));
-  }
-  // Slot-file notices ride alongside seat notices: a live holder means the
-  // GPU is busy (healthy waiting), a dead holder means a wedged generation.
-  // A LIVE slot for a seat also means that seat's queued submission is
-  // legitimately waiting behind a genuine run, so those seat names feed the
-  // admitted_not_started suppression (ROADMAP 37a): a dead holder's slot does
-  // NOT suppress it, because a gone run means nothing is advancing the
-  // submission and it IS stranded.
-  const genSlots = Number.isFinite(slots) ? readGenerationSlots(dbPath, slots) : [];
-  const seatsWithSlot = new Set(genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat));
-  const slotNotices = genSlots.map((g) => ({
-    scope: "seat",
-    seat: g.generatingSeat ?? `slot-${g.slotIndex}`,
-    kind: g.name,
-    detail:
-      g.name === "generation_in_flight" ? `generating since ${g.since}` : g.detail,
-  }));
-  // One bounded page per seat, shared: highlights and metrics both read these
-  // entries, so a render makes a single pass over the transcripts. Measured at
-  // 0.9-1.4 ms for 14 seats x 24 entries against a 750 ms poll (METRICS.md).
-  const pages = await readSeatPages(storage, BACKGROUND_CONTEXT, seats, entryLimit);
-  // The submission record carries no admission timestamp (scanSubmissions
-  // returns id/status/entry only), so recover it from the admitted input
-  // ENTRY's timestamp for the admitted_not_started notice; left undefined when
-  // that entry has fallen off the bounded page (ROADMAP 37a).
-  for (const seat of seats) {
-    const latest = latestByConv.get(seat.conversationId);
-    const entryId = latest?.entry;
-    if (!latest || entryId == null) continue;
-    const admitted = (pages[seat.name] ?? []).find((e) => e.id === entryId);
-    const ts = admitted?.model?.[0]?.timestamp;
-    if (Number.isFinite(ts)) latest.admittedAt = ts;
-  }
-  const metrics = computeMetrics({
-    pages,
-    queueItems: queueVal.items ?? [],
-    seats,
-    modelsBySeat,
-    nowMs: Date.now(),
-    // Say the window was cut only when a page actually hit the limit, so
-    // "bounded" is a fact about this reading rather than a standing claim.
-    bounded: Object.values(pages).some((items) => items.length >= entryLimit),
-  });
-  // The failure CAUSE is in the entry, not in the submission record: the record
-  // carries a category ("model_error"), the entry carries the provider's
-  // message. Collected here because the page is already in hand, so surfacing
-  // it costs nothing extra (dogfood F3).
-  const errorByConv = new Map();
-  for (const seat of seats) {
-    for (const entry of pages[seat.name] ?? []) {
-      const msg = Array.isArray(entry?.model) ? entry.model[0] : null;
-      if (msg?.errorMessage) {
-        errorByConv.set(seat.conversationId, msg.errorMessage);
-        break; // newest first, so the first hit is the most recent failure
-      }
-    }
-  }
-  const malformedCountByConv = new Map();
-  for (const seat of seats) {
-    malformedCountByConv.set(seat.conversationId, countMalformedToolCalls(pages[seat.name] ?? []));
-  }
-  // Admission age beyond which an unstarted submission is surfaced as stranded
-  // (ROADMAP 37a); null means the module default in src/attention.mjs stands.
-  const strandedMs = strandedMsSetting(CFG);
-  return {
-    seats,
-    queueItems: queueVal.items ?? [],
-    // Maps serialize as {} in JSON; flatten so watch/status output stays legible.
-    latestByConv: Object.fromEntries(latestByConv),
-    metrics,
-    attention: [
-      ...computeAttention(seats, queueVal.items ?? [], latestByConv, errorByConv, {
-        nowMs: Date.now(),
-        seatsWithSlot,
-        failureStreakByConv,
-        malformedCountByConv,
-        ...(strandedMs === null ? {} : { strandedMs }),
-      }),
-      ...slotNotices,
-      // Metric notices join the attention channel instead of claiming a screen
-      // of their own: same slot, same rendering, and signal only when a measure
-      // has actually moved (METRICS.md, "the move").
-      ...metrics.notices,
-    ],
-    // Internal: watch derives highlights from these instead of re-scanning.
-    _pages: pages,
-  };
-}
 // watch [--once] [--json|--human]: stream rig state - an initial snapshot,
 // then one line per observed change; each line is a full queue document so
 // a consumer never needs to diff. Without --once it runs until SIGINT.
@@ -1587,7 +1500,7 @@ async function cmdWatch(once, human) {
     );
   };
   const slots = maxSeats();
-  const initial = await readRigHealth(storage, DB_PATH, slots);
+  const initial = await readRigHealth(storage, DB_PATH, slots, { cfg: CFG });
   // Watching the wrong database is silent by nature: no commits ever arrive.
   // Tell the operator up front which database is being watched.
   if (!human) noteEmptyRig(initial.seats.length);
@@ -1601,7 +1514,7 @@ async function cmdWatch(once, human) {
     await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
     let health;
     try {
-      health = await readRigHealth(storage, DB_PATH, slots);
+      health = await readRigHealth(storage, DB_PATH, slots, { cfg: CFG });
     } catch (err) {
       // A failed poll must not kill the stream silently; report on stderr
       // and keep polling so transient storage races self-heal.
@@ -1639,7 +1552,7 @@ async function cmdOptimize(textParts) {
 async function cmdStatus() {
   const storage = await openNodeSqliteStorage(DB_PATH);
   try {
-    const health = await readRigHealth(storage, DB_PATH, maxSeats());
+    const health = await readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG });
     noteEmptyRig(health.seats.length);
     out({ ok: true, command: "status", db: DB_PATH, ...health });
     // `status` is the one-shot surface, so this is where the metrics command is
@@ -1709,6 +1622,7 @@ async function cmdMetrics(rigFile, human, windowArg) {
     const health = await readRigHealth(storage, DB_PATH, maxSeats(), {
       modelsBySeat: spec ? resolveModelsBySeat(spec) : {},
       entryLimit: parseWindow(windowArg),
+      cfg: CFG,
     });
     noteEmptyRig(health.seats.length);
     if (human) {
@@ -1800,15 +1714,7 @@ async function cmdCheck(rigFile, human) {
           : "";
         stored = { reason: "read", text };
 
-        const seatsRec = await storage.findDocument(
-          { kind: Seats.definition.kind, scope: { kind: "session" } },
-          "current",
-          BACKGROUND_CONTEXT,
-        );
-        const seatsVal = seatsRec
-          ? ((await storage.document(seatsRec.id, "current", BACKGROUND_CONTEXT))?.value ?? {})
-          : {};
-        storedSeats = Object.keys(seatsVal.seats ?? {});
+        storedSeats = (await readSeatList(storage)).map((s) => s.name);
       } finally {
         await storage.close(BACKGROUND_CONTEXT);
       }

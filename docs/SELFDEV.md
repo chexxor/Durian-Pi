@@ -84,6 +84,42 @@ and `NEXT.md` disagree, trust the queue and correct `NEXT.md`.
 dies, no claimed work is re-woken and nothing downstream can progress. Fix #110 first; see
 `docs/NEXT.md` and roadmap *"Deadlock and liveness prevention"* P5.
 
+## Operational pitfalls (learned driving the team, 2026-10-13)
+
+- **Never run two CLI write processes against one store concurrently.** Two `send`s
+  collided on an entry id (`ID n already belongs to entry`) and one message was
+  *silently dropped* (dogfood F24). The `send` path now retries (#257, D42), but
+  `up`/`run` are not yet covered — run one write process at a time. Drive several
+  seats by launching one backgrounded `send` and polling, not by firing them together.
+- **A `send` killed by the harness tool cap strands the seat.** Recover with
+  `node cli.mjs resume`; drive heavy work as a BACKGROUNDED `send` (PowerShell
+  `Start-Process`) or short `run --max-duration` chunks (dogfood F19, #252).
+- **A seat can degenerate into a repetition loop** (pseudo tool-calls emitted as
+  text) and leave a claimed item stalled. `resume` finds nothing (the run ended);
+  recover with `node cli.mjs reset <seat> <handoff>`, then re-drive (dogfood F29,
+  #275). Re-drive immediately if a run's reply ends in malformed `<tool calls>` text.
+- **An isolated worktree forks from HEAD.** The operator's *uncommitted* work is
+  invisible to seats and can be silently clobbered (dogfood F23). `worktree` now
+  refuses a dirty source (#255, D43); commit before forking.
+- **Coordinators (`pm`, `lead`) cannot read or write files** (B1 gap, #156). Route
+  any doc/file task to a file-capable seat (`impl`, `scribe`, `devtools`); a
+  coordinator asked to edit a file will (correctly) refuse rather than fabricate.
+- **Operator priority cannot be expressed by oldest-first claiming.** Use
+  `claim_work({ itemId })` (claim-by-id, #239) to claim a specific item; otherwise
+  START-NOW work runs via a direct `send` but stays `queued` (dogfood F18/F20).
+- **A seat's worktree is not the live tree.** `ps`/`status` now show each seat's
+  `root` (#261) — read it before trusting a "live" claim (dogfood F21).
+- **When `edit` misses, re-read the exact region — do not shell-edit source.** The
+  tool requires an exact match including newlines, and `src/rig.mjs` is CRLF-only, so
+  an LF `oldText` never matches; a seat that then patches with PowerShell/Python makes
+  it worse (dogfood F32). Re-read the region with `read`, then retry the edit.
+- **Never let a `pi-durable` doc proxy escape `api.commit`.** Read the plain fields
+  inside the callback; a returned proxy throws `Cannot use a settled overlay` once the
+  commit settles (dogfood F33; `claim_work` documents the pattern).
+- **Keep the seat root clean.** Scratch patchers (`fix_peek.py`), dump files, and
+  `peek_block.txt` left in the tree pollute the diff and the operator's integration
+  (observed on F32). Write scratch under `.spike/` and remove it, or use a temp dir.
+
 ## Clock in / clock out
 
 See `../AGENTS.md`. Short form: read `NEXT.md` → read this file → `git status --short -- .` →

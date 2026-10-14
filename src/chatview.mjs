@@ -11,12 +11,12 @@
 // tool output collapsed to one line under a tree connector rather than dumped.
 
 import { extractEntryText } from "./rigstory.mjs";
-
-// The system entry carries durig's own constitution and prompt scaffolding.
-// Rendering it would bury the conversation under the rig's plumbing.
+import { buildTurns, turnCollapse } from "./viewmodel.mjs";
 import { ANSI } from "./ansi.mjs";
 
-const NOT_CONVERSATION = new Set(["pi.system"]);
+// Re-exported so callers keep one import path for the view model; the
+// implementation lives in src/viewmodel.mjs (D21, ROADMAP item 7).
+export { buildTurns, extractThinking, extractToolCalls } from "./viewmodel.mjs";
 
 // A background tint reads wrong on an unknown terminal background, which is why
 // hard-coding one is the field's clearest cautionary tale; it is therefore opt-in
@@ -117,84 +117,6 @@ function dayOf(ms) {
 	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function stampOf(entry) {
-	const message = Array.isArray(entry?.model) ? entry.model[0] : null;
-	const ts = message?.timestamp;
-	return Number.isFinite(ts) ? ts : null;
-}
-
-// Tool calls live inside the assistant message that requested them, so the call
-// name and arguments are only reachable from there; the result arrives later as
-// its own entry, correlated by toolCallId.
-export function extractToolCalls(entry) {
-	const message = Array.isArray(entry?.model) ? entry.model[0] : null;
-	if (!Array.isArray(message?.content)) return [];
-	return message.content
-		.filter((part) => part?.type === "toolCall")
-		.map((part) => ({ id: part.id ?? part.toolCallId ?? null, name: part.name ?? "tool", args: part.arguments }));
-}
-
-// The model's reasoning is stored as thinking blocks beside the text it
-// produced. It is the seat's travelogue, never its speech, so it renders
-// labelled and dim rather than as prose. A safety filter can empty the body
-// while keeping the block (`redacted`), in which case the block's existence is
-// itself the fact to report - "no thinking" and "thinking withheld" are
-// different facts to an operator reading a transcript.
-export function extractThinking(entry) {
-	const message = Array.isArray(entry?.model) ? entry.model[0] : null;
-	if (!Array.isArray(message?.content)) return null;
-	const parts = message.content.filter((part) => part?.type === "thinking");
-	if (!parts.length) return null;
-	const text = parts
-		.map((part) => part.thinking ?? "")
-		.join("")
-		.trim();
-	const redacted = parts.some((part) => part.redacted === true);
-	return text || redacted ? { text, redacted } : null;
-}
-
-export function buildTurns(entries) {
-	const ordered = (entries ?? []).filter((e) => e && !NOT_CONVERSATION.has(e.kind));
-	const resultsById = new Map();
-	for (const entry of ordered) {
-		if (entry.kind !== "pi.tool-result") continue;
-		const id = entry.model?.[0]?.toolCallId;
-		if (id) resultsById.set(id, entry);
-	}
-
-	const consumed = new Set();
-	const turns = [];
-	for (const entry of ordered) {
-		if (entry.kind === "pi.user") {
-			turns.push({ kind: "operator", ts: stampOf(entry), entries: [entry] });
-			continue;
-		}
-		if (entry.kind === "pi.assistant") {
-			const thinking = extractThinking(entry);
-			if (thinking) {
-				// Before the act it explains: thinking comes first in the content
-				// array, and reordering it after would read as justification written
-				// afterwards rather than the reasoning that preceded the act.
-				turns.push({ kind: "thinking", ts: stampOf(entry), text: thinking.text, redacted: thinking.redacted });
-			}
-			const parsed = extractEntryText(entry);
-			if (parsed?.text.trim()) turns.push({ kind: "agent", ts: stampOf(entry), entries: [entry], text: parsed.text.trim() });
-			for (const call of extractToolCalls(entry)) {
-				const result = call.id ? resultsById.get(call.id) : undefined;
-				if (result) consumed.add(result);
-				turns.push({ kind: "tools", ts: stampOf(entry), call, result });
-			}
-			continue;
-		}
-		// A tail window can start after the call that produced a result, so an
-		// unconsumed result still has to be shown rather than silently dropped.
-		if (entry.kind === "pi.tool-result" && !consumed.has(entry)) {
-			turns.push({ kind: "tools", ts: stampOf(entry), call: null, result: entry });
-		}
-	}
-	return turns;
-}
-
 export function formatChat(entries, options = {}) {
 	const {
 		seat = "seat",
@@ -253,7 +175,8 @@ export function formatChat(entries, options = {}) {
 				lines.push(`${head}${paint("dim", "⋯")} ${paint("dim", "thinking (redacted by the provider)")}`);
 				continue;
 			}
-			const [first, ...rest] = turn.text.split("\n");
+			const first = turn.text.split("\n")[0];
+			const { lines: rest } = turnCollapse(turn, { full });
 			lines.push(`${head}${paint("dim", "⋯")} ${paint("dim", "thinking ›")} ${paint("dim", first)}`);
 			if (!full && rest.length) {
 				lines.push(paint("dim", `${gutter}⎿ (${rest.length} more line${rest.length === 1 ? "" : "s"} — --full to expand)`));
@@ -276,7 +199,8 @@ export function formatChat(entries, options = {}) {
 			const output = (extractEntryText(turn.result)?.text ?? "").replace(/\s+$/, "");
 			// One line only, then the remainder is summarized below: flattening the
 			// whole result into the header would defeat the point of collapsing it.
-			const [preview, ...rest] = output.split("\n");
+			const preview = output.split("\n")[0];
+			const { lines: rest } = turnCollapse(turn, { full });
 			// --full shows the preview line verbatim too; the terminal wraps what
 			// exceeds the width. Capping here is what hid the command's output tail.
 			const shown = full ? preview.trim() : truncate(preview, bodyWidth);
@@ -311,4 +235,30 @@ export function formatChat(entries, options = {}) {
 export function formatChatEntry(entry, options = {}) {
 	const text = formatChat([entry], { ...options, time: false });
 	return text ? text.split("\n") : null;
+}
+
+// A follower's window on work that has NOT committed (ROADMAP 40c). It renders
+// through a marker and wording a committed turn never uses (◌ / "streaming…"),
+// because the two are different facts: a committed turn is history, while this is
+// a snapshot the next poll may rewrite or withdraw. Nothing here is stamped or
+// grouped with committed turns, so a crashed driver's last partial cannot read as
+// the reply - it stays labelled uncommitted until it either settles into an entry
+// or disappears.
+export function formatPartial(partial, { seat = "seat", color = false } = {}) {
+	if (!partial || !partial.hasContent) return "";
+	const paint = (tone, text) => (color && tone ? `${ANSI[tone] ?? ""}${text}${ANSI.reset}` : text);
+	const lines = [
+		`${paint("cyan", "◌")} ${paint("magenta", seat)} ${paint("dim", "streaming… (not yet committed)")}`,
+	];
+	if (partial.thinking.trim()) {
+		const [first, ...rest] = partial.thinking.trim().split("\n");
+		lines.push(paint("dim", `  ⋯ thinking › ${first}`));
+		// Thinking is a travelogue, not the answer, so it stays dim and indented and
+		// is never trimmed to a count: it is already bounded by the poll, not a turn.
+		for (const line of rest) lines.push(paint("dim", `    ${line}`));
+	}
+	const body = String(partial.text ?? "").replace(/\s+$/, "");
+	if (body) for (const line of body.split("\n")) lines.push(`  ${line}`);
+	for (const tool of partial.tools) lines.push(`${paint("dim", "  ⚙ running:")} ${paint("yellow", tool.name)}`);
+	return lines.join("\n");
 }

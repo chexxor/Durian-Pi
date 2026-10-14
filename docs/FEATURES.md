@@ -21,8 +21,8 @@ Section 11 is planned, section 12 is deliberately absent.
 | **Constitution** | One text injected into every seat's system prompt, read **per request** so a single edit re-arms all seats | `src/rig.mjs` `Constitution`, `section("durig-constitution", …)` | `demo/constitution.test.mjs`, `demo/offline-v2.mjs` |
 | **Persona compilation** | `role`/`goal`/`backstory`/`constraints`/`capabilities`/`instructions` compile into one prompt | `src/rig.mjs` `compilePersona` | `demo/refresh.test.mjs` |
 | **Work queue** | Cross-seat queue with an append-only transition trail and DONE notices back to the sender; `queued → claimed → done`, plus `claimed ↔ deferred` | `src/rig.mjs` `RigQueue`, `enqueueItem` | `demo/race.test.mjs`, `demo/persistence.test.mjs` |
-| **Router tools** | The eight tools every seat gets: `send_work`, `claim_work`, `complete_work`, `defer_work`, `resume_work`, `revise_work`, `cancel_work`, `peek_queue` | `src/rig.mjs` `Router` | `demo/offline.mjs`, `demo/repeat-call.test.mjs`, `demo/defer.test.mjs`, `demo/curate.test.mjs` |
-| **Deferral** | A seat parks a claimed item on a question instead of guessing or going quiet: to the human operator (visible in `status`/`watch`, nothing enqueued) or to a seat (edge-gated, enqueued as real work), then `resume_work` takes it back. Not terminal — an item parked with no way back would be worse than the prose it replaces | `src/rig.mjs` `defer_work`/`resume_work`, `src/attention.mjs` `deferred_awaiting_answer` | `demo/defer.test.mjs`, `demo/watchview.test.mjs` |
+| **Router tools** | The eight tools every seat gets: `send_work`, `claim_work`, `complete_work`, `defer_work`, `resume_work`, `revise_work`, `cancel_work`, `peek_queue`. `claim_work({ itemId })` additionally claims a **named** item (must be `queued` and addressed to the caller; a `held` item is not claimable by id) | `src/rig.mjs` `Router` | `demo/offline.mjs`, `demo/repeat-call.test.mjs`, `demo/defer.test.mjs`, `demo/rearmclaim.test.mjs`, `demo/curate.test.mjs` |
+| **Deferral** | A seat parks a claimed item on a question instead of guessing or going quiet: to the human operator (visible in `status`/`watch`, nothing enqueued) or to a seat (edge-gated, enqueued as real work), then `resume_work` takes it back. Not terminal — an item parked with no way back would be worse than the prose it replaces. `deferred_awaiting_answer` splits human- vs seat-parked and names the newest human-parked item | `src/rig.mjs` `defer_work`/`resume_work`, `src/attention.mjs` `deferred_awaiting_answer` | `demo/defer.test.mjs`, `demo/watchview.test.mjs` |
 | **Queue curation** | A stale/superseded item can be cancelled (`cancel_work`, by its sender or holder) and an unclaimed item's subject/body revised (`revise_work`); `cancelled` is terminal alongside `done`, so the driver never wakes for it and it is not counted as non-terminal work | `src/rig.mjs` `isTerminalItem`/`revise_work`/`cancel_work` | `demo/curate.test.mjs` |
 | **Protocol primer** | A short protocol section appended to every seat prompt, so a migrated persona knows the tools exist | `cli.mjs` `buildSeatPrompt` | `demo/refresh.test.mjs` |
 
@@ -40,18 +40,19 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | Command | Does | Flags |
 |---|---|---|
 | `up <rig.json>` | Create/refresh seats, edges and constitution from a spec; idempotent | `--refresh` re-applies stored prompts, models **and** each seat's working directory |
-| `worktree <path>` | Create an isolated per-item checkout for seats to write in, with a `node_modules` junction so the demos can run there | `--source <dir>` |
-| `ps` | Seat roster with conversation ids and roles | |
+| `worktree <path>` | Create an isolated per-item checkout for seats to write in, with a `node_modules` junction so the demos can run there. **Refuses a dirty source tree** (uncommitted changes would not be carried into the fork) and names the offending path | `--source <dir>` |
+| `ps` | Seat roster with conversation ids and roles, each seat's configured `model`, and its worktree `root` when a non-default cwd is persisted | |
 | `send <seat> <text>` | Steer a seat, wait for its reply, return it inline | `--stream` / `--no-stream`, `--body-file <path>` (or `-`), `--request-id <id>` (retry-safe) |
 | `resume` | (alias `doctor`) advance admitted-but-not-progressing submissions — a run admitted but never scheduled | |
 | `run` | Drive the rig to quiescence: wake each seat that has queued work OR a stalled claim (a claimed item whose run died), hold the harness until the runs settle; exits at quiescence | `--watch` stays resident |
 | `serve` | The resident broker: own the harness and run a wake pass on each store change (no external clock); runs the supervisor each pass. `up` auto-starts it on a TTY | `--max-duration <seconds>` bounds it; `--stop` reaps a running broker |
 | `reset <seat> [handoff]` | (alias `clean`) break a seat out of a degenerate context by writing a `pi.reset` boundary; the durable transcript is preserved | |
 | `stop <seat> [reason]` | Emergency-stop: halt a seat's in-flight run across processes, settle it terminal as `aborted: <reason>`, release the lease | |
-| `queue` | Dump every work item with status and transitions | |
-| `log <seat> [limit]` | A seat's conversation, turn-grouped | `--follow`, `--full`, `--tool-bg`, `--theme dark\|light`, `--human`/`--json` |
-| `watch` | Follow rig state — human dashboard on a TTY, NDJSON when piped | `--once`, `--human`/`--json` |
-| `status` | One-shot per-seat health plus attention notices | |
+| `queue` | Dump every work item with status and transitions; a `summary` gives counts by status plus the notices count, so notices are distinguishable from work | `--active`, `--status <s>`, `--all` |
+| `events` | Durable read-only event feed with a monotonic `seq` cursor; a reconnect from the last `seq` resumes rather than replaying. No harness attach, nothing written | `--since <seq>`, `--follow` |
+| `log <seat> [limit]` | A seat's conversation, turn-grouped. `--follow` also shows the in-flight **partial** as streaming — a `partial` object on JSON, a live region on a TTY — always distinct from committed turns | `--follow`, `--full`, `--tool-bg`, `--theme dark\|light`, `--human`/`--json` |
+| `watch` | Follow rig state — human dashboard on a TTY, NDJSON when piped, with a per-seat `streaming` field and row | `--once`, `--human`/`--json` |
+| `status` | One-shot per-seat health plus attention notices; like `ps` it also surfaces each seat's `model` and its worktree `root` when a non-default cwd is persisted | |
 | `check <rig.json>` | Audit a rig file **and** the store against the research gaps | `--human`/`--json` |
 | `metrics [rig.json]` | Drift measures, each with its band, baseline and blind spot | `--window N\|all`, `--human`/`--json` |
 | `optimize <text>` | Rewrite a draft instruction through the optimizer | |
@@ -70,6 +71,10 @@ Three operator-facing behaviours are load-bearing:
   both paths and the fix. A seat's cwd is resolved once at `up` time and
   persisted; without this guard an operator who re-points a run at a new worktree
   silently writes into the old one and sees success (dogfood F12).
+- **Help and exit contract** — bare `cli.mjs`, `help`, `--help` and `-h` return
+  `{"ok":true,... "command":"help"}` with exit 0; an unknown verb returns
+  `{"ok":false,"error":"unknown command \"X\"", ...}` with exit 2
+  (`demo/cli.test.mjs`).
 
 ## 3. Configuration
 
@@ -128,16 +133,21 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Resume a stranded run** (`resume`/`doctor`) | Advances admitted-but-not-progressing submissions, so a run that was admitted but never scheduled is re-armed instead of looking idle (F11) | `cli.mjs` `cmdResume` | `demo/resume.test.mjs` |
 | **No DONE-of-DONE** | A DONE notice cannot generate another DONE notice, so the notice chain terminates instead of echoing | `src/rig.mjs` `isDoneNotice` | `demo/notices.test.mjs` |
 | **Seat-root guard** | A write-side `send`/`run` whose `DURIG_SEAT_ROOT` disagrees with a seat's persisted cwd fails closed, naming both paths and the fix; view-only commands and `up --refresh` are unaffected (dogfood F12) | `cli.mjs` `openHarness` | `demo/seatroot.test.mjs` |
+| **Concurrent store writes** | The `send` path is made safe for two CLI processes writing one store: a lost entry-id collision is retried instead of dying raw; a message that cannot be delivered is a guided refusal, not `ID n already belongs to entry`. **Known limit:** the `up`/`run` write paths are not yet covered | `src/storewrite.mjs` | `demo/storewrite.test.mjs` |
+| **Dirty-worktree refusal** | `worktree` refuses a source tree with uncommitted changes (they would not be carried into the fork) and names the offending path | `src/worktree.mjs` | `demo/worktree.test.mjs` |
 | **Zero durig SQL** | durig imports one storage opener and runs no SQL of its own | `cli.mjs:26` | architecture note, `docs/STATUS.md` |
 
 ## 6. Observability
 
 | Feature | What it does | Where | Proof |
 |---|---|---|---|
-| **Attention** | Derives operator-visible notices from durable state: `idle_with_queued_work`, `last_run_failed`, `admitted_not_started` (a submission admitted but never scheduled), `deferred_awaiting_answer` | `src/attention.mjs` | `demo/blocked.test.mjs`, `demo/stranded.test.mjs` |
+| **Attention** | Derives operator-visible notices from durable state: `idle_with_queued_work`, `last_run_failed`, `admitted_not_started` (a submission admitted but never scheduled), `deferred_awaiting_answer` — which **splits human- vs seat-parked** and names the newest human-parked item | `src/attention.mjs` | `demo/blocked.test.mjs`, `demo/stranded.test.mjs`, `demo/defer.test.mjs` |
 | **Watch dashboard** | Per-seat human view — who, current work, last words — with glyphs and colour; an empty dashboard can never look healthy | `src/watchview.mjs` | `demo/watchview.test.mjs` |
 | **Seat highlights** | Reads each seat's latest words and tool call **storage-direct**, never opening a harness | `src/rigstory.mjs` | `demo/watchview.test.mjs` |
+| **Shared read API** | One read-only seat/queue/health/live seam that every viewer and any future client imports (`watch`, `log`, `status`, `check`, `metrics` share it), so a client can read the store without opening a harness | `src/readapi.mjs` | exercised by every viewer demo |
 | **Cross-process live stream** | `watch` polls storage at 750 ms because SQLite has no cross-process notification | `cli.mjs` `cmdWatch` | `demo/watch.test.mjs` |
+| **Live partial (streaming)** | The in-flight assistant partial read from the conversation's `pi.live` document, rendered distinctly from committed turns in `log --follow` and `watch`; it is never emitted as an entry, so a rewritten or withdrawn partial cannot be replayed as history | `src/readapi.mjs` `readLiveState`, `src/viewmodel.mjs` `partialView`, `src/chatview.mjs` `formatPartial` | `demo/livestream.test.mjs` |
+| **Peer navigation graph** | Who sent to / received from whom, derived from the queue's `from`/`to` with direction kept (org edges are directional); exposed on `status`/`watch` so a client can switch to a peer without re-deriving it | `src/viewmodel.mjs` `peerGraph`, `peerTargets` | `demo/viewmodel.test.mjs` |
 | **Drift metrics** | Four measures over data already persisted, each declaring its band, evidence class and blind spot | `src/metrics.mjs`, `cli.mjs` `cmdMetrics` | `demo/metrics.test.mjs` |
 | **Config provenance** | `metrics` reports the revision it ran at, whether the tree was dirty, and the active extension set — so a movement can be attributed to a change | `src/provenance.mjs` | `demo/provenance.test.mjs` |
 
@@ -315,11 +325,11 @@ it to the live store).
 
 | Feature | What it does | Where |
 |---|---|---|
-| **Pinned pi main** | `pi-main.pin.json` records the exact upstream commit durig is validated against | `pi-main.pin.json` |
+| **Pinned pi main** | `pi-main.pin.json` records the exact upstream commit durig is validated against. Rebased 2026-10-13 to `7d75a0e` (main tip, 42 commits, includes Release v1.2.0); spike break list EMPTY, committed tree 47/47 GREEN, live tree 49/49 | `pi-main.pin.json` |
 | **Drift report** | Default `sync-pi` mode: is the pin still upstream's tip? A failed lookup reports *unavailable*, never "up to date" | `scripts/sync-pi.mjs` |
-| **Build from source** | Sparse clone of the four packages → `npm install` → build, reproducibly at the pin | `scripts/sync-pi.mjs --sync` |
+| **Build from source** | Sparse clone of the five tracked packages → `npm install` → build, reproducibly at the pin | `scripts/sync-pi.mjs --sync` |
 | **Link / unlink** | Point `node_modules` at the built tree with `--no-save`, so `package.json` and a fresh clone stay on releases | `--link` / `--unlink` |
-| **Re-pin deliberately** | `--update` moves the pin to main's tip, then rebuilds; the 19-demo suite is the regression gate | `--update` |
+| **Re-pin deliberately** | `--update` moves the pin to main's tip, then rebuilds; the demo suite is the regression gate (50 in the worktree after this session's fixes; 49 live) | `--update` |
 | **Field compatibility** | `toolText()` returns both `content` (1.1.0) and `output` (main), so one code path is correct on either | `src/rig.mjs` |
 
 ## 10. Proof surface
@@ -327,15 +337,16 @@ it to the live store).
 The entire check surface is the demos plus `node --check`; there is no build or
 lint step.
 
-**39 offline tests** — one runnable proof per guarantee, each exit 0 on success:
+**49 offline tests** — one runnable proof per guarantee, each exit 0 on success:
 
 ```
 blocked · chatlog · check · cli · config · confine · constitution · converter
-defer · eval · extensions · metrics · notices · optimizer · persistence · primer
-provenance · race · refresh · repeat-call · reset · resume · run · seatguard
-seatmodel · seatroot · seattools · singleflight · stalledclaim · starter · stop
-stranded · streamcli · streamview · syncpi · thincontext · watch · watchview
-worktree
+defer · driversurvive-pre · driversurvive · eval · extensions · livestream · malformedcall
+metrics · notices · optimizer · peekqueue · persistence · primer · provenance · race
+rearmclaim · refresh · repeat-call · reset · resume · run · seatguard · seatmodel
+seatroot · seattools · singleflight · stalledclaim · starter · stop · stranded
+streamcli · streamview · structuredhead · supervisor · syncpi · thincontext
+thinkinglevel · viewmodel · watch · watchview · worktree
 ```
 
 **4 runnable demo programs:**
@@ -367,7 +378,6 @@ Pointers, not promises — each is an item in `docs/ROADMAP.md`.
 - **Verifier model diversity** — give `qa`/`qa2` a different model family (item 3)
 - **Real seat tools** — read-only corpus access or edits plus a test runner, and `complete_work` carrying evidence a verifier can re-check (item 4, M3)
 - **Termination and attempt semantics** — deadline, attempt cap, repetition detection (item 6)
-- **Extracted view model and one shared read API** (items 7-8)
 - **Context pressure visibility** — per-seat tokens against the seat's model, plus the
   compactions the harness already records with a reason, feeding `computeMetrics` (item 27)
 - **A context-reduction surface** — expose the manual compaction the harness already

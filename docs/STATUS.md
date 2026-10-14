@@ -16,6 +16,57 @@ OpenRig daemon was also recovered (dead since 2026-10-06, and reported as a
 starved event loop because a recycled PID was trusted as the daemon), and the
 owed `security.sec` consult was finally taken (D30).
 
+Updated **2026-10-13 (direct implementation)**: the interactive client's **data
+layer** landed without choosing a screen (D40). ROADMAP items **7** (pure view
+model + peer navigation graph), **8** (one importable, read-only read API), and
+**40(c)** (the in-flight partial rendered as streaming, never as an entry) are
+built; `demo/viewmodel.test.mjs` and `demo/livestream.test.mjs` are demos 48–49 and
+the suite is 49/49. The TUI-vs-browser choice below is now a presentation decision,
+not a prerequisite. Still owed: independent `qa` verification of these three
+items, and the screen itself (item 17). Note the direct path: this work was done by
+the operator's agent, not routed through the selfdev seats, because the team was
+blocked (one seat root at a time against `#148`'s worktree, and `impl`'s context
+was degenerate).
+
+Updated **2026-10-13 (delegate session — event-driven tranche + usability batch)**: drove the
+selfdev team through the event-driven/Pi-integration work and a usability batch. All of it lives
+in the seat worktree `C:/tmp/durig-dev/pi-rebase/durig` (uncommitted); the live tree's direct
+work above is separate.
+
+- **PIECE 1 spike** (event-driven wake): DONE + qa-verified (#209/#215/#218). `.spike/pi-wake/` —
+  a Pi extension polls `durig watch --once --json` and calls `pi.sendUserMessage`; both directions
+  proven against the real global Pi in RPC mode (`prove-wake.mjs` exit 0).
+- **PIECE 2 feed**: DONE + qa-verified (#210/#223/#236), then **renamed** `src/readapi.mjs` →
+  `src/eventfeed.mjs` to keep it separate from the shared read API (#240/#247). New
+  `events --since/--follow` verb — read-only, monotonic `seq` cursor.
+- **PIECE 3** (resident broker) gate **RULED IN** (#237); registered **gated** (#238) on a D-entry
+  that supersedes (not erases) D11, plus a security position only if it opens a socket. Not started.
+- **Usability fixes** (all done + qa-verified): #259 (help/exit contract), #260
+  (`queue --active/--status/--all` + summary), #261 (`ps`/`status` surface seat `root`+`model`),
+  #262 (attention human/seat split).
+- **Ordering gap** ruled claim-by-id (#214) and fixed (#239): `claim_work({ itemId })` with the
+  status whitelist preserved (D41).
+- **Store-write contention** on the send path fixed (#257, D42); **`worktree` refuses a dirty
+  source** (#255, D43); **worktree pin** corrected (##219, sha `7d75a0e`).
+- The worktree demo suite is now **50/50**. Findings F18–F29 recorded in `docs/DOGFOOD.md`.
+- Nothing pushed; publishing and integration remain the operator's.
+
+Updated **2026-10-14 (delegate session — auto-wake investigation + repairs)**:
+- **`peek_queue` fix verified** (`demo/peekqueue.test.mjs` PASS): the tool now returns a **bounded
+  inline view** (status counts + first 20 items + a truncation footer) instead of only a file path —
+  the operator's complaint. Worktree; artifact **#293** to qa.
+- **Corrupt `pi.live` repair**: `impl`'s conversation was wedged (P5/#110,
+  `unresolvable path ["generation","message","content",0]`). `stop`+`resume`, `reset`, and a
+  `["r",{}]` root-replace all failed; **retiring** the corrupt incarnation fixed it. Tool:
+  `scripts/repair-pi-live.mjs <db> <conversationId>`. Separately, `src/readapi.mjs` `readLiveState`
+  now **survives an unreadable `pi.live`** (warns once, reads `{}`), so `log --follow`/`watch` no
+  longer crash on one corrupt seat.
+- **Auto-wake finding**: only **read-only viewers** were running (`watch`, several `log --follow`);
+  they cannot wake seats (D11), so `devtools` idled with 3 queued items + a stalled claim. `run` is an
+  external clock; the self‑driving/event‑driven wake is **PIECE 3 (#238), gated** — that is the next
+  session's priority. Findings F30–F33 and the long‑wait/cache‑refresh note recorded in DOGFOOD.
+- Nothing pushed.
+
 ## Where we stopped
 
 Milestone **M2 (operator can see the rig)** is finished and verified, and the
@@ -132,7 +183,9 @@ confirmed rather than taken on trust.
    the same work item as adding a verification loop (D23).
 2. **TUI or browser for the interactive client (M4).** Deferred by D21. Collapsing
    a turn in place requires owning the terminal screen; a read-only browser client
-   over SSE avoids that trade entirely.
+   over SSE avoids that trade entirely. **The prerequisites now exist** (ROADMAP 7,
+   8, 40c; D40), so this is purely a presentation choice rather than a build-order
+   dependency.
 3. **Pods design** — namespace-scoped queues vs a flat queue with pod tags
    (deferred twice; the OpenRig converter currently drops pods with a warning).
 4. **The drill task set** (item 2's remaining half). A fixed set of tasks hard

@@ -1075,6 +1075,124 @@ adopted. **Evidence:** `demo/driversurvive.test.mjs` reproduces the exact failur
 failing-first (`unresolvable path: ["generation","message","content",0]`, exit 1
 against the committed driver) and passes after; full `demo/*.test.mjs` loop 40/40.
 
+## D40 — The interactive client's data layer is separate from its screen, and a partial is not a turn (2026-10-13)
+
+**Decision:** build the interactive client (M4) on a **pure view model** and a
+**single read-only read API**, and keep the in-flight partial out of the
+transcript model entirely. Concretely:
+
+- `src/viewmodel.mjs` derives turns, collapse state, and the peer navigation graph
+  as pure functions over entry/queue records. The peer graph keeps **direction**
+  (`sent` vs `received`), because org edges are directional and collapsing them
+  would discard the permission the graph exists to show.
+- `src/readapi.mjs` is the one importable reader (`readSeatList`, `readQueueItems`,
+  `readRigHealth`, `readLiveState`). It is read-only by construction — no harness,
+  no write path (D11, D24). Config precedence stays in the CLI, so `readRigHealth`
+  takes `cfg` rather than importing it.
+- The in-flight partial lives in the conversation's `pi.live` document and is read
+  as a value (`partialView`), rendered through its own distinctly-labelled path
+  (`formatPartial`), and **never** emitted as an entry. It is uncommitted, may be
+  rewritten between polls, and is deleted when the run settles; treating it as a
+  turn would let transient text replay as history.
+
+**Rationale:** D21 deferred the screen but named the data it required. Building the
+data layer first is what makes the TUI-vs-browser choice a presentation decision
+rather than a rewrite, and it improves the existing `log`/`watch` on the way. The
+partial rule is the load-bearing safety property: a follower must be able to say
+"streaming now" versus "committed", and a crashed driver must leave no half-line
+that a later reader mistakes for the reply.
+
+**Alternatives:** (a) render the partial as a normal entry — rejected: it would be
+indistinguishable from committed history and could be replayed after a crash;
+(b) keep the peer graph inside the CLI — rejected: any client needs it, and D21's
+whole point is one implementation; (c) choose the TUI now — deferred: the screen
+is still the operator's call (STATUS.md, "Decisions needed", #2).
+
+**Status:** adopted; the screen choice remains open. **Evidence:**
+`demo/viewmodel.test.mjs` and `demo/livestream.test.mjs` (the latter falsified by
+disabling the partial publication), full `demo/*.test.mjs` loop 49/49.
+
+## D41 — A seat may claim a NAMED item, without weakening the held guard (2026-10-13)
+
+**Decision:** `claim_work` takes an optional `itemId`. With no id it keeps the existing
+oldest-QUEUED behavior; with an id it claims that specific item only if it is `queued` and
+addressed to the caller. The eligibility whitelist is the **same** as the oldest-first path,
+so a `held` (non-claimable) item cannot be claimed by id either.
+
+**Rationale:** a queue whose only claim rule is "oldest first" cannot express operator
+priority. On 2026-10-13 the PIECE-1 spike (#209) was the operator's explicit START-NOW, but ~20
+older queued items sat ahead of it; the work was done via a direct `send` and could **not** be
+marked done, because `complete_work` refuses a non-claimed item. `lead` ruled the fix (#214) as
+claim-by-id, its own item rather than folded into the `held` state (#90).
+
+**Alternatives:** (a) a priority-mark that reorders the queue — rejected: it only *moves* work,
+it does not let an already-bypassed item be *recorded*; (b) fold into #90 — rejected: one
+concern per change, and the `held` state is a different concern; (c) leave oldest-only —
+rejected: it is the reported defect.
+
+**Status:** adopted. **Evidence:** `demo/rearmclaim.test.mjs` (failing-first: a NAMED newer item
+is claimed while an older item stays queued; a `held` item is refused by id), suite 50/50.
+
+## D42 — Concurrent store writes on the send path are retried, not dropped (2026-10-13)
+
+**Decision:** `send` wraps its store commit in a retry helper (`src/storewrite.mjs`), so two CLI
+processes writing one store cannot silently lose a message to an entry-id collision. A write that
+still cannot be delivered becomes a guided error, not the raw `ID n already belongs to entry`.
+
+**Rationale:** running `send pm` and `send impl` concurrently made one exit
+`{"ok":false,"error":"ID 10051 already belongs to entry"}` and the message was **never
+delivered**. `genlock` serialises generation *slots*, not store writes, so nothing stopped two
+processes allocating the same next entry id.
+
+**Alternatives:** (a) a process-wide store lock — deferred as the heavier change; retrying the
+observed conflict is smaller and sufficient for the reported case; (b) do nothing — rejected: a
+silent drop is the worst outcome; (c) fix it inside pi-durable — out of scope (pinned vendor,
+synced by `sync-pi.mjs`).
+
+**Status:** adopted, with a known limit. **Limit:** only the `send` write path is covered;
+`up` and `run` are not yet. **Evidence:** `demo/storewrite.test.mjs` (failing-first collision,
+then retried/pass).
+
+## D43 — `worktree` refuses a dirty source rather than forking a partial tree (2026-10-13)
+
+**Decision:** `node cli.mjs worktree <path>` checks the source tree for uncommitted changes and
+REFUSES, naming the offending path, when any exist. A clean source proceeds unchanged.
+
+**Rationale:** an isolated worktree forks from HEAD. The operator's uncommitted direct work
+(ROADMAP 7/8: `src/readapi.mjs`, `src/viewmodel.mjs`) was absent from the seat worktree, and a
+seat's new `src/readapi.mjs` collided with the live 8.9 KB shared read API (#240). A seat cannot
+see — and can silently clobber — work it never knew existed; failing loud at fork time prevents
+it.
+
+**Alternatives:** (a) carry the working tree into the fork — deferred: larger, and the shared
+`node_modules` junction already makes installs hazardous; (b) warn only — rejected: a warning a
+run proceeds past is the failure mode being fixed.
+
+**Status:** adopted. **Evidence:** `demo/worktree.test.mjs` (failing-first: a dirty source
+produces no silent HEAD-only checkout; a clean source proceeds).
+
+## D44 — A corrupt `pi.live` is repaired by RETIRING its incarnation; a viewer must tolerate it (2026-10-14)
+
+**Decision:** when a seat's `pi.live` document cannot be materialized (P5/#110:
+`unresolvable path: ["generation","message","content",0]`), the repair is to **retire** the corrupt
+incarnation (storage `document.retire`), so `readLiveState` finds no current document and reads it as
+idle `{}`; the next run re-creates a clean one. Independently, a **viewer must never let one
+unreadable document kill it** — `readLiveState` catches, warns once, and returns `{}`.
+
+**Rationale:** `impl`'s conversation was wedged — `send` and `reset` both threw, and `stop`+`resume`
+did not clear it. A chord root-replace delta `["r", {}]` did **not** reset the materialization base
+(the orphaned append is still replayed), so it did not help; only retiring the incarnation removed the
+corruption. The viewer rule is the same P5 principle the `run` driver already follows (probe, skip,
+report) applied to `log --follow`/`watch`, which crashed on the corrupt seat.
+
+**Alternatives:** (a) root-replace — rejected: it appended atop the orphan and still threw; (b) delete
+or recreate the conversation — rejected: loses history and needs registry surgery; (c) hand-edit SQLite
+— rejected: outside durig's storage API and the zero-durig-SQL rule.
+
+**Status:** adopted. **Evidence:** `scripts/repair-pi-live.mjs` (run on conversation 9; `watch --once`
+silent afterward, `reset impl` succeeded). A first-class `repair` verb is not yet built — a candidate
+item.
+
 ## D45 — A resident broker reacts to in-process commits; D11's conclusion, not its evidence, is superseded (2026-10-14)
 
 **Decision:** durig gains a **resident broker** (`serve`; the command name is the
