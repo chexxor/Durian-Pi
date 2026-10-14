@@ -174,8 +174,14 @@ export function createWakeSignal() {
         return;
       }
       await new Promise((resolve) => {
+        // An indefinite wait needs a live handle: with no ref'd timer Node drains the
+        // event loop and exits with "unsettled top-level await" once the harness goes
+        // quiet — a resident broker must not. The keepalive is cleared the moment a
+        // signal or timeout resolves the wait.
+        const keepalive = setInterval(() => {}, 1 << 30);
         let timer = null;
         const done = () => {
+          clearInterval(keepalive);
           if (timer) clearTimeout(timer);
           resolve();
         };

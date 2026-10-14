@@ -24,8 +24,10 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import { AssistantEntry, configure, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { existsSync, unlinkSync } from "node:fs";
+import { closeSync, existsSync, openSync, unlinkSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 // Single source of truth for DeepInfra provider options, vendored into this tree
 // so durig is self-contained and publishable on its own
 // (src/providers/PROVENANCE.md records the source, version and licence). Node 24
@@ -53,7 +55,7 @@ import {
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
-import { drivePass, runWakeLoop } from "./src/broker.mjs";
+import { brokerAlive, clearBrokerState, drivePass, readBrokerState, runWakeLoop, writeBrokerState } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
@@ -81,6 +83,9 @@ try {
 }
 const { config: CFG, source: CFG_SOURCE } = cfgResult;
 const DB_PATH = CFG.DURIG_DB ?? "./rig.sqlite";
+// This CLI file's own path, so a parent can respawn the resident broker with the
+// same interpreter and the same script regardless of the invoking shell's cwd.
+const CLI_PATH = fileURLToPath(import.meta.url);
 // Read commands must be able to tell "this rig is empty" apart from "you are
 // pointed at a database that did not exist a moment ago". Opening storage
 // creates the file on demand, so without this snapshot the default
@@ -371,7 +376,7 @@ async function buildSeatPrompt(models, seat, providerId) {
 // of existing seats, so a fix to the primer, the edges policy, or a
 // per-seat model reaches a database created by an earlier durig version.
 // Edges and the constitution are always re-applied from the spec.
-async function cmdUp(rigFile, refresh = false) {
+async function cmdUp(rigFile, refresh = false, { serve = false } = {}) {
   const spec = JSON.parse(await readFile(rigFile, "utf8"));
   // A spec carries its constitution either inline (what the OpenRig converter
   // emits, since the text it read has no file on disk beside the spec) or as a
@@ -390,11 +395,11 @@ async function cmdUp(rigFile, refresh = false) {
       `note: ${rigFile} sets both constitutionInline and constitution; using the inline text`,
     );
   }
+  const created = [];
+  const existing = [];
+  const refreshed = [];
   const { harness, models, providerId, extensions } = await openHarness();
   try {
-    const created = [];
-    const existing = [];
-    const refreshed = [];
     await harness.commit(async (tx) => {
       const seatsDoc = await tx.doc(Seats);
       for (const seat of spec.seats) {
@@ -471,10 +476,13 @@ async function cmdUp(rigFile, refresh = false) {
     }, BACKGROUND_CONTEXT);
     // Report the extensions this process installed: they are active for every
     // seat, and a set the operator forgot they configured is worth seeing.
-    out({ ok: true, command: "up", db: DB_PATH, created, existing, refreshed, extensions });
   } finally {
     await harness.close(BACKGROUND_CONTEXT);
   }
+  // Start the resident broker only AFTER this process releases the harness, so a
+  // scripted `up` and the broker it spawns are never two writers at once.
+  const broker = serve ? await ensureBroker() : { started: false, reason: "disabled (--no-serve or non-interactive)" };
+  out({ ok: true, command: "up", db: DB_PATH, created, existing, refreshed, extensions, broker });
 }
 
 // worktree: an isolated checkout for one work item.
@@ -715,6 +723,12 @@ function parseMaxDuration(args) {
 // settle before the finally closes the harness, so a stopped run does not leave
 // `admitted_not_started` behind.
 async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
+  // Two drivers double-wake: if a resident broker is already driving this store,
+  // refuse rather than race it. The operator either stops it or uses `up --no-serve`.
+  const broker = readBrokerState(DB_PATH);
+  if (brokerAlive(broker)) {
+    fail(`a resident broker is already driving ${DB_PATH} (pid ${broker.pid}); stop it with "serve --stop", or start the rig with "up --no-serve"`);
+  }
   const { harness } = await openHarness({ enforceSeatRoot: true });
   // A raw read-only handle for probing seat documents. The driving harness fails
   // its whole session on the first storage error, so an unreadable `pi.live` must
@@ -809,6 +823,87 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
   }
 }
 
+// ensureBroker — the auto-start seam for `up`. Idempotent: a live broker is reused,
+// never duplicated (two brokers would be two drivers). It verifies the child actually
+// came up before reporting success, so `up` cannot claim a broker that failed.
+//
+// The child is detached with stdout/stderr to `<db>.broker.log` because it must
+// outlive this `up` process and must never write into this command's stdout (the
+// JSON contract). `windowsHide` avoids a console flash on this host.
+async function ensureBroker() {
+  const existing = readBrokerState(DB_PATH);
+  if (brokerAlive(existing)) {
+    return { started: false, reason: "already running", pid: existing.pid };
+  }
+  // A dead holder leaves a stale file; the child overwrites it, but clearing first
+  // keeps a concurrent reader from mistaking the dead pid for a live one.
+  clearBrokerState(DB_PATH);
+  const logPath = `${DB_PATH}.broker.log`;
+  let logFd;
+  try {
+    logFd = openSync(logPath, "a");
+  } catch (err) {
+    fail(`cannot open the broker log ${logPath}: ${err?.message ?? err}`);
+  }
+  let child;
+  try {
+    child = spawn(process.execPath, [CLI_PATH, "serve"], {
+      cwd: process.cwd(),
+      env: process.env,
+      detached: true,
+      windowsHide: true,
+      stdio: ["ignore", logFd, logFd],
+    });
+    child.unref();
+  } finally {
+    closeSync(logFd);
+  }
+  // Wait for the child's pidfile (or its early exit) so `up` reports the truth.
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    const state = readBrokerState(DB_PATH);
+    if (brokerAlive(state)) return { started: true, pid: state.pid, log: logPath };
+    if (child.exitCode !== null) {
+      return { started: false, reason: `broker exited (code ${child.exitCode}); see ${logPath}` };
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return { started: false, reason: `broker did not report within 3s; see ${logPath}` };
+}
+
+// serve --stop: the off switch for a broker started by `up` (or by hand). SIGTERM is
+// graceful on POSIX (the broker's handler stops after the pass in flight settles). On
+// Windows Node does not deliver SIGTERM, so `process.kill` terminates and the broker's
+// `finally` never runs; this command therefore clears the state itself.
+async function cmdStopBroker() {
+  const state = readBrokerState(DB_PATH);
+  if (!state) {
+    out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "no broker is running" });
+    return;
+  }
+  if (!brokerAlive(state)) {
+    clearBrokerState(DB_PATH);
+    out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "state was stale; cleared" });
+    return;
+  }
+  process.kill(state.pid);
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline && brokerAlive(state)) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  const stillAlive = brokerAlive(state);
+  if (!stillAlive) clearBrokerState(DB_PATH);
+  out({
+    ok: true,
+    command: "serve",
+    action: "stop",
+    db: DB_PATH,
+    stopped: !stillAlive,
+    pid: state.pid,
+    ...(stillAlive ? { reason: "process did not exit within 5s" } : {}),
+  });
+}
+
 // serve [--max-duration <s>] (D45): the RESIDENT BROKER. `run` is a clock — a human
 // must invoke it, and ROADMAP 38's self-driving queue needs a process that keeps
 // driving. `serve` opens the harness once, subscribes to its in-process commit
@@ -821,7 +916,14 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
 // starts, and cools off a per-seat retry so a re-woken stalled claim cannot hot-loop.
 // The supervisor runs each pass, exactly as `run --watch`. Bounded with
 // --max-duration; SIGINT/SIGTERM stop after the pass in flight settles.
-async function cmdServe({ maxDurationMs = 0 } = {}) {
+async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
+  if (stop) return cmdStopBroker();
+  // One broker per database: a second would be a second driver, and its wakes would
+  // race the first's. A live holder fails closed; a dead one is stale and replaced.
+  const existing = readBrokerState(DB_PATH);
+  if (brokerAlive(existing)) {
+    fail(`a broker is already running for ${DB_PATH} (pid ${existing.pid}); stop it with "serve --stop" first`);
+  }
   const { harness } = await openHarness({ enforceSeatRoot: true });
   const probeStorage = await openNodeSqliteStorage(DB_PATH);
   const scheduler = new WakeScheduler({
@@ -845,6 +947,7 @@ async function cmdServe({ maxDurationMs = 0 } = {}) {
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
   try {
+    writeBrokerState(DB_PATH, { pid: process.pid, since: new Date().toISOString() });
     const result = await runWakeLoop({
       harness,
       probeStorage,
@@ -896,6 +999,8 @@ async function cmdServe({ maxDurationMs = 0 } = {}) {
       stoppedBy: result.stoppedBy,
     });
   } finally {
+    // Clear only OUR state: a newer broker that already took over must keep its file.
+    clearBrokerState(DB_PATH, process.pid);
     unsubscribe();
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
@@ -1738,7 +1843,7 @@ async function cmdCheck(rigFile, human) {
 
 const USAGE = `
 usages:
-  node cli.mjs up <rig.json> [--refresh]   create seats (--refresh re-applies prompts)
+  node cli.mjs up <rig.json> [--refresh] [--serve|--no-serve]   create seats; on a TTY also start the broker (--no-serve disables)
   node cli.mjs ps              list seats
   node cli.mjs send <seat> <text> [--stream]   steer a seat and wait for its reply
   node cli.mjs send <seat> --body-file <path>  the same, prompt from a file (- = stdin)
@@ -1747,7 +1852,7 @@ usages:
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs reset <seat> [handoff]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary)
   node cli.mjs run [--watch] [--max-duration <seconds>]   drive to quiescence; --watch resident; --max-duration bounds it
-  node cli.mjs serve [--max-duration <seconds>]   the resident broker: wake seats from the store's change stream, no external clock
+  node cli.mjs serve [--max-duration <seconds>] [--stop]   the resident broker: wake seats from the store's change stream; --stop halts it
   node cli.mjs stop <seat> [reason]      emergency-stop: halts a seat's in-flight run across processes
   node cli.mjs log <seat> [limit] [--follow] [--full] [--tool-bg] [--theme dark|light]
                           a seat's conversation (--follow = live, --full = whole tool output)
@@ -1762,7 +1867,15 @@ usages:
 
 const [, , cmd, ...rest] = process.argv;
 try {
-  if (cmd === "up") await cmdUp(rest[0], rest.includes("--refresh"));
+  if (cmd === "up") {
+    // Auto-start the resident broker for an INTERACTIVE `up` (stdout is a TTY, like the
+    // human views in D19), so a terminal `up` leaves the queue self-driving; piped or
+    // scripted `up` never silently spawns a daemon. `--serve` forces it on, `--no-serve`
+    // off, and DURIG_NO_SERVE=1 is the script-wide opt-out.
+    const forced = rest.includes("--serve") ? true : rest.includes("--no-serve") ? false : undefined;
+    const serve = forced ?? (process.stdout.isTTY === true && process.env.DURIG_NO_SERVE !== "1");
+    await cmdUp(rest[0], rest.includes("--refresh"), { serve });
+  }
   else if (cmd === "worktree") await cmdWorktree(rest);
   else if (cmd === "ps") await cmdPs();
   else if (cmd === "send") {
@@ -1819,7 +1932,7 @@ try {
   } else if (cmd === "queue") await cmdQueue();
   else if (cmd === "resume" || cmd === "doctor") await cmdResume();
   else if (cmd === "run") await cmdRun({ watch: rest.includes("--watch"), maxDurationMs: parseMaxDuration(rest) });
-  else if (cmd === "serve") await cmdServe({ maxDurationMs: parseMaxDuration(rest) });
+  else if (cmd === "serve") await cmdServe({ maxDurationMs: parseMaxDuration(rest), stop: rest.includes("--stop") });
   else if (cmd === "stop") {
     if (!rest[0]) fail("stop needs <seat> [reason]");
     await cmdStop(rest[0], rest.slice(1).join(" "));

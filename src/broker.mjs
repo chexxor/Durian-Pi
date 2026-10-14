@@ -13,6 +13,8 @@
 // trigger is an in-process commit subscription with none of the cross-process
 // gap D11 documented. Read-only viewers keep D11's poll/read-storage rule.
 
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+
 import { RigQueue, Seats } from "./rig.mjs";
 import { driveOnce } from "./driver.mjs";
 
@@ -162,4 +164,60 @@ export async function runWakeLoop({
     }
   }
   return { passes, failedSeats: [...failedSeats], escalations, stoppedBy };
+}
+
+/* ------------------------------ broker lifetime ------------------------------ */
+// A resident broker is the one long-lived writer, so at most one may run per
+// database. The state file `<db>.broker.json` records the holder's pid, the same
+// convention `src/genlock.mjs` uses for generation leases: a missing/dead pid is
+// stale, and a second broker refuses to start rather than double-drive the queue
+// (two drivers = the double-wake class the driver's guards prevent only in-process).
+
+export function brokerStatePath(dbPath) {
+  return `${dbPath}.broker.json`;
+}
+
+/** Liveness probe by signal 0: no signal delivered, just "does this pid exist". */
+export function brokerAlive(state) {
+  if (!state || typeof state.pid !== "number") return false;
+  try {
+    process.kill(state.pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Read the broker state; an unreadable file is reported and treated as absent. */
+export function readBrokerState(dbPath) {
+  const path = brokerStatePath(dbPath);
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (err) {
+    if (err?.code !== "ENOENT") {
+      console.error(`BROKER WARNING: unreadable state ${path}: ${err?.message ?? err}`);
+    }
+    return null;
+  }
+}
+
+export function writeBrokerState(dbPath, { pid, since }) {
+  writeFileSync(brokerStatePath(dbPath), JSON.stringify({ pid, since }));
+}
+
+/**
+ * Remove the state file, optionally only when it still names `pid`. The pid guard
+ * keeps a broker that is shutting down from unlinking the state of a NEWER broker
+ * that already took over (a stale pid is replaced, but a live one must not be).
+ */
+export function clearBrokerState(dbPath, pid) {
+  const state = readBrokerState(dbPath);
+  if (state && pid !== undefined && state.pid !== pid) return false;
+  try {
+    unlinkSync(brokerStatePath(dbPath));
+    return true;
+  } catch (err) {
+    if (err?.code !== "ENOENT") throw err;
+    return false;
+  }
 }

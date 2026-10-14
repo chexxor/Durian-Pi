@@ -1111,3 +1111,34 @@ the next free label rather than colliding.
 proves the pure coalescing/floor/cooldown rules and wires them to a real harness
 commit stream; `demo/run.test.mjs`, `demo/driversurvive.test.mjs`,
 `demo/stalledclaim.test.mjs`, `demo/supervisor.test.mjs` stay green.
+
+## D46 — `up` auto-starts the broker, TTY-gated; at most one per database (2026-10-14)
+
+**Decision:** `up` starts the resident broker (D45) for an **interactive** run —
+stdout is a TTY, the same rule the human views use (D19) — and never for a piped or
+scripted one. `--serve` forces it on, `--no-serve` forces it off, and
+`DURIG_NO_SERVE=1` is the script-wide opt-out. At most one broker runs per database:
+the holder is recorded in `<db>.broker.json` (`{pid, since}`), mirroring the genlock
+lease convention, and a second broker refuses to start. `serve --stop` reaps the
+holder and clears the state; `run` refuses while a broker drives, because two
+drivers double-wake (the driver's in-process guards cannot see another process).
+**Why TTY-gated:** auto-start means spawning a detached daemon. Defaulting it on for
+piped/scripted `up` would silently leak an orphan broker into test runs and CI, where
+nothing reaps it. The interactive terminal is exactly where the operator wants the
+queue to keep moving, and it is already how durig decides human-vs-machine output.
+**Why a pidfile and not a socket:** the broker must outlive its launcher, and the
+operator needs to see and stop it. A pidfile beside the database gives both without a
+listening socket, which would be a new trust boundary and a `security` gate; it is the
+same no-socket visibility pattern `genlock` uses for generation leases.
+**Bug fixed here:** an unbounded `signal.wait(0)` held no ref'd handle, so Node
+drained the event loop and a resident `serve` exited immediately (`unsettled
+top-level await`). `createWakeSignal` now holds a keepalive interval while it waits,
+cleared on signal/timeout — without it D45's "resident" claim held only for bounded
+runs.
+**Boundary:** the child is spawned with this command's `cwd` and `env`, and writes
+only `<db>.broker.json` and `<db>.broker.log`. No socket, no egress, no new trust
+boundary, so no `security` consult is triggered (consistent with D45).
+**Status:** adopted (operator-directed). **Evidence:** `demo/autostart.test.mjs`
+(`--no-serve`/piped opt out; `--serve` starts a broker that stays resident; `run` and
+a second `serve` fail closed; `up --serve` is idempotent; `serve --stop` reaps it and
+clears the state; the log shows no unsettled await); full `demo/*.test.mjs` 50/50.
