@@ -1,0 +1,3 @@
+WATCH OK: snapshot(seq1)=["First item"] live-update(seq2)=["First item","Second item"] attention=["idle_with_queued_work"]
+WATCH TEST PASS
+

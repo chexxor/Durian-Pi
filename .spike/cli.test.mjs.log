@@ -1,0 +1,4 @@
+--- wrong-database guardrail ---
+--- error contract ---
+CLI TEST PASS (contracts, exit codes, stderr, error surface, request-id idempotency)
+

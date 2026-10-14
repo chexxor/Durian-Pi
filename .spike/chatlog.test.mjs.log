@@ -1,0 +1,12 @@
+--- elapsed-time formatting ---
+--- row rendering ---
+--- timestamps and elapse deltas ---
+--- collapsed tool output ---
+--- error and colour ---
+--- turn grouping ---
+--- thinking rendering ---
+--- --full shows the whole call and output ---
+--- identical output lines collapse with their count ---
+--- CLI: history, contract, follow ---
+CHATLOG TEST PASS (rendering, timestamps, collapsing, contract, follow)
+

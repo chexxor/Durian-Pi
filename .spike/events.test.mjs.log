@@ -1,0 +1,2 @@
+EVENTS TEST PASS (read-only feed: quiet=0 events; enqueue emits queue.enqueued with a durable seq; reconnect from seq does not replay; a later claim emits a strictly greater seq)
+

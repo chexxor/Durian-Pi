@@ -1,0 +1,2 @@
+RESET TEST PASS (reset/clean breaks a seat out of a degenerate context: refuses live lease, reports the reset entry id, subsequent turn excludes prior turns, transcript preserved)
+

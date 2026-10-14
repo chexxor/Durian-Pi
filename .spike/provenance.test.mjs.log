@@ -1,0 +1,2 @@
+PROVENANCE TEST PASS (reads a repo, the dirty flag moves, absence is unknown, the CLI reports the active set)
+

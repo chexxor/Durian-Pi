@@ -1,0 +1,13 @@
+--- entry extraction ---
+--- summarize (newest first, assistant-only) ---
+--- text fitting ---
+--- per-seat activity ---
+--- snapshot layout ---
+--- screen writer ---
+--- CLI wiring ---
+--- freshness across reads (regression) ---
+FRESHNESS PASS (reads reflect new speech, no stale cache)
+--- human streaming (not just --once) ---
+HUMAN STREAM PASS (2 snapshots, appended not cleared)
+WATCHVIEW TEST PASS (extraction, activity, layout, screen, CLI wiring, freshness, streaming)
+

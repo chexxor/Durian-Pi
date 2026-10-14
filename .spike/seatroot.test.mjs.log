@@ -1,0 +1,2 @@
+SEATROOT TEST PASS (DURIG_SEAT_ROOT/persisted-cwd mismatch fails closed on send/run with both paths named; equal and unset succeed; view-only status is unaffected; ps/status surface each seat's worktree root and configured model)
+

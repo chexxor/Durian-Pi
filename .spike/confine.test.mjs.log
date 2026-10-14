@@ -1,0 +1,38 @@
+
+SC1 — path confinement (F2: absolute paths escape a worktree with no boundary)
+  ok   an in-root read succeeds
+  ok   CONTROL: the raw env reads outside the root (so the canary can fail)
+  ok   an absolute path outside the root is refused
+  ok   a home-directory path is refused (the position's own example)
+  ok   absolutePath itself refuses, so no tool can route around it
+  ok   a .. path is refused
+  skip symlink canary — this host refused to create one
+
+SC3 — environment, and commands that leave the boundary
+  note — DEEPINFRA_API_KEY is unset here; the canary still asserts nothing key-shaped crosses
+  ok   the environment probe executed
+  ok   no credential-shaped variable reaches a seat's command
+  ok   wsl is refused before it is spawned
+  ok   docker is refused
+  ok   destructive git is refused
+  ok   git commit -m x is refused
+  ok   git checkout main is refused
+  ok   git restore src/rig.mjs is refused
+  ok   git revert HEAD is refused
+  ok   git clean -fd is refused
+  ok   git stash is refused
+  ok   git branch -D foo is refused
+  ok   read-only git is not refused
+
+SC2 — the verifier cannot mutate what it verifies
+  ok   an author can write inside the worktree
+  ok   the verifier's write is refused
+  ok   the verifier cannot remove a file
+  ok   the verifier can still read, so it can still check
+  ok   the verifier can still run a command (its copy is disposable)
+
+Temp files live inside the boundary, not in the OS temp directory
+  ok   a seat's temp dir is created under the root
+
+PASS — all confine canaries held
+

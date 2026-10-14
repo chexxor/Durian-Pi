@@ -1,0 +1,32 @@
+
+The tool set is what the design says, and bash is deliberately absent
+  ok   read, write, edit and a shell are bundled
+  ok   no bash tool — native-Windows bash is an undeclared Git Bash dependency
+  ok   a verifier loses write and edit
+
+cli.mjs actually installs and scopes them (an uninstalled control is not a control)
+  ok   the guard is installed
+  ok   the seat tools are installed
+  ok   the harness is given the confining environment
+  ok   the roster is filled from the store
+  ok   seat tools are scoped at `up`
+
+The tool set follows each seat's DECLARED CAPABILITIES, so routing is enforced by capability (F9)
+  ok   an implementer keeps every working tool
+  ok   a coordinator loses read, write, edit AND the shell, so it can only route
+  ok   a verifier loses write and edit but keeps read and the shell, so it can still re-run
+  ok   a seat declaring NOTHING is treated as a coordinator - fail closed for tools, and check reports it
+
+The environment chosen per seat — and it fails CLOSED
+  ok   an author seat can write inside its root
+  ok   a verifier seat cannot write, whatever tools it was offered
+  ok   an unknown conversation fails closed (read-only), not open
+  ok   every seat's environment is rooted, so an escape is refused even for an author
+
+The roster reuses `check`'s verifier judgement rather than inventing a second one
+  ok   an author is not marked a verifier
+  ok   a qa seat is
+  ok   an editor seat is (the same vocabulary `check` uses)
+
+PASS — the controls are wired
+

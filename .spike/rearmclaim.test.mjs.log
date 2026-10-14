@@ -1,0 +1,2 @@
+REARMCLAIM TEST PASS (claim_work reveals the oldest claimed-by-me item when nothing is queued, so a stalled claim is actionable; status stays claimed; no held claim -> NO_QUEUED_WORK)
+

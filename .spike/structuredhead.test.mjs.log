@@ -1,0 +1,2 @@
+STRUCTUREDHEAD TEST PASS (read-tool seat gets the structured head + path with the body on disk; no-read-tool seat gets the full body inline, not a byte cut; small claims stay inline)
+

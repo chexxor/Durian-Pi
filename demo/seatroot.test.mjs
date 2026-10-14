@@ -54,6 +54,11 @@ function runCli(args, extraEnv = {}) {
 	});
 }
 
+// The persisted cwd is stored with forward slashes ("C:/..."); a node:path join on
+// Windows produces backslashes ("C:\\..."). Compare normalised: separators unified
+// and case-folded, exactly how the F12 guard treats two spellings of one tree.
+const normRoot = (p) => String(p ?? "").replace(/\\/g, "/").replace(/\/$/, "").toLowerCase();
+
 try {
 	writeFileSync(rigFile, JSON.stringify(rig, null, 2));
 
@@ -86,7 +91,34 @@ try {
 	const status = await runCli(["status"], { DURIG_SEAT_ROOT: runRoot });
 	assert.equal(status.code, 0, `status (view-only) must not fire the guard (got exit ${status.code})`);
 
-	console.log("SEATROOT TEST PASS (DURIG_SEAT_ROOT/persisted-cwd mismatch fails closed on send/run with both paths named; equal and unset succeed; view-only status is unaffected)");
+	// (e) SURFACE THE ROOT + MODEL (F27/#203): a user must be able to SEE which
+	// worktree a seat is pointed at and which model it will use. Both are already
+	// persisted on the conversation (the F12 guard above reads the cwd), but `ps`
+	// and `status` never printed them. Assert both views report the persisted
+	// worktree `root` and the configured `model` for every seat.
+	const ps = await runCli(["ps"]);
+	assert.equal(ps.code, 0, `ps exited ${ps.code}; stderr=${ps.stderr.slice(0, 300)}`);
+	const psJson = JSON.parse(ps.stdout);
+	const psSeat = psJson.seats.find((s) => s.name === "worker");
+	assert.ok(psSeat, "ps lists the worker seat");
+	assert.equal(normRoot(psSeat.root), normRoot(persistedDir), `ps reports the persisted worktree root; got ${JSON.stringify(psSeat.root)}`);
+	assert.ok(psSeat.model, `ps reports the seat's configured model; got ${JSON.stringify(psSeat.model)}`);
+	assert.equal(psSeat.model.provider, "faux", `ps model names the provider; got ${JSON.stringify(psSeat.model)}`);
+	assert.ok(
+		typeof psSeat.model.modelId === "string" && psSeat.model.modelId.length > 0,
+		`ps model names the model id; got ${JSON.stringify(psSeat.model)}`,
+	);
+
+	const st = await runCli(["status"]);
+	assert.equal(st.code, 0, `status exited ${st.code}; stderr=${st.stderr.slice(0, 300)}`);
+	const stJson = JSON.parse(st.stdout);
+	const stSeat = stJson.seats.find((s) => s.name === "worker");
+	assert.ok(stSeat, "status lists the worker seat");
+	assert.equal(normRoot(stSeat.root), normRoot(persistedDir), `status reports the persisted worktree root; got ${JSON.stringify(stSeat.root)}`);
+	assert.ok(stSeat.model, `status reports the seat's configured model; got ${JSON.stringify(stSeat.model)}`);
+	assert.equal(stSeat.model.provider, "faux", `status model names the provider; got ${JSON.stringify(stSeat.model)}`);
+
+	console.log("SEATROOT TEST PASS (DURIG_SEAT_ROOT/persisted-cwd mismatch fails closed on send/run with both paths named; equal and unset succeed; view-only status is unaffected; ps/status surface each seat's worktree root and configured model)");
 } finally {
 	try {
 		rmSync(dir, { recursive: true, force: true });

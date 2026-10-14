@@ -1,0 +1,2 @@
+STOP TEST PASS (emergency-stop halts the cross-process driver, settles the run to aborted:<reason> on the attention channel, releases the lease, stays idempotent, and the work remains recoverable)
+

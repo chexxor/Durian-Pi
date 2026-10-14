@@ -35,6 +35,20 @@ export async function createWorktree({ source, target, ref = "HEAD" }) {
 	if (existsSync(target)) {
 		throw new Error(`refusing to reuse an existing path as a worktree: ${target}`);
 	}
+	// F23: a worktree forks from HEAD, so the operator's UNCOMMITTED direct work is
+	// absent from the fork - a seat cannot see it, and its own file at the same path
+	// then clobbers it on merge (#240: a seat's src/readapi.mjs collided with the
+	// live 8.9 KB shared read API). Refuse rather than carry: the uncommitted set can
+	// be large and carrying it would fork a tree neither git nor the operator tracks.
+	// Scoped to the SOURCE subtree (`-- .`) so unrelated dirty paths elsewhere in a
+	// larger repository do not wedge every fork.
+	const dirty = await uncommittedInSource(source);
+	if (dirty.trim() !== "") {
+		throw new Error(
+			`source has uncommitted changes; the new worktree would not contain them - commit or stash first ` +
+				`(in ${source}): ${dirty.trim().split("\n").slice(0, 5).join(", ")}`,
+		);
+	}
 	// `--detach` because a worktree per item must not occupy a branch: two items in flight would
 	// otherwise collide on the branch name, and the operator decides what becomes a branch.
 	await run("git", ["-C", root, "worktree", "add", "--detach", target, ref]);
@@ -52,6 +66,24 @@ export async function createWorktree({ source, target, ref = "HEAD" }) {
 	}
 
 	return { repo: root, worktree: resolve(target), cwd };
+}
+
+/**
+ * Uncommitted changes in `source` (its subtree of the repository), or "" when clean.
+ *
+ * Scoped with `-- .` from `source`, so the answer is about the tree being forked and not about
+ * unrelated dirty paths elsewhere in a larger repository. Ignored paths (node_modules) do not
+ * count as dirty, which is what keeps a forkable tree forkable.
+ */
+export async function uncommittedInSource(source) {
+	try {
+		const { stdout } = await run("git", ["-C", source, "status", "--porcelain", "--", "."]);
+		return stdout;
+	} catch (error) {
+		// Not a git checkout (or git missing): there is no HEAD to fork from, so there is nothing
+		// to guard and the caller will fail on the worktree add itself. Do not mask that here.
+		return "";
+	}
 }
 
 /**

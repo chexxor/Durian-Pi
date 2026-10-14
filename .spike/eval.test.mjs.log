@@ -1,0 +1,6 @@
+ANALYZER OK
+GUARD FALLBACK OK
+GUARD PASS-THROUGH OK
+JUDGE MAPPING OK (randomized A/B produced consistent winners across 2 mappings)
+EVAL MECHANICS TEST PASS
+

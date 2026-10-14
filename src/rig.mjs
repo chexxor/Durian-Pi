@@ -297,13 +297,40 @@ const Router = defineExtension({
 		defineTool({
 			name: "claim_work",
 			description:
-				"Claim the oldest queued work item addressed to you. Returns its subject and body.",
-			parameters: Type.Object({}),
+				"Claim a work item addressed to you. With no `itemId`, claims the oldest QUEUED item; pass `itemId` to claim that specific item (must be queued and addressed to you). Returns its subject and body.",
+			parameters: Type.Object({ itemId: Type.Optional(Type.Number()) }),
 			replay: "safe",
-			execute: async (_args, api, context) => {
+			execute: async (args, api, context) => {
 				const { name: me, hasReadTool } = await mySeatReadability(api, context);
 				const found = await api.commit(async (tx) => {
 					const queue = await tx.doc(RigQueue);
+					// Claim by id (lead #214 / #239): a seat names a specific item, so
+					// operator-priority work can be picked up even when older queued work
+					// sits ahead of it. The status whitelist is IDENTICAL to the oldest
+					// path (`to === me && status === "queued"`): a `held` item stays
+					// unclaimable so #90's hold is not defeated, and deferred/done/
+					// cancelled/other seats' items are refused. By-id NEVER falls back to
+					// the oldest item or the stalled-claim reveal: naming one item and
+					// silently claiming another would be a lie.
+					if (args.itemId !== undefined) {
+						const named = queue.items.find(
+							(it) => it.id === args.itemId && it.to === me && it.status === "queued",
+						);
+						if (!named) return null;
+						named.status = "claimed";
+						named.transitions.push({
+							at: new Date().toISOString(),
+							event: "claimed",
+							by: me,
+						});
+						return {
+							kind: "claimed",
+							id: named.id,
+							from: named.from,
+							subject: named.subject,
+							body: named.body,
+						};
+					}
 					// Normal claim: the oldest QUEUED item addressed to me.
 					const queued = queue.items.find(
 						(it) => it.to === me && it.status === "queued",
@@ -388,6 +415,9 @@ const Router = defineExtension({
 					}
 					item.status = "done";
 					item.resultSummary = args.resultSummary;
+					// Defensive: clear stale deferral fields on completion (F31).
+					delete item.question;
+					delete item.deferredTo;
 					item.transitions.push({
 						at: new Date().toISOString(),
 						event: "done",
@@ -472,6 +502,66 @@ const Router = defineExtension({
 			},
 		}),
 		defineTool({
+			name: "hold_work",
+			description:
+				"Park one of your claimed items without deferring. The item stays yours but becomes unclaimable until released. Useful when a seat cannot proceed but has no specific question for another party.",
+			parameters: Type.Object({
+				itemId: Type.Number(),
+				reason: Type.Optional(Type.String({
+					description: "brief explanation for why the item is being held",
+				})),
+			}),
+			replay: "safe",
+			execute: async (args, api, context) => {
+				const me = await mySeatName(api, context);
+				const out = await api.commit(async (tx) => {
+					const queue = await tx.doc(RigQueue);
+					const item = queue.items.find((it) => it.id === args.itemId);
+					if (!item) return `unknown item #${args.itemId}`;
+					if (item.to !== me)
+						return `item #${args.itemId} is addressed to ${item.to}, not you`;
+					if (item.status !== "claimed")
+						return `item #${args.itemId} is not claimed by you (status=${item.status})`;
+					item.status = "held";
+					if (args.reason) item.heldReason = args.reason;
+					item.transitions.push({
+						at: new Date().toISOString(),
+						event: "held",
+						by: me,
+					});
+					return `item #${item.id} held${args.reason ? ` (${args.reason})` : ""}; release with release_work(${item.id}) to restore it to queued.`;
+				}, context);
+				return toolText(out);
+			},
+		}),
+		defineTool({
+			name: "release_work",
+			description:
+				"Restore a held item to queued, so the driver can re-wake the seat.",
+			parameters: Type.Object({ itemId: Type.Number() }),
+			replay: "safe",
+			execute: async (args, api, context) => {
+				const me = await mySeatName(api, context);
+				const out = await api.commit(async (tx) => {
+					const queue = await tx.doc(RigQueue);
+					const item = queue.items.find((it) => it.id === args.itemId);
+					if (!item) return `unknown item #${args.itemId}`;
+					if (item.to !== me)
+						return `item #${args.itemId} is addressed to ${item.to}, not you`;
+					if (item.status !== "held")
+						return `item #${args.itemId} is not held (status=${item.status})`;
+					item.status = "queued";
+					item.transitions.push({
+						at: new Date().toISOString(),
+						event: "released",
+						by: me,
+					});
+					return `item #${item.id} released back to queued.`;
+				}, context);
+				return toolText(out);
+			},
+		}),
+		defineTool({
 			name: "resume_work",
 			description:
 				"Take back one of your deferred items once the answer has arrived, so complete_work can finish it.",
@@ -488,6 +578,9 @@ const Router = defineExtension({
 					if (item.status !== "deferred")
 						return `item #${args.itemId} is not deferred (status=${item.status})`;
 					item.status = "claimed";
+					// Clear stale deferral fields (F31).
+					delete item.question;
+					delete item.deferredTo;
 					item.transitions.push({
 						at: new Date().toISOString(),
 						event: "resumed",
@@ -505,30 +598,62 @@ const Router = defineExtension({
 			parameters: Type.Object({ all: Type.Optional(Type.Boolean()) }),
 			replay: "safe",
 			execute: async (args, api, context) => {
-				const { name: me, hasReadTool } = await mySeatReadability(api, context);
+				const { name: me } = await mySeatReadability(api, context);
 				// Default to the seat's own non-terminal work: the whole queue is a ~20 KB
 				// context write on a live rig, and it makes "what is mine?" an inference
 				// over other seats' history. all=true is the opt-in team-wide view.
-				const lines = await api.commit(async (tx) => {
-					const queue = await tx.doc(RigQueue);
-					return queue.items
-						.filter((it) =>
-							args.all ? true : it.status !== "done" && (it.to === me || it.from === me),
-						)
-						.map((it) => `#${it.id} ${it.status} from=${it.from} to=${it.to} subj=${it.subject}`);
-				}, context);
 				const scope = args.all ? "all" : me;
-				// An over-threshold dump defers to disk for a seat that can read the path; a seat
-				// with no read tool gets it inline, or the queue is invisible to it (#144 B).
-				return toolText(
-					await thinResultText(
-						api.env,
-						lines.length ? lines.join("\n") : "(empty)",
-						`queue-${scope}`,
-						`QUEUE (${scope})`,
-						{ inlineBody: !hasReadTool },
-					),
+				const [items, header] = await api.commit(async (tx) => {
+					const queue = await tx.doc(RigQueue);
+					const filtered = queue.items.filter((it) =>
+						args.all ? true : it.status !== "done" && (it.to === me || it.from === me),
+					);
+					const counts = {};
+					for (const it of filtered) counts[it.status] = (counts[it.status] || 0) + 1;
+					const countParts = Object.entries(counts).map(
+						([s, c]) => `${c} ${s}`,
+					);
+					const countSuffix = countParts.length
+						? ` — ${countParts.join(", ")}`
+						: "";
+					const head = `QUEUE (${scope}): ${filtered.length} non-terminal${countSuffix}`;
+					// Snapshot to plain values before returning: the commit releases its
+					// overlay and a proxy read after settlement throws "Cannot use a
+					// settled overlay".
+					const plain = filtered.map((it) => ({
+						id: it.id,
+						status: it.status,
+						from: it.from,
+						to: it.to,
+						subject: it.subject,
+					}));
+					return [plain, head];
+				}, context);
+				// Bounded inline view: always return counts + first N items.
+				// The full list is also written to disk for completeness.
+				const N = 20;
+				const cwd = api.env?.cwd;
+				let footer = "";
+				if (cwd) {
+					const file = join(cwd, ".durig", `queue-${scope}.md`);
+					mkdirSync(join(cwd, ".durig"), { recursive: true });
+					const fullLines = items.map(
+						(it) => `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}`,
+					);
+					writeFileSync(file, [header, ...fullLines].join("\n") + "\n", "utf8");
+					if (items.length > N) {
+						footer = `\n… showing ${N} of ${items.length} (full list: ${file})`;
+					}
+				} else {
+					if (items.length > N) {
+						footer = `\n… showing ${N} of ${items.length} (no workspace for full list)`;
+					}
+				}
+				const displayLines = items.slice(0, N).map(
+					(it) => `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}`,
 				);
+				const body = (items.length ? [header, ...displayLines].join("\n") : "(empty)") + footer;
+				return toolText(body);
 			},
 }),
 ],

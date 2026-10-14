@@ -1,0 +1,7 @@
+QUEUE #1 [claimed] someone->worker :: Do the thing
+--- tool-result entries found: 3
+ENTRY: {"model":[{"role":"toolResult","toolCallId":"tool:1791958051496:vu46fk0ym9p","toolName":"claim_work","content":[{"type":"text","text":"STALLED_CLAIM #1 | from=someone | subject=Do the thing | status=claimed\nBody of the thing."}],"isError":false,"durationMs":2,"timestamp":1791958051517}],"data":{"di
+ENTRY: {"model":[{"role":"toolResult","toolCallId":"tool:1791958051496:k2b2qtuo5uf","toolName":"claim_work","content":[{"type":"text","text":"ITEM #1 | from=someone | subject=Do the thing | status=claimed\nBody of the thing."}],"isError":false,"durationMs":2,"timestamp":1791958051517}],"data":{"diagnostics
+ENTRY: {"model":[{"role":"assistant","content":[{"type":"toolCall","id":"tool:1791958051496:k2b2qtuo5uf","name":"claim_work","arguments":{}},{"type":"toolCall","id":"tool:1791958051496:vu46fk0ym9p","name":"claim_work","arguments":{}}],"api":"faux:1791958051485:yqgdaq6mzge","provider":"faux","model":"faux-s
+REPEAT-CALL TEST PASS
+

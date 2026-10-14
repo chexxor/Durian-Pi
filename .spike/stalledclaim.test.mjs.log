@@ -1,0 +1,2 @@
+STALLEDCLAIM TEST PASS (driver re-wakes a stalled claim with no human send; operator-stopped and in-flight/busy items are never re-woken; queued wake preserved; bounded/idempotent, one wake per pass)
+

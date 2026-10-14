@@ -1,0 +1,43 @@
+
+The repo is found from the nested tree, not assumed to be the cwd
+  ok   repoRoot resolves the containing repository
+
+A worktree reproduces the source's place in the repository
+  ok   the worktree was created where asked
+  ok   its cwd is the same relative place as the source
+  ok   tracked content came with it
+
+node_modules is bridged, or the worktree could not run the suite at all
+  ok   a node_modules link exists in the worktree (gitignored, so absent otherwise)
+
+F23: a DIRTY source must not silently fork a HEAD-only checkout
+  ok   an untracked change in the source refuses the fork
+  ok   the refusal names the cause and the fix
+  ok   no HEAD-only worktree was produced (the silent divergence)
+  ok   the operator's uncommitted work is untouched
+  ok   a tracked, uncommitted modification also refuses
+  ok   the source is clean before the clean-fork check
+
+A CLEAN source still proceeds exactly as today
+  ok   a clean source forks without complaint
+  ok   and the clean fork carries the committed content
+  ok   the dirty-seed file is NOT carried into a clean fork
+
+An existing path is refused rather than adopted or overwritten
+  ok   a second create at the same path is refused
+
+Removal discards, so it must be asked for explicitly
+  ok   an unforced removal refuses a worktree holding changes
+  ok   and the work is still there
+  ok   a forced removal succeeds when the caller said so
+  ok   the junction's TARGET survived removal (the failure that emptied a real node_modules)
+  ok   the worktree's own node_modules bridge is gone with the worktree
+
+cli.mjs reaches the helper and points seats at a declared cwd
+  ok   the command is dispatched
+  ok   `up` records a declared cwd on the seat
+  ok   the seat root can come from the environment, so a rig file need not name a host path
+  ok   a seat without a declared cwd keeps the harness default rather than guessing one
+
+PASS — the worktree isolates
+

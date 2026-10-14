@@ -1,0 +1,6 @@
+MERGE PRECEDENCE OK
+DISCOVERY + REDACTION OK
+CLI INTEGRATION OK (file, env override, error contract)
+STREAM TIMEOUT OK (default stands, override reaches Harness.open, bad value fails)
+CONFIG TEST PASS
+

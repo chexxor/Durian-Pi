@@ -1,0 +1,3 @@
+--- driving the real tools ---
+NOTICES TEST PASS (real work acks once, completing a DONE notice loops no further, legacy notices are guarded)
+

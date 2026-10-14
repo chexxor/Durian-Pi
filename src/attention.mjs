@@ -143,12 +143,19 @@ export function computeAttention(
 		// than an inference from idleness - a failed run does not unpark it.
 		const deferred = queueItems.filter((it) => it.to === seat.name && it.status === "deferred");
 		if (deferred.length > 0) {
-			const held = deferred[0];
+			// Split the two audiences: a question parked on the human operator (an
+			// inbox the seat cannot poll) is a different fact from one parked on a
+			// seat. Naming the NEWEST human-parked item matters because the oldest
+			// is the most likely to have been superseded - a stale `#1 waiting`
+			// points the operator at a question they may already have answered.
+			const human = deferred.filter((it) => (it.deferredTo ?? "an answer") === "human");
+			const onSeat = deferred.length - human.length;
+			const held = human.at(-1) ?? deferred.at(-1);
 			notices.push({
 				scope: "seat",
 				seat: seat.name,
 				kind: "deferred_awaiting_answer",
-				detail: `${deferred.length} item(s) parked on a question; #${held.id} waiting on ${held.deferredTo ?? "an answer"}`,
+				detail: `${human.length} item(s) parked on the human, ${onSeat} on a seat` + (held ? `; #${held.id} waiting` : ""),
 			});
 		}
 		const streak = failureStreakByConv.get(seat.conversationId) ?? 0;

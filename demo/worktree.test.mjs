@@ -55,6 +55,68 @@ try {
 		existsSync(join(made.cwd, "node_modules", "dep.js")),
 	);
 
+	console.log("\nF23: a DIRTY source must not silently fork a HEAD-only checkout");
+	// The operator's uncommitted direct work lives only in the working tree, not in
+	// HEAD. A worktree forked from HEAD would not contain it, so a seat could not
+	// see it and could clobber it (#240 collision). The smallest guard: refuse.
+	const dirtyTarget = join(base, "item-dirty");
+	const dirtyNote = join(source, "uncommitted-work.mjs");
+	await writeFile(dirtyNote, "// the operator's uncommitted direct work\n");
+	let dirtyRefused = null;
+	try {
+		await createWorktree({ source, target: dirtyTarget });
+	} catch (error) {
+		dirtyRefused = error;
+	}
+	check(
+		"an untracked change in the source refuses the fork",
+		dirtyRefused !== null,
+		"it silently forked a HEAD-only checkout instead of refusing",
+	);
+	check(
+		"the refusal names the cause and the fix",
+		dirtyRefused !== null && /uncommitted changes/.test(dirtyRefused.message) && /commit or stash/.test(dirtyRefused.message),
+		String(dirtyRefused?.message),
+	);
+	check(
+		"no HEAD-only worktree was produced (the silent divergence)",
+		!existsSync(dirtyTarget),
+		"a worktree was created even though it lacks the uncommitted work",
+	);
+	check("the operator's uncommitted work is untouched", existsSync(dirtyNote));
+
+	// A tracked modification must trip it too, not only untracked files.
+	// Commit the seed so the tree is clean, then modify a TRACKED file so the
+	// refusal is exercised on the tracked path (not only on untracked files).
+	await run("git", ["-C", source, "add", "-A"]);
+	await run("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "pick up the work"]);
+	await writeFile(join(source, "tracked.txt"), "edited, uncommitted\n");
+	let modRefused = null;
+	try {
+		await createWorktree({ source, target: dirtyTarget });
+	} catch (error) {
+		modRefused = error;
+	}
+	check(
+		"a tracked, uncommitted modification also refuses",
+		modRefused !== null && /uncommitted changes/.test(modRefused.message),
+		String(modRefused?.message),
+	);
+	// Restore a clean source so the remaining checks run exactly as before, and drop
+	// the F23 seed file (it was committed above) so the clean fork is really clean.
+	await run("git", ["-C", source, "checkout", "--", "tracked.txt"]);
+	await run("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "rm", "-q", join("durig", "uncommitted-work.mjs")]);
+	await run("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "drop the F23 seed"]);
+	check("the source is clean before the clean-fork check", (await run("git", ["-C", source, "status", "--porcelain", "--", "."])).stdout.trim() === "");
+
+	console.log("\nA CLEAN source still proceeds exactly as today");
+	const cleanTarget = join(base, "item-clean");
+	const cleanMade = await createWorktree({ source, target: cleanTarget });
+	check("a clean source forks without complaint", cleanMade.worktree === cleanTarget && existsSync(cleanTarget));
+	check("and the clean fork carries the committed content", existsSync(join(cleanMade.cwd, "tracked.txt")));
+	check("the dirty-seed file is NOT carried into a clean fork", !existsSync(join(cleanMade.cwd, "uncommitted-work.mjs")));
+	await removeWorktree({ source, worktree: cleanTarget, force: true });
+
 	console.log("\nAn existing path is refused rather than adopted or overwritten");
 	let refused = null;
 	try {

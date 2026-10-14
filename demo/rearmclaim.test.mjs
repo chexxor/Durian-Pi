@@ -71,11 +71,11 @@ async function fillSeatRoster(roster, harness) {
 /**
  * Drive one seat conversation to call claim_work and return its tool-result text.
  */
-async function claimResult(harness, faux, convId) {
+async function claimResult(harness, faux, convId, claimArgs = {}) {
 	const conv = await harness.conversation(convId, ctx);
 	const before = await conv.submit({ type: "input", content: "go" }, ctx);
 	faux.setResponses([
-		fauxAssistantMessage([fauxToolCall("claim_work", {})], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxToolCall("claim_work", claimArgs)], { stopReason: "toolUse" }),
 		fauxAssistantMessage(fauxText("handled")),
 	]);
 	await before.wait(ctx);
@@ -88,6 +88,7 @@ async function claimResult(harness, faux, convId) {
 
 let a = null;
 let b = null;
+let c = null;
 try {
 	// --- (a)+(c): a seat holds a stalled CLAIM (run died), nothing is queued. ---
 	a = await freshHarness();
@@ -132,10 +133,73 @@ try {
 		`a seat with no held claim and nothing queued still gets NO_QUEUED_WORK (got: ${resultB.slice(0, 80)})`,
 	);
 
+	// --- (d) CLAIM BY ID (#239, lead #214): name a specific item to claim, so
+	// operator-priority work can be picked up even with older queued work ahead.
+	// Runs in its OWN harness so its faux flow cannot collide with A/B. ---
+	c = await freshHarness();
+	const pickyId = await addSeat(c.harness, "picky");
+
+	// An OLDER queued item (the oldest-queued path would grab this one)…
+	const olderId = await c.harness.commit(
+		(tx) => enqueueItem(tx, "boss", "picky", "the OLDER backlog job", "body"),
+		ctx,
+	);
+	// …a NEWER queued item that the operator wants claimed by name…
+	const newerId = await c.harness.commit(
+		(tx) => enqueueItem(tx, "boss", "picky", "the NEWER priority job", "body"),
+		ctx,
+	);
+	// …and a HELD item, which must NOT be claimable by id (else #90's hold is
+	// defeated). It also sits oldest, so a buggy by-id path that ignored the
+	// whitelist would surface here.
+	const heldId = await c.harness.commit(async (tx) => {
+		const id = await enqueueItem(tx, "boss", "picky", "the HELD job", "body");
+		const q = await tx.doc(RigQueue);
+		const it = q.items.find((i) => i.id === id);
+		it.status = "held";
+		it.transitions.push({ at: new Date().toISOString(), event: "held", by: "boss" });
+		return id;
+	}, ctx);
+
+	await fillSeatRoster(c.roster, c.harness);
+	const resultD = await claimResult(c.harness, c.faux, pickyId, { itemId: newerId });
+
+	// The NAMED newer item is claimed…
+	assert.match(
+		resultD,
+		new RegExp(`ITEM #${newerId}`),
+		`claim_work({itemId}) must claim the NAMED item (got: ${resultD.slice(0, 120)})`,
+	);
+	const qD = (await c.harness.documentState(RigQueue, undefined, ctx)).value.items;
+	const newer = qD.find((i) => i.id === newerId);
+	assert.equal(newer.status, "claimed", "the named item became claimed");
+	assert.ok(
+		newer.transitions.some((t) => t.event === "claimed" && t.by === "picky"),
+		"the by-id claim records the same transition (claimed, by: me) as the oldest path",
+	);
+	// …the OLDER queued item is untouched (by-id does not fall back to oldest)…
+	assert.equal(
+		qD.find((i) => i.id === olderId).status,
+		"queued",
+		"claiming by id leaves the older queued item untouched",
+	);
+	// …and the HELD item is NOT claimable by id (status whitelist == oldest path).
+	const heldResult = await claimResult(c.harness, c.faux, pickyId, { itemId: heldId });
+	assert.ok(
+		!/ITEM #/.test(heldResult),
+		`a held item must NOT be claimable by id (got: ${heldResult.slice(0, 120)})`,
+	);
+	assert.equal(
+		qD.find((i) => i.id === heldId).status,
+		"held",
+		"the held item's status is unchanged by a refused by-id claim",
+	);
+
 	console.log("REARMCLAIM TEST PASS (claim_work reveals the oldest claimed-by-me item when nothing is queued, so a stalled claim is actionable; status stays claimed; no held claim -> NO_QUEUED_WORK)");
 } finally {
 	if (a) await a.harness.close(ctx);
 	if (b) await b.harness.close(ctx);
+	if (c) await c.harness.close(ctx);
 	try {
 		rmSync(dir, { recursive: true, force: true });
 	} catch (err) {

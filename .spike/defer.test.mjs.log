@@ -1,0 +1,2 @@
+DEFER TEST PASS (parks the item, is visible to a human, resumes, asks a seat, edge-gated, hold/release, and F31 clears deferral fields)
+

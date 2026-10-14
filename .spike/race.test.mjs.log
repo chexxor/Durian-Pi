@@ -1,0 +1,3 @@
+RACE OK: winner="ITEM #1 | from=boss | subject=Only item | status=claimed" loser="STALLED_CLAIM #1 | from=boss | subject=Only item | status=claimed"(isError:false) claimed-events=1
+RACE TEST PASS
+

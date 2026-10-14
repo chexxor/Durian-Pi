@@ -9,6 +9,25 @@ and D23 records how this roadmap was re-ordered by the research. Gap-table
 handlings name their item rather than numbering it: the numbers had already gone
 stale once when item 0 and 1 were added.
 
+**Status 2026-10-13 (delegate session):** the **event-driven / Pi-integration** work (item 38
+self-driving queue; item 40 resident server) advanced. **PIECE 1** wake spike (#209) and **PIECE 2**
+durable read-only event feed (#210 — now `src/eventfeed.mjs` + `events --since/--follow`) are DONE
+and qa-verified. **PIECE 3** (resident broker) is **GATED** (#238) on a D-entry that supersedes D11
+(plus a security position only if a socket opens). The **ordering gap** — priority not expressible,
+and a completed-but-bypassed item could not be marked done — was ruled **claim-by-id** and fixed
+(#239, D41). Also done: `worktree` refuses a dirty source (#255, D43 — the fork-from-HEAD hazard);
+send-path **store-write contention** retry (#257, D42); usability fixes #259–#262 (help/exit
+contract, `queue` filters+summary, `ps`/`status` seat `root`+`model`, attention human/seat split);
+worktree pin corrected to `7d75a0e` (#219). Open items from this session: `docs/DOGFOOD.md`
+F18–F29 and `docs/NEXT.md`.
+
+**Status 2026-10-14 (delegate session):** `peek_queue` now returns a bounded inline view
+(counts + first 20 + footer) — verified, artifact #293. A corrupt `pi.live` was repaired by
+**retiring** the corrupt incarnation (`scripts/repair-pi-live.mjs`); the viewer (`readLiveState`)
+now tolerates an unreadable `pi.live`. The load‑bearing finding — **item 38 remains unbuilt**: the
+queue is inert until a write‑side `run`/`send` is invoked, so `devtools` idled despite queued work.
+The next session builds the **auto‑wake** (PIECE 3 broker, #238; a watchdog is the cheaper interim).
+
 ## Milestones
 
 - **M1 — Rig runs and routes. ✅ done.** Queue semantics, org edges, Router at
@@ -308,6 +327,15 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    turns, collapse state, and "which seat sent to / received from this seat",
    derivable from queue items' `from`/`to` and the Router tools. Unblocks both
    interactive asks without committing to a screen model.
+   **✅ done (2026-10-13, direct).** `src/viewmodel.mjs` holds the pure model:
+   `buildTurns`/`extractToolCalls`/`extractThinking` (moved from `chatview.mjs`,
+   which re-exports them so callers keep one import path), `turnCollapse` (collapse
+   state as a value, pinned to the renderer by `demo/viewmodel.test.mjs`), and
+   `peerGraph`/`peerTargets` over the queue's `from`/`to` with direction kept
+   (org edges are directional). Surfaced additively as `peerGraph` in
+   `status`/`watch` JSON via the shared read API, so a client can switch to a peer
+   without re-deriving the graph. New demo 48/48 green; shown failing first
+   (`ERR_MODULE_NOT_FOUND`) against the pre-change tree.
    → *From the demos (24f, 24g):* the platform already exposes most of this shape —
    `Conversation.viewState()` is a reactive structural view including the built-in
    documents, and `harness.taskGraph()` is a live graph of what waits on what and
@@ -320,6 +348,13 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    re-implement seat, health and queue reading today; that duplication is the real
    refactor smell, ahead of any formatting concern. It now has five consumers, so
    the seam is forced rather than speculative.
+   **✅ done (2026-10-13, direct).** `src/readapi.mjs` is the one read-only seam:
+   `readSeatList`, `readQueueItems`, and `readRigHealth` (moved out of `cli.mjs`, so
+   it is now importable by any client without running the CLI). `readRigHealth`
+   builds on the first two, and `cmdLog`/`cmdCheck` use `readSeatList` instead of
+   their own seat-document reads. `cfg` is passed in because config precedence is
+   the CLI's job. Behavior-preserving: the 48-demo suite is green and `status`,
+   `watch --once`, `log`, `metrics`, `check` all run against the live store.
 9. **Repeat-call tolerant tools** — a second `claim_work` in one invocation errors
    with `Cannot use a settled overlay` (RESEARCH.md R2). Tools should return
    current state on repeat calls; models retry naturally.
@@ -880,6 +915,17 @@ surface. A feature that is off must therefore cost nothing — not "little".
     half-line that a later reader mistakes for the reply.
     *Proof:* a demo where a follower process receives partial assistant text **before** the run
     settles, and the settled entry then supersedes it — falsifiable by disabling the publication.
+    **✅ done (c) (2026-10-13, direct).** `readLiveState` (shared read API) reads the
+    conversation-scoped `pi.live` document; `partialView` turns `generation.message`
+    into a plain value and is deliberately NOT a turn (no entry id, dropped at run
+    end) so it can never replay as history. `formatPartial` renders it with a `◌` /
+    `streaming… (not yet committed)` marker a committed turn never uses. `log
+    --follow` shows it in a TTY live region and, in JSON, emits a `partial` object
+    with no `entries` key; `watch` gains a per-seat `streaming` field and a
+    `⟳ streaming:` row (D24: no new write path, D11: read-only). `demo/livestream.test.mjs`
+    is demo 49: a follower sees the partial before settle, then a real `send`
+    commits and the partial is withdrawn; falsified by disabling the publication
+    (follower then times out). Full suite 49/49.
 
 41. **Emergency stop: cancel a seat's run and halt its loop** (raised by the operator 2026-10-11).
     While operating, the operator needs a way to STOP an agent in an emergency — when it has entered

@@ -1,0 +1,38 @@
+
+The guard is registered against the built-in tool task, not a lookalike
+  ok   a hook is registered on the "pi.tool" task
+  ok   the handler the hook runs is this module's beforeTool
+  ok   the extension is named, so a collision would be reported rather than silent
+
+Commands that leave the boundary are blocked, with the reason as the block text
+  ok   blocked: wsl ls
+  ok   blocked: docker ps
+  ok   blocked: docker-compose up
+  ok   blocked: git reset --hard HEAD~1
+  ok   blocked: git clean -fd
+  ok   blocked: git checkout -- .
+
+Ordinary work is not blocked — a guard that blocks everything is an outage
+  ok   allowed: node demo/cli.test.mjs
+  ok   allowed: git status
+  ok   allowed: git diff HEAD
+  ok   allowed: npm test
+  ok   allowed: rg wanted src
+
+Only shell tools are inspected, and nested calls are covered too
+  ok   a non-shell tool is not inspected (its `path` is not a command)
+  ok   a nested call — how a codemode script reaches a tool — is blocked too
+  ok   a shell call with no command string is left alone rather than guessed at
+
+One policy serves both layers (two lists would drift, and the drift would be a hole)
+  ok   the environment and the guard give the same reason for the same command
+
+Publishing is refused unless the OPERATOR granted it, which a seat cannot forge
+  ok   git push is refused by default
+  ok   an inline assignment in the seat's own command does NOT grant it
+  ok   the operator's grant, set in durig's environment, allows it
+  ok   the grant does not widen any other rule
+  ok   and the refusal returns once the grant is gone
+
+PASS — the guard holds
+

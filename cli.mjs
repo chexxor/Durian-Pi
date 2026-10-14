@@ -43,6 +43,7 @@ import {
   Router,
   Seats,
   compilePersona,
+  isDoneNotice,
   registerSeat,
 } from "./src/rig.mjs";
 import { describeConfig, loadConfig, strandedMsSetting, streamSettings } from "./src/config.mjs";
@@ -52,10 +53,12 @@ import {
 	readGenerationSlots,
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
+import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { driveOnce } from "./src/driver.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
+import { readFeed } from "./src/eventfeed.mjs";
 import { computeMetrics, formatMetrics } from "./src/metrics.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
@@ -339,6 +342,8 @@ async function buildSeatPrompt(models, seat, providerId) {
     "- defer_work(itemId, question[, to]): stop and ask instead of guessing, or instead of going quiet. Parks the item you hold on the question; omit `to` to defer to the human operator, pass `to` to ask another seat as well.",
     "- resume_work(itemId): take back a deferred item once the answer has arrived, then finish it with complete_work.",
     "- peek_queue([all]): read the queue. By default your non-terminal items (addressed to or sent by you); pass all=true for the team-wide, all-status view when coordinating or debugging.",
+    "- hold_work(itemId[, reason]): park a claimed item without deferring. Sets status to `held` so claim_work cannot touch it; useful when blocked but no specific question for another party.",
+    "- release_work(itemId): restore a held item to `queued` so the driver can re-wake the seat.",
     "When asked to decompose or route a task, CREATE QUEUE ITEMS with send_work - do not merely describe them in your reply.",
   ].join("\n");
   const seatModel = resolveSeatModel(models, seat.model, providerId, MODEL_ID);
@@ -500,11 +505,17 @@ async function cmdPs() {
   try {
     const doc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
     const seatsVal = doc?.value?.seats ?? {};
-    const seats = Object.entries(seatsVal).map(([name, s]) => ({
-      name,
-      conversationId: s.conversationId,
-      role: s.role,
-    }));
+    const seats = await Promise.all(
+      Object.entries(seatsVal).map(async ([name, s]) => ({
+        name,
+        conversationId: s.conversationId,
+        role: s.role,
+        // The worktree a seat is pointed at and the model it will use are already
+        // persisted on the conversation (the F12 guard reads the cwd); surface them
+        // here so a user can SEE which tree/model a seat resolves to (F27/#203).
+        ...(await readSeatRootAndModel(harness, s.conversationId)),
+      })),
+    );
     noteEmptyRig(seats.length);
     out({
       ok: true,
@@ -517,12 +528,67 @@ async function cmdPs() {
   }
 }
 
-// queue: every work item with status and transitions.
-async function cmdQueue() {
-  const { harness, providerId } = await openHarness();
+// queue: work items with status and transitions, notices split out.
+//
+// The raw store is the whole rig's history (done items and protocol DONE
+// notices included). Dumping it was unusable - 258 rows on a live rig - and it
+// mixed notices with work. This reads a FILTERED view:
+//   default        -> non-terminal work (`done` excluded)
+//   --active       -> queued + claimed only (the work a seat can act on now)
+//   --status <csv> -> only the named statuses (comma-separated)
+//   --all          -> everything, terminal included
+// Work items and notices are ALWAYS separated: `items` is work, `notices` is
+// DONE acks (see isDoneNotice). Every response carries a `summary` with a
+// by-status count over the returned WORK items plus the store's notice count.
+const QUEUE_TERMINAL_STATUSES = new Set(["done"]);
+const QUEUE_ACTIVE_STATUSES = new Set(["queued", "claimed"]);
+async function cmdQueue(args = []) {
+  const all = args.includes("--all");
+  const active = args.includes("--active");
+  const statusAt = args.indexOf("--status");
+  let statuses = null;
+  if (statusAt >= 0) {
+    const raw = args[statusAt + 1];
+    if (!raw || raw.startsWith("--")) fail("queue --status needs a value, e.g. --status done,deferred");
+    statuses = new Set(
+      raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+    if (statuses.size === 0) fail("queue --status needs at least one status");
+  }
+  // One predicate for both work and notices, so the split and the filter agree.
+  const visible = (it) => {
+    if (statuses) return statuses.has(it?.status);
+    if (active) return QUEUE_ACTIVE_STATUSES.has(it?.status);
+    if (all) return true;
+    return !QUEUE_TERMINAL_STATUSES.has(it?.status);
+  };
+  const { harness } = await openHarness();
   try {
     const doc = await harness.documentState(RigQueue, undefined, BACKGROUND_CONTEXT);
-    out({ ok: true, command: "queue", items: doc?.value?.items ?? [] });
+    const stored = doc?.value?.items ?? [];
+    const work = [];
+    const notices = [];
+    let noticeCount = 0;
+    for (const it of stored) {
+      const isNotice = isDoneNotice(it);
+      if (isNotice) noticeCount += 1; // store-wide: "how many notices exist"
+      if (!visible(it)) continue;
+      (isNotice ? notices : work).push(it);
+    }
+    const byStatus = {};
+    for (const it of work) byStatus[it.status] = (byStatus[it.status] ?? 0) + 1;
+    out({
+      ok: true,
+      command: "queue",
+      db: DB_PATH,
+      filter: statuses ? "status" : active ? "active" : all ? "all" : "default",
+      items: work,
+      notices,
+      summary: { byStatus, notices: noticeCount },
+    });
   } finally {
     await harness.close(BACKGROUND_CONTEXT);
   }
@@ -974,6 +1040,13 @@ async function cmdStop(seatName, reason) {
 // generation streams to stderr, labelled per seat; stdout stays one JSON doc.
 async function cmdSend(seatName, text, { stream = false, requestId = null } = {}) {
   const live = stream ? createLiveRenderer({ color: Boolean(process.stderr.isTTY) && !process.env.NO_COLOR }) : null;
+  // F24: retry the whole send on the cross-process entry-id conflict. The
+  // conflict fires at storage ADMISSION, before any generation, and its commit
+  // rolled back, so re-opening the harness (fresh next_id) and retrying cannot
+  // double-run the model or duplicate the message - it just loses the race to a
+  // concurrent writer and runs again on a correctly-resynced store.
+  await withStoreWriteRetry(
+    async () => {
   const { harness, providerId } = await openHarness({ live, enforceSeatRoot: true });
   {
     const doc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
@@ -1088,7 +1161,22 @@ async function cmdSend(seatName, text, { stream = false, requestId = null } = {}
       await harness.close(BACKGROUND_CONTEXT);
     }
 }
-
+    },
+    {
+      onRetry: (attempt) => {
+        console.error(
+          `send: another process wrote to the store while we did; re-reading ids and retrying (attempt ${attempt + 2})`,
+        );
+      },
+      // Exhausted the retries: say WHAT happened and the fix, not the raw
+      // storage string, so the operator is not left with an unexplained drop.
+      onExhausted: (err) => {
+        fail(
+          `store write conflict: a concurrent command kept claiming entry ids before we could write (${err?.message ?? err}). The message was NOT sent. Retry when the other command has finished.`,
+        );
+      },
+    },
+  );
 }
 // log <seat> [limit] [--follow] [--json|--human]: a seat's conversation, oldest
 // to newest. --follow keeps the process open and prints entries as they are
@@ -1226,6 +1314,51 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
   }
 }
 
+// Surface a seat's persisted worktree root (its conversation `cwd`) and configured
+// model, both read from committed state so a viewer stays read-only (same reasoning
+// as watch: no harness.resume(), no scheduling side effects). `harness` may be a
+// Harness or a raw Storage; both expose `conversation`/`findDocument`+`document`.
+//   - root  : the resolved working directory (seat.cwd ?? spec.cwd ?? DURIG_SEAT_ROOT),
+//             persisted at `up`. Undefined when the seat kept the host default.
+//   - model : { provider, modelId } the seat will generate with.
+async function readSeatRootAndModel(harness, conversationId) {
+  try {
+    let cwd;
+    let model;
+    // A Harness `conversation()` returns a Conversation handle with `agent()`; a raw
+    // Storage `conversation()` returns the bare record (no `agent`). Read the agent
+    // state either way, preferring the handle and falling back to the committed
+    // `pi.agent` document - both are read-only and resume nothing.
+    const conv = typeof harness.conversation === "function"
+      ? await harness.conversation(conversationId, BACKGROUND_CONTEXT)
+      : undefined;
+    if (conv && typeof conv.agent === "function") {
+      const agent = await conv.agent(BACKGROUND_CONTEXT);
+      cwd = agent?.cwd;
+      model = agent?.model;
+    } else {
+      const rec = await harness.findDocument(
+        { kind: "pi.agent", scope: { kind: "conversation", conversationId } },
+        "current",
+        BACKGROUND_CONTEXT,
+      );
+      const state = rec
+        ? (await harness.document(rec.id, "current", BACKGROUND_CONTEXT))?.value ?? {}
+        : {};
+      cwd = state.cwd;
+      model = state.model;
+    }
+    return {
+      ...(cwd === undefined ? {} : { root: cwd }),
+      ...(model === undefined ? {} : { model }),
+    };
+  } catch {
+    // A view command must never fail because one conversation could not be read;
+    // omit the fields and let the rest of the roster render.
+    return {};
+  }
+}
+
 // Storage-level snapshot of everything attention needs: seats, queue and
 // the latest submission per seat conversation. Reads committed state
 // straight from sqlite (same reasoning as `watch`: session replication is
@@ -1247,11 +1380,14 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
   const queueVal = queueRec
     ? (await storage.document(queueRec.id, "current", BACKGROUND_CONTEXT))?.value ?? {}
     : {};
-  const seats = Object.entries(seatsVal.seats ?? {}).map(([name, s]) => ({
-    name,
-    conversationId: s.conversationId,
-    role: s.role,
-  }));
+  const seats = await Promise.all(
+    Object.entries(seatsVal.seats ?? {}).map(async ([name, s]) => ({
+      name,
+      conversationId: s.conversationId,
+      role: s.role,
+      ...(await readSeatRootAndModel(storage, s.conversationId)),
+    })),
+  );
   const latestByConv = new Map();
   const failureStreakByConv = new Map();
   for (const seat of seats) {
@@ -1489,6 +1625,33 @@ function resolveModelsBySeat(spec) {
   return modelsBySeat;
 }
 
+// events [--since <seq>] [--follow] [--json]: the DURABLE event feed (PIECE 2,
+// PUSH-ARCHITECTURE §3.1). Read-only and additive: it opens storage directly
+// like `watch` (never a harness; D11) and derives a monotonic `seq` cursor from
+// committed state, so a late/reconnecting subscriber resumes from `--since`
+// rather than replaying. One JSON event per line; diagnostics on stderr.
+async function cmdEvents({ sinceSeq = 0, follow = false } = {}) {
+  const storage = await openNodeSqliteStorage(DB_PATH);
+  let stopping = false;
+  process.on("SIGINT", () => {
+    stopping = true;
+  });
+  let cursor = Number.isFinite(sinceSeq) ? sinceSeq : 0;
+  try {
+    do {
+      const { events, nextSeq } = await readFeed(storage, BACKGROUND_CONTEXT, { sinceSeq: cursor });
+      for (const event of events) console.log(JSON.stringify(event));
+      // Advance the cursor past what we emitted, so a --follow poll never
+      // replays the previous line and a reconnect resumes from `nextSeq`.
+      if (events.length) cursor = Math.max(cursor, nextSeq);
+      if (!follow || stopping) break;
+      await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
+    } while (!stopping);
+  } finally {
+    await storage.close(BACKGROUND_CONTEXT);
+  }
+}
+
 /** --window N turns, or `all`. The default is the ambient scan bound, because a
  * bounded window is what keeps the reading cheap; widening it is deliberate. */
 function parseWindow(arg) {
@@ -1681,6 +1844,7 @@ usages:
   node cli.mjs log <seat> [limit] [--follow] [--full] [--tool-bg] [--theme dark|light]
                           a seat's conversation (--follow = live, --full = whole tool output)
   node cli.mjs watch [--once] [--json|--human]   follow rig state (human on a terminal)
+  node cli.mjs events [--since <seq>] [--follow]   durable read-only event feed (resumes from <seq>)
   node cli.mjs status           per-seat health + attention notices
   node cli.mjs metrics [rig.json] [--window N|all]   drift measures, with bands and blind spots
   node cli.mjs check <rig.json> [--human]   audit a rig against the research gaps
@@ -1691,7 +1855,13 @@ usages:
 
 const [, , cmd, ...rest] = process.argv;
 try {
-  if (cmd === "up") await cmdUp(rest[0], rest.includes("--refresh"));
+  // Help is NOT a failure (F25): `--help`, `-h`, `help`, and a bare invocation
+  // are a normal ok:true response and exit 0. A caller must not read usage as a
+  // crash, which is what ok:false + exit 2 made it look like.
+  if (cmd === undefined || cmd === "--help" || cmd === "-h" || cmd === "help") {
+    out({ ok: true, command: "help", usage: USAGE.trim() });
+  }
+  else if (cmd === "up") await cmdUp(rest[0], rest.includes("--refresh"));
   else if (cmd === "worktree") await cmdWorktree(rest);
   else if (cmd === "ps") await cmdPs();
   else if (cmd === "send") {
@@ -1745,7 +1915,7 @@ try {
     const text = fromFile !== null ? fromFile : inline.join(" ");
     if (!text.trim()) fail("send needs <seat> <text>, or --body-file <path>");
     await cmdSend(args[0], text, { stream, requestId });
-  } else if (cmd === "queue") await cmdQueue();
+  } else if (cmd === "queue") await cmdQueue(rest);
   else if (cmd === "resume" || cmd === "doctor") await cmdResume();
   else if (cmd === "run") await cmdRun({ watch: rest.includes("--watch"), maxDurationMs: parseMaxDuration(rest) });
   else if (cmd === "stop") {
@@ -1761,6 +1931,15 @@ try {
     // terminal gets the readable view and a pipe keeps the JSON contract.
     const human = rest.includes("--human") || (Boolean(process.stdout.isTTY) && !rest.includes("--json"));
     await cmdWatch(rest.includes("--once"), human);
+  } else if (cmd === "events") {
+    // Read-only durable feed (§3.1). --since <seq> resumes strictly after a
+    // cursor; --follow keeps the process open and polls (bounded, like watch).
+    const at = rest.indexOf("--since");
+    const sinceArg = at >= 0 ? rest[at + 1] : undefined;
+    if (at >= 0 && (sinceArg === undefined || sinceArg.startsWith("--"))) fail("events --since needs a number");
+    const sinceSeq = sinceArg === undefined ? 0 : Number(sinceArg);
+    if (!Number.isFinite(sinceSeq) || sinceSeq < 0) fail(`events --since must be a non-negative number, got: ${sinceArg}`);
+    await cmdEvents({ sinceSeq, follow: rest.includes("--follow") });
   } else if (cmd === "status") await cmdStatus();
   else if (cmd === "metrics") {
     // Same precedence as watch/check: an explicit flag wins, otherwise a
@@ -1794,7 +1973,8 @@ try {
       theme: theme ?? "dark",
     });
   } else {
-    out({ ok: false, usage: USAGE.trim() });
+    // An unknown verb is DISTINCT from help: name it, keep ok:false and exit 2.
+    out({ ok: false, error: `unknown command "${cmd}"`, usage: USAGE.trim() });
     process.exit(2);
   }
 } catch (err) {

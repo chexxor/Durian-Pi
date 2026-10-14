@@ -315,3 +315,240 @@ Repaired by dropping the 21 orphaned deltas, leaving the base at `{}`;
 `run --watch` then survived its first pass. Two follow-ups: the driver must not die
 on one bad document (ROADMAP P5 / #110), and `fail()` discarding the stack is why
 this was untraceable for several cycles (fixed — `DURIG_DEBUG=1`).
+
+## F15 — a helper defined outside a `try` cannot see the `const` declared inside it
+
+Building the follower's live partial (ROADMAP 40c), `cmdLog` grew a `pollPartial`
+helper next to the existing `renderHuman`/`print`, and it referenced `seat`, which
+is a `const` declared **inside** the function's `try {` block. Block scoping means
+the outer closure has no such binding, so the follower died at the first poll with
+`ReferenceError: seat is not defined`. What made it costly: the CLI's top-level
+catch printed it as `{"ok":false,...}` on stdout and the process exited, so the
+demo saw a silent *timeout* — "no partial" looked like "feature does not work",
+not like a crash. Fixed by passing `conversationId` as a parameter; a future helper
+that runs after a block binding is established should take the value explicitly
+rather than closing over a block-scoped `const`.
+
+## F16 — `out()` pretty-prints, so a follower test cannot parse line-by-line
+
+`out()` is `console.log(JSON.stringify(p, dropInternals, 2))`, so every CLI
+document is **multi-line**. A follow demo that split the follower's stdout on `\n`
+and `JSON.parse`d each line therefore parsed nothing and misreported "no partial"
+for a feature that worked. Test against the stream by brace-balancing (or by text
+`includes`), not by line. `demo/livestream.test.mjs` now extracts balanced objects.
+
+## F17 — fabricating a `pi.live` fixture: `document.change`, and clear it before a real run
+
+To observe streaming deterministically the faux provider is too fast, so the demo
+writes an in-flight partial straight into the store. Two traps: `up` already
+creates an empty `pi.live` per conversation, so `document.create` fails with
+*"Document address already has a current incarnation"* — use `document.change`
+with a base value; and a real `send` started against a fabricated
+`generation.message` fails, so clear the fabricated generation first and let the
+real send append the committed entry. This is also where the design rule lives:
+the partial is **not** an entry and must never be emitted in an `entries` array.
+
+## F18 — operator priority is not expressible: `claim_work` is oldest-first and no seat can hold
+
+Driving the PIECE-1 spike (#209, the operator's explicit "START NOW") surfaced
+this: #209 sat behind ~20 older queued items for `impl` (#156 next). No seat tool
+can reorder, hold, or mark priority — `claim_work` takes `items.find(it => it.to
+=== me && it.status === "queued")` in insertion order (`src/rig.mjs`), and
+`send_work` only appends. `pm` could only work around it: register the gap
+(#214) and send a directive item (#213). **Consequence:** "START NOW" changes
+what a seat *does*, not what it can *claim*, so the work runs but its item stays
+`queued`. Lands: #214, fold into #90 (the non-claimable `held` state).
+
+## F19 — a `send` killed by the harness tool cap cancels the run and withdraws the message
+
+`node cli.mjs send impl …` was killed at the 420 s tool cap while the seat was
+mid-investigation. `node cli.mjs resume` then reported submission #9198 `placed`
+→ `run-cancelled`, and the override user entry was withdrawn. The seat's on-disk
+work survives and the committed transcript up to the abort persists, but the
+instruction must be re-sent and the run restarted. `run` has `--max-duration`
+(#147); `send` does **not**, so a heavy send has no bounded, self-settling form.
+Lands: #147 (bounded run) / a `send --max-duration`.
+
+## F20 — work done out of claim order cannot be completed
+
+`complete_work` refuses unless the item is `claimed` by the caller (`src/rig.mjs`:
+`if (item.to !== me || item.status !== "claimed") return …`). So when `impl` did
+#209 via a direct steer without claiming it (F18), there was no legal move to
+mark #209 done: the item stayed `queued` after the work was done *and
+independently verified* (`qa` #215/#218). The queue's status is therefore not a
+reliable "done" record for operator-priority work. Lands: #214 / #90.
+
+## F21 — an isolated seat root carried a malformed pin, so its oracle was 47/48
+
+The `pi-rebase` worktree's `pi-main.pin.json` is missing the comma before
+`"packages"` (a hand-edit that appended the `REBASE 2026-10-13` note to
+`"note"`), so `scripts/sync-pi.mjs` `readPin` and `demo/syncpi.test.mjs` throw
+`SyntaxError` at byte 729 — the whole demo suite is **47/48** in that worktree.
+The live tree's pin is valid (`sha 7d75a0e`; `node -e JSON.parse` ok) and its
+suite is unaffected. `qa` reported the defect as "in the LIVE tree"; from a seat
+whose root *is* the worktree that label is wrong and misleading. Two issues: the
+rebase note was applied to the worktree copy while the live copy kept the old
+note (the two differ only in `"note"`), and a verifier can mistake its isolated
+root for live. Lands: worktree hygiene / devtools.
+
+## F22 — the file tools are confined to the seat root; the shell is not
+
+`impl` observed it: the `read` tool refuses a path outside the seat root while a
+shell command can open the same path (the global Pi install under
+`C:\Users\Alex\.pi\agent\install\…\pi-coding-agent`). `confine.mjs` wraps the
+ExecutionEnv's path methods (`absolutePath`, `readTextFile`, …), but a spawned
+PowerShell is a separate OS process under the shared user, and `DENIED_COMMANDS`
+blocks only WSL/Docker/state-mutating git. So integration work can *execute* the
+global Pi but not *read* its docs through the `read` tool — a seat must fall back
+to the shell to dereference anything outside its worktree. Lands:
+confine/seatguard parity.
+
+## F23 — an isolated worktree forks from HEAD; uncommitted direct work is invisible and can be silently clobbered
+
+The selfdev seats were re-pointed to the `pi-rebase` worktree — a checkout of
+`a43ef44` (= live HEAD) with its own `node_modules`. But the operator's direct
+work (ROADMAP 7/8/40c: `src/readapi.mjs`, `src/viewmodel.mjs`, and the
+`chatview`/`watchview` edits) is UNCOMMITTED in the live tree, so the worktree
+never contained it. `impl`'s PIECE 2 then created a NEW `src/readapi.mjs`
+(4.7 KB event feed) **at the same path** as the live shared read API (8.9 KB,
+used by `watch`/`log`/`status`/`check`/`metrics`). Integrating the worktree's
+file would silently clobber the direct work — two different modules, one path.
+An isolated worktree is not a faithful copy of a dirty working tree: it forks
+from HEAD. Lands: worktree tooling / the operator's integration step; the feed
+should be `src/eventfeed.mjs` (or extend `readapi.mjs`), and the operator's
+uncommitted direct work should be committed before seats fork from it.
+
+## F24 — two CLI processes against one store collide on entry IDs
+
+Launching `send pm` and `send impl` **concurrently** against the same store made
+one die with `{"ok":false,"error":"ID 10051 already belongs to entry"}` while
+the other completed. `status`/`queue`/`resume` stayed healthy and `resume` found
+nothing stranded, so the store was not corrupted — but the message was **never
+delivered** (no guided refusal, no retry). `genlock` serialises generation
+**slots**, not store writes, so nothing stops two CLI invocations from allocating
+the same next entry id. Lands: a store write lock, or retry-on-conflict. Worth
+fixing because automation naturally drives several seats at once.
+
+## F25 — `--help`, a bare call, and an unknown verb all return `{"ok":false, …}` and exit 2
+
+Asking for help is reported as an error. Verified: `node cli.mjs --help` → exit
+**2**, `{"ok":false,"usage":…}`; `node cli.mjs` → exit 2; `node cli.mjs
+frobnicate` → exit 2 with the same usage blob (cli.mjs:1703 `out({ ok: false,
+usage }); process.exit(2)`). An end-user or a script cannot tell "help" from
+"unknown command", and a non-zero help exit breaks `set -e` pipelines. Lands:
+`demo/cli.test.mjs`.
+
+## F26 — `queue` dumps the whole store; notices and history bury the work
+
+Verified: `node cli.mjs queue` returned **258 items** — **181 done**, **94
+notice-flagged**, 44 queued, 29 deferred, 4 claimed — and `cmdQueue` ignores its
+arguments (cli.mjs:522, one `documentState` → every item). The `notice` flag is
+in the data but the dump does not separate notices from work. An end-user cannot
+find the 44 queued items under 181 done + 94 acks. Lands: `demo/peekqueue.test.mjs`
+/ `demo/cli.test.mjs`.
+
+## F27 — `ps`/`status` never show a seat's worktree root (or model)
+
+Verified: each `ps`/`status` seat object carries only name/`conversationId`/role.
+The per-conversation worktree root is persisted (the F12 guard reads it) but is
+never surfaced, so a user cannot see which tree a seat is pointed at — the exact
+confusion behind F21 (a seat calling its worktree "live") and #203 (the seat-root
+flipped mid-item). The seat's configured model is likewise absent. Lands:
+`demo/seatroot.test.mjs`.
+
+## F28 — attention "deferred_awaiting_answer" names the OLDEST parked item and calls it "waiting on human"
+
+Verified: `src/attention.mjs:144-151` takes `deferred[0]` and prints
+`#${held.id} waiting on ${held.deferredTo ?? "an answer"}`. Live status showed
+`impl: 24 item(s) parked on a question; #60 waiting on human` where **#60 is a
+stale ROADMAP backlog item**, not the current question — so the one id shown is
+arbitrary and the message conflates genuinely-pending parks with stale backlog
+parks. An operator cannot tell what is actually waiting on them. Lands:
+`demo/defer.test.mjs` / `demo/stranded.test.mjs`.
+
+## F29 — a seat can degenerate into a repetition loop and stall a claimed item, with no automatic signal
+
+On #260 (F26), `impl` emitted pseudo tool-calls as plain TEXT in a loop — its
+reply was a long run of repeated `<parameter name="command">…</parameter>`
+fragments rather than real shell calls — and the run ended with **#260 left
+`claimed` and `demo/cli.test.mjs` failing**. Recovery was manual and only partly
+helped: `node cli.mjs resume` found nothing (the run had already ended), and only
+`node cli.mjs reset impl <handoff>` cleared the degenerate context, after which a
+re-drive could finish the item. A run that ends "done" with a looping reply
+raises no attention notice — `repeated_failure` (#164) targets *failures*, not a
+degenerate-but-settled reply. An operator has to notice the garbage and know to
+`reset`. Lands: supervisor / ROADMAP 44.
+
+## Resolution status — 2026-10-13 session
+
+Fixed this session (in the seat worktree, verified, pending integration):
+- **F23 → #255** (`worktree` now refuses a dirty source).
+- **F24 → #257** (send-path write retry/lock; `up`/`run` not yet covered).
+- **F25 → #259**, **F26 → #260**, **F27 → #261**, **F28 → #262** (help exit code; `queue`
+  filters; `ps`/`status` root+model; attention human/seat split).
+- **F20 → #239** (`claim_work({ itemId })` claim-by-id, status whitelist preserved).
+- **#219** worktree pin corrected; the worktree suite is **50/50** again.
+
+Still open (queued/deferred): **F18/#214/#90** (priority + held state), **F19/#252**
+(`send --max-duration`), **F21/#253** (root-name guard), **F22/#254** (confine/shell
+parity), **F24/#258** (stale genlock slot), **F29/#275** (degenerate-loop notice),
+**#156** (B1 pm read gap).
+
+## F30 — `defer_work` is the only parking move, so unstarted backlog becomes phantom human questions
+
+Observed after driving the team: 32 items were `deferred`, **27 of them parked on the human by
+`impl`** — and they are not questions. `#252`'s recorded "question" is literally
+`"Held/backlog: #252 (F19, bounded send) is 'REGISTERED BACKLOG' … Not starting older/backlog
+items per the operator override. Parking unstarted; resume when re-sequenced."` with
+`deferredTo:"human"`. The gated broker **#238** (waiting on a D-entry, not a human answer) was
+parked the same way. **Cause:** the Router exposes no non-claimable `held` state — `grep` finds
+`held` only in a comment (`rig.mjs`) and in `supervisor.mjs`'s local variable — so a seat that must
+set backlog aside has exactly one legal move, `defer_work`, which by default asks the **human**.
+The result is an operator-facing pile of fake decisions (`impl: 27 item(s) parked on a question;`)
+that hides the real ones — the exact gap #90 ("non-claimable `held` queue state") designed but
+never reachable. **Fix:** make `held` reachable (`hold_work`/`release_work`), skipped by
+`claim_work`/the driver and shown by `peek_queue`.
+
+## F31 — `resume_work` leaves `question`/`deferredTo` on the item, so a done item still reads as deferred
+
+`resume_work` (`src/rig.mjs`) sets `status = "claimed"` and appends a `resumed` transition but does
+**not** clear `item.question` or `item.deferredTo`. So `#239`, `#255`, `#257`, `#260`, `#261`, `#262`
+are all `done` yet still carry `deferredTo:"human"` from an earlier park. Any reader that keys on
+`deferredTo` without re-checking `status` (e.g. `supervisor.mjs` skips a `claimed`/`queued` item
+whose stale `deferredTo === "human"`) can be misled. **Fix:** clear `question`/`deferredTo` on
+`resume_work` (and defensively on `complete_work`).
+
+## F32 — `edit` fails on a CRLF source file, pushing a seat into shell/Python surgery
+
+While fixing `peek_queue`, `impl`'s `edit` on `src/rig.mjs` returned *"Could not find the
+exact text in src/rig.mjs. The old text must match exactly including all whitespace and
+newlines."* The file is **CRLF‑only** (`717` CRLF, `0` bare LF), so an `oldText` a model
+emits with LF newlines can never match. The seat then fell back to PowerShell
+`Get-Content`/`Set-Content` string surgery and wrote a **Python patcher** (`fix_peek.py`, left
+behind in the seat root) — slow, error‑prone, and it re‑introduced a syntax error (`node
+--check` failed) before it converged. **Prevention:** normalise line endings in the edit
+matcher (compare ignoring `\r`, then preserve the file's existing endings on write), or
+surface the detected endings to the seat; and rule "when `edit` misses, re‑read the exact
+region; do not shell‑edit or script‑patch source." Lands: `demo/` for the matcher + a seat
+instruction.
+
+## F33 — `Cannot use a settled overlay`: a doc proxy returned from `api.commit` throws after settlement
+
+`impl`'s new `peek_queue` computed `filtered` inside `api.commit` and **returned it**
+(`return [filtered, head]`). Those are `RigQueue` item proxies; once the commit settled the
+overlay is released, so mapping/reading them afterwards threw `Cannot use a settled overlay`
+— a pi‑durable trap `claim_work` already documents ("snapshot plain values before returning …
+a proxy that escapes the callback throws"). **Prevention:** a shared `snapshot` helper used by
+every tool that returns doc‑derived data, plus a seat rule (never let a doc proxy escape the
+`api.commit` callback). Lands: `src/rig.mjs` helper + `demo/`.
+
+## Server‑side cache and long waits — a fourth option
+
+Mitigating a long mid‑task wait with a large context (the #289 topic) has **four** known
+options: (1) keep the fixed wake string so a *short* wait keeps the cache (ROADMAP 33);
+(2) **compact** the context; (3) write a durable **handoff** note and settle; and (4) **refresh
+the cache** by sending another request that carries the same context — the server documentedly
+resets the cache TTL on a hit. Option (4)'s catch is cost: a refresh is not free, and when the
+context is large the refresh can cost more than compacting or than writing a one‑line handoff,
+so the choice must be **measure‑first** (compare the refreshed‑prefill cost against the
+compact/handoff cost for the actual context size) rather than assumed.

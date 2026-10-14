@@ -1,0 +1,39 @@
+﻿=== #209 PIECE 1 spike — raw evidence transcript ===
+date: 2026-10-13T12:06:49.4849639-05:00
+node: v24.19.0
+
+$ node --check .spike/pi-wake/setup-queued-item.mjs
+exit=0
+$ node --check .spike/pi-wake/prove-wake.mjs
+exit=0
+$ node --check .spike/pi-wake/watcher.ts
+exit=0
+
+$ node .spike/pi-wake/prove-wake.mjs
+
+===== DIRECTION a (watcher ENABLED) =====
+db=C:\Users\Alex\AppData\Local\Temp\durig-209-a-RsxE3U\rig.sqlite
+[a] pi session started; records so far=2
+[a] enqueue -> exit=0 {"ok":true,"itemId":1,"to":"impl","status":"queued"}
+[a] record types seen: extension_ui_request,agent_start,turn_start,message_start,message_end,message_update,tool_execution_start,tool_execution_update,tool_execution_end,turn_end
+[a] wake user message injected: true
+[a] turn_start observed: true
+[a] injected user message: {"role":"user","content":[{"type":"text","text":"durig: queued work is waiting. Call claim_work to take the oldest item addressed to you."}],"timestamp":1791911217757}
+[a] watcher stderr:
+  [spike-watcher] watching db=C:\Users\Alex\AppData\Local\Temp\durig-209-a-RsxE3U\rig.sqlite seat=impl every 400ms
+  [spike-watcher] matched queued item #1 for seat impl; injecting wake
+
+===== DIRECTION b (watcher DISABLED) =====
+db=C:\Users\Alex\AppData\Local\Temp\durig-209-b-bcZEGG\rig.sqlite
+[b] pi session started; records so far=2
+[b] enqueue -> exit=0 {"ok":true,"itemId":1,"to":"impl","status":"queued"}
+[b] record types seen: extension_ui_request
+[b] wake user message injected: false
+[b] turn_start observed: false
+[b] watcher stderr:
+  [spike-watcher] disabled (DURIG_SPIKE_DISABLED=1); no change source opened
+
+===== VERDICT =====
+(a) watcher enabled  -> wake user msg=true, turn_start=true  => PASS
+(b) watcher disabled -> wake user msg=false  => PASS
+exit=0

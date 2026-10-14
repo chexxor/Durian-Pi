@@ -10,6 +10,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { RigQueue, Router, enqueueItem } from "../src/rig.mjs";
+import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+
 const dir = mkdtempSync(join(tmpdir(), "durig-cli-"));
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const db = join(dir, "rig.sqlite");
@@ -71,6 +75,146 @@ try {
 	assert.equal(q.ok, true);
 	assert.equal(q.command, "queue");
 	assert.deepEqual(q.items, [], "freshly bootstrapped queue is present and empty");
+
+	// --- queue filters + summary (F26) -------------------------------------
+	// The default dump was the WHOLE store (258 items on a live rig), unusable
+	// and mixing notices with work. Now: default is non-terminal; --active is
+	// queued+claimed; --status filters; --all includes terminal; every response
+	// carries a summary; notices are separated from work.
+	// Seed one item per status (plus one notice) directly into the SAME db, so
+	// the CLI reads a populated queue rather than an empty one.
+	const QUEUE_SEAT = "alpha";
+	await (async () => {
+		const storage = await openNodeSqliteStorage(db);
+		try {
+			// Since storage has no transaction helper without a harness, use the
+			// documented write path: a single commit through the seeded document.
+			const { createRegistry, Harness } = await import("@earendil-works/pi-durable");
+			const { createModels } = await import("@earendil-works/pi-ai/models");
+			const { fauxProvider } = await import("@earendil-works/pi-ai/providers/faux");
+			const models = createModels();
+			models.setProvider(fauxProvider({ models: [{ id: "faux-seat" }] }).provider);
+			const registry = createRegistry();
+			registry.install(Router);
+			const harness = await Harness.open(storage, { models, registry }, BACKGROUND_CONTEXT);
+			harness.resume();
+			try {
+				await harness.commit(async (tx) => {
+					// queued (default-visible), claimed (active), deferred (active is
+					// queued+claimed so deferred is default-visible but not --active),
+					// done (terminal), and a NOTICE that is also done.
+					const qid = await enqueueItem(tx, "beta", QUEUE_SEAT, "Q_QUEUED", "body");
+					const cid = await enqueueItem(tx, "beta", QUEUE_SEAT, "Q_CLAIMED", "body");
+					const did = await enqueueItem(tx, "beta", QUEUE_SEAT, "Q_DEFERRED", "body");
+					const don = await enqueueItem(tx, "beta", QUEUE_SEAT, "Q_DONE", "body");
+					const notice = await enqueueItem(tx, "beta", QUEUE_SEAT, "DONE #1: ack", "body", null, true);
+					const queue = await tx.doc(RigQueue);
+					const set = (id, status) => {
+						queue.items.find((it) => it.id === id).status = status;
+					};
+					set(cid, "claimed");
+					set(did, "deferred");
+					set(don, "done");
+					set(notice, "done");
+					return { qid, cid, did, don, notice };
+				}, BACKGROUND_CONTEXT);
+			} finally {
+				await harness.close(BACKGROUND_CONTEXT);
+			}
+		} finally {
+			await storage.close(BACKGROUND_CONTEXT);
+		}
+	})();
+
+	const subjects = (j) => (j.items ?? []).map((i) => i.subject);
+
+	// Default: non-terminal only — done + the notice are excluded.
+	const qDef = json(cli(["queue"]));
+	assert.equal(qDef.ok, true);
+	assert.deepEqual(
+		subjects(qDef).sort(),
+		["Q_CLAIMED", "Q_DEFERRED", "Q_QUEUED"],
+		`default excludes terminal (done/notice); got ${JSON.stringify(subjects(qDef))}`,
+	);
+
+	// --active: only queued + claimed (deferred is excluded).
+	const qActive = json(cli(["queue", "--active"]));
+	assert.deepEqual(
+		subjects(qActive).sort(),
+		["Q_CLAIMED", "Q_QUEUED"],
+		`--active is queued+claimed only; got ${JSON.stringify(subjects(qActive))}`,
+	);
+
+	// --status: filters by status (here two statuses via a comma list).
+	const qStatus = json(cli(["queue", "--status", "deferred,done"]));
+	const qStatusSubjects = [...subjects(qStatus), ...((qStatus.notices ?? []).map((n) => n.subject))].sort();
+	assert.deepEqual(
+		qStatusSubjects,
+		["Q_DEFERRED", "Q_DONE", "DONE #1: ack"].sort(),
+		`--status deferred,done filters to those statuses; got ${JSON.stringify(qStatusSubjects)}`,
+	);
+
+	// --all: includes terminal, and the notice is separated under `notices`.
+	const qAll = json(cli(["queue", "--all"]));
+	const qAllSubjects = [...subjects(qAll), ...((qAll.notices ?? []).map((n) => n.subject))].sort();
+	assert.deepEqual(
+		qAllSubjects,
+		["DONE #1: ack", "Q_CLAIMED", "Q_DEFERRED", "Q_DONE", "Q_QUEUED"],
+		`--all includes everything; got ${JSON.stringify(qAllSubjects)}`,
+	);
+	assert.ok(
+		(qAll.notices ?? []).some((n) => n.subject === "DONE #1: ack"),
+		"a notice is distinguishable from work (separate `notices` array)",
+	);
+	assert.ok(
+		!subjects(qAll).includes("DONE #1: ack"),
+		"work items do not include the notice",
+	);
+
+	// summary: counts by status + a notices count, on every response.
+	assert.ok(qDef.summary && typeof qDef.summary.byStatus === "object", "summary.byStatus is present");
+	assert.equal(qDef.summary.byStatus.queued, 1, "summary counts queued (default view)");
+	assert.equal(qDef.summary.byStatus.claimed, 1, "summary counts claimed (default view)");
+	assert.equal(qDef.summary.byStatus.deferred, 1, "summary counts deferred (default view)");
+	assert.ok(
+		typeof qDef.summary.notices === "number" && qDef.summary.notices >= 1,
+		"summary carries a notices count",
+	);
+	assert.equal(qAll.summary.byStatus.done, 1, "--all summary counts done");
+
+	// Drain the seeded queue now that the F26 assertions have read it. Anything
+	// still `queued` to a seat is a WAKE trigger: the later `run` / `run --watch`
+	// steps drive that seat and inject a "You have queued work" prompt (WAKE_CONTENT,
+	// src/driver.mjs) as a pi.user entry on every pass. That floods the seat's
+	// transcript and pushes the request-id entry out of the bounded `log` page, so
+	// the request-id assertion further down (`one send makes one user entry`) can no
+	// longer observe its +1. Draining restores the pre-seed "no queued work" state
+	// the rest of this contract test was written against.
+	await (async () => {
+		const storage = await openNodeSqliteStorage(db);
+		try {
+			const { createRegistry, Harness } = await import("@earendil-works/pi-durable");
+			const { createModels } = await import("@earendil-works/pi-ai/models");
+			const { fauxProvider } = await import("@earendil-works/pi-ai/providers/faux");
+			const models = createModels();
+			models.setProvider(fauxProvider({ models: [{ id: "faux-seat" }] }).provider);
+			const registry = createRegistry();
+			registry.install(Router);
+			const harness = await Harness.open(storage, { models, registry }, BACKGROUND_CONTEXT);
+			try {
+				await harness.commit(async (tx) => {
+					const queue = await tx.doc(RigQueue);
+					for (const it of queue.items) {
+						if (it.status === "queued" || it.status === "claimed") it.status = "done";
+					}
+				}, BACKGROUND_CONTEXT);
+			} finally {
+				await harness.close(BACKGROUND_CONTEXT);
+			}
+		} finally {
+			await storage.close(BACKGROUND_CONTEXT);
+		}
+	})();
 
 	// --- status: seats + queue + attention, all arrays ---------------------
 	const status = json(cli(["status"]));
@@ -257,7 +401,23 @@ try {
 	assert.equal(bogus.code, 2, "an unknown command exits 2");
 	const bogusJson = json(bogus);
 	assert.equal(bogusJson.ok, false);
+	// An unknown verb is DISTINCT from help: it names the verb so a typo is not
+	// mistaken for an empty/invalid invocation (F25).
+	assert.equal(bogusJson.error, 'unknown command "frobnicate"', "the error names the unknown verb");
 	assert.match(bogusJson.usage, /node cli\.mjs up/, "usage is returned to the caller");
+
+	// --- help is NOT a failure (F25) ---------------------------------------
+	// `--help`, `-h`, `help`, and a bare invocation are a normal response and
+	// exit 0. Treating help as an error (exit 2, ok:false) makes a caller read
+	// the usage as a crash.
+	for (const args of [["--help"], ["-h"], ["help"], []]) {
+		const h = cli(args);
+		assert.equal(h.code, 0, `help (${JSON.stringify(args)}) exits 0`);
+		const hj = json(h);
+		assert.equal(hj.ok, true, `help (${JSON.stringify(args)}) is ok:true`);
+		assert.equal(hj.command, "help", `help (${JSON.stringify(args)}) reports command:help`);
+		assert.match(hj.usage, /node cli\.mjs up/, "help carries the usage text");
+	}
 
 	// run must stay a known command (ROADMAP 38). The item 44 merge silently
 	// dropped it from the dispatch and the suite still passed, because

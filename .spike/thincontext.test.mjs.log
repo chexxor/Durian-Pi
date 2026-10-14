@@ -1,0 +1,2 @@
+THINCONTEXT TEST PASS (over-threshold claim_work returns a path to cwd/.durig/<id>.md whose file contains the body; small claims stay inline; idempotent)
+
