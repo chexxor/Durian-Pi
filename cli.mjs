@@ -25,7 +25,7 @@ import {
 import { AssistantEntry, configure, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 // Single source of truth for DeepInfra provider options, vendored into this tree
 // so durig is self-contained and publishable on its own
 // (src/providers/PROVENANCE.md records the source, version and licence). Node 24
@@ -45,7 +45,7 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { describeConfig, loadConfig, streamSettings } from "./src/config.mjs";
+import { describeConfig, loadConfig, strandedMsSetting, streamSettings } from "./src/config.mjs";
 import { computeAttention } from "./src/attention.mjs";
 import {
 	readGenerationSlots,
@@ -476,6 +476,265 @@ async function cmdQueue() {
   }
 }
 
+// resume (alias: doctor): the deliberate way to advance admitted-but-not-progressing
+// submissions (ROADMAP 37b). Opens the harness WITH resume() (re-arming scheduling,
+// exactly like `send` and `up`), scans the store for submissions a seat admitted but
+// is not advancing, and reconciles each stranded one to a terminal state. A seat with
+// a LIVE generation lease is legitimately generating behind that lease, so its
+// submission is progressing - not stranded - and is left alone. A submission whose
+// conversation belongs to no registered seat is out of scope for the verb.
+//   - `queued` (never started): harness.abortSubmission() withdraws it -> `unanswered`.
+//   - `placed` (a run started whose process is gone): abortSubmission() returns
+//     "already_placed" (the run already picked it up), so cancel the run instead via
+//     conversation.abort(), which withdraws queued inputs and aborts the ordinary
+//     ownership scope, settling the submissions terminal.
+// Reports what it found and what it did to each, in the one-JSON-doc contract.
+async function cmdResume() {
+  const { harness } = await openHarness();
+  try {
+    const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+    const seatsVal = seatsDoc?.value?.seats ?? {};
+    const seats = Object.entries(seatsVal);
+    const convToSeat = new Map(seats.map(([name, s]) => [s.conversationId, name]));
+    noteEmptyRig(seats.length);
+
+    // A seat with a LIVE generation lease is currently generating behind that lease,
+    // so its submission is advancing, not stranded (same seatsWithSlot guard the
+    // stranded notice computes in readRigHealth / ROADMAP 37a). Only consulted when
+    // genlock is actually configured (a finite max-concurrent-seats cap).
+    const slots = maxSeats();
+    const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
+    const seatsWithLiveSlot = new Set(
+      genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat),
+    );
+
+    // The harness's own unsettled submissions (queued + placed, in id order)
+    // restricted to conversations that belong to a registered seat.
+    const inspection = await harness.inspect(BACKGROUND_CONTEXT);
+    const stranded = (inspection.submissions ?? []).filter(
+      (s) =>
+        convToSeat.has(s.conversationId) &&
+        !seatsWithLiveSlot.has(convToSeat.get(s.conversationId)),
+    );
+
+    const actions = [];
+    for (const sub of stranded) {
+      const seatName = convToSeat.get(sub.conversationId);
+      const row = {
+        seat: seatName,
+        submission: sub.id,
+        status: sub.status,
+        action: null,
+      };
+      if (sub.status === "queued") {
+        // Never started: withdrawing it is enough to clear the stranded state.
+        const r = await harness.abortSubmission(sub.id, BACKGROUND_CONTEXT, sub.conversationId);
+        row.action = r === "aborted" ? "withdrawn" : `abortSubmission:${r}`;
+      } else {
+        // placed: a run started but its process is gone. abortSubmission() returns
+        // "already_placed" because the run already has it, so cancel the run instead.
+        const r = await harness.abortSubmission(sub.id, BACKGROUND_CONTEXT, sub.conversationId);
+        if (r === "already_placed") {
+          const conv = await harness.conversation(sub.conversationId, BACKGROUND_CONTEXT);
+          if (conv) await conv.abort(BACKGROUND_CONTEXT);
+          row.action = "run-cancelled";
+        } else {
+          row.action = r === "aborted" ? "withdrawn" : `abortSubmission:${r}`;
+        }
+      }
+      actions.push(row);
+    }
+
+    out({ ok: true, command: "resume", db: DB_PATH, found: stranded.length, actions });
+  } finally {
+    await harness.close(BACKGROUND_CONTEXT);
+  }
+}
+
+// reset (alias: clean): the deliberate way to break a seat out of a degenerate
+// context (ROADMAP 44). After a model emits a repetition loop, every later turn
+// re-conditions on that bad turn in history; pi-durable's conversation.reset()
+// writes a `pi.reset` boundary (head: self) so prior turns leave the model
+// CONTEXT without deleting the durable transcript. This verb opens the harness
+// the same way `send`/`up`/`resume` do, refuses to reset a seat that holds a
+// LIVE generation lease (a running seat must not be reset out from under
+// itself - same live-slot guard resume/status use), calls conversation.reset()
+// with the operator's optional handoff, and reports the reset ENTRY id it wrote.
+// The transcript is preserved; only the context head moves past the bad turns.
+async function cmdReset(seatName, handoff) {
+  const { harness } = await openHarness();
+  try {
+    const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+    const seatsVal = seatsDoc?.value?.seats ?? {};
+    const seat = seatsVal[seatName];
+    if (!seat) {
+      noteEmptyRig(Object.keys(seatsVal).length);
+      fail(`unknown seat: ${seatName}`);
+    }
+    const convId = seat.conversationId;
+
+    // Refuse when the seat holds a LIVE generation lease: resetting a running
+    // seat out from under its own generation corrupts the very boundary we are
+    // trying to draw. Same seatsWithLiveSlot guard the stranded notice and the
+    // resume verb compute (readGenerationSlots -> generatingSeat; ROADMAP 37a).
+    // Consulted only when genlock is actually configured (a finite cap).
+    const slots = maxSeats();
+    const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
+    const seatsWithLiveSlot = new Set(
+      genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat),
+    );
+    if (seatsWithLiveSlot.has(seatName)) {
+      fail(`seat ${seatName} holds a live generation lease; refusing to reset a running seat`);
+    }
+
+    const conv = await harness.conversation(convId, BACKGROUND_CONTEXT);
+    // Identify the reset entry THIS invocation wrote: a watermark before, then
+    // the newest pi.reset entry past it (the durable transcript keeps earlier
+    // resets too, so the newest-past-watermark is precisely ours, not a prior one).
+    const prior = await conv.entries({}, 20, undefined, BACKGROUND_CONTEXT);
+    const priorMaxId = prior.items.reduce((max, e) => Math.max(max, Number(e.id) || 0), 0);
+
+    // An omitted or blank handoff means a plain reset (no new user message on
+    // the boundary); only a non-blank handoff becomes the `pi.reset` user message.
+    const resetHandoff = handoff !== undefined && handoff.trim() !== "" ? handoff : undefined;
+    await conv.reset(resetHandoff, BACKGROUND_CONTEXT);
+
+    const after = await conv.entries({ order: "descending" }, 50, undefined, BACKGROUND_CONTEXT);
+    const resetEntry = after.items.find(
+      (e) => e.kind === "pi.reset" && Number(e.id) > priorMaxId,
+    );
+
+    out({
+      ok: true,
+      command: "reset",
+      seat: seatName,
+      resetEntryId: resetEntry?.id ?? null,
+      handoff: resetHandoff ?? null,
+      db: DB_PATH,
+    });
+  } finally {
+    await harness.close(BACKGROUND_CONTEXT);
+  }
+}
+
+// stop <seat> [reason] (emergency-stop): a deliberate operator surface that halts
+// a seat's in-flight run across processes (ROADMAP 41). A seat that has entered a
+// degenerate loop, or is behaving harmfully, can be stopped WITHOUT killing the
+// driving `send` process in a way that silently strands an admitted-but-unscheduled
+// submission (dogfood F11). Enforcement is by the driver/lease, not by a message to
+// the agent: `stop` finds the seat's live generation-lease holder (the cross-process
+// driver) and kills it, then settles the run's submission to a terminal
+// `aborted: <reason>` state (which the attention channel surfaces as
+// `last_run_failed`) and aborts the run's task so resume won't resurrect it.
+//   - (i)  no agent cooperation required: the halt is the lease holder's pid kill.
+//   - (ii) reaches a run in ANOTHER process: the lease (signal/kill the holder pid).
+//   - (iii) fail closed: the pending submission reaches terminal `unanswered` with
+//          reason `aborted: <reason>`, never a silent strand.
+//   - (iv) durable work preserved: the queue item, transcript and checkpoints stay
+//          in the store; resume (item 37(b)) is unaffected.
+//   - (v)  idempotent and bounded: no live holder AND no pending submission means
+//          the seat is already stopped -> a no-op; one command halves one seat.
+async function cmdStop(seatName, reason) {
+  const stopReason =
+    reason !== undefined && reason.trim() !== "" ? reason.trim() : "operator stop";
+  const { harness } = await openHarness({ resume: false });
+  try {
+    const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+    const seatsVal = seatsDoc?.value?.seats ?? {};
+    const seat = seatsVal[seatName];
+    if (!seat) {
+      noteEmptyRig(Object.keys(seatsVal).length);
+      fail(`unknown seat: ${seatName}`);
+    }
+    const convId = seat.conversationId;
+
+    // The cross-process holder is the seat's LIVE generation-lease slot: that is
+    // how durig knows WHO is driving a run (D12). Consulted only when genlock is
+    // actually configured (a finite max-concurrent-seats cap).
+    const slots = maxSeats();
+    const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
+    const holder = genSlots.find((g) => g.generatingSeat === seatName);
+
+    // The pending run is the seat's latest queued (never started) or placed (a run
+    // started) submission. From the harness's own unsettled-submissions view.
+    const inspection = await harness.inspect(BACKGROUND_CONTEXT);
+    const pending = (inspection.submissions ?? []).find(
+      (s) => s.conversationId === convId && (s.status === "queued" || s.status === "placed"),
+    );
+
+    // (v) idempotence: no live holder AND no pending run means the seat is already
+    // stopped (or never running) - one command halts one seat, a second is a no-op.
+    if (!holder && !pending) {
+      out({
+        ok: true,
+        command: "stop",
+        seat: seatName,
+        reason: stopReason,
+        alreadyStopped: true,
+        db: DB_PATH,
+      });
+      return;
+    }
+
+    // (ii) guarantee the halt: kill the cross-process driver that holds the lease.
+    let killed = null;
+    let slotPath = null;
+    if (holder && Number.isFinite(holder.pid)) {
+      killed = holder.pid;
+      slotPath = `${DB_PATH}.genlock.${holder.slotIndex}`;
+      try {
+        process.kill(killed, "SIGKILL");
+      } catch (err) {
+        // The holder already died - that only helps the stop.
+      }
+    }
+
+    // (iii) settle the pending submission to terminal `aborted: <reason>`, and
+    // abort the run's task so a later resume does not resurrect it. settleSubmission
+    // is called while the submission is non-terminal so the custom reason carries
+    // onto the record; abortTask is the durable abort mark that stops re-running.
+    let settled = false;
+    if (pending) {
+      await harness.commit(
+        (tx) => {
+          tx.settleSubmission(pending.id, {
+            status: "unanswered",
+            reason: `aborted: ${stopReason}`,
+          });
+        },
+        BACKGROUND_CONTEXT,
+      );
+      settled = true;
+    }
+    const runTask = (inspection.tasks ?? []).find((t) => t.record.conversationId === convId);
+    if (runTask) {
+      await harness.abortTask(runTask.record.id, BACKGROUND_CONTEXT);
+    }
+
+    // Release the lease slot the killed holder held, so `status`/`watch` no longer
+    // report a wedged generation for it.
+    if (slotPath) {
+      try {
+        unlinkSync(slotPath);
+      } catch (err) {
+        // ENOENT is fine (another process already released it); anything else we leave.
+      }
+    }
+
+    out({
+      ok: true,
+      command: "stop",
+      seat: seatName,
+      reason: stopReason,
+      killed,
+      aborted: settled,
+      db: DB_PATH,
+    });
+  } finally {
+    await harness.close(BACKGROUND_CONTEXT);
+  }
+}
+
 // send <seat> <text> [--stream|--no-stream]: operator steering. Submits input
 // to the seat's conversation and waits for the run to settle so the caller
 // can read the outcome in the same invocation (LLM-friendly: no polling
@@ -622,6 +881,37 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
     toolName: extractEntryText(entry)?.toolName ?? null,
     model: entry.model?.[0] ?? null,
   });
+  // Lines of the human transcript already emitted. Kept so the follow renderer
+  // can re-run the whole transcript through the SAME grouping path and emit only
+  // what has not been shown yet, instead of formatting each later turn as its own
+  // isolated block with its own column width and delta (the backfill/later-turn
+  // inconsistency ROADMAP item 10 fixes). The whole accumulated transcript goes
+  // through one formatChat call, so column alignment and turn grouping match the
+  // backfill exactly and a reader cannot tell where the backfill ended.
+  let humanLines = [];
+  const renderHuman = (entries) => {
+    const text = formatChat(entries, {
+      seat: seatName,
+      color,
+      width: process.stdout.columns ?? 100,
+      full,
+      toolBg,
+      theme,
+    });
+    if (!text) return;
+    const lines = text.split("\n");
+    // Re-rendering the full transcript is prefix-stable unless a turn regroups
+    // (a tool result arriving after the call that produced it folds back into
+    // the same turn), so walk from the first divergence rather than trusting the
+    // line count: the corrected tail is re-emitted even when an earlier line
+    // changes character.
+    let i = 0;
+    while (i < humanLines.length && i < lines.length && humanLines[i] === lines[i]) i++;
+    for (let k = i; k < lines.length; k++) console.log(lines[k]);
+    humanLines = lines;
+  };
+  // Follow keeps one continuous transcript: accumulate, then render it whole.
+  const allEntries = [];
   const print = (entries) => {
     // An empty transcript must SAY it is empty. Printing nothing - and then
     // waiting forever under --follow - makes "has never run" look identical to
@@ -633,15 +923,12 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
       );
     }
     if (human) {
-      const text = formatChat(entries, {
-        seat: seatName,
-        color,
-        width: process.stdout.columns ?? 100,
-        full,
-        toolBg,
-        theme,
-      });
-      if (text) console.log(text);
+      if (follow) {
+        for (const e of entries) allEntries.push(e);
+        renderHuman(allEntries);
+      } else {
+        renderHuman(entries);
+      }
       return;
     }
     out({
@@ -745,19 +1032,36 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
   }
   // Slot-file notices ride alongside seat notices: a live holder means the
   // GPU is busy (healthy waiting), a dead holder means a wedged generation.
-  const slotNotices = Number.isFinite(slots)
-    ? readGenerationSlots(dbPath, slots).map((g) => ({
-        scope: "seat",
-        seat: g.generatingSeat ?? `slot-${g.slotIndex}`,
-        kind: g.name,
-        detail:
-          g.name === "generation_in_flight" ? `generating since ${g.since}` : g.detail,
-      }))
-    : [];
+  // A LIVE slot for a seat also means that seat's queued submission is
+  // legitimately waiting behind a genuine run, so those seat names feed the
+  // admitted_not_started suppression (ROADMAP 37a): a dead holder's slot does
+  // NOT suppress it, because a gone run means nothing is advancing the
+  // submission and it IS stranded.
+  const genSlots = Number.isFinite(slots) ? readGenerationSlots(dbPath, slots) : [];
+  const seatsWithSlot = new Set(genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat));
+  const slotNotices = genSlots.map((g) => ({
+    scope: "seat",
+    seat: g.generatingSeat ?? `slot-${g.slotIndex}`,
+    kind: g.name,
+    detail:
+      g.name === "generation_in_flight" ? `generating since ${g.since}` : g.detail,
+  }));
   // One bounded page per seat, shared: highlights and metrics both read these
   // entries, so a render makes a single pass over the transcripts. Measured at
   // 0.9-1.4 ms for 14 seats x 24 entries against a 750 ms poll (METRICS.md).
   const pages = await readSeatPages(storage, BACKGROUND_CONTEXT, seats, entryLimit);
+  // The submission record carries no admission timestamp (scanSubmissions
+  // returns id/status/entry only), so recover it from the admitted input
+  // ENTRY's timestamp for the admitted_not_started notice; left undefined when
+  // that entry has fallen off the bounded page (ROADMAP 37a).
+  for (const seat of seats) {
+    const latest = latestByConv.get(seat.conversationId);
+    const entryId = latest?.entry;
+    if (!latest || entryId == null) continue;
+    const admitted = (pages[seat.name] ?? []).find((e) => e.id === entryId);
+    const ts = admitted?.model?.[0]?.timestamp;
+    if (Number.isFinite(ts)) latest.admittedAt = ts;
+  }
   const metrics = computeMetrics({
     pages,
     queueItems: queueVal.items ?? [],
@@ -782,6 +1086,9 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
       }
     }
   }
+  // Admission age beyond which an unstarted submission is surfaced as stranded
+  // (ROADMAP 37a); null means the module default in src/attention.mjs stands.
+  const strandedMs = strandedMsSetting(CFG);
   return {
     seats,
     queueItems: queueVal.items ?? [],
@@ -789,7 +1096,11 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
     latestByConv: Object.fromEntries(latestByConv),
     metrics,
     attention: [
-      ...computeAttention(seats, queueVal.items ?? [], latestByConv, errorByConv),
+      ...computeAttention(seats, queueVal.items ?? [], latestByConv, errorByConv, {
+        nowMs: Date.now(),
+        seatsWithSlot,
+        ...(strandedMs === null ? {} : { strandedMs }),
+      }),
       ...slotNotices,
       // Metric notices join the attention channel instead of claiming a screen
       // of their own: same slot, same rendering, and signal only when a measure
@@ -1121,6 +1432,9 @@ usages:
   node cli.mjs send <seat> --body-file <path>  the same, prompt from a file (- = stdin)
   node cli.mjs send <seat> <text> --no-stream   the same, without the live view
   node cli.mjs queue           dump the work queue
+  node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
+  node cli.mjs reset <seat> [handoff]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary)
+  node cli.mjs stop <seat> [reason]      emergency-stop: halts a seat's in-flight run across processes
   node cli.mjs log <seat> [limit] [--follow] [--full] [--tool-bg] [--theme dark|light]
                           a seat's conversation (--follow = live, --full = whole tool output)
   node cli.mjs watch [--once] [--json|--human]   follow rig state (human on a terminal)
@@ -1189,6 +1503,15 @@ try {
     if (!text.trim()) fail("send needs <seat> <text>, or --body-file <path>");
     await cmdSend(args[0], text, { stream, requestId });
   } else if (cmd === "queue") await cmdQueue();
+  else if (cmd === "resume" || cmd === "doctor") await cmdResume();
+  else if (cmd === "reset" || cmd === "clean") {
+    if (!rest[0]) fail("reset needs <seat> [handoff]");
+    await cmdReset(rest[0], rest.slice(1).join(" "));
+  }
+  else if (cmd === "stop") {
+    if (!rest[0]) fail("stop needs <seat> [reason]");
+    await cmdStop(rest[0], rest.slice(1).join(" "));
+  }
   else if (cmd === "watch") {
     // Same precedence as `send --stream`: an explicit flag wins, otherwise a
     // terminal gets the readable view and a pipe keeps the JSON contract.

@@ -293,6 +293,23 @@ try {
 		await waitFor(() => seen.includes("first message"), "the backfilled history");
 		assert.equal(run(["send", "alpha", "second message"]).code, 0);
 		await waitFor(() => seen.includes("second message"), "the newly committed message");
+
+		// ROADMAP item 10: a --follow backfill and a later turn must render
+		// through the same grouping path, so a reader cannot tell where the
+		// backfill ended. Concretely: the turn marker (›) of the follow-only
+		// "second message" must sit in the SAME column as the backfilled "first
+		// message". The old behaviour formatted each later entry as its own
+		// isolated block with its own label column width, so these diverged.
+		const markerColumn = (needle) => {
+			const line = seen.split("\n").find((l) => l.includes(needle));
+			assert.ok(line, `follow output should contain a line with "${needle}"`);
+			return line.indexOf("›");
+		};
+		assert.equal(
+			markerColumn("first message"),
+			markerColumn("second message"),
+			"a later --follow turn must align with the backfill (same grouping path)",
+		);
 		console.log("CHATLOG TEST PASS (rendering, timestamps, collapsing, contract, follow)");
 	} finally {
 		follower.kill();
