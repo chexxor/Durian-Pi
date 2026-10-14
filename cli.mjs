@@ -54,7 +54,7 @@ import {
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
-import { brokerAlive, clearBrokerState, drivePass, readBrokerState, runWakeLoop, writeBrokerState } from "./src/broker.mjs";
+import { brokerAlive, clearBrokerState, clearStopRequest, drivePass, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -845,6 +845,7 @@ async function ensureBroker() {
   // A dead holder leaves a stale file; the child overwrites it, but clearing first
   // keeps a concurrent reader from mistaking the dead pid for a live one.
   clearBrokerState(DB_PATH);
+  clearStopRequest(DB_PATH);
   const logPath = `${DB_PATH}.broker.log`;
   let logFd;
   try {
@@ -878,10 +879,11 @@ async function ensureBroker() {
   return { started: false, reason: `broker did not report within 3s; see ${logPath}` };
 }
 
-// serve --stop: the off switch for a broker started by `up` (or by hand). SIGTERM is
-// graceful on POSIX (the broker's handler stops after the pass in flight settles). On
-// Windows Node does not deliver SIGTERM, so `process.kill` terminates and the broker's
-// `finally` never runs; this command therefore clears the state itself.
+// serve --stop: the off switch for a broker started by `up` (or by hand). On POSIX
+// the broker receives SIGTERM and stops after the pass in flight settles. On Windows
+// Node does not deliver SIGTERM, so the fallback is to write a .stop request file that
+// the broker polls between passes (F35). If the broker is still alive after 5s,
+// process.kill is the last resort.
 async function cmdStopBroker() {
   const state = readBrokerState(DB_PATH);
   if (!state) {
@@ -893,13 +895,25 @@ async function cmdStopBroker() {
     out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "state was stale; cleared" });
     return;
   }
-  process.kill(state.pid);
+  // Write the stop request; the broker polls this between passes and exits cleanly
+  // after the pass in flight settles (same behaviour as SIGTERM on POSIX).
+  writeStopRequest(DB_PATH);
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline && brokerAlive(state)) {
     await new Promise((r) => setTimeout(r, 50));
   }
   const stillAlive = brokerAlive(state);
-  if (!stillAlive) clearBrokerState(DB_PATH);
+  if (!stillAlive) {
+    clearBrokerState(DB_PATH);
+    clearStopRequest(DB_PATH);
+  } else {
+    // Last resort: the cooperative request was not honoured in time.
+    process.kill(state.pid);
+    // Give a brief window for the finally block to run.
+    await new Promise((r) => setTimeout(r, 500));
+    clearBrokerState(DB_PATH);
+    clearStopRequest(DB_PATH);
+  }
   out({
     ok: true,
     command: "serve",
@@ -907,7 +921,7 @@ async function cmdStopBroker() {
     db: DB_PATH,
     stopped: !stillAlive,
     pid: state.pid,
-    ...(stillAlive ? { reason: "process did not exit within 5s" } : {}),
+    ...(stillAlive ? { reason: "process did not exit within 5s; forced kill" } : {}),
   });
 }
 
@@ -995,6 +1009,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
       maxDurationMs,
       startedAt,
       isStopping: () => stopping,
+      dbPath: DB_PATH,
     });
     out({
       ok: true,
@@ -1008,6 +1023,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   } finally {
     // Clear only OUR state: a newer broker that already took over must keep its file.
     clearBrokerState(DB_PATH, process.pid);
+    clearStopRequest(DB_PATH);
     unsubscribe();
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);

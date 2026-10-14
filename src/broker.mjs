@@ -13,7 +13,7 @@
 // trigger is an in-process commit subscription with none of the cross-process
 // gap D11 documented. Read-only viewers keep D11's poll/read-storage rule.
 
-import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync, existsSync } from "node:fs";
 
 import { RigQueue, Seats } from "./rig.mjs";
 import { driveOnce } from "./driver.mjs";
@@ -118,6 +118,7 @@ export async function runWakeLoop({
   now = Date.now,
   startedAt = now(),
   isStopping = () => false,
+  dbPath = undefined,
 }) {
   const failedSeats = new Set();
   const escalations = [];
@@ -141,10 +142,22 @@ export async function runWakeLoop({
       break;
     }
     if (!scheduler.shouldRun(now())) {
+      // Check for stop request before sleeping: on Windows there is no SIGTERM,
+      // so `serve --stop` relies on a .stop file to interrupt an idle broker.
+      if (dbPath && readStopRequest(dbPath) !== null) {
+        clearStopRequest(dbPath);
+        stoppedBy = "stop";
+        break;
+      }
       // Never sleep past the deadline: with no further commits a resident broker
       // rests in `signal.wait`, and a signal only interrupts it on SIGINT/SIGTERM.
       // A bounded run must wake itself to re-check `maxDurationMs`.
       let waitMs = scheduler.delayUntilReady(now());
+      // Also cap the wait so a .stop file written while idle is honoured within ~1s.
+      if (dbPath) {
+        const stopDeadline = 1000; // max ms before we re-check for .stop
+        waitMs = waitMs > 0 ? Math.min(waitMs, stopDeadline) : stopDeadline;
+      }
       if (maxDurationMs > 0) {
         const remaining = maxDurationMs - (now() - startedAt);
         if (remaining <= 0) continue; // deadline reached: re-check and exit at the top
@@ -173,6 +186,14 @@ export async function runWakeLoop({
       }
     } finally {
       scheduler.endPass();
+    }
+    // F35: cooperative stop — a `serve --stop` command writes a .stop file
+    // instead of process.kill (which does not deliver SIGTERM on Windows). The
+    // broker honours it here, after the pass in flight has settled.
+    if (dbPath && readStopRequest(dbPath) !== null) {
+      clearStopRequest(dbPath);
+      stoppedBy = "stop";
+      break;
     }
   }
   return { passes, failedSeats: [...failedSeats], escalations, stoppedBy };
@@ -230,6 +251,40 @@ export function clearBrokerState(dbPath, pid) {
     return true;
   } catch (err) {
     if (err?.code !== "ENOENT") throw err;
+    return false;
+  }
+}
+
+/* ------------------------------ cooperative stop request ------------------------------ */
+// A file-based stop request that the broker polls between passes. Solves F35:
+// on Windows `process.kill` does not deliver a real SIGTERM, so the broker's
+// `finally` (which waits for the pass to settle) never runs and a mid-pass
+// stop strands the run. Writing a .stop file is the POSIX-portable equivalent —
+// the broker honours it on the next pass-turn.
+export function stopRequestPath(dbPath) {
+  return `${dbPath}.broker.stop`;
+}
+
+export function writeStopRequest(dbPath) {
+  writeFileSync(stopRequestPath(dbPath), Date.now().toString());
+}
+
+export function readStopRequest(dbPath) {
+  const path = stopRequestPath(dbPath);
+  if (!existsSync(path)) return null;
+  try {
+    return readFileSync(path, "utf8").trim();
+  } catch {
+    return null;
+  }
+}
+
+export function clearStopRequest(dbPath) {
+  try {
+    unlinkSync(stopRequestPath(dbPath));
+    return true;
+  } catch (err) {
+    if (err?.code === "ENOENT") return true;
     return false;
   }
 }
