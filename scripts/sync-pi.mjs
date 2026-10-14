@@ -40,8 +40,35 @@ export function parseArgs(argv) {
 	};
 }
 
+// A malformed pin must fail LOUDLY (naming the file and the parse error) rather
+// than surfacing downstream as a confusing suite count. A hand-edited pin — e.g.
+// a missing comma before "packages" — previously threw a bare SyntaxError with
+// no file context, which read as a mystery failure.
 export function readPin(path = PIN_PATH) {
-	return JSON.parse(readFileSync(path, "utf8"));
+	let raw;
+	try {
+		raw = readFileSync(path, "utf8");
+	} catch (err) {
+		throw new Error(`cannot read pin ${path}: ${err?.message ?? err}`);
+	}
+	let pin;
+	try {
+		pin = JSON.parse(raw);
+	} catch (err) {
+		throw new Error(
+			`pi-main.pin.json is malformed: ${path} failed to parse as JSON (${err?.message ?? err}). ` +
+				`Fix the pin before running sync-pi.`,
+		);
+	}
+	if (!pin || typeof pin !== "object" || Array.isArray(pin)) {
+		throw new Error(`pi-main.pin.json is malformed: ${path} is not a JSON object.`);
+	}
+	if (typeof pin.sha !== "string" || !Array.isArray(pin.packages)) {
+		throw new Error(
+			`pi-main.pin.json is malformed: ${path} is missing a string "sha" and/or a "packages" array.`,
+		);
+	}
+	return pin;
 }
 
 /** Compare the pinned commit with upstream's tip. */

@@ -76,4 +76,45 @@ assert.ok(
 );
 console.log("LINK SPECS OK");
 
+// --- malformed pin fails LOUDLY, naming the file ----------------------------
+// A hand-edited pin (missing comma before "packages") used to surface as a
+// bare SyntaxError with no file context — read downstream as a mystery suite
+// count. readPin must name the pin and the parse error. We write fixtures to a
+// temp dir so the shipped pin is never touched.
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const dir = mkdtempSync(join(tmpdir(), "syncpi-pin-"));
+try {
+	const badPath = join(dir, "pi-main.pin.json");
+	writeFileSync(badPath, `{ "sha": "abc" "packages": [] }`);
+	let threw = null;
+	try {
+		readPin(badPath);
+	} catch (err) {
+		threw = err;
+	}
+	assert.ok(threw, "a malformed pin must throw, not return nonsense");
+	assert.match(threw.message, /pi-main\.pin\.json is malformed/, "the error names the pin file");
+	assert.match(threw.message, /failed to parse as JSON/, "the error names the parse failure");
+	assert.match(threw.message, /position \d+/, "the underlying JSON position is carried through");
+	console.log("MALFORMED PIN OK");
+
+	// A structurally valid JSON object that is missing "sha"/"packages" is also
+	// a broken pin and must fail loudly.
+	const shapePath = join(dir, "shape.pin.json");
+	writeFileSync(shapePath, `{ "repo": "x" }`);
+	let threwShape = null;
+	try {
+		readPin(shapePath);
+	} catch (err) {
+		threwShape = err;
+	}
+	assert.ok(threwShape, "a pin missing sha/packages must throw");
+	assert.match(threwShape.message, /is malformed/, "the shape error is also named");
+} finally {
+	rmSync(dir, { recursive: true, force: true });
+}
+
 console.log("SYNCPI TEST PASS");
