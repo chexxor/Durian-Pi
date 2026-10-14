@@ -57,11 +57,59 @@ export function displayName(id: string): string {
 }
 
 /**
- * Thinking level mapping. DeepInfra's `reasoning_effort` vocabulary is
- * identical to pi's (`minimal..max`) except "off" — DeepInfra uses "none".
- * Values pass through by name, so only "off" needs a mapping.
+ * pi's model thinking levels, in the order pi's own `EXTENDED_THINKING_LEVELS`
+ * ranks them (src/../models.ts:1222). `clampThinkingLevel` and
+ * `getSupportedThinkingLevels` walk this exact ordering, so durig's map must
+ * define every rung or pi falls back to sending the raw level name.
  */
-export const THINKING_LEVEL_MAP: ThinkingLevelMap = { off: "none" };
+export const DEEPINFRA_THINKING_LEVELS = [
+	"off",
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+] as const;
+
+/**
+ * Thinking level mapping, DeepInfra's `reasoning_effort` side.
+ *
+ * DeepInfra documents `reasoning_effort` as an **integer 1-100** (item 43(a)),
+ * not pi's `minimal..max` vocabulary — so "values pass through by name" was
+ * never true: pi's serializer emits `model.thinkingLevelMap[level] ?? level`,
+ * and with only `{off: "none"}` every other level fell through as the raw pi
+ * name ("medium"), a string DeepInfra has no vocabulary for. Every level is
+ * mapped to a distinctive integer inside 1-100 so:
+ *   - the field DeepInfra receives is always an integer in its documented range;
+ *   - the mapping is strictly monotone (pi's level order is preserved), which
+ *     is what lets `metrics` attribute a `step-repetition` change to a specific
+ *     level rather than to two levels that collapsed onto the same budget.
+ * Distinctness is deliberate: two levels sharing a value would make an A/B
+ * measurement indistinguishable, which is the one thing item 43(a) asks for.
+ *
+ * `off: "none"` (the only non-integer) is DeepInfra's documented spelling for
+ * "thinking off", and it keeps pi-durable's `thinkingLevelMap.off !== null`
+ * check truthful: null would mean "this level is unsupported" and silently
+ * drop it from `getSupportedThinkingLevels`.
+ */
+export const DEEPINFRA_REASONING_EFFORT_BY_LEVEL: Record<(typeof DEEPINFRA_THINKING_LEVELS)[number], string> = {
+	off: "none",
+	minimal: "5",
+	low: "25",
+	medium: "50",
+	high: "75",
+	xhigh: "90",
+	max: "100",
+};
+
+/**
+ * `DEEPINFRA_REASONING_EFFORT_BY_LEVEL`, versioned for pi's
+ * `ThinkingLevelMap` (`Record<ModelThinkingLevel, string | null>`) so pi reads
+ * it as "every level definitely maps" rather than a partial map whose absent
+ * rungs fall back to the raw level name.
+ */
+export const THINKING_LEVEL_MAP: ThinkingLevelMap = { ...DEEPINFRA_REASONING_EFFORT_BY_LEVEL };
 
 /**
  * Compatibility flags required by DeepInfra's OpenAI-compatible API

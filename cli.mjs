@@ -139,6 +139,7 @@ function maxSeats() {
 }
 
 import { resolveSeatModel } from "./src/seatmodel.mjs";
+import { claimedItemsForSeat, isModelChanged, modelChangeHandoff } from "./src/modelswitch.mjs";
 
 // live: when set, the provider is wrapped so a running generation streams to
 // the terminal. Off for commands that only read state, so `watch`/`status`
@@ -394,6 +395,20 @@ async function cmdUp(rigFile, refresh = false) {
     const created = [];
     const existing = [];
     const refreshed = [];
+    // Amendment #154's REPORT half: populated only when a seat's declared model actually
+    // changed on this refresh (applying the reset happens right after the configure commit,
+    // below); surfaced in `cmdUp`'s `out()` so a switch that wrote a boundary is observable
+    // in the same JSON document as the `up` result, not buried in a log line. Empty (key
+    // omitted) when nothing changed, so a routine refresh's output is unchanged.
+    const modelNameSwitches = [];
+    // Amendment #154: seats whose declared model CHANGED on this `up --refresh`, collected
+    // inside the configure commit (as its first read of the AHEAD-of-write agent state, while
+    // the old `AgentState.model` is still the current one) and reset IMMEDIATELY after that
+    // commit settles. Detection and application are split across two commits on purpose:
+    // `conv.reset()` is a write submission of its own (two writes in one `harness.commit`
+    // callback would race the commit being written), and the old model id has to be read
+    // BEFORE `configure` lands the new one.
+    const pendingModelChangeResets = [];
     await harness.commit(async (tx) => {
       const seatsDoc = await tx.doc(Seats);
       for (const seat of spec.seats) {
@@ -412,7 +427,31 @@ async function cmdUp(rigFile, refresh = false) {
             existing.push(seat.name);
             continue;
           }
-          await configure(tx, seatsDoc.seats[seat.name].conversationId, {
+          const seatConversationId = seatsDoc.seats[seat.name].conversationId;
+          // Amendment #154: a model CHANGE defaults to a context RESET, not a silent
+          // `configure` overwrite and NOT a new conversation. `up --refresh` is the moment
+          // durig re-reads a seat's declared model from the rig file (this branch already
+          // re-applies prompt/model/thinkingLevel below), so it is where "the model changed"
+          // is knowable — before any `configure` lands the new `AgentState.model`. Detected
+          // first, applied second: reading the CURRENT stored agent here (not the one that's
+          // about to be overwritten) is the only way to see the old id at all.
+          const currentAgent = await harness.snapshot(AgentDoc, seatConversationId, BACKGROUND_CONTEXT);
+          const declared = prompt.seatModel.modelId;
+          if (isModelChanged(currentAgent, declared, (raw) => resolveSeatModel(models, raw, providerId, MODEL_ID).modelId)) {
+            // The reset needs the harness's conversation handle and a queue read BEFORE the
+            // commit below rewrites `AgentState.model` (afterward the old id is gone), so
+            // gather both first, then hand the making of the boundary (which must be its own
+            // commit — `conv.reset()` is a write submission, not part of an in-progress
+            // transaction) to `applyModelChangeReset` after `trainup`Refresh`'s configure
+            // commit has settled. Detected now; reset applied right after.
+            pendingModelChangeResets.push({
+              seatName: seat.name,
+              conversationId: seatConversationId,
+              oldModel: currentAgent?.model?.modelId ?? "(unconfigured)",
+              newModel: declared,
+            });
+          }
+          await configure(tx, seatConversationId, {
             model: {
               provider: prompt.seatModel.provider,
               modelId: prompt.seatModel.modelId,
@@ -468,9 +507,64 @@ async function cmdUp(rigFile, refresh = false) {
       // has nothing for `watch` to observe.
       await tx.doc(RigQueue);
     }, BACKGROUND_CONTEXT);
+
+    // Amendment #154, applied AFTER the configure commit settles: for every seat whose model
+    // changed on this refresh, write the `pi.reset` boundary with a handoff that reports the
+    // switch (old -> new) and carries the seat's in-flight `claimed` queue items. Each reset is
+    // its own commit — `conv.reset()` is a write submission, not something to nest inside the
+    // `configure` transaction above — and it runs left-to-right so a rig that changed two
+    // seats reports both boundaries in a deterministic order.
+    for (const change of pendingModelChangeResets) {
+      const conv = await harness.conversation(change.conversationId, BACKGROUND_CONTEXT);
+      if (!conv) {
+        fail(
+          `seat ${change.seatName} has a registered conversation id that no longer opens (${change.conversationId}); cannot apply the model-change reset`,
+        );
+      }
+      // Read the queue State ONCE across the whole batch: one `documentState` per changed seat
+      // would re-scan on every loop iteration for rig that changed three seats in one refresh.
+      // `tx.doc(RigQueue)` already ran inside the commit above to materialize it, so this
+      // snapshot read costs one pass, not N.
+      const queueState = await harness.documentState(RigQueue, undefined, BACKGROUND_CONTEXT);
+      const handoff = modelChangeHandoff({
+        seat: change.seatName,
+        oldModel: change.oldModel,
+        newModel: change.newModel,
+        claimedItems: claimedItemsForSeat(queueState, change.seatName),
+      });
+      // Pre-watermark so the entry THIS reset wrote is unambiguous — the durable transcript
+      // keeps every prior `pi.reset` as well (same technique `cmdReset` uses), so "the newest
+      // one past the watermark" is exactly ours, never a previous run's boundary.
+      const prior = await conv.entries({}, 20, undefined, BACKGROUND_CONTEXT);
+      const priorMaxId = prior.items.reduce((max, e) => Math.max(max, Number(e.id) || 0), 0);
+      await conv.reset(handoff, BACKGROUND_CONTEXT);
+      const after = await conv.entries({ order: "descending" }, 50, undefined, BACKGROUND_CONTEXT);
+      const resetEntry = after.items.find(
+        (e) => e.kind === "pi.reset" && Number(e.id) > priorMaxId,
+      );
+      modelNameSwitches.push({
+        seat: change.seatName,
+        oldModel: change.oldModel,
+        newModel: change.newModel,
+        resetEntryId: resetEntry?.id ?? null,
+        handoff,
+      });
+    }
+
     // Report the extensions this process installed: they are active for every
     // seat, and a set the operator forgot they configured is worth seeing.
-    out({ ok: true, command: "up", db: DB_PATH, created, existing, refreshed, extensions });
+    // `modelSwitches` (amendment #154) makes the switch REPORTABLE: a model change that
+    // silently reset a context with no trace would be indistinguishable from a routine refresh.
+    out({
+      ok: true,
+      command: "up",
+      db: DB_PATH,
+      created,
+      existing,
+      refreshed,
+      extensions,
+      ...(modelNameSwitches.length ? { modelSwitches: modelNameSwitches } : {}),
+    });
   } finally {
     await harness.close(BACKGROUND_CONTEXT);
   }
