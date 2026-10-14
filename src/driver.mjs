@@ -120,18 +120,24 @@ export async function probeSeatReadability(storage, candidates, context) {
  * whole session, stranding every other seat too). The remaining seats are still
  * woken, and a later pass re-probes the bad one. Without `storage`, a per-wake
  * guard still keeps an unexpected single-conversation failure from killing the pass.
+ *
+ * `seatFilter` is an optional predicate over a candidate (`{name, conversationId}`),
+ * applied BEFORE the storage probe. A resident broker passes the scheduler's
+ * per-seat cooldown here so a repeatedly re-woken stalled claim is throttled
+ * without teaching this module about time.
  */
 export async function driveOnce(
   harness,
-  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError },
+  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, seatFilter },
 ) {
   const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds });
-  let wakes = candidates;
-  if (storage !== undefined && candidates.length > 0) {
-    const { wakeable, unreadable } = await probeSeatReadability(storage, candidates, context);
+  const eligible = seatFilter === undefined ? candidates : candidates.filter(seatFilter);
+  let wakes = eligible;
+  if (storage !== undefined && eligible.length > 0) {
+    const { wakeable, unreadable } = await probeSeatReadability(storage, eligible, context);
     for (const failure of unreadable) onError?.(failure);
     const allowed = new Set(wakeable.map((w) => w.name));
-    wakes = candidates.filter((w) => allowed.has(w.name));
+    wakes = eligible.filter((w) => allowed.has(w.name));
   }
   let actioned = 0;
   for (const wake of wakes) {

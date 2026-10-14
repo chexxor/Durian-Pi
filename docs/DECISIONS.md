@@ -1074,3 +1074,40 @@ seats are reached, so no work advances; (c) fix the producer inside vendored
 adopted. **Evidence:** `demo/driversurvive.test.mjs` reproduces the exact failure
 failing-first (`unresolvable path: ["generation","message","content",0]`, exit 1
 against the committed driver) and passes after; full `demo/*.test.mjs` loop 40/40.
+
+## D45 — A resident broker reacts to in-process commits; D11's conclusion, not its evidence, is superseded (2026-10-14)
+
+**Decision:** durig gains a **resident broker** (`serve`; the command name is the
+lead's call and the operator overrode the gate to build it directly) that **owns the
+harness** and reacts to the store's own **in-process commit stream**
+(`Session.subscribeCommits`) instead of an external clock. On a wake-relevant
+commit it runs the existing wake decision (`selectWakes`/`driveOnce`) through a
+**scheduler** that coalesces changes into one pass and throttles by a global floor
+and a per-seat cooldown. This **supersedes D11's conclusion** that only read-side
+polling is permissible; it does **not** erase D11's evidence, which still governs
+the read-only viewers.
+**Why D11's evidence still holds:** SQLite has no cross-process change
+notification, and a separate viewer that attached a harness would resume
+scheduling and kick the queue it is meant only to observe. A single long-lived
+process that *is* the harness has neither problem: the trigger is in-process
+because writer and observer are the same process. Read-only viewers (`watch`,
+`log`, `events`) keep D11's poll/read-storage rule unchanged.
+**Boundary:** the broker adds **no socket and no new trust boundary** — the trigger
+is an in-process callback and the broker only calls `conv.submit` through the
+harness it already owns. Per the #238 gate, a `security.sec` position is required
+**before code** only if a socket is added later; none is. The broker is the single
+long-lived writer, so the cross-process write races of F24/D42 do not arise inside
+it.
+**No-wake-storm invariants** (PUSH-ARCHITECTURE §3.3, held by `src/scheduler.mjs`):
+changes coalesce to one pass; a change during a pass marks the next pass dirty
+rather than being lost; a global floor separates pass starts; a per-seat cooldown
+stops a repeatedly re-woken stalled claim from hot-looping; the wake text stays
+fixed (`WAKE_CONTENT`); an operator-stopped seat is never resurrected; a corrupt
+`pi.live` never kills the pass.
+**Numbering note:** this is D45. D40–D44 already exist on the operator's
+integration line (D44 is the `pi.live` repair there), so the broker entry takes
+the next free label rather than colliding.
+**Status:** adopted (operator-directed). **Evidence:** `demo/scheduler.test.mjs`
+proves the pure coalescing/floor/cooldown rules and wires them to a real harness
+commit stream; `demo/run.test.mjs`, `demo/driversurvive.test.mjs`,
+`demo/stalledclaim.test.mjs`, `demo/supervisor.test.mjs` stay green.
