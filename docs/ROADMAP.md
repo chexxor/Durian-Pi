@@ -47,6 +47,22 @@ first live run remain open (detail in `docs/DOGFOOD.md`):
   `cancelled`); the *triage* of the ~40 stale items it exposed (`docs/QUEUE-TRIAGE-2026-10-14.md`)
   is still owed.
 
+**Status 2026-10-14 (delegate session — lost-tranche recovery):** the repo split kept the worktree's
+COMMITTED work and lost its UNCOMMITTED work; the snapshot branch **`pi-rebase` (commit `3bf61b1`)**
+held it, and it was adapted onto current `main` as one-concern items: **#307** claim-by-id,
+**#308** worktree dirty-source guard, **#309** `held` + hold/release, **#310** store-write retry
+(`src/storewrite.mjs`), **#311** event feed (`src/eventfeed.mjs` + `events`), **#312** bounded
+`peek_queue`. **F34 (#299) is FIXED** (the genlock lease now names the driven seat). Suite 55/56.
+
+**Backlog (2026-10-14):**
+- **#327 (safety, in progress)** — the seatguard git-refusal regexes end in `(\s|$)`, so `git stash;`
+  (and `commit;`/`reset;`/`-C . stash`) evade the guard; `git stash;` wiped the working tree once.
+  Fix the anchors and add failing-first demo cases.
+- **#328 (logged, do not start)** — the `starter.test.mjs` CRLF/LF drift (`core.autocrlf=true`, no
+  `.gitattributes`); normalize endings or add `.gitattributes`. Same family as **#291**.
+- **#300 (F35)** — the cooperative broker stop (Windows `serve --stop`).
+- **qa** — #313/#315/#317/#319/#321/#323/#325 await independent verification.
+
 ## Milestones
 
 - **M1 — Rig runs and routes. ✅ done.** Queue semantics, org edges, Router at

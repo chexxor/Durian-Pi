@@ -1281,3 +1281,27 @@ under the seat acting on it; cancellation is limited to the two parties so no th
 silently drop a routed item. Neither verb generates a notice — the transition and `cancelReason`
 are the record — so cancellation cannot itself spawn queue traffic.
 **Status:** adopted. **Evidence:** `demo/curate.test.mjs`; full `demo/*.test.mjs` 51/51.
+
+## D48 — Recover the lost worktree, and make shared-tree safety structural (2026-10-14)
+
+**Decision:** three things.
+1. **Recover the lost tranche.** The repo split kept the worktree's COMMITTED work and lost its
+   UNCOMMITTED work. Branch **`pi-rebase` (commit `3bf61b1`)** held it; each feature is adapted onto
+   current `main` as a one-concern item (#307 claim-by-id, #308 worktree dirty-source guard, #309
+   `held`+hold/release, #310 store-write retry, #311 event feed, #312 bounded `peek_queue`), plus F34
+   (#299). Recover by ADAPTING onto current `main` — never by restoring a whole snapshot file.
+2. **Shared-tree safety is structural-first.** Per-task git worktrees are the load-bearing isolation;
+   the seatguard git-refusal is a NON-LOAD-BEARING backstop; seats get a documented failing-first
+   recipe (run the test RED before the fix) so a revert is rarely needed. A regex denylist must never
+   be the thing standing between a seat and the operator's uncommitted work.
+3. **Per-worktree dependencies stay on npm** (`npm ci --prefer-offline`), not pnpm.
+**Why:** the split lost uncommitted work while keeping commits; and the research
+(`docs/Shared_Working_Tree_Safety_Research.md`) shows regex denylists miss 69-98.6% of bypasses for
+their target operation and prompt-only rules demonstrably fail — a seat ran `git stash;` and wiped the
+whole tree, and a Codex user watched `git restore` run after repeated "never touch git" instructions.
+The earlier `node_modules` JUNCTION is the catastrophic pattern (git followed it and deleted main's
+source); Git for Windows here is 2.42.0, below the 2.54.0 that fixed `git worktree remove` following
+junctions. Measured: `npm ci --prefer-offline` = 12 s / 111 MB, and a fresh worktree ran the
+committed suite 52-53; pnpm exited 1 on ignored build scripts.
+**Status:** adopted (operator-confirmed: per-task worktrees; npm chosen after measurement).
+**Evidence:** `docs/Shared_Working_Tree_Safety_Research.md`; suite 55/56; the per-worktree measurement.

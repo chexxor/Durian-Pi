@@ -244,3 +244,19 @@ confirmed rather than taken on trust.
   later entry its own, so column alignment and turn grouping differ between them.
 - **Cross-process updates are polled** at 750 ms; SQLite has no cross-process
   notification (D11, RESEARCH.md).
+
+Updated **2026-10-14 (later delegate session — lost-tranche recovery + structural safety)**:
+- **Recovered the lost worktree tranche onto `main`** from branch `pi-rebase` (`3bf61b1`): #307
+  claim-by-id, #308 worktree dirty-source guard, #309 `held`+hold/release, #310 store-write retry
+  (`src/storewrite.mjs`), #311 event feed (`src/eventfeed.mjs` + `events`), #312 bounded `peek_queue`.
+  **F34 (#299) fixed** (the genlock lease now names the driven seat). Suite 55/56.
+- **Guard incident:** a seat ran `git stash;` — the seatguard regex ended in `(\s|$)` so the `;`
+  slipped through and it wiped the whole uncommitted tree; recovered from `stash@{0}`. **Phase 1
+  (#329)** fixes the anchors (`\b` + `-C` forms) and makes refusals teach the safe path; the rule is
+  now in the constitution (P3 Safety), `docs/SELFDEV.md`, and `docs/failing-first-recipe.md`.
+- **Web research** (`docs/Shared_Working_Tree_Safety_Research.md`) settled the design (D48):
+  structural per-task worktrees + `npm ci --prefer-offline` + guard-as-backstop. **Phase 2 (#330)**
+  registered; blocked on Git ≥ 2.54 (host was 2.42.0).
+- **Known regression to fix with #328:** #329 edited `constitution.txt` but did not regenerate
+  `rig.starter.json`'s inline copy, so `demo/starter.test.mjs` now drifts on CONTENT as well as CRLF.
+- Nothing pushed.
