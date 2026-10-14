@@ -49,11 +49,17 @@ try {
 	check("its cwd is the same relative place as the source", made.cwd === join(target, "durig") && existsSync(made.cwd), made.cwd);
 	check("tracked content came with it", existsSync(join(made.cwd, "tracked.txt")));
 
-	console.log("\nnode_modules is bridged, or the worktree could not run the suite at all");
+	console.log("\nnode_modules is NO LONGER bridged — the caller must install per-worktree");
 	check(
-		"a node_modules link exists in the worktree (gitignored, so absent otherwise)",
-		existsSync(join(made.cwd, "node_modules", "dep.js")),
+		"no node_modules exists after create (the caller must run `npm ci --prefer-offline`)",
+		!existsSync(join(made.cwd, "node_modules")),
+		"a junction was created instead of leaving it absent",
 	);
+	// Re-create the bridge manually so the remaining checks (dirty worktree removal) can
+	// still run. This is a test-only convenience — real seats would install via npm ci.
+	const modules = join(made.cwd, "node_modules");
+	await mkdir(modules, { recursive: true });
+	await writeFile(join(modules, "dep.js"), "module.exports = 1;\n");
 
 	console.log("\nF23: a DIRTY source must not silently fork a HEAD-only checkout");
 	// The operator's uncommitted direct work lives only in the working tree, not in
