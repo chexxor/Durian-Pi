@@ -29,6 +29,8 @@ node cli.mjs send pm "hello"           # steer a seat; waits; returns reply
 node cli.mjs send pm "hello" --request-id r-1   # retry-safe: same id, one submission
 node cli.mjs queue                     # dump work queue
 node cli.mjs status                    # per-seat health + attention notices
+node cli.mjs run                       # drive the queue to quiescence once
+node cli.mjs serve [--max-duration <s>] # resident broker: keep waking seats on store changes
 node cli.mjs watch                     # live NDJSON stream of queue + attention
 node cli.mjs watch --once              # one snapshot line, then exit
 node cli.mjs log pm 20                 # tail a seat transcript

@@ -125,10 +125,13 @@ export async function probeSeatReadability(storage, candidates, context) {
  * applied BEFORE the storage probe. A resident broker passes the scheduler's
  * per-seat cooldown here so a repeatedly re-woken stalled claim is throttled
  * without teaching this module about time.
+ *
+ * `onWoke(name)` fires once per SUBMITTED wake, so a caller can start that seat's
+ * cooldown; a seat skipped by the probe never fires it.
  */
 export async function driveOnce(
   harness,
-  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, seatFilter },
+  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, seatFilter },
 ) {
   const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds });
   const eligible = seatFilter === undefined ? candidates : candidates.filter(seatFilter);
@@ -146,6 +149,7 @@ export async function driveOnce(
       if (!conv) continue;
       await conv.submit({ type: "input", content: WAKE_CONTENT }, context);
       actioned++;
+      onWoke?.(wake.name);
     } catch (error) {
       // Belt and braces: even a probed-readable seat can fail here. Report and
       // continue rather than abandon the pass.

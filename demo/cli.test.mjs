@@ -90,6 +90,20 @@ try {
 	assert.equal(w.command, "watch");
 	assert.equal(w.seq, 1, "the snapshot is sequence 1");
 
+	// --- serve --max-duration: the resident broker's bounded contract ---------
+	// The broker owns the harness and reacts to the store's commit stream; a bounded
+	// run must exit at its deadline. This guards the resting-wait bug: an idle
+	// broker sleeps in `signal.wait`, and a signal only interrupts it on SIGINT,
+	// so the wait itself must be bounded by the remaining duration.
+	const serve = cli(["serve", "--max-duration", "1"]);
+	assert.equal(serve.code, 0, `serve exit 0 (stderr: ${serve.stderr.slice(0, 200)})`);
+	const served = json(serve);
+	assert.equal(served.ok, true);
+	assert.equal(served.command, "serve");
+	assert.equal(served.db, db, "serve reports the database it drove");
+	assert.ok(served.passes >= 1, "the broker always runs its forced startup pass");
+	assert.equal(served.stoppedBy, "max-duration", "a bounded broker stops at its deadline");
+
 	// --- send: settles and reports the outcome -----------------------------
 	const send = cli(["send", "alpha", "hello"]);
 	assert.equal(send.code, 0, `send exit 0 (stderr: ${send.stderr.slice(0, 200)})`);

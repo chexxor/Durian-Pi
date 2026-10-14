@@ -52,7 +52,8 @@ import {
 	readGenerationSlots,
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
-import { driveOnce } from "./src/driver.mjs";
+import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
+import { drivePass, runWakeLoop } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
@@ -732,29 +733,6 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
   try {
-    // A claimed item whose seat's latest submission was operator-stopped
-    // (`aborted:<reason>`) must never be re-woken (ROADMAP 42; lead ruling #45/
-    // #50). Read that abort fact READ-ONLY off the settled submission that `stop`
-    // already writes (settleSubmission -> unanswered/"aborted:<reason>") — no new
-    // write path, no queue-item annotation. Computed once before the loop because
-    // the stopped fact is durable and stable across passes.
-    const seatsDoc0 = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-    const stoppedConvIds = new Set();
-    for (const s of Object.values(seatsDoc0?.value?.seats ?? {})) {
-      const page = await probeStorage.scanSubmissions(
-        { conversationId: s.conversationId, order: "descending" },
-        1,
-        undefined,
-        BACKGROUND_CONTEXT,
-      );
-      const latest = page.items[0];
-      if (
-        latest?.status === "unanswered" &&
-        String(latest.reason ?? "").startsWith("aborted:")
-      ) {
-        stoppedConvIds.add(s.conversationId);
-      }
-    }
     const maxPasses = watch ? Infinity : 200;
     let passes = 0;
     // Seats whose wake could not be delivered (P5 / #110). Tracked across passes so
@@ -772,24 +750,19 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
         stoppedBy = "max-duration";
         break;
       }
-      const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-      const queueDoc = await harness.documentState(RigQueue, undefined, BACKGROUND_CONTEXT);
-      const inspection = await harness.inspect(BACKGROUND_CONTEXT);
-      const pendingConvIds = new Set((inspection.submissions ?? []).map((s) => s.conversationId));
-      // A live generation lease means the seat is already advancing; a dead one
-      // does not, so only LIVE holders are treated as busy (same rule as the
-      // stranded notice and the resume verb).
-      const slots = maxSeats();
-      const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
-      const busySeats = new Set(genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat));
-      const actioned = await driveOnce(harness, {
-        seats: seatsDoc?.value?.seats,
-        items: queueDoc?.value?.items,
-        pendingConvIds,
-        busySeats,
-        stoppedConvIds,
+      // One shared pass (src/broker.mjs): the wake decision is `selectWakes`, and
+      // the operator-stop fact is read fresh each pass so a `stop` issued while a
+      // long `run --watch` is resident is honoured. `serve` uses the same function.
+      const { actioned } = await drivePass(harness, probeStorage, {
         context: BACKGROUND_CONTEXT,
-        storage: probeStorage,
+        readBusySeats: () => {
+          // A live generation lease means the seat is already advancing; a dead one
+          // does not, so only LIVE holders are treated as busy (same rule as the
+          // stranded notice and the resume verb).
+          const slots = maxSeats();
+          const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
+          return new Set(genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat));
+        },
         onError: ({ name, conversationId, error }) => {
           failedSeats.add(name);
           console.error(
@@ -804,9 +777,6 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
           );
         },
       });
-      // Hold the harness open until every run this pass started has settled;
-      // closing first would abandon them (the F11 class).
-      await harness.waitForIdle(BACKGROUND_CONTEXT);
       passes++;
       if (!watch && actioned === 0) break;
       if (passes >= maxPasses) break;
@@ -832,6 +802,101 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
     }
     out({ ok: true, command: "run", db: DB_PATH, passes, failedSeats: [...failedSeats], stoppedBy, escalated: escalations.length });
   } finally {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+    await harness.close(BACKGROUND_CONTEXT);
+    await probeStorage.close(BACKGROUND_CONTEXT);
+  }
+}
+
+// serve [--max-duration <s>] (D45): the RESIDENT BROKER. `run` is a clock — a human
+// must invoke it, and ROADMAP 38's self-driving queue needs a process that keeps
+// driving. `serve` opens the harness once, subscribes to its in-process commit
+// stream, and runs a wake pass whenever the store changes: an enqueue/claim/done
+// wakes the right seat with no external clock. It is the single long-lived writer
+// that *is* the harness, so it has none of the cross-process gap D11 documents for
+// viewers (docs/DECISIONS.md D45); read-only `watch`/`log` keep D11's poll.
+//
+// The scheduler (src/scheduler.mjs) coalesces commits into one pass, floors pass
+// starts, and cools off a per-seat retry so a re-woken stalled claim cannot hot-loop.
+// The supervisor runs each pass, exactly as `run --watch`. Bounded with
+// --max-duration; SIGINT/SIGTERM stop after the pass in flight settles.
+async function cmdServe({ maxDurationMs = 0 } = {}) {
+  const { harness } = await openHarness({ enforceSeatRoot: true });
+  const probeStorage = await openNodeSqliteStorage(DB_PATH);
+  const scheduler = new WakeScheduler({
+    minIntervalMs: 500,
+    seatCooldownMs: SERVE_SEAT_COOLDOWN_MS,
+  });
+  const signal = createWakeSignal();
+  // Subscribe BEFORE the first pass so a commit that lands during startup is not
+  // missed. The listener must not throw, block, or call Session APIs: it only
+  // classifies the commit and raises the signal.
+  const unsubscribe = harness.subscribeCommits((publication) => {
+    scheduler.notify(publication);
+    if (scheduler.dirty) signal.raise();
+  });
+  const startedAt = Date.now();
+  let stopping = false;
+  const onSignal = () => {
+    stopping = true;
+    signal.raise(); // interrupt a resting wait, so a signal is not stuck behind the floor
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+  try {
+    const result = await runWakeLoop({
+      harness,
+      probeStorage,
+      scheduler,
+      signal,
+      context: BACKGROUND_CONTEXT,
+      readBusySeats: () => {
+        const slots = maxSeats();
+        const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
+        return new Set(genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat));
+      },
+      supervise: () => superviseOnce(harness, probeStorage, BACKGROUND_CONTEXT),
+      onDiagnostic: (d) => {
+        if (d.kind === "wake-failed") {
+          console.error(
+            JSON.stringify({
+              ok: false,
+              command: "serve",
+              driver: "wake-failed",
+              seat: d.name,
+              conversationId: d.conversationId,
+              error: String(d.error?.message ?? d.error),
+            }),
+          );
+        } else if (d.kind === "escalated") {
+          console.error(
+            JSON.stringify({
+              ok: false,
+              command: "serve",
+              supervisor: "escalated",
+              seat: d.seat,
+              itemId: d.itemId,
+              reason: d.reason,
+            }),
+          );
+        }
+      },
+      maxDurationMs,
+      startedAt,
+      isStopping: () => stopping,
+    });
+    out({
+      ok: true,
+      command: "serve",
+      db: DB_PATH,
+      passes: result.passes,
+      failedSeats: result.failedSeats,
+      escalated: result.escalations.length,
+      stoppedBy: result.stoppedBy,
+    });
+  } finally {
+    unsubscribe();
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
     await harness.close(BACKGROUND_CONTEXT);
@@ -1370,6 +1435,11 @@ async function readRigHealth(storage, dbPath, slots, { modelsBySeat = {}, entryL
 // terminal; a person at a terminal gets the readable view of the same
 // snapshot, so the two never disagree about what the rig is doing.
 const WATCH_POLL_MS = 750;
+// Per-seat cooldown for the resident broker (D45): a seat re-woken for a stalled
+// claim waits this long before the broker will wake it again. The global floor in
+// the scheduler bounds bursts; this bounds one seat. Long enough to span a model
+// turn, short enough that a genuinely stranded claim still recovers promptly.
+const SERVE_SEAT_COOLDOWN_MS = 30_000;
 async function cmdWatch(once, human) {
   const storage = await openNodeSqliteStorage(DB_PATH);
   let seq = 0;
@@ -1677,6 +1747,7 @@ usages:
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs reset <seat> [handoff]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary)
   node cli.mjs run [--watch] [--max-duration <seconds>]   drive to quiescence; --watch resident; --max-duration bounds it
+  node cli.mjs serve [--max-duration <seconds>]   the resident broker: wake seats from the store's change stream, no external clock
   node cli.mjs stop <seat> [reason]      emergency-stop: halts a seat's in-flight run across processes
   node cli.mjs log <seat> [limit] [--follow] [--full] [--tool-bg] [--theme dark|light]
                           a seat's conversation (--follow = live, --full = whole tool output)
@@ -1748,6 +1819,7 @@ try {
   } else if (cmd === "queue") await cmdQueue();
   else if (cmd === "resume" || cmd === "doctor") await cmdResume();
   else if (cmd === "run") await cmdRun({ watch: rest.includes("--watch"), maxDurationMs: parseMaxDuration(rest) });
+  else if (cmd === "serve") await cmdServe({ maxDurationMs: parseMaxDuration(rest) });
   else if (cmd === "stop") {
     if (!rest[0]) fail("stop needs <seat> [reason]");
     await cmdStop(rest[0], rest.slice(1).join(" "));
