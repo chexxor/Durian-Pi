@@ -14,7 +14,7 @@
 // escalation lives here. `run --watch` runs this as a pass (bounded, idempotent).
 
 import { REPEATED_FAILURE_STREAK } from "./attention.mjs";
-import { DEFERRED_TO_HUMAN, RigQueue } from "./rig.mjs";
+import { DEFERRED_TO_HUMAN, RigQueue, isTerminalItem } from "./rig.mjs";
 
 /** How long a question parked on another SEAT waits before the human is escalated. */
 export const DEFERRED_TO_SEAT_MS = 15 * 60_000;
@@ -110,7 +110,7 @@ export async function applyEscalations(harness, plans, context) {
     const applied = [];
     for (const plan of plans) {
       const item = queue.items.find((it) => it.id === plan.itemId);
-      if (!item || item.status === "done") continue;
+      if (!item || isTerminalItem(item)) continue;
       item.status = "deferred";
       item.question = plan.question;
       item.deferredTo = DEFERRED_TO_HUMAN;

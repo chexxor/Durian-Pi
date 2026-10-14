@@ -32,7 +32,7 @@ export function seatActivity(seat, health, highlight) {
 	// separately because it is not idleness and not work in progress: the seat is
 	// held by a question, and the row should say which one.
 	const deferred = items.find((it) => it.to === seat.name && it.status === "deferred");
-	const routed = items.find((it) => it.from === seat.name && it.status !== "done");
+	const routed = items.find((it) => it.from === seat.name && it.status !== "done" && it.status !== "cancelled");
 	// Rig- and queue-scoped notices carry a null seat, so they are excluded
 	// EXPLICITLY rather than by the field being absent - otherwise a rig-wide
 	// notice lands on whichever seat row happens to match.

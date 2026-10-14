@@ -127,6 +127,17 @@ export function isDoneNotice(item) {
 }
 
 /**
+ * A terminal item is finished either way: `done` (the work happened) or
+ * `cancelled` (it no longer should). Both are invisible to the driver and to
+ * any "non-terminal work" view, and neither can be claimed — so every place that
+ * used to test `status !== "done"` must test this instead, or a cancelled item
+ * reappears as phantom work.
+ */
+export function isTerminalItem(item) {
+	return item?.status === "done" || item?.status === "cancelled";
+}
+
+/**
  * Enqueue work. Called inside a transaction; returns the assigned item id.
  * `transitions` records who did what and when for the audit trail.
  *
@@ -499,6 +510,88 @@ const Router = defineExtension({
 			},
 		}),
 		defineTool({
+			name: "revise_work",
+			description:
+				"Update the subject and/or body of a QUEUED item you sent or were sent, before it is claimed. A claimed item is being acted on and is not revised.",
+			parameters: Type.Object({
+				itemId: Type.Number(),
+				subject: Type.Optional(Type.String()),
+				body: Type.Optional(Type.String()),
+			}),
+			replay: "safe",
+			execute: async (args, api, context) => {
+				const me = await mySeatName(api, context);
+				const out = await api.commit(async (tx) => {
+					const queue = await tx.doc(RigQueue);
+					const item = queue.items.find((it) => it.id === args.itemId);
+					if (!item) return `unknown item #${args.itemId}`;
+					// Either party may revise: the sender corrects a request before it is
+					// picked up, or the holder tidies an item it has not started. Anyone
+					// else editing a routed item would be a silent spoof.
+					if (item.to !== me && item.from !== me)
+						return `item #${args.itemId} is not yours to revise (from=${item.from} to=${item.to})`;
+					// Only UNCLAIMED work: once claimed the recipient is acting on the
+					// item, so changing its body under them would diverge from the run.
+					if (item.status !== "queued")
+						return `item #${args.itemId} is not queued (status=${item.status}); only unclaimed work can be revised`;
+					if (args.subject === undefined && args.body === undefined)
+						return "revise_work needs a subject and/or a body";
+					const fields = [];
+					if (args.subject !== undefined && args.subject !== item.subject) {
+						item.subject = args.subject;
+						fields.push("subject");
+					}
+					if (args.body !== undefined && args.body !== item.body) {
+						item.body = args.body;
+						fields.push("body");
+					}
+					if (fields.length === 0) return `item #${item.id} unchanged`;
+					item.transitions.push({
+						at: new Date().toISOString(),
+						event: "revised",
+						by: me,
+						fields,
+					});
+					return `item #${item.id} revised (${fields.join(", ")}); it stays queued for ${item.to}.`;
+				}, context);
+				return toolText(out);
+			},
+		}),
+		defineTool({
+			name: "cancel_work",
+			description:
+				"Cancel one of your items (sent by you or addressed to you) that is no longer worth doing. Terminal: it can never be claimed and the broker will never wake anyone for it. Use it for stale or superseded work instead of leaving it in the queue.",
+			parameters: Type.Object({
+				itemId: Type.Number(),
+				reason: Type.String({
+					description: "why it is cancelled; recorded on the item for the other party and the queue view",
+				}),
+			}),
+			replay: "safe",
+			execute: async (args, api, context) => {
+				const me = await mySeatName(api, context);
+				const out = await api.commit(async (tx) => {
+					const queue = await tx.doc(RigQueue);
+					const item = queue.items.find((it) => it.id === args.itemId);
+					if (!item) return `unknown item #${args.itemId}`;
+					if (item.to !== me && item.from !== me)
+						return `item #${args.itemId} is not yours to cancel (from=${item.from} to=${item.to})`;
+					if (isTerminalItem(item))
+						return `item #${args.itemId} is already ${item.status}`;
+					item.status = "cancelled";
+					item.cancelReason = args.reason;
+					item.transitions.push({
+						at: new Date().toISOString(),
+						event: "cancelled",
+						by: me,
+						reason: args.reason,
+					});
+					return `item #${item.id} cancelled: ${args.reason}`;
+				}, context);
+				return toolText(out);
+			},
+		}),
+		defineTool({
 			name: "peek_queue",
 			description:
 				"List your queue work: non-terminal items addressed to or sent by you. Pass all=true for every item (any status, any seat) — oversight and debugging.",
@@ -513,7 +606,7 @@ const Router = defineExtension({
 					const queue = await tx.doc(RigQueue);
 					return queue.items
 						.filter((it) =>
-							args.all ? true : it.status !== "done" && (it.to === me || it.from === me),
+							args.all ? true : !isTerminalItem(it) && (it.to === me || it.from === me),
 						)
 						.map((it) => `#${it.id} ${it.status} from=${it.from} to=${it.to} subj=${it.subject}`);
 				}, context);

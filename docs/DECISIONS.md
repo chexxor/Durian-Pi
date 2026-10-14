@@ -1142,3 +1142,24 @@ boundary, so no `security` consult is triggered (consistent with D45).
 (`--no-serve`/piped opt out; `--serve` starts a broker that stays resident; `run` and
 a second `serve` fail closed; `up --serve` is idempotent; `serve --stop` reaps it and
 clears the state; the log shows no unsettled await); full `demo/*.test.mjs` 50/50.
+
+## D47 — `revise_work` and `cancel_work`: the queue can be curated, and `cancelled` is terminal (2026-10-14)
+
+**Decision:** add two Router tools and one terminal status.
+- `revise_work(itemId, {subject?, body?})` — the item's **sender or holder** may update a
+  **queued** (unclaimed) item; a claimed item is being acted on and refuses revision.
+- `cancel_work(itemId, reason)` — either party may cancel a non-terminal item to a terminal
+  `cancelled` status, recording the reason on the item.
+- `cancelled` joins `done` as terminal, tested by one helper `isTerminalItem(item)`. Every place
+  that used to test `status !== "done"` now uses it: `peek_queue`'s non-terminal view, `watchview`'s
+  `routed`, and `supervisor`'s `applyEscalations`. The driver already ignores it (it wakes only
+  `queued` items and stalled `claimed` runs).
+**Why:** F36 — a triage of `selfdev.sqlite` found ~40 of 60 active items stale or mere bookkeeping,
+and the queue had no move to cancel a stale item or edit an item's description. The only paths were
+"complete it as if done" or let a seat grind it, and the resident broker (D45), waking oldest-first,
+does exactly the latter. A queue that cannot be edited accumulates interred work.
+**Bounds (why these two parties):** revision is limited to unclaimed work so a run is never changed
+under the seat acting on it; cancellation is limited to the two parties so no third seat can
+silently drop a routed item. Neither verb generates a notice — the transition and `cancelReason`
+are the record — so cancellation cannot itself spawn queue traffic.
+**Status:** adopted. **Evidence:** `demo/curate.test.mjs`; full `demo/*.test.mjs` 51/51.
