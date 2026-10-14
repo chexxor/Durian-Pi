@@ -227,7 +227,7 @@ function buildModels(live = null) {
   return { models, providerId: "deepinfra" };
 }
 
-async function openHarness({ resume = true, live = null } = {}) {
+async function openHarness({ resume = true, live = null, enforceSeatRoot = false } = {}) {
   const { models, providerId } = buildModels(live);
   // createRegistry() holds only built-in tasks; without installing the Router
   // extension no seat conversation ever sees the durig tools
@@ -271,7 +271,44 @@ async function openHarness({ resume = true, live = null } = {}) {
   if (resume) harness.resume();
   const rosterDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
   fillRoster(seatRoster, rosterDoc?.value?.seats);
+  // DOGFOOD F12: a write-side run must never silently proceed against a tree the
+  // operator did not name. Each seat's working directory is resolved ONCE at `up`
+  // time (seat.cwd ?? spec.cwd ?? DURIG_SEAT_ROOT) and persisted onto the
+  // conversation; a later launch with a different DURIG_SEAT_ROOT would otherwise
+  // run against the persisted (stale/wrong) tree and look successful. So when
+  // DURIG_SEAT_ROOT is set and differs from a seat's persisted cwd, the write-side
+  // command (`send`/`run`) fails CLOSED, naming both paths and the fix. This lives
+  // here (once per command, where the write-side harness is opened), NOT in
+  // makeSeatEnv (which runs per tool call and must stay cheap).
+  if (enforceSeatRoot && CFG.DURIG_SEAT_ROOT) {
+    const root = normalizePath(CFG.DURIG_SEAT_ROOT);
+    const seatsVal = rosterDoc?.value?.seats ?? {};
+    let mismatched = null;
+    for (const [name, s] of Object.entries(seatsVal)) {
+      const conv = await harness.conversation(s.conversationId, BACKGROUND_CONTEXT);
+      const persisted = conv ? await conv.agent(BACKGROUND_CONTEXT).catch(() => null) : null;
+      const persistedCwd = persisted?.cwd;
+      if (persistedCwd && normalizePath(persistedCwd) !== root) {
+        mismatched = { name, persistedCwd };
+        break;
+      }
+    }
+    if (mismatched) {
+      fail(
+        `seat "${mismatched.name}" is pointed at a different worktree than DURIG_SEAT_ROOT: persisted cwd "${mismatched.persistedCwd}" vs DURIG_SEAT_ROOT "${CFG.DURIG_SEAT_ROOT}". Fix: re-point it with "up --refresh" under the new root, or unset DURIG_SEAT_ROOT.`,
+      );
+    }
+  }
   return { harness, models, providerId, extensions: extensionNames(extensions) };
+}
+
+// Normalize a path for equality comparison: absolute, separator-normalised, and
+// case-folded on Windows (where the filesystem is case-insensitive). Used only by
+// the F12 seat-root guard so "C:\A\durig" and "c:/a/durig/" count as the same tree.
+function normalizePath(p) {
+  let out = p.replace(/\\/g, "/");
+  while (out.endsWith("/")) out = out.slice(0, -1);
+  return process.platform === "win32" ? out.toLowerCase() : out;
 }
 
 // The stored system prompt for one seat: compiled persona plus the durig
@@ -625,7 +662,7 @@ async function cmdReset(seatName, handoff) {
 // missing: one `send` to route, then `run` finishes the chain without a second
 // external send. `--watch` stays resident instead of exiting.
 async function cmdRun({ watch = false } = {}) {
-  const { harness } = await openHarness();
+  const { harness } = await openHarness({ enforceSeatRoot: true });
   try {
     const maxPasses = watch ? Infinity : 200;
     let passes = 0;
@@ -796,7 +833,7 @@ async function cmdStop(seatName, reason) {
 // generation streams to stderr, labelled per seat; stdout stays one JSON doc.
 async function cmdSend(seatName, text, { stream = false, requestId = null } = {}) {
   const live = stream ? createLiveRenderer({ color: Boolean(process.stderr.isTTY) && !process.env.NO_COLOR }) : null;
-  const { harness, providerId } = await openHarness({ live });
+  const { harness, providerId } = await openHarness({ live, enforceSeatRoot: true });
   {
     const doc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
     const seatsVal = doc?.value?.seats ?? {};
