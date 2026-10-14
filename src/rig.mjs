@@ -11,6 +11,8 @@
 //   directions flow through one durable queue.
 import { defineDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 /** Seat roster: name -> conversation id + role text. Session singleton. */
 export const Seats = defineDoc({
@@ -138,6 +140,7 @@ export async function enqueueItem(
 	body,
 	optimizedVia = null,
 	notice = false,
+	tier = null,
 ) {
 	const queue = await tx.doc(RigQueue);
 	const id = queue.nextId++;
@@ -152,10 +155,37 @@ export async function enqueueItem(
 		optimizedVia,
 		// A protocol notice (a DONE ack), not work: completing it enqueues nothing.
 		notice,
+		// Ratcheting task tier (RANK 2 borrow): the PM's size for the request,
+		// assigned at intake and LATCHED onto the item's chain (its DONE notice,
+		// verification item and follow-ups inherit it). null = not tiered.
+		...(tier ? { tier } : {}),
 		status: "queued",
 		transitions: [{ at: new Date().toISOString(), event: "queued", by: from }],
 	});
 	return id;
+}
+
+// Ratcheting task tier (RANK 2 borrow; source vendor/eval/agent-fleet @ 7c34dde
+// docs/ARCHITECTURE.md "Task-tier budgets": the tier is task-scoped and ratcheted
+// - lowering is free, raising needs a stated reason). Durig maps the PM S/M/L onto
+// the ordered tiers trivial < small < feature < project. Raising = moving to a
+// HIGHER index; lowering = same or lower. A new intake (new subject from the
+// operator) starts a NEW tier; the chain (DONE notice, verification, follow-up)
+// latches onto the originating item's tier.
+export const RATCHET_TIERS = ["trivial", "small", "feature", "project"];
+
+/**
+ * The base task of a queue-item subject: strip the leading `DONE #<n>: ` (and
+ * any QUESTION prefix) so a follow-up, verification or DONE notice of the same
+ * task compares against the same originating subject. Used by the raise guard.
+ */
+export function baseTaskSubject(subject) {
+	return String(subject ?? "").replace(/^(DONE|QUESTION) #\d+: /, "");
+}
+
+/** Index in RATCHET_TIERS, or -1 if not a known tier. */
+export function tierIndex(tier) {
+	return RATCHET_TIERS.indexOf(String(tier ?? ""));
 }
 
 // Tool results cross the content->output rename in @earendil-works/pi-durable:
@@ -165,6 +195,42 @@ export async function enqueueItem(
 function toolText(text) {
 	const content = [{ type: "text", text }];
 	return { content, output: content };
+}
+
+// Thin-context return contract (agent-fleet borrow, ROADMAP RANK 1; source of
+// truth: vendor/eval/agent-fleet @ 7c34dde, docs/ARCHITECTURE.md "Research
+// helpers write findings to disk; the hub resumes specialists with paths, not
+// raw dumps"; durig shape per docs/COMPETITORS.md "durig seats already write to
+// disk, but our tool results still return bodies; the lesson is the return
+// contract"). CONTRACT (verbatim): for claim_work (and any toolText result over
+// the threshold), the tool returns a PATH; the full body is written to
+// cwd/.durig/<itemId>.md and read back via existing read tools. Results under
+// the threshold are unchanged (inline, byte-identical). Additive opt-in seam at
+// toolText: small bodies stay inline; only the large claim body is deferred to
+// disk. Deterministic per-item path so the demo can assert it and the body is
+// idempotently re-readable (re-claim rewrites the same file).
+export const TOOL_RESULT_INLINE_LIMIT = 2000;
+
+/**
+ * Write an over-threshold tool result body to the seat's disk workspace and
+ * return A PATH, per the thin-context return contract. Under the threshold (or
+ * when there is no usable seat workspace) the original text is returned
+ * unchanged, so small/short results stay byte-identical and the coordinator's
+ * context stays thin only for the large dump. The coordinator reads the body
+ * back with its EXISTING read tools (confined to its cwd); no auto-read.
+ * @param {{cwd?: string}|undefined} env the executing conversation's ExecutionEnv
+ * @param {string} text the full tool-result text
+ * @param {number|string} itemId the queue item id (deterministic file name)
+ * @returns {string} a path (over threshold) or the original text (under)
+ */
+export function thinResultText(env, text, itemId) {
+	if (typeof text !== "string" || text.length <= TOOL_RESULT_INLINE_LIMIT) return text;
+	const cwd = env?.cwd;
+	if (!cwd) return text; // no workspace to defer to: keep the inline contract
+	const file = join(cwd, ".durig", `${itemId}.md`);
+	mkdirSync(join(cwd, ".durig"), { recursive: true });
+	writeFileSync(file, text, "utf8");
+	return `claimed item #${itemId} - full body written to ${file}; read it with your read tool.`;
 }
 
 const Router = defineExtension({
@@ -196,6 +262,17 @@ const Router = defineExtension({
 				optimize: Type.Optional(Type.Boolean({
 					description: "Rewrite body through the instruction optimizer before enqueueing (costs one model call).",
 				})),
+				tier: Type.Optional(Type.Union([
+					Type.Literal("trivial"),
+					Type.Literal("small"),
+					Type.Literal("feature"),
+					Type.Literal("project"),
+				], {
+					description: "Ratchet tier for this task (trivial/small/feature/project); assigned at intake and latched onto the chain. Raising above an existing tier needs a `reason`.",
+				})),
+				reason: Type.Optional(Type.String({
+					description: "Required when RAISING the tier for an existing task; lowering is free so a reason is optional then.",
+				})),
 			}),
 			replay: "safe", // pure durable-state write; rerun after crash is idempotent-safe at doc level
 			execute: async (args, api, context) => {
@@ -225,7 +302,27 @@ const Router = defineExtension({
 					}
 					const id = await api.commit(async (tx) => {
 						await assertSendAllowed(tx, me, args.to, args.requires);
-						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia);
+						// Ratcheting tier raise guard: raising an already-tiered task's chain
+						// to a HIGHER tier requires a stated reason; lowering is free (RANK 2
+						// borrow, ARCHITECTURE.md "survives the next message ... raising needs a
+						// stated reason"). The reference tier is the newest existing item with
+						// the SAME base task subject (the originating item / its chain).
+						const tier = args.tier;
+						if (tier) {
+							const queue = await tx.doc(RigQueue);
+							const base = baseTaskSubject(args.subject);
+							const existing = [...queue.items]
+								.reverse()
+								.find((it) => tierIndex(it.tier) >= 0 && baseTaskSubject(it.subject) === base);
+							const newIdx = tierIndex(tier);
+							const oldIdx = existing ? tierIndex(existing.tier) : -1;
+							if (oldIdx >= 0 && newIdx > oldIdx && !(args.reason && args.reason.trim())) {
+								throw new Error(
+									`raising tier ${existing.tier}->${tier} for this task needs a stated reason`,
+								);
+							}
+						}
+						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null);
 					}, context);
 					return toolText(`queued item #${id} for ${args.to}${optimizedVia ? ` (body optimized via ${optimizedVia})` : ""}`);
 				} catch (err) {
@@ -267,7 +364,10 @@ const Router = defineExtension({
 				if (!claimed) {
 					return toolText("NO_QUEUED_WORK");
 				}
-				return toolText(`ITEM #${claimed.id} | from=${claimed.from} | subject=${claimed.subject}\n${claimed.body}`);
+				const claimText = `ITEM #${claimed.id} | from=${claimed.from} | subject=${claimed.subject}\n${claimed.body}`;
+				// Thin-context return contract: an over-threshold body goes to disk and
+				// the tool returns a PATH, not the dump (see thinResultText / RANK-1).
+				return toolText(await thinResultText(api.env, claimText, claimed.id));
 			},
 		}),
 		defineTool({
@@ -308,6 +408,10 @@ const Router = defineExtension({
 							args.resultSummary,
 							null,
 							true,
+							// Ratcheting tier LATCH: the DONE notice inherits the completed
+							// item's tier, so the chain (DONE -> verification -> follow-up)
+							// keeps the same ratio tier across the task's life (RANK 2).
+							item.tier ?? null,
 						);
 					}
 					return `ok`;

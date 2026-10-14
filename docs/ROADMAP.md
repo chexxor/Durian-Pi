@@ -988,6 +988,58 @@ surface. A feature that is off must therefore cost nothing — not "little".
     subsequent turn demonstrably excludes the prior turns (assert the reset boundary is the
     context head) — falsifiable by disabling the reset.
 
+45. **Borrow a thin-context return contract: tool results carry paths, not bodies.
+    (agent-fleet borrow, RANK 1).** Source of truth: `vendor/eval/agent-fleet` @ HEAD
+    `7c34dde46d4fc9b21f3750dc8b881df53e725640`, `docs/ARCHITECTURE.md` — "Research helpers
+    write findings to disk; the hub resumes specialists with **paths, not raw dumps**" (and the
+    diagram "findings written to disk — hub gets paths, not dumps"). The durig shape is stated
+    in `docs/COMPETITORS.md`: "durig seats already write to disk, but our tool results still
+    return bodies; the lesson is the **return** contract." So the mechanism is adopted, not the
+    stack: a tool result that would inline a large BODY into the coordinator's context instead
+    writes that body to the seat's disk workspace and returns A PATH, which the coordinator
+    reads back with its existing `read` tools (no auto-read, no new read verb).
+    *Durig file it touches:* `src/rig.mjs` — the `toolText()` seam and `claim_work` (the largest
+    inliner, which returns the full item subject+body). Shape per lead ruling (item 45/75):
+    ADDITIVE opt-in at `toolText`; the largest inliner (`claim_work`) defers to disk over one
+    threshold (`TOOL_RESULT_INLINE_LIMIT`); deterministic per-item file `cwd/.durig/<itemId>.md`
+    inside the seat's cwd/workspace; small results stay byte-identical/inline; bounded/idempotent
+    (re-claim overwrites the same deterministic file; a second claim is `NO_QUEUED_WORK`).
+    *CONTRACT (verbatim):* for `claim_work` (and any `toolText` result over the threshold), the
+    tool returns a PATH; the full body is written to `cwd/.durig/<itemId>.md` and read back via
+    existing read tools; results under the threshold are unchanged (inline, byte-identical).
+    *Proof:* `demo/thincontext.test.mjs` — an over-threshold `claim_work` returns a path (not
+    the inlined body) and the file at `cwd/.durig/<id>.md` contains the body; a small claim
+    stays inline (regression); a further claim is a bounded `NO_QUEUED_WORK`. Falsifiable by
+    disabling the path-return in `claim_work`.
+
+46. **Borrow a ratcheting task tier — a task-scoped size that survives the next
+    message and needs a reason to raise (agent-fleet borrow, RANK 2).** Source of
+    truth: `vendor/eval/agent-fleet` @ HEAD
+    `7c34dde46d4fc9b21f3750dc8b881df53e725640`, `docs/ARCHITECTURE.md`
+    "Task-tier budgets" — the tier is task-scoped and **ratcheted**: it survives
+    the user's next message, lowering is free, raising needs a stated `reason`.
+    The durig shape per the operator ruling (item #101): the tier is the PM's
+    size for a request, mapping the existing S/M/L onto
+    `trivial/small/feature/project`; it is assigned AT INTAKE to the
+    originating item and LATCHES for that item's chain (its DONE notice,
+    verification item, and any follow-up about the same task inherit the tier);
+    a NEW intake (a new subject from the operator) starts a NEW tier; RAISING
+    requires a stated `reason`, LOWERING is free.
+    *Durig files it touches:* `src/rig.mjs` — `enqueueItem` carries an optional
+    `tier` field on the free-form queue item; `send_work` accepts optional
+    `tier` + `reason` and a raise-requires-reason guard compares the newest
+    same-base-subject item; `complete_work` inherits the completed item's tier
+    onto its DONE notice (the chain latch); plus the work-protocol primer in
+    `cli.mjs` (`PROTOCOL`) telling the PM to assign a tier at intake and that
+    lowering is free while raising needs a reason. No new write path/schema
+    beyond a string field on the existing free-form queue item.
+    *Proof:* `demo/ratchet.test.mjs` — a `send_work` tier is stored and a DONE
+    notice inherits it (the tier persists across the chain/subsequent message);
+    a follow-up that RAISES the tier without a `reason` is REFUSED
+    (`SEND_WORK_ERROR: raising tier ... needs a stated reason`); lowering is
+    free; a fresh intake starts a new tier. Falsifiable by disabling the raise
+    guard or the latch.
+
 ## Sharing publicly
 
 22. **Publish durig as its own repository — no releases yet.** The operator wants
