@@ -9,6 +9,10 @@ durig.config.json
 .durig/
 # built upstream tree, reproducible from pi-main.pin.json
 vendor/pi-main/
+# vendored warden build tree: not imported anywhere in this repo (same policy as vendor/pi-main)
+vendor/pi-warden/
+# delegate/seat scratch, recovery patches, and captured logs
+.spike/
 # Operational exhaust from driving seats: stdout/stderr captures and scratch logs.
 .impl.log
 .*.out
