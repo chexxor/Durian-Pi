@@ -3,84 +3,84 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-14, operator's delegate session (peek_queue fix + corruption repair + auto-wake investigation)._
+_Last refreshed: 2026-10-14, operator's delegate session (broker verification + doc truth-up)._
 
-## NEXT SESSION — START HERE: build the auto-wake (the broker)
+## NEXT SESSION — START HERE: the resident broker is DONE; close its two follow-ups
 
-**Goal (operator):** seats must be **auto-notified when they are stuck, waiting, or have queued work**,
-with no external clock. Today nothing drives the queue unless a human runs `run` or `send`.
+**The broker the previous pointer asked for is built and committed.** `node cli.mjs serve`
+(`src/broker.mjs` + `src/scheduler.mjs`, D45), `up` auto-starts it on a TTY (D46), and it was
+observed **auto-waking `devtools`** against `selfdev.sqlite` with no manual `run`/`send` — the #238
+goal. The supersede-D11 D-entry exists (D45) and no socket was opened, so no `security` position was
+triggered. #238 is `cancelled`; the old "build the auto-wake" pointer is obsolete.
 
-**Verified finding that motivates it:** only **read-only viewers** were running (`node cli.mjs watch`,
-several `log … --follow`). Viewers are forbidden from waking seats by design — `src/driver.mjs`
-*"a passive viewer never schedules (D11)"*, `cli.mjs:274`. `devtools` sat idle with 3 queued items + a
-stalled claim because no write-side driver ran. The wake rule (`selectWakes`) is correct — it *would*
-wake `devtools`; nothing invokes it.
+Verify before trusting: `node demo/broker.test.mjs`, `node demo/scheduler.test.mjs`,
+`node demo/autostart.test.mjs` (all exit 0 on this HEAD).
 
-**Build PIECE 3 — the resident broker** (`docs/PUSH-ARCHITECTURE.md` §3.2/§3.3), registered **gated as #238**:
-- (a) a recorded **D-entry that supersedes (not erases) D11** — D11's evidence (SQLite has no
-  cross-process notify; a separate viewer must not attach a harness) is *why* the broker owns the
-  harness; (b) a **security position only if it opens a socket** (loopback+auth; prefer an in-process
-  handoff, no socket); (c) sequenced after PIECE 2 (done).
-- **Cheaper interim worth considering:** a **watchdog** that wakes exactly the stuck cases —
-  stalled claim, `admitted_not_started`, `deferred`-to-a-seat aged — reusing `src/supervisor.mjs`'s
-  residual set, without a full broker. A stuck-claim wake is the concrete thing `devtools` needed.
-- The D-entry must be written by a **file-capable seat**: `lead` is a coordinator with no write tool
-  (**#156**), so route the D-entry text to `impl`/`scribe` to record.
+**Two follow-ups from the broker's first live run are the natural next work** (`docs/ROADMAP.md`,
+both registered, neither fixed):
 
-Exact drive command (worktree seat root; SHORT bounded chunks):
-`cd durig && DURIG_SEAT_ROOT=C:/tmp/durig-dev/pi-rebase/durig DURIG_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`
+- **F34 — a broker-driven generation carries no seat in the genlock lease**
+  (`src/genlock.mjs:83` still records `options.seat ?? null`; the broker is not a seat), so
+  `status`/`watch` show an ownerless in-flight generation. Fix: carry the driven seat's name onto
+  the wake submission, or have `readGenerationSlots` fall back to the conversation's seat.
+- **F35 — `serve --stop` on Windows tears the broker down mid-pass** (Node does not deliver
+  `SIGTERM`; no `<db>.broker.stop` cooperative path exists), which can strand the in-flight run.
+  Fix: a cooperative, pass-settling stop on every platform, killing only as a last resort.
 
-## State of this session's work
+Exact drive command (one write process at a time; SHORT bounded chunks):
 
-- **`peek_queue` fix: DONE + verified** (worktree): bounded inline view — counts + first 20 + footer,
-  never a bare path — `demo/peekqueue.test.mjs` PASS, `node --check src/rig.mjs` ok; artifact to qa
-  **#293**. (The operator's complaint: it returned only a file path.)
-- **`impl` corrupt `pi.live`: REPAIRED.** `stop`+`resume` did not clear it; `reset` threw; a `["r",{}]`
-  root-replace did **not** reset the materialization base. **Retiring** the corrupt incarnation fixed
-  it. Tool: **`scripts/repair-pi-live.mjs <db> <conversationId>`**. Verified: `watch --once` silent,
-  `reset impl` succeeds.
-- **Viewer resilience (live tree):** `src/readapi.mjs` `readLiveState` now catches an unreadable
-  `pi.live`, warns once, returns `{}`, so `log --follow`/`watch` no longer crash on one corrupt seat.
-  (The worktree **inlines** `readRigHealth`; apply the same guard there on merge — F23.)
-- **`impl` seat:** model → `Qwen/Qwen3.6-35B-A3B`, context reset, healthy.
-- **Findings F30–F33** + "Server-side cache and long waits" in `docs/DOGFOOD.md`.
+`cd durig && DURIG_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`
+
+## State of the broker work (verified this session)
+
+- **`serve` + scheduler + autostart: DONE, committed, verified.** Commits (on `main`):
+  `8337d0a` (change-triggered wake scheduler, piece 1/2), `6cfef88` (resident `serve` broker +
+  shared wake pass, piece 2/2), `ddf7cca` (`up` auto-starts the broker, TTY-gated, D46),
+  `b542936` (`revise_work`/`cancel_work`, D47). `src/broker.mjs` 223 lines, `src/scheduler.mjs`
+  199 lines. Demos `broker`/`scheduler`/`autostart` all exit 0.
+- **No-wake-storm invariants** live in `src/scheduler.mjs` (coalescing, global floor, per-seat
+  cooldown); the wake decision itself is still `selectWakes`/`driveOnce` in `src/driver.mjs`, so the
+  bounded `run` loop and the resident broker cannot drift.
+- **F36 (queue cannot be curated) is FIXED** by D47 (`cancel_work`/`revise_work`, terminal
+  `cancelled`). The *triage* of the ~40 stale items it exposed is still owed (`docs/QUEUE-TRIAGE-2026-10-14.md`).
+- **The old worktree `C:/tmp/durig-dev/pi-rebase/durig` no longer exists.** Its work is now on
+  `main`; do not go looking for it.
+- **Suite health: 53 demos, 52 PASS / 1 FAIL at HEAD `762d95f`.** `demo/starter.test.mjs` fails on a
+  **LF/CRLF drift**: with `core.autocrlf=true` and no `.gitattributes`, `constitution.txt` checks out
+  CRLF while the `constitutionInline` string in `rig.starter.json` is LF, so they no longer compare
+  equal. Pre-existing and unrelated to docs; it is the F32/#291 LF-vs-CRLF family (normalize endings).
+  The broker demos (`broker`/`scheduler`/`autostart`) all exit 0.
 
 ## Open backlog (ids)
 
-- **Auto-wake:** **#238** (broker, gated) — the priority; **#294** (mid-turn steering: Pi has `steer`,
-  pi-durable's submit is `type:"input"` only).
+- **Broker follow-ups (next):** **F34** (lease seat attribution), **F35** (Windows cooperative stop).
+- **Queue hygiene:** item **#287** is `claimed` by `impl` but **stale** — it proposed a doc update
+  whose content ("broker GATED; do not write the D-entry") D45/D46 have overtaken. It needs
+  re-scoping or cancelling, not executing as written. ~48 non-terminal items remain, many stale DONE
+  acks; a `pm` triage pass (F36's other half) is the lever.
 - **Long waits / context:** **#289** (handoff/compact on a long wait) + **#290** (4th option: refresh
   the cache — measure-first).
-- **Seat ergonomics:** **#291** (`edit` LF vs CRLF `src/rig.mjs` → normalize endings), **#292** (a doc
-  proxy escaping `api.commit` → `Cannot use a settled overlay`; shared snapshot helper).
+- **Seat ergonomics:** **#291** (`edit` LF vs CRLF `src/rig.mjs` → normalize endings), **#292** (a
+  doc proxy escaping `api.commit` → `Cannot use a settled overlay`; shared snapshot helper).
 - **Earlier:** #251 (pin JSON guard), #252 (`send --max-duration`), #253 (root-name guard), #254
   (confine/shell parity), #258 (stale genlock slot), #275 (degenerate-loop notice), #156 (B1 read gap).
-- **Pending qa:** #293 (peek), and artifacts #280/#282/#288.
 
-## Integration state (F23 — read carefully)
+## Traps (learned — do not repeat)
 
-All recent **code** is in the seat worktree `C:/tmp/durig-dev/pi-rebase/durig` (uncommitted): the
-PIECE 1 spike `.spike/pi-wake/`, `src/eventfeed.mjs` + `events`, `src/storewrite.mjs`,
-`hold_work`/`release_work`, `claim_work({itemId})`, the F25–F28 fixes, the peek fix, `src/worktree.mjs`
-dirty-source refusal, and docs. **Live docs are authoritative** this session (DECISIONS D41–D43,
-ROADMAP, FEATURES, STATUS, SELFDEV, DOGFOOD, this file), and the live tree also has the viewer guard
-in `src/readapi.mjs`. On merge, reconcile `cli.mjs`'s read path: live uses `src/readapi.mjs`; the
-worktree inlines `readRigHealth`.
-
-## Traps (learned this session — do not repeat)
-
-- **Only a write-side process wakes seats** (`send`/`run`); `watch`/`log` never do (D11).
-- **Never run two CLI write processes at once** (F24); the worktree `send` retries, `up`/`run` do not.
-- **`send` blocks until the whole generation settles** (no `--max-duration`, F19/#252) — background it
-  (`Start-Process`) or use `run --max-duration`.
+- **Only a write-side process wakes seats** (`send`/`run`/`serve`); `watch`/`log` never do (D11).
+  The broker is the single long-lived writer that *is* the harness (D45).
+- **Never run two CLI write processes at once** (F24) — and `run` now refuses while a `serve` broker
+  drives. At most one broker per database (`<db>.broker.json`).
+- **`send` blocks until the whole generation settles** (no `--max-duration`, F19/#252) — background
+  it (`Start-Process`) or use `run --max-duration`.
 - **A seat can loop** (F29) — `reset <seat> <handoff>`; a corrupt `pi.live` needs
   `scripts/repair-pi-live.mjs` (retire).
-- **`edit` miss on a CRLF file → re-read the region, never shell-edit** (F32); **never let a doc proxy
-  escape `api.commit`** (F33); keep the seat root clean (scratch under `.spike/`).
+- **`edit` miss on a CRLF file → re-read the region, never shell-edit** (F32); **never let a doc
+  proxy escape `api.commit`** (F33); keep the seat root clean (scratch under `.spike/`).
 - **Coordinators (pm/lead) cannot read/write files** (#156) — route file tasks to a file-capable seat.
 
 ## Where main is
 
-`main` is `a43ef44`. The operator's uncommitted direct work (viewmodel/readapi/livestream, and the
-`pi-main.pin.json` bump) is still **uncommitted**; integration and publishing are the operator's call.
-Nothing was pushed.
+`main` is `762d95f`; the tracked tree is **clean** (the earlier uncommitted viewmodel/readapi/
+livestream work landed in `789ead6`). Untracked only: `AGENTS.md`, `pi-warden.md`, `vendor/`.
+Nothing was pushed. Integration and publishing remain the operator's call.

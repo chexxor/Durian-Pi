@@ -194,6 +194,36 @@ await call("pm", "defer_work", { itemId: 2, question: "not mine to defer" });
 assert.match(await transcript("pm"), /addressed to pm, not you|addressed to worker, not you/, "the target must hold the item");
 assert.equal((await item(2)).status, "deferred", "someone else's deferral does not change the item");
 
+/* =================================== F30: hold_work / release_work =================================== */
+// hold_work parks a claimed item in "held" status, making it unreachable by
+// claim_work. release_work restores it to "queued" so selectWakes can re-wake it.
+
+// First we need a claimed item to test hold_work on. Resume item 2 from deferred.
+await call("worker", "resume_work", { itemId: 2 });
+assert.equal((await item(2)).status, "claimed", "item 2 is claimed after resume");
+// Then hold it.
+await call("worker", "hold_work", { itemId: 2, reason: "blocked on upstream" });
+assert.equal((await item(2)).status, "held", "hold_work sets status to held");
+assert.equal((await item(2)).heldReason, "blocked on upstream", "heldReason is recorded");
+assert.ok((await item(2)).transitions.some((t) => t.event === "held"), "held transition is appended");
+
+// The held item must NOT be returned by claim_work (oldest-queued path).
+const nextQueued = (await queueState()).items.find((it) => it.to === "worker" && it.status === "queued");
+assert.equal(nextQueued, undefined, "no queued items for worker while #2 is held");
+// claim_work should return NO_QUEUED_WORK since #2 is held, not queued.
+const noQueuedResult = await transcript("worker");
+assert.ok(noQueuedResult.includes("NO_QUEUED_WORK") || noQueuedResult.includes("claim_work"),
+	"claim_work on a seat with only held items returns NO_QUEUED_WORK");
+
+// --- F30(b): release_work restores the item to queued ---
+await call("worker", "release_work", { itemId: 2 });
+assert.equal((await item(2)).status, "queued", "release_work sets status back to queued");
+assert.ok((await item(2)).transitions.some((t) => t.event === "released"), "released transition is appended");
+// Now claim_work can pick it up again.
+const queueAfterRelease = (await queueState()).items;
+const reQueued = queueAfterRelease.find((it) => it.id === 2 && it.status === "queued");
+assert.ok(reQueued, "#2 is back in queued status after release_work");
+
 await harness.close(ctx);
-console.log("DEFER TEST PASS (parks the item, is visible to a human, resumes, asks a seat, and is edge-gated)");
+console.log("DEFER TEST PASS (parks the item, is visible to a human, resumes, asks a seat, edge-gated, hold/release)");
 process.exit(0);

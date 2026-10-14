@@ -56,6 +56,7 @@ import {
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
 import { brokerAlive, clearBrokerState, drivePass, readBrokerState, runWakeLoop, writeBrokerState } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
+import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
 import { SCAN_LIMIT, extractEntryText, summarizeEntries } from "./src/rigstory.mjs";
 import { formatMetrics } from "./src/metrics.mjs";
@@ -69,6 +70,7 @@ import { auditRig, formatCheck } from "./src/checkup.mjs";
 import { SeatGuard } from "./src/seatguard.mjs";
 import { SeatTools, fillRoster, makeSeatEnv, scopeSeatTools } from "./src/seattools.mjs";
 import { createWatchScreen, formatSnapshot } from "./src/watchview.mjs";
+import { readFeed } from "./src/eventfeed.mjs";
 
 // Effective configuration for this process: environment over
 // durig.config.json over built-in defaults (see src/config.mjs). Resolved
@@ -345,6 +347,8 @@ async function buildSeatPrompt(models, seat, providerId) {
     "- send_work(to, subject, body[, requires]): delegate to another seat by putting an item in its queue. Route work, do not narrate it.",
     "- defer_work(itemId, question[, to]): stop and ask instead of guessing, or instead of going quiet. Parks the item you hold on the question; omit `to` to defer to the human operator, pass `to` to ask another seat as well.",
     "- resume_work(itemId): take back a deferred item once the answer has arrived, then finish it with complete_work.",
+    "- hold_work(itemId, reason?): park one of your claimed items so it becomes unclaimable until released; reason is optional.",
+    "- release_work(itemId): restore a held item to queued, so the driver can re-wake the seat.",
     "- revise_work(itemId, {subject?, body?}): fix the subject/body of a QUEUED item you sent or were sent, before it is claimed.",
     "- cancel_work(itemId, reason): cancel a stale or superseded item (one you sent or were sent). Terminal: it is never claimed and never woken for.",
     "- peek_queue([all]): read the queue. By default your non-terminal items (addressed to or sent by you); pass all=true for the team-wide, all-status view when coordinating or debugging.",
@@ -1147,121 +1151,130 @@ async function cmdStop(seatName, reason) {
 // generation streams to stderr, labelled per seat; stdout stays one JSON doc.
 async function cmdSend(seatName, text, { stream = false, requestId = null } = {}) {
   const live = stream ? createLiveRenderer({ color: Boolean(process.stderr.isTTY) && !process.env.NO_COLOR }) : null;
-  const { harness, providerId } = await openHarness({ live, enforceSeatRoot: true });
-  {
-    const doc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-    const seatsVal = doc?.value?.seats ?? {};
-    const seat = seatsVal[seatName];
-    if (!seat) {
-      // "unknown seat: pm" on the wrong database reads as a typo; the real
-      // cause is usually an empty rig, so say which one before failing.
-      noteEmptyRig(Object.keys(seatsVal).length);
-      fail(`unknown seat: ${seatName}`);
-    }
-    const conv = await harness.conversation(seat.conversationId, BACKGROUND_CONTEXT);
-    if (FAUX) {
-      // Offline smoke mode: one canned reply per send. Tool orchestration
-      // cannot be exercised here because scripting is per-process; use the
-      // demos under demo/ for full-loop offline tests.
-      FAUX.appendResponses([
-        fauxAssistantMessage([{ type: "text", text: "(faux) acknowledged." }]),
-      ]);
-    }
-    // Stamp the seat so generation leases attribute themselves (visible in
-    // status/watch as "GPU busy with <seat>"). Cleared in finally below.
-    process.env.DURIG_ACTIVE_SEAT = seatName;
-    if (!stream) {
-      console.error(`sending to ${seatName}; waiting for its run to settle (a real model can take minutes)...`);
-    }
-    let submission;
-    try {
-      // Identify a watermark BEFORE the run, so a settle that produced nothing
-      // cannot report a reply from an earlier send as if it belonged to this
-      // one.
-      //
-      // The watermark is the newest ENTRY id, not the newest ASSISTANT id.
-      // Diffing against the newest assistant id looks equivalent and is not: a
-      // run that produces nothing leaves older assistant entries that also
-      // differ from the newest one, so the scan below falls through to a
-      // previous send's reply. That only stayed hidden because the test's seat
-      // had exactly one prior assistant entry (dogfood F7). Entry ids increase,
-      // so "this run created it" is exactly "id > watermark".
-      const prior = await conv.entries({}, 20, undefined, BACKGROUND_CONTEXT);
-      const priorMaxId = prior.items.reduce(
-        (max, e) => Math.max(max, Number(e.id) || 0),
-        0,
-      );
-      submission = await conv.submit(
-        {
-          type: "input",
-          content: text,
-          ...(requestId === null ? {} : { requestId }),
-        },
-        BACKGROUND_CONTEXT,
-      );
-      const settled = await submission.wait(BACKGROUND_CONTEXT);
-      // A run that never generated (no_model, or a failed provider call)
-      // streams nothing and produces no reply, so a human watching the live
-      // view sees only an idle prompt. Say it on stderr; stdout keeps the
-      // machine-readable outcome.
-      if (settled.status !== "done") {
-        console.error(
-          `note: ${seatName} finished as ${settled.status}${settled.reason ? ` (${settled.reason})` : ""} - no reply was produced`,
-        );
+  // F24: retry the whole send on the cross-process entry-id conflict. The
+  // conflict fires at storage ADMISSION, before any generation, and its commit
+  // rolled back, so re-opening the harness (fresh next_id) and retrying cannot
+  // double-run the model or duplicate the message - it just loses the race to a
+  // concurrent writer and runs again on a correctly-resynced store.
+  // KNOWN LIMIT: `up`/`run` (broker) are NOT covered by this retry.
+  await withStoreWriteRetry(
+    async () => {
+      const { harness, providerId } = await openHarness({ live, enforceSeatRoot: true });
+      {
+        const doc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+        const seatsVal = doc?.value?.seats ?? {};
+        const seat = seatsVal[seatName];
+        if (!seat) {
+          // "unknown seat: pm" on the wrong database reads as a typo; the real
+          // cause is usually an empty rig, so say which one before failing.
+          noteEmptyRig(Object.keys(seatsVal).length);
+          fail(`unknown seat: ${seatName}`);
+        }
+        const conv = await harness.conversation(seat.conversationId, BACKGROUND_CONTEXT);
+        if (FAUX) {
+          // Offline smoke mode: one canned reply per send. Tool orchestration
+          // cannot be exercised here because scripting is per-process; use the
+          // demos under demo/ for full-loop offline tests.
+          FAUX.appendResponses([
+            fauxAssistantMessage([{ type: "text", text: "(faux) acknowledged." }]),
+          ]);
+        }
+        // Stamp the seat so generation leases attribute themselves (visible in
+        // status/watch as "GPU busy with <seat>"). Cleared in finally below.
+        process.env.DURIG_ACTIVE_SEAT = seatName;
+        if (!stream) {
+          console.error(`sending to ${seatName}; waiting for its run to settle (a real model can take minutes)...`);
+        }
+        let submission;
+        try {
+          // Identify a watermark BEFORE the run, so a settle that produced nothing
+          // cannot report a reply from an earlier send as if it belonged to this
+          // one.
+          //
+          // The watermark is the newest ENTRY id, not the newest ASSISTANT id.
+          // Diffing against the newest assistant id looks equivalent and is not: a
+          // run that produces nothing leaves older assistant entries that also
+          // differ from the newest one, so the scan below falls through to a
+          // previous send's reply. That only stayed hidden because the test's seat
+          // had exactly one prior assistant entry (dogfood F7). Entry ids increase,
+          // so "this run created it" is exactly "id > watermark".
+          const prior = await conv.entries({}, 20, undefined, BACKGROUND_CONTEXT);
+          const priorMaxId = prior.items.reduce(
+            (max, e) => Math.max(max, Number(e.id) || 0),
+            0,
+          );
+          submission = await conv.submit(
+            {
+              type: "input",
+              content: text,
+              ...(requestId === null ? {} : { requestId }),
+            },
+            BACKGROUND_CONTEXT,
+          );
+          const settled = await submission.wait(BACKGROUND_CONTEXT);
+          // A run that never generated (no_model, or a failed provider call)
+          // streams nothing and produces no reply, so a human watching the live
+          // view sees only an idle prompt. Say it on stderr; stdout keeps the
+          // machine-readable outcome.
+          if (settled.status !== "done") {
+            console.error(
+              `note: ${seatName} finished as ${settled.status}${settled.reason ? ` (${settled.reason})` : ""} - no reply was produced`,
+            );
+          }
+          // Resolving the reply takes one of two routes, and the choice is the whole
+          // point of --request-id:
+          //  - WITHOUT one, only a run that produced something may speak, so the
+          //    newest assistant entry past the watermark is the reply. A run that
+          //    produced nothing leaves older entries that also differ from the newest,
+          //    which is how an earlier send's reply got reported as this one's (F7).
+          //  - WITH one, the submission is identified by that id, so the platform's own
+          //    answer pointer is authoritative. That is not a nicety: a retry carrying
+          //    an id already used gets the EXISTING submission back, whose answer was
+          //    committed before this invocation's watermark - so the scan would find
+          //    nothing and report `reply: null` for a request that has a reply.
+          const answerExisted =
+            requestId !== null &&
+            settled.status === "done" &&
+            settled.type === "input" &&
+            Number(settled.answer) <= priorMaxId;
+          let msg;
+          if (answerExisted) {
+            // By id: the answer is deliberately older than the watermark and may be
+            // older than the 50-entry page below.
+            const rec = await conv.commit(
+              (tx) => tx.entry(AssistantEntry, settled.answer),
+              BACKGROUND_CONTEXT,
+            );
+            msg = rec?.model?.[0];
+          } else {
+            const pg = await conv.entries({}, 50, undefined, BACKGROUND_CONTEXT);
+            // Entries come newest-first; the newest assistant entry this run created
+            // is the first one past the watermark.
+            const lastAssistant = pg.items.find(
+              (e) => e.kind === "pi.assistant" && Number(e.id) > priorMaxId,
+            );
+            msg = lastAssistant?.model?.[0];
+          }
+          out({
+            ok: true,
+            command: "send",
+            seat: seatName,
+            settledStatus: settled.status,
+            settledReason: settled.reason ?? null,
+            reply: msg?.content ?? null,
+            stopReason: msg?.stopReason ?? null,
+            // Only meaningful with an id: it says this invocation did not generate,
+            // it re-read a reply that already existed. Without one the field would be
+            // a claim about a submission nobody asked to identify.
+            ...(requestId === null ? {} : { requestId, reused: answerExisted }),
+          });
+        } finally {
+          delete process.env.DURIG_ACTIVE_SEAT;
+          await harness.close(BACKGROUND_CONTEXT);
+        }
       }
-      // Resolving the reply takes one of two routes, and the choice is the whole
-      // point of --request-id:
-      //  - WITHOUT one, only a run that produced something may speak, so the
-      //    newest assistant entry past the watermark is the reply. A run that
-      //    produced nothing leaves older entries that also differ from the newest,
-      //    which is how an earlier send's reply got reported as this one's (F7).
-      //  - WITH one, the submission is identified by that id, so the platform's own
-      //    answer pointer is authoritative. That is not a nicety: a retry carrying
-      //    an id already used gets the EXISTING submission back, whose answer was
-      //    committed before this invocation's watermark - so the scan would find
-      //    nothing and report `reply: null` for a request that has a reply.
-      const answerExisted =
-        requestId !== null &&
-        settled.status === "done" &&
-        settled.type === "input" &&
-        Number(settled.answer) <= priorMaxId;
-      let msg;
-      if (answerExisted) {
-        // By id: the answer is deliberately older than the watermark and may be
-        // older than the 50-entry page below.
-        const rec = await conv.commit(
-          (tx) => tx.entry(AssistantEntry, settled.answer),
-          BACKGROUND_CONTEXT,
-        );
-        msg = rec?.model?.[0];
-      } else {
-        const pg = await conv.entries({}, 50, undefined, BACKGROUND_CONTEXT);
-        // Entries come newest-first; the newest assistant entry this run created
-        // is the first one past the watermark.
-        const lastAssistant = pg.items.find(
-          (e) => e.kind === "pi.assistant" && Number(e.id) > priorMaxId,
-        );
-        msg = lastAssistant?.model?.[0];
-      }
-      out({
-        ok: true,
-        command: "send",
-        seat: seatName,
-        settledStatus: settled.status,
-        settledReason: settled.reason ?? null,
-        reply: msg?.content ?? null,
-        stopReason: msg?.stopReason ?? null,
-        // Only meaningful with an id: it says this invocation did not generate,
-        // it re-read a reply that already existed. Without one the field would be
-        // a claim about a submission nobody asked to identify.
-        ...(requestId === null ? {} : { requestId, reused: answerExisted }),
-      });
-    } finally {
-      delete process.env.DURIG_ACTIVE_SEAT;
-      await harness.close(BACKGROUND_CONTEXT);
-    }
-}
-
+    },
+  );
 }
 // log <seat> [limit] [--follow] [--json|--human]: a seat's conversation, oldest
 // to newest. --follow keeps the process open and prints entries as they are
@@ -1460,6 +1473,34 @@ const WATCH_POLL_MS = 750;
 // the scheduler bounds bursts; this bounds one seat. Long enough to span a model
 // turn, short enough that a genuinely stranded claim still recovers promptly.
 const SERVE_SEAT_COOLDOWN_MS = 30_000;
+
+// events [--since <seq>] [--follow] [--json]: the DURABLE event feed (PIECE 2,
+// PUSH-ARCHITECTURE §3.1). Read-only and additive: it opens storage directly
+// like `watch` (never a harness; D11) and derives a monotonic `seq` cursor from
+// committed state, so a late/reconnecting subscriber resumes from `--since`
+// rather than replaying. One JSON event per line; diagnostics on stderr.
+async function cmdEvents({ sinceSeq = 0, follow = false } = {}) {
+  const storage = await openNodeSqliteStorage(DB_PATH);
+  let stopping = false;
+  process.on("SIGINT", () => {
+    stopping = true;
+  });
+  let cursor = Number.isFinite(sinceSeq) ? sinceSeq : 0;
+  try {
+    do {
+      const { events, nextSeq } = await readFeed(storage, BACKGROUND_CONTEXT, { sinceSeq: cursor });
+      for (const event of events) console.log(JSON.stringify(event));
+      // Advance the cursor past what we emitted, so a --follow poll never
+      // replays the previous line and a reconnect resumes from `nextSeq`.
+      if (events.length) cursor = Math.max(cursor, nextSeq);
+      if (!follow || stopping) break;
+      await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
+    } while (!stopping);
+  } finally {
+    await storage.close(BACKGROUND_CONTEXT);
+  }
+}
+
 async function cmdWatch(once, human) {
   const storage = await openNodeSqliteStorage(DB_PATH);
   let seq = 0;
@@ -1765,6 +1806,7 @@ usages:
   node cli.mjs log <seat> [limit] [--follow] [--full] [--tool-bg] [--theme dark|light]
                           a seat's conversation (--follow = live, --full = whole tool output)
   node cli.mjs watch [--once] [--json|--human]   follow rig state (human on a terminal)
+  node cli.mjs events [--since <seq>] [--follow]   durable read-only event feed (resumes from <seq>)
   node cli.mjs status           per-seat health + attention notices
   node cli.mjs metrics [rig.json] [--window N|all]   drift measures, with bands and blind spots
   node cli.mjs check <rig.json> [--human]   audit a rig against the research gaps
@@ -1886,6 +1928,17 @@ try {
       toolBg: rest.includes("--tool-bg"),
       theme: theme ?? "dark",
     });
+  } else if (cmd === "events") {
+    // Read-only durable feed (PUSH-ARCHITECTURE §3.1). --since <seq> resumes
+    // strictly after a cursor; --follow keeps the process open and polls.
+    const at = rest.indexOf("--since");
+    const sinceArg = at >= 0 ? rest[at + 1] : undefined;
+    if (at >= 0 && (sinceArg === undefined || sinceArg.startsWith("--")))
+      fail("events --since needs a number");
+    const sinceSeq = sinceArg === undefined ? 0 : Number(sinceArg);
+    if (!Number.isFinite(sinceSeq) || sinceSeq < 0)
+      fail(`events --since must be a non-negative number, got: ${sinceArg}`);
+    await cmdEvents({ sinceSeq, follow: rest.includes("--follow") });
   } else {
     out({ ok: false, usage: USAGE.trim() });
     process.exit(2);

@@ -5,9 +5,9 @@
 // worker that only needs its own work, and it made "what is mine?" something the
 // model had to infer from 100+ lines. The default is now the non-terminal items
 // addressed to OR sent by the calling seat; `all: true` restores the team-wide
-// view for coordinators and debugging. The result also goes through
-// thinResultText, so an over-threshold team-wide dump defers to a path rather
-// than inlining.
+// view for coordinators and debugging. The result is always a bounded inline view
+// (counts + up to 20 items), never a bare path — the full list is still written to
+// disk for completeness.
 //
 // Failing-first: against the old peek_queue (no scoping) the first assertion
 // fails because item B and the done item D leak into the default view.
@@ -99,18 +99,41 @@ try {
 		assert.ok(all.includes(`#${id} `), `all=true shows #${id}`);
 	}
 
-	// --- over threshold: the team-wide dump defers to a path ---------------
+	// --- over threshold: bounded inline view (NOT a bare path) ------------
+	// Build enough items to blow past the 2000-char inline limit.
 	await harness.commit(async (tx) => {
 		for (let i = 0; i < 40; i++) {
 			await enqueueItem(tx, "boss", "other", `filler ${i} ${"x".repeat(120)}`, "body");
 		}
 	}, ctx);
 	const big = await drivePeek({ all: true });
-	assert.ok(/\.durig[\\\/]/.test(big), `an over-threshold team-wide peek returns a PATH; got: ${big.slice(0, 120)}`);
-	assert.ok(big.length < 2400, `an over-threshold peek stays bounded; got ${big.length} chars`);
+	// The return MUST contain counts in the header.
+	assert.ok(/\b\d+ non-terminal\b/i.test(big),
+		`over-threshold peek returns a counts line; got: ${big.slice(0, 200)}`);
+	assert.ok(/\b\d+ queued\b/i.test(big),
+		`counts line includes a queued count; got: ${big.slice(0, 200)}`);
+	// Must show at least one item line, not just the header.
+	const itemLines = big.split("\n").filter((l) => /^#\d+ \w+ /.test(l));
+	assert.ok(itemLines.length > 0,
+		`over-threshold peek shows item lines; got: ${big.slice(0, 400)}`);
+	// Showed at most N=20 items (bounded output).
+	assert.ok(itemLines.length <= 20,
+		`over-threshold peek shows at most 20 items; got ${itemLines.length}`);
+	// Item lines follow the format #<id> <status> from=<x> to=<y> <subject>
+	const sampleLine = itemLines[0];
+	assert.ok(/^#\d+ \w+ from=\w+ to=\w+/.test(sampleLine),
+		`item line has expected shape; got: ${sampleLine}`);
+	// A truncated footer with a path should appear when the list exceeds N.
+	assert.ok(/full list:/.test(big),
+		`truncated output includes a full-list path; got: ${big.slice(-200)}`);
+	// The file must have been written (completeness).
+	const fs = await import("node:fs");
+	const allFiles = fs.readdirSync(join(dir, "seat-workspace", ".durig"));
+	assert.ok(allFiles.some((f) => f.startsWith("queue-") && f.endsWith(".md")),
+		`full queue was written to disk for completeness; files: ${allFiles}`);
 
 	console.log(
-		"PEEKQUEUE TEST PASS (default is the seat's own non-terminal work; all=true is team-wide; over-threshold defers to a path)",
+		"PEEKQUEUE TEST PASS (default is the seat's own non-terminal work; all=true is team-wide; over-threshold returns bounded inline view with counts + item lines)",
 	);
 } finally {
 	if (harness) await harness.close(ctx);

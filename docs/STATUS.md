@@ -67,6 +67,25 @@ Updated **2026-10-14 (delegate session — auto-wake investigation + repairs)**:
   session's priority. Findings F30–F33 and the long‑wait/cache‑refresh note recorded in DOGFOOD.
 - Nothing pushed.
 
+Updated **2026-10-14 (later delegate session — the resident broker landed)**:
+- **PIECE 3 (resident broker) is DONE and committed.** `serve` (`src/broker.mjs` + `src/scheduler.mjs`,
+  D45) reacts to the store's in-process commit stream — no external clock; `up` auto-starts it on a
+  TTY (`--no-serve`/`DURIG_NO_SERVE=1` opt out) and at most one runs per database (`<db>.broker.json`,
+  D46). Commits `8337d0a` (scheduler, 1/2), `6cfef88` (`serve` + shared wake pass, 2/2), `ddf7cca`
+  (auto-start, D46), `b542936` (`revise_work`/`cancel_work`, D47). Verified: the broker was observed
+  **auto-waking `devtools`** (its stalled #192) against `selfdev.sqlite` with no manual `run`/`send`;
+  `demo/broker.test.mjs`, `demo/scheduler.test.mjs`, `demo/autostart.test.mjs` all exit 0.
+- **F36 (the queue cannot be curated) is FIXED** by D47; the ~40-item triage it exposed
+  (`docs/QUEUE-TRIAGE-2026-10-14.md`) is still owed.
+- **Next:** the broker's two registered follow-ups — **F34** (a broker-driven generation carries no
+  seat in the genlock lease, `src/genlock.mjs:83`) and **F35** (`serve --stop` on Windows tears down
+  mid-pass; needs a cooperative, pass-settling stop). Item **#287** is a `claimed` but **stale** doc
+  item whose content D45/D46 overtook; it needs re-scoping or cancelling.
+- Docs trued up this session: `docs/NEXT.md`, `docs/ROADMAP.md`, `docs/STATUS.md` (the earlier
+  entries still described the broker as gated/next). The old worktree
+  `C:/tmp/durig-dev/pi-rebase/durig` no longer exists; its work is on `main`.
+- Nothing pushed.
+
 ## Where we stopped
 
 Milestone **M2 (operator can see the rig)** is finished and verified, and the

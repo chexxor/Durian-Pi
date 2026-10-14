@@ -12,8 +12,9 @@ stale once when item 0 and 1 were added.
 **Status 2026-10-13 (delegate session):** the **event-driven / Pi-integration** work (item 38
 self-driving queue; item 40 resident server) advanced. **PIECE 1** wake spike (#209) and **PIECE 2**
 durable read-only event feed (#210 — now `src/eventfeed.mjs` + `events --since/--follow`) are DONE
-and qa-verified. **PIECE 3** (resident broker) is **GATED** (#238) on a D-entry that supersedes D11
-(plus a security position only if a socket opens). The **ordering gap** — priority not expressible,
+and qa-verified. **PIECE 3** (resident broker) was **GATED** (#238) on a D-entry that supersedes D11
+(plus a security position only if a socket opens); it is **now DONE** (`serve`, D45; `up` auto-start,
+D46; no socket, so no security position). The **ordering gap** — priority not expressible,
 and a completed-but-bypassed item could not be marked done — was ruled **claim-by-id** and fixed
 (#239, D41). Also done: `worktree` refuses a dirty source (#255, D43 — the fork-from-HEAD hazard);
 send-path **store-write contention** retry (#257, D42); usability fixes #259–#262 (help/exit
@@ -24,22 +25,27 @@ F18–F29 and `docs/NEXT.md`.
 **Status 2026-10-14 (delegate session):** `peek_queue` now returns a bounded inline view
 (counts + first 20 + footer) — verified, artifact #293. A corrupt `pi.live` was repaired by
 **retiring** the corrupt incarnation (`scripts/repair-pi-live.mjs`); the viewer (`readLiveState`)
-now tolerates an unreadable `pi.live`. The load‑bearing finding — **item 38 remains unbuilt**: the
-queue is inert until a write‑side `run`/`send` is invoked, so `devtools` idled despite queued work.
-The next session builds the **auto‑wake** (PIECE 3 broker, #238; a watchdog is the cheaper interim).
+now tolerates an unreadable `pi.live`. The load‑bearing finding — **item 38 was unbuilt at the
+time**: the queue was inert until a write‑side `run`/`send` is invoked, so `devtools` idled despite
+queued work. **The auto‑wake has since landed** — see the next block.
 
-**Backlog — top, resolve next (2026-10-14, live broker run):** the resident broker (`serve`,
-D45) was started against `selfdev.sqlite` and **did auto-wake `devtools`** (its stalled #192) —
-the #238 goal — with no manual `run`/`send`. Two findings from that run are registered to resolve
-first; both are detailed in `docs/DOGFOOD.md`:
+**Status 2026-10-14 (later — the resident broker landed):** the **auto‑wake is DONE**. `serve`
+(`src/broker.mjs` + `src/scheduler.mjs`, D45) reacts to the store's in-process commit stream with no
+external clock; `up` auto-starts it on a TTY (`--no-serve`/`DURIG_NO_SERVE=1` opt out) and at most
+one runs per database (D46). It was observed **auto-waking `devtools`** (its stalled #192) against
+`selfdev.sqlite` with no manual `run`/`send` — the #238 goal. No socket opened, so no `security`
+position was triggered. `#238` is closed. Demos `broker`/`scheduler`/`autostart` exit 0.
+
+**Backlog — top, resolve next (2026-10-14, broker follow-ups):** two findings from the broker's
+first live run remain open (detail in `docs/DOGFOOD.md`):
 - **F34 — broker-driven generations carry no seat in the genlock lease**
   (`{"pid":…,"seat":null}`), so `status`/`watch` show a generation in flight with no seat name.
   Fix: attribute the lease to the driven seat.
 - **F35 — `serve --stop` on Windows terminates mid-generation** (no `SIGTERM` delivery), which can
   strand the in-flight run. Fix: a cooperative, pass-settling stop on every platform.
-- **F36 — the queue cannot be curated**: no `cancel_work`/`revise_work`, so stale items cannot be
-  cancelled and item descriptions/scope cannot be updated. ~40 of 60 active items are stale or
-  bookkeeping (see `docs/QUEUE-TRIAGE-2026-10-14.md`). Fix: add the two verbs, or a `pm` triage pass.
+- **F36 — the queue cannot be curated** is **FIXED** by D47 (`cancel_work`/`revise_work`, terminal
+  `cancelled`); the *triage* of the ~40 stale items it exposed (`docs/QUEUE-TRIAGE-2026-10-14.md`)
+  is still owed.
 
 ## Milestones
 

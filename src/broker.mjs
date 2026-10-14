@@ -56,7 +56,7 @@ export async function readStoppedConvIds(probeStorage, seats, context) {
 export async function drivePass(
   harness,
   probeStorage,
-  { context, seatFilter, readBusySeats, onError, onWoke } = {},
+  { context, seatFilter, readBusySeats, onError, onWoke, currentSeat: initialSeat } = {},
 ) {
   const seatsDoc = await harness.documentState(Seats, undefined, context);
   const queueDoc = await harness.documentState(RigQueue, undefined, context);
@@ -65,6 +65,11 @@ export async function drivePass(
   const seats = seatsDoc?.value?.seats;
   const stoppedConvIds = await readStoppedConvIds(probeStorage, seats, context);
   const busySeats = readBusySeats ? await readBusySeats() : new Set();
+  let wokenSeat = initialSeat ?? null;
+  const wrapOnWoke = (name) => {
+    wokenSeat = name;
+    onWoke?.(name);
+  };
   const actioned = await driveOnce(harness, {
     seats,
     items: queueDoc?.value?.items,
@@ -75,8 +80,15 @@ export async function drivePass(
     storage: probeStorage,
     seatFilter,
     onError,
-    onWoke,
+    onWoke: wrapOnWoke,
   });
+  // F34: carry the last-woken seat name onto the generation so wrapProviderWithSlots
+  // can name it in the genlock lease (otherwise seat:null because the broker process
+  // has no seat). For multi-seat concurrency the last woken wins — acceptable over
+  // seat:null.
+  if (wokenSeat) {
+    process.env.DURIG_ACTIVE_SEAT = wokenSeat;
+  }
   await harness.waitForIdle(context);
   return { actioned, seats };
 }

@@ -4,7 +4,12 @@
 ruling), `security` (if a socket is added), `advocate`/`designer` (workflow + surface). Not a decision.
 **Author:** operator's delegate session.
 **Date:** 2026-10-13.
-**Next work item:** §6 — a timeboxed spike on the Pi-side wake (piece 1).
+**Outcome (2026-10-14):** pieces 1–3 are **DONE**. Piece 1 spike (#209, qa-verified); piece 2
+durable feed → `src/eventfeed.mjs` + `events --since/--follow` (#210); piece 3 resident broker →
+`node cli.mjs serve` (`src/broker.mjs` + `src/scheduler.mjs`, D45) with `up` auto-start (D46). The §7
+gate (a `lead` ruling + a recorded D-entry) was satisfied by D45; no socket was opened, so the
+`security` position was not triggered. The design text below is the original input, kept for provenance.
+**Next work item (historical):** §6 — a timeboxed spike on the Pi-side wake (piece 1).
 **Companion doc:** `docs/UI-TUI-INITIAL-THINKING.md` (the interactive client, a separate concern).
 
 ---
@@ -187,10 +192,10 @@ the known limits found.
 ## 7. Gated items (after the spike)
 
 - **Piece 2 (feed)** — follows the spike; read-only, register with a proving test (start a subscriber,
-  enqueue an item, assert the event arrives and a reconnect resumes from `seq`).
+  enqueue an item, assert the event arrives and a reconnect resumes from `seq`). **DONE** (#210).
 - **Piece 3 (broker)** — **gate: a `lead` ruling + a recorded D-entry** (it revisits D11's conclusion).
   Consequence in the ruling: a `security` position if the broker opens a socket. This is the item that
-  retires `run`-as-a-clock.
+  retires `run`-as-a-clock. **DONE** (`serve`, D45/D46; no socket).
 - **Piece 4 (RPC bridge)** — only if driving an existing Pi session (rather than the extension) proves
   preferable.
 
