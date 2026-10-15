@@ -102,6 +102,14 @@ seat (D11); the broker is the single long-lived writer that *is* the harness (D4
 `--serve` forces it; `DURIG_NO_SERVE=1` for scripts). At most one broker runs per database;
 `serve --stop` reaps it, and `run` refuses while one drives (two drivers double-wake).
 
+**Concurrency is three layers, and only one of them is single-writer.** The **store/harness** is
+single-writer: one broker owns the store per DB, and a second driver double-wakes (D45/D46) — never
+run two drivers (`run` or `serve`) on one DB. The **files** are deliberately concurrent: each seat
+edits its own per-task worktree (D49), which is what makes concurrent seats safe. The
+**generations** are capped at `N = DURIG_MAX_CONCURRENT_SEATS` cross-process leases (`genlock`, D12).
+Sanctioned model: **one broker owns the store and drives up to N seats, each in its own worktree**;
+for genuinely independent drivers, use separate databases.
+
 **Isolate the work.** A seat resolves to the `cwd` of the command that wakes it when its rig
 declares no `cwd` (dogfood F12), so a run from durig's own tree can overwrite the operator's
 uncommitted work. Give the run an isolated checkout:

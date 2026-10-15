@@ -41,6 +41,35 @@ node cli.mjs metrics rig.v2.json       # drift measures (bands, baselines, blind
 node demo/online.mjs
 ```
 
+## The resident broker: switching it on and off
+
+The queue keeps moving on its own while you work because a **resident broker**
+(`serve`) owns the store and wakes each seat that has queued work — no external
+clock (D45). How it is switched on and off for the operator:
+
+- **A TTY `up` auto-starts it.** Running `node cli.mjs up <rig.json>` on an
+  interactive terminal starts the broker for that database. Opt **out** with
+  `--no-serve`, or with the env var `DURIG_NO_SERVE=1` (the script-wide
+  opt-out). A piped or scripted `up`, and scripted `send`/`run`, **never**
+  silently spawn a daemon — the TTY `up` is the *only* auto-start.
+  Proof: `demo/autostart.test.mjs` (TTY auto-starts; `--no-serve`/piped opt out;
+  `run` and a second `serve` fail closed; `up --serve` is idempotent).
+- **`serve --stop` reaps it** — `node cli.mjs serve --stop` settles the running
+  broker cooperatively and clears `<db>.broker.json`, so the next `run` is
+  allowed again. Proof: `demo/autostart.test.mjs` and
+  `demo/broker-cooperative-stop.test.mjs`.
+- **Raising `DURIG_MAX_CONCURRENT_SEATS` is how parallel seat work is enabled.**
+  The broker may drive up to `N` seats at once, but `N = DURIG_MAX_CONCURRENT_SEATS`
+  (`N` cross-process generation leases via `src/genlock.mjs`). Unset = unlimited;
+  `1` serializes all generations (e.g. one local model serving the whole rig); a
+  higher `N` lets more seats generate in parallel, each in its own worktree.
+  Proof: `demo/singleflight.test.mjs` (two concurrent seats, `max 1` in flight at
+  the cap).
+- **One broker per database.** A second `serve` refuses to start, and `run`
+  refuses while a broker drives that database (two drivers double-wake, D46).
+  For genuinely independent work use separate databases. Proof:
+  `demo/autostart.test.mjs`.
+
 ## Auditing a rig
 
 `check` reads the rig file **and** the store, because a rig that looks right in

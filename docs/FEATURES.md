@@ -58,7 +58,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | `optimize <text>` | Rewrite a draft instruction through the optimizer | |
 | `config` | Show the effective settings and which source supplied each | |
 
-Three operator-facing behaviours are load-bearing:
+Five operator-facing behaviours are load-bearing:
 
 - **Wrong-database guard** — read commands name the resolved database and warn
   when it holds no seats, because a missing `DURIG_DB` otherwise looks exactly
@@ -71,6 +71,19 @@ Three operator-facing behaviours are load-bearing:
   both paths and the fix. A seat's cwd is resolved once at `up` time and
   persisted; without this guard an operator who re-points a run at a new worktree
   silently writes into the old one and sees success (dogfood F12).
+- **Command guard / commit authority (D50)** — every seat's shell command is
+  checked against one denial list (`src/seatguard.mjs` `beforeTool` for the
+  tool layer, `src/confine.mjs` `refusalFor` for the environment — one policy,
+  so the two cannot drift). Read-only git (`status`/`log`/`diff`/`show`/`rev-parse`)
+  passes; **`git commit` is allowed**, scoped and `-C` forms included; `git push`
+  **is refused** unless the operator granted `DURIG_ALLOW_PUSH=1` in durig's own
+  environment (a seat's own inline assignment cannot forge it); and every
+  destructive form — `reset`, `checkout`, `restore`, `revert`, `clean`, `stash`,
+  `branch -D`, and unscoped `add -A`/`add .` — is refused with the reason as a
+  `block`, so a seat reads it and `defer_work`s instead of retrying variants.
+  Proof: `demo/confine.test.mjs` (every form + the `git commit;` separator
+  canaries), `demo/seatguard.test.mjs` (push refused by default, the operator's
+  grant allows only push, nothing else widens).
 - **Help and exit contract** — `help` and `--help` print the usage text to
   **stderr** and exit 0, emitting no stdout JSON; bare `cli.mjs`, `-h`, and an
   unknown verb print `{"ok":false,"usage":...}` to stdout and exit 2
@@ -124,7 +137,7 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Repeat-call tolerance** | A replayed tool call returns current state instead of erroring on a settled overlay | `src/rig.mjs` | `demo/repeat-call.test.mjs` |
 | **Request-idempotent send** | `send --request-id` makes one send one submission: a retry carrying the same id reuses the existing submission rather than generating again, and returns the original reply. The id is never derived from the text, because two deliberate identical sends are two requests | `cli.mjs` `cmdSend` | `demo/cli.test.mjs` |
 | **Self-driving queue** (`run`) | Wakes each seat that has queued work and nothing advancing it, holds the harness open until the runs it started settle, and exits at quiescence — the clock the queue was missing. A driver, not a wake inside the Router tools, because a stateless `send` closes its harness before a tool-woken run could finish (F11) | `src/driver.mjs`, `cli.mjs` `cmdRun` | `demo/run.test.mjs` |
-| **Resident broker** (`serve`) | One long-lived process that owns the harness and wakes seats from the store's in-process commit stream — no external clock. The scheduler coalesces a burst of commits into one pass, floors pass starts, and cools off a per-seat retry so a re-woken stalled claim cannot hot-loop; the supervisor runs each pass. Restarted later, it still drives work queued while nothing ran. It is the single long-lived writer that *is* the harness (D45); read-only viewers still never wake a seat (D11) | `src/broker.mjs`, `src/scheduler.mjs`, `cli.mjs` `cmdServe` | `demo/broker.test.mjs`, `demo/scheduler.test.mjs` |
+| **Resident broker** (`serve`) | One long-lived process that owns the harness and wakes seats from the store's in-process commit stream — no external clock. The scheduler coalesces a burst of commits into one pass, floors pass starts, and cools off a per-seat retry so a re-woken stalled claim cannot hot-loop; the supervisor runs each pass. Restarted later, it still drives work queued while nothing ran. It is the single long-lived writer that *is* the harness (D45); read-only viewers still never wake a seat (D11). **Sanctioned concurrency — one writer per DB, N seats:** the store/harness is single-writer (one broker owns the store; a second `serve` or a `run` refuses while one drives, D46 — two drivers double-wake), while the *files* are deliberately concurrent (each seat edits its own per-task worktree, D49) and the *generations* are capped at `N = DURIG_MAX_CONCURRENT_SEATS` leased cross-process by `genlock` (D12). Sanctioned model: **one broker owns the store and drives up to N seats, each in its own worktree**; never two drivers on one DB; genuinely independent drivers use separate databases | `src/broker.mjs`, `src/scheduler.mjs`, `cli.mjs` `cmdServe` | `demo/broker.test.mjs`, `demo/scheduler.test.mjs`, `demo/autostart.test.mjs` |
 | **Broker auto-start** (`up`) | A TTY `up` leaves the queue self-driving by starting the broker; a piped/scripted `up` never silently spawns a daemon. At most one broker per database (`<db>.broker.json`, the genlock pid convention); a second broker and `run` refuse while one drives (two drivers double-wake); `serve --stop` reaps it | `cli.mjs` `cmdUp`/`ensureBroker`/`cmdStopBroker`, `src/broker.mjs` | `demo/autostart.test.mjs` |
 | **Stalled-claim re-wake** | Also wakes a seat holding a `claimed` item whose run died (no in-flight submission, no live lease), so an abandoned claim is re-driven with no human send. An operator-`stop`ped claim is never re-woken — the guard reads, read-only, the abort fact `stop` already writes — and a live/in-flight run is never double-woken | `src/driver.mjs` `selectWakes`, `cli.mjs` `cmdRun` | `demo/stalledclaim.test.mjs` |
 | **Thin-context return** | A claim's `result` text returns a PATH, not an inline body, once it exceeds a threshold, so the coordinator's context is not flooded; the coordinator reads the file | `src/rig.mjs` `thinResultText` | `demo/thincontext.test.mjs` |
@@ -136,6 +149,7 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Concurrent store writes** | The `send` path is made safe for two CLI processes writing one store: a lost entry-id collision is retried instead of dying raw; a message that cannot be delivered is a guided refusal, not `ID n already belongs to entry`. **Known limit:** the `up`/`run` write paths are not yet covered | `src/storewrite.mjs` | `demo/storewrite.test.mjs` |
 | **Dirty-worktree refusal** | `worktree` refuses a source tree with uncommitted changes (they would not be carried into the fork) and names the offending path | `src/worktree.mjs` | `demo/worktree.test.mjs` |
 | **Per-task worktree lifecycle** | One worktree + branch per item: create-on-claim, `git worktree lock` while the item runs, remove on completion. `npm ci --prefer-offline` per worktree (never a junction); git-identity validation (`--show-toplevel` == the tree, `--absolute-git-dir` != `--git-common-dir`, `.git` is a file); rebase-before-merge with `rerere`; cleanup only via `git worktree remove`, refusing a dirty tree or any junction | `src/worktree.mjs` | `demo/worktree-lifecycle.test.mjs` |
+| **Broker-wired worktree + dirty-source guard (ASK F)** | The per-task worktree lifecycle is wired into the resident broker's wake path: on wake, the broker creates the item's worktree and points the seat's `DURIG_SEAT_ROOT` at it, then removes it on completion (#473). **Dirty-source guard interplay (finding):** the lifecycle's guard refuses to fork from a source tree with uncommitted changes (`uncommittedInSource`), so while the operator has uncommitted tracked work the broker's worktree claim fails and the seat falls back to the shared tree — the isolation the worktree boundary exists to provide is not met. This is why the operator must keep the source tree clean for per-task isolation to hold (it failed `pm`'s first broker wake on an uncommitted `docs/NEXT.md`) | `src/broker.mjs` (claim path), `src/worktree.mjs` `uncommittedInSource` | `demo/worktree.test.mjs` (dirty source refuses the fork), `demo/worktree-lifecycle.test.mjs` |
 | **Job-Object process reaping** | Windows has no SIGTERM; the seat's process tree is reaped by a Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) and the worktree is removed only after the tree is confirmed dead | `src/job-object.mjs` | `demo/job-object.test.mjs` |
 | **Broker observability and bounds** | The broker writes `<db>.broker.log`; `serve --max-duration` bounds wall-clock and exits; `serve --stop` settles cooperatively under load instead of a forced kill | `src/broker.mjs`, `cli.mjs` | `demo/broker-log.test.mjs`, `demo/broker-max-duration.test.mjs`, `demo/broker-cooperative-stop.test.mjs` |
 | **Concurrent seat attribution** | With N generation slots, each lease and `status` names the generation's own seat (AsyncLocalStorage), not the last-woken seat (fixes F34 under concurrency) | `src/genlock.mjs` | `demo/broker-seat-attr.test.mjs` |

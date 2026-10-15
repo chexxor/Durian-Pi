@@ -1393,3 +1393,66 @@ operator may still choose).
 lists no `Qwen`. No push.
 
 **Status:** adopted.
+
+## D52 — PIECE 3 corrected: the broker is a separate resident process that OWNS the session, so the socket path is live (2026-10-15)
+
+**Context (correction, item #411):** the earlier registration of PIECE 3 (#238) carried a flawed
+phrasing — recorded as "owns the harness in-process" — that let D45/D46 conclude "no socket, so no
+security consult". #238 was cancelled and re-registered as #411 with the corrected architecture:
+the resident broker is a **separate resident process** created via `pi.open`, and it **owns the
+session lifecycle** (`waitForEmpty`/`sendMessage`), which is what `docs/PUSH-ARCHITECTURE.md` §3.2
+always described ("one long-lived process that is the harness" = the session owner, not a second
+viewer).
+
+**Corrected rationale (supersedes the boundary paragraphs of D45/D46 where they conflict):** D11's
+evidence is respected **because the broker is the session OWNER, not a viewer**. D11 proved SQLite
+has no cross-process notification and that a separate *viewer* attaching a harness resumes
+scheduling against the queue it observes. Neither objection reaches the session owner: the broker
+injects events into a session it itself opened. Read-only viewers (`watch`, `log`, `events`) keep
+D11's poll/read-storage rule unchanged, and nothing in this entry widens what they may do.
+
+**Security (the gate that preceded this entry):** because the session owner is now reachable by
+other local processes, the socket path is live and a `security` position was required **before
+code**; it is recorded at
+`docs/reviews/security-sec-broker-socket.md` (loopback-only bind; per-database user-only token
+handshake — D30's D-ENV-AUTH finding means same-Windows-user is not a control; surface bound to
+status/wake/subscribe; explicit non-goal: never general remote access; lifecycle cleanup binds to
+the D46 pidfile). S1–S7 of that position are the acceptance hooks the implementation must falsify.
+
+**What is NOT decided here:** the socket implementation itself stays gated on this position + a
+failing-first demo proving the broker delivers a change to a waiting session it owns (separate
+resident process, loopback-only). No socket code has landed; nothing observable changes for the
+rig until it does.
+
+**Status:** recorded as a GATE decision (position precedes entry, per the item's gate order). Not
+yet implemented.
+
+## D53 — Concurrency clarified: three layers, and only the store/harness is single-writer (CLARIFICATION, 2026-10-15)
+
+**Clarification (records the lead's A1 statement; no new decision):** durig's concurrency is three
+layers, and exactly one of them is single-writer, so "concurrency" is not what the single-writer rule
+forbids. The rule is a **store/harness** rule, not a **files** rule.
+
+- **Files — concurrent (intended).** Each seat edits its own per-task worktree; concurrent editing is
+  the point, not a hazard, because the work is isolated and merged later (D49, `src/worktree.mjs`).
+- **Generation slots — capped at N.** `DURIG_MAX_CONCURRENT_SEATS=N` leases N cross-process generation
+  slots via `src/genlock.mjs` (D12); N concurrent seats may run, no more.
+- **Store/harness — ONE writer per DB.** The store and its harness are single-writer: two `send`
+  processes collided on an entry id and one message was silently dropped (dogfood F24); the `send`
+  path retries (`src/storewrite.mjs`, #310/D42) but `up`/`run` are not covered, and two drivers
+  double-wake (D45/D46).
+
+**Sanctioned model:** **one broker (`serve`) owns the store and drives up to N seats, each in its own
+worktree**; `run` refuses (and a second `serve` refuses to start) while a broker drives the same DB
+(D46). Two drivers on one DB = NO. Genuinely independent drivers use **separate databases**.
+
+**Why recorded:** the single-writer rule was repeatedly mis-read as "files cannot be edited
+concurrently". Per-task worktrees make exactly that concurrent and intended; it is the store/harness
+that is single-writer. This entry states the model the older decisions already imply so a reader does
+not flatten the two.
+
+**Status:** adopted (clarification; the model was already implemented). **Evidence:** `src/worktree.mjs`
++ `demo/worktree-lifecycle.test.mjs` (concurrent per-task worktrees, D49); `src/genlock.mjs` +
+`demo/singleflight.test.mjs` (N generation slots, D12); `src/broker.mjs`/`src/storewrite.mjs` +
+`demo/autostart.test.mjs` (one broker per DB, second `serve`/`run` refused) and
+`demo/storewrite.test.mjs` (send-path store-write retry, #310/D42).

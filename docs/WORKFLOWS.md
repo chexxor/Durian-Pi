@@ -38,11 +38,12 @@ tutor's surface, this one owns durig's workflows - and it differs from the docs 
 ## Driving model
 
 **Sanctioned concurrency model:** durig has **one** broker (the single writer) owning the
-store/harness and driving N seats (slot-cap) each in its own worktree. The single-writer scope
-is the **store + harness** (not files): a seat's worktree provides file isolation; the store
-provides coordination isolation. Multiple `run`/`send` invocations against the same database
-are **not sanctioned** - they double-wake seats and corrupt the queue driver's state (D46).
-Independent drivers use **separate databases**.
+store/harness and driving N seats up to the slot cap (`DURIG_MAX_CONCURRENT_SEATS`, D12:
+it caps concurrent GENERATIONS, not seats-as-objects), each seat in its own worktree.
+The single-writer scope is the **store + harness** (not files): a seat's worktree provides
+file isolation; the store provides coordination isolation. Multiple `run`/`send`
+invocations against the same database are **not sanctioned** - they double-wake seats and
+corrupt the queue driver's state (D46). Independent drivers use **separate databases**.
 
 **Must not break:** this clarifies W5's must-not-break loop (a viewer must never drive work) by
 extending it to *all* write-side commands: only one driver may be active per database at a time.
@@ -51,6 +52,7 @@ drives (D46). No workflow loop is weakened - the single-driver model is what mak
 notice delivery, W2's artifact consistency, and W4's item-at-a-time tracking sound.
 
 ---
+
 ## W1 - Routed delegation
 
 **Who:** any seat with an edge to another seat.

@@ -288,3 +288,69 @@ Updated **2026-10-14 (later delegate session — lost-tranche recovery + structu
   surface, now added (`cli.mjs --help`/`help`, usage to stderr, exit 0).
 - **Suite:** 68/68 at the time of writing; `docs/FEATURES.md` corrected against the code.
 - Nothing pushed.
+
+## Updated 2026-10-15 (scribe doc-gate closure session)
+
+The operator's commit gate items that were mostly written by the delegate this session were
+closed as verified by the scribe (per the runbook directive to verify, not redo). Each claim
+was checked against the code and the named demo before being recorded; every proof demo I ran
+in this session exited 0:
+
+- **#390 (FEATURES/STATUS Phase 2 gap):** the Phase 2 rows (per-task worktree lifecycle,
+  per-worktree `npm ci --prefer-offline`, git-identity validation, rebase+`rerere`,
+  `git worktree remove`-only cleanup, Job-Object reaping) and the corrected "no `node_modules`
+  junction" worktree row were already present and accurate; I added the missing **guard/authority
+  row** (D50) to `docs/FEATURES.md` §2.
+- **#398 (concurrency clarification):** `docs/SELFDEV.md` already stated the store/harness-not-files
+  WHY; I recorded the three-layer model in `.agents/skills/durig/SKILL.md`, added **D53** to
+  `docs/DECISIONS.md`, and extended the FEATURES.md broker row (“sanctioned concurrency — one
+  writer per DB, N seats”). WORKFLOWS.md is the advocate's separate item (out of #398's scope).
+- **#401 (broker operator switch):** added the “The resident broker: switching it on and off”
+  section to `README.md` (TTY `up` auto-start, `--no-serve`/`DURIG_NO_SERVE=1` opt-out,
+  `serve --stop` reaps, raising `DURIG_MAX_CONCURRENT_SEATS` enables parallel work).
+- **#470/#471 (DECISIONS confirm + gate nudge):** D50 confirmed present and accurate
+  (`docs/DECISIONS.md:1335`); D53 added as a test-grounded clarification.
+
+**Suite count I ran** (honest, not the full suite): **12 named demos, all exit 0** —
+`demo/confine.test.mjs`, `demo/seatguard.test.mjs`, `demo/worktree-lifecycle.test.mjs`,
+`demo/job-object.test.mjs`, `demo/readapi.test.mjs`, `demo/tui-client.test.mjs`,
+`demo/viewmodel.test.mjs`, `demo/autostart.test.mjs`, `demo/singleflight.test.mjs`,
+`demo/storewrite.test.mjs`, `demo/broker-cooperative-stop.test.mjs`, `demo/config.test.mjs`.
+I did not run the whole suite (71 `demo/*.test.mjs` files exist in this tree, two of them
+uncommitted), so I am not asserting a full-suite figure.
+
+**Outstanding in #469's scope:** TUI **C4** (#405) was reported "done but blocked" by qa, its
+corrected verification still owed; U1-U7 TUI re-prioritisation (#480–#487) is registered. The
+live tree is dirty (uncommitted broker/cli/pi-pin edits and two new demos) — operator owns the
+commit decision. Nothing pushed.
+
+## Updated 2026-10-15 (scribe project-level truth-up - groom, broker lifecycle, dirty-tree finding)
+
+Session narrative for this session's landed work, recorded per ASK G (#508):
+
+- **Queue groomed to broker-safe.** pm cancelled 45 and impl cancelled 28 bookkeeping/stale rows
+  (73 total); the queue was left at **39 real-work rows, 0 bookkeeping**, and stale claims
+  resolved (#289/#290/#291/#294/#335 and #287). Archive: .durig/queue-archive-2026-10-15.json.
+- **Resident broker driven, then force-cleared after a cooperative-stop hang, then restarted.**
+  serve was started (pid 14180, <db>.broker.json); later it was **force-cleared** when
+  serve --stop (cooperative) did not settle, per the runbook finding that a cooperative stop
+  can hang and leaves stale genlock/pidfile state; then restarted (pid 24952) and again after the
+  scribe reset (pid 33688). Runbook lesson: after a forced kill, check for and remove stale
+  .genlock.N slots whose pid is dead and any stray cli.mjs (send|run|serve) processes.
+- **Dirty-tree / worktree-guard finding (ASK F).** The per-task worktree lifecycle is wired into
+  the broker's wake path (src/broker.mjs calls claimWorktree, sets the seat's
+  DURIG_SEAT_ROOT, removes on completion - #473), and its dirty-source guard
+  (uncommittedInSource in src/worktree.mjs) **fails closed on an uncommitted source tree**:
+  pm's first broker wake failed on an uncommitted docs/NEXT.md, so the seat fell back to the
+  shared tree - the per-task isolation the worktree boundary exists to provide is not met while
+  the tree is dirty. The operator must keep the source tree clean for per-task isolation to hold.
+  Recorded as a new FEATURES.md section 5 row ("Broker-wired worktree + dirty-source guard
+  (ASK F)").
+
+FEATURES.md changes this item: added the ASK F broker-wired-worktree/dirty-source-guard row citing
+src/broker.mjs claim path, src/worktree.mjs uncommittedInSource, demo/worktree.test.mjs
+(dirty source refuses the fork - I ran it, exit 0) and demo/worktree-lifecycle.test.mjs.
+**Not added:** the status seat last-activity row (#502 / ASK B) - I verified the field does NOT
+exist in the code (cmdStatus/eadRigHealth expose no last-activity), so it is not documented
+(per the never-document-what-does-not-exist rule, not copied on trust); the tokens/cost/model
+metrics row is #504's (lead-coordinated), not added here. Nothing pushed.
