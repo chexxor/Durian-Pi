@@ -11,20 +11,24 @@ _Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 
 
 ## NEXT SESSION — START HERE
 
-**Current item (in flight): RESIDENT BROKER RUNNING (pid 14180) — the queue is auto-managing.**
-The groom landed: pm cancelled 45, impl cancelled 28 → `queued` **39, all real work, 0 bookkeeping**;
-stale claims resolved. `serve` started `2026-10-15T19:38:49Z` (pidfile `selfdev.sqlite.broker.json`).
-It is driving: **`#488` (pin move) claimed by devtools**, plus #400/#407/#415/#468; 3 generations in
-flight. Archive: `.durig/queue-archive-2026-10-15.json`.
+**Current item (in flight): five asks delivered to pm (pid 30384), after the broker was force-cleared.**
+The broker (pid 14180) wedged with a stop request and never exited; it was force-killed, its stale
+`broker.stop`/`broker.json` and dead-pid genlock removed, and `resume` reconciled 1 stranded impl
+submission. `send pm` (pid **30384**, `.spike/delegate/round2-pm.out`) carries, in order:
+**A** the #495 ruling (target upstream's LIVE tip `4954d760`, unblock #488); **B** PRIORITY — per-seat
+last-activity time in `cli status`; **C** backlog design — work-item layer + feature branches + persona
+review; **D** backlog — token/cost metrics + model attribution per turn/queue-item/work-item; **E**
+backlog research — durig bloat vs an extension/plugin system. Body: `.durig/pm-intent-round2.md`.
 
-Exact next commands (inspect):
+Exact next commands:
 `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`
-and `tail selfdev.sqlite.broker.log`; stop it with `… node cli.mjs serve --stop`.
+then restart the broker `… node cli.mjs serve` (script `.spike/delegate/dispatch-serve.ps1`).
 
-Known blocker: **do not leave uncommitted tracked changes** — the broker's per-task worktree guard
-fails closed on a dirty source (it failed pm's first wake on an uncommitted `docs/NEXT.md`). The store
-is **single-writer**: while `serve` (pid 14180) runs, do not start another `send`/`run`/`serve`.
-**#489 stays GATED on #488.**
+Known blockers: the store is **single-writer** (pm send pid **30384** must finish first). The tree is
+**dirty with seats' in-progress work** left by the force-kill (`M cli.mjs`, `M src/broker.mjs`,
+`?? demo/broker-wakepath.test.mjs`, `?? demo/up-model-reset.test.mjs`, `?? pi-main.pin.json.bak`) —
+DO NOT discard; but the broker's per-task worktree guard fails closed on any uncommitted/untracked
+change. **#489 GATED on #488.**
 
 **Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
 Evidence: `git diff --diff-filter=A main origin/pi-rebase -- . ':(exclude).spike'` is empty (no
