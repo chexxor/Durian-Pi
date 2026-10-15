@@ -35,7 +35,9 @@ three actors straight is the whole job:
 
 - **Do not do the team's work.** No claiming, completing, deferring, or routing queue items yourself.
 - **Ground every claim** in a retrieved passage or a command you actually ran; never assert from memory.
-- **Do not push or publish.** The operator holds that grant.
+- **Do not push or publish.** The operator holds that grant; the delegate may commit its own item's
+  work (the commit boundary is scoped per item — stage explicit paths only, never `git add -A`).
+  Push requires the operator's explicit grant (or `DURIG_ALLOW_PUSH=1` at launch).
 - **Native Windows only** — never `wsl`, `docker`, or `docker-compose`.
 - **Never run a whole-filesystem search**; stay inside your workspace.
 

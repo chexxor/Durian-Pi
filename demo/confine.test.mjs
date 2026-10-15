@@ -126,7 +126,6 @@ try {
 	// Every state-mutating git form is refused at the guard layer (ROADMAP 42 / #146), so a seat
 	// cannot diverge its worktree from the reviewed source; read-only git still runs.
 	for (const command of [
-		"git commit -m x",
 		"git checkout main",
 		"git restore src/rig.mjs",
 		"git revert HEAD",
@@ -151,10 +150,11 @@ try {
 	// Failing-first canaries — these commands bypassed the old guard (\s|$) because the
 	// match ended in whitespace or end-of-string, so trailing punctuation and separators
 	// defeated it. The fixed guard uses \b (word boundary) and -C <path> forms. These
-	// assert the guard CATCHES what used to slip through (RD #257).
+	// assert the guard CATCHES what used to slip through (RD #257). `git commit` and its
+	// `-C` forms are now allowed; separator canaries below verify they remain allowed
+	// when wrapped in punctuation.
 	for (const command of [
 		"git stash;",
-		"git commit;",
 		"git reset;",
 		"git checkout;",
 		"git restore;",
@@ -162,8 +162,9 @@ try {
 		"git revert;",
 		"git branch -D foo;",
 		"git -C . stash",
-		"git -C /a/path commit -m x",
-		"git -C . reset --hard HEAD~1",
+		"git -C /a/path reset --hard HEAD~1",
+		"git add -A;",
+		"git add .;",
 	]) {
 		const refused = await author.exec(command, {}, context);
 		check(
@@ -173,11 +174,41 @@ try {
 		);
 	}
 
+	// Unscoped staging is refused — it would sweep up files outside the item.
+	for (const command of ["git add -A", "git add ."]) {
+		const refused = await author.exec(command, {}, context);
+		check(
+			`${command} is refused (unscoped staging)`,
+			refused.ok === false && /unscoped staging/.test(refused.error?.message ?? ""),
+			JSON.stringify(refused.ok ? refused.value : refused.error?.message),
+		);
+	}
+
+	// Scoped staging with explicit paths is allowed.
+	for (const command of ["git add src/confine.mjs", "git add demo/confine.test.mjs"]) {
+		const allowed = await author.exec(command, {}, context);
+		check(
+			`${command} is allowed (scoped, explicit paths)`,
+			!/refused by durig/.test(allowed.error?.message ?? ""),
+			JSON.stringify(allowed.ok ? "ran" : allowed.error?.message),
+		);
+	}
+
 	// The read-only controls must still pass through after the fix.
 	for (const command of ["git status", "git log --oneline -3", "git diff HEAD", "git show HEAD", "git rev-parse HEAD"]) {
 		const allowed = await author.exec(command, {}, context);
 		check(
 			`${command} is not refused (read-only)`,
+			!/refused by durig/.test(allowed.error?.message ?? ""),
+			JSON.stringify(allowed.ok ? "ran" : allowed.error?.message),
+		);
+	}
+
+	// git commit is now allowed for both forms (separator canaries prove the \b boundary is tight).
+	for (const command of ["git commit -m x", "git commit;", "git -C . commit -m x", "git -C . commit;"]) {
+		const allowed = await author.exec(command, {}, context);
+		check(
+			`${command} is allowed (commit is no longer refused)`,
 			!/refused by durig/.test(allowed.error?.message ?? ""),
 			JSON.stringify(allowed.ok ? "ran" : allowed.error?.message),
 		);

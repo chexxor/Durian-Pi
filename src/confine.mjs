@@ -34,16 +34,15 @@ import { ExecutionError, FileError, err, ok } from "@earendil-works/pi-durable/e
 const DENIED_COMMANDS = [
 	{ re: /(^|[\s;&|"'()])wsl(\.exe)?([\s"'()]|$)/i, why: "WSL is unsupported on this host" },
 	{ re: /(^|[\s;&|"'()])docker(-compose)?(\.exe)?([\s"'()]|$)/i, why: "Docker is unsupported on this host" },
-	// State-mutating git is the operator's to do: a seat produces files in its worktree and the
-	// operator integrates them. A seat that commits, re-checks-out, stashes or resets diverges
-	// the tree from the reviewed source (observed: a seat reverted an integrated change in its
-	// worktree). Read-only git (status/log/diff/show/rev-parse) is deliberately NOT matched.
+	// State-mutating git the operator controls: a seat produces files in its worktree and the
+	// operator integrates them. A seat may commit its own work (scoped to its item) but cannot
+	// reset, re-checkout, stash, clean, revert, or delete branches — those diverge the tree.
+	// Read-only git (status/log/diff/show/rev-parse) is deliberately NOT matched.
 	// Bypass prevention: each pattern ends in \b (word boundary) or an explicit separator
 	// class so trailing punctuation (git stash;) or separators (&&, |) cannot defeat the
 	// match — the whole class of bug that caused a seat to wipe the shared tree (RD #257).
 	// The -C <path> forms cover the case where a seat tries to redirect git into another
 	// checkout; refuse them the same way (RD #257).
-	{ re: /git\s+commit\b/i, why: "committing is the operator's integration step; leave the change for review" },
 	{ re: /git\s+reset\b/i, why: "would restage or discard work a seat did not integrate" },
 	{ re: /git\s+checkout\b/i, why: "would change the seat's working tree or HEAD" },
 	{ re: /git\s+restore\b/i, why: "would discard uncommitted work" },
@@ -51,6 +50,12 @@ const DENIED_COMMANDS = [
 	{ re: /git\s+clean\b/i, why: "would discard untracked work" },
 	{ re: /git\s+stash\b/i, why: "would move uncommitted work out of the tree" },
 	{ re: /git\s+branch\s+(-D|-d|--delete)\b/i, why: "would delete a branch" },
+	// Unscoped staging would sweep up files outside the current item — in a shared tree
+	// this includes other seats' and the operator's uncommitted work. Even in an item's
+	// worktree, `git add -A` can accidentally stage scratch or temp files. Stage only
+	// the explicit paths you changed.
+	{ re: /git\s+add\s+-A\b/i, why: "unscoped staging: stage only the explicit paths you changed, never git add -A or git add ." },
+	{ re: /git\s+add\s+\.(?:$|[\s;&|"'()])/i, why: "unscoped staging: stage only the explicit paths you changed, never git add -A or git add ." },
 	{
 		re: /git\s+push\b/i,
 		why: "publishing needs the operator's authorization; ask with defer_work, or have the operator relaunch durig with DURIG_ALLOW_PUSH=1",
@@ -59,7 +64,7 @@ const DENIED_COMMANDS = [
 	// git -C <path> <verb> redirects the git operation to another directory. Even when
 	// the target looks "safe," the seat cannot verify that it is the right directory
 	// (a redirecting seat cannot validate git identity; that is the operator's job).
-	{ re: /git\s+-C\s+\S+\s+commit\b/i, why: "same as `git commit` — the operator integrates" },
+
 	{ re: /git\s+-C\s+\S+\s+reset\b/i, why: "same as `git reset` — discards or restages work" },
 	{ re: /git\s+-C\s+\S+\s+checkout\b/i, why: "same as `git checkout` — changes the working tree" },
 	{ re: /git\s+-C\s+\S+\s+restore\b/i, why: "same as `git restore` — discards uncommitted work" },
@@ -67,6 +72,9 @@ const DENIED_COMMANDS = [
 	{ re: /git\s+-C\s+\S+\s+clean\b/i, why: "same as `git clean` — discards untracked work" },
 	{ re: /git\s+-C\s+\S+\s+stash\b/i, why: "same as `git stash` — moves uncommitted work out of the tree" },
 	{ re: /git\s+-C\s+\S+\s+branch\s+(-D|-d|--delete)\b/i, why: "same as `git branch -D` — deletes a branch" },
+	// Unscoped staging redirected to another directory.
+	{ re: /git\s+-C\s+\S+\s+add\s+-A\b/i, why: "unscoped staging redirected" },
+	{ re: /git\s+-C\s+\S+\s+add\s+\.(?:$|[\s;&|"'()])/i, why: "unscoped staging redirected" },
 	{ re: /git\s+-C\s+\S+\s+push\b/i, why: "same as `git push` — needs operator authorization" },
 ];
 
