@@ -168,6 +168,14 @@ scribe keeps the project-level truth and chases the owner for what is missing.
 See `../AGENTS.md`. Short form: read `NEXT.md` → read this file → `git status --short -- .` →
 `status` → resume. On exit: update `NEXT.md`, record a durable decision's *why* in `DECISIONS.md`.
 
+## Research escalations
+
+The operator has a **specialized research agent** that can be handed initial-research tasks manually.
+When a seat (or the delegate) needs background research to do its work — competitor surveys, prior
+art, API/library behaviour — ask the operator to route the research question to that agent rather
+than spending seat turns guessing. Record what comes back as a doc and cite it in the item that
+needed it. (Operator note, 2026-10-15.)
+
 ## References
 
 - `docs/Agent_Onboarding_Research.md` — why this runbook exists (the cold-start research).
