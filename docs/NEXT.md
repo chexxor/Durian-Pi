@@ -3,18 +3,47 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-15, operator's delegate session (Phase 2 + commit policy + broker hardening + TUI client)._
+_Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 model swap, interactive client #480–#487 re-prioritized). Next agent: start #480._
 
-## NEXT SESSION — START HERE: #473 wire per-seat worktrees, then groom the queue and verify
+> **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
+> the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
+> operator notifies you when a run completes. Do not loop `sleep`/`tasklist` to watch it.
 
-**Current item: #473 — WIRE the worktree lifecycle into claim/completion (TOP PRIORITY, UNBLOCKED).**
-Phase 2 (#351–#356) built the functions but nothing calls them: `claimWorktree`/`removeClaimedWorktree`
-in `src/worktree.mjs` have **no callers**, only the manual `cli.mjs worktree <path>` uses
-`createWorktree`, and `git worktree list` shows only `main` — **seats still share the LIVE tree.**
+
+## NEXT SESSION — START HERE
+
+**Current item: #480 (U1) — build the `durig ui` driver (queue id #480; TOP PRIORITY; UNBLOCKED).**
+The rest of the interactive-client series is **#481–#487 (U2–U7)**. U1 is the missing piece between
+`src/tui/client.mjs` (a headless renderer) and the operator: a separate entrypoint that owns raw mode
++ key handling + the poll loop and paints `renderTui` frames (`cli.mjs` stays non-interactive, D21;
+read-only, D11/D40).
 
 Exact next command (drive the selfdev team; the seat root is the live tree):
 
-`DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`
+`DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs send impl --body-file <body>`
+
+and have impl `claim_work({ itemId: 480 })` FIRST — a plain `run` makes impl take its oldest queued row
+(impl has ~36). Bounded alternative: `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`.
+
+Known blocker: the store is **single-writer** — never run two `send`/`run`/`serve` at once. No
+genlock/broker is held at handoff.
+
+**Session state (2026-10-15 delegate handoff — do not re-derive):**
+- **#473 (worktree lifecycle wiring) DONE and qa-VERIFIED.** qa's #477 verdict = PASS (68/68,
+  `node --check` clean). qa's caveats: the demo does NOT exercise the live `drivePass` claim path
+  (reviewed only), and 5 pre-existing silent-return catches remain (`src/broker.mjs:317,375`;
+  `src/worktree.mjs:104,216,394`).
+- **Model swap (D51):** the five former Qwen seats (`impl`, `qa`, `advocate`, `auditor`, `designer`)
+  now run `zai-org/GLM-5.3-Flash`; `rig.selfdev.json` edited + `up --refresh` applied. No context reset
+  was written — the operator may `reset <seat>` the five.
+- **TUI re-prioritized** by pm into **#480–#487 (U1–U7)**: U1 driver, U2 team-wide multi-pane of
+  actively-generating seats (live generation state, NOT queue depth), U3 in-place tool-call block,
+  U4 pi-style tool bg/fg, U5 thinking parity, U6 re-open the bogus C4 verification, U7 poll-first vs
+  Level 2 to lead/operator. pm also cleared the #188/#193 deferrals (#487).
+- **Lower priority, NOT registered** (operator deferred): `watch`/`seatActivity` shows green "working"
+  for ANY `claimed` row, so impl's **6 stale claims (#287, #289, #290, #291, #294, #335)** read as active.
+  Two-part fix: resolve those rows (impl completes/cancels; pm cancels its five; #287 is lead's), and
+  make green require a live lease/in-flight submission.
 
 Then, in order:
 1. **#473** — wire worktrees into claim/completion: on claim, create the item's worktree+branch and

@@ -24,14 +24,17 @@ Nine seats (`node cli.mjs ps`), with the author/reviewer pairs the culture requi
 | Seat | Role | Model | Notes |
 |---|---|---|---|
 | `pm` | program manager | DeepSeek-V4.1-Flash | intake, decomposition, routing, tracking |
-| `impl` | implementation | DeepSeek-V4-Flash-0731 | author for build items |
-| `qa` | verifier | Qwen3.6-35B-A3B | independent; different model family from authors |
+| `impl` | implementation | GLM-5.3-Flash | author for build items |
+| `qa` | verifier | GLM-5.3-Flash | independent; different model family from authors |
 | `lead` | technical lead | DeepSeek-V4.1-Flash | scope/priority rulings; escalation target |
-| `advocate` | workflow/design reviewer | Qwen3.6-35B-A3B | owns `WORKFLOWS.md`, `SELF-ADMIN.md` |
+| `advocate` | workflow/design reviewer | GLM-5.3-Flash | owns `WORKFLOWS.md`, `SELF-ADMIN.md` |
 | `scribe` | documentation | DeepSeek-V4-Flash-0731 | keeps `FEATURES.md`/`STATUS.md` true |
 | `devtools` | toolchain | DeepSeek-V4.1-Flash | pi pin, `sync-pi.mjs` |
-| `auditor` | second verifier | Qwen3.6-35B-A3B | do the tests prove it; edges |
-| `designer` | CLI/UX | Qwen3.6-35B-A3B | surface and defaults |
+| `auditor` | second verifier | GLM-5.3-Flash | do the tests prove it; edges |
+| `designer` | CLI/UX | GLM-5.3-Flash | surface and defaults |
+
+*(Models are the live values in `rig.selfdev.json`; the five GLM seats moved from `Qwen/Qwen3.6-35B-A3B`
+under **D51**. The author/verifier split is still a different model family — GLM vs DeepSeek.)*
 
 ## Running it
 
@@ -85,6 +88,12 @@ dies, no claimed work is re-woken and nothing downstream can progress. Fix #110 
 `docs/NEXT.md` and roadmap *"Deadlock and liveness prevention"* P5.
 
 ## Operational pitfalls (learned driving the team, 2026-10-13)
+
+- **Do not poll or wait on a background seat run; the operator notifies you when it completes.**
+  Dispatch the `send`/`run` detached, note the pid and the output file, and continue with read-only
+  work or hand back. Long bounded `sleep`/`tasklist` monitor loops waste the session and were
+explicitly retired by the operator (2026-10-15). When the operator says a run is done, read its
+  `.out` (the JSON `settledStatus`) and the queue row, then take the next step.
 
 - **Two CLI *drivers* on one store is the anti-pattern — not concurrency itself.** The
   store/harness is single-writer: two `send` processes collided on an entry id
