@@ -963,6 +963,19 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
     seatCooldownMs: SERVE_SEAT_COOLDOWN_MS,
   });
   const signal = createWakeSignal();
+  // #473: determine worktree source (git repo root) from the current directory.
+  // If not a git repo, worktree lifecycle is disabled.
+  const { repoRoot } = await import("./src/worktree.mjs");
+  const worktreeSource = await (async () => {
+    try {
+      return await repoRoot(process.cwd());
+    } catch (err) {
+      // Worktree lifecycle disabled: process.cwd() is not a git repository,
+      // so per-item worktrees cannot be created.
+      console.error(`worktree lifecycle disabled: ${err.message}`);
+      return null;
+    }
+  })();
   // Subscribe BEFORE the first pass so a commit that lands during startup is not
   // missed. The listener must not throw, block, or call Session APIs: it only
   // classifies the commit and raises the signal.
@@ -1021,6 +1034,8 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
       startedAt,
       isStopping: () => stopping,
       dbPath: DB_PATH,
+      source: worktreeSource,
+      worktreeRoot: process.cwd(),
     });
     out({
       ok: true,

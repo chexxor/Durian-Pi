@@ -87,7 +87,9 @@ export function seatHasReadTool(seat) {
  */
 export function makeSeatEnv(roster, { fallbackRoot = process.cwd() } = {}) {
 	return (target) => {
-		const root = target.cwd ?? fallbackRoot;
+		// #473: if DURIG_SEAT_ROOT is set (by the broker's worktree lifecycle),
+		// use it as the seat's working directory instead of the shared tree.
+		const root = process.env.DURIG_SEAT_ROOT ?? target.cwd ?? fallbackRoot;
 		const base = new NodeExecutionEnv({ cwd: root });
 		const seat = roster.get(target.conversationId);
 		// Fail CLOSED: a conversation that is not a known seat - the roster not read yet, or a

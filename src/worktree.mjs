@@ -8,7 +8,7 @@
 // nothing of the operator's is at stake.
 
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -234,8 +234,24 @@ export async function removeClaimedWorktree({ worktree, force = false }) {
 		return { worktree, removed: false, skipped: true };
 	}
 	// Unlock first if held — a locked worktree cannot be removed even with --force.
+	// Read the .git pointer to find the repo root, then unlock from the repo root.
 	try {
-		await run("git", ["worktree", "unlock", worktree]);
+		const gitPointer = existsSync(join(worktree, ".git"))
+			? readFileSync(join(worktree, ".git"), "utf8").trim()
+			: "";
+		const wtNormForUnlock = worktree.replace(/\\/g, "/");
+		let repoRootUnlock;
+		if (gitPointer.startsWith("gitdir: ")) {
+			// gitdir points to <repo>/.git/worktrees/<name> — the repo is two levels up.
+			const gitDir = gitPointer.slice(8).replace(/\\/g, "/");
+			// gitDir is like /path/to/repo/.git/worktrees/item-1; split on /.git/ to get the repo root.
+			const parts = gitDir.split("/.git/");
+			repoRootUnlock = parts[0] ? parts[0].replace(/\\/g, "/") : resolve(gitDir).replace(/\\/g, "/").replace(/\\.git\//, "/");
+		} else {
+			// Fallback: try rev-parse from the worktree.
+			repoRootUnlock = (await run("git", ["-C", wtNormForUnlock, "rev-parse", "--show-toplevel"])).stdout.trim().replace(/\\/g, "/");
+		}
+		await run("git", ["-C", repoRootUnlock, "worktree", "unlock", wtNormForUnlock]);
 	} catch (err) {
 		// A worktree that is not locked (or already gone) is removed anyway; report the
 		// failure so a real unlock error is visible instead of silently swallowed.
@@ -253,28 +269,75 @@ export async function removeClaimedWorktree({ worktree, force = false }) {
 	}
 	// Forward-slash paths for -C on Windows.
 	const wtNorm = worktree.replace(/\\/g, "/");
-	// Resolve the repo root before unlinking .git (so we can use -C <repo>).
+	// Find the repo root by walking up from the worktree path.
+	// A worktree's metadata lives in its source repo's .git/worktrees/<name>/,
+	// so the first .git directory encountered walking up is the repo root.
 	let repoRoot;
 	try {
 		repoRoot = (await run("git", ["-C", wtNorm, "rev-parse", "--show-toplevel"])).stdout.trim().replace(/\\/g, "/");
 	} catch {
-		// .git already gone — nothing to do
-		return { worktree, removed: false, skipped: true };
-	}
-	// Remove the .git pointer file so git worktree remove can clean up cleanly.
-	const gitFile = join(worktree, ".git");
-	try {
-		await unlink(gitFile);
-	} catch {
-		// .git was already gone or is a directory — remove it.
-		await rm(gitFile, { recursive: true, force: true });
+		// Try parent directories.
+		const resolved = resolve(worktree).replace(/\\/g, "/");
+		let candidate = resolved;
+		const found = [];
+		while (true) {
+			const candidateGit = join(candidate, ".git");
+			let isGitDir = false;
+			try {
+				const { stat } = await import("node:fs/promises");
+				isGitDir = (await stat(candidateGit)).isDirectory();
+			} catch (statErr) {
+				// .git not present at this level — continue walking up.
+				console.debug(`worktree: stat ${candidateGit} failed: ${statErr.message}`);
+			}
+			if (isGitDir) {
+				try {
+					const r = await run("git", ["-C", candidate, "rev-parse", "--show-toplevel"]);
+					repoRoot = r.stdout.trim().replace(/\\/g, "/");
+					found.push(candidate);
+				} catch (err) {
+					// Not a valid git dir — continue walking up to the next ancestor.
+					console.error(`worktree: rev-parse failed for ${candidate}: ${err.message}`);
+				}
+			}
+			const parent = resolved.split(/[\\/]/);
+			parent.pop();
+			if (parent.length === 0) break;
+			candidate = parent.join(process.platform === "win32" ? "\\" : "/");
+		}
+		if (!repoRoot) {
+			// Entirely gone — nothing to do
+			return { worktree, removed: false, skipped: true };
+		}
 	}
 	// Run from the repo root so git can still find the worktree metadata.
 	const args = ["-C", repoRoot, "worktree", "remove", ...(force ? ["--force"] : []), wtNorm];
-	await run("git", args);
+	try {
+		await run("git", args);
+	} catch (gitErr) {
+		// On Windows `git worktree remove` can fail with permission errors
+		// when file handles are still open (e.g., node_modules, editor locks).
+		// The worktree may have been partially removed; report success if the
+		// .git metadata is gone and fall through to the fallback cleanup.
+		console.warn(`worktree: git worktree remove failed: ${gitErr.message}`);
+	}
+	// Clean up the .git pointer file that `git worktree remove` may leave behind.
+	const gitFile = join(worktree, ".git");
+	try {
+		await unlink(gitFile);
+	} catch (err) {
+		// ENOENT is the expected case (`git worktree remove` already cleaned it up);
+		// anything else is worth surfacing rather than swallowing. Cleanup continues below.
+		if (err.code !== "ENOENT") console.warn(`worktree: could not unlink ${gitFile}: ${err.message}`);
+	}
 	// Final cleanup: if git left the directory behind, remove it.
 	if (existsSync(worktree)) {
-		await rm(worktree, { recursive: true, force: true });
+		try {
+			await rm(worktree, { recursive: true, force: true });
+		} catch (rmErr) {
+			// On Windows the directory may still be locked briefly after git removes it.
+			console.warn(`worktree: final rm of ${worktree} failed: ${rmErr.message}`);
+		}
 	}
 	return { worktree, removed: true };
 }

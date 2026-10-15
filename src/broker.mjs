@@ -14,9 +14,12 @@
 // gap D11 documented. Read-only viewers keep D11's poll/read-storage rule.
 
 import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { RigQueue, Seats } from "./rig.mjs";
 import { driveOnce } from "./driver.mjs";
+import { claimWorktree, releaseWorktreeLock, removeClaimedWorktree } from "./worktree.mjs";
+import { wrapProviderWithSlots, getSeatFromContext } from "./genlock.mjs";
 
 /**
  * Seats whose latest settled submission is an operator stop (`aborted:<reason>`).
@@ -52,11 +55,14 @@ export async function readStoppedConvIds(probeStorage, seats, context) {
  * files beside the database, not in storage); when omitted, no seat is busy.
  * `onWoke(name)` fires for each seat whose wake was actually submitted, so a
  * broker can start that seat's cooldown.
+ * `source` is the git repository root for creating per-seat worktrees (#473).
+ * `worktreeRoot` is the parent directory under which worktrees are created.
  */
 export async function drivePass(
   harness,
   probeStorage,
-  { context, seatFilter, readBusySeats, onError, onWoke, currentSeat: initialSeat } = {},
+  { context, seatFilter, readBusySeats, onError, onWoke, currentSeat: initialSeat,
+    source, worktreeRoot, onSeatCreated } = {},
 ) {
   const seatsDoc = await harness.documentState(Seats, undefined, context);
   const queueDoc = await harness.documentState(RigQueue, undefined, context);
@@ -66,6 +72,46 @@ export async function drivePass(
   const stoppedConvIds = await readStoppedConvIds(probeStorage, seats, context);
   const busySeats = readBusySeats ? await readBusySeats() : new Set();
   let wokenSeat = initialSeat ?? null;
+  let worktreeClaimed = false; // track if we created a worktree this pass
+  let itemLabel = null;       // the item label for cleanup
+  let worktreePath = null;
+
+  // #473: wire worktree lifecycle into the pass.
+  // Before driving: create worktree for each seat with queued work, set DURIG_SEAT_ROOT.
+  if (source && worktreeRoot && queueDoc?.value?.items?.length) {
+    const seatsToWake = Object.entries(seats ?? {}).filter(([name]) => {
+      const hasQueued = queueDoc.value.items.some(it => it.to === name && it.status === "queued");
+      return hasQueued;
+    });
+    if (seatsToWake.length > 0) {
+      const [seatName] = seatsToWake[0];
+      const convId = seats[seatName]?.conversationId;
+      // Find the queued item for this seat
+      const item = queueDoc.value.items.find(it => it.to === seatName && it.status === "queued");
+      if (item) {
+        itemLabel = `item-${item.id}`;
+        worktreePath = join(worktreeRoot, itemLabel);
+        // Check for stale worktree (from a previous interrupted run)
+        try {
+          await removeClaimedWorktree({ worktree: worktreePath, force: true });
+        } catch (err) {
+          // A stale worktree may need manual cleanup; surface why removal failed
+          // rather than swallowing it — the create below fails if it persists.
+          console.warn(`broker: could not remove stale worktree ${worktreePath}: ${err.message}`);
+        }
+        try {
+          const wt = await claimWorktree({ source, worktreeRoot, itemLabel: itemLabel });
+          process.env.DURIG_SEAT_ROOT = wt.cwd; // seattools.makeSeatEnv picks this up
+          worktreeClaimed = true;
+          onSeatCreated?.(seatName, wt);
+        } catch (err) {
+          console.error(`BROKER: worktree claim failed for ${seatName}: ${err?.message ?? err}`);
+          // Fall through to shared-tree run — the seat will work in the shared tree
+        }
+      }
+    }
+  }
+
   const wrapOnWoke = (name) => {
     wokenSeat = name;
     onWoke?.(name);
@@ -90,6 +136,31 @@ export async function drivePass(
     process.env.DURIG_ACTIVE_SEAT = wokenSeat;
   }
   await harness.waitForIdle(context);
+
+  // #473: after idle, check if the item completed and cleanup the worktree.
+  if (worktreeClaimed && itemLabel && worktreePath) {
+    try {
+      const afterQueue = await harness.documentState(RigQueue, undefined, context);
+      const completedItem = afterQueue?.value?.items?.find(it =>
+        it.id === Number(itemLabel.replace("item-", "")) && it.status === "done",
+      );
+      if (completedItem) {
+        // Commit the item's files on its branch, then release and remove.
+        try {
+          await releaseWorktreeLock(worktreePath);
+          // The seat commits in its worktree; the broker cleans up the lock and removes.
+          await removeClaimedWorktree({ worktree: worktreePath, force: true });
+        } catch (err) {
+          console.error(`BROKER: worktree cleanup failed for ${itemLabel}: ${err?.message ?? err}`);
+        }
+      }
+    } catch (err) {
+      console.error(`BROKER: worktree status check failed: ${err?.message ?? err}`);
+    }
+    // Clear DURIG_SEAT_ROOT so subsequent passes don't inherit it.
+    delete process.env.DURIG_SEAT_ROOT;
+  }
+
   return { actioned, seats };
 }
 
@@ -119,6 +190,8 @@ export async function runWakeLoop({
   startedAt = now(),
   isStopping = () => false,
   dbPath = undefined,
+  source = null,
+  worktreeRoot = null,
 }) {
   const failedSeats = new Set();
   const escalations = [];
@@ -172,6 +245,8 @@ export async function runWakeLoop({
         context,
         seatFilter: scheduler.seatFilter(now()),
         readBusySeats,
+        source: source,
+        worktreeRoot: worktreeRoot,
         onError: (failure) => {
           failedSeats.add(failure.name);
           onDiagnostic({ kind: "wake-failed", ...failure });
@@ -208,12 +283,16 @@ export async function runWakeLoop({
 // so the broker's activity (passes, wakes, failures) is inspectable without a socket.
 
 export function brokerLogPath(dbPath) {
+  if (!dbPath) {
+    return null;
+  }
   return `${dbPath}.broker.log`;
 }
 
 /** Append one line to `<db>.broker.log`. */
 export function logBrokerLine(dbPath, line) {
   const path = brokerLogPath(dbPath);
+  if (!path) return; // dbPath not set — skip logging
   const ts = new Date().toISOString();
   appendFileSync(path, ts + " " + line + "\n", "utf8");
 }
