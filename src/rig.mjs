@@ -721,7 +721,7 @@ const Router = defineExtension({
 				const [items, header] = await api.commit(async (tx) => {
 					const queue = await tx.doc(RigQueue);
 					const filtered = queue.items.filter((it) =>
-						args.all ? true : !isTerminalItem(it) && (it.to === me || it.from === me),
+						!isTerminalItem(it) && (args.all || it.to === me || it.from === me),
 					);
 					const counts = {};
 					for (const it of filtered) counts[it.status] = (counts[it.status] || 0) + 1;
@@ -736,9 +736,9 @@ const Router = defineExtension({
 					// read after settlement throws "Cannot use a settled overlay".
 					return [snapshot(filtered), head];
 				}, context);
-				// Bounded inline view: always return counts + first N items.
-				// The full list is also written to disk for completeness.
-				const N = 20;
+				// Bounded inline view for per-seat queries to avoid context bloat.
+				// Team-wide (all=true) view is uncapped so coordinators can enumerate.
+				const N = args.all ? items.length : 20;
 				const cwd = api.env?.cwd;
 				let footer = "";
 				if (cwd) {

@@ -93,11 +93,13 @@ try {
 	assert.ok(!scoped.includes(`#${ids.b} `), "another seat's item is NOT in the default view");
 	assert.ok(!scoped.includes(`#${ids.d} `), "a done item is NOT in the default view");
 
-	// --- all: the team-wide view is still available ------------------------
+	// --- all: the team-wide non-terminal view ------------------------------
 	const all = await drivePeek({ all: true });
-	for (const id of [ids.a, ids.b, ids.c, ids.d]) {
-		assert.ok(all.includes(`#${id} `), `all=true shows #${id}`);
-	}
+	// all=true shows non-terminal items from ALL seats (not just me):
+	assert.ok(all.includes(`#${ids.a} `), "all=true shows my queued item");
+	assert.ok(all.includes(`#${ids.b} `), "all=true shows another seat's queued item");
+	assert.ok(all.includes(`#${ids.c} `), "all=true shows my sent item");
+	assert.ok(!all.includes(`#${ids.d} `), "all=true does NOT show done (terminal) items");
 
 	// --- over threshold: bounded inline view (NOT a bare path) ------------
 	// Build enough items to blow past the 2000-char inline limit.
@@ -116,16 +118,17 @@ try {
 	const itemLines = big.split("\n").filter((l) => /^#\d+ \w+ /.test(l));
 	assert.ok(itemLines.length > 0,
 		`over-threshold peek shows item lines; got: ${big.slice(0, 400)}`);
-	// Showed at most N=20 items (bounded output).
-	assert.ok(itemLines.length <= 20,
-		`over-threshold peek shows at most 20 items; got ${itemLines.length}`);
+	// Showed all items (team-wide view is uncapped; per-seat is capped at 20).
+	assert.ok(itemLines.length > 20,
+		`over-threshold all=true shows all items (not capped at 20); got ${itemLines.length}`);
 	// Item lines follow the format #<id> <status> from=<x> to=<y> <subject>
 	const sampleLine = itemLines[0];
 	assert.ok(/^#\d+ \w+ from=\w+ to=\w+/.test(sampleLine),
 		`item line has expected shape; got: ${sampleLine}`);
-	// A truncated footer with a path should appear when the list exceeds N.
-	assert.ok(/full list:/.test(big),
-		`truncated output includes a full-list path; got: ${big.slice(-200)}`);
+	// A truncated footer with a path should appear when the list exceeds N (20, the per-seat cap).
+	// For all=true, there is no truncation, so no "full list:" footer.
+	assert.ok(!/full list:/.test(big),
+		`all=true shows full items without truncation footer; got: ${big.slice(-200)}`);
 	// The file must have been written (completeness).
 	const fs = await import("node:fs");
 	const allFiles = fs.readdirSync(join(dir, "seat-workspace", ".durig"));

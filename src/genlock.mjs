@@ -27,10 +27,21 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 
 const STALE_MS = 60_000;
 const ACQUIRE_POLL_MS = 100;
+
+// In-process seat context (B2: per-concurrent-call seat attribution).
+// AsyncLocalStorage lets each concurrent generation carry its own seat name
+// through the provider call chain, independent of the global env var.
+const seatLocalStorage = new AsyncLocalStorage();
+
+/** Read the seat of the current async call, or null if not inside a slot. */
+export function getSeatFromContext() {
+	return seatLocalStorage.getStore() ?? null;
+}
 
 function slotPaths(dbPath, slots) {
 	return Array.from({ length: slots }, (_, i) => `${dbPath}.genlock.${i}`);
@@ -80,7 +91,10 @@ export async function withGenerationSlot(options, fn) {
 	const { dbPath, slots } = options;
 	mkdirSync(dirname(dbPath), { recursive: true });
 	const paths = slotPaths(dbPath, slots);
-	const me = { pid: process.pid, seat: options.seat ?? null, since: new Date().toISOString() };
+	// B2: read seat from ALS context of the CURRENT async call (set by wrapProviderWithSlots
+	// seatLocalStorage.run wrapper). Falls back to options.seat (explicit) or env var (legacy).
+	const seat = seatLocalStorage.getStore() ?? options.seat ?? process.env.DURIG_ACTIVE_SEAT ?? null;
+	const me = { pid: process.pid, seat, since: new Date().toISOString() };
 	let path;
 	for (;;) {
 		path = null;
@@ -112,7 +126,7 @@ export async function withGenerationSlot(options, fn) {
 		await new Promise((r) => setTimeout(r, ACQUIRE_POLL_MS));
 	}
 	try {
-		return await fn();
+		return await seatLocalStorage.run(me.seat, fn);
 	} finally {
 		try {
 			const holder = readHolder(path);
@@ -170,34 +184,33 @@ export function readGenerationSlots(dbPath, slots) {
 export function wrapProviderWithSlots(provider, options) {
 	const gated = (call) => (model, context, opts) => {
 		const out = new AssistantMessageEventStream();
-		withGenerationSlot(
-			{ ...options, seat: options.getSeat ? options.getSeat() : null },
-			async () => {
-			const inner = call(model, context, opts);
-			for await (const ev of inner) {
-				out.push(ev);
+		// B2: each call sets its own ALS context so concurrent generations
+		// carry their own seat name through the provider call chain.
+		const seatName = process.env.DURIG_ACTIVE_SEAT ?? null;
+		seatLocalStorage.run(seatName, async () => {
+			try {
+				await withGenerationSlot({ dbPath: options.dbPath, slots: options.slots }, async () => {
+					const inner = call(model, context, opts);
+					for await (const ev of inner) {
+						out.push(ev);
+					}
+					if (typeof inner.result === "function") {
+						try {
+							const res = await inner.result();
+							if (res) out.end(res);
+						} catch (err) {
+							console.error(`GENLOCK WARNING: inner result unavailable: ${err?.message ?? err}`);
+						}
+					}
+				});
+			} catch (err) {
+				console.error(`GENLOCK ERROR: generation failed while gated: ${err?.stack ?? err}`);
+				out.push({
+					type: "error",
+					reason: "error",
+					error: { role: "assistant", content: [], stopReason: "error" },
+				});
 			}
-			// If inner finished via end(result) without a terminal event,
-			// complete our mirror the same way so consumers never hang.
-			// Only genuine EventStreams have result(); composed wrappers
-			// that spread-copy streams do not, and their terminal event
-			// has already been forwarded by the loop above.
-			if (typeof inner.result === "function") {
-				try {
-					const res = await inner.result();
-					if (res) out.end(res);
-				} catch (err) {
-					console.error(`GENLOCK WARNING: inner result unavailable: ${err?.message ?? err}`);
-				}
-			}
-			},
-		).catch((err) => {
-			console.error(`GENLOCK ERROR: generation failed while gated: ${err?.stack ?? err}`);
-			out.push({
-				type: "error",
-				reason: "error",
-				error: { role: "assistant", content: [], stopReason: "error" },
-			});
 		});
 		return out;
 	};

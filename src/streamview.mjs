@@ -9,6 +9,7 @@
 // document every command promises to LLM operators, so `send > out.json`
 // still parses while a human watches the live view.
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
+import { getSeatFromContext } from "./genlock.mjs";
 
 const COLORS = {
 	bold: "\x1b[1m",
@@ -148,7 +149,10 @@ export function wrapProviderWithLiveView(provider, options) {
 	const { renderer } = options;
 	const tapped = (call) => (model, context, opts) => {
 		const out = new AssistantMessageEventStream();
-		const ctx = renderer.begin(options.getSeat ? options.getSeat() : null);
+		// B2: read seat from ALS context of THIS call (set by wrapProviderWithSlots),
+		// fallback to env-var or passed getSeat.
+		const seat = getSeatFromContext() ?? options.getSeat?.() ?? null;
+		const ctx = renderer.begin(seat);
 		(async () => {
 			try {
 				const inner = call(model, context, opts);

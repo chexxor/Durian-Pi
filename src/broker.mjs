@@ -13,7 +13,7 @@
 // trigger is an in-process commit subscription with none of the cross-process
 // gap D11 documented. Read-only viewers keep D11's poll/read-storage rule.
 
-import { readFileSync, unlinkSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
 
 import { RigQueue, Seats } from "./rig.mjs";
 import { driveOnce } from "./driver.mjs";
@@ -176,9 +176,13 @@ export async function runWakeLoop({
           failedSeats.add(failure.name);
           onDiagnostic({ kind: "wake-failed", ...failure });
         },
-        onWoke: (name) => scheduler.recordWakes([name], now()),
+        onWoke: (name) => {
+          scheduler.recordWakes([name], now());
+          logBrokerLine(dbPath, `WAKE ${name}`);
+        },
       });
       passes++;
+      logBrokerLine(dbPath, `PASS ${passes}`);
       if (supervise) {
         const plans = await supervise();
         for (const plan of plans) onDiagnostic({ kind: "escalated", ...plan });
@@ -197,6 +201,21 @@ export async function runWakeLoop({
     }
   }
   return { passes, failedSeats: [...failedSeats], escalations, stoppedBy };
+}
+
+/* ------------------------------ broker log (D46) ------------------------------ */
+// A resident broker is unobservable unless it writes a log. D46 requires `<db>.broker.log`
+// so the broker's activity (passes, wakes, failures) is inspectable without a socket.
+
+export function brokerLogPath(dbPath) {
+  return `${dbPath}.broker.log`;
+}
+
+/** Append one line to `<db>.broker.log`. */
+export function logBrokerLine(dbPath, line) {
+  const path = brokerLogPath(dbPath);
+  const ts = new Date().toISOString();
+  appendFileSync(path, ts + " " + line + "\n", "utf8");
 }
 
 /* ------------------------------ broker lifetime ------------------------------ */

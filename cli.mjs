@@ -897,31 +897,42 @@ async function cmdStopBroker() {
   }
   // Write the stop request; the broker polls this between passes and exits cleanly
   // after the pass in flight settles (same behaviour as SIGTERM on POSIX).
+  // Under load (multiple in-flight generations), a pass can take longer than the
+  // previous 5s window, so we give up to 60s for cooperative settlement. No forced
+  // kill: the broker WILL exit once its pass settles — waiting longer honours that.
   writeStopRequest(DB_PATH);
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + 60_000;
   while (Date.now() < deadline && brokerAlive(state)) {
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 100));
   }
   const stillAlive = brokerAlive(state);
   if (!stillAlive) {
     clearBrokerState(DB_PATH);
     clearStopRequest(DB_PATH);
-  } else {
-    // Last resort: the cooperative request was not honoured in time.
-    process.kill(state.pid);
-    // Give a brief window for the finally block to run.
-    await new Promise((r) => setTimeout(r, 500));
-    clearBrokerState(DB_PATH);
-    clearStopRequest(DB_PATH);
+    out({
+      ok: true,
+      command: "serve",
+      action: "stop",
+      db: DB_PATH,
+      stopped: true,
+      pid: state.pid,
+    });
+    return;
   }
+  // Bounded grace period expired: the broker could not settle in time. Do not
+  // force-kill — the operator should investigate with `status`.
+  console.warn(
+    `serve --stop: broker pid ${state.pid} did not exit within 60s; ` +
+      `pass may still be in-flight — check with \`serve --stop\` again`,
+  );
   out({
     ok: true,
     command: "serve",
     action: "stop",
     db: DB_PATH,
-    stopped: !stillAlive,
+    stopped: false,
     pid: state.pid,
-    ...(stillAlive ? { reason: "process did not exit within 5s; forced kill" } : {}),
+    reason: "pass did not settle within 60s; no forced kill — check status again",
   });
 }
 
@@ -1955,7 +1966,12 @@ try {
     if (!Number.isFinite(sinceSeq) || sinceSeq < 0)
       fail(`events --since must be a non-negative number, got: ${sinceArg}`);
     await cmdEvents({ sinceSeq, follow: rest.includes("--follow") });
-  } else {
+  }
+  else if (cmd === "--help" || cmd === "help") {
+    process.stderr.write(USAGE);
+    process.exit(0);
+  }
+  else {
     out({ ok: false, usage: USAGE.trim() });
     process.exit(2);
   }
