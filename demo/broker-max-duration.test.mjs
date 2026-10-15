@@ -84,7 +84,9 @@ try {
 } finally {
   try {
     rmSync(base, { recursive: true, force: true });
-  } catch {}
+  } catch (err) {
+    console.warn(`cleanup: could not remove ${base}: ${err.message}`);
+  }
 }
 
 process.exit(failures === 0 ? 0 : 1);

@@ -8,7 +8,7 @@
 import { existsSync, mkdtempSync, rmSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "path";
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 
 let failures = 0;
 function check(label, condition, detail = "") {
@@ -26,11 +26,14 @@ const rigPath = join(base, "rig.starter.json");
 copyFileSync("rig.starter.json", rigPath);
 const cliPath = join(process.cwd(), "cli.mjs");
 
+// Declared outside the try so the finally cleanup can reach it (an in-try const is
+// not visible there, and the old empty catch hid the resulting ReferenceError).
+let broker;
 try {
   console.log("\n=== B3: cooperative stop under load ===\n");
 
   // Start broker with --max-duration 10 so it will be running for the stop test
-  const broker = spawn(
+  broker = spawn(
     process.execPath,
     [cliPath, "serve", "--max-duration", "10"],
     {
@@ -97,9 +100,19 @@ try {
   failures += 1;
 } finally {
   try {
-    if (broker.pid) { try { require("child_process").execSync(`taskkill /F /PID ${broker.pid} 2>nul`); } catch {} }
+    if (broker.pid && broker.exitCode === null) {
+      try {
+        execSync(`taskkill /F /PID ${broker.pid} 2>nul`);
+      } catch (err) {
+        // Only reached when the broker is still running, so a real kill failure is
+        // worth surfacing; an already-exited broker skips this branch entirely.
+        console.warn(`cleanup: taskkill ${broker.pid} failed: ${err.message}`);
+      }
+    }
     rmSync(base, { recursive: true, force: true });
-  } catch {}
+  } catch (err) {
+    console.warn(`cleanup: could not remove ${base}: ${err.message}`);
+  }
 }
 
 process.exit(failures === 0 ? 0 : 1);
