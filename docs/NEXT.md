@@ -11,23 +11,23 @@ _Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 
 
 ## NEXT SESSION — START HERE
 
-**Current item (in flight): broker restarted (pid 33688); scribe context reset; pin moved to `4954d760`.**
-The pin move LANDED under the broker: `node scripts/sync-pi.mjs` → pinned `4954d760…`, `drift: false`
-("pin is upstream tip"), all 5 packages linked (#501 → devtools). `pi-main.pin.json` is updated but still
-UNCOMMITTED (devtools' run was cut off before committing) — re-woken as a stalled #488 claim.
-**scribe** was reset (operator call: F29 degeneration) — `reset scribe` wrote `resetEntryId 21967` with a
-handoff; the context head now skips the bad turns (transcript preserved). **lead is NOT stuck**: it
-completed #503 (design proposal, DONE #509) and was idle-with-queued (#504/#505/#507); now `placed`.
-`serve` restarted `2026-10-15T20:35:26Z`, pid **33688**.
+**Current item (in flight): broker running (pid 33688); pin at `4954d760` COMMITTED; round-4 intent queued.**
+**#488 upstream sync STEP 1 is DONE** — `43dff54 chore(sync-pi): pin pi main 7d75a0e -> 4954d760 (#488, UPSTREAM SYNC D10 step 1)`;
+`sync-pi` reports `drift: false` ("pin is upstream tip"). #501 also done. **#489 (impl drift fixes) is now UNGATED.**
+**scribe** was reset (`resetEntryId 21967`, operator call: F29) and is working its doc-gate queue. `serve`
+pid **33688** is driving; seats are mid-work (docs/FEATURES.md, README.md, DECISIONS.md, WORKFLOWS.md,
+cli.mjs, src/broker.mjs all dirty).
+**Pending delivery:** `.durig/pm-intent-round4.md` — backlog feature (work-item list view as an EXTENSION)
++ competitor-research item + the research-agent note. The store is held by the resident broker; deliver at
+the next stop (or in a batch).
 
 Exact next commands:
 `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`,
 `… node cli.mjs log devtools`; stop with `… node cli.mjs serve --stop`.
 
-Known blockers: the **dirty-tree worktree guard is biting live** — `serve.err` shows "worktree claim failed
-for pm … M cli.mjs, M docs/DECISIONS.md, M docs/WORKFLOWS.md, M pi-main.pin.json, M src/broker.mjs" (is
-**#506**); those are seats' in-progress files — **DO NOT discard**. Cooperative `serve --stop` is slow
-(passes run ~13 min) but it does exit. **#489 GATED on #488.**
+Known blockers: the **dirty-tree worktree guard bites live** (**#506**); those working-tree files are
+seats' in-progress work — **DO NOT discard**. Cooperative `serve --stop` is slow (passes run ~13 min) but
+does exit.
 
 **Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
 Evidence: `git diff --diff-filter=A main origin/pi-rebase -- . ':(exclude).spike'` is empty (no
