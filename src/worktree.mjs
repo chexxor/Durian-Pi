@@ -23,6 +23,30 @@ export async function repoRoot(dir) {
 }
 
 /**
+ * Run `npm ci --prefer-offline` in a worktree to make it usable.
+ * Called after createWorktree/claimWorktree because a fresh worktree has no
+ * node_modules (gitignored, not bridged).
+ *
+ * Skips if no package.json exists (throwaway repos).
+ * Measured: ~12 s, ~111 MB per worktree. Fails loudly on error.
+ */
+export async function installWorktreeDeps(worktreePath) {
+	const pkgPath = join(worktreePath, "package.json");
+	if (!existsSync(pkgPath)) {
+		return { ok: true, skipped: true, worktree: worktreePath };
+	}
+	try {
+		const result = await run("npm", ["ci", "--prefer-offline"], { cwd: worktreePath });
+		return { ok: true, worktree: worktreePath, stdout: result.stdout.trim() };
+	} catch (err) {
+		const msg = err.stderr || "";
+		throw new Error(
+			`npm ci --prefer-offline failed in ${worktreePath}:\n${msg}`,
+		);
+	}
+}
+
+/**
  * Add a detached worktree of the repository containing `source`, and make it usable.
  *
  * `source` is not only the repository to copy: its path inside the repository is reproduced in
@@ -99,3 +123,212 @@ export async function removeWorktree({ source, worktree, force = false }) {
 }
 
 // unlinkModulesBridge removed in #330 — no more junctions to drop.
+
+/* ================================================================ */
+/*  P2-1: worktree-per-task lifecycle (claim → lock → release → remove)  */
+/* ================================================================ */
+import { readFile, writeFile, unlink, rm, readdir } from "node:fs/promises";
+
+/**
+ * Validate that a worktree's git identity is correct — it resolves to itself,
+ * its `.git` entry is a file (not a directory), and its private git dir is
+ * under the common dir's `worktrees/` (not the common dir itself).
+ *
+ * Returns { ok: true } or throws with a descriptive message. This mirrors
+ * Claude Code's worktree-identity validation: refuse directories whose git
+ * metadata "resolves into the main checkout" (Claude Code docs).
+ */
+export async function validateWorktreeIdentity(worktreePath) {
+	// Use forward slashes for -C on Windows.
+	const wtNorm = worktreePath.replace(/\\/g, "/");
+	const showToplevel = (await run("git", ["-C", wtNorm, "rev-parse", "--show-toplevel"])).stdout.trim().replace(/\\/g, "/");
+	const absoluteGitDir = (await run("git", ["-C", wtNorm, "rev-parse", "--absolute-git-dir"])).stdout.trim().replace(/\\/g, "/");
+	const gitCommonDir = (await run("git", ["-C", wtNorm, "rev-parse", "--git-common-dir"])).stdout.trim().replace(/\\/g, "/");
+
+	const expectedToplevel = resolve(worktreePath).replace(/\\/g, "/");
+
+	// 1. toplevel must be this worktree's own directory.
+	if (showToplevel !== expectedToplevel) {
+		throw new Error(
+			`worktree identity violation: --show-toplevel (${showToplevel}) ` +
+				`does not match expected (${expectedToplevel})`,
+		);
+	}
+	// 2. private git dir must differ from common dir (not the main checkout).
+	if (absoluteGitDir === gitCommonDir) {
+		throw new Error(
+			`worktree identity violation: --absolute-git-dir === --git-common-dir ` +
+				`(${absoluteGitDir}) — the worktree resolves to the main checkout`,
+		);
+	}
+	// 3. the .git entry must be a FILE, not a directory.
+	const gitEntryPath = join(worktreePath, ".git");
+	const stat = await import("node:fs/promises").then((m) => m.stat(gitEntryPath));
+	if (stat.isDirectory()) {
+		throw new Error(
+			`worktree identity violation: .git is a directory (main checkout) at ${gitEntryPath}`,
+		);
+	}
+	return { ok: true, showToplevel, absoluteGitDir, gitCommonDir };
+}
+
+/**
+ * Create a worktree for a specific queue item, create a dedicated branch,
+ * and hold a `git worktree lock` so concurrent cleanup cannot remove it
+ * while the item is being processed.
+ *
+ * Returns the worktree metadata needed for later release/remove.
+ *
+ * `itemLabel` is used for the branch name (e.g. `wt/item-123`), kept short
+ * to avoid MAX_PATH issues.
+ */
+export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = "HEAD" }) {
+	const target = join(worktreeRoot, itemLabel);
+	if (existsSync(target)) {
+		throw new Error(`worktree path already exists: ${target}`);
+	}
+	const result = await createWorktree({ source, target, ref });
+	// Validate identity before returning — refuses if the worktree resolves
+	// back to the main checkout through a redirect.
+	await validateWorktreeIdentity(result.worktree);
+	// Hold a lock so concurrent cleanup cannot remove this worktree.
+	await run("git", ["-C", result.repo, "worktree", "lock", result.worktree]);
+	// Install deps — a fresh worktree has no node_modules, so it is unusable
+	// until dependencies are installed. npm ci --prefer-offline (~12 s, ~111 MB).
+	await installWorktreeDeps(result.worktree);
+	// Enable rerere so conflict resolutions are recorded for the merge-on-complete step.
+	await enableRerere(result.worktree);
+	return { ...result, itemLabel, locked: true };
+}
+
+/**
+ * Release the lock on a previously claimed worktree. After release the
+ * worktree may be removed (it may contain changes). The lock prevents
+ * concurrent `git worktree remove` from clobbering a worktree holding work.
+ */
+export async function releaseWorktreeLock(worktreePath) {
+	// Use forward slashes for -C on Windows.
+	const wtNorm = worktreePath.replace(/\\/g, "/");
+	// Resolve repo root first to use for -C.
+	let repoRoot;
+	try {
+		repoRoot = (await run("git", ["-C", wtNorm, "rev-parse", "--show-toplevel"])).stdout.trim();
+	} catch {
+		// Worktree already gone — nothing to unlock
+		return { worktree: worktreePath, locked: false };
+	}
+	await run("git", ["-C", repoRoot, "worktree", "unlock", wtNorm]);
+	return { worktree: worktreePath, locked: false };
+}
+
+/**
+ * Remove a worktree that has been locked-released. Uses `git worktree remove`
+ * (never `rm -rf`) to avoid stale `.git/worktrees/` metadata.
+ *
+ * Refuses when a junction/symlink/DirLink exists inside the worktree
+ * (Git 2.42 on this host deletes THROUGH junctions, risking the main tree).
+ */
+export async function removeClaimedWorktree({ worktree, force = false }) {
+	// If the worktree is already gone, nothing to do.
+	if (!existsSync(worktree)) {
+		return { worktree, removed: false, skipped: true };
+	}
+	// Unlock first if held — a locked worktree cannot be removed even with --force.
+	try {
+		await run("git", ["worktree", "unlock", worktree]);
+	} catch (err) {
+		// A worktree that is not locked (or already gone) is removed anyway; report the
+		// failure so a real unlock error is visible instead of silently swallowed.
+		console.warn(`worktree: unlock of ${worktree} did not apply: ${err.message}`);
+	}
+	// Refuse when a junction/symlink exists inside the worktree.
+	// Git 2.42 on this host deletes THROUGH junctions, risking the main tree.
+	const entries = await readdir(worktree, { recursive: true, withFileTypes: true });
+	for (const entry of entries) {
+		if (entry.isSymbolicLink()) {
+			throw new Error(
+				`refusing to remove worktree ${worktree}: junction/symlink detected at ${entry.path}/${entry.name}`,
+			);
+		}
+	}
+	// Forward-slash paths for -C on Windows.
+	const wtNorm = worktree.replace(/\\/g, "/");
+	// Resolve the repo root before unlinking .git (so we can use -C <repo>).
+	let repoRoot;
+	try {
+		repoRoot = (await run("git", ["-C", wtNorm, "rev-parse", "--show-toplevel"])).stdout.trim().replace(/\\/g, "/");
+	} catch {
+		// .git already gone — nothing to do
+		return { worktree, removed: false, skipped: true };
+	}
+	// Remove the .git pointer file so git worktree remove can clean up cleanly.
+	const gitFile = join(worktree, ".git");
+	try {
+		await unlink(gitFile);
+	} catch {
+		// .git was already gone or is a directory — remove it.
+		await rm(gitFile, { recursive: true, force: true });
+	}
+	// Run from the repo root so git can still find the worktree metadata.
+	const args = ["-C", repoRoot, "worktree", "remove", ...(force ? ["--force"] : []), wtNorm];
+	await run("git", args);
+	// Final cleanup: if git left the directory behind, remove it.
+	if (existsSync(worktree)) {
+		await rm(worktree, { recursive: true, force: true });
+	}
+	return { worktree, removed: true };
+}
+
+/**
+ * Enable `git rerere` in a worktree so conflict resolutions are recorded and replayed.
+ * Called during worktree creation or first use.
+ */
+export async function enableRerere(worktreePath) {
+	const wtNorm = worktreePath.replace(/\\/g, "/");
+	await run("git", ["-C", wtNorm, "config", "rerere.enabled", "true"]);
+	return { worktree: worktreePath, rerereEnabled: true };
+}
+
+/**
+ * Rebase the worktree's item branch onto a target branch (e.g. main).
+ * The worktree must have a branch checked out (not detached).
+ * Used during merge-on-complete integration.
+ */
+export async function rebaseItemBranch({ worktreePath, targetBranch }) {
+	const wtNorm = worktreePath.replace(/\\/g, "/");
+	// Verify this worktree has a branch (not detached HEAD).
+	const branch = (await run("git", ["-C", wtNorm, "branch", "--show-current"])).stdout.trim();
+	if (!branch) {
+		throw new Error(`worktree ${worktreePath} has no branch (detached HEAD); cannot rebase`);
+	}
+	// Rebase onto the target branch.
+	const result = await run("git", ["-C", wtNorm, "rebase", targetBranch]);
+	return { worktree: worktreePath, branch, rebasedOnto: targetBranch, stdout: result.stdout.trim() };
+}
+
+/**
+ * List existing worktrees for cleanup / audit. Returns an array of objects
+ * with path, branch (null if detached), and locked status.
+ */
+export async function listWorktrees(repoPath) {
+	try {
+		const { stdout } = await run("git", ["-C", repoPath, "worktree", "list", "--porcelain"]);
+		const worktrees = [];
+		let current = {};
+		for (const line of stdout.split("\n")) {
+			const [key, ...rest] = line.split(" ");
+			const value = rest.join(" ");
+			if (key === "worktree") current.worktree = value;
+			if (key === "branch") current.branch = value || null;
+			if (key === "locked") current.locked = true;
+			if (line === "" && current.worktree) {
+				worktrees.push({ ...current, locked: false });
+				current = {};
+			}
+		}
+		if (current.worktree) worktrees.push({ ...current, locked: false });
+		return worktrees;
+	} catch {
+		return [];
+	}
+}
