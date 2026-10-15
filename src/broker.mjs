@@ -314,8 +314,9 @@ export function brokerAlive(state) {
   try {
     process.kill(state.pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    // EPERM means the process exists but we cannot signal it — still alive.
+    return err?.code === "EPERM";
   }
 }
 
