@@ -11,24 +11,24 @@ _Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 
 
 ## NEXT SESSION — START HERE
 
-**Current item (in flight): five asks delivered to pm (pid 30384), after the broker was force-cleared.**
-The broker (pid 14180) wedged with a stop request and never exited; it was force-killed, its stale
-`broker.stop`/`broker.json` and dead-pid genlock removed, and `resume` reconciled 1 stranded impl
-submission. `send pm` (pid **30384**, `.spike/delegate/round2-pm.out`) carries, in order:
-**A** the #495 ruling (target upstream's LIVE tip `4954d760`, unblock #488); **B** PRIORITY — per-seat
-last-activity time in `cli status`; **C** backlog design — work-item layer + feature branches + persona
-review; **D** backlog — token/cost metrics + model attribution per turn/queue-item/work-item; **E**
-backlog research — durig bloat vs an extension/plugin system. Body: `.durig/pm-intent-round2.md`.
+**Current item (in flight): RESIDENT BROKER RESTARTED (pid 24952); all asks routed to pm.**
+After the wedged broker (pid 14180) was force-cleared and `resume` reconciled 1 stranded submission,
+pm handled two delegate messages and registered: **#501→devtools** (answer #495: resume #488 on the
+LIVE tip `4954d760`), **#502→impl** (status seat last-activity, PRIORITY), **#503→lead** (work-item +
+feature branches + persona review, design), **#504→lead** (tokens/cost/model metrics), **#505→lead**
+(bloat vs plugin system), **#506→impl** (broker worktree guard vs a dirty tree — the observed defect),
+**#507→lead** (doc-acceptance fold-in), **#508→scribe** (project-level docs truth-up). Bodies:
+`.durig/pm-intent-round2.md`, `.durig/pm-intent-round3.md`. `serve` restarted `2026-10-15T20:21:57Z`
+(pidfile `selfdev.sqlite.broker.json`), pid **24952**.
 
 Exact next commands:
-`DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`
-then restart the broker `… node cli.mjs serve` (script `.spike/delegate/dispatch-serve.ps1`).
+`DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`,
+`… node cli.mjs log devtools`; stop with `… node cli.mjs serve --stop`.
 
-Known blockers: the store is **single-writer** (pm send pid **30384** must finish first). The tree is
-**dirty with seats' in-progress work** left by the force-kill (`M cli.mjs`, `M src/broker.mjs`,
-`?? demo/broker-wakepath.test.mjs`, `?? demo/up-model-reset.test.mjs`, `?? pi-main.pin.json.bak`) —
-DO NOT discard; but the broker's per-task worktree guard fails closed on any uncommitted/untracked
-change. **#489 GATED on #488.**
+Known blockers: the **dirty-tree worktree guard is biting live** — `serve.err` shows "worktree claim
+failed for pm … M cli.mjs, M src/broker.mjs, ?? demo/broker-wakepath.test.mjs, ?? demo/up-model-reset.test.mjs,
+?? pi-main.pin.json.bak" (this IS #506). Those are seats' in-progress files — **DO NOT discard**. Store
+single-writer while pid 24952 runs. **#489 GATED on #488.**
 
 **Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
 Evidence: `git diff --diff-filter=A main origin/pi-rebase -- . ':(exclude).spike'` is empty (no
