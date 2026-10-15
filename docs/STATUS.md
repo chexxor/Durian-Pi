@@ -260,3 +260,31 @@ Updated **2026-10-14 (later delegate session — lost-tranche recovery + structu
 - **Known regression to fix with #328:** #329 edited `constitution.txt` but did not regenerate
   `rig.starter.json`'s inline copy, so `demo/starter.test.mjs` now drifts on CONTENT as well as CRLF.
 - Nothing pushed.
+
+## Updated 2026-10-15 (delegate session — Phase 2, policy, concurrency, broker)
+
+- **#330 Phase 2 DONE and qa-verified (#351–#356):** per-task worktree lifecycle in
+  `src/worktree.mjs` (create-on-claim + branch, `git worktree lock`, remove-on-completion,
+  per-worktree `npm ci --prefer-offline`, git-identity validation, rebase+`rerere`, cleanup only via
+  `git worktree remove` refusing dirty/junction), and Windows Job-Object reaping in
+  `src/job-object.mjs`. Demos `demo/worktree-lifecycle.test.mjs`, `demo/job-object.test.mjs`.
+- **Commit authority moved to the developer (D50):** the guard now ALLOWS `git commit` (plain and
+  `-C` forms) but still refuses every destructive form and `git push` (push stays operator-only,
+  grantable to the delegate). `constitution.txt` P2 Authority, the `constitutionInline` copies in
+  `rig.selfdev.json`/`rig.starter.json`, `AGENTS.md`, and the shared seat instructions updated;
+  `demo/starter.test.mjs` is GREEN, clearing the #328 drift.
+- **Docs-ownership norm adopted:** docs are written by whoever has the most knowledge (dev→impl,
+  project→pm, QA/architecture→qa/lead); **scribe** manages project-level docs (FEATURES/STATUS/README)
+  and delegates/owns the others. Recorded in `docs/SELFDEV.md` and `docs/WORKFLOWS.md`.
+- **Concurrency clarified and fixed:** one store/harness writer per DB; `DURIG_MAX_CONCURRENT_SEATS`
+  generation slots; per-task worktrees allow concurrent editing; `serve` + the slot cap is the
+  sanctioned concurrency. A 4-slot test found and fixed four broker defects: `serve --max-duration`
+  was not a real bound; F34 attributed every concurrent lease to the last-woken seat (now
+  AsyncLocalStorage per generation); `serve --stop` forced a kill under load (now cooperative);
+  the broker did not write `<db>.broker.log`. `peek_queue(all=true)` now returns the uncapped
+  non-terminal listing so coordinators can groom (#433).
+- **TUI:** C1 `src/readapi.mjs` and C2 `src/viewmodel.mjs` committed (`789ead6`); C3
+  `src/tui/client.mjs` + `demo/tui-client.test.mjs` built; the designer's UX review found no `--help`
+  surface, now added (`cli.mjs --help`/`help`, usage to stderr, exit 0).
+- **Suite:** 68/68 at the time of writing; `docs/FEATURES.md` corrected against the code.
+- Nothing pushed.

@@ -3,48 +3,54 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-14, operator's delegate session (broker verification + lost-tranche recovery)._
+_Last refreshed: 2026-10-14, operator's delegate session (Phase 2 #330 delivered — P2-1..P2-6)._
 
-## NEXT SESSION — START HERE: Phase 2 (#330) per-task worktrees, then F35 (#300) and qa
+## NEXT SESSION — START HERE: TUI C3 (#335), then the qa backlog, and the operator's integration
 
-**Current item: #330 (Phase 2 — per-task worktrees, the load-bearing isolation).** **Known
-blocker:** Git for Windows here is **2.42.0**, below the **2.54.0** that fixed `git worktree remove`
-deleting *through* a junction; the existing `node_modules` junction must be removed and none may
-remain (or upgrade Git). **Decision: stay on npm** (`npm ci --prefer-offline`, measured 12 s / 111 MB,
-committed suite 52/53) — not pnpm.
+**#330 PHASE 2 IS DONE AND qa-VERIFIED (#351–#356).** All six parts landed in the LIVE tree
+(uncommitted — the operator commits): per-task worktree lifecycle, per-worktree
+`npm ci --prefer-offline`, git-identity validation, rebase-before-merge + `rerere`,
+`git worktree remove`-only cleanup (refuse dirty/junction), and Windows Job-Object process reaping.
+Verification artifacts #365/#367/#369/#371/#373/#376 are DONE (qa re-ran the demos: PASS).
+
+**Operator action owed:** integrate/commit the Phase 2 work — `src/worktree.mjs` (modified),
+`src/job-object.mjs` (new), `demo/worktree-lifecycle.test.mjs` (new), `demo/job-object.test.mjs` (new) —
+plus the earlier TUI C1/C2 work already in the tree: `demo/readapi.test.mjs` (new),
+`demo/viewmodel.test.mjs` (modified). Nothing is pushed.
 
 Exact next command (drive the selfdev team; the seat root is the live tree):
 
-`cd durig && DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`
+`DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`
 
-**The resident broker is DONE** (`serve`, D45/D46) and was observed auto-waking `devtools` with no
-manual action. **The lost worktree tranche is RECOVERED** onto the working tree (#307–#312). **F34 is
-fixed.** **Phase 1 (#329) is DONE** (guard anchors + refusal-redirect, the norm, the failing-first
-recipe, demo cases; suite 55/56). What remains:
+What remains, in priority order:
 
-1. **#330 Phase 2 (per-task worktrees, load-bearing)** — one worktree + one branch per queue item,
-   create-on-claim / remove-on-completion, rebase-before-merge; **replace the `node_modules` junction
-   with an independent `npm ci --prefer-offline`** (never a junction); git-identity validation
-   (`--show-toplevel` == path, `--absolute-git-dir` != `--git-common-dir`, `.git` is a file);
-   **Job-Object reaping** (no SIGTERM); cleanup via `git worktree remove` only. Shares the Windows
-   signal gap with F35 — consider landing together. Full design: `docs/Shared_Working_Tree_Safety_Research.md`.
-2. **F35 (#300)** — `serve --stop` on Windows tears the broker down mid-pass (no `SIGTERM`); make the
-   stop cooperative and pass-settling (poll `<db>.broker.stop`, wait for the state file to clear,
-   kill only as a last resort).
-3. **CRLF/LF drift + stale starter — #328, LOGGED FOR LATER** — with `core.autocrlf=true` and no
-   `.gitattributes`, `constitution.txt` checks out CRLF while `rig.starter.json`'s inline copy stays
-   LF, so `demo/starter.test.mjs` fails at HEAD. Same family as #291. **Also:** #329 edited
-   `constitution.txt` (added P1 Evidence, P2 Isolation/Authority, P3 Safety) but did not regenerate
-   the starter's inline copy, so the test now drifts on CONTENT too — **regenerate
-   `rig.starter.json`'s `constitutionInline` as part of #328.** Do not start until the higher items clear.
-4. **qa** — artifacts queued but not yet verified: #313 (#307), #315 (#308), #317 (#309), #319 (#310),
-   #321 (#311), #323 (#312), #325 (F34).
+0. **Docs refresh owed (operator-flagged).** Phase 2 is a feature and `docs/FEATURES.md` is stale:
+   line 43 still says `worktree <path>` uses a `node_modules` junction (Phase 1 removed it), and there
+   are no entries for the per-task lifecycle, git-identity validation, rebase+rerere,
+   `git worktree remove`-only cleanup, or `src/job-object.mjs` Job-Object reaping. `docs/STATUS.md`
+   predates both the TUI read layer and Phase 2. Route to **scribe** (it owns FEATURES.md/STATUS.md).
+1. **TUI C3 (#335)** — `src/tui/client.mjs` (seat list + transcript + streaming row + status bar +
+   footer); then **C4 (#336, qa + auditor)** headless render tests at 80×24 / 60 / 48 cols + lifecycle
+   cleanup. (C1 #333 and C2 #334 are DONE.)
+2. **qa backlog** — older artifacts still queued: #331 (#329), #345 (#300), #347 (#330 Phase 1),
+   #349 (#339), #359 (#333), #363 (#334), plus qa's own reports to impl (#378–#383).
+3. **Housekeeping** — #357 (the "cancel #327" item) is complete in effect (#327 is `cancelled`) but
+   the row still reads `queued`; #358 is a stale `DONE #303` ack. Have pm settle both. The `events`
+   feed publishes durable events, so a reader can confirm the transitions.
+4. **#328 (CRLF/LF drift + stale starter)** — still logged for later; unchanged. Regenerate
+   `rig.starter.json`'s `constitutionInline` as part of it.
 
-## Recovered this session (working tree; NOT committed — integration is the operator's)
+**Known hard detail (do not re-derive):** `src/job-object.mjs` uses a runtime PowerShell `Add-Type`
+P/Invoke helper. It only works if `JOBOBJECT_EXTENDED_LIMIT_INFORMATION` is passed at exactly
+**144 bytes** with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` (`0x2000`) at offset 16; any other size gives
+`STATUS_HEAP_CORRUPTION` (0xC0000374). This deserves a deliberate review (or a native addon) before
+being trusted in production. The earlier failed scratch is at `.spike/delegate/p2-6-scratch/`.
+
+## Recovered in an earlier session (now COMMITTED on main)
 
 The repo split kept the worktree's COMMITTED work (broker, cancel/revise, TUI) and lost its
 UNCOMMITTED work. The snapshot branch **`pi-rebase` (commit `3bf61b1`)** held it; it was adapted onto
-current `main` as one-concern items (author=impl, verifier=qa):
+`main` as one-concern items (author=impl, verifier=qa):
 
 - **#307 claim-by-id** — `claim_work({itemId})`, same queued-only whitelist (a `held` item stays
   unclaimable by id too). DONE, demo `rearmclaim`.
@@ -60,10 +66,7 @@ current `main` as one-concern items (author=impl, verifier=qa):
   sets `DURIG_ACTIVE_SEAT` before `waitForIdle`; `wrapProviderWithSlots` `getSeat` names it). DONE,
   demo `f34`. **KNOWN LIMIT:** multi-seat concurrency attributes to the *last-woken* seat.
 
-All recovered files: `src/{rig,worktree,broker}.mjs`, `cli.mjs`, NEW `src/{storewrite,eventfeed}.mjs`,
-demos `{rearmclaim,worktree,defer,storewrite,events,peekqueue,f34}.test.mjs`, plus the doc truth-up.
-
-## Branch audit — DONE (delegate, 2026-10-14)
+## Branch audit — DONE (earlier delegate session)
 
 Full audit: **`docs/BRANCH-AUDIT-2026-10-14.md`**. Outcome:
 
@@ -85,46 +88,44 @@ Full audit: **`docs/BRANCH-AUDIT-2026-10-14.md`**. Outcome:
 
 ## Open backlog (ids)
 
-- **F35 #300 / #251 DONE this session** (verified). Open: **#325/#313/#315/#317/#319/#321/#323**
-  (qa artifacts) — note `#327` is a duplicate safety item already delivered by `#329`; pm should
-  cancel/ack it (`cancel_work`).
-- **Long waits / context:** #289 + #290. **Seat ergonomics:** #291 (LF/CRLF), #292 (doc-proxy).
-- **Earlier:** #251, #252, #253, #254, #258, #275, #156.
-- **Stale queue rows:** #287 (obsolete doc item) and ~40 old DONE acks; a `pm` triage with
-  `cancel_work` (now that the queue can be curated, D47) is owed.
+- **Done recently:** #330 Phase 2 (#351–#356) + verifications (#365/#367/#369/#371/#373/#376);
+  #327 cancelled; #333/#334 TUI C1/C2; F35 #300, #251, #329, #339.
+- **Open:** TUI C3 #335, TUI C4 #336; qa backlog #331/#345/#347/#349/#359/#363; qa→impl reports
+  #378–#383; stale rows #357/#358 (settle); long waits #289/#290; seat ergonomics #291/#292.
+- **Earlier deferred:** #252, #253, #254, #258, #275, #156; #120/#220 wait on the human.
 
 ## Traps (learned — do not repeat)
 
 - **NEVER run `git stash`/`reset`/`checkout`/`restore`/`clean` from a seat — not with a trailing
-  `;`/`&&`/`|`.** The guard misses those forms and one wiped the tree this session (see the gap above).
+  `;`/`&&`/`|`.** The guard misses those forms and one wiped the tree in an earlier session (see the
+  gap above). (The anchored refusal landed in #329; the regex denylist is still only a backstop.)
 - **Only a write-side process wakes seats** (`send`/`run`/`serve`); viewers never do (D11).
 - **Never run two CLI write processes at once** (F24); `send` now retries entry-id conflicts (#310).
 - **`send` blocks until the generation settles** — background it or use `run --max-duration`.
 - **The broker's harness is turn-based**; a wake is an event injection that STARTS a turn.
 - **Coordinators (pm/lead) cannot read/write files** (#156) — route file tasks to a file-capable seat.
-- **A seat can wander** (F29) — a tight direct steer + `reset <seat> <handoff>` recovers it; do not
-  let it run on stale backlog items.
+- **A seat can wander or thrash** (F29) — a tight direct steer + `reset <seat> <handoff>` recovers it;
+  a seat that ignores a bounded instruction should be `stop`ped and re-scoped, not left running.
+- **Keep scratch under `.spike/`** — a thrashing seat wrote ~10 scratch files into `src/` this session;
+  they were moved to `.spike/delegate/p2-6-scratch/` and removed from the tree.
+- **An abandoned `send` parent can linger after `stop <seat>`** (the seat run aborts, the send wrapper
+  does not). Confirm no genlock and no active generation, then `taskkill /F /PID <that node>`.
 
 ## Where main is
 
-`main` is `b27955b` ("docs(durig): session truth-up and shared-tree safety research") — the recovered
-tranche (#307–#312) is now COMMITTED; `origin/main` is still `762d95f`, so local `main` is ahead and
-**unpushed** (the operator holds push). Untracked remains: `.spike/`, `AGENTS.md`, `pi-warden.md`,
-`vendor/`, `docs/LLM_Agent_Long_Term_Memory_Strategies.md`, and the branch-audit scratch. Nothing was
-pushed.
+`main` is `30632a1` ("docs(durig): add LLM long-term memory research notes"); local `main` is ahead of
+`origin/main` and **unpushed** (the operator holds push). Untracked: `.spike/`, `AGENTS.md`,
+`pi-warden.md`, `vendor/`, `docs/LLM_Agent_Long_Term_Memory_Strategies.md`.
 
 **Uncommitted team work in the tree (verified by the delegate; the operator integrates/commits):**
 
-- **#300 (F35)** — `src/broker.mjs`, `cli.mjs`, NEW `demo/stoprequest.test.mjs`: cooperative
-  `.stop` file, pass-settling stop. DONE; `demo/stoprequest.test.mjs` green, `demo/broker.test.mjs` green.
-- **#251** — `scripts/sync-pi.mjs`, `demo/syncpi.test.mjs`: pin-guard `JSON.parse`. DONE; demo green.
-- **#330** — `src/worktree.mjs`, `demo/worktree.test.mjs`: node_modules junction removed (Git 2.42
-  hazard). DONE; demo 19/19.
-- **#339** — NEW `demo/pitui.test.mjs` (blob `36d97417`). DONE; `node demo/pitui.test.mjs` exit 0.
+- **#351–#356 (Phase 2)** — `src/worktree.mjs` (modified, +231 lines), `src/job-object.mjs` (new),
+  `demo/worktree-lifecycle.test.mjs` (new, 19/19 green), `demo/job-object.test.mjs` (new, green).
+  qa re-verified #365/#367/#369/#371/#373/#376 → PASS. **Amendment after that PASS:** the four
+  Phase 2 files had swallowed `catch` blocks (empty/comment-only); these were fixed to report the
+  best-effort error (operator-flagged) with no control-flow change. The delegate re-ran both demos
+  after the amendment → exit 0, so the verification still holds.
+- **TUI C1/C2** — `demo/readapi.test.mjs` (new), `demo/viewmodel.test.mjs` (modified). Not yet committed.
 
-Full suite after all four: **56/57 pass**; the single failure is the pre-existing
+Full suite at this state: the P2 demos are green; the only known failure remains the pre-existing
 `demo/starter.test.mjs` LF/CRLF drift (#328/#291, out of scope).
-
-Two `run` attempts hit harness problems: the first was killed at the tool cap (stranded submissions),
-the second hung on a stale `pid: undefined` genlock and was stopped. Both were recovered with
-`node cli.mjs resume`; no strands remain. **Never kill a run/send mid-generation.**

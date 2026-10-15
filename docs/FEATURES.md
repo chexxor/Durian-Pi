@@ -40,12 +40,12 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | Command | Does | Flags |
 |---|---|---|
 | `up <rig.json>` | Create/refresh seats, edges and constitution from a spec; idempotent | `--refresh` re-applies stored prompts, models **and** each seat's working directory |
-| `worktree <path>` | Create an isolated per-item checkout for seats to write in, with a `node_modules` junction so the demos can run there. **Refuses a dirty source tree** (uncommitted changes would not be carried into the fork) and names the offending path | `--source <dir>` |
+| `worktree <path>` | Create an isolated per-item checkout for seats to write in. **Refuses a dirty source tree** (uncommitted changes would not be carried into the fork) and names the offending path; dependencies are installed per worktree (`npm ci --prefer-offline`), never bridged with a `node_modules` junction (Git 2.42 deletes *through* junctions) | `--source <dir>` |
 | `ps` | Seat roster with conversation ids and roles, each seat's configured `model`, and its worktree `root` when a non-default cwd is persisted | |
 | `send <seat> <text>` | Steer a seat, wait for its reply, return it inline | `--stream` / `--no-stream`, `--body-file <path>` (or `-`), `--request-id <id>` (retry-safe) |
 | `resume` | (alias `doctor`) advance admitted-but-not-progressing submissions — a run admitted but never scheduled | |
 | `run` | Drive the rig to quiescence: wake each seat that has queued work OR a stalled claim (a claimed item whose run died), hold the harness until the runs settle; exits at quiescence | `--watch` stays resident |
-| `serve` | The resident broker: own the harness and run a wake pass on each store change (no external clock); runs the supervisor each pass. `up` auto-starts it on a TTY | `--max-duration <seconds>` bounds it; `--stop` reaps a running broker |
+| `serve` | The resident broker: own the harness and run a wake pass on each store change (no external clock); runs the supervisor each pass; writes `<db>.broker.log`. `up` auto-starts it on a TTY | `--max-duration <seconds>` bounds wall-clock; `--stop` reaps a running broker cooperatively |
 | `reset <seat> [handoff]` | (alias `clean`) break a seat out of a degenerate context by writing a `pi.reset` boundary; the durable transcript is preserved | |
 | `stop <seat> [reason]` | Emergency-stop: halt a seat's in-flight run across processes, settle it terminal as `aborted: <reason>`, release the lease | |
 | `queue` | Dump every work item with status and transitions; a `summary` gives counts by status plus the notices count, so notices are distinguishable from work | `--active`, `--status <s>`, `--all` |
@@ -71,10 +71,10 @@ Three operator-facing behaviours are load-bearing:
   both paths and the fix. A seat's cwd is resolved once at `up` time and
   persisted; without this guard an operator who re-points a run at a new worktree
   silently writes into the old one and sees success (dogfood F12).
-- **Help and exit contract** — bare `cli.mjs`, `help`, `--help` and `-h` return
-  `{"ok":true,... "command":"help"}` with exit 0; an unknown verb returns
-  `{"ok":false,"error":"unknown command \"X\"", ...}` with exit 2
-  (`demo/cli.test.mjs`).
+- **Help and exit contract** — `help` and `--help` print the usage text to
+  **stderr** and exit 0, emitting no stdout JSON; bare `cli.mjs`, `-h`, and an
+  unknown verb print `{"ok":false,"usage":...}` to stdout and exit 2
+  (`demo/cli-help.test.mjs`, `demo/cli.test.mjs`).
 
 ## 3. Configuration
 
@@ -135,6 +135,11 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Seat-root guard** | A write-side `send`/`run` whose `DURIG_SEAT_ROOT` disagrees with a seat's persisted cwd fails closed, naming both paths and the fix; view-only commands and `up --refresh` are unaffected (dogfood F12) | `cli.mjs` `openHarness` | `demo/seatroot.test.mjs` |
 | **Concurrent store writes** | The `send` path is made safe for two CLI processes writing one store: a lost entry-id collision is retried instead of dying raw; a message that cannot be delivered is a guided refusal, not `ID n already belongs to entry`. **Known limit:** the `up`/`run` write paths are not yet covered | `src/storewrite.mjs` | `demo/storewrite.test.mjs` |
 | **Dirty-worktree refusal** | `worktree` refuses a source tree with uncommitted changes (they would not be carried into the fork) and names the offending path | `src/worktree.mjs` | `demo/worktree.test.mjs` |
+| **Per-task worktree lifecycle** | One worktree + branch per item: create-on-claim, `git worktree lock` while the item runs, remove on completion. `npm ci --prefer-offline` per worktree (never a junction); git-identity validation (`--show-toplevel` == the tree, `--absolute-git-dir` != `--git-common-dir`, `.git` is a file); rebase-before-merge with `rerere`; cleanup only via `git worktree remove`, refusing a dirty tree or any junction | `src/worktree.mjs` | `demo/worktree-lifecycle.test.mjs` |
+| **Job-Object process reaping** | Windows has no SIGTERM; the seat's process tree is reaped by a Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) and the worktree is removed only after the tree is confirmed dead | `src/job-object.mjs` | `demo/job-object.test.mjs` |
+| **Broker observability and bounds** | The broker writes `<db>.broker.log`; `serve --max-duration` bounds wall-clock and exits; `serve --stop` settles cooperatively under load instead of a forced kill | `src/broker.mjs`, `cli.mjs` | `demo/broker-log.test.mjs`, `demo/broker-max-duration.test.mjs`, `demo/broker-cooperative-stop.test.mjs` |
+| **Concurrent seat attribution** | With N generation slots, each lease and `status` names the generation's own seat (AsyncLocalStorage), not the last-woken seat (fixes F34 under concurrency) | `src/genlock.mjs` | `demo/broker-seat-attr.test.mjs` |
+| **Coordinator queue listing** | `peek_queue(all=true)` returns the full non-terminal listing uncapped, so a coordinator with no read tool can groom the queue | `src/rig.mjs` | `demo/coordinator-queue.test.mjs` |
 | **Zero durig SQL** | durig imports one storage opener and runs no SQL of its own | `cli.mjs:26` | architecture note, `docs/STATUS.md` |
 
 ## 6. Observability

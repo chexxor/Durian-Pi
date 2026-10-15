@@ -86,11 +86,15 @@ dies, no claimed work is re-woken and nothing downstream can progress. Fix #110 
 
 ## Operational pitfalls (learned driving the team, 2026-10-13)
 
-- **Never run two CLI write processes against one store concurrently.** Two `send`s
-  collided on an entry id (`ID n already belongs to entry`) and one message was
-  *silently dropped* (dogfood F24). The `send` path now retries (#257, D42), but
-  `up`/`run` are not yet covered — run one write process at a time. Drive several
-  seats by launching one backgrounded `send` and polling, not by firing them together.
+- **Two CLI *drivers* on one store is the anti-pattern — not concurrency itself.** The
+  store/harness is single-writer: two `send` processes collided on an entry id
+  (`ID n already belongs to entry`) and one message was *silently dropped* (dogfood F24).
+  The `send` path retries (#310, D42), but `up`/`run` are not covered, and two drivers
+  double-wake (D45). This is a *store* rule, not a *files* rule: per-task worktrees let
+  different seats edit concurrently, and `genlock` already leases N cross-process
+  generation slots (`DURIG_MAX_CONCURRENT_SEATS`). The sanctioned concurrency is **one
+  broker (`serve`) owning the store and driving up to N seats**, each in its own
+  worktree; for genuinely independent drivers, use separate databases.
 - **A `send` killed by the harness tool cap strands the seat.** Recover with
   `node cli.mjs resume`; drive heavy work as a BACKGROUNDED `send` (PowerShell
   `Start-Process`) or short `run --max-duration` chunks (dogfood F19, #252).
@@ -124,6 +128,31 @@ dies, no claimed work is re-woken and nothing downstream can progress. Fix #110 
 - **Keep the seat root clean.** Scratch patchers (`fix_peek.py`), dump files, and
   `peek_block.txt` left in the tree pollute the diff and the operator's integration
   (observed on F32). Write scratch under `.spike/` and remove it, or use a temp dir.
+
+## Docs ownership: who writes which documentation
+
+Documentation is written by **whoever has the most knowledge of the topic**, not by a single
+docs role:
+
+- **Developer / implementation docs** (a feature's design rationale, a module's behaviour) are
+  written by the seat that did the work — **`impl`**.
+- **Project management and project-ownership docs** (roadmap, priorities, what is in/out of
+  scope, coordination records) are written by **`pm`**.
+- **Quality-assurance and architecture-level docs** (how verification proves a change, why the
+  architecture is shaped the way it is) are written by **`qa`** and **`lead`**.
+
+**The `scribe` seat's scope** is narrower and downstream of that:
+
+- Manages the **project-level** surfaces — `docs/FEATURES.md`, `docs/STATUS.md` and the README —
+  keeping them true to what the code and tests actually do.
+- **Audits, edits and contributes to** the developer docs above (correcting claims that no
+  longer match the code), but does not *replace* the owning seat's authorship.
+- Is responsible for **delegating and pushing for** the docs other seats should create and own:
+  when a seat's change ships without the doc its topic warrants, the scribe routes the doc item
+  back to the owning seat (or records the gap) rather than silently writing it on theirs.
+
+Anyone may write a doc another seat owns, but the owner is accountable for keeping it true; the
+scribe keeps the project-level truth and chases the owner for what is missing.
 
 ## Clock in / clock out
 
