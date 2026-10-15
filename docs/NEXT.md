@@ -11,22 +11,21 @@ _Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 
 
 ## NEXT SESSION — START HERE
 
-**Current item (in flight): broker running (pid 33688); pin at `4954d760` COMMITTED; round-4 intent queued.**
-**#488 upstream sync STEP 1 is DONE** — `43dff54 chore(sync-pi): pin pi main 7d75a0e -> 4954d760 (#488, UPSTREAM SYNC D10 step 1)`;
-`sync-pi` reports `drift: false` ("pin is upstream tip"). #501 also done. **#489 (impl drift fixes) is now UNGATED.**
-**scribe** was reset (`resetEntryId 21967`, operator call: F29) and is working its doc-gate queue. `serve`
-pid **33688** is driving; seats are mid-work (docs/FEATURES.md, README.md, DECISIONS.md, WORKFLOWS.md,
-cli.mjs, src/broker.mjs all dirty).
-**Pending delivery:** `.durig/pm-intent-round4.md` — backlog feature (work-item list view as an EXTENSION)
-+ competitor-research item + the research-agent note. The store is held by the resident broker; deliver at
-the next stop (or in a batch).
+**Current item (in flight): broker running (pid 32976); round-4 delivered; #488 STEP 1 DONE (pin `4954d760`).**
+**#488 upstream sync STEP 1 is DONE** — `43dff54 chore(sync-pi): pin pi main 7d75a0e -> 4954d760`; `sync-pi`
+reports `drift: false` ("pin is upstream tip"). **#489 (impl drift fixes) is now UNGATED.**
+**Round-4 delivered** (pm): **#538→lead** backlog feature (work-item list view as an EXTENSION — the
+first-extension case for #505), **#539→lead** backlog research (competitor/prior-art survey: work-items↔tasks,
+external tracker vs built-in), **#540→scribe** doc the research-escalation practice (the delegate already
+recorded it in `docs/SELFDEV.md` "Research escalations"). **scribe** was reset earlier (F29) and has
+re-claimed #540 — it is healthy. `serve` pid **32976** (restarted `2026-10-15T20:51:20Z`).
 
 Exact next commands:
 `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`,
-`… node cli.mjs log devtools`; stop with `… node cli.mjs serve --stop`.
+`… node cli.mjs log lead`; stop with `… node cli.mjs serve --stop`.
 
 Known blockers: the **dirty-tree worktree guard bites live** (**#506**); those working-tree files are
-seats' in-progress work — **DO NOT discard**. Cooperative `serve --stop` is slow (passes run ~13 min) but
+seats' in-progress work — **DO NOT discard**. Cooperative `serve --stop` can be slow (~13-min passes) but
 does exit.
 
 **Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
