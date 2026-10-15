@@ -406,11 +406,71 @@ async function cmdUp(rigFile, refresh = false, { serve = false } = {}) {
   const existing = [];
   const refreshed = [];
   const { harness, models, providerId, extensions } = await openHarness();
+  // #402 (#148 half-2; lead #241 ruling) — the model-change reset seam lives in cmdUp,
+  // NOT the wake path (no second wake-adjacent execution path, the #121 binding).
+  // Detection is read-only: rig-resolved seat model vs the model each existing seat's
+  // conversation last RAN under (newest pi.assistant entry). RigQueue is read in the
+  // same pass so the handoff can carry in-flight claimed item ids (#154).
+  //   bare up   → detect + REPORT ONLY (no write, no silent no-op): the mismatch is in
+  //               the JSON (`modelMismatch`) and a stderr notice names `up --refresh`.
+  //   --refresh → the ONLY apply path: detect → reset via the SHARED boundary mechanism
+  //               (lease-guarded conversation.reset(handoff)) → configure, so the new
+  //               model starts from a clean context. Idempotent: change-only (a second
+  //               --refresh with no further change writes nothing).
+  const resolvedPromptBySeat = new Map();
+  let modelMismatch = [];
+  let modelReset = [];
+  let modelRefused = [];
+  try {
+    // Resolve prompts once (the commit loop reuses them; detection compares them).
+    for (const seat of spec.seats) {
+      resolvedPromptBySeat.set(seat.name, await buildSeatPrompt(models, seat, providerId));
+    }
+    // Read-only detection pass over EXISTING seats (before any write).
+    modelMismatch = await detectModelMismatch(harness, spec, resolvedPromptBySeat);
+    if (refresh) {
+      // Apply path: reset each CHANGED seat's context before reconfiguring it.
+      for (const mm of modelMismatch) {
+        const carriedIds = mm.claimedIds.length ? ` Claimed items carried: #${mm.claimedIds.join(" #")}.` : "";
+        const handoffText =
+          `model-change reset: this seat is reconfigured to ${mm.to} (was ${mm.from});` +
+          ` your context was reset so you do not re-condition on turns written for another model.` +
+          ` ${carriedIds} Call claim_work to re-enter when you have read your instructions.`;
+        const result = await resetSeatContext(harness, mm.seat, handoffText, DB_PATH);
+        if (result.refused) {
+          // Live-leased seat: skip BOTH reset and reconfigure for this seat (a half-applied
+          // model switch is the worse state); the operator re-runs --refresh when idle.
+          // The refusal stays VISIBLE (stderr + JSON), never a silent no-op.
+          modelRefused.push({ seat: mm.seat, from: mm.from, to: mm.to, reason: result.reason });
+          console.error(
+            `up: seat ${mm.seat} holds a live generation lease; model change ${mm.from} → ${mm.to} NOT applied — re-run up --refresh after it settles`,
+          );
+        } else {
+          modelReset.push({ seat: mm.seat, from: mm.from, to: mm.to, resetEntryId: result.resetEntryId });
+        }
+      }
+    } else if (modelMismatch.length > 0) {
+      // Bare up: report WITHOUT writing. stderr for the human; JSON carries the facts.
+      for (const mm of modelMismatch) {
+        console.error(
+          `up: seat ${mm.seat} configured model ${mm.to} differs from its conversation's model ${mm.from}; run 'up --refresh' to apply the reset handoff`,
+        );
+      }
+    }
+  } catch (err) {
+    // Detection/resets must never wedge the rig bootstrap: report and continue with
+    // the normal up path (creation still works; the mismatch stays unhandled and
+    // the NEXT bare up re-reports it).
+    console.error(`up: model-change seam error: ${err?.message ?? err}`);
+    modelMismatch = [];
+  }
   try {
     await harness.commit(async (tx) => {
       const seatsDoc = await tx.doc(Seats);
       for (const seat of spec.seats) {
-        const prompt = await buildSeatPrompt(models, seat, providerId);
+        // Prompts were resolved once above (detection pass) and are REUSED here —
+        // a second buildSeatPrompt would run the optimizer twice (DURIG_OPTIMIZE=on).
+        const prompt = resolvedPromptBySeat.get(seat.name) ?? (await buildSeatPrompt(models, seat, providerId));
         // A rig may point its seats at an isolated tree: `seat.cwd` overrides `spec.cwd`, and with
         // neither the seat keeps the harness default. Recorded per conversation because that is
         // what the env function consults, so a renewal cannot silently widen the boundary.
@@ -489,7 +549,21 @@ async function cmdUp(rigFile, refresh = false, { serve = false } = {}) {
   // Start the resident broker only AFTER this process releases the harness, so a
   // scripted `up` and the broker it spawns are never two writers at once.
   const broker = serve ? await ensureBroker() : { started: false, reason: "disabled (--no-serve or non-interactive)" };
-  out({ ok: true, command: "up", db: DB_PATH, created, existing, refreshed, extensions, broker });
+  out({
+    ok: true,
+    command: "up",
+    db: DB_PATH,
+    created,
+    existing,
+    refreshed,
+    extensions,
+    broker,
+    // #402: bare up reports detected mismatches (write NOTHING); --refresh reports what
+    // it reset (and anything it refused for a live lease — the operator re-runs when idle).
+    ...(modelMismatch.length ? { modelMismatch: modelMismatch.map(({ seat, from, to }) => ({ seat, from, to })) } : {}),
+    ...(refresh && modelReset.length ? { modelReset } : {}),
+    ...(refresh && modelRefused.length ? { modelRefused } : {}),
+  });
 }
 
 // worktree: an isolated checkout for one work item.
@@ -619,6 +693,110 @@ async function cmdResume() {
   }
 }
 
+// Shared reset-boundary mechanism (#402, ruling lead #241): ONE boundary-write path.
+// `cmdReset` (operator verb) and the `up --refresh` model-change path both delegate here:
+// unknown-seat fail, LIVE-LEASE guard (a running seat must not be reset out from under
+// itself), watermark, `conversation.reset(handoff)` (writes the `pi.reset` boundary without
+// deleting the transcript), then the newest-past-watermark reset entry id.
+// Returns the reset entry id, or null when the seat was refused (live lease) — the caller
+// reports refusals; this function never writes while a lease is held.
+async function resetSeatContext(harness, seatName, handoff, dbPath) {
+  const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+  const seatsVal = seatsDoc?.value?.seats ?? {};
+  const seat = seatsVal[seatName];
+  if (!seat) {
+    noteEmptyRig(Object.keys(seatsVal).length);
+    fail(`unknown seat: ${seatName}`);
+  }
+  const convId = seat.conversationId;
+
+  // Refuse when the seat holds a LIVE generation lease: resetting a running
+  // seat out from under its own generation corrupts the very boundary we are
+  // trying to draw. Same seatsWithLiveSlot guard the stranded notice and the
+  // resume verb compute (readGenerationSlots -> generatingSeat; ROADMAP 37a).
+  // Consulted only when genlock is actually configured (a finite cap).
+  const slots = maxSeats();
+  const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
+  const seatsWithLiveSlot = new Set(
+    genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat),
+  );
+  if (seatsWithLiveSlot.has(seatName)) {
+    return { refused: true, reason: "live-generation-lease" };
+  }
+
+  const conv = await harness.conversation(convId, BACKGROUND_CONTEXT);
+  // Identify the reset entry THIS invocation wrote: a watermark before, then
+  // the newest pi.reset entry past it (the durable transcript keeps earlier
+  // resets too, so the newest-past-watermark is precisely ours, not a prior one).
+  const prior = await conv.entries({}, 20, undefined, BACKGROUND_CONTEXT);
+  const priorMaxId = prior.items.reduce((max, e) => Math.max(max, Number(e.id) || 0), 0);
+
+  // An omitted or blank handoff means a plain reset (no new user message on
+  // the boundary); only a non-blank handoff becomes the `pi.reset` user message.
+  const resetHandoff = handoff !== undefined && handoff.trim() !== "" ? handoff : undefined;
+  await conv.reset(resetHandoff, BACKGROUND_CONTEXT);
+
+  const after = await conv.entries({ order: "descending" }, 50, undefined, BACKGROUND_CONTEXT);
+  const resetEntry = after.items.find(
+    (e) => e.kind === "pi.reset" && Number(e.id) > priorMaxId,
+  );
+  return { refused: false, resetEntryId: resetEntry?.id ?? null, handoff: resetHandoff ?? null };
+}
+
+// Model-change DETECTION for the cmdUp reset seam (#402; #148 half-2; lead #241):
+// the conversation's CONFIGURED model is what `configure` last wrote (AgentDoc.model —
+// the idempotent reference point: the switch boundary this seam drew last time is part
+// of that doc), and the rig spec WOULD apply its resolved seat model. A difference is
+// an ACTUAL CHANGE that would leave the seat re-conditioning on a context written for
+// another model (#148) — the reset fires at that boundary, then configure rewrites it.
+// (The newer-pi.assistant ran-under read stays as a comment-level note: ran-under LAGS
+// config between refresh and next generation, so it can never provide the idempotent
+// reference the ruling demands.)
+// Read-only: documentState for Seats + RigQueue in ONE pass (carried claimed ids for
+// the handoff, per #154) + one AgentDoc read per existing seat.
+// @returns {Array<{seat:string, from:string, to:string, convId:number|string, claimedIds:number[]}>}
+import { AgentDoc } from "@earendil-works/pi-durable";
+async function detectModelMismatch(harness, spec, resolvedPromptBySeat) {
+  const context = BACKGROUND_CONTEXT;
+  const [seatsDoc, queueDoc] = await Promise.all([
+    harness.documentState(Seats, undefined, context),
+    harness.documentState(RigQueue, undefined, context),
+  ]);
+  const seatsVal = seatsDoc?.value?.seats ?? {};
+  const claimedIds = new Map(); // seat -> claimed item ids it holds
+  for (const it of queueDoc?.value?.items ?? []) {
+    if (it?.status === "claimed" && typeof it?.to === "string") {
+      claimedIds.set(it.to, [...(claimedIds.get(it.to) ?? []), it.id]);
+    }
+  }
+  const mismatches = [];
+  for (const seat of spec.seats) {
+    const registered = seatsVal[seat.name];
+    if (!registered) continue; // new seat: created below, nothing ran under anything
+    const prompt = resolvedPromptBySeat.get(seat.name);
+    if (!prompt) continue;
+    const to = `${prompt.seatModel.provider}/${prompt.seatModel.modelId}`;
+    // The conversation's configured model: what `configure` last wrote (AgentDoc.model).
+    let from = null;
+    try {
+      const agentDoc = await harness.documentState(AgentDoc, registered.conversationId, context);
+      const ref = agentDoc?.value?.model;
+      if (ref && typeof ref.provider === "string" && typeof ref.modelId === "string") {
+        from = `${ref.provider}/${ref.modelId}`;
+      }
+    } catch (err) {
+      // Unreadable agent doc: cannot know what it is configured under — do not guess.
+      // Report nothing for this seat; the operator's explicit `reset` stays available.
+      console.error(`up: model detection skipped for ${seat.name} (agent doc unreadable): ${err?.message ?? err}`);
+      continue;
+    }
+    if (from !== null && from !== to) {
+      mismatches.push({ seat: seat.name, from, to, convId: registered.conversationId, claimedIds: claimedIds.get(seat.name) ?? [] });
+    }
+  }
+  return mismatches;
+}
+
 // reset (alias: clean): the deliberate way to break a seat out of a degenerate
 // context (ROADMAP 44). After a model emits a repetition loop, every later turn
 // re-conditions on that bad turn in history; pi-durable's conversation.reset()
@@ -632,52 +810,18 @@ async function cmdResume() {
 async function cmdReset(seatName, handoff) {
   const { harness } = await openHarness();
   try {
-    const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-    const seatsVal = seatsDoc?.value?.seats ?? {};
-    const seat = seatsVal[seatName];
-    if (!seat) {
-      noteEmptyRig(Object.keys(seatsVal).length);
-      fail(`unknown seat: ${seatName}`);
-    }
-    const convId = seat.conversationId;
-
-    // Refuse when the seat holds a LIVE generation lease: resetting a running
-    // seat out from under its own generation corrupts the very boundary we are
-    // trying to draw. Same seatsWithLiveSlot guard the stranded notice and the
-    // resume verb compute (readGenerationSlots -> generatingSeat; ROADMAP 37a).
-    // Consulted only when genlock is actually configured (a finite cap).
-    const slots = maxSeats();
-    const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
-    const seatsWithLiveSlot = new Set(
-      genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat),
-    );
-    if (seatsWithLiveSlot.has(seatName)) {
+    // Delegate to the SHARED boundary mechanism (#402): same unknown-seat fail,
+    // same live-lease guard, same watermark + conversation.reset write path.
+    const result = await resetSeatContext(harness, seatName, handoff, DB_PATH);
+    if (result.refused) {
       fail(`seat ${seatName} holds a live generation lease; refusing to reset a running seat`);
     }
-
-    const conv = await harness.conversation(convId, BACKGROUND_CONTEXT);
-    // Identify the reset entry THIS invocation wrote: a watermark before, then
-    // the newest pi.reset entry past it (the durable transcript keeps earlier
-    // resets too, so the newest-past-watermark is precisely ours, not a prior one).
-    const prior = await conv.entries({}, 20, undefined, BACKGROUND_CONTEXT);
-    const priorMaxId = prior.items.reduce((max, e) => Math.max(max, Number(e.id) || 0), 0);
-
-    // An omitted or blank handoff means a plain reset (no new user message on
-    // the boundary); only a non-blank handoff becomes the `pi.reset` user message.
-    const resetHandoff = handoff !== undefined && handoff.trim() !== "" ? handoff : undefined;
-    await conv.reset(resetHandoff, BACKGROUND_CONTEXT);
-
-    const after = await conv.entries({ order: "descending" }, 50, undefined, BACKGROUND_CONTEXT);
-    const resetEntry = after.items.find(
-      (e) => e.kind === "pi.reset" && Number(e.id) > priorMaxId,
-    );
-
     out({
       ok: true,
       command: "reset",
       seat: seatName,
-      resetEntryId: resetEntry?.id ?? null,
-      handoff: resetHandoff ?? null,
+      resetEntryId: result.resetEntryId,
+      handoff: result.handoff,
       db: DB_PATH,
     });
   } finally {
