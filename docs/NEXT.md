@@ -11,20 +11,20 @@ _Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 
 
 ## NEXT SESSION — START HERE
 
-**Current item (in flight): QUEUE GROOM → start the resident broker.** pm's half landed and is
-verified (+45 `cancelled`; the 27 `qa->impl` notices remain bookkeeping; stale claims
-#289/#290/#291/#294/#335 cancelled). impl's half dispatched: pid **35076**, stdout
-`.spike/delegate/groom-impl.out` (cancels the 27 notices + stale claim #287). Archive:
-`.durig/queue-archive-2026-10-15.json`.
+**Current item (in flight): RESIDENT BROKER RUNNING (pid 14180) — the queue is auto-managing.**
+The groom landed: pm cancelled 45, impl cancelled 28 → `queued` **39, all real work, 0 bookkeeping**;
+stale claims resolved. `serve` started `2026-10-15T19:38:49Z` (pidfile `selfdev.sqlite.broker.json`).
+It is driving: **`#488` (pin move) claimed by devtools**, plus #400/#407/#415/#468; 3 generations in
+flight. Archive: `.durig/queue-archive-2026-10-15.json`.
 
-Exact next commands:
+Exact next commands (inspect):
 `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`
-then start the broker `… node cli.mjs serve` (dispatch script `.spike/delegate/dispatch-serve.ps1`).
+and `tail selfdev.sqlite.broker.log`; stop it with `… node cli.mjs serve --stop`.
 
-Known blocker: the store is **single-writer** — impl's groom send (pid **35076**) must finish and the
-queue must verify clean (only the 39 real-work rows `queued`: #390/#398/#400/#401/#402/#407/#411/#415/
-#426/#427/#437/#439/#440/#442/#444/#451/#456/#458/#460/#462/#464/#466/#469–#475/#480–#490) before
-`serve` starts, or it grinds bookkeeping oldest-first. **#489 stays GATED on #488.**
+Known blocker: **do not leave uncommitted tracked changes** — the broker's per-task worktree guard
+fails closed on a dirty source (it failed pm's first wake on an uncommitted `docs/NEXT.md`). The store
+is **single-writer**: while `serve` (pid 14180) runs, do not start another `send`/`run`/`serve`.
+**#489 stays GATED on #488.**
 
 **Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
 Evidence: `git diff --diff-filter=A main origin/pi-rebase -- . ':(exclude).spike'` is empty (no
