@@ -9,10 +9,30 @@ _Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
 > operator notifies you when a run completes. Do not loop `sleep`/`tasklist` to watch it.
 
-
 ## NEXT SESSION — START HERE
 
-**Current item: #480 (U1) — build the `durig ui` driver (queue id #480; TOP PRIORITY; UNBLOCKED).**
+**Current item (in flight): QUEUE GROOM → start the resident broker.** pm's half landed and is
+verified (+45 `cancelled`; the 27 `qa->impl` notices remain bookkeeping; stale claims
+#289/#290/#291/#294/#335 cancelled). impl's half dispatched: pid **35076**, stdout
+`.spike/delegate/groom-impl.out` (cancels the 27 notices + stale claim #287). Archive:
+`.durig/queue-archive-2026-10-15.json`.
+
+Exact next commands:
+`DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`
+then start the broker `… node cli.mjs serve` (dispatch script `.spike/delegate/dispatch-serve.ps1`).
+
+Known blocker: the store is **single-writer** — impl's groom send (pid **35076**) must finish and the
+queue must verify clean (only the 39 real-work rows `queued`: #390/#398/#400/#401/#402/#407/#411/#415/
+#426/#427/#437/#439/#440/#442/#444/#451/#456/#458/#460/#462/#464/#466/#469–#475/#480–#490) before
+`serve` starts, or it grinds bookkeeping oldest-first. **#489 stays GATED on #488.**
+
+**Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
+Evidence: `git diff --diff-filter=A main origin/pi-rebase -- . ':(exclude).spike'` is empty (no
+tracked file on the snapshot is absent from `main`); `demo/pitui.test.mjs` is present on `main`;
+the local branch is already deleted; `docs/BRANCH-AUDIT-2026-10-14.md` records the recovery as
+executed. Do NOT re-apply the snapshot (D48: adapt onto `main`, never restore a whole snapshot).
+
+**Then (next queued item): #480 (U1) — build the `durig ui` driver (queue id #480; TOP PRIORITY; UNBLOCKED).**
 The rest of the interactive-client series is **#481–#487 (U2–U7)**. U1 is the missing piece between
 `src/tui/client.mjs` (a headless renderer) and the operator: a separate entrypoint that owns raw mode
 + key handling + the poll loop and paints `renderTui` frames (`cli.mjs` stays non-interactive, D21;
