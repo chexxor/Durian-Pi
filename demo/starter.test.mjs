@@ -105,6 +105,14 @@ try {
 	// each one genuinely ran. A `skipped` status here means the starter is being
 	// audited by a check that could not actually judge it.
 	for (const c of result.json.checks) {
+		// The starter deliberately declares no `ownership` block (a bare starter rig
+		// must stay clean — ROADMAP 46 / #714), so that rule is SKIPPED with a reason,
+		// not passed. Every other rule must genuinely run and pass.
+		if (c.id === "ownership-seat-missing") {
+			assert.equal(c.status, "skipped", `the starter must skip ${c.id}, got "${c.status}"`);
+			assert.ok(c.why, `${c.id} must state why it was skipped`);
+			continue;
+		}
 		assert.equal(c.status, "pass", `rule ${c.id} is "${c.status}", not "pass": ${c.why ?? ""}`);
 	}
 
@@ -185,6 +193,7 @@ try {
 		"no-verifier-seat": "this file, control 5",
 		"single-model-rig": "this file, control 2",
 		"seat-without-capabilities": "this file, control 6",
+		"ownership-seat-missing": "demo/ownership.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(

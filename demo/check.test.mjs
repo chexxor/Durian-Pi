@@ -41,6 +41,9 @@ const hardenedSpec = () => ({
     { from: "verifier", maySendTo: ["alpha"] },
   ],
   constitutionInline: CONSTITUTION,
+  // A valid ownership block (ROADMAP 46) so the ownership-seat-missing rule RUNS
+  // and passes on the hardened rig, rather than being skipped.
+  ownership: { "src-tools-harness": ["alpha"], verification: ["verifier"] },
 });
 
 const ids = (result) => result.findings.map((f) => f.id);

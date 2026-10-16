@@ -225,5 +225,12 @@
                                     ]
                   }
               ],
+    "ownership":  {
+                      "src-tools-harness":  [ "impl", "devtools" ],
+                      "rig-roles-edges":  [ "pm", "lead" ],
+                      "verification":  [ "qa", "auditor" ],
+                      "feature-docs":  [ "scribe" ],
+                      "workflow-docs":  [ "advocate" ]
+                  },
     "constitution":  "constitution.txt"
 }
