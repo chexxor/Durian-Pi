@@ -170,7 +170,13 @@ export async function applyResets(harness, plans, context) {
 				`without acting. Your context is reset to break the pattern. Re-anchor from your durable ` +
 				`instructions and the queue; re-claim your item if you still hold it, and issue each tool ` +
 				`call through the tool channel, never as message text.`
-			: `degeneration guard reset (${plan.detail}): the run you were in outgrew its bounds, ` +
+			: /degenerate-text/.test(String(plan.detail ?? ""))
+				? `degenerate text (${plan.detail}): your last turn repeated the same short phrase many ` +
+					`times instead of acting — the context is saturated and you are looping on your own ` +
+					`output. Your context is reset to break the loop. Re-anchor from your durable ` +
+					`instructions and the queue; re-claim your item if you still hold it, and state each ` +
+					`next action once, then issue it.`
+				: `degeneration guard reset (${plan.detail}): the run you were in outgrew its bounds, ` +
 				`so your context is reset to break the loop. Re-anchor from your durable instructions ` +
 				`and the queue; re-claim your item if you still hold it.`;
 		const conv = await harness.conversation(plan.conversationId, context);

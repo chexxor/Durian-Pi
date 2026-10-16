@@ -11,7 +11,7 @@
 // not keep the seat resetting forever. A page already ending in `pi.reset` is skipped
 // outright, so a reset is not re-applied before the seat has run again (idempotence).
 
-import { countMalformedToolCalls, countPseudoToolCalls } from "./attention.mjs";
+import { countDegenerateTextTurns, countMalformedToolCalls, countPseudoToolCalls } from "./attention.mjs";
 
 /**
  * Conservative, operator-tunable trip points. Deliberately high: the repeat predicate
@@ -25,6 +25,7 @@ export const DEGEN_DEFAULTS = {
 	maxRepeats: 3, // identical tool calls within the run
 	maxMalformed: 2, // harness malformed-argument rejections within the run
 	maxPseudoToolCalls: 1, // a tool call emitted AS TEXT (no rejection to see): the run could not act
+	maxDegenerateText: 1, // one turn of the same short sentence repeated (F29 word salad): the run is thrashing
 	maxContextTokens: 400_000, // newest turn's prompt size (a backstop, not the primary trip)
 	repeatHorizon: 3, // matches metrics.REPEAT_HORIZON: a repeat is seen within 3 calls
 };
@@ -56,7 +57,8 @@ function toolCallKeys(entry) {
  * newest entry until the wake that started it.
  *
  * @returns {{degenerate:boolean, justReset:boolean, reasons:string[], toolTurns:number,
- *   repeats:number, malformed:number, pseudoToolCalls:number, contextTokens:number, calls:number}}
+ *   repeats:number, malformed:number, pseudoToolCalls:number, degenerateTextTurns:number,
+ *   contextTokens:number, calls:number}}
  */
 export function assessRun(entriesNewestFirst, opts = {}) {
 	const o = { ...DEGEN_DEFAULTS, ...opts };
@@ -69,6 +71,7 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		repeats: 0,
 		malformed: 0,
 		pseudoToolCalls: 0,
+		degenerateTextTurns: 0,
 		contextTokens: 0,
 		calls: 0,
 	};
@@ -104,6 +107,9 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 	// validation rejection — the `malformed` count above is structurally blind to it. That
 	// run settled "done" while the seat did not act, so it is its own degenerate cause.
 	const pseudoToolCalls = countPseudoToolCalls(run);
+	// The F29 word-salad shape: the same short sentence repeated throughout one turn's TEXT.
+	// Structurally invisible (the turn still emits a tool call), so it needs its own reader.
+	const degenerateTextTurns = countDegenerateTextTurns(run);
 	const contextTokens = run.reduce((max, entry) => {
 		const tokens = messageOf(entry)?.usage?.totalTokens;
 		return Number.isFinite(tokens) ? Math.max(max, tokens) : max;
@@ -116,6 +122,9 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 	if (pseudoToolCalls >= o.maxPseudoToolCalls) {
 		reasons.push(`pseudo-tool-call=${pseudoToolCalls}>=${o.maxPseudoToolCalls}`);
 	}
+	if (degenerateTextTurns >= o.maxDegenerateText) {
+		reasons.push(`degenerate-text=${degenerateTextTurns}>=${o.maxDegenerateText}`);
+	}
 	if (contextTokens >= o.maxContextTokens) reasons.push(`context-tokens=${contextTokens}>=${o.maxContextTokens}`);
 
 	return {
@@ -126,6 +135,7 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		repeats,
 		malformed,
 		pseudoToolCalls,
+		degenerateTextTurns,
 		contextTokens,
 		calls,
 	};

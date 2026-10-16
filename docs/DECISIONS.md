@@ -1926,3 +1926,29 @@ pass re-wakes it, rather than leaving a freshly-reset seat idle (observed: the r
 idle for 80 s until the process was restarted).
 The recurrence is a model/provider format fault (`deepseek-ai/DeepSeek-V4.1-Flash` via deepinfra,
 `openai-completions`); the operator keeps that model, so durig remediates rather than swapping it.
+
+## D78 — Repetitive degenerate PROSE is a degenerate run: detect by text, not by tool structure (2026-10-16)
+
+**Decision.** An assistant turn that fills its message TEXT with one short sentence repeated past a
+small bound (>=5 occurrences of a normalized sentence of <=60 chars in a SINGLE turn; fenced code
+blocks ignored) is **degenerate on the first occurrence**. `assessRun` counts it
+(`degenerate-text=N>=1`) and the supervisor resets the seat through the existing reset boundary, with a
+handoff that names the fault ("you are looping on your own output ... state each next action once").
+Detection is pure (`textDegeneration` / `countDegenerateTextTurns` in `src/attention.mjs`), consumed by
+`src/degeneration.mjs`, acted on by `src/supervisor.mjs`.
+
+**Why.** Observed live 2026-10-16: `impl` filled entry `36368` with "Let me emit. Emit. OK. Go. Now."
+~30 times, then STILL emitted a structured tool call. Every structural signal the guard had read clean —
+`tool-turns`, identical-call `repeats`, harness `malformed` rejections, and the D77 `pseudo-tool-call`
+tags were all below their bounds — and the `step-repetition` metric measures repeated TOOL CALLS (0.05,
+"ok"), not repeated PROSE. So the run burned minutes per turn, unhastened: exactly the F29 class the
+guard exists to catch, because the detector only ever looked at tool-call structure. A run can be
+structurally valid and still be thrashing.
+
+**Grounding trap.** The supervisor feeds RAW `scanEntries` items, where `entry.model` is an ARRAY
+(`[message]`). The `log` command unwraps it to `entry.model = entry.model[0]`. Testing a detector
+against `log`-shaped entries silently blinds every `messageOf`-based signal; test against the raw shape.
+
+**Status:** adopted (delegate), verified by `demo/degeneration.test.mjs` (RED before) and against the live
+impl run (`assessRun` on `readSeatPages(impl)` -> `degenerate-text=1>=1`; `planResets` -> a reset plan for
+`impl`). A false positive costs one context reset, never lost work (the transcript is durable).
