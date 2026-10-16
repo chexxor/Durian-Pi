@@ -26,7 +26,7 @@ import { AssistantEntry, configure, createRegistry, Harness } from "@earendil-wo
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { closeSync, existsSync, openSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 // Single source of truth for DeepInfra provider options, vendored into this tree
@@ -146,6 +146,21 @@ function noteEmptyRig(seatCount) {
   console.error(
     `note: no seats in ${DB_PATH}${freshness}. If you meant a different rig, set DURIG_DB or create durig.config.json - run: node cli.mjs config`,
   );
+}
+
+/** #491 C8: find the nearest rig.json from `start` upward through parents
+ * (this directory first, then each parent) so `check` can discover the
+ * checkable surface instead of demanding a path. Returns null when nothing
+ * is found. */
+function findRigFileFrom(start) {
+	let current = resolve(start);
+	for (;;) {
+		const candidate = join(current, "rig.json");
+		if (existsSync(candidate)) return candidate;
+		const parent = dirname(current);
+		if (parent === current) return null;
+		current = parent;
+	}
 }
 
 // Faux handle kept module-level so cmdSend can queue a default response;
@@ -1943,17 +1958,34 @@ async function cmdConfig() {
   });
 }
 
-// check <rig.json> [--json|--human]: audit a rig file against the research
-// gaps. Non-interactive like every other command (D21): the JSON contract on a
-// pipe, the readable report on a terminal. Exit code follows a linter's
-// convention - nonzero when the rig has `error` findings - so a script can gate
-// on it; `ok` stays true because the audit itself ran.
+// check [rig.json|auto|.]: audit a rig file against the research gaps. With a
+// path, audit that file; with `auto`/`.` OR no path at all (#491 C8), search
+// cwd and parents for rig.json and audit what was found. Non-interactive like
+// every other command (D21): the JSON contract on a pipe, the readable report
+// on a terminal. Exit code follows a linter's convention - nonzero when the rig
+// has `error` findings - so a script can gate on it; `ok` stays true because
+// the audit itself ran.
 //
 // It reads BOTH sides deliberately. The rig file is what the operator intends
 // and the store is what the seats actually run; the constitution defect existed
 // precisely because those two disagreed while every command reported ok.
-async function cmdCheck(rigFile, human) {
-  if (!rigFile) fail("check needs <rig.json>");
+async function cmdCheck(rigFile, human, rest = []) {
+  // #491 C8: a path is a decision; NO path (or auto/. for the explicit form) is
+  // an intent to audit "the rig I am standing in", so search cwd and parents
+  // for rig.json. The discovery is provenance-marked with discovered: true, and
+  // a script can stop the search with --discovered:false.
+  let discovered = false;
+  const skip = rest.includes("--discovered:false");
+  if (!rigFile && skip) fail("check needs <rig.json> (auto-discovery is disabled with --discovered:false)");
+  if (!rigFile || rigFile === "auto" || rigFile === ".") {
+    rigFile = findRigFileFrom(process.cwd());
+    if (rigFile === null) {
+      fail(
+        "no rig.json found in this directory or its parents - create one first with `node cli.mjs up rig.starter.json` (the starter is the hardened scaffold) or print help with `node cli.mjs help`",
+      );
+    }
+    discovered = true;
+  }
   let spec;
   try {
     spec = JSON.parse(await readFile(rigFile, "utf8"));
@@ -2011,8 +2043,14 @@ async function cmdCheck(rigFile, human) {
         color: true,
         seats: seatCount,
         storeReason: stored.reason,
+        discovered,
       }),
     );
+    // #491 C8: a human must be able to tell a discovered audit from a named
+    // one; a pipe gets the fact as a JSON field instead.
+    if (discovered) {
+      console.error(`note: audited the discovered rig file ${rigFile} (no path was given)`);
+    }
   } else {
     out({
       ok: true,
@@ -2021,6 +2059,7 @@ async function cmdCheck(rigFile, human) {
       db: DB_PATH,
       store: stored.reason,
       seats: seatCount,
+      discovered,
       ...result,
     });
   }
@@ -2048,7 +2087,8 @@ usages:
   node cli.mjs events [--since <seq>] [--follow]   durable read-only event feed (resumes from <seq>)
   node cli.mjs status           per-seat health + attention notices
   node cli.mjs metrics [rig.json] [--window N|all]   drift measures, with bands and blind spots
-  node cli.mjs check <rig.json> [--human]   audit a rig against the research gaps
+  node cli.mjs check [rig.json] [--human]   audit a rig against the research gaps;
+                            no path or auto/. = search cwd and parents for rig.json
   node cli.mjs optimize <text>  rewrite a draft instruction via the optimizer
   node cli.mjs config          show effective settings and their source
   node cli.mjs worktree <path> [--source <dir>]   isolate a work item in its own checkout
@@ -2146,7 +2186,7 @@ try {
   }
   else if (cmd === "check") {
     const human = rest.includes("--human") || (Boolean(process.stdout.isTTY) && !rest.includes("--json"));
-    await cmdCheck(rest.find((a) => !a.startsWith("--")), human);
+    await cmdCheck(rest.find((a) => !a.startsWith("--")), human, rest);
   }
   else if (cmd === "optimize") await cmdOptimize(rest);
   else if (cmd === "config") await cmdConfig();
