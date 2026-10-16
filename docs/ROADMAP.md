@@ -1554,7 +1554,8 @@ verification **re-execute evidence** rather than accept a claim. Registered here
 ## pi-durable alignment: what to adopt, keep, and replace (research landed 2026-10-16)
 
 Source: `docs/reviews/pi-durable-alignment.md` — the completed gap analysis (framework pinned at
-`earendil-works/pi@4954d760` / `pi-durable` 1.3.0; durig read from `main` on 2026-10-16). One-line
+`earendil-works/pi@4954d760` / `pi-durable` 1.3.0; durig read from `main` on 2026-10-16). The stable,
+maintainer- and upstream-facing summary is `docs/PI-DURABLE-INTEGRATION.md`. One-line
 verdict: durig reimplements **client state delivery** (the TUI poller) and **busy-conversation input**
 (await-and-hold), and correctly keeps the rest. Registered here, **not scheduled**; `pm` sequences them.
 **Read the review's §9 first** — it states its bounds (some files and the blog were not read; durig is

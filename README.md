@@ -242,6 +242,8 @@ docs/METRICS.md       metrics design: measures, surfacing, scope, traps (first c
 docs/DOGFOOD.md       dogfooding log: what we ran on durig, what broke, where it lands
 docs/REVIEW-pi-durable-demos.md  what the two pi-durable example projects show
                         durig: ideas, gap analysis, patterns and hazards
+docs/PI-DURABLE-INTEGRATION.md  how durig builds on pi-durable: what the harness
+                        owns, what durig adds, and the pin contract
 docs/WORKFLOWS.md     what durig is for: the workflows, their must-not-break loops,
                         and the capability each one needs
 docs/Managing_Long_Context_Length.md  long-context research: context rot, effective
@@ -286,7 +288,9 @@ the post-MVP backlog lives in docs/MVP.md.
 `@earendil-works/pi-durable` ships from a fast-moving monorepo (14 commits past
 the last release within a day, including API renames). There is **no dev/nightly
 npm dist-tag**, so `main` is the dev channel and must be **built from source**.
-`pi-main.pin.json` records the exact commit durig is validated against.
+`pi-main.pin.json` records the exact commit durig is validated against. See
+`docs/PI-DURABLE-INTEGRATION.md` for what durig takes from the harness, what it
+adds around it, and what the pin means for both sides.
 
 ```powershell
 node scripts/sync-pi.mjs            # drift: is the pin still upstream's tip?

@@ -3,6 +3,9 @@
 **Status:** explanatory reference (not a decision). Grounded in `src/broker.mjs`, `src/scheduler.mjs`,
 `src/driver.mjs`, `src/genlock.mjs`, `src/rig.mjs`, and `cli.mjs` `cmdServe`.
 **Audience:** anyone asking "why can't the seats just run independently, like async tasks?"
+**Companion:** `docs/PI-DURABLE-INTEGRATION.md` — the concrete mapping of durig onto pi-durable's
+own mechanisms (what the harness owns, what durig adds, the pin), written for durig maintainers and for
+pi-durable's.
 
 ## The model in one paragraph
 
