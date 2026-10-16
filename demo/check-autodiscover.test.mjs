@@ -133,4 +133,6 @@ try {
 	console.error("ERROR:", err?.stack ?? err);
 	process.exitCode = 1;
 }
-process.exitCode = failures === 0 ? 0 : 1;
+// A mid-suite throw leaves `failures` at 0 (the failed assert threw before its
+// check() accounting ran), so this line must NOT clobber the catch's exit 1.
+if (process.exitCode !== 1) process.exitCode = failures === 0 ? 0 : 1;
