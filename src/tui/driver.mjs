@@ -11,7 +11,8 @@
 //   render loop); a tick that is still running is skipped, never queued/executed
 //   concurrently; a failed read is caught and surfaced INSIDE the next frame.
 // - Every exit path restores the terminal: raw mode off, cursor visible, alt-screen
-//   buffer left (the entrypoint installs the enter/leave sequences via onCleanup).
+//   buffer left (ui.mjs calls the enter/restore pair from src/tui/restore.mjs's
+//   createTerminalScreen — enter() on start, restore() on every exit path).
 // - Keys: q / ESC / Ctrl+C → onExit("quit"); r → one immediate tick (refresh).
 //   Any other key is ignored (nothing to type: the TUI is read-only, D40/D11).
 // - Width is measured in terminal CELLS (stdout.columns/rows via injected getSize);
