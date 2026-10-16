@@ -11,12 +11,12 @@ _Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 
 
 ## NEXT SESSION — START HERE
 
-**Current item: #487 (impl) — clear the #188/#193 deferrals and re-sequence the interactive client.**
-**The interactive client is nearly landed:** U1 #480, U2 #481, U3 #482, U6 #485, U7 #486 are `done`;
-**U4 #483** and **U5 #484** are `claimed` by impl and in progress. So #487 is the top queued item in
-that series, followed by **#489** (upstream D10 STEP 2 drift fixes; UNGATED) and **#506** (dirty-tree
-worktree guard — it has been *biting live*). Queue id to start: **#487**. Live bookkeeping: **#572**
-(commit the DONE-but-uncommitted work), **#573** (dispose scratch/backup) — **#571 is MOOT**.
+**Current item: #506 (impl) — make the broker's per-task worktree guard NOT fail closed on a dirty
+shared tree.** #506 is next in impl's queue (position 2, behind the claimed U4 #483 and #502), so the
+running broker will drive it without re-prioritisation. **The interactive client series is COMPLETE**
+(U1–U7 #480–#486 all `done`); #487 (deferrals + re-sequence) is `done`; #488/#489/#490 (upstream sync
++ partner-check) are `done`. Live bookkeeping: **#491** (designer's 5 UX follow-ups — impl #617 is
+BLOCKED on a pm routing ruling) and **#502** (cli status seat last-activity, claimed).
 
 Exact next commands:
 `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`,
@@ -24,22 +24,35 @@ Exact next commands:
 
 **State at this refresh (2026-10-16, delegate session):** resident broker **pid 17424**
 (`01:12:41Z`; healthy — `PASS 1` in ~1 min) with the **degeneration guard armed**. Store is
-single-writer. The delegate committed the stranded work in scoped commits — TUI `c6eaef3` (U1–U5)
-and commit-model `11edfb3` (#474/#475) — landed the docs (`0ecf9cf` D63/D64 + the seat's D54–D62) and
-the earlier `484a571` broker audit / `ae96445` guard; suite **78/78**. It also recovered a **wedged
-broker** (pid 35604): no `PASS` for 42 min, `serve --stop` failed twice, so it was force-stopped and
-restarted (root cause in `.spike/delegate/serve.err`: the #506 dirty-tree worktree guard + a genlock
-slot `held by pid undefined`). Only untracked scratch remains (`#573` owns disposal; it also blocks
-worktree isolation via the dirty-tree guard). **#571 is moot** — `src/viewmodel.mjs` is fixed. NOTE:
-committing in-flight U4/U5 made impl log "another seat committed my work" — expected under the
-shared-tree entanglement (#506), not an error.
+single-writer. Only untracked scratch remains (`#612`/devtools owns `pi-main.pin.bak`; the other three
+scratch files are already gone). **#571 is moot** — `src/viewmodel.mjs` is fixed. NOTE: committing
+in-flight work makes a seat log "another seat committed my work" — expected under the shared-tree
+entanglement (#506), not an error.
+
+**Accomplishments this delegate session (all LOCAL; operator holds push):**
+
+| Commit | What |
+|---|---|
+| `3b429dc` | fix(broker) #400 — `brokerAlive` treats EPERM as alive |
+| `e937b31` | feat(up) #402 — model-change reset seam in `cmdUp` |
+| `5c300dc` | docs truth-up + broker socket review |
+| `484a571` | feat(broker) — lifecycle audit `START`/`EXIT reason` in `<db>.broker.log` |
+| `ae96445` | feat(guard) — auto-reset a seat whose run goes degenerate (F29) |
+| `0ecf9cf` | D63/D64 + landed the seat's stranded D54–D62 |
+| `c6eaef3` | feat(tui) U1–U5 — interactive client (`#480`–`#484`) |
+| `11edfb3` | chore(commit-model) #474/#475 — worktree-scoped explicit-path commits |
+| `a2ea013`,`832bc21`,`d24c9e6`,`e1bc4f2` | pointer refreshes |
+
+Also recovered a **wedged broker** (pid 35604 — no `PASS` for 42 min, `serve --stop` failed twice;
+force-stopped and restarted; root cause in `.spike/delegate/serve.err`: the #506 dirty-tree guard +
+a genlock slot `held by pid undefined`). Suite **78/78** on the committed tree; **no build, no lint**.
 
 Known blockers: **#506** (the dirty-tree worktree guard bites live; the working-tree files are seats'
-in-progress work — **DO NOT discard**); cooperative `serve --stop` can take ~13-min passes but exits.
+in-progress work — **DO NOT discard**); cooperative `serve --stop` can take ~13-min passes but exits
+(a wedged pass cannot be stopped cooperatively — see the recovery note above).
 **Docs landed:** D63 (broker lifecycle audit) + D64 (degeneration guard) are in `docs/DECISIONS.md`
 (commit `0ecf9cf`), which also landed the seat's stranded D54–D62 (D62 has a text corruption to fix).
-**#487 is next in impl's queue** (position 2, right behind the claimed U4 #483 / U5 #484), so the
-running broker will drive it without re-prioritisation.
+**#506 is next in impl's queue** (position 2, right behind the claimed U4 #483 / #502).
 
 _Historical (superseded): the #480-era notes below were written for the 2026-10-15 handoff._
 
