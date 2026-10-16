@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate handoff — #506/#502/#599 landed; current item #621; test-flakiness findings). Next agent: read **NEXT SESSION** and then the **PLAN — broker liveness** section below; the later sections are historical._
+_Last refreshed: 2026-10-16 (delegate session — broker-liveness (#D65) and the seat-facing `prepare_workspace` tool (#D66) landed; suite 82/82; the per-seat-worktree default is the open question). Next agent: read **NEXT SESSION**; the later sections are historical._
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
@@ -11,14 +11,16 @@ _Last refreshed: 2026-10-16 (delegate handoff — #506/#502/#599 landed; current
 
 ## NEXT SESSION — START HERE
 
-**Current item: #621 (impl) — CONFIG DEFAULTS: a shipped default config file so a fresh durig runs
-without a hand-written config.** `#621` is `claimed`/in flight; its failing-first demo
-`demo/config.test.mjs` is RED (it expects `loadShippedDefaults({ readFile })`, not yet implemented).
-Everything it touches is uncommitted in the shared tree and belongs to it — **leave those files
-alone**. The **interactive client (U1–U7), #487, #488/#489/#490, and the delegated #506/#502/#599**
-are all `done` **and committed**. Next real candidates: the **worktree-leak defect** (below),
-**#491** (designer's 5 UX follow-ups — impl #617 is BLOCKED on a pm routing ruling), and the
-still-unqueued **turn-kind indicator** (pm holds it pending the operator's spec).
+**Current item: #623 / #624 (claimed by impl) — `check` auto-discovery and `init` meta-defaults.**
+The delegate landed the mechanism work this session: D65 (broker-liveness; `PASS <n> ms=<dur>
+woke=<a,b>`; commit `b81e171`) and D66 (`prepare_workspace` — the seat-facing per-item worktree tool;
+the broker no longer sets a process-global `DURIG_SEAT_ROOT`). **Open operator-raised decision:**
+whether per-seat worktree isolation is on by default, opt-in, or opt-out — a consult to `advocate`
+was dispatched (`.spike/delegate/advocate-consult.*`); until ruled, isolation is effectively ON.
+**Blocker:** the shared tree is dirty with #623's in-flight `cli.mjs` and a seat's `docs/STATUS.md` —
+do not discard; stage explicit paths only. **Next real candidates after #623/#624:** the worktree-leak
+defect (leaked `item-1/`,`item-2/` dirs; now gitignored via `/item-*/`), #491 (designer's 5 UX
+follow-ups), and the still-unqueued turn-kind indicator.
 
 Exact next commands:
 `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`,
@@ -67,10 +69,11 @@ a genlock slot `held by pid undefined`). Suite **78/78** on the committed tree; 
   stopped** (or in a per-task worktree) via a single `npm test` runner that isolates the env and retries
   a timeout-flake once.
 
-Known blockers: **the shared tree is dirty with #621's in-flight work — DO NOT discard**; cooperative
-`serve --stop` can take ~13-min passes but exits (a wedged pass cannot be stopped cooperatively — see
-the recovery note above). **Docs landed:** D63/D64 in `docs/DECISIONS.md` (`0ecf9cf`), including the
-seat's stranded D54–D62 (D62 has a text corruption to fix).
+Known blockers: none for the delegate work. The shared tree is dirty with #623's in-flight `cli.mjs`
+and a seat's `docs/STATUS.md` edit — **DO NOT discard**; stage explicit paths only. The resident
+broker is **stopped** (it exited `reason=stop` after the delegate session); restart it with
+`DURIG_DB=./selfdev.sqlite node cli.mjs serve` once no `send`/`run` writer is in flight (the advocate
+consult is one). **Docs landed:** D63/D64 (`0ecf9cf`), D65 (`b81e171`), D66 (this session).
 
 _Historical (superseded): the #480-era notes below were written for the 2026-10-15 handoff._
 
@@ -90,7 +93,13 @@ would cut a single runaway run mid-flight. (Bounded runs are mitigated; this is 
 - **`docs/DECISIONS.md` entries** — LANDED (`0ecf9cf`): D63 (broker audit) + D64 (degeneration guard),
   plus the seat's stranded D54–D62. Remaining: fix D62's text corruption (`headless \tenderTui/Frame`).
 
-## PLAN — broker liveness: re-wake per seat, not after the slowest run (DELEGATE-OWNED, do NOT route)
+## LANDED — broker liveness: re-wake per seat, not after the slowest run (delegate-owned; D65)
+
+**Status: DONE.** `src/broker.mjs` `drivePass` waits only on the conversations a pass woke, races
+that against the loop's commit signal, and `runWakeLoop` drains globally once on exit (F11);
+`createWakeSignal` gained `race(promise)`; `PASS <n> ms=<dur> woke=<a,b>` is logged. Proof:
+`demo/broker-liveness.test.mjs` (RED: 1 fast wake in 2 s → GREEN: 2nd wake ~27 ms in while the other
+seat still generates). Commit `b81e171`. The narrative plan below is kept as the record of WHY.
 
 **Why delegate-owned:** the fix is to the process that DRIVES the queue (the broker). A routed item
 would sit behind the very broker it is meant to fix, so it must be done in the delegate seat directly
@@ -288,8 +297,10 @@ the whole point of #473.
 
 ## Workspace state for the next agent
 
-- **A writer IS running.** Resident broker **pid 17424** (`<db>.broker.json`, `since 01:12:41Z`); the
-  store is single-writer — do **not** start a second `serve`/`run`/`send`. Stop it with `serve --stop`.
+- **No writer is running on `./selfdev.sqlite`** except the detached `send advocate` consult
+  (`.spike/delegate/advocate-consult.*`) — do **not** start a second `serve`/`run`/`send` until it
+  exits, then restart the broker with `DURIG_DB=./selfdev.sqlite node cli.mjs serve`. Two drivers on
+  one store double-wake (D45/D46).
 - **The tree is DIRTY with #621's in-flight work** (`cli.mjs`, `src/config.mjs`, `demo/config.test.mjs`,
   `durig.config.default.json`) — **DO NOT discard**; it belongs to the claimed item. `item-1/`,`item-2/`
   are leaked worktrees (see the NEXT SESSION note).

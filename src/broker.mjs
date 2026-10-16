@@ -14,11 +14,9 @@
 // gap D11 documented. Read-only viewers keep D11's poll/read-storage rule.
 
 import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { RigQueue, Seats } from "./rig.mjs";
 import { driveOnce } from "./driver.mjs";
-import { claimWorktree, releaseWorktreeLock, removeClaimedWorktree } from "./worktree.mjs";
 import { wrapProviderWithSlots, getSeatFromContext } from "./genlock.mjs";
 
 /**
@@ -54,15 +52,15 @@ export async function readStoppedConvIds(probeStorage, seats, context) {
  * `readBusySeats` is a caller-owned async reader (generation leases live in
  * files beside the database, not in storage); when omitted, no seat is busy.
  * `onWoke(name)` fires for each seat whose wake was actually submitted, so a
- * broker can start that seat's cooldown.
- * `source` is the git repository root for creating per-seat worktrees (#473).
- * `worktreeRoot` is the parent directory under which worktrees are created.
+ * broker can start that seat's cooldown. A seat prepares its own per-item
+ * worktree through the `prepare_workspace` tool; the broker no longer creates one
+ * or sets a process-global root (#broker-tool-workspace).
  */
 export async function drivePass(
   harness,
   probeStorage,
   { context, seatFilter, readBusySeats, onError, onWoke, currentSeat: initialSeat,
-    source, worktreeRoot, onSeatCreated, settleSignal } = {},
+    settleSignal } = {},
 ) {
   const seatsDoc = await harness.documentState(Seats, undefined, context);
   const queueDoc = await harness.documentState(RigQueue, undefined, context);
@@ -77,55 +75,13 @@ export async function drivePass(
   // every ownerless conversation, so one long run held up the re-wake of a seat
   // that had already settled with work still queued.
   const wokenConvIds = new Set();
-  let worktreeClaimed = false; // track if we created a worktree this pass
-  let itemLabel = null;       // the item label for cleanup
-  let worktreePath = null;
-  let worktreeConvId = null;  // the seat whose worktree this pass owns
 
-  // #473: wire worktree lifecycle into the pass.
-  // Before driving: create worktree for each seat with queued work, set DURIG_SEAT_ROOT.
-  if (source && worktreeRoot && queueDoc?.value?.items?.length) {
-    const seatsToWake = Object.entries(seats ?? {}).filter(([name]) => {
-      const hasQueued = queueDoc.value.items.some(it => it.to === name && it.status === "queued");
-      return hasQueued;
-    });
-    if (seatsToWake.length > 0) {
-      const [seatName] = seatsToWake[0];
-      const convId = seats[seatName]?.conversationId;
-      // Find the queued item for this seat
-      const item = queueDoc.value.items.find(it => it.to === seatName && it.status === "queued");
-      if (item) {
-        itemLabel = `item-${item.id}`;
-        worktreePath = join(worktreeRoot, itemLabel);
-        // Check for stale worktree (from a previous interrupted run)
-        try {
-          await removeClaimedWorktree({ worktree: worktreePath, force: true });
-        } catch (err) {
-          // A stale worktree may need manual cleanup; surface why removal failed
-          // rather than swallowing it — the create below fails if it persists.
-          console.warn(`broker: could not remove stale worktree ${worktreePath}: ${err.message}`);
-        }
-        try {
-          const wt = await claimWorktree({ source, worktreeRoot, itemLabel: itemLabel });
-          process.env.DURIG_SEAT_ROOT = wt.cwd; // seattools.makeSeatEnv picks this up
-          worktreeClaimed = true;
-          worktreeConvId = convId;
-          // #506: the fork now carries the shared tree's visible (uncommitted) state;
-          // surface WHAT was carried so the fork is never an untracked surprise.
-          if (wt.carried?.length) {
-            console.error(
-              `BROKER: worktree for ${seatName} (${itemLabel}) carried ${wt.carried.length} uncommitted path(s) ` +
-                `from the shared tree: ${wt.carried.join(", ")}`,
-            );
-          }
-          onSeatCreated?.(seatName, wt);
-        } catch (err) {
-          console.error(`BROKER: worktree claim failed for ${seatName}: ${err?.message ?? err}`);
-          // Fall through to shared-tree run — the seat will work in the shared tree
-        }
-      }
-    }
-  }
+  // The seat prepares its OWN workspace: the `prepare_workspace` tool creates the
+  // item's worktree and points that one conversation at it (#broker-tool-workspace).
+  // The broker deliberately does NOT create a worktree or set a process-global
+  // DURIG_SEAT_ROOT here — one pass wakes many seats, so a single root applied to all
+  // of them was never the isolation D49/D53 promised, and its lifecycle was tied to
+  // the pass rather than the item the seat claimed.
 
   const wrapOnWoke = (name, convId) => {
     wokenSeat = name;
@@ -166,38 +122,6 @@ export async function drivePass(
   if (settleSignal) await settleSignal.race(wokenIdle);
   else await wokenIdle;
 
-  // #473: after idle, check if the item completed and cleanup the worktree.
-  if (worktreeClaimed && itemLabel && worktreePath) {
-    try {
-      const afterQueue = await harness.documentState(RigQueue, undefined, context);
-      const completedItem = afterQueue?.value?.items?.find(it =>
-        it.id === Number(itemLabel.replace("item-", "")) && it.status === "done",
-      );
-      if (completedItem) {
-        // Commit the item's files on its branch, then release and remove.
-        try {
-          // The pass wait is now cut short by commits, so the worktree seat's run
-          // may still be live when its item reports done (the tool result is
-          // committed before the run settles). Never remove a worktree out from
-          // under a live run: settle THIS conversation first.
-          const worktreeConv = worktreeConvId !== null
-            ? await harness.conversation(worktreeConvId, context)
-            : null;
-          await worktreeConv?.waitForIdle(context);
-          await releaseWorktreeLock(worktreePath);
-          // The seat commits in its worktree; the broker cleans up the lock and removes.
-          await removeClaimedWorktree({ worktree: worktreePath, force: true });
-        } catch (err) {
-          console.error(`BROKER: worktree cleanup failed for ${itemLabel}: ${err?.message ?? err}`);
-        }
-      }
-    } catch (err) {
-      console.error(`BROKER: worktree status check failed: ${err?.message ?? err}`);
-    }
-    // Clear DURIG_SEAT_ROOT so subsequent passes don't inherit it.
-    delete process.env.DURIG_SEAT_ROOT;
-  }
-
   return { actioned, seats };
 }
 
@@ -227,8 +151,6 @@ export async function runWakeLoop({
   startedAt = now(),
   isStopping = () => false,
   dbPath = undefined,
-  source = null,
-  worktreeRoot = null,
 }) {
   const failedSeats = new Set();
   const escalations = [];
@@ -290,8 +212,6 @@ export async function runWakeLoop({
         context,
         seatFilter: scheduler.seatFilter(now()),
         readBusySeats,
-        source: source,
-        worktreeRoot: worktreeRoot,
         settleSignal: signal,
         onError: (failure) => {
           failedSeats.add(failure.name);

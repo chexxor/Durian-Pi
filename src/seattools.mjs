@@ -6,15 +6,113 @@
 // position's conditions are.
 
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
-import { defineExtension } from "@earendil-works/pi-durable";
+import { configure, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import {
 	createEditTool,
 	createPowerShellTool,
 	createReadTool,
 	createWriteTool,
 } from "@earendil-works/pi-durable/tools";
+import { Type } from "@earendil-works/pi-ai";
 import { seatsAreVerifier } from "./checkup.mjs";
 import { authorEnv, verifierEnv } from "./confine.mjs";
+import { RigQueue, Seats } from "./rig.mjs";
+import { prepareSeatWorkspace } from "./worktree.mjs";
+
+/** A tool result carrying only text (the shape `defineTool` accepts). */
+function result(text) {
+	const content = [{ type: "text", text }];
+	return { content, output: content };
+}
+
+/**
+ * `prepare_workspace` — the seat's OWN workspace switch (replaces the broker's
+ * process-global `DURIG_SEAT_ROOT`, which pointed every seat woken in a pass at
+ * one worktree). Called after `claim_work`, it creates the item's isolated git
+ * worktree and persists THIS conversation's cwd to it through `configure`, so
+ * `makeSeatEnv` resolves each seat to its own tree. Idempotent: an existing
+ * worktree is reused, so a resume never nests one worktree inside another (#506).
+ */
+const prepareWorkspace = defineTool({
+	name: "prepare_workspace",
+	description:
+		"Prepare the isolated git worktree for an item you have claimed, and point your file/shell tools at it. Call this AFTER claim_work and BEFORE any filesystem work. Returns the worktree path.",
+	parameters: Type.Object({
+		itemId: Type.Optional(
+			Type.Number({
+				description:
+					"the claimed item to prepare the worktree for; defaults to your most recently claimed item",
+			}),
+		),
+	}),
+	// Creates a directory + git worktree and re-points the seat's persisted cwd. A
+	// rerun is idempotent (an existing worktree is reused, so no second npm
+	// install), but a blind replay of an interrupted call still repeats filesystem
+	// work, so it must not be replayed automatically.
+	replay: "unsafe",
+	execute: async (args, api, context) => {
+		try {
+			const me = await api.commit(async (tx) => {
+				const seats = await tx.doc(Seats);
+				for (const [name, seat] of Object.entries(seats.seats)) {
+					if (seat.conversationId === api.conversationId) return name;
+				}
+				return null;
+			}, context);
+			if (!me) return result("PREPARE_WORKSPACE_ERROR: this conversation is not a registered seat");
+			const claimed = await api.commit(async (tx) => {
+				const queue = await tx.doc(RigQueue);
+				// Plain ids only: a document proxy that escapes the callback throws
+				// "Cannot use a settled overlay" once the commit settles.
+				return queue.items
+					.filter((it) => it.to === me && it.status === "claimed")
+					.map((it) => it.id);
+			}, context);
+			const itemId =
+				args.itemId !== undefined
+					? claimed.includes(args.itemId)
+						? args.itemId
+						: null
+					: claimed.length > 0
+						? Math.max(...claimed)
+						: null;
+			if (itemId === null) {
+				return result(
+					`PREPARE_WORKSPACE_ERROR: no claimed item${
+						args.itemId === undefined ? "" : ` #${args.itemId}`
+					} is yours; call claim_work first, then prepare_workspace`,
+				);
+			}
+			// The tree the broker/CLI runs from. The worktree goes beside it at
+			// item-<id>; `prepareSeatWorkspace` reproduces the source's repo-relative
+			// path, so a durig subdirectory keeps its cwd.
+			const source = process.cwd();
+			let workspace;
+			try {
+				workspace = await prepareSeatWorkspace({ source, worktreeRoot: source, itemId });
+			} catch (err) {
+				return result(
+					`PREPARE_WORKSPACE_ERROR: cannot create a worktree from ${source} (is it a git repository?): ${err?.message ?? err}`,
+				);
+			}
+			// Persisted on this conversation's own agent, so the switch is per-seat and
+			// survives a restart — never a process-global root that bleeds across seats.
+			await api.commit(async (tx) => {
+				await configure(tx, api.conversationId, { cwd: workspace.cwd });
+			}, context);
+			return result(
+				`WORKSPACE READY (${workspace.created ? "created" : "reused"}): ${workspace.cwd}\n` +
+					`Your file and shell tools now resolve inside this item's worktree. ` +
+					`Work and commit there; do not touch the shared tree.` +
+					(workspace.carried.length > 0
+						? `\nCarried the shared tree's visible changes: ${workspace.carried.join(", ")}`
+						: ""),
+			);
+		} catch (err) {
+			return result(`PREPARE_WORKSPACE_ERROR: ${err && err.stack ? err.stack : String(err)}`);
+		}
+	},
+});
 
 // `bash` is deliberately absent. On native Windows `bash` means Git Bash - an undeclared
 // dependency that may simply not be installed - and WSL is unsupported on this host by policy,
@@ -25,6 +123,7 @@ export const seatTools = {
 	write: createWriteTool(),
 	edit: createEditTool(),
 	shell: createPowerShellTool(),
+	prepareWorkspace,
 };
 
 export const SeatTools = defineExtension({
@@ -49,7 +148,7 @@ export const VERIFIER_REMOVALS = [seatTools.write, seatTools.edit];
  * enforcement without replacing it, so pm investigated the repository instead of routing the
  * request. Removing the tools restores what prose could not.
  */
-export const COORDINATOR_REMOVALS = [seatTools.read, seatTools.write, seatTools.edit, seatTools.shell];
+export const COORDINATOR_REMOVALS = [seatTools.read, seatTools.write, seatTools.edit, seatTools.shell, seatTools.prepareWorkspace];
 
 /** Capabilities that mean a seat produces or checks something, so it needs the working tools. */
 const WORKING_CAPABILITIES = ["implement", "code", "verify", "review"];
@@ -87,9 +186,12 @@ export function seatHasReadTool(seat) {
  */
 export function makeSeatEnv(roster, { fallbackRoot = process.cwd() } = {}) {
 	return (target) => {
-		// #473: if DURIG_SEAT_ROOT is set (by the broker's worktree lifecycle),
-		// use it as the seat's working directory instead of the shared tree.
-		const root = process.env.DURIG_SEAT_ROOT ?? target.cwd ?? fallbackRoot;
+		// The seat's OWN persisted cwd wins: `prepare_workspace` sets it to the item's
+		// worktree via `configure`, so a seat that prepared a workspace is confined to
+		// its own tree regardless of any other seat. `DURIG_SEAT_ROOT` is only a
+		// fallback for a seat that has not prepared one (a rig pointing every seat at
+		// one shared checkout), never a global override of a prepared root.
+		const root = target.cwd ?? process.env.DURIG_SEAT_ROOT ?? fallbackRoot;
 		const base = new NodeExecutionEnv({ cwd: root });
 		const seat = roster.get(target.conversationId);
 		// Fail CLOSED: a conversation that is not a known seat - the roster not read yet, or a

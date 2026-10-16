@@ -246,6 +246,59 @@ export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = "HE
 }
 
 /**
+ * Prepare the isolated worktree for one claimed item, idempotently.
+ *
+ * This is the seat-facing `prepare_workspace` core: it puts the worktree under
+ * `worktreeRoot/item-<id>` (the deterministic path a later cleanup can recompute)
+ * and returns the `cwd` the seat should adopt. An existing worktree is REUSED
+ * rather than re-created, so a resumed run that calls the tool again does not pay
+ * the `npm ci` cost twice, and a seat cannot accidentally nest a second worktree
+ * inside the first (#506's recursive carry).
+ *
+ * `worktreeRoot` is the directory the seat is working from (durig's own tree, the
+ * broker's process cwd); the worktree is placed beside it under the same repo.
+ */
+export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, ref = "HEAD" }) {
+	const repo = await repoRoot(source);
+	const itemLabel = `item-${itemId}`;
+	const worktreePath = join(worktreeRoot, itemLabel);
+	// The worktree reproduces the source's path inside the repo, so a rig that
+	// declares no cwd still lands in the same relative place after the switch.
+	const inside = relative(repo, resolve(worktreeRoot));
+	const cwdFor = (worktree) => (inside === "" ? worktree : join(worktree, inside));
+	if (existsSync(worktreePath)) {
+		return {
+			worktree: worktreePath,
+			cwd: cwdFor(worktreePath),
+			itemLabel,
+			created: false,
+			carried: [],
+			locked: true,
+		};
+	}
+	const wt = await claimWorktree({ source, worktreeRoot, itemLabel, ref });
+	return {
+		worktree: wt.worktree,
+		cwd: wt.cwd,
+		itemLabel,
+		created: true,
+		carried: wt.carried ?? [],
+		locked: true,
+	};
+}
+
+/**
+ * Remove the worktree `prepareSeatWorkspace`/`claimWorktree` created for `itemId`,
+ * if it exists. Best-effort and idempotent: a missing worktree is a no-op, and a
+ * worktree still holding uncommitted work is refused by `removeClaimedWorktree`
+ * (a seat must commit or the operator must clean it — D60).
+ */
+export async function removeSeatWorkspace({ worktreeRoot, itemId, force = false }) {
+	const worktreePath = join(worktreeRoot, `item-${itemId}`);
+	return removeClaimedWorktree({ worktree: worktreePath, force });
+}
+
+/**
  * Release the lock on a previously claimed worktree. After release the
  * worktree may be removed (it may contain changes). The lock prevents
  * concurrent `git worktree remove` from clobbering a worktree holding work.

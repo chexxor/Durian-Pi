@@ -1571,3 +1571,30 @@ GREEN: 2nd wake ~27ms in while the other seat still generates), plus `PASS <n> m
 per-pass observability in `<db>.broker.log`. Whole `demo/*.test.mjs` suite green (81/81). The
 `idle_with_queued_work` notice is unchanged; a distinct "queued work, no live lease, aged" notice is
 still a recorded follow-up, not part of this decision.
+
+## D66 — The workspace switch is a seat tool, not a process-global broker root (2026-10-16)
+
+**Decision:** a seat prepares its own workspace by calling `prepare_workspace` (a `SeatTools` tool)
+after `claim_work` and before any filesystem work. It creates the item's isolated git worktree at
+`<root>/item-<id>` and persists THAT conversation's cwd to it with `configure`; `makeSeatEnv` resolves
+a seat's own prepared cwd FIRST, falling back to `DURIG_SEAT_ROOT` only when no workspace was
+prepared. The broker no longer creates a worktree or sets `DURIG_SEAT_ROOT` in `drivePass`.
+`complete_work` retires the workspace with `force:false` (a dirty worktree is refused, never
+discarded) and resets the cwd to the shared tree. The constitution instructs every seat to call the
+tool before filesystem work.
+
+**Why:** the old wiring created ONE worktree per pass for the FIRST queued seat and applied it
+through a process-global variable, so every seat woken in that pass shared one root and the
+worktree's life was tied to the pass, not the item claimed. That is not the per-seat isolation
+D49/D53 promise; it leaked and nested worktrees (`item-1`, `item-2`), and a seat could be pointed at
+a tree it never claimed. A tool call keyed to the claimed item puts the lifecycle where the claim is,
+names it in the seat's own context, and makes the switch per-conversation (durable via the persisted
+cwd) instead of process-global. Idempotent reuse closes the #506 recursive-carry path. The workspace
+root is now gitignored (`/item-*/`).
+
+**Status:** adopted (commit adding this entry); proof `demo/prepare-workspace.test.mjs`
+(create → idempotent reuse → per-seat cwd beats `DURIG_SEAT_ROOT` → remove), amended
+`demo/seattools.test.mjs`, and the full suite green (82/82). OPEN (operator-raised, delegate-owned):
+whether per-seat worktree isolation should be on by default, opt-in, or opt-out — a consult to the
+`advocate` seat and competitor research are in flight; this decision records the MECHANISM only, not
+the default.

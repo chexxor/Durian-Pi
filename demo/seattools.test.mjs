@@ -26,7 +26,7 @@ const context = {};
 try {
 	console.log("\nThe tool set is what the design says, and bash is deliberately absent");
 	const names = SeatTools.tools.map((tool) => tool.name).sort();
-	check("read, write, edit and a shell are bundled", JSON.stringify(names) === JSON.stringify(["edit", "powershell", "read", "write"]), JSON.stringify(names));
+	check("read, write, edit, a shell and prepare_workspace are bundled", JSON.stringify(names) === JSON.stringify(["edit", "powershell", "prepare_workspace", "read", "write"]), JSON.stringify(names));
 	check("no bash tool — native-Windows bash is an undeclared Git Bash dependency", !names.includes("bash"));
 	check("a verifier loses write and edit", JSON.stringify(VERIFIER_REMOVALS.map((t) => t.name).sort()) === JSON.stringify(["edit", "write"]));
 
@@ -49,12 +49,12 @@ try {
 		toolRemovalsFor({ name: "impl", role: "implementation engineer", capabilities: ["implement", "code"] }).length === 0,
 	);
 	check(
-		"a coordinator loses read, write, edit AND the shell, so it can only route",
+		"a coordinator loses read, write, edit, the shell AND prepare_workspace, so it can only route",
 		JSON.stringify(removalNames(toolRemovalsFor({ name: "pm", role: "program manager", capabilities: ["route", "plan"] }))) ===
-			JSON.stringify(["edit", "powershell", "read", "write"]),
+			JSON.stringify(["edit", "powershell", "prepare_workspace", "read", "write"]),
 	);
 	check(
-		"a verifier loses write and edit but keeps read and the shell, so it can still re-run",
+		"a verifier loses write and edit but keeps read, the shell AND prepare_workspace, so it can still re-run in its own tree",
 		JSON.stringify(removalNames(toolRemovalsFor({ name: "qa", role: "independent verifier", capabilities: ["verify", "review"] }))) ===
 			JSON.stringify(["edit", "write"]),
 	);

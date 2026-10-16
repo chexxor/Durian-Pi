@@ -9,11 +9,12 @@
 // - Mailbox semantics: every seat's tools see only items addressed to it;
 //   completing an item enqueues a DONE notice back to the sender, so both
 //   directions flow through one durable queue.
-import { defineDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
+import { configure, defineDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { seatHasReadTool } from "./seattools.mjs";
+import { removeSeatWorkspace } from "./worktree.mjs";
 
 /** Seat roster: name -> conversation id + role text. Session singleton. */
 export const Seats = defineDoc({
@@ -476,6 +477,23 @@ const Router = defineExtension({
 					}
 					return `ok`;
 				}, context);
+				if (out === "ok") {
+					// The item is complete, so retire the workspace `prepare_workspace`
+					// created. `force: false` never discards uncommitted work: a dirty
+					// worktree is refused and left for the operator (D60). Resetting the
+					// seat's cwd to the shared tree keeps the next item from inheriting a
+					// removed directory.
+					try {
+						await removeSeatWorkspace({ worktreeRoot: process.cwd(), itemId: args.itemId });
+						await api.commit(async (tx) => {
+							await configure(tx, api.conversationId, { cwd: process.cwd() });
+						}, context);
+					} catch (err) {
+						console.error(
+							`complete_work: workspace cleanup for #${args.itemId} failed: ${err?.message ?? err}`,
+						);
+					}
+				}
 				return toolText(out);
 			},
 		}),
