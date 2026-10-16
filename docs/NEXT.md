@@ -98,21 +98,30 @@ would sit behind the very broker it is meant to fix, so it must be done in the d
 durig team for that reason.
 
 ### Symptom (observed 2026-10-16, pid 17424)
-`<db>.broker.log`: `PASS 5` at `02:26:13`, its wakes fired, then **no `PASS 6` for 40+ min**. Meanwhile
-`status` showed **pm idle with 9 queued DONE-notices** and **qa idle with 2 queued artifacts**
-(`idle_with_queued_work`). The team is kept waiting by the SLOWEST run, not its own.
+`<db>.broker.log`: `PASS 5` at `02:26:13`, its wakes fired, then **no `PASS 6` for 40+ min** (still
+none at `03:10`). Measured pass intervals for this broker: 20.5, 20.3, 4.5, 27 min. Meanwhile `status`
+showed **pm idle with 9 queued DONE-notices** and **qa idle with 2 queued artifacts**
+(`idle_with_queued_work`), and a generation was live (genlock `scribe` since `03:10:05`). So seats with
+queued work sat idle while a run was in flight.
 
-### Root cause (verified)
-`src/broker.mjs` `drivePass` ends with `await harness.waitForIdle(context)`. pi-durable's contract
-(`node_modules/@earendil-works/pi-durable/dist/harness/types.d.ts`):
-> `Harness.waitForIdle` — “Resolve when the ordinary ownership scope of **every** ownerless
-> conversation has no live non-background task.”
+### Root cause — what is VERIFIED vs INFERRED
+**Verified (code + vendored contract):**
+- `src/broker.mjs:146` (`drivePass`) calls `await harness.waitForIdle(context)` — the HARNESS method.
+- Its contract (`node_modules/@earendil-works/pi-durable/dist/harness/types.d.ts:668-669`):
+  > `Harness.waitForIdle` — “Resolve when the ordinary ownership scope of **every** ownerless
+  > conversation has no live non-background task.”
 
-So one pass = wake seats → **wait for ALL runs** → `PASS` → supervise → next pass. A pass lasts as long
-as the longest run, so a seat that finished early is not re-woken until every seat finishes — even
-though `src/scheduler.mjs` treats a submission settling as wake-relevant (“a submission settling … is
-exactly when a stalled claim becomes wakeable again”). The per-submission intent is defeated by the
-global wait.
+  (A per-conversation wait exists too: `Conversation.waitForIdle`, line 87.)
+- Therefore every pass blocks until **all** ownerless conversations are idle. And `src/scheduler.mjs`
+  treats a submission settling as wake-relevant (“a submission settling … is exactly when a stalled
+  claim becomes wakeable again”) — so the loop cannot act on that per-submission intent while parked in
+  the global wait.
+
+**INFERRED (NOT measured — no instrumentation exists):** that this global wait is the SOLE/DOMINANT
+cause of the 27–44-min passes, and that “a pass lasts as long as the longest run”. The in-flight run
+during the stall is *consistent* with it, but there is no per-pass duration or per-seat wake→action
+latency in the log to isolate it. **Do not treat this as established** — the Observability step below
+exists to measure it before/after the fix.
 
 ### The tool that exists to fix it
 `Scheduler.waitForIdle(conversationId | undefined, context)` and `Conversation.waitForIdle(context)`
