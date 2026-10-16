@@ -33,8 +33,10 @@ removed its stray line; impl should verify and close #571, not re-repair.
 
 Known blockers: **#506** (the dirty-tree worktree guard bites live; the working-tree files are seats'
 in-progress work — **DO NOT discard**); cooperative `serve --stop` can take ~13-min passes but exits.
-**Docs owed:** a `docs/DECISIONS.md` entry for the degeneration guard and the broker lifecycle audit —
-DECISIONS.md is currently dirty with a seat's whole-file rewrite, so the delegate did not stage it.
+**Docs landed:** D63 (broker lifecycle audit) + D64 (degeneration guard) are in `docs/DECISIONS.md`
+(commit `0ecf9cf`), which also landed the seat's stranded D54–D62 (D62 has a text corruption to fix).
+**#487 is next in impl's queue** (position 2, right behind the claimed U4 #483 / U5 #484), so the
+running broker will drive it without re-prioritisation.
 
 _Historical (superseded): the #480-era notes below were written for the 2026-10-15 handoff._
 
@@ -46,8 +48,8 @@ drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guar
 finishes a work item — explicitly NOT finer item boundaries yet.
 - **Mid-run cut** (optional): the degeneration guard resets BETWEEN runs; a provider-level turn cap
 would cut a single runaway run mid-flight. (Bounded runs are mitigated; this is the residual gap.)
-- **`docs/DECISIONS.md` entries owed** for the degeneration guard (`ae96445`) and the broker
-lifecycle audit (`484a571`); DECISIONS.md is a seat's uncommitted rewrite, so the delegate left it.
+- **`docs/DECISIONS.md` entries** — LANDED (`0ecf9cf`): D63 (broker audit) + D64 (degeneration guard),
+plus the seat's stranded D54–D62. Remaining: fix D62's text corruption (`headless \tenderTui/Frame`).
 
 **Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
 Evidence: `git diff --diff-filter=A main origin/pi-rebase -- . ':(exclude).spike'` is empty (no
