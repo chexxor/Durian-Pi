@@ -17,6 +17,7 @@ import { computeMetrics } from "./metrics.mjs";
 import { computeAttention, countMalformedToolCalls } from "./attention.mjs";
 import { failureStreak } from "./supervisor.mjs";
 import { strandedMsSetting } from "./config.mjs";
+import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
 import { partialView, peerGraph } from "./viewmodel.mjs";
 
@@ -187,6 +188,13 @@ export async function readRigHealth(
 	for (const seat of seats) {
 		malformedCountByConv.set(seat.conversationId, countMalformedToolCalls(pages[seat.name] ?? []));
 	}
+	// READ-SIDE secret detection (item #828): scan the same committed entry pages
+	// the metrics/highlights passes already read, so this adds no scan and no write
+	// path — only a signal. The findings carry WHERE, never the value.
+	const secretFindings = [];
+	for (const seat of seats) {
+		secretFindings.push(...scanEntriesForSecrets(seat, pages[seat.name] ?? []));
+	}
 	// Admission age beyond which an unstarted submission is surfaced as stranded
 	// (ROADMAP 37a); null means the module default in src/attention.mjs stands.
 	const strandedMs = strandedMsSetting(cfg);
@@ -224,7 +232,14 @@ export async function readRigHealth(
 			// of their own: same slot, same rendering, and signal only when a measure
 			// has actually moved (METRICS.md, "the move").
 			...metrics.notices,
+			// A secret-shaped value in committed content rides the same attention
+			// channel as every other operator-visible fact: same slot, same rendering,
+			// names WHERE and never the value.
+			...secretNotices(secretFindings),
 		],
+		// The detection artifact, exposed so a caller (`check`, a future TUI pane)
+		// can act on WHERE without re-scanning; carries no value by construction.
+		secretFindings,
 		// Internal: watch derives highlights from these instead of re-scanning.
 		_pages: pages,
 	};
