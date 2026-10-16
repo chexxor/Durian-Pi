@@ -120,16 +120,20 @@ node cli.mjs worktree C:/tmp/durig-dev/item-1
 #   DURIG_SEAT_ROOT=<checkout> node cli.mjs up <rig.json> --refresh
 ```
 
-The worktree is a detached checkout with `node_modules` bridged, so the demo suite runs there.
+The worktree is a detached checkout with **no `node_modules` present** — a fresh worktree has none
+(`node_modules` is gitignored, not bridged), so you must install dependencies per-worktree before
+the demo suite can run there.
 
-**The bridge is a JUNCTION to the live tree — a trap for any dependency change.** `src/worktree.mjs`
-creates `node_modules` as a junction to the tree the worktree came from, so an install run inside
-the worktree (`npm install`, or `node scripts/sync-pi.mjs --link`) writes **through the junction
-into the live tree's `node_modules`**; a pin/dep bump then repoints the live `node_modules` at the
-worktree's disposable `vendor/`, so deleting the worktree later breaks the live tree. Before any
-dependency-mutating step in a worktree, replace the junction with a local install: `rmdir` the
-junction (never a recursive delete — that follows it into the live tree), then `npm ci` there.
-Plain read-only demo runs are safe with the bridge; the hazard is installs.
+**Dependencies are installed per worktree with `npm ci --prefer-offline` — never a junction.**
+`src/worktree.mjs` does NOT create a `node_modules` junction to the source tree: the junction
+bridge was **removed in #330** (see the code comments — "No junction: Git 2.42 on this host deletes
+THROUGH a junction… install dependencies independently: `npm ci --prefer-offline` per worktree").
+The per-worktree install is `installWorktreeDeps` (runs `npm ci --prefer-offline`, ~12 s / ~111 MB),
+so an `npm install`/`sync-pi --link` inside a worktree affects only that worktree's own
+`node_modules` — nothing flows into the live tree. The only remaining junction reference in
+the code is a CLEANUP GUARD that refuses to `git worktree remove` a worktree containing a
+junction/symlink (Git 2.42 deletes THROUGH junctions, risking the main tree) — it refuses, it
+does not create one.
 
 **The oracle is `demo/*.test.mjs` in the tree under test, and the count is not fixed** — the
 committed tree and the operator's live tree can hold different numbers of demos (live can carry
