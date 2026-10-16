@@ -1551,54 +1551,79 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     (d) the highest-harm un-named failure is a confident wrong verification propagating as trusted
     `done` state, poisoning the durable record.
     *Owner:* `lead` (scope ruling) · *Trigger:* before the next ownership change.
-## pi-durable alignment: multiplayer clients and state-backed UIs (from the blog + examples, 2026-10-16)
+## pi-durable alignment: what to adopt, keep, and replace (research landed 2026-10-16)
 
-Source: the pi-durable post's "Multiplayer" and "Many conversations at once" sections, the shipped
-README (`viewState().subscribe()`, `watch()`/`watchEvents()`, `whenBusy: "steer"`, one storage-owning
-process), and the 32 examples at
-`node_modules/@earendil-works/pi-durable/test/examples/` (notably `21-late-join.ts`, `05-watches.ts`,
-`28-reviewer.ts`, `08-harness-conversations.ts`). The post's own example apps (the vacation planner,
-the small coding agent) live in the Pi repo at `v1.0.0` under `packages/coding-agent/src/experimental/`
-and are **not in this checkout** — the research item fetches them. Registered here, **not scheduled**;
-`pm` sequences them.
+Source: `docs/reviews/pi-durable-alignment.md` — the completed gap analysis (framework pinned at
+`earendil-works/pi@4954d760` / `pi-durable` 1.3.0; durig read from `main` on 2026-10-16). One-line
+verdict: durig reimplements **client state delivery** (the TUI poller) and **busy-conversation input**
+(await-and-hold), and correctly keeps the rest. Registered here, **not scheduled**; `pm` sequences them.
+**Read the review's §9 first** — it states its bounds (some files and the blog were not read; durig is
+not pinned).
 
-51. **Research: is durig using pi-durable as intended?** A gap analysis of durig's architecture against
-    the harness's own model — conversations, tasks, documents, forks, per-conversation agent,
-    `viewState`/`watch`, ownership trees — grounded in the examples, not the marketing. durig
-    reimplements a queue, a wake loop, a read API and a polling viewer on top of the harness; the
-    question is which of those the harness already provides better, and which are genuinely durig's
-    (multi-process seats, a human operator, a durable work queue).
-    *Owner:* operator's research agent · *Deliverable:* `docs/reviews/pi-durable-alignment.md` with a
-    gap table (capability → pi-durable mechanism → durig today → adopt/keep/replace), labelled
-    `observed`/`advertised-elsewhere`/`inferred`.
-    *Acceptance:* each recommendation cites an example or spec section; the "keep" rows say why the
-    harness mechanism does not fit.
+51. **DONE — Research: is durig using pi-durable as intended?** Report:
+    `docs/reviews/pi-durable-alignment.md` (gap table, decision table, failure catalogue, borrow/avoid,
+    and an explicit "could not verify" list). Items 52–58 are its output.
 
-52. **Make the TUI a state-backed multiplayer client (Level 2).** The post says a UI should be backed by
-    committed state: a client attaches to the owning harness and gets `viewState()` first, then only
-    what changes (`21-late-join.ts`). durig's `ui.mjs` instead reads storage directly and polls every
-    700 ms (D11), so it has poll latency, can tear, and — the observed bug — a spooled intent waits
-    behind a run. Adopt the pattern: the TUI attaches to the broker, subscribes to the focused
-    conversation's view, and steers via `submit(..., { whenBusy: "steer" })`.
-    *Owner:* `lead` (ruling on revisiting D11) → `impl` · *Evidence:* `21-late-join.ts`, the post.
-    *Acceptance:* a TUI demo that attaches, renders a live tool output from `pi.live`, and steers a
-    running conversation, with the poll path kept as a documented fallback only if the ruling says so.
+52. **Attach the TUI as a state-backed client (was: Level 2).** **Adopt, gated by 55.** Replace the
+    700 ms storage poll with a subscription behind the existing `readapi` seam — an **in-process**
+    `viewState().subscribe()` first (no socket, no new trust boundary), with `watchEvents()` (remote,
+    snapshot + deltas, late-join) only after 55. Keep the poller as the documented fallback (D11's
+    evidence is not erased). Evidence: `21-late-join.ts`, spec `viewState`/`watch`; review §2, §8.
+    *Owner:* `lead` (D11 ruling) → `impl` · *Acceptance:* a late-join test — attach mid-run, the
+    snapshot shows the running tool's partial, later deltas arrive, and no partial becomes an entry (D40).
 
-53. **Adopt the reviewer-as-a-conversation pattern.** `28-reviewer.ts` is the harness's own model of a
-    verifier: a separate conversation with its own model, read-only tools, its own checkout, and an
-    `onYield` review loop. That is durig's author/verifier pair, expressed natively — and it pairs with
-    the sycophancy finding (verification must re-execute evidence).
-    *Owner:* `impl` (author) · *Consulted:* `qa`/`auditor` · *Evidence:* `28-reviewer.ts`, example 22/23
-    (subagents), `docs/reviews/Agent_Ownership_Review.md` §2.4.
-    *Acceptance:* a demo where a verifier conversation runs against an item's worktree and its review
-    loop is driven by the harness, not by durig's queue re-waking.
+53. **Adopt the reviewer-as-a-conversation pattern (config-only).** `28-reviewer.ts`: a verifier
+    conversation with its own (different) model, `tools:[read]`, its own checkout, and an `onYield`
+    review loop. Evidence: review §1 row 8, §8; pairs with the sycophancy finding
+    (`docs/reviews/Agent_Ownership_Review.md` §2.4).
+    *Owner:* `impl` · *Consulted:* `qa`/`auditor` · *Acceptance:* a demo verifier that cannot edit and
+    loops on findings, driven by the harness — not by the queue re-waking.
 
-54. **Decide durig's boundary with the harness.** Which durig constructs become pi-durable mechanisms —
-    the queue could be a document (it already is `RigQueue`), seats could be conversations with
-    per-conversation agents/tools (already true), re-waking could be `whenBusy` steering, long work
-    could be durable tasks with checkpoints — and which stay durig-specific (the operator surface, the
-    worktree isolation, the commit policy). This is the decision that follows item 51.
-    *Owner:* `lead` (scope ruling) · *Trigger:* after item 51's report.
+54. **Wake-and-return in `drivePass` (replace the in-tick await).** **The review's rank-1 change
+    (highest value, lowest cost).** Stop awaiting the runs a pass woke inside the tick; let the commit
+    subscription drive the next pass; keep the **one** global `waitForIdle` on loop exit (F11). This is
+    what parked the loop ~15 minutes behind a degenerate `qa` run and held a spooled intent. Evidence:
+    review §1 row 2b, §5 F1/F2; `docs/BROKER-ARCHITECTURE.md`.
+    *Owner:* delegate/`impl` (broker process) · *Acceptance:* failing-first — with a slow seat running,
+    a spooled intent is delivered and another seat re-woken without waiting for the slow run; no wake is
+    lost (the "dirty, not lost" invariant).
+
+55. **A `security.sec` position BEFORE any attach socket.** **The review's #1 overlooked harm.** D45
+    committed that adding a socket requires a security position *before code*; a remote TUI client is
+    that socket. The in-process subscriber in 52 needs none; the remote path in 52 does.
+    *Owner:* security position (`advocate`/`lead` with the operator) · *Trigger:* before remote attach.
+    *Acceptance:* a written position naming the boundary, the auth/trust model, and the fallback if the
+    broker dies.
+
+56. **`whenBusy:"steer"` for operator text, and the spool's post-attach role.** **Adopt + decide.** A
+    drained intent should submit with `whenBusy:"steer"` so it joins a busy run instead of queueing
+    behind it; keep the spool as the **out-of-process** substrate (no broker ⇒ no owner ⇒ no harness).
+    The review flags two unasked things: what the spool is *for* after attach, and that the operator's
+    text then has two records (`pi.inbox` and durig's queue) — a divergence risk. Evidence: review
+    §2.5, §7.5–7.6.
+    *Owner:* `impl` + `lead` · *Acceptance:* an operator message reaches a busy seat within the run; a
+    decision entry records the spool's remaining job.
+
+57. **Per-conversation agent for seat config.** **Adopt.** Write model/thinking/extensions/tools/`cwd`
+    on the conversation (it survives restart) and keep only role/goal/capabilities in durig's `Seats`
+    doc. Evidence: `28-reviewer.ts`, spec; review §1 row 4, §5 F7.
+    *Owner:* `impl` · *Acceptance:* reopen a store and assert the agent config survives; org metadata
+    stays in `Seats`.
+
+58. **Investigate: task checkpoints + the reset/degeneration guard.** The harness has task
+    `phases`/checkpoints/`abort`/recovery (`running`→`pending`) and compaction policy; durig has a reset
+    guard, `stop` files, and a broker audit log. Map durig's guard cases onto the harness primitives
+    **before** writing code. Evidence: review §1 rows 8–9, §4 rank 6.
+    *Owner:* `lead` + `impl` · *Acceptance:* a written mapping; prototype one custom task and measure
+    the `migrate` maintenance tax.
+
+**Kept — do not replace (recorded so it is not re-litigated):** durig's `RigQueue` (a shared,
+cross-conversation work log with `from`/`to`, a status machine, provenance and an audit trail — the
+harness `pi.inbox` is per-conversation ordered input, a different object); **org edges / capability
+gates** (the spec says ownership is not access control); **`genlock` / `DURIG_MAX_CONCURRENT_SEATS`** (a
+cost/provider bound; the harness imposes none); the **per-item worktree lifecycle** (adopt the harness
+`cwd` *mechanism*, keep durig's create/remove policy); and the **operator surface, `cli.mjs` JSON
+contract, docs gates and rig files** (no harness equivalent).
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for

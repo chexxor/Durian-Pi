@@ -120,12 +120,12 @@ _Historical (superseded): the #480-era notes below were written for the 2026-10-
   no-RACI decision (item 45, advocate); verification must **re-execute evidence** (item 48); finish the
   review's governance/cost passes (item 49). Surface decision (item 47) is already routed to
   advocate/scribe. Awaiting `pm` sequencing.
-- **pi-durable alignment (multiplayer clients, state-backed UI)** — items 51–54 in `docs/ROADMAP.md`
-  §“pi-durable alignment”. durig may be reimplementing what the harness already provides: a
-  state-backed UI client (`viewState().subscribe()` / `watchEvents()`, per `21-late-join.ts`), a
-  reviewer-as-conversation (`28-reviewer.ts`), and durable tasks/documents. Item 51 is the gap-analysis
-  research (operator's research agent); item 52 is the TUI-as-client (needs a lead ruling on D11's
-  Level 2). Awaiting `pm` sequencing.
+- **pi-durable alignment (research landed; items 51–58)** — `docs/reviews/pi-durable-alignment.md` is
+  complete and its verdict is folded into `docs/ROADMAP.md` §“pi-durable alignment”. durig reimplements
+  exactly two things the harness already provides: **client state** (the TUI poller → item 52, adopt,
+  gated by the socket security position in item 55) and **busy-input** (`whenBusy:"steer"` → item 56).
+  The rank-1 change is **wake-and-return in `drivePass`** (item 54). The review's explicit keep-list is
+  recorded. Awaiting `pm` sequencing.
 - **Broker intent-inbox** — deliver intent to a seat WITHOUT stopping the broker (a file the broker
 drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guard, so routing needs a
 `serve --stop`, which interrupts in-flight work.
