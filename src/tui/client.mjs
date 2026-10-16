@@ -17,7 +17,7 @@
 // entrypoint. log/watch/JSON surface is unchanged.
 
 import { pad, truncate } from "../watchview.mjs";
-import { formatDelta, formatArgs } from "../chatview.mjs";
+import { formatDelta, formatArgs, themeToolRoles } from "../chatview.mjs";
 import { ANSI } from "../ansi.mjs";
 
 function formatToolName(call) {
@@ -118,8 +118,15 @@ function renderTranscript(turns, collapsed, maxRows, width) {
 				break;
 			case "thinking":
 				marker = "◇";
-				text = truncate(turn.text ? (turn.redacted ? "[thinking withheld]" : turn.text.split("\n")[0]) : "[thinking]", width - 8);
-				lines.push(`  ${paint("yellow", marker)} ${text}`);
+				// U5: transcript matches the log (chatview formatChat): labelled
+				// ("thinking ›"), and a redacted block reported as the fact it is —
+				// "redacted by the provider" — never as a vague "withheld".
+				text = turn.redacted && !turn.text
+					? "thinking (redacted by the provider)"
+					: turn.text
+						? truncate(`thinking › ${turn.text.split("\n")[0]}`, width - 8)
+						: "[thinking]";
+				lines.push(`  ${paint("yellow", marker)} ${paint("dim", text)}`);
 				break;
 			case "tools":
 				marker = "⚙";
@@ -142,19 +149,49 @@ function renderTranscript(turns, collapsed, maxRows, width) {
 /**
  * Render the streaming / partial row.
  */
-function renderPartial(partial, width) {
+function renderPartial(partial, width, { roles = null } = {}) {
 	if (!partial || !partial.hasContent) {
 		return { lines: [paint("gray", "  [idle]", false)], height: 1 };
 	}
 
 	const lines = [];
+	// U4: tool rows carry pi's themed tool roles when a theme+tint are requested
+	// (opt-in, same rule as chatview's --tool-bg); fg-only glyphs otherwise. A row's
+	// tint comes from the call's status role; success/failure never rides hue alone
+	// (the glyph differs: ◧/↻/✓/✗).
+	const tintOf = (status, isError) => {
+		if (!roles) return "";
+		return isError ? roles.toolErrorBg : status === "done" ? roles.toolSuccessBg : roles.toolPendingBg;
+	};
+	for (const call of partial.toolCalls ?? []) {
+		const callStatus = call.status;
+		const isError = call.isError === true;
+		const glyph = isError ? "✗" : callStatus === "done" ? "✓" : callStatus === "running" ? "↻" : "◧";
+		const tone = isError ? "red" : callStatus === "done" ? "green" : callStatus === "running" ? "cyan" : "yellow";
+		const tint = tintOf(callStatus, isError);
+		const argsText = formatArgs(call.args || {}, Math.max(12, width - 16));
+		const row = `  ${paint(tone, glyph)} ${call.name}${argsText ? ` ${paint("gray", argsText)}` : ""}`;
+		lines.push(truncate(tint ? `${tint}${row}${ANSI.reset}` : row, width));
+		if (call.output) {
+			const first = String(call.output).split("\n")[0];
+			const outRow = `      ${paint("gray", first)}`;
+			lines.push(truncate(roles ? `${roles.toolOutput}${outRow}${ANSI.reset}` : outRow, width));
+		}
+	}
+	if (partial.thinking) {
+		// U5: the TUI speaks the log's words (chatview formatPartial): labelled
+		// ("thinking ›"), reasoning first, and NEVER hidden because text reached the
+		// frame — the log does not hide it either.
+		const text = truncate(partial.thinking.split("\n")[0], width - 18);
+		lines.push(`  ${paint("yellow", "◇")} ${paint("dim", "thinking ›")} ${text}`);
+	} else if (partial.thinkingRedacted) {
+		// U5: a redacted live block is reported with the exact phrase the log uses,
+		// in both surfaces — the block exists, the body does not.
+		lines.push(`  ${paint("yellow", "◇")} ${paint("dim", "thinking (redacted by the provider)")}`);
+	}
 	if (partial.text) {
 		const text = truncate(partial.text, width - 8);
 		lines.push(`  ${paint("cyan", "●")} ${text}`);
-	}
-	if (partial.thinking && !partial.text) {
-		const text = truncate(partial.thinking.split("\n")[0], width - 8);
-		lines.push(`  ${paint("yellow", "◇")} ${text}`);
 	}
 	if (partial.tools?.length) {
 		for (const tool of partial.tools.slice(0, 2)) {
@@ -212,16 +249,22 @@ function renderFooter(width) {
  * @param {Array} params.queueItems — from readapi.readQueueItems()
  * @param {number} params.width — terminal width (default 100)
  * @param {boolean} params.color — enable colour (default false)
+ * @param {string} params.theme — "dark"|"light": pi's tool role tokens (default "dark")
+ * @param {boolean} params.toolBg — OPT-IN tool-surface backgrounds (default false; identical
+ *   rule to chatview's --tool-bg: a hard-coded tint misreads on unknown backgrounds)
  * @returns {Frame}
  */
 export function renderTui({
 	seats = [],
 	turns = [],
 	partial = null,
+	partials = null,
 	health = {},
 	queueItems = [],
 	width = 100,
 	color = false,
+	theme = "dark",
+	toolBg = false,
 } = {}) {
 	const lines = [];
 
@@ -238,12 +281,33 @@ export function renderTui({
 	const { lines: seatLines } = renderSeatList(seats, null, Math.min(width - 4, 80));
 	lines.push(...seatLines);
 
-	// Streaming / partial row
-	const partialRows = renderPartial(partial, Math.min(width - 4, 80));
-	if (partialRows.lines.length > 0) {
+	// Streaming / partial rows — U2: EVERY actively-generating seat at once, keyed off
+	// live generation (`partialView(live).hasContent`), never queue depth. Team-wide:
+	// one seat-labelled block per active seat; the legacy single `partial` argument
+	// keeps working (unnamed block) so the C3 contract doesn't break.
+	const active = Array.isArray(partials)
+		? partials
+		: partial && partial.hasContent
+			? [partial]
+			: [];
+	if (active.length === 0) {
+		const partialRows = renderPartial(partial && partial.hasContent ? partial : null, Math.min(width - 4, 80), {
+			roles: color && toolBg ? themeToolRoles(theme) : null,
+		});
+		if (partialRows.lines.length > 0) {
+			lines.push("");
+			lines.push(paint("bold", "  ── streaming ──"));
+			lines.push(...partialRows.lines);
+		}
+	} else {
 		lines.push("");
-		lines.push(paint("bold", "  ── streaming ──"));
-		lines.push(...partialRows.lines);
+		for (const p of active) {
+			lines.push(paint("bold", `  ── streaming${p.seat ? `: ${p.seat}` : ""} ──`));
+			const row = renderPartial(p, Math.min(width - 4, 80), {
+				roles: color && toolBg ? themeToolRoles(theme) : null,
+			});
+			lines.push(...row.lines);
+		}
 	}
 
 	// Transcript preview

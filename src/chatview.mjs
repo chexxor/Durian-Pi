@@ -22,6 +22,38 @@ export { buildTurns, extractThinking, extractToolCalls } from "./viewmodel.mjs";
 // hard-coding one is the field's clearest cautionary tale; it is therefore opt-in
 // and themed, never automatic.
 const TOOL_BG = { dark: "\x1b[48;5;236m", light: "\x1b[48;5;253m" };
+export { TOOL_BG };
+
+// U4: pi's tool-surface role vocabulary (toolPendingBg/toolSuccessBg/toolErrorBg/
+// toolTitle/toolOutput) as durig's theme tokens, per theme. `toolPendingBg` IS the
+// existing TOOL_BG token (that decision is kept, not replaced); the success/error
+// variants are derivations on the SAME 256-color ramp family (one step from the
+// pending token, and darker on the dark ramp / lighter on the light ramp), NOT a
+// new palette family; `<pi-coding-agent>`'s own dark.json/light.json
+// are not vendored in this checkout, so no upstream hexes could be copied. Titles
+// and output stay fg-level roles (agent prose stays unbg'd: the contrast is the
+// point). Success/failure is never carried by hue alone - the glyphs differ too.
+export const THEME_ROLES = {
+	dark: {
+		toolPendingBg: TOOL_BG.dark,      // 48;5;236
+		toolSuccessBg: "\x1b[48;5;234m",  // one step darker on the same dark ramp
+		toolErrorBg: "\x1b[48;5;52m",     // red edge of the 256 ramp
+		toolTitle: ANSI.dim,
+		toolOutput: ANSI.dim,
+	},
+	light: {
+		toolPendingBg: TOOL_BG.light,     // 48;5;253
+		toolSuccessBg: "\x1b[48;5;255m",  // one step lighter on the same light ramp
+		toolErrorBg: "\x1b[48;5;224m",    // warm red edge for light backgrounds
+		toolTitle: ANSI.dim,
+		toolOutput: ANSI.dim,
+	},
+};
+
+/** Resolve one theme's tool roles; unknown themes fall back to dark. */
+export function themeToolRoles(theme) {
+	return THEME_ROLES[theme] ?? THEME_ROLES.dark;
+}
 
 const TIME_COL = 8;
 const DELTA_COL = 7;
@@ -256,6 +288,11 @@ export function formatPartial(partial, { seat = "seat", color = false } = {}) {
 		// Thinking is a travelogue, not the answer, so it stays dim and indented and
 		// is never trimmed to a count: it is already bounded by the poll, not a turn.
 		for (const line of rest) lines.push(paint("dim", `    ${line}`));
+	} else if (partial.thinkingRedacted) {
+		// U5 parity, TUI ⟷ log: a redacted live block is reported with the SAME
+		// wording the committed path uses below — the block exists, the body does
+		// not, and the operator must be able to tell that apart from silence.
+		lines.push(paint("dim", "  ⋯ thinking (redacted by the provider)"));
 	}
 	const body = String(partial.text ?? "").replace(/\s+$/, "");
 	if (body) for (const line of body.split("\n")) lines.push(`  ${line}`);

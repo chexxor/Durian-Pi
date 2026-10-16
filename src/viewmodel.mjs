@@ -220,7 +220,34 @@ export function partialView(live) {
 			.join("");
 	const text = join("text", "text");
 	const thinking = join("thinking", "thinking");
-	// Only running slots are progress; a done slot has already become an entry.
+	// U5: a provider may keep the thinking block while withholding its body
+	// (`redacted: true`, body emptied). durig cannot recover the body and does not
+	// try — the block's existence is itself the fact to report — so the live
+	// partial exposes a flag the TUI and the log can both render, using the same
+	// wording they already use for committed turns. A redacted-only generation
+	// still counts as content: silence there would read as "no thinking".
+	const thinkingRedacted = content.some((part) => part?.type === "thinking" && part.redacted === true);
+	// U3 in-place tool-call blocks: initiation (name + args) comes from the assistant
+	// message's toolCall parts — the call is visible the moment the model emits it —
+	// while status/output come from the live tool slots BY callId, so ONE block grows
+	// from initiation to its result IN PLACE. Done slots are INCLUDED here (their
+	// result is part of the in-flight round's view; committing remains an entry's job,
+	// D40): a slot-less emitted call reads as pending.
+	const slotByCallId = new Map((live?.tools ?? []).map((slot) => [slot.callId, slot]));
+	const toolCalls = content
+		.filter((part) => part?.type === "toolCall" && part?.id)
+		.map((part) => {
+			const slot = slotByCallId.get(part.id);
+			return {
+				callId: part.id,
+				name: part.name ?? slot?.name ?? "tool",
+				args: part.arguments ?? null,
+				status: slot?.status ?? "pending",
+				output: slot?.output ?? undefined,
+				details: slot?.details ?? undefined,
+			};
+		});
+	// Running (not-yet-settled) slots are progress; a done slot has not yet become an entry.
 	const tools = (live?.tools ?? [])
 		.filter((slot) => slot?.status === "running")
 		.map((slot) => ({ name: slot.name ?? "tool", callId: slot.callId ?? null }));
@@ -228,7 +255,9 @@ export function partialView(live) {
 		attempt: live?.generation?.attempt ?? null,
 		text,
 		thinking,
+		thinkingRedacted,
 		tools,
-		hasContent: Boolean(text.trim() || thinking.trim() || tools.length),
+		toolCalls,
+		hasContent: Boolean(text.trim() || thinking.trim() || thinkingRedacted || tools.length || toolCalls.length),
 	};
 }
