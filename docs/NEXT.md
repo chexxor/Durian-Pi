@@ -11,7 +11,7 @@ _Last refreshed: 2026-10-16 (delegate session, third pass — routed the daemon 
 
 ## NEXT SESSION — START HERE
 
-**Current item: the safe-writes cluster (ROADMAP 68 → 69 → 70 → 71) ahead of the daemon 61–64; three
+**Current item: the safe-writes cluster (ROADMAP 68 → 69 → 70 → 71) ahead of the daemon 61–64; four
 clean-path items are DONE.**
 - **Item 68 DONE (`037213f`):** `reconcileStrandedSubmissions` settles a `placed` submission with no live
 task before the pending set is built, so the blocked seat re-wakes. Verified live: `STRANDED settled=2`
@@ -24,7 +24,12 @@ unlink re-drains idempotently), and the broker reconciles dead `genlock.*` lease
 EPERM holders kept) and logs `RECONCILE leases=N`. `demo/broker-reconcile.test.mjs`. The orphaned-worktree
 sweep is split to **item 73** — `removeClaimedWorktree` force-rm's a dirty tree, so a sweep needs a
 clean-only guard first.
-- **Next (clean path):** item 73 (worktree clean-only guard + sweep), then item 65 (genlock `#745`).
+- **Item 73 DONE (`243f175`):** `removeClaimedWorktree` refuses a dirty worktree without `force` (D60;
+fixes a latent `rm -rf` data-loss path), and the broker sweeps orphaned `item-*` worktrees at start
+(clean removed; dirty reported and kept). `demo/broker-worktree-sweep.test.mjs` (RED before).
+- **Next (clean path):** item 65 (genlock `#745`) — a live single-writer hazard.
+**Language:** the `P3 Language` constitution rule (`a0ab993`) covers all seats once the constitution is
+re-applied (`up --refresh`); immediate English directives were spooled to `impl` and `qa` via the inbox.
 **⛔ Items 69–71 blocked:** each must edit `cli.mjs`, dirty with another item's work (`cmdInit`, #491
 C9/C10 — 127 lines + untracked `demo/init.test.mjs`).
 **Pending apply — needs a broker stop + `up --refresh`:** the impl model change (`9760da6`,

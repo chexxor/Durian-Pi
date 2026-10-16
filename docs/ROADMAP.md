@@ -1833,13 +1833,13 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
 **Cross-links:** item **54** (wake-and-return) and item **65** (genlock) remain independent and should
 not wait; item **66** is delivered for the spool + leases, with the worktree sweep split to **73**.
 
-73. **Orphaned-worktree sweep (split from 66).** Reconcile the leaked `item-*` worktrees against the
-    queue at broker start. **Blocked by a safety gap first:** `removeClaimedWorktree` falls through to
-    `rm -rf` when `git worktree remove` refuses a dirty tree (`src/worktree.mjs`), so an automatic sweep
-    would destroy uncommitted work. Land a **clean-only** guard (refuse when `git status --porcelain` is
-    non-empty) before any sweep. *Owner:* `impl` · *Where:* `src/worktree.mjs`, `src/broker.mjs` start.
-    *Acceptance:* a demo that leaves a clean orphaned worktree and a dirty one across a restart — the
-    clean one is removed, the dirty one is reported and kept.
+73. **Orphaned-worktree sweep (DELIVERED `243f175`).** `removeClaimedWorktree` now refuses a worktree
+    holding uncommitted work unless the caller passes `force` — the D60 refusal its seat-completion
+    caller already assumed, and a fix to a latent data-loss bug (the fallback is `rm -rf`). The
+    regenerated `node_modules` tree is not counted as work, so legitimate cleanup still runs. At broker
+    start the broker removes `item-<id>` worktrees whose queue item is no longer live, keeps live items'
+    worktrees, and refuses + reports dirty orphans. *Owner:* delegate · *Where:* `src/worktree.mjs`,
+    `src/broker.mjs` · *Proof:* `demo/broker-worktree-sweep.test.mjs` (RED before the fix).
 
 ## Explicitly deferred (with reasons)
 
