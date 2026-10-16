@@ -1750,19 +1750,15 @@ should not wait. **Correction (delegate, round 3):** the research agent read the
     boot in daemon mode); a documented way back to an interactive `cli.mjs serve` with the host not
     fighting it.
 
-65. **Correctness hardening: the genlock lease and broker identity.** Three verified hazards, all
-    independent of any daemon: (a) `src/genlock.mjs` holds a slot for the whole response but steals when
-    `age > STALE_MS` (**60 s**, wall clock), so a legitimate 60–600 s generation can be stolen by
-    another process — the cap is exceeded; the fix is **lease renewal** (or `STALE_MS` > the stream
-    timeout), not just a resume-gap exemption; (b) `holderAlive` swallows `EPERM` and reports a live
-    but unsignalable holder as dead, while `brokerAlive()` handles it correctly — make them match; and
-    the operator view (`readGenerationSlots`, pid-only stale) disagrees with the acquire path on what
-    "stale" means; (c) `brokerAlive()` trusts `process.kill(pid, 0)`, and Windows pids are reused —
-    assert identity with a per-run `runToken` + a fresh heartbeat (Node cannot call `GetProcessTimes`,
-    and an open fd is not a Windows lock).
-    *Owner:* `impl` · *Where:* `src/genlock.mjs`, `src/broker.mjs`.
-    *Acceptance:* failing-first demos for a long live generation that must NOT be stolen, an EPERM
-    holder that must read as alive, and a reused pid that must NOT read as the recorded broker.
+65. **Correctness hardening: the genlock lease and broker identity (DELIVERED `6fae68d`, `559f967`).**
+    (a) A held lease renews its `since` every 20 s (atomic temp+rename), and `STALE_MS` is raised to
+    660 s — longer than the 600 s provider stream timeout — so a legitimate long generation is not
+    age-stolen; `slotIsStale` is the one predicate both the acquire path and the operator view use.
+    (b) `holderAlive` treats every error except ESRCH as alive, so an EPERM (live, unsignalable) holder
+    is not stolen. (c) `.broker.json` carries a `runToken` and a `heartbeatAt` the broker refreshes
+    every 20 s; `brokerAlive` rejects a state whose heartbeat is older than 60 s, so a reused Windows
+    pid is not read as the broker. *Owner:* delegate · *Where:* `src/genlock.mjs`, `src/broker.mjs`.
+    *Proof:* `demo/genlock-hardening.test.mjs` (RED before the fix).
 
 66. **Idempotent intent drain + stale-lease reconciliation (DELIVERED `47507f1`).** Every inbox intent
     now carries a `requestId` (`writeIntent` mints one), so re-draining the spool after a crash between
@@ -1830,8 +1826,9 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     *Owner:* impl · *Where:* `src/broker.mjs`, `cli.mjs` `cmdServe`/`cmdUp`.
     *Acceptance:* the log names the origin for `up`-started and `serve`-started brokers.
 
-**Cross-links:** item **54** (wake-and-return) and item **65** (genlock) remain independent and should
-not wait; item **66** is delivered for the spool + leases, with the worktree sweep split to **73**.
+**Cross-links:** items **54** (wake-and-return), **65** (genlock), **66** (idempotent drain + leases),
+and **73** (worktree sweep) are delivered; items **55** (a security position before a socket) and
+**69–71** (broker-safe writes) remain open.
 
 73. **Orphaned-worktree sweep (DELIVERED `243f175`).** `removeClaimedWorktree` now refuses a worktree
     holding uncommitted work unless the caller passes `force` — the D60 refusal its seat-completion

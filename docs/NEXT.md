@@ -11,8 +11,11 @@ _Last refreshed: 2026-10-16 (delegate session, third pass — routed the daemon 
 
 ## NEXT SESSION — START HERE
 
-**Current item: the safe-writes cluster (ROADMAP 68 → 69 → 70 → 71) ahead of the daemon 61–64; four
-clean-path items are DONE.**
+**Current item: the safe-writes cluster (ROADMAP 68 → 69 → 70 → 71) ahead of the daemon 61–64; five
+clean-path items are DONE.** Registered queue anchors: item 65 = **#745**, item 66 = **#728**; items
+69–71 are **pending `pm` registration**. **Exact next command:**
+`DURIG_DB=./selfdev.sqlite node cli.mjs status`. **Blocker:** items 69–71 must edit `cli.mjs`, which is
+dirty with another item's work (`cmdInit`, **#491**).
 - **Item 68 DONE (`037213f`):** `reconcileStrandedSubmissions` settles a `placed` submission with no live
 task before the pending set is built, so the blocked seat re-wakes. Verified live: `STRANDED settled=2`
 → `WAKE qa`, `WAKE lead`. `demo/broker-strand.test.mjs` (RED: symbol absent at HEAD).
@@ -27,14 +30,24 @@ clean-only guard first.
 - **Item 73 DONE (`243f175`):** `removeClaimedWorktree` refuses a dirty worktree without `force` (D60;
 fixes a latent `rm -rf` data-loss path), and the broker sweeps orphaned `item-*` worktrees at start
 (clean removed; dirty reported and kept). `demo/broker-worktree-sweep.test.mjs` (RED before).
-- **Next (clean path):** item 65 (genlock `#745`) — a live single-writer hazard.
+- **Item 65 DONE (`6fae68d`, `559f967`):** lease renewal + a 660 s staleness (above the 600 s stream
+timeout), an EPERM-safe `holderAlive`, and heartbeat-based broker identity so a reused pid is not the
+broker. The operator view and the acquire path now share `slotIsStale`. `demo/genlock-hardening.test.mjs`
+(RED before).
+- **Next:** clean-path items are exhausted; items **69–71** need `cli.mjs` (dirty/blocked). The command
+spool (71) is the durable-plan unlock.
 **Language:** the `P3 Language` constitution rule (`a0ab993`) covers all seats once the constitution is
 re-applied (`up --refresh`); immediate English directives were spooled to `impl` and `qa` via the inbox.
 **⛔ Items 69–71 blocked:** each must edit `cli.mjs`, dirty with another item's work (`cmdInit`, #491
 C9/C10 — 127 lines + untracked `demo/init.test.mjs`).
+**Broker:** restarted `pid 3348` (`START 2026-10-16T19:23:04Z`) after it died abnormally (a storage
+error, no `EXIT`) and stalled `impl`; `resume` cleared 5 stranded submissions, then the restart woke
+pm/impl/scribe and `impl` is streaming again. The item-73 sweep refused to delete `item-635/636/638`
+(they hold uncommitted work), as designed. **Nothing restarts a dead broker — that is the supervision
+gap, items 61–64.**
 **Pending apply — needs a broker stop + `up --refresh`:** the impl model change (`9760da6`,
 deepseek-ai/DeepSeek-V4.1-Flash) and the `P3 Language` constitution rule (`a0ab993`), plus the impl
-reset. The running broker (`pid 19028`) still uses the old code/model until restarted.
+reset. The running broker still uses the old prompt/model until restarted.
 **Owed:** wire `reconcileStrandedSubmissions` into `cli.mjs cmdResume` (same blocker); a DECISIONS entry.
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; restart a down broker with
 `.spike/delegate/dispatch-serve-noroot.ps1`. Design of record: `docs/BROKER-SUPERVISION.md` (D71/D72),
