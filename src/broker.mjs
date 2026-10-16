@@ -215,7 +215,7 @@ export async function drivePass(
   harness,
   probeStorage,
   { context, seatFilter, readBusySeats, onError, onWoke, currentSeat: initialSeat,
-    settleSignal, dbPath, onDiagnostic } = {},
+    dbPath, onDiagnostic, waitForWakes = true } = {},
 ) {
   // Deliver any spooled operator intent FIRST, so the submission it creates is visible
   // to this pass's `inspect` and the seat is not also submitted a fixed wake.
@@ -282,20 +282,24 @@ export async function drivePass(
   if (wokenSeat) {
     process.env.DURIG_ACTIVE_SEAT = wokenSeat;
   }
-  // Hold the harness open for the runs this pass started, and only those. When
-  // the caller supplies its commit signal, stop the wait the moment a
-  // wake-relevant commit lands so the next pass can re-wake a seat that just
-  // settled, without waiting for the slowest run in this one. An empty wake set
-  // resolves at once. F11 is preserved by the drain on loop exit, which is the
-  // one place a global wait belongs.
-  const wokenIdle = Promise.all(
-    [...wokenConvIds].map(async (convId) => {
-      const conv = await harness.conversation(convId, context);
-      await conv?.waitForIdle(context);
-    }),
-  );
-  if (settleSignal) await settleSignal.race(wokenIdle);
-  else await wokenIdle;
+  // Hold the harness open for the runs this pass started, and only those. A
+  // one-shot `run` keeps this in-tick wait: it has no resident loop to drain
+  // promptly, and its single pass should reflect the run's outcome. The resident
+  // broker passes `waitForWakes: false` instead: awaiting here parks the whole
+  // loop, so a `serve --stop` request and a spooled intent both wait behind the
+  // slowest run (the ~15-minute pass gap). The broker drains the ordinary scope
+  // once on loop exit instead (F11), and the commit subscription drives the next
+  // pass, so a seat that settles early is re-woken without waiting for the slow
+  // one. An empty wake set resolves at once either way.
+  if (waitForWakes) {
+    const wokenIdle = Promise.all(
+      [...wokenConvIds].map(async (convId) => {
+        const conv = await harness.conversation(convId, context);
+        await conv?.waitForIdle(context);
+      }),
+    );
+    await wokenIdle;
+  }
 
   return { actioned, seats };
 }
@@ -387,7 +391,7 @@ export async function runWakeLoop({
         context,
         seatFilter: scheduler.seatFilter(now()),
         readBusySeats,
-        settleSignal: signal,
+        waitForWakes: false,
         dbPath,
         onDiagnostic,
         onError: (failure) => {
