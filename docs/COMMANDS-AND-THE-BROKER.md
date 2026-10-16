@@ -11,30 +11,64 @@ independent), `docs/BROKER-SUPERVISION.md` (the process lifecycle/daemon design 
 
 ---
 
-## 1. Orientation: the four nouns
+## 1. Orientation: a library, a program, and who owns the store
 
-- **pi-durable** — the runtime library. It owns *durability*: a `Harness` over a SQLite store, each
-  conversation a durable transcript, each input a `submission` that runs to a settled `done`/`unanswered`
-  state, plus tools, providers, usage, and `resume()` on reopen. durig is a layer on top; when in doubt,
-  the answer is usually "pi-durable owns that". (See `PI-DURABLE-INTEGRATION.md`.)
-- **durig** — the rig: **seats** (personas/roles), the cross-seat **queue** (`RigQueue`) and router
+**pi-durable is a library, not a service.** It ships classes — `Harness`, `SqliteStorage`,
+conversation and submission objects, tools, providers — that a *program* embeds. There is no daemon and
+no listening port, and no owner that outlives the process.
+
+That makes "pi-durable owns the store" a shorthand worth unpacking. Precisely: **the process that
+called `Harness.open(storage, …)` owns that storage for as long as its `Harness` is open.** The library
+supplies the rule; a running process satisfies it. The rule, verbatim from the library:
+
+> "One process owns a storage at a time; there is no cross-process locking." (`README.md:682`)
+
+So there is **no lock at the database level** — pi-durable simply assumes the embedding application
+keeps one owner. durig keeps its side by policy: **the broker is durig's chosen long-lived owner**, and
+`<db>.broker.json` plus the `run`/`serve` guards are how durig enforces it. The four nouns to keep
+straight:
+
+- **pi-durable** — the library: durable conversations, submissions, tools, providers, `resume()`.
+- **durig** — the program: **seats** (personas/roles), the cross-seat **queue** (`RigQueue`) and router
   tools (`claim_work`, `complete_work`, `send_work`, `defer_work`), the **driver** that decides whom to
   wake, the **broker** that drives, and the **observers** (`status`/`watch`/`log`/`ui`).
-- **The store** — one SQLite file = one rig (`selfdev.sqlite`, `tutor-pi.sqlite`; also `rig.sqlite` by
+- **The store** — one SQLite file = one rig (`selfdev.sqlite`, `tutor-pi.sqlite`; `rig.sqlite` by
   default). Everything durable lives here. `*.sqlite` is gitignored.
 - **The three actors** — the **operator/delegate** (intent, rulings), the **seats** (the team), and the
-  **broker** (the scheduler/supervisor process). Keeping them straight is most of the onboarding.
+  **broker** (the scheduler/supervisor process).
 
----
+For the durig-versus-harness division of responsibilities, see the concept map in
+`docs/PI-DURABLE-INTEGRATION.md` §2.
 
-## 2. The rule that explains everything: one owner, many clients
+## 2. Multiplayer, precisely: one owner, many clients
 
-pi-durable's storage contract is **"one process owns a storage at a time; other clients attach to that
-process."** durig implements that owner as the **broker** (`cli.mjs serve`). Consequences:
+pi-durable **is** a multiplayer system — but "multiplayer" here means **many clients attached to the
+one owner**, not many writers to one file. The library provides the client surface:
+
+- `viewState()` — the conversation's structural view, "updated after every commit" (`README.md:380`);
+- `watch()` / `watchEvents()` — attach a live stream mid-run (`README.md:493`);
+- busy-conversation semantics — a client can steer a running conversation or queue a follow-up.
+
+There is no multi-writer mode and no cross-process lock; the embedding program must keep a single
+owner. durig currently **under-uses** the client surface — its observers read the store directly and
+poll (`D11`) instead of attaching to the owner's push stream, which is why the TUI feels single-player
+and why "adopt the owner's push stream" is a deferred item (`docs/BROKER-ARCHITECTURE.md`).
+
+The broker is **not** the only part of durig that touches the library, nor the only harness owner:
+
+| Component | How it uses pi-durable |
+|---|---|
+| `cli.mjs` | the **composition root**: `openHarness()` opens a real `Harness` over the store; `openStore()` opens the storage read-only. No `src/` module opens a harness. |
+| verbs `up`, `ps`, `queue`, `resume`, `reset`, `run`, `serve`, `stop`, `send` | each opens a **short-lived `Harness`** — each is a short-lived **owner** |
+| verbs `status`, `watch`, `log`, `events`, `metrics`, `check` | open the **storage only** (`openStore`) — true readers |
+| `intent.mjs` | opens **neither** — it writes a request file for the broker to drain |
+| `src/*.mjs` (rig, seattools, seatguard, confine, readapi, …) | consume pi-durable's types and utilities as pure layers handed a harness/storage; they never open one |
+| `demo/*.mjs` (42 files) | construct `Harness.open(new MemoryStorage(), …)` directly for offline tests |
+
+The broker is special only as the **long-lived** owner. Every other verb that opens a harness is a
+**second owner** while the broker runs — the root of the conflict the rest of this document explains:
 
 - **One process is the writer.** The broker opens the `Harness` once and holds it for its whole life.
-- **Many client surfaces attach or read.** pi-durable's own clients are `viewState().subscribe()` and
-  `watchEvents()`; durig's observers currently **read the store directly and poll** instead (D11).
 - **Everything else is a producer** that either (a) *reads* the store (safe anytime) or (b) *writes*
   through a path that must not race the owner.
 
@@ -47,8 +81,10 @@ That last point is the whole "why can't I just run a write command?" story.
 ```
   operator / delegate / scripts / TUI / future daemon CLI
         │
-        ├── READS ──► status·watch·log·events·ps·queue·metrics·check·config·ui.mjs
-        │                  └─ read the SQLite store directly (D11); safe anytime
+        ├── READS ──► status·watch·log·events·metrics·check·config·ui.mjs
+        │                  └─ open the STORAGE read-only (D11); safe anytime
+        │   ps·queue ──► read the roster/queue, but open a full Harness (a short-lived owner);
+        │                  avoid while the broker runs (§4)
         │
         └── WRITES ─┬─► CLI write verbs: send · reset · resume/doctor · stop · up · run · serve
                     │        └─ open their OWN Harness (a second owner) ── then write

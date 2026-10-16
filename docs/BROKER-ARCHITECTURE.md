@@ -94,6 +94,9 @@ The pi-durable post's "Multiplayer" is **not** many writers to one file — it i
   behind a run. Adopting the owner's push stream for the TUI is the deferred "Level 2 resident server",
   and it is the same pub-sub you asked about — it already exists upstream; durig just is not a client.
 
+The command-path view of this — which durig processes open a harness, which only read storage, and what
+that means for writing while the broker runs — is `docs/COMMANDS-AND-THE-BROKER.md` §1–§2.
+
 ## One known scheduler bug, and the fix
 
 `drivePass` wakes its seats and then **awaits** them:

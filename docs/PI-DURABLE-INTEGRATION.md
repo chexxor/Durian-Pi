@@ -20,6 +20,11 @@ seats and supervises them, **per-item worktrees**, a **cross-process generation 
 **operator surface** (a JSON CLI and a TUI). Nothing durig persists bypasses the harness: durig writes
 one storage opener's worth of documents and entries and runs no SQL of its own.
 
+A clarification that prevents a common confusion: pi-durable is a **library**, not a service. It
+supplies the rule that one process owns a storage at a time; the process that calls `Harness.open` is
+the owner. durig designates the broker as that long-lived owner — see
+`docs/COMMANDS-AND-THE-BROKER.md` §§1–2 for the full ownership and multiplayer picture.
+
 ## 2. Concept map — who owns what
 
 | durig concept | pi-durable concept | Owner | Where |
