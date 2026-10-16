@@ -55,7 +55,9 @@ and progressing (advocate generating; impl working `demo/tui-client.test.mjs`).
 (never set `DURIG_SEAT_ROOT`) once no writer is in flight.
 
 **Delegate clock-out this session (2026-10-16, second pass):** operational + incident recovery, no repo
-code changed (the `.spike/` repair scripts are gitignored). Committed only `docs/NEXT.md`. Tree still
+code changed (the `.spike/` repair scripts are gitignored). Committed only `docs/NEXT.md`. Added
+`docs/COMMANDS-AND-THE-BROKER.md` (new-maintainer command-path map: every read/write path, why one
+owner, and where the daemon/mailbox fit; recommends logging the broker's start source). Tree still
 holds other items' files (`cli.mjs`, `docs/DECISIONS.md`, `docs/FEATURES.md`, `docs/STATUS.md`,
 `docs/WORKFLOWS.md`, `demo/init.test.mjs`) — untouched. No push.
 
