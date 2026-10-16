@@ -231,7 +231,12 @@ confirmed rather than taken on trust.
 
 ## Known gaps worth remembering
 
-- **Seats have no working tools.** `src/rig.mjs` registers exactly six:
+- **Carry-not-refuse means a worktree fork includes other seats' uncommitted
+  work.** Since #506, a dirty shared tree forks WITH its visible content
+  (returned + logged, so never silent): a seat's worktree may contain another
+  seat's in-flight edits. Reviewing a seat's diff includes deciding whether a
+  carried path belongs to the item; merge-time attribution is manual for now.
+- **Seats have no working tools.** `src/rig.mjs` registers exactly seven:
   `send_work`, `claim_work`, `complete_work`, `defer_work`, `resume_work`,
   `peek_queue`. A live worker seat
   reported itself blocked and refused to claim a completed deliverable, which is
@@ -351,6 +356,7 @@ FEATURES.md changes this item: added the ASK F broker-wired-worktree/dirty-sourc
 src/broker.mjs claim path, src/worktree.mjs uncommittedInSource, demo/worktree.test.mjs
 (dirty source refuses the fork - I ran it, exit 0) and demo/worktree-lifecycle.test.mjs.
 **Not added:** the status seat last-activity row (#502 / ASK B) - I verified the field does NOT
-exist in the code (cmdStatus/eadRigHealth expose no last-activity), so it is not documented
+exist in the code (cmdStatus/
+eadRigHealth expose no last-activity), so it is not documented
 (per the never-document-what-does-not-exist rule, not copied on trust); the tokens/cost/model
 metrics row is #504's (lead-coordinated), not added here. Nothing pushed.

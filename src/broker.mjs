@@ -103,6 +103,14 @@ export async function drivePass(
           const wt = await claimWorktree({ source, worktreeRoot, itemLabel: itemLabel });
           process.env.DURIG_SEAT_ROOT = wt.cwd; // seattools.makeSeatEnv picks this up
           worktreeClaimed = true;
+          // #506: the fork now carries the shared tree's visible (uncommitted) state;
+          // surface WHAT was carried so the fork is never an untracked surprise.
+          if (wt.carried?.length) {
+            console.error(
+              `BROKER: worktree for ${seatName} (${itemLabel}) carried ${wt.carried.length} uncommitted path(s) ` +
+                `from the shared tree: ${wt.carried.join(", ")}`,
+            );
+          }
           onSeatCreated?.(seatName, wt);
         } catch (err) {
           console.error(`BROKER: worktree claim failed for ${seatName}: ${err?.message ?? err}`);

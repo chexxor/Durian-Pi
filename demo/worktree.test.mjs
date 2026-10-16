@@ -61,55 +61,43 @@ try {
 	await mkdir(modules, { recursive: true });
 	await writeFile(join(modules, "dep.js"), "module.exports = 1;\n");
 
-	console.log("\nF23: a DIRTY source must not silently fork a HEAD-only checkout");
-	// The operator's uncommitted direct work lives only in the working tree, not in
-	// HEAD. A worktree forked from HEAD would not contain it, so a seat could not
-	// see it and could clobber it (#240 collision). The smallest guard: refuse.
+	console.log("\nF23 as amended by ASK F #506: a DIRTY source forks the VISIBLE STATE (carry, not refuse)");
+	// The original F23 refusal ("commit or stash first") made isolation depend on a
+	// pristine shared tree. Under a CONCURRENT team that blocks every worktree claim
+	// whenever any seat is mid-edit (#506: "one seat's uncommitted/untracked file
+	// blocks all worktree creation"), so seats degraded to the shared tree — the
+	// fate #473 exists to prevent. The semantic is now CARRY: the fork gets HEAD
+	// plus the enumerated visible content, the carried set is returned, and the
+	// broker logs it — anti-stale kept (#240), failure-closed partially removed.
 	const dirtyTarget = join(base, "item-dirty");
 	const dirtyNote = join(source, "uncommitted-work.mjs");
 	await writeFile(dirtyNote, "// the operator's uncommitted direct work\n");
-	let dirtyRefused = null;
-	try {
-		await createWorktree({ source, target: dirtyTarget });
-	} catch (error) {
-		dirtyRefused = error;
-	}
+	const plainNote = join(source, "tracked.txt");
+	await writeFile(plainNote, "edited, uncommitted\n");
+	const carriedRun = await createWorktree({ source, target: dirtyTarget });
 	check(
-		"an untracked change in the source refuses the fork",
-		dirtyRefused !== null,
-		"it silently forked a HEAD-only checkout instead of refusing",
-	);
-	check(
-		"the refusal names the cause and the fix",
-		dirtyRefused !== null && /uncommitted changes/.test(dirtyRefused.message) && /commit or stash/.test(dirtyRefused.message),
-		String(dirtyRefused?.message),
-	);
-	check(
-		"no HEAD-only worktree was produced (the silent divergence)",
-		!existsSync(dirtyTarget),
-		"a worktree was created even though it lacks the uncommitted work",
-	);
-	check("the operator's uncommitted work is untouched", existsSync(dirtyNote));
+		"a dirty source forks (does NOT refuse): the claim must not fail closed",
+		existsSync(dirtyTarget),
+		"the fork was blocked — the #506 defect",
+		);
+	check("the carried set is returned, naming the untracked and edited paths",
+		Array.isArray(carriedRun.carried) && carriedRun.carried.some((p) => p.endsWith("uncommitted-work.mjs")) &&
+			carriedRun.carried.some((p) => p.endsWith("tracked.txt")),
+		JSON.stringify(carriedRun.carried));
+	check("the fork CONTENT carries the uncommitted work (anti-stale, #240)",
+		(await readFile(join(carriedRun.cwd, "uncommitted-work.mjs"), "utf8")).includes("the operator's uncommitted direct work") &&
+			(await readFile(join(carriedRun.cwd, "tracked.txt"), "utf8")) === "edited, uncommitted\n");
+	check("the operator's uncommitted work in the SHARED tree is untouched", existsSync(dirtyNote));
 
-	// A tracked modification must trip it too, not only untracked files.
-	await run("git", ["-C", source, "add", "-A"]);
-	await run("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "pick up the work"]);
-	await writeFile(join(source, "tracked.txt"), "edited, uncommitted\n");
-	let modRefused = null;
-	try {
-		await createWorktree({ source, target: dirtyTarget });
-	} catch (error) {
-		modRefused = error;
-	}
-	check(
-		"a tracked, uncommitted modification also refuses",
-		modRefused !== null && /uncommitted changes/.test(modRefused.message),
-		String(modRefused?.message),
-	);
+	// A DELETION stays a deletion: an uncommitted `rm` must not resurrect from HEAD
+	// in the fork, or the fork lies about the visible state.
+	await rm(plainNote);
+	const delRun = await createWorktree({ source, target: join(base, "item-dirty-del") });
+	check("an uncommitted deletion stays deleted in the fork (visible state)",
+		!existsSync(join(delRun.cwd, "tracked.txt")), "resurrected from HEAD");
 	// Restore a clean source so the remaining checks run exactly as before.
-	await run("git", ["-C", source, "checkout", "--", "tracked.txt"]);
-	await run("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "rm", "-q", join("durig", "uncommitted-work.mjs")]);
-	await run("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "drop the F23 seed"]);
+	await run("git", ["-C", source, "add", "-A"]);
+	await run("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "settle #506 fixture"]);
 	check("the source is clean before the next check", (await run("git", ["-C", source, "status", "--porcelain", "--", "."])).stdout.trim() === "");
 
 	console.log("\nAn existing path is refused rather than adopted or overwritten");

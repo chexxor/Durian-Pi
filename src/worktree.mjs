@@ -9,7 +9,8 @@
 
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { copyFile, cp, mkdir, rm, stat } from "node:fs/promises";
+import { join, relative, resolve, dirname } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
@@ -58,23 +59,17 @@ export async function createWorktree({ source, target, ref = "HEAD" }) {
 	if (existsSync(target)) {
 		throw new Error(`refusing to reuse an existing path as a worktree: ${target}`);
 	}
-	// F23: a worktree forks from HEAD, so the operator's UNCOMMITTED direct work is
-	// absent from the fork - a seat cannot see it, and its own file at the same path
-	// then clobbers it on merge (#240: a seat's src/readapi.mjs collided with the
-	// live 8.9 KB shared read API). Refuse rather than carry: the uncommitted set can
-	// be large and carrying it would fork a tree neither git nor the operator tracks.
-	// Scoped to the SOURCE subtree (`-- .`) so unrelated dirty paths elsewhere in a
-	// larger repository do not wedge every fork.
+	// ASK F (#506): a concurrent team's shared tree is EXPECTED to be dirty — one
+	// seat's in-flight edit or untracked demo used to block worktree creation for
+	// EVERY seat (observed: "BROKER: worktree claim failed … M docs/NEXT.md"), so
+	// isolation degraded to shared-tree editing, defeating #473's purpose. F23's
+	// refusal is superseded by CARRY: fork HEAD, then carry the visible state in
+	// and RETURN it. The anti-stale guarantee stays — the fork contains everything
+	// the source visibly held (#240) — but the fork is no longer “a tree neither
+	// git nor the operator tracks”: it is HEAD plus an enumerated, returned list.
 	const dirty = await uncommittedInSource(source);
-	if (dirty.trim() !== "") {
-		throw new Error(
-			`source has uncommitted changes; the new worktree would not contain them - commit or stash first ` +
-				`(in ${source}): ${dirty.trim().split("\n").slice(0, 5).join(", ")}`,
-		);
-	}
-	// `--detach` because a worktree per item must not occupy a branch: two items in flight would
-	// otherwise collide on the branch name, and the operator decides what becomes a branch.
 	await run("git", ["-C", root, "worktree", "add", "--detach", target, ref]);
+	const carried = dirty.trim() === "" ? [] : await carryVisibleState({ source, target });
 
 	const inside = relative(root, resolve(source));
 	const cwd = inside === "" ? target : join(target, inside);
@@ -87,7 +82,56 @@ export async function createWorktree({ source, target, ref = "HEAD" }) {
 	// The worktree is unusable without this step — the seat that needs it should run the install
 	// before working.
 
-	return { repo: root, worktree: resolve(target), cwd };
+	return { repo: root, worktree: resolve(target), cwd, carried };
+}
+
+/**
+ * Carry the visible (uncommitted) state of `source`'s subtree into a just-created
+ * worktree, and report what moved (#506). Disk visibility decides the action:
+ * a dirty path that exists on disk is copied (tracked edit, staged add, untracked
+ * file - or an untracked directory, recursively); a dirty path absent on disk is
+ * deleted in the fork too, so an uncommitted deletion stays a deletion instead of
+ * resurrecting from HEAD. Reads the SHARED tree, writes only inside the NEW
+ * worktree; the shared tree is never touched.
+ *
+ * `--porcelain -z` is parsed by \0-chunks with repo-root-relative paths (porcelain
+ * v1), so the carried list uses the same path names `git status` shows the
+ * operator. Rename pairs carry the new path and remove the old.
+ */
+export async function carryVisibleState({ source, target }) {
+	if (!target) throw new Error("carryVisibleState needs `target` — the new worktree root (the write side)");
+	const repo = await repoRoot(source);
+	const worktree = resolve(target);
+	const { stdout } = await run("git", ["-C", source, "status", "--porcelain", "-z", "--", "."]);
+	if (!stdout) return [];
+	const carried = [];
+	const chunks = stdout.split("\0").filter((c) => c !== "");
+	for (let i = 0; i < chunks.length; i++) {
+		let entry = chunks[i];
+		if (!entry.includes(" ") && entry.length === 2) continue; // stray status chunk defence
+		const status = entry.slice(0, 2);
+		let path = entry.slice(3);
+		if (status[0] === "R" || status[1] === "R") {
+			const oldPath = chunks[++i] ?? ""; // -z rename: the OLD path is the next chunk
+			if (oldPath && !existsSync(join(repo, oldPath))) {
+				await rm(join(worktree, oldPath), { force: true, recursive: true });
+			}
+		}
+		const srcPath = join(repo, path);
+		const dstPath = join(worktree, path);
+		if (existsSync(srcPath)) {
+			await mkdir(dirname(dstPath), { recursive: true });
+			if (entry.endsWith("/") || (await stat(srcPath)).isDirectory()) {
+				await cp(srcPath, dstPath, { recursive: true, force: true });
+			} else {
+				await copyFile(srcPath, dstPath);
+			}
+		} else {
+			await rm(dstPath, { force: true, recursive: path.endsWith("/") });
+		}
+		carried.push(path);
+	}
+	return carried;
 }
 
 /**
@@ -127,7 +171,7 @@ export async function removeWorktree({ source, worktree, force = false }) {
 /* ================================================================ */
 /*  P2-1: worktree-per-task lifecycle (claim → lock → release → remove)  */
 /* ================================================================ */
-import { readFile, writeFile, unlink, rm, readdir } from "node:fs/promises";
+import { readFile, writeFile, unlink, readdir } from "node:fs/promises";
 
 /**
  * Validate that a worktree's git identity is correct — it resolves to itself,
