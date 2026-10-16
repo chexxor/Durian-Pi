@@ -38,6 +38,17 @@ DECISIONS.md is currently dirty with a seat's whole-file rewrite, so the delegat
 
 _Historical (superseded): the #480-era notes below were written for the 2026-10-15 handoff._
 
+**Future work (candidate items — not yet queued):**
+- **Broker intent-inbox** — deliver intent to a seat WITHOUT stopping the broker (a file the broker
+drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guard, so routing needs a
+`serve --stop`, which interrupts in-flight work.
+- **Reset at WORK-ITEM boundaries only** (deferred mitigation 3): clear a seat's context when it
+finishes a work item — explicitly NOT finer item boundaries yet.
+- **Mid-run cut** (optional): the degeneration guard resets BETWEEN runs; a provider-level turn cap
+would cut a single runaway run mid-flight. (Bounded runs are mitigated; this is the residual gap.)
+- **`docs/DECISIONS.md` entries owed** for the degeneration guard (`ae96445`) and the broker
+lifecycle audit (`484a571`); DECISIONS.md is a seat's uncommitted rewrite, so the delegate left it.
+
 **Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
 Evidence: `git diff --diff-filter=A main origin/pi-rebase -- . ':(exclude).spike'` is empty (no
 tracked file on the snapshot is absent from `main`); `demo/pitui.test.mjs` is present on `main`;
