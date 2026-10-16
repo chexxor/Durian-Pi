@@ -20,6 +20,7 @@ import { pad, truncate } from "../watchview.mjs";
 import { formatDelta, formatArgs, themeToolRoles } from "../chatview.mjs";
 import { ANSI } from "../ansi.mjs";
 import { sanitizeTerminalText } from "../sanitize.mjs";
+import { textWidth, sliceToWidth, firstCluster } from "../textwidth.mjs";
 
 function formatToolName(call) {
 	return call?.name ?? "tool";
@@ -111,22 +112,28 @@ function renderSeatList(seats, activityMap, width, selectedSeat = null, color = 
 function wrapText(text, width) {
 	const flat = String(text ?? "").replace(/\s+/g, " ").trim();
 	const w = Math.max(1, width);
-	if (flat.length <= w) return [flat];
+	if (textWidth(flat) <= w) return [flat];
 	const out = [];
 	let line = "";
 	for (const word of flat.split(" ")) {
-		if (word.length > w) {
+		if (textWidth(word) > w) {
 			// Hard-split a token longer than the line (a URL or id) so it cannot
-			// silently overflow the frame.
+			// silently overflow the frame. Cut by cells, never through a grapheme.
 			if (line !== "") {
 				out.push(line);
 				line = "";
 			}
-			for (let i = 0; i < word.length; i += w) out.push(word.slice(i, i + w));
+			let rest = word;
+			while (textWidth(rest) > w) {
+				const chunk = sliceToWidth(rest, w) || firstCluster(rest);
+				out.push(chunk);
+				rest = rest.slice(chunk.length);
+			}
+			line = rest;
 			continue;
 		}
 		if (line === "") line = word;
-		else if (`${line} ${word}`.length <= w) line += ` ${word}`;
+		else if (textWidth(`${line} ${word}`) <= w) line += ` ${word}`;
 		else {
 			out.push(line);
 			line = word;

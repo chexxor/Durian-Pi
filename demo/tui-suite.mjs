@@ -17,7 +17,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // tui- prefix. `ui-driver` is the driver state machine; `sanitize` guards the escapes
 // that reach all three human surfaces.
 const files = readdirSync(HERE)
-	.filter((f) => /^tui-.*\.test\.mjs$/.test(f) || f === "ui-driver.test.mjs" || f === "sanitize.test.mjs")
+	.filter((f) => /^tui-.*\.test\.mjs$/.test(f) || f === "ui-driver.test.mjs" || f === "sanitize.test.mjs" || f === "textwidth.test.mjs")
 	.sort();
 
 const results = [];

@@ -14,6 +14,7 @@ import { extractEntryText } from "./rigstory.mjs";
 import { buildTurns, turnCollapse } from "./viewmodel.mjs";
 import { ANSI } from "./ansi.mjs";
 import { sanitizeTerminalText } from "./sanitize.mjs";
+import { textWidth, sliceToWidth } from "./textwidth.mjs";
 
 // Re-exported so callers keep one import path for the view model; the
 // implementation lives in src/viewmodel.mjs (D21, ROADMAP item 7).
@@ -64,8 +65,9 @@ const CONTENT_GAP = 3;
 export function truncate(text, width) {
 	const flat = String(text ?? "").replace(/\s+/g, " ").trim();
 	if (width <= 0) return "";
-	if (flat.length <= width) return flat;
-	return width === 1 ? "…" : `${flat.slice(0, width - 1)}…`;
+	// Cells, not code units: one CJK glyph is two columns and must not overrun the row.
+	if (textWidth(flat) <= width) return flat;
+	return width === 1 ? "…" : `${sliceToWidth(flat, width - 1)}…`;
 }
 
 // Elapsed time between turns, in the units a person actually reads: seconds

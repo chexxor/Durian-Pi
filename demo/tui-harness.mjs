@@ -10,6 +10,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { textWidth } from "../src/textwidth.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const GOLDEN_DIR = join(HERE, "__golden__");
@@ -100,25 +101,10 @@ export function partial(fields = {}) {
 	};
 }
 
-/* ───────── cell width (H4 seam) ───────── */
+/* ───────── cell width (H4: the real measurement) ───────── */
 
-// Provisional wide-range table so the buffer can measure CJK/emoji before H4 lands.
-// H4 replaces this with src/textwidth.mjs (Intl.Segmenter + get-east-asian-width);
-// keep this in sync until then, and do not grow it into a second implementation.
-function isWideCodePoint(cp) {
-	return (
-		(cp >= 0x1100 && cp <= 0x115f) ||
-		(cp >= 0x2e80 && cp <= 0xa4cf) ||
-		(cp >= 0xac00 && cp <= 0xd7a3) ||
-		(cp >= 0xf900 && cp <= 0xfaff) ||
-		(cp >= 0xfe30 && cp <= 0xfe6f) ||
-		(cp >= 0xff00 && cp <= 0xff60) ||
-		(cp >= 0xffe0 && cp <= 0xffe6) ||
-		(cp >= 0x1f300 && cp <= 0x1faff) ||
-		(cp >= 0x20000 && cp <= 0x3fffd)
-	);
-}
-
+// Delegate to src/textwidth.mjs so the buffer measures exactly what the renderers do;
+// a second width implementation here would drift from the one under test.
 const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
 
 export function visibleText(line) {
@@ -126,17 +112,11 @@ export function visibleText(line) {
 }
 
 export function cellWidth(text) {
-	let width = 0;
-	for (const ch of String(text ?? "")) {
-		const cp = ch.codePointAt(0);
-		if (cp === 0x200d || (cp >= 0x0300 && cp <= 0x036f) || (cp >= 0xfe00 && cp <= 0xfe0f)) continue; // ZWJ / combining / variation selectors
-		width += isWideCodePoint(cp) ? 2 : 1;
-	}
-	return width;
+	return textWidth(text);
 }
 
 export function displayWidth(line) {
-	return cellWidth(visibleText(line));
+	return textWidth(line);
 }
 
 /* ───────── screen buffer ───────── */

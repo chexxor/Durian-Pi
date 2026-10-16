@@ -6,6 +6,7 @@
 
 import { ANSI } from "./ansi.mjs";
 import { sanitizeTerminalText } from "./sanitize.mjs";
+import { textWidth, sliceToWidth } from "./textwidth.mjs";
 
 // Collapse whitespace before truncating: model prose arrives with newlines and
 // indentation that would otherwise break the one-line-per-seat layout.
@@ -13,14 +14,16 @@ export function truncate(text, width) {
 	const flat = String(text ?? "")
 		.replace(/\s+/g, " ")
 		.trim();
-	if (flat.length <= width) return flat;
-	if (width <= 1) return flat.slice(0, Math.max(width, 0));
-	return `${flat.slice(0, width - 1)}…`;
+	// Measure and cut in terminal CELLS: a CJK/emoji string is not `flat.length` wide.
+	if (textWidth(flat) <= width) return flat;
+	if (width <= 1) return sliceToWidth(flat, Math.max(width, 0));
+	return `${sliceToWidth(flat, width - 1)}…`;
 }
 
 export function pad(text, width) {
 	const s = String(text ?? "");
-	return s.length >= width ? s : s + " ".repeat(width - s.length);
+	const w = textWidth(s);
+	return w >= width ? s : s + " ".repeat(width - w);
 }
 
 // Attention kinds are the vocabulary the rig already uses; the human view only
