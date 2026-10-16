@@ -162,10 +162,17 @@ export function planResets({ seats, assessmentsByConv }) {
 export async function applyResets(harness, plans, context) {
 	const applied = [];
 	for (const plan of plans ?? []) {
-		const handoff =
-			`degeneration guard reset (${plan.detail}): the run you were in outgrew its bounds, ` +
-			`so your context is reset to break the loop. Re-anchor from your durable instructions ` +
-			`and the queue; re-claim your item if you still hold it.`;
+		// A tool call emitted as text is a FORMAT fault, not a runaway loop: the handoff must name
+		// the fault and the fix, or the model re-anchors onto the same malformed habit.
+		const handoff = /pseudo-tool-call/.test(String(plan.detail ?? ""))
+			? `malformed tool call (${plan.detail}): your last turn wrote the tool call into the message ` +
+				`TEXT — a <parameter name="…"> block — instead of using the tool API, so the run ended ` +
+				`without acting. Your context is reset to break the pattern. Re-anchor from your durable ` +
+				`instructions and the queue; re-claim your item if you still hold it, and issue each tool ` +
+				`call through the tool channel, never as message text.`
+			: `degeneration guard reset (${plan.detail}): the run you were in outgrew its bounds, ` +
+				`so your context is reset to break the loop. Re-anchor from your durable instructions ` +
+				`and the queue; re-claim your item if you still hold it.`;
 		const conv = await harness.conversation(plan.conversationId, context);
 		if (!conv) continue;
 		try {

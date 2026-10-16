@@ -65,6 +65,53 @@ export function countMalformedToolCalls(entries) {
 }
 
 /**
+ * The model's recurrent malformed shape: a tool call written into the message TEXT as an
+ * Anthropic-style block whose opener is `<parameter name="TOOL">` (it should be
+ * `<invoke name="TOOL">`), with the arguments as further `<parameter …>` tags and a trailing
+ * `</invoke>`. The tell is two adjacent parameter opens where the first is never closed — a
+ * well-formed block starts with `<invoke`, and prose that merely NAMES the marker carries no
+ * stray `</invoke>`. Kept strict on purpose: the remediation is a context reset, and D64 accepts
+ * one wasted reset as cheaper than a seat stalled mid-item with an uncommitted artifact.
+ */
+const PSEUDO_TOOL_CALL_MARKER = /<parameter\s+name="[^"]+"\s*>\s*<parameter\s+name="/;
+const PSEUDO_TOOL_CALL_CLOSE = /<\/invoke>\s*$/;
+
+/**
+ * Did this assistant turn try to act but emit the tool call as text instead of a tool call?
+ *
+ * @param {{kind?:string, model?:unknown}} entry one seat entry
+ * @returns {boolean}
+ */
+export function isPseudoToolCallTurn(entry) {
+	const message = Array.isArray(entry?.model) ? entry.model[0] : entry?.model;
+	if (!message || message.role !== "assistant") return false;
+	const parts = Array.isArray(message.content) ? message.content : [];
+	// A real tool call means the model used the tool channel; there is nothing to repair.
+	if (parts.some((part) => part?.type === "toolCall")) return false;
+	const text = parts
+		.filter((part) => part?.type === "text")
+		.map((part) => part?.text ?? "")
+		.join("\n");
+	return PSEUDO_TOOL_CALL_MARKER.test(text) && PSEUDO_TOOL_CALL_CLOSE.test(text);
+}
+
+/**
+ * How many assistant turns in a page emitted a tool call as text (the F29-adjacent fault the
+ * validation-error marker cannot see, because no tool call was ever submitted to be rejected).
+ *
+ * @param {Array<{kind?:string, model?:unknown}>} entries seat entries
+ * @returns {number}
+ */
+export function countPseudoToolCalls(entries) {
+	let count = 0;
+	for (const entry of entries ?? []) {
+		if (entry?.kind !== "pi.assistant") continue;
+		if (isPseudoToolCallTurn(entry)) count++;
+	}
+	return count;
+}
+
+/**
  * The reason a run failed, plus the CAUSE when the entry knows it.
  *
  * A submission record carries a category - "model_error" - and nothing else,

@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { assessRun, DEGEN_DEFAULTS } from "../src/degeneration.mjs";
 import { applyResets, planResets } from "../src/supervisor.mjs";
+import { countPseudoToolCalls, isPseudoToolCallTurn } from "../src/attention.mjs";
 
 let failures = 0;
 function check(label, fn) {
@@ -46,6 +47,22 @@ const malformed = () => ({
   model: [{ isError: true, content: [{ type: "text", text: '<harness> [error] Validation failed for tool "edit": path required' }] }],
 });
 const reset = () => ({ kind: "pi.reset", model: [{ role: "user", content: [{ type: "text", text: "reset" }] }] });
+// The model's recurrent fault: a tool call written into the message TEXT as an Anthropic-shaped
+// block whose opener is `<parameter name="TOOL">` (not `<invoke name=…`), closed by `</invoke>`.
+const pseudoCall = (tool = "powershell", command = "echo hi") => ({
+  kind: "pi.assistant",
+  model: [
+    {
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: `Let me run it.\n\n<parameter name="${tool}">\n<parameter name="command" string="true">${command}</parameter>\n</invoke>\n`,
+        },
+      ],
+    },
+  ],
+});
 
 console.log("\n=== degeneration guard: assessRun ===\n");
 
@@ -83,6 +100,32 @@ check("malformed tool calls trip the malformed bound", () => {
   assert.ok(a.reasons.some((r) => r.startsWith("malformed=")), a.reasons.join(","));
 });
 
+check("a tool call emitted AS TEXT trips the pseudo-call bound", () => {
+  const entries = [user()];
+  entries.unshift(pseudoCall());
+  const a = assessRun(entries);
+  assert.equal(a.pseudoToolCalls, 1, "the run reports one pseudo tool call");
+  assert.equal(a.degenerate, true);
+  assert.ok(a.reasons.some((r) => r.startsWith("pseudo-tool-call=")), a.reasons.join(","));
+});
+
+check("a prose mention of the shape is not a pseudo tool call", () => {
+  const prose = assistant([], { text: 'The model may emit a <parameter name="edit"> block; that is the fault.' });
+  assert.equal(isPseudoToolCallTurn(prose), false);
+  assert.equal(countPseudoToolCalls([prose]), 0);
+  assert.equal(assessRun([prose, user()]).degenerate, false);
+});
+
+check("a real structured tool call is not a pseudo tool call", () => {
+  const real = assistant([["read", { path: "a" }]], { text: "Reading the file." });
+  assert.equal(isPseudoToolCallTurn(real), false);
+});
+
+check("the pseudo-call predicate requires BOTH the unclosed parameter pair and the stray close", () => {
+  const onlyOpen = assistant([], { text: '<parameter name="edit">\n<parameter name="path">a</parameter>' });
+  assert.equal(isPseudoToolCallTurn(onlyOpen), false, "no stray </invoke> means it is not this fault");
+});
+
 check("a context past the token bound is degenerate", () => {
   const entries = [assistant([["read", { path: "a" }]], { usage: { totalTokens: 999_999 } }), user()];
   const a = assessRun(entries);
@@ -107,7 +150,7 @@ check("only the CURRENT run is judged; an old degenerate run behind a wake is ig
 });
 
 check("defaults are conservative and complete", () => {
-  for (const key of ["maxToolTurns", "maxRepeats", "maxMalformed", "maxContextTokens", "repeatHorizon"]) {
+  for (const key of ["maxToolTurns", "maxRepeats", "maxMalformed", "maxPseudoToolCalls", "maxContextTokens", "repeatHorizon"]) {
     assert.ok(Number.isFinite(DEGEN_DEFAULTS[key]), `missing default ${key}`);
   }
 });
@@ -139,6 +182,18 @@ await checkAsync("applyResets writes the reset boundary for each plan", async ()
   assert.equal(resetCalls.length, 1);
   assert.equal(resetCalls[0].id, 7);
   assert.match(resetCalls[0].handoff, /degeneration guard reset/);
+});
+
+await checkAsync("applyResets names the malformed-tool-call fault so the model re-issues via the tool API", async () => {
+	const handoffs = [];
+	const harness = { conversation: async () => ({ reset: async (handoff) => handoffs.push(handoff) }) };
+	await applyResets(
+		harness,
+		[{ seat: "impl", conversationId: 9, reason: "degeneration", detail: "pseudo-tool-call=1>=1" }],
+		{},
+	);
+	assert.match(handoffs[0], /tool API/);
+	assert.match(handoffs[0], /pseudo-tool-call/);
 });
 
 await checkAsync("applyResets reports a failing seat and still resets the others", async () => {
