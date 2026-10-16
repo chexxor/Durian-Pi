@@ -1785,6 +1785,52 @@ subscriber. **Portability is a first-class requirement** (Windows, macOS, Linux 
 trigger file, the kill-tree primitive, and the stop signal are OS-specific; `src/host.mjs` is identical
 everywhere (`docs/BROKER-SUPERVISION.md` §2 portability boundary).
 
+## Safe writes while the broker owns the store (raised 2026-10-16, after the crash)
+
+Source: the 2026-10-16 incident — a concurrent `resume` against the live broker crashed it and corrupted
+two `pi.live` run-control documents, and the F12 guard's single-session read then wedged **every**
+write verb. Analysis and the command-path map: `docs/COMMANDS-AND-THE-BROKER.md`.
+**Why this precedes items 61–64:** the host daemon makes the broker *always* on, which multiplies the
+exposure of every second-owner write; safe writes are a precondition for a trustworthy always-on broker.
+Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** rides the daemon).
+**Item 68 is the live blocker** — qa and lead are stalled today.
+
+68. **Settle stranded submissions (liveness).** A finished run can leave its submission `placed` while
+    its task is already `terminal`; `resume` reports `run-cancelled` but does not settle it, and
+    `selectWakes` then skips the conversation forever (`admitted_not_started`). On broker start and in
+    `resume`, settle any `queued`/`placed` submission whose run task is terminal.
+    *Owner:* delegate (fixes the driver — same rationale as item 54/D65) · *Where:* `src/broker.mjs`,
+    `cli.mjs` `cmdResume`. *Acceptance:* a demo that forces terminal-task + placed-submission and shows
+    the seat is re-woken after start/`resume`.
+
+69. **Refuse or route writes while the broker drives.** `resume`/`doctor`, `reset`, `send`, and
+    `ps`/`queue` (which open a full harness just to read) must not become a second owner while a broker
+    is alive: refuse with a clear message naming the spool, or route through it; `ps`/`queue` read via
+    `openStore` like `status`. *Owner:* impl · *Where:* `cli.mjs`.
+    *Acceptance:* a demo asserting each verb with a live broker; no second-owner write path remains.
+
+70. **Read-boundary hardening.** One unreadable `pi.live` must not kill a command's whole pi-durable
+    session: the F12 guard and the broker open path tolerate an unreadable document (skip + report, as
+    `src/readapi.mjs` does), and startup reconciles the spool/leases/worktrees (folds item 66).
+    *Owner:* impl · *Where:* `cli.mjs` `openHarness`, `src/broker.mjs`.
+    *Acceptance:* a demo with a corrupt `pi.live` where `serve`/`run`/`send` still start and report it.
+
+71. **Command spool — writes as requests the broker applies (the mailbox).** Generalise the intent
+    inbox from "deliver a message" to "apply an operation": `send`, `reset`, `stop`, and queue edits
+    become request files with a `requestId` (idempotent re-drain) and a result channel, so the CLI/TUI/
+    daemon stay *clients* of the owner (pi-durable's multiplayer model) instead of opening a second
+    harness. *Owner:* devtools, delegate consulting · *Where:* `src/broker.mjs` + producers.
+    *Acceptance:* a demo running a mutating request end-to-end while the broker drives; a duplicate
+    `requestId` applies once.
+
+72. **Broker start provenance + lifecycle observability.** `START pid=<n> source=up|serve|daemon` (plus
+    version/pin), so a reader can tell how the broker was launched; folds into items 61–62.
+    *Owner:* impl · *Where:* `src/broker.mjs`, `cli.mjs` `cmdServe`/`cmdUp`.
+    *Acceptance:* the log names the origin for `up`-started and `serve`-started brokers.
+
+**Cross-links:** item **54** (wake-and-return) and item **65** (genlock) remain independent and should
+not wait; item **66** folds into **70**.
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for

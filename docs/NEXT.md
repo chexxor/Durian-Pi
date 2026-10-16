@@ -11,12 +11,19 @@ _Last refreshed: 2026-10-16 (delegate session, third pass — routed the daemon 
 
 ## NEXT SESSION — START HERE
 
-**Current item: the durig daemon host, routed to the team (option A).** The broker is **running**
-(`pid 22724`, `START` 2026-10-16T17:18:57Z) after the incident below. All four operator intents were
-delivered to `pm` (`INTENT delivered=4 dead=0`): agent-ownership 45–50, doc-site 59, zero-trust 60, and
-the **daemon intent** (ROADMAP 61–67). `pm` owns registration/sequencing; the order is **61 → 62 → 63 →
-64** (64 depends on 63), **65 independent**. Design of record: `docs/BROKER-SUPERVISION.md`; **D71** +
-**D72**. `pm` registered the rows (#723–#728) and the sequencing note (#730).
+**Current item: SAFE WRITES while the broker owns the store — ROADMAP items 68 → 69 → 70 → 71 (new
+section, raised after the crash), ahead of the daemon 61–64.** Root cause of the 2026-10-16 incident and
+the prerequisite for an always-on broker (the daemon multiplies second-owner exposure). Start with
+**item 68** (settle stranded submissions — the live blocker). Item 68 is a driver fix →
+**delegate-owned** (same rationale as 54/D65); then 69 (write guards), 70 (read-boundary hardening,
+folds ROADMAP 66 = queue **#728**), 71 (command spool). Registered queue anchor for the cluster:
+**#728**; the daemon cluster is **#723–#728** (+#730); the new items' own queue ids are **pending `pm`
+registration**. **Blocker:** qa **#30661** and lead **#30674** are stalled (`placed` over a terminal
+task) — item 68 clears them. **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`;
+restart a down broker with `.spike/delegate/dispatch-serve-noroot.ps1`. Design of record:
+`docs/BROKER-SUPERVISION.md` (D71/D72) and `docs/COMMANDS-AND-THE-BROKER.md` (command paths + mailbox).
+**DECISIONS entry owed** (safe writes precede the always-on daemon) — blocked by the dirty
+`docs/DECISIONS.md` (D73/D74, another item's work).
 
 **INCIDENT (2026-10-16, delegate) — a second writer crashed the broker and corrupted two run-control
 docs.** 🚨 Do **not** run `resume`/`doctor` (or any write verb) while the broker is running: they are
