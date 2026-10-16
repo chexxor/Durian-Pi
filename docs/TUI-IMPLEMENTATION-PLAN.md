@@ -16,6 +16,24 @@ re-verified against this tree (see its §"Repo-grounded verification and adjustm
 - "Where" is grounded in the tree at `697f376`; line numbers will drift, symbol names should not.
 - Native Windows only. No push/publish without the operator's grant.
 
+## Priority order (2026-10-16)
+
+Ranked by user value × readiness, grounded in the plan and the live non-terminal queue. Section
+letters name the item; the order is the recommendation, not a pm ruling.
+
+| # | Item | Why now | Status / queue |
+|---|---|---|---|
+| 1 | **B1 type-to-seat input** | The stated current item; the write substrate (D68) is ready and the screen model is settled (D69) | Unregistered → `pm`; must land with **H5** |
+| 2 | **B2 TUI close-out** | Already queued; the 48-col golden half now exists (H7), lifecycle cleanup remains | `#662` queued to impl |
+| 3 | **H4 cell-width (`src/textwidth.mjs`)** | The harness's provisional `cellWidth` is the seam; CJK/emoji layout is wrong without it | Not built |
+| 4 | **H3 DECSET 2026 sync output** | Small, isolated, kills frame tearing; Windows Terminal supports it | Not built |
+| 5 | **H6 resize / too-small** | A drag-resize or tiny pane can currently render stale/torn | Not built |
+| 6 | **H8 anchored scroll + "N new"** | Reading a live stream jumps when new turns arrive | Not built |
+| 7 | **H7 Tier 3/4 tests** | Tier 1/2 landed; interaction + optional PTY remain | Partly landed |
+| 8 | **§D rulings G1–G4** | Blocked on operator/lead, not on work | Open |
+
+**Done already:** H1 sanitise, H2 restore, H7 Tier 1/2 (commits `18b372a`, `aea7e74`).
+
 ---
 
 ## A. Landed (context)
@@ -33,14 +51,17 @@ re-verified against this tree (see its §"Repo-grounded verification and adjustm
 
 ## B. In flight
 
-### B1 — Type-to-seat input line (#624, delegate-owned)
+### B1 — Type-to-seat input line (delegate-owned; UNREGISTERED — candidate for pm)
 **Goal:** an input line that sends text straight to the selected seat via `writeIntent` (D68), so the
 TUI never opens the store.
-**Blocker:** none; the screen model is settled for `ui.mjs` by D69 pending operator/lead ratification.
+**Queue id:** none. An earlier draft cited `#624`, but that is the `init` meta-defaults item (now
+`done`); no non-terminal queue row names type-to-seat, so `pm` must register it (the delegate does not
+route queue items).
 **Prerequisite added by this plan (D70 §5):** **bracketed paste (DECSET 2004)** must land with the
 input line, not after it — see §C-H5. Raw-mode line editing without bracketed paste can execute a
 multi-line paste.
 **Where:** `ui.mjs` (mode + key wiring), `src/tui/driver.mjs` (edit keys), a new input module.
+**Screen model:** settled for `ui.mjs` by D69 pending operator/lead ratification.
 **Test:** `demo/tui-input.test.mjs` (failing-first): a typed line produces exactly one intent file; a
 `q` in the text is not a quit; a bracketed paste containing newlines is one line, not N submits.
 
