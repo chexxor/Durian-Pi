@@ -13,6 +13,7 @@
 import { extractEntryText } from "./rigstory.mjs";
 import { buildTurns, turnCollapse } from "./viewmodel.mjs";
 import { ANSI } from "./ansi.mjs";
+import { sanitizeTerminalText } from "./sanitize.mjs";
 
 // Re-exported so callers keep one import path for the view model; the
 // implementation lives in src/viewmodel.mjs (D21, ROADMAP item 7).
@@ -97,7 +98,7 @@ export function formatArgs(args, width = 48) {
 		else parts.push(`${key}=…`);
 	}
 	if (keys.length > 2) parts.push("…");
-	return truncate(parts.join(", "), width);
+	return sanitizeTerminalText(truncate(parts.join(", "), width));
 }
 
 // The whole call for --full: every key, nothing elided. Newlines inside a
@@ -107,13 +108,15 @@ export function formatArgs(args, width = 48) {
 export function formatArgsFull(args) {
 	if (!args || typeof args !== "object" || Array.isArray(args)) return "";
 	const keys = Object.keys(args).filter((k) => args[k] !== null && args[k] !== undefined);
-	return keys
-		.map((k) => {
-			const value = args[k];
-			const shown = typeof value === "string" ? value.replace(/\r?\n/g, "\\n") : JSON.stringify(value);
-			return `${k}=${shown}`;
-		})
-		.join(", ");
+	return sanitizeTerminalText(
+		keys
+			.map((k) => {
+				const value = args[k];
+				const shown = typeof value === "string" ? value.replace(/\r?\n/g, "\\n") : JSON.stringify(value);
+				return `${k}=${shown}`;
+			})
+			.join(", "),
+	);
 }
 
 // Runs of identical non-blank lines are one fact with a multiplier: a runaway
@@ -203,12 +206,13 @@ export function formatChat(entries, options = {}) {
 			// prose would attribute the reasoning as something the seat said. The
 			// collapse rule matches tool results - legible default, nothing lost
 			// under --full.
-			if (turn.redacted && !turn.text) {
+			const thinkingText = sanitizeTerminalText(turn.text);
+			if (turn.redacted && !thinkingText) {
 				lines.push(`${head}${paint("dim", "⋯")} ${paint("dim", "thinking (redacted by the provider)")}`);
 				continue;
 			}
-			const first = turn.text.split("\n")[0];
-			const { lines: rest } = turnCollapse(turn, { full });
+			const first = thinkingText.split("\n")[0];
+			const { lines: rest } = turnCollapse({ ...turn, text: thinkingText }, { full });
 			lines.push(`${head}${paint("dim", "⋯")} ${paint("dim", "thinking ›")} ${paint("dim", first)}`);
 			if (!full && rest.length) {
 				lines.push(paint("dim", `${gutter}⎿ (${rest.length} more line${rest.length === 1 ? "" : "s"} — --full to expand)`));
@@ -224,11 +228,11 @@ export function formatChat(entries, options = {}) {
 		if (turn.kind === "tools") {
 			const message = turn.result?.model?.[0];
 			const failed = message?.isError === true;
-			const name = turn.call?.name ?? message?.toolName ?? "tool";
+			const name = sanitizeTerminalText(turn.call?.name ?? message?.toolName ?? "tool");
 			const args = full ? formatArgsFull(turn.call?.args) : formatArgs(turn.call?.args);
 			const mark = failed ? paint("red", "✗") : paint("green", "✓");
 			const label = paint(failed ? "red" : "green", `${name}(${args})`);
-			const output = (extractEntryText(turn.result)?.text ?? "").replace(/\s+$/, "");
+			const output = sanitizeTerminalText(extractEntryText(turn.result)?.text ?? "").replace(/\s+$/, "");
 			// One line only, then the remainder is summarized below: flattening the
 			// whole result into the header would defeat the point of collapsing it.
 			const preview = output.split("\n")[0];
@@ -243,7 +247,7 @@ export function formatChat(entries, options = {}) {
 				lines.push(paint("dim", `${gutter}⎿ (${rest.length} more line${rest.length === 1 ? "" : "s"} — --full to expand)`));
 			} else if (full) {
 				for (const extra of collapseRuns(rest)) {
-					lines.push(tint(`${gutter}${paint("dim", "⎿ ")}${paint("dim", extra.text)}`));
+					lines.push(tint(`${gutter}${paint("dim", "⎿ ")}${paint("dim", sanitizeTerminalText(extra.text))}`));
 					if (extra.repeats > 1) lines.push(paint("dim", `${gutter}⎿ ${repeatMarker(extra.repeats)}`));
 				}
 			}
@@ -252,7 +256,7 @@ export function formatChat(entries, options = {}) {
 
 		const label = turn.kind === "operator" ? "you" : seat;
 		const tone = turn.kind === "operator" ? "cyan" : "magenta";
-		const text = turn.kind === "operator" ? extractEntryText(turn.entries[0])?.text ?? "" : turn.text;
+		const text = sanitizeTerminalText(turn.kind === "operator" ? extractEntryText(turn.entries[0])?.text ?? "" : turn.text);
 		const [first, ...rest] = String(text).replace(/\s+$/, "").split("\n");
 		lines.push(
 			`${head}${paint(tone, "▌")} ${paint(tone, label.padEnd(labelWidth))} ${paint("dim", "›")} ${first}`,
@@ -280,10 +284,10 @@ export function formatPartial(partial, { seat = "seat", color = false } = {}) {
 	if (!partial || !partial.hasContent) return "";
 	const paint = (tone, text) => (color && tone ? `${ANSI[tone] ?? ""}${text}${ANSI.reset}` : text);
 	const lines = [
-		`${paint("cyan", "◌")} ${paint("magenta", seat)} ${paint("dim", "streaming… (not yet committed)")}`,
+		`${paint("cyan", "◌")} ${paint("magenta", sanitizeTerminalText(seat))} ${paint("dim", "streaming… (not yet committed)")}`,
 	];
 	if (partial.thinking.trim()) {
-		const [first, ...rest] = partial.thinking.trim().split("\n");
+		const [first, ...rest] = sanitizeTerminalText(partial.thinking).trim().split("\n");
 		lines.push(paint("dim", `  ⋯ thinking › ${first}`));
 		// Thinking is a travelogue, not the answer, so it stays dim and indented and
 		// is never trimmed to a count: it is already bounded by the poll, not a turn.
@@ -294,8 +298,8 @@ export function formatPartial(partial, { seat = "seat", color = false } = {}) {
 		// not, and the operator must be able to tell that apart from silence.
 		lines.push(paint("dim", "  ⋯ thinking (redacted by the provider)"));
 	}
-	const body = String(partial.text ?? "").replace(/\s+$/, "");
+	const body = sanitizeTerminalText(partial.text ?? "").replace(/\s+$/, "");
 	if (body) for (const line of body.split("\n")) lines.push(`  ${line}`);
-	for (const tool of partial.tools) lines.push(`${paint("dim", "  ⚙ running:")} ${paint("yellow", tool.name)}`);
+	for (const tool of partial.tools) lines.push(`${paint("dim", "  ⚙ running:")} ${paint("yellow", sanitizeTerminalText(tool.name))}`);
 	return lines.join("\n");
 }

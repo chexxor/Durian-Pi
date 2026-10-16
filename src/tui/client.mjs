@@ -19,6 +19,7 @@
 import { pad, truncate } from "../watchview.mjs";
 import { formatDelta, formatArgs, themeToolRoles } from "../chatview.mjs";
 import { ANSI } from "../ansi.mjs";
+import { sanitizeTerminalText } from "../sanitize.mjs";
 
 function formatToolName(call) {
 	return call?.name ?? "tool";
@@ -83,10 +84,10 @@ function renderSeatList(seats, activityMap, width, selectedSeat = null, color = 
 	const lines = [];
 	for (const seat of seats) {
 		const act = activityMap?.[seat.name] ?? { glyph: "○", tone: "gray", state: "idle", focus: "" };
-		const name = truncate(seat.name, maxName - 1);
-		const role = truncate(seat.role ?? "", maxRole - 1);
+		const name = truncate(sanitizeTerminalText(seat.name), maxName - 1);
+		const role = truncate(sanitizeTerminalText(seat.role ?? ""), maxRole - 1);
 		const head = `${paint(act.tone, act.glyph, color)} ${pad(name, maxName)}${pad(role, maxRole)}`;
-		const focus = truncate(act.focus, width - activityCol);
+		const focus = truncate(sanitizeTerminalText(act.focus), width - activityCol);
 		// The selected row is marked with a cursor glyph in place of the leading
 		// space, so selection adds no width and every row keeps one 2-cell gutter.
 		const isSelected = selectedSeat !== null && seat.name === selectedSeat;
@@ -144,12 +145,12 @@ function transcriptTurnLines(turn, width, color) {
 	const lines = [];
 	switch (turn.kind) {
 		case "operator": {
-			const text = truncate(turn.text, width - 8);
+			const text = truncate(sanitizeTerminalText(turn.text), width - 8);
 			lines.push(`  ${paint("green", "▶", color)} ${paint("bold", text, color)}`);
 			break;
 		}
 		case "agent": {
-			const text = truncate(turn.text, width - 8);
+			const text = truncate(sanitizeTerminalText(turn.text), width - 8);
 			lines.push(`  ${paint("cyan", "◀", color)} ${text}`);
 			break;
 		}
@@ -157,20 +158,21 @@ function transcriptTurnLines(turn, width, color) {
 			// U5: transcript matches the log (chatview formatChat): labelled
 			// ("thinking ›"), and a redacted block reported as the fact it is —
 			// "redacted by the provider" — never as a vague "withheld".
-			const text = turn.redacted && !turn.text
+			const thinkingText = sanitizeTerminalText(turn.text);
+			const text = turn.redacted && !thinkingText
 				? "thinking (redacted by the provider)"
-				: turn.text
-					? truncate(`thinking › ${turn.text.split("\n")[0]}`, width - 8)
+				: thinkingText
+					? truncate(`thinking › ${thinkingText.split("\n")[0]}`, width - 8)
 					: "[thinking]";
 			lines.push(`  ${paint("yellow", "◇", color)} ${paint("dim", text, color)}`);
 			break;
 		}
 		case "tools":
 			if (turn.call) {
-				const callText = formatToolName(turn.call) + " " + formatArgs(turn.call.args || {}, width - 12);
+				const callText = sanitizeTerminalText(formatToolName(turn.call) + " " + formatArgs(turn.call.args || {}, width - 12));
 				lines.push(`  ${paint("magenta", "⚙", color)} ${callText}`);
 			} else if (turn.result) {
-				const resText = truncate(extractResultText(turn.result), width - 8);
+				const resText = truncate(sanitizeTerminalText(extractResultText(turn.result)), width - 8);
 				lines.push(`  ${paint("gray", "⚙", color)} ${resText}`);
 			}
 			break;
@@ -241,11 +243,12 @@ function renderPartial(partial, width, { roles = null, color = false, wrap = fal
 		const glyph = isError ? "✗" : callStatus === "done" ? "✓" : callStatus === "running" ? "↻" : "◧";
 		const tone = isError ? "red" : callStatus === "done" ? "green" : callStatus === "running" ? "cyan" : "yellow";
 		const tint = tintOf(callStatus, isError);
-		const argsText = formatArgs(call.args || {}, Math.max(12, width - 16));
-		const row = `  ${paint(tone, glyph, color)} ${call.name}${argsText ? ` ${paint("gray", argsText, color)}` : ""}`;
+		const argsText = sanitizeTerminalText(formatArgs(call.args || {}, Math.max(12, width - 16)));
+		const nameText = sanitizeTerminalText(call.name ?? "tool");
+		const row = `  ${paint(tone, glyph, color)} ${nameText}${argsText ? ` ${paint("gray", argsText, color)}` : ""}`;
 		lines.push(truncate(tint ? `${tint}${row}${ANSI.reset}` : row, width));
 		if (call.output) {
-			const first = String(call.output).split("\n")[0];
+			const first = sanitizeTerminalText(String(call.output).split("\n")[0]);
 			const outRow = `      ${paint("gray", first, color)}`;
 			lines.push(truncate(roles ? `${roles.toolOutput}${outRow}${ANSI.reset}` : outRow, width));
 		}
@@ -256,9 +259,10 @@ function renderPartial(partial, width, { roles = null, color = false, wrap = fal
 		// frame — the log does not hide it either. `wrap` is the conversation view:
 		// reasoning is prose and must stay readable across the viewport.
 		const label = `${paint("yellow", "◇", color)} ${paint("dim", "thinking ›", color)} `;
+		const thinkingText = sanitizeTerminalText(partial.thinking);
 		const body = wrap
-			? wrapText(partial.thinking, Math.max(4, width - 18))
-			: [truncate(partial.thinking.split("\n")[0], width - 18)];
+			? wrapText(thinkingText, Math.max(4, width - 18))
+			: [truncate(thinkingText.split("\n")[0], width - 18)];
 		body.forEach((line, i) => lines.push(i === 0 ? `  ${label}${line}` : `             ${line}`));
 	} else if (partial.thinkingRedacted) {
 		// U5: a redacted live block is reported with the exact phrase the log uses,
@@ -266,14 +270,15 @@ function renderPartial(partial, width, { roles = null, color = false, wrap = fal
 		lines.push(`  ${paint("yellow", "◇", color)} ${paint("dim", "thinking (redacted by the provider)", color)}`);
 	}
 	if (partial.text) {
+		const text = sanitizeTerminalText(partial.text);
 		const body = wrap
-			? wrapText(partial.text, Math.max(4, width - 8))
-			: [truncate(partial.text, width - 8)];
+			? wrapText(text, Math.max(4, width - 8))
+			: [truncate(text, width - 8)];
 		body.forEach((line, i) => lines.push(`  ${i === 0 ? paint("cyan", "●", color) : " "} ${line}`));
 	}
 	if (partial.tools?.length) {
 		for (const tool of partial.tools.slice(0, 2)) {
-			const line = `    ${paint("magenta", "⚙", color)} ${tool.name}${tool.callId ? ` (${tool.callId})` : ""}`;
+			const line = `    ${paint("magenta", "⚙", color)} ${sanitizeTerminalText(tool.name)}${tool.callId ? ` (${sanitizeTerminalText(tool.callId)})` : ""}`;
 			lines.push(truncate(line, width));
 		}
 	}
@@ -361,7 +366,11 @@ export function renderTui({
 	if (view === "conversation") {
 		const seatName = selectedSeat ?? health?.seats?.[0]?.name ?? null;
 		const seat = seats.find((s) => s.name === seatName);
-		lines.push(`  durig · ${seatName ?? "?"}${seat?.role ? ` · ${seat.role}` : ""} · conversation`);
+		// The header names the focused seat, so its length depends on the seat's role;
+		// truncate it like every other row rather than letting a long role overflow a
+		// narrow terminal (found by the 48-column golden buffer test). Keep the gutter
+		// outside the truncation so the indent matches the rules below.
+		lines.push(`  ${truncate(`durig · ${sanitizeTerminalText(seatName ?? "?")}${seat?.role ? ` · ${sanitizeTerminalText(seat.role)}` : ""} · conversation`, Math.max(0, width - 2))}`);
 		lines.push(rule);
 
 		// The FOCUSED seat's partial, not whichever seat streams first: a conversation
@@ -411,8 +420,8 @@ export function renderTui({
 
 	// Header
 	const seatLabel = seats?.length ? `${seats.length} seat${seats.length !== 1 ? "s" : ""}` : "no seats";
-	const header = `  durig · ${seatLabel} · TUI`;
-	lines.push(header);
+	const header = `durig · ${seatLabel} · TUI`;
+	lines.push(`  ${truncate(header, Math.max(0, width - 2))}`);
 	lines.push(rule);
 
 	// Seat list (uses ~40% of height for seats)

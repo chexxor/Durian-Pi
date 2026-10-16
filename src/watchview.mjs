@@ -5,6 +5,7 @@
 // docs/RESEARCH.md for the conventions borrowed from comparable systems).
 
 import { ANSI } from "./ansi.mjs";
+import { sanitizeTerminalText } from "./sanitize.mjs";
 
 // Collapse whitespace before truncating: model prose arrives with newlines and
 // indentation that would otherwise break the one-line-per-seat layout.
@@ -113,7 +114,7 @@ export function formatSnapshot({ db, health, highlights = {}, seq = 1, width = 1
 
 	for (const seat of seats) {
 		const activity = seatActivity(seat, health, highlights[seat.name]);
-		const role = truncate(seat.role ?? "", roleCol - 1);
+		const role = truncate(sanitizeTerminalText(seat.role ?? ""), roleCol - 1);
 		const head = `${paint(activity.tone, activity.glyph)} ${pad(seat.name, nameCol)}${pad(role, roleCol)}`;
 		lines.push(`${head}${truncate(activity.focus, width - focusAt)}`);
 		const says = highlights[seat.name]?.says;
@@ -122,10 +123,10 @@ export function formatSnapshot({ db, health, highlights = {}, seq = 1, width = 1
 		// withdrawn by the next poll (ROADMAP 40c).
 		const stream = health.streaming?.[seat.name];
 		if (stream) {
-			const live = stream.text || stream.thinking || stream.tools.map((t) => t.name).join(", ") || "…";
+			const live = sanitizeTerminalText(stream.text || stream.thinking || stream.tools.map((t) => t.name).join(", ") || "…");
 			lines.push(paint("cyan", `      ⟳ streaming: ${truncate(live, width - 20)}`));
 		}
-		const quote = says ? truncate(says, width - 14) : "(nothing said yet)";
+		const quote = says ? truncate(sanitizeTerminalText(says), width - 14) : "(nothing said yet)";
 		lines.push(paint("dim", `      ↳ ${quote}`));
 	}
 

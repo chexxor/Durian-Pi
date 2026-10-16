@@ -24,11 +24,8 @@ import { loadConfig } from "./src/config.mjs";
 import { readSeatList, readQueueItems, readLiveState, readRigHealth } from "./src/readapi.mjs";
 import { buildTurns, partialView } from "./src/viewmodel.mjs";
 import { createUiDriver, decodeKeys } from "./src/tui/driver.mjs";
+import { createTerminalScreen } from "./src/tui/restore.mjs";
 
-const ENTER_ALT = "\x1b[?1049h";
-const LEAVE_ALT = "\x1b[?1049l";
-const HIDE_CURSOR = "\x1b[?25l";
-const SHOW_CURSOR = "\x1b[?25h";
 const CLEAR = "\x1b[H\x1b[2J";
 
 const USAGE = `durig ui — the read-only TUI (polls the store ≤0.75s; renders seats, transcript, streaming, status)
@@ -114,28 +111,10 @@ async function makeReadState(storage, ui) {
 
 /* ───────── terminal ownership ───────── */
 
-let restored = false;
-let altBuffer = false;
-function enterScreen() {
-  if (!process.stdout.isTTY) return;
-  process.stdout.write(ENTER_ALT + HIDE_CURSOR + CLEAR);
-  altBuffer = true;
-}
-function restoreScreenOnce() {
-  if (restored) return;
-  restored = true;
-  if (altBuffer) {
-    process.stdout.write(SHOW_CURSOR + CLEAR + LEAVE_ALT);
-    altBuffer = false;
-  }
-  if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
-    try {
-      process.stdin.setRawMode(false);
-    } catch {
-      // stdin may already be closed on an abnormal exit; nothing further to restore.
-    }
-  }
-}
+// The screen object owns the alt buffer, cursor and raw mode (src/tui/restore.mjs).
+// It exists before anything below can throw so every abnormal-exit handler can
+// reach it, and its restore() is synchronous and idempotent.
+const screen = createTerminalScreen({ stdout: process.stdout, stdin: process.stdin });
 
 /* ───────── paint ───────── */
 
@@ -187,7 +166,7 @@ try {
   const readState = await makeReadState(storage, ui);
   process.stdin.setRawMode(true);
   process.stdin.resume();
-  enterScreen();
+  screen.enter();
 
   const driver = createUiDriver({
     getSize: () => ({ width: process.stdout.columns ?? 80, height: process.stdout.rows ?? 24 }),
@@ -239,7 +218,7 @@ try {
   function quit() {
     if (quitting) return;
     quitting = true;
-    restoreScreenOnce();
+    screen.restore();
     const bye = async () => {
       try {
         await driver.cleanup();
@@ -255,8 +234,23 @@ try {
     void bye();
   }
 
+  // One fatal path for every abnormal exit. The screen is restored FIRST so a
+  // throw can never leave raw mode or the alt screen behind; restore failures are
+  // reported after the cause, because the cause is what the operator needs to read.
+  function fatal(err) {
+    const { errors } = screen.restore();
+    process.stderr.write(`durig ui: ${err?.stack ?? err}\n`);
+    for (const e of errors) process.stderr.write(`terminal restore: ${e?.message ?? e}\n`);
+    process.exit(1);
+  }
+
   process.on("SIGINT", quit);
   process.on("SIGTERM", quit);
+  process.on("uncaughtException", fatal);
+  process.on("unhandledRejection", fatal);
+  // The last-resort path for a normal or signal exit that skipped quit(): exit
+  // handlers may only do synchronous work, which is exactly what restore() is.
+  process.on("exit", () => screen.restore());
   if (typeof process.stdout.on === "function") {
     process.stdout.on("resize", () => driver.tick());
   }
@@ -267,7 +261,7 @@ try {
   });
   driver.start();
 } catch (err) {
-  restoreScreenOnce();
+  screen.restore();
   process.stderr.write(`durig ui: ${err?.message ?? err}\n`);
   process.exit(1);
 }
