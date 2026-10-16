@@ -3,7 +3,34 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate, **fifth pass / clock-out** — fixed the recurring `impl` malformed-tool-call stall and registered the queue-view item. See **CLOCK-OUT** immediately below, then the older **LATEST** sections (historical).)_
+_Last refreshed: 2026-10-16 (delegate, **sixth pass** — D78 prose-degeneration guard landed and verified live; impl committed the seatguard work. See **SIXTH PASS** immediately below, then the **CLOCK-OUT** and older **LATEST** sections (historical).)_
+
+## SIXTH PASS — 2026-10-16 (delegate)
+
+- **impl committed the seatguard work the operator asked for: `8ae8fff`** (`src/seatguard.mjs` +
+  `demo/seatguard.test.mjs`, #673/#780) on explicit paths; the shared tree is now clean of them. The
+  inbox intent that asked for it was delivered while the broker ran (`INTENT delivered=1`), no second
+  writer.
+- **THE `cli.mjs` GATE STILL STANDS.** `cli.mjs` + untracked `demo/init.test.mjs` are still uncommitted
+  (#624's artifact); items 69/70/71/74/78 stay blocked until it lands.
+- **NEW, committed `97a3c6d` (D78): the degeneration guard now detects repetitive PROSE.** `impl`
+  looped live (entry `36368`: "Let me emit. Emit. OK. Go. Now." ~30× per turn) while STILL emitting
+  tool calls — so `tool-turns`/`repeats`/`malformed`/`pseudo-tool-call` and the `step-repetition` metric
+  all read clean and the run went unchecked. Added `textDegeneration`/`countDegenerateTextTurns`
+  (`src/attention.mjs`), `degenerate-text=N>=1` in `assessRun` (`src/degeneration.mjs`), and a named
+  reset handoff (`src/supervisor.mjs`). Live-verified on the impl page
+  (`assessRun(readSeatPages(impl))` → `degenerate-text=1>=1`; `planResets` → a plan for `impl`);
+  `demo/degeneration.test.mjs` RED before (symbols absent at HEAD).
+- **⚠️ OWED — restart the broker to load `97a3c6d`.** The running pid 16628 still has the pre-fix code
+  and will NOT reset a prose-degenerate seat. Stop it first (`serve --stop`; proceed only on
+  `stopped:true` and confirm no `cli.mjs serve` remains), then `scripts/serve-noroot.ps1`. Do NOT
+  restart while `pm`/`advocate` are generating.
+- **Open sqlite lock (transient, by design):** any opener can hit "database is locked" because EVERY
+  open runs schema-migration DDL (`BEGIN IMMEDIATE`) and the resident broker holds the single write
+  lock; the adapter's busy_timeout is 5000 ms, so a retry succeeds. Aggravated by stale
+  `log --follow` viewers holding connections. It clears when the broker is stopped (and viewers reaped);
+  the durable fix (skip migrations for read-only opens) is a code item for the team.
+- **Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
