@@ -1456,3 +1456,94 @@ not flatten the two.
 `demo/singleflight.test.mjs` (N generation slots, D12); `src/broker.mjs`/`src/storewrite.mjs` +
 `demo/autostart.test.mjs` (one broker per DB, second `serve`/`run` refused) and
 `demo/storewrite.test.mjs` (send-path store-write retry, #310/D42).
+
+
+## D54 — HELD: a non-claimable queue state with one explicit release transition (2026-10-15)
+
+**Decision:** a held queue state — non-claimable (the claim/wake predicates are whitelist-by-status, so a held item is never claimed and never woken for), entered by hold_work, left by exactly ONE explicit sender transition (
+elease_work → queued); no auto-release. A stale claimed item that cannot proceed is parked so the driver does not re-wake it, but nothing silently re-queues it.
+**Why:** registered-but-not-ready work previously had to masquerade as claimable (a queue row that was claimed but could not progress), which the driver then re-woke repeatedly. held gives a parked item a real, non-terminal, unclaimable state (#86).
+**Status:** adopted (recovered with the lost-tranche work, #309/D48). **Evidence:** the held/
+elease_work tools and holderOf/status whitelists in src/rig.mjs; the held-not-claimable-by-id guard is D41.
+
+## D55 — Coordinator read gap: option B — thin-context return keyed by read capability, not role (2026-10-15)
+
+**Decision:** an over-threshold claim result travels per the seat's READ capability, not by role: a seat with NO read tool (pm/lead) gets the full body INLINE (inlineBody: true), because it cannot open a path; a read-capable seat gets the structured head + a path to cwd/.durig/<itemId>.md and reads the body back itself. Over the threshold the return is a DELIBERATE STRUCTURED SELECTION (id + path + the from/to/subject/status head), not a mid-body byte cut. F9 removals are untouched (a coordinator without read tools is not given read tools here).
+**Why:** a path a coordinator cannot open is worse than a body — found live on #100, where pm deferred rather than guess; the capability-keyed fallback reconciles the thin-context borrow with #124 (lead #144 option B).
+**Status:** adopted. **Evidence:** src/rig.mjs 	hinResultText + the claim_work caller passing { inlineBody: !hasReadTool }; demo/thincontext.test.mjs (over-threshold returns the path for a read-capable seat; small claims stay inline; I ran it, exit 0).
+
+## D56 — Git state-mutation block at the guard layer (2026-10-15) — with a code flag
+
+**Decision (as scoped):** state-mutating git is blocked at the GUARD layer (src/seatguard.mjs beforeTool, the same layer as the push refusal) for all seats; READ-ONLY git (status/log/diff/show/rev-parse) stays allowed, because a seat reverting committed code would silently diverge its worktree.
+**CODE FLAG (contradiction — recorded rather than asserted blindly):** the decision as supplied listed commit and merge/
+ebase among the blocked verbs. The CURRENT code does NOT block those: git commit is ALLOWED by design (D50 moved commit authority to the developer; demo/confine.test.mjs asserts "git commit is allowed"), and merge/
+ebase are not in the deny list. What IS actually blocked (verified in src/confine.mjs DENIED_COMMANDS, and by demo/confine.test.mjs/demo/seatguard.test.mjs, both exit 0): 
+eset, checkout, 
+estore, 
+evert, clean, stash, ranch -D, unscoped dd -A/dd ., and push (push exempt only with the operator's DURIG_ALLOW_PUSH=1), plus the -C <path> forms. If merge/
+ebase (and reverting commit) are intended to be blocked, that is a NEW change to request — it is not current behaviour.
+**Status:** adopted for the code-true core (destructive git + push blocked, read-only allowed); the commit/merge/rebase clauses flagged as not code-true and NOT recorded as current behaviour.
+
+## D57 — U7 poll-first: the interactive client stays poll-based; Level 2 resident server deferred (2026-10-15)
+
+**Decision:** the interactive client's update path remains POLL-based; Level 2 (a resident server/push path) stays DEFERRED. A <=0.75 s poll meets "immediately" for TURN-based content (a turn is a coarse, slow event; pushing cannot meaningfully beat polling for it). Re-open Level 2 only on a DEMONSTRATED flow-breaking lag in actual use.
+**Why:** smallest unblock — push adds a socket/trust surface and a resident server for events that arrive at turn granularity, where poll already lands in time.
+**Status:** adopted (deferred Level 2). **Evidence:** the 750 ms poll loop in cli.mjs cmdWatch (setTimeout(r, 750)); demo/watch.test.mjs.
+
+## D58 — Failure recovery vs diagnosis are TWO concerns: escalation in the supervisor, malformed-tool-call as one cause-class (2026-10-15)
+
+**Decision:** escalation lives in the SUPERVISOR (src/supervisor.mjs planEscalations/pplyEscalations), not the driver, surfaced as a 
+epeated_failure notice; malformed_tool_call is ONE class defined by CAUSE (harness call-arg validation/parse), surfaced via the metrics count + a bounded notice, preferring a structured error kind. A diagnosis signal ADDS a signal only and never blocks the call.
+**Why:** recovery (re-drive a stranded/held item) and diagnosis (why it keeps failing) have different owners and cadence; conflating them had a single mechanism trying to do both (#145).
+**Status:** adopted (the supervisor escalation pass is code-true: ttention.mjs emits kind: "repeated_failure"/last_run_failed, the supervisor plans and applies them). **Evidence:** src/supervisor.mjs, src/attention.mjs, demo/supervisor.test.mjs, demo/malformedcall.test.mjs.
+
+## D59 — P6 quint model as a DECISION entry: formal assurance over the liveness invariant (2026-10-15)
+
+**Decision:** P6 (quint model) is a DECISION entry — formal assurance over the already-found liveness invariant: "no non-terminal item is permanently unwoken". One property, stated and (once modelled) checked, POST-#118 (i.e. after the thin-context/claim contract that #118 half-2 established).
+**Why:** the invariant is the property all the driver/broker wake rules protect; a formal model makes the assurance explicit and checkable rather than asserted in prose.
+**Status:** recorded (decision to pursue the formal model; the invariant is ROADMAP item 42 / P6). Not yet implemented.
+
+## D60 — Worktree automation: creation is a backlog item, cleanup stays manual (2026-10-15)
+
+**Decision:** per-task WORKTREE CREATION is a backlog item — a --worktree <path|auto> flag with a deterministic path, which must NOT create an F12 cwd/DURIG_SEAT_ROOT mismatch window. WORKTREE CLEANUP stays MANUAL.
+**Why:** safety — automated removal collides with the F8 junction hazard, MAX_PATH, and uncommitted work in the worktree; manual cleanup is where the operator can see what is being removed (#175, against D48/D49).
+**Status:** decision recorded (creation flagged as backlog; cleanup remains manual). Partial automation to date is the #473 broker wake-path worktree (on-claim create / on-complete remove in src/broker.mjs); the standing --worktree CLI backlog item is separate and unchanged.
+
+## D61 — TUI screen model: a scrollback/pipes-preserving screen; Level 2 resident server deferred (2026-10-15)
+
+**Decision:** the interactive client's screen model is a MAIN SCREEN that preserves scrollback and pipes — it does NOT own an alternate screen (that loses scrollback and pipes, and is the worst-supported combination with tmux, consistent with D21/D22; no multiplexer). Level 2 (a resident server shared by >1 viewer / remote access / 38b) is DEFERRED.
+**Why:** the client must not regress the piped/JSON contract or break a terminal multiplexer; the deferred Level 2 is gated on felt sub-poll latency, a second viewer, or a remote-access need that does not exist yet.
+**Status:** decision recorded. C3 (src/tui/client.mjs — a headless 
+enderTui/Frame, no storage/harness/driver import, proven by demo/tui-client.test.mjs, exit 0) is built; the U1 driver/or raw-mode screen (#480) is not built yet. Not pushed.
+
+## D62 — Doc-acceptance policy: every new capability carries its own doc acceptance (2026-10-15)
+
+**Decision:** every new/changed capability carries DOC ACCEPTANCE in its own item — the docs/FEATURES.md row, verified by the item's partner-check (qa) — rather than a separate doc chore after the fact. Design/research reports ARE their own docs; decisions go to docs/DECISIONS.md with their WHY.
+**Why:** a capability that ships without its provable doc entry is a silent gap; making acceptance part of the item closes it where the work is verified, and matches the scribe's project-level truth role (docs-ownership norm, SELFDEV/WORKFLOWS).
+**Status:** adopted (this session's doc-gate items #390/#398/#401/#468–#471/#508/#540 follow it). Files: docs/SELFDEV.md, docs/WORKFLOWS.md, docs/FEATURES.md.
+
+## D63 — Broker lifecycle is an append-only audit log (2026-10-16)
+
+**Decision:** `<db>.broker.log` records `START pid=<pid>` when the wake loop begins, and
+`EXIT pid=<pid> reason=stop|signal|max-duration|max-passes passes=<n>` before it returns.
+**Why:** `stoppedBy` reached stdout only, so once the process was gone the log could not answer "why
+did the broker stop?" — a `serve --stop` was indistinguishable from a crash or a bound. A `START` with
+no matching `EXIT` now means an abnormal death (a kill or a throw), because the EXIT line is written
+synchronously before the loop returns.
+**Status:** adopted; commit `484a571`; proof `demo/broker-log.test.mjs` (RED then GREEN) and
+`demo/broker-cooperative-stop.test.mjs` (asserts `reason=stop`).
+
+## D64 — Degeneration guard: the broker auto-resets a seat whose run outgrows its bounds (2026-10-16)
+
+**Decision:** the broker's supervise pass assesses each seat's CURRENT run (entries above the last
+`pi.user` wake) and, when it outgrows a conservative, operator-tunable bound (tool-turns / context
+tokens / step-repetition / malformed tool calls), writes the EXISTING reset boundary via
+`conversation.reset`; the next wake re-anchors the seat from its durable instructions.
+**Why:** durig MEASURED `step-repetition` and `malformed-tool-call` but nothing ACTED on them, so a seat
+could loop for hours (F29; seen live when `impl` degraded to word salad and wrote junk files).
+Idempotent (a page already ending in `pi.reset` is skipped); judged per RUN, so an old degenerate run
+behind a wake does not reset forever; bounded, not destructive (the transcript is durable). It resets
+BETWEEN runs — a mid-run cut is a recorded residual gap, not part of this decision.
+**Status:** adopted; commit `ae96445`; pure detector `src/degeneration.mjs`
+(`demo/degeneration.test.mjs`), action `planResets`/`applyResets` in `src/supervisor.mjs`, wired in
+`cli.mjs` `superviseOnce`.
