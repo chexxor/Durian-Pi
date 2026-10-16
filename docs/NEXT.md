@@ -11,21 +11,24 @@ _Last refreshed: 2026-10-16 (delegate session, third pass — routed the daemon 
 
 ## NEXT SESSION — START HERE
 
-**Current item: SAFE WRITES while the broker owns the store — ROADMAP items 68 → 69 → 70 → 71, ahead
-of the daemon 61–64.** **Item 68 DONE (delegate, commit `037213f`):** `src/broker.mjs`
-`reconcileStrandedSubmissions` + a `drivePass` call that settles a `placed` submission whose
-conversation has no live task, *before* the pending set is built so the blocked seat is woken in the same
-pass; `demo/broker-strand.test.mjs` (passes; RED evidenced — the symbol is absent at HEAD). **Verified in
-the running broker:** after a restart the log shows `STRANDED settled=2` then `WAKE qa`, `WAKE lead`, and
-both are generating again. Broker now **pid 19028** (`START 2026-10-16T18:07:34Z`). **Next:** item 69
-(write guards) then 70 (read-boundary hardening, folds ROADMAP 66 = queue anchor **#728**) then 71
-(command spool); the daemon cluster is **#723–#728** (+#730). **⛔ Blocker for 69–71:** each must edit
-`cli.mjs`, which is dirty with another item's uncommitted work (`cmdInit`, #491 C9/C10 — 127 lines plus
-untracked `demo/init.test.mjs`); a clean item-scoped commit is impossible until that is committed or
-resolved. **Owed:** wire `reconcileStrandedSubmissions` into `cli.mjs cmdResume` (same blocker), and a
-DECISIONS entry. **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; restart a down
-broker with `.spike/delegate/dispatch-serve-noroot.ps1`. Design of record:
-`docs/BROKER-SUPERVISION.md` (D71/D72) and `docs/COMMANDS-AND-THE-BROKER.md` (command paths + mailbox).
+**Current item: the safe-writes cluster (ROADMAP 68 → 69 → 70 → 71) ahead of the daemon 61–64; two
+clean-path items are DONE.**
+- **Item 68 DONE (`037213f`):** `reconcileStrandedSubmissions` settles a `placed` submission with no live
+task before the pending set is built, so the blocked seat re-wakes. Verified live: `STRANDED settled=2`
+→ `WAKE qa`, `WAKE lead`. `demo/broker-strand.test.mjs` (RED: symbol absent at HEAD).
+- **Item 54 DONE (`58cbac2`):** `drivePass` takes `waitForWakes`; `runWakeLoop` passes `false` and drains
+once on loop exit (F11). Fixes the loop park that made `serve --stop` hang. `demo/broker-wake-return.test.mjs`
+(RED: HEAD takes 4014ms; GREEN ~0.2s).
+- **Next:** item 66 (startup reconciliation, clean path `src/broker.mjs`), then item 65 (genlock `#745`).
+**⛔ Items 69–71 blocked:** each must edit `cli.mjs`, dirty with another item's work (`cmdInit`, #491
+C9/C10 — 127 lines + untracked `demo/init.test.mjs`).
+**Pending apply — needs a broker stop + `up --refresh`:** the impl model change (`9760da6`,
+deepseek-ai/DeepSeek-V4.1-Flash) and the `P3 Language` constitution rule (`a0ab993`), plus the impl
+reset. The running broker (`pid 19028`) still uses the old code/model until restarted.
+**Owed:** wire `reconcileStrandedSubmissions` into `cli.mjs cmdResume` (same blocker); a DECISIONS entry.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; restart a down broker with
+`.spike/delegate/dispatch-serve-noroot.ps1`. Design of record: `docs/BROKER-SUPERVISION.md` (D71/D72),
+`docs/COMMANDS-AND-THE-BROKER.md` (command paths + mailbox).
 
 **INCIDENT (2026-10-16, delegate) — a second writer crashed the broker and corrupted two run-control
 docs.** 🚨 Do **not** run `resume`/`doctor` (or any write verb) while the broker is running: they are
