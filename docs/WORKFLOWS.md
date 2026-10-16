@@ -184,6 +184,21 @@ which.
 whole *workflow* (as opposed to one item), which is item 12, and any attempt/deadline
 semantics, which is item 6.
 
+**Surface decision (required at decomposition, mirrors D62's doc-acceptance):** every
+capability an item builds or changes states which surface(s) expose it - `cli`
+(verb/flag), `tui` (view/action), or `both` - with one line of why; pm does not
+decompose an item whose surface decision is absent. The requirement is that the choice is
+STATED and justified, NOT that both surfaces exist (forced parity is wrong). The decision
+rule:
+
+- state change -> `cli` mandatory (D21: cli.mjs is the operator/LLM surface), `tui` optional
+- observation the operator acts on -> `both` (CLI for scripts/grep, TUI for the live cockpit)
+- purely interactive affordance (scroll, selection, key nav) -> `tui`-only
+- batch/contract/JSON -> `cli`-only
+
+The vocabulary is the FEATURES.md `Surface` column (cli/tui/both). This is the decision
+that keeps a feature from being ACCIDENTALLY missing from one surface.
+
 **Evidence:** `docs/DOGFOOD.md` (the first dogfood session routed a real backlog item
 `pm` to `worker` through the queue), `docs/QUICKSTART.md` Steps 4-6 (the same loop as a
 walkthrough), team norms' "every new request becomes a queue item registered by the PM".
@@ -377,3 +392,27 @@ prevent stale docs, which is a W5 concern (operator trust in the surface).
 
 **Capability:** `read` + `edit` tools (for `impl`, `devtools`, `scribe`), send edges for
 delegation, `peek_queue` for tracking doc items to completion.
+## Decision rights (compact, decision-class keyed - NOT a task grid)
+
+A full RACI/DACI/RAPID/MOCHA grid is REJECTED as redundant (D74) - redundant against this
+document's role table, docs-ownership norm and capability matrix, and the queue's single
+claimer, whose single-Accountable-per-task assumption this team's artifact-keyed ownership
+contradicts. What durig keeps is the DECISION-AUTHORITY layer those frameworks exist to
+supply, recorded at decision-class granularity with the enforcement named so it cannot go
+stale unnoticed. Keyed to decision/artifact CLASS, never per task:
+
+| Decision class | Owner | Consulted | Enforced by | Escalates to |
+|---|---|---|---|---|
+| Surface decision (cli/tui/both) | `designer` | `advocate`, `scribe` | W4 decomposition gate (pm does not decompose without it); FEATURES.md `Surface` column (D73) | `lead` |
+| Decomposition + priority | `pm` | `lead` | the queue itself (every request = tracked item; single claimer) | `lead` |
+| Scope ruling | `lead` | `pm` | the decision record (DECISIONS.md carries the WHY); safety wins explicitly | operator |
+| Docs truth | `scribe` | `owning seat` | D62 doc-acceptance (FEATURES row verified by partner-check) | `pm` |
+| Workflow fit | `advocate` | `designer`, (raising) lead/operator | partner-check on adoption; WORKFLOWS.md ownership | `lead` |
+| Verification verdict | `qa` (peer: `auditor`) | author seat | different-model-family `check` rule; W2 re-execute-evidence (item 48) | `lead` |
+
+This is the research review's smallest form (four columns, not R/A/C/I lettering -
+docs/reviews/Agent_Ownership_Review.md Part 5). Honesty note (D74): the enforced-by column
+names what does the real work TODAY (queue mechanics, the edge gate, D62's partner-check,
+the model-family rule) and what is named-but-not-yet-built (the surface-decision and
+artifact-ownership check rules are ROADMAP item 46, registered, not scheduled); until then
+this table is a ledger for machine-checkable claims, not a substitute for them.
