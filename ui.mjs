@@ -24,7 +24,9 @@ import { loadConfig } from "./src/config.mjs";
 import { readSeatList, readQueueItems, readLiveState, readRigHealth } from "./src/readapi.mjs";
 import { buildTurns, partialView } from "./src/viewmodel.mjs";
 import { createUiDriver, decodeKeys } from "./src/tui/driver.mjs";
-import { createTerminalScreen } from "./src/tui/restore.mjs";
+import { createTerminalScreen, PASTE_OFF } from "./src/tui/restore.mjs";
+import { createInputLine } from "./src/tui/input.mjs";
+import { writeIntent } from "./src/broker.mjs";
 import { composeFrame } from "./src/tui/paint.mjs";
 import { createSyncState, SYNC_QUERY } from "./src/tui/sync.mjs";
 
@@ -88,6 +90,7 @@ async function makeReadState(storage, ui) {
     }
     ui.selectedIndex = Math.max(0, Math.min(ui.seatCount - 1, ui.selectedIndex));
     const focusSeat = health.seats[ui.selectedIndex]?.name ?? health.seats[0]?.name;
+    ui.focusSeat = ui.seatCount > 0 ? focusSeat : null;
     let turns = [];
     if (liveBySeat[focusSeat]?.conversationId !== undefined && health._pages?.[focusSeat]) {
       turns = buildTurns(health._pages[focusSeat]);
@@ -105,6 +108,7 @@ async function makeReadState(storage, ui) {
       selectedSeat: ui.seatCount > 0 ? focusSeat : null,
       view: ui.mode,
       scroll: ui.scroll,
+      inputText: ui.mode === "input" ? input.value : null,
     };
   };
 }
@@ -119,6 +123,12 @@ const screen = createTerminalScreen({ stdout: process.stdout, stdin: process.std
 // Synchronized output (DECSET 2026): default on for a TTY, turned off by the
 // DECRQM reply or DURIG_TUI_NO_SYNC=1. Created here so paintScreen can reach it.
 const sync = createSyncState({ isTTY: process.stdout.isTTY, env: process.env });
+
+// The type-to-seat input line (B1). While input mode is active the entrypoint routes
+// raw bytes to `input` instead of the key decoder, so a typed `q` is text, not a quit.
+// `writeIntent` (D68) is the write substrate: the TUI never opens the store.
+const input = createInputLine();
+const PASTE_ON = "\x1b[?2004h"; // bracketed paste on; restore.mjs turns it off on exit
 
 /* ───────── paint ───────── */
 
@@ -203,6 +213,10 @@ try {
       ui.scroll = 0;
       void driver.tick();
     },
+    onInput: () => {
+      // `i` opens the type-to-seat input line; the entrypoint owns the mode.
+      enterInput();
+    },
     onNavigate: (delta) => {
       if (ui.mode === "conversation") {
         // ↑ (−1) reveals older turns; ↓ (+1) returns toward the live tail.
@@ -217,6 +231,36 @@ try {
       quit();
     },
   });
+
+  function enterInput() {
+    if (ui.seatCount === 0) return; // no seat to address
+    ui.mode = "input";
+    input.clear();
+    if (process.stdout.isTTY) process.stdout.write(PASTE_ON);
+    void driver.tick();
+  }
+
+  function exitInput() {
+    ui.mode = "seats";
+    input.clear();
+    if (process.stdout.isTTY) process.stdout.write(PASTE_OFF);
+    void driver.tick();
+  }
+
+  function submitInput() {
+    const text = input.value.trim();
+    const to = ui.focusSeat;
+    if (text && to) {
+      // The intent inbox is the write substrate (D68): the TUI opens no store, and
+      // the broker delivers the text as a real operator input to the seat.
+      try {
+        writeIntent(DB_PATH, { to, from: "operator", content: text, createdAt: new Date().toISOString() });
+      } catch (err) {
+        process.stderr.write(`durig ui: cannot spool intent: ${err?.message ?? err}\n`);
+      }
+    }
+    exitInput();
+  }
 
   let quitting = false;
   function quit() {
@@ -259,7 +303,17 @@ try {
     process.stdout.on("resize", () => driver.tick());
   }
   process.stdin.on("data", (chunk) => {
-    for (const key of decodeKeys(sync.consume(chunk))) {
+    const clean = sync.consume(chunk);
+    // In input mode every byte is text for the line, not a key: this is what keeps a
+    // typed `q` from quitting and a pasted newline from submitting.
+    if (ui.mode === "input") {
+      const events = input.feed(clean);
+      if (events.submitted) submitInput();
+      else if (events.cancelled) exitInput();
+      else void driver.tick();
+      return;
+    }
+    for (const key of decodeKeys(clean)) {
       if (driver.handleKey(key)) return; // quit requested
     }
   });

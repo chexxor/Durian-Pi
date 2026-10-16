@@ -51,7 +51,7 @@ const ERR_FRAME_MAX = 120;
  * @param {number} [io.pollMs] — poll interval (default 700).
  * @param {boolean} [io.color] — pass-through to renderTui (NO_COLOR respected by caller).
  */
-export function createUiDriver({ getSize, readState, paint, onExit = () => {}, onNavigate = () => {}, onEnter = () => {}, onTail = () => {}, onBack = null, pollMs = DEFAULT_POLL_MS, color = false }) {
+export function createUiDriver({ getSize, readState, paint, onExit = () => {}, onNavigate = () => {}, onEnter = () => {}, onTail = () => {}, onBack = null, onInput = () => {}, pollMs = DEFAULT_POLL_MS, color = false }) {
 	let timer = null;
 	let running = false; // a tick is in flight
 	let stopped = false; // cleanup happened
@@ -146,6 +146,10 @@ export function createUiDriver({ getSize, readState, paint, onExit = () => {}, o
 			onTail();
 			return true;
 		}
+		if (key === "input") {
+			onInput();
+			return true;
+		}
 		return false; // read-only TUI: unknown keys are consumed silently
 	}
 
@@ -199,6 +203,7 @@ export function decodeKeys(chunk) {
 		else if (ch === "j") keys.push("down");
 		else if (ch === "k") keys.push("up");
 		else if (ch === "G") keys.push("tail");
+		else if (ch === "i") keys.push("input");
 		else if (ch === "\r" || ch === "\n") keys.push("enter");
 	}
 	return keys;

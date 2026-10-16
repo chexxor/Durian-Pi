@@ -15,6 +15,9 @@ export const LEAVE_ALT = "\x1b[?1049l";
 export const HIDE_CURSOR = "\x1b[?25l";
 export const SHOW_CURSOR = "\x1b[?25h";
 export const CLEAR = "\x1b[H\x1b[2J";
+// Bracketed paste is enabled for the input line; it must be off on exit or the
+// operator's shell keeps framing pastes.
+export const PASTE_OFF = "\x1b[?2004l";
 
 /**
  * Own the terminal's alt screen, cursor and raw mode.
@@ -45,9 +48,10 @@ export function createTerminalScreen({ stdout, stdin } = {}) {
 		restored = true;
 		if (altActive && typeof stdout?.write === "function") {
 			try {
-				// Cursor before alt-leave: the reset writes to the screen we are about
-				// to leave, and the shell prompt must not inherit a hidden cursor.
-				stdout.write(SHOW_CURSOR + CLEAR + LEAVE_ALT);
+				// Leave paste mode first (a paste still in flight must not be framed for a
+				// process that is exiting), then show the cursor before leaving the alt
+				// screen so the shell prompt does not inherit a hidden cursor.
+				stdout.write(PASTE_OFF + SHOW_CURSOR + CLEAR + LEAVE_ALT);
 			} catch (err) {
 				errors.push(err);
 			}

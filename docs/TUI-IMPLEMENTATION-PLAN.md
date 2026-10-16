@@ -64,6 +64,10 @@ multi-line paste.
 **Screen model:** settled for `ui.mjs` by D69 pending operator/lead ratification.
 **Test:** `demo/tui-input.test.mjs` (failing-first): a typed line produces exactly one intent file; a
 `q` in the text is not a quit; a bracketed paste containing newlines is one line, not N submits.
+**Status:** LANDED (2026-10-16) — `src/tui/input.mjs` (pure line + paste state machine) with
+`demo/tui-input.test.mjs`; `ui.mjs` adds an `input` mode (`i` opens it, Enter sends via `writeIntent`,
+Esc cancels), renders the input row + hint, and the entrypoint routes raw bytes to the editor while in
+that mode. `npm run test:tui` 14/14.
 
 ### B2 — TUI close-out (#662)
 **Goal:** 48-column golden frame + terminal lifecycle cleanup.
@@ -195,6 +199,9 @@ echoed.
 a payload containing a forged `\x1b[201~` does not terminate early; 2004 is enabled with the input
 line and disabled on exit.
 **Acceptance:** pastes are inert data; no paste-triggered submit.
+**Status:** LANDED with B1 — DECSET 2004 is enabled while input mode is active, `src/tui/restore.mjs`
+turns it off on every exit path, and `src/tui/input.mjs` strips the markers and control bytes from the
+payload; `demo/tui-input.test.mjs` covers the split marker and an OSC in a payload.
 **Ruling needed:** none; **it lands with B1** (this is the D70 condition).
 
 ### H6 — Resize and unknown/too-small size

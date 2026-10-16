@@ -323,9 +323,11 @@ function renderStatusBar(health, seats, queueItems, width, color = false) {
  */
 function renderFooter(width, color = false, view = "seats") {
 	const hint =
-		view === "conversation"
-			? " Esc=back  ↑↓=scroll  G=tail  q=quit "
-			: " q=quit  r=refresh  ↑↓/jk=seat  Enter=open ";
+		view === "input"
+			? " Enter=send  Esc=cancel "
+			: view === "conversation"
+				? " Esc=back  ↑↓=scroll  G=tail  q=quit "
+				: " q=quit  r=refresh  ↑↓/jk=seat  Enter=open  i=input ";
 	const truncated = truncate(hint, width - 4);
 	const gutter = "└" + "─".repeat(Math.max(0, width - 2 - truncated.length));
 	return { lines: [paint("gray", gutter + truncated, color)], height: 1 };
@@ -362,6 +364,7 @@ export function renderTui({
 	selectedSeat = null,
 	view = "seats",
 	scroll = 0,
+	inputText = null,
 } = {}) {
 	const lines = [];
 	const w = width;
@@ -491,7 +494,12 @@ export function renderTui({
 	lines.push(rule);
 
 	// Footer
-	const { lines: footerLines } = renderFooter(width, color);
+	// The input row sits with the footer: typing targets the selected seat, so it is
+	// part of the seat-list view, not a separate screen.
+	if (inputText !== null) {
+		lines.push(`  ${paint("bold", "┃", color)} ${truncate(inputText, Math.max(0, width - 6))}▏`);
+	}
+	const { lines: footerLines } = renderFooter(width, color, inputText !== null ? "input" : "seats");
 	lines.push(...footerLines);
 
 	const frame = new Frame(lines);
