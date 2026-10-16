@@ -492,6 +492,24 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     *Acceptance:* opening a seat's detail view renders that seat's prior turns from the durable transcript
     (paged, never only the live tail), then follows new entries live; a golden/demo proves the backfill is
     present, shown FAILING against the current stream-only behaviour before it passes.
+90. **App-level syntax formatter (`format` verb) for seats and pre-commit use.** An explicit command a
+    seat can run over the files it changed — after edits, before `git add`/commit — so style is
+    consistent and whitespace/EOL churn stops leaking into diffs. **Value:** the tree is genuinely mixed
+    (`cli.mjs`, `src/broker.mjs`, `src/scheduler.mjs`, `src/checkup.mjs`, `src/driver.mjs` are
+    2-space-indented; most of `src/*` is tab-indented) and EOL drift is a live width (F32: an LF
+    `oldText` never matches a CRLF `rig.mjs`; #328 CRLF/LF). A fixed format makes agent edits
+    deterministic and diffs reviewable. **Cost:** the repo has **zero devDependencies** and "no build, no
+    lint", so a formatter is a toolchain/dependency decision (devtools) *and* a one-time whole-tree
+    normalize that must be stop-the-world — it collides with the dirty shared tree and in-flight work.
+    **Design (recommended):** an explicit verb `node cli.mjs format [--check] [-- <paths>]` (JSON
+    contract, explicit paths, `--check` exits non-zero) — NOT an automatic on-write formatter (formatting
+    between a seat's read and its edit makes the exact-match `oldText` stale) and NOT a global git hook
+    (a hook rewrites files outside the staged set, violating explicit-paths-only). Run `format` before
+    committing an item; run `format --check` as a gate beside `node --check` in the demo loop.
+    **Sequence:** AFTER the #885 `cli.mjs` gate and when the tree is quiet (the normalize is large).
+    *Cross-refs:* #328, #291, F32. *Owner:* devtools (tool choice + pin) with impl (the verb).
+    *Acceptance:* `format` normalizes a given file; `format --check` fails on an unformatted file and
+    passes on a formatted one (shown FAILING first); the tool choice and pin are recorded; no auto-hook.
 
 ## Extensibility and distribution
 
