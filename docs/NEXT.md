@@ -16,6 +16,17 @@ clean-path items are DONE.** Registered queue anchors: item 65 = **#745**, item 
 69–71 are **pending `pm` registration**. **Exact next command:**
 `DURIG_DB=./selfdev.sqlite node cli.mjs status`. **Blocker:** items 69–71 must edit `cli.mjs`, which is
 dirty with another item's work (`cmdInit`, **#491**).
+
+**Maintenance done (`806ce7f`):** broker stopped → `up rig.selfdev.json --refresh` → restarted
+(`pid 14536`, `START 2026-10-16T19:33:43Z`). `impl` is now `deepseek-ai/DeepSeek-V4.1-Flash`, and the
+constitution (`durig.constitution` doc 28) now carries **`prepare_workspace`** and **`P3 Language`**.
+The root cause was constitution **drift**: `rig.selfdev.json` set `constitutionInline`, which
+`cmdUp` prefers over `constitution.txt`, so the file edit never applied; the rig now sources
+`constitution.txt` (single source). **New ROADMAP items 74–80** capture the recurrences.
+**Second-writer mistake (again):** `serve --stop` returned `stopped:false` and I ran `up --refresh`
+anyway, corrupting impl's `pi.live` (doc 12105); recovered from `store-backup-20261016-143336` +
+`.spike/delegate/repair-live.mjs`. It reinforces items **69** (hard write guard, incl. `serve --stop`
+exit confirmation) and **78** (crash forensics).
 - **Item 68 DONE (`037213f`):** `reconcileStrandedSubmissions` settles a `placed` submission with no live
 task before the pending set is built, so the blocked seat re-wakes. Verified live: `STRANDED settled=2`
 → `WAKE qa`, `WAKE lead`. `demo/broker-strand.test.mjs` (RED: symbol absent at HEAD).

@@ -1830,6 +1830,55 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
 and **73** (worktree sweep) are delivered; items **55** (a security position before a socket) and
 **69–71** (broker-safe writes) remain open.
 
+## Pitfalls from the broker hardening (raised 2026-10-16)
+
+Source: the 2026-10-16 hardening session — five clean-path items landed (54, 65, 66, 68, 73) and **two
+separate incidents were caused by a second writer running while a broker was alive** (a stray `resume`,
+then an `up --refresh` after `serve --stop` returned `stopped:false`). These items close the
+recurrences; `pm` sequences them against 61–71.
+
+74. **Constitution/spec reconciliation without a stop (hot-reload).** The broker reads the rig spec and
+    `constitution.txt` and applies a changed model/prompt/constitution on its next pass (or on an mtime
+    change), so a doc or model edit no longer needs stop + `up --refresh`. This is the durable-plan
+    core behind items 66/71 and the reason the P3 Language rule sat unapplied. *Owner:* delegate/devtools
+    · *Where:* `src/broker.mjs`, `cli.mjs`. *Acceptance:* edit the constitution, and a running broker
+    applies it with no stop; a live seat's run is not cut.
+75. **Unify and validate the constitution source.** `constitutionInline` shadowed `constitution.txt`, so
+    edits to the file silently did not apply (found 2026-10-16). One source of truth, and `up`/`check`
+    warn when both are present or when an inline copy differs from the file. *Owner:* impl · *Where:*
+    `cli.mjs` `cmdUp`, `src/checkup.mjs`. *Acceptance:* a rig with a stale inline copy is flagged, not
+    silently preferred.
+76. **Worktree audit + leak resolution.** `item-635/636/638` leaked with uncommitted work, so the item-73
+    sweep correctly refuses them and they keep polluting the tree. Add an operator surface (a `worktree`
+    audit / `status` notice) that lists each `item-*` worktree with its queue status and uncommitted
+    count, and diagnose why cleanup was skipped. *Owner:* impl · *Where:* `src/worktree.mjs`, `cli.mjs`.
+    *Acceptance:* the leaked worktrees are visible and resolvable (commit or force-remove) without
+    guessing.
+77. **Reap stale viewer processes.** `log --follow`/`watch` accumulate across sessions (11 found
+    2026-10-16, up to two days old), holding the store and muddying `ps`. The broker/`up` reaps viewers
+    older than their originating session, or `status` names them. *Owner:* impl · *Where:* `cli.mjs`,
+    `src/broker.mjs`. *Acceptance:* stale viewers are reaped or reported; no silent accumulation.
+78. **Broker crash forensics + survive a conversation storage error.** The broker died on `Session failed
+    after a storage error; close and reopen it` with no `EXIT` and no cause logged, stalling the queue
+    (impl). Make the broker log the `cause` chain, skip the poisoned conversation for the pass instead
+    of dying, and surface it as attention. *Owner:* impl · *Where:* `cli.mjs` `cmdServe`, `src/broker.mjs`.
+    *Acceptance:* a corrupt conversation degrades to a notice; the broker keeps driving.
+79. **Wrong-rig guard for the configured store path.** `durig.config.json` set `DURIG_DB` to another
+    project's store (`tapl-decompile/tutor-pi.sqlite`), so a bare command reads the wrong rig. Warn
+    (or refuse) when the configured store is outside the seat root / differs from a repo-local DB.
+    *Owner:* designer/impl · *Where:* `cli.mjs` entrypoint, `src/config.mjs`, `src/checkup.mjs`.
+    *Acceptance:* the wrong-rig case is named, not silently obeyed.
+80. **Doc-seat worktree conformance.** The stale constitution meant `scribe`/`advocate`/`designer` never
+    called `prepare_workspace`, so doc-only items completed with work left uncommitted in the shared
+    tree (found 2026-10-16). After the constitution refresh, assert doc seats prepare a worktree and
+    commit there, and that a completion with no commit says so. *Owner:* pm/impl · *Where:* the seat
+    prompts, `src/seattools.mjs`. *Acceptance:* a doc item's artifact is a commit on its branch, or the
+    completion names the absence.
+
+**Cross-links:** item **69** absorbs the hard guard for `up`/`resume`/`reset`/`send` and the
+`serve --stop` exit confirmation; item **70** the read-boundary tolerance; item **71** the command spool
+that makes 74/80 broker-applied.
+
 73. **Orphaned-worktree sweep (DELIVERED `243f175`).** `removeClaimedWorktree` now refuses a worktree
     holding uncommitted work unless the caller passes `force` — the D60 refusal its seat-completion
     caller already assumed, and a fix to a latent data-loss bug (the fallback is `rm -rf`). The
