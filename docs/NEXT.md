@@ -11,19 +11,21 @@ _Last refreshed: 2026-10-16 (delegate session, third pass — routed the daemon 
 
 ## NEXT SESSION — START HERE
 
-**Current item: SAFE WRITES while the broker owns the store — ROADMAP items 68 → 69 → 70 → 71 (new
-section, raised after the crash), ahead of the daemon 61–64.** Root cause of the 2026-10-16 incident and
-the prerequisite for an always-on broker (the daemon multiplies second-owner exposure). Start with
-**item 68** (settle stranded submissions — the live blocker). Item 68 is a driver fix →
-**delegate-owned** (same rationale as 54/D65); then 69 (write guards), 70 (read-boundary hardening,
-folds ROADMAP 66 = queue **#728**), 71 (command spool). Registered queue anchor for the cluster:
-**#728**; the daemon cluster is **#723–#728** (+#730); the new items' own queue ids are **pending `pm`
-registration**. **Blocker:** qa **#30661** and lead **#30674** are stalled (`placed` over a terminal
-task) — item 68 clears them. **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`;
-restart a down broker with `.spike/delegate/dispatch-serve-noroot.ps1`. Design of record:
+**Current item: SAFE WRITES while the broker owns the store — ROADMAP items 68 → 69 → 70 → 71, ahead
+of the daemon 61–64.** **Item 68 DONE (delegate, commit `037213f`):** `src/broker.mjs`
+`reconcileStrandedSubmissions` + a `drivePass` call that settles a `placed` submission whose
+conversation has no live task, *before* the pending set is built so the blocked seat is woken in the same
+pass; `demo/broker-strand.test.mjs` (passes; RED evidenced — the symbol is absent at HEAD). **Verified in
+the running broker:** after a restart the log shows `STRANDED settled=2` then `WAKE qa`, `WAKE lead`, and
+both are generating again. Broker now **pid 19028** (`START 2026-10-16T18:07:34Z`). **Next:** item 69
+(write guards) then 70 (read-boundary hardening, folds ROADMAP 66 = queue anchor **#728**) then 71
+(command spool); the daemon cluster is **#723–#728** (+#730). **⛔ Blocker for 69–71:** each must edit
+`cli.mjs`, which is dirty with another item's uncommitted work (`cmdInit`, #491 C9/C10 — 127 lines plus
+untracked `demo/init.test.mjs`); a clean item-scoped commit is impossible until that is committed or
+resolved. **Owed:** wire `reconcileStrandedSubmissions` into `cli.mjs cmdResume` (same blocker), and a
+DECISIONS entry. **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; restart a down
+broker with `.spike/delegate/dispatch-serve-noroot.ps1`. Design of record:
 `docs/BROKER-SUPERVISION.md` (D71/D72) and `docs/COMMANDS-AND-THE-BROKER.md` (command paths + mailbox).
-**DECISIONS entry owed** (safe writes precede the always-on daemon) — blocked by the dirty
-`docs/DECISIONS.md` (D73/D74, another item's work).
 
 **INCIDENT (2026-10-16, delegate) — a second writer crashed the broker and corrupted two run-control
 docs.** 🚨 Do **not** run `resume`/`doctor` (or any write verb) while the broker is running: they are
