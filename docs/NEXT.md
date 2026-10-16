@@ -91,6 +91,15 @@ surfaced by the broker sitting idle `20:14:13Z → 20:19:54Z` while impl had que
 both times: spool a corrective steer via `intent.mjs` (latest
 `.spike/delegate/intent-impl-finish-700-v2.txt`); impl re-woke to finish #700 (commit `28c7ba5`).
 
+**Full-suite result after the D77 fix (2026-10-16):** `demo/*.test.mjs` = **94 pass / 3 fail**;
+`npm run test:tui` = **14/14**; `npm run demo` = **PASS**. The 3 failures are **pre-existing
+constitution drift, NOT this session's diff**: `constitution.txt` carries `P3 Language` (`a0ab993`) and
+`P3 Runbooks` (`fe0c74c`) but `rig.starter.json`'s `constitutionInline` carries neither, so
+`demo/commit-model.test.mjs`, `demo/seat-commit-instructions.test.mjs`, and `demo/starter.test.mjs` fail
+their starter-inline `=== constitution.txt` assertion (deterministic on re-run; none of those files is in
+the session diff). Fix: sync `rig.starter.json`'s inline copy with `constitution.txt` (a constitution-drift
+item-75/80 case) — route to the constitution's owner.
+
 ## NEXT SESSION — START HERE
 
 **STATE.** Five clean-path items **DONE**: 54, 65, 66, 68, 73 (commits `58cbac2`, `6fae68d`+`559f967`,
