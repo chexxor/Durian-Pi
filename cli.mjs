@@ -48,7 +48,8 @@ import {
   registerSeat,
 } from "./src/rig.mjs";
 import { describeConfig, loadConfig, streamSettings } from "./src/config.mjs";
-import { applyEscalations, failureStreak, planEscalations } from "./src/supervisor.mjs";
+import { applyEscalations, applyResets, failureStreak, planEscalations, planResets } from "./src/supervisor.mjs";
+import { assessRun } from "./src/degeneration.mjs";
 import {
 	readGenerationSlots,
 	wrapProviderWithSlots,
@@ -58,7 +59,7 @@ import { brokerAlive, clearBrokerState, clearStopRequest, drivePass, readBrokerS
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
-import { SCAN_LIMIT, extractEntryText, summarizeEntries } from "./src/rigstory.mjs";
+import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
 import { formatMetrics } from "./src/metrics.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
@@ -849,7 +850,20 @@ async function superviseOnce(harness, probeStorage, context) {
     failureStreakByConv.set(seat.conversationId, failureStreak(page.items));
   }
   const plans = planEscalations({ seats: seatList, queueItems: queueDoc?.value?.items, failureStreakByConv });
-  return applyEscalations(harness, plans, context);
+  const escalations = await applyEscalations(harness, plans, context);
+
+  // Degeneration guard (mitigations 1+2 for the F29 class): reset a seat whose CURRENT run
+  // has outgrown its turn/context bound, or shows step-repetition / malformed tool calls.
+  // Detection is pure (src/degeneration.mjs); the write is the existing reset boundary, and
+  // it is idempotent (a page already ending in `pi.reset` is skipped) so a pass loop cannot
+  // re-reset a seat before it has run again. Bounded page: the current run sits at the top.
+  const pages = await readSeatPages(probeStorage, context, seatList, SCAN_LIMIT);
+  const assessmentsByConv = new Map();
+  for (const seat of seatList) {
+    assessmentsByConv.set(seat.conversationId, assessRun(pages[seat.name] ?? []));
+  }
+  const resets = await applyResets(harness, planResets({ seats: seatList, assessmentsByConv }), context);
+  return [...escalations, ...resets];
 }
 
 /** Parse `--max-duration <seconds>` (or `--max-duration=<seconds>`) into milliseconds; 0 = unbounded. */

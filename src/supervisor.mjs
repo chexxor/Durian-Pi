@@ -125,3 +125,57 @@ export async function applyEscalations(harness, plans, context) {
     return applied;
   }, context);
 }
+
+/**
+ * The degenerate seats to reset this pass. Pure: it decides, `applyResets` writes.
+ *
+ * This is the intervention the metrics alone could not make: `step-repetition` and
+ * `malformed-tool-call` DETECT a seat going degenerate, but nothing acted on them, so a
+ * seat could loop for hours until an operator noticed (F29). Resetting the conversation
+ * clears the context the loop feeds on; the durable instructions re-anchor it on the next
+ * wake. Only seats the detector flags are planned, so a healthy rig is untouched.
+ *
+ * @param {{seats: Array<{name:string, conversationId:number|string}>, assessmentsByConv: Map}} input
+ * @returns {Array<{seat:string, conversationId:number|string, reason:string, detail:string}>}
+ */
+export function planResets({ seats, assessmentsByConv }) {
+	const plans = [];
+	for (const seat of seats ?? []) {
+		const assessment = assessmentsByConv?.get(seat.conversationId);
+		if (!assessment?.degenerate) continue;
+		plans.push({
+			seat: seat.name,
+			conversationId: seat.conversationId,
+			reason: "degeneration",
+			detail: assessment.reasons.join(", "),
+		});
+	}
+	return plans;
+}
+
+/**
+ * Apply the resets through the EXISTING reset boundary (`conversation.reset`, the same write
+ * `cli reset` uses) — no new write path and no queue annotation. A failure on one seat is
+ * reported and does not abandon the others: one seat's storage problem must not leave the
+ * rest looping.
+ */
+export async function applyResets(harness, plans, context) {
+	const applied = [];
+	for (const plan of plans ?? []) {
+		const handoff =
+			`degeneration guard reset (${plan.detail}): the run you were in outgrew its bounds, ` +
+			`so your context is reset to break the loop. Re-anchor from your durable instructions ` +
+			`and the queue; re-claim your item if you still hold it.`;
+		const conv = await harness.conversation(plan.conversationId, context);
+		if (!conv) continue;
+		try {
+			await conv.reset(handoff, context);
+			applied.push(plan);
+		} catch (err) {
+			// Report and continue: a failed reset is surfaced, not swallowed, and one bad
+			// conversation must not stop the guard from resetting the others.
+			console.error(`supervisor: reset failed for ${plan.seat}: ${err?.message ?? err}`);
+		}
+	}
+	return applied;
+}
