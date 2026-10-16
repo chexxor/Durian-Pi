@@ -26,6 +26,13 @@ export const DEGEN_DEFAULTS = {
 	maxMalformed: 2, // harness malformed-argument rejections within the run
 	maxPseudoToolCalls: 1, // a tool call emitted AS TEXT (no rejection to see): the run could not act
 	maxContextTokens: 400_000, // newest turn's prompt size (a backstop, not the primary trip)
+	// Per-turn WALL-CLOCK, its OWN cause and NOT the prose detector. It reads a number the harness
+	// already persists (AssistantMessage.durationMs), not a parse of prose, so a healthy long
+	// document cannot trip it — the failure mode that reverted the D78 text heuristic. Deliberately
+	// HIGH (5 min): a legitimately slow turn must never be reset, so the bound only catches a run
+	// that is burning minutes per turn without progressing. Operator-tunable through `opts`, the
+	// same seam as every other limit here.
+	maxTurnDurationMs: 5 * 60_000,
 	repeatHorizon: 3, // matches metrics.REPEAT_HORIZON: a repeat is seen within 3 calls
 };
 
@@ -56,7 +63,8 @@ function toolCallKeys(entry) {
  * newest entry until the wake that started it.
  *
  * @returns {{degenerate:boolean, justReset:boolean, reasons:string[], toolTurns:number,
- *   repeats:number, malformed:number, pseudoToolCalls:number, contextTokens:number, calls:number}}
+ *   repeats:number, malformed:number, pseudoToolCalls:number, contextTokens:number,
+ *   turnDurationMs:number, calls:number}}
  */
 export function assessRun(entriesNewestFirst, opts = {}) {
 	const o = { ...DEGEN_DEFAULTS, ...opts };
@@ -70,6 +78,7 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		malformed: 0,
 		pseudoToolCalls: 0,
 		contextTokens: 0,
+		turnDurationMs: 0,
 		calls: 0,
 	};
 	if (items.length === 0) return empty;
@@ -108,6 +117,12 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		const tokens = messageOf(entry)?.usage?.totalTokens;
 		return Number.isFinite(tokens) ? Math.max(max, tokens) : max;
 	}, 0);
+	// The slowest single turn of the run. `durationMs` is absent on legacy messages, so a run of
+	// old entries reads 0 and is never flagged on this cause.
+	const turnDurationMs = run.reduce((max, entry) => {
+		const ms = messageOf(entry)?.durationMs;
+		return Number.isFinite(ms) ? Math.max(max, ms) : max;
+	}, 0);
 
 	const reasons = [];
 	if (toolTurns >= o.maxToolTurns) reasons.push(`tool-turns=${toolTurns}>=${o.maxToolTurns}`);
@@ -117,6 +132,9 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		reasons.push(`pseudo-tool-call=${pseudoToolCalls}>=${o.maxPseudoToolCalls}`);
 	}
 	if (contextTokens >= o.maxContextTokens) reasons.push(`context-tokens=${contextTokens}>=${o.maxContextTokens}`);
+	if (turnDurationMs >= o.maxTurnDurationMs) {
+		reasons.push(`turn-duration-ms=${turnDurationMs}>=${o.maxTurnDurationMs}`);
+	}
 
 	return {
 		degenerate: reasons.length > 0,
@@ -127,6 +145,7 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		malformed,
 		pseudoToolCalls,
 		contextTokens,
+		turnDurationMs,
 		calls,
 	};
 }
