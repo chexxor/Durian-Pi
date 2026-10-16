@@ -142,6 +142,16 @@ export class WakeScheduler {
   }
 
   /**
+   * Forget a seat's cooldown so its next candidate wake is eligible at once. A seat whose
+   * context was just RESET must not stay throttled: the cooldown exists to slow re-waking a
+   * stalled claim, but a reset is a fresh context and the point is to re-drive it now, not to
+   * leave it idle until an unrelated commit happens to run a pass.
+   */
+  clearSeatCooldown(name) {
+    this.#lastWakeBySeat.delete(name);
+  }
+
+  /**
    * A predicate for `driveOnce`'s optional `seatFilter`: drops candidates still
    * inside their cooldown. Bound to `now` at call time by the caller.
    */

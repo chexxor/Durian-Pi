@@ -506,6 +506,17 @@ export async function runWakeLoop({
         const plans = await supervise();
         for (const plan of plans) onDiagnostic({ kind: "escalated", ...plan });
         escalations.push(...plans);
+        // A reset seat is a fresh context, but the wake THIS pass submitted started its cooldown,
+        // so the next pass would suppress it and the seat would sit idle until an unrelated commit
+        // — the exact stall the reset exists to break. Clear the cooldown and force a pass so the
+        // seat is re-driven now.
+        const resetSeats = plans
+          .filter((plan) => plan.reason === "degeneration")
+          .map((plan) => plan.seat);
+        if (resetSeats.length > 0) {
+          for (const name of resetSeats) scheduler.clearSeatCooldown(name);
+          scheduler.markDirty();
+        }
       }
     } finally {
       scheduler.endPass();

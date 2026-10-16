@@ -182,6 +182,13 @@ assert.equal(throttled.candidates.length, 1, "the seat still has work");
 assert.equal(throttled.actioned, 0, "but the cooldown prevents a second wake inside the window");
 broker.endPass();
 
+// A seat whose context was just RESET must be wakeable at once: the guard clears the cooldown
+// the resetting pass's wake started, or the reset leaves the seat idle until an unrelated commit.
+assert.equal(broker.seatReady("worker", passClock), false, "the cooldown is active after the first wake");
+broker.clearSeatCooldown("worker");
+assert.equal(broker.seatReady("worker", passClock), true, "clearing the cooldown makes a reset seat immediately wakeable");
+broker.recordWakes(["worker"], passClock); // restore the cooldown for the elapsed-time case below
+
 passClock += 5000; // cooldown elapsed
 broker.beginPass();
 const resumed = await pass();
