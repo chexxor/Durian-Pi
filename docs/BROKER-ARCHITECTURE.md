@@ -39,7 +39,7 @@ by resources and whose actors are expensive and stateful.
 | **Scheduler** | libuv, cooperative at I/O | the BEAM, preemptive, millions of processes | the VM's call stack | `runWakeLoop` + commit subscription |
 | **Preemption** | none (cooperative) | yes (reductions) | none (synchronous) | **none** — a run cannot be preempted mid-generation |
 | **State lifetime** | ephemeral (lost on crash) | ephemeral (lost on crash; supervisors restart) | ephemeral unless persisted | **durable** — conversation, claim, worktree |
-| **Shared state** | in-process variables | none (isolation is the rule) | object graph (shared by reference) | one **single-writer** store; the queue is a shared log |
+| **Shared state** | in-process variables | none (isolation is the rule) | object graph (shared by reference) | one **storage-owning harness**; other clients attach; the queue is a shared log |
 | **Isolation** | not applicable | memory isolation per process | objects share the heap | separate conversations + per-item worktrees; one OS process |
 | **Cost per unit** | microseconds | microseconds | nanoseconds | **seconds–minutes and real money** |
 | **Concurrency bound** | thousands | millions | one thread | `DURIG_MAX_CONCURRENT_SEATS` (generation slots) |
@@ -59,14 +59,35 @@ by resources and whose actors are expensive and stateful.
 
 ## The three real constraints (why "fully independent" is not free)
 
-1. **A single-writer durable store.** Every seat's result becomes durable through one SQLite store, and
-   the queue is a shared mutable log. Actors contend on one writer, so exactly one broker drives them
-   (`<db>.broker.json` enforces one holder). Node's thousands of tasks share no such resource.
+1. **One storage-owning harness — pi-durable's rule, not durig's.** The README says "One process owns a
+   storage at a time; there is no cross-process locking", and the spec says old and new harnesses must
+   never own the same Session concurrently. durig's `<db>.broker.json` holder implements that rule; the
+   F24 collision (`ID n already belongs to entry`) is what happens when two harness owners share one
+   store. This bounds **owners**, not seats: many conversations run concurrently *inside* the one owner.
 2. **Expensive, resource-bounded actors.** A run holds a generation slot and a paid provider stream;
-   the bound is economic, not a scheduler limit. You could have thousands of seats if they were free
-   and stateless.
+   `DURIG_MAX_CONCURRENT_SEATS` is *durig's* cost/GPU/provider bound. pi-durable's "Many conversations
+   at once" imposes no such limit — you could run far more seats if they were free.
 3. **Non-deterministic, unbounded runs.** A seat can degenerate (the observed `qa` loop) and keep
    generating. Nothing preempts it, so a supervisor cannot act mid-run; the guard resets *between* runs.
+
+## Multiplayer, correctly understood
+
+The pi-durable post's "Multiplayer" is **not** many writers to one file — it is **many clients attached
+ to one owning harness**:
+
+> "everything a UI needs is committed state, so any number of clients can attach to any conversation in
+> the harness… Any client can steer a running conversation or queue a follow-up." — the blog
+
+ and the same post, on storage: "One process owns a storage at a time, and other clients attach to that
+ process." So the two are the same design at two layers: **one owner, many clients.**
+
+- pi-durable's client surface is `viewState().subscribe()` (push, updated after every commit),
+  `watch()`/`watchEvents()` (remote, over a socket), and busy-conversation semantics
+  (`whenBusy: "steer" | "follow-up" | "reject"`).
+- durig's viewers (`ui.mjs`, `watch`, `log --follow`) **do not attach** to the owner; they read storage
+  directly and poll (D11). That is why the TUI feels non-multiplayer and why a spooled intent can wait
+  behind a run. Adopting the owner's push stream for the TUI is the deferred "Level 2 resident server",
+  and it is the same pub-sub you asked about — it already exists upstream; durig just is not a client.
 
 ## One known scheduler bug, and the fix
 
