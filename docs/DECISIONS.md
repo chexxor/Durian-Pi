@@ -1480,7 +1480,7 @@ ebase among the blocked verbs. The CURRENT code does NOT block those: git commit
 ebase are not in the deny list. What IS actually blocked (verified in src/confine.mjs DENIED_COMMANDS, and by demo/confine.test.mjs/demo/seatguard.test.mjs, both exit 0): 
 eset, checkout, 
 estore, 
-evert, clean, stash, ranch -D, unscoped dd -A/dd ., and push (push exempt only with the operator's DURIG_ALLOW_PUSH=1), plus the -C <path> forms. If merge/
+evert, clean, stash, branch -D, unscoped add -A/add ., and push (push exempt only with the operator's DURIG_ALLOW_PUSH=1), plus the -C <path> forms. If merge/
 ebase (and reverting commit) are intended to be blocked, that is a NEW change to request â€” it is not current behaviour.
 **Status:** adopted for the code-true core (destructive git + push blocked, read-only allowed); the commit/merge/rebase clauses flagged as not code-true and NOT recorded as current behaviour.
 
@@ -1492,10 +1492,10 @@ ebase (and reverting commit) are intended to be blocked, that is a NEW change to
 
 ## D58 â€” Failure recovery vs diagnosis are TWO concerns: escalation in the supervisor, malformed-tool-call as one cause-class (2026-10-15)
 
-**Decision:** escalation lives in the SUPERVISOR (src/supervisor.mjs planEscalations/pplyEscalations), not the driver, surfaced as a 
+**Decision:** escalation lives in the SUPERVISOR (src/supervisor.mjs planEscalations/applyEscalations), not the driver, surfaced as a 
 epeated_failure notice; malformed_tool_call is ONE class defined by CAUSE (harness call-arg validation/parse), surfaced via the metrics count + a bounded notice, preferring a structured error kind. A diagnosis signal ADDS a signal only and never blocks the call.
 **Why:** recovery (re-drive a stranded/held item) and diagnosis (why it keeps failing) have different owners and cadence; conflating them had a single mechanism trying to do both (#145).
-**Status:** adopted (the supervisor escalation pass is code-true: ttention.mjs emits kind: "repeated_failure"/last_run_failed, the supervisor plans and applies them). **Evidence:** src/supervisor.mjs, src/attention.mjs, demo/supervisor.test.mjs, demo/malformedcall.test.mjs.
+**Status:** adopted (the supervisor escalation pass is code-true: attention.mjs emits kind: "repeated_failure"/last_run_failed, the supervisor plans and applies them). **Evidence:** src/supervisor.mjs, src/attention.mjs, demo/supervisor.test.mjs, demo/malformedcall.test.mjs.
 
 ## D59 â€” P6 quint model as a DECISION entry: formal assurance over the liveness invariant (2026-10-15)
 
@@ -1516,7 +1516,7 @@ epeated_failure notice; malformed_tool_call is ONE class defined by CAUSE (harne
 **Status:** decision recorded. C3 (src/tui/client.mjs - a headless renderTui/Frame, no storage/harness/driver import, proven by demo/tui-client.test.mjs, exit 0) is built; the U1 driver + ui.mjs entrypoint (#480) are now BUILT too - src/tui/driver.mjs and the root ui.mjs entrypoint exist, proven by demo/ui-driver.test.mjs and demo/tui-conversation.test.mjs - so the earlier "(not built yet)" note is SUPERSEDED. Not pushed.
 
 **Layer-accurate correction (lead ruling #666, 2026-10-16) -- D61's "does NOT own an alternate screen" was over-strong.** It conflated two layers. The accurate statement:
-- **Two layers.** (a) The **in-TUI frame rendering** (`renderTui`/`Frame`, headless-only in C3 `src/tui/client.mjs`) is governed by D61 -- it preserves scrollback and pipes at the painting layer. (b) The **entrypoint terminal handoff** (the U1 `ui.mjs` entrypoint) uses the ALT SCREEN -- it declares ``ENTER_ALT "\\x1b[?1049h"`` / ``LEAVE_ALT "\\x1b[?1049l"`` at `ui.mjs:28-29` and installs the enter/leave sequences via the driver's `onCleanup`.
+- **Two layers.** (a) The **in-TUI frame rendering** (`renderTui`/`Frame`, headless-only in C3 `src/tui/client.mjs`) is governed by D61 -- it preserves scrollback and pipes at the painting layer. (b) The **entrypoint terminal handoff** (the U1 `ui.mjs` entrypoint) uses the ALT SCREEN -- it declares ``ENTER_ALT "\\x1b[?1049h"`` / ``LEAVE_ALT "\\x1b[?1049l"`` in `src/tui/restore.mjs` (lines 13-14) and wires the terminal via `createTerminalScreen`'s `screen.enter()` on start and a restore-once `screen.restore()` (LEAVE_ALT + cursor + raw-mode off) on EVERY exit path -- not a "driver's onCleanup" argument.
 - **Residual, recorded honestly.** While the entrypoint holds the alt screen, scrollback is NOT available DURING the session -- it is restored on EXIT. So "preserves scrollback" is true ACROSS the session boundary and FALSE during it. Not papered over.
 - **Direction (ruled).** ACCEPT the alt-screen entrypoint -- it is the conventional, correct handoff for a full-screen TUI (clean restore on exit, no scrollback pollution), and the properties actually required (D21: a separate non-interactive-cli entrypoint; D22: no multiplexer) are PRESERVED. The accurate statement is: "the entrypoint uses the alt screen for a clean handoff; scrollback survives the session boundary (restored on exit), not during the session." RE-OPEN only if scrollback-DURING-session becomes a hard requirement -- then the entrypoint's alt-screen use is itself revisited.
 - **Optional note.** The in-TUI screen painting does NOT depend on the alt screen for its scrollback property; the handoff does.
@@ -1775,3 +1775,84 @@ or implement it.
 
 **Status:** operator ruling recorded 2026-10-16 (delegate clock-out). CLI surface in
 `docs/BROKER-SUPERVISION.md` §11; roadmap item 64. No code changed.
+
+## D73 - Surface-decision policy: every capability states its surface, at decomposition (2026-10-16)
+
+**Decision.** A capability's operator surface is an explicit, recorded decision, not an
+accident: every item that builds or changes a capability states which surface(s) expose it -
+`cli` (verb/flag), `tui` (view/action), or `both` (vocabulary = the
+FEATURES.md `Surface` column) - with one line of why, and pm does not decompose an
+item whose surface decision is absent. The requirement is a STATED and justified placement,
+not forced parity: scrolling/alt-screen have no CLI meaning; JSON output has no TUI meaning.
+
+**The decision rule** (state the class, then the surface):
+- state change -> `cli` mandatory (D21: cli.mjs is the operator/LLM surface), `tui` optional;
+- observation the operator acts on -> `both` (CLI for scripts/grep, TUI for the live cockpit);
+- purely interactive affordance (scroll, selection, key nav) -> `tui`-only;
+- batch/contract/JSON -> `cli`-only.
+
+**Where it lives.** `docs/WORKFLOWS.md` W4 (the advocate's paragraph), which is the
+document pm decomposes against; the same vocabulary in FEATURES.md's `Surface` column.
+The call itself is the designer's (SELFDEV.md's role table: CLI/UX, surface and defaults);
+workflow-fit challenge is the advocate's; a contested call escalates to lead.
+
+**Why.** The failure this prevents is a capability that is silently missing from one surface.
+It was observed in this repo: the designer's UX review of the TUI C3 build found `cli.mjs`
+had NO --help surface (docs/STATUS.md, 2026-10-15) - a capability (help) that existed only as
+an error fallback and was invisible to first-run users. Mirrors D62's doc-acceptance: a
+capability carries its acceptance (docs) AND its surface decision in the same item, verified
+by the partner check.
+
+**Evidence classes.** Observed: the missing --help finding; the FEATURES.md
+`Surface` column and its current cli/tui rows. Inferred: the four-rule mapping (it is
+a policy the operator set, not a measured result).
+
+**Status:** adopted (operator directive, 2026-10-16); W4 text landed same day. No code
+changed by the policy; the check-rule enforcement for the surface-decision field is ROADMAP
+item 46's second half (registered, not scheduled).
+
+## D74 - No RACI/DACI/RAPID/MOCHA grid: artifact-keyed ownership, machine-checked (2026-10-16)
+
+**Decision.** A full RACI/DACI/RAPID/MOCHA grid is REJECTED. Redundant against what durig
+already has: the role table (docs/SELFDEV.md), the docs-ownership norm (docs/WORKFLOWS.md),
+the capability matrix (docs/WORKFLOWS.md), and the queue's single claimer. Its
+single-Accountable-per-task assumption also CONTRADICTS durig's artifact-keyed ownership:
+accountability here attaches to artifacts and the queue already makes exactly one seat the
+claimer of an item, so a task-level grid would restate the role table and duplicate what the
+queue enforces mechanically.
+
+**What the rejection keeps.** The real gap RACI is criticized for is decision authority -
+and durig supplies that where it is enforced: one claimer per item (the queue),
+org-edge send rights (the rig file), escalation paths to lead. Three adopted follow-ups carry
+the value without a grid: (a) artifact ownership becomes MACHINE-CHECKED (ROADMAP item 46: a
+check rule mapping every docs-ownership class to a live owning seat - "a decision-rights row
+not enforced by check (or the queue) is prose and goes stale"); (b) the SURFACE decision is
+owned per capability (D73); (c) verification re-executes evidence rather than accepting a
+claim (ROADMAP item 48). The one compact addition durig KEEPS is an artifact/DECISION-CLASS
+table (owner / consulted / enforced by / escalates to) in docs/WORKFLOWS.md - four columns,
+not a grid, and the review's own smallest-form recommendation - which is distinct from the
+rejected task-level R/A/C/I lettering.
+
+**Alternatives rejected, with evidence classes.** Full RACI/RASCI: redundant +
+contradictory (review Part 5.1; observed - read). Full DACI: its Driver/Approver semantics
+already hold mechanically in the queue's single claimer (advertised-elsewhere for the
+framework's origin - the Intuit attribution is unverified). Full RAPID: its "one Decide" is
+exactly the queue's single claimer (advertised-elsewhere - Bain's own doc). MOCHA: not
+verified anywhere (review Part 1 table) - rejected as unverifiable.
+
+**Evidence base (all from docs/reviews/Agent_Ownership_Review.md, the research draft).**
+Observed: MAST taxonomy (organisational breakdown a named failure category); the
+loop-back-authority paired experiment (flat teams produced higher-quality reports than a
+manager with send-back power); measured sycophancy/conformity (wrong-peer adoption 29.7%;
+disagreement collapse). Inferred: "keep the organisation spec machine-checkable and small"
+(MOISE+ transfer). The review is PARTIAL - its governance pass (Part 3) and
+coordination-cost numbers (Part 4) were not run - and the no-grid verdict rests on the
+passes that did complete; the unfinished passes do not bear on it.
+
+**Pilot's-honesty note.** The compact decision-class table in WORKFLOWS.md is
+prose until item 46's check rule lands; its enforced-by column names the rule that will do
+the real work, so the prose is a ledger for a machine-checkable claim, not a substitute for
+one.
+
+**Status:** adopted (operator directive, ROADMAP item 45; pm registered as selfdev item
+#713). The decision-of-record so the question is not re-litigated.
