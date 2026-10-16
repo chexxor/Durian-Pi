@@ -1749,3 +1749,29 @@ as does item 55 for any control socket.
 **Status:** design recorded 2026-10-16 (delegate), refined after the round-3 research reply. Roadmap
 items 61–67. No code changed by the record itself. References: `docs/BROKER-SUPERVISION.md`,
 `docs/reviews/building-agent-systems-on-pi-research.md`.
+
+## D72 — The daemon supports both modes with a per-user default and a clean switch (2026-10-16, operator ruling)
+
+**Why.** durig will have different users with different use cases. A developer on a laptop wants the rig
+to run only while logged in (and the TUI in-process); an unattended host needs the broker to survive
+logout and reboot. One mode cannot serve both, and the platform trigger differs across Windows, macOS,
+and Linux — so the user-facing surface must hide the mechanism.
+
+**Decision.** Ship both modes. `--user` (per-user agent: Windows Task / macOS LaunchAgent /
+`systemd --user`) is the **default**; `--system` (system daemon: Windows Service / macOS LaunchDaemon /
+systemd system unit) is opt-in. The end-user surface is `durig daemon install|switch|status|uninstall|
+restart|stop|logs`; `durig daemon switch --user|--system` is the clean migration (drain → uninstall the
+current trigger → install the target → verify the heartbeat), and the store is preserved. `--user` is
+the default because it inherits the user's profile, git/npm credentials, and ACLs and keeps the TUI's
+in-process subscriber; the system daemon is for unattended hosts and forces the remote, security-gated
+TUI path (items 52/55). No persistent trigger is installed without an explicit command.
+
+**Portability.** Only the trigger file, the kill-tree primitive, and the stop signal are OS-specific;
+`src/host.mjs` is pure Node and identical everywhere.
+
+**Routing.** Operator chose **option A — route to the team**: `pm` registers/sequences items 61–64 and
+routes to `devtools`/`impl`, **after** the team finishes its current tasks. The delegate does not route
+or implement it.
+
+**Status:** operator ruling recorded 2026-10-16 (delegate clock-out). CLI surface in
+`docs/BROKER-SUPERVISION.md` §11; roadmap item 64. No code changed.

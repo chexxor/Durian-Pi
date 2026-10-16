@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate session, paused — TUI hardening H1–H4 done, H7 Tier 1/2, B1/H5 type-to-seat + bracketed paste; broker park diagnosed; pi-durable alignment review landed and folded into the roadmap as items 51–58; doc-site item 59 queued; broker-supervision design recorded — `docs/BROKER-SUPERVISION.md`, roadmap items 61–67, D71). Next agent: read **NEXT SESSION**; the later sections are historical._
+_Last refreshed: 2026-10-16 (delegate session, paused — TUI hardening H1–H4 done, H7 Tier 1/2, B1/H5 type-to-seat + bracketed paste; broker park diagnosed; pi-durable alignment review landed and folded into the roadmap as items 51–58; doc-site item 59 queued; broker-supervision design recorded — `docs/BROKER-SUPERVISION.md`, roadmap items 61–67, D71; then the portable daemon CLI surface (§11) and the operator ruling for **both** modes with `--user` as default (D72); operator chose **option A** — route the daemon to the team after the current tasks drain). Next agent: read **NEXT SESSION**; the later sections are historical._
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
@@ -11,13 +11,35 @@ _Last refreshed: 2026-10-16 (delegate session, paused — TUI hardening H1–H4 
 
 ## NEXT SESSION — START HERE
 
-**Current item (next session): ROADMAP item 54 — `drivePass` wake-and-return** (the pi-durable
-alignment review's rank-1 change; delegate-owned broker work). Stop awaiting the runs a pass woke
-inside the tick; let the commit subscription drive the next pass; keep the **one** global `waitForIdle`
-on loop exit (F11). Alternatives if the operator picks otherwise: **H6 resize** then **H8 anchored
-scroll** (TUI plan §C), or **ROADMAP item 52** (attach the TUI as a state-backed client) — 52 is
-**gated on item 55** (a `security.sec` position before any attach socket). The standing priority list
-is `docs/TUI-IMPLEMENTATION-PLAN.md` §"Priority order".
+**Current item (next session): start the broker, let the team drain, then route the durig daemon
+(option A).** The operator chose to support **both** daemon modes (`--user` default, `--system` opt-in)
+and to **route the work to the team** (`pm` → `devtools`/`impl`), not the delegate. In order:
+1. Once no writer is in flight, start the broker **detached**:
+   `DURIG_DB=./selfdev.sqlite node cli.mjs serve`. Its first pass will also deliver the spooled
+   zero-trust intent (item 60). Do not poll it — the operator notifies you when runs complete.
+2. Let the team finish its current tasks — **#662** (TUI C4 close-out) and **#710** (`src/tui/driver.mjs`
+   comment fix), both queued to `impl` — and drain the queue.
+3. Then deliver the daemon intent (see **READY TO SEND** below) to `pm`, which registers/sequences
+   **ROADMAP items 61–64** (owner `devtools`/`impl`); order **61 → 62 → 63 → 64**, and item **65**
+   (genlock live-holder steal / EPERM / PID reuse) is independent and should not wait.
+Design of record: `docs/BROKER-SUPERVISION.md`; decisions **D71** + **D72**.
+**Open, not this session:** ROADMAP **item 54** (`drivePass` wake-and-return) is **still not done** —
+the scoped D65 wait remains; item 65 is a live single-writer hazard.
+
+**READY TO SEND — daemon intent (option A), after the drain:** the body is at
+`.spike/delegate/durig-daemon-intent.txt` (gitignored, on disk). Exact command:
+
+```
+DURIG_DB=./selfdev.sqlite node cli.mjs send pm --body-file .spike/delegate/durig-daemon-intent.txt
+```
+
+Do **not** send it before **#662/#710** have finished. (If the body file is missing, rebuild it from
+`docs/BROKER-SUPERVISION.md` §11 + ROADMAP items 61–64.)
+
+**Delegate clock-out this session (2026-10-16):** docs-only work, no code. Added the broker-supervision
+design of record (`docs/BROKER-SUPERVISION.md`), ROADMAP items **61–67**, decisions **D71** + **D72**,
+the architecture pointer, and the round-2/round-3 reviews on the research doc. Commits `8889b4d`,
+`f095080`, `8af0411`, `08d2166`. Tests: `npm run test:tui` **14/14**; no build/lint exists.
 
 **Queue work running alongside:** **#662** (TUI C4 close-out — 48-col golden + lifecycle cleanup,
 queued to `impl`) and **#710** (the `src/tui/driver.mjs` comment fix, queued to `impl`). ROADMAP item
