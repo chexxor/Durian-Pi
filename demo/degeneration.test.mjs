@@ -47,8 +47,11 @@ const malformed = () => ({
   model: [{ isError: true, content: [{ type: "text", text: '<harness> [error] Validation failed for tool "edit": path required' }] }],
 });
 const reset = () => ({ kind: "pi.reset", model: [{ role: "user", content: [{ type: "text", text: "reset" }] }] });
-// The model's recurrent fault: a tool call written into the message TEXT as an Anthropic-shaped
-// block whose opener is `<parameter name="TOOL">` (not `<invoke name=…`), closed by `</invoke>`.
+// The model's recurrent fault: a tool call written into the message TEXT. Observed in two shapes —
+// DeepSeek's DSML framing (a special-token delimiter of fullwidth vertical lines around "DSML")
+// and a plain nested-parameter pair. The delimiter is stripped by a terminal, so a screen read
+// hides it; this test uses the bytes the store actually holds.
+const DSML = "\uFF5CDSML\uFF5C";
 const pseudoCall = (tool = "powershell", command = "echo hi") => ({
   kind: "pi.assistant",
   model: [
@@ -57,7 +60,10 @@ const pseudoCall = (tool = "powershell", command = "echo hi") => ({
       content: [
         {
           type: "text",
-          text: `Let me run it.\n\n<parameter name="${tool}">\n<parameter name="command" string="true">${command}</parameter>\n</invoke>\n`,
+          text:
+            `Let me run it.\n\n<parameter name="${tool}">\n` +
+            `<${DSML} parameter name="command" string="true">${command}</${DSML} parameter>\n` +
+            `</${DSML} invoke>\n</${DSML} calls>\n`,
         },
       ],
     },
@@ -121,9 +127,13 @@ check("a real structured tool call is not a pseudo tool call", () => {
   assert.equal(isPseudoToolCallTurn(real), false);
 });
 
-check("the pseudo-call predicate requires BOTH the unclosed parameter pair and the stray close", () => {
-  const onlyOpen = assistant([], { text: '<parameter name="edit">\n<parameter name="path">a</parameter>' });
-  assert.equal(isPseudoToolCallTurn(onlyOpen), false, "no stray </invoke> means it is not this fault");
+check("the predicate matches the DSML-delimited form and the plain nested-parameter variant", () => {
+  const proseOnly = assistant([], { text: 'The model may emit a <parameter name="edit"> block; that is the fault.' });
+  assert.equal(isPseudoToolCallTurn(proseOnly), false, "a lone mention is not this fault");
+  const dsml = assistant([], { text: `<parameter name="read">\n<${DSML} parameter name="path">a</${DSML} parameter>` });
+  assert.equal(isPseudoToolCallTurn(dsml), true, "the DSML delimiter is the tell");
+  const plainNested = assistant([], { text: '<parameter name="edit">\n<parameter name="path">a</parameter>' });
+  assert.equal(isPseudoToolCallTurn(plainNested), true, "the plain nested pair is the same fault");
 });
 
 check("a context past the token bound is degenerate", () => {

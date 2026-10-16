@@ -65,16 +65,20 @@ export function countMalformedToolCalls(entries) {
 }
 
 /**
- * The model's recurrent malformed shape: a tool call written into the message TEXT as an
- * Anthropic-style block whose opener is `<parameter name="TOOL">` (it should be
- * `<invoke name="TOOL">`), with the arguments as further `<parameter …>` tags and a trailing
- * `</invoke>`. The tell is two adjacent parameter opens where the first is never closed — a
- * well-formed block starts with `<invoke`, and prose that merely NAMES the marker carries no
- * stray `</invoke>`. Kept strict on purpose: the remediation is a context reset, and D64 accepts
- * one wasted reset as cheaper than a seat stalled mid-item with an uncommitted artifact.
+ * The model's recurrent malformed shape: a tool-call block written into the message TEXT instead
+ * of the tool channel. Two forms were observed (`impl`, three times on #700):
+ *   - DeepSeek's DSML framing — a `<parameter name="TOOL">` opener, then argument tags written
+ *     with the DSML special-token delimiter (fullwidth vertical line, "DSML", fullwidth vertical
+ *     line) and a matching `invoke`/`calls` close. The delimiter must never appear in ordinary
+ *     prose, so it is the reliable tell; the terminal strips it, which is why a screen read showed
+ *     a plain `<parameter>` and hid the fault.
+ *   - the plain nested form — a `<parameter name="TOOL">` opener immediately followed by a second
+ *     `<parameter name="ARG">`, with no `<invoke>` between them.
+ * Kept strict on purpose: the remediation is a context reset, and D64 accepts one wasted reset as
+ * cheaper than a seat stalled mid-item with an uncommitted artifact.
  */
-const PSEUDO_TOOL_CALL_MARKER = /<parameter\s+name="[^"]+"\s*>\s*<parameter\s+name="/;
-const PSEUDO_TOOL_CALL_CLOSE = /<\/invoke>\s*$/;
+const DSML_TOOL_DELIMITER = /\uFF5CDSML\uFF5C/;
+const PLAIN_PARAMETER_BLOCK = /<parameter\s+name="[^"]+"\s*>\s*<parameter\s+name="/;
 
 /**
  * Did this assistant turn try to act but emit the tool call as text instead of a tool call?
@@ -92,7 +96,7 @@ export function isPseudoToolCallTurn(entry) {
 		.filter((part) => part?.type === "text")
 		.map((part) => part?.text ?? "")
 		.join("\n");
-	return PSEUDO_TOOL_CALL_MARKER.test(text) && PSEUDO_TOOL_CALL_CLOSE.test(text);
+	return DSML_TOOL_DELIMITER.test(text) || PLAIN_PARAMETER_BLOCK.test(text);
 }
 
 /**
