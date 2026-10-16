@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate session — TUI streaming research verified against the tree; D70 hardening recommendation recorded; corrections folded into `docs/reviews/tui-streaming-research.md` and Appendix A of `docs/UI-TUI-INITIAL-THINKING.md`). Next agent: read **NEXT SESSION**; the later sections are historical._
+_Last refreshed: 2026-10-16 (delegate session, paused — TUI hardening H1–H4 done, H7 Tier 1/2, B1/H5 type-to-seat + bracketed paste; broker park diagnosed; pi-durable alignment review landed and folded into the roadmap as items 51–58; doc-site item 59 queued). Next agent: read **NEXT SESSION**; the later sections are historical._
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
@@ -11,70 +11,46 @@ _Last refreshed: 2026-10-16 (delegate session — TUI streaming research verifie
 
 ## NEXT SESSION — START HERE
 
-**Current item: TUI TYPE-TO-SEAT — an input line that sends straight to the selected seat
-(delegate-owned).** The rich conversation view just landed: **Enter on a seat opens its full stream**
-with `↑↓` scroll and `Esc` back (D69; `demo/tui-conversation.test.mjs`). The write substrate is the
-intent-inbox (D68): the input line calls `writeIntent`, so the TUI stays a viewer while the broker
-delivers. Queue work #624 (impl, `init`) and #662 (TUI close-out: 48-col golden + lifecycle cleanup)
-run alongside.
-**Research review landed (2026-10-16, delegate):** `docs/reviews/tui-streaming-research.md` is now
-verified against the tree, with corrections and a ranked adjustment list; **D70** records the
-recommended hardening posture — sanitise untrusted text on ingest (`src/viewmodel.mjs`), restore
-**synchronously** on `uncaughtException`/`unhandledRejection`/`exit` in `ui.mjs`, wrap each paint in
-DECSET 2026, and replace `String.length` width math. **Bracketed paste (DECSET 2004) is now a
-prerequisite of the input line below** — do not ship raw-mode input without it. Open rulings:
-the prose-measure cap (would reverse `697f376`'s full-width viewport) and the still-open D69/D61
-screen-model supersession. **The operator-approved plan of record is `docs/TUI-IMPLEMENTATION-PLAN.md`
-(§B in-flight, §C hardening H1–H5, §D open rulings) — pm registers its items; the delegate does not
-claim or route them.**
+**Current item (next session): ROADMAP item 54 — `drivePass` wake-and-return** (the pi-durable
+alignment review's rank-1 change; delegate-owned broker work). Stop awaiting the runs a pass woke
+inside the tick; let the commit subscription drive the next pass; keep the **one** global `waitForIdle`
+on loop exit (F11). Alternatives if the operator picks otherwise: **H6 resize** then **H8 anchored
+scroll** (TUI plan §C), or **ROADMAP item 52** (attach the TUI as a state-backed client) — 52 is
+**gated on item 55** (a `security.sec` position before any attach socket). The standing priority list
+is `docs/TUI-IMPLEMENTATION-PLAN.md` §"Priority order".
 
-**TUI testing framework landed (2026-10-16, delegate):** design in `docs/TUI-TESTING.md`; first
-increment is `demo/tui-harness.mjs` (shared fixtures + a cell `ScreenBuffer` + golden helpers),
-`demo/tui-golden.test.mjs` (8 golden frames incl. the 48-col floor), `demo/tui-buffer.test.mjs`, and
-`demo/tui-suite.mjs`. Run regression with **`npm run test:tui`** (currently 11/11, hermetic — safe
-while the broker is live). The harness immediately found a real bug (the conversation header
-overflowed 48 columns by 7 cells) which is fixed and frozen in the golden. Release clones for
-comparison live in gitignored `vendor/eval/`.
+**Landed this session (2026-10-16, delegate):** H3 DECSET 2026 synchronized output (`40f454b`); H4
+grapheme-cell width, `src/textwidth.mjs` (`09e6d8d`); the TUI testing framework — shared fixtures + a
+cell `ScreenBuffer` + 8 golden frames incl. the 48-col floor, `demo/tui-suite.mjs` (`aea7e74`;
+`npm run test:tui` now **14/14**); B1+H5 — the type-to-seat input line (`i`, Enter → `writeIntent`,
+Esc/Ctrl+C) with bracketed paste (`9af85d0`); and docs — `docs/BROKER-ARCHITECTURE.md`,
+`docs/PI-DURABLE-INTEGRATION.md`, the two research reports, and the roadmap backlog items **45–59**.
+The test harness immediately found a real bug (the conversation header overflowed 48 columns) — fixed
+and frozen in a golden.
 
-**Blocker:** none for the input line — the TUI input mode and `writeIntent` are both unblocked. The
-screen model is settled for `ui.mjs` by D69 (alt-screen + app-owned scroll), pending operator/lead
-ratification. **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`, then restart the
-broker with `DURIG_DB=./selfdev.sqlite node cli.mjs serve` once no writer is in flight.
+**Broker (diagnosed):** the resident broker (pid 34440) was parked ~15 minutes on a degenerate `qa` run
+(`PASS 185` → `PASS 186`); `PASS 186` then delivered the `advocate`+`scribe` intents
+(`INTENT delivered=2 dead=0`). Two `pm` intents are **spooled, not yet delivered** (registration for
+the ownership items 45–50 and the doc-site item 59). The diagnosis and the fix are item 54.
 
-**Just landed (this delegate session):** D65 broker-liveness (`b81e171`), D66 `prepare_workspace`
-(`ca65e00`), D67 (advocate's SA-13 default recommendation), TUI improvements (`1127960`: real
-arrow-key nav, honest footer, working color + reverse-video selection), the **broker intent-inbox
-(D68)** (`c43e277`: `intent.mjs` spools, the broker drains), and the **TUI rich conversation view
-(D69)**: Enter opens the selected seat's stream with `↑↓` scroll and `Esc` back. The open
-**workspace-gate** follow-up remains: fail-closed isolation with the **verifier-artifact path first**
-(D67 condition 1); isolation is currently ADVISORY. **Next real candidates:** type-to-seat, the
-workspace gate, the worktree-leak defect (leaked `item-1/`,`item-2/` dirs; now gitignored), #491, and
-the still-unqueued turn-kind indicator.
+**Open rulings:** the security position (55); the D11/Level-2 ruling for the TUI attach (52); and TUI
+plan §D-G1–G4 (prose-measure cap, alt-screen receipts, D69/D61 supersession). `pm` registers/sequences
+backlog 52–59 — the delegate does not route queue items.
 
-**State at this refresh (2026-10-16, delegate session):** the resident broker ran as **pid 33116**
-(`04:20Z`) with the D65 liveness fix and was healthy; the delegate stopped/restarted it around the
-TUI and intent-inbox work. Store is single-writer. The team landed the delegated items
-(**#506** `67810af`, **#502** `3b44f38`); the delegate landed the stranded **#599** (`04413fd`).
-`item-1/`, `item-2/` are leaked per-task worktrees (see below). NOTE: committing in-flight work makes
-a seat log "another seat committed my work" — expected under the shared-tree entanglement, not an error.
+**Blockers / owed:** (a) the `docs/DECISIONS.md` alignment entry is **owed** but editing it is blocked
+because `DECISIONS.md` is dirty with **another item's** edit (the D61 citation correction) and staging
+the file would carry that work — leave it to that item's owner. (b) The working tree holds other items'
+files (`cli.mjs`, `docs/DECISIONS.md`, `docs/FEATURES.md`, `docs/STATUS.md`, `demo/init.test.mjs`) —
+**do not discard**.
 
-**Accomplishments this delegate session (all LOCAL; operator holds push):**
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; run the hermetic TUI
+regression with `npm run test:tui`. If the broker is stopped, restart it with
+`DURIG_DB=./selfdev.sqlite node cli.mjs serve` once no writer is in flight.
 
-| Commit | What |
-|---|---|
-| `3b429dc` | fix(broker) #400 — `brokerAlive` treats EPERM as alive |
-| `e937b31` | feat(up) #402 — model-change reset seam in `cmdUp` |
-| `5c300dc` | docs truth-up + broker socket review |
-| `484a571` | feat(broker) — lifecycle audit `START`/`EXIT reason` in `<db>.broker.log` |
-| `ae96445` | feat(guard) — auto-reset a seat whose run goes degenerate (F29) |
-| `0ecf9cf` | D63/D64 + landed the seat's stranded D54–D62 |
-| `c6eaef3` | feat(tui) U1–U5 — interactive client (`#480`–`#484`) |
-| `11edfb3` | chore(commit-model) #474/#475 — worktree-scoped explicit-path commits |
-| `a2ea013`,`832bc21`,`d24c9e6`,`e1bc4f2`,`3241ca2`,`04413fd`,`001339b` | pointer refreshes + landed the stranded #599 |
+**State at this refresh (2026-10-16, delegate session, paused):** store is single-writer; the broker is
+the owner; `vendor/eval/` (reference clones) and `vendor/pi-main/` are gitignored.
 
-Also recovered a **wedged broker** (pid 35604 — no `PASS` for 42 min, `serve --stop` failed twice;
-force-stopped and restarted; root cause in `.spike/delegate/serve.err`: the #506 dirty-tree guard +
-a genlock slot `held by pid undefined`). Suite **78/78** on the committed tree; **no build, no lint**.
+**.
 
 **Test flakiness under a live broker — finding + mitigations (2026-10-16):** running
 `demo/*.test.mjs` while the broker drives gave **71/78**; re-running the 8 failures individually gave
