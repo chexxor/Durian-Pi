@@ -1551,6 +1551,54 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     (d) the highest-harm un-named failure is a confident wrong verification propagating as trusted
     `done` state, poisoning the durable record.
     *Owner:* `lead` (scope ruling) · *Trigger:* before the next ownership change.
+## pi-durable alignment: multiplayer clients and state-backed UIs (from the blog + examples, 2026-10-16)
+
+Source: the pi-durable post's "Multiplayer" and "Many conversations at once" sections, the shipped
+README (`viewState().subscribe()`, `watch()`/`watchEvents()`, `whenBusy: "steer"`, one storage-owning
+process), and the 32 examples at
+`node_modules/@earendil-works/pi-durable/test/examples/` (notably `21-late-join.ts`, `05-watches.ts`,
+`28-reviewer.ts`, `08-harness-conversations.ts`). The post's own example apps (the vacation planner,
+the small coding agent) live in the Pi repo at `v1.0.0` under `packages/coding-agent/src/experimental/`
+and are **not in this checkout** — the research item fetches them. Registered here, **not scheduled**;
+`pm` sequences them.
+
+51. **Research: is durig using pi-durable as intended?** A gap analysis of durig's architecture against
+    the harness's own model — conversations, tasks, documents, forks, per-conversation agent,
+    `viewState`/`watch`, ownership trees — grounded in the examples, not the marketing. durig
+    reimplements a queue, a wake loop, a read API and a polling viewer on top of the harness; the
+    question is which of those the harness already provides better, and which are genuinely durig's
+    (multi-process seats, a human operator, a durable work queue).
+    *Owner:* operator's research agent · *Deliverable:* `docs/reviews/pi-durable-alignment.md` with a
+    gap table (capability → pi-durable mechanism → durig today → adopt/keep/replace), labelled
+    `observed`/`advertised-elsewhere`/`inferred`.
+    *Acceptance:* each recommendation cites an example or spec section; the "keep" rows say why the
+    harness mechanism does not fit.
+
+52. **Make the TUI a state-backed multiplayer client (Level 2).** The post says a UI should be backed by
+    committed state: a client attaches to the owning harness and gets `viewState()` first, then only
+    what changes (`21-late-join.ts`). durig's `ui.mjs` instead reads storage directly and polls every
+    700 ms (D11), so it has poll latency, can tear, and — the observed bug — a spooled intent waits
+    behind a run. Adopt the pattern: the TUI attaches to the broker, subscribes to the focused
+    conversation's view, and steers via `submit(..., { whenBusy: "steer" })`.
+    *Owner:* `lead` (ruling on revisiting D11) → `impl` · *Evidence:* `21-late-join.ts`, the post.
+    *Acceptance:* a TUI demo that attaches, renders a live tool output from `pi.live`, and steers a
+    running conversation, with the poll path kept as a documented fallback only if the ruling says so.
+
+53. **Adopt the reviewer-as-a-conversation pattern.** `28-reviewer.ts` is the harness's own model of a
+    verifier: a separate conversation with its own model, read-only tools, its own checkout, and an
+    `onYield` review loop. That is durig's author/verifier pair, expressed natively — and it pairs with
+    the sycophancy finding (verification must re-execute evidence).
+    *Owner:* `impl` (author) · *Consulted:* `qa`/`auditor` · *Evidence:* `28-reviewer.ts`, example 22/23
+    (subagents), `docs/reviews/Agent_Ownership_Review.md` §2.4.
+    *Acceptance:* a demo where a verifier conversation runs against an item's worktree and its review
+    loop is driven by the harness, not by durig's queue re-waking.
+
+54. **Decide durig's boundary with the harness.** Which durig constructs become pi-durable mechanisms —
+    the queue could be a document (it already is `RigQueue`), seats could be conversations with
+    per-conversation agents/tools (already true), re-waking could be `whenBusy` steering, long work
+    could be durable tasks with checkpoints — and which stay durig-specific (the operator surface, the
+    worktree isolation, the commit policy). This is the decision that follows item 51.
+    *Owner:* `lead` (scope ruling) · *Trigger:* after item 51's report.
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for
