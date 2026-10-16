@@ -11,20 +11,25 @@ _Last refreshed: 2026-10-16 (delegate session — broker-liveness (#D65) and the
 
 ## NEXT SESSION — START HERE
 
-**Current item: #623 / #624 (claimed by impl) — `check` auto-discovery and `init` meta-defaults.**
-The delegate landed the mechanism work this session: D65 (broker-liveness; `PASS <n> ms=<dur>
-woke=<a,b>`; commit `b81e171`) and D66 (`prepare_workspace` — the seat-facing per-item worktree tool;
-the broker no longer sets a process-global `DURIG_SEAT_ROOT`). **Open operator-raised decision:**
-whether per-seat worktree isolation is on by default, opt-in, or opt-out — a consult to `advocate`
-was dispatched (`.spike/delegate/advocate-consult.*`); until ruled, isolation is effectively ON.
-**Blocker:** the shared tree is dirty with #623's in-flight `cli.mjs` and a seat's `docs/STATUS.md` —
-do not discard; stage explicit paths only. **Next real candidates after #623/#624:** the worktree-leak
-defect (leaked `item-1/`,`item-2/` dirs; now gitignored via `/item-*/`), #491 (designer's 5 UX
-follow-ups), and the still-unqueued turn-kind indicator.
+**Current item: the advocated workspace DEFAULT — fail-closed per-item isolation, with the
+verifier-artifact path first (delegate-owned); queue work #623/#624 (claimed by impl) runs
+alongside.** The mechanism is landed (D65 broker-liveness `b81e171`; D66 `prepare_workspace`
+`ca65e00`). The `advocate` answered the operator's opt-in/opt-out question (**SA-13 / D67**): per-item
+isolation should be the DEFAULT (conditionally ON in a git repo), the file/shell tools must FAIL
+CLOSED until `prepare_workspace` runs, and a non-git workspace must degrade satisfiably. The one
+condition before the gate lands: a verifier's worktree must be baseable on the AUTHOR's item, or
+verification passes against pre-change HEAD (D67 condition 1). Current behavior is ADVISORY — an
+unprepared seat silently falls through to the shared tree.
+
+**Blocker:** the verifier-artifact path must be designed before the gate (D67 condition 1). The shared
+tree holds #623's in-flight `cli.mjs` and a seat's `docs/STATUS.md` — do not discard; stage explicit
+paths only. **Next real candidates after the gate:** the worktree-leak defect (leaked
+`item-1/`,`item-2/` dirs; now gitignored via `/item-*/`), #491 (designer's 5 UX follow-ups), and the
+still-unqueued turn-kind indicator.
 
 Exact next commands:
 `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`,
-`… node cli.mjs log impl`; stop with `… node cli.mjs serve --stop`.
+then `… node cli.mjs serve` (restart; no writer is running now).
 
 **State at this refresh (2026-10-16, delegate session):** resident broker **pid 17424**
 (`01:12:41Z`; healthy — `PASS 4`+ logged) with the **degeneration guard armed** (it has fired and

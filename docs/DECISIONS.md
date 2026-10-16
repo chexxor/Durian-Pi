@@ -1598,3 +1598,31 @@ root is now gitignored (`/item-*/`).
 whether per-seat worktree isolation should be on by default, opt-in, or opt-out — a consult to the
 `advocate` seat and competitor research are in flight; this decision records the MECHANISM only, not
 the default.
+
+## D67 — Per-seat workspace isolation: the advocate's default recommendation (2026-10-16, RECOMMENDATION)
+
+**Recommendation (advocate, recorded as SA-13 in docs/SELF-ADMIN.md):** make per-item workspace
+isolation the DEFAULT, not advisory — conditionally ON by default when the workspace is a git repo;
+the file/write/edit/shell tools FAIL CLOSED with a model-readable "call `prepare_workspace(itemId)`
+first" until the conversation has a recorded workspace; outside a git repo `prepare_workspace`
+succeeds trivially (records the cwd and states isolation is off) so a first-run rig never dead-ends;
+an opt-out knob for operators who want direct-to-live editing. Reads may stay open or be gated
+(designer's call). Advisory-only is the one answer the advocate rejects.
+
+**Why (advocate's evidence):** `makeSeatEnv` falls through `target.cwd ?? DURIG_SEAT_ROOT ??
+fallbackRoot`, so an unprepared seat silently works in the shared tree; prompt-only constraints
+demonstrably fail (D48's stash incident, F9, F23), and the denylist misses most bypasses. Default-ON
+with a git-repo condition serves both the newcomer (no silent live-tree write) and the solo operator
+(review-before-merge becomes `git diff main..item-<branch>`).
+
+**Two conditions before the gate lands (advocate's dissent-with-reason):**
+1. **Verifier-artifact path first.** A verifier's worktree forks HEAD, but the author's artifact is on
+   the item's branch (D50). Unless `prepare_workspace` for a verification item can base the tree on
+   the AUTHOR's item (same object DB, fetch-free), verification re-runs against pre-change HEAD and
+   passes without exercising the change — the W2 false-pass. This is the one conditional.
+2. **No silent fallback.** If `DURIG_SEAT_ROOT` remains a fallback for unprepared seats, it must log
+   a one-line stderr note naming the root.
+
+**Status:** recorded as a recommendation, NOT yet adopted or implemented. The mechanism (the
+`prepare_workspace` tool, D66) is landed and currently advisory. The fail-closed gate plus the two
+conditions is the delegate-owned next item; the operator/lead ratifies the default.
