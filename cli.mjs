@@ -125,6 +125,19 @@ const MODEL_ID = CFG.DURIG_MODEL ?? "zai-org/GLM-5.3-Flash";
 // at ./rig.sqlite, every command reports ok with zero seats, and the rig looks
 // broken. Say so on stderr (stdout keeps the JSON contract) with the one fact
 // that resolves it - which database was used, and from where.
+// Every storage-open failure flows to fail()/the entrypoint catch-alls with
+// inner error text that never names WHICH file was in play ("unable to open
+// database file") — the wrong-rig trap a fresh install meets on day one. One
+// wrapper keeps the resolved DB_PATH in front of the cause for every verb
+// (#491 C7): same JSON contract {ok:false,error}, same exit code, path named.
+async function openStore(path = DB_PATH) {
+  try {
+    return await openNodeSqliteStorage(path);
+  } catch (err) {
+    throw new Error(`cannot open ${path}: ${String(err?.message ?? err)}`);
+  }
+}
+
 function noteEmptyRig(seatCount) {
   if (seatCount > 0) return;
   const freshness = DB_EXISTED_AT_START
@@ -290,7 +303,7 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
   // runs, `makeSeatEnv` fails closed (read-only), so the gap is safe rather than open.
   const seatRoster = new Map();
   const harness = await Harness.open(
-    await openNodeSqliteStorage(DB_PATH),
+    await openStore(),
     {
       models,
       registry,
@@ -923,7 +936,7 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
   // its whole session on the first storage error, so an unreadable `pi.live` must
   // be detected through this handle BEFORE the harness opens that conversation
   // (P5 / #110). One handle for the run; closed with the harness.
-  const probeStorage = await openNodeSqliteStorage(DB_PATH);
+  const probeStorage = await openStore();
   // Bounded-run state (#147): `startedAt` drives --max-duration; `stopping` is set by a signal
   // so the loop breaks AFTER the pass in flight settles (waitForIdle), never mid-run. Declared
   // here, not inside the try, because the finally removes the handlers and reports `stoppedBy`.
@@ -1139,7 +1152,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
     fail(`a broker is already running for ${DB_PATH} (pid ${existing.pid}); stop it with "serve --stop" first`);
   }
   const { harness } = await openHarness({ enforceSeatRoot: true });
-  const probeStorage = await openNodeSqliteStorage(DB_PATH);
+  const probeStorage = await openStore();
   const scheduler = new WakeScheduler({
     minIntervalMs: 500,
     seatCooldownMs: SERVE_SEAT_COOLDOWN_MS,
@@ -1509,7 +1522,7 @@ async function cmdSend(seatName, text, { stream = false, requestId = null } = {}
 async function cmdLog(seatName, limitStr, { follow = false, human = false, full = false, toolBg = false, theme = "dark" } = {}) {
   const parsed = Number(limitStr);
   const limit = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 20;
-  const storage = await openNodeSqliteStorage(DB_PATH);
+  const storage = await openStore();
   const interactive = Boolean(process.stdout.isTTY);
   const color = human && interactive && !process.env.NO_COLOR;
   let stopping = false;
@@ -1704,7 +1717,7 @@ const SERVE_SEAT_COOLDOWN_MS = 30_000;
 // committed state, so a late/reconnecting subscriber resumes from `--since`
 // rather than replaying. One JSON event per line; diagnostics on stderr.
 async function cmdEvents({ sinceSeq = 0, follow = false } = {}) {
-  const storage = await openNodeSqliteStorage(DB_PATH);
+  const storage = await openStore();
   let stopping = false;
   process.on("SIGINT", () => {
     stopping = true;
@@ -1726,7 +1739,7 @@ async function cmdEvents({ sinceSeq = 0, follow = false } = {}) {
 }
 
 async function cmdWatch(once, human) {
-  const storage = await openNodeSqliteStorage(DB_PATH);
+  const storage = await openStore();
   let seq = 0;
   let stopping = false;
   process.on("SIGINT", () => {
@@ -1815,7 +1828,7 @@ async function cmdOptimize(textParts) {
 // and attention notices for blocked seats. Same computation the watch
 // stream carries, for callers that want a single document and an exit code.
 async function cmdStatus() {
-  const storage = await openNodeSqliteStorage(DB_PATH);
+  const storage = await openStore();
   try {
     const health = await readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG });
     noteEmptyRig(health.seats.length);
@@ -1882,7 +1895,7 @@ async function cmdMetrics(rigFile, human, windowArg) {
     ...gitProvenance(process.cwd()),
     active: activeSet(parseExtensionList(CFG.DURIG_EXTENSIONS ?? "")),
   };
-  const storage = await openNodeSqliteStorage(DB_PATH);
+  const storage = await openStore();
   try {
     const health = await readRigHealth(storage, DB_PATH, maxSeats(), {
       modelsBySeat: spec ? resolveModelsBySeat(spec) : {},
@@ -1969,7 +1982,7 @@ async function cmdCheck(rigFile, human) {
     stored = { reason: "absent" };
   } else {
     try {
-      const storage = await openNodeSqliteStorage(DB_PATH);
+      const storage = await openStore();
       try {
         const rec = await storage.findDocument(
           { kind: Constitution.definition.kind, scope: { kind: "session" } },

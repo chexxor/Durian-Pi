@@ -149,7 +149,9 @@ try {
     process.stderr.write(`no store at ${DB_PATH} — run "node cli.mjs up rig.starter.json" first (or set DURIG_DB)\n`);
     process.exit(2);
   }
-  storage = await openNodeSqliteStorage(DB_PATH);
+  storage = await openNodeSqliteStorage(DB_PATH).catch((err) => {
+    throw new Error(`cannot open ${DB_PATH}: ${err?.message ?? err}`);
+  });
 
   const readState = await makeReadState(storage);
   process.stdin.setRawMode(true);

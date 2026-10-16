@@ -119,6 +119,14 @@ anchored to durig's install directory (`durig.config.default.json`)
 log. Proof: `demo/config.test.mjs` — merge order (env > file > defaults), a
 fresh CWD with no runtime config still gets the shipped floor, malformed
 defaults fail loudly, and the wiring is asserted in cli.mjs's real load path.
+
+Store-open failures name the store: every verb goes through one storage-open
+wrapper, so a failure reads `cannot open <resolved DB_PATH>: <cause>` (same
+JSON contract `{ok:false,error}` and exit 1 as any CLI failure) instead of bare
+sqlite wording that leaves the operator guessing which store was in play
+(#491 C7). The interactive `durig ui` renders the same wording on its failure
+path. Proof: `demo/errorwording.test.mjs` — directory-as-DB through the real
+CLI, exit 1, the exact resolved path in the error text before the cause.
 Provider options are imported from `src/providers/deepinfra-models.ts` — a vendored
 copy of the module the pi extension uses — so the catalog is single-sourced and
 durig stands alone (see `src/providers/PROVENANCE.md`).
