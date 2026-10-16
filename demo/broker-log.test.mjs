@@ -69,6 +69,12 @@ try {
     lines.slice(0, 10).forEach((l) => console.log(`    ${l}`));
 
     check("broker.log records PASS lines", /PASS \d/.test(logContent));
+    // Audit (this change): the log must say WHEN the broker started and WHY it stopped,
+    // so "why did the broker stop?" is answerable after the process is gone. RED here
+    // before the START/EXIT lifecycle lines exist.
+    check("broker.log records a START line", /START pid=\d+/.test(logContent));
+    check("broker.log records an EXIT line with a reason", /EXIT pid=\d+ reason=\S+ passes=\d+/.test(logContent));
+    check("EXIT reason names the max-duration bound", /EXIT pid=\d+ reason=max-duration passes=\d+/.test(logContent));
   }
 
   console.log(failures === 0

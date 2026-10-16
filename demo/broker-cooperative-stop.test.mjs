@@ -5,7 +5,7 @@
 //
 // Run: node demo/broker-cooperative-stop.test.mjs  (exit 0 = pass)
 
-import { existsSync, mkdtempSync, rmSync, copyFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, copyFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "path";
 import { spawn, execSync } from "node:child_process";
@@ -91,6 +91,24 @@ try {
   const slotFiles = [0, 1, 2, 3].map(i => `${dbPath}.genlock.${i}`);
   const staleSlots = slotFiles.filter(p => existsSync(p));
   check("no stale genlock slots after stop", staleSlots.length === 0, `Found: ${staleSlots.join(", ")}`);
+
+  // Audit (this change): the stop REASON must survive in the log, not just stdout. The
+  // broker writes EXIT just before it returns, and `serve --stop` can observe the cleared
+  // .stop file first, so give the process a moment to flush the final line.
+  if (stopResult.stopped === true) {
+    const logFile = `${dbPath}.broker.log`;
+    let logContent = "";
+    for (let i = 0; i < 50; i++) {
+      logContent = existsSync(logFile) ? readFileSync(logFile, "utf8") : "";
+      if (/EXIT/.test(logContent)) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    check(
+      "broker.log records EXIT reason=stop after a cooperative stop",
+      /EXIT pid=\d+ reason=stop passes=\d+/.test(logContent),
+      logContent.trim().split("\n").slice(-2).join(" | "),
+    );
+  }
 
   console.log(failures === 0
     ? "\nPASS — B3 cooperative stop verified"

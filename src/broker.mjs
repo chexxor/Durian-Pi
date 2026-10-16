@@ -201,6 +201,12 @@ export async function runWakeLoop({
   // (three items queued with nothing driving) — so the first pass is forced
   // rather than waiting for a future commit.
   scheduler.markDirty();
+  // Broker lifecycle audit (D46): `stoppedBy` reached stdout only, so once the process was
+  // gone `<db>.broker.log` could not answer "why did the broker stop?" — a stop request was
+  // indistinguishable from a crash or a bound. Log the birth here. A START with no matching
+  // EXIT below means the broker died abnormally (a kill or a throw), because logBrokerLine is
+  // synchronous and the EXIT line is written before the loop returns.
+  logBrokerLine(dbPath, `START pid=${process.pid}`);
   for (;;) {
     if (isStopping()) {
       stoppedBy = "signal";
@@ -275,6 +281,9 @@ export async function runWakeLoop({
       break;
     }
   }
+  // Close the audit opened by START: the reason the broker stopped (a `.stop` request, a
+  // bound, or a signal) survives the process here instead of only on stdout.
+  logBrokerLine(dbPath, `EXIT pid=${process.pid} reason=${stoppedBy ?? "unknown"} passes=${passes}`);
   return { passes, failedSeats: [...failedSeats], escalations, stoppedBy };
 }
 
