@@ -20,9 +20,14 @@ drain) and restarted as **pid 32276** at `20:06:55Z` (`scripts/serve-noroot.ps1`
 
 **impl recovered (the operator's ask).** impl claimed **#700** (no-secrets config guard) at 19:56:43,
 wrote coherent `SECRET_VALUE_PATTERNS` / `looksLikeSecret` / `assertNoSecretsInFile` code into
-`src/config.mjs` — but in the **shared main tree** (no `item-700` worktree; it skipped
-`prepare_workspace`) — then its run ended on a **malformed pseudo-tool-call** (`<parameter name="edit">`
-arrived as text; `stopReason:"stop"`) at ~20:01, leaving the item incomplete. Recovery: backed up the
+`src/config.mjs`, then its run ended on a **malformed pseudo-tool-call** (`<parameter name="edit">`
+arrived as text; `stopReason:"stop"`) at ~20:01, leaving the item incomplete. **Cause, corrected from
+this session's first draft (which claimed it "skipped" `prepare_workspace`):** in the pre-malformed run
+there is no `prepare_workspace` call after `claim_work #700` (entry `34390`) — but the shared-tree write
+is a **tool-path resolution defect**, because on the later attempt `prepare_workspace(700)` itself FAILED
+(`npm ci --prefer-offline failed`, entry `34577`) while the worktree still existed (entry `34585`,
+`item-700` at `f802d5f`), and the edit had landed in BOTH main and `item-700` (entries `34591`–`34595`).
+Recovery: backed up the
 tree (`.spike/delegate/impl-recovery-20261016-200534/`: `tracked.patch`, `init.test.mjs`), then spooled a
 steer via `intent.mjs` (`.spike/delegate/intent-impl-resume-700.txt`) = call `prepare_workspace(700)`
 FIRST, re-apply the guard inside `item-700`, revert the shared-tree block with the edit tool (never
@@ -41,8 +46,11 @@ FIRST, re-apply the guard inside `item-700`, revert the shared-tree block with t
 
 **Gate unchanged:** `cli.mjs` is still dirty (cmdInit C9/C10 + untracked `demo/init.test.mjs`) and
 `src/seatguard.mjs` + `demo/seatguard.test.mjs` are dirty in main; **items 69/78 remain blocked on
-`cli.mjs`**. Note the seatguard work is committed in `item-673` (#802, `0102f3c`), so the main-tree
-copies may be stale leftovers — verify before treating them as in-flight.
+`cli.mjs`**. The main-tree seatguard copy is **NOT** the committed #802 work: `git diff 0102f3c --
+src/seatguard.mjs` is `+11/−89` (and impl's own entry `34305` calls it "an earlier/alternate copy"
+lacking the async `absoluteSeatPath`/`seatGraphRoot` work), so it is a **divergent draft** — establish its
+provenance before treating it as in-flight. (This session's first draft wrongly called it a stale
+duplicate of `0102f3c`; that was inferred, not checked.)
 
 ## NEXT SESSION — START HERE
 
