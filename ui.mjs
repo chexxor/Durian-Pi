@@ -39,6 +39,7 @@ usage:
 keys:
   q / Esc / Ctrl+C   quit (terminal is always restored)
   r                  repaint now
+  ↑ / ↓ or k / j     select the seat whose transcript is shown
 
 environment:
   DURIG_DB, durig.config.json   which database to watch (same as watch/status)
@@ -54,7 +55,7 @@ const DB_PATH = CFG.DURIG_DB ?? "./rig.sqlite";
 
 /* ───────── readState (read-only store reads; D11 poll) ───────── */
 
-async function makeReadState(storage) {
+async function makeReadState(storage, ui) {
   const slots = Number(CFG.DURIG_MAX_CONCURRENT_SEATS ?? "");
   const bounded = Number.isFinite(slots) && slots > 0 ? slots : 999;
   return async () => {
@@ -77,14 +78,29 @@ async function makeReadState(storage) {
         }
       }
     }
-    // Transcript: the streaming seat's committed turns (the view shows one
-    // conversation's recent turns); fall back to the first seat when idle.
-    const focusSeat = streamingSeat ?? health.seats[0]?.name;
+    // The selected seat drives the transcript. Until the operator navigates,
+    // auto-follow the first streaming seat; once they press a nav key, their
+    // choice sticks (README: r does not steal focus back).
+    ui.seatCount = health.seats.length;
+    if (!ui.navigated && streamingSeat !== null) {
+      const idx = health.seats.findIndex((s) => s.name === streamingSeat);
+      if (idx >= 0) ui.selectedIndex = idx;
+    }
+    ui.selectedIndex = Math.max(0, Math.min(ui.seatCount - 1, ui.selectedIndex));
+    const focusSeat = health.seats[ui.selectedIndex]?.name ?? health.seats[0]?.name;
     let turns = [];
     if (liveBySeat[focusSeat]?.conversationId !== undefined && health._pages?.[focusSeat]) {
       turns = buildTurns(health._pages[focusSeat]);
     }
-    return { seats: health.seats, turns, partial, partials, health, queueItems };
+    return {
+      seats: health.seats,
+      turns,
+      partial,
+      partials,
+      health,
+      queueItems,
+      selectedSeat: ui.seatCount > 0 ? focusSeat : null,
+    };
   };
 }
 
@@ -153,7 +169,12 @@ try {
     throw new Error(`cannot open ${DB_PATH}: ${err?.message ?? err}`);
   });
 
-  const readState = await makeReadState(storage);
+  // Selection is owned here, not in the driver: the driver is a pure key/tick
+  // machine, and this entrypoint already owns readState (the seat whose turns
+  // are shown). `navigated` latches on the first nav key so auto-follow of a
+  // streaming seat never fights the operator's choice.
+  const ui = { selectedIndex: 0, navigated: false, seatCount: 0 };
+  const readState = await makeReadState(storage, ui);
   process.stdin.setRawMode(true);
   process.stdin.resume();
   enterScreen();
@@ -164,6 +185,11 @@ try {
     paint: paintScreen,
     color: !process.env.NO_COLOR,
     pollMs: 700,
+    onNavigate: (delta) => {
+      ui.navigated = true;
+      ui.selectedIndex = Math.max(0, Math.min(ui.seatCount - 1, ui.selectedIndex + delta));
+      void driver.tick();
+    },
     onExit: () => {
       quit();
     },

@@ -7,7 +7,8 @@
   "main": "src/rig.mjs",
   "scripts": {
     "demo": "node demo/offline.mjs",
-    "cli": "node cli.mjs"
+    "cli": "node cli.mjs",
+    "ui": "node ui.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "^1.0.0",

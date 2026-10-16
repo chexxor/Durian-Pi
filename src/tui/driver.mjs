@@ -41,10 +41,12 @@ const ERR_FRAME_MAX = 120;
  * @param {(payload: {lines: string[], width: number, kind: "frame"|"error"}) => void} io.paint —
  *   repaint the screen with the given lines (entrypoint writes the buffer).
  * @param {(reason: "quit") => void} [io.onExit] — invoked once per quit request.
+ * @param {(delta: -1|1) => void} [io.onNavigate] — up/down request; the ENTRYPOINT owns the
+ *   selected seat (it also owns readState), so the driver stays a pure key/tick machine.
  * @param {number} [io.pollMs] — poll interval (default 700).
  * @param {boolean} [io.color] — pass-through to renderTui (NO_COLOR respected by caller).
  */
-export function createUiDriver({ getSize, readState, paint, onExit = () => {}, pollMs = DEFAULT_POLL_MS, color = false }) {
+export function createUiDriver({ getSize, readState, paint, onExit = () => {}, onNavigate = () => {}, pollMs = DEFAULT_POLL_MS, color = false }) {
 	let timer = null;
 	let running = false; // a tick is in flight
 	let stopped = false; // cleanup happened
@@ -111,6 +113,10 @@ export function createUiDriver({ getSize, readState, paint, onExit = () => {}, p
 			void tick();
 			return true;
 		}
+		if (key === "up" || key === "down") {
+			onNavigate(key === "up" ? -1 : 1);
+			return true;
+		}
 		return false; // read-only TUI: unknown keys are consumed silently
 	}
 
@@ -135,13 +141,33 @@ export function createUiDriver({ getSize, readState, paint, onExit = () => {}, p
 
 /* ───────── decode stdin chunks ───────── */
 
-/** Decode a raw-mode stdin chunk into key tokens ("q", "\x1b", "\x03", "r", ...). */
+/** Decode a raw-mode stdin chunk into key tokens.
+ *
+ * Arrow keys are CSI sequences (`ESC [ A/B/C/D`) and must be consumed WHOLE: the
+ * naive per-character decode saw the leading ESC as "quit", so pressing an arrow
+ * exited the TUI. A bare ESC (nothing following) is still quit. `j`/`k` are
+ * aliases for down/up; the rest is ignored (read-only surface). */
 export function decodeKeys(chunk) {
 	const s = String(chunk);
 	const keys = [];
-	for (const ch of s) {
-		if (ch === "\x03" || ch === "\x1b" || ch === "q" || ch === "r") keys.push(ch);
-		// everything else is ignored (read-only surface)
+	for (let i = 0; i < s.length; i++) {
+		const ch = s[i];
+		if (ch === "\x1b") {
+			if (s[i + 1] === "[") {
+				const code = s[i + 2];
+				if (code === "A") keys.push("up");
+				else if (code === "B") keys.push("down");
+				i += 2; // consume the CSI sequence so its bytes are never re-read
+				continue;
+			}
+			keys.push("\x1b");
+			continue;
+		}
+		if (ch === "\x03") keys.push("\x03");
+		else if (ch === "q") keys.push("q");
+		else if (ch === "r") keys.push("r");
+		else if (ch === "j") keys.push("down");
+		else if (ch === "k") keys.push("up");
 	}
 	return keys;
 }

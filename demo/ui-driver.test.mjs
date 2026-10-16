@@ -168,6 +168,31 @@ try {
   await keyDriver.cleanup();
   check("double cleanup is safe", true);
 
+  // --- 5. arrow keys + seat navigation ------------------------------------
+  // The bug this pins: an arrow key's leading ESC byte used to be decoded as
+  // "quit", so pressing later committed work sent the operator out of the TUI.
+  check("decodeKeys maps ↑ to up, not quit", JSON.stringify(driverModule.decodeKeys("\x1b[A")) === JSON.stringify(["up"]));
+  check("decodeKeys maps ↓ to down", JSON.stringify(driverModule.decodeKeys("\x1b[B")) === JSON.stringify(["down"]));
+  check("decodeKeys still maps a bare ESC to quit", JSON.stringify(driverModule.decodeKeys("\x1b")) === JSON.stringify(["\x1b"]));
+  check("decodeKeys maps j/k aliases to down/up", JSON.stringify(driverModule.decodeKeys("jk")) === JSON.stringify(["down", "up"]));
+
+  const navs = [];
+  const exitedNav = [];
+  const navDriver = driverModule.createUiDriver({
+    getSize: () => size,
+    color: false,
+    pollMs: 10,
+    readState: async () => ({ seats: dummySeats, turns: [], partial: null, health: dummyHealth, queueItems: [] }),
+    paint: () => {},
+    onNavigate: (d) => navs.push(d),
+    onExit: (reason) => exitedNav.push(reason),
+  });
+  navDriver.handleKey("down");
+  navDriver.handleKey("up");
+  check("up/down call onNavigate with the direction", JSON.stringify(navs) === JSON.stringify([1, -1]), JSON.stringify(navs));
+  check("navigation does NOT exit", exitedNav.length === 0, JSON.stringify(exitedNav));
+  await navDriver.cleanup();
+
   console.log(failures === 0
     ? "\nPASS — driver paints renderTui frames; poll+key lifecycle clean"
     : `\nFAIL — ${failures} check(s) failed`);

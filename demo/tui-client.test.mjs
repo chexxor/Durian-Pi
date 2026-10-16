@@ -157,6 +157,19 @@ try {
 	});
 	const strippedLines = tuiModule.frameToLines(frameWithColor);
 	check("stripped lines are clean strings", strippedLines.every((l) => typeof l === "string" && !/\x1b/.test(l)));
+	// The color path must ACTUALLY emit escapes: every `paint()` call used to omit
+	// its `color` argument, so `color:true` silently rendered monochrome and this
+	// strip test passed on a frame with nothing to strip.
+	check("color:true emits ANSI (not silently monochrome)", frameWithColor.lines.some((l) => /\x1b\[/.test(l)));
+
+	// Selection: reverse video + bold + the ▸ marker (skill: the canonical
+	// current-row signal), and legible in monochrome via the marker alone.
+	console.log("\n8b. selection signal");
+	const noColorSel = tuiModule.renderTui({ seats: dummySeats, turns: [], width: 80, color: false, selectedSeat: "impl" });
+	check("selected seat row carries the ▸ marker", noColorSel.lines.some((l) => l.startsWith("▸") && l.includes("impl")));
+	check("non-selected rows keep the plain gutter", noColorSel.lines.filter((l) => /^[ ]/.test(l) && l.includes("pm")).length > 0);
+	const colorSel = tuiModule.renderTui({ seats: dummySeats, turns: [], width: 80, color: true, selectedSeat: "impl" });
+	check("selected row uses reverse video", colorSel.lines.some((l) => l.includes("\x1b[7m") && l.includes("impl")));
 
 	// Regression: no storage/harness/driver imports
 	console.log("\n9. Regression: no storage/harness/drive imports");

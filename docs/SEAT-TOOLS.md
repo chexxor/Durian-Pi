@@ -48,11 +48,17 @@ cannot drift into a hole.
 `HarnessOptions.env` from `makeSeatEnv`, and fills the roster from the store; `up` narrows
 verifier seats through `scopeVerifierTools`. The test opens by asserting that **cli.mjs contains
 those calls**, because a module that is never installed protects nothing while looking finished,
-and only then proves behaviour: the tool set is read/write/edit/PowerShell with **no bash**, an
+and only then proves behaviour: the tool set is read/write/edit/PowerShell + `prepare_workspace` with **no bash**, an
 author can write inside its root, a verifier **cannot** write whatever tools it was offered, an
 **unknown conversation fails closed** rather than open, and an escape is refused even for an
 author. A live scratch `up` / `check` / `ps` on a throwaway store confirms the real path still
 works with the wiring in place.
+
+**Workspace switch (D66, `prepare_workspace`):** the seat prepares its own item worktree — the
+broker no longer sets a process-global `DURIG_SEAT_ROOT`, and `makeSeatEnv` resolves the seat's own
+persisted cwd first, so each conversation is confined to its own tree. Coordinator seats lose
+`prepare_workspace` with the rest of `COORDINATOR_REMOVALS`; verifiers keep it so they can work in a
+disposable copy. Proof: `demo/prepare-workspace.test.mjs`, amended `demo/seattools.test.mjs`.
 
 *The residual, stated plainly:* a verifier's **shell can still write**, because a shell cannot be
 made read-only - but it is now **bounded by the worktree below**, since the only tree a verifier

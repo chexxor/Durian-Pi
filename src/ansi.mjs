@@ -9,6 +9,10 @@
 export const ANSI = {
 	reset: "\x1b[0m",
 	dim: "\x1b[2m",
+	bold: "\x1b[1m",
+	// Reverse video is the canonical "current selection" signal (the TUI design
+	// skill's visual-patterns): it works back to VT100 and survives every theme.
+	reverse: "\x1b[7m",
 	green: "\x1b[32m",
 	yellow: "\x1b[33m",
 	red: "\x1b[31m",

@@ -56,6 +56,7 @@ function paint(tone, text, color) {
 		cyan: ANSI.cyan,
 		magenta: ANSI.magenta,
 		bold: ANSI.bold,
+		reverse: ANSI.reverse,
 	};
 	return `${codes[tone] ?? ""}${text}${codes.reset}`;
 }
@@ -70,9 +71,9 @@ function stripColors(text) {
  * Render the seat list section.
  * Returns { lines, width } where width is the used character width.
  */
-function renderSeatList(seats, activityMap, width) {
+function renderSeatList(seats, activityMap, width, selectedSeat = null, color = false) {
 	if (!seats?.length) {
-		return { lines: [paint("gray", "  (no seats yet)", false)], width: Math.max(18, 0) };
+		return { lines: [paint("gray", "  (no seats yet)", color)], width: Math.max(18, 0) };
 	}
 
 	const maxName = Math.max(...seats.map((s) => s.name.length), 4) + 1;
@@ -84,9 +85,17 @@ function renderSeatList(seats, activityMap, width) {
 		const act = activityMap?.[seat.name] ?? { glyph: "○", tone: "gray", state: "idle", focus: "" };
 		const name = truncate(seat.name, maxName - 1);
 		const role = truncate(seat.role ?? "", maxRole - 1);
-		const head = `${paint(act.tone, act.glyph)} ${pad(name, maxName)}${pad(role, maxRole)}`;
+		const head = `${paint(act.tone, act.glyph, color)} ${pad(name, maxName)}${pad(role, maxRole)}`;
 		const focus = truncate(act.focus, width - activityCol);
-		lines.push(`  ${head}${focus}`);
+		// The selected row is marked with a cursor glyph in place of the leading
+		// space, so selection adds no width and every row keeps one 2-cell gutter.
+		const isSelected = selectedSeat !== null && seat.name === selectedSeat;
+		const cursor = isSelected ? "▸" : " ";
+		const row = `${cursor} ${head}${focus}`;
+		// Selection is reverse video + bold (the skill's canonical, most-readable
+		// current-row signal — see references/visual-patterns.md), reinforced by the
+		// ▸ glyph so it still reads in monochrome / NO_COLOR.
+		lines.push(isSelected ? paint("reverse", paint("bold", row, color), color) : row);
 	}
 
 	return { lines, width: width };
@@ -95,9 +104,9 @@ function renderSeatList(seats, activityMap, width) {
 /**
  * Render the transcript section (last N turns).
  */
-function renderTranscript(turns, collapsed, maxRows, width) {
+function renderTranscript(turns, collapsed, maxRows, width, color = false) {
 	if (!turns?.length) {
-		return { lines: [paint("gray", "  (no turns yet)", false)], height: 1 };
+		return { lines: [paint("gray", "  (no turns yet)", color)], height: 1 };
 	}
 
 	// Show last `maxRows` turns, newest first, but reverse order for display
@@ -109,12 +118,12 @@ function renderTranscript(turns, collapsed, maxRows, width) {
 			case "operator":
 				marker = "▶";
 				text = truncate(turn.text, width - 8);
-				lines.push(`  ${paint("green", marker)} ${paint("bold", text)}`);
+				lines.push(`  ${paint("green", marker, color)} ${paint("bold", text, color)}`);
 				break;
 			case "agent":
 				marker = "◀";
 				text = truncate(turn.text, width - 8);
-				lines.push(`  ${paint("cyan", marker)} ${text}`);
+				lines.push(`  ${paint("cyan", marker, color)} ${text}`);
 				break;
 			case "thinking":
 				marker = "◇";
@@ -126,16 +135,16 @@ function renderTranscript(turns, collapsed, maxRows, width) {
 					: turn.text
 						? truncate(`thinking › ${turn.text.split("\n")[0]}`, width - 8)
 						: "[thinking]";
-				lines.push(`  ${paint("yellow", marker)} ${paint("dim", text)}`);
+				lines.push(`  ${paint("yellow", marker, color)} ${paint("dim", text, color)}`);
 				break;
 			case "tools":
 				marker = "⚙";
 				if (turn.call) {
 					const callText = formatToolName(turn.call) + " " + formatArgs(turn.call.args || {}, width - 12);
-					lines.push(`  ${paint("magenta", marker)} ${callText}`);
+					lines.push(`  ${paint("magenta", marker, color)} ${callText}`);
 				} else if (turn.result) {
 					const resText = truncate(extractResultText(turn.result), width - 8);
-					lines.push(`  ${paint("gray", marker)} ${resText}`);
+					lines.push(`  ${paint("gray", marker, color)} ${resText}`);
 				}
 				break;
 			default:
@@ -149,9 +158,9 @@ function renderTranscript(turns, collapsed, maxRows, width) {
 /**
  * Render the streaming / partial row.
  */
-function renderPartial(partial, width, { roles = null } = {}) {
+function renderPartial(partial, width, { roles = null, color = false } = {}) {
 	if (!partial || !partial.hasContent) {
-		return { lines: [paint("gray", "  [idle]", false)], height: 1 };
+		return { lines: [paint("gray", "  [idle]", color)], height: 1 };
 	}
 
 	const lines = [];
@@ -170,11 +179,11 @@ function renderPartial(partial, width, { roles = null } = {}) {
 		const tone = isError ? "red" : callStatus === "done" ? "green" : callStatus === "running" ? "cyan" : "yellow";
 		const tint = tintOf(callStatus, isError);
 		const argsText = formatArgs(call.args || {}, Math.max(12, width - 16));
-		const row = `  ${paint(tone, glyph)} ${call.name}${argsText ? ` ${paint("gray", argsText)}` : ""}`;
+		const row = `  ${paint(tone, glyph, color)} ${call.name}${argsText ? ` ${paint("gray", argsText, color)}` : ""}`;
 		lines.push(truncate(tint ? `${tint}${row}${ANSI.reset}` : row, width));
 		if (call.output) {
 			const first = String(call.output).split("\n")[0];
-			const outRow = `      ${paint("gray", first)}`;
+			const outRow = `      ${paint("gray", first, color)}`;
 			lines.push(truncate(roles ? `${roles.toolOutput}${outRow}${ANSI.reset}` : outRow, width));
 		}
 	}
@@ -183,19 +192,19 @@ function renderPartial(partial, width, { roles = null } = {}) {
 		// ("thinking ›"), reasoning first, and NEVER hidden because text reached the
 		// frame — the log does not hide it either.
 		const text = truncate(partial.thinking.split("\n")[0], width - 18);
-		lines.push(`  ${paint("yellow", "◇")} ${paint("dim", "thinking ›")} ${text}`);
+		lines.push(`  ${paint("yellow", "◇", color)} ${paint("dim", "thinking ›", color)} ${text}`);
 	} else if (partial.thinkingRedacted) {
 		// U5: a redacted live block is reported with the exact phrase the log uses,
 		// in both surfaces — the block exists, the body does not.
-		lines.push(`  ${paint("yellow", "◇")} ${paint("dim", "thinking (redacted by the provider)")}`);
+		lines.push(`  ${paint("yellow", "◇", color)} ${paint("dim", "thinking (redacted by the provider)", color)}`);
 	}
 	if (partial.text) {
 		const text = truncate(partial.text, width - 8);
-		lines.push(`  ${paint("cyan", "●")} ${text}`);
+		lines.push(`  ${paint("cyan", "●", color)} ${text}`);
 	}
 	if (partial.tools?.length) {
 		for (const tool of partial.tools.slice(0, 2)) {
-			const line = `    ${paint("magenta", "⚙")} ${tool.name}${tool.callId ? ` (${tool.callId})` : ""}`;
+			const line = `    ${paint("magenta", "⚙", color)} ${tool.name}${tool.callId ? ` (${tool.callId})` : ""}`;
 			lines.push(truncate(line, width));
 		}
 	}
@@ -206,21 +215,21 @@ function renderPartial(partial, width, { roles = null } = {}) {
 /**
  * Render the status bar.
  */
-function renderStatusBar(health, seats, queueItems, width) {
+function renderStatusBar(health, seats, queueItems, width, color = false) {
 	const seatCount = seats?.length ?? 0;
 	const queueCount = queueItems?.length ?? 0;
 	const uptime = health?.uptime != null ? `${Math.round(health.uptime / 60)}m` : "?";
 
 	const parts = [
-		paint("bold", `seats: ${seatCount}`),
-		paint("bold", `queue: ${queueCount}`),
-		paint("bold", `uptime: ${uptime}`),
+		paint("bold", `seats: ${seatCount}`, color),
+		paint("bold", `queue: ${queueCount}`, color),
+		paint("bold", `uptime: ${uptime}`, color),
 	];
 
 	if (health?.attention?.length) {
 		for (const note of health.attention.slice(0, 3)) {
 			const text = truncate(`[${note.kind}]`, width - parts.join("  ").length - 2);
-			parts.push(text ? paint("yellow", text) : "");
+			parts.push(text ? paint("yellow", text, color) : "");
 		}
 	}
 
@@ -231,11 +240,11 @@ function renderStatusBar(health, seats, queueItems, width) {
 /**
  * Render the footer (help / keybindings).
  */
-function renderFooter(width) {
-	const hint = " q=quit  r=refresh  ↑↓=navigate  =collapse";
+function renderFooter(width, color = false) {
+	const hint = " q=quit  r=refresh  ↑↓/jk=seat ";
 	const truncated = truncate(hint, width - 4);
 	const gutter = "└" + "─".repeat(Math.max(0, width - 2 - truncated.length));
-	return { lines: [paint("gray", gutter + truncated)], height: 1 };
+	return { lines: [paint("gray", gutter + truncated, color)], height: 1 };
 }
 
 /**
@@ -265,6 +274,7 @@ export function renderTui({
 	color = false,
 	theme = "dark",
 	toolBg = false,
+	selectedSeat = null,
 } = {}) {
 	const lines = [];
 
@@ -278,7 +288,7 @@ export function renderTui({
 	// Seat list (uses ~40% of height for seats)
 	const mainHeight = Math.max(10, Math.floor(width * 0.3));
 	const seatRows = Math.min(8, Math.max(3, Math.floor(mainHeight * 0.4)));
-	const { lines: seatLines } = renderSeatList(seats, null, Math.min(width - 4, 80));
+	const { lines: seatLines } = renderSeatList(seats, null, Math.min(width - 4, 80), selectedSeat, color);
 	lines.push(...seatLines);
 
 	// Streaming / partial rows — U2: EVERY actively-generating seat at once, keyed off
@@ -293,18 +303,20 @@ export function renderTui({
 	if (active.length === 0) {
 		const partialRows = renderPartial(partial && partial.hasContent ? partial : null, Math.min(width - 4, 80), {
 			roles: color && toolBg ? themeToolRoles(theme) : null,
+			color,
 		});
 		if (partialRows.lines.length > 0) {
 			lines.push("");
-			lines.push(paint("bold", "  ── streaming ──"));
+			lines.push(paint("bold", "  ── streaming ──", color));
 			lines.push(...partialRows.lines);
 		}
 	} else {
 		lines.push("");
 		for (const p of active) {
-			lines.push(paint("bold", `  ── streaming${p.seat ? `: ${p.seat}` : ""} ──`));
+			lines.push(paint("bold", `  ── streaming${p.seat ? `: ${p.seat}` : ""} ──`, color));
 			const row = renderPartial(p, Math.min(width - 4, 80), {
 				roles: color && toolBg ? themeToolRoles(theme) : null,
+				color,
 			});
 			lines.push(...row.lines);
 		}
@@ -317,22 +329,23 @@ export function renderTui({
 		{},
 		transcriptRows,
 		Math.min(width - 4, 80),
+		color,
 	);
 	if (transLines.length > 0) {
 		lines.push("");
-		lines.push(paint("bold", "  ── transcript ──"));
+		lines.push(paint("bold", "  ── transcript ──", color));
 		lines.push(...transLines);
 	}
 
 	// Status bar
 	lines.push("");
 	lines.push("  " + "─".repeat(Math.max(0, Math.min(width, 80) - 4)));
-	const { lines: statusLines } = renderStatusBar(health, seats, queueItems, Math.min(width - 4, 80));
+	const { lines: statusLines } = renderStatusBar(health, seats, queueItems, Math.min(width - 4, 80), color);
 	lines.push(...statusLines);
 	lines.push("  " + "─".repeat(Math.max(0, Math.min(width, 80) - 4)));
 
 	// Footer
-	const { lines: footerLines } = renderFooter(Math.min(width, 80));
+	const { lines: footerLines } = renderFooter(Math.min(width, 80), color);
 	lines.push(...footerLines);
 
 	const frame = new Frame(lines);
