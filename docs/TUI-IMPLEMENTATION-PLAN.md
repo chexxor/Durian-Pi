@@ -141,6 +141,8 @@ width in graphemes and pairs with H4.
 ends with `\x1b[?2026l` around the frame; with sync disabled, neither appears; the frame content is
 unchanged.
 **Acceptance:** frames are atomic on supporting terminals; content identical.
+**Status:** LANDED (2026-10-16) — `src/tui/sync.mjs` (state + DECRQM consume) and
+`src/tui/paint.mjs` (`composeFrame`), wired into `ui.mjs` `paintScreen`; `demo/tui-sync-output.test.mjs`.
 **Ruling needed:** none.
 
 ### H4 — Grapheme/East-Asian-width-correct measurement

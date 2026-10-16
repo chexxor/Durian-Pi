@@ -25,8 +25,8 @@ import { readSeatList, readQueueItems, readLiveState, readRigHealth } from "./sr
 import { buildTurns, partialView } from "./src/viewmodel.mjs";
 import { createUiDriver, decodeKeys } from "./src/tui/driver.mjs";
 import { createTerminalScreen } from "./src/tui/restore.mjs";
-
-const CLEAR = "\x1b[H\x1b[2J";
+import { composeFrame } from "./src/tui/paint.mjs";
+import { createSyncState, SYNC_QUERY } from "./src/tui/sync.mjs";
 
 const USAGE = `durig ui — the read-only TUI (polls the store ≤0.75s; renders seats, transcript, streaming, status)
 
@@ -116,6 +116,10 @@ async function makeReadState(storage, ui) {
 // reach it, and its restore() is synchronous and idempotent.
 const screen = createTerminalScreen({ stdout: process.stdout, stdin: process.stdin });
 
+// Synchronized output (DECSET 2026): default on for a TTY, turned off by the
+// DECRQM reply or DURIG_TUI_NO_SYNC=1. Created here so paintScreen can reach it.
+const sync = createSyncState({ isTTY: process.stdout.isTTY, env: process.env });
+
 /* ───────── paint ───────── */
 
 function paintScreen({ kind, lines, width }) {
@@ -125,13 +129,10 @@ function paintScreen({ kind, lines, width }) {
     process.stderr.write(`${lines.join("\n")}\n`);
     return;
   }
-  // Frame: home + clear, then paint. Rows beyond the frame's height are lost — a
-  // fresh frame always fully covers (small heights are the 60-col/24-row floor case).
-  process.stdout.write(CLEAR);
-  const height = process.stdout.rows ?? lines.length;
-  for (let i = 0; i < Math.min(lines.length, height); i++) {
-    process.stdout.write(`${i > 0 ? "\r\n" : ""}${lines[i]}`);
-  }
+  // Frame: home + clear, then paint, wrapped in DECSET 2026 when supported so the
+  // terminal shows the whole frame or none of it (no tearing mid-repaint). Rows
+  // beyond the frame's height are clipped by composeFrame.
+  process.stdout.write(composeFrame(lines, { height: process.stdout.rows ?? lines.length, sync }));
 }
 
 /* ───────── main ───────── */
@@ -167,6 +168,9 @@ try {
   process.stdin.setRawMode(true);
   process.stdin.resume();
   screen.enter();
+  // Probe whether the terminal honours DECSET 2026; the reply is consumed in the
+  // stdin handler and only ever turns the wrapper OFF.
+  if (sync.enabled) process.stdout.write(SYNC_QUERY);
 
   const driver = createUiDriver({
     getSize: () => ({ width: process.stdout.columns ?? 80, height: process.stdout.rows ?? 24 }),
@@ -255,7 +259,7 @@ try {
     process.stdout.on("resize", () => driver.tick());
   }
   process.stdin.on("data", (chunk) => {
-    for (const key of decodeKeys(chunk)) {
+    for (const key of decodeKeys(sync.consume(chunk))) {
       if (driver.handleKey(key)) return; // quit requested
     }
   });
