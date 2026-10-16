@@ -1647,6 +1647,46 @@ gates** (the spec says ownership is not access control); **`genlock` / `DURIG_MA
 cost/provider bound; the harness imposes none); the **per-item worktree lifecycle** (adopt the harness
 `cwd` *mechanism*, keep durig's create/remove policy); and the **operator surface, `cli.mjs` JSON
 contract, docs gates and rig files** (no harness equivalent).
+
+## Zero trust to zero agent — narrow seat permissions (research requested 2026-10-16)
+
+**The question.** durig grants a seat its reach with coarse, role-level capabilities and
+restrictive-by-default `edges`; a seat's tool surface and filesystem `cwd` are broader than any
+single work item needs. Research how teams assign **narrow, per-seat / per-item least privilege**
+to LLM agent members — a "zero trust to zero agent" posture — and which of those mechanisms durig
+should adopt, keep, or reject. The operator's framing: today's permissions are assigned to the
+*member*; the research asks how to narrow them toward the *task*.
+
+60. **Research: narrow per-seat / per-item least-privilege permissions (owner: operator's research agent).**
+    **What to investigate.** (a) Agent permission models — object-capability / capability-based
+    security, RBAC/ABAC for agents, per-conversation tool scoping (the harness already sets
+    `tools:[read]` on a reviewer conversation, item 53, and writes agent config per conversation,
+    item 57), filesystem sandboxing and `cwd` confinement, and network-egress control. (b) "Zero
+    trust between agents": authenticated per-agent identity, no implicit trust from co-residency or
+    role, and the failure modes trust-by-topology creates. (c) The harm class — prompt injection →
+    tool abuse, and delegation broadening a grant — as described in the practitioner literature.
+    (d) The cost side: how narrow grants multiply configuration/maintenance, and where durig's
+    artifact-keyed ownership (`docs/reviews/Agent_Ownership_Review.md`) already supplies the
+    accountability half.
+    **durig baseline the review must measure against.** restrictive-by-default org `edges` (`check`
+    reports `unreachable-seat`); the capability matrix; per-seat `cwd` (dogfood F12) and the per-item
+    worktree lifecycle (D49); the seat-tool allowlist (`docs/SEAT-TOOLS.md`); and `security.sec`
+    positions gating new execution surfaces (D24/D27, item 55). The gap: none of these is a **narrow
+    per-item grant** — reach is set per seat, not per work item, and there is no deny-by-default
+    tool/network boundary for a single claim.
+    *Owner:* operator's research agent · *Consulted:* `lead`, `advocate`, `qa`.
+    *Output:* `docs/reviews/zero-trust-zero-agent.md` in the shape of the existing research reviews —
+    a gap table (mechanism → what durig has → what is missing → adopt/keep/reject), a decision table
+    with the why, a failure catalogue, and an explicit "could not verify" list — plus proposed
+    backlog items, **registered not scheduled**.
+    *Depends:* item 55 (the `security.sec` position) before anything that opens a new trust boundary
+    or execution surface.
+    *Acceptance:* the report cites each external claim with a URL (the web-research rule), maps every
+    finding to a concrete durig mechanism or names the one it could not verify, and states its
+    evidence class.
+    **Evidence class:** externally-cited (`advertised-elsewhere`) for the permission models;
+    `observed` for the durig baseline.
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for
