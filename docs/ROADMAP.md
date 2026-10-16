@@ -1812,6 +1812,27 @@ subscriber. **Portability is a first-class requirement** (Windows, macOS, Linux 
 trigger file, the kill-tree primitive, and the stop signal are OS-specific; `src/host.mjs` is identical
 everywhere (`docs/BROKER-SUPERVISION.md` §2 portability boundary).
 
+91. **Multiple durig instances on one machine (operator request, 2026-10-16).** Support more than one
+    durig installation / rig on a single computer, and make the OS-level host/daemon namespace-safe
+    across them. Today the supervision design assumes "one host per store" (§8) and `durig daemon ...
+    [--db <path>]`, but nothing defines an **instance identity** for the OS artifacts: two instances
+    would collide on the trigger name (Windows Task, launchd label, systemd unit), the Job
+    Object / process-group name, the log path, and the future control socket/pipe — and the host's
+    "single-instance" lock must be **per instance**, not global. Consequences to pin down: (a) the
+    instance key (resolve the store to an absolute path; a slug/hash of it, or an explicit
+    `--instance <name>`); (b) keep every marker store-scoped (already true: `<db>.broker.json` /
+    `.down` / `.stop` / `.inbox`) and key the host's single-instance lock and OS trigger the same way;
+    (c) the wrong-rig trap — a bare `durig` must not discover the wrong instance's
+    `durig.config.json`/store (#491, D18); (d) version coexistence — two installations on different
+    pinned pi/versions must not fight over one trigger; (e) two instances must never drive one store
+    (single-writer already forbids it — the second is *refused*, not silently second-written).
+    **Sequence** with the daemon items 61–64 (this parameterizes them); socket naming waits on item 55.
+    **Doc:** grow `docs/BROKER-SUPERVISION.md` §8 ("Multiple stores") into an instance-identity section.
+    *Owner:* devtools (OS trigger/namespace) + impl (markers/lock); consulted lead. *Acceptance:* a
+    design naming the instance key and every OS artifact it scopes; two instances install and run side
+    by side on one host without colliding (proved with `--print` on the generated trigger plus a
+    hermetic test for the per-instance lock and marker scoping).
+
 ## Safe writes while the broker owns the store (raised 2026-10-16, after the crash)
 
 Source: the 2026-10-16 incident — a concurrent `resume` against the live broker crashed it and corrupted
