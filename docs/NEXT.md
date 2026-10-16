@@ -11,11 +11,22 @@ _Last refreshed: 2026-10-16 (delegate session, third pass — routed the daemon 
 
 ## NEXT SESSION — START HERE
 
-**Current item: the safe-writes cluster (ROADMAP 68 → 69 → 70 → 71) ahead of the daemon 61–64; five
-clean-path items are DONE.** Registered queue anchors: item 65 = **#745**, item 66 = **#728**; items
-69–71 are **pending `pm` registration**. **Exact next command:**
-`DURIG_DB=./selfdev.sqlite node cli.mjs status`. **Blocker:** items 69–71 must edit `cli.mjs`, which is
-dirty with another item's work (`cmdInit`, **#491**).
+**STATE.** Five clean-path items **DONE**: 54, 65, 66, 68, 73 (commits `58cbac2`, `6fae68d`+`559f967`,
+`47507f1`, `037213f`, `243f175`). The runbook set is started (`docs/runbooks/`) and the research folded
+(items 74–88 registered). **THE GATE IS `cli.mjs`:** it is dirty with **two seats' in-flight work** —
+`cmdInit` (`cli.mjs` + untracked `demo/init.test.mjs`) and a `seatguard` change (`src/seatguard.mjs` +
+`demo/seatguard.test.mjs`). Until those land, items **69/70/71/74/78** cannot be edited or committed
+cleanly.
+
+**CURRENT ITEM → NEXT ACTION.** Highest priority: **item 69 — hard write guard on every write verb** (make
+"never proceed on a false `stopped` signal" code, not prose; the research report's #1 fix and the cause of
+**two** store corruptions on 2026-10-16). Then **item 78** (broker crash forensics / survive a
+conversation storage error). Both are **blocked on `cli.mjs`**. Anchors: item 65 = **#745**, item 66 =
+**#728**; items 69–78 are **pending `pm` registration**.
+**Clean-path work available NOW (no `cli.mjs`):** **item 85** (run each runbook's read-only `Diagnose`
+block in CI — the set is currently unverified), **item 81** (`runbook-stale`/`runbook-unverified` `check`
+rules), **item 86** (runbook verification in the `check` provenance line) — `src/checkup.mjs` + `demo/` only.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
 
 **Maintenance done (`806ce7f`):** broker stopped → `up rig.selfdev.json --refresh` → restarted
 (`pid 14536`, `START 2026-10-16T19:33:43Z`). `impl` is now `deepseek-ai/DeepSeek-V4.1-Flash`, and the
@@ -59,19 +70,21 @@ broker. The operator view and the acquire path now share `slotIsStale`. `demo/ge
 spool (71) is the durable-plan unlock.
 **Language:** the `P3 Language` constitution rule (`a0ab993`) covers all seats once the constitution is
 re-applied (`up --refresh`); immediate English directives were spooled to `impl` and `qa` via the inbox.
-**⛔ Items 69–71 blocked:** each must edit `cli.mjs`, dirty with another item's work (`cmdInit`, #491
-C9/C10 — 127 lines + untracked `demo/init.test.mjs`).
-**Broker:** restarted `pid 3348` (`START 2026-10-16T19:23:04Z`) after it died abnormally (a storage
-error, no `EXIT`) and stalled `impl`; `resume` cleared 5 stranded submissions, then the restart woke
-pm/impl/scribe and `impl` is streaming again. The item-73 sweep refused to delete `item-635/636/638`
-(they hold uncommitted work), as designed. **Nothing restarts a dead broker — that is the supervision
-gap, items 61–64.**
-**Pending apply — needs a broker stop + `up --refresh`:** the impl model change (`9760da6`,
-deepseek-ai/DeepSeek-V4.1-Flash) and the `P3 Language` constitution rule (`a0ab993`), plus the impl
-reset. The running broker still uses the old prompt/model until restarted.
-**Owed:** wire `reconcileStrandedSubmissions` into `cli.mjs cmdResume` (same blocker); a DECISIONS entry.
+**⛔ Gate — `cli.mjs`:** dirty with two seats' in-flight work (`cmdInit`: `cli.mjs` + `demo/init.test.mjs`;
+`seatguard`: `src/seatguard.mjs` + `demo/seatguard.test.mjs`). **Do not commit those** (not this seat's
+work). Resolve/land them (their owners, or an operator ruling) before items 69/70/71/74/78.
+**Broker:** running `pid 14536` (`START 2026-10-16T19:33:43Z`); `.broker.json` carries `runToken` +
+`heartbeatAt` (item 65 identity). Start a down broker with
+`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1` (never set
+`DURIG_SEAT_ROOT`). **Nothing restarts a dead broker — the supervision gap is items 61–64.** A broker that
+died on a storage error stalled `impl` (2026-10-16); `resume` + restart recovered it.
+**Pending apply — one broker stop + `up --refresh`:** the **`P3 Runbooks`** rule in `constitution.txt`
+(`fe0c74c`) is not yet live for seats (the `P3 Language` rule and the impl→DeepSeek model were applied at
+`806ce7f`). ⚠️ On `serve --stop`, proceed **only** on `"stopped": true` — never `false`; that is how the
+store was corrupted twice. See `docs/runbooks/broker-safe-change.md`.
+**Owed:** wire `reconcileStrandedSubmissions` into `cli.mjs cmdResume` (blocked on `cli.mjs`).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; restart a down broker with
-`.spike/delegate/dispatch-serve-noroot.ps1`. Design of record: `docs/BROKER-SUPERVISION.md` (D71/D72),
+`scripts/serve-noroot.ps1`. Design of record: `docs/BROKER-SUPERVISION.md` (D71/D72),
 `docs/COMMANDS-AND-THE-BROKER.md` (command paths + mailbox).
 
 **INCIDENT (2026-10-16, delegate) — a second writer crashed the broker and corrupted two run-control
@@ -97,7 +110,7 @@ start / in `resume`, settle any `placed`/`queued` submission whose task is termi
 
 **Seat-root trap (do not repeat):** start the selfdev broker **without `DURIG_SEAT_ROOT`** — a seat's
 own prepared cwd wins (`src/seattools.mjs` `makeSeatEnv`), so a single global root conflicts with the
-per-item worktree model and trips the F12 guard. Use `.spike/delegate/dispatch-serve-noroot.ps1`.
+per-item worktree model and trips the F12 guard. Use `scripts/serve-noroot.ps1`.
 
 **Do not poll** the running broker — the operator notifies the delegate when runs complete.
 

@@ -1856,3 +1856,44 @@ one.
 
 **Status:** adopted (operator directive, ROADMAP item 45; pm registered as selfdev item
 #713). The decision-of-record so the question is not re-litigated.
+
+## D75 — Safe writes precede the always-on daemon; the command spool is the mechanism (2026-10-16)
+
+**Decision.** Build broker-safe writes (a hard guard on every write verb, a command spool the broker
+applies, and spec/constitution hot-reload) **before** the host daemon (ROADMAP 61–64). The running broker
+enforces the single-writer invariant in code, not prose.
+
+**Why.** The daemon makes the broker *always* on, which multiplies the exposure of every second-owner
+write. On 2026-10-16 a stray `resume` (and later an `up --refresh` after `serve --stop` returned
+`stopped:false`) each ran a second writer while the broker was up; each corrupted a `pi.live` document
+and wedged every write verb. Prose preconditions are what failed — twice — so the fix is a code guard.
+
+**Evidence base.** Observed: the two corruptions and their recovery (docs/NEXT.md incident notes;
+`docs/runbooks/store-corruption-recovery.md`); the ownership vocabulary and the command-path table in
+`docs/COMMANDS-AND-THE-BROKER.md` §1–§7. Advertised-elsewhere: the research report
+(`docs/reviews/runbooks-sop-best-practices.md`) that the precondition must be enforced at the tool layer.
+
+**Status:** adopted (delegate), ROADMAP items 69 (guard), 71 (spool), 74 (hot-reload). Not yet
+implemented (blocked on `cli.mjs`).
+
+## D76 — Runbooks are maintained, machine-checked artifacts (2026-10-16)
+
+**Decision.** `docs/runbooks/` is a maintained SOP set with a mandatory front-matter block and a skeleton
+(`When to use / Impact / Preconditions / Diagnose / Do / Verify / If it fails / Escalate to / Evidence`);
+rot is a failing check (`runbook-stale` / `runbook-unverified`), not a prose reminder; and a seat that
+introduces or changes an operational procedure adds/updates the runbook as part of the item
+(`constitution.txt` **P3 Runbooks**).
+
+**Why.** Scanning/prose conventions do not survive; durig's own runbook conventions already matched
+published practice, but nothing enforced them and the pivotal precondition was prose. A runbook is done
+only when its `Verify` step has actually run, otherwise it is marked unverified. Agent execution is
+structured **prose now**, with an executable runtime deferred behind a per-model capability gate
+(weak models were *harmed* by active-frame guidance).
+
+**Evidence base.** `docs/reviews/runbooks-sop-best-practices.md` (research report; template, lifecycle,
+agent-execution findings, anti-patterns) and `docs/runbooks/README.md` (the folded conventions). The
+report's `advertised-elsewhere` claims cite URLs; the agent-execution result (SOPBench) is the load-
+bearing external source.
+
+**Status:** adopted (delegate), ROADMAP items 81–88. The set is largely **unverified** until item 85 runs
+the `Diagnose` blocks.

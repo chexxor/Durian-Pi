@@ -191,3 +191,7 @@ needed it. (Operator note, 2026-10-15.)
 - `docs/ROADMAP.md` — *"Deadlock and liveness prevention"* (P1–P6) and
   *"New-session onboarding for seats"* (O1–O4).
 - `.agents/skills/durig/SKILL.md` — driving the CLI.
+- `docs/runbooks/` — operating procedures (broker down/stall, safe spec change, store recovery, seat
+  reset, leaked worktrees, the pre-written daemon runbook, and how to commission research). Read the
+  matching runbook before improvising a recovery; the set is largely **unverified** until ROADMAP item
+  85 runs its `Diagnose` blocks.
