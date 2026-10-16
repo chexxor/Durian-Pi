@@ -114,6 +114,12 @@ _Historical (superseded): the #480-era notes below were written for the 2026-10-
   the render boundary; synchronous restore on `uncaughtException`/`unhandledRejection`/`exit`;
   DECSET 2026 around `paintScreen`; grapheme/EAW-correct width. Bracketed paste (DECSET 2004) is
   required by the type-to-seat input line, not optional polish.
+- **Agent ownership (from `docs/reviews/Agent_Ownership_Review.md`)** — action items 45–50 in
+  `docs/ROADMAP.md` §“Agent ownership and accountability”. Verdict: no RACI/DACI/RAPID/MOCHA; keep
+  artifact-keyed ownership but make it `check`-enforced (item 46, `src/checkup.mjs`); record the
+  no-RACI decision (item 45, advocate); verification must **re-execute evidence** (item 48); finish the
+  review's governance/cost passes (item 49). Surface decision (item 47) is already routed to
+  advocate/scribe. Awaiting `pm` sequencing.
 - **Broker intent-inbox** — deliver intent to a seat WITHOUT stopping the broker (a file the broker
 drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guard, so routing needs a
 `serve --stop`, which interrupts in-flight work.

@@ -173,6 +173,10 @@ accent, and an ambiguous-width char each measure by cells; `sliceToWidth` never 
 `watchview.truncate` stops on a cell boundary.
 **Acceptance:** wrapped rows never exceed the frame width in cells; seat-list columns align.
 **Ruling needed:** none for the mechanism. (See §D-G1 for the separate *measure cap*.)
+**Status:** LANDED (2026-10-16) — `src/textwidth.mjs` + `demo/textwidth.test.mjs`;
+`watchview.truncate`/`pad`, `chatview.truncate` and `client.wrapText` routed through it; the buffer
+harness measures with the same function; `get-east-asian-width` is a direct dependency;
+`npm run test:tui` 13/13.
 
 ### H5 — Bracketed paste (DECSET 2004) for the input line
 **Goal:** a paste is delivered as one bounded payload, never as keystrokes.

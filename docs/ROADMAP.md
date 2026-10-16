@@ -1501,6 +1501,56 @@ O4. **A seat's root and oracle are derived from configuration, never hand-copied
 **Evidence class:** O1–O4 are `advertised-elsewhere` (the research doc's citations) for the pattern
 and `observed` for the delegate miss and F13. Managed by the advocate's rule (D36).
 
+## Agent ownership and accountability (from the research review, 2026-10-16)
+
+Source: `docs/reviews/Agent_Ownership_Review.md` (partial — its governance and coordination-cost
+passes are unfinished). Its verdict: do **not** adopt RACI/DACI/RAPID/MOCHA; keep the existing
+artifact-keyed ownership and make it **machine-checked**; keep the surface-decision field; and make
+verification **re-execute evidence** rather than accept a claim. Registered here, **not scheduled**;
+`pm` sequences them.
+
+45. **Record the "no RACI" decision, so it is not re-litigated.** The research found full RACI
+    redundant against the existing role table + docs-ownership norm + capability matrix + the queue's
+    single claimer, and its single-accountable-per-task assumption contradicts durig's artifact-keyed
+    accountability. RACI's real gap is *decision authority*, which DACI/RAPID address and the queue
+    already supplies.
+    *Owner:* `advocate` (decision record) · *Output:* a `docs/DECISIONS.md` entry with the why.
+    *Acceptance:* the entry names the alternatives rejected and the evidence class.
+
+46. **Make artifact ownership checkable — a `check` rule, not a prose grid.** The load-bearing
+    finding: a decision-rights row not enforced by `check` (or the queue) is prose and goes stale. Add
+    a `check` rule that every artifact class in the docs-ownership norm maps to a live owning seat,
+    and (D62) every capability has a FEATURES row.
+    *Owner:* `impl` (author) · *Consulted:* `advocate`, `devtools` · *Where:* `src/checkup.mjs`.
+    *Acceptance:* failing-first demo — a rig naming a non-existent owner seat fails `check`; the
+    current rig passes.
+
+47. **Surface decision (in flight).** A capability states CLI/TUI/both — the research confirms this is
+    the one genuinely missing decision class. Routed 2026-10-16 to `advocate` (`WORKFLOWS.md` W4) and
+    `scribe` (`FEATURES.md` `Surface` column).
+
+48. **Verification must re-execute evidence, not accept a claim.** The strongest evidence-backed
+    finding: reviewer/peer agents measurably agree (sycophancy/conformity — measured wrong-peer
+    adoption ~29.7%, disagreement collapse), so a verifier that only reads the author's summary is the
+    collapse setup. This strengthens item 4 (real seat tools + verification evidence) and W2's
+    evidence protocol.
+    *Owner:* `impl` (author) · *Consulted:* `qa`/`auditor` · *Evidence:* `Agent_Ownership_Review.md` §2.4.
+    *Acceptance:* a verifier item fails when it only acks a claim and passes when it re-runs the artifact.
+
+49. **Finish the research's unfinished passes.** The review explicitly did not verify the governance
+    pass (NIST AI RMF, ISO/IEC 42001, EU AI Act Art. 14, multi-agent "accountability gap") or the
+    coordination-cost/scaling numbers; social-loafing and handoff-routing under explicit accountability
+    remain open.
+    *Owner:* operator's research agent · *Output:* the remaining sections of
+    `docs/reviews/Agent_Ownership_Review.md`, same source labels.
+
+50. **Ownership questions the review could not settle (record, decide later).** (a) verification when
+    the verifier shares the author's *evidence*-level blind spot, not just the model; (b) who owns a
+    decision when the queue and the docs disagree (the rule is "trust the queue", but no owner is
+    named); (c) at 20–50 seats the bottleneck is the single-writer store, not the ownership matrix;
+    (d) the highest-harm un-named failure is a confident wrong verification propagating as trusted
+    `done` state, poisoning the durable record.
+    *Owner:* `lead` (scope ruling) · *Trigger:* before the next ownership change.
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for
