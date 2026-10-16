@@ -1,0 +1,152 @@
+// demo/cli-broker-refuse.test.mjs — a CLI write verb refuses while a broker drives.
+//
+// ROADMAP 69 / item 83: `resume`/`doctor`, `reset`, and `send` each open a full
+// harness, so each is a second OWNER — two owners crash the broker and corrupt
+// run-control docs (2026-10-16, twice: `resume` racing the broker left a mid-stream
+// `generation` reset that orphaned later appends). They must REFUSE while a resident
+// broker drives the store, naming the spool/`serve --stop`. `ps`/`queue` are READS
+// and must keep working while the broker drives: they read via `openStore` (like
+// `status`) instead of opening a harness.
+//
+// A "live broker" here is a broker state file naming a live pid with a FRESH
+// heartbeat — `brokerAlive` treats it exactly as the real broker, and the demo's own
+// pid is alive and fresh, so no broker process is spawned.
+//
+// Failing-first: before the fix, `reset`/`resume`/`send` open a harness and proceed
+// (exit 0), so the refusal assertions fail.
+// Run: node demo/cli-broker-refuse.test.mjs  (exit 0 = pass)
+
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { configure, createRegistry, Harness } from "@earendil-works/pi-durable";
+import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+import { Router, registerSeat } from "../src/rig.mjs";
+import { brokerAlive, readBrokerState, writeBrokerState } from "../src/broker.mjs";
+
+const ctx = BACKGROUND_CONTEXT;
+const dir = mkdtempSync(join(tmpdir(), "durig-broker-refuse-"));
+const db = join(dir, "rig.sqlite");
+const repoRoot = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+
+const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
+const models = createModels();
+models.setProvider(faux.provider);
+const registry = createRegistry();
+registry.install(Router);
+
+/** Run one CLI verb against the temp store; return { exitCode, json, stderr }. */
+function runCli(args) {
+	return new Promise((resolve) => {
+		const child = spawn(process.execPath, ["cli.mjs", ...args], {
+			cwd: repoRoot,
+			env: { ...process.env, DURIG_PROVIDER: "faux", DURIG_DB: db },
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let stdout = "";
+		let stderr = "";
+		child.stdout.on("data", (c) => (stdout += c.toString("utf8")));
+		child.stderr.on("data", (c) => (stderr += c.toString("utf8")));
+		// A RED run of `send` would start a model turn; bound it so the demo cannot hang.
+		const timer = setTimeout(() => child.kill("SIGKILL"), 20_000);
+		child.once("exit", (code) => {
+			clearTimeout(timer);
+			let json = null;
+			try {
+				json = JSON.parse(stdout.trim());
+			} catch {
+				// leave null; the assertion below reports the raw output
+			}
+			resolve({ exitCode: code, json, stdout, stderr });
+		});
+	});
+}
+
+let failures = 0;
+async function check(label, fn) {
+	try {
+		await fn();
+		console.log(`  ok   ${label}`);
+	} catch (err) {
+		failures += 1;
+		console.log(`  FAIL ${label} -- ${err.message}`);
+	}
+}
+
+try {
+	// Seed a store with one seat, so `ps`/`queue` have something to read.
+	{
+		const storage = await openNodeSqliteStorage(db);
+		const harness = await Harness.open(storage, { models, registry }, ctx);
+		try {
+			await harness.commit(async (tx) => {
+				const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
+				await configure(tx, conv.id, { model: { provider: "faux", modelId: "faux-seat" } });
+				await registerSeat(tx, "worker", conv.id, "implementation");
+			}, ctx);
+		} finally {
+			await harness.close(ctx);
+			await storage.close(ctx);
+		}
+	}
+
+	// A LIVE broker: a state file naming a live pid with a fresh heartbeat.
+	writeBrokerState(db, { pid: process.pid, since: Date.now() });
+	assert.equal(brokerAlive(readBrokerState(db)), true, "the broker state reads as alive (sanity)");
+
+	console.log("\n=== CLI write verbs refuse while the broker drives ===\n");
+
+	for (const [label, args] of [
+		["resume", ["resume"]],
+		["reset", ["reset", "worker"]],
+		["send", ["send", "worker", "hello"]],
+	]) {
+		await check(`${label} refuses with a live broker`, async () => {
+			const { exitCode, json, stdout } = await runCli(args);
+			assert.equal(exitCode, 1, `${label} must exit 1 (got ${exitCode}); stdout=${stdout.slice(0, 200)}`);
+			assert.ok(json, `${label} must print one JSON doc; got ${stdout.slice(0, 200)}`);
+			assert.equal(json.ok, false, `${label} must report ok:false`);
+			assert.match(String(json.error), /refuses to run while a resident broker/, `names the reason: ${json.error}`);
+			assert.match(String(json.error), /serve --stop/, "names the stop verb");
+			assert.match(String(json.error), /intent\.mjs/, "names the spool route");
+		});
+	}
+
+	console.log("\n=== CLI read verbs still work while the broker drives ===\n");
+
+	await check("ps reads the roster with a live broker (no refusal)", async () => {
+		const { exitCode, json, stdout } = await runCli(["ps"]);
+		assert.equal(exitCode, 0, `ps must succeed (got ${exitCode}); stdout=${stdout.slice(0, 200)}`);
+		assert.equal(json.ok, true, `ps ok:true`);
+		assert.equal(json.command, "ps");
+		assert.equal(json.seats.length, 1, "the seeded seat is listed");
+		assert.equal(json.seats[0].name, "worker");
+	});
+
+	await check("queue reads the items with a live broker (no refusal)", async () => {
+		const { exitCode, json, stdout } = await runCli(["queue"]);
+		assert.equal(exitCode, 0, `queue must succeed (got ${exitCode}); stdout=${stdout.slice(0, 200)}`);
+		assert.equal(json.ok, true, `queue ok:true`);
+		assert.equal(json.command, "queue");
+		assert.ok(Array.isArray(json.items), "items is an array");
+	});
+
+	console.log(
+		failures === 0
+			? "\nCLI BROKER-REFUSE PASS (resume/reset/send refuse while a broker drives; ps/queue read)"
+			: `\nFAIL — ${failures} check(s) failed`,
+	);
+} finally {
+	try {
+		rmSync(dir, { recursive: true, force: true });
+	} catch (err) {
+		console.error(`CLEANUP WARNING (temp dir kept): ${err?.message ?? err}`);
+	}
+}
+process.exit(failures === 0 ? 0 : 1);
