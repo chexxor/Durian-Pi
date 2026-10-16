@@ -74,11 +74,15 @@ call written into the CONTENT as `<parameter name="powershell">…` (entries `34
 `countMalformedToolCalls` (`src/attention.mjs`, which matches only the harness marker
 `[error] Validation failed for tool "`) and the D64 degeneration guard never fire, and the
 `malformed-tool-call` metric stays 0 (its own documented blind spot). impl's model is
-`deepseek-ai/DeepSeek-V4.1-Flash` (deepinfra, `api: openai-completions`). **Fix LANDED (`f086382`, D77):**
+`deepseek-ai/DeepSeek-V4.1-Flash` (deepinfra, `api: openai-completions`). **Fix LANDED (`f086382` +
+`c38815f`, D77):**
 durig now detects a tool call emitted as text (`isPseudoToolCallTurn`/`countPseudoToolCalls` in
 `src/attention.mjs`; `assessRun` trips on the FIRST one) and the supervisor resets the seat with a handoff
 naming the fault — NO translation layer (a synthesized half-parsed call would execute without the model's
-validation). The operator keeps the model. **Still open:** (c) auto re-drive (the reset + the driver's
+validation). **Grounding trap:** the terminal strips the DSML special-token delimiter, so a screen read of
+the entry shows a clean `<parameter>` block and HIDES the fault; the detector reads the stored bytes
+(the U+FF5C `DSML` delimiter, or the plain nested `<parameter>` pair). The operator keeps the model.
+**Still open:** (c) auto re-drive (the reset + the driver's
 queued-work wake should cover it, but not yet proven live); (d) make `idle_with_queued_work` schedule a
 pass — the broker sat idle `20:14:13Z → 20:19:54Z` while impl was idle with queued work. Recovery used
 both times: spool a corrective steer via `intent.mjs` (latest

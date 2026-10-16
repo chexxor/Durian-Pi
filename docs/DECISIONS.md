@@ -1901,8 +1901,9 @@ the `Diagnose` blocks.
 ## D77 — A tool call emitted as TEXT is a degenerate run: detect and reset, not translate (2026-10-16)
 
 **Decision.** When an assistant turn ends with `stopReason:"stop"` and no structured tool call, but its
-text carries the model's malformed tool shape (an unclosed `<parameter name="TOOL">` opener, then
-parameter tags, then a stray `</invoke>`), the current run is **degenerate on the first occurrence**.
+text carries the model's malformed tool block — written with DeepSeek's **DSML special-token
+delimiter** (U+FF5C `DSML` U+FF5C), or as the plain nested `<parameter name="TOOL">` /
+`<parameter name="ARG">` pair — the current run is **degenerate on the first occurrence**.
 `assessRun` counts it (`pseudo-tool-call=N>=1`) and the supervisor resets the seat through the existing
 reset boundary, with a handoff that names the fault and says to issue the call through the tool channel.
 We do **not** parse-and-execute the text: a translation layer would synthesize a half-parsed
@@ -1912,10 +1913,13 @@ synthetic tool call into pi-durable's pipeline.
 **Why.** The harness reads the malformed turn as a normal completion (submission `done`, not failed), so
 nothing retried and the seat idled mid-item — `impl` did this three times on #700. The existing
 `malformed-tool-call` detector matches only the harness's schema-validation rejection; no call was ever
-submitted, so it was structurally blind, and the metric stayed 0. The predicate requires BOTH the
-unclosed parameter pair and the stray close, so prose that merely names the shape does not trip it; a
-false positive costs one context reset, never lost work (the transcript is durable).
+submitted, so it was structurally blind, and the metric stayed 0. **Grounding trap:** the terminal
+STRIPS the DSML delimiter, so a screen read of the entry shows a clean `<parameter>` block and hides the
+fault; the detector must read the stored bytes, and the rule requires the delimiter (or the plain nested
+pair), so prose that merely names the shape does not trip it. A false positive costs one context reset,
+never lost work (the transcript is durable).
 
-**Status:** adopted (delegate), commit `f086382`; verified by `demo/degeneration.test.mjs` (RED before).
+**Status:** adopted (delegate), commits `f086382` + `c38815f`; verified by `demo/degeneration.test.mjs`
+(RED before) and against the real stored entry `35382` (`pseudo-tool-call=1>=1`).
 The recurrence is a model/provider format fault (`deepseek-ai/DeepSeek-V4.1-Flash` via deepinfra,
 `openai-completions`); the operator keeps that model, so durig remediates rather than swapping it.
