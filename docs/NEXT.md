@@ -27,6 +27,14 @@ The root cause was constitution **drift**: `rig.selfdev.json` set `constitutionI
 anyway, corrupting impl's `pi.live` (doc 12105); recovered from `store-backup-20261016-143336` +
 `.spike/delegate/repair-live.mjs`. It reinforces items **69** (hard write guard, incl. `serve --stop`
 exit confirmation) and **78** (crash forensics).
+
+**Runbooks started (`3fe0ebb`):** `docs/runbooks/` — a README (authoring conventions + index) and 5
+runbooks (`broker-down-or-stalled`, `broker-safe-change`, `store-corruption-recovery`, `seat-reset`,
+`leaked-worktrees`). Recovery helpers promoted to `scripts/read-constitution.mjs` and
+`scripts/serve-noroot.ps1`; the canonical `scripts/repair-pi-live.mjs` is used for repair. **Research
+request (operator to send):** `docs/reviews/runbooks-research-prompt.md` — best practices for authoring
+and maintaining runbooks, including agent-executable ones. The set is **unverified** where a `Verify`
+step has not been run.
 - **Item 68 DONE (`037213f`):** `reconcileStrandedSubmissions` settles a `placed` submission with no live
 task before the pending set is built, so the blocked seat re-wakes. Verified live: `STRANDED settled=2`
 → `WAKE qa`, `WAKE lead`. `demo/broker-strand.test.mjs` (RED: symbol absent at HEAD).
