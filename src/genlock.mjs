@@ -198,7 +198,7 @@ export function readGenerationSlots(dbPath, slots) {
 			slotIndex,
 			pid: typeof holder?.pid === "number" ? holder.pid : null,
 			since: typeof holder?.since === "string" ? holder.since : null,
-			stale: !holderAlive(holder),
+			stale: slotIsStale(holder),
 			generatingSeat:
 				holder && holderAlive(holder)
 					? (typeof holder.seat === "string" ? holder.seat : `pid-${holder.pid}`)
@@ -207,10 +207,7 @@ export function readGenerationSlots(dbPath, slots) {
 				holder && !holderAlive(holder)
 					? `held by pid ${holder.pid}${holder.seat ? ` (${holder.seat})` : ""}, which is gone`
 					: "",
-			name:
-				holder && !holderAlive(holder)
-					? "generation_stale"
-					: "generation_in_flight",
+			name: slotIsStale(holder) ? "generation_stale" : "generation_in_flight",
 		});
 	}
 	return out;
