@@ -175,8 +175,25 @@ export async function withGenerationSlot(options, fn) {
 			const holder = readHolder(path);
 			if (holder?.pid === process.pid) {
 				unlinkSync(path);
+			} else if (holder && typeof holder.pid === "number" && holderAlive(holder)) {
+				// A DIFFERENT live process holds this slot: a real conflict. Leave it for
+				// that holder (or the acquire path's age fallback) and say so, because a
+				// dropped lease here would let the concurrency cap be exceeded.
+				console.error(`GENLOCK WARNING: slot ${path} held by pid ${holder.pid}, not us; leaving it alone`);
 			} else {
-				console.error(`GENLOCK WARNING: slot ${path} held by pid ${holder?.pid}, not us; leaving it alone`);
+				// Reclaimable: no usable holder at all (a torn/absent record reads as
+				// `pid undefined`) or a dead holder. This is OUR slot gone stale (a
+				// forced kill can leave a dead-pid lease behind), and the acquire path's
+				// dead-pid steal would absorb it silently later — so release reclaims it
+				// silently now instead of warning "leaving it alone" and stranding it
+				// for a later driver to stall on (F24-2 / #258).
+				try {
+					unlinkSync(path);
+				} catch (err) {
+					if (err?.code !== "ENOENT") {
+						console.error(`GENLOCK WARNING: could not reclaim ${path} on release: ${err?.message ?? err}`);
+					}
+				}
 			}
 		} catch (err) {
 			console.error(`GENLOCK WARNING: release check failed for ${path}: ${err?.message ?? err}`);
