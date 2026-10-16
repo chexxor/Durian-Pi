@@ -1806,6 +1806,10 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     is alive: refuse with a clear message naming the spool, or route through it; `ps`/`queue` read via
     `openStore` like `status`. *Owner:* impl · *Where:* `cli.mjs`.
     *Acceptance:* a demo asserting each verb with a live broker; no second-owner write path remains.
+    *Cross-refs (lead #807; = item 83 in the runbook set):* the single-writer precondition is enforced in
+    CODE, not a runbook sentence — PROSE is what failed twice on 2026-10-16. Cites lead's **#716 Q2**
+    (verified artifact / code wins over prose when docs and code disagree) and **#397 Q4** (`done` /
+    enforcement must be VERIFIED, not asserted — carry the check run + exit code, re-openable).
 
 70. **Read-boundary hardening.** One unreadable `pi.live` must not kill a command's whole pi-durable
     session: the F12 guard and the broker open path tolerate an unreadable document (skip + report, as
