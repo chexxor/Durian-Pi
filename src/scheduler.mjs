@@ -195,5 +195,37 @@ export function createWakeSignal() {
       });
       raised = false;
     },
+    /**
+     * Resolve when `promise` settles OR the next `raise()` arrives — whichever is
+     * first — and drop the losing side. This is what lets a broker's pass stop
+     * waiting on the slowest run the moment a wake-relevant commit lands, so the
+     * next pass can re-wake a seat that just settled (#broker-liveness). It must
+     * clean up after itself: a resident loop races one of these per pass, and a
+     * leaked keepalive timer would accumulate. Returns true when the signal won.
+     */
+    async race(promise) {
+      if (raised) {
+        raised = false;
+        return true;
+      }
+      let signalWon = false;
+      const signalPromise = new Promise((resolve) => {
+        resolveWaiting = () => {
+          signalWon = true;
+          resolve();
+        };
+      });
+      try {
+        await Promise.race([promise, signalPromise]);
+      } finally {
+        // The race consumed the event that resolved it, so clear the one-shot
+        // flag and retire the waiter: a concurrent raise is still recorded in the
+        // scheduler's dirty bit (the listener sets it before raising), which is
+        // what actually drives the next pass. A leftover keepalive would leak.
+        resolveWaiting = null;
+        raised = false;
+      }
+      return signalWon;
+    },
   };
 }

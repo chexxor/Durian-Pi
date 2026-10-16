@@ -1547,3 +1547,27 @@ BETWEEN runs — a mid-run cut is a recorded residual gap, not part of this deci
 **Status:** adopted; commit `ae96445`; pure detector `src/degeneration.mjs`
 (`demo/degeneration.test.mjs`), action `planResets`/`applyResets` in `src/supervisor.mjs`, wired in
 `cli.mjs` `superviseOnce`.
+
+## D65 — The broker's pass wait is scoped to the seats it woke, and ends on a commit (2026-10-16)
+
+**Decision:** `drivePass` no longer calls `harness.waitForIdle(context)` (which resolves only when
+EVERY ownerless conversation is idle). It waits only on the conversations THIS pass submitted a wake
+to, and when the loop supplies its commit signal it races that wait against the next wake-relevant
+commit, so a pass ends as soon as a run settles or new work lands. The F11 invariant is preserved by
+one global `harness.waitForIdle(context)` drain at `runWakeLoop` exit — the single place it belongs —
+so the harness is never closed with a live run. `createWakeSignal` gains `race(promise)`, which drops
+the losing side (a leaked keepalive per pass would accumulate).
+
+**Why:** the global per-pass wait parked the whole loop on the slowest run, so a seat that settled
+early was not re-woken for its remaining queued work until the last run finished — `status` showed
+idle seats with queued work while one run was in flight (observed live: `PASS 5` at 02:26Z, then no
+`PASS 6` for ~58 min; a `serve --stop` requested at 02:29Z could not be honoured). The wake-relevant
+commit stream (src/scheduler.mjs) already tells the loop exactly when a submission settles or the queue
+changes; the pass wait must not ignore it. Measured effect: a cooperative stop under load settles in
+~1.8s where the notes recorded multi-minute blocked passes.
+
+**Status:** adopted; commit `1d358cd`; proof `demo/broker-liveness.test.mjs` (RED: 1 fast wake in 2s →
+GREEN: 2nd wake ~27ms in while the other seat still generates), plus `PASS <n> ms=<dur> woke=<a,b>`
+per-pass observability in `<db>.broker.log`. Whole `demo/*.test.mjs` suite green (81/81). The
+`idle_with_queued_work` notice is unchanged; a distinct "queued work, no live lease, aged" notice is
+still a recorded follow-up, not part of this decision.

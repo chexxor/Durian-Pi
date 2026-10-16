@@ -62,7 +62,7 @@ export async function drivePass(
   harness,
   probeStorage,
   { context, seatFilter, readBusySeats, onError, onWoke, currentSeat: initialSeat,
-    source, worktreeRoot, onSeatCreated } = {},
+    source, worktreeRoot, onSeatCreated, settleSignal } = {},
 ) {
   const seatsDoc = await harness.documentState(Seats, undefined, context);
   const queueDoc = await harness.documentState(RigQueue, undefined, context);
@@ -72,9 +72,15 @@ export async function drivePass(
   const stoppedConvIds = await readStoppedConvIds(probeStorage, seats, context);
   const busySeats = readBusySeats ? await readBusySeats() : new Set();
   let wokenSeat = initialSeat ?? null;
+  // The conversations THIS pass submitted a wake to. The settle-wait below is
+  // scoped to them (#broker-liveness): the old global wait parked the loop on
+  // every ownerless conversation, so one long run held up the re-wake of a seat
+  // that had already settled with work still queued.
+  const wokenConvIds = new Set();
   let worktreeClaimed = false; // track if we created a worktree this pass
   let itemLabel = null;       // the item label for cleanup
   let worktreePath = null;
+  let worktreeConvId = null;  // the seat whose worktree this pass owns
 
   // #473: wire worktree lifecycle into the pass.
   // Before driving: create worktree for each seat with queued work, set DURIG_SEAT_ROOT.
@@ -103,6 +109,7 @@ export async function drivePass(
           const wt = await claimWorktree({ source, worktreeRoot, itemLabel: itemLabel });
           process.env.DURIG_SEAT_ROOT = wt.cwd; // seattools.makeSeatEnv picks this up
           worktreeClaimed = true;
+          worktreeConvId = convId;
           // #506: the fork now carries the shared tree's visible (uncommitted) state;
           // surface WHAT was carried so the fork is never an untracked surprise.
           if (wt.carried?.length) {
@@ -120,8 +127,9 @@ export async function drivePass(
     }
   }
 
-  const wrapOnWoke = (name) => {
+  const wrapOnWoke = (name, convId) => {
     wokenSeat = name;
+    if (convId !== undefined) wokenConvIds.add(convId);
     onWoke?.(name);
   };
   const actioned = await driveOnce(harness, {
@@ -143,7 +151,20 @@ export async function drivePass(
   if (wokenSeat) {
     process.env.DURIG_ACTIVE_SEAT = wokenSeat;
   }
-  await harness.waitForIdle(context);
+  // Hold the harness open for the runs this pass started, and only those. When
+  // the caller supplies its commit signal, stop the wait the moment a
+  // wake-relevant commit lands so the next pass can re-wake a seat that just
+  // settled, without waiting for the slowest run in this one. An empty wake set
+  // resolves at once. F11 is preserved by the drain on loop exit, which is the
+  // one place a global wait belongs.
+  const wokenIdle = Promise.all(
+    [...wokenConvIds].map(async (convId) => {
+      const conv = await harness.conversation(convId, context);
+      await conv?.waitForIdle(context);
+    }),
+  );
+  if (settleSignal) await settleSignal.race(wokenIdle);
+  else await wokenIdle;
 
   // #473: after idle, check if the item completed and cleanup the worktree.
   if (worktreeClaimed && itemLabel && worktreePath) {
@@ -155,6 +176,14 @@ export async function drivePass(
       if (completedItem) {
         // Commit the item's files on its branch, then release and remove.
         try {
+          // The pass wait is now cut short by commits, so the worktree seat's run
+          // may still be live when its item reports done (the tool result is
+          // committed before the run settles). Never remove a worktree out from
+          // under a live run: settle THIS conversation first.
+          const worktreeConv = worktreeConvId !== null
+            ? await harness.conversation(worktreeConvId, context)
+            : null;
+          await worktreeConv?.waitForIdle(context);
           await releaseWorktreeLock(worktreePath);
           // The seat commits in its worktree; the broker cleans up the lock and removes.
           await removeClaimedWorktree({ worktree: worktreePath, force: true });
@@ -254,6 +283,8 @@ export async function runWakeLoop({
       continue;
     }
     scheduler.beginPass(now());
+    const passStartedAt = now();
+    const wokeThisPass = [];
     try {
       await drivePass(harness, probeStorage, {
         context,
@@ -261,17 +292,24 @@ export async function runWakeLoop({
         readBusySeats,
         source: source,
         worktreeRoot: worktreeRoot,
+        settleSignal: signal,
         onError: (failure) => {
           failedSeats.add(failure.name);
           onDiagnostic({ kind: "wake-failed", ...failure });
         },
         onWoke: (name) => {
           scheduler.recordWakes([name], now());
+          wokeThisPass.push(name);
           logBrokerLine(dbPath, `WAKE ${name}`);
         },
       });
       passes++;
-      logBrokerLine(dbPath, `PASS ${passes}`);
+      // Duration + the seats woken make a pass's liveness legible: a long
+      // `ms=` with `woke=-` is a pass that waited, not one that worked.
+      logBrokerLine(
+        dbPath,
+        `PASS ${passes} ms=${now() - passStartedAt} woke=${wokeThisPass.length > 0 ? wokeThisPass.join(",") : "-"}`,
+      );
       if (supervise) {
         const plans = await supervise();
         for (const plan of plans) onDiagnostic({ kind: "escalated", ...plan });
@@ -289,6 +327,12 @@ export async function runWakeLoop({
       break;
     }
   }
+  // F11: the per-pass wait is now scoped to the conversations a pass woke, so
+  // the loop can exit (a stop request or a bound) while a run started earlier is
+  // still live. Never close the harness with a live run — drain the ordinary
+  // scope here, exactly as the old global wait used to do at every pass. This
+  // is the one place a global wait belongs.
+  await harness.waitForIdle(context);
   // Close the audit opened by START: the reason the broker stopped (a `.stop` request, a
   // bound, or a signal) survives the process here instead of only on stdout.
   logBrokerLine(dbPath, `EXIT pid=${process.pid} reason=${stoppedBy ?? "unknown"} passes=${passes}`);

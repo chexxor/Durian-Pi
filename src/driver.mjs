@@ -149,7 +149,9 @@ export async function driveOnce(
       if (!conv) continue;
       await conv.submit({ type: "input", content: WAKE_CONTENT }, context);
       actioned++;
-      onWoke?.(wake.name);
+      // The conversation id travels with the wake so a caller can scope its
+      // settle-wait to the runs THIS pass started (#broker-liveness).
+      onWoke?.(wake.name, wake.conversationId);
     } catch (error) {
       // Belt and braces: even a probed-readable seat can fail here. Report and
       // continue rather than abandon the pass.
