@@ -74,12 +74,14 @@ call written into the CONTENT as `<parameter name="powershell">…` (entries `34
 `countMalformedToolCalls` (`src/attention.mjs`, which matches only the harness marker
 `[error] Validation failed for tool "`) and the D64 degeneration guard never fire, and the
 `malformed-tool-call` metric stays 0 (its own documented blind spot). impl's model is
-`deepseek-ai/DeepSeek-V4.1-Flash` (deepinfra, `api: openai-completions`). Candidate fixes (**none
-verified as a cure**): (a) swap impl off DeepSeek-V4.1-Flash to GLM-5.3-Flash (operator ruling +
-`broker-safe-change`); (b) detect pseudo-call-as-text in `attention.mjs`/`degeneration.mjs` so the
-notice/guard fire; (c) auto re-drive a run whose final turn is a pseudo-call; (d) make
-`idle_with_queued_work` schedule a pass — the broker sat idle `20:14:13Z → 20:19:54Z` while impl was
-idle with queued work. Recovery used both times: spool a corrective steer via `intent.mjs` (latest
+`deepseek-ai/DeepSeek-V4.1-Flash` (deepinfra, `api: openai-completions`). **Fix LANDED (`f086382`, D77):**
+durig now detects a tool call emitted as text (`isPseudoToolCallTurn`/`countPseudoToolCalls` in
+`src/attention.mjs`; `assessRun` trips on the FIRST one) and the supervisor resets the seat with a handoff
+naming the fault — NO translation layer (a synthesized half-parsed call would execute without the model's
+validation). The operator keeps the model. **Still open:** (c) auto re-drive (the reset + the driver's
+queued-work wake should cover it, but not yet proven live); (d) make `idle_with_queued_work` schedule a
+pass — the broker sat idle `20:14:13Z → 20:19:54Z` while impl was idle with queued work. Recovery used
+both times: spool a corrective steer via `intent.mjs` (latest
 `.spike/delegate/intent-impl-finish-700-v2.txt`); impl re-woke to finish #700 (commit `28c7ba5`).
 
 ## NEXT SESSION — START HERE
