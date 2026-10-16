@@ -1513,8 +1513,7 @@ epeated_failure notice; malformed_tool_call is ONE class defined by CAUSE (harne
 
 **Decision:** the interactive client's screen model is a MAIN SCREEN that preserves scrollback and pipes â€” it does NOT own an alternate screen (that loses scrollback and pipes, and is the worst-supported combination with tmux, consistent with D21/D22; no multiplexer). Level 2 (a resident server shared by >1 viewer / remote access / 38b) is DEFERRED.
 **Why:** the client must not regress the piped/JSON contract or break a terminal multiplexer; the deferred Level 2 is gated on felt sub-poll latency, a second viewer, or a remote-access need that does not exist yet.
-**Status:** decision recorded. C3 (src/tui/client.mjs â€” a headless 
-enderTui/Frame, no storage/harness/driver import, proven by demo/tui-client.test.mjs, exit 0) is built; the U1 driver/or raw-mode screen (#480) is not built yet. Not pushed.
+**Status:** decision recorded. C3 (src/tui/client.mjs - a headless renderTui/Frame, no storage/harness/driver import, proven by demo/tui-client.test.mjs, exit 0) is built; the U1 driver + ui.mjs entrypoint (#480) are now BUILT too - src/tui/driver.mjs and the root ui.mjs entrypoint exist, proven by demo/ui-driver.test.mjs and demo/tui-conversation.test.mjs - so the earlier "(not built yet)" note is SUPERSEDED. Not pushed.
 
 **Layer-accurate correction (lead ruling #666, 2026-10-16) -- D61's "does NOT own an alternate screen" was over-strong.** It conflated two layers. The accurate statement:
 - **Two layers.** (a) The **in-TUI frame rendering** (`renderTui`/`Frame`, headless-only in C3 `src/tui/client.mjs`) is governed by D61 -- it preserves scrollback and pipes at the painting layer. (b) The **entrypoint terminal handoff** (the U1 `ui.mjs` entrypoint) uses the ALT SCREEN -- it declares ``ENTER_ALT "\\x1b[?1049h"`` / ``LEAVE_ALT "\\x1b[?1049l"`` at `ui.mjs:28-29` and installs the enter/leave sequences via the driver's `onCleanup`.
@@ -1672,3 +1671,30 @@ of documenting a contradiction (#667).
 Esc back; the seat list advertises Enter). **OPEN for the operator/lead:** ratify the supersession of
 D61 for the interactive client, or rule main-screen — in which case the rich view is reworked onto
 terminal scrollback and the app-side scroll window is dropped.
+
+## D70 — TUI hardening: the render boundary sanitises untrusted text, and every exit path restores the terminal (2026-10-16)
+
+**Decision:** adopt a hardening posture for the interactive surface, in this order: (1) sanitise
+untrusted model/tool text at the render boundary — one allowlist (a strict SGR subset plus `\n`/`\t`;
+all other C0, ESC, CSI and OSC stripped), applied once on ingest in `src/viewmodel.mjs` and
+defensively at the `src/tui/client.mjs` emit, so `ui.mjs`, `chatview` and `streamview` all inherit it;
+(2) restore the terminal **synchronously** on `uncaughtException`/`unhandledRejection`/`exit` in
+addition to SIGINT/SIGTERM; (3) wrap the frame paint in DECSET 2026 (`\x1b[?2026h … \x1b[?2026l`);
+(4) replace `String.length` width math with a grapheme/East-Asian-width-aware helper.
+
+**Why:** the external research in `docs/reviews/tui-streaming-research.md` (which could not read the
+tree) was re-verified against the code at `697f376`, and the four gaps are real: raw text reaches the
+terminal (`viewmodel` → `client.mjs`; only a test helper strips colour), there is no exception-path
+restore (`ui.mjs` handles SIGINT/SIGTERM/try-catch only), there is no synchronized output (`CLEAR` plus
+rewrite, `ui.mjs:32,151`), and width is measured in code units (`watchview.mjs:15,22`, `client.mjs`
+`wrapText`). OSC 52 clipboard writes and OSC 8 link spoofing are the highest-blast-radius form
+(clipboard poisoning detonates on paste), and an abnormal exit left in raw mode / on the alt screen is
+exactly when an operator pastes a recovery command — the two compound, so sanitise-and-restore are one
+unit of work.
+
+**Status:** ADOPTED (operator-approved 2026-10-16). The four hardening rules are the plan of record as items H1–H5 in `docs/TUI-IMPLEMENTATION-PLAN.md` §C; `pm` registers the queue items — the delegate does not claim or route them. No code changed by the approval itself. Open rulings this depends on: the
+prose-measure cap (would reverse `697f376`'s full-width viewport) and whether `ui.mjs` stays read-only
+or gains the type-to-seat input line (D68/#624), for which **bracketed paste (DECSET 2004) is a
+prerequisite**. Bounded-page finding: `readRigHealth` reads 24 entries per seat (`SCAN_LIMIT`,
+`src/rigstory.mjs:12`), so the research's "transcript length is the scaling cliff" is overstated for
+the current code — the real limit is that the conversation scroll window is capped to that page.

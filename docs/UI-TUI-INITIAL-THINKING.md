@@ -305,3 +305,27 @@ This maps the field's converged practice onto durig's client so the next change 
 **Jump-start list for the next TUI items:** (1) search within the conversation; (2) copy/export the
 transcript and leave a scrollback receipt on exit; (3) an inline/plain fallback for accessibility.
 These are the known costs of the alt-screen choice, named by the exemplars — not optional polish.
+
+---
+
+### Appendix A — verification addendum (delegate, 2026-10-16)
+
+A repo-grounded re-check of the external research in `docs/reviews/tui-streaming-research.md` (which
+could not read this tree) confirmed every row above and added the arms the comparison was missing:
+
+| Practice (source) | What the exemplars do | durig today | Status |
+|---|---|---|---|
+| **Diff strategy** (DECSET 2026) | Atomic frames via synchronized output; cell-diffing only in heavy renderers | full `\x1b[H\x1b[2J` + rewrite, no `\x1b[?2026h/l` | **GAP** — wrap the repaint in 2026 (cheap; isolated to `paintScreen`). |
+| **Untrusted-text sanitiser** (security) | Strip ESC/OSC (clipboard, hyperlinks, title) at the render boundary | raw text reaches the terminal (`viewmodel` → `client.mjs`); `chatview` too | **GAP (security)** — highest-harm finding; sanitise on ingest. |
+| **Crash-safe restore** | Idempotent restore on `exit`/`uncaughtException`/`unhandledRejection` | `ui.mjs` restores on SIGINT/SIGTERM/try-catch only | **GAP** — wire the remaining handlers to a synchronous restore. |
+| **Cell-width correctness** | Grapheme clustering + East-Asian-width table | `String.length` (`watchview.truncate`/`pad`, `client.wrapText`) | **GAP** — CJK/emoji rows misalign. |
+
+Two further corrections to the external research: `ui.mjs` does **not** use the vendored `pi-tui` (the
+dependency is declared in `package.json` but imported nowhere), and the store read is a **bounded
+24-entry page per seat** (`SCAN_LIMIT`), so transcript length is not the scaling cliff — the
+conversation scroll window is instead capped to that page.
+
+The full verdict, evidence and ranked adjustments are in
+`docs/reviews/tui-streaming-research.md` §"Repo-grounded verification and adjustments"; the
+recommended posture is `docs/DECISIONS.md` D70, and the scoped work items are in
+`docs/TUI-IMPLEMENTATION-PLAN.md`.

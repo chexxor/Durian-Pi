@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate session — broker-liveness (#D65) and the seat-facing `prepare_workspace` tool (#D66) landed; suite 82/82; the per-seat-worktree default is the open question). Next agent: read **NEXT SESSION**; the later sections are historical._
+_Last refreshed: 2026-10-16 (delegate session — TUI streaming research verified against the tree; D70 hardening recommendation recorded; corrections folded into `docs/reviews/tui-streaming-research.md` and Appendix A of `docs/UI-TUI-INITIAL-THINKING.md`). Next agent: read **NEXT SESSION**; the later sections are historical._
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
@@ -17,6 +17,25 @@ with `↑↓` scroll and `Esc` back (D69; `demo/tui-conversation.test.mjs`). The
 intent-inbox (D68): the input line calls `writeIntent`, so the TUI stays a viewer while the broker
 delivers. Queue work #624 (impl, `init`) and #662 (TUI close-out: 48-col golden + lifecycle cleanup)
 run alongside.
+**Research review landed (2026-10-16, delegate):** `docs/reviews/tui-streaming-research.md` is now
+verified against the tree, with corrections and a ranked adjustment list; **D70** records the
+recommended hardening posture — sanitise untrusted text on ingest (`src/viewmodel.mjs`), restore
+**synchronously** on `uncaughtException`/`unhandledRejection`/`exit` in `ui.mjs`, wrap each paint in
+DECSET 2026, and replace `String.length` width math. **Bracketed paste (DECSET 2004) is now a
+prerequisite of the input line below** — do not ship raw-mode input without it. Open rulings:
+the prose-measure cap (would reverse `697f376`'s full-width viewport) and the still-open D69/D61
+screen-model supersession. **The operator-approved plan of record is `docs/TUI-IMPLEMENTATION-PLAN.md`
+(§B in-flight, §C hardening H1–H5, §D open rulings) — pm registers its items; the delegate does not
+claim or route them.**
+
+**TUI testing framework landed (2026-10-16, delegate):** design in `docs/TUI-TESTING.md`; first
+increment is `demo/tui-harness.mjs` (shared fixtures + a cell `ScreenBuffer` + golden helpers),
+`demo/tui-golden.test.mjs` (8 golden frames incl. the 48-col floor), `demo/tui-buffer.test.mjs`, and
+`demo/tui-suite.mjs`. Run regression with **`npm run test:tui`** (currently 11/11, hermetic — safe
+while the broker is live). The harness immediately found a real bug (the conversation header
+overflowed 48 columns by 7 cells) which is fixed and frozen in the golden. Release clones for
+comparison live in gitignored `vendor/eval/`.
+
 **Blocker:** none for the input line — the TUI input mode and `writeIntent` are both unblocked. The
 screen model is settled for `ui.mjs` by D69 (alt-screen + app-owned scroll), pending operator/lead
 ratification. **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`, then restart the
@@ -84,6 +103,17 @@ consult is one). **Docs landed:** D63/D64 (`0ecf9cf`), D65 (`b81e171`), D66 (thi
 _Historical (superseded): the #480-era notes below were written for the 2026-10-15 handoff._
 
 **Future work (candidate items — not yet queued):**
+- **TUI app implementation plan** — the operator-approved plan of record is
+  `docs/TUI-IMPLEMENTATION-PLAN.md`. Its §C hardening items H1–H5 (sanitise untrusted text at every
+  render boundary; synchronous restore on abnormal exit; DECSET 2026; grapheme/EAW-correct width;
+  bracketed paste with the input line) carry the D70 posture and await `pm` registration. §D holds the
+  open rulings (prose-measure cap, alt-screen receipts/search/copy/plain, D69/D61 supersession).
+  Recorded facts: `ui.mjs` declares `pi-tui` but imports it nowhere, and the conversation scroll
+  window is capped to the 24-entry page (`SCAN_LIMIT`).
+- **TUI hardening (D70, operator-approved — folded into the plan above):** sanitise untrusted text at
+  the render boundary; synchronous restore on `uncaughtException`/`unhandledRejection`/`exit`;
+  DECSET 2026 around `paintScreen`; grapheme/EAW-correct width. Bracketed paste (DECSET 2004) is
+  required by the type-to-seat input line, not optional polish.
 - **Broker intent-inbox** — deliver intent to a seat WITHOUT stopping the broker (a file the broker
 drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guard, so routing needs a
 `serve --stop`, which interrupts in-flight work.
