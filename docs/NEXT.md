@@ -11,29 +11,28 @@ _Last refreshed: 2026-10-16 (delegate session — broker-liveness (#D65) and the
 
 ## NEXT SESSION — START HERE
 
-**Current item: the advocated workspace DEFAULT — fail-closed per-item isolation, with the
-verifier-artifact path first (delegate-owned); queue work #623/#624 (claimed by impl) runs
-alongside.** The mechanism is landed (D65 broker-liveness `b81e171`; D66 `prepare_workspace`
-`ca65e00`). The `advocate` answered the operator's opt-in/opt-out question (**SA-13 / D67**): per-item
-isolation should be the DEFAULT (conditionally ON in a git repo), the file/shell tools must FAIL
-CLOSED until `prepare_workspace` runs, and a non-git workspace must degrade satisfiably. The one
-condition before the gate lands: a verifier's worktree must be baseable on the AUTHOR's item, or
-verification passes against pre-change HEAD (D67 condition 1). Current behavior is ADVISORY — an
-unprepared seat silently falls through to the shared tree.
+**Current item: #624 (impl, `init`) and #662 (TUI close-out) run alongside the delegate-owned broker
+INTENT-INBOX.** The intent-inbox delivers intent to a seat WITHOUT stopping the broker: today a `send`
+is a second store writer, so routing while the broker drives needs `serve --stop`, which interrupts
+in-flight runs (the delegate hit this consulting the advocate). The fix is a file spool the broker
+drains each pass, sibling to `.broker.stop`.
+**Blocker:** `cli.mjs` holds #624's in-flight `init` work, so the producer cannot be a `cli.mjs` verb
+without entangling that item — the surface is a separate `intent.mjs` entrypoint (like `ui.mjs`, D21)
+plus `npm run intent`, with a `cli.mjs send --async` alias after #624 lands.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`, then restart the broker with
+`DURIG_DB=./selfdev.sqlite node cli.mjs serve` once no writer is in flight.
 
-**Blocker:** the verifier-artifact path must be designed before the gate (D67 condition 1). The shared
-tree holds #623's in-flight `cli.mjs` and a seat's `docs/STATUS.md` — do not discard; stage explicit
-paths only. **Next real candidates after the gate:** the worktree-leak defect (leaked
-`item-1/`,`item-2/` dirs; now gitignored via `/item-*/`), #491 (designer's 5 UX follow-ups), and the
+**Just landed (this delegate session):** D65 broker-liveness (`b81e171`), D66 `prepare_workspace`
+(`ca65e00`), D67 (advocate's SA-13 default recommendation), and TUI improvements (`1127960`: real
+arrow-key nav, honest footer, working color + reverse-video selection). The open **workspace-gate**
+follow-up remains: fail-closed isolation with the **verifier-artifact path first** (D67 condition 1);
+isolation is currently ADVISORY. **Next real candidates:** the workspace gate, the worktree-leak defect
+(leaked `item-1/`,`item-2/` dirs; now gitignored), #491 (designer's 5 UX follow-ups), and the
 still-unqueued turn-kind indicator.
 
-Exact next commands:
-`DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`,
-then `… node cli.mjs serve` (restart; no writer is running now).
-
-**State at this refresh (2026-10-16, delegate session):** resident broker **pid 17424**
-(`01:12:41Z`; healthy — `PASS 4`+ logged) with the **degeneration guard armed** (it has fired and
-self-healed a degenerate seat). Store is single-writer. The team landed the delegated items
+**State at this refresh (2026-10-16, delegate session):** the resident broker ran as **pid 33116**
+(`04:20Z`) with the D65 liveness fix and was healthy; the delegate stopped/restarted it around the
+TUI and intent-inbox work. Store is single-writer. The team landed the delegated items
 (**#506** `67810af`, **#502** `3b44f38`); the delegate landed the stranded **#599** (`04413fd`).
 `item-1/`, `item-2/` are leaked per-task worktrees (see below). NOTE: committing in-flight work makes
 a seat log "another seat committed my work" — expected under the shared-tree entanglement, not an error.
