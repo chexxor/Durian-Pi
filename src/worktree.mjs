@@ -54,7 +54,7 @@ export async function installWorktreeDeps(worktreePath) {
  * the new worktree, so the returned `cwd` is the same relative place a seat would otherwise have
  * had, and a rig's declared `cwd` keeps meaning when the tree underneath it changes.
  */
-export async function createWorktree({ source, target, ref = "HEAD" }) {
+export async function createWorktree({ source, target, ref = "HEAD", branch = null }) {
 	const root = await repoRoot(source);
 	if (existsSync(target)) {
 		throw new Error(`refusing to reuse an existing path as a worktree: ${target}`);
@@ -68,7 +68,16 @@ export async function createWorktree({ source, target, ref = "HEAD" }) {
 	// the source visibly held (#240) — but the fork is no longer “a tree neither
 	// git nor the operator tracks”: it is HEAD plus an enumerated, returned list.
 	const dirty = await uncommittedInSource(source);
-	await run("git", ["-C", root, "worktree", "add", "--detach", target, ref]);
+	// Attach the item's own BRANCH when asked — the P2 commit discipline expects
+	// commits to land on `impl-item-N`, not a detached HEAD (#859). `-b` creates the
+	// branch; an EXISTING branch is attached rather than reset, so a leftover item
+	// branch that already carries commits is never silently rewound.
+	const addArgs = branch
+		? (await branchExists(root, branch))
+			? ["worktree", "add", target, branch]
+			: ["worktree", "add", "-b", branch, target, ref]
+		: ["worktree", "add", "--detach", target, ref];
+	await run("git", ["-C", root, ...addArgs]);
 	const carried = dirty.trim() === "" ? [] : await carryVisibleState({ source, target });
 
 	const inside = relative(root, resolve(source));
@@ -82,7 +91,39 @@ export async function createWorktree({ source, target, ref = "HEAD" }) {
 	// The worktree is unusable without this step — the seat that needs it should run the install
 	// before working.
 
-	return { repo: root, worktree: resolve(target), cwd, carried };
+	return { repo: root, worktree: resolve(target), cwd, carried, branch: branch ?? null };
+}
+
+/** Whether `refs/heads/<branch>` exists in the repo at `root`. */
+async function branchExists(root, branch) {
+	try {
+		await run("git", ["-C", root, "rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Make a worktree sit on `branch`, creating/switching to it AT the current HEAD.
+ * Used when an item worktree is REUSED (#859): a pre-existing worktree is often on
+ * a detached HEAD (older runs, or a commit made before the branch existed), so a
+ * resumed run must re-establish the branch without losing anything. `checkout -B`
+ * resets only the BRANCH ref to HEAD; the working tree does not move, so both the
+ * commits already made on the detached HEAD and any uncommitted work survive.
+ * Returns what it did, for the tool message.
+ */
+async function ensureWorktreeBranch(worktreePath, branch) {
+	const wtNorm = worktreePath.replace(/\\/g, "/");
+	let current = "";
+	try {
+		current = (await run("git", ["-C", wtNorm, "branch", "--show-current"])).stdout.trim();
+	} catch {
+		current = "";
+	}
+	if (current === branch) return { action: "already-on-branch", branch };
+	await run("git", ["-C", wtNorm, "checkout", "-B", branch]);
+	return { action: current === "" ? "created-at-detached-head" : `switched-from-${current}`, branch };
 }
 
 /**
@@ -247,12 +288,12 @@ export async function validateWorktreeIdentity(worktreePath) {
  * `itemLabel` is used for the branch name (e.g. `wt/item-123`), kept short
  * to avoid MAX_PATH issues.
  */
-export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = "HEAD" }) {
+export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = "HEAD", branch = null }) {
 	const target = join(worktreeRoot, itemLabel);
 	if (existsSync(target)) {
 		throw new Error(`worktree path already exists: ${target}`);
 	}
-	const result = await createWorktree({ source, target, ref });
+	const result = await createWorktree({ source, target, ref, branch });
 	// Validate identity before returning — refuses if the worktree resolves
 	// back to the main checkout through a redirect.
 	await validateWorktreeIdentity(result.worktree);
@@ -278,30 +319,47 @@ export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = "HE
  *
  * `worktreeRoot` is the directory the seat is working from (durig's own tree, the
  * broker's process cwd); the worktree is placed beside it under the same repo.
+ *
+ * The worktree is put ON AN ITEM BRANCH (#859): `<seat>-item-<id>` (or `item-<id>`
+ * when no seat is given), so a seat's commits land on a branch instead of a
+ * detached HEAD and do not need hand-rolled branch creation. A REUSED worktree is
+ * re-attached to that branch if it was detached, preserving any commits already
+ * made there.
  */
-export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, ref = "HEAD" }) {
+export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatName = null, ref = "HEAD" }) {
 	const repo = await repoRoot(source);
 	const itemLabel = `item-${itemId}`;
 	const worktreePath = join(worktreeRoot, itemLabel);
+	// The item BRANCH the worktree commits to (#859): `<seat>-item-<id>` when the
+	// seat is known (the convention the queue and the constitution name), else
+	// `item-<id>`. The worktree no longer lands on a detached HEAD.
+	const branch = seatName ? `${seatName}-${itemLabel}` : itemLabel;
 	// The worktree reproduces the source's path inside the repo, so a rig that
 	// declares no cwd still lands in the same relative place after the switch.
 	const inside = relative(repo, resolve(worktreeRoot));
 	const cwdFor = (worktree) => (inside === "" ? worktree : join(worktree, inside));
 	if (existsSync(worktreePath)) {
+		// REUSE must still ensure the branch: a worktree from an older run (or one
+		// whose seat committed before the branch existed) may be on a detached HEAD.
+		const ensured = await ensureWorktreeBranch(worktreePath, branch);
 		return {
 			worktree: worktreePath,
 			cwd: cwdFor(worktreePath),
 			itemLabel,
+			branch,
+			branchAction: ensured.action,
 			created: false,
 			carried: [],
 			locked: true,
 		};
 	}
-	const wt = await claimWorktree({ source, worktreeRoot, itemLabel, ref });
+	const wt = await claimWorktree({ source, worktreeRoot, itemLabel, ref, branch });
 	return {
 		worktree: wt.worktree,
 		cwd: wt.cwd,
 		itemLabel,
+		branch,
+		branchAction: "created",
 		created: true,
 		carried: wt.carried ?? [],
 		locked: true,

@@ -89,7 +89,7 @@ const prepareWorkspace = defineTool({
 			const source = process.cwd();
 			let workspace;
 			try {
-				workspace = await prepareSeatWorkspace({ source, worktreeRoot: source, itemId });
+				workspace = await prepareSeatWorkspace({ source, worktreeRoot: source, itemId, seatName: me });
 			} catch (err) {
 				return result(
 					`PREPARE_WORKSPACE_ERROR: cannot create a worktree from ${source} (is it a git repository?): ${err?.message ?? err}`,
@@ -104,6 +104,7 @@ const prepareWorkspace = defineTool({
 				`WORKSPACE READY (${workspace.created ? "created" : "reused"}): ${workspace.cwd}\n` +
 					`Your file and shell tools now resolve inside this item's worktree. ` +
 					`Work and commit there; do not touch the shared tree.` +
+					(workspace.branch ? ` The worktree is on branch ${workspace.branch}; commit your item's files there.` : "") +
 					(workspace.carried.length > 0
 						? `\nCarried the shared tree's visible changes: ${workspace.carried.join(", ")}`
 						: ""),
