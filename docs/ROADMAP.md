@@ -481,6 +481,17 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     `@earendil-works/pi-tui` (already a dependency of `pi-coding-agent@1.1.0`, so
     it is in-stack) over adopting a new framework; the browser/SSE client is the
     cheaper option if the interaction set stays small.
+89. **TUI: load a seat's full chat transcript when opening its detail view (operator request, 2026-10-16).**
+    Today the conversation pane only carries the most recently **streaming** entries: the store read is a
+    bounded 24-entry page (`SCAN_LIMIT`) and the scroll window cannot reach past that page
+    (`docs/TUI-IMPLEMENTATION-PLAN.md` §G4, which leaves the "load older than the page" affordance open).
+    Opening a seat's details must **load its chat log** — backfill the durable transcript for that seat,
+    paged as needed, then continue following new entries live — instead of showing only the latest stream.
+    *Grounded:* `src/readapi.mjs` / `src/rigstory.mjs` (`SCAN_LIMIT`), the TUI plan §G4.
+    *Owner:* route via `pm` (impl for the transcript read path; designer for the detail-view surface).
+    *Acceptance:* opening a seat's detail view renders that seat's prior turns from the durable transcript
+    (paged, never only the live tail), then follows new entries live; a golden/demo proves the backfill is
+    present, shown FAILING against the current stream-only behaviour before it passes.
 
 ## Extensibility and distribution
 
