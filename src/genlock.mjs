@@ -24,6 +24,7 @@ import {
 	openSync,
 	readFileSync,
 	readdirSync,
+	renameSync,
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -31,7 +32,13 @@ import { basename, dirname, join } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 
-const STALE_MS = 60_000;
+// A legitimate generation can run to the provider stream timeout (600 s by default
+// for the openai-compatible providers). A 60 s age fallback steals such a live
+// holder and lets the concurrency cap be exceeded mid-response, so the age fallback
+// is longer than that timeout, and a live holder renews its lease every
+// LEASE_RENEW_MS — only a truly hung or dead holder ever ages out.
+const STALE_MS = 660_000;
+const LEASE_RENEW_MS = 20_000;
 const ACQUIRE_POLL_MS = 100;
 
 // In-process seat context (B2: per-concurrent-call seat attribution).
@@ -48,13 +55,44 @@ function slotPaths(dbPath, slots) {
 	return Array.from({ length: slots }, (_, i) => `${dbPath}.genlock.${i}`);
 }
 
-function holderAlive(holder) {
+export function holderAlive(holder) {
 	if (!holder || typeof holder.pid !== "number") return false;
 	try {
 		process.kill(holder.pid, 0); // signal 0 = liveness probe only
 		return true;
-	} catch {
-		return false;
+	} catch (err) {
+		// EPERM means the process exists but we may not signal it (another integrity
+		// level on Windows); only ESRCH means it is gone. Anything else is treated as
+		// alive, because wrongly stealing a live holder breaks the concurrency cap.
+		return err?.code !== "ESRCH";
+	}
+}
+
+/**
+ * Whether a slot may be stolen: its holder is dead, or it has aged past STALE_MS.
+ * STALE_MS is longer than the provider stream timeout, and a live holder renews its
+ * `since`, so a legitimate long generation is never age-stolen.
+ */
+export function slotIsStale(holder, now = Date.now()) {
+	if (!holderAlive(holder)) return true;
+	const age = holder?.since ? now - Date.parse(holder.since) : Infinity;
+	return age > STALE_MS;
+}
+
+/**
+ * Refresh a held slot's `since` so it never ages out while its generation is alive.
+ * Written to a temp file and renamed, because a concurrent reader that parses a
+ * half-written holder reads it as null and would steal a live lease.
+ */
+function renewSlot(path, me) {
+	const tmp = `${path}.${process.pid}.renew`;
+	try {
+		writeFileSync(tmp, JSON.stringify({ ...me, since: new Date().toISOString() }));
+		renameSync(tmp, path);
+	} catch (err) {
+		if (err?.code !== "ENOENT") {
+			console.error(`GENLOCK WARNING: could not renew ${path}: ${err?.message ?? err}`);
+		}
 	}
 }
 
@@ -110,8 +148,7 @@ export async function withGenerationSlot(options, fn) {
 				}
 			} else {
 				const holder = readHolder(candidate);
-				const age = holder?.since ? Date.now() - Date.parse(holder.since) : Infinity;
-				if (!holderAlive(holder) || age > STALE_MS) {
+				if (slotIsStale(holder)) {
 					try {
 						unlinkSync(candidate); // steal from a dead or wedged holder
 					} catch (err) {
@@ -126,9 +163,14 @@ export async function withGenerationSlot(options, fn) {
 		if (path) break;
 		await new Promise((r) => setTimeout(r, ACQUIRE_POLL_MS));
 	}
+	// Renew the lease while fn runs: a response longer than STALE_MS must not look
+	// abandoned. unref() keeps the timer from holding the process open.
+	const renew = setInterval(() => renewSlot(path, me), LEASE_RENEW_MS);
+	if (typeof renew.unref === "function") renew.unref();
 	try {
 		return await seatLocalStorage.run(me.seat, fn);
 	} finally {
+		clearInterval(renew);
 		try {
 			const holder = readHolder(path);
 			if (holder?.pid === process.pid) {

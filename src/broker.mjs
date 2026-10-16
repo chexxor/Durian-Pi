@@ -420,6 +420,22 @@ export async function runWakeLoop({
       onDiagnostic({ kind: "reconcile-failed", error: String(err?.message ?? err) });
     }
   }
+  // Heartbeat: keep the state file fresh so a recycled pid cannot be mistaken for this
+  // broker. The token carries across rewrites; only the broker owns this interval.
+  let heartbeat = null;
+  if (dbPath) {
+    const state = readBrokerState(dbPath);
+    if (state && state.pid === process.pid) {
+      heartbeat = setInterval(() => {
+        try {
+          writeBrokerState(dbPath, { pid: state.pid, since: state.since, runToken: state.runToken });
+        } catch (err) {
+          console.error(`BROKER WARNING: heartbeat write failed: ${err?.message ?? err}`);
+        }
+      }, BROKER_HEARTBEAT_MS);
+      if (typeof heartbeat.unref === "function") heartbeat.unref();
+    }
+  }
   for (;;) {
     if (isStopping()) {
       stoppedBy = "signal";
@@ -508,6 +524,7 @@ export async function runWakeLoop({
   // still live. Never close the harness with a live run — drain the ordinary
   // scope here, exactly as the old global wait used to do at every pass. This
   // is the one place a global wait belongs.
+  if (heartbeat) clearInterval(heartbeat);
   await harness.waitForIdle(context);
   // Close the audit opened by START: the reason the broker stopped (a `.stop` request, a
   // bound, or a signal) survives the process here instead of only on stdout.
@@ -545,9 +562,25 @@ export function brokerStatePath(dbPath) {
   return `${dbPath}.broker.json`;
 }
 
-/** Liveness probe by signal 0: no signal delivered, just "does this pid exist". */
-export function brokerAlive(state) {
+// The broker refreshes its state file this often; a state whose heartbeat is older
+// than the timeout is treated as dead. This is the identity proxy Windows needs:
+// pids are reused, so `process.kill(pid, 0)` alone can read a recycled pid as the
+// broker. A fresh heartbeat can only come from the real broker process.
+const BROKER_HEARTBEAT_MS = 20_000;
+const BROKER_HEARTBEAT_TIMEOUT_MS = 60_000;
+
+/** Liveness probe by signal 0, hardened against a recycled pid. */
+export function brokerAlive(state, { now = Date.now() } = {}) {
   if (!state || typeof state.pid !== "number") return false;
+  // A stale heartbeat means the state file outlived the broker that wrote it: the pid
+  // may now name an unrelated process, so the pid probe alone would be wrong. A state
+  // with no heartbeat (an older writer) falls back to the pid probe.
+  if (
+    typeof state.heartbeatAt === "number" &&
+    now - state.heartbeatAt > BROKER_HEARTBEAT_TIMEOUT_MS
+  ) {
+    return false;
+  }
   try {
     process.kill(state.pid, 0);
     return true;
@@ -570,8 +603,8 @@ export function readBrokerState(dbPath) {
   }
 }
 
-export function writeBrokerState(dbPath, { pid, since }) {
-  writeFileSync(brokerStatePath(dbPath), JSON.stringify({ pid, since }));
+export function writeBrokerState(dbPath, { pid, since, runToken = randomUUID(), heartbeatAt = Date.now() }) {
+  writeFileSync(brokerStatePath(dbPath), JSON.stringify({ pid, since, runToken, heartbeatAt }));
 }
 
 /**
