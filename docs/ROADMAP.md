@@ -1735,8 +1735,10 @@ should not wait. **Correction (delegate, round 3):** the research agent read the
 64. **OS trigger adapters (portable host, per-platform install).** Keep `src/host.mjs` pure Node and
     generate the boot/login trigger per platform: a **per-user agent by default** (Windows Task, macOS
     LaunchAgent, `systemd --user`), a **system daemon opt-in** for an always-on host (Windows Service,
-    LaunchDaemon, systemd system unit). A `durig service install` emits the unit/plist/service config and
-    the per-platform kill-tree primitive (Windows Job Object vs POSIX process group). Either way:
+    LaunchDaemon, systemd system unit). The end-user surface is `durig daemon install [--user|--system]`
+    (with `--print`), `durig daemon switch --user|--system` for a clean migration, and `durig daemon status`
+    — see the CLI table in `docs/BROKER-SUPERVISION.md` §11. `install` emits the unit/plist/service config
+    and the per-platform kill-tree primitive (Windows Job Object vs POSIX process group). Either way:
     delayed auto-start, log rotation, a stop/drain window **≥ 900 s** (> the 600 s stream timeout +
     margin), restart-on-nonzero with backoff, and a store path parameter (`selfdev.sqlite`,
     `tutor-pi.sqlite`) that refuses a network/synced filesystem on every OS. System-daemon mode removes

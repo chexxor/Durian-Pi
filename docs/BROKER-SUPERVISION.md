@@ -244,6 +244,34 @@ impersonation/squatting vectors, and logon-SID scoping are recorded in the resea
 4. **Version handshake details** (what `status` refuses to claim when the on-disk version differs).
 5. **Uninstall / downgrade path** back to an interactive `cli.mjs serve` without the host fighting it.
 
+## 11. CLI surface — one command, two modes, clean switch
+
+`durig daemon <subcommand>` is the single end-user surface; the platform adapter picks the mechanism,
+so the user never names schtasks/launchctl/systemctl.
+
+| Command | Meaning |
+| --- | --- |
+| `durig daemon install [--user|--system] [--db <path>] [--print]` | Install the OS trigger. **`--user` is the default** (starts at login, runs as you). `--print` emits the generated unit/plist/task without applying it (the cross-platform testable path). |
+| `durig daemon switch --user|--system` | Migrate cleanly: drain the broker, uninstall the current trigger, install the target, start it, verify the heartbeat. The store is preserved. |
+| `durig daemon uninstall [--user|--system]` | Remove the trigger (default: whichever is installed); leaves the store. |
+| `durig daemon status` | Mode, platform mechanism, state, heartbeat age, and the switch hint. |
+| `durig daemon restart` / `stop` | Operator controls (`stop` writes `<db>.broker.down`). |
+| `durig daemon logs [-f]` | Tail the host/broker log. |
+
+**Mode names for end users:** `--user` = per-user agent (Windows Task, macOS LaunchAgent, `systemd
+--user`) — "starts when you log in, runs as you". `--system` = system daemon (Windows Service, macOS
+LaunchDaemon, systemd system unit) — "starts at boot, runs without a login".
+
+**Discoverability.** `durig up` and the first `serve` print a one-line hint when no daemon is installed:
+*"the broker stops when you log out — keep the team running with `durig daemon install` (user) or
+`durig daemon install --system` (always-on)."* `durig daemon status` always names the other mode and the
+`switch` command; `durig --help` lists `daemon`.
+
+**Rules.** `install` never silently picks `--system` — the user mode is the explicit default. `switch`
+is the only migration path and is idempotent (installing the mode already installed is a no-op message),
+and it is the one place that stops the running host first. No persistent OS trigger is ever installed
+without an explicit command (never on first `run`).
+
 ## Why (the decision rationale)
 
 Durability and supervision are different jobs. pi-durable owns durability and `resume()`; the host owns
