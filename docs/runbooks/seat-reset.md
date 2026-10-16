@@ -12,8 +12,12 @@ through the broker inbox while the broker runs.
 ```bash
 DURIG_DB=./selfdev.sqlite node cli.mjs status
 DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 6
+# Preview the reset — READ-ONLY, needs no broker stop (ROADMAP 84):
+DURIG_DB=./selfdev.sqlite node cli.mjs reset <seat> --dry-run
 ```
-A repeating assistant entry with no tool calls, or CJK in the live stream, confirms it.
+A repeating assistant entry with no tool calls, or CJK in the live stream, confirms it. The
+`reset --dry-run` preview names the seat and whether the reset would go through (`wouldReset`), or
+refuses because the seat holds a live lease — and writes **nothing**.
 
 ## Do
 **Preferred — steer without stopping (safe while the broker runs):** deliver an operator directive through

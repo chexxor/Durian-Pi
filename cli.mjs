@@ -436,7 +436,7 @@ async function buildSeatPrompt(models, seat, providerId) {
 // of existing seats, so a fix to the primer, the edges policy, or a
 // per-seat model reaches a database created by an earlier durig version.
 // Edges and the constitution are always re-applied from the spec.
-async function cmdUp(rigFile, refresh = false, { serve = false } = {}) {
+async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false } = {}) {
   const spec = JSON.parse(await readFile(rigFile, "utf8"));
   // A spec carries its constitution either inline (what the OpenRig converter
   // emits, since the text it read has no file on disk beside the spec) or as a
@@ -458,7 +458,7 @@ async function cmdUp(rigFile, refresh = false, { serve = false } = {}) {
   const created = [];
   const existing = [];
   const refreshed = [];
-  const { harness, models, providerId, extensions } = await openHarness();
+  const { harness, models, providerId, extensions } = await openHarness(dryRun ? { resume: false } : {});
   // #402 (#148 half-2; lead #241 ruling) — the model-change reset seam lives in cmdUp,
   // NOT the wake path (no second wake-adjacent execution path, the #121 binding).
   // Detection is read-only: rig-resolved seat model vs the model each existing seat's
@@ -481,6 +481,25 @@ async function cmdUp(rigFile, refresh = false, { serve = false } = {}) {
     }
     // Read-only detection pass over EXISTING seats (before any write).
     modelMismatch = await detectModelMismatch(harness, spec, resolvedPromptBySeat);
+    // #84: `--dry-run` reviews the change and writes NOTHING — no reset, no commit,
+    // no broker. It reuses the SAME read-only detection the apply path uses, so the
+    // preview cannot disagree with what would actually happen.
+    if (dryRun) {
+      const preview = await previewUp(harness, spec, resolvedPromptBySeat, constitutionText, refresh);
+      out({
+        ok: true,
+        command: "up",
+        dryRun: true,
+        db: DB_PATH,
+        writes: 0,
+        ...preview,
+        ...(refresh && modelMismatch.length
+          ? { wouldReset: modelMismatch.map(({ seat, from, to }) => ({ seat, from, to })) }
+          : {}),
+      });
+      await harness.close(BACKGROUND_CONTEXT);
+      return;
+    }
     if (refresh) {
       // Apply path: reset each CHANGED seat's context before reconfiguring it.
       for (const mm of modelMismatch) {
@@ -617,6 +636,75 @@ async function cmdUp(rigFile, refresh = false, { serve = false } = {}) {
     ...(refresh && modelReset.length ? { modelReset } : {}),
     ...(refresh && modelRefused.length ? { modelRefused } : {}),
   });
+}
+
+// #84: the read-only DIFF a dry run prints. Names the seats that would be CREATED
+// and, for a refresh, each existing seat's CHANGED fields (model, instructions,
+// cwd, thinkingLevel) plus whether the constitution or the edges policy would
+// change. Reads the same documents the apply path writes; writes NOTHING and
+// starts no broker.
+async function previewUp(harness, spec, resolvedPromptBySeat, constitutionText, refresh) {
+  const context = BACKGROUND_CONTEXT;
+  const [seatsDoc, edgesDoc, constitutionDoc] = await Promise.all([
+    harness.documentState(Seats, undefined, context),
+    harness.documentState(Edges, undefined, context),
+    harness.documentState(Constitution, undefined, context),
+  ]);
+  const seatsVal = seatsDoc?.value?.seats ?? {};
+  const wouldCreate = [];
+  const wouldRefresh = [];
+  const unchanged = [];
+  for (const seat of spec.seats) {
+    const registered = seatsVal[seat.name];
+    if (!registered) {
+      wouldCreate.push(seat.name);
+      continue;
+    }
+    // Bare `up` never rewrites an existing seat, so nothing to diff.
+    if (!refresh) {
+      unchanged.push(seat.name);
+      continue;
+    }
+    const prompt = resolvedPromptBySeat.get(seat.name);
+    const seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT;
+    let agent;
+    try {
+      agent = (await harness.documentState(AgentDoc, registered.conversationId, context))?.value ?? {};
+    } catch (err) {
+      // Cannot know what would change: report the seat and the cause, never guess.
+      wouldRefresh.push({ seat: seat.name, changes: { unreadable: String(err?.message ?? err) } });
+      continue;
+    }
+    const changes = {};
+    if (prompt) {
+      const to = `${prompt.seatModel.provider}/${prompt.seatModel.modelId}`;
+      const from =
+        agent.model && typeof agent.model.provider === "string" && typeof agent.model.modelId === "string"
+          ? `${agent.model.provider}/${agent.model.modelId}`
+          : null;
+      if (from !== null && from !== to) changes.model = { from, to };
+      if (agent.instructions !== prompt.instructions) changes.instructions = true;
+      if (seat.thinkingLevel !== undefined && agent.thinkingLevel !== seat.thinkingLevel) {
+        changes.thinkingLevel = { from: agent.thinkingLevel ?? null, to: seat.thinkingLevel };
+      }
+      if (seatCwd !== undefined && agent.cwd !== seatCwd) {
+        changes.cwd = { from: agent.cwd ?? null, to: seatCwd };
+      }
+    }
+    wouldRefresh.push({ seat: seat.name, changes });
+  }
+  const edgesChanged =
+    spec.edges !== undefined &&
+    JSON.stringify(edgesDoc?.value?.edges ?? null) !== JSON.stringify(spec.edges);
+  const constitutionChanged =
+    constitutionText !== undefined && constitutionDoc?.value?.text !== constitutionText;
+  return {
+    wouldCreate,
+    ...(refresh ? { wouldRefresh } : { existing: unchanged }),
+    constitution: { changed: constitutionChanged },
+    edges: { changed: edgesChanged },
+    note: "dry run: nothing was written; re-run without --dry-run to apply",
+  };
 }
 
 // init: scaffold a minimal working rig in the current directory (#491 C9/C10).
@@ -876,7 +964,7 @@ async function cmdResume() {
 // deleting the transcript), then the newest-past-watermark reset entry id.
 // Returns the reset entry id, or null when the seat was refused (live lease) — the caller
 // reports refusals; this function never writes while a lease is held.
-async function resetSeatContext(harness, seatName, handoff, dbPath) {
+async function resetSeatContext(harness, seatName, handoff, dbPath, { dryRun = false } = {}) {
   const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
   const seatsVal = seatsDoc?.value?.seats ?? {};
   const seat = seatsVal[seatName];
@@ -900,16 +988,20 @@ async function resetSeatContext(harness, seatName, handoff, dbPath) {
     return { refused: true, reason: "live-generation-lease" };
   }
 
+  // An omitted or blank handoff means a plain reset (no new user message on
+  // the boundary); only a non-blank handoff becomes the `pi.reset` user message.
+  const resetHandoff = handoff !== undefined && handoff.trim() !== "" ? handoff : undefined;
+  // #84 dry run: the unknown-seat fail and the live-lease guard above are the
+  // SAME checks the apply path runs; only the boundary write is skipped.
+  if (dryRun) {
+    return { refused: false, dryRun: true, resetEntryId: null, handoff: resetHandoff ?? null };
+  }
   const conv = await harness.conversation(convId, BACKGROUND_CONTEXT);
   // Identify the reset entry THIS invocation wrote: a watermark before, then
   // the newest pi.reset entry past it (the durable transcript keeps earlier
   // resets too, so the newest-past-watermark is precisely ours, not a prior one).
   const prior = await conv.entries({}, 20, undefined, BACKGROUND_CONTEXT);
   const priorMaxId = prior.items.reduce((max, e) => Math.max(max, Number(e.id) || 0), 0);
-
-  // An omitted or blank handoff means a plain reset (no new user message on
-  // the boundary); only a non-blank handoff becomes the `pi.reset` user message.
-  const resetHandoff = handoff !== undefined && handoff.trim() !== "" ? handoff : undefined;
   await conv.reset(resetHandoff, BACKGROUND_CONTEXT);
 
   const after = await conv.entries({ order: "descending" }, 50, undefined, BACKGROUND_CONTEXT);
@@ -983,12 +1075,26 @@ async function detectModelMismatch(harness, spec, resolvedPromptBySeat) {
 // itself - same live-slot guard resume/status use), calls conversation.reset()
 // with the operator's optional handoff, and reports the reset ENTRY id it wrote.
 // The transcript is preserved; only the context head moves past the bad turns.
-async function cmdReset(seatName, handoff) {
-  const { harness } = await openHarness();
+async function cmdReset(seatName, handoff, { dryRun = false } = {}) {
+  const { harness } = await openHarness(dryRun ? { resume: false } : {});
   try {
     // Delegate to the SHARED boundary mechanism (#402): same unknown-seat fail,
     // same live-lease guard, same watermark + conversation.reset write path.
-    const result = await resetSeatContext(harness, seatName, handoff, DB_PATH);
+    const result = await resetSeatContext(harness, seatName, handoff, DB_PATH, { dryRun });
+    if (dryRun) {
+      // A preview: name the seat and whether the write would happen; write NOTHING.
+      out({
+        ok: true,
+        command: "reset",
+        dryRun: true,
+        seat: seatName,
+        wouldReset: !result.refused,
+        ...(result.refused ? { refused: true, reason: result.reason } : { handoff: result.handoff }),
+        writes: 0,
+        db: DB_PATH,
+      });
+      return;
+    }
     if (result.refused) {
       fail(`seat ${seatName} holds a live generation lease; refusing to reset a running seat`);
     }
@@ -2194,14 +2300,14 @@ async function cmdCheck(rigFile, human, rest = []) {
 const USAGE = `
 usages:
   node cli.mjs init              scaffold a minimal working rig (rig.json from the hardened starter) + durig.config.json in this directory
-  node cli.mjs up <rig.json> [--refresh] [--serve|--no-serve]   create seats; on a TTY also start the broker (--no-serve disables)
+  node cli.mjs up <rig.json> [--refresh] [--dry-run] [--serve|--no-serve]   create seats; --dry-run prints the diff and writes nothing; on a TTY also start the broker (--no-serve disables)
   node cli.mjs ps              list seats
   node cli.mjs send <seat> <text> [--stream]   steer a seat and wait for its reply
   node cli.mjs send <seat> --body-file <path>  the same, prompt from a file (- = stdin)
   node cli.mjs send <seat> <text> --no-stream   the same, without the live view
   node cli.mjs queue           dump the work queue
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
-  node cli.mjs reset <seat> [handoff]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary)
+  node cli.mjs reset <seat> [handoff] [--dry-run]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary); --dry-run previews it and writes nothing
   node cli.mjs run [--watch] [--max-duration <seconds>]   drive to quiescence; --watch resident; --max-duration bounds it
   node cli.mjs serve [--max-duration <seconds>] [--stop]   the resident broker: wake seats from the store's change stream; --stop halts it
   node cli.mjs stop <seat> [reason]      emergency-stop: halts a seat's in-flight run across processes
@@ -2227,7 +2333,7 @@ try {
     // off, and DURIG_NO_SERVE=1 is the script-wide opt-out.
     const forced = rest.includes("--serve") ? true : rest.includes("--no-serve") ? false : undefined;
     const serve = forced ?? (process.stdout.isTTY === true && process.env.DURIG_NO_SERVE !== "1");
-    await cmdUp(rest[0], rest.includes("--refresh"), { serve });
+    await cmdUp(rest[0], rest.includes("--refresh"), { serve, dryRun: rest.includes("--dry-run") });
   }
   else if (cmd === "worktree") await cmdWorktree(rest);
   else if (cmd === "init") await cmdInit();
@@ -2293,7 +2399,10 @@ try {
   }
   else if (cmd === "reset" || cmd === "clean") {
     if (!rest[0]) fail("reset needs <seat> [handoff]");
-    await cmdReset(rest[0], rest.slice(1).join(" "));
+    // --dry-run is a flag, not part of the handoff text: filter it out so a
+    // preview cannot smuggle the flag into the message the apply path writes.
+    const dryRun = rest.includes("--dry-run");
+    await cmdReset(rest[0], rest.slice(1).filter((a) => a !== "--dry-run").join(" "), { dryRun });
   }
   else if (cmd === "watch") {
     // Same precedence as `send --stream`: an explicit flag wins, otherwise a
