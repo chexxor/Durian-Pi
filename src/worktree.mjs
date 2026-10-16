@@ -7,13 +7,60 @@
 // the verifier's shell-write residual: a verifier can scribble freely in its own copy, where
 // nothing of the operator's is at stake.
 
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { copyFile, cp, mkdir, rm, stat } from "node:fs/promises";
 import { join, relative, resolve, dirname } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
+
+/**
+ * Resolve a PORTABLE, shell-free way to run npm.
+ *
+ * `execFile("npm", …)` fails on Windows with `spawn npm ENOENT`: `npm` is an
+ * `.cmd` shim, and Node does not apply PATHEXT when resolving a bare name for
+ * `execFile` without `shell: true` (#822). Naming `npm.cmd` does not help —
+ * Node refuses to spawn `.cmd`/`.bat` directly (CVE-2024-27980 → `spawn EINVAL`).
+ * `shell: true` works but is deprecated for argument arrays (args are concatenated
+ * unescaped → injection surface) and would put a shell between durig and npm.
+ *
+ * The portable form is to run npm's own JS entry point with the SAME interpreter
+ * that is running durig, so `src/worktree.mjs` stays pure Node and identical on
+ * every platform (the item-63 host constraint). Returns `{ file, prefixArgs }`;
+ * the caller appends npm's own args.
+ *
+ * `execFileSync` is used for the two lookups because resolution must complete
+ * before `npm` is invoked and is cheap; a failed lookup is caught per candidate.
+ */
+export function resolveNpmInvocation() {
+	// 1. The npm CLI shipped beside the running node (…/nodejs/node_modules/npm/…).
+	const beside = join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+	if (existsSync(beside)) return { file: process.execPath, prefixArgs: [beside] };
+
+	// 2. Ask npm where it is, on platforms where `npm` resolves for execFile
+	//    (POSIX). On Windows the bare name is exactly what ENOENTs, so fall back
+	//    to `where`/`which` to locate the real shim, whose sibling npm-cli.js is
+	//    then run through node (never executed as a `.cmd`).
+	try {
+		const which = process.platform === "win32" ? "where" : "which";
+		const found = execFileSync(which, ["npm"], { encoding: "utf8", shell: false })
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.filter(Boolean);
+		for (const bin of found) {
+			const cli = join(dirname(bin), "node_modules", "npm", "bin", "npm-cli.js");
+			if (existsSync(cli)) return { file: process.execPath, prefixArgs: [cli] };
+		}
+	} catch {
+		// No npm on PATH — fall through to the bare name so the caller's own error
+		// (with its stderr) is what surfaces, not this resolver's failure.
+	}
+
+	// 3. Last resort: the bare name, which works on POSIX and reproduces the
+	//    precise ENOENT on Windows rather than silently doing nothing.
+	return { file: "npm", prefixArgs: [] };
+}
 
 /** The git repository containing `dir`: durig is normally a subdirectory of a larger repository. */
 export async function repoRoot(dir) {
@@ -30,19 +77,25 @@ export async function repoRoot(dir) {
  *
  * Skips if no package.json exists (throwaway repos).
  * Measured: ~12 s, ~111 MB per worktree. Fails loudly on error.
+ *
+ * Invokes npm through `resolveNpmInvocation` so the call works on every platform
+ * without a shell (#822: a bare `execFile("npm", …)` is `spawn npm ENOENT` on
+ * Windows). The failure message includes `err.message` as well as stderr, because
+ * an ENOENT/EINVAL spawn failure has EMPTY stderr and the old message hid the cause.
  */
 export async function installWorktreeDeps(worktreePath) {
 	const pkgPath = join(worktreePath, "package.json");
 	if (!existsSync(pkgPath)) {
 		return { ok: true, skipped: true, worktree: worktreePath };
 	}
+	const { file, prefixArgs } = resolveNpmInvocation();
 	try {
-		const result = await run("npm", ["ci", "--prefer-offline"], { cwd: worktreePath });
+		const result = await run(file, [...prefixArgs, "ci", "--prefer-offline"], { cwd: worktreePath });
 		return { ok: true, worktree: worktreePath, stdout: result.stdout.trim() };
 	} catch (err) {
-		const msg = err.stderr || "";
+		const detail = [err.message, err.stderr].filter(Boolean).join("\n").trim();
 		throw new Error(
-			`npm ci --prefer-offline failed in ${worktreePath}:\n${msg}`,
+			`npm ci --prefer-offline failed in ${worktreePath}:\n${detail}`,
 		);
 	}
 }
