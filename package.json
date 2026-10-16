@@ -19,5 +19,8 @@
     "@earendil-works/pi-tui": "^1.1.0",
     "get-east-asian-width": "^1.6.0",
     "js-yaml": "^5.4.3"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
   }
 }
