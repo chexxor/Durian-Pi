@@ -78,7 +78,8 @@ are spooled for the owner to apply (safe).**
 
 | Path | Effect | Opens the store? | Safe while the broker runs? | Why |
 |---|---|---|---|---|
-| `status`, `watch`, `log`, `events`, `ps`, `queue`, `metrics`, `check`, `config`, `ui.mjs` | read | read-only | **Yes** | D11: viewers never wake seats; they read storage directly |
+| `status`, `watch`, `log`, `events`, `metrics`, `check`, `config`, `ui.mjs` | read | storage read-only (`openStore`) | **Yes** | D11: viewers never wake seats; they read the storage layer directly |
+| `ps`, `queue` | read the roster / queue, **but open a full harness** (`openHarness`, `resume: true`) | **Yes** | **Avoid while the broker runs** | they are short-lived *owners*, not viewers; they should read via `openStore` like `status` does (latent defect, §10) |
 | `intent.mjs <seat> --body-file …` | spool an input for a seat | **No** (writes a file) | **Yes** | the broker drains `<db>.broker.inbox/` and submits it as operator input (`src/broker.mjs` `drainIntentInbox`) |
 | seat tools (`claim_work`, `complete_work`, `send_work`, `defer_work`, …) | queue/transcript writes | inside whatever session drives the run | **Yes** when the broker drives | the tools run inside the seat's run, so the session that started the run is the sole writer for that write |
 | `send <seat> …` | submit an input, wait for the run | **Yes** | **Risky — avoid** | second owner; `withStoreWriteRetry` covers only the entry-id race, and `up`/`run` are explicitly not covered (`cli.mjs` `cmdSend`) |
@@ -186,7 +187,7 @@ the correct shape for a daemon anyway. This is the direction `BROKER-ARCHITECTUR
 
 | File / entry | Role |
 |---|---|
-| `cli.mjs` | all verbs: `cmdUp`/`cmdServe`/`cmdRun`/`cmdSend`/`cmdStop`/`cmdResume`/`cmdReset`; the F12 seat-root guard; the top-level JSON contract |
+| `cli.mjs` | all verbs: `cmdUp`/`cmdServe`/`cmdRun`/`cmdSend`/`cmdStop`/`cmdResume`/`cmdReset`; the F12 seat-root guard; the top-level JSON contract; the **composition root** that opens the harness (`openHarness`) and the storage (`openStore`) — no `src/` module opens a harness |
 | `src/broker.mjs` | `drivePass`, `runWakeLoop`, `logBrokerLine`, broker state/log, the intent inbox (`writeIntent`/`drainIntentInbox`) |
 | `src/driver.mjs` | `selectWakes` / `driveOnce` — *whom* to wake |
 | `src/scheduler.mjs` | *when* a pass may run (floor, cooldown, coalescing) |
@@ -208,6 +209,7 @@ the correct shape for a daemon anyway. This is the direction `BROKER-ARCHITECTUR
   `START pid=<n> source=up|serve|daemon`. (Touch `cli.mjs`/`src/broker.mjs`: a team item, and `cli.mjs`
   is often in flight.)
 - **The command spool** (§7) does not exist yet for non-message writes.
+- **`ps` / `queue` open a full harness just to read.** `cmdPs`/`cmdQueue` call `openHarness()` (default `resume: true`), so they are short-lived *owners* and can race the broker; `status`/`watch`/`log`/`events` read via `openStore` (storage only). The fix is to route `ps`/`queue` through `openStore` too — a small, isolated change.
 - **No heartbeat / durable down marker yet** (items 61–62) — a reader cannot distinguish "parked in a
   pass" from "wedged"; `BROKER-SUPERVISION.md` §4.
 - **Pass parking** — `drivePass` still awaits the runs it woke, so the `PASS` line can stop advancing
