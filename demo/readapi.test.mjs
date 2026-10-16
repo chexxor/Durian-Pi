@@ -13,11 +13,11 @@ import { join } from "node:path";
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { fauxAssistantMessage, fauxProvider, fauxText } from "@earendil-works/pi-ai/providers/faux";
 import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 
 import { RigQueue, Router, Seats, enqueueItem, registerSeat } from "../src/rig.mjs";
-import { fillRoster, makeSeatEnv } from "../src/seattools.mjs";
+import { fillRoster } from "../src/seattools.mjs";
 import {
 	readSeatList,
 	readQueueItems,
@@ -126,6 +126,28 @@ try {
 	check("_pages is present", typeof health._pages === "object");
 	// streaming should be empty — no seat has generated yet
 	check("streaming is empty (no in-flight generation)", Object.keys(health.streaming).length === 0);
+
+	/* ---- readRigHealth — lastActivity after real activity (ASK B #502) ---- */
+	// A REAL seat submission through the durable pipeline (as the scheduling loop
+	// would run it): submit input for alpha's conversation and let the faux
+	// provider settle it. That proves the surfaced field comes from the SAME
+	// admittedAt recovery the watch/highlight path uses — not a hand-built shape.
+	faux.setResponses([fauxAssistantMessage(fauxText("#502 probe reply"))]);
+	const alphaConv = await harness.conversation(seats.alpha.conversationId, ctx);
+	const alphaRun = await alphaConv.submit({ type: "input", content: "#502 probe run" }, ctx);
+	await alphaRun.wait(ctx);
+	const health2 = await readRigHealth(storage, dir, 4, { entryLimit: 10 });
+	const alpha = health2.seats.find((s) => s.name === "alpha");
+	const beta = health2.seats.find((s) => s.name === "beta");
+	check("alpha row has lastActivity after an admitted submission",
+		typeof alpha?.lastActivity === "string",
+		JSON.stringify(alpha));
+	check("lastActivity parses and is epoch-instant-looking",
+		Number.isFinite(Date.parse(alpha?.lastActivity ?? "x")),
+		String(alpha?.lastActivity));
+	check("lastActivity matches the queue record's admittedAt input-entry timestamp",
+		alpha?.lastActivity === new Date(health2.latestByConv?.[String(alpha?.conversationId) ?? -1]?.admittedAt).toISOString(),
+		JSON.stringify({ row: alpha?.lastActivity, latest: health2.latestByConv }));
 
 	console.log(failures === 0 ? "\nPASS — readapi exports verified" : `\nFAIL — ${failures} check(s) failed`);
 } finally {

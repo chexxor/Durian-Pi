@@ -115,6 +115,10 @@ export async function readRigHealth(
 			undefined,
 			BACKGROUND_CONTEXT,
 		);
+		// ASK B (#502): a seat's LAST ACTIVITY is its newest submission's admitted
+		// input-entry timestamp (recovered in the admittedAt pass below); that is
+		// also what watch/highlighting treats as freshness, so status and watch
+		// cannot disagree about what "recently active" means.
 		latestByConv.set(seat.conversationId, page.items[0]);
 		failureStreakByConv.set(seat.conversationId, failureStreak(page.items));
 	}
@@ -145,6 +149,15 @@ export async function readRigHealth(
 		const admitted = (pages[seat.name] ?? []).find((e) => e.id === entryId);
 		const ts = admitted?.model?.[0]?.timestamp;
 		if (Number.isFinite(ts)) latest.admittedAt = ts;
+	}
+	// ASK B (#502): project each seat's last activity onto its row. ISO-8601
+	// (Date.toISOString) keeps the JSON contract comparable across surfaces, and
+	// an absent row field serializes nowhere (additive to the status contract).
+	// No timestamps of our own are invented: no seats/no submissions means no
+	// field, which is the honest empty state.
+	for (const seat of seats) {
+		const lastTs = latestByConv.get(seat.conversationId)?.admittedAt;
+		if (Number.isFinite(lastTs)) seat.lastActivity = new Date(lastTs).toISOString();
 	}
 	const metrics = computeMetrics({
 		pages,

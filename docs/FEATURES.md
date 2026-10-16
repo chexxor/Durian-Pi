@@ -52,7 +52,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | `events` | Durable read-only event feed with a monotonic `seq` cursor; a reconnect from the last `seq` resumes rather than replaying. No harness attach, nothing written | `--since <seq>`, `--follow` |
 | `log <seat> [limit]` | A seat's conversation, turn-grouped. `--follow` also shows the in-flight **partial** as streaming — a `partial` object on JSON, a live region on a TTY — always distinct from committed turns | `--follow`, `--full`, `--tool-bg`, `--theme dark\|light`, `--human`/`--json` |
 | `watch` | Follow rig state — human dashboard on a TTY, NDJSON when piped, with a per-seat `streaming` field and row | `--once`, `--human`/`--json` |
-| `status` | One-shot per-seat health plus attention notices; like `ps` it also surfaces each seat's `model` and its worktree `root` when a non-default cwd is persisted | |
+| `status` | One-shot per-seat health plus attention notices; like `ps` it also surfaces each seat's `model` and its worktree `root` when a non-default cwd is persisted. Each seat row carries `lastActivity` — the newest admitted submission's input-entry timestamp, ISO-8601, absent when the seat has none | |
 | `check <rig.json>` | Audit a rig file **and** the store against the research gaps | `--human`/`--json` |
 | `metrics [rig.json]` | Drift measures, each with its band, baseline and blind spot | `--window N\|all`, `--human`/`--json` |
 | `optimize <text>` | Rewrite a draft instruction through the optimizer | |
