@@ -28,13 +28,15 @@ anyway, corrupting impl's `pi.live` (doc 12105); recovered from `store-backup-20
 `.spike/delegate/repair-live.mjs`. It reinforces items **69** (hard write guard, incl. `serve --stop`
 exit confirmation) and **78** (crash forensics).
 
-**Runbooks started (`3fe0ebb`):** `docs/runbooks/` — a README (authoring conventions + index) and 5
-runbooks (`broker-down-or-stalled`, `broker-safe-change`, `store-corruption-recovery`, `seat-reset`,
-`leaked-worktrees`). Recovery helpers promoted to `scripts/read-constitution.mjs` and
-`scripts/serve-noroot.ps1`; the canonical `scripts/repair-pi-live.mjs` is used for repair. **Research
-request (operator to send):** `docs/reviews/runbooks-research-prompt.md` — best practices for authoring
-and maintaining runbooks, including agent-executable ones. The set is **unverified** where a `Verify`
-step has not been run.
+**Runbooks — research reviewed and folded (`<pending>`):** `docs/reviews/runbooks-sop-best-practices.md`
+(the operator's research agent) found our conventions already match published practice; the gap is
+**machinery**, not prose. Actions taken: ROADMAP items **81–88** (stale/unverified `check` rules,
+mandatory front-matter, the hard write guard = item 69, `--dry-run`, executable `Diagnose`, provenance,
+capability-gated agent runtime, the daemon runbook); `docs/runbooks/README.md` now carries the
+front-matter, maintenance policy, agent-execution guardrails and anti-patterns; added
+`_template.md`, `daemon-not-running.md`, `research-request.md`; and **P3 Runbooks** was added to
+`constitution.txt` (applies on `up --refresh`). A request to author/maintain runbooks for its recent
+work was spooled to `pm` via the broker inbox. The set is **unverified** where a `Verify` step has not run.
 - **Item 68 DONE (`037213f`):** `reconcileStrandedSubmissions` settles a `placed` submission with no live
 task before the pending set is built, so the blocked seat re-wakes. Verified live: `STRANDED settled=2`
 → `WAKE qa`, `WAKE lead`. `demo/broker-strand.test.mjs` (RED: symbol absent at HEAD).

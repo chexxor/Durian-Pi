@@ -1879,6 +1879,45 @@ recurrences; `pm` sequences them against 61–71.
 `serve --stop` exit confirmation; item **70** the read-boundary tolerance; item **71** the command spool
 that makes 74/80 broker-applied.
 
+## Runbooks as maintained artifacts (from the research report, 2026-10-16)
+
+Source: `docs/reviews/runbooks-sop-best-practices.md`. Verdict: durig's runbook conventions already match
+published practice; what is missing is **machinery** — nothing enforces them or detects rot, and the
+single-writer precondition is prose, which failed twice on 2026-10-16. `pm` sequences these.
+
+81. **`runbook-stale` / `runbook-unverified` check rules.** `runbook-stale` is an `error` when
+    `last_verified` is old AND a file the runbook names changed since; `runbook-unverified` is `fix-now`
+    when `Verify` has never run. Turns rot into a failing test. *Owner:* impl · *Where:*
+    `src/checkup.mjs`, `docs/runbooks/*`. *Acceptance:* a stale and an unverified runbook each produce
+    the right severity.
+82. **Mandatory runbook front-matter + `_template.md`.** Enforce the header block (owner, writes,
+    precondition, last_verified, evidence) so a seat, a human, or a `check` rule reads the same fields.
+    *Owner:* impl/scribe · *Where:* `docs/runbooks/`, `src/checkup.mjs`. *Acceptance:* a runbook missing
+    front-matter is a `check` finding.
+83. **Hard write guard on all write verbs.** The single most important recommendation; the precondition
+    must be code, not a sentence. This **is** item **69** — do not duplicate; land it. *Acceptance:* see
+    item 69.
+84. **`--dry-run` for `up --refresh` / `reset`.** Print the diff (which constitution doc / seat model
+    would change) before writing, so a blind write becomes reviewable. *Owner:* impl · *Where:*
+    `cli.mjs`. *Acceptance:* `up --refresh --dry-run` names the seats and fields it would change and
+    writes nothing.
+85. **Executable `Diagnose` blocks in CI.** Run each runbook's read-only `Diagnose` block in a hermetic
+    test; assert it exits 0 and prints parseable output — the read-only half never rots. *Owner:* qa
+    · *Where:* `demo/`. *Acceptance:* a broken `Diagnose` command fails the suite.
+86. **Runbook verification in the `check` provenance line.** Report "runbooks verified against rev X"
+    alongside the existing revision/dirty-tree/extensions. *Owner:* impl · *Where:* `src/checkup.mjs`.
+    *Acceptance:* a reading names the verification basis or says it cannot.
+87. **Agent-executable runbook runtime (research, gated).** Compile-then-page lifted refusal to 100% but
+    **harmed weak models** (59:237); a per-model discipline check must gate it. Register as research, not
+    a v1 feature. *Owner:* operator's research agent / delegate · *Where:* `docs/`. *Acceptance:* a
+    report naming the capability gate and the per-model check.
+88. **`daemon-not-running.md` runbook (DELIVERED).** Pre-writes the operator surface for items 61–64
+    (`docs/runbooks/daemon-not-running.md`), marked unverified until the daemon exists. *Owner:*
+    delegate · *Proof:* the file plus `docs/BROKER-SUPERVISION.md` §11.
+
+**Cross-links:** item **69** is the research's top recommendation; item **87** depends on a future
+capability gate; item **81/82** reuse the `check` rule machinery (item 46's artifact-keyed ownership).
+
 73. **Orphaned-worktree sweep (DELIVERED `243f175`).** `removeClaimedWorktree` now refuses a worktree
     holding uncommitted work unless the caller passes `force` — the D60 refusal its seat-completion
     caller already assumed, and a fix to a latent data-loss bug (the fallback is `rm -rf`). The
