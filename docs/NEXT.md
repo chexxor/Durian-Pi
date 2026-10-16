@@ -19,6 +19,10 @@ scroll** (TUI plan §C), or **ROADMAP item 52** (attach the TUI as a state-backe
 **gated on item 55** (a `security.sec` position before any attach socket). The standing priority list
 is `docs/TUI-IMPLEMENTATION-PLAN.md` §"Priority order".
 
+**Queue work running alongside:** **#662** (TUI C4 close-out — 48-col golden + lifecycle cleanup,
+queued to `impl`) and **#710** (the `src/tui/driver.mjs` comment fix, queued to `impl`). ROADMAP item
+54's own queue id is pending `pm` registration of the 51–58 batch.
+
 **Landed this session (2026-10-16, delegate):** H3 DECSET 2026 synchronized output (`40f454b`); H4
 grapheme-cell width, `src/textwidth.mjs` (`09e6d8d`); the TUI testing framework — shared fixtures + a
 cell `ScreenBuffer` + 8 golden frames incl. the 48-col floor, `demo/tui-suite.mjs` (`aea7e74`;
