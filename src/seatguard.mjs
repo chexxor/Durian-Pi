@@ -40,8 +40,9 @@ async function seatGraphRoot(api, context) {
 		try {
 			const agent = await api.snapshot(AgentDoc, api.conversationId, context);
 			if (agent?.cwd !== undefined) return agent.cwd;
-		} catch {
-			// fail-open: keep the fallback root
+		} catch (err) {
+			// fail-open: keep the fallback root, but report the cause rather than swallow it.
+			console.error(`SEATGUARD WARNING: seat cwd snapshot failed, using fallback root: ${err?.message ?? err}`);
 		}
 	}
 	return process.env.DURIG_SEAT_ROOT ?? process.cwd();
