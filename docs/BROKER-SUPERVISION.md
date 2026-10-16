@@ -186,7 +186,8 @@ object — keep ours as the authority).
   calls. Use delayed auto-start and let backoff handle it — and document that a boot `WAKE`/provider
   error is expected, not a bug.
 - **Multiple stores.** `selfdev.sqlite` and `tutor-pi.sqlite` ⇒ one host per store, parameterized
-  (`durig install --db <path>`), never hard-coded `rig.sqlite`.
+  (`durig install --db <path>`), never hard-coded `rig.sqlite`. Every OS artifact the host installs is
+  keyed by the store — see **Instance identity** below.
 - **Upgrade under load.** The trigger runs a fixed exe path; a new pinned pi or new code is picked up
   only on restart. Do a drain + restart, and put `version` + upstream pin in the heartbeat and the
   `START` line; `status` refuses to claim health if the running version differs from disk.
@@ -208,6 +209,57 @@ object — keep ours as the authority).
   service mode *forces* the remote `watchEvents()` path of ROADMAP item 52, which is **gated on item
   55** (the `security.sec` position). Going service-first commits us to writing `security.sec` before
   the TUI can attach. The logon-Task mode keeps the in-process subscriber.
+
+### Instance identity — one store ⇔ one driver ⇔ one instance key
+
+**Invariant (state this first):** *one store ⇔ one driver ⇔ one instance key.* Every OS-level artifact
+the host installs is scoped by ONE key derived from the store, so two durig instances on one machine
+never share a name. Without it, two instances collide on the trigger name, the kill primitive's Job
+Object / process-group name, the log path, and (later) the control socket — and a host's
+"single-instance" lock would be global instead of per store.
+
+**The key — contract owned by impl (ROADMAP 91 / #940).** The instance key is DERIVED from the store's
+**canonicalized absolute path** — realpath, case-fold, and 8.3-name normalization on Windows (the trap:
+`C:\DB\RIG.sqlite`, `c:\db\rig.sqlite` and `C:\DB\RIG~1.SQL` are ONE store). `--instance <name>` is a
+**human label only**; it never replaces the derived key. As of this writing the derivation does **not
+exist in code**, so this section fixes the CONTRACT the host adapters consume rather than inventing a
+second key:
+
+- **Input:** the store's absolute path, exactly as `--db`/config resolution yields it.
+- **Output:** a stable token safe in a Task/label/unit/Job-Object/log/socket name (e.g. a short hex
+digest of the canonicalized path).
+- **Properties:** same canonical store ⇒ same token on every platform; different stores ⇒ different
+tokens. Filesystem- and case-insensitive-safe.
+
+**Every OS artifact keyed by that one key (one key everywhere).**
+
+| Artifact | Keyed name (illustrative) | Notes |
+|---|---|---|
+| OS trigger | Windows Task `durig-<key>`; launchd label `com.durig.<key>`; systemd `durig-<key>.service` | item 64 adapters |
+| Kill primitive | Job Object / process-group name `durig-<key>` | `KILL_ON_JOB_CLOSE` (Windows) / `kill(-pid)` (POSIX) |
+| Log path | `<logdir>/durig-<key>.log` | `daemon logs` tails it |
+| Single-instance lock | `<db>.host.lock` (store-scoped) | PER INSTANCE, not global |
+| Control socket/pipe (future) | `\\.\pipe\durig-<key>` / a per-key socket | naming **waits on item 55** |
+| Markers (already store-scoped) | `<db>.broker.json` / `.down` / `.stop` / `.inbox` | keep store-scoped; the lock keys the same way |
+
+**Rules.**
+
+- **One store, one driver.** A second driver on the SAME store is **REFUSED** with a message naming the
+  running instance — never silently second-written (the single-writer rule; the 2026-10-16 corruption).
+- **Different stores coexist.** Two stores ⇒ two distinct keys ⇒ two triggers, logs, and locks; they
+  install and run side by side.
+- **Version coexistence.** Two installations on different pinned pi versions must NOT fight over one
+  trigger: the key is store-derived, so different stores never collide, and a re-pin/upgrade of ONE
+  instance restarts only its own trigger (items 64/72).
+- **Wrong-rig trap.** A bare `durig` must not discover another instance's `durig.config.json`/store
+  (#491, D18): the resolved store (hence the key) comes from explicit `--db`/config discovery, never a
+  global default.
+- **No control socket yet.** Naming any socket/pipe key waits on item 55 (the `security.sec` position).
+
+**Acceptance (host chain).** Two instances install and run side by side on one host without colliding —
+made visible and testable by `--print` on the generated trigger (emit without applying), PLUS a hermetic
+test for the per-instance lock and marker scoping. (The `--print`/lock/marker proof is gated on items
+61–64; this section is the design they are built against.)
 
 ## 9. Option B — control socket / TUI attach (gated)
 
