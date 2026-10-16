@@ -23,10 +23,11 @@ import {
 	mkdirSync,
 	openSync,
 	readFileSync,
+	readdirSync,
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 
@@ -171,6 +172,56 @@ export function readGenerationSlots(dbPath, slots) {
 		});
 	}
 	return out;
+}
+
+/**
+ * Remove slot files whose holder process is provably gone. Called once at broker
+ * start, where the previous broker's slots are dead by definition. Only a pid the
+ * OS reports as non-existent (ESRCH) is removed; an EPERM means a LIVE process we
+ * may not signal (another integrity level), and removing that slot would delete a
+ * live lease, so it is left alone (the `holderAlive` EPERM bug is tracked by item
+ * 65 and must not be reintroduced here).
+ * @returns {Array<{slot: string, pid: number}>} the slots removed
+ */
+export function reconcileGenerationSlots(dbPath, { onDiagnostic } = {}) {
+	if (!dbPath) return [];
+	const dir = dirname(dbPath);
+	const prefix = `${basename(dbPath)}.genlock.`;
+	let names;
+	try {
+		names = readdirSync(dir);
+	} catch (err) {
+		if (err?.code !== "ENOENT") {
+			onDiagnostic?.({ kind: "genlock-reconcile-scan-failed", error: String(err?.message ?? err) });
+		}
+		return [];
+	}
+	const removed = [];
+	for (const name of names) {
+		if (!name.startsWith(prefix)) continue;
+		const path = join(dir, name);
+		const holder = readHolder(path);
+		const pid = typeof holder?.pid === "number" ? holder.pid : null;
+		// No pid to check (a torn/absent record): leave it; the acquire path ages it out.
+		if (pid === null) continue;
+		let gone = false;
+		try {
+			process.kill(pid, 0);
+		} catch (err) {
+			if (err?.code === "ESRCH") gone = true;
+			// EPERM / unknown: assume a live holder and keep the slot.
+		}
+		if (!gone) continue;
+		try {
+			unlinkSync(path);
+			removed.push({ slot: name, pid });
+		} catch (err) {
+			if (err?.code !== "ENOENT") {
+				onDiagnostic?.({ kind: "genlock-reconcile-failed", path, error: String(err?.message ?? err) });
+			}
+		}
+	}
+	return removed;
 }
 
 /**

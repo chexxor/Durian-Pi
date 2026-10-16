@@ -15,10 +15,11 @@
 
 import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync } from "node:fs";
 import { join, basename } from "node:path";
+import { randomUUID } from "node:crypto";
 
 import { RigQueue, Seats } from "./rig.mjs";
 import { driveOnce } from "./driver.mjs";
-import { wrapProviderWithSlots, getSeatFromContext } from "./genlock.mjs";
+import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
 
 /**
  * Seats whose latest settled submission is an operator stop (`aborted:<reason>`).
@@ -72,7 +73,12 @@ export function writeIntent(dbPath, intent) {
   const name = `${String(Date.now()).padStart(16, "0")}-${process.pid}-${Math.random().toString(36).slice(2, 8)}.json`;
   const tmp = join(dir, `.${name}.tmp`);
   const final = join(dir, name);
-  writeFileSync(tmp, JSON.stringify(intent), "utf8");
+  // A stable requestId makes a RE-drain idempotent: the harness dedupes a submission
+  // by (conversation, requestId), so an intent whose file survived a crash between
+  // submit and unlink is not submitted twice on the next pass. A caller-supplied id
+  // is kept so a producer retrying a specific intent does not mint a second one.
+  const stored = intent.requestId ? intent : { ...intent, requestId: randomUUID() };
+  writeFileSync(tmp, JSON.stringify(stored), "utf8");
   renameSync(tmp, final);
   return final;
 }
@@ -345,6 +351,14 @@ export async function runWakeLoop({
   // EXIT below means the broker died abnormally (a kill or a throw), because logBrokerLine is
   // synchronous and the EXIT line is written before the loop returns.
   logBrokerLine(dbPath, `START pid=${process.pid}`);
+  // Reconcile generation leases left by a previous broker: at broker start a slot
+  // whose holder pid no longer exists is stale by construction, and removing it here
+  // (once, reported) is clearer than letting the acquire path steal it lazily on the
+  // next generation. EPERM holders are kept — only a provably-gone pid is removed.
+  if (dbPath) {
+    const reconciled = reconcileGenerationSlots(dbPath, { onDiagnostic });
+    if (reconciled.length > 0) logBrokerLine(dbPath, `RECONCILE leases=${reconciled.length}`);
+  }
   for (;;) {
     if (isStopping()) {
       stoppedBy = "signal";
