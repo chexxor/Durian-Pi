@@ -11,23 +11,25 @@ _Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 
 
 ## NEXT SESSION — START HERE
 
-**Current item: #506 (impl) — make the broker's per-task worktree guard NOT fail closed on a dirty
-shared tree.** #506 is next in impl's queue (position 2, behind the claimed U4 #483 and #502), so the
-running broker will drive it without re-prioritisation. **The interactive client series is COMPLETE**
-(U1–U7 #480–#486 all `done`); #487 (deferrals + re-sequence) is `done`; #488/#489/#490 (upstream sync
-+ partner-check) are `done`. Live bookkeeping: **#491** (designer's 5 UX follow-ups — impl #617 is
-BLOCKED on a pm routing ruling) and **#502** (cli status seat last-activity, claimed).
+**Current item: #621 (impl) — CONFIG DEFAULTS: a shipped default config file so a fresh durig runs
+without a hand-written config.** `#621` is `claimed`/in flight; its failing-first demo
+`demo/config.test.mjs` is RED (it expects `loadShippedDefaults({ readFile })`, not yet implemented).
+Everything it touches is uncommitted in the shared tree and belongs to it — **leave those files
+alone**. The **interactive client (U1–U7), #487, #488/#489/#490, and the delegated #506/#502/#599**
+are all `done` **and committed**. Next real candidates: the **worktree-leak defect** (below),
+**#491** (designer's 5 UX follow-ups — impl #617 is BLOCKED on a pm routing ruling), and the
+still-unqueued **turn-kind indicator** (pm holds it pending the operator's spec).
 
 Exact next commands:
 `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`,
 `… node cli.mjs log impl`; stop with `… node cli.mjs serve --stop`.
 
 **State at this refresh (2026-10-16, delegate session):** resident broker **pid 17424**
-(`01:12:41Z`; healthy — `PASS 1` in ~1 min) with the **degeneration guard armed**. Store is
-single-writer. Only untracked scratch remains (`#612`/devtools owns `pi-main.pin.bak`; the other three
-scratch files are already gone). **#571 is moot** — `src/viewmodel.mjs` is fixed. NOTE: committing
-in-flight work makes a seat log "another seat committed my work" — expected under the shared-tree
-entanglement (#506), not an error.
+(`01:12:41Z`; healthy — `PASS 4`+ logged) with the **degeneration guard armed** (it has fired and
+self-healed a degenerate seat). Store is single-writer. The team landed the delegated items
+(**#506** `67810af`, **#502** `3b44f38`); the delegate landed the stranded **#599** (`04413fd`).
+`item-1/`, `item-2/` are leaked per-task worktrees (see below). NOTE: committing in-flight work makes
+a seat log "another seat committed my work" — expected under the shared-tree entanglement, not an error.
 
 **Accomplishments this delegate session (all LOCAL; operator holds push):**
 
@@ -41,18 +43,31 @@ entanglement (#506), not an error.
 | `0ecf9cf` | D63/D64 + landed the seat's stranded D54–D62 |
 | `c6eaef3` | feat(tui) U1–U5 — interactive client (`#480`–`#484`) |
 | `11edfb3` | chore(commit-model) #474/#475 — worktree-scoped explicit-path commits |
-| `a2ea013`,`832bc21`,`d24c9e6`,`e1bc4f2` | pointer refreshes |
+| `a2ea013`,`832bc21`,`d24c9e6`,`e1bc4f2`,`3241ca2`,`04413fd`,`001339b` | pointer refreshes + landed the stranded #599 |
 
 Also recovered a **wedged broker** (pid 35604 — no `PASS` for 42 min, `serve --stop` failed twice;
 force-stopped and restarted; root cause in `.spike/delegate/serve.err`: the #506 dirty-tree guard +
 a genlock slot `held by pid undefined`). Suite **78/78** on the committed tree; **no build, no lint**.
 
-Known blockers: **#506** (the dirty-tree worktree guard bites live; the working-tree files are seats'
-in-progress work — **DO NOT discard**); cooperative `serve --stop` can take ~13-min passes but exits
-(a wedged pass cannot be stopped cooperatively — see the recovery note above).
-**Docs landed:** D63 (broker lifecycle audit) + D64 (degeneration guard) are in `docs/DECISIONS.md`
-(commit `0ecf9cf`), which also landed the seat's stranded D54–D62 (D62 has a text corruption to fix).
-**#506 is next in impl's queue** (position 2, right behind the claimed U4 #483 / #502).
+**Test flakiness under a live broker — finding + mitigations (2026-10-16):** running
+`demo/*.test.mjs` while the broker drives gave **71/78**; re-running the 8 failures individually gave
+**7 pass** (flaky) + `config.test.mjs` (a legit #621 failing-first RED). Grounded causes and fixes:
+- **Inherited repo config**: demos spawn `cli.mjs` with `{...process.env}` and so pick up the local
+  `durig.config.json` (`DURIG_MAX_CONCURRENT_SEATS: 4`, a real provider/model). Fix: a hermetic test env
+  (temp `DURIG_DB`, `DURIG_MAX_CONCURRENT_SEATS=1`, `DURIG_PROVIDER=faux`, and do not read the repo config).
+- **Live working tree**: tests `copyFileSync("rig.starter.json", …)` and read other tracked files a seat
+  is mid-editing. Fix: read fixtures from HEAD (`git show HEAD:<path>`) or run the suite from a frozen
+  worktree.
+- **Fixed-timeout waits**: several demos `setTimeout(…, 5–10s)`; under CPU load the wait fires early.
+  Fix: poll-until-condition with a generous deadline.
+- **Resource contention**: concurrent `serve`/sqlite/temp-dir churn. Fix: run the suite **with the broker
+  stopped** (or in a per-task worktree) via a single `npm test` runner that isolates the env and retries
+  a timeout-flake once.
+
+Known blockers: **the shared tree is dirty with #621's in-flight work — DO NOT discard**; cooperative
+`serve --stop` can take ~13-min passes but exits (a wedged pass cannot be stopped cooperatively — see
+the recovery note above). **Docs landed:** D63/D64 in `docs/DECISIONS.md` (`0ecf9cf`), including the
+seat's stranded D54–D62 (D62 has a text corruption to fix).
 
 _Historical (superseded): the #480-era notes below were written for the 2026-10-15 handoff._
 
