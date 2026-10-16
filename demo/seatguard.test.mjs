@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { SeatGuard, beforeTool } from "../src/seatguard.mjs";
+import { afterTool } from "../src/secretredact.mjs";
 import { authorEnv } from "../src/confine.mjs";
 
 let failures = 0;
@@ -29,11 +30,18 @@ const context = {};
 try {
 	console.log("\nThe guard is registered against the built-in tool task, not a lookalike");
 	check(
-		'a hook is registered on the "pi.tool" task',
-		SeatGuard.hooks?.length === 1 && SeatGuard.hooks[0].task === "pi.tool",
+		'hooks are registered on the "pi.tool" task',
+		SeatGuard.hooks?.length === 2 && SeatGuard.hooks.every((h) => h.task === "pi.tool"),
 		JSON.stringify(SeatGuard.hooks),
 	);
-	check("the handler the hook runs is this module's beforeTool", SeatGuard.hooks[0].handlers.beforeTool === beforeTool);
+	check(
+		"the beforeTool handler is this module's beforeTool",
+		SeatGuard.hooks.find((h) => h.handlers.beforeTool)?.handlers.beforeTool === beforeTool,
+	);
+	check(
+		"the sibling afterTool hook (redaction) is registered on the same task",
+		SeatGuard.hooks.find((h) => h.handlers.afterTool)?.handlers.afterTool === afterTool,
+	);
 	check("the extension is named, so a collision would be reported rather than silent", SeatGuard.name === "durig.guard");
 
 	console.log("\nCommands that leave the boundary are blocked, with the reason as the block text");

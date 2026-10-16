@@ -101,6 +101,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [broker-down-or-stalled.md](broker-down-or-stalled.md) | seats idle with queued work; no `serve` process; log stops | yes |
 | [broker-safe-change.md](broker-safe-change.md) | a model/constitution/reset change must apply without corrupting the store | yes |
 | [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error` | yes |
+| [tool-result-redacted.md](tool-result-redacted.md) | a tool result shows a `[redacted by durig: …]` marker instead of its text | no |
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language | yes |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
@@ -112,6 +113,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 |---|---|
 | Broker / `serve` | broker-down-or-stalled, broker-safe-change |
 | Store / `pi.live` | store-corruption-recovery |
+| Tool results | tool-result-redacted |
 | Seats | seat-reset |
 | Worktrees | leaked-worktrees |
 | Daemon / host | daemon-not-running |
