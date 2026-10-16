@@ -1961,3 +1961,20 @@ against the REAL seat pages of every seat (all false positives zero) BEFORE it i
 against synthetic fixtures; and "a false positive costs one reset" is false when the heuristic fires on
 every seat. The F29 prose loop still needs a signal that does not parse prose — e.g. a per-turn
 wall-clock latency bound (impl's degenerate turns ran 56 s then 122 s while healthy turns ran seconds).
+
+
+## D79 — Land the complete-but-uncommitted #624 `cli.mjs` artifact and clean the shared tree (2026-10-16)
+
+**Decision.** The operator rules that the complete-but-uncommitted work in the shared tree lands on
+`main`, AHEAD of other queued items: `cli.mjs` + `demo/init.test.mjs` (#624 `cmdInit` — clean under
+`node --check`, `demo/init.test.mjs` exits 0, row #624 `done`, yet in NO commit),
+`docs/SEAT-LIFECYCLE.md` (#819 scribe, after its #823 verify), and the `docs/ROADMAP.md` edit (fold into
+the item whose registration it records). Routing is `pm`'s; the priority intent was delivered through the
+broker inbox.
+
+**Why.** `cli.mjs` in no commit is the gate blocking items 69/70/71/74/78. NEXT had reserved it to "the
+owner or an operator ruling"; the operator gave that ruling. Landing it clears the tree and unblocks the
+blocked batch, so the next session starts from committed state.
+
+**Status:** adopted; routed to `pm` (intent delivered 2026-10-16T21:39:38Z). Explicit-path commits only;
+never push.

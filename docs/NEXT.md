@@ -3,7 +3,37 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate, **seventh pass** — routed the compact / wall-clock / degenerate-text work to `pm` and documented the D78 revert in the runbooks. See **SEVENTH PASS** below, then **SIXTH PASS**, then the older sections (historical).)_
+_Last refreshed: 2026-10-16 (delegate, **clock-out / eighth pass** — operator ruled to land ALL uncommitted shared-tree work onto `main` (routed to `pm` at HIGHEST priority) and routed the compact / wall-clock / degenerate-text build. See **CLOCK-OUT** below, then older sections (historical).)_
+
+## CLOCK-OUT — start here (2026-10-16, delegate)
+
+**`main` HEAD:** `978574d`. Commits this session: `8ae8fff` (impl: seatguard #673/#780), `191c481` (a
+swallowed-catch fix the warden flagged), `97a3c6d` (D78 prose guard) then `449e870` (**REVERTED** — it
+false-reset lead/advocate/scribe/auditor/impl), `689416a` + `978574d` (pointer/runbooks).
+
+**PRIORITY 1 — operator ruling (routed to `pm`, intent delivered `21:39:38Z`, D79):** land ALL
+uncommitted shared-tree work on `main`:
+- `cli.mjs` + `demo/init.test.mjs` = **#624 `cmdInit`** (the gate; complete but in no commit);
+- `docs/SEAT-LIFECYCLE.md` = **#819 (scribe)**, after its #823 verify;
+- `docs/ROADMAP.md` edit = fold into its registering item.
+Explicit-path commits only; no push. **This unblocks items 69/70/71/74/78.**
+
+**PRIORITY 2 — routed to `pm` (intent delivered `21:37:29Z`):** the three ordered build items —
+(1) `compact` verb; (2) a HIGH per-turn wall-clock bound as a separate guard cause (implement first);
+(3) a revived degenerate-text guard as an **extensible named-pattern registry**, with positive AND
+negative fixtures pulled from the seats' own conversations, **zero false positives on all real pages
+before enabling**, then verified against `impl`'s entry-`36368` loop. Bodies:
+`.spike/delegate/intent-compact-wallclock-degentext.md` and `intent-land-uncommitted-priority.md`.
+
+**Still open:** the `impl` prose loop (`36368`) is UNCAUGHT until item (3) lands; the dormant-broker
+revisit gap is unfixed; item 69's hard write guard still depends on the `cli.mjs` landing.
+
+**Broker:** `pid 29372` (`scripts/serve-noroot.ps1`), reverted guard loaded; `pm` + `scribe` generating.
+A broker restart is the only reliable way to drain the inbox if it is dormant — spool the intent, then
+restart. **Never `serve --stop` while a `genlock.*` is held** (the F11 drain hangs; `"stopped": true` is
+not proof the process exited — see `broker-safe-change.md`).
+
+**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
 
 ## SEVENTH PASS — 2026-10-16 (delegate)
 
