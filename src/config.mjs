@@ -13,6 +13,19 @@
 
 export const DEFAULT_CONFIG_PATHS = ["durig.config.json", ".durig/config.json"];
 
+// The SHIPPED defaults file (#491 C6): discovered the same way the runtime
+// config is — relative to the CWD (source of truth in cli.mjs) — PLUS any
+// anchored path the caller provides. The anchored path is how a fresh install
+// in an arbitrary CWD still finds the shipped file: the CLI anchors it to
+// durig's OWN install directory, because "ship a defaults file" only works if
+// the file rides WITH the artifact, not with wherever the operator happens to
+// stand.
+export const DEFAULTS_CONFIG_PATHS = [
+	"durig.config.default.json",
+	".durig/config.default.json",
+	"../durig.config.default.json",
+];
+
 /** Keys a config file may set, mirroring the environment variables. */
 export const CONFIG_KEYS = [
 	"DURIG_DB",
@@ -28,17 +41,39 @@ export const CONFIG_KEYS = [
 ];
 
 /**
- * Merge config-file values under the environment (environment wins).
- * Empty-string env vars are treated as unset so `DURIG_DB= node cli.mjs`
- * falls back to config/default exactly like an absent variable.
+ * Read the SHIPPED defaults file with the same resilience rules as loadConfig.
+ * Returns { values, source }: `source` names the path actually read (null when
+ * none found) so `node cli.mjs config` can say WHY a default is what it is.
+ * Missing file => { values: {}, source: null }; malformed file => loud error
+ * with its path (never silently ignored).
  *
- * @param {Record<string, unknown>} fileValues
- * @param {Record<string, unknown>} env
- * @returns {Record<string, unknown>}
+ * Why a FILE and not just more constants: the defaults must be VISIBLE and
+ * OVERRIDABLE in the shipped artifact (the operator opens the file, edits,
+ * reruns), and the config report can name its source.
  */
-export function mergeConfig(fileValues, env) {
+export async function loadShippedDefaults({ readFile, anchors = [] } = {}) {
+	const candidates = [...anchors, ...DEFAULTS_CONFIG_PATHS];
+	if (readFile == null) return { values: {}, source: null };
+	for (const path of candidates) {
+		let text;
+		try {
+			text = await readFile(path, "utf8");
+		} catch (err) {
+			if (err && err.code === "ENOENT") continue;
+			throw err;
+		}
+		try {
+			return { values: JSON.parse(text) ?? {}, source: path };
+		} catch (err) {
+			throw new Error(`invalid JSON in config file ${path}: ${err.message}`);
+		}
+	}
+	return { values: {}, source: null };
+}
+export function mergeConfig(fileValues, env, defaults = {}) {
 	const out = {};
-	for (const [k, v] of Object.entries(fileValues ?? {})) {
+	const fromFiles = { ...defaults, ...fileValues };
+	for (const [k, v] of Object.entries(fromFiles)) {
 		if (v !== undefined && v !== null) out[k] = v;
 	}
 	for (const [k, v] of Object.entries(env ?? {})) {
@@ -56,7 +91,7 @@ export function mergeConfig(fileValues, env) {
  *   injected so tests need no real filesystem.
  * @returns {Promise<{config: Record<string, unknown>, source: string|null}>}
  */
-export async function loadConfig({ env = {}, readFile } = {}) {
+export async function loadConfig({ env = {}, readFile, defaults = {}, defaultsSource = null } = {}) {
 	const explicit = env.DURIG_CONFIG;
 	const candidates = explicit ? [explicit] : DEFAULT_CONFIG_PATHS;
 	let fileValues = {};
@@ -82,7 +117,7 @@ export async function loadConfig({ env = {}, readFile } = {}) {
 		source = path;
 		break;
 	}
-	return { config: mergeConfig(fileValues, env), source };
+	return { config: mergeConfig(fileValues, env, defaults), source, defaultsSource };
 }
 
 /**

@@ -91,24 +91,34 @@ Five operator-facing behaviours are load-bearing:
 
 ## 3. Configuration
 
-One vocabulary for both the environment and the config file, resolved
-**env → `durig.config.json` → built-in default**.
+One vocabulary for both the environment and the config files, resolved
+**env → `durig.config.json` → `durig.config.default.json` (shipped) → built-in
+default** — a fresh install runs with no hand-written config at all (#491 C6):
+the shipped defaults file rides with the artifact (also looked up anchored to
+durig's own install directory), ships `DURIG_MAX_CONCURRENT_SEATS=1` so a bare
+install cannot stampede a local model, and `node cli.mjs config` names where
+each value came from (`defaultsSource`).
 
 | Key | Meaning |
 |---|---|
-| `DURIG_DB` | Storage path (default `./rig.sqlite`) |
+| `DURIG_DB` | Storage path (default `./rig.sqlite`) — the shipped defaults file sets `./rig.sqlite` explicitly so the floor is visible, not implied |
 | `DURIG_SEAT_ROOT` | Fallback working directory for seats at `up` time (keeps a rig file portable by naming no host path). Persisted per seat, so a later write-side `send`/`run` with a different value **fails closed** rather than silently using the old tree |
 | `DURIG_PROVIDER` | `deepinfra` (default) or `faux` for offline runs |
 | `DURIG_MODEL` | Default model for seats without their own |
-| `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent generations rig-wide (unset = unlimited) |
+| `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent generations rig-wide (unset = unlimited). **Shipped default: `1`** (#491 C6) — serialize rather than stampede a local model; an operator opts in to more |
 | `DURIG_OPTIMIZE` | `on`: run each persona through the optimizer during `up` |
 | `DURIG_EXTENSIONS` | Comma-separated pi-durable extension modules to install. A path that cannot load **fails the command** rather than being skipped, and `up` reports the names it installed. Proof: `demo/extensions.test.mjs` |
 | `DURIG_STREAM_TIMEOUT_MS` | Total request timeout for one generation attempt. Unset = platform default (`openai` SDK, 600000 ms). The only harness setting durig exposes, because it is the only one with no default and a real reason to move in both directions. Proof: `demo/config.test.mjs` |
 | `DEEPINFRA_API_KEY` | Ambient credential, read from env/config, never stored or printed |
 
 Discovery order: `$DURIG_CONFIG`, then `./durig.config.json`, then
-`./.durig/config.json`. `node cli.mjs config` prints the effective values and the
-source; the API key is reduced to `set`/`unset` so it is always safe to log.
+`./.durig/config.json`; the shipped defaults file is additionally looked up
+anchored to durig's install directory (`durig.config.default.json`)
+(#491 C6). `node cli.mjs config` prints the effective values, the source, and
+`defaultsSource`; the API key is reduced to `set`/`unset` so it is always safe to
+log. Proof: `demo/config.test.mjs` — merge order (env > file > defaults), a
+fresh CWD with no runtime config still gets the shipped floor, malformed
+defaults fail loudly, and the wiring is asserted in cli.mjs's real load path.
 Provider options are imported from `src/providers/deepinfra-models.ts` — a vendored
 copy of the module the pi extension uses — so the catalog is single-sourced and
 durig stands alone (see `src/providers/PROVENANCE.md`).

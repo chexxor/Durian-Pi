@@ -1,0 +1,5 @@
+{
+  "DURIG_DB": "./rig.sqlite",
+  "DURIG_MAX_CONCURRENT_SEATS": "1",
+  "DURIG_OPTIMIZE": "off"
+}

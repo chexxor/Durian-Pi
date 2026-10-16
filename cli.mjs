@@ -26,6 +26,7 @@ import { AssistantEntry, configure, createRegistry, Harness } from "@earendil-wo
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { closeSync, existsSync, openSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 // Single source of truth for DeepInfra provider options, vendored into this tree
@@ -47,7 +48,7 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { describeConfig, loadConfig, streamSettings } from "./src/config.mjs";
+import { describeConfig, loadConfig, loadShippedDefaults, streamSettings } from "./src/config.mjs";
 import { applyEscalations, applyResets, failureStreak, planEscalations, planResets } from "./src/supervisor.mjs";
 import { assessRun } from "./src/degeneration.mjs";
 import {
@@ -79,17 +80,40 @@ import { readFeed } from "./src/eventfeed.mjs";
 // config is reported in the same JSON contract as every other failure
 // rather than as a stack trace (out()/fail() are defined further down).
 let cfgResult;
+// This CLI file's own path, so a parent can respawn the resident broker with the
+// same interpreter and the same script regardless of the invoking shell's cwd.
+// Declared BEFORE the config load: the shipped defaults file (#491 C6) is
+// anchored to durig's own install directory, so a fresh install in an arbitrary
+// CWD still finds the file it rode in with.
+const CLI_PATH = fileURLToPath(import.meta.url);
+// durig configuration: environment variables win; the operator's runtime config
+// file (durig.config.json / .durig/config.json / $DURIG_CONFIG) is next in line;
+// the SHIPPED defaults file (durig.config.default.json, same three discovery
+// paths) wins over the built-in per-key constants only. The order is "env beats
+// the shipped defaults" for the dangerous-but-easy keys (#491 C6): a fresh rig
+// with no hand-written config gets exactly the shipped defaults, which include a
+// SQLite path and a serialized seat cap (DURIG_MAX_CONCURRENT_SEATS=1) — an
+// unlimited cap stampedes a local model on first run.
 try {
-  cfgResult = await loadConfig({ env: process.env, readFile });
+  // #491 C6: the shipped defaults (durig.config.default.json) are read first and
+  // passed as an object. ANCHORED to durig's own install dir, because a fresh
+  // install in an arbitrary CWD must find the shipped file it rode in with.
+  const shipped = await loadShippedDefaults({
+    readFile,
+    anchors: [join(dirname(CLI_PATH), "durig.config.default.json")],
+  });
+  cfgResult = await loadConfig({
+    env: process.env,
+    readFile,
+    defaults: shipped.values,
+    defaultsSource: shipped.source,
+  });
 } catch (err) {
   console.error(JSON.stringify({ ok: false, error: String(err?.message ?? err) }));
   process.exit(1);
 }
-const { config: CFG, source: CFG_SOURCE } = cfgResult;
+const { config: CFG, source: CFG_SOURCE, defaultsSource: CFG_DEFAULTS_SOURCE } = cfgResult;
 const DB_PATH = CFG.DURIG_DB ?? "./rig.sqlite";
-// This CLI file's own path, so a parent can respawn the resident broker with the
-// same interpreter and the same script regardless of the invoking shell's cwd.
-const CLI_PATH = fileURLToPath(import.meta.url);
 // Read commands must be able to tell "this rig is empty" apart from "you are
 // pointed at a database that did not exist a moment ago". Opening storage
 // creates the file on demand, so without this snapshot the default
@@ -1901,6 +1925,8 @@ async function cmdConfig() {
     ok: true,
     command: "config",
     ...describeConfig({ config: CFG, source: CFG_SOURCE }),
+    // #491 C6: name where a default VALUE came from (the shipped file, or null).
+    defaultsSource: CFG_DEFAULTS_SOURCE,
   });
 }
 
