@@ -137,6 +137,14 @@ explicitly retired by the operator (2026-10-15). When the operator says a run is
 - **Keep the seat root clean.** Scratch patchers (`fix_peek.py`), dump files, and
   `peek_block.txt` left in the tree pollute the diff and the operator's integration
   (observed on F32). Write scratch under `.spike/` and remove it, or use a temp dir.
+- **Scan docs for stray control bytes before a write-through lands.** A shell-escape write
+  can drop a control character where a letter belonged (a `0x07` BEL / `0x08` BS replacing the
+  leading letter of a word) — found in `docs/DECISIONS.md` where "add"/"apply"/"attention"/
+  "branch" had arrived as `0x07`/`0x08`+`dd`/`pply`/`ttention`/`ranch`. Before committing a docs
+  edit made through a shell, scan the touched region for stray control bytes (0x01–0x08,
+  0x0B–0x1F; 0x0A/0x0D are line endings and are fine) so a stray byte is caught rather than
+  committed. Prefer writing docs through the `write`/`edit` tools over a shell heredoc or
+  `Add-Content` that can interpolate control characters.
 
 ## Docs ownership: who writes which documentation
 
