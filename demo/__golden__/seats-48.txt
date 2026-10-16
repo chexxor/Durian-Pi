@@ -1,0 +1,20 @@
+  durig · 4 seats · TUI
+  ────────────────────────────────────────────
+  ○ pm   program manager
+  ○ impl implementation eng…
+  ○ qa   independent verifi…
+  ○ lead technical lead
+
+  ── streaming ──
+  [idle]
+
+  ── transcript ──
+  ▶ Please check the queue.
+  ◇ thinking › Read the queue, then cla…
+  ◀ I will check the queue now.
+  ⚙ peek_queue all=true
+
+  ────────────────────────────────────────────
+  ── seats: 4  │  queue: 0  │  uptime: 60m
+  ────────────────────────────────────────────
+└────────q=quit r=refresh ↑↓/jk=seat Enter=open

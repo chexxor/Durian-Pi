@@ -1,0 +1,11 @@
+  durig · impl · implementation engineer · conv…
+  ────────────────────────────────────────────
+  ▶ Please check the queue.
+  ◇ thinking › Read the queue, then cla…
+  ◀ I will check the queue now.
+  ⚙ peek_queue all=true
+
+  ────────────────────────────────────────────
+  ── seats: 4  │  queue: 0  │  uptime: 60m
+  ────────────────────────────────────────────
+└──────────────Esc=back ↑↓=scroll G=tail q=quit

@@ -7,6 +7,7 @@
   "main": "src/rig.mjs",
   "scripts": {
     "demo": "node demo/offline.mjs",
+    "test:tui": "node demo/tui-suite.mjs",
     "cli": "node cli.mjs",
     "ui": "node ui.mjs",
     "intent": "node intent.mjs"
