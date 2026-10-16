@@ -153,6 +153,27 @@ export async function uncommittedInSource(source) {
 }
 
 /**
+ * Uncommitted WORK in `worktree`: modified tracked files and new files, minus the
+ * regenerated dependency tree. `node_modules` is installed per worktree, so counting
+ * it as work would refuse every legitimate cleanup; the D60 refusal is about a seat's
+ * own changes, not its dependencies. A path git cannot read returns a sentinel so a
+ * removal fails closed instead of falling through to `rm -rf`.
+ */
+async function uncommittedWork(worktree) {
+	const wtNorm = worktree.replace(/\\/g, "/");
+	let stdout;
+	try {
+		({ stdout } = await run("git", ["-C", wtNorm, "status", "--porcelain"]));
+	} catch (error) {
+		return [`<cannot read status: ${error.message}>`];
+	}
+	return stdout
+		.split("\n")
+		.filter((line) => line.trim() !== "")
+		.filter((line) => !line.includes("node_modules/"));
+}
+
+/**
  * Remove a worktree.
  *
  * `force` is required rather than defaulted, because removing a worktree discards whatever is in
@@ -329,6 +350,16 @@ export async function removeClaimedWorktree({ worktree, force = false }) {
 	// If the worktree is already gone, nothing to do.
 	if (!existsSync(worktree)) {
 		return { worktree, removed: false, skipped: true };
+	}
+	// D60: never discard a seat's uncommitted work. Both removal paths below end in
+	// `rm -rf` when git refuses a dirty tree, so a dirty worktree must be refused here,
+	// before either runs. `force` is the caller explicitly accepting that loss.
+	if (!force) {
+		const work = await uncommittedWork(worktree);
+		if (work.length > 0) {
+			console.warn(`worktree: refusing to remove ${worktree}: ${work.length} uncommitted path(s)`);
+			return { worktree, removed: false, refused: "dirty", dirty: work.length };
+		}
 	}
 	// Unlock first if held — a locked worktree cannot be removed even with --force.
 	// Read the .git pointer to find the repo root, then unlock from the repo root.

@@ -14,12 +14,13 @@
 // gap D11 documented. Read-only viewers keep D11's poll/read-storage rule.
 
 import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { RigQueue, Seats } from "./rig.mjs";
 import { driveOnce } from "./driver.mjs";
 import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
+import { listWorktrees, removeClaimedWorktree } from "./worktree.mjs";
 
 /**
  * Seats whose latest settled submission is an operator stop (`aborted:<reason>`).
@@ -207,6 +208,57 @@ export async function reconcileStrandedSubmissions(harness, inspection, { contex
 }
 
 /**
+ * Remove `item-<id>` worktrees whose queue item is no longer live. A leaked worktree (a
+ * crash before its item's cleanup, or the recorded recursive-nesting defect) is an
+ * orphan; one still holding uncommitted work is refused by the clean-only guard in
+ * `removeClaimedWorktree` and reported, never force-removed (D60).
+ */
+export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, onDiagnostic } = {}) {
+  if (!repoPath) return [];
+  const worktrees = await listWorktrees(repoPath);
+  const removed = [];
+  for (const wt of worktrees) {
+    const match = /^item-(\d+)$/.exec(basename(wt.worktree));
+    if (!match) continue;
+    const itemId = Number(match[1]);
+    if (liveItemIds.has(itemId)) continue;
+    const result = await removeClaimedWorktree({ worktree: wt.worktree });
+    if (result?.removed) removed.push(itemId);
+    else {
+      onDiagnostic?.({
+        kind: "worktree-orphan-kept",
+        itemId,
+        worktree: wt.worktree,
+        reason: result?.refused ?? (result?.skipped ? "missing" : "not-removed"),
+      });
+    }
+  }
+  return removed;
+}
+
+/**
+ * One reconciliation at broker start: dead generation leases and orphaned item
+ * worktrees. The sweep is scoped to the directory that holds the store, so a broker
+ * against a temp database (every demo) never scans an unrelated checkout —
+ * `listWorktrees` returns [] for a path that is not a git repo.
+ */
+export async function reconcileBrokerStartup(harness, { dbPath, context, onDiagnostic } = {}) {
+  const leases = reconcileGenerationSlots(dbPath, { onDiagnostic });
+  const repoPath = dbPath ? dirname(resolve(dbPath)) : null;
+  let worktrees = [];
+  if (repoPath) {
+    const queueDoc = await harness.documentState(RigQueue, undefined, context);
+    const liveItemIds = new Set(
+      (queueDoc?.value?.items ?? [])
+        .filter((it) => ["queued", "claimed", "deferred", "held"].includes(it.status))
+        .map((it) => it.id),
+    );
+    worktrees = await reconcileOrphanedWorktrees({ repoPath, liveItemIds, onDiagnostic });
+  }
+  return { leases, worktrees };
+}
+
+/**
  * Run one wake pass and hold the harness open until every run it started has
  * settled — closing earlier abandons the run (the F11 class).
  *
@@ -351,13 +403,22 @@ export async function runWakeLoop({
   // EXIT below means the broker died abnormally (a kill or a throw), because logBrokerLine is
   // synchronous and the EXIT line is written before the loop returns.
   logBrokerLine(dbPath, `START pid=${process.pid}`);
-  // Reconcile generation leases left by a previous broker: at broker start a slot
-  // whose holder pid no longer exists is stale by construction, and removing it here
-  // (once, reported) is clearer than letting the acquire path steal it lazily on the
-  // next generation. EPERM holders are kept — only a provably-gone pid is removed.
+  // Reconcile what a previous broker left behind before the first pass: dead
+  // generation leases and orphaned item worktrees. Reported here once, rather than
+  // masked by the acquire path's lazy steal or left to pollute `git status`. A
+  // failure is reported, never allowed to stop the broker from driving.
   if (dbPath) {
-    const reconciled = reconcileGenerationSlots(dbPath, { onDiagnostic });
-    if (reconciled.length > 0) logBrokerLine(dbPath, `RECONCILE leases=${reconciled.length}`);
+    try {
+      const reconciled = await reconcileBrokerStartup(harness, { dbPath, context, onDiagnostic });
+      if (reconciled.leases.length > 0 || reconciled.worktrees.length > 0) {
+        logBrokerLine(
+          dbPath,
+          `RECONCILE leases=${reconciled.leases.length} worktrees=${reconciled.worktrees.length}`,
+        );
+      }
+    } catch (err) {
+      onDiagnostic({ kind: "reconcile-failed", error: String(err?.message ?? err) });
+    }
   }
   for (;;) {
     if (isStopping()) {
