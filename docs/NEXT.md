@@ -52,6 +52,21 @@ lacking the async `absoluteSeatPath`/`seatGraphRoot` work), so it is a **diverge
 provenance before treating it as in-flight. (This session's first draft wrongly called it a stale
 duplicate of `0102f3c`; that was inferred, not checked.)
 
+**The `cli.mjs` gate is #624's complete-but-UNCOMMITTED artifact (checked 2026-10-16).** The working-tree
+`cmdInit` is the #624 "INIT META-DEFAULTS" implementation; `node --check cli.mjs` is clean and
+`demo/init.test.mjs` exits 0 (`INIT TEST PASS`), and queue row **#624 is `done`** — but `cmdInit` appears
+in **no commit**: `git log --all -S "async function cmdInit"` and `-S cmdInit` both return nothing, and no
+`item-*` worktree's `HEAD:cli.mjs` contains it. So the gate is a **landing/ownership decision** (commit
+`cli.mjs` + `demo/init.test.mjs`, explicit paths only), not unfinished code. `NEXT.md` reserved it to the
+owner or an operator ruling; do not `git add` another item's artifact without one.
+
+**Runbook work is now registered and in flight (pm delivered the operator intent):** **#819 → scribe**
+(seat-lifecycle + environment narrative — CLAIMED and being written; the operator's request this session,
+after a prior check showed no such doc exists); **#814 → impl** (runbook check rules 81/82/86, reuses item
+46's machinery); **#815 → impl** (`--dry-run` 84); **#816 → qa** (executable Diagnose blocks 85, held until
+81/82 land); **#817 → lead** (delegate-owned 87/88, deferred). Clean-path NEXT items 81/85/86 are therefore
+no longer "available now" — they are queued.
+
 ## NEXT SESSION — START HERE
 
 **STATE.** Five clean-path items **DONE**: 54, 65, 66, 68, 73 (commits `58cbac2`, `6fae68d`+`559f967`,
