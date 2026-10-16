@@ -35,6 +35,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
 The seat's next run is in English and resumes its claimed item (`log <seat>` / `status`). No `adjudicate`
 or repeated identical turns.
 
+> **A GUARD reset can be a FALSE POSITIVE.** The broker's supervisor also resets on its own; a bad
+> detector has reset healthy seats (2026-10-16: the D78 prose heuristic false-reset `lead`, `advocate`,
+> `scribe`, `auditor`, and `impl` — since reverted, commit `449e870`). Before treating an automatic
+> reset as real, read the run it fired on (`log <seat>`): a REAL loop repeats one phrase/action many
+> times in a SINGLE turn and stops acting; a healthy long document repeats ordinary words while staying
+> varied. If the detector is the cause, fix/revert the detector — do not just reset again.
+
 ## If it fails
 - `reset` refuses ("holds a live generation lease") → wait, or `stop <seat>`, then retry.
 - The seat keeps drifting: the durable fix is the `P3 Language` constitution rule plus a model that

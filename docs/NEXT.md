@@ -3,7 +3,36 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate, **sixth pass** — D78 prose-degeneration guard landed and verified live; impl committed the seatguard work. See **SIXTH PASS** immediately below, then the **CLOCK-OUT** and older **LATEST** sections (historical).)_
+_Last refreshed: 2026-10-16 (delegate, **seventh pass** — routed the compact / wall-clock / degenerate-text work to `pm` and documented the D78 revert in the runbooks. See **SEVENTH PASS** below, then **SIXTH PASS**, then the older sections (historical).)_
+
+## SEVENTH PASS — 2026-10-16 (delegate)
+
+- **ROUTED to `pm`** (intent spooled + delivered, `INTENT delivered=1`; body
+  `.spike/delegate/intent-compact-wallclock-degentext.md`). Three ordered items, each with a
+  runbook + FEATURES row + a D-entry:
+  1. **`compact` verb** — expose pi-durable's `Conversation.compact` as `node cli.mjs compact <seat>
+     [instructions]`, mirroring `resetSeatContext` (unknown-seat fail + live-generation-lease refusal),
+     and make the verb truthful about how its background task completes (no enqueue-and-exit stub).
+  2. **HIGH per-turn wall-clock bound** as a SEPARATE guard cause (propose ~5 min, operator-tunable),
+     so a legitimately long text/tool turn never trips it. Implemented FIRST.
+  3. **Revive the degenerate-text guard EXTENSIBLY** (a named-pattern registry) with positive AND
+     negative fixtures PULLED FROM THE SEATS' OWN CONVERSATIONS, validated against ALL seats' real
+     pages with a false-positive count of 0 BEFORE enabling; then verify it catches `impl`'s entry-36368
+     loop specifically. (D78's lesson: a context-resetting heuristic must be validated against real
+     pages, not just synthetic fixtures.)
+- **Completed this session (committed):** `8ae8fff` impl landed the seatguard work (#673/#780);
+  `191c481` fixed a swallowed catch flagged by the warden; `97a3c6d` added the D78 prose guard and
+  `449e870` REVERTED it (it false-reset `lead`, `advocate`, `scribe`, `auditor`, and `impl`); `689416a`
+  and this pass keep the pointer true.
+- **Docs updated this pass:** `docs/runbooks/seat-reset.md` (a GUARD reset can be a false positive;
+  read the run before trusting it); `broker-safe-change.md` (`"stopped": true` is NOT proof the process
+  exited — the F11 drain hangs; never kill while a genlock is held); `broker-down-or-stalled.md` (the
+  alive-but-DORMANT revisit gap: fresh heartbeat + stale `PASS` + no genlock).
+- **Still owed / open:** the `impl` prose loop (entry `36368`) is UNCAUGHT until Task 3 lands; the
+  dormant-broker revisit gap is unfixed; the `cli.mjs` gate (#624) still blocks items 69/70/71/74/78.
+- **Broker:** restarted `pid 29372` (`scripts/serve-noroot.ps1`); the reverted guard is loaded (no
+  degeneration escalations). Do NOT call `serve --stop` while a `genlock.*` is held.
+- **Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
 
 ## SIXTH PASS — 2026-10-16 (delegate)
 

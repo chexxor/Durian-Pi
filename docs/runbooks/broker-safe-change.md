@@ -22,7 +22,13 @@ powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \
    Proceed **only** on `"stopped": true`. On `"stopped": false` the pass did not settle inside the
    window: wait and run it again until it is `true`, or (if no genlock slot is held) terminate the pid.
    **Never proceed on `false`** — that is the second-writer corruption.
-2. Confirm no `serve` process remains (the check in Diagnose).
+   **`"stopped": true` is NOT proof the process is gone.** Observed twice: the CLI clears
+   `broker.json` and reports success while the broker is still alive in its final F11 drain. The stop
+   is honoured AFTER the pass in flight settles, so do not call `--stop` while a `genlock.*` is held
+   (you would wait on, or strand, that run).
+2. Confirm no `serve` process remains (the check in Diagnose) AND `broker.json` is gone. If the pid is
+   still alive after the drain and NO genlock is held (all runs settled), terminate it:
+   `taskkill /F /PID <pid>`. Never terminate while a genlock slot exists.
 3. Apply the change:
    ```bash
    DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh
@@ -52,3 +58,6 @@ powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \
 carried a shadowing `constitutionInline` (fixed, commit `806ce7f`); a second attempt ran `up --refresh`
 after `serve --stop` returned `stopped:false` and corrupted `impl`'s `pi.live` (recovered). ROADMAP items
 69 (hard guard) and 74 (hot-reload) remove the stop from this procedure entirely.
+2026-10-16 (again): `serve --stop` returned `"stopped": true` for pid 35812/30596 while each process
+remained alive in the F11 drain; the pid had to be force-killed once all runs had settled. Confirm the
+process, not the flag.
