@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 model swap, interactive client #480–#487 re-prioritized). Next agent: start #480._
+_Last refreshed: 2026-10-16 (delegate handoff — #506/#502/#599 landed; current item #621; test-flakiness findings). Next agent: read **NEXT SESSION** below; the later sections are historical._
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
@@ -53,8 +53,11 @@ a genlock slot `held by pid undefined`). Suite **78/78** on the committed tree; 
 `demo/*.test.mjs` while the broker drives gave **71/78**; re-running the 8 failures individually gave
 **7 pass** (flaky) + `config.test.mjs` (a legit #621 failing-first RED). Grounded causes and fixes:
 - **Inherited repo config**: demos spawn `cli.mjs` with `{...process.env}` and so pick up the local
-  `durig.config.json` (`DURIG_MAX_CONCURRENT_SEATS: 4`, a real provider/model). Fix: a hermetic test env
-  (temp `DURIG_DB`, `DURIG_MAX_CONCURRENT_SEATS=1`, `DURIG_PROVIDER=faux`, and do not read the repo config).
+  `durig.config.json` (`DURIG_MAX_CONCURRENT_SEATS: 4`, a real provider/model, and — the worst part —
+  `DURIG_DB: C:/Users/Alex/dsh-Projects/tapl-decompile/durig/tutor-pi.sqlite`, a DIFFERENT project's
+  store, so a demo that forgets to override `DURIG_DB` reads the wrong database — this is the live
+  `no seats in …tutor-pi.sqlite` error seen in impl's log). Fix: a hermetic test env (temp `DURIG_DB`,
+  `DURIG_MAX_CONCURRENT_SEATS=1`, `DURIG_PROVIDER=faux`, and do not read the repo config).
 - **Live working tree**: tests `copyFileSync("rig.starter.json", …)` and read other tracked files a seat
   is mid-editing. Fix: read fixtures from HEAD (`git show HEAD:<path>`) or run the suite from a frozen
   worktree.
@@ -85,7 +88,7 @@ would cut a single runaway run mid-flight. (Bounded runs are mitigated; this is 
   **copies the existing untracked worktrees** (`item-2` nests a full `item-1/`) — recursive growth.
   Needs a lifecycle fix (ignore the worktree root + clean up on completion).
 - **`docs/DECISIONS.md` entries** — LANDED (`0ecf9cf`): D63 (broker audit) + D64 (degeneration guard),
-plus the seat's stranded D54–D62. Remaining: fix D62's text corruption (`headless \tenderTui/Frame`).
+  plus the seat's stranded D54–D62. Remaining: fix D62's text corruption (`headless \tenderTui/Frame`).
 
 **Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
 Evidence: `git diff --diff-filter=A main origin/pi-rebase -- . ':(exclude).spike'` is empty (no
@@ -201,8 +204,11 @@ the whole point of #473.
 
 ## Workspace state for the next agent
 
-- **No writers running.** No `serve`/`broker.json`, no `genlock` slots. Confirm with the process check.
-- **Tree is clean**, `main` at `ddd9c49`, unpushed.
+- **A writer IS running.** Resident broker **pid 17424** (`<db>.broker.json`, `since 01:12:41Z`); the
+  store is single-writer — do **not** start a second `serve`/`run`/`send`. Stop it with `serve --stop`.
+- **The tree is DIRTY with #621's in-flight work** (`cli.mjs`, `src/config.mjs`, `demo/config.test.mjs`,
+  `durig.config.default.json`) — **DO NOT discard**; it belongs to the claimed item. `item-1/`,`item-2/`
+  are leaked worktrees (see the NEXT SESSION note).
 - **Backups under `.spike/delegate/`**: `recovery-WIP.patch`, `storewrite-WIP.mjs`,
   `p2-6-scratch/` (the Job-Object attempts), `scratch-backup/` (the removed scratch), and the
   intent bodies used this session. `.spike/` is gitignored.
@@ -221,8 +227,7 @@ the whole point of #473.
 
 ## Where main is
 
-`main` is at the handoff commit; **`origin/main` = `ddd9c49`** — the six commits through the broker-fix
-commit were pushed externally (NOT by the delegate), so only the handoff commit is local. The
-recovered tranche (#307–#312) and the TUI read layer (`789ead6`) are already committed.
-Untracked/ignored: `.spike/`, `AGENTS.md` (modified + committed this session), `pi-warden.md`,
-`vendor/`.
+`main` = **`6cfe481`** (this handoff commit); **`origin/main` = `c3a2671`** — `main` is **ahead by 30
+commits**, all local (the operator holds push). Do not assume anything is pushed.
+Untracked/ignored: `.spike/`, `pi-warden.md`, `vendor/`, and `item-1/`+`item-2/` (leaked worktrees —
+currently NOT ignored, which is the defect).
