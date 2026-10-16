@@ -1,5 +1,16 @@
 # durig — research log
 
+## External system-of-record research (2026-10-17, #539)
+
+`docs/research/work-items-and-system-of-record.md` — how comparable agentic/queue-driven
+projects model work-items vs tasks and where the system of record lives. Conclusion adopted
+from that report: durig keeps the **built-in** `durig.queue` doc as the single source of truth
+(re-affirming D3) and offers a **read-only export seam** (`src/readapi.mjs`) as the only
+external interop — no write-back or two-way sync. The external-tracker claims in that file are
+prior art (`advertised-elsewhere`), not verified against a live source.
+
+---
+
 Primary comparative research lives in the project workspace,
 `../docs/ORCHESTRATION-COMPARISON.md` (feature matrix F1–F12 across OpenRig,
 agent-fleet+pi-durable, tuios, hermes-agent; augmented-stack variants V1/V2; spike
