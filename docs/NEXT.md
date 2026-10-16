@@ -82,9 +82,12 @@ naming the fault — NO translation layer (a synthesized half-parsed call would 
 validation). **Grounding trap:** the terminal strips the DSML special-token delimiter, so a screen read of
 the entry shows a clean `<parameter>` block and HIDES the fault; the detector reads the stored bytes
 (the U+FF5C `DSML` delimiter, or the plain nested `<parameter>` pair). The operator keeps the model.
-**Still open:** (c) auto re-drive (the reset + the driver's
-queued-work wake should cover it, but not yet proven live); (d) make `idle_with_queued_work` schedule a
-pass — the broker sat idle `20:14:13Z → 20:19:54Z` while impl was idle with queued work. Recovery used
+**Still open:** (c) auto re-drive — **DONE for the reset path (`7d62929`)**: a reset clears that
+seat's cooldown and marks the scheduler dirty, so the next pass re-wakes it (verified live: impl
+reset at `20:35:20Z`, and after the restart its re-drive fix produced a `generation_in_flight` impl at
+`20:40:48Z`). (d) the GENERAL revisit — a seat suppressed by the per-seat cooldown after a NORMAL
+settle still waits for an unrelated commit (runs usually outlast the 30 s cooldown, so it is rare);
+surfaced by the broker sitting idle `20:14:13Z → 20:19:54Z` while impl had queued work. Recovery used
 both times: spool a corrective steer via `intent.mjs` (latest
 `.spike/delegate/intent-impl-finish-700-v2.txt`); impl re-woke to finish #700 (commit `28c7ba5`).
 

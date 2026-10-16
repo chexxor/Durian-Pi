@@ -1919,7 +1919,10 @@ fault; the detector must read the stored bytes, and the rule requires the delimi
 pair), so prose that merely names the shape does not trip it. A false positive costs one context reset,
 never lost work (the transcript is durable).
 
-**Status:** adopted (delegate), commits `f086382` + `c38815f`; verified by `demo/degeneration.test.mjs`
-(RED before) and against the real stored entry `35382` (`pseudo-tool-call=1>=1`).
+**Status:** adopted (delegate), commits `f086382` + `c38815f` (detect) and `7d62929` (re-drive);
+verified by `demo/degeneration.test.mjs` and `demo/scheduler.test.mjs` (RED before each) and against the
+real stored entry `35382` (`pseudo-tool-call=1>=1`). The reset clears that seat's cooldown so the next
+pass re-wakes it, rather than leaving a freshly-reset seat idle (observed: the reset alone left impl
+idle for 80 s until the process was restarted).
 The recurrence is a model/provider format fault (`deepseek-ai/DeepSeek-V4.1-Flash` via deepinfra,
 `openai-completions`); the operator keeps that model, so durig remediates rather than swapping it.
