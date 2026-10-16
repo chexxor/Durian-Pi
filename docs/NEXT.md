@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate handoff — #506/#502/#599 landed; current item #621; test-flakiness findings). Next agent: read **NEXT SESSION** below; the later sections are historical._
+_Last refreshed: 2026-10-16 (delegate handoff — #506/#502/#599 landed; current item #621; test-flakiness findings). Next agent: read **NEXT SESSION** and then the **PLAN — broker liveness** section below; the later sections are historical._
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
@@ -89,6 +89,74 @@ would cut a single runaway run mid-flight. (Bounded runs are mitigated; this is 
   Needs a lifecycle fix (ignore the worktree root + clean up on completion).
 - **`docs/DECISIONS.md` entries** — LANDED (`0ecf9cf`): D63 (broker audit) + D64 (degeneration guard),
   plus the seat's stranded D54–D62. Remaining: fix D62's text corruption (`headless \tenderTui/Frame`).
+
+## PLAN — broker liveness: re-wake per seat, not after the slowest run (DELEGATE-OWNED, do NOT route)
+
+**Why delegate-owned:** the fix is to the process that DRIVES the queue (the broker). A routed item
+would sit behind the very broker it is meant to fix, so it must be done in the delegate seat directly
+(code + tests + commit), then handed to the operator. The operator explicitly preferred this over the
+durig team for that reason.
+
+### Symptom (observed 2026-10-16, pid 17424)
+`<db>.broker.log`: `PASS 5` at `02:26:13`, its wakes fired, then **no `PASS 6` for 40+ min**. Meanwhile
+`status` showed **pm idle with 9 queued DONE-notices** and **qa idle with 2 queued artifacts**
+(`idle_with_queued_work`). The team is kept waiting by the SLOWEST run, not its own.
+
+### Root cause (verified)
+`src/broker.mjs` `drivePass` ends with `await harness.waitForIdle(context)`. pi-durable's contract
+(`node_modules/@earendil-works/pi-durable/dist/harness/types.d.ts`):
+> `Harness.waitForIdle` — “Resolve when the ordinary ownership scope of **every** ownerless
+> conversation has no live non-background task.”
+
+So one pass = wake seats → **wait for ALL runs** → `PASS` → supervise → next pass. A pass lasts as long
+as the longest run, so a seat that finished early is not re-woken until every seat finishes — even
+though `src/scheduler.mjs` treats a submission settling as wake-relevant (“a submission settling … is
+exactly when a stalled claim becomes wakeable again”). The per-submission intent is defeated by the
+global wait.
+
+### The tool that exists to fix it
+`Scheduler.waitForIdle(conversationId | undefined, context)` and `Conversation.waitForIdle(context)`
+wait for **one** conversation (`harness/scheduler.d.ts:86`, `harness/types.d.ts:669`). The loop can
+wait per-WOKEN-seat and re-wake others as they settle.
+
+### The fix (chosen direction)
+1. In `drivePass`, replace the single global `await harness.waitForIdle(context)` with a wait that
+   settles when every conversation **this pass woke** is idle (track the woken conversation ids; wait
+   on those only — do NOT wait on conversations this pass did not wake). A settle that the commit
+   subscription raises should be able to end the wait early so the next pass starts promptly.
+2. Preserve the F11 invariant that actually matters: **never close the harness with a live run**
+   (keep it open while ANY run is in flight), rather than “wait for global idle”.
+3. Leave the scheduler floor (`minIntervalMs = 500`) and per-seat cooldown
+   (`SERVE_SEAT_COOLDOWN_MS = 30_000`) as-is; optionally lower the cooldown once passes are short.
+4. Keep the per-pass `supervise`, but it must not gate the wake path.
+
+### Observability (part of the fix)
+- Log each pass with its DURATION and the seats it woke: `PASS <n> ms=<dur> woke=<a,b,c>`.
+- Add a liveness notice/measure: “seat has queued work and **no live generation lease** for > N s” —
+distinct from the existing `idle_with_queued_work`, which cannot tell “waiting for the pass” from
+“wedged”. Surface in `status` and as a `check` rule.
+
+### Tests (failing-first)
+- **New `demo/broker-liveness.test.mjs`:** two seats; make one run long (faux provider with a delay /
+  multi-turn script), give the other queued work; assert the second seat's wake appears in the broker
+  log within a bound (≈5 s) **while the first is still running**. RED against the current
+  global-`waitForIdle` broker; GREEN after the fix.
+- Keep `broker.test.mjs`, `broker-max-duration`, `broker-cooperative-stop`, `broker-wakepath`,
+  `broker-log`, `autostart` green; `node --check` clean; whole `demo/*.test.mjs` suite green.
+
+### Acceptance
+- A long run on one seat does NOT delay waking another seat with queued work (proven by the demo).
+- Pass duration ≈ the pass's own work, not the longest run.
+- Never closes the harness with a live run (no stranded submissions).
+- `stop` / `serve --stop` / `--max-duration` semantics unchanged.
+
+### Constraints / gotchas
+- **Restart the broker to test the fix** — editing source does not affect the running process.
+- Single-writer: only one `serve`/`run`/`send` at a time on `./selfdev.sqlite`.
+- The tree may hold in-flight seat work (#623 etc.) — **stage explicit paths only**, never `git add -A`.
+- Native Windows only; never push/publish.
+- Related, lower priority: the **broker intent-inbox** (below) would let a delegate deliver intent
+  without a `serve --stop`; and the worktree-leak defect (below) shares the same pass lifecycle.
 
 **Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
 Evidence: `git diff --diff-filter=A main origin/pi-rebase -- . ':(exclude).spike'` is empty (no
