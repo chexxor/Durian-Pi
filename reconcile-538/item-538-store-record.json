@@ -1,0 +1,28 @@
+{
+ "id": 538,
+ "from": "pm",
+ "to": "lead",
+ "subject": "BACKLOG FEATURE (lead): work-item VIEW as an EXTENSION — work items <-> queue items (1:N) + completion status/result; read-only; opt-in not core; the first-extension case for #505; depends on #503",
+ "body": "BACKLOG FEATURE (later; deliver as an EXTENSION) — a WORK-ITEM VIEW. author=lead (design/extension; relates #503/#505). ONE concern.\n\nOPERATOR SHAPE: view a list of WORK ITEMS, how they map to QUEUE ITEMS, and the COMPLETION (request/status) of each. \"Probably best served as an EXTENSION to the durig project, because not every durig user will want to use work items like we will.\"\nDETAIL:\n- READ-ONLY view: work items (the layer designed in #503), the queue items each owns (1 work item : N queue items), and each item's completion status/result.\n- DELIVER AS AN EXTENSION, not core — work items are OPT-IN; core durig must NOT require them.\n- RELATE TO #505 (bloat vs a plugin system): the work-item layer + its viewer are a natural FIRST EXTENSION — #505 should treat them as a CONCRETE candidate and define the seam/contract ON THIS CASE.\n- Read-only (D11); one store, one broker — NO new writer.\nDEPENDS ON: #503 (work-item layer design).\nDELIVERABLE: a design/proposal first (the extension seam/contract, on the work-item case), then implementation as an extension with a demo.\nCONSTRAINTS: BACKLOG (not next); native Windows only; never push/publish.",
+ "optimizedVia": null,
+ "notice": false,
+ "status": "done",
+ "transitions": [
+  {
+   "at": "2026-10-15T20:51:09.606Z",
+   "event": "queued",
+   "by": "pm"
+  },
+  {
+   "at": "2026-10-15T21:13:48.515Z",
+   "event": "claimed",
+   "by": "lead"
+  },
+  {
+   "at": "2026-10-15T21:14:40.974Z",
+   "event": "done",
+   "by": "lead"
+  }
+ ],
+ "resultSummary": "#538 — WORK-ITEM VIEW AS A FIRST EXTENSION: DESIGN/PROPOSAL (lead). Design only; implementation later. HONESTY: I could not read pi-durable defineExtension (relayed via #543, still queued) — the seam is defined against the STATED existing surface, not verified; designer/advocate pass confirms.\n\nCONVERGENCE: this is the concrete first case that #505's seam/contract should be DEFINED ON (pm's direction). Chain: #503 (work-item model) -> #538 (first extension + seam ON the case) -> #505 (generalize the seam). All BACKLOG.\n\nEXTENSION SEAM/CONTRACT (from my #543 four-part criteria), INSTANTIATED ON THE WORK-ITEM CASE:\n1. DISCOVERY/REGISTRATION — opt-in PULL: the extension declares itself to a core extension surface; core does NOT import it. ABSENCE = core behaves exactly as today (work items simply don't exist). KEY PROPERTY: core must NOT require the extension.\n2. LIFECYCLE — bounded, trivial: the viewer is read-only and can be a short-lived invocation, so load/init/teardown with NO resident state. This is the CHEAPEST possible first extension — good, because it stress-tests the seam without heavy apparatus.\n3. CAPABILITIES/PERMISSIONS — LEAST PRIVILEGE: needs READ of the store only (list work items + their queue items + completion). NO store-write, NO git authority (#146), NO second writer (A1). LOAD-BEARING CONSTRAINT (bind to A1/F24): the extension reads THROUGH the broker/readapi, NOT by opening the DB itself — a second DB opener races on entry-id allocation (F24). Extensions get MEDIATED access, never direct DB handles. This is the single most important rule of the whole seam.\n4. VERSIONING — the extension declares the core contract version it targets; core states compatibility. The surface is small (work item <-> queue item <-> completion), which is WHY the seam should be defined here first — small blast radius.\n\nTHE VIEW ITSELF (read-only, D11): shows work items; per work item, its owned queue items (1:N via the ASK C additive `workItemId?` field) and each item's COMPLETION status/result (status `done` + resultSummary). A work-item roll-up (e.g. all children done => deliverable) is COMPUTED AT READ TIME, not stored — no new state, no new writer.\nNO NEW WRITER: one store, one broker, read-only. Consistent with D11 (poll-based).\n\nDEPENDENCY (precise): #538 depends on #503 being adopted and implemented AT LEAST TO C-1 (the `workItemId?` additive field + WorkItem store record) — its read surface. It does NOT need C-2/C-3/C-4 from #503. Note #505 is currently DEFERRED (parked on the operator's policy question + impl's cited inventory); #538 is the concrete case #505 should treat as the FIRST candidate and define the seam on.\n\nGUARDRAILS: core does not require the extension; mediated read-only access (no direct DB handle -> F24); no store-write; no git authority (#146); no new writer; read-only consistent with D11.\nGROUNDING HONESTY: design proposal; no code claim; I did not read defineExtension/extensions.test.mjs; I cannot run the demo. One concern; native Windows only; never push/publish."
+}

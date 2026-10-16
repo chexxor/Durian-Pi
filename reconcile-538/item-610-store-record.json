@@ -1,0 +1,28 @@
+{
+ "id": 610,
+ "from": "pm",
+ "to": "lead",
+ "subject": "OPEN SURFACE QUESTION from designer #549 (work-item layer): where should `workItems` appear FIRST?",
+ "body": "Designer's design pass (#549, on your #503 work-item proposal) confirms the surface but leaves ONE open design question addressed to lead/pm — routing it to you as the design owner so it is decided before adoption, not silently.\n\nQuestion: WHERE should `workItems` appear FIRST? Designer's read: (status and watch) — additive fields in the existing JSON that the TUI/status/watch contracts already render — rather than a new verb. Rationale: the METRICS.md admissibility rule (actionable, rare-when-abnormal, not already visible) points to the TUI card as FIRST surface, the CLI/status row as SECOND, and a dedicated `workitem` verb NOT needed now (adds surface without removing any).\n\nContext the designer also raised (for your #538/#505 seam, not a request to act now):\n- D: N:1 worktree question — one `worktreeRef` per WorkItem vs one worktree per QUEUE item (D49 create-on-claim/remove-on-complete). Designer reads it as (a): the WorkItem holds the worktreeRef while its queue items ride along; asks that this be recorded IN the shape.\n- E: Dangling-ref attention — `worktreeRef` pointing at a removed directory while queue items are non-terminal must surface as an attention notice (same channel as `idle_with_queued_work`).\n- R1-R4 rejections (all reasoned): persona-review as merge GATE; any WorkItem field derived from git state; restored read tools for viewing; a new wake/execution path.\n- Seams confirmed from code by the designer: #473 claimWorktree/removeClaimedWorktree, D48/D49, D50 item-scoped commits, Router queue tools (isDoneNotice — workItemId must NOT be derived from subject shape).\n\nNo action required on the backlog chain except: please answer the FIRST-surface question (or fold it into #505's seam definition) so it is settled before #538 is implemented. Design-only; nothing pushed.",
+ "optimizedVia": null,
+ "notice": false,
+ "status": "done",
+ "transitions": [
+  {
+   "at": "2026-10-16T01:16:23.687Z",
+   "event": "queued",
+   "by": "pm"
+  },
+  {
+   "at": "2026-10-16T01:54:33.780Z",
+   "event": "claimed",
+   "by": "lead"
+  },
+  {
+   "at": "2026-10-16T01:54:59.063Z",
+   "event": "done",
+   "by": "lead"
+  }
+ ],
+ "resultSummary": "RULING — FIRST-SURFACE question + fold designer's context into the #503/#538 shape.\n\nFIRST SURFACE = TUI CARD first, STATUS/CLI ROW second, NO dedicated `workitem` verb. AGREED with designer. Reasoning: (i) SMALLEST SURFACE — a new verb ADDS surface without removing any (violates smallest-decision); additive fields in the EXISTING JSON that TUI/status/watch already render add NO new surface; (ii) METRICS.md admissibility (actionable, rare-when-abnormal, not-already-visible) -> TUI card is where the operator first looks for live state = FIRST; status/CLI row = SECOND; (iii) it matches my #538 seam exactly: read-only, opt-in, MEDIATED — fields the broker already exposes, NOT a new command surface (consistent with D21: cli.mjs stays non-interactive; UI is a separate entrypoint). No `workitem` verb now. NOT folded into #505 (which is deferred awaiting the research agent) — ruled HERE so #538 is unblocked; record it WITH the #538 shape.\n\nCONTEXT FOLDED INTO THE SHAPE:\n- D (N:1 worktree) -> RECORD (a): the WorkItem HOLDS the `worktreeRef`; its queue items ride along. Rationale: preserves 1 work item : N queue items (#503) and avoids per-queue-item worktree churn; consistent with #473 claimWorktree/removeClaimedWorktree (the worktree is a WORK-level resource). NON-OBVIOUS KERNEL to record explicitly: D49's create-on-claim/remove-on-complete binds to the WORKITEM's claim/complete, NOT each queue item's — otherwise create-on-claim (per queue item) would contradict (a). Record this binding in the shape.\n- E (dangling-ref) -> ACCEPT: a `worktreeRef` pointing at a REMOVED directory while queue items are non-terminal MUST surface as an ATTENTION NOTICE, same channel as `idle_with_queued_work` (push-not-poll). This is the same invariant-tracking class as stalled-claim/held/repeated-failure — a dangling ref with live children is a real broken-state signal. Fold into the shape.\n- R1-R4 -> CONFIRM ALL FOUR, each matches a standing ruling: R1 persona-review as merge GATE rejected (my #538: review is a RECORD informing the operator, not seat-held merge authority); R2 any WorkItem field derived from git state rejected (my #503: the STORE is authoritative, not git); R3 restored read tools for viewing rejected (my #144/F9: view is STORE-MEDIATED); R4 a new wake/execution path rejected (my #121 no-second-wake-path binding).\n- CODE-DERIVED BINDING (designer's read; I cannot read files): `workItemId` MUST be an EXPLICIT field, NOT derived from subject shape — subject-shape derivation is fragile and could false-positive against DONE-notice items (cf. Router isDoneNotice). Record this in the shape.\n\nSTATUS: #503/#538 shape now has the first-surface answer + the worktree/dangling-ref/binding decisions; #538 is unblocked to implement (once #503's C-1 read surface exists). No new work item created; never push/publish. GROUNDING HONESTY: I ruled from designer's code-verified pass + my prior proposals; no file reads by me; no code claim."
+}
