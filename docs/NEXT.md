@@ -3,7 +3,51 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate, **clock-out / eighth pass** — operator ruled to land ALL uncommitted shared-tree work onto `main` (routed to `pm` at HIGHEST priority) and routed the compact / wall-clock / degenerate-text build. See **CLOCK-OUT** below, then older sections (historical).)_
+_Last refreshed: 2026-10-16 (delegate, **clock-out / ninth pass** — applied the thinkingLevel fix, restarted the broker, and routed four operator intents; the team registered all four. See **CLOCK-OUT (ninth pass)** immediately below.)_
+
+## CLOCK-OUT — ninth pass (2026-10-16, delegate) — START HERE
+
+**HEAD at clock-out:** `d5c1dfb`. Delegate commits this session: `f579bb2` (thinkingLevel on the 5
+DeepSeek seats), `072bfe6` (ROADMAP 89 TUI), `b2ff656` (pointer), `89c50d4` (ROADMAP 90 formatter),
+`d5c1dfb` (ROADMAP 91 multi-instance).
+
+**WHAT THE DELEGATE DID (all verified):**
+1. **impl degradation fixed** — `rig.selfdev.json` had no `thinkingLevel`, so DeepSeek seats ran with
+   `thinking:{type:"disabled"}` + no `reasoning_effort` (pi-ai `openai-completions.js:668-679`) and
+   every recent `impl` turn showed `usage.reasoning:0` (ROADMAP 43a). Added `thinkingLevel:"high"` to
+   pm/impl/lead/scribe/devtools (`f579bb2`), applied broker-safe (stop → `up --refresh --no-serve` →
+   `reset impl` entry `38233` → restart). Verified 5 seats read `thinkingLevel="high"` in AgentState.
+2. **Four operator intents routed to `pm`** (inbox; all delivered, `dead=0`): broker-safe writes,
+   request-TRACE, TUI seat-transcript (ROADMAP 89), app-level formatter (ROADMAP 90), multi-instance
+   (ROADMAP 91). **The team registered all of them the same session** — see the queue.
+3. **Roadmap:** added items **89** (TUI seat-detail transcript), **90** (app-level `format` verb),
+   **91** (multiple instances / instance identity for the daemon).
+
+**PRIORITY — CURRENT ITEM:** **#885 (LAND #624 `cmdInit`: `M cli.mjs` + `?? demo/init.test.mjs`)** is
+STILL `queued` to `impl` — NOT landed. The delegate delivered a claim-by-id priority steer to `impl`
+(`opr-20261016-impl-priority-885`, `.spike/delegate/intent-impl-priority-885.md`): claim #885, run
+`node --check cli.mjs` + `demo/init.test.mjs`, commit explicit paths only, complete, report to qa.
+**lead #913 rules #885 lands FIRST** — it gates #910 (69), #911 (70), #912 (71), #873 (`compact`), and
+#934/#940/#927 (all edit `cli.mjs`). **Exact next command (read-only):**
+`DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+
+**ORDER after #885:** #874 (wall-clock, first) → #873 (`compact`) → #875 (degen-text registry); then
+#910/#911 → #912. Registered from this session's intents: #920/#922/#923 (trace), #927/#928 (TUI 89;
+designer CLAIMED #928), #933/#934 (formatter 90; devtools CLAIMED #933), #939/#940 (multi-instance 91).
+
+**⚠ OPERATOR POLICY QUESTION PENDING (surface to the operator):** **#944 / #948** — a SCOPE+POLICY
+ruling on the **CRLF / line-ending stance** (ROADMAP #328, #766); lead split the scope and ruled POLICY
+is the OPERATOR's (#328 on hold). Same width as formatter item 90. The delegate has NOT ruled it.
+
+**TREE STATE — NOT the delegate's (do NOT commit or discard):** `M cli.mjs`, `?? demo/init.test.mjs`
+(#624/#885); `M package.json`, `M package-lock.json`, `?? .prettierrc.json`, `?? docs/FORMATTER.md`
+(devtools/impl #933/#934 — Prettier tool choice in flight). Delegate's own edits are all COMMITTED.
+
+**BROKER:** pid `4644` (`scripts/serve-noroot.ps1`), started `21:58:43Z`; `genlock.0` held at clock-out
+(one run in flight). Inbox empty, no dead-letter. **Do NOT poll runs — the operator notifies.**
+
+**Do NOT `serve --stop` while a `genlock.*` is held** (`docs/runbooks/broker-safe-change.md`);
+`"stopped": true` is not proof the process exited.
 
 ## OPERATOR INTENT ROUTED — broker-safe writes (2026-10-16, delegate)
 
@@ -25,12 +69,11 @@ _Last refreshed: 2026-10-16 (delegate, **clock-out / eighth pass** — operator 
 `thinkingLevel` on any seat, so pi-ai's DeepSeek branch sent `thinking:{type:"disabled"}` and no
 `reasoning_effort` (`openai-completions.js:668-679`); every recent `impl` turn showed `usage.reasoning:
 0` and the seat narrated its own loop (ROADMAP 43a named this exactly). Applied: added
-`"thinkingLevel": "high"` to the five DeepSeek seats (pm, impl, lead, scribe, devtools) — **`rig.selfdev.json`
-now dirty, uncommitted** — then broker-safe stop → `up rig.selfdev.json --refresh --no-serve`
+`"thinkingLevel": "high"` to the five DeepSeek seats (pm, impl, lead, scribe, devtools) — **committed `f579bb2`** — then broker-safe stop → `up rig.selfdev.json --refresh --no-serve`
 (all 9 `refreshed`) → `reset impl` (entry `38233`) → broker restarted (**pid 4644**). Verified the five
 seats read `thinkingLevel="high"` from AgentState (`.spike/delegate/check-thinking.mjs`).
 
-**Two operator intents routed to `pm` (inbox):**
+**Four operator intents routed to `pm` (inbox; all delivered, `dead=0`):**
 - **request-TRACE surface** (`opr-20261016-request-trace`): a verb/env to dump the ACTUAL serialized
   request payload per model call, via pi-ai's unused `ProviderRequestOptions.onPayload`/`onResponse`/
   `fetch` seam (`types.d.ts:52-83`) — realizes ROADMAP 43(c) and lets a user see the real DeepInfra
@@ -39,10 +82,15 @@ seats read `thinkingLevel="high"` from AgentState (`.spike/delegate/check-thinki
   chat log on opening its details, not only the live tail (the 24-entry `SCAN_LIMIT` page). Added to
   `docs/ROADMAP.md` (Mid-term, next to item 17). Body: `.spike/delegate/intent-tui-seat-transcript.md`.
 
-**Dirty tree owned by this delegate session:** `rig.selfdev.json`, `docs/NEXT.md`, `docs/ROADMAP.md`
-(item 89) — uncommitted; commit on the operator's word (explicit paths only).
+- **ROADMAP 90 — app-level formatter** (`opr-20261016-formatter-backlog`): an explicit
+  `format [--check] [-- <paths>]` verb; body `.spike/delegate/intent-formatter-backlog.md`.
+- **ROADMAP 91 — multiple instances** (`opr-20261016-multi-instance`): instance identity for the OS
+  trigger / markers / lock; body `.spike/delegate/intent-multi-instance-backlog.md`.
 
-## CLOCK-OUT — start here (2026-10-16, delegate)
+**Delegate edits this session are ALL COMMITTED** (`f579bb2`, `072bfe6`, `b2ff656`, `89c50d4`,
+`d5c1dfb`). The remaining dirty tree is OTHER seats' in-flight work — do NOT commit or discard.
+
+## CLOCK-OUT — eighth pass (2026-10-16, delegate) — historical
 
 **`main` HEAD:** `978574d`. Commits this session: `8ae8fff` (impl: seatguard #673/#780), `191c481` (a
 swallowed-catch fix the warden flagged), `97a3c6d` (D78 prose guard) then `449e870` (**REVERTED** — it

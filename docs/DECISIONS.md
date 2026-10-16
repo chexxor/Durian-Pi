@@ -1978,3 +1978,27 @@ blocked batch, so the next session starts from committed state.
 
 **Status:** adopted; routed to `pm` (intent delivered 2026-10-16T21:39:38Z). Explicit-path commits only;
 never push.
+
+## D80 — Enable reasoning for the DeepSeek seats (`thinkingLevel: "high"`), 2026-10-16
+
+**Decision.** `rig.selfdev.json` now declares `thinkingLevel: "high"` on the five **DeepSeek** seats
+(pm, impl, lead, scribe, devtools). Applied live via a broker-safe stop → `up rig.selfdev.json --refresh
+--no-serve` → `reset impl` (entry `38233`) → broker restart; committed `f579bb2`. The GLM seats (qa,
+advocate, auditor, designer) were left unset.
+
+**Why.** Every DeepSeek seat ran with no `thinkingLevel`, so pi-ai's DeepSeek branch
+(`@earendil-works/pi-ai/dist/api/openai-completions.js:668-679`) sent `thinking:{type:"disabled"}` and
+omitted `reasoning_effort`; every recent `impl` assistant entry carried `usage.reasoning: 0` and the
+seat narrated its own degeneration ("I looped again without acting…"). ROADMAP 43(a) had already
+predicted exactly this: the "let me do it" monologue is thinking with nowhere to go but the visible
+content. The plumbing (per-seat `thinkingLevel` → `configure` → AgentState) already existed
+(`cli.mjs:548/566`; item #635); the value was simply never set, and item #134 was `deferred`. The
+`reset impl` was written because a degenerate turn self-conditions every later turn (ROADMAP 44).
+
+**Note / open.** The exact DeepInfra `reasoning_effort` wire type for DeepSeek (string level name vs
+integer 1–100) is UNVERIFIED; the vendored `THINKING_LEVEL_MAP` maps only `{off:"none"}` and passes the
+other levels through by name. The request-trace item (**#920**, ROADMAP 43c) is the tool that will
+confirm it.
+
+**Status:** applied and committed; effectiveness is measured by the `step-repetition` metric (README:
+"measures repeated tool calls", so a prose-only loop is its documented blind spot).
