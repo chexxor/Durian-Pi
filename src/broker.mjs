@@ -156,6 +156,50 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
   return { delivered, deadLettered };
 }
 
+/* ---------------------- stranded-submission reconciliation ---------------------- */
+// A run can end without settling its input — the crash landed between the run
+// task's terminal commit and the submission's settlement. The submission stays
+// `placed` forever, and `selectWakes` reads any pending submission as "in flight"
+// and never re-wakes the conversation, so the seat stalls silently as
+// `admitted_not_started`. The harness offers no recovery for it:
+// `abortSubmission` returns "already_placed" (a run picked it up) and
+// `conversation.abort()` finds nothing live to abort. So settle it directly: a
+// `placed` submission whose conversation has NO live task is an orphan that can no
+// longer receive an answer. `conv.commit` is the public way to reach
+// `tx.settleSubmission`; a live run always has its task committed with the
+// placement in one commit, so a settled orphan cannot race a starting run.
+// Returns the ids it settled so the caller can stop counting them as pending.
+export async function reconcileStrandedSubmissions(harness, inspection, { context, onDiagnostic } = {}) {
+  const liveConvIds = new Set();
+  for (const task of inspection?.tasks ?? []) {
+    const convId = task?.record?.conversationId;
+    if (convId !== undefined) liveConvIds.add(convId);
+  }
+  const settled = [];
+  for (const sub of inspection?.submissions ?? []) {
+    if (sub.status !== "placed" || liveConvIds.has(sub.conversationId)) continue;
+    try {
+      const conv = await harness.conversation(sub.conversationId, context);
+      if (!conv) {
+        onDiagnostic?.({ kind: "stranded-unknown-conversation", submission: sub.id });
+        continue;
+      }
+      await conv.commit((tx) => tx.settleSubmission(sub.id, { status: "unanswered", reason: "stranded" }), context);
+      settled.push(sub.id);
+    } catch (err) {
+      // A settlement that still fails is reported, never swallowed: the seat stays
+      // stranded and the operator has to see why.
+      onDiagnostic?.({
+        kind: "stranded-settle-failed",
+        submission: sub.id,
+        conversationId: sub.conversationId,
+        error: String(err?.message ?? err),
+      });
+    }
+  }
+  return settled;
+}
+
 /**
  * Run one wake pass and hold the harness open until every run it started has
  * settled — closing earlier abandons the run (the F11 class).
@@ -184,7 +228,19 @@ export async function drivePass(
   const seatsDoc = await harness.documentState(Seats, undefined, context);
   const queueDoc = await harness.documentState(RigQueue, undefined, context);
   const inspection = await harness.inspect(context);
-  const pendingConvIds = new Set((inspection.submissions ?? []).map((s) => s.conversationId));
+  // Orphans first: a `placed` submission with no live task would otherwise read as
+  // in-flight and hold its seat out of every wake. Settle them before building the
+  // pending set, so the conversation they blocked becomes wakeable in THIS pass.
+  const settledStranded = await reconcileStrandedSubmissions(harness, inspection, { context, onDiagnostic });
+  if (dbPath && settledStranded.length > 0) {
+    logBrokerLine(dbPath, `STRANDED settled=${settledStranded.length}`);
+  }
+  const settledStrandedIds = new Set(settledStranded);
+  const pendingConvIds = new Set(
+    (inspection.submissions ?? [])
+      .filter((s) => !settledStrandedIds.has(s.id))
+      .map((s) => s.conversationId),
+  );
   const seats = seatsDoc?.value?.seats;
   const stoppedConvIds = await readStoppedConvIds(probeStorage, seats, context);
   const busySeats = readBusySeats ? await readBusySeats() : new Set();
