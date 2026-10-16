@@ -135,11 +135,11 @@ second one.**
 ## Glossary
 
 - **Pass** — one scheduler tick: drain intent, inspect, select wakes, submit, supervise.
-- **Daemon / brokerd** — the host process that supervises the broker (`docs/BROKER-SUPERVISION.md`);
-  distinct from `src/supervisor.mjs`, the in-process escalation pass.
+- **Daemon / host** — the OS-level host process that supervises the broker (`src/host.mjs`,
+  `docs/BROKER-SUPERVISION.md`); distinct from `src/supervisor.mjs`, the in-process escalation pass.
 - **Heartbeat** — a file the broker rewrites to prove its event loop is turning (liveness) and its pass
-  counter is advancing (progress); the daemon's hang detector.
-- **Durable stop marker** — `<db>.broker.stopped`, operator intent that survives a reboot; distinct from
+  counter is advancing (progress); the host's hang detector.
+- **Durable down marker** — `<db>.broker.down`, operator intent that survives a reboot; distinct from
   the ephemeral `<db>.broker.stop` request file the broker polls.
 - **Wake** — a submitted input that tells a seat to act.
 - **Slot / genlock** — a cross-process lease that bounds concurrent generations.

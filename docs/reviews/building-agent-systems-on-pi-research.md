@@ -665,3 +665,386 @@ Can you access those four files on our open-source GitHub repo?
 -----------------
 
 
+I'll check what's in the attachment first, then verify against the repo.The attachment is the round-2 context doc, not the four files. Let me try to pull them from GitHub directly.Yes — I can read all four files directly from the repo. I fetched them successfully: `src/broker.mjs` (491 lines), `src/genlock.mjs` (222 lines), `src/supervisor.mjs` (181 lines), and `docs/ROADMAP.md` items 52/54/55 [^1] [^2] [^3] [^6]. Now let me research your ten follow-ups.Good material. Let me pull the specifics on WinSW's process-tree handling, the SCM flag semantics, service accounts, and the clock/PID questions.Let me nail down the clock question and the Servy/Task Scheduler specifics.One last pass on the clock semantics and the Servy option.# Yes — I can read all four files
+
+I pulled them straight from `github.com/chexxor/Pi-OpenDurig`:
+
+| File | Lines read |
+| --- | --- |
+| `src/broker.mjs` | 491 [^1] |
+| `src/genlock.mjs` | 222 [^2] |
+| `src/supervisor.mjs` | 181 [^3] |
+| `docs/ROADMAP.md` items 52/54/55 | present [^6] [^6] [^6] |
+
+That changes several things. `cmdServe`/`cmdUp` are **not** in `broker.mjs` — that file exports `drivePass`, `runWakeLoop`, broker state/logging, stop-request and inbox helpers, but not the CLI commands [^1]. So the detached-spawn code is in `cli.mjs`, which I could **not** read. Diffs that touch `cli.mjs` below are specified **by interface**, not by literal patch. Everything touching `broker.mjs`/`genlock.mjs`/`supervisor.mjs` is exact.
+
+---
+
+## Corrections to my round-2 report (from the real source)
+
+1. **`src/supervisor.mjs` is not a process supervisor at all.** It is the application-level *escalation pass* (ROADMAP 42): `failureStreak`, `planEscalations`, `applyEscalations`, `planResets`, `applyResets` [^3]. It observes seats and parks items on the human via the existing `deferred` representation. My round-2 report treated "supervisor" as the process-supervision layer. **They are different layers and now share a name.** The OS-level supervisor is a *new* file; do not put it in `supervisor.mjs`.
+2. **The stop file is `<db>.broker.stop`, not `<db>.stop`.** `stopRequestPath(dbPath)` returns `` `${dbPath}.broker.stop` `` [^1]. My round-2 proposal for a `<db>.stop` marker was based on the context doc, not the code.
+3. **`brokerAlive` already handles `EPERM` correctly** — it returns true when the signal is refused for permission [^1]. But **`genlock.mjs`'s `holderAlive` does not**: it `catch`es everything and returns `false`, so a slot held by a process we cannot signal (different integrity level) reads as *dead* and gets stolen [^2]. Inconsistency; fix one to match the other.
+4. **`genlock.mjs` computes lease age from wall clock**: `age = Date.now() - Date.parse(holder.since)` [^2]. This is the Modern-Standby hazard, and it is *already in the code*, not hypothetical.
+5. **ROADMAP 54 appears already implemented.** `drivePass` scopes the settle-wait to the conversations the pass woke, races it against the caller's `settleSignal`, and `runWakeLoop` keeps the single global `waitForIdle` on loop exit [^1]. That is exactly what item 54 asks for [^6]. Confirm against git history; if it is done, item 54 is not a dependency of your supervisor.
+6. **The broker already emits a rich audit log** — `START pid=…`, `WAKE <seat>`, `PASS <n> ms=… woke=…`, `INTENT delivered=… dead=…`, `EXIT pid=… reason=…` [^1]. So the *progress* SLI exists; what's missing is a *liveness* (event-loop) signal and the "is the service alive" line.
+7. **ROADMAP 52's first step is explicitly socket-free and in-process** — `viewState().subscribe()` with no new trust boundary, remote `watchEvents()` only after 55 [^6]. This collides with service mode (see pitfall 7).
+
+---
+
+## §1–§7 as exact diffs
+
+### §1 — Option A: the host process
+
+**New file `src/host.mjs`** (name it distinctly from `supervisor.mjs`). Runs under WinSW/Servy/Task; spawns the broker; owns single-instance, wedge-kill, backoff, give-up; **never opens the store**.
+
+```js
+// src/host.mjs — OS-level process supervisor for the resident broker.
+// Distinct from src/supervisor.mjs (application escalation, ROADMAP 42).
+// Opens NO store; touches only: <db>.broker.json, <db>.broker.heartbeat,
+// <db>.broker.stop, <db>.broker.down, and the child process.
+
+import { spawn } from "node:child_process";
+import { readFileSync, writeFileSync, unlinkSync, existsSync, statSync } from "node:fs";
+import { readBrokerState, brokerAlive } from "./broker.mjs";
+
+export const hostDownPath      = (db) => `${db}.broker.down`;
+export const brokerHeartbeatPath = (db) => `${db}.broker.heartbeat`;
+
+const HEARTBEAT_INTERVAL_MS = 20_000;
+const HEARTBEAT_TIMEOUT_MS  = 60_000;
+const DRAIN_MS              = 720_000;   // > DURIG_STREAM_TIMEOUT_MS (600 s)
+const BACKOFF_MS            = [5_000, 30_000, 120_000];
+const GIVE_UP_AFTER         = 5;         // abnormal starts within RESET_MS
+const RESET_MS              = 3_600_000;
+
+export function readDown(db)  { return existsSync(hostDownPath(db)); }
+export function writeDown(db) { writeFileSync(hostDownPath(db), String(Date.now())); }
+export function clearDown(db) { try { unlinkSync(hostDownPath(db)); } catch {} }
+
+/** Broker exit code -> host action. This is the restart contract in code. */
+export function decide(exitCode, downMarker) {
+  if (downMarker)          return "stay-down";   // operator asked for down
+  if (exitCode === 0)      return "stay-down";   // clean, bounded, or give-up
+  if (exitCode === 2)      return "restart";     // WEDGE
+  return "restart";                              // crash (1) / any other
+}
+
+export function heartbeatAgeMs(db) {
+  const p = brokerHeartbeatPath(db);
+  try { return Date.now() - statSync(p).mtimeMs; } catch { return Infinity; }
+}
+```
+
+The host's loop, in outline:
+
+```js
+async function run(db, { argv, env }) {
+  if (readDown(db)) return 0;                       // operator wants it down
+  const state = readBrokerState(db);
+  if (state && brokerAlive(state)) return 0;        // single-instance: fail closed
+
+  let abnormal = 0, backoffIdx = 0;
+  for (;;) {
+    const child = spawn(process.execPath, ["cli.mjs", "serve", "--db", db, ...argv],
+      { cwd: env.DURIG_CWD, env, stdio: ["ignore", "inherit", "inherit"],
+        windowsHide: true, jobObject: /* your existing KILL_ON_JOB_CLOSE job */ });
+
+    const killTimer = setInterval(() => {
+      const age = heartbeatAgeMs(db);
+      if (age > HEARTBEAT_TIMEOUT_MS) {
+        // A gap FAR larger than the check interval is a resume, not a wedge.
+        if (age > 5 * HEARTBEAT_INTERVAL_MS) { log(`RESUME gap=${age}ms`); return; }
+        log(`WEDGE heartbeat age=${age}ms -> terminating pid=${child.pid}`);
+        child.kill("SIGKILL");                       // TerminateProcess on Windows
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+
+    const code = await new Promise((r) => child.on("exit", (c, s) => r(c ?? (s ? 1 : 0))));
+    clearInterval(killTimer);
+    if (code !== 0) abnormal++;
+    const action = decide(code, readDown(db));
+    if (action === "stay-down") return 0;
+    if (abnormal >= GIVE_UP_AFTER) { writeDown(db); log(`GIVE_UP after ${abnormal} abnormal starts`); return 0; }
+    await sleep(BACKOFF_MS[Math.min(backoffIdx++, BACKOFF_MS.length - 1)]);
+  }
+}
+```
+
+### §2 — host config
+
+WinSW XML (corrected `stoptimeout` — my round-2 "90 sec" was **wrong**, see Q6):
+
+```xml
+<service>
+  <id>durig-broker</id>
+  <executable>C:\Program Files\nodejs\node.exe</executable>
+  <arguments>"C:\durig\src\host.mjs" --db "C:\durig\rig.sqlite"</arguments>
+  <workingdirectory>C:\durig</workingdirectory>
+  <stoptimeout>900sec</stoptimeout>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="none"/>
+  <resetfailure>1 hour</resetfailure>
+  <delayedAutoStart>true</delayedAutoStart>
+</service>
+```
+
+`onfailure` here is a **backstop for `host.mjs` itself dying** — it is *not* the child-restart mechanism (see Q3).
+
+### §3 — restart / stop contract, exact
+
+Add to `broker.mjs`, next to the existing stop-request helpers [^1]:
+
+```js
+export function exitCodeForStopReason(reason) {
+  switch (reason) {
+    case "stop": case "signal": case "max-duration": case "max-passes": return 0;
+    default: return 1;                      // crash / unknown
+  }
+}
+```
+
+In `cli.mjs` (unread — specify by interface):
+- `cmdServe`: after `runWakeLoop` returns, `process.exitCode = exitCodeForStopReason(result.stoppedBy)`.
+- `cmdStop`: `writeStopRequest(db)` **and** `writeDown(db)`.
+- `cmdStart`/`up`: `clearDown(db)`.
+
+Intent marker lives in the **file**, not the store — because the host must not open the store, and `.broker.down` survives reboot. Exit codes:
+
+| Cause | `stoppedBy` | Exit | `.broker.down` | Host action |
+| --- | --- | --- | --- | --- |
+| `serve --stop` | `stop` | 0 | written | stay down |
+| SIGINT/SIGTERM | `signal` | 0 | — | stay down |
+| bounded run | `max-duration`/`max-passes` | 0 | — | stay down |
+| crash / throw | (no EXIT) | 1 | — | restart |
+| wedge | — | 2 | — | restart |
+| give-up | — | 0 | written | stay down + alert |
+
+### §4 — liveness signal, exact
+
+Add to `broker.mjs`:
+
+```js
+export function writeHeartbeat(dbPath, { state, pass, version, upstreamPin }) {
+  if (!dbPath) return;
+  writeFileSync(`${dbPath}.broker.heartbeat`, JSON.stringify({
+    schema: 1, pid: process.pid, state, pass,
+    version, upstreamPin,
+    ts_wall: Date.now(), ts_mono: performance.now(),
+  }));
+}
+```
+
+In `runWakeLoop`, add a **main-thread** `setInterval(…, 20_000)` that calls `writeHeartbeat(db, {state:"live", pass: passes, …})` and clears it in the `finally`. Also stamp the version into the existing START line:
+
+```diff
+- logBrokerLine(dbPath, `START pid=${process.pid}`);
++ logBrokerLine(dbPath, `START pid=${process.pid} v=${VERSION} pass0`);
+```
+
+Two signals, two timeouts:
+
+| Signal | Writer | Interval | Timeout | Catches |
+| --- | --- | --- | --- | --- |
+| **Liveness** | `setInterval` (event loop) | 20 s | 60 s | event-loop block / full hang |
+| **Progress** | existing `PASS <n> ms=… woke=…` [^1] | per pass | `DURIG_STREAM_TIMEOUT_MS` + margin | stuck await / deadlock |
+
+A 600 s model call does **not** block the event loop, so the heartbeat stays fresh — correct: a long call is not a wedge. A blocked loop stops the `setInterval` — correct: that *is* a wedge.
+
+### §5 — stateful single-writer: unchanged
+
+The host opens no store; the health surface is file/pid/heartbeat only. One writer, many readers (your `watch`/`status`). Nothing to diff here beyond keeping the host store-free.
+
+### §6 — pre-mortem: two concrete new diffs
+
+**genlock monotonic fix** (`genlock.mjs`):
+
+```diff
+- const age = holder?.since ? Date.now() - Date.parse(holder.since) : Infinity;
+- if (!holderAlive(holder) || age > STALE_MS) {
++ const age = holder?.since ? Date.now() - Date.parse(holder.since) : Infinity;
++ const resumeGap = age > 5 * STALE_MS;          // a jump this large is a resume
++ if (!holderAlive(holder) || (age > STALE_MS && !resumeGap)) {
+```
+
+and make `holderAlive` match `brokerAlive`'s EPERM handling:
+
+```diff
+- } catch {
+-   return false;
+- }
++ } catch (err) {
++   return err?.code === "EPERM";   // exists but unsignalable == alive
++ }
+```
+
+**single-instance race**: the host must confirm the old pid is dead **and** `.broker.json` is stale before spawning (the code above does). The new broker then re-acquires the lease in `cmdServe` before opening the store.
+
+### §7 — seam inventory (corrected names)
+
+| Artifact | On crash | On restart | On clean shutdown |
+| --- | --- | --- | --- |
+| `<db>.broker.json` `{pid,since}` [^1] | stale pid → stolen | re-acquired before store open | `clearBrokerState(db, pid)` (pid-guarded) |
+| `<db>.broker.down` *(new)* | absent → restart | read at start; if present → host exits 0 | **written** by `serve --stop`; cleared by `serve --start` |
+| `<db>.broker.stop` [^1] | transient; cleared by broker | — | consumed + `clearStopRequest` |
+| `<db>.broker.inbox` [^1] | files remain → re-drained, idempotent via `requestId` | drained at pass start before `inspect` | left for next start |
+| `<db>.broker.inbox.error` [^1] | dead-lettered intents | surfaced | unchanged |
+| `<db>.genlock.<i>` [^2] | dead pid → steal | reconciled | released iff `holder.pid === process.pid` |
+| `<db>.broker.log` [^1] | `START` w/o `EXIT` = abnormal | new `START` | `EXIT reason=stop` |
+| `<db>.broker.heartbeat` *(new)* | stale | rewritten each tick | removed/marked stopped |
+
+---
+
+## The ten follow-ups
+
+**2 — Does WinSW kill the child tree, and does it use a Job Object?** No Job Object. WinSW discovers children by enumerating processes, checking start time, and reading the parent PID via `NtQueryInformationProcess`, then recursively terminates descendants [^8] [^8]. Its stop sequence is: check already-exited → send Ctrl+C → close main window → wait for a timeout → force-kill [^8]. Orphaned children are a known issue [^13]. **So: keep your `KILL_ON_JOB_CLOSE` job as the authority** — assign the broker to it in `host.mjs`. Don't rebuild it. Note WinSW's Ctrl+C step is useless for a console-less service child, so its "graceful" path will fall through to force-kill; that is another reason the *real* graceful stop must be your `.broker.stop` + drain, not the SCM stop.
+
+**3 — Does the SCM skip `onfailure` on clean exit 0 and on operator stop?** **Confirmed, and now documented, not inferred.** A service is considered failed only when it terminates *without* reporting `SERVICE_STOPPED` [^9]. The failure-actions flag (default off) means failure actions run "only if the service terminates without reporting a status of `SERVICE_STOPPED`" [^14] [^10]. An operator service-stop *is* a `SERVICE_STOPPED`, so it never triggers recovery. There is a separate "honor exit code" flag if you want non-zero exits to count as failures [^15] — **don't enable it**; keep the distinction in `host.mjs`. Consequence: **SCM failure actions are a backstop for the wrapper crashing, not for the broker exiting.**
+
+**4 — WinSW vs Servy vs node-windows.** WinSW's last stable is **v2.12.0, Jan 28 2023**; 3.x lives on the `v3` branch as pre-releases [^16] [^17]. Community consensus: NSSM unmaintained since 2017, WinSW in "maintenance limbo," no release since 2023 but still working [^18] [^11]. Servy is actively maintained and adds graceful tree kill, Ctrl+C, force-kill, recursive zombie cleanup, built-in health monitoring (heartbeat every 30 s, consecutive-failure threshold), and heartbeat-URL alerting [^7] [^7] [^19] [^20]. ⚠️ That comparison is **vendor-authored** [^7], and Servy has its own stop-timeout bug (double-waiting on the grace period) [^21]. **Recommendation:** you want a *thin* host, so pick the one you'll treat as a dumb service host and **disable its health checks** (they'd duplicate your heartbeat). Servy is the safer long-term bet on maintenance; WinSW is the most "dumb" and most battle-tested in CI. Either is fine — the decision that matters is that restart/health logic stays in `host.mjs`.
+
+**5 — Service account recipe.** Create a non-admin local user, grant "Log on as a service" [^22] [^23] [^24]. **Use a real user account, not LocalService/NetworkService** — the latter has no network identity and a different profile, which silently changes git/npm paths. What actually breaks, and the fix:
+
+| Breaks | Why | Fix |
+| --- | --- | --- |
+| `%USERPROFILE%` / `%APPDATA%` wrong | service accounts don't get the interactive profile loaded **[inferred]** | set `HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA` explicitly in the host env |
+| `git` "dubious ownership" | repo owned by a different SID than the service account | `git config --global --add safe.directory <repo>` **in the service account's config** |
+| git credential lookup fails | GCM store is per-user / per-session | `GIT_CONFIG_GLOBAL=C:\durig\etc\gitconfig`, `credential.helper=store --file=C:\durig\etc\gitcred`, `GIT_TERMINAL_PROMPT=0` |
+| `npm ci` unauthenticated | `.npmrc` in the wrong profile | `NPM_CONFIG_USERCONFIG=C:\durig\etc\npmrc` with the registry token |
+| `core.longpaths` / worktree writes | long worktree paths, ACLs | `core.longpaths=true`; ACL the seat root to the service account |
+| `DURIG_SEAT_ROOT` | the broker no longer sets it — the `prepare_workspace` tool owns the worktree [^1] | set it in env if the tool reads it; otherwise configure the tool |
+
+**6 — Stop semantics vs long turns.** The broker's stop is **cooperative and settles the pass first**: the `.stop` file is checked between passes and while idle (re-check capped at ~1 s), and the loop then runs `await harness.waitForIdle(context)` before `EXIT` [^1]. So a stop mid-pass waits for the in-flight run — up to `DURIG_STREAM_TIMEOUT_MS` (600 s). Therefore:
+
+- **`stoptimeout` must be > 600 s + margin.** Use **900 s**. My round-2 "90 sec" was wrong and would have force-killed a live run → a stranded run.
+- **Two-phase stop:** Phase 1 = operator runs `durig serve --stop` → writes `.broker.stop` **and** `.broker.down` → broker drains → exits 0 → host sees `.down` → stays down. Phase 2 = only if the broker ignores it, `host.mjs` force-kills after `DRAIN_MS`. **Never let the SCM's timeout be what kills a live run.**
+- Keep the SCM stop for uninstall/maintenance only.
+
+**7 — PID reuse.** PIDs are aggressively reused on Windows [^25]; the canonical identity check is **process creation time** via `GetProcessTimes` → `FILETIME`, compared with `CompareFileTime` [^12] [^26] [^27]. Node cannot call `GetProcessTimes` directly. Practical, no-native-code answer: **use `pid` + heartbeat freshness as the identity proxy.** A recycled PID will not be refreshing *your* heartbeat file. Store a per-run `runToken` in `.broker.json` and require both a live pid and a heartbeat newer than `HEARTBEAT_TIMEOUT_MS`. That defeats reuse without creation times. (An exclusive lock file is **weak on Windows** — Node's `fs.open` has no share-mode control, so an open fd doesn't block deletion. Don't rely on it.)
+
+**8 — Monotonic clock under Modern Standby.** This is counterintuitive, so read carefully:
+
+- `performance.now()` on Windows is based on `process.hrtime()` → **QPC** [^5]. QPC is **monotonic (never goes backward)** [^4] **and it *includes* time in sleep/standby/hibernate/connected standby** [^4].
+- So `performance.now()` **does not exclude sleep** — it counts it. Switching `genlock` from `Date.now()` to `performance.now()` fixes the *clock-set* bug (NTP/DST/manual changes) but **does not fix** the *sleep-inflation* bug.
+- `Date.now()` is a real-time clock and can jump both ways [^5].
+- A suspend-*excluding* clock exists — `QueryUnbiasedInterruptTime`/`…Precise` [^4] — but **Node does not expose it**; the libuv monotonic-realtime clock (`uv_clock_gettime`) landed but is **still unused in Node** [^5]. The Node issue asking for suspend-adjusted `performance.now()` was **closed stale, unresolved** [^5].
+
+**Recommendation:** use `performance.now()` for all in-process durations/timeouts (strictly better than `Date.now()` — immune to clock changes), but treat sleep as a **discrete event**, not as elapsed time. A gap much larger than the check interval *is* a resume:
+
+```js
+const gap = performance.now() - lastCheckMono;
+if (gap > 5 * CHECK_INTERVAL_MS) { log(`RESUME gap=${gap}ms`); /* don't kill, don't steal */ }
+```
+
+This is clock-agnostic and needs no native code. Apply it in `host.mjs` (don't kill) and in `genlock.mjs` (don't steal). Note also: **`performance.now()`'s origin is per-process**, so it is *not* directly cross-process comparable — for cross-process ages use `os.uptime()` (boot-relative, shared) or wall time, and lean on PID liveness as the primary signal.
+
+**9 — Is a Windows Service warranted?** For a personal rig, often no. The decisive split is: **`host.mjs` is the supervisor either way; the service/task is only the boot trigger.** Recommendation:
+
+- **Default = a logon-triggered Task Scheduler task running `host.mjs`.** You keep the user profile, git creds, npm auth, and GPU/desktop access; the TUI can still run in-session. Costs: dies on logout, needs logon after reboot, "run whether logged on or not" runs **non-interactive** and can break network/mapped-drive access [^28] [^29].
+- **Service = opt-in for an always-on host.** Session 0 has no console/desktop; the TUI must be a remote client (see pitfall 7).
+- Neither is better for Modern Standby — Session 0 services are throttled/suspended during Modern Standby, and user-session threads are suspended by the Desktop Activity Moderator. Both need the resume handling from Q8.
+
+**10 — Uninstall / downgrade without the service fighting you.** Sequence:
+
+1. `durig serve --stop` → writes `.broker.stop` + `.broker.down`; broker drains and exits 0; host sees `.down` and does **not** restart.
+2. Stop the service (`winsw stop` / Servy stop) — now safe, because `.down` means nothing restarts.
+3. Uninstall the service (`winsw uninstall` / Servy uninstall) **or** set it to Disabled for a downgrade.
+4. Now `node cli.mjs serve` interactively works — the host refuses to spawn when `.broker.json` names a live pid, so there's no double-drive.
+5. **Do not forget to `clearDown` on the next `serve --start`/`up`,** or the service will refuse to start later.
+
+**Downgrade** = keep the service *disabled, not uninstalled*, and swap code + restart. Because the pinned upstream (`pi-durable`) and the code are on disk, the "downgrade" is a file swap plus a drain/restart.
+
+---
+
+## The seven pitfalls
+
+1. **SQLite on a network/OneDrive/synced path.** The store must be local disk. The installer should **refuse** a UNC path (`\\`), a non-fixed drive, or a path under `%OneDrive%`/`%Dropbox%`. Check drive type (`fsutil fsinfo drivetype`) and the `OneDrive` env var at install time.
+2. **Boot ordering.** The service starts before network/credentials; the first pass fails provider calls. Use **delayed auto-start** (`<delayedAutoStart>true</delayedAutoStart>`) and let backoff handle the rest — and **say so in the docs**, because a `WAKE`/provider error in the log at boot is expected, not a bug.
+3. **Multiple stores.** Two services, or one service parameterized per DB. The install must **not** hard-code `rig.sqlite`: derive the service name and `--db` from an argument (`durig install --db <path>`).
+4. **Upgrade under load.** WinSW/Servy run a fixed exe path, so a new pinned `pi-durable` or new code is only picked up on restart. Do a **drain + restart** and a **version handshake**: put `version` + `upstreamPin` in the heartbeat/ready frame and in the START line (diffs in §4). `status` should print the running version and refuse to claim health if it differs from the on-disk version.
+5. **Human visibility.** Add one line to `status`: `daemon: up pid=<n> since=<iso> pass=<n> hb_age=<ms> v=<ver>`. "Is the service alive" = heartbeat age < 60 s. `degraded` = alive but last `PASS` older than stream-timeout + margin. `down` = `.broker.down` present or heartbeat absent.
+6. **AV/Defender.** Defender scanning worktrees, `node_modules`, and the broker exe slows `npm ci` and can lock files mid-write. Add exclusions for the seat root, `node_modules`, the store dir, and the node/host executables. Also expect AV to delay service start — another reason for delayed auto-start.
+7. **Session 0 vs the TUI.** A service-hosted broker has no console, so the TUI **cannot** be in-process. That *forces* ROADMAP 52's shape: the in-process `viewState().subscribe()` path [^6] only works in foreground `run`/`serve`; **service mode requires the remote `watchEvents()` path, which is gated on the 55 security position** [^6]. So: **going service-first commits you to writing `security.sec` before the TUI can attach.** If you want the TUI now, run the logon-Task mode (Q9) and keep the in-process subscriber.
+
+---
+
+## Could not verify
+
+1. **`cli.mjs`** — where `cmdServe`/`cmdUp`/`cmdStop` and the detached spawn live. Diffs to it are specified by interface only.
+2. **Whether ROADMAP 54 is already merged** — the current `broker.mjs` matches its acceptance description [^1] [^6], but I have no git history.
+3. **WinSW `<delayedAutoStart>` element name** — inferred; confirm against the v3 docs.
+4. **Whether `child.kill("SIGKILL")` / a Job Object reliably reaps the full broker subtree** on your Windows build — verify empirically.
+5. **Servy's stop-timeout behavior** — a vendor issue reports a double-wait [^21]; test before trusting a 900 s drain.
+6. **Whether a service user account's profile is loaded by default** — labeled **[inferred]**; the explicit-env recipe is safe either way.
+7. **The exact SCM behavior for a WinSW-wrapped child that exits 0** — I confirmed the *flag semantics* [^14] [^10] but not WinSW's internal `SERVICE_STOPPED` reporting in every path. Test by killing the broker and watching whether the service restarts.
+
+**Bottom line:** rename the OS-level supervisor (`host.mjs`) so it stops colliding with the escalation `supervisor.mjs`; make it store-free and let it own single-instance, wedge-kill, backoff, give-up, and `.broker.down`; fix the two real bugs the source revealed (genlock's wall-clock age and its EPERM handling); set `stoptimeout` to 900 s, not 90; and remember that **`performance.now()` counts sleep on Windows** — so detect resume as a gap event rather than trusting any clock.
+
+**References**
+
+[^1]: [src/broker.mjs](https://github.com/chexxor/Pi-OpenDurig/blob/main/src/broker.mjs) (15%)
+[^2]: [src/genlock.mjs](https://github.com/chexxor/Pi-OpenDurig/blob/main/src/genlock.mjs) (15%)
+[^3]: [src/supervisor.mjs](https://github.com/chexxor/Pi-OpenDurig/blob/main/src/supervisor.mjs) (15%)
+[^4]: [Acquiring high-resolution time stamps - Win32 apps | Microsoft Learn](https://learn.microsoft.com/en-us/windows/win32/sysinfo/acquiring-high-resolution-time-stamps) (10%)
+[^5]: [performance.now() should jump after sleep/suspend/hibernation](https://github.com/nodejs/node/issues/47724) (8%)
+[^6]: [Pi-OpenDurig/docs/ROADMAP.md at main · chexxor/Pi-OpenDurig · GitHub](https://github.com/chexxor/Pi-OpenDurig/blob/main/docs/ROADMAP.md) (7%)
+[^7]: [Comparison with Alternatives · aelassas/servy Wiki · GitHub](https://github.com/aelassas/servy/wiki/Comparison-with-Alternatives) (5%)
+[^8]: [Process Management | winsw/winsw | DeepWiki](https://deepwiki.com/winsw/winsw/2.3-process-management) (4%)
+[^9]: [SERVICE_FAILURE_ACTIONSA (winsvc.h) - Win32 apps](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_failure_actionsa) (2%)
+[^10]: [Set up Recovery Actions to Take Place When a Service Fails](https://serverfault.com/questions/72318/set-up-recovery-actions-to-take-place-when-a-service-fails) (2%)
+[^11]: [Servy vs. NSSM vs. WinSW - DEV Community](https://dev.to/aelassas/servy-vs-nssm-vs-winsw-2k46) (2%)
+[^12]: [GetProcessTimes function (processthreadsapi.h)](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes) (2%)
+[^13]: [Error Stopping Service · Issue #1027 · winsw ...](https://github.com/winsw/winsw/issues/1027) (1%)
+[^14]: [[MS-SCMR]: SERVICE_FAILURE_ACTIONS_FLAG | Microsoft Learn](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-scmr/9b244e2e-82fc-4c54-8f4f-b19034faa2c4) (1%)
+[^15]: [Win32 Service Gotcha: Recovery Actions - Stephen Cleary](https://blog.stephencleary.com/2020/06/servicebase-gotcha-recovery-actions.html) (1%)
+[^16]: [Releases · winsw/winsw](https://github.com/winsw/winsw/releases) (1%)
+[^17]: [Home - Windows Service Wrapper - winsw.github.io](https://winsw.github.io/v3/) (1%)
+[^18]: [WinSW / NSSM / Shawl : creating a service with a dumb ...](https://www.reddit.com/r/sysadmin/comments/1k0g6wx/winsw_nssm_shawl_creating_a_service_with_a_dumb/) (1%)
+[^19]: [Health Monitoring & Recovery · aelassas/servy Wiki · GitHub](https://github.com/aelassas/servy/wiki/Health-Monitoring-&-Recovery) (1%)
+[^20]: [aelassas/servy: Enterprise-Grade Windows Service Wrapper](https://github.com/aelassas/servy) (1%)
+[^21]: [[Robustness] ProcessWrapper.cs — Stop(timeoutMs) uses the ... - GitHub](https://github.com/aelassas/servy/issues/1971) (1%)
+[^22]: [Log on as a service - Windows 10 | Microsoft Learn](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/log-on-as-a-service) (1%)
+[^23]: [Run a Windows Service with a Non-Admin User Account](https://poweradm.com/logon-as-windows-service-non-admin-user/) (1%)
+[^24]: [Granting ‘Logon as a service’ Rights via GPO or PowerShell](https://theitbros.com/configure-logon-as-a-service/) (1%)
+[^25]: [Consider moving away from pid-based process tracking ...](https://issues.chromium.org/issues/371219670) (1%)
+[^26]: [Win32API/libraries/kernel32/GetProcessTimes.md at master - GitHub](https://github.com/VFPX/Win32API/blob/master/libraries/kernel32/GetProcessTimes.md) (1%)
+[^27]: [How can I reliably check whether one Windows process is the parent of ...](https://stackoverflow.com/questions/6593003/how-can-i-reliably-check-whether-one-windows-process-is-the-parent-of-another-in) (1%)
+[^28]: [scheduler tasks with security options “Run whether user is logged on or ...](https://learn.microsoft.com/en-us/answers/questions/5789906/scheduler-tasks-with-security-options-run-whether) (1%)
+[^29]: [Task scheduler - does not work with the option 'Run whether user is ...](https://learn.microsoft.com/en-us/answers/questions/2188387/task-scheduler-does-not-work-with-the-option-run-w) (1%)
+
+
+-----------------
+
+## durig review of this round-3 reply (delegate, 2026-10-16)
+
+The agent read the four files this time (from the pushed repo) and the answer is substantially better.
+Adopted into **`docs/BROKER-SUPERVISION.md`** (now v2), roadmap items **61–67**, and **D71**:
+`src/host.mjs` replaces the earlier `brokerd.mjs`; `<db>.broker.down` replaces `.broker.stopped`; the
+stop/drain window is **900 s**, not 90; the OS default is a **logon Task** with a service opt-in;
+`performance.now()` **counts sleep** on Windows, so sleep is a resume-gap event, not a clock fix; PID
+identity uses a **`runToken` + fresh heartbeat** because Node cannot call `GetProcessTimes` and an open
+fd is not a Windows lock; and the SCM restart semantics are now documented, not inferred.
+
+**Corrections (re-verified against the local tree):**
+
+| Round-3 claim | Finding |
+| --- | --- |
+| “ROADMAP 54 appears already implemented” | **Wrong.** `drivePass` still `await`s the runs it woke (`await settleSignal.race(wokenIdle)`); the scoped wait is D65, not the wake-and-return item 54 asks for. Item 54 remains pending, and is still the sequencing predecessor for the heartbeat. |
+| §4 diff stamps `VERSION` into the START line | **No such constant exists.** It is a new value to add, not an existing one. |
+| genlock fix = add a `resumeGap` exemption | **Incomplete.** `src/genlock.mjs` steals a **live** holder at `age > STALE_MS` (60 s) though a slot is held for the whole response (up to 600 s), so the concurrency cap can be exceeded. A gap exemption only rescues >300 s, leaving the 60–300 s window broken; the fix is **lease renewal** (or `STALE_MS` > the stream timeout). Also `readGenerationSlots` uses pid-only staleness, disagreeing with the acquire path. |
+| `DURIG_STREAM_TIMEOUT_MS` default 600000 ms | **Nuance.** durig sets no default (`src/config.mjs` only passes it through); 600000 ms is the underlying openai provider's request timeout. Phrase it as “provider stream timeout”. |
+
+**Confirmed by the delegate:** `src/supervisor.mjs` is the escalation pass, not a process supervisor
+(new file needed); the stop file is `<db>.broker.stop`; `genlock.holderAlive` swallows `EPERM` while
+`brokerAlive` handles it; the genlock age is wall-clock; the broker audit log is already rich
+(`START`/`WAKE`/`PASS`/`INTENT`/`EXIT`); item 52's first step is socket-free and in-process; the
+`cli.mjs` commands are outside `broker.mjs`.
+
+**Round-4 questions for the research agent:** (1) does `os.uptime()` count Modern-Standby sleep
+(boot-relative), i.e. is it usable for cross-process lease ages, or must we fall back to wall + pid?
+(2) a concrete **lease-renewal** design (refresh cadence + a safe stale threshold) for `src/genlock.mjs`;
+(3) confirm the WinSW `<delayedAutoStart>` element name (it flagged this as inferred); (4) Servy's
+stop-timeout double-wait — fixed or still open?; (5) empirically, does `TerminateProcess` / the
+`KILL_ON_JOB_CLOSE` job reap the full broker subtree on our Windows build?; (6) confirm whether a
+service account's profile is loaded by default (the explicit-env recipe is safe either way).
+

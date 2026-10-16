@@ -1695,52 +1695,68 @@ failure: a broker `START` with no matching `EXIT` (`src/broker.mjs` lifecycle au
 three spooled operator intents idle indefinitely, because nothing supervises the broker process.
 Registered here, **not scheduled**; `pm` sequences them. **Sequencing: after item 54** (a heartbeat can
 only be trusted once the pass loop no longer parks on the slowest run). Item **65 is independent** and
-should not wait.
+should not wait. **Correction (delegate, round 3):** the research agent read the scoped settle-wait in
+`drivePass` (D65) and concluded item 54 was implemented; it is **not** — `drivePass` still
+`await`s the runs it woke (`await settleSignal.race(wokenIdle)`), so wake-and-return is still pending.
 
-61. **Exit-code taxonomy + a durable operator stop marker.** Give `serve` distinct exit codes
+61. **Exit-code taxonomy + a durable operator down marker.** Give `serve` distinct exit codes
     (0 intended stop / 1 crash / 2 wedge / 0 give-up) via `process.exitCode` (never `process.exit()` —
-    it truncates the piped JSON payload, the rule `check` already follows), and add `<db>.broker.stopped`
-    as a **durable** stop marker that survives a reboot. This is distinct from the existing ephemeral
+    it truncates the piped JSON payload, the rule `check` already follows), and add `<db>.broker.down`
+    as a **durable** down marker that survives a reboot. This is distinct from the existing ephemeral
     `<db>.broker.stop` request file (F35), which the broker clears on exit; do not give two files the
-    same semantics.
-    *Owner:* `impl` · *Where:* `cli.mjs` `cmdServe`, `src/broker.mjs`.
+    same semantics. Add the two-phase stop: `serve --stop` writes both files, the broker drains and
+    exits 0, the host sees `.down` and stays down; only the host force-kills after the drain window.
+    *Owner:* `impl` · *Where:* `cli.mjs` `cmdServe`/`cmdStop`/`cmdUp`, `src/broker.mjs`.
     *Acceptance:* a demo asserting each stop cause yields its code and marker; `serve --stop` is not
     restarted; `up`/`serve --start` clears the durable marker.
 
-62. **Liveness + progress heartbeats.** Write a heartbeat file the daemon can read without opening the
-    store: a liveness tick (~20 s / 60 s timeout) proving the event loop turns, and a progress counter
-    derived from `PASS <n>` with the threshold from `DURIG_STREAM_TIMEOUT_MS` (default 600000 ms). Use a
-    **monotonic** clock; a Modern Standby gap is a gap, not a failure.
+62. **Liveness + progress heartbeats.** Write a heartbeat file the host can read without opening the
+    store: a liveness tick (~20 s / 60 s timeout) proving the event loop turns, and the existing
+    `PASS <n>` as progress with the threshold from the provider stream timeout (`DURIG_STREAM_TIMEOUT_MS`;
+    600000 ms for the openai provider when unset). Carry `version` + upstream pin so `status` can refuse
+    to claim health when the running version differs from disk. **`performance.now()` counts sleep on
+    Windows** (QPC includes standby; Node exposes no suspend-excluding clock), so a monotonic clock does
+    not exclude sleep — detect resume as a large gap event (do not kill, do not steal), and use
+    `os.uptime()`/wall time for cross-process ages.
     *Owner:* `impl` · *Where:* `src/broker.mjs` `runWakeLoop`.
     *Acceptance:* a demo that blocks the loop and shows the liveness file going stale while `PASS`
-    stalls; a fake-clock test showing no spurious kill across a simulated sleep.
+    stalls; a fake-clock test showing a resume gap does not trigger a kill.
 
-63. **Thin daemon supervisor (`src/brokerd.mjs`).** A host process that owns single-instance, backoff,
-    give-up, reading the heartbeat, killing a wedged broker, and honoring the durable stop marker. It
+63. **Thin host supervisor (`src/host.mjs`).** A host process that owns single-instance, backoff,
+    give-up, reading the heartbeat, killing a wedged broker, and honoring the durable down marker. It
     **never opens the store** (pid + heartbeat + lease files only), so it cannot break single-writer.
-    Named `brokerd` because `src/supervisor.mjs` is already the escalation pass (ROADMAP 42/P3).
+    Named `src/host.mjs` (not `brokerd`), distinct from `src/supervisor.mjs`, the escalation pass
+    (ROADMAP 42/P3). It places the broker in the existing `KILL_ON_JOB_CLOSE` Job Object so a kill reaps
+    the tree.
     *Owner:* `impl` · *Consulted:* `lead`.
-    *Acceptance:* chaos demo — crash, hang, and stop-request each produce the right daemon action; the
-    daemon never opens the store.
+    *Acceptance:* chaos demo — crash, hang, and stop-request each produce the right host action; the host
+    never opens the store.
 
-64. **Windows Service packaging (one per store).** Host the daemon under a Windows Service with delayed
-    auto-start, log rotation, a stop timeout ≥ `DURIG_STREAM_TIMEOUT_MS`, and restart-on-nonzero with
-    backoff; parameterize the store path (`selfdev.sqlite`, `tutor-pi.sqlite`) and refuse a network /
-    OneDrive store path. Service account, git credentials, and per-worktree `npm ci` are the open
-    questions in `docs/BROKER-SUPERVISION.md` §8; **Windows Service vs logon Task is an operator
-    ruling.**
+64. **OS trigger packaging (one per store).** Default to a **logon-triggered Task** running
+    `src/host.mjs` (keeps the user profile, git/npm auth, desktop access); a **Windows Service is
+    opt-in** for an always-on host. Either way: delayed auto-start, log rotation, a stop/ drain window
+    **≥ 900 s** (> the 600 s stream timeout + margin), restart-on-nonzero with backoff, and a store path
+    parameter (`selfdev.sqlite`, `tutor-pi.sqlite`) that refuses a network/OneDrive/non-fixed-drive path.
+    Service mode removes the console, so the TUI must be a remote client (item 52's `watchEvents()` path,
+    gated on item 55). The service-account recipe (explicit `HOME`/`USERPROFILE`/`APPDATA`, git
+    `safe.directory` + store credentials, `NPM_CONFIG_USERCONFIG`) is in `docs/BROKER-SUPERVISION.md` §10.
     *Owner:* `devtools` · *Consulted:* `operator`, `impl`.
     *Acceptance:* install/uninstall on native Windows; survives logout and reboot; a documented way back
-    to an interactive `cli.mjs serve` with the service not fighting it.
+    to an interactive `cli.mjs serve` with the host not fighting it.
 
-65. **Correctness hardening: monotonic lease age + PID-reuse-safe liveness.** `src/genlock.mjs` ages a
-    lease on the wall clock (`Date.now()` vs a 60 s `STALE_MS`), so a sleep can make a live holder look
-    stale and be stolen (double-drive); `brokerAlive()` trusts `process.kill(pid, 0)`, so a reused pid
-    reads as alive. Move lease ages to a monotonic clock and assert process identity (creation time or
-    an exclusive lock handle). **Independent of the daemon** — a live single-writer hazard today.
+65. **Correctness hardening: the genlock lease and broker identity.** Three verified hazards, all
+    independent of any daemon: (a) `src/genlock.mjs` holds a slot for the whole response but steals when
+    `age > STALE_MS` (**60 s**, wall clock), so a legitimate 60–600 s generation can be stolen by
+    another process — the cap is exceeded; the fix is **lease renewal** (or `STALE_MS` > the stream
+    timeout), not just a resume-gap exemption; (b) `holderAlive` swallows `EPERM` and reports a live
+    but unsignalable holder as dead, while `brokerAlive()` handles it correctly — make them match; and
+    the operator view (`readGenerationSlots`, pid-only stale) disagrees with the acquire path on what
+    "stale" means; (c) `brokerAlive()` trusts `process.kill(pid, 0)`, and Windows pids are reused —
+    assert identity with a per-run `runToken` + a fresh heartbeat (Node cannot call `GetProcessTimes`,
+    and an open fd is not a Windows lock).
     *Owner:* `impl` · *Where:* `src/genlock.mjs`, `src/broker.mjs`.
-    *Acceptance:* failing-first demo for a simulated sleep that must NOT steal a live lease, and for a
-    reused pid that must NOT read as the recorded broker.
+    *Acceptance:* failing-first demos for a long live generation that must NOT be stolen, an EPERM
+    holder that must read as alive, and a reused pid that must NOT read as the recorded broker.
 
 66. **Idempotent intent drain + startup reconciliation sweep.** Give every inbox intent a `requestId` so
     re-draining the spool after a crash cannot double-submit; on broker start, reconcile the spool, the
@@ -1750,14 +1766,15 @@ should not wait.
     *Acceptance:* a demo that leaves a spool/lease/worktree artifact across a restart and shows one
     clean reconciliation.
 
-67. **Supervisor chaos suite.** Crash injection (`taskkill /F`), hang injection (`DURIG_FAULT=wedge`),
+67. **Host chaos suite.** Crash injection (`taskkill /F`), hang injection (`DURIG_FAULT=wedge`),
     restart-storm injection, a single-instance race, and resume-after-crash — all offline against the
     faux provider — plus a property asserting the `START`/`EXIT` invariant after every test.
     *Owner:* `qa` (author) with `impl` · *Where:* `demo/`.
     *Acceptance:* the suite fails against today's unsupervised broker and passes against the design.
 
 **Cross-links:** item **55** still gates any control socket (Option B / item **52**); item **52** gains a
-note that an attached client is a *client* of the daemon, never a second writer.
+note that an attached client is a *client* of the host, never a second writer — and that **service mode
+(Session 0) forces the remote gated path** while the logon-Task mode keeps the in-process subscriber.
 
 ## Explicitly deferred (with reasons)
 

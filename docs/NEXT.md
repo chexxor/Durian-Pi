@@ -116,13 +116,15 @@ _Historical (superseded): the #480-era notes below were written for the 2026-10-
   before any new trust boundary. An operator intent to `pm` to register/sequence item 60 is **spooled
   in `selfdev.sqlite.broker.inbox/`** (pending the next broker pass), alongside the two earlier pm
   intents.
-- **Broker supervision / daemon host (design recorded 2026-10-16; ROADMAP items 61–67; D71)** —
-  `docs/BROKER-SUPERVISION.md` is the design of record: an OS service hosting a thin daemon
-  (`src/brokerd.mjs`, never opens the store) that supervises the sole-writer broker, with an exit-code
-  taxonomy, a durable stop marker distinct from the existing `.broker.stop`, and liveness/progress
-  heartbeats. Sequenced **after item 54**; item 65 (monotonic lease age + PID-reuse-safe liveness) is a
-  live single-writer hazard and should land regardless. Windows Service vs logon Task is an operator
-  ruling. Registered, not scheduled — awaiting `pm` sequencing.
+- **Broker supervision / host daemon (design recorded 2026-10-16; refined after round 3; ROADMAP items
+  61–67; D71)** — `docs/BROKER-SUPERVISION.md` is the design of record: a logon Task (default) or
+  Windows Service (opt-in) hosting a thin **`src/host.mjs`** (never opens the store) that supervises the
+  sole-writer broker — exit-code taxonomy, a durable `<db>.broker.down` marker distinct from the existing
+  `.broker.stop`, liveness/progress heartbeats (sleep is a resume-gap, not a clock), and the Job Object.
+  Sequenced **after item 54** — and **item 54 is NOT done** (the scoped D65 wait still awaits the woken
+  runs; wake-and-return is pending). Item **65** is a live single-writer hazard (genlock age-steals a
+  live long generation, swallows `EPERM`, trusts reused pids) and should land regardless. Logon Task vs
+  Windows Service is an operator ruling. Registered, not scheduled — awaiting `pm` sequencing.
 - **Broker intent-inbox** — deliver intent to a seat WITHOUT stopping the broker (a file the broker
 drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guard, so routing needs a
 `serve --stop`, which interrupts in-flight work.

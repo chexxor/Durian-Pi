@@ -1707,27 +1707,41 @@ spooled operator intents idle indefinitely. pi-durable owns durability and `resu
 supervision. A durability guarantee is not a liveness guarantee.
 
 **Decision (design of record; mechanism open).** Supervision is a host process *around* the broker, in
-three layers: an OS service for boot/logout survival → a thin daemon (`src/brokerd.mjs`) that never
-opens the store and owns single-instance, backoff, give-up, heartbeat-watching, kill-on-wedge, and the
-stop handshake → the broker, still the sole writer. The contract: (a) an exit-code taxonomy (0 intended
-stop / 1 crash / 2 wedge / 0 give-up) set via `process.exitCode`, never `process.exit()`; (b) a durable
-operator intent marker `<db>.broker.stopped`, distinct from the ephemeral `<db>.broker.stop` (F35);
-(c) two monotonic-clock heartbeats — liveness (event loop) and progress (`PASS`) — with the progress
-threshold from `DURIG_STREAM_TIMEOUT_MS`; (d) the supervisor never opens the store. The daemon must not
-duplicate retries, scheduling, or resume — if it re-drives the queue, that is double-work.
+three layers: an OS trigger for boot/logout survival (logon Task by default; Windows Service opt-in) →
+a thin **host** (`src/host.mjs`) that never opens the store and owns single-instance, backoff, give-up,
+heartbeat-watching, kill-on-wedge, and the stop handshake → the broker, still the sole writer. The
+contract: (a) an exit-code taxonomy (0 intended stop / 1 crash / 2 wedge / 0 give-up) set via
+`process.exitCode`, never `process.exit()`; (b) a durable operator down marker `<db>.broker.down`,
+distinct from the ephemeral `<db>.broker.stop` (F35); (c) two heartbeats — liveness (event loop) and
+progress (`PASS`) — with the progress threshold from the provider stream timeout, and sleep treated as
+a resume-gap event (`performance.now()` counts sleep on Windows, so no clock excludes it); (d) the host
+never opens the store. The host must not duplicate retries, scheduling, or resume — if it re-drives the queue, that is double-work.
 
 **Rejected / corrected alternatives.** A self-supervising detached parent is the exact shape that
 already failed. A Worker-thread `process.exit()` self-kill is invalid: it stops the Worker, not the
 process (verified empirically), and a blocked main thread cannot receive the Worker's messages.
 Restart-on-exit alone would undo `serve --stop`, hence the exit-code + durable-marker split. A service
 stop timeout shorter than `DURIG_STREAM_TIMEOUT_MS` would force-kill a broker mid-run and strand the
-submission (F11).
+submission (F11). Round 3 corrected two more assumptions: a monotonic clock alone does not exclude sleep
+(`performance.now()` counts it on Windows), and a resume-gap exemption alone leaves a 60–300 s window in
+which a live long generation is still stolen (see below). Windows Service is not the default — a logon
+Task keeps the user profile and the in-process TUI; service mode (Session 0) forces item 52's remote,
+security-gated path.
+
+**Correctness hazards (round 3, verified in code).** `src/genlock.mjs` age-steals a **live** holder
+(`age > STALE_MS` = 60 s) although a slot is held for the whole response, up to the 600 s stream
+timeout → the concurrency cap can be exceeded; the fix is lease renewal (or `STALE_MS` > the stream
+timeout), not a gap exemption. `genlock.holderAlive` swallows `EPERM` and reports a live unsignalable
+holder dead, while `brokerAlive` handles it correctly. `brokerAlive` trusts `process.kill(pid, 0)` and
+Windows reuses pids → assert identity with a per-run `runToken` + fresh heartbeat (Node cannot call
+`GetProcessTimes`, and an open fd is not a Windows lock).
 
 **Not yet scheduled.** The full shape depends on item 54 (the pass loop must not park) for its heartbeat
-to be meaningful; item 65 (monotonic lease age + PID-reuse-safe `brokerAlive`) is a live single-writer
-hazard independent of the daemon and should land regardless. Windows Service vs logon Task remains an
-operator ruling, as does item 55 for any control socket.
+to be meaningful — **and item 54 is not done**: `drivePass` still awaits the runs it woke (the scoped
+D65 wait), so wake-and-return remains pending. Item 65 is a live single-writer hazard independent of
+the host and should land regardless. The OS trigger (logon Task vs Service) remains an operator ruling,
+as does item 55 for any control socket.
 
-**Status:** design recorded 2026-10-16 (delegate). Roadmap items 61–67. No code changed, no seat work
-done. References: `docs/BROKER-SUPERVISION.md`,
+**Status:** design recorded 2026-10-16 (delegate), refined after the round-3 research reply. Roadmap
+items 61–67. No code changed by the record itself. References: `docs/BROKER-SUPERVISION.md`,
 `docs/reviews/building-agent-systems-on-pi-research.md`.
