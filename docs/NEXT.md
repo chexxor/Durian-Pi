@@ -67,6 +67,21 @@ after a prior check showed no such doc exists); **#814 → impl** (runbook check
 81/82 land); **#817 → lead** (delegate-owned 87/88, deferred). Clean-path NEXT items 81/85/86 are therefore
 no longer "available now" — they are queued.
 
+**Recurring `impl` stall — malformed tool call emitted AS TEXT (root cause, 2026-10-16 evening).** impl
+stalled the same way twice: the turn ends with `stopReason:"stop"`, `hasToolCall:false`, and the tool
+call written into the CONTENT as `<parameter name="powershell">…` (entries `34844`, `34898`; earlier
+`34495`). The harness reads that as a normal completed turn — no rejected call, no error — so
+`countMalformedToolCalls` (`src/attention.mjs`, which matches only the harness marker
+`[error] Validation failed for tool "`) and the D64 degeneration guard never fire, and the
+`malformed-tool-call` metric stays 0 (its own documented blind spot). impl's model is
+`deepseek-ai/DeepSeek-V4.1-Flash` (deepinfra, `api: openai-completions`). Candidate fixes (**none
+verified as a cure**): (a) swap impl off DeepSeek-V4.1-Flash to GLM-5.3-Flash (operator ruling +
+`broker-safe-change`); (b) detect pseudo-call-as-text in `attention.mjs`/`degeneration.mjs` so the
+notice/guard fire; (c) auto re-drive a run whose final turn is a pseudo-call; (d) make
+`idle_with_queued_work` schedule a pass — the broker sat idle `20:14:13Z → 20:19:54Z` while impl was
+idle with queued work. Recovery used both times: spool a corrective steer via `intent.mjs` (latest
+`.spike/delegate/intent-impl-finish-700-v2.txt`); impl re-woke to finish #700 (commit `28c7ba5`).
+
 ## NEXT SESSION — START HERE
 
 **STATE.** Five clean-path items **DONE**: 54, 65, 66, 68, 73 (commits `58cbac2`, `6fae68d`+`559f967`,
