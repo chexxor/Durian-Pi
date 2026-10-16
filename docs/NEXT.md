@@ -11,22 +11,32 @@ _Last refreshed: 2026-10-15 (delegate handoff — #473 landed and verified, D51 
 
 ## NEXT SESSION — START HERE
 
-**Current item (in flight): broker running (pid 32976); round-4 delivered; #488 STEP 1 DONE (pin `4954d760`).**
-**#488 upstream sync STEP 1 is DONE** — `43dff54 chore(sync-pi): pin pi main 7d75a0e -> 4954d760`; `sync-pi`
-reports `drift: false` ("pin is upstream tip"). **#489 (impl drift fixes) is now UNGATED.**
-**Round-4 delivered** (pm): **#538→lead** backlog feature (work-item list view as an EXTENSION — the
-first-extension case for #505), **#539→lead** backlog research (competitor/prior-art survey: work-items↔tasks,
-external tracker vs built-in), **#540→scribe** doc the research-escalation practice (the delegate already
-recorded it in `docs/SELFDEV.md` "Research escalations"). **scribe** was reset earlier (F29) and has
-re-claimed #540 — it is healthy. `serve` pid **32976** (restarted `2026-10-15T20:51:20Z`).
+**Current item: #487 (impl) — clear the #188/#193 deferrals and re-sequence the interactive client.**
+**The interactive client is nearly landed:** U1 #480, U2 #481, U3 #482, U6 #485, U7 #486 are `done`;
+**U4 #483** and **U5 #484** are `claimed` by impl and in progress. So #487 is the top queued item in
+that series, followed by **#489** (upstream D10 STEP 2 drift fixes; UNGATED) and **#506** (dirty-tree
+worktree guard — it has been *biting live*). Queue id to start: **#487**. Live bookkeeping: **#572**
+(commit the DONE-but-uncommitted work), **#573** (dispose scratch/backup) — **#571 is MOOT**.
 
 Exact next commands:
 `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`,
-`… node cli.mjs log lead`; stop with `… node cli.mjs serve --stop`.
+`… node cli.mjs log impl`; stop with `… node cli.mjs serve --stop`.
 
-Known blockers: the **dirty-tree worktree guard bites live** (**#506**); those working-tree files are
-seats' in-progress work — **DO NOT discard**. Cooperative `serve --stop` can be slow (~13-min passes) but
-does exit.
+**State at this refresh (2026-10-16, delegate session):** resident broker **pid 35604**
+(restarted `2026-10-16T00:29:03Z`); store is single-writer. The delegate committed stranded work
+(#400 `3b429dc`, #402 `e937b31`, docs `5c300dc`, broker lifecycle audit `484a571`) and added the
+**degeneration guard** (`ae96445`): a seat whose run outgrows its turn/context bound or shows
+step-repetition/malformed tool calls is now auto-reset by the broker's supervise pass. `impl` was
+caught in an F29 loop and recovered: `stop impl` → cleared stale broker state → `reset impl <handoff>`
+→ broker restarted. **#571 is now moot** — the operator repaired `src/viewmodel.mjs:70` and impl
+removed its stray line; impl should verify and close #571, not re-repair.
+
+Known blockers: **#506** (the dirty-tree worktree guard bites live; the working-tree files are seats'
+in-progress work — **DO NOT discard**); cooperative `serve --stop` can take ~13-min passes but exits.
+**Docs owed:** a `docs/DECISIONS.md` entry for the degeneration guard and the broker lifecycle audit —
+DECISIONS.md is currently dirty with a seat's whole-file rewrite, so the delegate did not stage it.
+
+_Historical (superseded): the #480-era notes below were written for the 2026-10-15 handoff._
 
 **Earlier this session: `pi-rebase` recovery (C) re-verified COMPLETE — no action taken.**
 Evidence: `git diff --diff-filter=A main origin/pi-rebase -- . ':(exclude).spike'` is empty (no
