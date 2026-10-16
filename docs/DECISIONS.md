@@ -1626,3 +1626,24 @@ with a git-repo condition serves both the newcomer (no silent live-tree write) a
 **Status:** recorded as a recommendation, NOT yet adopted or implemented. The mechanism (the
 `prepare_workspace` tool, D66) is landed and currently advisory. The fail-closed gate plus the two
 conditions is the delegate-owned next item; the operator/lead ratifies the default.
+
+## D68 — The broker intent-inbox: deliver intent without stopping the broker (2026-10-16)
+
+**Decision:** a producer spools operator intent as one atomic JSON file in `<db>.broker.inbox/`; the
+broker drains the spool at the START of each pass and submits each intent as a real operator input to
+its target conversation. An undeliverable intent is dead-lettered to `<db>.broker.inbox.error/` with
+its reason, never retried forever. The producer (`intent.mjs`, a separate entrypoint like `ui.mjs`,
+D21) never opens the store. Each drain is logged `INTENT delivered=<n> dead=<n>`.
+
+**Why:** the resident broker is the single store writer, so a `send` (which opens its own harness)
+required `serve --stop` to deliver intent — interrupting in-flight runs (the delegate hit this
+consulting the `advocate`). The F35 stop file proved a file side-channel reaches a resident broker
+portably; the inbox generalizes it from "stop" to "tell". Draining before `harness.inspect` makes the
+new submission visible to the same pass, so the seat is not also submitted a fixed wake.
+
+**Status:** adopted; proof `demo/broker-inbox.test.mjs` (drain delivers + clears; unknown seat and
+unreadable file are dead-lettered; `runWakeLoop` drains through `drivePass`; the producer is pinned as
+not opening storage). The `cli.mjs send --async` alias is deferred until `cli.mjs` frees — it currently
+holds #624's in-flight `init` work, and entangling another item into the commit would be wrong.
+**Next:** this spool is the write substrate for the interactive TUI (`ui.mjs`): typing to a seat from
+the TUI writes an intent instead of opening the store, so the TUI stays a viewer.

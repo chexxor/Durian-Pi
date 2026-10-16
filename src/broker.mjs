@@ -13,7 +13,8 @@
 // trigger is an in-process commit subscription with none of the cross-process
 // gap D11 documented. Read-only viewers keep D11's poll/read-storage rule.
 
-import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync } from "node:fs";
+import { join, basename } from "node:path";
 
 import { RigQueue, Seats } from "./rig.mjs";
 import { driveOnce } from "./driver.mjs";
@@ -45,6 +46,116 @@ export async function readStoppedConvIds(probeStorage, seats, context) {
   return stopped;
 }
 
+/* ------------------------------ broker intent-inbox ------------------------------ */
+// F35's stop file proved a file beside the database is the portable way to reach a
+// resident broker. The inbox generalizes it: a producer writes ONE intent as a JSON
+// file, and the broker drains it on its next pass and submits it as a real operator
+// input to the target conversation. The producer never opens the store, so intent can
+// be delivered while the broker drives — no second writer, no `serve --stop`.
+
+export function intentInboxDir(dbPath) {
+  return `${dbPath}.broker.inbox`;
+}
+
+export function intentErrorDir(dbPath) {
+  return `${dbPath}.broker.inbox.error`;
+}
+
+/**
+ * Write one intent atomically (temp file + rename) so the broker can never read a
+ * half-written JSON document. Returns the final path. The name is time-ordered so
+ * `readIntentFiles` replays intent in the order it was produced.
+ */
+export function writeIntent(dbPath, intent) {
+  const dir = intentInboxDir(dbPath);
+  mkdirSync(dir, { recursive: true });
+  const name = `${String(Date.now()).padStart(16, "0")}-${process.pid}-${Math.random().toString(36).slice(2, 8)}.json`;
+  const tmp = join(dir, `.${name}.tmp`);
+  const final = join(dir, name);
+  writeFileSync(tmp, JSON.stringify(intent), "utf8");
+  renameSync(tmp, final);
+  return final;
+}
+
+/** Pending intent files, oldest first (the name is time-ordered). */
+export function readIntentFiles(dbPath) {
+  const dir = intentInboxDir(dbPath);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(".json"))
+    .sort()
+    .map((name) => join(dir, name));
+}
+
+/**
+ * Move an undeliverable intent out of the spool into the error dir with its reason, so
+ * a bad intent is surfaced once instead of being retried every pass forever.
+ */
+function deadLetterIntent(dbPath, file, reason) {
+  try {
+    const dir = intentErrorDir(dbPath);
+    mkdirSync(dir, { recursive: true });
+    const target = join(dir, `${basename(file).replace(/\.json$/, "")}.error.json`);
+    renameSync(file, target);
+    writeFileSync(`${target}.reason`, String(reason), "utf8");
+  } catch (err) {
+    console.error(`BROKER: could not dead-letter intent ${file}: ${err?.message ?? err}`);
+  }
+}
+
+/**
+ * Drain the inbox into the harness: submit each intent as an operator input to its
+ * target seat. Called at the START of a pass, before `harness.inspect`, so a drained
+ * intent shows up as a pending submission in the same pass and the seat is not
+ * double-woken. An unknown seat or a failed submit is dead-lettered, never retried
+ * forever. Returns `{ delivered, deadLettered }`.
+ */
+export async function drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic } = {}) {
+  if (!dbPath) return { delivered: 0, deadLettered: 0 };
+  const files = readIntentFiles(dbPath);
+  if (files.length === 0) return { delivered: 0, deadLettered: 0 };
+  const seatsDoc = await harness.documentState(Seats, undefined, context);
+  const seats = seatsDoc?.value?.seats ?? {};
+  let delivered = 0;
+  let deadLettered = 0;
+  for (const file of files) {
+    let intent;
+    try {
+      intent = JSON.parse(readFileSync(file, "utf8"));
+    } catch (err) {
+      deadLetterIntent(dbPath, file, `unreadable intent: ${err?.message ?? err}`);
+      deadLettered += 1;
+      continue;
+    }
+    const seat = seats[intent.to];
+    if (!seat) {
+      deadLetterIntent(dbPath, file, `unknown seat: ${intent.to}`);
+      onDiagnostic?.({ kind: "intent-undeliverable", seat: intent.to, reason: "unknown seat" });
+      deadLettered += 1;
+      continue;
+    }
+    try {
+      const conv = await harness.conversation(seat.conversationId, context);
+      if (!conv) throw new Error(`no conversation for seat ${intent.to}`);
+      await conv.submit(
+        {
+          type: "input",
+          content: String(intent.content ?? ""),
+          ...(intent.requestId ? { requestId: intent.requestId } : {}),
+        },
+        context,
+      );
+      unlinkSync(file);
+      delivered += 1;
+    } catch (err) {
+      deadLetterIntent(dbPath, file, `submit failed: ${err?.message ?? err}`);
+      onDiagnostic?.({ kind: "intent-undeliverable", seat: intent.to, reason: String(err?.message ?? err) });
+      deadLettered += 1;
+    }
+  }
+  return { delivered, deadLettered };
+}
+
 /**
  * Run one wake pass and hold the harness open until every run it started has
  * settled — closing earlier abandons the run (the F11 class).
@@ -60,8 +171,16 @@ export async function drivePass(
   harness,
   probeStorage,
   { context, seatFilter, readBusySeats, onError, onWoke, currentSeat: initialSeat,
-    settleSignal } = {},
+    settleSignal, dbPath, onDiagnostic } = {},
 ) {
+  // Deliver any spooled operator intent FIRST, so the submission it creates is visible
+  // to this pass's `inspect` and the seat is not also submitted a fixed wake.
+  if (dbPath) {
+    const drained = await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic });
+    if (drained.delivered > 0 || drained.deadLettered > 0) {
+      logBrokerLine(dbPath, `INTENT delivered=${drained.delivered} dead=${drained.deadLettered}`);
+    }
+  }
   const seatsDoc = await harness.documentState(Seats, undefined, context);
   const queueDoc = await harness.documentState(RigQueue, undefined, context);
   const inspection = await harness.inspect(context);
@@ -213,6 +332,8 @@ export async function runWakeLoop({
         seatFilter: scheduler.seatFilter(now()),
         readBusySeats,
         settleSignal: signal,
+        dbPath,
+        onDiagnostic,
         onError: (failure) => {
           failedSeats.add(failure.name);
           onDiagnostic({ kind: "wake-failed", ...failure });

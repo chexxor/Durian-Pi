@@ -27,6 +27,8 @@ pm-*.err
 *.sqlite-shm.bak-*
 *.sqlite.broker.log
 *.sqlite.broker.json
+*.sqlite.broker.inbox/
+*.sqlite.broker.inbox.error/
 *.sqlite.genlock.*
 # Per-item seat worktrees (`prepare_workspace` puts them at <root>/item-<id>`).
 # They are disposable checkouts whose work is committed to a branch, so they must

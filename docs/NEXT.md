@@ -11,24 +11,24 @@ _Last refreshed: 2026-10-16 (delegate session — broker-liveness (#D65) and the
 
 ## NEXT SESSION — START HERE
 
-**Current item: #624 (impl, `init`) and #662 (TUI close-out) run alongside the delegate-owned broker
-INTENT-INBOX.** The intent-inbox delivers intent to a seat WITHOUT stopping the broker: today a `send`
-is a second store writer, so routing while the broker drives needs `serve --stop`, which interrupts
-in-flight runs (the delegate hit this consulting the advocate). The fix is a file spool the broker
-drains each pass, sibling to `.broker.stop`.
-**Blocker:** `cli.mjs` holds #624's in-flight `init` work, so the producer cannot be a `cli.mjs` verb
-without entangling that item — the surface is a separate `intent.mjs` entrypoint (like `ui.mjs`, D21)
-plus `npm run intent`, with a `cli.mjs send --async` alias after #624 lands.
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`, then restart the broker with
-`DURIG_DB=./selfdev.sqlite node cli.mjs serve` once no writer is in flight.
+**Current item: TUI INTERACTIVITY — Enter opens the selected seat's conversation stream in a rich
+view, and the operator types a message straight to that seat (delegate-owned).** The **intent-inbox
+(D68)** just landed is the write substrate: the TUI writes an intent with `writeIntent` instead of
+opening the store, so it stays a viewer while the broker delivers. Queue work #624 (impl, `init`)
+and #662 (TUI close-out) run alongside.
+**Blocker:** `ui.mjs`/`driver.mjs` have no input line or focus modes yet, and the screen-model
+conflict (D61 main-screen vs `ui.mjs` alt-screen) is #667 and must be settled for a rich transcript
+view. **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`, then restart the broker
+with `DURIG_DB=./selfdev.sqlite node cli.mjs serve` once no writer is in flight.
 
 **Just landed (this delegate session):** D65 broker-liveness (`b81e171`), D66 `prepare_workspace`
-(`ca65e00`), D67 (advocate's SA-13 default recommendation), and TUI improvements (`1127960`: real
-arrow-key nav, honest footer, working color + reverse-video selection). The open **workspace-gate**
-follow-up remains: fail-closed isolation with the **verifier-artifact path first** (D67 condition 1);
-isolation is currently ADVISORY. **Next real candidates:** the workspace gate, the worktree-leak defect
-(leaked `item-1/`,`item-2/` dirs; now gitignored), #491 (designer's 5 UX follow-ups), and the
-still-unqueued turn-kind indicator.
+(`ca65e00`), D67 (advocate's SA-13 default recommendation), TUI improvements (`1127960`: real
+arrow-key nav, honest footer, working color + reverse-video selection), and the **broker intent-inbox
+(D68)** — `intent.mjs` spools, the broker drains. The open **workspace-gate** follow-up remains:
+fail-closed isolation with the **verifier-artifact path first** (D67 condition 1); isolation is
+currently ADVISORY. **Next real candidates:** the workspace gate, the worktree-leak defect (leaked
+`item-1/`,`item-2/` dirs; now gitignored), #491 (designer's 5 UX follow-ups), and the still-unqueued
+turn-kind indicator.
 
 **State at this refresh (2026-10-16, delegate session):** the resident broker ran as **pid 33116**
 (`04:20Z`) with the D65 liveness fix and was healthy; the delegate stopped/restarted it around the

@@ -8,7 +8,8 @@
   "scripts": {
     "demo": "node demo/offline.mjs",
     "cli": "node cli.mjs",
-    "ui": "node ui.mjs"
+    "ui": "node ui.mjs",
+    "intent": "node intent.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "^1.0.0",
