@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate session, second pass — broker restarted detached as pid 17692 after fixing the F12 seat-root conflict, fixed by starting without `DURIG_SEAT_ROOT`; the durig-daemon intent was delivered to `pm` through the broker inbox together with the three earlier spooled intents (ownership 45–50, doc-site 59, zero-trust 60), **before** the #662/#710 gate was met, on the operator's direct instruction). Next agent: read **NEXT SESSION**; the later sections are historical._
+_Last refreshed: 2026-10-16 (delegate session, third pass — routed the daemon intent to `pm`; then recovered from a self-inflicted incident: a concurrent `resume` crashed the broker and corrupted two `pi.live` run-control docs, wedging every write-side open. Store repaired and broker restarted as pid 22724. One residual defect remains (qa/lead submissions stuck `placed` over a terminal task). See **NEXT SESSION**). Next agent: read **NEXT SESSION**; the later sections are historical._
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
@@ -11,45 +11,53 @@ _Last refreshed: 2026-10-16 (delegate session, second pass — broker restarted 
 
 ## NEXT SESSION — START HERE
 
-**Current item: the durig daemon host, routed to the team (option A).** The broker is **running
-detached** (`pid 17692`, `START` at `2026-10-16T17:01:19Z`) and its first pass delivered **all four
-spooled operator intents** to `pm` (`INTENT delivered=4 dead=0`): agent-ownership items 45–50, the
-doc-site item 59, the zero-trust item 60, and the **daemon intent** (ROADMAP items 61–67). `pm` now
-owns registration and sequencing; the daemon order to record is **61 → 62 → 63 → 64** (64 depends on
-63), with **65 (genlock live-holder steal / EPERM / PID reuse) independent** and not waiting. Design of
-record: `docs/BROKER-SUPERVISION.md`; decisions **D71** + **D72**. Intent body (kept on disk):
-`.spike/delegate/durig-daemon-intent.txt`.
+**Current item: the durig daemon host, routed to the team (option A).** The broker is **running**
+(`pid 22724`, `START` 2026-10-16T17:18:57Z) after the incident below. All four operator intents were
+delivered to `pm` (`INTENT delivered=4 dead=0`): agent-ownership 45–50, doc-site 59, zero-trust 60, and
+the **daemon intent** (ROADMAP 61–67). `pm` owns registration/sequencing; the order is **61 → 62 → 63 →
+64** (64 depends on 63), **65 independent**. Design of record: `docs/BROKER-SUPERVISION.md`; **D71** +
+**D72**. `pm` registered the rows (#723–#728) and the sequencing note (#730).
 
-**Deviation from the prior plan (operator-directed):** the daemon intent was delivered **before**
-#662/#710 finished, contrary to the previous "after the drain" gate. The operator asked to work on the
-daemon now; the intent body itself still tells `pm` to sequence behind current work, so nothing was
-preempted. The two gate items remain queued to `impl` (below).
+**INCIDENT (2026-10-16, delegate) — a second writer crashed the broker and corrupted two run-control
+docs.** 🚨 Do **not** run `resume`/`doctor` (or any write verb) while the broker is running: they are
+write-side and **ignore `--help`** (they execute!). `node cli.mjs resume --help` against the live broker
+was a second writer; it crashed the broker (`Task 30658 is already terminal` in `serve.err`) and left
+the `pi.live` documents for qa (doc 16) and lead (doc 22) corrupt (`unresolvable path:
+["generation","message","content",0]` — a mid-stream `generation` reset orphaned later appends). That
+wedged **every** write-side open: the F12 guard reads each seat's persisted cwd and one bad read kills
+the pi-durable session (`SessionFailed`), so `serve`/`run`/`send` all died.
+**Recovery (all under `.spike/`, gitignored — no repo code changed):** backed up the store
+(`.spike/delegate/store-backup-20261016-121820/`); killed 11 stale 1–2-day-old `log --follow`/`watch`
+viewers; reset docs 16/22 to the clean empty-base state (`.spike/delegate/repair-live.mjs`, 69+52
+deltas dropped); verified all 10 `pi.live` materialize and all 9 seat agents read in one session; ran
+`resume`; restarted the broker. **If it recurs, restore the backup or re-run `repair-live.mjs`.**
 
-**Seat-root fix — do not repeat this trap:** the first broker start (`dispatch-serve.ps1`) failed the
-F12 guard because `impl`'s persisted cwd is its per-item worktree `item-658` (its claimed #658) while
-`DURIG_SEAT_ROOT` named the repo root. A seat's own prepared cwd wins (`src/seattools.mjs`
-`makeSeatEnv`), so a single global `DURIG_SEAT_ROOT` conflicts with the per-item worktree model. Start
-the selfdev broker **without `DURIG_SEAT_ROOT`** (`.spike/delegate/dispatch-serve-noroot.ps1`); seats
-without a prepared tree fall back to `process.cwd()` (the repo root).
+**RESIDUAL DEFECT (open; needs a code fix, not store surgery):** qa (conv 15 #30661) and lead (conv 21
+#30674) have a submission **stuck `placed` while its run task is already `terminal`** — a finished run
+that never settled its submission. `resume` reports `run-cancelled` but does not settle it, so
+`selectWakes` skips those conversations forever (`admitted_not_started` persists). Fix candidate: on
+start / in `resume`, settle any `placed`/`queued` submission whose task is terminal (folds into ROADMAP
+37(b) / item 66). qa owning the chaos suite (#727) is therefore not yet running.
+
+**Seat-root trap (do not repeat):** start the selfdev broker **without `DURIG_SEAT_ROOT`** — a seat's
+own prepared cwd wins (`src/seattools.mjs` `makeSeatEnv`), so a single global root conflicts with the
+per-item worktree model and trips the F12 guard. Use `.spike/delegate/dispatch-serve-noroot.ps1`.
 
 **Do not poll** the running broker — the operator notifies the delegate when runs complete.
 
-**Still queued to `impl`:** #662 (TUI C4 close-out — 48-col golden + lifecycle cleanup), #710
-(`src/tui/driver.mjs:13` comment fix), and #660/#663/#665/#673/#674/#676/#696/#700/#702/#705; #658 is
-`claimed`. These now sit behind the daemon intent's sequencing note.
+**Active queue:** current — claimed #658 (impl) and #727 (qa); queued #660/#662/#663/#665/#673/#674/
+#676/#696/#700/#702/#705/#710/#713–#715/#718/#719/#723–#725/#728. All ancient rows (#60–#172) remain
+`deferred` (parked on questions, not claimable). After the restart, pm/impl/advocate/scribe were woken
+and progressing (advocate generating; impl working `demo/tui-client.test.mjs`).
 
-**Open, unchanged:** ROADMAP **item 54** (`drivePass` wake-and-return) is **still not done** — the
-scoped D65 wait remains; item 65 is a live single-writer hazard; items 66/67 are inbox idempotency +
-startup reconciliation (the leaked `item-635/636/638` worktrees are the observed case).
+**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; broker log is
+`selfdev.sqlite.broker.log`. Restart a down broker with `.spike/delegate/dispatch-serve-noroot.ps1`
+(never set `DURIG_SEAT_ROOT`) once no writer is in flight.
 
-**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; the broker log is
-`selfdev.sqlite.broker.log`. If the broker is down, restart with
-`.spike/delegate/dispatch-serve-noroot.ps1` (never set `DURIG_SEAT_ROOT`) once no writer is in flight.
-
-**Delegate clock-out this session (2026-10-16, second pass):** operational, no code. Restarted the
-broker with the seat-root fix and routed the daemon intent to `pm` via the broker inbox. Tree held
-other items' files (`cli.mjs`, `docs/DECISIONS.md`, `docs/FEATURES.md`, `docs/STATUS.md`,
-`demo/init.test.mjs`) — untouched. No push.
+**Delegate clock-out this session (2026-10-16, second pass):** operational + incident recovery, no repo
+code changed (the `.spike/` repair scripts are gitignored). Committed only `docs/NEXT.md`. Tree still
+holds other items' files (`cli.mjs`, `docs/DECISIONS.md`, `docs/FEATURES.md`, `docs/STATUS.md`,
+`docs/WORKFLOWS.md`, `demo/init.test.mjs`) — untouched. No push.
 
 **Queue work running alongside:** **#662** (TUI C4 close-out — 48-col golden + lifecycle cleanup,
 queued to `impl`) and **#710** (the `src/tui/driver.mjs` comment fix, queued to `impl`). ROADMAP item
