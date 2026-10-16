@@ -1698,3 +1698,36 @@ or gains the type-to-seat input line (D68/#624), for which **bracketed paste (DE
 prerequisite**. Bounded-page finding: `readRigHealth` reads 24 entries per seat (`SCAN_LIMIT`,
 `src/rigstory.mjs:12`), so the research's "transcript length is the scaling cliff" is overstated for
 the current code — the real limit is that the conversation scroll window is capped to that page.
+
+## D71 — The broker is supervised by a host daemon with a stop/liveness contract (2026-10-16)
+
+**Why.** The broker is the one process that drives the queue. It is spawned detached and forgotten, so
+an abnormal death (`START` with no `EXIT`, `src/broker.mjs` lifecycle audit) left queued work and three
+spooled operator intents idle indefinitely. pi-durable owns durability and `resume()`; it does not own
+supervision. A durability guarantee is not a liveness guarantee.
+
+**Decision (design of record; mechanism open).** Supervision is a host process *around* the broker, in
+three layers: an OS service for boot/logout survival → a thin daemon (`src/brokerd.mjs`) that never
+opens the store and owns single-instance, backoff, give-up, heartbeat-watching, kill-on-wedge, and the
+stop handshake → the broker, still the sole writer. The contract: (a) an exit-code taxonomy (0 intended
+stop / 1 crash / 2 wedge / 0 give-up) set via `process.exitCode`, never `process.exit()`; (b) a durable
+operator intent marker `<db>.broker.stopped`, distinct from the ephemeral `<db>.broker.stop` (F35);
+(c) two monotonic-clock heartbeats — liveness (event loop) and progress (`PASS`) — with the progress
+threshold from `DURIG_STREAM_TIMEOUT_MS`; (d) the supervisor never opens the store. The daemon must not
+duplicate retries, scheduling, or resume — if it re-drives the queue, that is double-work.
+
+**Rejected / corrected alternatives.** A self-supervising detached parent is the exact shape that
+already failed. A Worker-thread `process.exit()` self-kill is invalid: it stops the Worker, not the
+process (verified empirically), and a blocked main thread cannot receive the Worker's messages.
+Restart-on-exit alone would undo `serve --stop`, hence the exit-code + durable-marker split. A service
+stop timeout shorter than `DURIG_STREAM_TIMEOUT_MS` would force-kill a broker mid-run and strand the
+submission (F11).
+
+**Not yet scheduled.** The full shape depends on item 54 (the pass loop must not park) for its heartbeat
+to be meaningful; item 65 (monotonic lease age + PID-reuse-safe `brokerAlive`) is a live single-writer
+hazard independent of the daemon and should land regardless. Windows Service vs logon Task remains an
+operator ruling, as does item 55 for any control socket.
+
+**Status:** design recorded 2026-10-16 (delegate). Roadmap items 61–67. No code changed, no seat work
+done. References: `docs/BROKER-SUPERVISION.md`,
+`docs/reviews/building-agent-systems-on-pi-research.md`.

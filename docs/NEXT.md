@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate session, paused — TUI hardening H1–H4 done, H7 Tier 1/2, B1/H5 type-to-seat + bracketed paste; broker park diagnosed; pi-durable alignment review landed and folded into the roadmap as items 51–58; doc-site item 59 queued). Next agent: read **NEXT SESSION**; the later sections are historical._
+_Last refreshed: 2026-10-16 (delegate session, paused — TUI hardening H1–H4 done, H7 Tier 1/2, B1/H5 type-to-seat + bracketed paste; broker park diagnosed; pi-durable alignment review landed and folded into the roadmap as items 51–58; doc-site item 59 queued; broker-supervision design recorded — `docs/BROKER-SUPERVISION.md`, roadmap items 61–67, D71). Next agent: read **NEXT SESSION**; the later sections are historical._
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
@@ -116,6 +116,13 @@ _Historical (superseded): the #480-era notes below were written for the 2026-10-
   before any new trust boundary. An operator intent to `pm` to register/sequence item 60 is **spooled
   in `selfdev.sqlite.broker.inbox/`** (pending the next broker pass), alongside the two earlier pm
   intents.
+- **Broker supervision / daemon host (design recorded 2026-10-16; ROADMAP items 61–67; D71)** —
+  `docs/BROKER-SUPERVISION.md` is the design of record: an OS service hosting a thin daemon
+  (`src/brokerd.mjs`, never opens the store) that supervises the sole-writer broker, with an exit-code
+  taxonomy, a durable stop marker distinct from the existing `.broker.stop`, and liveness/progress
+  heartbeats. Sequenced **after item 54**; item 65 (monotonic lease age + PID-reuse-safe liveness) is a
+  live single-writer hazard and should land regardless. Windows Service vs logon Task is an operator
+  ruling. Registered, not scheduled — awaiting `pm` sequencing.
 - **Broker intent-inbox** — deliver intent to a seat WITHOUT stopping the broker (a file the broker
 drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guard, so routing needs a
 `serve --stop`, which interrupts in-flight work.

@@ -6,6 +6,8 @@
 **Companion:** `docs/PI-DURABLE-INTEGRATION.md` — the concrete mapping of durig onto pi-durable's
 own mechanisms (what the harness owns, what durig adds, the pin), written for durig maintainers and for
 pi-durable's.
+**Companion:** `docs/BROKER-SUPERVISION.md` — the process-lifecycle layer this document leaves out: how
+the broker is kept alive and healthy by a host daemon (stop/liveness contract, exit codes, heartbeats).
 
 ## The model in one paragraph
 
@@ -119,9 +121,26 @@ See `docs/TUI-IMPLEMENTATION-PLAN.md` for the surface work; the broker fix is tr
 - **No crash-only design.** Erlang's "let it crash" restarts a fresh process; durig must preserve the
   conversation and the claimed item across a reset.
 
+## Process lifecycle: who supervises the broker
+
+This document describes the broker's *in-process* model. The **process** model — who keeps the broker
+running across a crash, a hang, a reboot, or a sleep — is `docs/BROKER-SUPERVISION.md`. The short
+version: durig's broker is a detached child that nothing restarts, which is why one abnormal death
+(`START` with no `EXIT`) left the queue idle indefinitely. The design of record adds a host daemon that
+never opens the store, a liveness/progress heartbeat, a durable stop marker distinct from the existing
+`.broker.stop` request file, and an exit-code taxonomy so an intended stop is not restarted. The
+in-process invariant is unchanged: **the broker is the sole writer, and the daemon must never become a
+second one.**
+
 ## Glossary
 
 - **Pass** — one scheduler tick: drain intent, inspect, select wakes, submit, supervise.
+- **Daemon / brokerd** — the host process that supervises the broker (`docs/BROKER-SUPERVISION.md`);
+  distinct from `src/supervisor.mjs`, the in-process escalation pass.
+- **Heartbeat** — a file the broker rewrites to prove its event loop is turning (liveness) and its pass
+  counter is advancing (progress); the daemon's hang detector.
+- **Durable stop marker** — `<db>.broker.stopped`, operator intent that survives a reboot; distinct from
+  the ephemeral `<db>.broker.stop` request file the broker polls.
 - **Wake** — a submitted input that tells a seat to act.
 - **Slot / genlock** — a cross-process lease that bounds concurrent generations.
 - **Intent inbox** — a file spool (`<db>.broker.inbox/`) the broker drains at the start of a pass, so
