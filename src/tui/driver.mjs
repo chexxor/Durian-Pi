@@ -43,10 +43,14 @@ const ERR_FRAME_MAX = 120;
  * @param {(reason: "quit") => void} [io.onExit] — invoked once per quit request.
  * @param {(delta: -1|1) => void} [io.onNavigate] — up/down request; the ENTRYPOINT owns the
  *   selected seat (it also owns readState), so the driver stays a pure key/tick machine.
+ * @param {() => void} [io.onEnter] — Enter request (open the selected seat's conversation).
+ * @param {(() => void)|null} [io.onBack] — Esc request. When provided, ESC is "back" (the
+ *   entrypoint decides whether that leaves a view or quits); when absent, ESC quits, so a
+ *   caller that does not implement modes keeps the original behavior.
  * @param {number} [io.pollMs] — poll interval (default 700).
  * @param {boolean} [io.color] — pass-through to renderTui (NO_COLOR respected by caller).
  */
-export function createUiDriver({ getSize, readState, paint, onExit = () => {}, onNavigate = () => {}, pollMs = DEFAULT_POLL_MS, color = false }) {
+export function createUiDriver({ getSize, readState, paint, onExit = () => {}, onNavigate = () => {}, onEnter = () => {}, onBack = null, pollMs = DEFAULT_POLL_MS, color = false }) {
 	let timer = null;
 	let running = false; // a tick is in flight
 	let stopped = false; // cleanup happened
@@ -64,8 +68,8 @@ export function createUiDriver({ getSize, readState, paint, onExit = () => {}, o
 		try {
 			const state = await readState();
 			if (stopped) return;
-			const { width } = getSize();
-			const frame = renderTui({ ...state, width, color: Boolean(color) });
+			const { width, height } = getSize();
+			const frame = renderTui({ ...state, width, height, color: Boolean(color) });
 			paint({ kind: "frame", lines: frame.lines, width });
 		} catch (err) {
 			// A failed poll must not kill the session: report inside the frame area on
@@ -97,16 +101,32 @@ export function createUiDriver({ getSize, readState, paint, onExit = () => {}, o
 		}, pollMs);
 	}
 
+	/** Stop the poll loop and report the quit once. */
+	function requestQuit() {
+		if (!stopped) stopped = true;
+		if (timer) {
+			clearTimeout(timer);
+			timer = null;
+		}
+		onExit("quit");
+	}
+
 	/** Map one decoded key to driver behaviour. Returns true when handled. */
 	function handleKey(key) {
 		if (stopped) return false;
-		if (key === "q" || key === "\x1b" || key === "\x03") {
-			if (!stopped) stopped = true;
-			if (timer) {
-				clearTimeout(timer);
-				timer = null;
+		if (key === "q" || key === "\x03") {
+			requestQuit();
+			return true;
+		}
+		if (key === "\x1b") {
+			// Enter/back is the entrypoint's call: in the seat list ESC quits, in the
+			// conversation view it returns to the list. A driver with no onBack keeps
+			// the original ESC=quit behavior.
+			if (onBack) {
+				onBack();
+				return true;
 			}
-			onExit("quit");
+			requestQuit();
 			return true;
 		}
 		if (key === "r") {
@@ -115,6 +135,10 @@ export function createUiDriver({ getSize, readState, paint, onExit = () => {}, o
 		}
 		if (key === "up" || key === "down") {
 			onNavigate(key === "up" ? -1 : 1);
+			return true;
+		}
+		if (key === "enter") {
+			onEnter();
 			return true;
 		}
 		return false; // read-only TUI: unknown keys are consumed silently
@@ -168,6 +192,7 @@ export function decodeKeys(chunk) {
 		else if (ch === "r") keys.push("r");
 		else if (ch === "j") keys.push("down");
 		else if (ch === "k") keys.push("up");
+		else if (ch === "\r" || ch === "\n") keys.push("enter");
 	}
 	return keys;
 }

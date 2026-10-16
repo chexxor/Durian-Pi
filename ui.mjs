@@ -37,9 +37,11 @@ usage:
   node ui.mjs [--help]
 
 keys:
-  q / Esc / Ctrl+C   quit (terminal is always restored)
+  q / Ctrl+C         quit (terminal is always restored)
   r                  repaint now
-  ↑ / ↓ or k / j     select the seat whose transcript is shown
+  ↑ / ↓ or k / j     seat list: select a seat; conversation: scroll the transcript
+  Enter              open the selected seat's conversation stream
+  Esc                back to the seat list (press again to quit)
 
 environment:
   DURIG_DB, durig.config.json   which database to watch (same as watch/status)
@@ -79,10 +81,10 @@ async function makeReadState(storage, ui) {
       }
     }
     // The selected seat drives the transcript. Until the operator navigates,
-    // auto-follow the first streaming seat; once they press a nav key, their
-    // choice sticks (README: r does not steal focus back).
+    // auto-follow the first streaming seat; once they press a nav key — or open a
+    // seat's conversation — their choice sticks (r does not steal focus back).
     ui.seatCount = health.seats.length;
-    if (!ui.navigated && streamingSeat !== null) {
+    if (!ui.navigated && ui.mode === "seats" && streamingSeat !== null) {
       const idx = health.seats.findIndex((s) => s.name === streamingSeat);
       if (idx >= 0) ui.selectedIndex = idx;
     }
@@ -92,6 +94,9 @@ async function makeReadState(storage, ui) {
     if (liveBySeat[focusSeat]?.conversationId !== undefined && health._pages?.[focusSeat]) {
       turns = buildTurns(health._pages[focusSeat]);
     }
+    // Clamp the conversation scroll to the turns actually held, so holding ↑ cannot
+    // scroll into empty space forever.
+    ui.scroll = Math.max(0, Math.min(ui.scroll, Math.max(0, turns.length - 1)));
     return {
       seats: health.seats,
       turns,
@@ -100,6 +105,8 @@ async function makeReadState(storage, ui) {
       health,
       queueItems,
       selectedSeat: ui.seatCount > 0 ? focusSeat : null,
+      view: ui.mode,
+      scroll: ui.scroll,
     };
   };
 }
@@ -172,8 +179,10 @@ try {
   // Selection is owned here, not in the driver: the driver is a pure key/tick
   // machine, and this entrypoint already owns readState (the seat whose turns
   // are shown). `navigated` latches on the first nav key so auto-follow of a
-  // streaming seat never fights the operator's choice.
-  const ui = { selectedIndex: 0, navigated: false, seatCount: 0 };
+  // streaming seat never fights the operator's choice; `mode` is the seat list or
+  // the selected seat's focused conversation; `scroll` counts older turns when in
+  // the conversation view.
+  const ui = { selectedIndex: 0, navigated: false, seatCount: 0, mode: "seats", scroll: 0 };
   const readState = await makeReadState(storage, ui);
   process.stdin.setRawMode(true);
   process.stdin.resume();
@@ -185,9 +194,34 @@ try {
     paint: paintScreen,
     color: !process.env.NO_COLOR,
     pollMs: 700,
+    onEnter: () => {
+      // Enter opens the selected seat's conversation; Enter again in the conversation
+      // view is a no-op (Esc is the way back).
+      if (ui.mode === "seats" && ui.seatCount > 0) {
+        ui.mode = "conversation";
+        ui.scroll = 0;
+        void driver.tick();
+      }
+    },
+    onBack: () => {
+      // Esc leaves the conversation view; at the seat list it quits (the pre-modes
+      // behavior), so Esc is never a dead key.
+      if (ui.mode === "conversation") {
+        ui.mode = "seats";
+        ui.scroll = 0;
+        void driver.tick();
+      } else {
+        quit();
+      }
+    },
     onNavigate: (delta) => {
-      ui.navigated = true;
-      ui.selectedIndex = Math.max(0, Math.min(ui.seatCount - 1, ui.selectedIndex + delta));
+      if (ui.mode === "conversation") {
+        // ↑ (−1) reveals older turns; ↓ (+1) returns toward the live tail.
+        ui.scroll = Math.max(0, ui.scroll - delta);
+      } else {
+        ui.navigated = true;
+        ui.selectedIndex = Math.max(0, Math.min(ui.seatCount - 1, ui.selectedIndex + delta));
+      }
       void driver.tick();
     },
     onExit: () => {

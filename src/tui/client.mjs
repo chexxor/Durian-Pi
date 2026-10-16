@@ -104,13 +104,19 @@ function renderSeatList(seats, activityMap, width, selectedSeat = null, color = 
 /**
  * Render the transcript section (last N turns).
  */
-function renderTranscript(turns, collapsed, maxRows, width, color = false) {
+function renderTranscript(turns, collapsed, maxRows, width, color = false, scroll = 0) {
 	if (!turns?.length) {
-		return { lines: [paint("gray", "  (no turns yet)", color)], height: 1 };
+		return { lines: [paint("gray", "  (no turns yet)", color)], height: 1, above: 0, below: 0 };
 	}
 
-	// Show last `maxRows` turns, newest first, but reverse order for display
-	const recent = turns.slice(-maxRows);
+	// `scroll` counts turns back from the newest, so ↑ (scroll+1) reveals older turns
+	// and ↓ (scroll-1) returns to the live tail. Clamped: a negative or oversized
+	// scroll must never slice past either end.
+	const end = Math.max(0, turns.length - Math.max(0, scroll));
+	const start = Math.max(0, end - maxRows);
+	const recent = turns.slice(start, end);
+	const above = start; // turns hidden above the window (older)
+	const below = Math.max(0, turns.length - end); // turns hidden below (newer)
 	const lines = [];
 	for (const turn of recent) {
 		let marker, text;
@@ -152,7 +158,7 @@ function renderTranscript(turns, collapsed, maxRows, width, color = false) {
 		}
 	}
 
-	return { lines, height: lines.length };
+	return { lines, height: lines.length, above, below };
 }
 
 /**
@@ -240,8 +246,11 @@ function renderStatusBar(health, seats, queueItems, width, color = false) {
 /**
  * Render the footer (help / keybindings).
  */
-function renderFooter(width, color = false) {
-	const hint = " q=quit  r=refresh  ↑↓/jk=seat ";
+function renderFooter(width, color = false, view = "seats") {
+	const hint =
+		view === "conversation"
+			? " Esc=back  ↑↓=scroll  q=quit "
+			: " q=quit  r=refresh  ↑↓/jk=seat  Enter=open ";
 	const truncated = truncate(hint, width - 4);
 	const gutter = "└" + "─".repeat(Math.max(0, width - 2 - truncated.length));
 	return { lines: [paint("gray", gutter + truncated, color)], height: 1 };
@@ -271,17 +280,67 @@ export function renderTui({
 	health = {},
 	queueItems = [],
 	width = 100,
+	height = 24,
 	color = false,
 	theme = "dark",
 	toolBg = false,
 	selectedSeat = null,
+	view = "seats",
+	scroll = 0,
 } = {}) {
 	const lines = [];
+	const w = Math.min(width, 80);
+	const rule = "  " + "─".repeat(Math.max(0, w - 4));
+
+	// Conversation view (Enter on a seat): ONE seat's full stream, so the team-wide
+	// seat list and other seats' partials are deliberately absent — the operator
+	// asked for this seat's conversation, not the dashboard.
+	if (view === "conversation") {
+		const seatName = selectedSeat ?? health?.seats?.[0]?.name ?? null;
+		const seat = seats.find((s) => s.name === seatName);
+		lines.push(`  durig · ${seatName ?? "?"}${seat?.role ? ` · ${seat.role}` : ""} · conversation`);
+		lines.push(rule);
+
+		const focusedPartial = partial && partial.hasContent ? partial : null;
+		const streaming = focusedPartial
+			? renderPartial(focusedPartial, Math.min(width - 4, 80), {
+					roles: color && toolBg ? themeToolRoles(theme) : null,
+					color,
+				})
+			: { lines: [] };
+		// Chrome is header(2) + status(3) + footer(1); reserve the streaming block's
+		// rows when present so the transcript never pushes the footer off-screen.
+		const chrome = 2 + 3 + 1 + (streaming.lines.length > 0 ? streaming.lines.length + 2 : 0);
+		const transcriptRows = Math.max(4, height - chrome);
+		const { lines: transLines, above, below } = renderTranscript(
+			turns,
+			{},
+			transcriptRows,
+			Math.min(width - 4, 80),
+			color,
+			scroll,
+		);
+		if (above > 0) lines.push(paint("gray", `  ↑ ${above} older turn${above === 1 ? "" : "s"}`, color));
+		lines.push(...(transLines.length > 0 ? transLines : [paint("gray", "  (no turns yet)", color)]));
+		if (below > 0) lines.push(paint("gray", `  ↓ ${below} newer turn${below === 1 ? "" : "s"} (↓ to the live tail)`, color));
+		if (focusedPartial) {
+			lines.push("");
+			lines.push(paint("bold", "  ── streaming ──", color));
+			lines.push(...streaming.lines);
+		}
+
+		lines.push("");
+		lines.push(rule);
+		const { lines: statusLines } = renderStatusBar(health, seats, queueItems, Math.min(width - 4, 80), color);
+		lines.push(...statusLines);
+		lines.push(rule);
+		lines.push(...renderFooter(Math.min(width, 80), color, "conversation").lines);
+		return new Frame(lines);
+	}
 
 	// Header
 	const seatLabel = seats?.length ? `${seats.length} seat${seats.length !== 1 ? "s" : ""}` : "no seats";
 	const header = `  durig · ${seatLabel} · TUI`;
-	const rule = "  " + "─".repeat(Math.max(0, Math.min(width, 80) - 4));
 	lines.push(header);
 	lines.push(rule);
 
@@ -339,10 +398,10 @@ export function renderTui({
 
 	// Status bar
 	lines.push("");
-	lines.push("  " + "─".repeat(Math.max(0, Math.min(width, 80) - 4)));
+	lines.push(rule);
 	const { lines: statusLines } = renderStatusBar(health, seats, queueItems, Math.min(width - 4, 80), color);
 	lines.push(...statusLines);
-	lines.push("  " + "─".repeat(Math.max(0, Math.min(width, 80) - 4)));
+	lines.push(rule);
 
 	// Footer
 	const { lines: footerLines } = renderFooter(Math.min(width, 80), color);
