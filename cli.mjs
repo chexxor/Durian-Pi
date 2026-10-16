@@ -25,7 +25,7 @@ import {
 import { AssistantEntry, configure, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { closeSync, existsSync, openSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -65,7 +65,7 @@ import { formatMetrics } from "./src/metrics.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readRigHealth, readSeatList } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readRigHealth, readSeatList } from "./src/readapi.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree } from "./src/worktree.mjs";
 import { auditRig, formatCheck } from "./src/checkup.mjs";
@@ -616,6 +616,129 @@ async function cmdUp(rigFile, refresh = false, { serve = false } = {}) {
     ...(modelMismatch.length ? { modelMismatch: modelMismatch.map(({ seat, from, to }) => ({ seat, from, to })) } : {}),
     ...(refresh && modelReset.length ? { modelReset } : {}),
     ...(refresh && modelRefused.length ? { modelRefused } : {}),
+  });
+}
+
+// init: scaffold a minimal working rig in the current directory (#491 C9/C10).
+//
+// The defaults must be METADATA, not memory: a bare install has nothing
+// runnable, so `init` writes the two files a rig needs beside the operator,
+// from artifacts durig already ships — one definition each: the scaffold is a
+// copy of the hardened starter (never a second wording that can drift), and
+// the config is the shipped defaults materialized locally (never re-derived
+// values). npm-init-like refusals where they matter: an existing rig.json or
+// durig.config.json is never overwritten; both sources are gathered and
+// validated before either target is written, so the scaffold is all-or-
+// nothing; and the seed must pass the same `check` audit a fresh copy of the
+// starter passes, so init cannot silently hand a new user a rig their own
+// linter would reject.
+async function cmdInit() {
+  const rigPath = "rig.json";
+  const configPath = "durig.config.json";
+  // Both sources resolve BEFORE anything is checked or written; a torn
+  // scaffold (a rig with no config, or half of either) is exactly the state a
+  // bare install must not learn to expect.
+  const shipped = await loadShippedDefaults({
+    readFile,
+    anchors: [join(dirname(CLI_PATH), "durig.config.default.json")],
+  });
+  if (shipped.source === null) {
+    fail(
+      `init: no shipped defaults file (durig.config.default.json) was found - searched ${
+        [join(dirname(CLI_PATH), "durig.config.default.json"), ...DEFAULTS_CONFIG_PATHS].join(", ")
+      }; without it the scaffold has no safe concurrency floor`,
+    );
+  }
+  let starterText;
+  let starterSource;
+  const starterCandidates = [join(dirname(CLI_PATH), "rig.starter.json"), "../rig.starter.json"];
+  for (const candidate of starterCandidates) {
+    try {
+      starterText = await readFile(candidate, "utf8");
+      starterSource = candidate;
+      break;
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+  }
+  if (starterText === undefined) {
+    fail(
+      `init: no starter rig (rig.starter.json) was found - searched ${starterCandidates.join(", ")}; without it init has no seed to scaffold from`,
+    );
+  }
+  // Parse once, audit once: the seed must be a valid rig file that its own
+  // linter accepts BEFORE it becomes the operator's rig.json.
+  let starterSpec;
+  try {
+    starterSpec = JSON.parse(starterText);
+  } catch (err) {
+    fail(`init: invalid JSON in the starter rig ${starterSource}: ${err?.message ?? err}`);
+  }
+  const audit = auditRig({
+    rig: starterSource,
+    spec: starterSpec,
+    specConstitution:
+      typeof starterSpec?.constitutionInline === "string"
+        ? starterSpec.constitutionInline
+        : starterSpec?.constitution
+          ? await readFile(starterSpec.constitution, "utf8")
+          : undefined,
+    // A FIRST scaffold has no store yet: the file-only rules (verifier seat, single
+    // model, capabilities, edges) are the ones the scaffold must pass. Store rules
+    // are skipped-with-reason here exactly as check reports them against an absent
+    // store, so init and `check` cannot disagree about a not-yet-created rig.
+    stored: { reason: "absent" },
+    modelsBySeat: resolveModelsBySeat(starterSpec),
+  });
+  if (audit.findings.length > 0) {
+    fail(
+      `init: the starter rig ${starterSource} does not pass its own check (${audit.summary.error} error(s), ${audit.summary["fix-now"]} fix-now); not scaffolding a rejected seed - fix rig.starter.json first`,
+    );
+  }
+  // Only now the overwrite refusals: an operator file that exists is never
+  // clobbered. The refusals sit AFTER the source checks so a failed init
+  // always names the thing that actually blocked it.
+  if (existsSync(rigPath)) fail(`init: ${rigPath} already exists; refusing to overwrite it`);
+  if (existsSync(configPath)) fail(`init: ${configPath} already exists; refusing to overwrite it`);
+  // The rig metadata gets a provenance note; the rest of the seed is used
+  // verbatim (re-serializing the whole starter to "improve" it would be a
+  // second definition).
+  const scaffoldedSpec = starterSpec._readme
+    ? { ...starterSpec, _readme: `Created by 'node cli.mjs init' from rig.starter.json (#491). Rename the seats to your domain, run 'node cli.mjs up rig.json', then 'node cli.mjs check rig.json'.` }
+    : starterSpec;
+  await writeFile(rigPath, `${JSON.stringify(scaffoldedSpec, null, 2)}\n`, "utf8");
+  await writeFile(configPath, `${JSON.stringify(shipped.values, null, 2)}\n`, "utf8");
+  // stderr keeps the human path and the next steps; stdout stays JSON so
+  // scripts can drive the same call.
+  const seatNames = (starterSpec.seats ?? []).map((s) => s.name).join(", ");
+  console.error(
+    `init: scaffolded ${rigPath} (seeded seats: ${seatNames}) and ${configPath} from the shipped defaults`,
+  );
+  console.error("  next: node cli.mjs up rig.json      # create the seats; on a TTY it also starts the broker");
+  console.error("        node cli.mjs check rig.json   # expect: no findings");
+  console.error("        node cli.mjs send pm 'hello rig'   # steer a seat from the command line");
+  const hasKey = Boolean(process.env.DEEPINFRA_API_KEY ?? CFG.DEEPINFRA_API_KEY);
+  if (!hasKey) {
+    console.error("        no API key? set DURIG_PROVIDER=faux to try the rig offline first");
+  }
+  const seatCount = starterSpec.seats?.length ?? 0;
+  if (seatCount === 0) {
+    // C7's rule applied to init: an honest scaffold names what is missing
+    // instead of looking finished. The starter guard above makes this
+    // unreachable today; the audit may be relaxed later without this notice
+    // silently rotting into a wrong-feeling success.
+    noteEmptyRig(0);
+  }
+  out({
+    ok: true,
+    command: "init",
+    rig: { path: rigPath, seats: (starterSpec.seats ?? []).map((s) => s.name), from: starterSource },
+    config: {
+      path: configPath,
+      values: shipped.values,
+      sourceDefaults: shipped.source,
+    },
+    next: ["node cli.mjs up rig.json", "node cli.mjs check rig.json"],
   });
 }
 
@@ -2010,6 +2133,10 @@ async function cmdCheck(rigFile, human, rest = []) {
   // from "read and empty" - an empty store is a real, reportable disagreement
   // with a rig file that declares seats.
   let storedSeats = null;
+  // The queue, for the verification-evidence rule (ROADMAP 48): a completed
+  // `VERIFY #N` item with no recorded evidence is an ack, not a re-run. Null
+  // until read, so "could not read" stays distinguishable from "read and empty".
+  let queueItems = null;
   if (!DB_EXISTED_AT_START) {
     stored = { reason: "absent" };
   } else {
@@ -2027,6 +2154,7 @@ async function cmdCheck(rigFile, human, rest = []) {
         stored = { reason: "read", text };
 
         storedSeats = (await readSeatList(storage)).map((s) => s.name);
+        queueItems = await readQueueItems(storage);
       } finally {
         await storage.close(BACKGROUND_CONTEXT);
       }
@@ -2034,7 +2162,7 @@ async function cmdCheck(rigFile, human, rest = []) {
       stored = { reason: "unreadable", error: String(err?.message ?? err) };
     }
   }
-  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, storedSeats, modelsBySeat });
+  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, storedSeats, modelsBySeat, queueItems });
   const seatCount = (spec.seats ?? []).length;
   if (human) {
     console.log(
@@ -2070,6 +2198,7 @@ async function cmdCheck(rigFile, human, rest = []) {
 
 const USAGE = `
 usages:
+  node cli.mjs init              scaffold a minimal working rig (rig.json from the hardened starter) + durig.config.json in this directory
   node cli.mjs up <rig.json> [--refresh] [--serve|--no-serve]   create seats; on a TTY also start the broker (--no-serve disables)
   node cli.mjs ps              list seats
   node cli.mjs send <seat> <text> [--stream]   steer a seat and wait for its reply
@@ -2106,6 +2235,7 @@ try {
     await cmdUp(rest[0], rest.includes("--refresh"), { serve });
   }
   else if (cmd === "worktree") await cmdWorktree(rest);
+  else if (cmd === "init") await cmdInit();
   else if (cmd === "ps") await cmdPs();
   else if (cmd === "send") {
     // --body-file (or `-` for stdin) exists because a prompt is shell input: a

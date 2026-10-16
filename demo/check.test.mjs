@@ -86,6 +86,10 @@ try {
     stored: { reason: "read", text: CONSTITUTION },
     storedSeats: ["alpha", "verifier"],
     modelsBySeat: { alpha: "faux/model-a", verifier: "faux/model-b" },
+    // An empty queue so the verification-evidence rule (ROADMAP 48) RUNS and
+    // passes, rather than being skipped: this assertion is "every rule ran and
+    // passed", and a rule that cannot run is not a pass.
+    queueItems: [],
   });
   assert.deepEqual(ids(hardened), [], `hardened rig has no findings; got ${ids(hardened).join(", ")}`);
   assert.equal(hardened.exitCode, 0);

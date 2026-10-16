@@ -438,10 +438,26 @@ const Router = defineExtension({
 		defineTool({
 			name: "complete_work",
 			description:
-				"Mark one of your claimed items done with a result. Sends a DONE notice back to the sender.",
+				"Mark one of your claimed items done with a result. Sends a DONE notice back to the sender. " +
+				"Pass `evidence` ({command, exitCode, artifact?}) when you VERIFIED someone's work: it is what " +
+				"makes the completion re-checkable, and `check` reports a verifier item completed without it " +
+				"(ROADMAP 48 / W2). `resultSummary` stays the narrative; evidence is additive.",
 			parameters: Type.Object({
 				itemId: Type.Number(),
 				resultSummary: Type.String(),
+				evidence: Type.Optional(
+					Type.Object({
+						command: Type.String({
+							description: "the exact command you ran to re-check the artifact",
+						}),
+						exitCode: Type.Number({ description: "its exit code (0 = pass)" }),
+						artifact: Type.Optional(
+							Type.String({
+								description: "the commit/rev the command ran against, when it names one",
+							}),
+						),
+					}),
+				),
 			}),
 			replay: "safe",
 			execute: async (args, api, context) => {
@@ -453,8 +469,23 @@ const Router = defineExtension({
 					if (item.to !== me || item.status !== "claimed") {
 						return `item #${args.itemId} is not claimed by you (status=${item.status})`;
 					}
+					// Evidence is OPTIONAL (a free-text completion stays legal), but when it IS
+					// given it must be checkable: a blank command is a claim, not evidence, and
+					// recording it would let `check`'s verifier rule pass on nothing.
+					if (args.evidence !== undefined && String(args.evidence.command ?? "").trim() === "") {
+						return "complete_work: `evidence.command` must name the command you ran (evidence is what a verifier re-runs)";
+					}
 					item.status = "done";
 					item.resultSummary = args.resultSummary;
+					// Record the re-runnable evidence beside the narrative summary (additive, like
+					// `optimizedVia`): `check`'s verification-without-evidence rule reads it.
+					if (args.evidence !== undefined) {
+						item.evidence = {
+							command: args.evidence.command,
+							exitCode: args.evidence.exitCode,
+							...(args.evidence.artifact === undefined ? {} : { artifact: args.evidence.artifact }),
+						};
+					}
 					item.transitions.push({
 						at: new Date().toISOString(),
 						event: "done",

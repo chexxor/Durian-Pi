@@ -79,6 +79,11 @@ export const RULES = [
     severity: "fix-now",
     what: "a seat declares no capabilities, so per-seat tool scoping gives it no working tools",
   },
+  {
+    id: "verification-without-evidence",
+    severity: "fix-now",
+    what: "a verification task was completed with only an acknowledgement, not re-runnable evidence",
+  },
 ];
 
 const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
@@ -98,6 +103,31 @@ export function seatsAreVerifier(seat) {
 }
 
 /**
+ * An item that verifies another seat's work carries the protocol marker in its
+ * subject (`VERIFY #N`, how a verification is routed to a verifier seat). Exported
+ * so the marker has ONE definition, like VERIFIER_TERMS.
+ */
+export function isVerificationItem(item) {
+  return /\bVERIFY\b/i.test(String(item?.subject ?? ""));
+}
+
+/**
+ * Whether a completion carries re-runnable evidence — the shape `complete_work`
+ * records: a non-blank command and a finite exit code. A blank command is a claim,
+ * not evidence.
+ */
+export function hasEvidence(item) {
+  const e = item?.evidence;
+  return (
+    e != null &&
+    typeof e.command === "string" &&
+    e.command.trim() !== "" &&
+    typeof e.exitCode === "number" &&
+    Number.isFinite(e.exitCode)
+  );
+}
+
+/**
  * @param {object} input
  * @param {string} input.rig            rig file path, for display
  * @param {object} input.spec           parsed rig file
@@ -105,9 +135,10 @@ export function seatsAreVerifier(seat) {
  * @param {{reason:"read",text:string}|{reason:"absent"}|{reason:"unreadable",error:string}} input.stored
  * @param {string[]|null} [input.storedSeats]  seat names the store holds, or null when it was not read
  * @param {Record<string,string>} [input.modelsBySeat]  seat name -> "provider/modelId"
+ * @param {Array<object>|null} [input.queueItems]  the store's queue items, or null when the queue was not read
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {} }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, queueItems = null }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -304,6 +335,32 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       `${capless.join(", ")} - no capabilities declared, so per-seat tool scoping gives these seats no working tools and they cannot do work`,
       "declare what each seat does - \"implement\"/\"code\" to produce, \"verify\"/\"review\" to check, or \"route\"/\"plan\"/\"decide\" for coordination - so the tool set matches the role",
     );
+  }
+
+  // 9. ROADMAP 48 / W2: a verifier that only acks is the sycophancy-collapse setup (peer
+  //    agreement ~29.7% on a wrong peer). The completion must carry EVIDENCE a reader can
+  //    re-run (a command + its exit code), not a claim. An item is a verification task when
+  //    its subject carries the protocol marker (`VERIFY #N`); the rule fails when such a task
+  //    is `done` with no evidence recorded. When the queue could not be read, the rule is
+  //    SKIPPED with its reason, never passed — "could not check" is not "checked and fine".
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "verification-without-evidence",
+      why: "the queue could not be read, so completed verification tasks cannot be inspected",
+    });
+  } else {
+    const acked = queueItems.filter(
+      (it) => it?.status === "done" && isVerificationItem(it) && !hasEvidence(it),
+    );
+    if (acked.length > 0) {
+      const ids = acked.map((it) => `#${it.id}`).join(", ");
+      add(
+        "verification-without-evidence",
+        ids,
+        `${acked.length === 1 ? "verification item" : `${acked.length} verification items`} ${ids} completed without evidence — the completion is an ack, not a re-run, so nothing can be re-checked`,
+        "re-run the artifact and record it when completing a verification item: complete_work(<id>, <summary>, { command, exitCode, artifact }) — an ack alone is not a sign-off (W2)",
+      );
+    }
   }
 
   const summary = { error: 0, "fix-now": 0, total: findings.length };
