@@ -22,14 +22,17 @@ Exact next commands:
 `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs status`,
 `… node cli.mjs log impl`; stop with `… node cli.mjs serve --stop`.
 
-**State at this refresh (2026-10-16, delegate session):** resident broker **pid 35604**
-(restarted `2026-10-16T00:29:03Z`); store is single-writer. The delegate committed stranded work
-(#400 `3b429dc`, #402 `e937b31`, docs `5c300dc`, broker lifecycle audit `484a571`) and added the
-**degeneration guard** (`ae96445`): a seat whose run outgrows its turn/context bound or shows
-step-repetition/malformed tool calls is now auto-reset by the broker's supervise pass. `impl` was
-caught in an F29 loop and recovered: `stop impl` → cleared stale broker state → `reset impl <handoff>`
-→ broker restarted. **#571 is now moot** — the operator repaired `src/viewmodel.mjs:70` and impl
-removed its stray line; impl should verify and close #571, not re-repair.
+**State at this refresh (2026-10-16, delegate session):** resident broker **pid 17424**
+(`01:12:41Z`; healthy — `PASS 1` in ~1 min) with the **degeneration guard armed**. Store is
+single-writer. The delegate committed the stranded work in scoped commits — TUI `c6eaef3` (U1–U5)
+and commit-model `11edfb3` (#474/#475) — landed the docs (`0ecf9cf` D63/D64 + the seat's D54–D62) and
+the earlier `484a571` broker audit / `ae96445` guard; suite **78/78**. It also recovered a **wedged
+broker** (pid 35604): no `PASS` for 42 min, `serve --stop` failed twice, so it was force-stopped and
+restarted (root cause in `.spike/delegate/serve.err`: the #506 dirty-tree worktree guard + a genlock
+slot `held by pid undefined`). Only untracked scratch remains (`#573` owns disposal; it also blocks
+worktree isolation via the dirty-tree guard). **#571 is moot** — `src/viewmodel.mjs` is fixed. NOTE:
+committing in-flight U4/U5 made impl log "another seat committed my work" — expected under the
+shared-tree entanglement (#506), not an error.
 
 Known blockers: **#506** (the dirty-tree worktree guard bites live; the working-tree files are seats'
 in-progress work — **DO NOT discard**); cooperative `serve --stop` can take ~13-min passes but exits.
