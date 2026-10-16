@@ -11,7 +11,7 @@ _Last refreshed: 2026-10-16 (delegate session, third pass — routed the daemon 
 
 ## NEXT SESSION — START HERE
 
-**Current item: the safe-writes cluster (ROADMAP 68 → 69 → 70 → 71) ahead of the daemon 61–64; two
+**Current item: the safe-writes cluster (ROADMAP 68 → 69 → 70 → 71) ahead of the daemon 61–64; three
 clean-path items are DONE.**
 - **Item 68 DONE (`037213f`):** `reconcileStrandedSubmissions` settles a `placed` submission with no live
 task before the pending set is built, so the blocked seat re-wakes. Verified live: `STRANDED settled=2`
@@ -19,7 +19,12 @@ task before the pending set is built, so the blocked seat re-wakes. Verified liv
 - **Item 54 DONE (`58cbac2`):** `drivePass` takes `waitForWakes`; `runWakeLoop` passes `false` and drains
 once on loop exit (F11). Fixes the loop park that made `serve --stop` hang. `demo/broker-wake-return.test.mjs`
 (RED: HEAD takes 4014ms; GREEN ~0.2s).
-- **Next:** item 66 (startup reconciliation, clean path `src/broker.mjs`), then item 65 (genlock `#745`).
+- **Item 66 DONE (`47507f1`):** every inbox intent carries a `requestId` (so a crash between submit and
+unlink re-drains idempotently), and the broker reconciles dead `genlock.*` leases at start (ESRCH only;
+EPERM holders kept) and logs `RECONCILE leases=N`. `demo/broker-reconcile.test.mjs`. The orphaned-worktree
+sweep is split to **item 73** — `removeClaimedWorktree` force-rm's a dirty tree, so a sweep needs a
+clean-only guard first.
+- **Next (clean path):** item 73 (worktree clean-only guard + sweep), then item 65 (genlock `#745`).
 **⛔ Items 69–71 blocked:** each must edit `cli.mjs`, dirty with another item's work (`cmdInit`, #491
 C9/C10 — 127 lines + untracked `demo/init.test.mjs`).
 **Pending apply — needs a broker stop + `up --refresh`:** the impl model change (`9760da6`,

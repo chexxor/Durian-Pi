@@ -1764,13 +1764,15 @@ should not wait. **Correction (delegate, round 3):** the research agent read the
     *Acceptance:* failing-first demos for a long live generation that must NOT be stolen, an EPERM
     holder that must read as alive, and a reused pid that must NOT read as the recorded broker.
 
-66. **Idempotent intent drain + startup reconciliation sweep.** Give every inbox intent a `requestId` so
-    re-draining the spool after a crash cannot double-submit; on broker start, reconcile the spool, the
-    stale `genlock.*` leases, and orphaned `item-*` worktrees against the queue (the recursive worktree
-    leak is already recorded).
-    *Owner:* `impl` · *Where:* `src/broker.mjs` `drainIntentInbox`, startup path.
-    *Acceptance:* a demo that leaves a spool/lease/worktree artifact across a restart and shows one
-    clean reconciliation.
+66. **Idempotent intent drain + stale-lease reconciliation (DELIVERED `47507f1`).** Every inbox intent
+    now carries a `requestId` (`writeIntent` mints one), so re-draining the spool after a crash between
+    submit and unlink is a no-op submission — the harness dedupes a submission by (conversation,
+    requestId). At broker start the broker reconciles dead `genlock.*` leases once, removing only a pid
+    the OS reports as non-existent (ESRCH) and keeping an EPERM holder, and logs `RECONCILE leases=N`.
+    *Owner:* delegate · *Where:* `src/broker.mjs`, `src/genlock.mjs` · *Proof:*
+    `demo/broker-reconcile.test.mjs` (RED before the fix).
+    The orphaned-worktree sweep is split to item **73** — `removeClaimedWorktree` force-removes a dirty
+    worktree, so it is unsafe to automate before that is fixed.
 
 67. **Host chaos suite.** Crash injection (`taskkill /F`), hang injection (`DURIG_FAULT=wedge`),
     restart-storm injection, a single-instance race, and resume-after-crash — all offline against the
@@ -1829,7 +1831,15 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     *Acceptance:* the log names the origin for `up`-started and `serve`-started brokers.
 
 **Cross-links:** item **54** (wake-and-return) and item **65** (genlock) remain independent and should
-not wait; item **66** folds into **70**.
+not wait; item **66** is delivered for the spool + leases, with the worktree sweep split to **73**.
+
+73. **Orphaned-worktree sweep (split from 66).** Reconcile the leaked `item-*` worktrees against the
+    queue at broker start. **Blocked by a safety gap first:** `removeClaimedWorktree` falls through to
+    `rm -rf` when `git worktree remove` refuses a dirty tree (`src/worktree.mjs`), so an automatic sweep
+    would destroy uncommitted work. Land a **clean-only** guard (refuse when `git status --porcelain` is
+    non-empty) before any sweep. *Owner:* `impl` · *Where:* `src/worktree.mjs`, `src/broker.mjs` start.
+    *Acceptance:* a demo that leaves a clean orphaned worktree and a dirty one across a restart — the
+    clean one is removed, the dirty one is reported and kept.
 
 ## Explicitly deferred (with reasons)
 
