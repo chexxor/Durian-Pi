@@ -64,6 +64,11 @@ drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guar
 finishes a work item — explicitly NOT finer item boundaries yet.
 - **Mid-run cut** (optional): the degeneration guard resets BETWEEN runs; a provider-level turn cap
 would cut a single runaway run mid-flight. (Bounded runs are mitigated; this is the residual gap.)
+- **Worktree leak + recursion (NEW, observed 2026-10-16):** the broker's per-task worktrees
+  (`item-1/`, `item-2/` in the repo root) are **not gitignored** and **not cleaned up**, so they
+  pollute `git status`; and because the #506 fix “forks the visible state”, each new worktree
+  **copies the existing untracked worktrees** (`item-2` nests a full `item-1/`) — recursive growth.
+  Needs a lifecycle fix (ignore the worktree root + clean up on completion).
 - **`docs/DECISIONS.md` entries** — LANDED (`0ecf9cf`): D63 (broker audit) + D64 (degeneration guard),
 plus the seat's stranded D54–D62. Remaining: fix D62's text corruption (`headless \tenderTui/Frame`).
 
