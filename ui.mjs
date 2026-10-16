@@ -41,6 +41,7 @@ keys:
   r                  repaint now
   ↑ / ↓ or k / j     seat list: select a seat; conversation: scroll the transcript
   Enter              open the selected seat's conversation stream
+  G / End            jump to the live tail (re-enable auto-follow)
   Esc                back to the seat list (press again to quit)
 
 environment:
@@ -213,6 +214,11 @@ try {
       } else {
         quit();
       }
+    },
+    onTail: () => {
+      // Re-enable auto-follow: scroll 0 pins the newest turns and the live tail.
+      ui.scroll = 0;
+      void driver.tick();
     },
     onNavigate: (delta) => {
       if (ui.mode === "conversation") {

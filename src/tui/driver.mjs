@@ -44,13 +44,14 @@ const ERR_FRAME_MAX = 120;
  * @param {(delta: -1|1) => void} [io.onNavigate] — up/down request; the ENTRYPOINT owns the
  *   selected seat (it also owns readState), so the driver stays a pure key/tick machine.
  * @param {() => void} [io.onEnter] — Enter request (open the selected seat's conversation).
+ * @param {() => void} [io.onTail] — jump-to-live-tail request (re-enable auto-follow).
  * @param {(() => void)|null} [io.onBack] — Esc request. When provided, ESC is "back" (the
  *   entrypoint decides whether that leaves a view or quits); when absent, ESC quits, so a
  *   caller that does not implement modes keeps the original behavior.
  * @param {number} [io.pollMs] — poll interval (default 700).
  * @param {boolean} [io.color] — pass-through to renderTui (NO_COLOR respected by caller).
  */
-export function createUiDriver({ getSize, readState, paint, onExit = () => {}, onNavigate = () => {}, onEnter = () => {}, onBack = null, pollMs = DEFAULT_POLL_MS, color = false }) {
+export function createUiDriver({ getSize, readState, paint, onExit = () => {}, onNavigate = () => {}, onEnter = () => {}, onTail = () => {}, onBack = null, pollMs = DEFAULT_POLL_MS, color = false }) {
 	let timer = null;
 	let running = false; // a tick is in flight
 	let stopped = false; // cleanup happened
@@ -141,6 +142,10 @@ export function createUiDriver({ getSize, readState, paint, onExit = () => {}, o
 			onEnter();
 			return true;
 		}
+		if (key === "tail") {
+			onTail();
+			return true;
+		}
 		return false; // read-only TUI: unknown keys are consumed silently
 	}
 
@@ -181,6 +186,7 @@ export function decodeKeys(chunk) {
 				const code = s[i + 2];
 				if (code === "A") keys.push("up");
 				else if (code === "B") keys.push("down");
+				else if (code === "F") keys.push("tail"); // End key
 				i += 2; // consume the CSI sequence so its bytes are never re-read
 				continue;
 			}
@@ -192,6 +198,7 @@ export function decodeKeys(chunk) {
 		else if (ch === "r") keys.push("r");
 		else if (ch === "j") keys.push("down");
 		else if (ch === "k") keys.push("up");
+		else if (ch === "G") keys.push("tail");
 		else if (ch === "\r" || ch === "\n") keys.push("enter");
 	}
 	return keys;

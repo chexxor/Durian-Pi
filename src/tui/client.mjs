@@ -102,9 +102,91 @@ function renderSeatList(seats, activityMap, width, selectedSeat = null, color = 
 }
 
 /**
- * Render the transcript section (last N turns).
+ * Wrap prose to `width` cells instead of truncating it. The conversation view is a
+ * reading surface for a live stream: a single long assistant line must be readable
+ * across the viewport, not cut off with an ellipsis (the skill's "truncate, do not
+ * wrap" rule is for tables; a conversation is prose).
  */
-function renderTranscript(turns, collapsed, maxRows, width, color = false, scroll = 0) {
+function wrapText(text, width) {
+	const flat = String(text ?? "").replace(/\s+/g, " ").trim();
+	const w = Math.max(1, width);
+	if (flat.length <= w) return [flat];
+	const out = [];
+	let line = "";
+	for (const word of flat.split(" ")) {
+		if (word.length > w) {
+			// Hard-split a token longer than the line (a URL or id) so it cannot
+			// silently overflow the frame.
+			if (line !== "") {
+				out.push(line);
+				line = "";
+			}
+			for (let i = 0; i < word.length; i += w) out.push(word.slice(i, i + w));
+			continue;
+		}
+		if (line === "") line = word;
+		else if (`${line} ${word}`.length <= w) line += ` ${word}`;
+		else {
+			out.push(line);
+			line = word;
+		}
+	}
+	if (line !== "") out.push(line);
+	return out.length > 0 ? out : [""];
+}
+
+/**
+ * The display lines for one conversation turn. Kept separate from the transcript
+ * window so the conversation view can budget by LINES, not turns: a tools or thinking
+ * turn renders several lines, and a turn-count budget silently overflows the viewport.
+ */
+function transcriptTurnLines(turn, width, color) {
+	const lines = [];
+	switch (turn.kind) {
+		case "operator": {
+			const text = truncate(turn.text, width - 8);
+			lines.push(`  ${paint("green", "▶", color)} ${paint("bold", text, color)}`);
+			break;
+		}
+		case "agent": {
+			const text = truncate(turn.text, width - 8);
+			lines.push(`  ${paint("cyan", "◀", color)} ${text}`);
+			break;
+		}
+		case "thinking": {
+			// U5: transcript matches the log (chatview formatChat): labelled
+			// ("thinking ›"), and a redacted block reported as the fact it is —
+			// "redacted by the provider" — never as a vague "withheld".
+			const text = turn.redacted && !turn.text
+				? "thinking (redacted by the provider)"
+				: turn.text
+					? truncate(`thinking › ${turn.text.split("\n")[0]}`, width - 8)
+					: "[thinking]";
+			lines.push(`  ${paint("yellow", "◇", color)} ${paint("dim", text, color)}`);
+			break;
+		}
+		case "tools":
+			if (turn.call) {
+				const callText = formatToolName(turn.call) + " " + formatArgs(turn.call.args || {}, width - 12);
+				lines.push(`  ${paint("magenta", "⚙", color)} ${callText}`);
+			} else if (turn.result) {
+				const resText = truncate(extractResultText(turn.result), width - 8);
+				lines.push(`  ${paint("gray", "⚙", color)} ${resText}`);
+			}
+			break;
+		default:
+			lines.push(`  [${turn.kind}]`);
+	}
+	return lines;
+}
+
+/**
+ * Render a window of turns. `maxLines > 0` bounds the result by DISPLAY LINES — the
+ * conversation view's fit guarantee: turns accumulate newest-first and the ones that
+ * do not fit are reported as hidden above. `maxLines === 0` keeps the turn-bounded
+ * behavior the seats view uses.
+ */
+function renderTranscript(turns, collapsed, maxRows, width, color = false, scroll = 0, maxLines = 0) {
 	if (!turns?.length) {
 		return { lines: [paint("gray", "  (no turns yet)", color)], height: 1, above: 0, below: 0 };
 	}
@@ -114,57 +196,32 @@ function renderTranscript(turns, collapsed, maxRows, width, color = false, scrol
 	// scroll must never slice past either end.
 	const end = Math.max(0, turns.length - Math.max(0, scroll));
 	const start = Math.max(0, end - maxRows);
-	const recent = turns.slice(start, end);
-	const above = start; // turns hidden above the window (older)
-	const below = Math.max(0, turns.length - end); // turns hidden below (newer)
+	const window = turns.slice(start, end);
 	const lines = [];
-	for (const turn of recent) {
-		let marker, text;
-		switch (turn.kind) {
-			case "operator":
-				marker = "▶";
-				text = truncate(turn.text, width - 8);
-				lines.push(`  ${paint("green", marker, color)} ${paint("bold", text, color)}`);
+	let dropped = 0;
+	if (maxLines > 0) {
+		const buckets = window.map((turn) => transcriptTurnLines(turn, width, color));
+		let used = 0;
+		for (let i = buckets.length - 1; i >= 0; i--) {
+			if (used + buckets[i].length > maxLines && lines.length > 0) {
+				dropped = i + 1;
 				break;
-			case "agent":
-				marker = "◀";
-				text = truncate(turn.text, width - 8);
-				lines.push(`  ${paint("cyan", marker, color)} ${text}`);
-				break;
-			case "thinking":
-				marker = "◇";
-				// U5: transcript matches the log (chatview formatChat): labelled
-				// ("thinking ›"), and a redacted block reported as the fact it is —
-				// "redacted by the provider" — never as a vague "withheld".
-				text = turn.redacted && !turn.text
-					? "thinking (redacted by the provider)"
-					: turn.text
-						? truncate(`thinking › ${turn.text.split("\n")[0]}`, width - 8)
-						: "[thinking]";
-				lines.push(`  ${paint("yellow", marker, color)} ${paint("dim", text, color)}`);
-				break;
-			case "tools":
-				marker = "⚙";
-				if (turn.call) {
-					const callText = formatToolName(turn.call) + " " + formatArgs(turn.call.args || {}, width - 12);
-					lines.push(`  ${paint("magenta", marker, color)} ${callText}`);
-				} else if (turn.result) {
-					const resText = truncate(extractResultText(turn.result), width - 8);
-					lines.push(`  ${paint("gray", marker, color)} ${resText}`);
-				}
-				break;
-			default:
-				lines.push(`  [${turn.kind}]`);
+			}
+			lines.unshift(...buckets[i]);
+			used += buckets[i].length;
 		}
+	} else {
+		for (const turn of window) lines.push(...transcriptTurnLines(turn, width, color));
 	}
-
+	const above = start + dropped; // turns hidden above the window (older or trimmed for fit)
+	const below = Math.max(0, turns.length - end); // turns hidden below (newer)
 	return { lines, height: lines.length, above, below };
 }
 
 /**
  * Render the streaming / partial row.
  */
-function renderPartial(partial, width, { roles = null, color = false } = {}) {
+function renderPartial(partial, width, { roles = null, color = false, wrap = false } = {}) {
 	if (!partial || !partial.hasContent) {
 		return { lines: [paint("gray", "  [idle]", color)], height: 1 };
 	}
@@ -196,17 +253,23 @@ function renderPartial(partial, width, { roles = null, color = false } = {}) {
 	if (partial.thinking) {
 		// U5: the TUI speaks the log's words (chatview formatPartial): labelled
 		// ("thinking ›"), reasoning first, and NEVER hidden because text reached the
-		// frame — the log does not hide it either.
-		const text = truncate(partial.thinking.split("\n")[0], width - 18);
-		lines.push(`  ${paint("yellow", "◇", color)} ${paint("dim", "thinking ›", color)} ${text}`);
+		// frame — the log does not hide it either. `wrap` is the conversation view:
+		// reasoning is prose and must stay readable across the viewport.
+		const label = `${paint("yellow", "◇", color)} ${paint("dim", "thinking ›", color)} `;
+		const body = wrap
+			? wrapText(partial.thinking, Math.max(4, width - 18))
+			: [truncate(partial.thinking.split("\n")[0], width - 18)];
+		body.forEach((line, i) => lines.push(i === 0 ? `  ${label}${line}` : `             ${line}`));
 	} else if (partial.thinkingRedacted) {
 		// U5: a redacted live block is reported with the exact phrase the log uses,
 		// in both surfaces — the block exists, the body does not.
 		lines.push(`  ${paint("yellow", "◇", color)} ${paint("dim", "thinking (redacted by the provider)", color)}`);
 	}
 	if (partial.text) {
-		const text = truncate(partial.text, width - 8);
-		lines.push(`  ${paint("cyan", "●", color)} ${text}`);
+		const body = wrap
+			? wrapText(partial.text, Math.max(4, width - 8))
+			: [truncate(partial.text, width - 8)];
+		body.forEach((line, i) => lines.push(`  ${i === 0 ? paint("cyan", "●", color) : " "} ${line}`));
 	}
 	if (partial.tools?.length) {
 		for (const tool of partial.tools.slice(0, 2)) {
@@ -249,7 +312,7 @@ function renderStatusBar(health, seats, queueItems, width, color = false) {
 function renderFooter(width, color = false, view = "seats") {
 	const hint =
 		view === "conversation"
-			? " Esc=back  ↑↓=scroll  q=quit "
+			? " Esc=back  ↑↓=scroll  G=tail  q=quit "
 			: " q=quit  r=refresh  ↑↓/jk=seat  Enter=open ";
 	const truncated = truncate(hint, width - 4);
 	const gutter = "└" + "─".repeat(Math.max(0, width - 2 - truncated.length));
@@ -289,7 +352,7 @@ export function renderTui({
 	scroll = 0,
 } = {}) {
 	const lines = [];
-	const w = Math.min(width, 80);
+	const w = width;
 	const rule = "  " + "─".repeat(Math.max(0, w - 4));
 
 	// Conversation view (Enter on a seat): ONE seat's full stream, so the team-wide
@@ -301,24 +364,32 @@ export function renderTui({
 		lines.push(`  durig · ${seatName ?? "?"}${seat?.role ? ` · ${seat.role}` : ""} · conversation`);
 		lines.push(rule);
 
-		const focusedPartial = partial && partial.hasContent ? partial : null;
+		// The FOCUSED seat's partial, not whichever seat streams first: a conversation
+		// about impl must never show pm's stream.
+		const focusedPartial =
+			(Array.isArray(partials) ? partials.find((p) => p.seat === seatName) : null) ??
+			(partial && partial.hasContent && (partial.seat === undefined || partial.seat === seatName) ? partial : null);
 		const streaming = focusedPartial
-			? renderPartial(focusedPartial, Math.min(width - 4, 80), {
+			? renderPartial(focusedPartial, width - 4, {
 					roles: color && toolBg ? themeToolRoles(theme) : null,
 					color,
+					wrap: true,
 				})
 			: { lines: [] };
-		// Chrome is header(2) + status(3) + footer(1); reserve the streaming block's
-		// rows when present so the transcript never pushes the footer off-screen.
-		const chrome = 2 + 3 + 1 + (streaming.lines.length > 0 ? streaming.lines.length + 2 : 0);
-		const transcriptRows = Math.max(4, height - chrome);
+		// Reserve the fixed chrome AND the streaming block, then bound the transcript by
+		// DISPLAY LINES: a tools/thinking turn renders several lines, so a turn-count
+		// budget overflowed the viewport and pushed the live tail off-screen.
+		const streamingRows = streaming.lines.length > 0 ? streaming.lines.length + 2 : 0;
+		const reserve = 2 /*header*/ + 2 /*one indicator each side*/ + 5 /*status block + footer*/ + streamingRows;
+		const transcriptBudget = Math.max(4, height - reserve);
 		const { lines: transLines, above, below } = renderTranscript(
 			turns,
 			{},
-			transcriptRows,
-			Math.min(width - 4, 80),
+			500, // the line budget bounds this window; maxRows only caps how far we scan
+			width - 4,
 			color,
 			scroll,
+			transcriptBudget,
 		);
 		if (above > 0) lines.push(paint("gray", `  ↑ ${above} older turn${above === 1 ? "" : "s"}`, color));
 		lines.push(...(transLines.length > 0 ? transLines : [paint("gray", "  (no turns yet)", color)]));
@@ -331,10 +402,10 @@ export function renderTui({
 
 		lines.push("");
 		lines.push(rule);
-		const { lines: statusLines } = renderStatusBar(health, seats, queueItems, Math.min(width - 4, 80), color);
+		const { lines: statusLines } = renderStatusBar(health, seats, queueItems, width - 4, color);
 		lines.push(...statusLines);
 		lines.push(rule);
-		lines.push(...renderFooter(Math.min(width, 80), color, "conversation").lines);
+		lines.push(...renderFooter(width, color, "conversation").lines);
 		return new Frame(lines);
 	}
 
@@ -347,7 +418,7 @@ export function renderTui({
 	// Seat list (uses ~40% of height for seats)
 	const mainHeight = Math.max(10, Math.floor(width * 0.3));
 	const seatRows = Math.min(8, Math.max(3, Math.floor(mainHeight * 0.4)));
-	const { lines: seatLines } = renderSeatList(seats, null, Math.min(width - 4, 80), selectedSeat, color);
+	const { lines: seatLines } = renderSeatList(seats, null, width - 4, selectedSeat, color);
 	lines.push(...seatLines);
 
 	// Streaming / partial rows — U2: EVERY actively-generating seat at once, keyed off
@@ -360,7 +431,7 @@ export function renderTui({
 			? [partial]
 			: [];
 	if (active.length === 0) {
-		const partialRows = renderPartial(partial && partial.hasContent ? partial : null, Math.min(width - 4, 80), {
+		const partialRows = renderPartial(partial && partial.hasContent ? partial : null, width - 4, {
 			roles: color && toolBg ? themeToolRoles(theme) : null,
 			color,
 		});
@@ -373,7 +444,7 @@ export function renderTui({
 		lines.push("");
 		for (const p of active) {
 			lines.push(paint("bold", `  ── streaming${p.seat ? `: ${p.seat}` : ""} ──`, color));
-			const row = renderPartial(p, Math.min(width - 4, 80), {
+			const row = renderPartial(p, width - 4, {
 				roles: color && toolBg ? themeToolRoles(theme) : null,
 				color,
 			});
@@ -387,7 +458,7 @@ export function renderTui({
 		turns,
 		{},
 		transcriptRows,
-		Math.min(width - 4, 80),
+		width - 4,
 		color,
 	);
 	if (transLines.length > 0) {
@@ -399,12 +470,12 @@ export function renderTui({
 	// Status bar
 	lines.push("");
 	lines.push(rule);
-	const { lines: statusLines } = renderStatusBar(health, seats, queueItems, Math.min(width - 4, 80), color);
+	const { lines: statusLines } = renderStatusBar(health, seats, queueItems, width - 4, color);
 	lines.push(...statusLines);
 	lines.push(rule);
 
 	// Footer
-	const { lines: footerLines } = renderFooter(Math.min(width, 80), color);
+	const { lines: footerLines } = renderFooter(width, color);
 	lines.push(...footerLines);
 
 	const frame = new Frame(lines);

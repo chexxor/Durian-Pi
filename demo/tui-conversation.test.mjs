@@ -74,6 +74,28 @@ assert.deepEqual(decodeKeys("\r"), ["enter"], "Enter (CR) decodes to enter");
 assert.deepEqual(decodeKeys("\n"), ["enter"], "Enter (LF) decodes to enter");
 assert.deepEqual(decodeKeys("\x1b[A"), ["up"], "arrow up still decodes to up");
 
+// 6. The FOCUSED seat's own stream (not another seat's), wrapped, fitting the height.
+const partials = [
+  { seat: "pm", hasContent: true, text: "PM STREAMING" },
+  { seat: "impl", hasContent: true, text: "IMPL-LIVE " + "word ".repeat(40) },
+];
+const streamed = renderTui({ seats, turns, partial: partials[0], partials, health, selectedSeat: "impl", view: "conversation", width: 60, height: 24 });
+const streamLines = frameToLines(streamed);
+const streamText = streamLines.join("\n");
+assert.ok(!streamText.includes("PM STREAMING"), "the conversation never shows another seat's stream");
+assert.match(streamText, /IMPL-LIVE/, "shows the focused seat's stream");
+assert.ok(streamLines.filter((l) => l.includes("word")).length >= 2, "long streaming prose wraps across lines");
+assert.ok(streamLines.length <= 24, `the conversation frame fits the viewport (${streamLines.length} <= 24)`);
+
+// 7. G / End returns to the live tail (auto-follow).
+const tailed = [];
+const tailDriver = createUiDriver({ ...io(), onTail: () => tailed.push("tail") });
+tailDriver.handleKey("tail");
+assert.deepEqual(tailed, ["tail"], "the tail request is delivered");
+assert.deepEqual(decodeKeys("G"), ["tail"], "G decodes to tail");
+assert.deepEqual(decodeKeys("\x1b[F"), ["tail"], "End decodes to tail");
+await tailDriver.cleanup();
+
 await driver.cleanup();
 await backDriver.cleanup();
 await quitDriver.cleanup();

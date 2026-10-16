@@ -282,3 +282,26 @@ test for each**. Recommended decomposition (PM owns the final split):
 
 **Explicit non-goals:** no browser; do not change `cli.mjs`'s JSON contract; keep `log`/`watch`/JSON
 working unchanged; no new write path.
+
+---
+
+## Appendix A — best-practice comparison against other TUI apps (2026-10-16)
+
+Grounded in the vendored skill `skills/tui-design/SKILL.md` and its references
+(`references/exemplar-apps.md`, `references/visual-patterns.md`, `references/interaction-patterns.md`).
+This maps the field's converged practice onto durig's client so the next change starts from it.
+
+| Practice (source) | What the exemplars do | durig today | Status |
+|---|---|---|---|
+| **Screen buffer** (`visual-patterns.md` *Inline, alt-screen, or overlay*) | "alt screen for apps you *live in*; inline for tools you *summon*." Claude Code (fullscreen) and Copilot CLI use alt-screen + a virtualized transcript; Gemini CLI stays inline (`<Static>`) and inherits native scrollback/search/copy. | `ui.mjs` uses the alt-screen; transcript is line-windowed | **Adopt** (D69) — matches Claude Code/Copilot for a live chat. |
+| **Virtualized transcript** (`exemplar-apps.md` Claude Code/Copilot; *Virtualization*) | Only visible rows render, so memory stays flat and nothing flickers. | `renderTranscript` now budgets by DISPLAY LINES from the newest turn backward; `buildTurns` reads a bounded page | **Fixed** — the line budget removes the 26>24 viewport overflow. |
+| **Wrap vs truncate** (`visual-patterns.md` *Truncation*) | "Wrap — only for prose. Never wrap in cells of dense tables." | seat list truncates; conversation streaming prose wraps | **Fixed** in the conversation view. |
+| **Live tail + auto-scroll toggle** (`exemplar-apps.md` lazydocker; *Live log streaming*) | A live log stream with an explicit auto-scroll toggle. | conversation auto-follows (scroll 0); `↑` pauses; **`G`/`End` returns to the tail** | **Fixed** — added the return-to-tail key. |
+| **Drill-down + back, status header** (`exemplar-apps.md` k9s) | Enter drills into detail, Esc backs out; a status header shows the "address". | Enter opens the seat's conversation, Esc backs to the list, header names the seat | match. |
+| **Debounced live redraw** (`exemplar-apps.md` k9s) | Live updates reflect without refresh, via a debounced redraw. | driver coalesces ticks (`tickScheduled`), polls ≤750 ms (D11) | match. |
+| **Search / copy / scrollback export** (`exemplar-apps.md` Claude Code/Copilot) | On the alt-screen the app "must rebuild what the terminal gave for free — search, copy, exporting the transcript to scrollback — and keep an inline fallback". | none of these exist yet | **GAP** — the named cost of the alt-screen; the next TUI items. |
+| **Inline / accessible fallback** (same) | Claude Code forces its classic renderer in screen-reader mode. | `watch`/`log` JSON surfaces remain the scriptable/accessible path (D21) | partial; an explicit plain mode is the gap. |
+
+**Jump-start list for the next TUI items:** (1) search within the conversation; (2) copy/export the
+transcript and leave a scrollback receipt on exit; (3) an inline/plain fallback for accessibility.
+These are the known costs of the alt-screen choice, named by the exemplars — not optional polish.
