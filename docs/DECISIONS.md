@@ -1566,7 +1566,7 @@ commit stream (src/scheduler.mjs) already tells the loop exactly when a submissi
 changes; the pass wait must not ignore it. Measured effect: a cooperative stop under load settles in
 ~1.8s where the notes recorded multi-minute blocked passes.
 
-**Status:** adopted; commit `1d358cd`; proof `demo/broker-liveness.test.mjs` (RED: 1 fast wake in 2s →
+**Status:** adopted; commit `b81e171`; proof `demo/broker-liveness.test.mjs` (RED: 1 fast wake in 2s →
 GREEN: 2nd wake ~27ms in while the other seat still generates), plus `PASS <n> ms=<dur> woke=<a,b>`
 per-pass observability in `<db>.broker.log`. Whole `demo/*.test.mjs` suite green (81/81). The
 `idle_with_queued_work` notice is unchanged; a distinct "queued work, no live lease, aged" notice is
