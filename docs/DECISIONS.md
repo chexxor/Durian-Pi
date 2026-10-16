@@ -1707,7 +1707,8 @@ spooled operator intents idle indefinitely. pi-durable owns durability and `resu
 supervision. A durability guarantee is not a liveness guarantee.
 
 **Decision (design of record; mechanism open).** Supervision is a host process *around* the broker, in
-three layers: an OS trigger for boot/logout survival (logon Task by default; Windows Service opt-in) →
+three layers: an OS trigger for boot/logout survival (a per-user agent by default — Windows Task /
+macOS LaunchAgent / `systemd --user`; a system daemon opt-in) →
 a thin **host** (`src/host.mjs`) that never opens the store and owns single-instance, backoff, give-up,
 heartbeat-watching, kill-on-wedge, and the stop handshake → the broker, still the sole writer. The
 contract: (a) an exit-code taxonomy (0 intended stop / 1 crash / 2 wedge / 0 give-up) set via
@@ -1715,7 +1716,10 @@ contract: (a) an exit-code taxonomy (0 intended stop / 1 crash / 2 wedge / 0 giv
 distinct from the ephemeral `<db>.broker.stop` (F35); (c) two heartbeats — liveness (event loop) and
 progress (`PASS`) — with the progress threshold from the provider stream timeout, and sleep treated as
 a resume-gap event (`performance.now()` counts sleep on Windows, so no clock excludes it); (d) the host
-never opens the store. The host must not duplicate retries, scheduling, or resume — if it re-drives the queue, that is double-work.
+never opens the store. The host must not duplicate retries, scheduling, or resume. **The host is
+platform-neutral pure Node** (durig must adapt to macOS and Linux distros): only the trigger file, the
+kill-tree primitive (Windows Job Object vs POSIX process group), and the stop signal (POSIX SIGTERM vs
+the Windows `.stop` file) are OS-specific. — if it re-drives the queue, that is double-work.
 
 **Rejected / corrected alternatives.** A self-supervising detached parent is the exact shape that
 already failed. A Worker-thread `process.exit()` self-kill is invalid: it stops the Worker, not the

@@ -117,14 +117,18 @@ _Historical (superseded): the #480-era notes below were written for the 2026-10-
   in `selfdev.sqlite.broker.inbox/`** (pending the next broker pass), alongside the two earlier pm
   intents.
 - **Broker supervision / host daemon (design recorded 2026-10-16; refined after round 3; ROADMAP items
-  61–67; D71)** — `docs/BROKER-SUPERVISION.md` is the design of record: a logon Task (default) or
-  Windows Service (opt-in) hosting a thin **`src/host.mjs`** (never opens the store) that supervises the
-  sole-writer broker — exit-code taxonomy, a durable `<db>.broker.down` marker distinct from the existing
-  `.broker.stop`, liveness/progress heartbeats (sleep is a resume-gap, not a clock), and the Job Object.
+  61–67; D71)** — `docs/BROKER-SUPERVISION.md` is the design of record: a per-user agent (Windows Task /
+  macOS LaunchAgent / `systemd --user`) by default, or a system daemon opt-in (Windows Service /
+  LaunchDaemon / systemd system unit), hosting a **portable** thin **`src/host.mjs`** (never opens the
+  store) that supervises the sole-writer broker — exit-code taxonomy, a durable `<db>.broker.down` marker
+  distinct from the existing `.broker.stop`, liveness/progress heartbeats (sleep is a resume-gap, not a
+  clock), and a per-platform kill-tree primitive (Job Object vs POSIX process group). Only the trigger
+  file, the kill primitive, and the stop signal are OS-specific — the host is identical on Windows,
+  macOS, and Linux distros.
   Sequenced **after item 54** — and **item 54 is NOT done** (the scoped D65 wait still awaits the woken
   runs; wake-and-return is pending). Item **65** is a live single-writer hazard (genlock age-steals a
-  live long generation, swallows `EPERM`, trusts reused pids) and should land regardless. Logon Task vs
-  Windows Service is an operator ruling. Registered, not scheduled — awaiting `pm` sequencing.
+  live long generation, swallows `EPERM`, trusts reused pids) and should land regardless. Per-user agent vs system daemon is an
+  operator ruling. Registered, not scheduled — awaiting `pm` sequencing.
 - **Broker intent-inbox** — deliver intent to a seat WITHOUT stopping the broker (a file the broker
 drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guard, so routing needs a
 `serve --stop`, which interrupts in-flight work.

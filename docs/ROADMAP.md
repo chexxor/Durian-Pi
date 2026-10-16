@@ -1732,17 +1732,21 @@ should not wait. **Correction (delegate, round 3):** the research agent read the
     *Acceptance:* chaos demo — crash, hang, and stop-request each produce the right host action; the host
     never opens the store.
 
-64. **OS trigger packaging (one per store).** Default to a **logon-triggered Task** running
-    `src/host.mjs` (keeps the user profile, git/npm auth, desktop access); a **Windows Service is
-    opt-in** for an always-on host. Either way: delayed auto-start, log rotation, a stop/ drain window
-    **≥ 900 s** (> the 600 s stream timeout + margin), restart-on-nonzero with backoff, and a store path
-    parameter (`selfdev.sqlite`, `tutor-pi.sqlite`) that refuses a network/OneDrive/non-fixed-drive path.
-    Service mode removes the console, so the TUI must be a remote client (item 52's `watchEvents()` path,
-    gated on item 55). The service-account recipe (explicit `HOME`/`USERPROFILE`/`APPDATA`, git
-    `safe.directory` + store credentials, `NPM_CONFIG_USERCONFIG`) is in `docs/BROKER-SUPERVISION.md` §10.
+64. **OS trigger adapters (portable host, per-platform install).** Keep `src/host.mjs` pure Node and
+    generate the boot/login trigger per platform: a **per-user agent by default** (Windows Task, macOS
+    LaunchAgent, `systemd --user`), a **system daemon opt-in** for an always-on host (Windows Service,
+    LaunchDaemon, systemd system unit). A `durig service install` emits the unit/plist/service config and
+    the per-platform kill-tree primitive (Windows Job Object vs POSIX process group). Either way:
+    delayed auto-start, log rotation, a stop/drain window **≥ 900 s** (> the 600 s stream timeout +
+    margin), restart-on-nonzero with backoff, and a store path parameter (`selfdev.sqlite`,
+    `tutor-pi.sqlite`) that refuses a network/synced filesystem on every OS. System-daemon mode removes
+    the console, so the TUI must be a remote client (item 52's `watchEvents()` path, gated on item 55);
+    the per-user agent keeps it in-process. The account/identity recipe is in `docs/BROKER-SUPERVISION.md`
+    §10.
     *Owner:* `devtools` · *Consulted:* `operator`, `impl`.
-    *Acceptance:* install/uninstall on native Windows; survives logout and reboot; a documented way back
-    to an interactive `cli.mjs serve` with the host not fighting it.
+    *Acceptance:* install/uninstall on Windows **and** macOS **and** a Linux distro; survives login (and
+    boot in daemon mode); a documented way back to an interactive `cli.mjs serve` with the host not
+    fighting it.
 
 65. **Correctness hardening: the genlock lease and broker identity.** Three verified hazards, all
     independent of any daemon: (a) `src/genlock.mjs` holds a slot for the whole response but steals when
@@ -1773,8 +1777,11 @@ should not wait. **Correction (delegate, round 3):** the research agent read the
     *Acceptance:* the suite fails against today's unsupervised broker and passes against the design.
 
 **Cross-links:** item **55** still gates any control socket (Option B / item **52**); item **52** gains a
-note that an attached client is a *client* of the host, never a second writer — and that **service mode
-(Session 0) forces the remote gated path** while the logon-Task mode keeps the in-process subscriber.
+note that an attached client is a *client* of the host, never a second writer — and that **system-daemon
+mode (no console) forces the remote gated path** while the **per-user agent** keeps the in-process
+subscriber. **Portability is a first-class requirement** (Windows, macOS, Linux distros): only the
+trigger file, the kill-tree primitive, and the stop signal are OS-specific; `src/host.mjs` is identical
+everywhere (`docs/BROKER-SUPERVISION.md` §2 portability boundary).
 
 ## Explicitly deferred (with reasons)
 

@@ -4,7 +4,8 @@
 `docs/reviews/building-agent-systems-on-pi-research.md` and **re-verified against durig's code** at
 every round (the research agent read the tree from round 3 on). **Registered, not scheduled:** roadmap
 items 61–67; `pm` sequences them. The host mechanism **logon Task vs Windows Service** is still an open
-operator question (§10).
+operator question (§10) — and, since durig must adapt to macOS and Linux, the real axis is
+**per-user agent vs system daemon** across platforms.
 **Scope:** how the process that owns the store (`cli.mjs serve`) is kept alive and healthy on a host
 that can reboot, sleep, and kill processes — the "daemon" around durig.
 **Companion:** `docs/BROKER-ARCHITECTURE.md` (the in-process event loop / actor model). This document
@@ -23,19 +24,30 @@ stopped until a human runs `up`/`serve` again.
 ## 2. The design: three layers, each seeing only what it can
 
 ```
-SCM / Task Scheduler ──▶ Windows host (boot/logon trigger)
-                           └─spawns──▶ src/host.mjs   (thin daemon supervisor; never opens the store)
-                                         └─spawns in a Job Object──▶ cli.mjs serve   (the sole writer)
+OS trigger (Task · launchd · systemd) ──▶ src/host.mjs  (PORTABLE supervisor, pure Node)
+                                          └─spawns (behind a kill-tree boundary)──▶ cli.mjs serve
 ```
 
-- **Layer 0 — the OS trigger.** A logon Task (default) or a Windows Service (opt-in, always-on host)
-  gives boot/logout survival and restart-on-crash. Critically, the OS trigger only observes *process
-  exit*; it cannot see a process that is alive but wedged. So a hang detector must live below it (§4).
-- **Layer 1 — the thin daemon (`src/host.mjs`).** Owns single-instance, backoff, give-up, reading the
-  heartbeat, killing a wedged broker, and honoring the durable down marker. It never opens the store —
-  health is pid + heartbeat + lease files only — so it cannot break single-writer.
+- **Layer 0 — the OS trigger (per platform, thin).** A "run at login as the user" agent by default
+  (Windows Task, macOS LaunchAgent, `systemd --user`), or a system daemon for an always-on host
+  (Windows Service, macOS LaunchDaemon, systemd system unit). It gives boot/logout survival and
+  restart-on-crash, and observes **process exit only** — so a hang detector must live below it (§4).
+  The trigger is a generated unit/plist/service config that starts `src/host.mjs` and nothing else.
+- **Layer 1 — the portable host (`src/host.mjs`).** Pure Node, no OS API. Owns single-instance, backoff,
+  give-up, heartbeat-watching, kill-on-wedge, and the durable down marker. It never opens the store, so
+  it cannot break single-writer.
 - **Layer 2 — the broker (`cli.mjs serve`).** Unchanged as the sole writer; adds the exit-code taxonomy
   (§3) and the heartbeat writer (§4).
+
+**Portability boundary (the requirement: durig must adapt to macOS and Linux distros).** Only three
+things are OS-specific, and each sits behind a small adapter so the host is byte-identical everywhere:
+(1) the **boot/login trigger** — a generated unit/plist/service file, not code; (2) the **kill-tree
+primitive** — Windows Job Object vs POSIX process group (`detached` + `kill(-pid)`); (3) the **stop
+signal** — POSIX `SIGTERM` vs the Windows `.stop` file (F35; already needed). Everything else is
+already portable: the markers are DB-relative files, exit codes are Node's, path handling is Node's, and
+**the resume-gap heartbeat is clock-agnostic** (§4) because `performance.now()`'s suspend behavior
+differs per platform. The design does **not** depend on WinSW/Servy/launchd/systemd — those are just the
+per-OS trigger adapters.
 
 **Naming (verified).** `src/supervisor.mjs` already exists and is the *escalation pass* (ROADMAP 42/P3:
 `failureStreak` → park on the human), so the OS-level supervisor takes a distinct name. **`src/host.mjs`
@@ -183,6 +195,15 @@ object — keep ours as the authority).
   down = `.broker.down` present or heartbeat absent.
 - **AV/Defender.** Exclude the seat root, `node_modules`, the store dir, and the node/host executables;
   expect AV to delay service start (another reason for delayed auto-start).
+- **Kill the whole tree, portably.** On POSIX, spawn the broker `detached` and kill its process group
+  (`kill(-pid)`); on Windows use the `KILL_ON_JOB_CLOSE` Job Object. `child.kill()` alone leaves
+  grandchildren on every platform. Abstract this as the host's one kill primitive.
+- **Clocks differ per platform.** `performance.now()` excludes suspend on some platforms (Linux
+  `CLOCK_MONOTONIC`) and includes it on others (Windows QPC), so never assume — the resume-gap rule is
+  the portable one.
+- **"Local disk" is per-filesystem.** SQLite locking is unsafe on network/synced filesystems
+  (SMB/NFS/OneDrive/Dropbox) on every OS; the install check must be per-platform (drive type on Windows,
+  `statfs`/mount type on POSIX, the `OneDrive`/`Dropbox` env vars).
 - **Session 0 vs the TUI.** A service-hosted broker has no console, so the TUI cannot be in-process:
   service mode *forces* the remote `watchEvents()` path of ROADMAP item 52, which is **gated on item
   55** (the `security.sec` position). Going service-first commits us to writing `security.sec` before
@@ -198,17 +219,28 @@ impersonation/squatting vectors, and logon-SID scoping are recorded in the resea
 
 ## 10. Open questions (operator / research)
 
-1. **Logon Task vs Windows Service.** The round-3 recommendation: **default to a logon-triggered Task**
-   running `src/host.mjs` (keeps the user profile, git/npm auth, desktop access; the TUI can stay
-   in-session), and treat a service as **opt-in for an always-on host** (Session 0 has no console).
-   **Operator ruling needed.** Neither helps Modern Standby — both need the resume handling of §4.
-2. **Service account recipe.** A service account changes `%USERPROFILE%`/`%APPDATA%`, git credentials,
-   and per-worktree `npm ci`. The safe recipe is explicit env (`HOME`/`USERPROFILE`/`APPDATA`/
-   `LOCALAPPDATA`), `safe.directory`, `GIT_CONFIG_GLOBAL` + a store credential file, and
-   `NPM_CONFIG_USERCONFIG`; verify it end-to-end before relying on a service.
-3. **WinSW vs Servy.** WinSW's last stable is 2023 (maintenance limbo, still works); Servy is actively
-   maintained and adds tree-kill/health, but its stop-timeout has a reported double-wait bug. Either is
-   fine **because the restart/health logic stays in `src/host.mjs`**; the OS wrapper is a dumb trigger.
+1. **Per-user agent vs system daemon (a cross-platform axis, not a Windows one).** Default to a
+   **per-user agent** that runs at login as the user — Windows Task, macOS LaunchAgent, `systemd --user`
+   — because it inherits the user's profile, git/npm credentials, and file ACLs, and lets the TUI stay
+   in-process. Its cost: it stops at logout and needs a login after reboot. A **system daemon** is the
+   opt-in for an always-on host that must run unattended; on Windows it is Session 0 (no console).
+   Neither escapes Modern Standby/sleep (§4). **Operator ruling needed**, and it is per machine, not per
+   OS — the host is the same either way.
+
+   | | per-user agent (default) | system daemon (opt-in) |
+   | --- | --- | --- |
+   | Windows | logon Task | Windows Service (Session 0) |
+   | macOS | LaunchAgent | LaunchDaemon |
+   | Linux | `systemd --user` (or distro equivalent) | systemd system unit (or OpenRC/runit/supervisord) |
+
+2. **Account / identity (per platform).** Prefer running as the invoking user on every OS. A dedicated
+   account is needed only for a system daemon; then the explicit-env recipe (`HOME`/`USERPROFILE`/
+   `APPDATA`/`LOCALAPPDATA`, git `safe.directory` + credential store, `NPM_CONFIG_USERCONFIG`) must be
+   verified end to end. POSIX expresses it as the unit's `User=`; Windows as "Log on as a service".
+3. **Windows trigger adapter.** WinSW's last stable is 2023 (maintenance limbo, still works); Servy is
+   actively maintained and adds tree-kill/health, but its stop-timeout has a reported double-wait bug.
+   Either is fine **because the restart/health logic stays in `src/host.mjs`**; the OS wrapper is a dumb
+   trigger. The macOS/Linux adapters (launchd plist, systemd unit) are generated the same way.
 4. **Version handshake details** (what `status` refuses to claim when the on-disk version differs).
 5. **Uninstall / downgrade path** back to an interactive `cli.mjs serve` without the host fighting it.
 
