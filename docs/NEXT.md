@@ -3,11 +3,46 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate session, third pass — routed the daemon intent to `pm`; then recovered from a self-inflicted incident: a concurrent `resume` crashed the broker and corrupted two `pi.live` run-control docs, wedging every write-side open. Store repaired and broker restarted as pid 22724. One residual defect remains (qa/lead submissions stuck `placed` over a terminal task). See **NEXT SESSION**). Next agent: read **NEXT SESSION**; the later sections are historical._
+_Last refreshed: 2026-10-16 (delegate session, **fourth pass** — applied the pending `P3 Runbooks` constitution and recovered `impl`, which had ended a run on a malformed pseudo-tool-call mid-#700. See **LATEST** immediately below, then **NEXT SESSION**; the later sections are historical.)_
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
 > operator notifies you when a run completes. Do not loop `sleep`/`tasklist` to watch it.
+
+## LATEST — 2026-10-16 fourth pass (delegate): impl recovered; P3 Runbooks applied
+
+**Broker:** stopped pid 14536 cleanly (`EXIT pid=14536 reason=stop` at `20:03:12Z`, after a long `lead`
+drain) and restarted as **pid 32276** at `20:06:55Z` (`scripts/serve-noroot.ps1`; logs
+`.spike/serve.{out,err}` and `selfdev.sqlite.broker.log`).
+
+**Constitution:** `up rig.selfdev.json --refresh --no-serve` applied **P3 Runbooks**; doc 28 now carries
+`prepare_workspace`, `P3 Language`, and `P3 Runbooks` (verified with `scripts/read-constitution.mjs`).
+
+**impl recovered (the operator's ask).** impl claimed **#700** (no-secrets config guard) at 19:56:43,
+wrote coherent `SECRET_VALUE_PATTERNS` / `looksLikeSecret` / `assertNoSecretsInFile` code into
+`src/config.mjs` — but in the **shared main tree** (no `item-700` worktree; it skipped
+`prepare_workspace`) — then its run ended on a **malformed pseudo-tool-call** (`<parameter name="edit">`
+arrived as text; `stopReason:"stop"`) at ~20:01, leaving the item incomplete. Recovery: backed up the
+tree (`.spike/delegate/impl-recovery-20261016-200534/`: `tracked.patch`, `init.test.mjs`), then spooled a
+steer via `intent.mjs` (`.spike/delegate/intent-impl-resume-700.txt`) = call `prepare_workspace(700)`
+FIRST, re-apply the guard inside `item-700`, revert the shared-tree block with the edit tool (never
+`git restore`), write the failing-first demo, verify, commit #700; then #806. impl re-woke (lease
+`seat:impl` from `20:07:37Z`) and is generating. **Do not poll; hand back.**
+
+**Two defects found this session (feed item 69 / item 66):**
+1. **`serve --stop` returned `stopped:true` while pid 14536 was still alive** in its final F11 drain.
+   `runWakeLoop` clears the heartbeat interval *before* `await harness.waitForIdle`, so `brokerAlive`
+   reads stale, `cmdStopBroker` clears `broker.json`, and the stop reports success. **Never trust
+   `stopped:true` alone — confirm no `cli.mjs serve` process remains** (the runbook already requires this).
+2. **A spooled inbox intent drains only when a pass runs**, and passes fire only on wake-relevant store
+   commits; the operator's runbook intent (`requestId c9557fe6…`) sat from 19:49 to 19:56 until an
+   unrelated commit. Item 66's "drain each pass" is incomplete — a spooled operator intent should force
+   a pass rather than wait for one.
+
+**Gate unchanged:** `cli.mjs` is still dirty (cmdInit C9/C10 + untracked `demo/init.test.mjs`) and
+`src/seatguard.mjs` + `demo/seatguard.test.mjs` are dirty in main; **items 69/78 remain blocked on
+`cli.mjs`**. Note the seatguard work is committed in `item-673` (#802, `0102f3c`), so the main-tree
+copies may be stale leftovers — verify before treating them as in-flight.
 
 ## NEXT SESSION — START HERE
 
