@@ -1087,6 +1087,28 @@ surface. A feature that is off must therefore cost nothing — not "little".
     readable `main` plus the docs. **Requires the operator's authorization to
     push**, and a GitHub remote added alongside the existing LAN Gitea one.
 
+59. **A public documentation site — GitHub Pages, for newcomers, users, and maintainers.** The repo is
+    becoming public (item 22) and its docs are substantive but organized for *us*: `STATUS`/`NEXT`/
+    `DECISIONS`/`ROADMAP` are internal working surfaces. Three audiences need three shapes — a
+    **landing page** for someone first hearing about durig (what it is, why it exists, a 60-second
+    example), **end-user pages** for operating a rig (install, quickstart, the CLI verbs, the TUI,
+    configuring a rig, troubleshooting), and **maintainer pages** for changing it (the broker and
+    architecture, `docs/PI-DURABLE-INTEGRATION.md`, how to build on pi-durable, the decisions record,
+    how to contribute). Static site on **GitHub Pages** (the operator's host choice); the **framework
+    is an open decision** — evaluate on: content is already Markdown; no server; a native-Windows
+    build; minimal dependencies; reproducible/pinned builds; and how cleanly it projects pages from
+    `docs/` **without duplicating** them (the internal docs stay the source of truth, D62).
+    *Owner:* `scribe` (project-level surfaces: FEATURES/STATUS/README) · *Consulted:* `designer`
+    (information architecture + landing page), `devtools` (build/deploy to Pages), `advocate`
+    (workflow fit), operator (framework choice).
+    *Depends:* item 22 (the public repo); the surface-decision rule (where the site sits relative to
+    the CLI and TUI).
+    *Acceptance:* a static site that builds on native Windows and deploys to GitHub Pages; a landing
+    page, at least one end-user task page, and a maintainer page; internal links resolve; the build is
+    reproducible from the repo with no un-committed generated content.
+    *Open decision:* the framework (e.g. Astro Starlight, MkDocs Material, Docusaurus, VitePress, or a
+    plain Markdown renderer) — a small evaluation, not a commitment.
+
 ## Prior art — the pi-durable example projects (reviewed 2026-10-11)
 
 24. **Adopt what the pi-durable demos show, and record what they don't.** The Pi

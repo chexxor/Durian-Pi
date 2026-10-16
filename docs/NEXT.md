@@ -127,6 +127,9 @@ _Historical (superseded): the #480-era notes below were written for the 2026-10-
   The rank-1 change is **wake-and-return in `drivePass`** (item 54). The review's explicit keep-list is
   recorded. **How-we-build doc for maintainers and upstream: `docs/PI-DURABLE-INTEGRATION.md`.**
   Awaiting `pm` sequencing.
+- **Public doc site (item 59)** — `scribe` builds a GitHub Pages static site with a landing page,
+  end-user pages, and maintainer pages, projecting from `docs/` (no duplication); the framework is an
+  open decision. Depends on item 22 (the public repo). Awaiting `pm` sequencing.
 - **Broker intent-inbox** — deliver intent to a seat WITHOUT stopping the broker (a file the broker
 drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guard, so routing needs a
 `serve --stop`, which interrupts in-flight work.
