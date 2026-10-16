@@ -116,12 +116,19 @@ queued work sat idle while a run was in flight.
   treats a submission settling as wake-relevant (“a submission settling … is exactly when a stalled
   claim becomes wakeable again”) — so the loop cannot act on that per-submission intent while parked in
   the global wait.
+- **Code path (the decisive one):** `src/broker.mjs:258-274` does `await drivePass(...)` and THEN
+  `passes++; logBrokerLine(dbPath, \`PASS ${passes}\`)`. So `PASS` is written **only after `drivePass`
+  returns**, and `drivePass` returns **only after line 146's `harness.waitForIdle` resolves**, which is
+  only when **every** ownerless conversation is idle. Consequence (a code-path FACT, not an inference):
+  **no pass boundary — and therefore no next wake of ANY seat — until every in-flight run settles**; a
+  seat that finished early is not re-woken until the slowest run finishes.
 
-**INFERRED (NOT measured — no instrumentation exists):** that this global wait is the SOLE/DOMINANT
-cause of the 27–44-min passes, and that “a pass lasts as long as the longest run”. The in-flight run
-during the stall is *consistent* with it, but there is no per-pass duration or per-seat wake→action
-latency in the log to isolate it. **Do not treat this as established** — the Observability step below
-exists to measure it before/after the fix.
+**UNVERIFIED (relative contribution):** how much of the 20–44-min pass time is this wait versus the
+pass TAIL (`worktreeClaimed` cleanup, `supervise`). There is **no per-pass duration instrumentation**
+(`grep -n 'Date.now() - |durationMs' src/broker.mjs` → none), so the split cannot be isolated without
+adding it (the Observability step below) or a controlled experiment — and a controlled experiment is
+blocked by the single-writer rule plus the running broker. **The mechanism is code-verified; only the
+proportion is not.**
 
 ### The tool that exists to fix it
 `Scheduler.waitForIdle(conversationId | undefined, context)` and `Conversation.waitForIdle(context)`
