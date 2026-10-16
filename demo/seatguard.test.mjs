@@ -6,6 +6,7 @@
 // tool task - and only then the behaviour.
 
 import { mkdtemp, rm } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
@@ -37,7 +38,7 @@ try {
 
 	console.log("\nCommands that leave the boundary are blocked, with the reason as the block text");
 	for (const command of ["wsl ls", "docker ps", "docker-compose up", "git reset --hard HEAD~1", "git clean -fd", "git checkout -- ."]) {
-		const verdict = beforeTool({ type: "toolCall", id: "1", name: "bash", arguments: { command } });
+		const verdict = await beforeTool({ type: "toolCall", id: "1", name: "bash", arguments: { command } });
 		check(
 			`blocked: ${command}`,
 			verdict?.block?.includes("refused by durig"),
@@ -47,14 +48,14 @@ try {
 
 	console.log("\nOrdinary work is not blocked — a guard that blocks everything is an outage");
 	for (const command of ["node demo/cli.test.mjs", "git status", "git diff HEAD", "npm test", "rg wanted src"]) {
-		const verdict = beforeTool({ type: "toolCall", id: "2", name: "powershell", arguments: { command } });
+		const verdict = await beforeTool({ type: "toolCall", id: "2", name: "powershell", arguments: { command } });
 		check(`allowed: ${command}`, verdict === undefined, JSON.stringify(verdict));
 	}
 
 	console.log("\nOnly shell tools are inspected, and nested calls are covered too");
-	const readCall = beforeTool({ type: "toolCall", id: "3", name: "read", arguments: { path: "wsl ls" } });
+	const readCall = await beforeTool({ type: "toolCall", id: "3", name: "read", arguments: { path: "wsl ls" } });
 	check("a non-shell tool is not inspected (its `path` is not a command)", readCall === undefined);
-	const nested = beforeTool({
+	const nested = await beforeTool({
 		type: "toolCall",
 		id: "4",
 		name: "powershell",
@@ -62,12 +63,12 @@ try {
 		parent: { taskId: "tool:1", callId: "c1" },
 	});
 	check("a nested call — how a codemode script reaches a tool — is blocked too", nested?.block?.includes("refused by durig"));
-	const missing = beforeTool({ type: "toolCall", id: "5", name: "bash", arguments: {} });
+	const missing = await beforeTool({ type: "toolCall", id: "5", name: "bash", arguments: {} });
 	check("a shell call with no command string is left alone rather than guessed at", missing === undefined);
 
 	console.log("\nOne policy serves both layers (two lists would drift, and the drift would be a hole)");
 	const envRefusal = await authorEnv(new NodeExecutionEnv({ cwd: root }), root).exec("wsl ls", {}, context);
-	const guardRefusal = beforeTool({ type: "toolCall", id: "6", name: "bash", arguments: { command: "wsl ls" } });
+	const guardRefusal = await beforeTool({ type: "toolCall", id: "6", name: "bash", arguments: { command: "wsl ls" } });
 	const envReason = envRefusal.ok ? "" : envRefusal.error?.message ?? "";
 	check(
 		"the environment and the guard give the same reason for the same command",
@@ -77,13 +78,13 @@ try {
 
 	console.log("\nPublishing is refused unless the OPERATOR granted it, which a seat cannot forge");
 	const pushCall = (command, id) => ({ type: "toolCall", id, name: "powershell", arguments: { command } });
-	const push = beforeTool(pushCall("git push origin main", "7"));
+	const push = await beforeTool(pushCall("git push origin main", "7"));
 	check("git push is refused by default", push?.block?.includes("operator's authorization"), JSON.stringify(push));
 
 	// The exemption reads durig's OWN environment, so an assignment the seat makes inside its own
 	// command changes only that child process. This is the assertion that makes the grant worth
 	// having: without it, "permissioned" would mean "a seat can permit itself".
-	const forged = beforeTool(pushCall("$env:DURIG_ALLOW_PUSH=1; git push origin main", "8"));
+	const forged = await beforeTool(pushCall("$env:DURIG_ALLOW_PUSH=1; git push origin main", "8"));
 	check(
 		"an inline assignment in the seat's own command does NOT grant it",
 		forged?.block?.includes("refused by durig"),
@@ -93,11 +94,11 @@ try {
 	const priorGrant = process.env.DURIG_ALLOW_PUSH;
 	process.env.DURIG_ALLOW_PUSH = "1";
 	try {
-		const granted = beforeTool(pushCall("git push origin main", "9"));
+		const granted = await beforeTool(pushCall("git push origin main", "9"));
 		check("the operator's grant, set in durig's environment, allows it", granted === undefined, JSON.stringify(granted));
 		// Everything else stays refused whatever the grant says: it is a push exemption, not a
 		// general amnesty, and a grant that widened a different rule would be a silent hole.
-		const stillRefused = beforeTool(pushCall("wsl ls", "10"));
+		const stillRefused = await beforeTool(pushCall("wsl ls", "10"));
 		check("the grant does not widen any other rule", stillRefused?.block?.includes("WSL is unsupported"));
 	} finally {
 		// Restore rather than delete: if the operator really had launched with the grant, a test
@@ -107,8 +108,56 @@ try {
 	}
 	check(
 		"and the refusal returns once the grant is gone",
-		beforeTool(pushCall("git push origin main", "11"))?.block?.includes("operator's authorization"),
+		(await beforeTool(pushCall("git push origin main", "11")))?.block?.includes("operator's authorization"),
 	);
+
+	console.log("\nWrite corruption (#673): a `write` that would serialize a multi-line source to one line is refused");
+	const code_payload = "const a = 1; const b = 2; const c = 3;".repeat(20);
+	const multiline_payload = Array.from({ length: 50 }, (_, i) => `line ${i} of new content`).join("\n");
+	// `target.mjs` lives INSIDE the temp root with a 40-line prior: the demo
+	// writes it through the same fs the guard reads, so the guard's disk peek
+	// sees REAL pre-state rather than a fixture. The path argument is the
+	// string that the guard inspects (absolute, as the confined tools pass it).
+	const target = join(root, "target.mjs");
+	writeFileSync(target, "const line1 = 1;\n".repeat(40), "utf8");
+	const as_tool = (args) => ({ type: "toolCall", id: "w", name: "write", arguments: args });
+
+	const corrupt = await beforeTool(as_tool({ path: target, content: code_payload }), {}, context);
+	check(
+		"the serialized-one-line overwrite is refused with the recovery wording",
+		corrupt?.block?.includes("refused by durig") && /multi-line source file \(40 lines\)/.test(corrupt.block),
+		JSON.stringify(corrupt).slice(0, 160),
+	);
+
+	const healthy = await beforeTool(as_tool({ path: target, content: multiline_payload }), {}, context);
+	check("a healthy multi-line rewrite of the same file is allowed", healthy === undefined, JSON.stringify(healthy));
+
+	const scratch = await beforeTool(as_tool({ path: join(root, "new-scratch.js"), content: code_payload }), {}, context);
+	check("a one-line write to a file with no prior is allowed (new-file scratch)", scratch === undefined, JSON.stringify(scratch));
+
+	const config1Liner = await beforeTool(as_tool({ path: join(root, "durig.config.json"), content: '{"note":"config","a":1}' }), {}, context);
+	check("a one-line JSON config rewrite is allowed (not a source file)", config1Liner === undefined, JSON.stringify(config1Liner));
+
+	const shellStill = await beforeTool(pushCall("git reset --hard HEAD~1", "12"));
+	check("the write branch does not change the shell verdicts", shellStill?.block?.includes("refused by durig"), JSON.stringify(shellStill));
+
+	console.log("\nControl-byte corruption (#780): a text write that introduces stray control bytes is refused");
+	const bel = String.fromCharCode(0x07);
+	const bs = String.fromCharCode(0x08);
+	// A BEL where a word's leading letter should be — the shell-escape shape.
+	const mangled = `const x = "see${bel}ranch -D";\nconst y = ${bs}dd -A;\n`;
+	const mangledVerdict = await beforeTool(as_tool({ path: join(root, "mangled.js"), content: mangled }), {}, context);
+	check(
+		"a write introducing 0x07/0x08 is refused, naming the bytes",
+		mangledVerdict?.block?.includes("refused by durig") && /0x07/.test(mangledVerdict.block) && /0x08/.test(mangledVerdict.block),
+		JSON.stringify(mangledVerdict).slice(0, 200),
+	);
+
+	const tabsAndNewlines = await beforeTool(as_tool({ path: join(root, "clean.md"), content: "# title\n\tindented\nplain\n" }), {}, context);
+	check("tab, LF and CR stay legal (\u0009/\u000a/\u000d are ordinary text)", tabsAndNewlines === undefined, JSON.stringify(tabsAndNewlines));
+
+	const nonAscii = await beforeTool(as_tool({ path: join(root, "unicode.md"), content: "caf\u00e9 \u2014 \u4e2d\u6587 \u{1f600}\n" }), {}, context);
+	check("non-ASCII text is not mistaken for control bytes (UTF-8 multibyte never drops below 0x80)", nonAscii === undefined, JSON.stringify(nonAscii));
 
 	console.log(failures === 0 ? "\nPASS — the guard holds" : `\nFAIL — ${failures} assertion(s) failed`);
 } finally {
