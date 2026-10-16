@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate session, paused — TUI hardening H1–H4 done, H7 Tier 1/2, B1/H5 type-to-seat + bracketed paste; broker park diagnosed; pi-durable alignment review landed and folded into the roadmap as items 51–58; doc-site item 59 queued; broker-supervision design recorded — `docs/BROKER-SUPERVISION.md`, roadmap items 61–67, D71; then the portable daemon CLI surface (§11) and the operator ruling for **both** modes with `--user` as default (D72); operator chose **option A** — route the daemon to the team after the current tasks drain). Next agent: read **NEXT SESSION**; the later sections are historical._
+_Last refreshed: 2026-10-16 (delegate session, second pass — broker restarted detached as pid 17692 after fixing the F12 seat-root conflict, fixed by starting without `DURIG_SEAT_ROOT`; the durig-daemon intent was delivered to `pm` through the broker inbox together with the three earlier spooled intents (ownership 45–50, doc-site 59, zero-trust 60), **before** the #662/#710 gate was met, on the operator's direct instruction). Next agent: read **NEXT SESSION**; the later sections are historical._
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
@@ -11,35 +11,45 @@ _Last refreshed: 2026-10-16 (delegate session, paused — TUI hardening H1–H4 
 
 ## NEXT SESSION — START HERE
 
-**Current item (next session): start the broker, let the team drain, then route the durig daemon
-(option A).** The operator chose to support **both** daemon modes (`--user` default, `--system` opt-in)
-and to **route the work to the team** (`pm` → `devtools`/`impl`), not the delegate. In order:
-1. Once no writer is in flight, start the broker **detached**:
-   `DURIG_DB=./selfdev.sqlite node cli.mjs serve`. Its first pass will also deliver the spooled
-   zero-trust intent (item 60). Do not poll it — the operator notifies you when runs complete.
-2. Let the team finish its current tasks — **#662** (TUI C4 close-out) and **#710** (`src/tui/driver.mjs`
-   comment fix), both queued to `impl` — and drain the queue.
-3. Then deliver the daemon intent (see **READY TO SEND** below) to `pm`, which registers/sequences
-   **ROADMAP items 61–64** (owner `devtools`/`impl`); order **61 → 62 → 63 → 64**, and item **65**
-   (genlock live-holder steal / EPERM / PID reuse) is independent and should not wait.
-Design of record: `docs/BROKER-SUPERVISION.md`; decisions **D71** + **D72**.
-**Open, not this session:** ROADMAP **item 54** (`drivePass` wake-and-return) is **still not done** —
-the scoped D65 wait remains; item 65 is a live single-writer hazard.
+**Current item: the durig daemon host, routed to the team (option A).** The broker is **running
+detached** (`pid 17692`, `START` at `2026-10-16T17:01:19Z`) and its first pass delivered **all four
+spooled operator intents** to `pm` (`INTENT delivered=4 dead=0`): agent-ownership items 45–50, the
+doc-site item 59, the zero-trust item 60, and the **daemon intent** (ROADMAP items 61–67). `pm` now
+owns registration and sequencing; the daemon order to record is **61 → 62 → 63 → 64** (64 depends on
+63), with **65 (genlock live-holder steal / EPERM / PID reuse) independent** and not waiting. Design of
+record: `docs/BROKER-SUPERVISION.md`; decisions **D71** + **D72**. Intent body (kept on disk):
+`.spike/delegate/durig-daemon-intent.txt`.
 
-**READY TO SEND — daemon intent (option A), after the drain:** the body is at
-`.spike/delegate/durig-daemon-intent.txt` (gitignored, on disk). Exact command:
+**Deviation from the prior plan (operator-directed):** the daemon intent was delivered **before**
+#662/#710 finished, contrary to the previous "after the drain" gate. The operator asked to work on the
+daemon now; the intent body itself still tells `pm` to sequence behind current work, so nothing was
+preempted. The two gate items remain queued to `impl` (below).
 
-```
-DURIG_DB=./selfdev.sqlite node cli.mjs send pm --body-file .spike/delegate/durig-daemon-intent.txt
-```
+**Seat-root fix — do not repeat this trap:** the first broker start (`dispatch-serve.ps1`) failed the
+F12 guard because `impl`'s persisted cwd is its per-item worktree `item-658` (its claimed #658) while
+`DURIG_SEAT_ROOT` named the repo root. A seat's own prepared cwd wins (`src/seattools.mjs`
+`makeSeatEnv`), so a single global `DURIG_SEAT_ROOT` conflicts with the per-item worktree model. Start
+the selfdev broker **without `DURIG_SEAT_ROOT`** (`.spike/delegate/dispatch-serve-noroot.ps1`); seats
+without a prepared tree fall back to `process.cwd()` (the repo root).
 
-Do **not** send it before **#662/#710** have finished. (If the body file is missing, rebuild it from
-`docs/BROKER-SUPERVISION.md` §11 + ROADMAP items 61–64.)
+**Do not poll** the running broker — the operator notifies the delegate when runs complete.
 
-**Delegate clock-out this session (2026-10-16):** docs-only work, no code. Added the broker-supervision
-design of record (`docs/BROKER-SUPERVISION.md`), ROADMAP items **61–67**, decisions **D71** + **D72**,
-the architecture pointer, and the round-2/round-3 reviews on the research doc. Commits `8889b4d`,
-`f095080`, `8af0411`, `08d2166`. Tests: `npm run test:tui` **14/14**; no build/lint exists.
+**Still queued to `impl`:** #662 (TUI C4 close-out — 48-col golden + lifecycle cleanup), #710
+(`src/tui/driver.mjs:13` comment fix), and #660/#663/#665/#673/#674/#676/#696/#700/#702/#705; #658 is
+`claimed`. These now sit behind the daemon intent's sequencing note.
+
+**Open, unchanged:** ROADMAP **item 54** (`drivePass` wake-and-return) is **still not done** — the
+scoped D65 wait remains; item 65 is a live single-writer hazard; items 66/67 are inbox idempotency +
+startup reconciliation (the leaked `item-635/636/638` worktrees are the observed case).
+
+**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; the broker log is
+`selfdev.sqlite.broker.log`. If the broker is down, restart with
+`.spike/delegate/dispatch-serve-noroot.ps1` (never set `DURIG_SEAT_ROOT`) once no writer is in flight.
+
+**Delegate clock-out this session (2026-10-16, second pass):** operational, no code. Restarted the
+broker with the seat-root fix and routed the daemon intent to `pm` via the broker inbox. Tree held
+other items' files (`cli.mjs`, `docs/DECISIONS.md`, `docs/FEATURES.md`, `docs/STATUS.md`,
+`demo/init.test.mjs`) — untouched. No push.
 
 **Queue work running alongside:** **#662** (TUI C4 close-out — 48-col golden + lifecycle cleanup,
 queued to `impl`) and **#710** (the `src/tui/driver.mjs` comment fix, queued to `impl`). ROADMAP item
