@@ -3,11 +3,61 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate session, **fourth pass** — applied the pending `P3 Runbooks` constitution and recovered `impl`, which had ended a run on a malformed pseudo-tool-call mid-#700. See **LATEST** immediately below, then **NEXT SESSION**; the later sections are historical.)_
+_Last refreshed: 2026-10-16 (delegate, **fifth pass / clock-out** — fixed the recurring `impl` malformed-tool-call stall and registered the queue-view item. See **CLOCK-OUT** immediately below, then the older **LATEST** sections (historical).)_
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
 > operator notifies you when a run completes. Do not loop `sleep`/`tasklist` to watch it.
+
+## CLOCK-OUT — 2026-10-16 (delegate, fifth pass) — START HERE
+
+**What this session did (all LOCAL, unpushed):**
+- Applied the pending **P3 Runbooks** constitution (`up rig.selfdev.json --refresh --no-serve`); doc 28
+  now carries `prepare_workspace` + `P3 Language` + `P3 Runbooks` (verified).
+- Fixed the **recurring `impl` stall**: a tool call written as TEXT using DeepSeek's **DSML**
+  special-token delimiter (U+FF5C `DSML` U+FF5C). **A terminal STRIPS the delimiter, so a screen read
+  shows a clean `<parameter>` block and HIDES the fault — read the stored bytes.** `src/attention.mjs`
+  `isPseudoToolCallTurn`/`countPseudoToolCalls`; `assessRun` (`src/degeneration.mjs`) trips on the first
+  occurrence; `src/supervisor.mjs` reset handoff names it; `src/scheduler.mjs` + `src/broker.mjs` clear
+  the reset seat's cooldown so the next pass re-drives it. Commits `f086382` → `c38815f` → `7d62929`;
+  decision **D77**. Verified against the real stored entry `35382` and live (reset written, seat re-woken
+  and generating).
+- Registered via `pm`: **#819 → scribe** (seat lifecycle + environment doc; CLAIMED, in progress;
+  `docs/SEAT-LIFECYCLE.md` is untracked in the tree), runbook items **#814/#815 → impl, #816 → qa (held),
+  #817 → lead (deferred)**, and the **queue-view + directed-graph** item **#841 → designer (surface,
+  CLAIMED) / #842 → impl (data) / #843 → lead (sequencing)**. Design recorded in the registration:
+  build the VIEW first, keep dependencies ADVISORY, and adopt pi-durable's `TaskGraphState.waiting`
+  (`on`/`policy`) if enforcement is ever wanted — do NOT build a parallel DAG scheduler in `RigQueue`.
+- Full suite after the fix: `demo/*.test.mjs` = **94 pass / 3 fail**; `npm run test:tui` = **14/14**;
+  `npm run demo` = **PASS**. The 3 failures are **pre-existing constitution drift, not this session**:
+  `rig.starter.json`'s `constitutionInline` is missing `P3 Language` (`a0ab993`) and `P3 Runbooks`
+  (`fe0c74c`), so `demo/commit-model.test.mjs`, `demo/seat-commit-instructions.test.mjs`, and
+  `demo/starter.test.mjs` fail their `starter === constitution.txt` assertion. **Unblocked, high-value
+  next item: sync the starter's inline copy with `constitution.txt` → suite 97/97** (route to the
+  constitution's owner, or take as a clean-path fix).
+
+**Broker:** running **pid 16628** (`scripts/serve-noroot.ps1`), started after a clean
+`EXIT pid=9444 reason=stop`; it loads the DSML fix. pm was generating at clock-out (see
+`selfdev.sqlite.genlock.*`). Log: `selfdev.sqlite.broker.log`.
+
+**Open decision / blocker needing an OPERATOR RULING:**
+1. **The `cli.mjs` gate.** The working-tree `cli.mjs` is **#624's complete-but-UNCOMMITTED** `cmdInit`
+   artifact: `demo/init.test.mjs` exits 0, `node --check cli.mjs` is clean, queue row **#624 is `done`**,
+   yet `cmdInit` is in **no commit** (`git log --all -S cmdInit` empty; no `item-*` worktree HEAD has it).
+   **Items 69/78 are blocked until it lands.** Question for the operator: **may the delegate commit
+   `cli.mjs` + `demo/init.test.mjs` (explicit paths only) to clear the gate?** Items 69/78 are also still
+   NOT registered as queue rows.
+
+**Still owed (delegate):** the GENERAL broker revisit gap — a seat suppressed by the per-seat cooldown
+   after a NORMAL settle (not a reset) still waits for an unrelated commit; the reset path is fixed
+   (`7d62929`). Fix by scheduling a pass when a candidate is cooldown-suppressed.
+
+**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+**Restart a down broker:** `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1`
+(never set `DURIG_SEAT_ROOT`).
+
+**Do NOT commit the tree's other-seat work:** `cli.mjs`, `demo/init.test.mjs`, `src/seatguard.mjs`,
+`demo/seatguard.test.mjs`, `docs/ROADMAP.md`, `docs/SEAT-LIFECYCLE.md`. Stage explicit paths only.
 
 ## LATEST — 2026-10-16 fourth pass (delegate): impl recovered; P3 Runbooks applied
 
