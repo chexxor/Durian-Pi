@@ -13,18 +13,26 @@ _Last refreshed: 2026-10-16 (delegate, **sixth pass** — D78 prose-degeneration
   writer.
 - **THE `cli.mjs` GATE STILL STANDS.** `cli.mjs` + untracked `demo/init.test.mjs` are still uncommitted
   (#624's artifact); items 69/70/71/74/78 stay blocked until it lands.
-- **NEW, committed `97a3c6d` (D78): the degeneration guard now detects repetitive PROSE.** `impl`
-  looped live (entry `36368`: "Let me emit. Emit. OK. Go. Now." ~30× per turn) while STILL emitting
-  tool calls — so `tool-turns`/`repeats`/`malformed`/`pseudo-tool-call` and the `step-repetition` metric
-  all read clean and the run went unchecked. Added `textDegeneration`/`countDegenerateTextTurns`
-  (`src/attention.mjs`), `degenerate-text=N>=1` in `assessRun` (`src/degeneration.mjs`), and a named
-  reset handoff (`src/supervisor.mjs`). Live-verified on the impl page
-  (`assessRun(readSeatPages(impl))` → `degenerate-text=1>=1`; `planResets` → a plan for `impl`);
-  `demo/degeneration.test.mjs` RED before (symbols absent at HEAD).
-- **⚠️ OWED — restart the broker to load `97a3c6d`.** The running pid 16628 still has the pre-fix code
-  and will NOT reset a prose-degenerate seat. Stop it first (`serve --stop`; proceed only on
-  `stopped:true` and confirm no `cli.mjs serve` remains), then `scripts/serve-noroot.ps1`. Do NOT
-  restart while `pm`/`advocate` are generating.
+- **REVERTED `97a3c6d` (D78): the prose-degeneration detector false-positived and was removed.** It
+  did catch the real `impl` loop (entry `36368`: "Let me emit. Emit. OK. Go. Now." ~30× per turn while
+  still emitting tool calls, so every structural signal read clean), but on the broker's FIRST pass it
+  also reset `lead`, `advocate`, `scribe`, and `auditor` — coherent transcripts with low *fragment*
+  diversity. Sentence heuristics over markdown cannot separate a word-salad loop from a normal long
+  document (the length cap discards the varied sentences and keeps the repeated ones). The guard is back
+  to its pre-D78 structural signals; **the `impl` prose loop remains UNCAUGHT**. A signal that does not
+  parse prose (a per-turn wall-clock latency bound — degenerate turns ran 56 s then 122 s) is the
+  candidate. See D78's **Status: REVERTED**.
+- **Broker restarted 21:20 (pid 35812)** to drain the impl question and load D78; it then false-reset the
+  four seats above. It **MUST be restarted again** after the D78 revert lands, or it keeps resetting them.
+  Stop first (`serve --stop`; proceed only on `stopped:true` and confirm no `cli.mjs serve` remains),
+  then `scripts/serve-noroot.ps1`.
+- **`impl` went dormant with 23 queued items — the GENERAL revisit gap.** After a NORMAL settle the
+  per-seat cooldown suppresses the re-wake, and no further pass fires without a store commit, so a seat
+  with queued work sits until an unrelated commit or a restart. Verified: pid 16628's last `PASS 82` at
+  `21:09:19`, heartbeat fresh, no genlocks. Still owed.
+- **No compaction verb exists.** pi-durable ships `CompactionTask`, but durig calls it nowhere and
+  `help` has no `compact`; ROADMAP #62 (owner: impl) is the ordered context-pressure + one-compaction
+  item. `reset` is the only context-reducing verb — a full reset, not a summary.
 - **Open sqlite lock (transient, by design):** any opener can hit "database is locked" because EVERY
   open runs schema-migration DDL (`BEGIN IMMEDIATE`) and the resident broker holds the single write
   lock; the adapter's busy_timeout is 5000 ms, so a retry succeeds. Aggravated by stale

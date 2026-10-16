@@ -1949,6 +1949,15 @@ structurally valid and still be thrashing.
 (`[message]`). The `log` command unwraps it to `entry.model = entry.model[0]`. Testing a detector
 against `log`-shaped entries silently blinds every `messageOf`-based signal; test against the raw shape.
 
-**Status:** adopted (delegate), verified by `demo/degeneration.test.mjs` (RED before) and against the live
-impl run (`assessRun` on `readSeatPages(impl)` -> `degenerate-text=1>=1`; `planResets` -> a reset plan for
-`impl`). A false positive costs one context reset, never lost work (the transcript is durable).
+**Status: REVERTED (delegate, same day).** The prose heuristic false-positived on real, coherent seat
+transcripts the moment it went live: on the broker's first pass it reset `lead`, `advocate`, `scribe`,
+and `auditor` (`pi.reset` at 2026-10-16T21:20:32Z). Sentence-fragment analysis over markdown has poor
+lexical diversity even in healthy prose (a lead ruling: 123 fragments, 33 unique), and the fragment
+length cap discards the varied sentences and keeps the repeated ones — so "distinct-sentence ratio"
+cannot separate a word-salad loop from a normal long document. The wiring (`degenerate-text` in
+`assessRun`, the reset handoff) and the `textDegeneration`/`countDegenerateTextTurns` helpers were
+removed, restoring the pre-D78 guard. **Lesson:** a heuristic that resets context must be validated
+against the REAL seat pages of every seat (all false positives zero) BEFORE it is enabled, not just
+against synthetic fixtures; and "a false positive costs one reset" is false when the heuristic fires on
+every seat. The F29 prose loop still needs a signal that does not parse prose — e.g. a per-turn
+wall-clock latency bound (impl's degenerate turns ran 56 s then 122 s while healthy turns ran seconds).

@@ -9,13 +9,7 @@
 import assert from "node:assert/strict";
 import { assessRun, DEGEN_DEFAULTS } from "../src/degeneration.mjs";
 import { applyResets, planResets } from "../src/supervisor.mjs";
-import {
-  countDegenerateTextTurns,
-  countPseudoToolCalls,
-  isDegenerateTextTurn,
-  isPseudoToolCallTurn,
-  textDegeneration,
-} from "../src/attention.mjs";
+import { countPseudoToolCalls, isPseudoToolCallTurn } from "../src/attention.mjs";
 
 let failures = 0;
 function check(label, fn) {
@@ -58,16 +52,6 @@ const reset = () => ({ kind: "pi.reset", model: [{ role: "user", content: [{ typ
 // and a plain nested-parameter pair. The delimiter is stripped by a terminal, so a screen read
 // hides it; this test uses the bytes the store actually holds.
 const DSML = "\uFF5CDSML\uFF5C";
-// The F29 text-degeneration shape, taken verbatim from the 2026-10-16 live `impl` turn
-// entry 36368: the model filled the message TEXT with one short sentence repeated dozens of
-// times, then still produced a structured tool call — so every structural signal reads clean.
-const babblingText =
-  "Now stage only those two explicit paths, then commit.\n" +
-  "Let me stage them.\n\nLet me verify the staged set is exactly those two.\n\n" +
-  "Let me do it.\n\nEmit.\n\nOK.\n\nGo.\n\nNow.\n\n" +
-  Array.from({ length: 28 }, () => "Let me emit.\n\nEmit.\n\nOK.\n\nGo.\n\nNow.").join("\n\n");
-const babbling = () =>
-  assistant([["powershell", { command: "git add a b" }]], { text: babblingText });
 const pseudoCall = (tool = "powershell", command = "echo hi") => ({
   kind: "pi.assistant",
   model: [
@@ -152,36 +136,6 @@ check("the predicate matches the DSML-delimited form and the plain nested-parame
   assert.equal(isPseudoToolCallTurn(plainNested), true, "the plain nested pair is the same fault");
 });
 
-check("the F29 repeated-prose shape is detected", () => {
-  const hit = textDegeneration(babblingText);
-  assert.ok(hit, "a phrase repeated many times in one turn is flagged");
-  assert.ok(hit.count >= 5, `expected >=5 repeats, got ${hit?.count}`);
-  assert.equal(isDegenerateTextTurn(babbling()), true);
-  assert.equal(countDegenerateTextTurns([babbling()]), 1);
-});
-
-check("ordinary prose is not flagged as degenerate text", () => {
-  const prose = assistant([["read", { path: "a" }]], {
-    text: "I read the file, found the bug in the guard, and will now fix it. The fix adds a bound.",
-  });
-  assert.equal(isDegenerateTextTurn(prose), false);
-  assert.equal(assessRun([prose, user()]).degenerate, false);
-});
-
-check("repeated lines inside a fenced code block are not flagged", () => {
-  const withCode = assistant([["write", { path: "a" }]], {
-    text: "Here is the file:\n```js\nfoo();\nfoo();\nfoo();\nfoo();\nfoo();\nfoo();\n```\nDone.",
-  });
-  assert.equal(isDegenerateTextTurn(withCode), false);
-});
-
-check("a run with a degenerate-text turn trips the guard", () => {
-  const a = assessRun([babbling(), user()]);
-  assert.equal(a.degenerateTextTurns, 1, "the run reports one degenerate-text turn");
-  assert.equal(a.degenerate, true);
-  assert.ok(a.reasons.some((r) => r.startsWith("degenerate-text=")), a.reasons.join(","));
-});
-
 check("a context past the token bound is degenerate", () => {
   const entries = [assistant([["read", { path: "a" }]], { usage: { totalTokens: 999_999 } }), user()];
   const a = assessRun(entries);
@@ -206,7 +160,7 @@ check("only the CURRENT run is judged; an old degenerate run behind a wake is ig
 });
 
 check("defaults are conservative and complete", () => {
-  for (const key of ["maxToolTurns", "maxRepeats", "maxMalformed", "maxPseudoToolCalls", "maxDegenerateText", "maxContextTokens", "repeatHorizon"]) {
+  for (const key of ["maxToolTurns", "maxRepeats", "maxMalformed", "maxPseudoToolCalls", "maxContextTokens", "repeatHorizon"]) {
     assert.ok(Number.isFinite(DEGEN_DEFAULTS[key]), `missing default ${key}`);
   }
 });
@@ -250,18 +204,6 @@ await checkAsync("applyResets names the malformed-tool-call fault so the model r
 	);
 	assert.match(handoffs[0], /tool API/);
 	assert.match(handoffs[0], /pseudo-tool-call/);
-});
-
-await checkAsync("applyResets names the degenerate-text fault so the model stops looping", async () => {
-	const handoffs = [];
-	const harness = { conversation: async () => ({ reset: async (handoff) => handoffs.push(handoff) }) };
-	await applyResets(
-		harness,
-		[{ seat: "impl", conversationId: 9, reason: "degeneration", detail: "degenerate-text=1>=1" }],
-		{},
-	);
-	assert.match(handoffs[0], /degenerate text/);
-	assert.match(handoffs[0], /repeated the same short phrase/);
 });
 
 await checkAsync("applyResets reports a failing seat and still resets the others", async () => {
