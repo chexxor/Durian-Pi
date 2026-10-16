@@ -5,6 +5,43 @@ backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
 _Last refreshed: 2026-10-16 (delegate, **clock-out / eighth pass** — operator ruled to land ALL uncommitted shared-tree work onto `main` (routed to `pm` at HIGHEST priority) and routed the compact / wall-clock / degenerate-text build. See **CLOCK-OUT** below, then older sections (historical).)_
 
+## OPERATOR INTENT ROUTED — broker-safe writes (2026-10-16, delegate)
+
+**Operator instructed: prioritize and get ROADMAP 69/70/71 moving.** Delivered to `pm` via the inbox
+(`intent.mjs`, requestId `opr-20261016-broker-safe-writes-69-71`); broker log shows
+`INTENT delivered=1 dead=0` at `21:48:29Z`; inbox empty, no dead-letter. Body:
+`.spike/delegate/intent-prioritize-broker-safe-writes.md`.
+
+- **69** refuse/route writes while the broker drives (impl, `cli.mjs`); **70** read-boundary hardening
+  (impl); **71** command spool / mailbox — the "all commands through the broker" piece (devtools +
+  delegate consulting). Order: 68→69→70→71, then daemon 61–64. 68 already delivered.
+- **Prerequisite:** the `cli.mjs` gate (#624 `cmdInit`, uncommitted) — that is PRIORITY 1 below.
+- **Status: REGISTERED.** `pm` created **#910** (69, impl) and **#911** (70, impl); **#912** (71, devtools) is `held`. `lead` ruled **#913** and sequenced: **#885 (land #624 `cmdInit`) lands FIRST** — three families contend for the dirty `cli.mjs` (#885, 69/70/71, and the `compact` verb #873) and must not be open at once. `pm`'s reply is **#914**.
+- **Do NOT poll `pm`;** hand back and wait for the operator.
+
+## THIS SESSION — live changes + two new routed items (2026-10-16 late, delegate)
+
+**impl degradation fixed operationally (thinking was disabled).** `rig.selfdev.json` had no
+`thinkingLevel` on any seat, so pi-ai's DeepSeek branch sent `thinking:{type:"disabled"}` and no
+`reasoning_effort` (`openai-completions.js:668-679`); every recent `impl` turn showed `usage.reasoning:
+0` and the seat narrated its own loop (ROADMAP 43a named this exactly). Applied: added
+`"thinkingLevel": "high"` to the five DeepSeek seats (pm, impl, lead, scribe, devtools) — **`rig.selfdev.json`
+now dirty, uncommitted** — then broker-safe stop → `up rig.selfdev.json --refresh --no-serve`
+(all 9 `refreshed`) → `reset impl` (entry `38233`) → broker restarted (**pid 4644**). Verified the five
+seats read `thinkingLevel="high"` from AgentState (`.spike/delegate/check-thinking.mjs`).
+
+**Two operator intents routed to `pm` (inbox):**
+- **request-TRACE surface** (`opr-20261016-request-trace`): a verb/env to dump the ACTUAL serialized
+  request payload per model call, via pi-ai's unused `ProviderRequestOptions.onPayload`/`onResponse`/
+  `fetch` seam (`types.d.ts:52-83`) — realizes ROADMAP 43(c) and lets a user see the real DeepInfra
+  DeepSeek args, not the programmed config. Body: `.spike/delegate/intent-request-trace.md`.
+- **ROADMAP 89 — TUI seat-detail transcript** (`opr-20261016-tui-seat-transcript`): load a seat's full
+  chat log on opening its details, not only the live tail (the 24-entry `SCAN_LIMIT` page). Added to
+  `docs/ROADMAP.md` (Mid-term, next to item 17). Body: `.spike/delegate/intent-tui-seat-transcript.md`.
+
+**Dirty tree owned by this delegate session:** `rig.selfdev.json`, `docs/NEXT.md`, `docs/ROADMAP.md`
+(item 89) — uncommitted; commit on the operator's word (explicit paths only).
+
 ## CLOCK-OUT — start here (2026-10-16, delegate)
 
 **`main` HEAD:** `978574d`. Commits this session: `8ae8fff` (impl: seatguard #673/#780), `191c481` (a
