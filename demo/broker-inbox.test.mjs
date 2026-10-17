@@ -70,7 +70,7 @@ try {
   assert.equal(readIntentFiles(dbPath).length, 1, "the spool holds the pending intent");
 
   const drained = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
-  assert.deepEqual(drained, { delivered: 1, deadLettered: 0 }, `drain result ${JSON.stringify(drained)}`);
+  assert.deepEqual(drained, { delivered: 1, deadLettered: 0, duplicates: 0 }, `drain result ${JSON.stringify(drained)}`);
   assert.equal(readIntentFiles(dbPath).length, 0, "a delivered intent leaves the spool");
   await harness.waitForIdle(ctx);
   assert.ok(await entriesContain("INTENT-ALPHA"), "the seat's conversation received the intent content");
@@ -78,7 +78,7 @@ try {
   // 2. An unknown seat is dead-lettered with its reason, not retried forever.
   writeIntent(dbPath, { to: "ghost", from: "operator", content: "to nobody" });
   const ghost = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
-  assert.deepEqual(ghost, { delivered: 0, deadLettered: 1 }, `ghost drain ${JSON.stringify(ghost)}`);
+  assert.deepEqual(ghost, { delivered: 0, deadLettered: 1, duplicates: 0 }, `ghost drain ${JSON.stringify(ghost)}`);
   const errFiles = readdirSync(intentErrorDir(dbPath)).filter((n) => n.endsWith(".error.json"));
   assert.equal(errFiles.length, 1, "the undeliverable intent is dead-lettered");
   assert.match(readFileSync(join(intentErrorDir(dbPath), `${errFiles[0]}.reason`), "utf8"), /unknown seat/);

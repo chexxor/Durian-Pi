@@ -111,56 +111,155 @@ function deadLetterIntent(dbPath, file, reason) {
 }
 
 /**
- * Drain the inbox into the harness: submit each intent as an operator input to its
- * target seat. Called at the START of a pass, before `harness.inspect`, so a drained
- * intent shows up as a pending submission in the same pass and the seat is not
- * double-woken. An unknown seat or a failed submit is dead-lettered, never retried
- * forever. Returns `{ delivered, deadLettered }`.
+ * Result channel: one JSON per applied request, keyed by `requestId`. A producer
+ * awaits the outcome by polling `<requestId>.json` here. It is ALSO the idempotency
+ * ledger: a request whose result already exists is not applied again on a re-drain.
+ */
+export function intentResultDir(dbPath) {
+  return `${dbPath}.broker.inbox.out`;
+}
+
+function readIntentResult(dbPath, requestId) {
+  if (!requestId) return null;
+  const path = join(intentResultDir(dbPath), `${requestId}.json`);
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeIntentResult(dbPath, requestId, result) {
+  const dir = intentResultDir(dbPath);
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, `${requestId}.json`);
+  writeFileSync(path, JSON.stringify(result), "utf8");
+  return path;
+}
+
+/**
+ * The operation a spooled request asks the broker to apply. An absent `op` means the
+ * original "deliver a message" intent, so producers written before the spool keep
+ * working.
+ */
+export function requestOp(request) {
+  return request?.op ?? "message";
+}
+
+/**
+ * The operations the command spool accepts (ROADMAP 71). "Do not add a fourth kind":
+ * a new mutating verb EXTENDS this list — the broker applies it in-process with its own
+ * harness — rather than opening a second writer.
+ */
+export const SPOOL_OPS = ["message", "stop"];
+
+/**
+ * Apply one typed request with the broker's OWN harness — the single writer. Throws on
+ * an unknown op or seat; the drain dead-letters the throw with its reason.
+ */
+async function applyRequest(harness, request, { seats, context }) {
+  const op = requestOp(request);
+  if (op === "message") {
+    const seat = seats[request.to];
+    if (!seat) throw new Error(`unknown seat: ${request.to}`);
+    const conv = await harness.conversation(seat.conversationId, context);
+    if (!conv) throw new Error(`no conversation for seat ${request.to}`);
+    await conv.submit(
+      {
+        type: "input",
+        content: String(request.content ?? ""),
+        ...(request.requestId ? { requestId: request.requestId } : {}),
+      },
+      context,
+    );
+    return { op, seat: request.to, delivered: true };
+  }
+  if (op === "stop") {
+    // The broker holds the run in-process, so it can halt a seat without the
+    // cross-process pid kill `cmdStop` needs: settle the pending submission to
+    // terminal `aborted: <reason>` and abort the run task, both with its own writer.
+    const seatName = request.to ?? request.seat;
+    const seat = seats[seatName];
+    if (!seat) throw new Error(`unknown seat: ${seatName}`);
+    const convId = seat.conversationId;
+    const reason = String(request.reason ?? "operator stop");
+    const inspection = await harness.inspect(context);
+    const pending = (inspection.submissions ?? []).find(
+      (s) => s.conversationId === convId && (s.status === "queued" || s.status === "placed"),
+    );
+    let settled = false;
+    if (pending) {
+      await harness.commit(
+        (tx) => tx.settleSubmission(pending.id, { status: "unanswered", reason: `aborted: ${reason}` }),
+        context,
+      );
+      settled = true;
+    }
+    const runTask = (inspection.tasks ?? []).find((t) => t.record.conversationId === convId);
+    if (runTask) await harness.abortTask(runTask.record.id, context);
+    return { op, seat: seatName, settled, aborted: Boolean(runTask), reason };
+  }
+  throw new Error(`unknown op: ${op} (known: ${SPOOL_OPS.join(", ")})`);
+}
+
+/**
+ * Drain the inbox into the harness: apply each typed request with the broker's own
+ * writer. Called at the START of a pass, before `harness.inspect`, so a drained
+ * `message` shows up as a pending submission in the same pass and the seat is not
+ * double-woken. An unknown op/seat or a failed apply is dead-lettered, never retried
+ * forever. Returns `{ delivered, deadLettered, duplicates }` — `duplicates` counts
+ * requests whose `requestId` already had a recorded result (applied ONCE, not again).
  */
 export async function drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic } = {}) {
-  if (!dbPath) return { delivered: 0, deadLettered: 0 };
+  if (!dbPath) return { delivered: 0, deadLettered: 0, duplicates: 0 };
   const files = readIntentFiles(dbPath);
-  if (files.length === 0) return { delivered: 0, deadLettered: 0 };
+  if (files.length === 0) return { delivered: 0, deadLettered: 0, duplicates: 0 };
   const seatsDoc = await harness.documentState(Seats, undefined, context);
   const seats = seatsDoc?.value?.seats ?? {};
   let delivered = 0;
   let deadLettered = 0;
+  let duplicates = 0;
   for (const file of files) {
-    let intent;
+    let request;
     try {
-      intent = JSON.parse(readFileSync(file, "utf8"));
+      request = JSON.parse(readFileSync(file, "utf8"));
     } catch (err) {
       deadLetterIntent(dbPath, file, `unreadable intent: ${err?.message ?? err}`);
       deadLettered += 1;
       continue;
     }
-    const seat = seats[intent.to];
-    if (!seat) {
-      deadLetterIntent(dbPath, file, `unknown seat: ${intent.to}`);
-      onDiagnostic?.({ kind: "intent-undeliverable", seat: intent.to, reason: "unknown seat" });
+    const op = requestOp(request);
+    const requestId = request.requestId ?? null;
+
+    // Idempotent re-drain: a request whose RESULT is already recorded was applied on
+    // an earlier pass (its file survived a crash before the unlink). Consume the file
+    // WITHOUT applying again — a duplicate requestId applies ONCE.
+    if (readIntentResult(dbPath, requestId)) {
+      unlinkSync(file);
+      duplicates += 1;
+      continue;
+    }
+    if (!SPOOL_OPS.includes(op)) {
+      deadLetterIntent(dbPath, file, `unknown op: ${op} (known: ${SPOOL_OPS.join(", ")})`);
+      onDiagnostic?.({ kind: "intent-undeliverable", op, reason: "unknown op" });
       deadLettered += 1;
       continue;
     }
     try {
-      const conv = await harness.conversation(seat.conversationId, context);
-      if (!conv) throw new Error(`no conversation for seat ${intent.to}`);
-      await conv.submit(
-        {
-          type: "input",
-          content: String(intent.content ?? ""),
-          ...(intent.requestId ? { requestId: intent.requestId } : {}),
-        },
-        context,
-      );
+      const result = await applyRequest(harness, request, { seats, context });
+      if (requestId) {
+        writeIntentResult(dbPath, requestId, { requestId, op, ok: true, result, at: new Date().toISOString() });
+      }
       unlinkSync(file);
       delivered += 1;
     } catch (err) {
-      deadLetterIntent(dbPath, file, `submit failed: ${err?.message ?? err}`);
-      onDiagnostic?.({ kind: "intent-undeliverable", seat: intent.to, reason: String(err?.message ?? err) });
+      deadLetterIntent(dbPath, file, `apply failed: ${err?.message ?? err}`);
+      onDiagnostic?.({ kind: "intent-undeliverable", op, seat: request.to, reason: String(err?.message ?? err) });
       deadLettered += 1;
     }
   }
-  return { delivered, deadLettered };
+  return { delivered, deadLettered, duplicates };
 }
 
 /* ---------------------- stranded-submission reconciliation ---------------------- */
@@ -325,8 +424,8 @@ export async function drivePass(
   // to this pass's `inspect` and the seat is not also submitted a fixed wake.
   if (dbPath) {
     const drained = await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic });
-    if (drained.delivered > 0 || drained.deadLettered > 0) {
-      logBrokerLine(dbPath, `INTENT delivered=${drained.delivered} dead=${drained.deadLettered}`);
+    if (drained.delivered > 0 || drained.deadLettered > 0 || drained.duplicates > 0) {
+      logBrokerLine(dbPath, `INTENT delivered=${drained.delivered} dead=${drained.deadLettered} dup=${drained.duplicates}`);
     }
   }
   const seatsDoc = await harness.documentState(Seats, undefined, context);
