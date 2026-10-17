@@ -3,9 +3,9 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate — **branch-maintenance audit done**: 52 merged/duplicate branches
-pruned, new `docs/runbooks/branch-cleanup.md` added; the `done`-but-unlanded set (33 commits) is the
-open finding and must be routed to `pm`. Everything below is historical.)_
+_Last refreshed: 2026-10-17 (delegate — **clock-out/handover**: broker restarted (pid `36488`),
+`security` working `#1581`, branch cleanup done, `docs/incidents/` started (6 reports); top priority is
+`#1610` MAIN IS RED. See `## NEXT SESSION` — everything below it is historical.)_
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; new agent takes the seat)
 
@@ -45,27 +45,45 @@ scribe's, landed).
 
 ## NEXT SESSION
 
-**Current item:** the rig is **running again** (broker pid `36488`) and `security` is resumed on its
-stranded claim. Next work is what the broker drives; the delegate's queue is:
-- **`#1609`** (impl) — the incident-report `check` rules + `ownership` class + demo.
-- **`#1610` / `#1611`** (impl/qa) — **MAIN IS RED**: `demo/secretredact.test.mjs` fails on `main` (a
-  secret IS committed).  This blocks the `merge.md` gate for ANY landing.
-- **`#1605`** (impl) — the branch-landing pass is **PARKED/HELD** (`#1612`); it needs a fresh quiesced
-  window and a green `main`.
+**Current item:** nothing blocks the delegate — the rig is **up** (broker pid `36488`) and the queue is
+advancing. Work the **ordered list below**; item 1 (`#1610` MAIN IS RED) gates all landing.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
-**State at clock-out:**
-- **Broker:** UP, pid `36488` (`START 19:12:44Z`), passes advancing. It woke pm/impl/qa/devtools;
-  `security` was steered via the broker inbox (`intent.mjs`) and resumed (`lastActivity 19:13:41Z`).
-- `main` HEAD = the `#1448` docs commits + the `docs(incidents)` commit; **tree clean**.
-- Local refs **128 → 76** (52 pruned: 50 merged `-d`, 2 patch-equivalent `-D`); **33 unlanded refs kept**.
-- **Owed pruning:** **42 merged branches still held by a worktree** — release per `leaked-worktrees.md`.
-- **New:** `docs/incidents/` (template + index + 5 backfilled reports); enforcement routed as `#1609`.
-  Runbook `docs/runbooks/branch-cleanup.md` remains current (`last_verified: 2026-10-17`).
+**Priority order (grounded in the queue + `status` attention):**
+1. **`#1610` / `#1611` — MAIN IS RED (blocker).** `node demo/secretredact.test.mjs` → exit 1 on `main`
+   (3 checks; a secret IS committed). Until green, **no landing passes the `merge.md` gate**.
+2. **Land the wrong-root guard (`#1151`) SOON (operator priority).** Land `impl-item-1444-fix` first
+   (covers `#1151 → #1225 → #1249 → #1261 → #1444(D1 fix) → #1487`) once `main` is green — routed to
+   `pm`; it is the control for the new `seat-root-fallback-commit` incident.
+3. **`secret_detected` on `security`** — routed to `pm`; per `store-secret-detected.md` rotate the
+   credential and treat the store as compromised.
+4. **`#1607` / `#1608`** — `durig ui` `view is not defined` fix + regression test.
+5. **`#1609`** — incident-report `check` rules + `ownership` class + demo.
+6. **Crash-proofing cluster (HIGH):** ROADMAP 78 (survive a per-conversation storage error), true
+   read-only opens, broker watchdog/auto-restart, serialise migrations, log `SessionFailed.cause` —
+   the root of the `broker-crash` incident.
+7. **`#1605` — the 33-branch landing pass**, parked (`#1612`); re-open in a **quiesced window** after 1.
+8. **Prune the 42 merged-but-worktree-held branches** — release per `leaked-worktrees.md`, then `-d`.
+9. **`#1388` / ROADMAP 131 (`pause`/`unpause`)** — kills the land-first / broker-window dance.
 
-**Known blocker:** `main` is red (`secretredact`), so no landing can pass the gate until `#1610` lands.
-Landing `#1605` stays parked. Entry 11 (`impl-item-1151`, `#1151`) stays EXCLUDED (D1 open).
+**State at clock-out:**
+- **Broker:** UP, pid `36488` (`START 19:12:44Z`), passes advancing.
+- `main` HEAD = `9ccfff7`; **tree clean**; the shared tree is on `main`.
+- `security`: actively working `#1581` (log turns at `19:19:38`); still `claimed`.
+- Local refs **128 → 76** (52 pruned); **33 unlanded refs kept**; **42 merged held by worktrees**.
+- **New doc class:** `docs/incidents/` (`_template.md` + index + **6 reports**); enforcement = `#1609`.
+- Runbooks: `docs/runbooks/branch-cleanup.md` (`last_verified: 2026-10-17`).
+
+**Known blocker:** `main` is red (`secretredact`) — gates all landing. `#1605` parked. `#1151`/D1
+(excluded last pass) lands via the `impl-item-1444-fix` chain.
+
+**Handover notes (this session):**
+- 6 incidents filed: landing-safety, broker-crash, live-worktree-reap, empty-landing-window,
+  ui-view-undefined, seat-root-fallback-commit.
+- Delegate docs commits this session: `1663151`, `5ce0187`, `8b637d9`, `2c49158`, `bec594e`, `9ccfff7`;
+  **not pushed** (the operator holds push).
+- Recorded lesson: confirm `git branch --show-current` is `main` before committing in the shared tree.
 
 ## DELEGATE NOTE — 2026-10-17 (priority delivered, landing window declared, pause command registered)
 
