@@ -156,9 +156,18 @@ export function isInside(root, target) {
  * takes a path cannot be added to the environment without appearing in `PATH_METHODS` - a
  * hand-maintained list of 25 wrappers is exactly where a hole would go unnoticed.
  */
-export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_ALLOWLIST } = {}) {
+export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_ALLOWLIST, readOnlyRoots = [] } = {}) {
 	const confinedRoot = resolve(root ?? base.cwd);
 	const allowlist = envAllowlist;
+	// #1465: directories the seat may READ but never write, even though they sit outside its
+	// worktree. The one caller passes the shared `.durig/` — where `claim_work` writes an
+	// over-threshold item body — so a seat that has since run `prepare_workspace` (which narrows its
+	// root) can still read the body it was handed. READ ONLY is the whole point: a seat must never
+	// write the shared queue (the scratch rule, #1458).
+	const extraReadRoots = readOnlyRoots.map((r) => resolve(r));
+	/** Inside the worktree, or inside a read-only root when this call is not a mutation. */
+	const within = (candidate, mutating) =>
+		isInside(confinedRoot, candidate) || (!mutating && extraReadRoots.some((r) => isInside(r, candidate)));
 
 	const denied = (what, target, why) =>
 		err(new FileError("permission_denied", `refused by durig: ${what} ${target} ${why}`, target));
@@ -167,29 +176,29 @@ export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_A
 	 * Resolve `p` exactly as the base environment would - so `~`, `file://` and absolute paths
 	 * behave as the tools expect - and then require the result to be under the root.
 	 */
-	const check = async (p, context) => {
+	const check = async (p, context, mutating = false) => {
 		const resolved = await base.absolutePath(p, context);
 		if (!resolved.ok) return resolved;
-		if (!isInside(confinedRoot, resolved.value)) {
+		if (!within(resolved.value, mutating)) {
 			return denied("path", resolved.value, `is outside the seat's worktree (${confinedRoot})`);
 		}
 		// A symlink that lives inside the root can still point outside it, and the base follows
 		// links, so an existing path is canonicalised before it is trusted. A path that does not
 		// exist yet has no link to follow, and is covered by the check above.
 		const canonical = await base.canonicalPath(resolved.value, context);
-		if (canonical.ok && !isInside(confinedRoot, canonical.value)) {
+		if (canonical.ok && !within(canonical.value, mutating)) {
 			return denied("symlink", canonical.value, `escapes the seat's worktree (${confinedRoot})`);
 		}
 		return resolved;
 	};
 
 	/** Run `fn` only after every path argument it takes has been confined. */
-	const withPaths = (fn, pathIndexes, contextIndex) =>
+	const withPaths = (fn, pathIndexes, contextIndex, mutating = false) =>
 		async (...args) => {
 			const context = args[contextIndex];
 			const confined = [...args];
 			for (const index of pathIndexes) {
-				const checked = await check(args[index], context);
+				const checked = await check(args[index], context, mutating);
 				if (!checked.ok) return checked;
 				confined[index] = checked.value;
 			}
@@ -318,7 +327,7 @@ export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_A
 		if (typeof fn !== "function") continue;
 		wrapper[name] = readOnly && MUTATING.has(name)
 			? readOnlyGuard()
-			: withPaths(fn, pathIndexes, contextIndex);
+			: withPaths(fn, pathIndexes, contextIndex, MUTATING.has(name));
 	}
 
 	return wrapper;
@@ -331,8 +340,8 @@ export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_A
  * environment never reaches a seat's command (the `inheritEnv: true` default at bash.ts:76 is
  * exactly the leak SC3 exists to close).
  */
-export function authorEnv(base, root) {
-	return confinedEnv(base, { root, readOnly: false });
+export function authorEnv(base, root, { readOnlyRoots = [] } = {}) {
+	return confinedEnv(base, { root, readOnly: false, readOnlyRoots });
 }
 
 /**
@@ -345,8 +354,8 @@ export function authorEnv(base, root) {
  * writes lands in the throwaway copy and is discarded. It therefore cannot alter the artifact it
  * is verifying, which is the property that was actually wanted.
  */
-export function verifierEnv(base, snapshotRoot) {
-	return confinedEnv(base, { root: snapshotRoot, readOnly: true });
+export function verifierEnv(base, snapshotRoot, { readOnlyRoots = [] } = {}) {
+	return confinedEnv(base, { root: snapshotRoot, readOnly: true, readOnlyRoots });
 }
 
 /**
