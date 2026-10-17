@@ -91,8 +91,10 @@ try {
     modelsBySeat: { alpha: "faux/model-a", verifier: "faux/model-b" },
     // An empty queue so the verification-evidence rule (ROADMAP 48) RUNS and
     // passes, rather than being skipped: this assertion is "every rule ran and
-    // passed", and a rule that cannot run is not a pass.
+    // passed", and a rule that cannot run is not a pass. Same for the FEATURES-row
+    // rule (ROADMAP 46 / D62): an empty feat set is a real "nothing to check".
     queueItems: [],
+    featureDocs: [],
   });
   assert.deepEqual(ids(hardened), [], `hardened rig has no findings; got ${ids(hardened).join(", ")}`);
   assert.equal(hardened.exitCode, 0);
