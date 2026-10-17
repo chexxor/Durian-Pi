@@ -2122,6 +2122,56 @@ async function cmdConfig() {
   });
 }
 
+// format [--check] [-- <paths>]: run the PINNED prettier over EXPLICIT paths
+// (ROADMAP 90). Wraps devtools' tool choice (prettier 3.9.10 + .prettierrc.json)
+// without adding an auto-hook or an on-write formatter: a seat runs it after its
+// edits, before `git add`, so whitespace/EOL churn stops leaking into diffs. The
+// JSON contract is one document; `--check` writes nothing and exits non-zero when
+// a file is unformatted, so it can sit beside `node --check` as an explicit gate.
+// EXPLICIT paths only - no glob and no default tree walk: the whole-tree normalize
+// is a separate, gated, stop-the-world change (docs/FORMATTER.md).
+async function cmdFormat({ check = false, paths = [] } = {}) {
+  if (paths.length === 0) {
+    fail("format needs explicit paths: node cli.mjs format [--check] [-- <paths>] (no glob, no default tree)");
+  }
+  let prettier;
+  try {
+    // Loaded on demand: the formatter is a devDependency, so every other verb
+    // keeps working (and stays fast) when it is not installed.
+    prettier = (await import("prettier")).default;
+  } catch (err) {
+    fail(`format needs the pinned prettier devDependency (run npm ci): ${err?.message ?? err}`);
+  }
+  const files = [];
+  let unformatted = 0;
+  let failed = 0;
+  for (const path of paths) {
+    try {
+      const source = await readFile(path, "utf8");
+      const options = (await prettier.resolveConfig(path)) ?? {};
+      // prettier.check is the tool's own "is this already formatted" answer;
+      // formatting only when it says no keeps a clean run byte-stable.
+      const already = await prettier.check(source, { ...options, filepath: path });
+      if (already) {
+        files.push({ path, status: "unchanged" });
+      } else if (check) {
+        unformatted += 1;
+        files.push({ path, status: "unformatted" });
+      } else {
+        await writeFile(path, await prettier.format(source, { ...options, filepath: path }));
+        files.push({ path, status: "formatted" });
+      }
+    } catch (err) {
+      failed += 1;
+      files.push({ path, status: "error", error: String(err?.message ?? err) });
+    }
+  }
+  // Exit non-zero on a check hit or a real error, so the verb is gateable.
+  const ok = failed === 0 && unformatted === 0;
+  out({ ok, command: "format", check, files, unformatted, failed });
+  if (!ok) process.exitCode = 1;
+}
+
 // check [rig.json|auto|.]: audit a rig file against the research gaps. With a
 // path, audit that file; with `auto`/`.` OR no path at all (#491 C8), search
 // cwd and parents for rig.json and audit what was found. Non-interactive like
@@ -2257,6 +2307,7 @@ usages:
   node cli.mjs optimize <text>  rewrite a draft instruction via the optimizer
   node cli.mjs config          show effective settings and their source
   node cli.mjs worktree <path> [--source <dir>]   isolate a work item in its own checkout
+  node cli.mjs format [--check] [-- <paths>]   format explicit files with the pinned prettier (--check = gate, no write)
 `;
 
 const [, , cmd, ...rest] = process.argv;
@@ -2356,6 +2407,16 @@ try {
   }
   else if (cmd === "optimize") await cmdOptimize(rest);
   else if (cmd === "config") await cmdConfig();
+  else if (cmd === "format") {
+    // `-- <paths>` is the explicit form; bare non-flag args before `--` are also
+    // accepted as paths so `format --check src/x.mjs` works. Flags never become
+    // paths, and there is no default path set.
+    const sep = rest.indexOf("--");
+    const before = sep >= 0 ? rest.slice(0, sep) : rest;
+    const after = sep >= 0 ? rest.slice(sep + 1) : [];
+    const paths = [...before.filter((a) => !a.startsWith("--")), ...after];
+    await cmdFormat({ check: before.includes("--check"), paths });
+  }
   else if (cmd === "log") {
     if (!rest[0]) fail("log needs <seat>");
     // A numeric positional is the limit; flags are order-independent so
