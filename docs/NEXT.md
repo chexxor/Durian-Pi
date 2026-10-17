@@ -69,6 +69,12 @@ runbook-81/82/86 work. **Trust the queue + `status`, not the ninth-pass text bel
   then the held daemon `#723`→`#725`. Delivered to `pm` (inbox intent `opr-20261017-priority-order`;
   broker logged `INTENT delivered=1 dead=0`). **Still open for the operator:** `#1059` (KEEP vs reset
   `#940`'s shared-main commit `e3a8e53`).
+- **Compaction research follow-up DRAFTED (2026-10-17):**
+  `docs/reviews/context-compaction-followup-research-prompt.md` — the questions the operator's
+  `docs/reviews/chat-session-compaction-best-practices.md` left open (trigger/effective-window,
+  thinking-token replay, mid-item safety, verifier isolation, masking primitive, evaluation). Awaiting the
+  operator routing it to the research agent; **do NOT update ROADMAP 27–30 until the report lands**
+  (`docs/reviews/context-compaction-followup.md`).
 
 **BROKER:** pid `35640` (`scripts/serve-noroot.ps1`), started `2026-10-17T01:13:17Z`; loaded the
 delegate's broker fixes. Inbox empty (the EOL ruling was delivered). At start it woke `impl` + `qa`.
