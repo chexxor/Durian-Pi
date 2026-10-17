@@ -96,15 +96,23 @@ try {
 	assert.notEqual(dup.code, 0, "a second serve exits non-zero");
 	assert.match(dup.stdout, /already running/, "naming the live broker");
 
-	// 6. A second `up` must REFUSE (#1589). `up` opens a full harness and writes (creates
-	// seats, re-applies edges/constitution), so while the broker drives it is a second
-	// OWNER — the hazard `send`/`reset`/`compact`/`resume`/`run` already refuse. This is
-	// the behaviour change: `up --serve` is no longer an idempotent "ensure the broker is
-	// up" (use `status`), because that path opened a second harness.
+	// 6. A second `up --serve` must be the IDEMPOTENT REUSE (lead #1700 ruling (B)), NOT a
+	// refusal: `up --serve` doubles as "ensure the broker is up". The reuse checks the broker
+	// state READ-ONLY and opens NO harness — a second harness (a second OWNER) is the named
+	// hazard, not the reuse. `--refresh` and a plain `up` (which writes seats) still refuse.
 	const again = cli(["up", rigFile, "--serve"]);
-	assert.notEqual(again.code, 0, "a second up --serve exits non-zero");
-	assert.match(again.stdout, /refuses to run while a resident broker/, "and says why");
-	assert.match(again.stdout, /serve --stop/, "naming the stop verb");
+	assert.equal(again.status, 0, "a second up --serve is the idempotent reuse, not a refusal");
+	const againJson = json(again);
+	assert.equal(againJson.broker.started, false, "the reuse starts no broker");
+	assert.equal(againJson.broker.reason, "already running", "and names the live broker");
+	assert.equal(againJson.broker.pid, on.broker.pid, "the reuse leaves the broker untouched");
+	assert.deepEqual(againJson.existing, [], "the reuse opened NO harness (no seats enumerated)");
+	assert.deepEqual(againJson.extensions, [], "the reuse opened NO harness (no extensions installed)");
+
+	// 6b. The WRITE path still refuses: `up --refresh` while the broker drives.
+	const refresh = cli(["up", rigFile, "--refresh"]);
+	assert.notEqual(refresh.status, 0, "up --refresh exits non-zero while a broker drives");
+	assert.match(refresh.stdout, /refuses to run while a resident broker/, "and says why");
 	assert.equal(liveBrokerPid(), on.broker.pid, "the refusal leaves the broker untouched");
 
 	// 7. `serve --stop` reaps it and clears the state.
