@@ -1,8 +1,8 @@
 {
   "repo": "https://github.com/earendil-works/pi.git",
   "branch": "main",
-  "sha": "4954d760504c11df9b2cbdc040346107b6a8153d",
-  "pinnedAt": "2026-10-15T20:22:29.402Z",
+  "sha": "8efd314fa3d3232ce197d8d7a6a5660530b9d83e",
+  "pinnedAt": "2026-10-17T08:39:16.387Z",
   "note": "pi-durable/pi-ai/chord move fast and rename APIs between releases; this pin is the commit durig is validated against. Move it deliberately with: node scripts/sync-pi.mjs --update",
   "packages": [
     {
