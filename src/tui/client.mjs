@@ -18,6 +18,7 @@
 
 import { pad, truncate } from "../watchview.mjs";
 import { formatDelta, formatArgs, themeToolRoles } from "../chatview.mjs";
+import { extractEntryText } from "../rigstory.mjs";
 import { ANSI } from "../ansi.mjs";
 import { sanitizeTerminalText } from "../sanitize.mjs";
 import { textWidth, sliceToWidth, firstCluster } from "../textwidth.mjs";
@@ -152,7 +153,11 @@ function transcriptTurnLines(turn, width, color) {
 	const lines = [];
 	switch (turn.kind) {
 		case "operator": {
-			const text = truncate(sanitizeTerminalText(turn.text), width - 8);
+			// The turn's text is either carried directly (fixtures pass `text`) or, on the
+			// real path, lives in the operator ENTRY — buildTurns keeps the entry, not a
+			// copy. Reading both is what stops the detail view rendering the operator's
+			// messages as blank rows (chatview's log reads the entry the same way).
+			const text = truncate(sanitizeTerminalText(turn.text ?? extractEntryText(turn.entries?.[0])?.text ?? ""), width - 8);
 			lines.push(`  ${paint("green", "▶", color)} ${paint("bold", text, color)}`);
 			break;
 		}
@@ -347,6 +352,10 @@ function renderFooter(width, color = false, view = "seats") {
  * @param {string} params.theme — "dark"|"light": pi's tool role tokens (default "dark")
  * @param {boolean} params.toolBg — OPT-IN tool-surface backgrounds (default false; identical
  *   rule to chatview's --tool-bg: a hard-coded tint misreads on unknown backgrounds)
+ * @param {boolean|null} params.exhausted — conversation view only: whether no OLDER entries
+ *   exist beyond the loaded set. `false` renders the "load older" invite, `true` renders
+ *   "start of conversation"; `null` (default) leaves the top indicator at today's behaviour,
+ *   so callers that do not know do not fabricate a state.
  * @returns {Frame}
  */
 export function renderTui({
@@ -365,6 +374,7 @@ export function renderTui({
 	view = "seats",
 	scroll = 0,
 	inputText = null,
+	exhausted = null,
 } = {}) {
 	const lines = [];
 	const w = width;
@@ -410,7 +420,22 @@ export function renderTui({
 			scroll,
 			transcriptBudget,
 		);
-		if (above > 0) lines.push(paint("gray", `  ↑ ${above} older turn${above === 1 ? "" : "s"}`, color));
+		// Top indicator — three honest states (ROADMAP 89; designer contract #952 §2):
+		// (a) `↑ N older turns` — hidden-above count WITHIN the loaded set (unchanged);
+		// (b) `↑ loaded-max · press ↑ to load older` — at the loaded top while older
+		//     entries exist BEYOND it (count OMITTED: a cheap count needs a full scan,
+		//     and a fabricated number is the lie D24/D28 forbid);
+		// (c) `── start of conversation ──` — at the loaded top and exhausted, so a short
+		//     seat says so rather than inviting a page that would find nothing.
+		// `exhausted === null` (unknown) keeps only state (a): no state is invented.
+		if (above > 0) {
+			// Truncate the hint, never the number: the count leads, so a narrow row keeps it.
+			lines.push(paint("gray", truncate(`  ↑ ${above} older turn${above === 1 ? "" : "s"}`, Math.max(0, width - 2)), color));
+		} else if (exhausted === false) {
+			lines.push(paint("gray", truncate("  ↑ loaded-max · press ↑ to load older", Math.max(0, width - 2)), color));
+		} else if (exhausted === true) {
+			lines.push(paint("gray", truncate("  ── start of conversation ──", Math.max(0, width - 2)), color));
+		}
 		lines.push(...(transLines.length > 0 ? transLines : [paint("gray", "  (no turns yet)", color)]));
 		if (below > 0) lines.push(paint("gray", `  ↓ ${below} newer turn${below === 1 ? "" : "s"} (↓ to the live tail)`, color));
 		if (focusedPartial) {

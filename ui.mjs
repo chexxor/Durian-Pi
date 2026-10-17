@@ -22,7 +22,9 @@ import { join } from "node:path";
 
 import { loadConfig } from "./src/config.mjs";
 import { readSeatList, readQueueItems, readLiveState, readRigHealth } from "./src/readapi.mjs";
-import { buildTurns, partialView } from "./src/viewmodel.mjs";
+import { partialView } from "./src/viewmodel.mjs";
+import { SCAN_LIMIT, readOlderEntries, conversationExhausted } from "./src/rigstory.mjs";
+import { createConversationWindow, selectSeat, mergeNewest, oldestLoadedId, turnsOf, loadOlder } from "./src/tui/conversation.mjs";
 import { createUiDriver, decodeKeys } from "./src/tui/driver.mjs";
 import { createTerminalScreen, PASTE_OFF } from "./src/tui/restore.mjs";
 import { createInputLine } from "./src/tui/input.mjs";
@@ -39,6 +41,7 @@ keys:
   q / Ctrl+C         quit (terminal is always restored)
   r                  repaint now
   ↑ / ↓ or k / j     seat list: select a seat; conversation: scroll the transcript
+                     (at the loaded top, ↑ loads one older page of the seat's log)
   Enter              open the selected seat's conversation stream
   G / End            jump to the live tail (re-enable auto-follow)
   Esc                back to the seat list (press again to quit)
@@ -57,7 +60,7 @@ const DB_PATH = CFG.DURIG_DB ?? "./rig.sqlite";
 
 /* ───────── readState (read-only store reads; D11 poll) ───────── */
 
-async function makeReadState(storage, ui) {
+async function makeReadState(storage, ui, conv) {
   const slots = Number(CFG.DURIG_MAX_CONCURRENT_SEATS ?? "");
   const bounded = Number.isFinite(slots) && slots > 0 ? slots : 999;
   return async () => {
@@ -91,9 +94,27 @@ async function makeReadState(storage, ui) {
     ui.selectedIndex = Math.max(0, Math.min(ui.seatCount - 1, ui.selectedIndex));
     const focusSeat = health.seats[ui.selectedIndex]?.name ?? health.seats[0]?.name;
     ui.focusSeat = ui.seatCount > 0 ? focusSeat : null;
+    const focusConvId = health.seats.find((s) => s.name === focusSeat)?.conversationId;
+    ui.convId = focusConvId;
+    // The detail view's loaded window (ROADMAP 89): the newest page, plus any older
+    // pages the operator paged in. A seat switch resets it (a different transcript);
+    // the newest page is merged id-keyed each poll, so live turns append at the tail
+    // while backfilled history stays put. Exhaustion is UNKNOWN until a short page or
+    // an on-demand probe answers — never fabricated, and never part of the shared
+    // per-poll scan (a probe runs only while this view is open).
     let turns = [];
-    if (liveBySeat[focusSeat]?.conversationId !== undefined && health._pages?.[focusSeat]) {
-      turns = buildTurns(health._pages[focusSeat]);
+    let exhausted = null;
+    if (ui.mode === "conversation" && ui.focusSeat !== null) {
+      if (conv.seat !== ui.focusSeat) selectSeat(conv, ui.focusSeat);
+      mergeNewest(conv, health._pages?.[ui.focusSeat] ?? [], SCAN_LIMIT);
+      if (conv.exhausted === null && focusConvId !== undefined) {
+        const oldest = oldestLoadedId(conv);
+        if (oldest !== null) {
+          conv.exhausted = await conversationExhausted(storage, focusConvId, oldest, BACKGROUND_CONTEXT);
+        }
+      }
+      turns = turnsOf(conv);
+      exhausted = conv.exhausted;
     }
     // Clamp the conversation scroll to the turns actually held, so holding ↑ cannot
     // scroll into empty space forever.
@@ -108,6 +129,7 @@ async function makeReadState(storage, ui) {
       selectedSeat: ui.seatCount > 0 ? focusSeat : null,
       view: ui.mode,
       scroll: ui.scroll,
+      exhausted,
       inputText: ui.mode === "input" ? input.value : null,
     };
   };
@@ -173,8 +195,11 @@ try {
   // streaming seat never fights the operator's choice; `mode` is the seat list or
   // the selected seat's focused conversation; `scroll` counts older turns when in
   // the conversation view.
-  const ui = { selectedIndex: 0, navigated: false, seatCount: 0, mode: "seats", scroll: 0 };
-  const readState = await makeReadState(storage, ui);
+  const ui = { selectedIndex: 0, navigated: false, seatCount: 0, mode: "seats", scroll: 0, focusSeat: null, convId: undefined };
+  // The detail view's loaded window (ROADMAP 89): newest page + paged-in older
+  // pages, owned by the entrypoint and driven by the keys below.
+  const conv = createConversationWindow();
+  const readState = await makeReadState(storage, ui, conv);
   process.stdin.setRawMode(true);
   process.stdin.resume();
   screen.enter();
@@ -190,10 +215,12 @@ try {
     pollMs: 700,
     onEnter: () => {
       // Enter opens the selected seat's conversation; Enter again in the conversation
-      // view is a no-op (Esc is the way back).
+      // view is a no-op (Esc is the way back). Opening resets the loaded window, so
+      // the detail view always starts at the newest page for the seat just opened.
       if (ui.mode === "seats" && ui.seatCount > 0) {
         ui.mode = "conversation";
         ui.scroll = 0;
+        selectSeat(conv, ui.focusSeat);
         void driver.tick();
       }
     },
@@ -219,8 +246,19 @@ try {
     },
     onNavigate: (delta) => {
       if (ui.mode === "conversation") {
-        // ↑ (−1) reveals older turns; ↓ (+1) returns toward the live tail.
-        ui.scroll = Math.max(0, ui.scroll - delta);
+        // ↑ (−1) reveals older turns; ↓ (+1) returns toward the live tail. At the
+        // LOADED top, ↑ loads ONE older page instead of a no-op — it does NOT
+        // re-anchor to the tail (designer contract §1/§3). loadOlder keeps the
+        // first visible turn pinned, so the view does not jump while history grows.
+        const loaded = turnsOf(conv);
+        const maxScroll = Math.max(0, loaded.length - 1);
+        if (delta < 0 && ui.scroll >= maxScroll && ui.convId !== undefined && conv.exhausted !== true) {
+          void loadOlder(conv, (oldest) =>
+            readOlderEntries(storage, ui.convId, oldest, SCAN_LIMIT, BACKGROUND_CONTEXT),
+          ).then(() => driver.tick());
+          return;
+        }
+        ui.scroll = Math.max(0, Math.min(maxScroll, ui.scroll - delta));
       } else {
         ui.navigated = true;
         ui.selectedIndex = Math.max(0, Math.min(ui.seatCount - 1, ui.selectedIndex + delta));
