@@ -11,7 +11,12 @@
 //     subdirectory keeps its `cwd`;
 //   - `makeSeatEnv` resolves a seat's OWN prepared cwd over the process-global
 //     `DURIG_SEAT_ROOT` (the per-seat/per-item switch);
-//   - `removeSeatWorkspace` retires it.
+//   - `removeSeatWorkspace` retires it;
+//   - `installWorktreeDeps` actually RUNS npm on a package.json-bearing tree
+//     (#822: the worktree fixture below has no package.json, so the old demo took
+//     the `skipped` early-return and never exercised the npm invocation — which
+//     meant `execFile("npm", …)` failing with `spawn npm ENOENT` on Windows went
+//     unseen).
 //
 // Before this module/function existed the import fails (RED). Run:
 //   node demo/prepare-workspace.test.mjs   (exit 0 = pass)
@@ -23,7 +28,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { prepareSeatWorkspace, removeSeatWorkspace } from "../src/worktree.mjs";
+import { installWorktreeDeps, prepareSeatWorkspace, removeSeatWorkspace } from "../src/worktree.mjs";
 import { makeSeatEnv } from "../src/seattools.mjs";
 
 const run = promisify(execFile);
@@ -64,12 +69,43 @@ try {
   assert.equal(env.cwd, first.cwd, "the prepared per-seat cwd beats DURIG_SEAT_ROOT");
   delete process.env.DURIG_SEAT_ROOT;
 
-  // --- 4. cleanup retires the worktree ---
+  // --- 4. installWorktreeDeps RUNS npm when package.json exists (#822) ---
+  // A no-dependency package.json + hand-written lockfile is enough for `npm ci`
+  // and stays offline/fast. The point is that the npm path is entered at all:
+  // the old deleted fixture (no package.json) skipped it, hiding `spawn npm ENOENT`.
+  const depDir = join(base, "dep-fixture");
+  await mkdir(depDir, { recursive: true });
+  await writeFile(join(depDir, "package.json"), JSON.stringify({ name: "dep-fixture", version: "1.0.0", private: true, dependencies: {} }));
+  await writeFile(join(depDir, "package-lock.json"), JSON.stringify({
+    name: "dep-fixture", version: "1.0.0", lockfileVersion: 3, requires: true,
+    packages: { "": { name: "dep-fixture", version: "1.0.0" } },
+  }));
+  const installed = await installWorktreeDeps(depDir);
+  assert.equal(installed.skipped, undefined, "npm is invoked, not skipped (package.json present)");
+  assert.equal(installed.ok, true, `npm ci succeeds (${JSON.stringify(installed).slice(0, 160)})`);
+  // (Zero-dependency fixtures need not produce node_modules; the load-bearing
+  // assertion is that npm was actually spawned and exited 0 rather than ENOENTing.)
+  // A package.json without a lockfile must FAIL LOUDLY, and the error must name a
+  // cause (not the old empty message from an ENOENT spawn).
+  const noLock = join(base, "no-lock");
+  await mkdir(noLock, { recursive: true });
+  await writeFile(join(noLock, "package.json"), JSON.stringify({ name: "no-lock", version: "1.0.0", private: true }));
+  let loudMessage = null;
+  try {
+    await installWorktreeDeps(noLock);
+  } catch (err) {
+    loudMessage = err.message;
+  }
+  assert.ok(loudMessage, "npm ci without a lockfile throws");
+  assert.ok(loudMessage.includes("npm ci --prefer-offline failed in"), `the message names the operation (got ${loudMessage})`);
+  assert.match(loudMessage, /lock/i, `the message names a cause, not an empty stderr (got ${loudMessage})`);
+
+  // --- 5. cleanup retires the worktree ---
   const removed = await removeSeatWorkspace({ worktreeRoot: source, itemId: 7 });
   assert.ok(removed.removed, `removeSeatWorkspace removes it (${JSON.stringify(removed)})`);
   assert.ok(!existsSync(worktree), "the worktree path is gone");
 
-  console.log("PREPARE-WORKSPACE PASS (idempotent per-item worktree; the seat's own cwd wins)");
+  console.log("PREPARE-WORKSPACE PASS (idempotent per-item worktree; the seat's own cwd wins; npm ci path exercised)");
 } finally {
   delete process.env.DURIG_SEAT_ROOT;
   if (worktree && existsSync(worktree)) {
