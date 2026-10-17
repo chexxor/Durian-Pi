@@ -1,0 +1,13 @@
+# .gitattributes — narrow, file-scoped EOL pin (#1055, D83 ruling on #944). NOT repo-wide:
+# a repo-wide `* text=auto eol=lf` is expressly not approved.
+#
+# Each path below is compared byte-for-byte (the constitution mirrors) by
+# demo/commit-model.test.mjs, demo/seat-commit-instructions.test.mjs and demo/starter.test.mjs.
+# With core.autocrlf=true they would otherwise be checked out as CRLF and flake those comparisons.
+#
+# constitution.txt  — the shipped constitution text
+# rig.starter.json  — carries constitutionInline (starter mirror)
+# rig.selfdev.json  — carries constitutionInline (selfdev mirror)
+constitution.txt text eol=lf
+rig.starter.json text eol=lf
+rig.selfdev.json text eol=lf
