@@ -162,8 +162,9 @@ export function planResets({ seats, assessmentsByConv }) {
 export async function applyResets(harness, plans, context) {
 	const applied = [];
 	for (const plan of plans ?? []) {
-		// The handoff must name the CAUSE and the fix: a format fault, a wall-clock stall, and a
-		// generic runaway each need a different re-anchor, or the model repeats the same habit.
+		// The handoff must name the CAUSE and the fix: a format fault, a wall-clock stall, a prose
+		// loop, and a generic runaway each need a different re-anchor, or the model repeats the
+		// same habit.
 		const detail = String(plan.detail ?? "");
 		let handoff;
 		if (/pseudo-tool-call/.test(detail)) {
@@ -192,6 +193,15 @@ export async function applyResets(harness, plans, context) {
 				`probes, comments, commit messages and replies; never switch languages mid-task. ` +
 				`Your context is reset to break the pattern. Re-anchor from your durable ` +
 				`instructions and the queue; re-claim your item if you still hold it.`;
+		} else if (/degenerate-text/.test(detail)) {
+			// A prose loop (a NAMED pattern): name the fault and the fix, or the model re-anchors onto
+			// the same repeated-phrase habit.
+			handoff =
+				`degenerate text (${plan.detail}): your last turn filled its message with the same short ` +
+				`phrase over and over instead of acting — the run is looping on its own output. Your ` +
+				`context is reset to break the loop. Re-anchor from your durable instructions and the ` +
+				`queue; re-claim your item if you still hold it, and state each next action ONCE, then ` +
+				`issue it as a tool call.`;
 		} else {
 			handoff =
 				`degeneration guard reset (${plan.detail}): the run you were in outgrew its bounds, ` +

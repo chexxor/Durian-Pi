@@ -1,0 +1,55 @@
+Now I have the full context from the durable store. This is very illuminating:
+
+1. **The "never echo keys" convention appears in #700 part (a)'s guard** (`src/config.mjs`) — but that's about the config-file guard (name the key, never echo the **value**), NOT a docs-only convention. That's implemented in code, so it's fine.
+
+2. **lead's #824 ruling** explicitly: `PROSE IS WHAT FAILS (my #716 Q2; #397 Q4; and item 69). "Never echo keys into transcripts" as a convention repeats exactly that failure. It MAY be recorded as an INTERIM COMPLEMENT, explicitly labeled interim — never as the resolution.`
+
+3. **The real fixes** (from #824's deliverables):
+   - Vendor redaction hook (pi-durable capability request, routed to devtools as #827) — "never echo the secret value, name WHERE"
+   - durig-side DETECTION (read-side scan of committed entries raising an attention notice naming WHERE, never echoing the value) — registered as a durig backlog item.
+
+4. #700 part (b) was PARKED; part (a) DONE (#821).
+
+Now, the question is: **does any docs note record the "never echo keys into transcripts" convention as THE fix?** 
+
+From my doc search: The only notes are SEAT-TOOLS.md's `complete_work` evidence constraint (an acceptance canary about evidence containing no key material — correctly framed as a constraint, not THE fix). There is **no** docs note in the docs/ tree that presents "never echo keys into transcripts" as the resolution.
+
+The #829 item's own durable content also confirms: "if no such note exists, this may be a no-op — say so."
+
+So the honest determination: **No docs note exists (in the docs/ surface) that records "never echo keys into transcripts" as a convention/resolution.** The convention lives in:
+- Code comments in `src/config.mjs` (part a guard — implemented, correct).
+- The durable ruling/decision records (#824) — which already correctly label it as INTERIM complement, not the fix.
+
+However, I should verify whether the "never echo keys into transcripts" phrase appeared in any OTHER recording that a reader might see as a policy note — e.g., a runbook, DECISIONS.md, or FEATURES. Let me check DECISIONS.md and FEATURES.md specifically, and the runbooks, for any such convention note that should be labeled INTERIM.
+
+Actually, from my earlier search, docs/ doesn't contain "never echo" at all (the matches were in the durable store / source code comments). The only doc mentions are SEAT-TOOLS.md's "evidence must contain no key material" (a constraint, correctly framed).
+
+Let me double-check whether there's a decision record (DECISIONS.md) or a runbook note about "no secrets in evidence" / "never echo keys" that might need labeling. Let me search DECISIONS.md and the security docs and runbooks for any such policy statement.
+
+Let me also check: is there a #700-related policy note in FEATURES.md or a security section that states "never echo keys into transcripts" as a convention? Let me search FEATURES.md and runbooks specifically.
+
+Let me search the docs for "no secrets" / "secret" policies that might record this convention as the fix.
+
+Let me search DECISIONS.md, FEATURES.md, and the runbooks for secret-related convention statements.
+
+Let me do targeted searches.
+
+I now have the full context. The "never echo keys" convention:
+- Appears in **code** (`src/config.mjs` — the part-(a) config guard: "name the key, never echo the value"), which is implemented in code and correct.
+- lead's ruling #824 already correctly labels it as **INTERIM complement, never the resolution**, with the real fixes being (1) the vendor redaction hook (devtools #827) and (2) durig read-side detection (backlog).
+- There is **no docs note** in docs/ that records "never echo keys into transcripts" as THE fix.
+
+Let me confirm by checking DECISIONS.md, FEATURES.md, and the runbooks for any secret-convention note that might need an INTERIM label, to make sure I'm not missing one.
+
+Let me search DECISIONS.md, FEATURES.md, and the runbooks specifically.
+
+Let me search for secret/echo policy statements in the project doc surfaces.Now I have the full context. The "never echo keys" convention lives in **code** (`src/config.mjs` part-(a) guard: "name the key, never echo the value") and in lead's #824 ruling which already correctly labels it **INTERIM**, never the resolution. The docs/ surface has no note presenting it as THE fix. Let me confirm there's no such policy note in DECISIONS.md, FEATURES.md, or the runbooks that would need an INTERIM label.
+
+Let me search the project doc surfaces for any secret-convention policy note.
+
+Let me search DECISIONS.md, FEATURES.md, runbooks, and any security doc for a "no secrets"/"never echo" convention statement.
+
+Let me search these specifically.Let me confirm no doc surface (DECISIONS, FEATURES, runbooks, constitution) records "never echo keys" as a fix that needs labeling. Let me search these specific surfaces.
+
+
+

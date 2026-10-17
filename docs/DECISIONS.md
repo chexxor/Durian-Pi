@@ -2178,3 +2178,32 @@ if it regularly exceeds a threshold, the landing step wants a different trigger 
 
 **Status:** docs landed (`d1326da`); ROADMAP item 100 registered; the one-time landing pass routed to
 `pm` (`opr-20261017-landing-pass` + pre-flight `opr-20261017-landing-preflight`).
+## D87 — Degenerate PROSE is detected by a NAMED-PATTERN registry, validated against real pages, 2026-10-16
+
+**Decision.** Revive the prose-degeneration guard as a small NAMED-PATTERN registry (`TEXT_PATTERNS` in
+`src/attention.mjs`): each pattern is a **pure predicate over ONE assistant turn's text**. `assessRun`
+counts matches PER PATTERN and the reason names it (`degenerate-text=<pattern>=N`); `src/supervisor.mjs`
+gives the prose cause its own named reset handoff. Adding a future shape is one new entry, not a change
+to the detector, the supervisor, or the test plumbing. The first (and only) pattern is
+`short-sentence-wall`: a turn whose longest **unbroken** run of short (<= 30-char) sentences is >= 60
+long while using <= 20 distinct phrases — the observed shape `Emit. OK. Go. Now.` / `Completing:`.
+
+**Why a wall, not a fragment count.** D78 counted ABSOLUTE repetition of sentence fragments (>= 5), and
+a healthy long document repeats fragments constantly, so it false-reset five healthy seats. The wall
+metric is structural: healthy prose breaks the run with longer sentences and varies its short ones, so
+it does not fire; a real loop is a wall of near-identical micro-sentences.
+
+**Evidence (real pages, not fixtures).** `scripts/degen-scan.mjs` over the live selfdev store: 5636
+assistant turns scanned, **26 matched, 0 false positives** (every match is an emit/completing/deferring/
+read/issue wall or an XML tool-call-as-text blob). `demo/degeneration-text.test.mjs` pins 3 POSITIVE and
+6 NEGATIVE turns pulled from the store (`demo/fixtures/degenerate-text/`).
+
+**Correction to D78's evidence.** D78 cited "a lead ruling: 123 fragments, 33 unique" as proof that
+healthy prose has low fragment diversity. That turn is entry `36004`, and it is ITSELF degenerate: it
+ends in a wall of ~60 identical `Completing:` sentences (measured: longest short-sentence run 64, 5
+distinct). So D78's "false positive" on `lead` was a TRUE positive, and its diversity argument rested on
+a degenerate sample. The genuinely healthy turns v1 also reset (`advocate` 36335, `scribe` 35168/35231,
+`auditor` 22137) are the negatives the registry is proved against.
+
+**Status:** adopted (item #875). D78's detector `97a3c6d` stays reverted (`449e870`); this is a distinct
+design, validated before enabling as D78's lesson requires.

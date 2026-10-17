@@ -178,6 +178,108 @@ export function countLanguageDriftTurns(entries, opts = {}) {
 }
 
 /**
+ * NAMED-PATTERN registry for degenerate PROSE. Each pattern is a PURE predicate over ONE
+ * assistant turn's joined message text, so a new degeneracy SHAPE is one new entry here — no
+ * change to assessRun, the supervisor, or the test plumbing.
+ *
+ * Why a registry and not a single heuristic: D78 shipped one fragment-repetition rule and it
+ * false-positived on real transcripts the moment it went live (it reset five healthy seats). The
+ * lesson (docs/DECISIONS.md D78 REVERTED) is that a context-resetting heuristic must be validated
+ * against EVERY seat's real pages with ZERO false positives, and that a slightly different shape
+ * must be cheap to add. Naming each pattern makes the firing cause legible in the reason
+ * (`degenerate-text=<name>=N`) and lets each pattern be tested independently against the stored
+ * fixtures in demo/fixtures/degenerate-text/.
+ */
+
+/** A turn's text as trimmed, non-empty sentences. Fenced code is dropped: code repeats legitimately. */
+function sentences(text) {
+	const body = String(text ?? "").replace(/```[\s\S]*?```/g, " ");
+	return body
+		.split(/[\n.!?]+/)
+		.map((s) => s.trim())
+		.filter((s) => s.length > 0);
+}
+
+/** Lowercase, collapse whitespace, drop punctuation, so "Emit." and "emit" compare equal. */
+function normalizePhrase(text) {
+	return text
+		.toLowerCase()
+		.replace(/\s+/g, " ")
+		.replace(/[^a-z0-9 ]/g, "")
+		.trim();
+}
+
+/** The longest run of consecutive "short" sentences, with the number of distinct phrases in it. */
+function longestShortRun(sents, maxSentenceLen) {
+	let best = { run: 0, distinct: 0 };
+	let i = 0;
+	while (i < sents.length) {
+		if (sents[i].length > maxSentenceLen) {
+			i++;
+			continue;
+		}
+		let j = i;
+		const distinct = new Set();
+		while (j < sents.length && sents[j].length <= maxSentenceLen) {
+			distinct.add(normalizePhrase(sents[j]));
+			j++;
+		}
+		if (j - i > best.run) best = { run: j - i, distinct: distinct.size };
+		i = j;
+	}
+	return best;
+}
+
+export const TEXT_PATTERNS = [
+	{
+		name: "short-sentence-wall",
+		// The observed F29 shape: the tail of a turn becomes a long UNBROKEN run of very short
+		// sentences ("Emit. OK. Go. Now." / "Completing:") with almost no variety. A healthy
+		// document does not put dozens of near-identical micro-sentences in a row; when it does
+		// have many short lines (a list), the lines DIFFER, so `distinct` is high and this does
+		// not fire. Thresholds are deliberately conservative and the real-corpus gap is wide:
+		// degenerate walls run 61+ consecutive short sentences at <= 20 distinct, while the
+		// healthy fixtures never string more than a handful together. (D78 lesson: measure against
+		// real pages, not synthetic fixtures.)
+		detect(text, opts = {}) {
+			const maxSentenceLen = opts.maxSentenceLen ?? 30;
+			const minRun = opts.minRun ?? 60;
+			const maxDistinct = opts.maxDistinct ?? 20;
+			const { run, distinct } = longestShortRun(sentences(text), maxSentenceLen);
+			return run >= minRun && distinct <= maxDistinct;
+		},
+	},
+];
+
+/** The names of the prose patterns one turn's text matches (usually none). */
+export function matchTextPatterns(text, opts = {}) {
+	return TEXT_PATTERNS.filter((pattern) => pattern.detect(text, opts)).map((pattern) => pattern.name);
+}
+
+/** Joined text of one assistant entry (empty for any other entry kind). */
+export function assistantText(entry) {
+	const message = Array.isArray(entry?.model) ? entry.model[0] : entry?.model;
+	if (!message || message.role !== "assistant") return "";
+	const parts = Array.isArray(message.content) ? message.content : [];
+	return parts
+		.filter((part) => part?.type === "text")
+		.map((part) => part?.text ?? "")
+		.join("\n");
+}
+
+/** Per-pattern counts of the assistant turns in a page that match each prose pattern. */
+export function countTextPatternTurns(entries, opts = {}) {
+	const counts = {};
+	for (const entry of entries ?? []) {
+		if (entry?.kind !== "pi.assistant") continue;
+		for (const name of matchTextPatterns(assistantText(entry), opts)) {
+			counts[name] = (counts[name] ?? 0) + 1;
+		}
+	}
+	return counts;
+}
+
+/**
  * The reason a run failed, plus the CAUSE when the entry knows it.
  *
  * A submission record carries a category - "model_error" - and nothing else,

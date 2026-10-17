@@ -1,0 +1,24 @@
+Interesting — git status shows `M src/broker.mjs` and `?? demo/broker-wakepath.test.mjs` — so there IS modified code (broker.mjs modified, unbuilt/uncommitted) even though the item claims "NO code landed". "Landed" may mean "committed" — the working tree is shared, and these modifications might be from another seat's or the operator's uncommitted work (per P3 Safety, the working tree is shared). I must NOT touch those, but I should note what I observe honestly: src/broker.mjs is modified in the working tree, and demo/broker-wakepath.test.mjs is untracked. The item says "NO code landed — the item's gate forbids code before these recordings." That likely means impl has not committed; the dirty tree contains someone's WIP. I should verify whether the modification relates to the broker socket work. Let me check `git diff --stat src/broker.mjs` — read-only — to see the scale, but I must not read qa's notes first; reading diff is fine (it's evidence about the tree, not qa notes).
+
+Wait — careful. "Never edit the artifact under review." Here the artifacts under review are the two docs. The broker.mjs modification might be impl's failing-first demo in progress. The item says remaining acceptance: failing-first demo proving broker delivers change to waiting session it owns. demo/broker-wakepath.test.mjs exists untracked — that's likely the demo being written. My method: run the named test myself. But is it part of my scrutiny now? The item asks for scrutiny of the position (a) and (b), BEFORE code. The demo comes "later turn, after your/qa scrutiny of the position". So now: scrutinize the docs. But I can note the tree state as evidence: docs/reviews is untracked (??), docs/DECISIONS.md modified. So both recordings are uncommitted working-tree changes, not landings. "Recorded" = written into the working tree. Fine.
+
+Also the second PowerShell didn't show docs listing because the first Get-ChildItem output (repo listing) consumed... actually it printed only demo file list; the docs part seems truncated/empty. Let me list docs separately.
+
+Plan now:
+1. Read docs/reviews/security-sec-broker-socket.md (the position).
+2. Read docs/DECISIONS.md D52 (and D30, D45, D46, D11).
+3. Read PUSH-ARCHITECTURE.md §3.2/§5.4/§7.
+4. Check file write times to verify "position precedes entry" ordering.
+5. Run the demo suite (it's big — 70+ tests; maybe run all and report; P1 says name check and exit code). Running the whole suite may take a while; the oracle is the demo suite. As auditor I should run at least the suite relevant to the change: broker tests (broker.test.mjs, broker-log, broker-max-duration, broker-seat-attr, broker-cooperative-stop) — but the change hasn't landed. The claim I'm checking is about docs, not code. Still, "a claim about durig is checked by RUNNING the demo suite" — my verdict concerns doc claims; the referenced demo check for acceptance is broker-wakepath.test.mjs (not yet complete?). I can run the broker-related tests to see current state, plus node --check on the modified broker.mjs to see if the tree is even syntactically valid.
+
+Actually careful: my method says "run the named test yourself and do not read qa's notes first". The item is about doc scrutiny; but as the second verifier I should run the demo suite to confirm the checkout baseline is green BEFORE recordings were made... hmm, the recordings have no code. The relevant evidence: does the current tree pass the oracle? If a seat modified broker.mjs and broke something, that's not my item. I'll run the broker demos to ground the bounded surface claims (S4 status/wake/subscribe — these are presumably existing CLI/archive surface verbs). Let me not over-run: run full suite? 70 tests, each maybe seconds to minutes. Could be expensive. The oracle requirement applies to claims about durig behavior. The position doc makes claims about durig's surface (broker commands exist: status/wake/subscribe). I can verify with `node cli.mjs --help`? Or read the source (grounding via retrieved passages: read src/broker.mjs, cli.mjs).
+
+Efficient: read the position doc first, then verify each claim against source/citations.
+
+Also compare file timestamps for gate order.
+
+Let me read the docs now — several parallel reads: the review doc, DECISIONS.md (maybe long; read all), PUSH-ARCHITECTURE.md.Claimed — Item #517 | from=impl | GATE artifacts recorded — ... (status claimed)
+
+Item #517 — "GATE artifacts recorded": impl wants my scrutiny of (a) the security position doc and (b) the corrected D52, recorded *before* any code lands. Notable from the tree: `src/broker.mjs` is modified and `demo/broker-wakepath.test.mjs` is untracked — these are uncommitted working-tree changes (shared tree; per P3 Safety I won't touch them, and "landed" presumably means committed, which has not happened). I'll note that honestly in my verdict.
+
+Reading the artifacts under review:
