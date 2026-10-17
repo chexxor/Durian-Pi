@@ -33,8 +33,9 @@ registration. Everything below this block is historical.)_
 **A `pause` command was routed to the backlog (operator request).**
 - Intent `opr-20261017-pause-command` delivered to `pm` (08:16:46Z; `.spike/delegate/intent-pause-command.md`):
   a `pause`/`unpause` command that stops seats taking NEW work while in-flight work settles, so broker
-  upgrades run against a quiescent rig. **REGISTERED by pm as ROADMAP 130** — #1387 (docs-only) +
-  #1388 (implementation, BACKLOG — HOLD, do not start).
+  upgrades run against a quiescent rig. **REGISTERED on `impl-item-1387` as ROADMAP 131** — #1387
+  (docs-only, done) + #1388 (implementation, BACKLOG — HOLD, do not start). NOTE: queue rows #1387/#1388
+  still say "ROADMAP 130"; the ROADMAP file (131) is authoritative.
 - **Why it matters now:** today the only quiesce options are `serve --stop` (kills in-flight runs) and the
   prose "exclusive window" — this is the missing drain-to-quiescence primitive, adjacent to ROADMAP
   69/71/74 and the daemon 61-64.
@@ -65,16 +66,29 @@ dead=0` 08:46:20Z) and impl re-engaged #1390 (opened #1395).
 
 ## NEXT SESSION
 
-**Current item (clock-out):** the store is QUIESCENT and free — broker exited (`EXIT pid=37376
-reason=stop` 08:32:10), no genlock, no driver process. **The landing pass #1390 is `deferred` to pm and
-landed NOTHING** (main unchanged at `ffa1ea6`). Next: either the operator takes the broker upgrade now,
-or restart the broker and re-drive the landing (#1390) — the pass needs a landing path outside the broker.
+**Current item (clock-out):** **#1398 — the landing pass RE-DRIVE (26 branches, OUTSIDE-broker path)**, which
+supersedes the empty #1390 and is the item that LANDS all the verified accumulated work (commit gate
+#1317/#1379/#1380, #1383, ROADMAP registrations, ...). Its own procedure names the operator/delegate as the
+quiesce driver: **stop the broker, hand-verify** (`ls -1 selfdev.sqlite.genlock*` empty AND no `cli.mjs
+serve` process), then run the landing OUTSIDE the broker (`scripts/land.mjs` detached, or broker stopped +
+a single driver), and verify each tip with `git merge-base --is-ancestor <tip> main`. main is at `6195c99`;
+the branches are still unlanded.
+
+**Broker:** upgraded + restarted — `START pid=37596` 08:46:18Z on the new runtime (pi pin `8efd314f`),
+PASS advancing. The re-drive note drained and impl re-engaged (#1395 -> #1398).
 
 **Known hazards / gates:**
-- **#1383** - the `land.mjs` genlock probe is wrong; do not trust it. Check the store's genlock state by
-  hand.
-- **#1390 deferred, empty** - re-route it; a broker-hosted seat cannot stop the broker and keep landing.
-- **#1358** window is spent (quiet but nothing landed); #1169's 4 branches remain unlanded with the rest.
+- **#1398 is `queued` to impl but its GO needs an operator/delegate quiesce** — a broker-hosted seat cannot
+  stop the broker itself (that is the #1399 procedure fix, now queued for land.md).
+- **#1383 FIXED + verified** (#1418): `land.mjs`'s genlock probe now resolves the store in use and refuses a
+  mis-resolution — still hand-verify quiescence before the pass.
+- **Registration mismatch to flag:** the `pause` item is **ROADMAP 131** in the file (`impl-item-1387`), but
+  queue rows #1387/#1388 still say "ROADMAP 130" — the queue text is stale, the file is authoritative.
+- **queue-ageing** soft warning (~39 min, band 30).
+
+**Known blocker:** #1398 is queued to impl but its GO cannot be self-driven — a broker-hosted seat cannot
+stop the broker it lives in. It needs an operator/delegate quiesce window (stop + hand-verify), then the
+landing runs outside the broker.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
