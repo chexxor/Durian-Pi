@@ -496,15 +496,36 @@ const Router = defineExtension({
 					// `isDoneNotice` also covers flag-less DONE items already in the
 					// store that predate the structural flag.
 					if (!isDoneNotice(item)) {
-						await enqueueItem(
+						// The handoff must be RE-RUNNABLE (ROADMAP 48 / W2; lead #1553: verification
+						// MUST re-execute the evidence, accepting a claim is not verification). A
+						// completion's evidence is therefore carried ON THE DONE NOTICE - verbatim,
+						// as a structured field AND a readable line - so whoever routes or performs
+						// the verification receives the exact command + exit code + artifact instead
+						// of a summary they would have to trust.
+						const ev = item.evidence;
+						const evidenceLine = ev
+							? `\n\nevidence: \`${ev.command}\` -> exit ${ev.exitCode}${ev.artifact ? ` (artifact ${ev.artifact})` : ""}`
+							: "";
+						const noticeId = await enqueueItem(
 							tx,
 							me,
 							item.from,
 							`DONE #${item.id}: ${item.subject}`,
-							args.resultSummary,
+							`${args.resultSummary}${evidenceLine}`,
 							null,
 							true,
 						);
+						if (ev) {
+							const queue = await tx.doc(RigQueue);
+							const notice = queue.items.find((it) => it.id === noticeId);
+							if (notice) {
+								notice.evidence = {
+									command: ev.command,
+									exitCode: ev.exitCode,
+									...(ev.artifact === undefined ? {} : { artifact: ev.artifact }),
+								};
+							}
+						}
 					}
 					return `ok`;
 				}, context);
