@@ -11,6 +11,10 @@
 // FAILING-FIRST: `listWorktrees` reports `locked: false` for a locked worktree, and
 // `reconcileOrphanedWorktrees` reaps the locked and branch-held worktrees (RED).
 //
+// #1244 REFINED it: a branch-held worktree is now reaped ONLY when its item is TERMINAL,
+// unlocked and clean. A LIVE item's branch-held worktree still SURVIVES (this demo's case);
+// the terminal+unlocked+clean reap is covered by demo/broker-worktree-sweep.test.mjs.
+//
 // Run: node demo/worktree-sweep.test.mjs   (exit 0 = pass)
 
 import assert from "node:assert/strict";
@@ -87,12 +91,15 @@ try {
   const diagnostics = [];
   const removed = await reconcileOrphanedWorktrees({
     repoPath: repo,
-    liveItemIds: new Set(),
+    // #1244: item-3 is a LIVE item (non-terminal) — the #1194 safety keeps its branch-held
+    // worktree. item-1 is terminal, so its dead detached worktree is reapable.
+    liveItemIds: new Set([3]),
+    terminalItemIds: new Set([1]),
     onDiagnostic: (d) => diagnostics.push(d),
   });
   check("the dead, detached, unlocked worktree IS reaped (the sweep still works)", removed.includes(1) && !existsSync(dead), JSON.stringify({ removed, exists: existsSync(dead) }));
   check("the LOCKED worktree SURVIVES", existsSync(locked), locked);
-  check("the BRANCH-HELD worktree SURVIVES", existsSync(branched), branched);
+  check("the BRANCH-HELD worktree of a LIVE item SURVIVES", existsSync(branched), branched);
 
   const after = await listWorktrees(repo);
   const stillListed = (p) => after.some((w) => norm(w.worktree) === norm(p));
@@ -102,7 +109,7 @@ try {
   check("...and the branch-held one is STILL on its branch", /impl-item-3$/.test(String(after.find((w) => norm(w.worktree) === norm(branched))?.branch ?? "")));
   check(
     "the sweep reported WHY it kept them",
-    diagnostics.some((d) => d.reason === "locked") && diagnostics.some((d) => d.reason === "branch-checked-out"),
+    diagnostics.some((d) => d.reason === "locked") && diagnostics.some((d) => d.reason === "live"),
     JSON.stringify(diagnostics),
   );
 
