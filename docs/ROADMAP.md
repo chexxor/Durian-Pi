@@ -2371,11 +2371,12 @@ call count. `pm` sequences these.
     author names; the broker audit sink must be the effect record **before** codemode lands, as an
     acceptance criterion for P1 Evidence to survive. *Owner:* impl · *Where:* `src/`, `docs/CODEMODE.md`.
     *Acceptance:* a codemode execution's arguments and effect are recoverable from the audit sink.
-130. **Relabel the "longer plans hurt accuracy" claim (correction C1).** The first report's supporting
-    source is a blog and no controlled dose-response study exists — downgrade to "over-planning is a
-    plausible risk, not a measured result" wherever the claim appears. *Owner:* delegate · *Where:*
-    `docs/reviews/reducing-llm-agent-tool-calls.md`. *Acceptance:* the claim carries its evidence class
-    or is removed.
+130. **Relabel the "longer plans hurt accuracy" claim (correction C1) — DELIVERED.** The first report's
+    supporting source is a blog and no controlled dose-response study exists — downgraded to
+    "over-planning is a plausible risk, not a measured result" and the claim + reference now carry the
+    `advertised-elsewhere` evidence class. *Owner:* delegate · *Where:*
+    `docs/reviews/reducing-llm-agent-tool-calls.md`. *Proof:* point 3 and reference `[^6]` carry the
+    class and cite the C1 correction in `docs/reviews/reducing-llm-agent-tool-calls-followup.md` §1.
 
 **Cross-links:** item 127 is the prerequisite that makes 126's before/after honest; item 128 is the
 surface D64 was built for but cannot yet see; item 129 gates any codemode rollout; the metric

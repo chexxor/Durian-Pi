@@ -38,7 +38,7 @@ This is the part the marketing tends to skip, and it's why the answer is "yes, b
 
 2. **Plan errors get amplified.** A single mistaken assumption in the up-front plan now corrupts an entire generated program, rather than being caught at step 3. Interleaved execution gives you natural checkpoints; a monolithic program does not. The upside is that LLMCompiler reports "minimal Planner failures" in its own failure analysis [^1] — but that's on benchmark tasks with clean tool interfaces.
 
-3. **Over-planning can actively hurt.** Longer plans correlate with reduced accuracy and slower decisions in production settings [^6].
+3. **Over-planning *may* hurt — but this is unverified, not measured.** The claim that "longer plans correlate with reduced accuracy and slower decisions" rests on one **blog** post, `advertised-elsewhere` [^6]; no controlled dose-response study was found (see `docs/reviews/reducing-llm-agent-tool-calls-followup.md` §1, correction **C1**). Treat over-planning as a plausible risk, not a result. The nearest *observed* evidence is about plan **quality and horizon** — LLM planners produce unnecessarily long, suboptimal plans, and long-horizon performance degrades — not about plan **length** lowering accuracy.
 
 4. **Security and operational overhead are real.** Running agent-generated code demands sandboxing, resource limits, and monitoring — costs that direct tool calls avoid. Anthropic explicitly says the benefits "should be weighed against these implementation costs" [^2].
 
@@ -67,4 +67,4 @@ Your instinct is correct and the architecture you're describing is essentially t
 [^3]: [Replanning When Agent Execution Fails: Dynamic Plan Revision](https://agentixforce.ai/blog/replanning-when-agent-execution-fails) (3%)
 [^4]: [ReWOO: Decoupling Reasoning from Observations for ...](https://www.alphaxiv.org/abs/2305.18323) (1%)
 [^5]: [[2606.05806] When Tools Fail: Benchmarking Dynamic Replanning and ...](https://arxiv.org/abs/2606.05806) (1%)
-[^6]: [When Longer Agent Plans Make Models Worse](https://medium.com/@duckweave/when-longer-agent-plans-make-models-worse-750bcc6ec68e) (1%)
+[^6]: [When Longer Agent Plans Make Models Worse](https://medium.com/@duckweave/when-longer-agent-plans-make-models-worse-750bcc6ec68e) (1%) — **`advertised-elsewhere`** (blog, not a controlled study; see correction C1)
