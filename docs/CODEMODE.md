@@ -77,6 +77,10 @@ and a nested result never enters the transcript (spec §8.3–8.4). The broker's
 therefore the script's real effect record, and it is a requirement, not a nicety: without it a
 codemode execution is one opaque line in `log`.
 
+Research: `docs/reviews/reducing-llm-agent-tool-calls-followup.md` §3/§6 confirms the shape of this gap
+and turns it into an acceptance criterion — ROADMAP **129** (the audit sink) and **128** (a mid-run bound
+on a single long-running sandbox call, which D64 cannot see until the run settles).
+
 ## What this buys, and what it does not
 
 **Buys:** a narrower front door. If the model sees only `codemode` and the minted set is

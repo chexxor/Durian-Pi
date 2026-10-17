@@ -324,3 +324,10 @@ store contains a seat the rig spec does not declare (`worker`, left over from an
 earlier `up` of `rig.v2.json`), and `up` only ever adds or refreshes, so it will
 remain. `check` already reads both sides and is the natural place for a
 `stray-seat` rule — spec and store disagreeing is exactly the class it exists for.
+
+## Research folded in
+
+`docs/reviews/reducing-llm-agent-tool-calls-followup.md` §2 recommends **cost with the cache split** as
+the primary metric and **round-trips as a diagnostic, not a target**. ROADMAP **126** adds a
+turns-per-item measure to this file's one computation, self-gating on minimum observations the same way
+the seat scope already does ("no data" on a sparse seat).

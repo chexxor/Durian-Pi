@@ -2340,6 +2340,47 @@ capability gate; item **81/82** reuse the `check` rule machinery (item 46's arti
     worktrees, and refuses + reports dirty orphans. *Owner:* delegate · *Where:* `src/worktree.mjs`,
     `src/broker.mjs` · *Proof:* `demo/broker-worktree-sweep.test.mjs` (RED before the fix).
 
+## Reducing agent round-trips (from the research follow-up, 2026-10-17)
+
+Source: `docs/reviews/reducing-llm-agent-tool-calls-followup.md` (follow-up to
+`docs/reviews/reducing-llm-agent-tool-calls.md`). Verdict: plan-then-execute / code-as-action
+collapses **model round-trips** with peer-reviewed support (LLMCompiler 1.80–3.74× latency, 3.37–6.73×
+cost, up to ~9% accuracy; ReWOO 64% tokens), but for durig it must (a) **preserve resumability** by
+checkpointing plan nodes, and (b) expect the degeneration surface to **shift** to an opaque in-sandbox
+loop the current detectors cannot see mid-run. The primary metric is **cost with the cache split**, not
+call count. `pm` sequences these.
+
+126. **Round-trip / turns-per-item measure feeding `computeMetrics`.** Count assistant entries above a
+    wake boundary (read-only; a new *measure*, not a new write path, so D24 permits it) and report it
+    with a declared blind spot ("no data" when a seat has too few turns — most seats are at zero entries
+    today). *Owner:* impl · *Where:* `src/metrics.mjs`, `docs/METRICS.md`. *Acceptance:* `metrics`
+    reports turns-per-item per seat with a band + blind spot and says "no data" rather than guessing on a
+    sparse seat.
+127. **Checkpointed plan-step execution (the durability-preserving form of batching).** Adopt a DAG
+    planner, but bind each node to a pi-durable `defineTask` phase with a checkpoint so `resume()`
+    replays completed nodes and re-runs only the in-flight one — never a single monolithic program.
+    *Owner:* impl/lead · *Where:* `src/`, `docs/`. *Acceptance:* a crash mid-plan replays completed nodes
+    from checkpoints and re-runs only the interrupted node (a faux-provider demo proves it).
+128. **A mid-run sandbox bound.** Extend D64's detector to see one long-running sandbox call: require
+    `memoryLimitBytes` and a deliberate `timeoutMs` on every codemode sandbox construction (the library
+    defaults are unlimited / 300 s), and surface `result.calls` duration in the completion evidence.
+    *Owner:* impl · *Where:* `src/`, `docs/CODEMODE.md`. *Acceptance:* a sandbox call that outlives its
+    bound is detected before the run settles, or the residual gap is named.
+129. **Narrow the codemode audit gap (a P1-Evidence prerequisite).** `result.calls` records
+    `{name, status, durationMs}` only — no arguments, no output — so a verifier cannot re-run what the
+    author names; the broker audit sink must be the effect record **before** codemode lands, as an
+    acceptance criterion for P1 Evidence to survive. *Owner:* impl · *Where:* `src/`, `docs/CODEMODE.md`.
+    *Acceptance:* a codemode execution's arguments and effect are recoverable from the audit sink.
+130. **Relabel the "longer plans hurt accuracy" claim (correction C1).** The first report's supporting
+    source is a blog and no controlled dose-response study exists — downgrade to "over-planning is a
+    plausible risk, not a measured result" wherever the claim appears. *Owner:* delegate · *Where:*
+    `docs/reviews/reducing-llm-agent-tool-calls.md`. *Acceptance:* the claim carries its evidence class
+    or is removed.
+
+**Cross-links:** item 127 is the prerequisite that makes 126's before/after honest; item 128 is the
+surface D64 was built for but cannot yet see; item 129 gates any codemode rollout; the metric
+recommendation (cost with the cache split) already lives in `docs/METRICS.md`.
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for
