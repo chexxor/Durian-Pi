@@ -7,29 +7,34 @@ _Last refreshed: 2026-10-17 (delegate, **nineteenth pass** — PM-adapter direct
 tutor-app references removed, seat worktrees relocated out of the project root (D89), ROADMAP 102–125
 registered. Everything below this block is historical.)_
 
-## DELEGATE NOTE — 2026-10-17 (runbook discoverability + research follow-up)
+## DELEGATE NOTE — 2026-10-17 (runbook discoverability, round-trip research, docs hygiene)
 
 **This session (committed):**
-1. **Followed `research-request.md` before replying** (the Diagnose step + the required prompt shape) and
-   wrote **`docs/reviews/reducing-llm-agent-tool-calls-followup-research-prompt.md`** — the grounded
-   follow-up to the operator's `docs/reviews/reducing-llm-agent-tool-calls.md` (durability, named-evidence
-   verification, single-writer, multi-agent queue, D77/D78 degeneration; corrections table requested).
-2. **Runbook discoverability added** to the delegate entry point (`AGENTS.md` clock-in + Where-to-read),
-   the durig skill (`.agents/skills/durig/SKILL.md`), and the seat constitution (`constitution.txt`
-   **P3 Runbooks** now requires *reading* the matching runbook before improvising, not just authoring).
-   Commits `fa4b22f` (onboarding) + `1702b72` (research).
-
-**PENDING — live apply to seats (needs a quiet window):** `constitution.txt` changed, and
-`up rig.selfdev.json --refresh --dry-run` confirms `constitution.changed=true` (`writes: 0`). At 05:40Z
-**two `genlock.*` were held** (a run in flight: broker just woke `impl`), so per `broker-safe-change.md`
-the stop was NOT run. Apply when no genlock is held: `serve --stop` (proceed only on `stopped:true`, then
-confirm no `serve` process and no `genlock.*`) → `up rig.selfdev.json --refresh` → restart
-`scripts/serve-noroot.ps1`. Verify with `node scripts/read-constitution.mjs` / the broker log.
+1. **Followed `research-request.md` before replying** (Diagnose step + the required prompt shape) and
+   wrote `docs/reviews/reducing-llm-agent-tool-calls-followup-research-prompt.md`; then, after the report
+   landed, **consumed** `docs/reviews/reducing-llm-agent-tool-calls-followup.md` — spot-verified the new
+   load-bearing citations (`2512.08296` scaling-agent-systems + Nature `s42256-026-01268-y` both real and
+   accurately characterised; the `CODEMODE.md` claims match the tree), registered **ROADMAP 126–130**,
+   and cross-linked from `docs/CODEMODE.md` + `docs/METRICS.md`. **Topic closed** — no further external
+   research requested. Commits `1702b72`, `c91692b`, `26ab58b`.
+2. **Runbook discoverability** added to `AGENTS.md`, the durig skill, and `constitution.txt` **P3
+   Runbooks** (read the matching runbook before improvising, not just author). Commit `fa4b22f`; D90.
+3. **Seat constitution reload DONE (forced, operator-authorised):** with two genlocks held, backed up the
+   store (`.spike/delegate/store-backup-20261017-054314`), force-killed the broker, ran `up --refresh`
+   (9 seats, `constitution.changed=true`, no model resets), `resume` (recovered qa #50734 / impl #51153),
+   and restarted the broker (**pid 36768**, `START 05:43:43Z`). `read-constitution.mjs` confirms the new
+   P3. Commits `41cf527`.
+4. **Docs hygiene** (operator question): the team **is** documenting (scribe active; code landings carry
+   doc updates), **but** four project docs carry double-encoded punctuation — `DECISIONS.md` (244 lines),
+   `FEATURES.md` (80), `STATUS.md` (32), `SELF-ADMIN.md` (13); `ROADMAP.md`/`WORKFLOWS.md` are clean.
+   Spooled a `pm` intent (`opr-20261017-roundtrip-docs`) to fix the encoding + confirm the #1179
+   registration lag; broker log `INTENT delivered=1 dead=0` at `05:56:48Z`.
 
 ## NEXT SESSION
 
-**Current item (clock-out):** the delegate's work (this session) is done and committed; the team is
-mid-flight. Live queue: `#1151` (impl, claimed — seat-root fallback guard, order 3/3), `#1182` (impl,
+**Current item (clock-out):** the delegate's work this session is committed; the team's next action is
+`pm`'s — `opr-20261017-roundtrip-docs` was delivered (register/sequence ROADMAP 126–130 + fix the four
+mojibake docs + confirm #1179). Nothing blocks the delegate. Live queue is unchanged: `#1151` (impl, claimed — seat-root fallback guard, order 3/3), `#1182` (impl,
 claimed — resume for #1151), `#1189` (qa, claimed — ROADMAP 97 harness; live runs pending operator spend),
 `#1190` (qa, claimed — VERIFY #1163, landing-safety B). `#1169`/`#1202` track the **landing-pass
 follow-up for the 4 SKIPPED branches** (#658/#662/#828/#837); `#1211` tracks the branch-deletion/git-guard
