@@ -3,16 +3,39 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate — **clock-out; incoming agent: verify the git repo branches**:
-competitor review of `microsoft/agent-governance-toolkit` is DONE
-(`docs/reviews/agent-governance-toolkit-review.md` + OWASP addendum + surface inventory), with
-`docs/COMPETITORS.md`, ROADMAP **133–151**, D96 + **D97**, and the competitor-review runbook deepened
-(triage/deep/re-review prompts, header, evidence classes, anti-patterns, re-review fork). `main` HEAD
-`9fe43c9`, tree clean. **A push to `origin` occurred this session** (`origin/main` moved `1b46411` →
-`7000634`; live remote `git ls-remote origin refs/heads/main` = `7000634`); **the delegate did not run
-`git push` and the cause is UNVERIFIED**. Only `9fe43c9` is unpushed. **117 local branches
-(53 unlanded / 64 merged); 156 worktrees.** Broker UP pid `34700`. Everything below the new handover is
-historical.)_
+_Last refreshed: 2026-10-17 (delegate — **branch audit DONE**; the next item is the landing backlog)._
+
+## BRANCH AUDIT — 2026-10-17 (delegate; operator: "review the repo and branches")
+
+**Read-only audit run; no refs changed.** `main` HEAD `6c8e1d3`, tree clean (`git status --short -- .`
+empty), no `.git/MERGE_HEAD`, no conflict markers, broker UP pid `34700` (`cli.mjs serve`, heartbeat
+fresh, 3 genlocks held, `PASS` advancing). `origin/main` = `7000634` is an **ancestor** of `main`;
+**`main` is ahead 2** (`9fe43c9`, `6c8e1d3`) — unpushed, operator holds push.
+
+**Counts:** 117 local branches (excl `main`) = **63 merged (`ahead=0`) + 54 unlanded (`ahead>0`)**, of
+which **52 are real unlanded work** and **2 are snapshots (`item-148`, `selfdev-borrow` — never
+merge/delete)**. 156 worktrees, **116 `locked`**.
+
+- **Prunable now (merged + free, `git branch -d`):** 7 — `devtools-item-1667`, `devtools-item-1745`,
+  `impl-item-156`, `qa-item-1638`, `qa-item-1764`, `scribe-item-1648`, `security-item-1581`.
+- **Merged but worktree-held (release per `leaked-worktrees.md`, then prune):** 56.
+- **No patch-equivalent duplicates** (every unlanded branch's `git cherry` is all `+`), but duplicate
+tips exist: `impl-item-1680` and `impl-item-1681` share `5a414de1`; 10 refs share `1b46411` (clock-out
+doc branches), 6 share `6c384ac`, 5 share `7b72b83`, 5 share `6195c99`.
+- **Landing backlog is the real liability:** last merge onto `main` was `7ba34c9` at 17:00Z (≈6.5 h
+  ago); **no feature/fix has landed since**, while 52 branches with unique commits (many 13–19 h old)
+  sit off `main`. 9 open `LANDING LIST` rows in the queue.
+- **Direct cost of the backlog:** `impl-item-1703`/`-1704` (degeneration-guard fixes) are written and
+  unlanded, so the resident broker still runs the OLD in-memory module and the `security` seat is
+  visibly degenerating; `#1705` is still `queued`. Landing + a broker restart is owed.
+- **Adjacent liveness signals (not branch management):** qa `admitted_not_started` submission `#75791`;
+  context `pm` 363k / `impl` 367k; `secret_detected` on qa `#75535` and scribe `#69744` (detection
+  only — do not echo values; prior same-class findings were git-SHA false positives).
+
+**Owed / recommended (operator owns the landing decision):** (1) run one landing pass per `merge.md`
+for the 52 unlanded branches in a quiesced window, then restart the broker for #1703/#1704; (2) prune
+the 7 free-merged refs; (3) release the 56 merged-but-held worktrees per `leaked-worktrees.md`, then
+prune. **Never `-D` an `ahead>0` ref and never delete a snapshot.**
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; incoming agent: **verify the git repo branches**)
 
