@@ -22,7 +22,13 @@ import {
   fauxAssistantMessage,
   fauxProvider,
 } from "@earendil-works/pi-ai/providers/faux";
-import { AssistantEntry, configure, createRegistry, Harness } from "@earendil-works/pi-durable";
+import {
+  AssistantEntry,
+  CompactionEntry,
+  configure,
+  createRegistry,
+  Harness,
+} from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
@@ -1022,6 +1028,84 @@ async function cmdReset(seatName, handoff) {
       seat: seatName,
       resetEntryId: result.resetEntryId,
       handoff: result.handoff,
+      db: DB_PATH,
+    });
+  } finally {
+    await harness.close(BACKGROUND_CONTEXT);
+  }
+}
+
+// compact: a MANUAL compaction of a seat's context (ROADMAP 61-67 daemon group, operator TASK 1).
+// Where `reset` draws a boundary and DROPS the prior turns from the model context, `compact`
+// SUMMARIZES them: pi-durable's conversation.compact() creates a conversation-owned
+// `pi.compaction` task that selects an old prefix, summarizes it with the seat's own model, and
+// places a summary entry whose `head` is the first kept entry. The durable transcript is
+// preserved (a summary ENTRY, not a deletion) — only the model CONTEXT shrinks, so the seat
+// keeps what it learned without re-reading every turn.
+//
+// TRUTHFULNESS (the item's hard requirement): compact() only COMMITS the task and returns its
+// id — the commit does not run it. The harness drives tasks through its TaskScheduler, so the
+// CLI must resume and WAIT for the task (harness.waitForTask) and then prove a compaction entry
+// landed. An enqueue-and-exit stub would report success while nothing was ever summarized. A
+// manual compaction is foreground (`background = reason !== "manual"`), so waiting here is safe.
+async function cmdCompact(seatName, instructions) {
+  // Same class as `reset`: compact writes a context boundary, so it must not race the broker's
+  // own writer (ROADMAP 69 / COMMANDS-AND-THE-BROKER §4).
+  refuseWhileBrokerDrives("compact");
+  const { harness } = await openHarness();
+  try {
+    const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+    const seatsVal = seatsDoc?.value?.seats ?? {};
+    const seat = seatsVal[seatName];
+    if (!seat) {
+      noteEmptyRig(Object.keys(seatsVal).length);
+      fail(`unknown seat: ${seatName}`);
+    }
+
+    // Refuse when the seat holds a LIVE generation lease — the same seatsWithLiveSlot guard
+    // reset/resume compute (readGenerationSlots -> generatingSeat; ROADMAP 37a). Compacting a
+    // seat mid-generation would race the generation that owns the context being rewritten.
+    const slots = maxSeats();
+    const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
+    const seatsWithLiveSlot = new Set(
+      genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat),
+    );
+    if (seatsWithLiveSlot.has(seatName)) {
+      fail(`seat ${seatName} holds a live generation lease; refusing to compact a running seat`);
+    }
+
+    const conv = await harness.conversation(seat.conversationId, BACKGROUND_CONTEXT);
+    if (FAUX) {
+      // Offline smoke mode (same seam as cmdSend): the summarization phase is a model call, so
+      // the faux provider needs one canned reply per compaction. Scripting is per-process, so
+      // the demos under demo/ drive full loops; here the CLI only needs the call to return.
+      FAUX.appendResponses([
+        fauxAssistantMessage([{ type: "text", text: "(faux) compacted summary." }]),
+      ]);
+    }
+    // Omitted or blank instructions means a plain compaction (no operator guidance folded into
+    // the summary prompt); only a non-blank string is passed through.
+    const text = instructions !== undefined && instructions.trim() !== "" ? instructions : undefined;
+    const taskId = await conv.compact(text, BACKGROUND_CONTEXT);
+    // Drive the task to completion. Without this the verb would return a task id for work nobody
+    // runs — exactly the stub the item forbids.
+    await harness.waitForTask(taskId, BACKGROUND_CONTEXT);
+
+    // PROVE the compaction happened, not merely that a task ran: pi-durable places a
+    // `pi.compaction` summary entry. Report its id (null would mean the task completed without
+    // compacting — e.g. nothing to compact — and must not be reported as success).
+    const after = await conv.entries({ order: "descending" }, 50, undefined, BACKGROUND_CONTEXT);
+    const summary = after.items.find((e) => e.kind === CompactionEntry.kind);
+    if (!summary) {
+      fail(`compact: no compaction entry was written for seat ${seatName} (task ${taskId})`);
+    }
+    out({
+      ok: true,
+      command: "compact",
+      seat: seatName,
+      taskId,
+      instructions: text ?? null,
+      summaryEntryId: summary.id,
       db: DB_PATH,
     });
   } finally {
@@ -2293,6 +2377,7 @@ usages:
   node cli.mjs queue           dump the work queue
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs reset <seat> [handoff]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary)
+  node cli.mjs compact <seat> [instructions]   summarize a seat's older context into a summary entry (keeps the transcript)
   node cli.mjs run [--watch] [--max-duration <seconds>]   drive to quiescence; --watch resident; --max-duration bounds it
   node cli.mjs serve [--max-duration <seconds>] [--stop]   the resident broker: wake seats from the store's change stream; --stop halts it
   node cli.mjs stop <seat> [reason]      emergency-stop: halts a seat's in-flight run across processes
@@ -2386,6 +2471,10 @@ try {
   else if (cmd === "reset" || cmd === "clean") {
     if (!rest[0]) fail("reset needs <seat> [handoff]");
     await cmdReset(rest[0], rest.slice(1).join(" "));
+  }
+  else if (cmd === "compact") {
+    if (!rest[0]) fail("compact needs <seat> [instructions]");
+    await cmdCompact(rest[0], rest.slice(1).join(" "));
   }
   else if (cmd === "watch") {
     // Same precedence as `send --stream`: an explicit flag wins, otherwise a
