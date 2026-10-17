@@ -79,6 +79,16 @@ export const RULES = [
     severity: "fix-now",
     what: "a seat declares no capabilities, so per-seat tool scoping gives it no working tools",
   },
+  {
+    id: "runbook-stale",
+    severity: "error",
+    what: "a runbook was verified before a file it names changed",
+  },
+  {
+    id: "runbook-unverified",
+    severity: "fix-now",
+    what: "a runbook's Verify step has never run",
+  },
 ];
 
 const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
@@ -105,9 +115,14 @@ export function seatsAreVerifier(seat) {
  * @param {{reason:"read",text:string}|{reason:"absent"}|{reason:"unreadable",error:string}} input.stored
  * @param {string[]|null} [input.storedSeats]  seat names the store holds, or null when it was not read
  * @param {Record<string,string>} [input.modelsBySeat]  seat name -> "provider/modelId"
+ * @param {Array<{file:string, frontMatter:object|null, changedNamedFiles?:string[]}>} [input.runbooks]
+ *   runbook data the CALLER read from docs/runbooks/* and passed as plain values (this module never
+ *   touches the filesystem). Each entry carries the parsed front-matter and the files the runbook
+ *   NAMES that changed since `last_verified`. Omit it entirely to leave the runbook rules unrun
+ *   (they are then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {} }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -304,6 +319,43 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       `${capless.join(", ")} - no capabilities declared, so per-seat tool scoping gives these seats no working tools and they cannot do work`,
       "declare what each seat does - \"implement\"/\"code\" to produce, \"verify\"/\"review\" to check, or \"route\"/\"plan\"/\"decide\" for coordination - so the tool set matches the role",
     );
+  }
+
+  // 9. Runbook health (docs/runbooks/README.md maintenance policy; ROADMAP 81). auditRig stays
+  //    PURE: the caller reads docs/runbooks/* and passes plain data - each runbook's parsed
+  //    front-matter plus the files it NAMES that changed since `last_verified`. A runbook whose
+  //    Verify step never ran is fix-now (unproven but harmless to a run); one verified before a file
+  //    it names changed is an ERROR, because its literal steps may no longer match the code.
+  //    Omitting `runbooks` leaves both rules SKIPPED with a reason - never a false pass.
+  if (!Array.isArray(runbooks)) {
+    const why = "no runbook data was supplied, so no runbook can be judged";
+    skipped.push({ id: "runbook-stale", why });
+    skipped.push({ id: "runbook-unverified", why });
+  } else {
+    for (const runbook of runbooks) {
+      const file = runbook?.file ?? "(unnamed runbook)";
+      const lastVerified = runbook?.frontMatter?.last_verified;
+      if (lastVerified === undefined || lastVerified === null || lastVerified === "" || lastVerified === "unverified") {
+        add(
+          "runbook-unverified",
+          file,
+          `${file} has never had its Verify step run (last_verified: ${lastVerified ?? "absent"}), so the procedure is unproven`,
+          "run the runbook's Verify step, then set last_verified: <date> in its front-matter",
+        );
+        continue;
+      }
+      const changed = Array.isArray(runbook?.changedNamedFiles)
+        ? runbook.changedNamedFiles.filter((path) => typeof path === "string" && path !== "")
+        : [];
+      if (changed.length > 0) {
+        add(
+          "runbook-stale",
+          file,
+          `${file} was verified ${lastVerified}, but ${changed.length === 1 ? "a file it names has" : `${changed.length} files it names have`} changed since (${changed.join(", ")}), so its steps may no longer match the code`,
+          "re-run the runbook's Verify step and update last_verified, or fix the runbook to match the code",
+        );
+      }
+    }
   }
 
   const summary = { error: 0, "fix-now": 0, total: findings.length };

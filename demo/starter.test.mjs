@@ -105,6 +105,13 @@ try {
 	// each one genuinely ran. A `skipped` status here means the starter is being
 	// audited by a check that could not actually judge it.
 	for (const c of result.json.checks) {
+		// The runbook rules need runbook data the CLI does not supply yet (item 86 wires the caller to
+		// read docs/runbooks/*), so they are legitimately SKIPPED here - and must say why.
+		if (c.id.startsWith("runbook-")) {
+			assert.equal(c.status, "skipped", `rule ${c.id} is "${c.status}", not "skipped": the CLI passes no runbook data yet`);
+			assert.ok(c.why, `rule ${c.id} skips without a reason`);
+			continue;
+		}
 		assert.equal(c.status, "pass", `rule ${c.id} is "${c.status}", not "pass": ${c.why ?? ""}`);
 	}
 
@@ -185,6 +192,8 @@ try {
 		"no-verifier-seat": "this file, control 5",
 		"single-model-rig": "this file, control 2",
 		"seat-without-capabilities": "this file, control 6",
+		"runbook-stale": "demo/runbook-rules.test.mjs",
+		"runbook-unverified": "demo/runbook-rules.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(

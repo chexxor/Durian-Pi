@@ -91,8 +91,8 @@ try {
   assert.equal(hardened.exitCode, 0);
   assert.equal(hardened.pass, true);
   assert.ok(
-    hardened.checks.every((c) => c.status === "pass"),
-    "every rule ran and passed on the hardened rig",
+    hardened.checks.every((c) => c.status === "pass" || (c.status === "skipped" && c.id.startsWith("runbook-"))),
+    "every rule ran and passed on the hardened rig (the runbook rules skip: this pure audit is given no runbook data)",
   );
 
   // 3. THE regression: the spec declares a constitution and the store holds a
