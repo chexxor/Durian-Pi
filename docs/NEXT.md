@@ -49,26 +49,32 @@ scribe's, landed).
 surfaced. 33 unique commits for `done` items are not on `main` (guard/confine stack `#1151, #1182,
 #1225, #1249, #1261, #1444, #1465, #1475, #1487, #1505, #1519`; docs `#1232, #1233, #1257, #1274,
 #1323, #1458, #1469, #1529, #1530, #1535, #1542, #1545, #1558, #1565`; plus `#1087, #1271, #1456`).
-**Route them to `pm` for one landing pass** — this is the `merge.md` Escalate-to, not a re-derive.
+**Route them to `pm` for one landing pass** — the `merge.md` Escalate-to, not a re-derive.
+**DONE:** `pm` routed the pass as **#1605 → impl** (31 branches; stacked-chain dedupe; archives excluded).
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue`
 
-**Routing already dispatched (do NOT re-send):** `send pm` for the branch-audit follow-up (**#1448**),
-dispatched 2026-10-17, pid `23772`, `--request-id opr-20261017-branch-landing`, body
-`.durig/opr-branch-landing-20261017.md`. When it settles, read `.durig/send-pm.out` (JSON
-`settledStatus`) and confirm with `node cli.mjs queue` that `pm` opened the landing item(s).
+**In flight / owed (do NOT re-send):**
+- **Landing pass #1605 is DRIVING** outside the broker: `send impl` pid `31164`,
+  `--request-id opr-20261017-landing-drive`, body `.durig/drive-landing-20261017.md`, output
+  `.durig/drive-landing.out`. The exclusive window was hand-verified open (no `serve`, no `genlock`,
+  no `MERGE_HEAD`, clean tree) per `land.md` / #1448 path (A). The `pm` send already settled
+  (`.durig/send-pm.out`).
+- **OWED next:** when #1605 settles, **start the broker** —
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1`
+  (`broker-down-or-stalled.md`). The rig has had no broker since ~18:11Z and is not self-restarting.
 
 **State at clock-out:**
-- `main` HEAD = `c0534ed`, **tree clean** — pruning deleted refs only, never touched the tree.
-- Local refs **128 → 76** (52 pruned: 50 merged `-d`, 2 patch-equivalent `-D`). **33 unlanded refs kept.**
-- **Owed pruning still open:** **42 merged branches are held by a worktree** (checked out in a linked
-  worktree, so `git branch -d` refuses). Release each only per `leaked-worktrees.md` (terminal +
-  unlocked + clean; a **locked** worktree is an intentional keep), then prune.
+- `main` HEAD = `5ce0187` (the two #1448 docs commits), **tree clean**.
+- Local refs **128 → 76** (52 pruned: 50 merged `-d`, 2 patch-equivalent `-D`); **33 unlanded refs kept**.
+- **Owed pruning still open:** **42 merged branches held by a worktree** — release each only per
+  `leaked-worktrees.md` (terminal + unlocked + clean; a **locked** worktree is an intentional keep).
 - **Runbook:** `docs/runbooks/branch-cleanup.md` (indexed in `README.md`; cross-linked from `merge.md`
   "Trust, but verify"). `last_verified: 2026-10-17`.
 
-**Known blocker:** none blocking the delegate. Seats cannot prune (seatguard); the delegate/operator
-must. Landing-pass entry 11 (`impl-item-1151`, `#1151`) stays EXCLUDED (D1 open).
+**Known blocker:** a landing pass cannot restart the broker itself (it runs outside it); the
+delegate/operator restarts after #1605 settles. Seats cannot prune (seatguard). Entry 11
+(`impl-item-1151`, `#1151`) stays EXCLUDED (D1 open).
 
 ## DELEGATE NOTE — 2026-10-17 (priority delivered, landing window declared, pause command registered)
 
