@@ -3,9 +3,9 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **fifteenth pass** — consumed the git-merging follow-up, registered
-ROADMAP 102–114, created the competitor-review runbook, and reviewed Aider. Prior pass: ROADMAP 101,
-the landing-safety incident, and the first git-merging research. See **NEXT SESSION** below.)_
+_Last refreshed: 2026-10-17 (delegate, **sixteenth pass** — consumed the PM-tools research, registered
+ROADMAP 115–117, and added `docs/PM-ADAPTERS.md`. Prior pass: the git-merging follow-up, Aider review,
+and the competitor-review runbook. See **NEXT SESSION** below.)_
 
 ## NEXT SESSION
 
@@ -48,7 +48,13 @@ reviewed; corrections applied — `resolve-merge-conflict.md` no longer tells re
 research SOP now **mandates** registering proposed items. ROADMAP items **102–114** registered. Created
 `docs/runbooks/competitor-review.md`; reviewed Aider (`docs/reviews/aider-review.md`; `vendor/eval/aider`
 HEAD `5dc9490`) → `docs/COMPETITORS.md` entry. **Owed:** route the follow-up as done; `pm` sequences
-102–114.
+102–117.
+
+**PM-tools research consumed (2026-10-17):** `docs/reviews/llm-agent-project-management-tools.md`
+reviewed (Agent Board / Linear MCP / Atlassian MCP citations spot-verified). Accepted direction in
+`docs/PM-ADAPTERS.md`; ROADMAP items **115–117** registered (TaskSource seam + state mapping, local/stdio
+MCP adapter, read-only external view). Key constraint: official tracker MCP servers are **remote/HTTP**,
+so the MCP client stays in the operator/broker path — seats keep no network.
 
 **Next-session checklist (the landing cleanup):**
 1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`

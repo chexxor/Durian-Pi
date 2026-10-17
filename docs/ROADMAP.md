@@ -647,6 +647,26 @@ pre-flight in `merge.md`); these are the code and measurement items.
      then the repo map, then editable files (Aider's order); consider a keepalive ping for long-lived
      seats. *Owner:* impl. *Acceptance:* a measured cache-hit improvement on a long seat.
 
+## External task-source adapters (raised 2026-10-17)
+
+From `docs/reviews/llm-agent-project-management-tools.md`; accepted direction in `docs/PM-ADAPTERS.md`.
+**Registered, not scheduled** — `pm` sequences them. `RigQueue` stays the single authority; adapters are
+one-way and idempotent.
+
+115. **`TaskSource` adapter seam + external state mapping.** A thin one-way adapter contract: ingest
+     external work items into `RigQueue` (keyed by external id, idempotent) and export status back, with
+     an explicit external↔durig state-mapping spec. Runs in the broker/operator path, never as a second
+     writer. *Owner:* lead (design) + impl. *Acceptance:* an adapter creates and reconciles a queue row
+     without duplication; the mapping is documented and cycle-safe.
+116. **Local/stdio MCP client adapter as the first `TaskSource`.** One MCP client reaches
+     GitHub/Jira/Linear/Agent Board instead of N REST integrations. Seats keep no network: the client
+     runs in the operator/broker path, and remote/HTTP MCP is operator-gated (the official Linear and
+     Atlassian servers are remote/HTTP). *Owner:* impl + lead. *Acceptance:* the adapter reaches a local
+     stdio MCP server; no seat network capability is minted.
+117. **Read-only external status view.** A read-only surface for humans watching the swarm (the report's
+     `clientViewEnabled` analogue), riding the existing read API/TUI with no mutation path. *Owner:*
+     designer + impl. *Acceptance:* a read-only view renders queue/seat status; no write verb is added.
+
 ## Extensibility and distribution
 
 **Ruled 2026-10-11 (operator): one distribution, no editions** — chosen extension
