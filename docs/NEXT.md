@@ -8,7 +8,9 @@ competitor review of `microsoft/agent-governance-toolkit` is DONE
 (`docs/reviews/agent-governance-toolkit-review.md` + OWASP addendum + surface inventory), with
 `docs/COMPETITORS.md`, ROADMAP **133–151**, D96 + **D97**, and the competitor-review runbook deepened
 (triage/deep/re-review prompts, header, evidence classes, anti-patterns, re-review fork). `main` HEAD
-`7000634`, tree clean, **not pushed** (origin/main `1b46411`, 10 commits behind). **117 local branches
+`9fe43c9`, tree clean. **A push to `origin` occurred this session** (`origin/main` moved `1b46411` →
+`7000634`; live remote `git ls-remote origin refs/heads/main` = `7000634`); **the delegate did not run
+`git push` and the cause is UNVERIFIED**. Only `9fe43c9` is unpushed. **117 local branches
 (53 unlanded / 64 merged); 156 worktrees.** Broker UP pid `34700`. Everything below the new handover is
 historical.)_
 
@@ -32,18 +34,22 @@ their own author branch (seatguard), the delegate/operator may.
 - Release locked worktrees only per `docs/runbooks/leaked-worktrees.md`; never `--force` a dirty one.
 
 **State at clock-out:**
-- `main` HEAD `7000634`; tree clean; on `main`; **not pushed** (`origin/main` `1b46411` is an ancestor;
-  `git log --oneline origin/main..main` = 10 commits, incl. this session's `d84e345`, `a27c9c1`, `2e8b3be`,
-  `7000634`).
+- `main` HEAD `9fe43c9` (this clock-out commit, **unpushed**); tree clean; on `main`.
+- **A push to `origin` happened during this session** — `origin/main` moved `1b46411` → `7000634`, and the
+  live remote (`git ls-remote origin refs/heads/main`) reports `7000634`. **The delegate did not run
+  `git push`; the cause is UNVERIFIED** (operator or another process). Re-check the refs before relying
+  on any "unpushed" assumption. Only `9fe43c9` is now unpushed.
 - **117 local branches** (excl `main`): **53 unlanded (`ahead>0`)**, **64 merged (`ahead=0`)**.
 - **156 worktrees** (`git worktree list | wc -l`) — many `locked` `item-*` under the repo root plus
   `/tmp` verify scratch; audit before releasing.
 - Broker UP pid `34700` (unchanged this session).
 
-**This session changed (all committed, not pushed):** the AGT competitor review + OWASP addendum +
-`docs/COMPETITORS.md`; ROADMAP **133–151**; **D96** (amended) + **D97**; the competitor-review runbook.
+**This session changed (committed):** the AGT competitor review + OWASP addendum + `docs/COMPETITORS.md`;
+ROADMAP **133–151**; **D96** (amended) + **D97**; the competitor-review runbook. The history up to
+`7000634` is on `origin/main`; `9fe43c9` is not.
 
-**Do not:** push; run a second driver while the broker is UP; delete a branch with `ahead>0`.
+**Do not:** push without the operator's grant; run a second driver while the broker is UP; delete a
+branch with `ahead>0`.
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; incoming agent: **initial competitor research**)
 
