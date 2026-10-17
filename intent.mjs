@@ -12,9 +12,11 @@
 //   node intent.mjs <seat> --body-file <path>        # deliver a message (op=message)
 //   node intent.mjs <seat> --body-file <path> --request-id <id>
 //   node intent.mjs <seat> --op stop [--reason <text>] [--request-id <id>]
+//   node intent.mjs <seat> --op reset [--handoff <text>] [--request-id <id>]
 //
 // The `op` names the OPERATION the broker applies: `message` (default) submits the
-// body as operator input; `stop` halts the seat's run. A `requestId` is minted when
+// body as operator input; `stop` halts the seat's run; `reset` draws a reset boundary
+// (optionally with a handoff message). A `requestId` is minted when
 // omitted and printed, so the caller can await the result file
 // `<db>.broker.inbox.out/<requestId>.json`.
 //
@@ -31,6 +33,7 @@ usage:
   node intent.mjs <seat> --body-file <path> [--op message] [--request-id <id>] [--from <name>]
   node intent.mjs <seat> --body-file -            (read the body from stdin)
   node intent.mjs <seat> --op stop [--reason <text>] [--request-id <id>]
+  node intent.mjs <seat> --op reset [--handoff <text>] [--request-id <id>]
 
 ops: ${SPOOL_OPS.join(", ")}
 
@@ -89,6 +92,8 @@ const fromAt = args.indexOf("--from");
 const from = fromAt === -1 ? "operator" : args[fromAt + 1] ?? "operator";
 const reasonAt = args.indexOf("--reason");
 const reason = reasonAt === -1 ? undefined : args[reasonAt + 1];
+const handoffAt = args.indexOf("--handoff");
+const handoff = handoffAt === -1 ? undefined : args[handoffAt + 1];
 
 const { config: CFG } = await loadConfig({ env: process.env, readFile });
 const DB_PATH = CFG.DURIG_DB ?? "./rig.sqlite";
@@ -101,6 +106,7 @@ try {
     from,
     content,
     ...(reason !== undefined ? { reason } : {}),
+    ...(handoff !== undefined ? { handoff } : {}),
     requestId,
     createdAt: new Date().toISOString(),
   });

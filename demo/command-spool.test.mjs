@@ -65,7 +65,7 @@ const submissions = async () => (await harness.inspect(ctx)).submissions ?? [];
 try {
   // 0. The vocabulary is a closed list, and an absent `op` means "message" (back-compat
   //    for producers written before the spool).
-  assert.deepEqual(SPOOL_OPS, ["message", "stop"], "the spool's op vocabulary");
+  assert.deepEqual(SPOOL_OPS, ["message", "stop", "reset"], "the spool's op vocabulary");
   assert.equal(requestOp({ to: "worker", content: "hi" }), "message", "an intent with no op is a message");
   assert.equal(requestOp({ op: "stop", to: "worker" }), "stop");
 
@@ -131,6 +131,26 @@ try {
   const stoppedIds = await readStoppedConvIds(storage, { worker: { conversationId: convId } }, ctx);
   assert.ok(stoppedIds.has(convId), "the seat reads as stopped on the next pass");
 
+  // 3b. A `reset` op draws the shared reset boundary (#402) with the broker's writer.
+  const R4 = "req-reset-1";
+  writeIntent(dbPath, { op: "reset", to: "worker", handoff: "RESET-HANDOFF", requestId: R4 });
+  const reset = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
+  assert.deepEqual(reset, { delivered: 1, deadLettered: 0, duplicates: 0 }, `reset drain ${JSON.stringify(reset)}`);
+  const r4 = readResult(R4);
+  assert.equal(r4.ok, true, "the reset applied");
+  assert.ok(r4.result.resetEntryId != null, "the result names the pi.reset entry it wrote");
+  const afterReset = await (await harness.conversation(convId, ctx)).entries({}, 500, undefined, ctx);
+  assert.ok(
+    afterReset.items.some((e) => e.kind === "pi.reset"),
+    "a pi.reset boundary is in the transcript",
+  );
+
+  // 3c. A reset for an unknown seat is REFUSED and dead-lettered by name, never a
+  //     silent no-op.
+  writeIntent(dbPath, { op: "reset", to: "ghost", requestId: "req-reset-ghost" });
+  const ghostReset = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
+  assert.equal(ghostReset.deadLettered, 1, "a reset for an unknown seat is dead-lettered");
+
   // 4. An UNKNOWN op is dead-lettered with the known vocabulary, never applied, never
   //    retried forever. "Do not add a fourth kind" — a new verb EXTENDS the list.
   writeIntent(dbPath, { op: "teleport", to: "worker", requestId: "req-bad-op" });
@@ -144,7 +164,7 @@ try {
   );
 
   console.log(
-    "COMMAND SPOOL PASS (message end-to-end via the broker loop; duplicate requestId applies once; stop settles a live submission; unknown op dead-lettered)",
+    "COMMAND SPOOL PASS (message end-to-end via the broker loop; duplicate requestId applies once; stop settles a live submission; reset draws the boundary; unknown op/seat dead-lettered)",
   );
 } finally {
   try {

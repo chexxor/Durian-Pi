@@ -18,6 +18,7 @@ import { join, basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { RigQueue, Seats } from "./rig.mjs";
+import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
 import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
 import { listWorktrees, removeClaimedWorktree } from "./worktree.mjs";
@@ -152,13 +153,13 @@ export function requestOp(request) {
  * a new mutating verb EXTENDS this list — the broker applies it in-process with its own
  * harness — rather than opening a second writer.
  */
-export const SPOOL_OPS = ["message", "stop"];
+export const SPOOL_OPS = ["message", "stop", "reset"];
 
 /**
  * Apply one typed request with the broker's OWN harness — the single writer. Throws on
  * an unknown op or seat; the drain dead-letters the throw with its reason.
  */
-async function applyRequest(harness, request, { seats, context }) {
+async function applyRequest(harness, request, { seats, context, dbPath }) {
   const op = requestOp(request);
   if (op === "message") {
     const seat = seats[request.to];
@@ -199,6 +200,20 @@ async function applyRequest(harness, request, { seats, context }) {
     const runTask = (inspection.tasks ?? []).find((t) => t.record.conversationId === convId);
     if (runTask) await harness.abortTask(runTask.record.id, context);
     return { op, seat: seatName, settled, aborted: Boolean(runTask), reason };
+  }
+  if (op === "reset") {
+    // The shared reset-boundary mechanism (#402), applied with the broker's own writer.
+    // A refusal (unknown seat / live lease) throws so the drain dead-letters it with the
+    // reason — a reset the operator asked for is never a silent no-op.
+    const seatName = request.to ?? request.seat;
+    const result = await resetSeatContext(harness, seatName, request.handoff, dbPath, {
+      maxSeats: maxSeatsFromEnv(),
+      context,
+    });
+    if (result.refused) {
+      throw new Error(result.reason === "unknown-seat" ? `unknown seat: ${seatName}` : result.reason);
+    }
+    return { op, seat: seatName, resetEntryId: result.resetEntryId, handoff: result.handoff ?? null };
   }
   throw new Error(`unknown op: ${op} (known: ${SPOOL_OPS.join(", ")})`);
 }
@@ -247,7 +262,7 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
       continue;
     }
     try {
-      const result = await applyRequest(harness, request, { seats, context });
+      const result = await applyRequest(harness, request, { seats, context, dbPath });
       if (requestId) {
         writeIntentResult(dbPath, requestId, { requestId, op, ok: true, result, at: new Date().toISOString() });
       }
