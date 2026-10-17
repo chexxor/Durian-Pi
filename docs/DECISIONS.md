@@ -2503,3 +2503,27 @@ directly onto the live degeneration-guard (#1766–#1769) and crash-proofing (RO
 **not scheduled** (ROADMAP 133–150 after the addendum); sequencing intent `opr-20261017-agt-review`
 delivered to `pm`. Review: `docs/reviews/agent-governance-toolkit-review.md`; comparators:
 `docs/COMPETITORS.md`.
+
+## D97 — A re-review of an already-reviewed project forks on the prior review's artifacts: missing any required artifact forces a full quality redo, not a freshness delta (delegate, 2026-10-17)
+
+**Decision.** `docs/runbooks/competitor-review.md` prompt 3 splits "re-review" into two modes chosen by an
+**objective artifact checklist**, not by the request's wording: (a) **quality redo** (the full deep brief)
+when the prior review lacks any required artifact — header, surface-inventory table, "not read" list,
+standards table, coverage matrix — or when a new concern/surface is in scope; (b) **freshness delta**
+(unshallow fetch, diff `<old HEAD>..<new HEAD>`, re-check only the touched adopt/reject calls) only when
+those artifacts exist. The Diagnose step routes an already-reviewed project to this fork; the anti-patterns
+table names delta-only re-review of a deficient prior review.
+
+**Why.** The delta prompt as first written said "read only what changed, do not re-read the unchanged
+tree." The OWASP miss that motivated the runbook tightening lived in the **unchanged** tree, so a delta
+re-review would have re-blessed a review that never ran the standards pass. A delta cannot find a miss in
+unchanged code by construction, so the mode must key on the prior review's completeness, not on a desire
+for cheapness.
+
+**Alternatives.** (a) Always do a full deep review — rejected: expensive, and it defeats the pinned-HEAD
+header's purpose. (b) Always delta — rejected: cannot repair a coverage miss (the OWASP case). (c) Judge
+by the operator's phrasing ("re-review" vs "refresh") — rejected: the request's wording is not a reliable
+signal of whether the prior review is complete.
+
+**Status:** implemented in `docs/runbooks/competitor-review.md` (commit `7000634`); no re-review has run
+yet, so the runbook's `last_verified` deliberately stays `unverified`.

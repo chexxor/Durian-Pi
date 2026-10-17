@@ -3,17 +3,47 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate — **competitor research DONE + clock-out**: reviewed
-`microsoft/agent-governance-toolkit` per `docs/runbooks/competitor-review.md` →
-`docs/reviews/agent-governance-toolkit-review.md` (HEAD `cfb44576`) + an **OWASP ASI addendum**,
-`docs/COMPETITORS.md` entry, and ROADMAP **133–151** registered (security + healing + the OWASP Agentic
-Top 10 policy surface + the `competitor-review-covered` check rule); D96 recorded (amended for the OWASP
-adoption); `docs/runbooks/competitor-review.md` deepened with paste-ready **triage/deep/re-review**
-prompts, a review header (license/maturity/pin), `observed`/`advertised` evidence classes, anti-patterns,
-and re-review triggers; sequencing intents
-`opr-20261017-agt-review` + `-agt-owasp-addendum` delivered to `pm`. The prior active-degeneration-guard
-intent is registered as **#1766** (lead shape ruling) + **#1767/#1768/#1769** (impl, gated). Broker UP pid
-`34700`, unchanged. Everything below the new handover is historical.)_
+_Last refreshed: 2026-10-17 (delegate — **clock-out; incoming agent: verify the git repo branches**:
+competitor review of `microsoft/agent-governance-toolkit` is DONE
+(`docs/reviews/agent-governance-toolkit-review.md` + OWASP addendum + surface inventory), with
+`docs/COMPETITORS.md`, ROADMAP **133–151**, D96 + **D97**, and the competitor-review runbook deepened
+(triage/deep/re-review prompts, header, evidence classes, anti-patterns, re-review fork). `main` HEAD
+`7000634`, tree clean, **not pushed** (origin/main `1b46411`, 10 commits behind). **117 local branches
+(53 unlanded / 64 merged); 156 worktrees.** Broker UP pid `34700`. Everything below the new handover is
+historical.)_
+
+## HANDOVER — 2026-10-17 (delegate clock-out; incoming agent: **verify the git repo branches**)
+
+**Your job (operator-declared):** verify branch management. Ground in `docs/runbooks/merge.md` (the
+landing gate + "Trust, but verify" audit), `docs/runbooks/branch-cleanup.md`, and `docs/WORKFLOWS.md`
+W6. **Read-only first.**
+
+**Exact first command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Read-only audit (never destructive):**
+```bash
+git branch --format='%(refname:short)' | grep -v '^main$'
+for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done
+git worktree list
+```
+- `ahead=0` = fully merged → safe to prune with `git branch -d` (refuses unmerged); seats cannot delete
+their own author branch (seatguard), the delegate/operator may.
+- `ahead>0` = unlanded work → **never delete** it, not with `-d` and never with `-D`.
+- Release locked worktrees only per `docs/runbooks/leaked-worktrees.md`; never `--force` a dirty one.
+
+**State at clock-out:**
+- `main` HEAD `7000634`; tree clean; on `main`; **not pushed** (`origin/main` `1b46411` is an ancestor;
+  `git log --oneline origin/main..main` = 10 commits, incl. this session's `d84e345`, `a27c9c1`, `2e8b3be`,
+  `7000634`).
+- **117 local branches** (excl `main`): **53 unlanded (`ahead>0`)**, **64 merged (`ahead=0`)**.
+- **156 worktrees** (`git worktree list | wc -l`) — many `locked` `item-*` under the repo root plus
+  `/tmp` verify scratch; audit before releasing.
+- Broker UP pid `34700` (unchanged this session).
+
+**This session changed (all committed, not pushed):** the AGT competitor review + OWASP addendum +
+`docs/COMPETITORS.md`; ROADMAP **133–151**; **D96** (amended) + **D97**; the competitor-review runbook.
+
+**Do not:** push; run a second driver while the broker is UP; delete a branch with `ahead>0`.
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; incoming agent: **initial competitor research**)
 
@@ -55,26 +85,16 @@ name the target project** — no target is recorded here.
 
 ## NEXT SESSION
 
-**Current item:** the operator's **initial competitor research is DONE** for the named target
-`microsoft/agent-governance-toolkit` — review at `docs/reviews/agent-governance-toolkit-review.md`
-(+ the OWASP ASI addendum), comparators in `docs/COMPETITORS.md`, accepted practices registered as
-ROADMAP **133–150**, decision **D96** (amended), sequencing intents `opr-20261017-agt-review` +
-`opr-20261017-agt-owasp-addendum` delivered to `pm`. **No next research target is
-named** — confirm one with the operator before re-running `competitor-review.md`. In parallel the
-team's active work is unchanged: the active-degeneration-guard **`#1766`** (lead shape ruling) gating
-**`#1767`**/**`#1768`**/**`#1769`** (impl); ROADMAP 135 (monotone ratchet) and 144 (advisory→blocking
-gate) extend that cluster, and 147 (per-item budget) extends the #1766 halt core.
-
-**OWASP follow-up (this session):** the first pass wrongly rejected the project's compliance mappings
-unread; the Addendum now adopts the **OWASP Agentic Top 10 (ASI01–ASI10)** as durig's agent-security
-self-assessment (ROADMAP 145) plus output screening (148), security lint (146), budgets (147),
-reversibility-aware approval (149), and vendored-code supply chain (150).
+**Current item:** the operator has assigned branch verification to the incoming agent (see the top
+handover). The competitor review (`microsoft/agent-governance-toolkit`) is DONE: review + OWASP addendum,
+`docs/COMPETITORS.md`, ROADMAP **133–151**, D96/D97, runbook deepened. **No next research target is
+named.** The team's active work is unchanged: the active-degeneration-guard **`#1766`** (lead shape
+ruling) gating **`#1767`**/**`#1768`**/**`#1769`** (impl).
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
-**Known blocker (unchanged):** no competitor project named for a *next* research pass; and the `main`
-secretredact gate is observed red (`demo/secretredact.test.mjs` exit 1) while queue rows
-`#1741`/`#1747` claim green — reconcile before any landing.
+**Known blocker (unchanged):** `main` secretredact gate observed red (`demo/secretredact.test.mjs`
+exit 1) while queue rows `#1741`/`#1747` claim green — reconcile before any landing.
 
 
 ## HANDOVER — 2026-10-17 (stage-two recovery; clock-out — NEWEST; read `## NEXT SESSION` below)
