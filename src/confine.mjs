@@ -167,7 +167,9 @@ const DENIED_COMMANDS = [
 	{ re: /(^|[\s;&|"'()])docker(-compose)?(\.exe)?([\s"'()]|$)/i, why: "Docker is unsupported on this host" },
 	// State-mutating git the operator controls: a seat produces files in its worktree and the
 	// operator integrates them. A seat may commit its own work (scoped to its item) but cannot
-	// reset, re-checkout, stash, clean, revert, or force-delete branches — those diverge the tree.
+	// reset, re-checkout, switch, stash, clean, revert, or force-delete branches — those diverge the
+	// tree. `git switch` is the modern `git checkout` (it moves HEAD and rewrites the working tree,
+	// `-c` also creates a branch), so it is refused in the same class.
 	// Branch ref-ops that do NOT touch the working tree (create/rename/`-d`) are allowed; only
 	// the FORCE delete (`-D`, or a delete flag with `--force`) stays blocked (#1211).
 	// Read-only git (status/log/diff/show/rev-parse) is deliberately NOT matched.
@@ -178,6 +180,7 @@ const DENIED_COMMANDS = [
 	// checkout; refuse them the same way (RD #257).
 	{ re: /git\s+reset\b/i, why: "would restage or discard work a seat did not integrate" },
 	{ re: /git\s+checkout\b/i, why: "would change the seat's working tree or HEAD" },
+	{ re: /git\s+switch\b/i, why: "would change the seat's working tree or HEAD (`switch` is the modern `checkout`)" },
 	{ re: /git\s+restore\b/i, why: "would discard uncommitted work" },
 	{ re: /git\s+revert\b/i, why: "would rewrite committed work" },
 	{ re: /git\s+clean\b/i, why: "would discard untracked work" },
@@ -203,6 +206,7 @@ const DENIED_COMMANDS = [
 
 	{ re: /git\s+-C\s+\S+\s+reset\b/i, why: "same as `git reset` — discards or restages work" },
 	{ re: /git\s+-C\s+\S+\s+checkout\b/i, why: "same as `git checkout` — changes the working tree" },
+	{ re: /git\s+-C\s+\S+\s+switch\b/i, why: "same as `git switch` — changes the working tree" },
 	{ re: /git\s+-C\s+\S+\s+restore\b/i, why: "same as `git restore` — discards uncommitted work" },
 	{ re: /git\s+-C\s+\S+\s+revert\b/i, why: "same as `git revert` — rewrites committed work" },
 	{ re: /git\s+-C\s+\S+\s+clean\b/i, why: "same as `git clean` — discards untracked work" },
