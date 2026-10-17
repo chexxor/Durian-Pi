@@ -29,6 +29,13 @@ name the target project** — no target is recorded here.
   `opr-20261017-active-degeneration-guard` (23:06:07Z) → registered **`#1766`**/`#1767`/`#1768`/`#1769`;
   `opr-20261017-active-degeneration-guard-addendum` (23:08:12Z) → agent-fleet prior art + the verified
   absence of `vendor/eval/agent-fleet`.
+- **`#1766` RULED (lead, during this checkout):** the TRIGGER is a **SIBLING** of `#62` (cause-based vs
+  context-pressure) — do not fold in; but the **ORDERING/HALT/RESOLVE core** (detect → halt → wait idle →
+  resolve) is ONE mechanism built ONCE and shared by BOTH — `#1769` [C] is that shared core. Halt
+  cooperatively (`abortTask`/`Conversation.abort`); never reset a live lease. Autonomy tightened: halt
+  ONLY (no destructive op), recoverable, cause-specific resolution, observable; **zero false positives
+  before enabling**; requires a DESIGN-POLICY doc (not just a runbook) + a `DECISIONS.md` entry for the
+  new stop authority. **`pm` must now un-gate `#1767`/`#1768`/`#1769`** (`#1766` was the gate).
 - **Verified finding (why #1767–#1769 exist):** the guard is post-hoc (assesses committed pages at pass
   end); its actuator is `conversation.reset()` (admitted at the next boundary while busy), and
   `reset`/`compact` refuse a live lease by design. The halt seam already exists in pi-durable
