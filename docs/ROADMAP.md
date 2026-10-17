@@ -2255,6 +2255,37 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     *Owner:* impl · *Where:* `src/broker.mjs`, `cli.mjs` `cmdServe`/`cmdUp`.
     *Acceptance:* the log names the origin for `up`-started and `serve`-started brokers.
 
+131. **`pause` / `unpause` — drain to quiescence before a broker upgrade.** Registered 2026-10-17
+    (operator intent; **pm assigned 130, but 130 is TAKEN** by the "longer plans hurt accuracy" relabel,
+    so this registers as **131**). Today the only ways to get a quiet rig are `serve --stop`, which
+    INTERRUPTS in-flight runs and whose `stopped:true` is not proof the process exited (the F11 drain can
+    hang; `docs/runbooks/broker-safe-change.md`), and the operator-declared "exclusive window"
+    (`docs/runbooks/merge.md`), a PROSE state enforced only by convention — the reason ROADMAP 69 and
+    `docs/COMMANDS-AND-THE-BROKER.md` exist is that prose enforcement failed twice on 2026-10-16. A
+    first-class `pause` is the missing drain-to-quiescence primitive: refuse NEW claims/wakes, let
+    claimed items FINISH, and the store is then quiescent so a broker upgrade (`up --refresh`, restart,
+    `serve --stop`) proceeds without stranding a run. `unpause` clears it.
+    *Acceptance:*
+    1. a persisted, broker-visible RIG-LEVEL `paused` state that `selectWakes` / `claim_work` honour —
+       while paused a seat is NOT woken to claim a NEW item (a per-seat override is OUT OF SCOPE, its own
+       item if the team later decides it needs one);
+    2. in-flight work SETTLES: a run already generating, or an item already `claimed`, COMPLETES — pause
+       gates TAKING new work, never FINISHING current work, and must not kill a run;
+    3. legible + reversible: a `pause` verb and an `unpause` verb, `status` reports the paused state, and
+       a wake refused during pause is LEGIBLE, never silent;
+    4. not a second store writer: the pause/unpause producer follows the mailbox / command-spool
+       discipline (ROADMAP 71, `intent.mjs` style) or it is just another `serve --stop`;
+    5. verifiable quiescence: `pause --wait` returns only once EVERY seat has settled, and `status`
+       reports the paused state — the point is to KNOW it is safe to upgrade before touching the broker.
+    *Owner:* impl · *Where:* `src/broker.mjs` (`selectWakes`), `cli.mjs` (`pause`/`unpause`), the store (one
+    persisted flag). *Sequencing:* with **68 → 69 → 70 → 71**, then the daemon **61–64** — pause needs 71's
+    producer discipline (AC4) before it is more than a kill.
+    *Relationship (do not duplicate):* distinct from `serve --stop` (kills) and from the exclusive window
+    (prose only); adjacent to **69** (refuse/route writes while the broker drives), **71** (command
+    spool — the producer side this needs), **74** (hot-reload, which could remove the stop entirely), the
+    daemon **61–64**, and **91** (multi-instance / instance identity, for a per-instance pause).
+    *Constraints:* no new store/schema beyond what a persisted paused flag requires.
+
 **Cross-links:** items **54** (wake-and-return), **65** (genlock), **66** (idempotent drain + leases),
 and **73** (worktree sweep) are delivered; items **55** (a security position before a socket) and
 **69–71** (broker-safe writes) remain open.
