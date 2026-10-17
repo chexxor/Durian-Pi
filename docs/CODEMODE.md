@@ -107,7 +107,11 @@ model-authored scripts proves worth the authoring failure rate.
 
 1. **`security.sec` position** — a new dependency (`pi-codemode` + `quickjs-wasi`), a new
    execution surface, and its own audit sink. No network capability is exposed in the first cut;
-   `net.fetch` and `model.call` are **not minted**, so no egress is added.
+   `net.fetch` and `model.call` are **not minted**, so no egress is added. The delegate's security round
+   (`docs/reviews/security-codemode-review.md`) proposes the threat model, the falsifiable controls
+   **E1–E14**, and a **read-only T0 first cut** (no `fs.write`, `proc.exec`, `net.fetch`, `model.call`);
+   `security.sec` must ratify or correct it before code. Open questions include where the audit sink
+   lives (git per D30, or the store) and whether `proc.exec` is admitted at all.
 2. **Boundary first.** SC1–SC3 land and are proved before codemode exists, because the
    executors delegate to them.
 3. **Library review as requirements** — the four corrections above are acceptance criteria, and
@@ -119,5 +123,7 @@ model-authored scripts proves worth the authoring failure rate.
 ## Relationship to the other seat-tool work
 
 - `docs/SEAT-TOOLS.md` — the shell/tools boundary this depends on (SC1–SC3).
+- `docs/reviews/security-codemode-review.md` — the delegate security round: threat model **E1–E14**, the
+  **T0 read-only** first cut, and the audit-sink/bounds prerequisites (ROADMAP **128/129**).
 - ROADMAP item 31 — the pi-warden port (the guard at `beforeTool`), which covers nested calls.
 - ROADMAP item 32 — this plan.
