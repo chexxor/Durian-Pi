@@ -102,6 +102,10 @@ Then delete the branch: `git branch -d <branch>` (safe — `-d` refuses anything
 ## If it fails
 - A conflict you cannot resolve cleanly: **stop and report**; send the branch back for a rebase (W2) and
   name the conflict. Never force.
+- `git branch -d <branch>` is refused by the seatguard (`refused by durig: would delete a branch`): the
+  landing is still complete (the sha is an ancestor of `main`); leave the merged branch in place and
+  report it — branch deletion is guard-blocked for author seats, so the operator (or a non-author seat)
+  must prune the merged branch.
 - A demo is red on the merged result: `git revert -m 1 <merge>` and report the exact failure to the
   author; do not "fix forward" on `main`.
 - Unlanded work is piling up: run the Diagnose block, and open one landing pass (see Escalate to).
