@@ -101,7 +101,8 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [broker-down-or-stalled.md](broker-down-or-stalled.md) | seats idle with queued work; no `serve` process; log stops | yes |
 | [broker-safe-change.md](broker-safe-change.md) | a model/constitution/reset change must apply without corrupting the store | yes |
 | [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error` | yes |
-| [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language | yes |
+| [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language / emitting a tool call as text | yes |
+| [write-corruption-recovery.md](write-corruption-recovery.md) | a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line | maybe |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
@@ -114,6 +115,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | Broker / `serve` | broker-down-or-stalled, broker-safe-change |
 | Store / `pi.live` | store-corruption-recovery |
 | Seats | seat-reset |
+| Write guard / source files | write-corruption-recovery |
 | Worktrees | leaked-worktrees |
 | Daemon / host | daemon-not-running |
 | Research | research-request |
