@@ -10,7 +10,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { copyFile, cp, mkdir, rm, stat } from "node:fs/promises";
-import { join, relative, resolve, dirname } from "node:path";
+import { join, relative, resolve, dirname, isAbsolute } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
@@ -158,6 +158,12 @@ export async function carryVisibleState({ source, target }) {
 	const { stdout } = await run("git", ["-C", source, "status", "--porcelain", "-z", "--", "."]);
 	if (!stdout) return [];
 	const carried = [];
+	// #998/#506: a LINKED worktree (the just-created target, or a sibling item worktree) shows
+	// up in the source's status as an untracked directory, but it is not visible state to carry.
+	// Copying the TARGET would place the destination inside its own source
+	// (`cp(repo/item-2, repo/item-2/item-2)` -> ERR_FS_CP_EINVAL); copying a sibling copies a
+	// whole foreign checkout (node_modules and all). Only the source's own state travels.
+	const worktreeRoots = await linkedWorktreeRoots(source, repo, worktree);
 	const chunks = stdout.split("\0").filter((c) => c !== "");
 	for (let i = 0; i < chunks.length; i++) {
 		let entry = chunks[i];
@@ -171,6 +177,7 @@ export async function carryVisibleState({ source, target }) {
 			}
 		}
 		const srcPath = join(repo, path);
+		if (worktreeRoots.some((root) => isWithin(srcPath, root))) continue; // #998: never carry a worktree into a worktree
 		const dstPath = join(worktree, path);
 		if (existsSync(srcPath)) {
 			await mkdir(dirname(dstPath), { recursive: true });
@@ -185,6 +192,30 @@ export async function carryVisibleState({ source, target }) {
 		carried.push(path);
 	}
 	return carried;
+}
+
+/**
+ * Absolute roots of the repository's LINKED worktrees — every `git worktree list` entry
+ * except the source's own root (the source's own tree must still be carried; only its
+ * SIBLINGS and the new target are excluded). `target` is added explicitly because
+ * `git worktree add` has already registered it by the time the carry runs.
+ */
+async function linkedWorktreeRoots(source, repo, target) {
+	const { stdout } = await run("git", ["-C", source, "worktree", "list", "--porcelain"]);
+	const roots = new Set([resolve(target)]);
+	for (const line of stdout.split("\n")) {
+		const match = /^worktree (.+)$/.exec(line.trim());
+		if (!match) continue;
+		const path = resolve(match[1]);
+		if (path !== resolve(repo)) roots.add(path);
+	}
+	return [...roots];
+}
+
+/** Is `candidate` `root` itself, or a path inside it? (#998) */
+function isWithin(candidate, root) {
+	const rel = relative(resolve(root), resolve(candidate));
+	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 /**
