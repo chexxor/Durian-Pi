@@ -115,27 +115,9 @@ rather than implying it was checked.
 - **lead/pm:** landing #700's scanner and the #828/#837 tie-ins — they adopt; this seat recommends
   only.
 
-## Appendix: review method (how a trust-boundary review runs)
-The pm asked to include the method here and to flag if it does not fit one symptom-indexed runbook.
-Placement: as **part of the credential-surface walkthrough** it fits; as a standalone method it does
-not — one situation per file would put a procedure inside a failure doc. Flagged to square this in
-the completion: a future read-only runbook `security-trust-boundary-review.md` is the cleaner home;
-adoption is pm/lead's call. Until then, the method:
-
-1. **Scan for secrets first** (class patterns above) — before reading anything else in the change.
-2. **Name the surface:** what listens, what writes, what reads across the boundary
-   (broker/store single-writer; seat confinement SC1–SC3 + env allowlist; the `genlock` lease;
-   per-item worktrees; spooled inbox; codemode; any socket/daemon; egress; the credential surface).
-3. **Threat table: threat → proposed control → falsification probe.** A control without a runnable
-   probe is noise; prefer the probe that can fail to the assertion that cannot. Findings name
-   severity, exploit path, and concrete fix — a line flagged without all three is not a finding.
-4. **Non-goals + gates:** what the review does not cover; what must hold before the code lands.
-5. **Posture rules:** default-deny, least privilege, fail closed, never a single layer; OS identity is
-   a norm, not a control. A position is written **before** code crosses a new trust boundary, and it
-   lands as a per-item artifact in `docs/reviews/security-<topic>.md` — there is **no standing
-   `docs/reviews/security-*.md` set** (lead ruling #1297).
-6. **Behavioral:** prefer the false negative to the false positive on a heuristic; never echo a
-   secret value; a "leaked secret is burned" — removal alone is never sufficient.
+The trust-boundary **review method** MOVED 2026-10-17 (item #1322, lead ruling #1316) to
+[security-trust-boundary-review.md](security-trust-boundary-review.md). This file keeps the failure
+mode and the class-pattern table; the method links here instead of duplicating it.
 
 ## Evidence
 - Authored by `security`, item #1300 (2026-10-17), under the #1297 lead ruling (one durable surface:
@@ -146,3 +128,5 @@ adoption is pm/lead's call. Until then, the method:
 - Verify actually ran 2026-10-17 by `security`: class-pattern `git grep` over the tracked tree
   (exit 1, no matches), pickaxe for `sk-ant-` and `AKIA` (0 hits each), no log files present in the
   item worktree — clean state at rev 7e5d16e.
+- #1322 (2026-10-17): the review-method appendix MOVED (not duplicated) to
+  `security-trust-boundary-review.md`; this file keeps only the secret failure mode (lead #1316).
