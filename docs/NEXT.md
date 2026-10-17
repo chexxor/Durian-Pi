@@ -3,9 +3,56 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **nineteenth pass** — PM-adapter direction applied (D88), all
-tutor-app references removed, seat worktrees relocated out of the project root (D89), ROADMAP 102–125
-registered. Everything below this block is historical.)_
+_Last refreshed: 2026-10-17 (delegate, **twentieth pass** — priority #1317 delivered + verified; the
+operator declared the EXCLUSIVE LANDING WINDOW for #1358; a `pause` command registered to the backlog.
+Everything below this block is historical.)_
+
+## DELEGATE NOTE — 2026-10-17 (priority delivered, landing window declared, pause command registered)
+
+**Priority #1317 (commit-time secret gate) is DELIVERED and VERIFIED.**
+- `impl-item-1317 @6400e8e` (2 commits: `53f6049` cherry-picks #700's scanner; `6400e8e` wires the gate
+  into `src/seatguard.mjs` + `demo/commit-secrets.test.mjs`). Delegate spot-checked the branch: both
+  commits + all four files present, `6400e8e` not an ancestor of main (correctly unlanded).
+- qa verified it (#1376: every named check exit 0 + falsification probes).
+- security ratified the posture (#1368 -> `docs/reviews/security-commit-gate-position.md @cf84825`):
+  prefix-only gate ratified; the blunt 40-hex entropy rule correctly stays OUT; fail-open-on-git-error
+  ratified with one correction.
+- Related: #1298 (ratified security position folded into `docs/CODEMODE.md` gate 1, `@6a53136`) verified
+  #1357. Codemode gate follow-ups opened: #1379/#1380/#1381.
+
+**The exclusive landing window is DECLARED (operator, 2026-10-17).**
+- `pm` intent `opr-20261017-landing-window` spooled (`.spike/delegate/intent-landing-window-declared.md`):
+  run landing pass **#1358** per `docs/runbooks/land.md`; quiescing the broker is authorized as part of
+  the window (#1360(b) answered).
+- **HAZARD flagged:** **#1383** — `land.mjs`'s genlock probe resolves the WRONG store, so it can pass
+  while a live broker owns the store. Verify quiescence by hand (`ls -1 selfdev.sqlite.genlock*` empty +
+  no `cli.mjs serve` process) before trusting the probe, or land #1383 first.
+- **A `genlock.0` was held when the window was declared** (pm generating); the pass must begin once every
+  run settles — never `serve --stop` while a genlock is held.
+
+**A `pause` command was registered to the backlog (operator request).**
+- Intent `opr-20261017-pause-command` delivered to `pm` (08:16:46Z; `.spike/delegate/intent-pause-command.md`):
+  a `pause`/`unpause` command that stops seats taking NEW work while in-flight work settles, so broker
+  upgrades run against a quiescent rig. **pm owns placement/numbering** — record the ROADMAP number here
+  once pm reports it.
+- **Why it matters now:** today the only quiesce options are `serve --stop` (kills in-flight runs) and the
+  prose "exclusive window" — this is the missing drain-to-quiescence primitive, adjacent to ROADMAP
+  69/71/74 and the daemon 61-64.
+
+## NEXT SESSION
+
+**Current item (clock-out):** verify the **#1358 landing pass** once it runs — for each landed tip,
+confirm `git merge-base --is-ancestor <tip> main`, and confirm `#1317 @6400e8e` is among them. Then
+record the pause command's ROADMAP number (ask `pm`).
+
+**Known hazards / gates:**
+- **#1383** - the `land.mjs` genlock probe is wrong; do not trust it. Check the store's genlock state by
+  hand.
+- **#1358** was HOLDing only on the operator declaring the window — now declared.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+## DELEGATE NOTE — 2026-10-17 (runbook discoverability, round-trip research, docs hygiene)
 
 ## DELEGATE NOTE — 2026-10-17 (runbook discoverability, round-trip research, docs hygiene)
 
