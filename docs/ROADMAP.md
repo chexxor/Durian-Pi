@@ -1480,6 +1480,18 @@ collision the team hit when it invented `#45`.
   `thinResultText`, `demo/thincontext.test.mjs`; qa-verified, suite 39/39).
 - **RANK 2 — ratcheting task tier.** The PM task tier latches per task; raising it
   needs a stated reason (agent-fleet's 13-minute/47-hour post-mortem).
+  **✅ done (2026-10-17)** — shape ruled in `#101`: a *task tier* is the PM's size for
+  a request, `trivial/small/feature/project` (mapping the existing `S/M/L`); it is
+  assigned AT INTAKE to the originating item and LATCHES onto that item's chain (its
+  DONE notice, its verification item and any follow-up about the same task inherit the
+  tier); a NEW intake (a new subject from the operator) starts a NEW tier; RAISING a
+  tier needs a stated `reason`, LOWERING is free. Implemented in `src/rig.mjs`
+  (`RATCHET_TIERS` + `baseTaskSubject` + `tierIndex`, the raise guard in `send_work`,
+  the tier LATCH into `complete_work`'s DONE notice) and surfaced in the seat primer
+  (`cli.mjs` `buildSeatPrompt`). Proof: `demo/ratchet.test.mjs` — failing-first, since
+  on the pre-change tree `send_work` silently DROPS the `tier` (the stored item has no
+  `tier`, `undefined`). Grounded in `vendor/eval/agent-fleet` @ `7c34dde`
+  `docs/ARCHITECTURE.md` "Task-tier budgets".
 - **RANK 3 — Verification Contract result shape.** `complete_work` carries an
   orthogonal execution/changes/verification/acceptance result bound to revision,
   command, exit status and evidence, so a completion cannot read as a pass.
