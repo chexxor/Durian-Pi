@@ -38,15 +38,21 @@ Check whether it has already been asked/answered: search `docs/reviews/` for the
 2. Hand it to the operator to route to the research agent (the delegate cannot call it directly).
 3. When the report lands, **take the actions it names**:
    - Fold accepted recommendations into the owning doc (e.g. `docs/runbooks/README.md`).
-   - Raise the proposed **ROADMAP items** (`registered, not scheduled`) — do not silently adopt.
+   - **Register the proposed ROADMAP items in `docs/ROADMAP.md`** (`registered, not scheduled`) — this is
+     required, not optional. A report that changes what we build must reach the backlog: append each
+     accepted item with its owner and acceptance, and let `pm` sequence it. Reject an item explicitly
+     with the reason rather than leaving it only in the report.
    - Cross-link the report from the doc it informs.
    - Record any **design choice vs established practice** distinction the report flags.
-4. `git add` the report and the folded doc, explicit paths, one concern per commit.
+   - For a **competitor/vendor review**, also add or update its `docs/COMPETITORS.md` entry — see
+     `competitor-review.md`.
+4. `git add` the report and every folded doc, explicit paths, one concern per commit.
 
 ## Verify
 The report exists under `docs/reviews/`, every external claim carries a URL + evidence class, and each
-finding is mapped to a durig mechanism or explicitly listed as unverified. The ROADMAP items it proposed
-exist. The informing doc links to the report.
+finding is mapped to a durig mechanism or explicitly listed as unverified. Every proposed item is either
+registered in `docs/ROADMAP.md` or explicitly rejected with a reason. The informing doc links to the
+report, and a competitor review has a `docs/COMPETITORS.md` entry.
 
 ## If it fails
 If the report leaves a question open, do not guess — extend the prompt or defer the decision with

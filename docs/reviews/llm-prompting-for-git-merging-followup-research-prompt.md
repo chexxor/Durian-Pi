@@ -149,3 +149,4 @@ not externally answerable, say so and mark it **internal — unverified** rather
   pi-durable `dist/tools/edit.js` (the exact-match edit that returns a `patch`).
 - Prefer primary sources (papers, provider docs, first-party engineering blogs) over aggregators; say when
   a claim rests on a community report rather than a controlled result.
+

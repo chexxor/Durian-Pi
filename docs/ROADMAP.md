@@ -588,6 +588,65 @@ them forward, and the impl items are HELD until pm releases.
     *Acceptance:* the metric appears in `metrics`/`status` and the delegate's clock-out audit reads it; no
     automation is added.
 
+## Landing, merge & edit tooling (raised 2026-10-17)
+
+From `docs/reviews/llm-prompting-for-git-merging.md` + `-followup.md` and the Aider competitor review
+(`docs/reviews/aider-review.md`). All **registered, not scheduled** — `pm` sequences them. The runbook
+half is already done this session (`docs/runbooks/resolve-merge-conflict.md`, and the `merge-tree`
+pre-flight in `merge.md`); these are the code and measurement items.
+
+102. **Edit-format measurement harness for our models (DeepSeek-V4.1-Flash / GLM-5.3-Flash).** No
+     controlled edit-format benchmark covers these families (Diff-XYZ covers GPT/Claude/Gemini/Qwen), so
+     the default format is unmeasured. Replay ~150–300 real repo edits, hold context fixed, vary only the
+     format (unified diff / relaxed diff / anchored search-replace / native `edit`), and report Apply-EM,
+     parse-failure, and wrong-region rates per model. Rides item 90's `format` verb so the EOL policy is
+     fixed once. *Owner:* impl. *Acceptance:* a demo/script reports per-model apply-rate; the seat edit
+     guidance names the chosen format.
+103. **Object-store landing-train workflow.** `git merge-tree --stdin --write-tree` → resolve blobs →
+     `git commit-tree` → `git update-ref`, so the shared tree never enters `MERGE_HEAD` (the direct fix
+     for the 2026-10-17 incident). *Owner:* impl (delegate/operator path). *Acceptance:* a read-only
+     pre-flight plus a documented object-store resolution; no shared-tree conflict markers.
+104. **Conflict-graph ordering for landing trains.** Build the pairwise conflict graph from
+     `merge-tree --stdin` and order the train to minimise overlap (GitHub's remove-and-reform analogue).
+     *Owner:* impl. *Acceptance:* an order is produced for a real train and the clean-first sequence is
+     shown.
+105. **Per-hunk conflict resolver.** `{Left, Right, Base, Both}` + a free-form escape hatch (the #714
+     case needed synthesis), keyed by chunk hash, with abstention → `defer_work` carrying the
+     base/ours/theirs payload **inline** (coordinators cannot read files). *Owner:* impl. *Acceptance:* a
+     demo resolves a real conflict; an ambiguous hunk produces a self-contained deferral.
+106. **Deterministic parse gate with revert-on-error.** On every edit/merge: no leftover `<<<<<<<`,
+     `node --check` on changed `.mjs`, no duplicate declarations, plus the item's demo (Aider's
+     auto-lint/test loop). Revert and explain on failure. *Owner:* impl. *Acceptance:* the gate refuses a
+     deliberately conflicted `checkup.mjs` (failing-first).
+107. **`carryVisibleState` is conflict-aware.** Refuse (or warn) when a carried dirty path is unmerged
+     (`UU`), so a worktree created mid-merge does not inherit conflict markers (`src/worktree.mjs`).
+     *Owner:* impl. *Acceptance:* a demo creates a worktree over a `UU` file and shows the refusal.
+108. **Chosen-side resolution without `git checkout`.** The seat guard denies `git checkout`; implement
+     side selection as read+write of the stage blobs (`git show :1: :2: :3:`), or move it to the
+     operator path. *Owner:* impl. *Acceptance:* a seat resolves a conflict without a denied command.
+109. **Untrusted-conflict-content envelope.** Treat base/ours/theirs as data, not instructions; keep the
+     byte-stable persona prefix authoritative; require snippet-only output. *Owner:* impl + lead.
+     *Acceptance:* a resolved-payload test with injected prose in a conflict produces no instruction
+     following.
+110. **Conflict-replay eval harness.** Replay our own past conflicts as 20-line-context 3-way hunks;
+     report Exact / Normalized / Conflict / Different / Invalid-Markdown; reuse but calibrate
+     `src/judge.mjs` (structural validity deterministic, 100% gate). *Owner:* qa + impl. *Acceptance:* the
+     harness runs on historical conflicts and reports the five categories.
+111. **Lazy `checkup` import + `MERGE_HEAD` startup guard.** A mid-merge `checkup.mjs` currently makes
+     every `node cli.mjs` verb a `SyntaxError`; make `checkup` dynamic and add a startup guard that does
+     **not** import `checkup`. *Owner:* impl. *Acceptance:* with a conflicted `checkup.mjs`, `status` /
+     `queue` still run (failing-first).
+112. **Per-model edit-format selection + high-level-diff guidance.** Adopt Aider's per-model format knob
+     and its "high-level diffs" instruction (30–50% fewer errors); adopt its bounded flexible patching
+     (normalize/sub-hunk) but **not** the similarity fallback; always return the applied diff. *Owner:*
+     impl. *Acceptance:* format is selectable per model and the guidance is in the seat prompt.
+113. **Repository-map context selection for seats.** Rank the repo's symbols by a dependency graph within
+     a token budget (Aider's repo map) as a prompt section, instead of navigation-only. *Owner:* impl +
+     lead (design). *Acceptance:* a measured context/token reduction with no coverage loss.
+114. **Prompt-cache ordering + keepalive.** Cache the constitution/persona first, then read-only context,
+     then the repo map, then editable files (Aider's order); consider a keepalive ping for long-lived
+     seats. *Owner:* impl. *Acceptance:* a measured cache-hit improvement on a long seat.
+
 ## Extensibility and distribution
 
 **Ruled 2026-10-11 (operator): one distribution, no editions** — chosen extension

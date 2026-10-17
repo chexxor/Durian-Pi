@@ -26,6 +26,9 @@ An unresolved shared tree breaks `cli.mjs` for the whole rig: `cli.mjs` statical
   below are read-only and safe while the broker drives; a resolution that edits the **shared** tree is not.
 - If the conflict is already in the shared tree: **stop the broker and confirm no `genlock.*` is held**
   (`broker-safe-change.md`) before resolving, or `git merge --abort` and redo it in a scratch worktree.
+- **Never create a seat worktree while the shared tree is mid-merge:** `carryVisibleState`
+  (`src/worktree.mjs`) copies every dirty path it finds, and a `UU` (unmerged) file is carried with its
+  `<<<<<<<` markers — the conflict propagates into the new worktree.
 - The branch is verified (W2); do not resolve away a semantic conflict just to make the merge complete.
 
 ## Diagnose (read-only)
@@ -48,19 +51,21 @@ branches first, schedule conflicts for a quiesced window.
    ```bash
    git worktree add --detach ../resolve-<item> main
    ```
-2. **Deterministic first.** Where one side is wholly authoritative for a file:
+2. **Deterministic first — but never `git checkout`.** durig's seat guard (`src/confine.mjs`
+   `DENIED_COMMANDS`) refuses `git checkout`, `reset`, `restore`, `clean`, `stash`, and `revert` in a
+   seat shell. Choose a side by reading the stage blobs and writing the chosen content:
    ```bash
-   git checkout --ours -- <path>        # or --theirs
-   git add <path>
+   git show :2:<path>    # ours (current branch)
+   git show :3:<path>    # theirs (incoming)
+   git show :1:<path>    # base (common ancestor)
    ```
-   `git rerere` may replay a recorded resolution for a repeated conflict; read `git rerere diff` before
-   trusting it — rerere can silently apply a stale resolution.
-3. **Get the three-sided view** for semantic conflicts (feed the model base + ours + theirs, per the
-   research). Expose the base in the markers:
-   ```bash
-   git checkout --conflict=diff3 -- <path>
-   ```
-   or set `git config merge.conflictStyle zdiff3` (a repo-level choice — record it if changed).
+   Write the chosen content with the `write` tool, not a shell redirect, so the write guard still sees it.
+   `git rerere` may replay a recorded resolution; read `git rerere diff` before trusting it — rerere
+   matches by content (not path) and can silently apply a stale resolution.
+3. **Get the three-sided view** for semantic conflicts (feed the model base + ours + theirs with ~20 lines
+   of context). Reconstruct the sides with the `git show :1: :2: :3:` commands above; if you can set it
+   **before** the merge, `git config merge.conflictStyle zdiff3` embeds the base in the markers (a
+   repo-level choice — record it if changed).
 4. **Resolve one hunk at a time** with the `edit` tool. Keep **both** sides when the change is additive
    (the `#714` conflict was a union). If the intent is ambiguous, **abstain** — leave the conflict and
    `defer_work` rather than guess.
@@ -87,7 +92,8 @@ node <the item's demo>        # exit 0
 pass.
 
 ## Evidence
-Grounded in `docs/reviews/llm-prompting-for-git-merging.md` (deterministic-first cascade; per-hunk
-resolution with explicit abstention; 3-way base/ours/theirs context) and the 2026-10-17 landing-safety
-incident. `git merge-tree --write-tree` pre-flight verified locally on git 2.55.0.windows.5 (2026-10-17).
-`last_verified: unverified` until the Verify step runs on a real conflict.
+Grounded in `docs/reviews/llm-prompting-for-git-merging.md` and
+`docs/reviews/llm-prompting-for-git-merging-followup.md` (deterministic-first cascade; per-hunk
+resolution with explicit abstention; 3-way base/ours/theirs context; guard-denied `git checkout`) and the
+2026-10-17 landing-safety incident. `git merge-tree --write-tree` pre-flight verified locally on git
+2.55.0.windows.5 (2026-10-17). `last_verified: unverified` until the Verify step runs on a real conflict.

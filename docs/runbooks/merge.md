@@ -49,6 +49,16 @@ git worktree list --porcelain | grep -A1 '^worktree'
 unique work — confirm with `git cherry -v main <branch>`: a `+` line is a commit **not** in `main` (keep the
 branch); a `-` line is a patch-equivalent commit already in `main` (rebased duplicate).
 
+**Pre-flight each branch WITHOUT touching the working tree** (git 2.55; verified 2026-10-17). This merges
+into a tree object only, so it is safe to run while the broker drives, and it is how a landing pass knows
+its conflict set before the first `git merge`:
+```bash
+for b in <the branches>; do echo "$b:"; git merge-tree --write-tree --name-only main "$b"; echo "exit=$?"; done
+```
+`exit=0` is a clean merge; `exit=1` prints the conflicted paths. `git merge-tree --stdin --write-tree`
+computes the conflict set for a whole train in one invocation. Land clean branches first and reserve
+conflicts for a quiesced resolution.
+
 ## The merge checklist — the gate
 Apply the **universal gate** to every branch, then the one **type block** that matches the change. A
 branch that fails a row is not ready: send it back through W2; do not merge it "and fix later".
@@ -92,7 +102,13 @@ branch that fails a row is not ready: send it back through W2; do not merge it "
 
 ## Do
 1. Confirm the branch and its sha: `git log --oneline -1 <branch>`.
-2. Land it so the sha becomes an **ancestor** of `main` (the worktree-prune criterion):
+2. **Pre-flight the branch** (no working tree) and stop before merging if it conflicts:
+   ```bash
+   git merge-tree --write-tree --name-only main <branch>; echo "exit=$?"
+   ```
+   A conflicted branch is resolved per `resolve-merge-conflict.md` in a scratch worktree — never left
+   mid-merge in the shared tree.
+3. Land it so the sha becomes an **ancestor** of `main` (the worktree-prune criterion):
    ```bash
    git merge --no-ff <sha> -m "merge: land <branch> onto main (#<item>)"
    ```
@@ -100,8 +116,8 @@ branch that fails a row is not ready: send it back through W2; do not merge it "
    mid-merge**: resolve to completion in the same operation, or `git merge --abort` immediately if you
    cannot. For a multi-branch pass where any branch conflicts, prefer landing in a scratch/detached
    worktree off `main` and advancing `main` only once the result is clean.
-3. Run the item's covering demo on the merged result.
-4. Remove the item's worktree if it is clean: `git worktree remove <path>` then `git worktree prune`.
+4. Run the item's covering demo on the merged result.
+5. Remove the item's worktree if it is clean: `git worktree remove <path>` then `git worktree prune`.
 
 ## Verify
 ```bash

@@ -3,9 +3,9 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **fourteenth pass** — added ROADMAP item 101 (TUI newline bug),
-actioned the landing-safety incident, and reviewed the git-merging research. Prior pass: merged-branch
-cleanup, the merge/landing runbook (W6), and ROADMAP item 100. See **NEXT SESSION** below.)_
+_Last refreshed: 2026-10-17 (delegate, **fifteenth pass** — consumed the git-merging follow-up, registered
+ROADMAP 102–114, created the competitor-review runbook, and reviewed Aider. Prior pass: ROADMAP 101,
+the landing-safety incident, and the first git-merging research. See **NEXT SESSION** below.)_
 
 ## NEXT SESSION
 
@@ -41,8 +41,14 @@ SWE-agent 2405.15793, Merge-Bench 2605.25890 — all real and accurately charact
 `docs/runbooks/resolve-merge-conflict.md` (deterministic-first, per-hunk, abstention, `git merge-tree
 --write-tree` pre-flight) + README index; wrote the follow-up prompt
 `docs/reviews/llm-prompting-for-git-merging-followup-research-prompt.md`. Committed `2d2f43f`.
-**Owed to the operator:** route the follow-up prompt to the research agent; do NOT register the proposed
-tooling items until `docs/reviews/llm-prompting-for-git-merging-followup.md` lands.
+
+**Follow-up landed + actioned (2026-10-17):** `docs/reviews/llm-prompting-for-git-merging-followup.md`
+reviewed; corrections applied — `resolve-merge-conflict.md` no longer tells resolvers to use guard-denied
+`git checkout` (use `git show :1/:2:/:3:` + write), `merge.md` gained the `merge-tree` pre-flight, and the
+research SOP now **mandates** registering proposed items. ROADMAP items **102–114** registered. Created
+`docs/runbooks/competitor-review.md`; reviewed Aider (`docs/reviews/aider-review.md`; `vendor/eval/aider`
+HEAD `5dc9490`) → `docs/COMPETITORS.md` entry. **Owed:** route the follow-up as done; `pm` sequences
+102–114.
 
 **Next-session checklist (the landing cleanup):**
 1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`
