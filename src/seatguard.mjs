@@ -173,8 +173,15 @@ export function refusalForWrite({ root, path, content }) {
  */
 const GIT_COMMIT_RE = /(^|[\s;&|"'()])git(\s+-C\s+\S+)?\s+commit\b/i;
 const TOKEN_RE = /[A-Za-z0-9_+=\-]{16,}/g;
+/**
+ * #1379 (G-A, security position @cf84825): a PEM header CANNOT be caught as a token —
+ * TOKEN_RE breaks `-----BEGIN RSA PRIVATE KEY-----` at its spaces into sub-16 fragments —
+ * so it is matched on the raw ADDED LINE (trim-aware). Same name-the-file, never-the-value
+ * contract as the token path.
+ */
+const PEM_LINE_RE = /^-----BEGIN [A-Z ]*PRIVATE KEY-----$/;
 
-/** The added lines of a unified diff that carry a secret-shaped token. */
+/** The added lines of a unified diff that carry a secret-shaped token or a PEM header. */
 export function secretOffendersInDiff(diffText) {
 	const offenders = [];
 	let path = null;
@@ -185,6 +192,11 @@ export function secretOffendersInDiff(diffText) {
 		}
 		if (!raw.startsWith("+")) continue;
 		const line = raw.slice(1);
+		// #1379: the PEM header is matched on the LINE, not as a token (PEM_LINE_RE).
+		if (PEM_LINE_RE.test(line.trim())) {
+			offenders.push({ path });
+			continue;
+		}
 		for (const tok of line.match(TOKEN_RE) ?? []) {
 			if (SECRET_PREFIX_PATTERNS.some((re) => re.test(tok))) {
 				offenders.push({ path });
