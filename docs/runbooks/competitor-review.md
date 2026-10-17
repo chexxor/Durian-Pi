@@ -47,12 +47,19 @@ Three briefs for three moments. Add the project URL and the operator's question 
 > per claim, mark each mechanism `observed` (you read the code) or `advertised` (docs only), and name
 > anything you could not verify rather than adopting it.
 
-### 3. Re-review — what changed since the pinned HEAD?
+### 3. Re-review — an already-reviewed project
 
-> The review at `docs/reviews/<name>-review.md` was pinned at `<old HEAD>`. Read only what changed
-> between that commit and `<new HEAD>` (`git -C vendor/eval/<name> log --oneline <old>..<new>`), then
-> update the review, the `docs/COMPETITORS.md` entry, and any ROADMAP item the change affects. Do not
-> re-read the unchanged tree; do not re-derive the verdict.
+> First decide which re-review this is. **(a) Quality redo** — if the prior review is missing any required
+> artifact (header, surface-inventory table, "not read" list, standards table, coverage matrix), or a new
+> concern or class of surface is now in scope, run the **deep-review brief** instead; a delta cannot find
+> a miss in unchanged code (the OWASP miss of 2026-10-17 sat in the unchanged tree). **(b) Freshness
+> delta** — only if those artifacts exist: re-read what changed between `<old HEAD>` and `<new HEAD>`
+> (`git -C vendor/eval/<name> fetch --unshallow origin`, then `git log --oneline <old>..<new>`), update
+> the review, the `docs/COMPETITORS.md` entry, and any ROADMAP item the change affects, and re-check
+> exactly the adopt/reject calls the diff touches. Do not re-derive untouched calls. Discover the
+> placeholders yourself: the prior review's header carries `<old HEAD>`; fetch the clone and use its
+> default-branch tip as `<new HEAD>`. If `<old>` is unreachable (upstream force-pushed or rebased),
+> compare file trees instead of a commit range, or fall back to a quality redo.
 
 These briefs are deliberately project-independent: they force the reviewer to walk the *project's*
 surface rather than the *question's* keywords — the step whose absence produces a missed standard (the
@@ -70,6 +77,10 @@ directory for its name before cloning.
 ls vendor/eval/
 rg -n "<project>" docs/COMPETITORS.md
 ```
+If it **is** already reviewed, do not clone again and do not start from a blank review — pick a re-review
+mode (prompt 3): a **freshness delta** only when the prior review has its required artifacts (header,
+surface inventory, standards table, coverage matrix); otherwise a **quality redo** (the full deep brief),
+because a delta only sees changed lines and cannot find a miss in unchanged code.
 
 ## Do
 1. **Shallow-clone read-only** into `vendor/eval/<name>` (gitignored; never a workspace root). Native
@@ -77,6 +88,8 @@ rg -n "<project>" docs/COMPETITORS.md
    ```bash
    git clone --depth 1 https://github.com/<org>/<project>.git vendor/eval/<name>
    ```
+   `--depth 1` is enough for a first review. A re-review needs history for a diff, so `fetch --unshallow`
+   in place rather than deleting the directory (which would lose the pinned commit).
 2. **Pin the commit and open the review with a header.** Every claim must be reproducible, and a borrowed
    mechanism must be legally borrowable:
    ```bash
@@ -131,6 +144,7 @@ question has a follow-up prompt or an explicit "closed". `git status` shows only
 | Anti-pattern | Why it fails |
 |---|---|
 | **Category dismissal** — "reject compliance/identity/the SDKs" without an opened artifact | The 2026-10-17 OWASP miss; a confident wrong finding |
+| **Delta-only re-review of a deficient prior review** | A diff cannot find a miss in unchanged code; the OWASP miss lived in unchanged code |
 | Reading aggregators, blog posts, or the project's README instead of its tree | A feature-page summary, not evidence |
 | No pinned HEAD (or a bare branch name) | Claims are not reproducible; a re-review cannot diff |
 | Treating the spec as the implementation | Preview projects ship specs ahead of code (AGT `HALF_OPEN`, quarantine) |
