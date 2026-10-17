@@ -53,6 +53,11 @@ surfaced. 33 unique commits for `done` items are not on `main` (guard/confine st
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
+**Routing already dispatched (do NOT re-send):** `send pm` for the branch-audit follow-up (**#1448**),
+dispatched 2026-10-17, pid `23772`, `--request-id opr-20261017-branch-landing`, body
+`.durig/opr-branch-landing-20261017.md`. When it settles, read `.durig/send-pm.out` (JSON
+`settledStatus`) and confirm with `node cli.mjs queue` that `pm` opened the landing item(s).
+
 **State at clock-out:**
 - `main` HEAD = `c0534ed`, **tree clean** — pruning deleted refs only, never touched the tree.
 - Local refs **128 → 76** (52 pruned: 50 merged `-d`, 2 patch-equivalent `-D`). **33 unlanded refs kept.**
