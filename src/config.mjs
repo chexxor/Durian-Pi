@@ -45,11 +45,23 @@ export const DEFAULTS_CONFIG_PATHS = [
  * specific to avoid refusing ordinary paths (a Windows path with a colon is not a
  * token): known provider prefixes, and long high-entropy runs.
  */
-const SECRET_VALUE_PATTERNS = [
+/**
+ * #1317: the provider-PREFIX shapes only. The commit-time gate (src/seatguard.mjs)
+ * tests tokens from a staged DIFF with these — deliberately NOT the blunt 40+
+ * entropy rule below, which fires on the hashes, ids and base64 that are ordinary
+ * in a diff (a full git sha in a JSON string is 40 hex chars). Security's posture:
+ * prefer a false negative to a false positive, because a gate that refuses an
+ * ordinary commit is an outage.
+ */
+export const SECRET_PREFIX_PATTERNS = [
 	/^sk-[A-Za-z0-9_-]{16,}$/, // OpenAI-style
 	/^hf_[A-Za-z0-9]{16,}$/, // HuggingFace
 	/^ghp_[A-Za-z0-9]{20,}$/, // GitHub PAT
 	/^AIza[0-9A-Za-z_-]{20,}$/, // Google API key
+];
+
+export const SECRET_VALUE_PATTERNS = [
+	...SECRET_PREFIX_PATTERNS,
 	// Long high-entropy run: letters AND digits, no path separators (a path with
 	// `/` or `\` is not a token), no whitespace.
 	/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9+_=-]{40,}$/,
