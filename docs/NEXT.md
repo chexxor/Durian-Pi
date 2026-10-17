@@ -3,11 +3,55 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate — **stage-two recovery + clock-out**: qa's saturated context
-was compacted in an operator-sanctioned window (367k→48k) after its runaway turn hung the broker's F11
-drain; the degeneration-guard fixes are registered as `#1703`/`#1704`/`#1705` (queued to impl) but NOT
-landed, so this can recur. Broker restarted live (**pid `34700`**) after a dormant spell. Top priority is
-still `#1610` MAIN IS RED. See `## NEXT SESSION` — everything below it is historical.)_
+_Last refreshed: 2026-10-17 (delegate — **active-guard intent delivered + clock-out for a
+competitor-research session**: the operator's "active in-flight degeneration guard" intent is delivered
+and registered by `pm` as **#1766** (lead shape ruling) + **#1767/#1768/#1769** (impl, gated); an
+addendum names the existing agent-fleet "drift watchdog" prior art. Incoming task = initial competitor
+research. Broker UP pid `34700`. Everything below the new handover is historical.)_
+
+## HANDOVER — 2026-10-17 (delegate clock-out; incoming agent: **initial competitor research**)
+
+**The incoming agent's job:** initial competitor research. Start from `docs/runbooks/competitor-review.md`
+(upstream-read: shallow-clone read-only into `vendor/eval/<name>`, pin the HEAD, cite a path per claim,
+write `docs/reviews/<name>-review.md`, update `docs/COMPETITORS.md`, register adopts as ROADMAP items).
+Check `docs/COMPETITORS.md` and `vendor/eval/` first so a project is not re-reviewed. **The operator must
+name the target project** — no target is recorded here.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**State at clock-out:**
+- **Broker UP**, pid `34700` (heartbeat fresh; PASS advancing). Genlock held by `pm` at times.
+- `main` HEAD `8178c79`; tree clean; on `main`; **not pushed** (operator holds push).
+- **Observed:** `node demo/secretredact.test.mjs` exits **1** on this tree, so the `#1610` MAIN-RED gate
+  still reproduces — but queue rows `#1741`/`#1747` claim main went green via `impl-item-837`. **Reconcile
+  the discrepancy** (likely the lockfile-vs-pin item `#1754`/`#1755`); trust neither claim without re-running.
+- **Delivered this session (broker-delivered, all `dead=0`):**
+  `opr-20261017-active-degeneration-guard` (23:06:07Z) → registered **`#1766`**/`#1767`/`#1768`/`#1769`;
+  `opr-20261017-active-degeneration-guard-addendum` (23:08:12Z) → agent-fleet prior art + the verified
+  absence of `vendor/eval/agent-fleet`.
+- **Verified finding (why #1767–#1769 exist):** the guard is post-hoc (assesses committed pages at pass
+  end); its actuator is `conversation.reset()` (admitted at the next boundary while busy), and
+  `reset`/`compact` refuse a live lease by design. The halt seam already exists in pi-durable
+  (`Harness.abortTask`/`Conversation.abort`, `context.abortSignal`). **In-process the genlock holder is the
+  broker's own pid** — verified `selfdev.sqlite.broker.json` pid `34700` == `selfdev.sqlite.genlock.0`
+  pid `34700` — so `cmdStop`'s `process.kill` is an external-driver tool; the broker needs the cooperative
+  abort, not a self-kill.
+- **Watch:** `qa` re-saturation (guard fixes `#1703`/`#1704`/`#1705` still not landed).
+- **Do not:** push; stop the broker without an operator-declared window; run a second driver while the
+  broker is UP.
+
+## NEXT SESSION
+
+**Current item:** the operator's next task is **initial competitor research**, but no target project is
+named yet — confirm the target with the operator. In parallel, the active-degeneration-guard work sits
+with the team: **`#1766`** (lead shape ruling) gating **`#1767`**/**`#1768`**/**`#1769`** (impl).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Known blocker:** no competitor project named by the operator (research cannot start without a target);
+and the `main` secretredact gate is observed red (`demo/secretredact.test.mjs` exit 1) while queue rows
+`#1741`/`#1747` claim green — reconcile before any landing.
+
 
 ## HANDOVER — 2026-10-17 (stage-two recovery; clock-out — NEWEST; read `## NEXT SESSION` below)
 
