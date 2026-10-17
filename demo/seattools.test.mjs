@@ -26,7 +26,7 @@ const context = {};
 try {
 	console.log("\nThe tool set is what the design says, and bash is deliberately absent");
 	const names = SeatTools.tools.map((tool) => tool.name).sort();
-	check("read, write, edit, a shell and prepare_workspace are bundled", JSON.stringify(names) === JSON.stringify(["edit", "powershell", "prepare_workspace", "read", "write"]), JSON.stringify(names));
+	check("read, write, edit, a shell, prepare_workspace and seat_root are bundled", JSON.stringify(names) === JSON.stringify(["edit", "powershell", "prepare_workspace", "read", "seat_root", "write"]), JSON.stringify(names));
 	check("no bash tool — native-Windows bash is an undeclared Git Bash dependency", !names.includes("bash"));
 	check("a verifier loses write and edit", JSON.stringify(VERIFIER_REMOVALS.map((t) => t.name).sort()) === JSON.stringify(["edit", "write"]));
 

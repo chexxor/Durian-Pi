@@ -6,7 +6,7 @@
 // position's conditions are.
 
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
-import { configure, defineExtension, defineTool } from "@earendil-works/pi-durable";
+import { AgentDoc, configure, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import {
 	createEditTool,
 	createPowerShellTool,
@@ -17,6 +17,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { seatsAreVerifier } from "./verifierrole.mjs";
 import { authorEnv, verifierEnv } from "./confine.mjs";
 import { RigQueue, Seats } from "./rig.mjs";
+import { describeSeatRoot, resolveSeatRoot } from "./seatroot.mjs";
 import { prepareSeatWorkspace } from "./worktree.mjs";
 
 /** A tool result carrying only text (the shape `defineTool` accepts). */
@@ -115,6 +116,36 @@ const prepareWorkspace = defineTool({
 	},
 });
 
+/**
+ * `seat_root` — name the tree this seat is ACTUALLY in (DOGFOOD F21 / #253).
+ *
+ * F21's failure was a verifier calling its ISOLATED item worktree "the live tree": a seat could
+ * not tell which tree it was in, so its judgement about the live tree was wrong. This is the
+ * read-only surface that fixes it — it reports the seat's RESOLVED root (the same chain
+ * `makeSeatEnv` and `seatguard` use), says whether that root is the main checkout or a linked
+ * worktree, and flags a `DURIG_SEAT_ROOT` disagreement loudly.
+ *
+ * Read-only, and deliberately NOT in `COORDINATOR_REMOVALS`, so every seat — including a
+ * coordinator with no file tools — can always name its own root.
+ */
+const seatRoot = defineTool({
+	name: "seat_root",
+	description:
+		"Report the seat's ACTUAL resolved root — the tree this seat's file and shell tools operate in — so an isolated item worktree is never mistaken for the live tree. Read-only; available to every seat.",
+	parameters: Type.Object({}),
+	execute: async (_args, api, context) => {
+		try {
+			const persistedCwd = await api.commit(async (tx) => {
+				const agent = await tx.doc(AgentDoc, api.conversationId);
+				return agent?.cwd;
+			}, context);
+			return result(describeSeatRoot({ persistedCwd }));
+		} catch (err) {
+			return result(`SEAT_ROOT_ERROR: ${err && err.stack ? err.stack : String(err)}`);
+		}
+	},
+});
+
 // `bash` is deliberately absent. On native Windows `bash` means Git Bash - an undeclared
 // dependency that may simply not be installed - and WSL is unsupported on this host by policy,
 // so the seat shell is PowerShell, which `createPowerShellTool` resolves as `pwsh`, then
@@ -125,6 +156,7 @@ export const seatTools = {
 	edit: createEditTool(),
 	shell: createPowerShellTool(),
 	prepareWorkspace,
+	seatRoot,
 };
 
 export const SeatTools = defineExtension({
@@ -192,7 +224,7 @@ export function makeSeatEnv(roster, { fallbackRoot = process.cwd() } = {}) {
 		// its own tree regardless of any other seat. `DURIG_SEAT_ROOT` is only a
 		// fallback for a seat that has not prepared one (a rig pointing every seat at
 		// one shared checkout), never a global override of a prepared root.
-		const root = target.cwd ?? process.env.DURIG_SEAT_ROOT ?? fallbackRoot;
+		const root = resolveSeatRoot({ persistedCwd: target.cwd, fallbackRoot }).root;
 		const base = new NodeExecutionEnv({ cwd: root });
 		const seat = roster.get(target.conversationId);
 		// Fail CLOSED: a conversation that is not a known seat - the roster not read yet, or a
