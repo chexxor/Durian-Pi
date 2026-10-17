@@ -102,5 +102,128 @@ fail-closed enforcement posture plus a mature vocabulary for detecting, isolatin
 misbehaving agent. Adopt its **fail-closed invariant**, **structured denial**, **monotone risk ratchet**,
 **per-seat circuit breaker**, **structured incident lifecycle with dedup/correlation**, and its
 **chaos/rogue-detection signal design**; adapt its executable-runbook rollback/approval fields into the
-existing ROADMAP 81–88 machinery; reject its identity/mesh/ring/compliance stack as wrong-layer for a
-single-operator local rig. Its accepted ideas are registered as ROADMAP 133–144.
+existing ROADMAP 81–88 machinery; adopt its **OWASP Agentic Top 10 self-assessment** and policy-as-code
+lint rules (see the Addendum); reject its identity/mesh/ring stack and the enterprise certification
+mappings. Its accepted ideas are registered as ROADMAP 133–150.
+
+## Addendum (2026-10-17, delegate) — OWASP ASI Top 10 and the broader policy surface
+
+**Correction.** The first pass above rejected "compliance mappings" *en bloc* and never opened them. That
+was too coarse. AGT maps to **three** OWASP standards, and one of them — the **OWASP Top 10 for Agentic
+Applications 2026 (ASI01–ASI10)** — is a directly applicable external checklist for durig's own agents
+(`docs/compliance/owasp-agentic-top10-architecture.md`, `docs/security/owasp-compliance.md`). The
+enterprise *certification* mappings (SOC2, EU AI Act, NIST AI RMF, ISO 42001) remain out of scope, but
+the ASI Top 10 and its **policy packs** are adopted below. AGT itself labels these "internal
+self-assessment mapping[s], NOT a validated certification or third-party audit"
+(`docs/compliance/owasp-agentic-top10-architecture.md` intro) — durig's own mapping must carry the same
+label.
+
+### The OWASP ASI Top 10 as durig's agent-security checklist
+
+AGT rates itself **7/10 Full, 3/10 Partial** against ASI01–ASI10 and names a concrete control + evidence
+path for each (`docs/compliance/owasp-agentic-top10-architecture.md`). The value for durig is the
+taxonomy, not AGT's score: it names the failure classes a multi-agent rig actually has. Mapping durig's
+existing controls onto it exposes real gaps:
+
+| ASI risk | durig control today | Gap this exposes |
+|---|---|---|
+| **ASI01 Goal Hijack** | constitution + `edges`/capabilities; codemode gate | prompt/tool-input injection is not screened; confinement limits blast radius but does not detect goal override |
+| **ASI02 Tool Misuse** | `src/confine.mjs` (path/command block), `src/seatguard.mjs` | no per-action allowlist with deny-all default; refusals are narrow guards, not one catalog |
+| **ASI03 Identity / Privilege Abuse** | seat name + store; `edges`; seat-tool allowlist (`docs/SEAT-TOOLS.md`) | no least-privilege *per item*; no credential-use audit |
+| **ASI04 Agentic Supply Chain** | vendored `vendor/pi-main`, `vendor/eval/*`, `vendor/pi-warden`; `scripts/sync-pi.mjs` pins | **no SBOM / dependency scan of vendored code** — a genuine gap |
+| **ASI05 Unexpected Code Execution** | `src/confine.mjs` command block; codemode gate (ROADMAP 32) | static lint over seat-authored code is absent |
+| **ASI06 Memory / Context Poisoning** | durable transcript; `src/degeneration.mjs`; D95 context bound | no `MemoryGuard`-style integrity check on the transcript/context read path; poisoning vs saturation are conflated |
+| **ASI07 Insecure Inter-Agent Comm.** | single-writer store; `edges` routing (no network mesh) | low exposure by construction; trust is the store, not a wire |
+| **ASI08 Cascading Failures** | `src/supervisor.mjs` escalation; broker single-writer | no circuit breaker (ROADMAP 137); no session tool-call/budget cap |
+| **ASI09 Human-Agent Trust** | operator grants via `intent`; landing gate | approvals are not bound to an action digest, not expiry-checked (ROADMAP 138/149) |
+| **ASI10 Rogue Agents** | `src/degeneration.mjs`, supervisor, `reset` (ROADMAP 137) | detectors are post-hoc and blind to the chaotic (high-entropy) pole (ROADMAP 142) |
+
+**Adopt**: run this mapping as a dated `security`-seat self-assessment and re-run it on trigger (a new
+execution surface, a landing-path change), exactly as the runbook maintenance policy already does →
+**ROADMAP 145**.
+
+### Policy packs worth mining for concrete rules
+
+- **Deny-all-by-default posture with explicit numeric budgets** — every pack sets `default_action: deny`
+  plus `max_tokens`, `max_tool_calls`, and a `confidence` floor per profile
+  (`docs/compliance/owasp-asi-policy-mapping.md` "Default Posture by Pack"). durig's seats have no
+  per-item tool/token budget; only the degeneration guard's high-water marks. → **ROADMAP 147**.
+- **Per-risk named rules** — e.g. `asi08-session-tool-call-limit`, `asi06-context-budget-limit`,
+  `asi10-charter-autonomous-loop`, `asi03-block-credentials-in-output`, `asi06-block-pii-ssn`
+  (same table). These are concrete, testable control names to adopt against durig's own surfaces.
+- **Policy-as-code static review** — AGT ships 14 lint rules over agent code, each mapped to ASI risks:
+  `unguarded-tool-execution`, `no-tool-allowlist`, `missing-audit-logging`, `missing-pii-redaction`,
+  `missing-trust-verification`, `no-prompt-injection-guards`, `stub-security-implementation`,
+  `hardcoded-security-denylist`, `unsafe-deserialization`, `unbounded-collection`,
+  `missing-circuit-breaker`, `ssrf-vulnerable-url`, `no-behavior-monitoring`,
+  `missing-governance-middleware` (`agent-governance-python/agentmesh-integrations/copilot-governance/src/reviewer.ts`).
+  **Adopt**: durig's `check` (`src/checkup.mjs`) is the natural home for a security-lint rule set over
+  seat-authored code, with each finding labelled by ASI risk → **ROADMAP 146**.
+- **Severity→exit behavior** — critical/high block merge; medium/low warn
+  (`docs/security/scanning.md`). A useful shape for a `check` security rule.
+- **Reversibility assessment** — classify an action `FULLY_REVERSIBLE`/`PARTIALLY`/`IRREVERSIBLE`/
+  `UNKNOWN`, and require extra approval + a compensation plan for irreversible actions
+  (`agent-governance-python/agent-os/src/agent_os/reversibility.py`; `ReversibilityLevel`,
+  `_REVERSIBILITY_MAP`). durig's irreversible operations (branch deletion, force-landing, a broker
+  stop) would benefit → **ROADMAP 149**.
+- **Action-bound, fail-closed approval** — an approval must name the exact action digest, bind the
+  policy version, expire, and reject replay (`docs/adr/0030-action-bound-approval-protocol.md`). The
+  concrete hardening for ROADMAP 138.
+
+### OWASP LLM Top 10 — read, mostly not adopted
+
+AGT's own LLM mapping is **0 fully mitigated / 9 partial / 1 gap** and candidly names its widest gaps as
+**output sanitization and sensitive-data protection** (`docs/compliance/owasp-llm-top10-mapping.md`
+Executive Summary). That is the same finding as its agentic mapping, from a different angle: adopt the
+*output-screening* control (credentials + PII) → **ROADMAP 148**, and read the LLM mapping as a
+cross-check, not a separate backlog.
+
+### What other policies to adopt (and what to leave)
+
+**Adopt** (registered 145–150):
+
+- **OWASP ASI Top 10 self-assessment** → 145.
+- **Security-lint as `check` rules, mapped to ASI** → 146.
+- **Per-item deny-by-default budget** (max tool calls, max tokens, confidence floor) → 147.
+- **Output screening** for credentials **and PII** (durig redacts *tool results* only —
+  `src/secretredact.mjs` is wired as the `afterTool` hook in `src/seatguard.mjs:20`, so assistant output
+  is not screened) → 148.
+- **Reversibility-aware approval** for irreversible operations → 149.
+- **Supply-chain hygiene for vendored code** (SBOM / dependency scan of `vendor/pi-main`,
+  `vendor/eval/*`, `vendor/pi-warden`; pin + provenance already exist via `scripts/sync-pi.mjs`) → 150.
+
+**Leave** (wrong scale or already have a local equivalent): Ed25519/DID mesh, 0–1000 trust scoring and
+`docs/security/trust-score-calibration.md`; multi-tenant / Kubernetes isolation
+(`docs/security/tenant-isolation.md`); SOC2 / EU AI Act / NIST / ISO certification mappings;
+vulnerability-disclosure process and post-market monitoring (a private single-operator rig); SBOM
+*signing* infrastructure (mitigated here by pinning + `scripts/sync-pi.mjs --update --link`). The
+**MemoryGuard** idea for ASI06 is noted but not registered — durig's transcript integrity is better
+solved by the store's own write path, and adding a second integrity layer before that is measured would
+be premature.
+
+## Surface inventory (runbook step 4, added 2026-10-17 when the runbook was tightened)
+
+The `competitor-review.md` runbook now requires this table and a "not read" list. Recorded after the
+fact for this review, and it is the post-mortem of the miss: the first pass skipped several index
+surfaces, and that is how the OWASP ASI material was missed.
+
+| Doc area | Opened? | What it yielded |
+|---|---|---|
+| `README.md`, `docs/ARCHITECTURE.md`, `docs/index.md` | yes | what it is; subsystem map; the enforcement thesis |
+| `docs/LIMITATIONS.md`, `docs/ERROR_HANDLING.md` | yes | honest gaps (spec ahead of code); structured errors → 134 |
+| `docs/adr/` (index + `0013`,`0016`,`0017`,`0020`,`0030`) | partly | fail-closed (133), circuit breaker (137), approval protocol (149), Merkle (rejected) |
+| `docs/specs/AGENT-SRE-GOVERNANCE-1.0.md`, `...HYPERVISOR...` | yes | circuit breaker, chaos, incidents, kill switch, failure semantics |
+| `docs/security/{index,threat-model,context-accumulation-governance,owasp-compliance}` | yes | boundary taxonomy (136), ratchet (135), **OWASP pointer** |
+| `docs/compliance/` index + `owasp-agentic-top10-architecture.md`, `owasp-asi-policy-mapping.md`, `owasp-llm-top10-mapping.md`, `incident-response-workflow.md` | **first pass: no; addendum: yes** | **the miss** — ASI Top 10, policy packs, budgets, output-screening gap (145–150) |
+| `docs/operations/advisory-to-blocking-graduation.md` | yes | graduation gate (144) |
+| `docs/tutorials/{05,30}` | yes | rogue detector, lifecycle/orphan |
+| `examples/policy-templates/general-saas.yaml` | yes | deny-all default + numeric budgets |
+| `agent-governance-python/.../{context_envelope,rogue_detector,event_sink,reversibility,incidents/*,lifecycle/orphan_detector}.py`, `.../copilot-governance/src/reviewer.ts` | yes | implementations + the 14 lint rules (146) |
+
+**Not read (and why).** `docs/compliance/{soc2,eu-ai-act,nist-ai-rmf,iso-42001,cis-controls,nsa-mcp,mcp-owasp-top10,atf-conformance}-*`
+(enterprise certification mappings — out of scope for a local rig); `docs/FAQ.md`, `docs/COMPARISON.md`
+(vendor positioning); `docs/BENCHMARKS.md`, `benchmarks/`, `tests/` (we do not run the project's code —
+read-only review); most of the ~55 `docs/tutorials/` and all of `docs/deployment/`,
+`docs/integrations/` (cloud/framework-specific); `agent-governance-{dotnet,rust,golang}/` source beyond
+the directory layout. These are named so a later reviewer can reopen them; none is **known** to change
+the verdict, but only the compliance row above was an observed error.

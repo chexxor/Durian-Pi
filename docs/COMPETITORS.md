@@ -172,9 +172,17 @@ mechanics only.
 | **Advisory→blocking graduation checklist** (`docs/operations/advisory-to-blocking-graduation.md`) | Turns "no false positives before enabling" into a dated gate + rollback | the degeneration guard's zero-false-positive rule is currently prose (ROADMAP 144) |
 
 **Not to borrow:** Ed25519/DID mesh, execution rings, trust scoring 0–1000, the multi-language SDK
-sprawl, the compliance mappings, and the `<0.1 ms` policy-engine figure quoted as end-to-end overhead
+sprawl, the enterprise certification (SOC2 / EU AI Act / NIST / ISO) mappings, and the `<0.1 ms` policy-engine figure quoted as end-to-end overhead
 (`docs/LIMITATIONS.md` §3). Wrong layer for a single-operator local rig; the least-privilege principle
 is already ROADMAP 60.
 
 **What it does not give us:** any durable queue, single-writer store, crash recovery, seats, or
 landing/merge model — every durig-internal durability and recovery mechanism stays ours.
+
+**Policy surface (OWASP).** AGT also maps to the **OWASP Agentic Top 10 (ASI01-ASI10)**, the OWASP
+LLM Top 10, and the OWASP MCP Top 10, and ships four policy packs (`examples/policy-templates/`)
+plus 14 static review rules mapped to ASI risks (`.../copilot-governance/src/reviewer.ts`). The
+**ASI Top 10 is a directly applicable external checklist** for durig and is adopted (self-assessment,
+deny-by-default budgets, security lint, output screening, reversibility-aware approval, vendored-code
+supply chain) - see the review Addendum and ROADMAP **145-150**. The enterprise certification
+mappings stay out of scope.

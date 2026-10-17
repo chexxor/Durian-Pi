@@ -2523,6 +2523,67 @@ ROADMAP 87 (gated executor), not a rival; **141** extends ROADMAP 67; **137/141*
 breaker shape from AGT ADR-0020. **Rejected** (not registered): Ed25519/DID mesh, execution rings, trust
 scoring, the multi-language SDKs, and the compliance mappings — see the review's "Where it does not fit".
 
+## OWASP ASI Top 10 and policy-as-code — from the AGT review addendum (2026-10-17)
+
+Source: `docs/reviews/agent-governance-toolkit-review.md` §Addendum. Correction to the review's first
+pass, which rejected "compliance mappings" without reading them: the **OWASP Top 10 for Agentic
+Applications 2026 (ASI01–ASI10)** is a directly applicable external checklist, and its policy packs and
+static-review rules are concrete. The enterprise certification mappings (SOC2 / EU AI Act / NIST /
+ISO) stay out of scope. `pm` sequences these. Registered **not scheduled**. *(145–150.)*
+
+145. **OWASP ASI Top 10 self-assessment for durig.** Map durig's controls onto ASI01–ASI10 with an
+    honest coverage rating and a named gap per risk — the AGT table is the shape
+    (`docs/compliance/owasp-agentic-top10-architecture.md`; its own intro must be carried: it is a
+    "self-assessment mapping, NOT a validated certification"). The mapping above already flags ASI04
+    (supply chain), ASI06 (memory/context poisoning vs saturation), ASI08 (no breaker/budget), and ASI09
+    (approvals not action-bound). *Owner:* `security` · *Where:* `docs/security/`, re-run on trigger per
+    the runbook maintenance policy. *Acceptance:* a dated mapping with a per-risk durig control and gap,
+    re-run when a new execution surface or the landing path changes.
+146. **Security-lint `check` rules mapped to OWASP ASI.** Adopt the shape of AGT's 14 static review rules
+    over agent code — `unguarded-tool-execution`, `no-tool-allowlist`, `missing-audit-logging`,
+    `missing-pii-redaction`, `unsafe-deserialization`, `unbounded-collection`, `missing-circuit-breaker`,
+    `ssrf-vulnerable-url`, `stub-security-implementation`, and the rest — as `check` rules over
+    seat-authored code, each finding labelled by ASI risk
+    (`.../copilot-governance/src/reviewer.ts`; severity→exit behaviour from `docs/security/scanning.md`:
+    critical/high block, medium/low warn). *Owner:* impl/`security` · *Where:* `src/checkup.mjs`.
+    *Acceptance:* a diff introducing an unguarded tool call or an unbounded collection is a `check`
+    finding that names its ASI risk.
+147. **Per-item deny-by-default action budget.** Every work item carries an explicit `max_tool_calls`,
+    `max_tokens`, and a confidence floor, with **deny-all as the default** — the AGT policy-pack posture
+    (`docs/compliance/owasp-asi-policy-mapping.md` "Default Posture by Pack"; rules
+    `asi08-session-tool-call-limit`, `asi06-context-budget-limit`). durig has only the degeneration
+    guard's high-water marks. *Owner:* impl/lead · *Where:* `src/rig.mjs`/seat spec, `src/degeneration.mjs`.
+    *Acceptance:* an item exceeding its tool/token budget is halted before the run settles, with the
+    budget named as the cause (extends the #1766 halt core).
+148. **Output screening for credentials and PII.** durig redacts **tool results** only
+    (`src/secretredact.mjs` is the `afterTool` hook, wired in `src/seatguard.mjs:20`); assistant output
+    is not screened. Extend screening to model output and add a PII class — AGT calls output
+    sanitization and sensitive-data protection its widest gap
+    (`docs/compliance/owasp-llm-top10-mapping.md`; rules `asi03-block-credentials-in-output`,
+    `asi06-block-pii-ssn`). *Owner:* `security`/impl · *Where:* `src/secretredact.mjs`,
+    `src/seatguard.mjs`, `docs/runbooks/tool-result-redacted.md`. *Acceptance:* a credential or PII
+    string emitted in assistant output is redacted or refused, with the redaction recorded.
+149. **Reversibility-aware approval for irreversible operations.** Classify an action
+    `FULLY_REVERSIBLE`/`PARTIALLY`/`IRREVERSIBLE`/`UNKNOWN` and require extra operator approval plus a
+    compensation plan for the irreversible — AGT `ReversibilityLevel` / `_REVERSIBILITY_MAP`
+    (`agent-governance-python/agent-os/src/agent_os/reversibility.py`); approval bound to the action
+    digest, expiring, replay-rejected (`docs/adr/0030-action-bound-approval-protocol.md`). durig's
+    branch deletion, force-landing, and broker stop are the candidates. *Owner:* impl/lead · *Where:*
+    `src/seatguard.mjs`, `cli.mjs`, `docs/runbooks/`. *Acceptance:* an irreversible verb requires an
+    approval naming its action digest, and the approval expires. *Extends:* item 138.
+150. **Supply-chain hygiene for vendored code.** Produce a dependency inventory / vulnerability scan for
+    the vendored trees (`vendor/pi-main`, `vendor/eval/*`, `vendor/pi-warden`) and a provenance note per
+    vendored project — the ASI04 gap (`docs/compliance/owasp-agentic-top10-architecture.md` ASI04).
+    Pinning + `scripts/sync-pi.mjs` provenance already exist; the scan does not. *Owner:* devtools/`security`
+    · *Where:* `scripts/`, `docs/PROVENANCE-pi-warden.md`. *Acceptance:* `check` (or a script) reports the
+    vendored inventory and a vulnerability scan, and names any un-inventoried tree.
+
+**Cross-links:** item **146** extends the `check` rule machinery (ROADMAP 46/81/82); **147** extends the
+#1766 halt core and the D95 context bound; **148** extends the secretredact/commit-gate work
+(#1317); **149** hardens ROADMAP 138; **150** closes the ASI04 row of ROADMAP 145. **Left out** (not
+registered, with reasons in the addendum): Ed25519/DID mesh, trust scoring, multi-tenant/K8s isolation,
+enterprise certification mappings, disclosure/post-market processes, and SBOM signing.
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for

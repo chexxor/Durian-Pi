@@ -19,7 +19,25 @@ operator's research agent; this one reads a real project's tree and docs directl
 
 ## Impact
 Without it we rebuild what already exists, or adopt a practice whose actual behaviour we never read. A
-review that cannot cite the source path is a feature-page summary, not evidence.
+review that cannot cite the source path is a feature-page summary, not evidence. A review that judges a
+**category** ("compliance", "identity", "the SDKs") without opening a representative artifact in it is
+worse than a feature-page summary: it is a confident dismissal the operator will trust.
+
+## The instruction that shapes a deep review (paste this to the reviewer)
+
+> Read the project the way its own maintainers ordered it, not just where my question points. Before you
+> summarize, produce: (1) an inventory of the project's documentation surface — every `docs/` index and
+> "start here" page, plus its security, compliance, standards-mapping, and policy-template areas — open
+> each, and list what you did *not* read and why; (2) every external standard, checklist, benchmark, or
+> policy set the project names, each with an adopt / adapt / reject and a cited path — never dismiss a
+> whole category without opening a representative artifact in it; (3) the project's own
+> coverage/self-assessment tables and the gaps it admits, mapped onto our mechanisms; (4) a coverage
+> matrix of our system against the project's claimed controls (have / lack / not-applicable). Cite a path
+> per claim; name anything you could not verify rather than adopting it.
+
+That prompt is deliberately project-independent: it forces the reviewer to walk the *project's* surface
+rather than the *question's* keywords — which is precisely the step whose absence produces a missed
+standard like OWASP ASI.
 
 ## Preconditions
 - Read-only: **do not run the project's code**, install its dependencies, or modify this repo other than
@@ -47,18 +65,34 @@ rg -n "<project>" docs/COMPETITORS.md
 3. **Read the project's own docs and source**, not aggregators. Prefer the docs directory the project
    maintains (for a docs-site repo, the `website/docs/` or `docs/` tree) and the source file that
    implements each mechanism. Cite a **path per claim**.
-4. **Write `docs/reviews/<name>-review.md`**: what it is; adoptable practices as a table (practice ·
-   evidence path · durig counterpart); where it does **not** fit our constraints; and an explicit
-   adopt / adapt / reject call per practice.
-5. **Add or update its `docs/COMPETITORS.md` entry** (the maintained list). One row per decision, with the
+4. **Walk the project's own documentation surface, in the order its maintainers present it.** Open every
+   top-level doc index and "start here" page (`docs/index.md`, `docs/*/index.md`, a docs-site `nav:` in
+   `mkdocs.yml`, an ADR index) and enumerate what it points to — **including security, compliance,
+   standards-mapping, and policy-template areas the operator's question did not name.** The review MUST
+   carry a **surface-inventory table** (doc area · opened? · what it yielded) and a **"not read" list**
+   naming every area left unopened and why.
+5. **Run an explicit standards-and-policies pass.** Enumerate every external standard, checklist,
+   benchmark, policy pack, and control framework the project claims to map to or ships (OWASP, NIST,
+   CIS, ISO, SOC2, EU AI Act, …) and give each an adopt / adapt / reject **with a cited path and its
+   stated coverage**. A **category-level rejection is not allowed**: to reject "compliance", "identity",
+   or "the SDKs", open at least one representative artifact in it and cite what it actually contains.
+   Extract the project's own **coverage/self-assessment table and the gaps it admits** — that honesty is
+   the highest-value input, because it maps directly onto our gaps.
+6. **Write `docs/reviews/<name>-review.md`**: what it is; adoptable practices as a table (practice ·
+   evidence path · durig counterpart); a **coverage matrix of durig against the project's claimed control
+   set** (have / lack / not-applicable); where it does **not** fit our constraints; and an explicit
+   adopt / adapt / reject call per practice **and per standard** from step 5.
+7. **Add or update its `docs/COMPETITORS.md` entry** (the maintained list). One row per decision, with the
    durig counterpart it should change or inform, and the pinned HEAD + cited paths.
-6. **Register the accepted practices as ROADMAP items** (`registered, not scheduled`) with owner and
+8. **Register the accepted practices as ROADMAP items** (`registered, not scheduled`) with owner and
    acceptance; reject the rest in the review with a reason. See `research-request.md` step 3.
 
 ## Verify
 `vendor/eval/<name>` is cloned and its HEAD pinned; every claim in the review cites a path in that tree;
-`docs/COMPETITORS.md` has the entry; each adopt call is either a registered `docs/ROADMAP.md` item or a
-named rejection. `git status` shows only the intended doc files.
+the review carries a **surface-inventory table**, a **"not read" list**, a **durig coverage matrix**,
+and a **per-standard adopt / adapt / reject table**; `docs/COMPETITORS.md` has the entry; each adopt call
+is either a registered `docs/ROADMAP.md` item or a named rejection. `git status` shows only the intended
+doc files.
 
 ## If it fails
 - Clone blocked (network, license): do not vendor it; record the blocker in the review and fall back to

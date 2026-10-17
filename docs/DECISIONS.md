@@ -2471,10 +2471,15 @@ repeatedly-failing seat until an explicit `reset`; (d) a **structured incident l
 signals and dedup/correlation windows for `docs/incidents/` + `attention`; (e) **rollback + approval
 fields** on runbook steps (extending ROADMAP 81–88/87, not replacing); (f) **behavioural chaos faults**
 and rogue-detection **entropy/z-score** signals; (g) **orphan detection + credential rotation**; and
-(h) an **advisory→blocking graduation gate** with rollback. Registered as ROADMAP **133–144**.
-**Reject** its Ed25519/DID mesh, execution rings, 0–1000 trust scoring, multi-language SDKs, and
-compliance mappings as wrong-layer for a single-operator local rig; the least-privilege principle is
-already ROADMAP 60.
+(h) an **advisory→blocking graduation gate** with rollback. Registered as ROADMAP **133–144**. A
+follow-up addendum (same session) **corrected the first pass's rejection of "compliance mappings"**: the
+**OWASP Agentic Top 10 (ASI01–ASI10)** is a directly applicable external checklist and is adopted —
+ASI self-assessment (145), security-lint `check` rules (146), deny-by-default per-item budgets (147),
+output screening for secrets + PII (148), reversibility-aware approval (149), and vendored-code
+supply-chain hygiene (150) — registered as ROADMAP **145–150**; the enterprise certification mappings
+(SOC2 / EU AI Act / NIST / ISO) remain out of scope. **Reject** its Ed25519/DID mesh, execution rings,
+0–1000 trust scoring, multi-language SDKs, and multi-tenant isolation as wrong-layer for a
+single-operator local rig; the least-privilege principle is already ROADMAP 60.
 
 **Why.** durig had no single named deny-on-error contract, its degeneration detector is blind to the
 chaotic (high-entropy) pole and can forget a signal once the assessment window moves, `src/supervisor.mjs`
@@ -2495,5 +2500,6 @@ its fail-closed, ratchet, breaker, and incident-lifecycle designs are small, det
 directly onto the live degeneration-guard (#1766–#1769) and crash-proofing (ROADMAP 78) work.
 
 **Status:** accepted by the delegate per `docs/runbooks/competitor-review.md`; items registered
-**not scheduled**; sequencing intent `opr-20261017-agt-review` delivered to `pm`. Review:
-`docs/reviews/agent-governance-toolkit-review.md`; comparators: `docs/COMPETITORS.md`.
+**not scheduled** (ROADMAP 133–150 after the addendum); sequencing intent `opr-20261017-agt-review`
+delivered to `pm`. Review: `docs/reviews/agent-governance-toolkit-review.md`; comparators:
+`docs/COMPETITORS.md`.

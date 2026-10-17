@@ -5,11 +5,12 @@ backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
 _Last refreshed: 2026-10-17 (delegate — **competitor research DONE + clock-out**: reviewed
 `microsoft/agent-governance-toolkit` per `docs/runbooks/competitor-review.md` →
-`docs/reviews/agent-governance-toolkit-review.md` (HEAD `cfb44576`), `docs/COMPETITORS.md` entry, and
-ROADMAP **133–144** registered (security + healing); D96 recorded; sequencing intent
-`opr-20261017-agt-review` delivered to `pm`. The prior active-degeneration-guard intent is registered as
-**#1766** (lead shape ruling) + **#1767/#1768/#1769** (impl, gated). Broker UP pid `34700`, unchanged.
-Everything below the new handover is historical.)_
+`docs/reviews/agent-governance-toolkit-review.md` (HEAD `cfb44576`) + an **OWASP ASI addendum**,
+`docs/COMPETITORS.md` entry, and ROADMAP **133–150** registered (security + healing + the OWASP Agentic
+Top 10 policy surface); D96 recorded (amended for the OWASP adoption); sequencing intents
+`opr-20261017-agt-review` + `-agt-owasp-addendum` delivered to `pm`. The prior active-degeneration-guard
+intent is registered as **#1766** (lead shape ruling) + **#1767/#1768/#1769** (impl, gated). Broker UP pid
+`34700`, unchanged. Everything below the new handover is historical.)_
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; incoming agent: **initial competitor research**)
 
@@ -52,13 +53,19 @@ name the target project** — no target is recorded here.
 ## NEXT SESSION
 
 **Current item:** the operator's **initial competitor research is DONE** for the named target
-`microsoft/agent-governance-toolkit` — review at `docs/reviews/agent-governance-toolkit-review.md`,
-comparators in `docs/COMPETITORS.md`, accepted practices registered as ROADMAP **133–144**, decision
-**D96**, sequencing intent `opr-20261017-agt-review` delivered to `pm`. **No next research target is
+`microsoft/agent-governance-toolkit` — review at `docs/reviews/agent-governance-toolkit-review.md`
+(+ the OWASP ASI addendum), comparators in `docs/COMPETITORS.md`, accepted practices registered as
+ROADMAP **133–150**, decision **D96** (amended), sequencing intents `opr-20261017-agt-review` +
+`opr-20261017-agt-owasp-addendum` delivered to `pm`. **No next research target is
 named** — confirm one with the operator before re-running `competitor-review.md`. In parallel the
 team's active work is unchanged: the active-degeneration-guard **`#1766`** (lead shape ruling) gating
 **`#1767`**/**`#1768`**/**`#1769`** (impl); ROADMAP 135 (monotone ratchet) and 144 (advisory→blocking
-gate) extend that cluster.
+gate) extend that cluster, and 147 (per-item budget) extends the #1766 halt core.
+
+**OWASP follow-up (this session):** the first pass wrongly rejected the project's compliance mappings
+unread; the Addendum now adopts the **OWASP Agentic Top 10 (ASI01–ASI10)** as durig's agent-security
+self-assessment (ROADMAP 145) plus output screening (148), security lint (146), budgets (147),
+reversibility-aware approval (149), and vendored-code supply chain (150).
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
