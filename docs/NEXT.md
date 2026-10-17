@@ -157,6 +157,21 @@ operator/delegate to drive **variant (1)** (stop broker, hand-verify, land outsi
    Existing encoding-debt intent `opr-20261017-roundtrip-docs` still covers the mojibake; do not
    duplicate it. **Mitigation rec (operator-owned):** make doc-acceptance machine-checked (D62 /
    ROADMAP 46), not prose — plus a delegate clock-out docs-drift audit.
+10. **Docs-drift mitigation — (2)+(4) DONE, (3) pending** (operator approved 2026-10-17):
+   - **(2) merge gate tightened** — `docs/runbooks/merge.md` Feature block now requires a `FEATURES.md`
+     row OR an explicit "no feature surface" note; a runbook/README mention no longer suffices
+     (commit `634a5c3`).
+   - **(4) docs-drift audit added** — `merge.md` "Trust, but verify" now carries a read-only block
+     (`git log --grep '^feat'` vs `FEATURES`/`ROADMAP` touches); ran it on the last 30 h, it reproduces
+     the drift (only `cc19f5b`/compact touched `FEATURES.md`). **LIMITS:** `feat` commits only;
+     same-commit touch only; does not cover `DECISIONS.md`, runbooks, `STATUS.md`, or a doc added in a
+     LATER commit.
+   - **(3) machine check — NOT YET SPOOLED** (next delegate action): route to `pm` to register the
+     FEATURES-row half of ROADMAP 46 as a `check` rule.
+   - **Branch-management/merge rules into the canonical docs — OPEN** (operator directive): the merge
+     procedure lives in `merge.md` / W6 / `BRANCH-AUDIT-2026-10-14.md`; nothing yet consolidates the
+     BRANCH LIFECYCLE rules (naming, deletion safety, seatguard refusal, exclusive window). Route the
+     canonical-docs part (`WORKFLOWS.md` W6 / `FEATURES.md`, team-owned) to `pm`.
 
 ## NEXT SESSION
 
