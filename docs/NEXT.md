@@ -6,8 +6,11 @@ backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 _Last refreshed: 2026-10-17 (delegate — **competitor research DONE + clock-out**: reviewed
 `microsoft/agent-governance-toolkit` per `docs/runbooks/competitor-review.md` →
 `docs/reviews/agent-governance-toolkit-review.md` (HEAD `cfb44576`) + an **OWASP ASI addendum**,
-`docs/COMPETITORS.md` entry, and ROADMAP **133–150** registered (security + healing + the OWASP Agentic
-Top 10 policy surface); D96 recorded (amended for the OWASP adoption); sequencing intents
+`docs/COMPETITORS.md` entry, and ROADMAP **133–151** registered (security + healing + the OWASP Agentic
+Top 10 policy surface + the `competitor-review-covered` check rule); D96 recorded (amended for the OWASP
+adoption); `docs/runbooks/competitor-review.md` deepened with paste-ready **triage/deep/re-review**
+prompts, a review header (license/maturity/pin), `observed`/`advertised` evidence classes, anti-patterns,
+and re-review triggers; sequencing intents
 `opr-20261017-agt-review` + `-agt-owasp-addendum` delivered to `pm`. The prior active-degeneration-guard
 intent is registered as **#1766** (lead shape ruling) + **#1767/#1768/#1769** (impl, gated). Broker UP pid
 `34700`, unchanged. Everything below the new handover is historical.)_

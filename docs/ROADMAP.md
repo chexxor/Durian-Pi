@@ -2584,6 +2584,19 @@ ISO) stay out of scope. `pm` sequences these. Registered **not scheduled**. *(14
 registered, with reasons in the addendum): Ed25519/DID mesh, trust scoring, multi-tenant/K8s isolation,
 enterprise certification mappings, disclosure/post-market processes, and SBOM signing.
 
+## Runbook machinery — competitor-review coverage (2026-10-17)
+
+Source: `docs/runbooks/competitor-review.md` "Machinery (proposed)", added while tightening that runbook
+after the OWASP miss. `pm` sequences. Registered **not scheduled**.
+
+151. **`competitor-review-covered` check rule.** Fail when a `docs/reviews/<name>-review.md` whose
+    `vendor/eval/<name>` clone exists has no `docs/COMPETITORS.md` entry, or when a review's pinned HEAD
+    differs from its clone's HEAD. Key on the clone's existence so non-competitor reviews
+    (`security-codemode-review.md`) are not flagged, and do **not** require a review for every
+    `vendor/eval/` clone (that directory also holds dependency/TUI evals). *Owner:* impl · *Where:*
+    `src/checkup.mjs`. *Acceptance:* a missing `COMPETITORS.md` entry, or a stale pin, is a `check`
+    finding. *Cross-links:* the runbook-machinery family ROADMAP 81/82.
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for

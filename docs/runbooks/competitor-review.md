@@ -23,7 +23,18 @@ review that cannot cite the source path is a feature-page summary, not evidence.
 **category** ("compliance", "identity", "the SDKs") without opening a representative artifact in it is
 worse than a feature-page summary: it is a confident dismissal the operator will trust.
 
-## The instruction that shapes a deep review (paste this to the reviewer)
+## Prompts for the reviewer (paste-ready, project-independent)
+
+Three briefs for three moments. Add the project URL and the operator's question to whichever you use.
+
+### 1. Triage — is a deep review even warranted?
+
+> Given `<project url>` and this question — `<question>` — spend one read-only pass deciding whether a
+> full review is worth it. Report: what the project is in two sentences; its license and maturity
+> (stable / preview / archived, and version); the specific durig decisions it could inform; and a
+> recommend / do-not-recommend call with the reason. Do not answer the question yet.
+
+### 2. Deep review — the default brief
 
 > Read the project the way its own maintainers ordered it, not just where my question points. Before you
 > summarize, produce: (1) an inventory of the project's documentation surface — every `docs/` index and
@@ -33,12 +44,20 @@ worse than a feature-page summary: it is a confident dismissal the operator will
 > whole category without opening a representative artifact in it; (3) the project's own
 > coverage/self-assessment tables and the gaps it admits, mapped onto our mechanisms; (4) a coverage
 > matrix of our system against the project's claimed controls (have / lack / not-applicable). Cite a path
-> per claim; name anything you could not verify rather than adopting it.
+> per claim, mark each mechanism `observed` (you read the code) or `advertised` (docs only), and name
+> anything you could not verify rather than adopting it.
 
-That prompt is deliberately project-independent: it forces the reviewer to walk the *project's* surface
-rather than the *question's* keywords — which is precisely the step whose absence produces a missed
-standard like OWASP ASI.
+### 3. Re-review — what changed since the pinned HEAD?
 
+> The review at `docs/reviews/<name>-review.md` was pinned at `<old HEAD>`. Read only what changed
+> between that commit and `<new HEAD>` (`git -C vendor/eval/<name> log --oneline <old>..<new>`), then
+> update the review, the `docs/COMPETITORS.md` entry, and any ROADMAP item the change affects. Do not
+> re-read the unchanged tree; do not re-derive the verdict.
+
+These briefs are deliberately project-independent: they force the reviewer to walk the *project's*
+surface rather than the *question's* keywords — the step whose absence produces a missed standard (the
+OWASP ASI miss, 2026-10-17). Prompt 3 exists because a shallow clone is a snapshot: the review is only
+as true as its pin.
 ## Preconditions
 - Read-only: **do not run the project's code**, install its dependencies, or modify this repo other than
   the docs named below.
@@ -58,13 +77,20 @@ rg -n "<project>" docs/COMPETITORS.md
    ```bash
    git clone --depth 1 https://github.com/<org>/<project>.git vendor/eval/<name>
    ```
-2. **Pin the commit you read** so every claim is reproducible:
+2. **Pin the commit and open the review with a header.** Every claim must be reproducible, and a borrowed
+   mechanism must be legally borrowable:
    ```bash
-   git -C vendor/eval/<name> rev-parse HEAD
+   git -C vendor/eval/<name> rev-parse HEAD        # pinned commit
+   git -C vendor/eval/<name> log -1 --format=%cI   # commit date
    ```
+   Record at the top of the review: **pinned HEAD + date · license · maturity · project version · the
+   operator's question**. Maturity matters: a `public-preview`/`alpha` project often ships its spec ahead
+   of its code (AGT did). Check the license **before** borrowing — MIT/Apache is borrowable with
+   attribution; a copyleft or missing license is an escalation (below), not a quiet copy.
 3. **Read the project's own docs and source**, not aggregators. Prefer the docs directory the project
    maintains (for a docs-site repo, the `website/docs/` or `docs/` tree) and the source file that
-   implements each mechanism. Cite a **path per claim**.
+   implements each mechanism. Cite a **path per claim**, and mark each mechanism **`observed`** (you
+   opened the code) or **`advertised`** (docs only) — the spec is not the implementation.
 4. **Walk the project's own documentation surface, in the order its maintainers present it.** Open every
    top-level doc index and "start here" page (`docs/index.md`, `docs/*/index.md`, a docs-site `nav:` in
    `mkdocs.yml`, an ADR index) and enumerate what it points to — **including security, compliance,
@@ -78,21 +104,57 @@ rg -n "<project>" docs/COMPETITORS.md
    or "the SDKs", open at least one representative artifact in it and cite what it actually contains.
    Extract the project's own **coverage/self-assessment table and the gaps it admits** — that honesty is
    the highest-value input, because it maps directly onto our gaps.
-6. **Write `docs/reviews/<name>-review.md`**: what it is; adoptable practices as a table (practice ·
-   evidence path · durig counterpart); a **coverage matrix of durig against the project's claimed control
-   set** (have / lack / not-applicable); where it does **not** fit our constraints; and an explicit
-   adopt / adapt / reject call per practice **and per standard** from step 5.
+6. **Write `docs/reviews/<name>-review.md`**: what it is (with the header from step 2); adoptable
+   practices as a table (practice · evidence path · durig counterpart); a **coverage matrix of durig
+   against the project's claimed control set** (have / lack / not-applicable); where it does **not** fit
+   our constraints; and an explicit adopt / adapt / reject call per practice **and per standard** from
+   step 5. Each adopt names the durig mechanism it would change, and calls out a conflict with a
+   recorded `docs/DECISIONS.md` entry rather than silently contradicting one.
 7. **Add or update its `docs/COMPETITORS.md` entry** (the maintained list). One row per decision, with the
    durig counterpart it should change or inform, and the pinned HEAD + cited paths.
 8. **Register the accepted practices as ROADMAP items** (`registered, not scheduled`) with owner and
    acceptance; reject the rest in the review with a reason. See `research-request.md` step 3.
+9. **Close the topic.** If questions remain, write `docs/reviews/<name>-followup-research-prompt.md` for
+   the operator's research agent (per `research-request.md` step 4); if it is genuinely closed, say so in
+   the review rather than leaving an implicit open loop.
 
 ## Verify
-`vendor/eval/<name>` is cloned and its HEAD pinned; every claim in the review cites a path in that tree;
-the review carries a **surface-inventory table**, a **"not read" list**, a **durig coverage matrix**,
-and a **per-standard adopt / adapt / reject table**; `docs/COMPETITORS.md` has the entry; each adopt call
-is either a registered `docs/ROADMAP.md` item or a named rejection. `git status` shows only the intended
-doc files.
+`vendor/eval/<name>` is cloned and its HEAD pinned; the review carries the **header** (HEAD + date, license,
+maturity, version, the question); every claim cites a path in that tree and is marked **`observed`** or
+**`advertised`**; the review carries a **surface-inventory table**, a **"not read" list**, a **durig
+coverage matrix**, and a **per-standard adopt / adapt / reject table**; `docs/COMPETITORS.md` has the
+entry; each adopt call is either a registered `docs/ROADMAP.md` item or a named rejection; and any open
+question has a follow-up prompt or an explicit "closed". `git status` shows only the intended doc files.
+
+## Anti-patterns (do not)
+
+| Anti-pattern | Why it fails |
+|---|---|
+| **Category dismissal** — "reject compliance/identity/the SDKs" without an opened artifact | The 2026-10-17 OWASP miss; a confident wrong finding |
+| Reading aggregators, blog posts, or the project's README instead of its tree | A feature-page summary, not evidence |
+| No pinned HEAD (or a bare branch name) | Claims are not reproducible; a re-review cannot diff |
+| Treating the spec as the implementation | Preview projects ship specs ahead of code (AGT `HALF_OPEN`, quarantine) |
+| Adopting a mechanism you could not verify from the tree | Adoption on faith; name it unverified instead |
+| Summarising without a durig counterpart per practice | Not actionable; no item can be registered |
+| Burying the license until borrowing time | A copyleft surprise after the code is written |
+| Leaving open questions implicit | The topic never closes; the next reviewer re-derives it |
+
+## Re-review (trigger-based)
+
+Re-run brief 3 when (a) upstream moves past the pinned HEAD **and** commits touch a mechanism we adopted
+or rejected; (b) a durig mechanism the review named changes; or (c) a `check` rule it references changes.
+Do not re-review on a calendar. A review whose pin is stale for an adopted mechanism is a stale doc.
+
+## Machinery (proposed)
+
+Enforcement belongs in `check` (ROADMAP 81/82), not in this prose: a **`competitor-review-covered`** rule
+that fails when (a) a `docs/reviews/<name>-review.md` whose `vendor/eval/<name>` clone exists has no
+`docs/COMPETITORS.md` entry, or (b) a review's pinned HEAD differs from its `vendor/eval/<name>` clone's
+HEAD. Keying on the clone's existence avoids flagging non-competitor reviews under `docs/reviews/`
+(e.g. `security-codemode-review.md`). It deliberately does **not** require every `vendor/eval/` clone to
+have a review — that directory also holds dependency/TUI evals (`ansi-regex`, `bubbletea`, `node-pty`, …)
+that are not competitor reviews. Until the rule lands, the read-only audit is: every competitor review
+has an entry, and its pin matches its clone.
 
 ## If it fails
 - Clone blocked (network, license): do not vendor it; record the blocker in the review and fall back to
