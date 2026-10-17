@@ -8,6 +8,13 @@
 // passes `force` (D60: never discard a seat's work). A dirty orphan is reported and
 // kept.
 //
+// #1194 NARROWED what counts as an orphan. A worktree that is LOCKED is held deliberately,
+// and one with a BRANCH CHECKED OUT is a live seat's workspace (durig puts every item worktree
+// ON its item branch, #859) whose removal made the seat's tools fall back to the SHARED tree
+// (2026-10-17: #1186, #1196). The sweep now reports and KEEPS both (`worktree-orphan-kept`).
+// So the genuinely reapable orphan here is DETACHED and unlocked; the locked/branch-held keep
+// is covered end-to-end by demo/worktree-sweep.test.mjs.
+//
 // Failing-first: HEAD's `removeClaimedWorktree` ignored uncommitted work and would
 // have removed the dirty orphan; `reconcileOrphanedWorktrees` did not exist.
 // Run: node demo/broker-worktree-sweep.test.mjs  (exit 0 = pass)
@@ -37,9 +44,10 @@ try {
 	await git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init");
 
 	// item-1 is live (claimed); item-2 is a clean orphan; item-3 is a dirty orphan.
-	for (const id of [1, 2, 3]) {
-		await git(repo, "worktree", "add", "-q", "-b", `item${id}`, wt(id));
-	}
+	// #1194: only a DETACHED, unlocked worktree is reapable now — a branch-checked-out one is kept.
+	await git(repo, "worktree", "add", "-q", "-b", "item1", wt(1));
+	await git(repo, "worktree", "add", "-q", "--detach", wt(2));
+	await git(repo, "worktree", "add", "-q", "--detach", wt(3));
 	writeFileSync(join(wt(3), "shared.txt"), "uncommitted work\n");
 
 	// The guard refuses a dirty worktree unless the caller forces it (D60).

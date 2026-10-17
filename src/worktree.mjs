@@ -677,11 +677,15 @@ export async function listWorktrees(repoPath) {
 			if (key === "branch") current.branch = value || null;
 			if (key === "locked") current.locked = true;
 			if (line === "" && current.worktree) {
-				worktrees.push({ ...current, locked: false });
+				// Normalize the DEFAULTS FIRST and let the parsed values override them: the old
+				// `{ ...current, locked: false }` put the default LAST, so a `locked` line parsed
+				// from `git worktree list` was always overwritten and NO caller could ever see a
+				// locked worktree (#1194 — which is how the orphan sweep reaped one).
+				worktrees.push({ branch: null, locked: false, ...current });
 				current = {};
 			}
 		}
-		if (current.worktree) worktrees.push({ ...current, locked: false });
+		if (current.worktree) worktrees.push({ branch: null, locked: false, ...current });
 		return worktrees;
 	} catch {
 		return [];

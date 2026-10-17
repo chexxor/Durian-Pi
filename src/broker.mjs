@@ -222,6 +222,17 @@ export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, onDiag
     if (!match) continue;
     const itemId = Number(match[1]);
     if (liveItemIds.has(itemId)) continue;
+    // #1194: an item's STATUS alone is not enough to call its worktree an orphan. A worktree
+    // that is LOCKED is held deliberately, and one with a BRANCH CHECKED OUT carries that
+    // branch's commits (a durig item worktree is put ON its item branch, #859, and its commits
+    // are unlanded until the landing pass runs). Reaping one is what removed a live seat's
+    // workspace, made its tools fall back to the SHARED tree, and put a commit straight on main
+    // (2026-10-17, twice: #1186, #1196). Neither is an orphan; report and keep.
+    const held = wt.locked ? "locked" : wt.branch ? "branch-checked-out" : null;
+    if (held) {
+      onDiagnostic?.({ kind: "worktree-orphan-kept", itemId, worktree: wt.worktree, reason: held });
+      continue;
+    }
     const result = await removeClaimedWorktree({ worktree: wt.worktree });
     if (result?.removed) removed.push(itemId);
     else {
