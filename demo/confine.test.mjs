@@ -214,6 +214,50 @@ try {
 		);
 	}
 
+	// #1211 part 1: branch REF ops are exempt. Create (how a commit gets anchored), rename and
+	// SAFE delete do not touch the working tree, and `-d` is safe by git's own semantics (git
+	// refuses to delete an unmerged branch). Only the FORCE delete stays blocked.
+	for (const command of [
+		"git branch impl-item-1217 main",
+		"git branch -m old-name new-name",
+		"git branch -d merged-topic",
+		"git branch --delete merged-topic",
+		"git -C . branch -d merged-topic",
+	]) {
+		const allowed = await author.exec(command, {}, context);
+		check(
+			`${command} is allowed (branch ref-op)`,
+			!/refused by durig/.test(allowed.error?.message ?? ""),
+			JSON.stringify(allowed.ok ? "ran" : allowed.error?.message),
+		);
+	}
+	for (const command of [
+		"git branch -D unmerged-topic",
+		"git branch --delete --force unmerged-topic",
+		"git -C . branch -D unmerged-topic",
+	]) {
+		const refused = await author.exec(command, {}, context);
+		check(
+			`${command} is refused (force delete)`,
+			refused.ok === false && /refused by durig/.test(refused.error?.message ?? ""),
+			JSON.stringify(refused.ok ? refused.value : refused.error?.message),
+		);
+	}
+
+	// #1211 part 2: the guard matches the ACTUAL invocation, not text inside a quoted argument.
+	// A commit message that merely documents the refused form must not itself be refused.
+	for (const command of [
+		'git commit -m "docs: explain that git branch -d is safe"',
+		'git commit -m "the guard blocks git branch -D"',
+	]) {
+		const allowed = await author.exec(command, {}, context);
+		check(
+			`${command} is allowed (quoted text is not an invocation)`,
+			!/refused by durig/.test(allowed.error?.message ?? ""),
+			JSON.stringify(allowed.ok ? "ran" : allowed.error?.message),
+		);
+	}
+
 	console.log("\nSC2 — the verifier cannot mutate what it verifies");
 	const authorWrite = await author.writeFile(join(root, "author.txt"), "ok", context);
 	check("an author can write inside the worktree", authorWrite.ok === true);

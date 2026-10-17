@@ -31,12 +31,145 @@ import { ExecutionError, FileError, err, ok } from "@earendil-works/pi-durable/e
  * only that child process - never this one - so reading `process.env` here is the only gate a
  * seat cannot reach.
  */
+/**
+ * A bounded shell tokenizer: split a command into per-segment token lists, honouring
+ * single/double quotes and treating `;`, `&`, `|`, `(`, `)` and newlines as segment
+ * separators. Quoted content becomes part of a token and is NEVER re-read as a command,
+ * which is what stops a quoted commit message from being mistaken for an invocation
+ * (#1211). Perfect shell parsing is out of scope; this is enough to place the git
+ * subcommand at the command position.
+ */
+function shellSegments(text) {
+	const segments = [];
+	let tokens = [];
+	let cur = "";
+	let quote = null;
+	const flush = () => {
+		if (cur !== "") {
+			tokens.push(cur);
+			cur = "";
+		}
+	};
+	const end = () => {
+		flush();
+		if (tokens.length > 0) segments.push(tokens);
+		tokens = [];
+	};
+	for (let i = 0; i < text.length; i++) {
+		const ch = text[i];
+		if (quote !== null) {
+			if (ch === quote) {
+				quote = null;
+				continue;
+			}
+			if (quote === '"' && ch === "\\" && i + 1 < text.length) {
+				cur += text[++i];
+				continue;
+			}
+			cur += ch;
+			continue;
+		}
+		if (ch === '"' || ch === "'") {
+			quote = ch;
+			continue;
+		}
+		if (ch === "\\" && i + 1 < text.length) {
+			cur += text[++i];
+			continue;
+		}
+		if (ch === ";" || ch === "|" || ch === "&" || ch === "\n" || ch === "(" || ch === ")") {
+			end();
+			continue;
+		}
+		if (ch === " " || ch === "\t" || ch === "\r") {
+			flush();
+			continue;
+		}
+		cur += ch;
+	}
+	end();
+	return segments;
+}
+
+/**
+ * The git subcommand and its arguments, skipping git's global options (and the value an
+ * option like `-C <path>` consumes) so `git -C x branch -D` reads as `branch`.
+ */
+function gitSubcommand(args) {
+	const VALUE_GLOBALS = new Set([
+		"-C",
+		"-c",
+		"--git-dir",
+		"--work-tree",
+		"--namespace",
+		"--exec-path",
+		"--config-env",
+	]);
+	let i = 0;
+	while (i < args.length) {
+		const t = args[i];
+		if (VALUE_GLOBALS.has(t)) {
+			i += 2;
+			continue;
+		}
+		if (t.startsWith("-")) {
+			i += 1;
+			continue;
+		}
+		break;
+	}
+	return { sub: args[i], rest: args.slice(i + 1) };
+}
+
+/**
+ * True when the command FORCE-deletes a branch: `git branch -D …`, or a delete flag
+ * (`-d`/`--delete`) combined with `-f`/`--force`. Branch CREATE (`git branch <name> <sha>`),
+ * RENAME (`-m`) and SAFE DELETE (`git branch -d`, which git refuses for an unmerged branch)
+ * are ref-ops that do not touch the working tree, so they are allowed (#1211). The match is
+ * anchored at the COMMAND position and skips quoted content, so a commit message containing
+ * the literal text is not mistaken for an invocation.
+ */
+function branchForceDelete(text) {
+	for (const tokens of shellSegments(text)) {
+		const head = tokens[0]?.toLowerCase();
+		if (head !== "git" && head !== "git.exe") continue;
+		const { sub, rest } = gitSubcommand(tokens.slice(1));
+		if (sub !== "branch") continue;
+		let del = false;
+		let force = false;
+		for (const t of rest) {
+			if (t === "--delete") {
+				del = true;
+				continue;
+			}
+			if (t === "--force") {
+				force = true;
+				continue;
+			}
+			if (t.startsWith("--")) continue;
+			if (t.startsWith("-") && t.length > 1) {
+				const flags = t.slice(1);
+				if (flags.includes("D")) {
+					del = true;
+					force = true;
+				}
+				if (flags.includes("d")) del = true;
+				if (flags.includes("f")) force = true;
+			}
+		}
+		if (del && force) return true;
+	}
+	return false;
+}
+
 const DENIED_COMMANDS = [
 	{ re: /(^|[\s;&|"'()])wsl(\.exe)?([\s"'()]|$)/i, why: "WSL is unsupported on this host" },
 	{ re: /(^|[\s;&|"'()])docker(-compose)?(\.exe)?([\s"'()]|$)/i, why: "Docker is unsupported on this host" },
 	// State-mutating git the operator controls: a seat produces files in its worktree and the
 	// operator integrates them. A seat may commit its own work (scoped to its item) but cannot
-	// reset, re-checkout, stash, clean, revert, or delete branches — those diverge the tree.
+	// reset, re-checkout, stash, clean, revert, or force-delete branches — those diverge the tree.
+	// Branch ref-ops that do NOT touch the working tree (create/rename/`-d`) are allowed; only
+	// the FORCE delete (`-D`, or a delete flag with `--force`) stays blocked (#1211).
 	// Read-only git (status/log/diff/show/rev-parse) is deliberately NOT matched.
 	// Bypass prevention: each pattern ends in \b (word boundary) or an explicit separator
 	// class so trailing punctuation (git stash;) or separators (&&, |) cannot defeat the
@@ -49,7 +182,10 @@ const DENIED_COMMANDS = [
 	{ re: /git\s+revert\b/i, why: "would rewrite committed work" },
 	{ re: /git\s+clean\b/i, why: "would discard untracked work" },
 	{ re: /git\s+stash\b/i, why: "would move uncommitted work out of the tree" },
-	{ re: /git\s+branch\s+(-D|-d|--delete)\b/i, why: "would delete a branch" },
+	{
+		check: branchForceDelete,
+		why: "would force-delete a branch (`-D`/`--force`) — the safe `git branch -d` and branch create/rename are allowed",
+	},
 	// Unscoped staging would sweep up files outside the current item — in a shared tree
 	// this includes other seats' and the operator's uncommitted work. Even in an item's
 	// worktree, `git add -A` can accidentally stage scratch or temp files. Stage only
@@ -71,7 +207,7 @@ const DENIED_COMMANDS = [
 	{ re: /git\s+-C\s+\S+\s+revert\b/i, why: "same as `git revert` — rewrites committed work" },
 	{ re: /git\s+-C\s+\S+\s+clean\b/i, why: "same as `git clean` — discards untracked work" },
 	{ re: /git\s+-C\s+\S+\s+stash\b/i, why: "same as `git stash` — moves uncommitted work out of the tree" },
-	{ re: /git\s+-C\s+\S+\s+branch\s+(-D|-d|--delete)\b/i, why: "same as `git branch -D` — deletes a branch" },
+
 	// Unscoped staging redirected to another directory.
 	{ re: /git\s+-C\s+\S+\s+add\s+-A\b/i, why: "unscoped staging redirected" },
 	{ re: /git\s+-C\s+\S+\s+add\s+\.(?:$|[\s;&|"'()])/i, why: "unscoped staging redirected" },
@@ -129,8 +265,8 @@ function pickEnv(requested, allowlist) {
 /** The refusal a seat sees, phrased so it can act on it rather than retry blindly. */
 function refusalFor(command) {
 	const text = Array.isArray(command) ? command.join(" ") : String(command);
-	for (const { re, why, unless } of DENIED_COMMANDS) {
-		if (!re.test(text)) continue;
+	for (const { re, why, unless, check } of DENIED_COMMANDS) {
+		if (!(check ? check(text) : re.test(text))) continue;
 		if (unless?.() === true) continue;
 		return `refused by durig: ${why} — to test without your change, run the test RED BEFORE the fix, or use a throwaway detached worktree / temp copy (never revert the shared tree)`;
 	}
