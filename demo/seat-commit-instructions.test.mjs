@@ -19,6 +19,12 @@ const starter = JSON.parse(readFileSync(join(durigDir, "rig.starter.json"), "utf
 const selfdev = JSON.parse(readFileSync(join(durigDir, "rig.selfdev.json"), "utf8"));
 const constitution = readFileSync(join(durigDir, "constitution.txt"), "utf8");
 
+// AUTHOR WARNING (#977, D83): a byte-equality compare MUST be EOL-insensitive. This repo has
+// core.autocrlf=true, so the LF blob is checked out as CRLF while a JSON-parsed inline copy
+// carries LF — a raw `a === b` then flakes by platform/checkout. Normalize CRLF->LF on BOTH
+// sides before comparing (the file-scoped .gitattributes half is a separate item, #1055).
+const lf = (text) => String(text ?? "").replace(/\r\n/g, "\n");
+
 let failures = 0;
 function check(label, ok, detail = "") {
   if (ok) console.log(`  ok   ${label}`);
@@ -51,11 +57,13 @@ try {
     /if your item has no worktree/i.test(constitution) &&
     /not commit from the shared tree/i.test(constitution));
 
-  // 2. Mirror integrity: byte-for-byte across the three surfaces.
-  check("rig.starter.json constitutionInline === constitution.txt bytes",
-    starter.constitutionInline === constitution);
-  check("rig.selfdev.json constitutionInline === constitution.txt bytes",
-    selfdev.constitutionInline === constitution);
+  // 2. Mirror integrity across the three surfaces — EOL-insensitive (#977/D83).
+  check("rig.starter.json constitutionInline === constitution.txt (EOL-insensitive)",
+    lf(starter.constitutionInline) === lf(constitution),
+    "content differs after EOL normalization — regenerate the starter (#976)");
+  check("rig.selfdev.json constitutionInline === constitution.txt (EOL-insensitive)",
+    lf(selfdev.constitutionInline) === lf(constitution),
+    "content differs after EOL normalization — re-point the selfdev inline (#975)");
 
   // 3. EVERY seat in the self-dev rig carries the block.
   check("selfdev has seats", Array.isArray(selfdev.seats) && selfdev.seats.length > 0);

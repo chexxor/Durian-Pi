@@ -20,6 +20,11 @@ const durigDir = process.cwd();
 const starter = JSON.parse(readFileSync(join(durigDir, "rig.starter.json"), "utf8"));
 const selfdev = JSON.parse(readFileSync(join(durigDir, "rig.selfdev.json"), "utf8"));
 const constitution = readFileSync(join(durigDir, "constitution.txt"), "utf8");
+// AUTHOR WARNING (#977, D83): a byte-equality compare MUST be EOL-insensitive. This repo has
+// core.autocrlf=true, so the LF blob is checked out as CRLF while a JSON-parsed inline copy
+// carries LF — a raw `a === b` then flakes by platform/checkout. Normalize CRLF->LF on BOTH
+// sides before comparing (the file-scoped .gitattributes half is a separate item, #1055).
+const lf = (text) => String(text ?? "").replace(/\r\n/g, "\n");
 
 const MODEL_REQUIRED = [
   "one commit per concern",
@@ -49,8 +54,12 @@ try {
     }
   }
 
-  check("starter constitutionInline === constitution.txt", starter.constitutionInline === constitution);
-  check("selfdev constitutionInline === constitution.txt", selfdev.constitutionInline === constitution);
+  check("starter constitutionInline === constitution.txt (EOL-insensitive)",
+    lf(starter.constitutionInline) === lf(constitution),
+    "content differs after EOL normalization — regenerate the starter (#976)");
+  check("selfdev constitutionInline === constitution.txt (EOL-insensitive)",
+    lf(selfdev.constitutionInline) === lf(constitution),
+    "content differs after EOL normalization — re-point the selfdev inline (#975)");
 
   console.log(failures === 0
     ? "\nPASS — commit model documented in the constitution and every seat's instructions"
