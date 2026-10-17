@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-10-17
 verified_by: security
-evidence: "#1322 (section-anchor conformance check against the #1295 codemode position at 4cba82f; Verify run 2026-10-17)"
+evidence: "#1322 (section-anchor conformance check against the #1295 codemode pair on branch security-item-1322 at daa4594; Verify run 2026-10-17)"
 check_rule: null
 ---
 
@@ -113,8 +113,12 @@ the same two greps against its own artifact.
   as #1318 — #1297's "one runbook" wording revised); the method MOVED here from `leaked-secret.md`,
   not duplicated. Branch `security-item-1322` carries `82337e0` (the #1300 runbook commit) as
   ancestor via the item's own merge step.
-- Verify actually ran 2026-10-17: the section-anchor conformance greps above executed against the
-  codemode pair (`docs/reviews/security-codemode-position.md` @ `4cba82f` + the input round) —
-  4 anchors in the position, `Threat model` in the round, both commands exit 0.
+- Verify actually ran 2026-10-17 ON BRANCH `security-item-1322` at `daa4594`: the
+  section-anchor conformance greps above executed against the codemode pair
+  (`docs/reviews/security-codemode-position.md` — 4 anchors — plus the input round's
+  `Threat model` heading), both exits 0. The codemode position (`4cba82f`, branch
+  `security-item-1295`) was carried in as the item's second merge so the Verify runs against real
+  artifacts from this branch; any future checkout of this runbook must run against artifacts it
+  actually contains.
 - Method exercised end-to-end by its own artifacts: `security-codemode-position.md` (E1–E14 ratified
   with corrections, Q1–Q6 answered, Gates G1–G8) and `leaked-secret.md`.
