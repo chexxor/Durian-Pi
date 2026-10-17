@@ -19,6 +19,8 @@ registered. Everything below this block is historical.)_
    research requested. Commits `1702b72`, `c91692b`, `26ab58b`.
 2. **Runbook discoverability** added to `AGENTS.md`, the durig skill, and `constitution.txt` **P3
    Runbooks** (read the matching runbook before improvising, not just author). Commit `fa4b22f`; D90.
+   The starter's inline constitution was synced afterward (`rig.starter.json`, commit `b52133f`) — the
+   P3 Runbooks rewrite had broken the 3 constitution-drift demos, now `demo/*.test.mjs` 115/0.
 3. **Seat constitution reload DONE (forced, operator-authorised):** with two genlocks held, backed up the
    store (`.spike/delegate/store-backup-20261017-054314`), force-killed the broker, ran `up --refresh`
    (9 seats, `constitution.changed=true`, no model resets), `resume` (recovered qa #50734 / impl #51153),
