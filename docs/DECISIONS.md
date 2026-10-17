@@ -1478,9 +1478,9 @@ elease_work tools and holderOf/status whitelists in src/rig.mjs; the held-not-cl
 **CODE FLAG (contradiction — recorded rather than asserted blindly):** the decision as supplied listed commit and merge/
 ebase among the blocked verbs. The CURRENT code does NOT block those: git commit is ALLOWED by design (D50 moved commit authority to the developer; demo/confine.test.mjs asserts "git commit is allowed"), and merge/
 ebase are not in the deny list. What IS actually blocked (verified in src/confine.mjs DENIED_COMMANDS, and by demo/confine.test.mjs/demo/seatguard.test.mjs, both exit 0): 
-eset, checkout, 
-estore, 
-evert, clean, stash, branch -D, unscoped add -A/add ., and push (push exempt only with the operator's DURIG_ALLOW_PUSH=1), plus the -C <path> forms. If merge/
+reset, checkout, switch, 
+restore, 
+revert, clean, stash, branch -D, unscoped add -A/add ., and push (push exempt only with the operator's DURIG_ALLOW_PUSH=1), plus the -C <path> forms (including `git switch` and `git -C <path> switch`). If merge/
 ebase (and reverting commit) are intended to be blocked, that is a NEW change to request — it is not current behaviour.
 **Status:** adopted for the code-true core (destructive git + push blocked, read-only allowed); the commit/merge/rebase clauses flagged as not code-true and NOT recorded as current behaviour.
 
