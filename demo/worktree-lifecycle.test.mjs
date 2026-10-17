@@ -77,8 +77,11 @@ try {
 
   // --- 4. listWorktrees shows the worktree ---
   const listed = await listWorktrees(wt.repo);
+  // #1453: identity is the PATH, not a substring. `item-10` contains `item-1`, and so does any
+  // cwd that names a seat worktree (`item-1444`) — the repo's OWN root is such a path. Match the
+  // exact resolved path instead of `includes`.
   check("listWorktrees shows our worktree",
-    listed.some(l => l.worktree.includes("item-1")),
+    listed.some(l => resolve(l.worktree) === resolve(wt.worktree)),
     JSON.stringify(listed));
 
   // --- 5. removeClaimedWorktree ---
@@ -89,7 +92,7 @@ try {
   // --- 6. verify no residual worktree metadata ---
   const stillListed = await listWorktrees(wt.repo);
   check("removed worktree no longer listed",
-    !stillListed.some(l => l.worktree.includes("item-1")),
+    !stillListed.some(l => resolve(l.worktree) === resolve(wt.worktree)),
     JSON.stringify(stillListed));
 
   // --- 7. worktree creation fails on existing path ---
@@ -102,6 +105,23 @@ try {
     check("claimWorktree refuses existing path", true, err.message.slice(0, 50));
   } finally {
     await removeClaimedWorktree({ worktree: wt2.worktree, force: true });
+  }
+
+  // --- 8. #1453 regression: a path SUBSTRING is not item identity ---
+  // `item-10` CONTAINS `item-1`, and the repo's own root contains `item-1` whenever the suite is
+  // run from a seat worktree like `item-1444`. The old `!includes("item-1")` assertion therefore
+  // could not hold while either existed — that is the false-fail. Identity matching must ignore it.
+  const wt10 = await claimWorktree({ source: testDir, worktreeRoot, itemLabel: "item-10" });
+  try {
+    const entries = await listWorktrees(wt10.repo);
+    check("identity: exactly one entry is item-10's worktree",
+      entries.filter(l => resolve(l.worktree) === resolve(wt10.worktree)).length === 1,
+      JSON.stringify(entries));
+    check("the OLD substring form matches item-10's path too (the #1453 false-positive)",
+      entries.some(l => l.worktree.includes("item-1")),
+      JSON.stringify(entries.map(l => l.worktree)));
+  } finally {
+    await removeClaimedWorktree({ worktree: wt10.worktree, force: true });
   }
 
   console.log(failures === 0
