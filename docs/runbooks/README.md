@@ -5,7 +5,9 @@ runbook when woken into a situation it does not own). A runbook is an operating 
 doc: the design lives in `BROKER-ARCHITECTURE.md` / `BROKER-SUPERVISION.md` /
 `COMMANDS-AND-THE-BROKER.md`; this directory is *what to do*.
 
-**Reviewed against research:** `docs/reviews/runbooks-sop-best-practices.md`. durig's skeleton already
+**Reviewed against research:** `docs/reviews/runbooks-sop-best-practices.md`. The merge/conflict procedure
+(`merge.md`, `resolve-merge-conflict.md`) additionally incorporates `docs/reviews/llm-prompting-for-git-merging.md`
+(deterministic-first, per-hunk resolution with abstention, 3-way context). durig's skeleton already
 matched published practice; the research's real finding is that the missing part is **machinery** —
 nothing enforces the conventions or detects rot, and the one guardrail that matters (never proceed on a
 false `stopped` signal) is prose, which failed twice on 2026-10-16. The conventions below incorporate
@@ -107,6 +109,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [degeneration-guard.md](degeneration-guard.md) | a seat was auto-reset (`pi.reset` naming `degenerate-text=...`); tell a real loop from a false positive, or add a shape | no |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
+| [resolve-merge-conflict.md](resolve-merge-conflict.md) | a merge/landing pass stopped with conflict markers; the tree is mid-merge | no |
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
 | [research-request.md](research-request.md) | you need external research | no |
 
@@ -119,6 +122,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | Seats | seat-reset, compact-a-seat |
 | Write guard / source files | write-corruption-recovery |
 | Worktrees | leaked-worktrees |
+| Merge / conflicts | merge, resolve-merge-conflict |
 | Daemon / host | daemon-not-running |
 | Research | research-request |
 
