@@ -52,6 +52,11 @@ main. The store is now FREE (no `genlock.*`, no `serve`/`run`/`send` process, no
 a seat hosted BY the broker cannot stop that broker and then keep landing; #1390's GO needs a landing path
 that runs OUTSIDE the broker (or the broker restarted and the pass re-driven once the upgrade is done).
 
+**Re-drive NOTED for pm (operator-requested):** intent `opr-20261017-redrive-1390` spooled
+(`.spike/delegate/intent-redrive-landing-1390.md`) — re-route #1390 with a landing path outside the
+broker, account for #1383, verify each tip. It sits in `selfdev.sqlite.broker.inbox/` until the broker
+restarts (operator is taking a broker upgrade).
+
 ## NEXT SESSION
 
 **Current item (clock-out):** the store is QUIESCENT and free — broker exited (`EXIT pid=37376
