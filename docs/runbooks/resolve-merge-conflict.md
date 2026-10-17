@@ -19,7 +19,7 @@ files carry `<<<<<<<` markers.
 An unresolved shared tree breaks `cli.mjs` for the whole rig: `cli.mjs` statically imports
 `src/checkup.mjs` (and `src/metrics.mjs`/`src/seattools.mjs` import it too), so a conflict there makes
 **every** `node cli.mjs` verb a `SyntaxError`. This is the 2026-10-17 landing-safety incident
-(`docs/reviews/landing-safety-2026-10-17.md`).
+(`docs/incidents/2026-10-17-landing-safety.md`).
 
 ## Preconditions
 - **Resolve in a scratch/detached worktree, not the shared tree.** The `Diagnose` and pre-flight commands

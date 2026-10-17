@@ -26,7 +26,7 @@ verified branches** directly into the shared `main` working tree while the rig w
 `impl-item-714` conflicted, the tree held `.git/MERGE_HEAD` plus `<<<<<<<` markers in `src/checkup.mjs`;
 because `cli.mjs` statically imports `checkup.mjs`, **every** `node cli.mjs` verb became a `SyntaxError`
 until it was resolved. The conflict itself was routine and resolved to a **union** of both sides.
-Full analysis: `docs/reviews/landing-safety-2026-10-17.md`.
+Full analysis: `docs/incidents/2026-10-17-landing-safety.md`.
 
 **Our constraints (the first pass could not account for these):**
 - **Models:** seats resolve to `deepseek-ai/DeepSeek-V4.1-Flash` and `zai-org/GLM-5.3-Flash` on
@@ -144,7 +144,7 @@ not externally answerable, say so and mark it **internal — unverified** rather
 
 - **Written report only; do not modify code.**
 - Baseline to read: `docs/reviews/llm-prompting-for-git-merging.md`,
-  `docs/reviews/landing-safety-2026-10-17.md`, `docs/runbooks/merge.md`,
+  `docs/incidents/2026-10-17-landing-safety.md`, `docs/runbooks/merge.md`,
   `docs/runbooks/resolve-merge-conflict.md`, `docs/ROADMAP.md` items 100–101, and the vendored
   pi-durable `dist/tools/edit.js` (the exact-match edit that returns a `patch`).
 - Prefer primary sources (papers, provider docs, first-party engineering blogs) over aggregators; say when

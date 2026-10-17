@@ -1,3 +1,15 @@
+---
+incident: landing-safety
+date: 2026-10-17
+severity: sev1
+status: resolved
+symptom: "every node cli.mjs verb fails to load; the shared tree is left mid-merge"
+runbook: merge
+fix: "#1165/#1171 (scripts/land.mjs)"
+prevention: "scripts/land.mjs + demo/land-helper.test.mjs"
+last_reviewed: 2026-10-17
+---
+
 # Landing safety — keep the shared working tree out of a conflicted merge
 
 *Incident 2026-10-17; raised by the operator; analysis by the delegate.*

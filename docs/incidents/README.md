@@ -1,0 +1,69 @@
+# durig incident reports
+
+**Status:** working set. Audience: the **delegate**, the **operator**, and any seat reviewing project
+history. An incident report is a **backward-looking, timestamped record** of something that broke —
+what happened, why, and what durable change stops it recurring. It is *not* a runbook (that is *how to
+respond* — `docs/runbooks/`) and *not* a review (that is forward-looking design/research —
+`docs/reviews/`). A record is **appended to / re-reviewed**, never rewritten; if the analysis changes,
+add a dated note rather than editing history.
+
+## The one rule that makes these maintainable
+
+The `docs/reviews/runbooks-sop-best-practices.md` finding applies here: **conventions without machinery
+rot.** These reports stay true only because `check` enforces the surface (same seam as the runbook
+rules `runbook-stale` / `runbook-unverified` in `src/checkup.mjs` §9). See "Rules" below.
+
+## Front-matter (mandatory)
+
+```yaml
+---
+incident: <slug>                      # filename stem after the date; stable id
+date: YYYY-MM-DD
+severity: sev1                        # sev1 = rig unusable / data risk | sev2 = a capability broken | sev3 = degraded
+status: open                          # open | mitigated | resolved
+symptom: "<the words a person would type>"
+runbook: <runbook-stem|null>
+fix: <"#NNN"|"<sha>"|null>
+prevention: "<#NNN|check-rule|test|runbook|null>"
+last_reviewed: YYYY-MM-DD
+---
+```
+
+## Conventions
+
+1. **One incident per file**, named `YYYY-MM-DD-<slug>.md`; the slug mirrors `incident:`.
+2. **Fixed skeleton** (`_template.md`): Summary / Timeline / Impact / Root cause / Detection /
+   Resolution / Prevention / Evidence / Links.
+3. **Ground every claim** in `## Evidence` — a command, a store entry id, a commit, or a file:line.
+   Mark **UNVERIFIED** explicitly rather than asserting a cause.
+4. **`prevention: null` is honest** — an incident with no durable change says so; it is not a lesson.
+5. **Pair with a runbook:** add one `## Evidence` line to the runbook that covers the symptom, and
+   update the runbook if the procedure changed. The runbook is *how to respond*; the incident is *what
+   happened*.
+6. **Re-review on trigger, not calendar** — re-open or link a new report if the class recurs; do not
+   rewrite the old one.
+
+## Rules (enforced by `check`)
+
+| Rule | Severity | Fails when |
+|---|---|---|
+| `incident-unindexed` | error | an incident file is missing from this index |
+| `incident-runbook-missing` | error | `runbook:` names a file that does not exist |
+| `incident-unresolved` | fix-now | `status: open` past the age band |
+| `incident-no-prevention` | fix-now | `status: resolved` with `prevention: null` and `runbook: null` |
+
+*(Rules proposed/routed; until they land, this table is advisory. Drop this note once they exist.)*
+
+## Index
+
+| Date | Sev | Incident | Symptom | Runbook | Status |
+|---|---|---|---|---|---|
+| 2026-10-17 | sev1 | [landing-safety](2026-10-17-landing-safety.md) | every `node cli.mjs` verb fails to load; the shared tree is left mid-merge | merge | resolved |
+| 2026-10-17 | sev1 | [broker-crash](2026-10-17-broker-crash.md) | seats idle with queued work; no `serve` process; the broker log stops | broker-down-or-stalled | open |
+| 2026-10-17 | sev1 | [live-worktree-reap](2026-10-17-live-worktree-reap.md) | a commit lands on `main` from a seat whose cwd fell back to the shared tree | leaked-worktrees | resolved |
+| 2026-10-17 | sev2 | [empty-landing-window](2026-10-17-empty-landing-window.md) | the exclusive landing window closes with no branches landed | land | resolved |
+| 2026-10-17 | sev2 | [ui-view-undefined](2026-10-17-ui-view-undefined.md) | `durig ui` paints `(poll failed: ...)` and nothing else | null | open |
+
+## Template
+
+New reports start from [`_template.md`](_template.md).

@@ -325,7 +325,7 @@ TUI 89/98/99; register via `pm`.
 `.git/MERGE_HEAD` + conflict markers in `src/checkup.mjs` on the shared tree; `cli.mjs` statically
 imports it, so every `node cli.mjs` verb died until impl resolved it. Delegate: corrected
 `docs/runbooks/merge.md` (landing pass needs an exclusive window; never leave the tree mid-merge),
-wrote `docs/reviews/landing-safety-2026-10-17.md`, and delivered intents `opr-20261017-landing-safety-pm`
+wrote `docs/incidents/2026-10-17-landing-safety.md`, and delivered intents `opr-20261017-landing-safety-pm`
 + `-lead` (both `INTENT delivered=1 dead=0` at 04:11:39Z). Committed `7051839`; ROADMAP item 101 in
 `9b0eb08`.
 
