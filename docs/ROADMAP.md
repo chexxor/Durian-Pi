@@ -1300,6 +1300,8 @@ surface. A feature that is off must therefore cost nothing — not "little".
     than a hope.
     *Proof:* reproduce the loop deterministically (a scripted fixture), then show the chosen lever
     prevents it — falsifiable by disabling the lever.
+    **Wall-clock bound (#874 `7013294`) + named-pattern degenerate-text registry (#875 `50bc585`)
+    delivered; reasoning-effort lever (a) still open.**
 
 44. **A `reset`/`clean` verb for a seat whose context has degenerated.** Found 2026-10-11 while
     pushing `impl` through item 37(b): after the model emitted a 16 KB "OK. Let me call write."
@@ -1619,6 +1621,7 @@ missing halves, and 30 is the honest advert.
     conversation-owned summary through a **write submission**, so 28a must reconcile with the
     stale-submission/stranded logic (`reconcileStrandedSubmissions`, items 66/68) — a summary
     submission must not read as an in-flight task and suppress a wake. [internal check owed]
+    **28a delivered by #873 (`cc19f5b`); 28b (fresh conversation) still open.**
 
 29. **Make taking a fresh session a team practice, not a judgement call.** A verb nobody
     knows when to call is a verb that gets called at the wrong moment, which the evidence
@@ -1930,6 +1933,7 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     evidence protocol.
     *Owner:* `impl` (author) · *Consulted:* `qa`/`auditor` · *Evidence:* `Agent_Ownership_Review.md` §2.4.
     *Acceptance:* a verifier item fails when it only acks a claim and passes when it re-runs the artifact.
+    **Evidence surface delivered by #715 (`50240f9`); re-execute enforcement still open (#851).**
 
 49. **Finish the research's unfinished passes.** The review explicitly did not verify the governance
     pass (NIST AI RMF, ISO/IEC 42001, EU AI Act Art. 14, multi-agent "accountability gap") or the
