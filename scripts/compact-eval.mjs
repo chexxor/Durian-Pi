@@ -215,12 +215,22 @@ async function runItem(opts) {
 			await storage.close();
 		}
 	}
-	const models = buildLiveModels(envModelId);
-	const priced = priceOf(models, envModelId);
+	// qa #1573: the ESTIMATE needs no live model - a model id is required only to FIRE (or to
+	// price the estimate in USD). Build the provider when we will fire, or when DURIG_MODEL is
+	// set for a priced estimate; a bare dry run now succeeds with the token estimate alone.
+	const willFire = !(opts.dry || !opts.yes);
+	const models = willFire || envModelId ? buildLiveModels(envModelId) : null;
+	const priced = models ? priceOf(models, envModelId) : null;
+	const probeReplies = (recon.needles.length + recon.paths.length + 1) * 2;
+	const estTokens = recon.counts.estTokens * 2 + recon.counts.estTokens;
 	console.log(`item delta | seat=${opts.seat} records=${recon.counts.total} (~${recon.counts.estTokens} est tokens)`);
 	console.log(`expectations from the dropped zone: ${recon.needles.length} needle(s), ${recon.paths.length} path(s)`);
-	console.log(`cost: 1 summarizer call + ~${(recon.needles.length + recon.paths.length + 1) * 2} probe replies ${usdLabel(recon.counts.estTokens * 2 + recon.counts.estTokens, priced.input)} (upper estimate; cache only lowers)`);
-	if (opts.dry || !opts.yes) {
+	console.log(
+		priced
+			? `cost: 1 summarizer call + ~${probeReplies} probe replies ${usdLabel(estTokens, priced.input)} (upper estimate; cache only lowers)`
+			: `cost: 1 summarizer call + ~${probeReplies} probe replies, ~${estTokens} est tokens (set DURIG_MODEL for a USD estimate)`,
+	);
+	if (!willFire) {
 		console.log(`DRY RUN - store copy at ${copy}; pass --yes to fire`);
 		return 0;
 	}
