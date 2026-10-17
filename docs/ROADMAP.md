@@ -666,7 +666,8 @@ external-only items below are **PARKED** until an external PM is prioritized (th
      `docs/PM-ADAPTERS.md`. *Owner:* lead (design) + impl. *Acceptance:* the internal read/write path goes
      through the interface; a fake in-memory `TaskSource` passes the same contract tests; the schema is
      documented, versioned, and round-trips the human-owned fields with an explicit intake-vs-status split
-     and a readiness gate.
+     and a readiness gate; claim selection honors an explicit `priority`/`rank` so human ordering survives
+     ingest; a human `assignee` is distinct from the seat `to`.
 116. **PARKED — local/stdio MCP client adapter as the first `TaskSource`.** One MCP client reaches multiple
      trackers instead of N REST integrations. The client runs in the operator/broker path (where the
      tracker token lives); **start with GitHub**, which has a locally runnable stdio server plus

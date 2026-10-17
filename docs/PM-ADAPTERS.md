@@ -49,6 +49,10 @@ prioritizes, groups, and assigns work items in a tool they already use. That ref
 - **Field ownership** keeps the split clean: human-owned fields (`title`, `body`, `priority`, `labels`,
   `collection`/grouping, `assignee`, external links) are taken from the PM on ingest; execution-owned fields
   (`state`, `claimed by`, `attempts`, `deferred`/`held`, history) are durig's and are mirrored out.
+- **Organization must survive ingest:** the queue item has no priority/order field today and a bare
+  `claim_work` claims the **oldest** queued item (`src/rig.mjs`), so a human's ordering would be lost on
+  ingest. The schema adds an explicit `priority`/`rank`, and the claim selector must honor it — otherwise
+  "organize" means nothing internally. A PM `assignee` (a person) is distinct from durig's `to` (a seat).
 - **Admission:** a human-authored item is not automatically runnable. Ingest needs a readiness gate (the
   item's acceptance/target is stated), so the queue does not receive vague items as agent work.
 - **Round-trip schema:** the internal `Task` must carry the human/organizational fields as optional data,
@@ -70,10 +74,10 @@ implements it; an external adapter would implement the same shape as a projectio
 | `transition(id, to, meta)` | `Task` | `defer`/`held`/`complete`/`cancel`, validated by the state machine |
 | `subscribe(listener)` | `() => void` | the commit-stream wake; no socket |
 
-`Task` storage fields: `id`, `externalId?`, `source?`, `title`, `body`, `state`, `from`, `to`, `deps`
-(advisory), `attempts`, `createdAt`, `updatedAt`, a link to the history/transcript, and the optional
-human-owned fields an adapter must round-trip: `priority?`, `labels?`, `collection?` (epic/group),
-`assignee?`, `links?`.
+`Task` storage fields: `id`, `externalId?`, `source?`, `title`, `body`, `state`, `from`, `to` (a seat),
+`deps` (advisory), `attempts`, `createdAt`, `updatedAt`, a link to the history/transcript, and the optional
+human-owned fields an adapter must round-trip: `priority?`/`rank?` (claim selection honors it), `labels?`,
+`collection?` (epic/group), `assignee?` (a human; distinct from `to`), `links?`.
 
 The adapter layer (parked) adds two operations over this contract: `pullNew()` (intake — PM → queue) and
 `pushStatus(task)` (mirror — queue → PM). It never becomes the execution authority.
