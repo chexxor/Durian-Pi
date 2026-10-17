@@ -66,29 +66,30 @@ dead=0` 08:46:20Z) and impl re-engaged #1390 (opened #1395).
 
 ## NEXT SESSION
 
-**Current item (clock-out):** **#1398 — the landing pass RE-DRIVE (26 branches, OUTSIDE-broker path)**, which
-supersedes the empty #1390 and is the item that LANDS all the verified accumulated work (commit gate
-#1317/#1379/#1380, #1383, ROADMAP registrations, ...). Its own procedure names the operator/delegate as the
-quiesce driver: **stop the broker, hand-verify** (`ls -1 selfdev.sqlite.genlock*` empty AND no `cli.mjs
-serve` process), then run the landing OUTSIDE the broker (`scripts/land.mjs` detached, or broker stopped +
-a single driver), and verify each tip with `git merge-base --is-ancestor <tip> main`. main is at `6195c99`;
-the branches are still unlanded.
+**Current item (clock-out):** **#1434** — the landing pass (28 entries; supersedes the cancelled #1398, which
+superseded the empty #1390). It is **`deferred` and BLOCKED**, not drivable as-is:
+- lead authorized **VARIANT (3)** (broker UP + an exclusive lock HELD ACROSS the ff), but the mandatory lock
+does NOT exist — `scripts/land.mjs` is a start-check only and the `genlock` is not exclusive (4 slots).
+impl **STOPPED AND REPORTED** (open question **#1439**).
+- **#1440** is a new blocker — a real defect (`confine.mjs READ_ONLY_COMMAND` prefix-anchored, no metachar
+guard, so compounds run from the shared checkout); it **gates #1434 entry 11** (`impl-item-1151`).
+- **VARIANT (1)** (operator/delegate stops the broker, hand-verifies, lands outside the broker) REMAINS
+AVAILABLE.
+- **Operator chose to WAIT (2026-10-17)** for the team to resolve #1440/#1439 before any re-attempt — the
+delegate did NOT stop the broker and landed nothing.
 
-**Broker:** upgraded + restarted — `START pid=37596` 08:46:18Z on the new runtime (pi pin `8efd314f`),
-PASS advancing. The re-drive note drained and impl re-engaged (#1395 -> #1398).
+**Broker:** upgraded + healthy — pid 37596 (pi pin `8efd314f`), PASS advancing; `pm` generating on the
+#1439/#1440 resolution.
 
 **Known hazards / gates:**
-- **#1398 is `queued` to impl but its GO needs an operator/delegate quiesce** — a broker-hosted seat cannot
-  stop the broker itself (that is the #1399 procedure fix, now queued for land.md).
 - **#1383 FIXED + verified** (#1418): `land.mjs`'s genlock probe now resolves the store in use and refuses a
-  mis-resolution — still hand-verify quiescence before the pass.
-- **Registration mismatch to flag:** the `pause` item is **ROADMAP 131** in the file (`impl-item-1387`), but
-  queue rows #1387/#1388 still say "ROADMAP 130" — the queue text is stale, the file is authoritative.
-- **queue-ageing** soft warning (~39 min, band 30).
+  mis-resolution.
+- **pause = ROADMAP 131** (file authoritative). The number correction is done (#1422 -> #1437); the only
+  stale remnant is the immovable subject text of held row #1388 ("ROADMAP 130").
 
-**Known blocker:** #1398 is queued to impl but its GO cannot be self-driven — a broker-hosted seat cannot
-stop the broker it lives in. It needs an operator/delegate quiesce window (stop + hand-verify), then the
-landing runs outside the broker.
+**Known blocker:** the landing needs either a real exclusive-lock mechanism (variant 3) or a
+broker-stopped window driven by the operator/delegate (variant 1); plus #1440 must clear before entry 11
+can land.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
