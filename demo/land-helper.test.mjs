@@ -222,7 +222,7 @@ try {
   const afterClear = land(repo, ["feat-g"]);
   check("with the live slot gone, the same landing succeeds", afterClear.code === 0, afterClear.raw.slice(0, 200));
   check("...and feat-g is an ancestor of main", spawnSync("git", ["merge-base", "--is-ancestor", featG, "main"], { cwd: repo }).status === 0);
-  console.log("\n7. the FF holds an EXCLUSIVE lock across the advance, and releases it on every path");
+  console.log("\n8. the FF holds an EXCLUSIVE lock across the advance, and releases it on every path");
   const slotPaths = [0, 1].map((i) => join(repo, `rig.sqlite.genlock.${i}`));
   const readSlot = (p) => {
     try {
@@ -253,8 +253,8 @@ try {
   };
 
   console.log("8a. the lock is HELD across the FF, cannot be interleaved, and is released on success");
-  const featG2 = feature("feat-g", "g.txt", "from feat-g\n");
-  const heldRun = landAsync("feat-g", { DURIG_LAND_HOLD_FF_MS: "1200" });
+  const featG2 = feature("feat-g-lock", "g2.txt", "from feat-g-lock\n");
+  const heldRun = landAsync("feat-g-lock", { DURIG_LAND_HOLD_FF_MS: "1200" });
   const heldSeen = await waitFor(() => slotPaths.every((p) => readSlot(p)?.pid === heldRun.pid), 8000);
   check("the lander HOLDS all N slots across the FF", heldSeen, slotPaths.map((p) => JSON.stringify(readSlot(p))).join(" "));
   let claimErr = null;
