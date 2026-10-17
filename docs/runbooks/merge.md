@@ -31,7 +31,8 @@ radius: a bad merge touches every seat's base tree.
   (`SyntaxError`). So a landing pass runs in an **exclusive window**: stop the broker
   (`broker-safe-change.md`) and confirm **no `genlock.*` is held** before the first merge; restart it
   after the pass verifies. This is the 2026-10-17 landing-safety incident (see
-  `docs/reviews/landing-safety-2026-10-17.md`).
+  `docs/reviews/landing-safety-2026-10-17.md`). **A broker-hosted seat cannot drive that pass:** stopping
+  the broker ends that seat's own run, so the pass must run OUTSIDE the broker (`land.md` Do step 0).
 - **Serialized:** one landing at a time; never merge while another commit/merge to `main` is in flight or
   another seat is generating.
 - The branch's worktree is **not mid-edit**: a linked worktree (`item-<id>`) must be clean, or removed,
