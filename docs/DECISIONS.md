@@ -2299,3 +2299,97 @@ vendored agency-agents security personas (MIT; `vendor/eval/agency-agents/securi
 **Status:** created and running (`rig.selfdev.json` `f701837`; broker pid 37376). The external
 `security.sec` consult is superseded for durig's own surfaces; whether it is retired or kept for
 compliance/live-ops depth is `lead`'s ruling (queue #1318).
+
+## D92 — Codemode's ratified security position (ROADMAP 32 gate 1): E1–E14 ratified with C1–C3, six consult questions answered, gates G1–G8 (security #1295, recorded by scribe #1329, 2026-10-17)
+
+**Decision.** The `security` seat's per-item position `docs/reviews/security-codemode-position.md`
+(rev `4cba82f`, branch `security-item-1295`, item #1295, delivered #1321) is the ratified security
+position for codemode, and ROADMAP 32's gate 1 ("a `security.sec` position" — new dependency, new
+execution surface, its own audit sink) is satisfied by it. The position realizes the gate as: the
+boundary's scope (per-script minted `api.*` over an effect broker, SC1 spine, D-ENV-AUTH same-user
+fact); **E1–E14 ratified with three corrections** — C1: a thread escape with the same Windows user
+reaches broker process memory (the store handle, the provider key in env), sharper than "language
+isolation only"; C2: the audit sink records **denied** effects too, not only allowed ones (now gate
+G1); C3: cite-by-reference library claims must be re-verified against the vendored library before the
+fold into `docs/CODEMODE.md`; **all six consult questions answered** — Q1 mint+SC1 sufficient for T0
+(read-only/compute), host containment REQUIRED before T1/T2; Q2 the audit sink is git-backed
+append-only, readable broker-stopped, a prerequisite before ANY tier; Q3 `model.call` NOT minted in
+the first cut (credential surface nameably unverified); Q4 `proc.exec` never the boundary, rejected
+in T0/T1; Q5 containment without a runnable deny-demo does not exist; Q6 the mid-run bound is a
+security control, live evidence = this seat's own 2026-10-17 turn-stall reset
+(`turn-duration-ms=312487>=300000`); **gates G1–G8** (audit sink first, mid-run bound, bounds fail
+closed, offline demo probes for E1/E3/E4/E7/E8/E11/E12/E14, ROADMAP 32's two-layer denial proof,
+supply-chain pins, declared = granted = minted equality, deviation needs a new consult); and
+**residual risk stated** (thread escape reaching broker memory; seat egress + credential surfaces
+nameably unverified and unminted; the gate-1 fold still open until lead/pm folds).
+
+**Why.** ROADMAP 32 gates codemode on a `security.sec` position with a two-layer denial proof. The
+delegate-authored round (`docs/reviews/security-codemode-review.md`, E1–E14) was the input; the
+position is a **different writer** ratifying it (two-eye principle), correcting what the round
+under-stated (C1–C3) rather than accepting it on the delegate's authority. The six consult questions
+were the open items; answering them fixes the boundary before any codemode tier lands. T0
+(read-only/compute: `fs.read` + `fs.list`) is cleared conditionally; T1/T2 stay gated on host
+containment + the audit sink (ROADMAP 128/129).
+
+**Alternatives.** The position is the corrected form of the round: per-claim acceptance with the
+corrections recorded, and the residual risks named rather than buried. Per the position's Routing
+section, adoption and the fold into `docs/CODEMODE.md` gate 1 are **lead/pm's** call; the operator
+has now made that call (impl #1298 folds the position and closes the gate — it does not decide C1–C3/
+G1–G8, which are the seat's position; anything beyond gate 1 goes to lead).
+
+**Status:** ratified by `security` (#1295, delivered #1321); recorded by `scribe` (#1329). Artifact:
+`docs/reviews/security-codemode-position.md` @`4cba82f` (branch `security-item-1295`; carried in the
+#1310 landing pass). Gate-1 close lands with impl's fold (#1298); T1/T2 are NOT released by this
+entry (containment + audit sink still gated; T0's held items #1268/#1269/#1270 unchanged). No
+executable check applies (a narrative decision log). LANDING NOTE: main's D91 is the delegate's
+seat-creation entry; scribe's standing-surface/consult ruling (lead #1297 as revised by #1316,
+branches scribe-item-1301/1323, currently numbered D91) must be renumbered (recommended D93) or
+folded into D91 at landing to avoid a collision.
+
+
+## D93 — The `security` seat's standing surface is runbook-only, and the external `security.sec` consult is on-escalation (lead #1297, revised by lead #1316; recorded by scribe #1301/#1323, 2026-10-17)
+
+**Decision.** Q1 — STANDING SURFACE = RUNBOOK ONLY (TWO runbooks; no standing review set). The `security`
+seat owns two runbooks under `docs/runbooks/`:
+- `docs/runbooks/leaked-secret.md` — the failure-mode SYMPTOM: a secret was committed → detect/respond
+  (ties #828 read-side detection + #837 redaction);
+- `docs/runbooks/security-trust-boundary-review.md` — the review METHOD: how to review a trust boundary;
+  reusable across reviews and broader than the leaked-secret scenario.
+There is NO standing `docs/reviews/security-*.md` set — reviews remain per-item artifacts
+(`docs/reviews/<topic>.md`), exactly as `qa`/`advocate` produce per-item reviews and own no standing set.
+Q2 — `security.sec` CONSULT = ON-ESCALATION (not retired, not fully retained). The internal seat handles
+routine security review (fast, free, always available); the external consult is engaged only when the
+seat escalates (high-stakes, uncertain, or beyond the seat's depth). CAVEAT (operator-facing): if a
+compliance requirement mandates independent external review regardless of the seat's judgment, that is a
+STANDING (non-discretionary) trigger — the operator must name it; absent that, on-escalation is the
+default. NOTE: capability `review`, not a verifier — so `security` does NOT take the verifier exemption
+(it works in worktrees when it has a claimed item), consistent with lead's #1222 blast-radius ruling.
+
+**Revised (#1316).** Lead's #1297 ruled "ONE runbook" (failure modes + review method); lead #1316 REVISED
+that on the seat's content-based report: the review method gets its OWN runbook and `leaked-secret.md`
+keeps ONLY the failure mode (the method section is MOVED, not duplicated). Rationale: ONE CONCERN PER
+ARTIFACT — a failure-mode runbook and a review method are distinct concerns; bundling makes
+`leaked-secret.md` do two jobs (respond to an incident AND teach a method). #1297's "one runbook" was a
+minimality instinct; the method's broader scope (any trust boundary, not just secrets) is the deciding
+factor. The new runbook must follow the runbook convention: front-matter per `_template.md`, a Diagnose
+step, and a Verify step that has actually run; plus its README symptom/mechanism row.
+
+**Why.** The smallest surface that makes the seat effective: runbooks for its failure modes and its
+review method, satisfying P3 Runbooks (a failure mode the work covers gets a runbook), without the
+maintenance burden of a standing review set. The consult is a depth/compliance backstop, not a routine
+path.
+
+**Alternatives.** Q1: (a) one runbook bundling failure mode + method — REVISED: two concerns in one
+artifact; (b) both a runbook AND a standing `security-*.md` set — rejected: a standing namespace goes
+stale and duplicates per-item reviews; (c) only a standing review set, no runbook — rejected: the team
+has security failure modes and runbooks are symptom-indexed procedures. Q2: (a) retire the external
+consult — rejected: it preserves depth the internal seat may lack on high-stakes/uncertain work;
+(b) keep it as a routine path — rejected: it would duplicate the seat.
+
+**Status:** ruling #1297 (as revised by #1316, delivered #1299/#1318) by `lead`; recorded by `scribe`
+(#1301, amended #1323). Routed: #1300/#1315 → `security` authored `docs/runbooks/leaked-secret.md`;
+#1322 → `security` authors `docs/runbooks/security-trust-boundary-review.md` (review method; front-matter
+per `_template.md`, Diagnose, Verify actually run; README row) and REMOVES the method section from
+`leaked-secret.md` (moved, not duplicated). OPEN FOR OPERATOR: the compliance caveat — name a mandated
+independent external review and it becomes a standing (non-discretionary) `security.sec` trigger rather
+than an escalation.
