@@ -23,14 +23,14 @@
 // drives every rule without a database, a provider, or a model.
 
 import { ANSI } from "./ansi.mjs";
+// The verifier vocabulary and predicate live in their own low-layer module
+// (src/verifierrole.mjs) because `metrics` and `seattools` need them at RUNTIME:
+// importing them from this audit made a conflicted checkup.mjs fatal to the whole
+// CLI's load (2026-10-17, lead #1164). Re-exported so every importer keeps ONE
+// definition.
+import { VERIFIER_TERMS, seatsAreVerifier } from "./verifierrole.mjs";
 
-// Terms that mark a seat as an independent verifier, matched as substrings of
-// the seat's NAME and ROLE text. Deliberately excludes this rig's shared
-// `peer-review` capability: `impl`/`impl2` advertise it too, so matching on
-// capabilities would call the authors verifiers and report an all-clear on the
-// exact gap the rule exists to catch. `audit` is excluded for the same reason —
-// a security seat audits its own surface, not other seats' work.
-export const VERIFIER_TERMS = ["verif", "qa", "review", "editor"];
+export { VERIFIER_TERMS, seatsAreVerifier };
 
 /** Rule ids are the stable API: scripts match on them, prose may change. */
 export const RULES = [
@@ -107,14 +107,6 @@ const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
 function firstLine(text, limit = 96) {
   const line = String(text ?? "").split("\n")[0].trim();
   return line.length > limit ? `${line.slice(0, limit - 1)}…` : line;
-}
-
-/** A seat counts as a verifier when its name or role says so. Exported because
- * the config-derived metrics measure needs the same judgement `check`'s
- * no-verifier-seat rule makes, and two definitions would drift. */
-export function seatsAreVerifier(seat) {
-  const haystack = `${seat.name ?? ""} ${seat.role ?? ""}`.toLowerCase();
-  return VERIFIER_TERMS.some((term) => haystack.includes(term));
 }
 
 /**

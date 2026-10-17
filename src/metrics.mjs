@@ -19,7 +19,7 @@
 
 import { ANSI } from "./ansi.mjs";
 import { countMalformedToolCalls } from "./attention.mjs";
-import { seatsAreVerifier } from "./checkup.mjs";
+import { seatsAreVerifier } from "./verifierrole.mjs";
 
 /**
  * A tool call whose canonical key duplicates one the same seat made within its
