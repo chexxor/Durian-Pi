@@ -56,6 +56,30 @@ A pattern is a PURE predicate over ONE assistant turn's text, registered in `TEX
 3. `node demo/degeneration-text.test.mjs` (must exit 0) and `node scripts/degen-scan.mjs <store-copy>`
    (every match must be a real loop). The reason string is `degenerate-text=<name>=<count>>=<bound>`.
 
+## Two more failure modes: the run window and tool durations (2026-10-17)
+
+A real incident (`docs/incidents/2026-10-17-qa-context-degeneration.md`) exposed two `assessRun`
+defects that are NOT patterns to tighten:
+
+- **FALSE NEGATIVE — a saturated seat is never reset.** `assessRun` judges only entries newer than the
+  last `pi.user`. The broker submits a `pi.user` wake after essentially every turn, so the window is
+  1–2 turns and `repeats`/`toolTurns`/`degenerate-text`/`turnDurationMs` never accumulate, while
+  `contextTokens` never reaches the fixed `maxContextTokens: 400_000`. `qa` reached **367,559** tokens,
+  produced incoherent output, and got **0** escalations. The context bound must come from the model's
+  EFFECTIVE window (the `DURIG_CONTEXT_WINDOW` seam / `src/context.mjs` denominator), not a constant:
+  GLM-5.3-Flash *advertises* ~1,048,576 tokens yet degraded at 367k ("advertised != usable").
+- **FALSE POSITIVE — a tool duration read as a model stall.** `turnDurationMs` takes the max of
+  `messageOf(entry)?.durationMs` over the whole run, INCLUDING `pi.tool-result` entries. A legitimate
+  ~5-min tool sweep (`#72059`, `durationMs=301935`) trips the 5-min wall-clock bound; the guard then
+  re-fired every pass (285+ `impl` resets, 20+ consecutive `pi.reset` ids 72099–72118) because the
+  broker's long-lived read handle did not observe the `pi.reset` it just wrote, so the
+  `items[0].kind === "pi.reset"` idempotence check never fired. Every per-turn cause must read
+  ASSISTANT turns only, and the reset must be idempotent against the handle that applies it.
+
+**Diagnose a "burning tokens" seat:** check the newest assistant turn's `usage.totalTokens` and the
+run length in `log <seat> 8`. If the seat is saturated but the guard is silent, it is the false
+negative above — fix `src/degeneration.mjs`, do not loosen or add a prose pattern.
+
 ## Verify
 ```bash
 node demo/degeneration-text.test.mjs        # exit 0: positives flagged, negatives untouched
@@ -64,6 +88,10 @@ node scripts/degen-scan.mjs <store-copy>    # 0 false positives: every match is 
 Last verified 2026-10-16: the demo exits 0 (3 positives flagged, 6 real-turn negatives untouched) and the
 scan over the live selfdev store reports 26 matched turns out of 5636 — every one an emit/completing/
 deferring/read/issue wall or an XML tool-call-as-text blob, i.e. 0 false positives.
+
+2026-10-17 (`2026-10-17-qa-context-degeneration`): the pattern registry was NOT the cause — `qa`
+degraded from CONTEXT SATURATION (367,559 tokens) and the run-window/`maxContextTokens` bound never
+fired; `impl` was over-reset from a tool-result duration. Fixes routed as `#1703`/`#1704`/`#1705`.
 
 ## If it fails
 - The guard keeps firing on a healthy seat → the pattern is too loose; tighten its thresholds and

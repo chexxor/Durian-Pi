@@ -3,11 +3,11 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate — **broker-crash recurrence**: the handover's "broker UP pid
-`36488`" was wrong — it had already died at `19:32:35Z`, before the handover was committed; recovered to
-pid `37388` after one failed restart. Top priority is still `#1610` MAIN IS RED, and the crash-proofing
-cluster is now recommended ABOVE the product items. See `## NEXT SESSION` — everything below it is
-historical.)_
+_Last refreshed: 2026-10-17 (delegate — **stage-two recovery**: qa's saturated context was compacted
+in an operator-sanctioned window (367k→48k) after its runaway turn hung the broker's F11 drain; the
+degeneration-guard fixes are registered as `#1703`/`#1704`/`#1705` (queued to impl) but NOT landed, so
+this can recur. Broker is up again (pid `32840`). Top priority is still `#1610` MAIN IS RED. See
+`## NEXT SESSION` — everything below it is historical.)_
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; new agent takes the seat)
 
@@ -47,11 +47,12 @@ scribe's, landed).
 
 ## NEXT SESSION
 
-**Current item:** nothing blocks the delegate — the rig is **up** (broker pid `37388`) and the queue is
+**Current item:** nothing blocks the delegate — the rig is **up** (broker pid `32840`) and the queue is
 advancing. Work the **ordered list below**; item 1 (`#1610` MAIN IS RED) gates all landing. **Recommended
-change:** promote item 6 (the crash-proofing cluster) above the product items 4/5 — the broker died
-abnormally a third time this session and a restart itself crashed, so the recurring root cause now
-outranks UI/incident-rule polish.
+change:** (a) promote item 6 (the crash-proofing cluster) above the product items 4/5, and (b) add the
+degeneration-guard fixes (`#1703`/`#1704`/`#1705`) as an immediate priority — they are the only thing
+that stops the `qa-context-degeneration` incident and impl's false-positive reset loop recurring. Both
+recurring root causes now outrank UI/incident-rule polish.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
@@ -83,6 +84,11 @@ outranks UI/incident-rule polish.
   advancing (`WAKE impl`, `PASS 1-3`, 4 genlocks). NOT the `pi.live` corruption case (`log`/`status` read
   clean, no `unreadable`). Visible aggravator: **8 stale `log --follow`/`watch` viewers** (Oct 16-17) hold
   the store open. Recurrence recorded in `docs/incidents/2026-10-17-broker-crash.md`.
+- **qa recovered (delegate, operator-sanctioned window):** `compact qa` in one window (`serve --stop` →
+  backup `.spike/store-backup-20261017-165036` → force-kill the hung F11 drain → `resume` → `compact qa`
+  → restart); a 2nd short cycle cleared an `admitted_not_started` submission. qa context **367,559 →
+  ~48k tokens**, coherent turns, **0** escalations since. Guard fixes `#1703`/`#1704`/`#1705` remain
+  queued to impl. New incident: `docs/incidents/2026-10-17-qa-context-degeneration.md`.
 - `main` HEAD = `9ccfff7`; **tree clean**; the shared tree is on `main`.
 - `security`: actively working `#1581` (log turns at `19:19:38`); still `claimed`.
 - Local refs **128 → 76** (52 pruned); **33 unlanded refs kept**; **42 merged held by worktrees**.

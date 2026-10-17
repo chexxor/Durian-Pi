@@ -64,6 +64,7 @@ last_reviewed: YYYY-MM-DD
 | 2026-10-17 | sev1 | [seat-root-fallback-commit](2026-10-17-seat-root-fallback-commit.md) | a commit reached `main` and the shared tree moved to an item branch, no landing pass | leaked-worktrees | open |
 | 2026-10-17 | sev2 | [empty-landing-window](2026-10-17-empty-landing-window.md) | the exclusive landing window closes with no branches landed | land | resolved |
 | 2026-10-17 | sev2 | [ui-view-undefined](2026-10-17-ui-view-undefined.md) | `durig ui` paints `(poll failed: ...)` and nothing else | null | open |
+| 2026-10-17 | sev2 | [qa-context-degeneration](2026-10-17-qa-context-degeneration.md) | a seat loops on a saturated context and burns tokens; the guard never resets it | degeneration-guard | mitigated |
 
 ## Template
 
