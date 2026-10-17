@@ -106,6 +106,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language / emitting a tool call as text | yes |
 | [write-corruption-recovery.md](write-corruption-recovery.md) | a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line | maybe |
 | [compact-a-seat.md](compact-a-seat.md) | a seat's context is saturated and a reset would lose durable context | yes |
+| [format-before-commit.md](format-before-commit.md) | my diff shows whitespace or line-ending churn I did not intend | no |
 | [degeneration-guard.md](degeneration-guard.md) | a seat was auto-reset (`pi.reset` naming `degenerate-text=...`); tell a real loop from a false positive, or add a shape | no |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
