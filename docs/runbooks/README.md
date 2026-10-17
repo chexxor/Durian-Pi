@@ -72,6 +72,7 @@ a **`How to re-verify this document`** section: literal commands whose output is
 | [../BRANCH-AND-WORKTREE-LIFECYCLE.md](../BRANCH-AND-WORKTREE-LIFECYCLE.md) | refs, worktrees, landing gates, prune paths, the store/rig pair, suite-verdict traps | land, branch-cleanup, leaked-worktrees, merge |
 | [../SEAT-LIFECYCLE.md](../SEAT-LIFECYCLE.md) | a seat from create to retire | seat-reset, compact-a-seat, degeneration-guard |
 | [../WORK-ITEM-LIFECYCLE.md](../WORK-ITEM-LIFECYCLE.md) | queue states and transitions, who may move an item, what wakes a seat, what is surfaced, why work gets stuck | stale-held-backlog, resume-while-broker-runs |
+| [run-your-area.md](run-your-area.md) | which tests do I run before landing? the demo suite is 120+ files | no |
 
 **Rule for a topic doc:** a claim without a command that proves it is not allowed — mark it `UNVERIFIED`
 or drop it. That is what makes the doc audit-able instead of merely plausible.
@@ -184,3 +185,4 @@ New runbooks start from [`_template.md`](_template.md). Proposed machinery: ROAD
 (`runbook-stale`/`runbook-unverified` check rules, mandatory front-matter, the hard write guard, a
 `--dry-run`, executable `Diagnose` blocks, verification provenance, a gated agent runtime, the daemon
 runbook).
+
