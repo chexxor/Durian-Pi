@@ -1,8 +1,8 @@
 ﻿# Self-admin improvement register
 
 **What this is.** A durable, evidence-grounded list of *improvements a durig
-installation could apply* â€” configuration changes, platform features, refactors,
-and **system-prompt edits** â€” that a durig **self-admin** consults when a user
+installation could apply* — configuration changes, platform features, refactors,
+and **system-prompt edits** — that a durig **self-admin** consults when a user
 hits a platform problem, or when a user asks for improvement ideas directly or
 indirectly. It is the answer to "a bare Linux versus a distro with the drivers,
 themes and packages a normal user wants pre-installed": durig should carry
@@ -19,8 +19,8 @@ should *offer* the fix instead of requiring the user to know the architecture.
   a hypothesis with a reason, never a wish list.
 
 **Entry format** (one per entry):
-`id` Â· **trigger/symptom** Â· **evidence** (file/## /dogfood finding/roadmap item) Â·
-**change** (the concrete edit) Â· **why it helps** Â· **risk/effort** Â· **surfaced by**
+`id` · **trigger/symptom** · **evidence** (file/## /dogfood finding/roadmap item) ·
+**change** (the concrete edit) · **why it helps** · **risk/effort** · **surfaced by**
 (which signal should point here). A prompt-drift entry names the *prompt text* and
 what intent it has drifted from.
 
@@ -34,20 +34,20 @@ run where the stale instruction bit.
 
 ## Seeded entries (grounded)
 
-### SA-1 â€” Context management should have safe defaults (the biggest hands-off gap)
+### SA-1 — Context management should have safe defaults (the biggest hands-off gap)
 - **Trigger:** a seat degenerates or its context fills; today this is handled by
   hand (`reset`, `resume`) rather than by default.
 - **Evidence:** ROADMAP 27/28 (context visibility/reduction, unbuilt); durig
   needed `reset` (ROADMAP 44) for exactly this; agent-fleet ships an ordered
   pressure guard + session recycle by default (`BORROW-FROM-agent-fleet.md`).
-- **Change:** enable a default pressure guard (warn â†’ preserve-and-settle â†’ one
+- **Change:** enable a default pressure guard (warn → preserve-and-settle → one
   compaction) and optional session recycle, exposed as settings with sensible
   defaults, plus a budget diagnostic.
 - **Why it helps:** stops the most common operator intervention.
 - **Risk/effort:** M; changes runtime behaviour, so it needs a measure and a gate.
 - **Surfaced by:** `last_run_failed` / context measures / a user "why did it loop".
 
-### SA-2 â€” A completion should not be readable as a pass
+### SA-2 — A completion should not be readable as a pass
 - **Trigger:** a seat's `DONE` is trusted more than the evidence behind it.
 - **Evidence:** agent-fleet's Verification Contract (`agent-fleet.runtime-result/v1`)
   separates `execution / changes / verification / acceptance`; durig's pair review
@@ -55,10 +55,10 @@ run where the stale instruction bit.
 - **Change:** give `complete_work` a structured result (changed? verified? by
   what command/exit? evidence path).
 - **Why it helps:** a verifier can act on the shape, not the prose.
-- **Risk/effort:** Sâ€“M; additive.
+- **Risk/effort:** S–M; additive.
 - **Surfaced by:** qa "the completion said done but nothing ran".
 
-### SA-3 â€” Runaway runs should be caught by the platform
+### SA-3 — Runaway runs should be caught by the platform
 - **Trigger:** a seat loops (repeated tool calls / repeated text) and burns turns.
 - **Evidence:** ROADMAP 43 (degenerate loop) and 42 (supervisor); the 16 KB
   "OK. Let me call write." repetition that forced `reset`; agent-fleet's drift
@@ -69,7 +69,7 @@ run where the stale instruction bit.
 - **Risk/effort:** M; safety-relevant (must not kill healthy runs).
 - **Surfaced by:** `step-repetition` measure.
 
-### SA-4 â€” Proportionality should latch per task, not reset per message
+### SA-4 — Proportionality should latch per task, not reset per message
 - **Trigger:** a small correction re-opens a large workspace / budget.
 - **Evidence:** agent-fleet's post-mortem (a 13-minute change open 47 hours);
   their ratcheting tier (`#60`); durig's PM `S/M/L` is turn-scoped.
@@ -78,7 +78,7 @@ run where the stale instruction bit.
 - **Risk/effort:** S (protocol).
 - **Surfaced by:** budget/metrics outliers.
 
-### SA-5 â€” Upgrades must not silently change behaviour
+### SA-5 — Upgrades must not silently change behaviour
 - **Trigger:** `up --refresh` or a platform bump changes defaults underneath a rig.
 - **Evidence:** agent-fleet records a feature snapshot and never auto-enables new
   features on update; durig re-applies whatever the file says (`BORROW-FROM-agent-fleet.md`).
@@ -88,11 +88,11 @@ run where the stale instruction bit.
 - **Risk/effort:** S.
 - **Surfaced by:** a rig that "changed by itself" after an update.
 
-### SA-6 â€” Prompt drift: re-check always-on instructions against current intent
+### SA-6 — Prompt drift: re-check always-on instructions against current intent
 - **Trigger:** a seat follows an instruction the operator no longer wants, or
   misses one added later; the constitution/primer drifts from intent.
 - **Evidence:** the constitution is injected into **every** seat's prompt and read
-  **per request** (`FEATURES.md` Â§1), so a stale line is enforced everywhere; the
+  **per request** (`FEATURES.md` §1), so a stale line is enforced everywhere; the
   project has already changed seats/models/pins several times this cycle
   (`DECISIONS.md` pin moves; `rig.selfdev.json`).
 - **Change:** a periodic (self-admin or PM) review that diffs the always-on prompt
@@ -102,7 +102,7 @@ run where the stale instruction bit.
 - **Risk/effort:** S; it is a review practice plus a register entry.
 - **Surfaced by:** a user correcting a seat for following an outdated rule.
 
-### SA-7 â€” Common defaults should be pre-set, not discovered
+### SA-7 — Common defaults should be pre-set, not discovered
 - **Trigger:** the operator must know the architecture to set a sensible value.
 - **Evidence:** `DURIG_MAX_CONCURRENT_SEATS`, `DURIG_STREAM_TIMEOUT_MS`,
   per-seat models, `DURIG_SEAT_ROOT` all require knowing *why* they exist;
@@ -113,7 +113,7 @@ run where the stale instruction bit.
 - **Risk/effort:** M.
 - **Surfaced by:** `check` findings on a new rig.
 
-### SA-8 â€” Personas Ã— skills Ã— commands should compose predictably
+### SA-8 — Personas × skills × commands should compose predictably
 - **Trigger:** a seat's behaviour is defined ad hoc in one instruction blob.
 - **Evidence:** agent-fleet names the *how* (skill) / *who* (persona) / *when*
   (command) layering; durig folds them into the seat's inline `instructions`.
@@ -129,7 +129,7 @@ run where the stale instruction bit.
 ## How this gets implemented (not by hand forever)
 The register is useful **only if it is consulted**. The product work is:
 1. a self-admin **seat/role** whose remit is this file (and the topology change
-   that adds it â€” see the self-dev rig roles);
+   that adds it — see the self-dev rig roles);
 2. `check`/`doctor` **pointing at** the matching entry when a finding fires, so it
    is not in-your-face but is discoverable;
 3. the **compound-learning** habit: after a session that revealed a platform gap,
@@ -137,7 +137,7 @@ The register is useful **only if it is consulted**. The product work is:
 
 ## UX review entries (from designer's review #406)
 
-### SA-9 â€” cli.mjs needs a discoverable help surface
+### SA-9 — cli.mjs needs a discoverable help surface
 - **Trigger:** a user runs 
 ode cli.mjs and gets {ok:false,usage:"usages:\n..."} with exit 2. There is no --help flag and no help subcommand.
 - **Evidence:** cli.mjs USAGE string exists at line ~1800 but is only reached via the error fallback (the else branch of the command dispatch). No --help or help routes to it.
