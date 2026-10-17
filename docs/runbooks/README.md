@@ -109,6 +109,8 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [format-before-commit.md](format-before-commit.md) | my diff shows whitespace or line-ending churn I did not intend | no |
 | [degeneration-guard.md](degeneration-guard.md) | a seat was auto-reset (`pi.reset` naming `degenerate-text=...`); tell a real loop from a false positive, or add a shape | no |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
+| [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
+| [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land — run the review method before the code | no |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
 | [resolve-merge-conflict.md](resolve-merge-conflict.md) | a merge/landing pass stopped with conflict markers; the tree is mid-merge | no |
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
@@ -124,6 +126,8 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | Seats | seat-reset, compact-a-seat |
 | Write guard / source files | write-corruption-recovery |
 | Worktrees | leaked-worktrees |
+| Credentials / secrets | leaked-secret |
+| Review method | security-trust-boundary-review |
 | Merge / conflicts | merge, resolve-merge-conflict |
 | Daemon / host | daemon-not-running |
 | Research | research-request, competitor-review |
