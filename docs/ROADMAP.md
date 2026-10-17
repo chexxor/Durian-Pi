@@ -492,7 +492,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     *Acceptance:* opening a seat's detail view renders that seat's prior turns from the durable transcript
     (paged, never only the live tail), then follows new entries live; a golden/demo proves the backfill is
     present, shown FAILING against the current stream-only behaviour before it passes.
-90. **App-level syntax formatter (`format` verb) for seats and pre-commit use.** An explicit command a
+90. **App-level syntax formatter (`format` verb) for seats and pre-commit use (DELIVERED `d0fa7ad`).** An explicit command a
     seat can run over the files it changed — after edits, before `git add`/commit — so style is
     consistent and whitespace/EOL churn stops leaking into diffs. **Value:** the tree is genuinely mixed
     (`cli.mjs`, `src/broker.mjs`, `src/scheduler.mjs`, `src/checkup.mjs`, `src/driver.mjs` are
