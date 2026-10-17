@@ -64,32 +64,33 @@ dead=0` 08:46:20Z) and impl re-engaged #1390 (opened #1395).
 - **Revert path if a regression appears:** `node scripts/sync-pi.mjs --unlink` (back to released
   packages) + restore the pin sha with the edit tool (never `git restore`/`checkout --`).
 
+**Worktree base-ref gap (impl blocked) — operator directive, REGISTERED.** impl was blocked on #1444 (the D1
+fix, which blocks landing entry 11) because **no entry point could make a worktree at an UNLANDED base**:
+`prepare_workspace` (`src/seattools.mjs:37`) and the `worktree` verb (`cli.mjs:870`) never pass `ref`,
+though the core (`prepareSeatWorkspace`/`createWorktree`) already accepts it. impl also hit refusals
+writing item notes into the shared, gitignored `.durig/` (outside its worktree). Intents delivered:
+`opr-20261017-impl-worktree-gap`, then `opr-20261017-worktree-capability-first` — operator directive:
+**fix the base-ref capability FIRST** (with a failing-first demo); **register** the rest. pm REGISTERED:
+**#1456** (capability fix), **#1458** (scratch-path docs), plus **#1453** (worktree-lifecycle test bug) and
+**#1465** (long item bodies unreadable after `prepare_workspace` — body lives in `<repo>/.durig/`).
+
 ## NEXT SESSION
 
-**Current item (clock-out):** **#1434** — the landing pass (28 entries; supersedes the cancelled #1398, which
-superseded the empty #1390). It is **`deferred` and BLOCKED**, not drivable as-is:
-- lead authorized **VARIANT (3)** (broker UP + an exclusive lock HELD ACROSS the ff), but the mandatory lock
-does NOT exist — `scripts/land.mjs` is a start-check only and the `genlock` is not exclusive (4 slots).
-impl **STOPPED AND REPORTED** (open question **#1439**).
-- **#1440** is a new blocker — a real defect (`confine.mjs READ_ONLY_COMMAND` prefix-anchored, no metachar
-guard, so compounds run from the shared checkout); it **gates #1434 entry 11** (`impl-item-1151`).
-- **VARIANT (1)** (operator/delegate stops the broker, hand-verifies, lands outside the broker) REMAINS
-AVAILABLE.
-- **Operator chose to WAIT (2026-10-17)** for the team to resolve #1440/#1439 before any re-attempt — the
-delegate did NOT stop the broker and landed nothing.
+**Current item (clock-out):** **#1456** — REGISTERED (rig gap, SMALL): expose `base`/`ref` on
+`prepare_workspace` (the core already accepts it). This is the operator's "fix the capability FIRST": it
+unblocks **#1444** (the D1 `confine.mjs` fix, whose parent base `85c5d95` is UNLANDED) and therefore
+landing entry 11. A parallel workaround (**#1461**, lead-ruled "plumbing method", parent 85c5d95) is
+`claimed`.
 
-**Broker:** upgraded + healthy — pid 37596 (pi pin `8efd314f`), PASS advancing; `pm` generating on the
-#1439/#1440 resolution.
+**Landing:** **#1448** (FINAL PROCEDURE, supersedes #1434/#1442) is `deferred` and READY for the
+operator/delegate to drive **variant (1)** (stop broker, hand-verify, land outside the broker) with
+**entry 11 EXCLUDED**; the operator parked it. `land.mjs` now holds an exclusive FF lock (#1441, verified
+#1451), so fallback variant (3) is also enabled.
 
-**Known hazards / gates:**
-- **#1383 FIXED + verified** (#1418): `land.mjs`'s genlock probe now resolves the store in use and refuses a
-  mis-resolution.
-- **pause = ROADMAP 131** (file authoritative). The number correction is done (#1422 -> #1437); the only
-  stale remnant is the immovable subject text of held row #1388 ("ROADMAP 130").
+**Broker:** healthy — pid 37596 (pi pin `8efd314f`), PASS advancing.
 
-**Known blocker:** the landing needs either a real exclusive-lock mechanism (variant 3) or a
-broker-stopped window driven by the operator/delegate (variant 1); plus #1440 must clear before entry 11
-can land.
+**Known blocker:** #1444 cannot proceed until a worktree can be based on the unlanded tip `85c5d95` — via
+#1456 (capability) or #1461 (plumbing workaround).
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
