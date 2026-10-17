@@ -332,6 +332,18 @@ export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = "HE
  * `worktreeRoot` is the directory the seat is working from (durig's own tree, the
  * broker's process cwd); the worktree is placed beside it under the same repo.
  */
+/**
+ * Is an existing item worktree ACTUALLY provisioned? A tree with no `package.json`
+ * needs no install; one with a `package.json` is only provisioned once `node_modules`
+ * exists (`npm ci` writes it — a zero-dependency package is the exception, and
+ * re-installing that cheap case is harmless). `installWorktreeDeps` is the only
+ * writer, so this is exactly the condition its success establishes.
+ */
+function isProvisioned(worktreePath) {
+	if (!existsSync(join(worktreePath, "package.json"))) return true;
+	return existsSync(join(worktreePath, "node_modules"));
+}
+
 export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, ref = "HEAD" }) {
 	const repo = await repoRoot(source);
 	const itemLabel = `item-${itemId}`;
@@ -341,6 +353,16 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, ref =
 	const inside = relative(repo, resolve(worktreeRoot));
 	const cwdFor = (worktree) => (inside === "" ? worktree : join(worktree, inside));
 	if (existsSync(worktreePath)) {
+		// Reuse is only safe when the worktree is ACTUALLY provisioned. A first attempt can
+		// create the `item-<id>` dir and then FAIL inside installWorktreeDeps, leaving a dir
+		// with no `node_modules`; returning it as "provisioned" hands the seat a dep-less
+		// worktree (#916 "poisoned-item-dir reuse"). Verify, and (re)install when missing, so
+		// a retry REPAIRS the tree or FAILS LOUD rather than reporting a lie. (We repair in
+		// place rather than deleting the dir: it is a real git worktree the seat may have
+		// branched in, and the branch-naming lifecycle is #859/#995's concern.)
+		if (!isProvisioned(worktreePath)) {
+			await installWorktreeDeps(worktreePath);
+		}
 		return {
 			worktree: worktreePath,
 			cwd: cwdFor(worktreePath),
