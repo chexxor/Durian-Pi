@@ -1643,6 +1643,19 @@ async function cmdSend(seatName, text, { stream = false, requestId = null } = {}
             // a claim about a submission nobody asked to identify.
             ...(requestId === null ? {} : { requestId, reused: answerExisted }),
           });
+        } catch (err) {
+          // An unreadable `pi.live` (P5/#110: `unresolvable path: [...]`) poisons the
+          // session the moment the run materializes the conversation. Report it against
+          // the SEAT and name the repair (D44 retires the corrupt incarnation) instead of
+          // surfacing a bare storage error that does not say which conversation is wedged
+          // or what to do (ROADMAP 70 read-boundary hardening).
+          if (/unresolvable path/.test(String(err?.message ?? err))) {
+            fail(
+              `seat ${seatName}'s pi.live document is unreadable (${String(err?.message ?? err)}), so its run cannot start. ` +
+                `Retire the corrupt document and retry (docs/DECISIONS.md D44; scripts/repair-pi-live.mjs).`,
+            );
+          }
+          throw err;
         } finally {
           delete process.env.DURIG_ACTIVE_SEAT;
           await harness.close(BACKGROUND_CONTEXT);
