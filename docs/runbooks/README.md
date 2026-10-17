@@ -136,6 +136,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [tool-result-redacted.md](tool-result-redacted.md) | a tool result shows a `[redacted by durian-pi: â€¦]` marker instead of its text | no |
 | [constitution-amendment.md](constitution-amendment.md) | you edited (or will edit) `constitution.txt`, or the 3 constitution-mirror demos fail their starter === constitution.txt assertion | no |
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language / emitting a tool call as text | yes |
+| [compaction-eval.md](compaction-eval.md) | a compaction threshold needs a MEASUREMENT: the compacted-vs-full delta or a model’s real window | no |
 | [write-corruption-recovery.md](write-corruption-recovery.md) | a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line | maybe |
 | [compact-a-seat.md](compact-a-seat.md) | a seat's context is saturated and a reset would lose durable context | yes |
 | [format-before-commit.md](format-before-commit.md) | my diff shows whitespace or line-ending churn I did not intend | no |
@@ -165,6 +166,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Store / `pi.live` | store-corruption-recovery, store-secret-detected |
 | Tool results | tool-result-redacted |
 | Seats | seat-reset, compact-a-seat |
+| Long-context eval | compaction-eval |
 | Write guard / source files | write-corruption-recovery |
 | Constitution / starter mirror | constitution-amendment |
 | Worktrees | leaked-worktrees, prepare-workspace-etarget |
