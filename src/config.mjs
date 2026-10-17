@@ -8,7 +8,7 @@
 //   3. ./.durig/config.json     (cwd)
 //
 // Why this exists: an operator with no DURIG_DB ran `send pm` and the CLI
-// silently acted on the default ./rig.sqlite instead of their tutor-pi.sqlite
+// silently acted on the default ./rig.sqlite instead of their configured store
 // — the rig looked broken when it was simply pointed at a different database.
 
 export const DEFAULT_CONFIG_PATHS = ["durig.config.json", ".durig/config.json"];

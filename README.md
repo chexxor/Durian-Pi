@@ -73,13 +73,13 @@ clock (D45). How it is switched on and off for the operator:
 ## Auditing a rig
 
 `check` reads the rig file **and** the store, because a rig that looks right in
-the file can still be running something else: the tutor-pi spec declared its
-constitution inline while the store held a different one, so all 13 seats ran
+the file can still be running something else: a rig spec declared its
+constitution inline while the store held a different one, so its seats ran
 without the team culture and nothing anywhere reported it.
 
 ```powershell
-node cli.mjs check rigs/tutor-pi.rig.json --human   # readable report
-node cli.mjs check rigs/tutor-pi.rig.json           # JSON (the contract)
+node cli.mjs check rig.starter.json --human   # readable report
+node cli.mjs check rig.starter.json           # JSON (the contract)
 ```
 
 Every finding carries a stable rule id, a subject, and the exact fix. Severity
@@ -113,9 +113,9 @@ everything is in band, because nine measures permanently on screen stop being
 read by the second day.
 
 ```powershell
-node cli.mjs metrics rigs/tutor-pi.rig.json --human      # the deliberate table
-node cli.mjs metrics rigs/tutor-pi.rig.json              # JSON (the contract)
-node cli.mjs metrics rigs/tutor-pi.rig.json --window all # widen past the scan bound
+node cli.mjs metrics rig.starter.json --human      # the deliberate table
+node cli.mjs metrics rig.starter.json              # JSON (the contract)
+node cli.mjs metrics rig.starter.json --window all # widen past the scan bound
 ```
 
 Four measures ship: `step-repetition` (direct), `unverified-completions` (proxy),
@@ -268,7 +268,7 @@ demo/online.mjs       real DeepInfra end-to-end test
 demo/optimizer-eval.mjs    optimizer effectiveness benchmark (guard + blind judge)
 demo/eval.test.mjs    mechanics test for the guard and judge
 scripts/from-openrig.mjs   OpenRig rig.yaml -> durig v2 converter (pods, per-seat role.md, skills, guidance, rig-level edges)
-rigs/tutor-pi.rig.json    the migrated 15-seat tutor-pi rig
+rig.starter.json          the packaged starter rig
 docs/                 QUICKSTART, FEATURES, MVP burn-down, STATUS, ROADMAP, METRICS, decisions D1-D37, research
 ```
 

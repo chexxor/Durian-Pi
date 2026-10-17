@@ -189,7 +189,7 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
   }
 
   // 2. The proven defect class: the spec declares text and the store holds
-  //    something else. This is what let 13 seats run without the tutor-pi team
+  //    something else. This is what let a rig's seats run without the team
   //    culture while the rig file looked correct.
   if (specConstitution !== undefined) {
     if (!storeRead) {
@@ -262,7 +262,7 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
   }
 
   // 5. Whichever way the store's seat set and the rig file disagree. Both
-  //    directions were found live at once (2026-10-11: the tutor-pi store held a
+  //    directions were found live at once (2026-10-11: the live store held a
   //    stray `worker` AND was missing `scribe`), and they are not symmetric:
   //      - a seat the rig file declares and the store lacks cannot receive work
   //        at all — a send fails with "unknown seat" — and the fix is `up`,

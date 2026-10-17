@@ -1,7 +1,7 @@
 {
   "_readme": "Copy to durig.config.json (gitignored). Environment variables override these values. Verify with: node cli.mjs config",
   "_paths_note": "DURIG_DB is relative to the working directory you run cli.mjs from; an absolute path avoids ambiguity.",
-  "DURIG_DB": "tutor-pi.sqlite",
+  "DURIG_DB": "./selfdev.sqlite",
   "DURIG_PROVIDER": "deepinfra",
   "DURIG_MODEL": "zai-org/GLM-5.3-Flash",
   "DURIG_MAX_CONCURRENT_SEATS": 1,

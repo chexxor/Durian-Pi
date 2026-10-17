@@ -24,7 +24,7 @@ function cli(args) {
 }
 
 try {
-	const up = cli(["up", join(durigDir, "rigs", "tutor-pi.rig.json")]);
+	const up = cli(["up", join(durigDir, "rig.starter.json")]);
 	assert.equal(up.status, 0, `up failed: ${up.stderr.slice(0, 200)}`);
 
 	// --- --stream: labelled transcript on stderr, JSON on stdout -----------

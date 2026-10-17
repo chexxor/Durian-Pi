@@ -21,7 +21,7 @@ import { Seats } from "../src/rig.mjs";
 const dir = mkdtempSync(join(tmpdir(), "durig-refresh-"));
 const db = join(dir, "rig.sqlite");
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
-const rigFile = join(durigDir, "rigs", "tutor-pi.rig.json");
+const rigFile = join(durigDir, "rig.starter.json");
 // Read the expected seat set from the spec rather than hard-coding it: the rig
 // grows (the docs pod added a 14th seat), and a count baked into a test turns
 // every legitimate addition into a false failure.

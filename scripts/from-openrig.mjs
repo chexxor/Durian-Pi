@@ -1,6 +1,6 @@
 // from-openrig.mjs - convert an OpenRig rig.yaml into a durig rig v2 spec.
 //
-// Handles the REAL OpenRig topology (tutor-pi shape), not a flat agents[]:
+// Handles the REAL OpenRig topology (pods of agents), not a flat agents[]:
 //   pods[].members[].agent_ref (local:./agents/X) -> seats[]
 //   agents/X/agent.yaml description              -> seats[].role
 //   agents/X/guidance/role.md (resources.guidance) -> inlined as the seat's

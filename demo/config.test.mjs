@@ -139,7 +139,7 @@ try {
 	writeFileSync(
 		join(dir, "durig.config.json"),
 		JSON.stringify({
-			DURIG_DB: "tutor-pi.sqlite",
+			DURIG_DB: "example.sqlite",
 			DURIG_PROVIDER: "faux",
 			DURIG_MODEL: "faux-seat",
 		}),
@@ -148,7 +148,7 @@ try {
 	const fromFile = await runConfig(cleanEnv);
 	assert.equal(fromFile.code, 0, `config from file failed: ${fromFile.stderr.slice(0, 200)}`);
 	const a = JSON.parse(fromFile.stdout);
-	assert.equal(a.DURIG_DB, "tutor-pi.sqlite", "file DB reaches the CLI");
+	assert.equal(a.DURIG_DB, "example.sqlite", "file DB reaches the CLI");
 	assert.equal(a.source, "durig.config.json", "CLI reports the config source");
 	assert.equal(a.DURIG_PROVIDER, "faux", "file provider reaches the CLI");
 

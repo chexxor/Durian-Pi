@@ -1,6 +1,6 @@
 // `check` audits a rig file against the research gaps, and its whole reason to
-// exist is the defect that shipped silently: the tutor-pi spec declared a
-// constitution inline and the store held a different one, so 13 seats ran
+// exist is the defect that shipped silently: a rig spec declared a
+// constitution inline and the store held a different one, so its seats ran
 // without the team culture while the rig file looked correct. A rule that only
 // reads the rig file would have called that rig healthy.
 //
@@ -18,7 +18,7 @@ const dir = mkdtempSync(join(tmpdir(), "durig-check-"));
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 
 const CONSTITUTION = "# Team culture\n\nGround every claim in a retrieved passage.\n";
-// The generic text the live tutor-pi store held while the rig file declared the
+// The generic text the live store held while the rig file declared the
 // team culture above: the exact defect this rule exists to catch.
 const STALE_TEXT = "# Rig constitution - priority-ordered;\n";
 
@@ -106,7 +106,7 @@ try {
   //    different one. Nothing else in durig reports this, and it is invisible
   //    from the rig file alone.
   const drifted = auditRig({
-    rig: "tutor-pi.rig.json",
+    rig: "example.rig.json",
     spec: { ...hardenedSpec() },
     specConstitution: CONSTITUTION,
     stored: { reason: "read", text: STALE_TEXT },
@@ -118,7 +118,7 @@ try {
   assert.match(detail, new RegExp(`store holds ${STALE_TEXT.length} bytes`), `detail names the stored size; got: ${detail}`);
   assert.match(detail, new RegExp(`the rig file has ${CONSTITUTION.length}`), "detail names the declared size");
 
-  // 4. The verifier rule must not be fooled by capabilities. tutor-pi's own
+  // 4. The verifier rule must not be fooled by capabilities. Authors' own
   //    implementers advertise `peer-review`, so a capability-based match would
   //    call the authors verifiers and report an all-clear on the exact gap the
   //    rule exists to catch.
@@ -139,7 +139,7 @@ try {
     ids(authorsWithCaps).includes("no-verifier-seat"),
     "`peer-review` on an author does not count as an independent verifier",
   );
-  // And the real verifier names in tutor-pi DO satisfy it.
+  // And the real verifier names DO satisfy it.
   const withVerifier = auditRig({
     rig: "x",
     spec: {
@@ -229,13 +229,13 @@ try {
   assert.match(danglingFinding.subject, /ghost \(as a sender\)/, "the sender typo is named");
 
   // 7. Seat drift, in BOTH directions, because both were live at once on the real
-  //    rig (verified 2026-10-11: the tutor-pi store held a stray `worker` and was
+  //    rig (verified 2026-10-11: the live store held a stray `worker` and was
   //    missing `scribe`). They are not symmetric - a declared-but-absent seat
   //    cannot receive work at all, while a stray seat still has a working address
   //    - so a rule that reported only one direction would have reported half a
   //    real problem while looking complete.
   const seatDrift = auditRig({
-    rig: "rigs/tutor-pi.rig.json",
+    rig: "rig.starter.json",
     spec: {
       version: 2,
       seats: [

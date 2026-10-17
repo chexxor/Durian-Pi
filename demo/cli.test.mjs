@@ -15,7 +15,7 @@ const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)
 const db = join(dir, "rig.sqlite");
 const rigFile = join(dir, "rig.json");
 
-// A two-seat rig keeps this contract test fast; the 13-seat tutor-pi rig is
+// A two-seat rig keeps this contract test fast; the packaged starter rig is
 // exercised by seatmodel/refresh/streamcli tests.
 writeFileSync(
 	rigFile,
