@@ -65,7 +65,7 @@ import { formatMetrics } from "./src/metrics.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readRigHealth, readSeatList } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readRigHealth, readSeatList } from "./src/readapi.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree } from "./src/worktree.mjs";
 import { auditRig, formatCheck } from "./src/checkup.mjs";
@@ -145,6 +145,25 @@ function noteEmptyRig(seatCount) {
     : ` (it did not exist before this command, so it was just created empty)`;
   console.error(
     `note: no seats in ${DB_PATH}${freshness}. If you meant a different rig, set DURIG_DB or create durig.config.json - run: node cli.mjs config`,
+  );
+}
+
+/**
+ * ROADMAP 69 / item 83: a CLI WRITE verb must NOT become a second owner while a
+ * resident broker drives this store. Two owners crash the broker and corrupt
+ * run-control documents (2026-10-16, twice: `resume` racing the broker left a
+ * mid-stream `generation` reset that orphaned later appends). The guard lives in
+ * CODE, not a runbook sentence, because prose is exactly what failed. Reads are
+ * unaffected; a write either waits for `serve --stop` or goes through the spool
+ * (`intent.mjs`), which the broker drains as operator input.
+ */
+function refuseWhileBrokerDrives(verb) {
+  const broker = readBrokerState(DB_PATH);
+  if (!brokerAlive(broker)) return;
+  fail(
+    `${verb} refuses to run while a resident broker is driving ${DB_PATH} (pid ${broker.pid}): ` +
+      `a second owner crashes the broker and corrupts run-control docs. Stop it with "serve --stop", ` +
+      `or route the request through the spool: node intent.mjs <seat> --body-file <file>`,
   );
 }
 
@@ -760,17 +779,14 @@ async function cmdWorktree(args) {
   }
 }
 
-// ps: roster with per-seat conversation id and role.
+// ps: roster with per-seat conversation id and role. A READ, so it opens the
+// storage layer read-only (like `status`) rather than a full harness — a
+// short-lived harness is a second OWNER, and opening one while the broker drives
+// is the hazard ROADMAP 69 removes (docs/COMMANDS-AND-THE-BROKER.md §4).
 async function cmdPs() {
-  const { harness, providerId } = await openHarness();
+  const storage = await openStore();
   try {
-    const doc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-    const seatsVal = doc?.value?.seats ?? {};
-    const seats = Object.entries(seatsVal).map(([name, s]) => ({
-      name,
-      conversationId: s.conversationId,
-      role: s.role,
-    }));
+    const seats = await readSeatList(storage);
     noteEmptyRig(seats.length);
     out({
       ok: true,
@@ -779,18 +795,19 @@ async function cmdPs() {
       seats,
     });
   } finally {
-    await harness.close(BACKGROUND_CONTEXT);
+    await storage.close(BACKGROUND_CONTEXT);
   }
 }
 
-// queue: every work item with status and transitions.
+// queue: every work item with status and transitions. A READ via `openStore`, for
+// the same reason as `ps`.
 async function cmdQueue() {
-  const { harness, providerId } = await openHarness();
+  const storage = await openStore();
   try {
-    const doc = await harness.documentState(RigQueue, undefined, BACKGROUND_CONTEXT);
-    out({ ok: true, command: "queue", items: doc?.value?.items ?? [] });
+    const items = await readQueueItems(storage);
+    out({ ok: true, command: "queue", items });
   } finally {
-    await harness.close(BACKGROUND_CONTEXT);
+    await storage.close(BACKGROUND_CONTEXT);
   }
 }
 
@@ -808,6 +825,9 @@ async function cmdQueue() {
 //     ownership scope, settling the submissions terminal.
 // Reports what it found and what it did to each, in the one-JSON-doc contract.
 async function cmdResume() {
+  // ROADMAP 69: `resume` is a compound WRITE (it settles stranded submissions),
+  // so a second owner while the broker drives is the 2026-10-16 crash. Refuse.
+  refuseWhileBrokerDrives("resume");
   const { harness } = await openHarness();
   try {
     const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
@@ -984,6 +1004,10 @@ async function detectModelMismatch(harness, spec, resolvedPromptBySeat) {
 // with the operator's optional handoff, and reports the reset ENTRY id it wrote.
 // The transcript is preserved; only the context head moves past the bad turns.
 async function cmdReset(seatName, handoff) {
+  // ROADMAP 69: `reset` writes a context boundary — a second owner while the
+  // broker drives. Refuse before opening a harness (the live-lease guard inside
+  // resetSeatContext is a narrower, per-seat check).
+  refuseWhileBrokerDrives("reset");
   const { harness } = await openHarness();
   try {
     // Delegate to the SHARED boundary mechanism (#402): same unknown-seat fail,
@@ -1525,6 +1549,10 @@ async function cmdStop(seatName, reason) {
 // loop needed). With a live view (default when stderr is a terminal) the
 // generation streams to stderr, labelled per seat; stdout stays one JSON doc.
 async function cmdSend(seatName, text, { stream = false, requestId = null } = {}) {
+  // ROADMAP 69: `send` submits an input and drives the run — a second owner and
+  // scheduler while the broker drives. Refuse once, before the write retry, so a
+  // live broker never races it (withStoreWriteRetry only covers the entry-id race).
+  refuseWhileBrokerDrives("send");
   const live = stream ? createLiveRenderer({ color: Boolean(process.stderr.isTTY) && !process.env.NO_COLOR }) : null;
   // F24: retry the whole send on the cross-process entry-id conflict. The
   // conflict fires at storage ADMISSION, before any generation, and its commit

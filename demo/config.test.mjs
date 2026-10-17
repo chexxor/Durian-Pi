@@ -257,7 +257,9 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 
 	// And through the real open path: a bad value must surface at Harness.open,
 	// which is what proves this is in the path rather than merely exported.
-	const badOpen = await runCliNew(dir, ["ps"], {
+	// The vehicle is `resume` (it opens a harness). `ps`/`queue` are READS now and
+	// open no harness (ROADMAP 69), so they can no longer carry this check.
+	const badOpen = await runCliNew(dir, ["resume"], {
 		...cleanEnv,
 		DURIG_PROVIDER: "faux",
 		DURIG_DB: join(dir, "stream.sqlite"),
@@ -272,7 +274,7 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 
 	// A valid one opens the harness normally, so the check above is not failing for
 	// an unrelated reason.
-	const goodOpen = await runCliNew(dir, ["ps"], {
+	const goodOpen = await runCliNew(dir, ["resume"], {
 		...cleanEnv,
 		DURIG_PROVIDER: "faux",
 		DURIG_DB: join(dir, "stream.sqlite"),
