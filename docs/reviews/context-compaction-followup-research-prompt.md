@@ -1,3 +1,4 @@
+
 # Research request — context compaction for a durable multi-agent rig (follow-up)
 
 **Ask:** hand this to the operator's research agent. Report to
@@ -152,3 +153,5 @@ not externally answerable, say so explicitly and mark it **internal — unverifi
   `docs/BROKER-SUPERVISION.md`, and the vendored pi-durable `compaction.d.ts` / `types.d.ts`.
 - Prefer primary sources (papers, provider docs, first-party engineering blogs) over aggregators; say when
   a claim rests on a community report rather than a controlled result.
+
+
