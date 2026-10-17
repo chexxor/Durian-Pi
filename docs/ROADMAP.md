@@ -650,50 +650,55 @@ pre-flight in `merge.md`); these are the code and measurement items.
 ## External task-source adapters (raised 2026-10-17)
 
 From `docs/reviews/llm-agent-project-management-tools.md`; accepted direction in `docs/PM-ADAPTERS.md`.
-**Registered, not scheduled** — `pm` sequences them. `RigQueue` stays the single authority; adapters are
-one-way and idempotent.
+**Operator direction (2026-10-17): an external PM adapter is deferred** — no one interfaces an external PM
+system soon and its value is unproven. Only the **task interface + storage format** (115) is elevated; the
+external-only items below are **PARKED** until an external PM is prioritized (then `pm` sequences them).
+`RigQueue` stays the single authority; adapters are one-way and idempotent.
 
-115. **`TaskSource` adapter seam + external state mapping.** A thin one-way adapter contract: ingest
-     external work items into `RigQueue` (keyed by external id, idempotent) and export status back, with
-     an explicit external↔durig state-mapping spec. Runs in the broker/operator path, never as a second
-     writer. *Owner:* lead (design) + impl. *Acceptance:* an adapter creates and reconciles a queue row
-     without duplication; the mapping is documented and cycle-safe.
-116. **Local/stdio MCP client adapter as the first `TaskSource`.** One MCP client reaches multiple
+115. **ELEVATED — task interface + storage format (internal + external boundary).** Define ONE stable task
+     contract (`TaskSource` shape: `list`/`get`/`add`/`claim`/`transition`/`subscribe`) and a versioned
+     `Task` storage schema, used by the internal queue and, when prioritized, by an external adapter, so
+     adding one causes minimal churn. Preserves: internal queue is authority, `subscribe` is the only wake,
+     advisory dependencies, exported functions declare their return type (JSDoc `@returns`). Proposal in
+     `docs/PM-ADAPTERS.md`. *Owner:* lead (design) + impl. *Acceptance:* the internal read/write path goes
+     through the interface; a fake in-memory `TaskSource` passes the same contract tests; the schema is
+     documented and versioned.
+116. **PARKED — local/stdio MCP client adapter as the first `TaskSource`.** One MCP client reaches multiple
      trackers instead of N REST integrations. The client runs in the operator/broker path (where the
      tracker token lives); **start with GitHub**, which has a locally runnable stdio server plus
      ETag/conditional polling. Remote/HTTP Linear and Atlassian are operator-gated. A seat never receives
      a tracker tool or credential. *Owner:* impl + lead. *Acceptance:* the adapter reaches a local stdio
      MCP server; the tracker credential never reaches a seat.
-117. **Read-only external status view + inline coordinator status.** A read-only surface for humans
+117. **PARKED (follows the adapter) — read-only external status view + inline coordinator status.** A read-only surface for humans
      watching the swarm (the report's `clientViewEnabled` analogue), riding the existing read API/TUI with
      no mutation path, **plus** a self-contained inline status a coordinator seat (`pm`/`lead`, which has
      no file tools) can read. *Owner:* designer + impl. *Acceptance:* a read-only view renders queue/seat
      status; no write verb is added; `pm`/`lead` receive the status inline.
-118. **Verify the seat-egress mechanism.** `src/confine.mjs` enforces paths, env, and command blocks but
+118. **PARKED — verify the seat-egress mechanism.** `src/confine.mjs` enforces paths, env, and command blocks but
      has **no network/socket rule** (verified 2026-10-17), and no other egress control was found.
      Determine what, if anything, blocks seat egress (host config, or nothing) and state it truthfully in
      `docs/PM-ADAPTERS.md`. *Blocks item 116.* *Owner:* delegate + lead. *Acceptance:* a documented,
      tested statement of whether a seat shell can reach the network.
-119. **Fake MCP server + sync-correctness metrics.** A local stdio MCP server that replays a recorded
+119. **PARKED — fake MCP server + sync-correctness metrics.** A local stdio MCP server that replays a recorded
      tracker event stream and injects faults (429 / 304 / edited / reopened); metrics computed read-only
      from the store: duplicate rows, lost updates, mapping drift, reconcile divergences. *Owner:* impl +
      qa. *Acceptance:* a demo drives the adapter against the fake server and reports zero duplicates and
      zero lost updates.
-120. **One-way sync + external-id ingest + second-writer detection.** Ingest create-once keyed on
+120. **PARKED — one-way sync + external-id ingest + second-writer detection.** Ingest create-once keyed on
      `(tracker, external_id)` (never derived from content) with a `requestId`-style idempotency key; record
      the tracker's `updatedAt` at ingest and raise a second-writer alert on uncaused divergence; terminal
      queue states are immutable from the tracker side. *Owner:* impl. *Acceptance:* re-ingest is a no-op;
      an external edit to a terminal item raises a notice and does not resurrect it.
-121. **State-projection module (queue → tracker).** Compute the tracker's expected label/status from the
+121. **PARKED — state-projection module (queue → tracker).** Compute the tracker's expected label/status from the
      queue on every sync so a re-sync is a no-op; record transitions the tracker cannot express
      (`claimed ↔ deferred`) as labels, not statuses. **Keep dependencies advisory** — do not port Agent
      Board's enforced DAG. *Owner:* impl. *Acceptance:* a demo shows an idempotent projection and an
      advisory-dependency item still claimable with unmet deps.
-122. **Agent Board Windows operability spike.** Test whether `quentintou/agent-board` (MIT, JSON files,
+122. **PARKED — Agent Board Windows operability spike.** Test whether `quentintou/agent-board` (MIT, JSON files,
      localhost REST + MCP) runs on native Windows and is usable as a **read-only mirror candidate**; do
      not embed it. (Vibe Kanban is sunsetting and is not a candidate.) *Owner:* devtools + impl.
      *Acceptance:* a documented Windows run/no-run result; no dependency added.
-123. **Value case for an external tracker (decision + measurement).** The PM-tools research establishes
+123. **DEFERRED (follows the adapter) — value case for an external tracker (decision + measurement).** The PM-tools research establishes
      feasibility and practice, not benefit. Define what "efficiency / correctness / effectiveness" means
      at the human-facing layer, then measure before adopting a tracker beyond an optional source/mirror:
      intake latency, priority alignment, time-to-human-decision, duplicate work, blocked time. *Owner:*

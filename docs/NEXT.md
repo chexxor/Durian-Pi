@@ -3,9 +3,9 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **seventeenth pass** — digested the PM-tools follow-up, corrected
-`docs/PM-ADAPTERS.md`, and registered ROADMAP 115–122. Prior pass: the PM-tools survey, `PM-ADAPTERS.md`,
-and 115–117. See **NEXT SESSION** below.)_
+_Last refreshed: 2026-10-17 (delegate, **eighteenth pass** — applied the operator's PM direction: defer the
+external adapter, elevate the task interface + storage format (115), park 116–123. Prior pass: digesting
+the PM-tools follow-up and 115–122. See **NEXT SESSION** below.)_
 
 ## NEXT SESSION
 
@@ -58,6 +58,11 @@ unverified, item 118); (2) keep dependencies **advisory**, do not port Agent Boa
 questions are externally closed; the **value case** (does an external tracker improve efficiency /
 correctness / effectiveness?) is **not** answered by the research — it is a decision + measurement
 (item 123). Other internal open item: the egress mechanism (118).
+
+**Operator direction (2026-10-17):** defer the external PM adapter — no one interfaces an external PM
+system soon and its value is unproven. **Elevate only ROADMAP 115** (task interface + storage format, one
+contract for internal and future-external use); **park 116–123**. See `docs/PM-ADAPTERS.md` "Product
+direction" + "Task interface contract (proposal)".
 
 **Next-session checklist (the landing cleanup):**
 1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`

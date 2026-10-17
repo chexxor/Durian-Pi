@@ -29,6 +29,36 @@ rather than N bespoke REST integrations.
 5. **An explicit state-mapping spec** is required for any adapter: external statuses and durig's columns
    are not 1:1, and the mapping must be idempotent and cycle-safe.
 
+## Product direction (operator, 2026-10-17)
+An external PM adapter is **deferred**: no one will interface an external PM system soon, and its value is
+unproven (see the value case). The high-priority work is the **stable task interface and storage format** —
+one contract used by the internal queue and, when someone prioritizes it, by an external PM adapter — so
+adding an external adapter causes minimal code churn. External-only work (the MCP client, sync/projection,
+the fake MCP server, the Agent Board spike, egress verification) is **parked** until an external PM is
+prioritized. The seam is low-regret: it is useful internally even if no adapter is ever built.
+
+## Task interface contract (proposal)
+The seam is a thin module boundary (`TaskSource`), not a pluggable source of truth. The internal queue
+implements it; an external adapter would implement the same shape as a projection.
+
+| Operation | Result | Notes |
+|---|---|---|
+| `list(filter)` | `Task[]` | read-only |
+| `get(id)` | `Task \| null` | read-only |
+| `add(seed)` | `Task` | new internal id; `externalId`/`source` optional |
+| `claim(id, seat)` | `Task` | refuses wrong owner/state (as `claim_work` does) |
+| `transition(id, to, meta)` | `Task` | `defer`/`held`/`complete`/`cancel`, validated by the state machine |
+| `subscribe(listener)` | `() => void` | the commit-stream wake; no socket |
+
+`Task` storage fields: `id`, `externalId?`, `source?`, `title`, `body`, `state`, `from`, `to`, `deps`
+(advisory), `attempts`, `createdAt`, `updatedAt`, and a link to the history/transcript.
+
+Invariants the interface MUST preserve:
+- the internal queue is the single authority; the interface never lets an adapter write the store directly;
+- `subscribe` is the only wake (no inbound endpoint);
+- dependencies stay advisory (no enforced DAG);
+- every exported function declares its return type (JSDoc `@returns`), per the project convention.
+
 ## durig constraints the report could not see
 - **Seat network egress is NOT blocked by `src/confine.mjs`.** That file enforces path confinement, a
   stripped env allowlist, and a `SECRET_NAME` refusal, but it contains no network/socket rule — a seat
@@ -64,11 +94,11 @@ them would be a separate ruling. Task chaining (`nextTask`) likewise maps onto d
 - **A bespoke web UI first** — the TUI already covers the in-rig read surface.
 
 ## Work registered
-ROADMAP items **115–122** (`docs/ROADMAP.md`): the `TaskSource` seam + state mapping (115); the local/stdio
-MCP adapter, GitHub first (116); the read-only external status view plus an inline status path for
-`pm`/`lead` (117); the egress-mechanism verification (118); the fake MCP server + sync-correctness metrics
-(119); one-way sync with external-id idempotency and second-writer detection (120); the state-projection
-module with advisory dependencies (121); and the Agent Board Windows operability spike (122).
+The task interface + storage format is **elevated** (ROADMAP 115, reframed). The external-only items are
+**parked** until an external PM is prioritized: the local/stdio MCP adapter (116), egress verification
+(118), the fake MCP server + sync-correctness metrics (119), one-way sync + external-id ingest (120), state
+projection (121), and the Agent Board spike (122). The read-only external status view (117) and the value
+case (123) stay registered but follow the adapter.
 
 ## Follow-up consumed (2026-10-17)
 The follow-up (`docs/reviews/llm-agent-project-management-tools-followup.md`) confirmed this direction and
