@@ -20,6 +20,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const durigDir = join(here, "..");
 const STARTER = join(durigDir, "rig.starter.json");
 
+// AUTHOR WARNING (#977, D83): a byte-equality compare MUST be EOL-insensitive. This repo has
+// core.autocrlf=true, so the LF blob is checked out as CRLF while a JSON-parsed inline copy
+// carries LF — a raw `a === b` then flakes by platform/checkout. Normalize CRLF->LF on BOTH
+// sides before comparing (the file-scoped .gitattributes half is a separate item, #1055).
+const lf = (text) => String(text ?? "").replace(/\r\n/g, "\n");
+
 const dir = mkdtempSync(join(tmpdir(), "durig-starter-"));
 
 /** Run cli.mjs against a scratch database and return its parsed JSON. */
@@ -73,9 +79,10 @@ try {
 	// The constitution is inline so the file is self-contained (a `constitution`
 	// path resolves against the CWD, so it would only work from durig's own
 	// directory). That copy must not silently drift from the text durig ships.
+	// Compare EOL-insensitively (#977/D83): the inline carries LF, the disk file CRLF.
 	assert.equal(
-		spec.constitutionInline,
-		readFileSync(join(durigDir, "constitution.txt"), "utf8"),
+		lf(spec.constitutionInline),
+		lf(readFileSync(join(durigDir, "constitution.txt"), "utf8")),
 		"the inline constitution has drifted from constitution.txt — regenerate the starter",
 	);
 
