@@ -18,7 +18,7 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -33,6 +33,17 @@ import { brokerAlive, readBrokerState, writeBrokerState } from "../src/broker.mj
 const ctx = BACKGROUND_CONTEXT;
 const dir = mkdtempSync(join(tmpdir(), "durig-broker-refuse-"));
 const db = join(dir, "rig.sqlite");
+// #1589: `up` needs a spec to read. The guard runs BEFORE the read, so the refusal
+// would fire either way; the file exists so the `--dry-run` non-refusal check below
+// exercises a real preview rather than a parse error.
+const rigFile = join(dir, "rig.json");
+writeFileSync(
+		rigFile,
+		JSON.stringify({
+			version: 2,
+			seats: [{ name: "worker", role: "implementation", instructions: "w" }],
+		}),
+	);
 const repoRoot = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 
 const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
@@ -106,6 +117,8 @@ try {
 		["resume", ["resume"]],
 		["reset", ["reset", "worker"]],
 		["send", ["send", "worker", "hello"]],
+		// #1589: `up` opened a harness with NO guard, so `up --refresh` was a second owner.
+		["up --refresh", ["up", rigFile, "--refresh"]],
 	]) {
 		await check(`${label} refuses with a live broker`, async () => {
 			const { exitCode, json, stdout } = await runCli(args);
@@ -119,6 +132,16 @@ try {
 	}
 
 	console.log("\n=== CLI read verbs still work while the broker drives ===\n");
+
+	// #1589 non-regression: `--dry-run` previews and writes NOTHING, so it must keep
+	// working while a broker drives (the `reset` precedent). This is the check that
+	// fails if the guard is placed unconditionally instead of on the write path.
+	await check("up --dry-run still previews with a live broker (no refusal)", async () => {
+		const { exitCode, json, stdout } = await runCli(["up", rigFile, "--dry-run"]);
+		assert.equal(exitCode, 0, `up --dry-run must succeed (got ${exitCode}); stdout=${stdout.slice(0, 300)}`);
+		assert.equal(json.ok, true, "up --dry-run ok:true");
+		assert.equal(json.dryRun, true, "it reports itself as a preview");
+	});
 
 	await check("ps reads the roster with a live broker (no refusal)", async () => {
 		const { exitCode, json, stdout } = await runCli(["ps"]);
@@ -139,7 +162,7 @@ try {
 
 	console.log(
 		failures === 0
-			? "\nCLI BROKER-REFUSE PASS (resume/reset/send refuse while a broker drives; ps/queue read)"
+			? "\nCLI BROKER-REFUSE PASS (resume/reset/send/up refuse while a broker drives; up --dry-run and ps/queue read)"
 			: `\nFAIL — ${failures} check(s) failed`,
 	);
 } finally {
