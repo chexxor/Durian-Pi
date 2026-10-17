@@ -3,31 +3,45 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **twelfth pass** — D85 language-drift guard, qa reset, and two
-operator TUI items 98/99 registered. See **NEXT SESSION** below.)_
+_Last refreshed: 2026-10-17 (delegate, **thirteenth pass** — merged-branch cleanup, the merge/landing
+runbook (W6), and ROADMAP item 100 for landing-health metrics. See **NEXT SESSION** below.)_
 
-## NEXT SESSION — current item
+## NEXT SESSION
+
+**Current item:** the team's next work — `pm` releases the holds and runs the **landing pass** for the 15
+verified-but-unlanded branches (routed as `opr-20261017-landing-pass`), then the top-three: **`#1087`**
+(ROADMAP 97, qa, measure-first) → TUI **`#1109`** (99 bug) and **`#1108`** (98 feature) → **`#1151`**
+(seat-root guard). The delegate has done its part (cleanup + process docs); the landing execution is the
+team's.
+
+**Known blocker:** none blocking the delegate. The operator holds **push** (lands stay local until you
+push), and the **#994** Prettier-normalize quiet window is still undeclared.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
 **This pass (all done):**
-1. **D85 language-drift guard** implemented + committed (`06e08f8`): `isLanguageDriftTurn`/
-   `countLanguageDriftTurns` (`src/attention.mjs`), the `language-drift` cause in `assessRun`
-   (`src/degeneration.mjs`), and the English-only reset handoff (`src/supervisor.mjs`). qa
-   (GLM-5.3-Flash) had emitted a long Chinese recap after #1085. RED→GREEN `demo/degeneration.test.mjs`;
-   full suite **102/0**.
-2. **qa reset** (operator-authorized broker-safe stop): stopped pid 35640 (hung in the F11 drain, no
-   genlock → force-killed per the runbook), `reset qa` with an English-only handoff (the `pi.reset`
-   entry is in qa's log), restarted → **broker pid 13712** (`2026-10-17T02:12:18Z`), now running the
-   guard. qa resumed in English on #1102.
-3. **Two operator TUI items registered** — ROADMAP **98** (show a seat's context consumption in its
-   conversation view; designer+advocate consult) and **99** (BUG: the conversation view has no `i`
-   affordance and entering it drops the conversation). Delivered to `pm` (intent
-   `opr-20261017-tui-context-input`, `INTENT delivered=1 dead=0`).
+1. **Branch cleanup:** deleted the 18 fully-merged local branches (`git branch -d`, all succeeded); 18
+   local branches remain (17 with unique work + `main`).
+2. **Merge/landing process added:** `docs/runbooks/merge.md` (universal gate + per-type checklists
+   bugfix/feature/research/docs-only; the landing procedure + read-only audit), a **W6** workflow in
+   `docs/WORKFLOWS.md`, and an index row in `docs/runbooks/README.md`. Operator preference honored:
+   **instructions + a later read-only audit, no new broker automation.**
+3. **ROADMAP item 100** — measure landing health (unlanded-verified count + time-to-land): a read-only
+   metric (no auto-merge/broker hook) so the delegate can verify later; explicitly tied to the operator's
+   "trust, but verify later" preference.
+4. **Landing pass routed to `pm`** (intent `opr-20261017-landing-pass`): land the 15 verified-but-unlanded
+   branches once, and register item 100.
+5. **Top-three directive delivered** (intent `opr-20261017-top-three`): `#1087`/ROADMAP 97 (qa,
+   measure-first) → TUI `#1109`(99)/`#1108`(98) → `#1151` (seat-root guard).
+6. The prior pass (D85 language-drift guard + qa reset) is done and verified.
 
-**Still the critical path (unchanged):** `#1040` landing train → `#1036` (land #916 → 2nd rig reload)
-→ the `cli.mjs` chain → daemon. **On the operator:** `#1059` is RESOLVED (lead ruled KEEP); the second
-rig reload after #916 lands; the #994 quiet window; push.
+`#1036`/`#916` and the second reload are DONE (the broker restarted at 02:12 UTC, after #916 landed at
+01:58 UTC).
 
-**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+**NEXT SESSION — prior pass detail (twelfth, done):** D85 language-drift guard (`06e08f8`:
+`src/attention.mjs` + `src/degeneration.mjs` + `src/supervisor.mjs`, RED→GREEN, suite 102/0); qa reset
+via an operator-authorized broker-safe stop (pid 35640 force-killed in the F11 drain, `reset qa`
+English-only handoff, broker restarted **pid 13712**, qa back in English); TUI items 98/99 registered.
 
 ## CLOCK-OUT — tenth pass (2026-10-16, delegate) — historical
 

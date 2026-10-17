@@ -554,6 +554,20 @@ them forward, and the impl items are HELD until pm releases.
 - **99** (bug: the `i` input affordance drops the conversation; fix = treat input as an OVERLAY on
   the current view) — owners: impl #1109 (fix, GATED), designer #1110 (footer/hint wording, advisory).
 
+100. **Measure landing health — unlanded verified branches and time-to-land (operator request,
+    2026-10-17).** The branch backlog (2026-10-17: 15 verified-but-unlanded branches) is invisible today:
+    the store says an item is `done` while `main` does not contain it. We choose to **trust the agent to
+    land** (no auto-gate) and **verify later** with a measurement the delegate can read — this item is that
+    measurement, not an automation. A read-only measure over git + the store: count `<seat>-item-*`
+    branches whose tip is **not an ancestor of `main`** while their item is `done` (the "unlanded-verified"
+    count) and the age of the oldest (time-to-land). Reuse the existing read-only git audit (the Diagnose
+    block in `docs/runbooks/merge.md`, or a `scripts/branch-audit.mjs`) — **no new write path, no broker
+    hook, no auto-merge**. *Value test:* if the count stays near 0 without prompting, the measure earns its
+    place; if it regularly exceeds a threshold, the landing step (W6) wants a different trigger, not more
+    process. *Owner:* impl (measure) with the delegate (audit), riding item 2's metrics pattern.
+    *Acceptance:* the metric appears in `metrics`/`status` and the delegate's clock-out audit reads it; no
+    automation is added.
+
 ## Extensibility and distribution
 
 **Ruled 2026-10-11 (operator): one distribution, no editions** — chosen extension

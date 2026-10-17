@@ -232,6 +232,37 @@ the file" - specifically no per-task abort or veto from the operator surface.
 (the two notice kinds), `demo/cli.test.mjs` (the wrong-database guardrail), D11, D18, D22.
 
 ---
+## W6 - Landing and merge review
+
+**Who:** the author seat lands its own branch after verification; `qa`/`auditor` verified it (W2); `pm`
+routes a landing pass when several are outstanding. A user-facing change has designer/advocate sign-off.
+**Trigger:** an item is `done` and its work is committed on an `<seat>-item-<id>` branch.
+
+**Loop:** the author lands with `git merge --no-ff <sha>` so the sha becomes an **ancestor** of `main`,
+runs the covering demo on the merged result, removes the item's clean worktree, and deletes the branch
+with `git branch -d`. A branch that cannot merge cleanly goes back through W2 for a rebase - never force.
+
+**The gate is a checklist the agent applies, not an auto-gate** (operator preference, 2026-10-17): a
+**universal** gate (item id + one concern + explicit paths; independent review of the artifact;
+`node --check`; the covering demo passes with failing-first evidence; clean merge; no push; never merge a
+snapshot/archive branch), plus the **type block** that matches the change - **bugfix** (failing-first
+repro + named root cause), **feature** (closed spec, right-layer tests, docs, rollback, serialization),
+**research/spike** (report under `docs/reviews/` with a URL + evidence class per claim; findings mapped or
+marked unverified; ROADMAP items raised), **docs-only** (links resolve, no code). The full checklist and
+the exact landing procedure are in [`docs/runbooks/merge.md`](runbooks/merge.md).
+
+**Must not break:** (a) `main` advances **serialized** - one landing at a time; (b) the landed sha is an
+**ancestor** of `main`, or the worktree-prune criterion fails; (c) the artifact is **verified before it
+lands** (W2), not after; (d) a branch is never merged while its worktree holds uncommitted edits.
+
+**Verify later - do not over-automate:** there is deliberately **no `land` verb and no broker hook** -
+landing is trusted to the agent, and the delegate runs the read-only branch audit (the Diagnose block in
+`merge.md`) periodically. The measurement that makes the audit worth running - unlanded-verified count and
+time-to-land - is ROADMAP item 100.
+
+**Evidence:** `docs/BRANCH-AUDIT-2026-10-14.md`; `docs/runbooks/merge.md`; the 2026-10-17 audit (18
+fully-merged branches deleted, 15 verified-but-unlanded flagged).
+
 ## The operator loop: a rig change under measurement
 
 **Who:** operator or lead. **Trigger:** someone wants to change the rig - a model, a

@@ -103,6 +103,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error` | yes |
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language | yes |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
+| [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
 | [research-request.md](research-request.md) | you need external research | no |
 
