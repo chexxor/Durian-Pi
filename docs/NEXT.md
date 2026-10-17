@@ -45,36 +45,27 @@ scribe's, landed).
 
 ## NEXT SESSION
 
-**Current item:** the branch-management audit is **DONE**; the follow-up is the *unlanded work* it
-surfaced. 33 unique commits for `done` items are not on `main` (guard/confine stack `#1151, #1182,
-#1225, #1249, #1261, #1444, #1465, #1475, #1487, #1505, #1519`; docs `#1232, #1233, #1257, #1274,
-#1323, #1458, #1469, #1529, #1530, #1535, #1542, #1545, #1558, #1565`; plus `#1087, #1271, #1456`).
-**Route them to `pm` for one landing pass** — the `merge.md` Escalate-to, not a re-derive.
-**DONE:** `pm` routed the pass as **#1605 → impl** (31 branches; stacked-chain dedupe; archives excluded).
+**Current item:** the rig is **running again** (broker pid `36488`) and `security` is resumed on its
+stranded claim. Next work is what the broker drives; the delegate's queue is:
+- **`#1609`** (impl) — the incident-report `check` rules + `ownership` class + demo.
+- **`#1610` / `#1611`** (impl/qa) — **MAIN IS RED**: `demo/secretredact.test.mjs` fails on `main` (a
+  secret IS committed).  This blocks the `merge.md` gate for ANY landing.
+- **`#1605`** (impl) — the branch-landing pass is **PARKED/HELD** (`#1612`); it needs a fresh quiesced
+  window and a green `main`.
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue`
-
-**In flight / owed (do NOT re-send):**
-- **Landing pass #1605 is DRIVING** outside the broker: `send impl` pid `31164`,
-  `--request-id opr-20261017-landing-drive`, body `.durig/drive-landing-20261017.md`, output
-  `.durig/drive-landing.out`. The exclusive window was hand-verified open (no `serve`, no `genlock`,
-  no `MERGE_HEAD`, clean tree) per `land.md` / #1448 path (A). The `pm` send already settled
-  (`.durig/send-pm.out`).
-- **OWED next:** when #1605 settles, **start the broker** —
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1`
-  (`broker-down-or-stalled.md`). The rig has had no broker since ~18:11Z and is not self-restarting.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
 **State at clock-out:**
-- `main` HEAD = `5ce0187` (the two #1448 docs commits), **tree clean**.
+- **Broker:** UP, pid `36488` (`START 19:12:44Z`), passes advancing. It woke pm/impl/qa/devtools;
+  `security` was steered via the broker inbox (`intent.mjs`) and resumed (`lastActivity 19:13:41Z`).
+- `main` HEAD = the `#1448` docs commits + the `docs(incidents)` commit; **tree clean**.
 - Local refs **128 → 76** (52 pruned: 50 merged `-d`, 2 patch-equivalent `-D`); **33 unlanded refs kept**.
-- **Owed pruning still open:** **42 merged branches held by a worktree** — release each only per
-  `leaked-worktrees.md` (terminal + unlocked + clean; a **locked** worktree is an intentional keep).
-- **Runbook:** `docs/runbooks/branch-cleanup.md` (indexed in `README.md`; cross-linked from `merge.md`
-  "Trust, but verify"). `last_verified: 2026-10-17`.
+- **Owed pruning:** **42 merged branches still held by a worktree** — release per `leaked-worktrees.md`.
+- **New:** `docs/incidents/` (template + index + 5 backfilled reports); enforcement routed as `#1609`.
+  Runbook `docs/runbooks/branch-cleanup.md` remains current (`last_verified: 2026-10-17`).
 
-**Known blocker:** a landing pass cannot restart the broker itself (it runs outside it); the
-delegate/operator restarts after #1605 settles. Seats cannot prune (seatguard). Entry 11
-(`impl-item-1151`, `#1151`) stays EXCLUDED (D1 open).
+**Known blocker:** `main` is red (`secretredact`), so no landing can pass the gate until `#1610` lands.
+Landing `#1605` stays parked. Entry 11 (`impl-item-1151`, `#1151`) stays EXCLUDED (D1 open).
 
 ## DELEGATE NOTE — 2026-10-17 (priority delivered, landing window declared, pause command registered)
 
