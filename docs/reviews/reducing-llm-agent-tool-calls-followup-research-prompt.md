@@ -36,9 +36,9 @@ completion that must **name the exact checks it ran and their exit codes** (cons
   bounds concurrency; the broker does not parallelize a single seat's tool calls for you.
 
 **What durig already has (build on it, do not re-research it):**
-- A **code-execution surface** is available in the pi stack (`services/durig` seats run under a pi
-  runtime that ships a codemode surface — see the pi `docs/codemode.md`). Whether seats under-use it is an
-  internal question, not a research one.
+- A **code-execution surface** is available in the pi stack (the seats run under a pi runtime that ships
+  a codemode surface — see the pi `docs/codemode.md`). Whether seats under-use it is an internal
+  question, not a research one.
 - `metrics` already measures, per seat, context tokens, `step-repetition` (repeated tool calls), and
   `malformed-tool-call`; each metric declares a **band and a blind spot** and says "no data" rather than
   guessing. A per-turn **wall-clock** bound is a planned item.
