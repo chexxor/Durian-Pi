@@ -26,6 +26,12 @@ A worktree whose item is terminal is an **orphan**. An orphan with uncommitted w
    once clean.
 3. Do not force-remove a dirty worktree while a seat may own it: check the queue item's status first.
 
+> **Item branches (#859).** `prepare_workspace` now creates each item worktree ON its
+> `<seat>-item-<id>` branch, so a seat's commits land on a branch, not a detached HEAD. A worktree
+> made before this change may still be detached: re-run `prepare_workspace` for that item and it
+> re-attaches the branch at the current HEAD, preserving any commits already made there. Do not
+> hand-roll a branch — the tool owns it.
+
 ## Verify
 `git worktree list` no longer lists the resolved worktree; `git status` is quiet for `item-*`.
 

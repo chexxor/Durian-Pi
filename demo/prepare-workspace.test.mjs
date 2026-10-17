@@ -48,6 +48,7 @@ try {
   const first = await prepareSeatWorkspace({ source, worktreeRoot: source, itemId: 7 });
   worktree = first.worktree;
   assert.equal(first.created, true, "first call creates the worktree");
+  assert.equal(first.branch, "item-7", "the worktree is put on the item branch (#859)");
   assert.ok(first.worktree.endsWith(join("durig", "item-7")) || first.worktree.endsWith("item-7"),
     `worktree is at item-7 (got ${first.worktree})`);
   assert.ok(existsSync(first.cwd), `the seat cwd exists (got ${first.cwd})`);
@@ -60,6 +61,41 @@ try {
   assert.equal(second.created, false, "a rerun does not re-create");
   assert.equal(second.cwd, first.cwd, "a rerun returns the same cwd");
   assert.ok(!existsSync(join(first.cwd, "item-7")), "no nested item-7 worktree inside the first");
+
+  // --- 2b. the worktree is on an ITEM BRANCH, not a detached HEAD (#859) ---
+  const branchOf = async (wt) => (await run("git", ["-C", wt, "branch", "--show-current"])).stdout.trim();
+  assert.equal(await branchOf(first.worktree), "item-7", "the worktree is on item-7, not detached");
+  assert.equal(second.branch, "item-7", "prepareSeatWorkspace reports the branch");
+  // A commit made in the worktree lands on the branch — the whole point of #859.
+  await writeFile(join(first.cwd, "work.txt"), "x\n");
+  await run("git", ["-C", first.cwd, "-c", "user.email=t@t", "-c", "user.name=t", "add", "work.txt"]);
+  await run("git", ["-C", first.cwd, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "item work"]);
+  assert.equal(await branchOf(first.worktree), "item-7", "the commit stays on the branch");
+  assert.match((await run("git", ["-C", repo, "log", "--oneline", "item-7"])).stdout, /item work/, "the repo sees the item branch");
+
+  // --- 2c. the branch is <seat>-item-<id> when the seat is known. Done in a
+  //     FRESH repo: a second worktree under the same source triggers the #506
+  //     recursive-carry (a sibling worktree is untracked and gets carried), which
+  //     is a separate concern from #859. ---
+  const repo2 = join(base, "repo2");
+  const source2 = join(repo2, "durig");
+  await mkdir(source2, { recursive: true });
+  await writeFile(join(source2, "artifact.txt"), "x\n");
+  await run("git", ["init", "-q", repo2]);
+  await run("git", ["-C", repo2, "add", "durig/artifact.txt"]);
+  await run("git", ["-C", repo2, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
+  const seated = await prepareSeatWorkspace({ source: source2, worktreeRoot: source2, itemId: 9, seatName: "impl" });
+  assert.equal(seated.branch, "impl-item-9", "the branch is <seat>-item-<id>");
+  assert.equal(await branchOf(seated.worktree), "impl-item-9");
+  await removeSeatWorkspace({ worktreeRoot: source2, itemId: 9 });
+
+  // --- 2d. reuse REPAIRS a detached worktree (an older run's worktree) ---
+  await run("git", ["-C", first.worktree, "checkout", "--detach"]);
+  assert.equal(await branchOf(first.worktree), "", "detached");
+  const repaired = await prepareSeatWorkspace({ source, worktreeRoot: source, itemId: 7 });
+  assert.equal(await branchOf(repaired.worktree), "item-7", "re-prepare re-establishes the branch");
+  assert.equal(repaired.branchAction, "created-at-detached-head", "and reports what it did");
+  assert.match((await run("git", ["-C", repo, "log", "--oneline", "item-7"])).stdout, /item work/, "the commit made on the detached HEAD is preserved on the branch");
 
   // --- 3. the seat's OWN prepared cwd wins over the process-global root ---
   const decoy = join(base, "decoy-shared-tree");
