@@ -37,6 +37,26 @@ adding an external adapter causes minimal code churn. External-only work (the MC
 the fake MCP server, the Agent Board spike, egress verification) is **parked** until an external PM is
 prioritized. The seam is low-regret: it is useful internally even if no adapter is ever built.
 
+## Architecture through the human-intake lens (operator, 2026-10-17)
+The motivating reason to adopt an external PM is **human authoring and organization** — a person adds,
+prioritizes, groups, and assigns work items in a tool they already use. That reframes the architecture:
+- The external PM is a **human front door + status mirror**, not the execution system of record. `RigQueue`
+  remains the authority for execution (claim, state, attempts, leases); the PM is authoritative for the
+  **human-owned fields** a person authors.
+- Two flows, one seam: **intake** (PM → queue: human-created items become runnable tasks) and **status
+  mirror** (queue → PM: the human sees progress). The internal system runs with no PM; adding one supplies
+  intake and visibility.
+- **Field ownership** keeps the split clean: human-owned fields (`title`, `body`, `priority`, `labels`,
+  `collection`/grouping, `assignee`, external links) are taken from the PM on ingest; execution-owned fields
+  (`state`, `claimed by`, `attempts`, `deferred`/`held`, history) are durig's and are mirrored out.
+- **Admission:** a human-authored item is not automatically runnable. Ingest needs a readiness gate (the
+  item's acceptance/target is stated), so the queue does not receive vague items as agent work.
+- **Round-trip schema:** the internal `Task` must carry the human/organizational fields as optional data,
+  so ingest is lossless and export is meaningful with no schema migration when an adapter is added.
+
+Consequence: the interface is **not two peer backends**. It is one execution contract (the internal task
+API) plus an optional adapter that pulls human-authored items in and pushes status out.
+
 ## Task interface contract (proposal)
 The seam is a thin module boundary (`TaskSource`), not a pluggable source of truth. The internal queue
 implements it; an external adapter would implement the same shape as a projection.
@@ -51,7 +71,12 @@ implements it; an external adapter would implement the same shape as a projectio
 | `subscribe(listener)` | `() => void` | the commit-stream wake; no socket |
 
 `Task` storage fields: `id`, `externalId?`, `source?`, `title`, `body`, `state`, `from`, `to`, `deps`
-(advisory), `attempts`, `createdAt`, `updatedAt`, and a link to the history/transcript.
+(advisory), `attempts`, `createdAt`, `updatedAt`, a link to the history/transcript, and the optional
+human-owned fields an adapter must round-trip: `priority?`, `labels?`, `collection?` (epic/group),
+`assignee?`, `links?`.
+
+The adapter layer (parked) adds two operations over this contract: `pullNew()` (intake — PM → queue) and
+`pushStatus(task)` (mirror — queue → PM). It never becomes the execution authority.
 
 Invariants the interface MUST preserve:
 - the internal queue is the single authority; the interface never lets an adapter write the store directly;

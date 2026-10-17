@@ -658,11 +658,15 @@ external-only items below are **PARKED** until an external PM is prioritized (th
 115. **ELEVATED — task interface + storage format (internal + external boundary).** Define ONE stable task
      contract (`TaskSource` shape: `list`/`get`/`add`/`claim`/`transition`/`subscribe`) and a versioned
      `Task` storage schema, used by the internal queue and, when prioritized, by an external adapter, so
-     adding one causes minimal churn. Preserves: internal queue is authority, `subscribe` is the only wake,
-     advisory dependencies, exported functions declare their return type (JSDoc `@returns`). Proposal in
+     adding one causes minimal churn. The external PM's purpose is **human authoring/organization** (PM →
+     queue intake, queue → PM status), so the schema carries the human-owned fields (`priority`/`labels`/
+     `collection`/`assignee`) as optional data and separates intake from status export, even while no
+     adapter exists. Preserves: internal queue is authority, `subscribe` is the only wake, advisory
+     dependencies, exported functions declare their return type (JSDoc `@returns`). Proposal in
      `docs/PM-ADAPTERS.md`. *Owner:* lead (design) + impl. *Acceptance:* the internal read/write path goes
      through the interface; a fake in-memory `TaskSource` passes the same contract tests; the schema is
-     documented and versioned.
+     documented, versioned, and round-trips the human-owned fields with an explicit intake-vs-status split
+     and a readiness gate.
 116. **PARKED — local/stdio MCP client adapter as the first `TaskSource`.** One MCP client reaches multiple
      trackers instead of N REST integrations. The client runs in the operator/broker path (where the
      tracker token lives); **start with GitHub**, which has a locally runnable stdio server plus

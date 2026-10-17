@@ -64,6 +64,11 @@ system soon and its value is unproven. **Elevate only ROADMAP 115** (task interf
 contract for internal and future-external use); **park 116–123**. See `docs/PM-ADAPTERS.md` "Product
 direction" + "Task interface contract (proposal)".
 
+**Purpose clarified (operator, 2026-10-17):** the external PM exists for a **human to add and organize work
+items** — it is a human front door + status mirror, not the execution authority. `RigQueue` stays the
+execution system of record; the schema (115) carries the human-owned fields (`priority`/`labels`/
+`collection`/`assignee`) and separates intake (PM → queue) from status export (queue → PM).
+
 **Next-session checklist (the landing cleanup):**
 1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`
 2. Delete **only** `ahead=0` branches: `git branch -d <b>` (safe — refuses anything unmerged).
