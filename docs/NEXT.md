@@ -3,9 +3,11 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate — **clock-out/handover**: broker restarted (pid `36488`),
-`security` working `#1581`, branch cleanup done, `docs/incidents/` started (6 reports); top priority is
-`#1610` MAIN IS RED. See `## NEXT SESSION` — everything below it is historical.)_
+_Last refreshed: 2026-10-17 (delegate — **broker-crash recurrence**: the handover's "broker UP pid
+`36488`" was wrong — it had already died at `19:32:35Z`, before the handover was committed; recovered to
+pid `37388` after one failed restart. Top priority is still `#1610` MAIN IS RED, and the crash-proofing
+cluster is now recommended ABOVE the product items. See `## NEXT SESSION` — everything below it is
+historical.)_
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; new agent takes the seat)
 
@@ -45,8 +47,11 @@ scribe's, landed).
 
 ## NEXT SESSION
 
-**Current item:** nothing blocks the delegate — the rig is **up** (broker pid `36488`) and the queue is
-advancing. Work the **ordered list below**; item 1 (`#1610` MAIN IS RED) gates all landing.
+**Current item:** nothing blocks the delegate — the rig is **up** (broker pid `37388`) and the queue is
+advancing. Work the **ordered list below**; item 1 (`#1610` MAIN IS RED) gates all landing. **Recommended
+change:** promote item 6 (the crash-proofing cluster) above the product items 4/5 — the broker died
+abnormally a third time this session and a restart itself crashed, so the recurring root cause now
+outranks UI/incident-rule polish.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
@@ -60,15 +65,24 @@ advancing. Work the **ordered list below**; item 1 (`#1610` MAIN IS RED) gates a
    credential and treat the store as compromised.
 4. **`#1607` / `#1608`** — `durig ui` `view is not defined` fix + regression test.
 5. **`#1609`** — incident-report `check` rules + `ownership` class + demo.
-6. **Crash-proofing cluster (HIGH):** ROADMAP 78 (survive a per-conversation storage error), true
-   read-only opens, broker watchdog/auto-restart, serialise migrations, log `SessionFailed.cause` —
-   the root of the `broker-crash` incident.
+6. **Crash-proofing cluster (PROMOTE — delegate recommendation):** ROADMAP 78 (survive a per-conversation
+   storage error), true read-only opens, broker watchdog/auto-restart, serialise migrations, log
+   `SessionFailed.cause` — the root of the `broker-crash` incident, which recurred again this session
+   (third abnormal death, plus a failed restart). Move this ahead of items 4/5.
 7. **`#1605` — the 33-branch landing pass**, parked (`#1612`); re-open in a **quiesced window** after 1.
 8. **Prune the 42 merged-but-worktree-held branches** — release per `leaked-worktrees.md`, then `-d`.
 9. **`#1388` / ROADMAP 131 (`pause`/`unpause`)** — kills the land-first / broker-window dance.
 
 **State at clock-out:**
-- **Broker:** UP, pid `36488` (`START 19:12:44Z`), passes advancing.
+- **Broker:** **DOWN at clock-in, then recovered.** The handover's "pid `36488`, passes advancing" was
+  stale: the last broker.log line was `PASS 93` at `19:32:35Z`, `START pid=36488` (`19:12:44Z`) had **no
+  `EXIT`**, and there was no `serve` process / `broker.json` / `genlock` — it died ~16 min before the
+  handover commit. Per `broker-down-or-stalled.md`: `resume` cleared 3 stranded submissions (impl #67700,
+  security #67887, security #68025); a first restart (pid `14692`) **died ~6s later** on `Session failed
+  after a storage error` (crash loop); a second restart (**pid `37388`, `START 19:53:33Z`**) held and is
+  advancing (`WAKE impl`, `PASS 1-3`, 4 genlocks). NOT the `pi.live` corruption case (`log`/`status` read
+  clean, no `unreadable`). Visible aggravator: **8 stale `log --follow`/`watch` viewers** (Oct 16-17) hold
+  the store open. Recurrence recorded in `docs/incidents/2026-10-17-broker-crash.md`.
 - `main` HEAD = `9ccfff7`; **tree clean**; the shared tree is on `main`.
 - `security`: actively working `#1581` (log turns at `19:19:38`); still `claimed`.
 - Local refs **128 → 76** (52 pruned); **33 unlanded refs kept**; **42 merged held by worktrees**.
