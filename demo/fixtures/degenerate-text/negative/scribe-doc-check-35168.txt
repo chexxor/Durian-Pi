@@ -1,0 +1,22 @@
+The docs don't contain a distinct "never echo keys into transcripts" convention note. The references to #700 and redaction are context about the security work, and `DECISIONS.md:700` is a line-number coincidence (not item 700).
+
+Let me check whether #700 (impl's no-secrets config guard) part b created any note. Let me look at the #700 item content and whether impl recorded anything about "never echo keys". Let me check the .durig/700.md and the #824 routing.
+
+Let me also check whether the item #824 (lead's ruling) itself produced a doc note I need to reconcile, and whether impl's #700 part b recorded a "never echo" convention in FEATURES or a security doc.
+
+Let me check the .durig/700.md and search the broader tree (not just docs/) for "never echo" — maybe in a demo or the store.
+
+Let me read .durig/700.md and search for the exact phrase anywhere.
+
+Let me check #700's content and search the whole tree for "echo" transcripts convention.No distinct "never echo keys into transcripts" note exists in docs — only SEAT-TOOLS.md's `complete_work` evidence constraint. Let me check the #700 item content (part b) and search more broadly to be sure no such convention note was recorded (e.g., in FEATURES or a security doc or the durable store).
+
+Let me read the #700 item and search the whole tree for the exact convention phrase.
+
+Let me check .durig/700.md and search broadly.Let me read the #700 item body (part b context) and search the whole tree (not just docs/) for any "never echo keys into transcripts" note.
+
+Let me check the #700 item and search broadly.
+
+Let me read .durig/700.md and search all files for the convention phrase.
+
+
+

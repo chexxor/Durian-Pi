@@ -11,7 +11,12 @@
 // not keep the seat resetting forever. A page already ending in `pi.reset` is skipped
 // outright, so a reset is not re-applied before the seat has run again (idempotence).
 
-import { countLanguageDriftTurns, countMalformedToolCalls, countPseudoToolCalls } from "./attention.mjs";
+import {
+	countLanguageDriftTurns,
+	countMalformedToolCalls,
+	countPseudoToolCalls,
+	countTextPatternTurns,
+} from "./attention.mjs";
 
 /**
  * Conservative, operator-tunable trip points. Deliberately high: the repeat predicate
@@ -32,6 +37,10 @@ export const DEGEN_DEFAULTS = {
 	maxLanguageDrift: 1, // assistant turns whose reply is predominantly CJK
 	minLanguageDriftChars: 40, // CJK characters that must appear in the reply
 	minLanguageDriftRatio: 0.5, // share of the reply's CJK+Latin letters that are CJK
+	// One turn matching a named PROSE pattern is enough: a word-salad turn is already a whole
+	// wasted turn, and the patterns themselves are conservative (see TEXT_PATTERNS). The registry
+	// names the pattern in the reason so a firing cause is legible.
+	maxDegenerateText: 1,
 	maxContextTokens: 400_000, // newest turn's prompt size (a backstop, not the primary trip)
 	// Per-turn WALL-CLOCK, its OWN cause and NOT the prose detector. It reads a number the harness
 	// already persists (AssistantMessage.durationMs), not a parse of prose, so a healthy long
@@ -70,8 +79,8 @@ function toolCallKeys(entry) {
  * newest entry until the wake that started it.
  *
  * @returns {{degenerate:boolean, justReset:boolean, reasons:string[], toolTurns:number,
- *   repeats:number, malformed:number, pseudoToolCalls:number, contextTokens:number,
- *   turnDurationMs:number, calls:number}}
+ *   repeats:number, malformed:number, pseudoToolCalls:number, languageDrift:number,
+ *   degenerateText:Object, contextTokens:number, turnDurationMs:number, calls:number}}
  */
 export function assessRun(entriesNewestFirst, opts = {}) {
 	const o = { ...DEGEN_DEFAULTS, ...opts };
@@ -85,6 +94,7 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		malformed: 0,
 		pseudoToolCalls: 0,
 		languageDrift: 0,
+		degenerateText: {},
 		contextTokens: 0,
 		turnDurationMs: 0,
 		calls: 0,
@@ -128,6 +138,10 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		minChars: o.minLanguageDriftChars,
 		minRatio: o.minLanguageDriftRatio,
 	});
+	// Degenerate PROSE: the same shape the D78 heuristic chased, but read by a NAMED-PATTERN
+	// registry so each shape is independently testable and the reason names the pattern. Counted
+	// per pattern, so a run can trip on one shape without the others.
+	const degenerateText = countTextPatternTurns(run);
 	const contextTokens = run.reduce((max, entry) => {
 		const tokens = messageOf(entry)?.usage?.totalTokens;
 		return Number.isFinite(tokens) ? Math.max(max, tokens) : max;
@@ -149,6 +163,11 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 	if (languageDrift >= o.maxLanguageDrift) {
 		reasons.push(`language-drift=${languageDrift}>=${o.maxLanguageDrift}`);
 	}
+	for (const [pattern, count] of Object.entries(degenerateText)) {
+		if (count >= o.maxDegenerateText) {
+			reasons.push(`degenerate-text=${pattern}=${count}>=${o.maxDegenerateText}`);
+		}
+	}
 	if (contextTokens >= o.maxContextTokens) reasons.push(`context-tokens=${contextTokens}>=${o.maxContextTokens}`);
 	if (turnDurationMs >= o.maxTurnDurationMs) {
 		reasons.push(`turn-duration-ms=${turnDurationMs}>=${o.maxTurnDurationMs}`);
@@ -163,6 +182,7 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		malformed,
 		pseudoToolCalls,
 		languageDrift,
+		degenerateText,
 		contextTokens,
 		turnDurationMs,
 		calls,
