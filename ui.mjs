@@ -21,10 +21,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadConfig } from "./src/config.mjs";
-import { readSeatList, readQueueItems, readLiveState, readRigHealth } from "./src/readapi.mjs";
-import { partialView } from "./src/viewmodel.mjs";
-import { SCAN_LIMIT, readOlderEntries, conversationExhausted } from "./src/rigstory.mjs";
-import { createConversationWindow, selectSeat, mergeNewest, oldestLoadedId, turnsOf, loadOlder } from "./src/tui/conversation.mjs";
+import { SCAN_LIMIT, readOlderEntries } from "./src/rigstory.mjs";
+import { createConversationWindow, selectSeat, turnsOf, loadOlder } from "./src/tui/conversation.mjs";
+import { makeReadState } from "./src/tui/readstate.mjs";
 import { createUiDriver, decodeKeys } from "./src/tui/driver.mjs";
 import { createViewMode } from "./src/tui/viewmode.mjs";
 import { createTerminalScreen, PASTE_OFF } from "./src/tui/restore.mjs";
@@ -60,85 +59,6 @@ notes:
 
 const { config: CFG } = await loadConfig({ env: process.env, readFile });
 const DB_PATH = CFG.DURIG_DB ?? "./rig.sqlite";
-
-/* ───────── readState (read-only store reads; D11 poll) ───────── */
-
-async function makeReadState(storage, ui, conv) {
-  const slots = Number(CFG.DURIG_MAX_CONCURRENT_SEATS ?? "");
-  const bounded = Number.isFinite(slots) && slots > 0 ? slots : 999;
-  return async () => {
-    const health = await readRigHealth(storage, DB_PATH, bounded, { cfg: CFG });
-    const queueItems = health.queueItems ?? (await readQueueItems(storage));
-    // Streaming partials, U2: EVERY actively-generating seat at once (team-wide),
-    // keyed off live generation (`partialView(live).hasContent`) — NEVER queue depth.
-    const liveBySeat = {};
-    let partial = null;
-    let streamingSeat = null;
-    const partials = [];
-    for (const seat of health.seats) {
-      liveBySeat[seat.name] = await readLiveState(storage, seat.conversationId);
-      const pv = partialView(liveBySeat[seat.name]);
-      if (pv?.hasContent) {
-        partials.push({ ...pv, seat: seat.name });
-        if (streamingSeat === null) {
-          streamingSeat = seat.name;
-          partial = { ...pv, seat: seat.name };
-        }
-      }
-    }
-    // The selected seat drives the transcript. Until the operator navigates,
-    // auto-follow the first streaming seat; once they press a nav key — or open a
-    // seat's conversation — their choice sticks (r does not steal focus back).
-    ui.seatCount = health.seats.length;
-    if (!ui.navigated && view.mode === "seats" && streamingSeat !== null) {
-      const idx = health.seats.findIndex((s) => s.name === streamingSeat);
-      if (idx >= 0) ui.selectedIndex = idx;
-    }
-    ui.selectedIndex = Math.max(0, Math.min(ui.seatCount - 1, ui.selectedIndex));
-    const focusSeat = health.seats[ui.selectedIndex]?.name ?? health.seats[0]?.name;
-    ui.focusSeat = ui.seatCount > 0 ? focusSeat : null;
-    const focusConvId = health.seats.find((s) => s.name === focusSeat)?.conversationId;
-    ui.convId = focusConvId;
-    // The detail view's loaded window (ROADMAP 89): the newest page, plus any older
-    // pages the operator paged in. A seat switch resets it (a different transcript);
-    // the newest page is merged id-keyed each poll, so live turns append at the tail
-    // while backfilled history stays put. Exhaustion is UNKNOWN until a short page or
-    // an on-demand probe answers — never fabricated, and never part of the shared
-    // per-poll scan (a probe runs only while this view is open).
-    let turns = [];
-    let exhausted = null;
-    if (view.view === "conversation" && ui.focusSeat !== null) {
-      if (conv.seat !== ui.focusSeat) selectSeat(conv, ui.focusSeat);
-      mergeNewest(conv, health._pages?.[ui.focusSeat] ?? [], SCAN_LIMIT);
-      if (conv.exhausted === null && focusConvId !== undefined) {
-        const oldest = oldestLoadedId(conv);
-        if (oldest !== null) {
-          conv.exhausted = await conversationExhausted(storage, focusConvId, oldest, BACKGROUND_CONTEXT);
-        }
-      }
-      turns = turnsOf(conv);
-      exhausted = conv.exhausted;
-    }
-    // Clamp the conversation scroll to the turns actually held, so holding ↑ cannot
-    // scroll into empty space forever.
-    ui.scroll = Math.max(0, Math.min(ui.scroll, Math.max(0, turns.length - 1)));
-    return {
-      seats: health.seats,
-      turns,
-      partial,
-      partials,
-      health,
-      queueItems,
-      selectedSeat: ui.seatCount > 0 ? focusSeat : null,
-      // The view UNDER the overlay, never "input": the input row is an overlay on the
-      // current view (ROADMAP 99), so the renderer keeps drawing that view.
-      view: view.view,
-      scroll: ui.scroll,
-      exhausted,
-      inputText: view.inputting ? input.value : null,
-    };
-  };
-}
 
 /* ───────── terminal ownership ───────── */
 
@@ -207,7 +127,7 @@ try {
   // The detail view's loaded window (ROADMAP 89): newest page + paged-in older
   // pages, owned by the entrypoint and driven by the keys below.
   const conv = createConversationWindow();
-  const readState = await makeReadState(storage, ui, conv);
+  const readState = await makeReadState(storage, ui, conv, view, { input, cfg: CFG, dbPath: DB_PATH });
   process.stdin.setRawMode(true);
   process.stdin.resume();
   screen.enter();
