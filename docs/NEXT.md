@@ -4,8 +4,8 @@
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
 _Last refreshed: 2026-10-17 (delegate, **twentieth pass** — priority #1317 delivered + verified; the
-operator declared the EXCLUSIVE LANDING WINDOW for #1358; a `pause` command registered to the backlog.
-Everything below this block is historical.)_
+operator declared the EXCLUSIVE LANDING WINDOW for #1358; a `pause` command routed to pm for backlog
+registration. Everything below this block is historical.)_
 
 ## DELEGATE NOTE — 2026-10-17 (priority delivered, landing window declared, pause command registered)
 
@@ -30,7 +30,7 @@ Everything below this block is historical.)_
 - **A `genlock.0` was held when the window was declared** (pm generating); the pass must begin once every
   run settles — never `serve --stop` while a genlock is held.
 
-**A `pause` command was registered to the backlog (operator request).**
+**A `pause` command was routed to the backlog (operator request).**
 - Intent `opr-20261017-pause-command` delivered to `pm` (08:16:46Z; `.spike/delegate/intent-pause-command.md`):
   a `pause`/`unpause` command that stops seats taking NEW work while in-flight work settles, so broker
   upgrades run against a quiescent rig. **pm owns placement/numbering** — record the ROADMAP number here
