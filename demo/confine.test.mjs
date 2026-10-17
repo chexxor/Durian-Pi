@@ -5,6 +5,7 @@
 // here is paired with its unguarded control - the same discipline demo/starter.test.mjs uses
 // for `check`, where "0 findings" is meaningless unless the rules can be shown to fire.
 
+import { existsSync, rmdirSync } from "node:fs";
 import { mkdtemp, mkdir, rm, symlink, writeFile as write } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -266,6 +267,28 @@ try {
 		const viaSeat = await seatEnv.readTextFile(join(shared, "42.md"), context);
 		check("makeSeatEnv wires the shared .durig read-only by default", viaSeat.ok === true && viaSeat.value.includes("ITEM #42"), JSON.stringify(viaSeat));
 		denied(await seatEnv.writeFile(join(shared, "44.md"), "x", context), "...and that default is still read-only");
+
+		// qa #1489 (HIGH): a JUNCTION inside the worktree must not let a CREATE write THROUGH it.
+		// The plain-path check passes (the link path IS inside the root) and `canonicalPath` FAILS for a
+		// not-yet-existing destination, so the deny has to fall back to the deepest EXISTING ancestor.
+		const linkPath = join(root, "durig-link");
+		let junctionMade = false;
+		try {
+			await symlink(shared, linkPath, "junction");
+			junctionMade = true;
+		} catch (err) {
+			check("junction probe: the junction could not be created on this host", false, String(err?.message ?? err));
+		}
+		if (junctionMade) {
+			denied(await roEnv.writeFile(join(linkPath, "BOOM.txt"), "x", context), "a CREATE through a junction into the read-only root is REFUSED");
+			check("...and nothing landed in the read-only root", !existsSync(join(shared, "BOOM.txt")));
+			denied(await roEnv.writeFile(join(linkPath, "sub", "BOOM.txt"), "x", context), "a CREATE through a junction into a NON-EXISTENT subdir is REFUSED");
+			// Remove the junction BEFORE the generic cleanup, so rmSync cannot walk the link.
+			try {
+				rmdirSync(linkPath);
+			} catch {}
+			check("the junction was removed", !existsSync(linkPath));
+		}
 	}
 
 	console.log(failures === 0 ? "\nPASS — all confine canaries held" : `\nFAIL — ${failures} canary(ies) failed`);

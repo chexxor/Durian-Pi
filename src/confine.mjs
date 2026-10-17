@@ -10,7 +10,7 @@
 // docs/reviews/security-sec-m3-seat-tools.md (F2, F3) and docs/SEAT-TOOLS.md (SC1-SC3).
 
 import { mkdtemp, writeFile } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { ExecutionError, FileError, err, ok } from "@earendil-works/pi-durable/env";
 
 /**
@@ -182,10 +182,21 @@ export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_A
 		if (!within(resolved.value, mutating)) {
 			return denied("path", resolved.value, `is outside the seat's worktree (${confinedRoot})`);
 		}
-		// A symlink that lives inside the root can still point outside it, and the base follows
-		// links, so an existing path is canonicalised before it is trusted. A path that does not
-		// exist yet has no link to follow, and is covered by the check above.
-		const canonical = await base.canonicalPath(resolved.value, context);
+		// A link inside the root can still point outside it, and the base FOLLOWS links. Canonicalise
+		// the path when it exists; when it does NOT (a CREATE), canonicalise the DEEPEST EXISTING
+		// ANCESTOR instead. Without that, `canonicalPath` fails with ENOENT for a not-yet-existing
+		// destination, the deny below is skipped, and the base writes THROUGH a junction in the
+		// worktree into a read-only root or the shared tree (qa #1489 — HIGH; a junction needs no
+		// admin on this host). The loop cannot fail open: the resolved path is inside the root and the
+		// root exists, so some ancestor always canonicalises.
+		let probe = resolved.value;
+		let canonical = await base.canonicalPath(probe, context);
+		while (!canonical.ok) {
+			const parent = dirname(probe);
+			if (parent === probe) break;
+			probe = parent;
+			canonical = await base.canonicalPath(probe, context);
+		}
 		if (canonical.ok && !within(canonical.value, mutating)) {
 			return denied("symlink", canonical.value, `escapes the seat's worktree (${confinedRoot})`);
 		}
