@@ -148,6 +148,15 @@ operator/delegate to drive **variant (1)** (stop broker, hand-verify, land outsi
    that **`impl-item-1256` is a redundant duplicate** of `b52133f` (`git cherry` shows the patch already
    on main), so it must NOT be landed (#1256/#1304/#1287 dropped). Spooled `opr-20261017-next-priority`
    (`07:41:55Z`); recorded **D91** (the standing security seat).
+9. **Docs-drift finding + intent delivered** (operator question, 2026-10-17 16:32Z): decisions and
+   runbooks are well kept, but the FEATURE INVENTORY lags — `format`/`--dry-run`/instance-key/TUI
+   backfill/ROADMAP 69 + the `check` rules (81a, #714/#715) landed on `main` with no `FEATURES.md`
+   row and no ROADMAP `DELIVERED` mark. Spooled `pm` intent `opr-20261017-docs-drift-features`
+   (delivered `16:32:31Z`, `INTENT delivered=1 dead=0`, inbox drained) to register/route the docs and
+   to weigh tightening the merge gate's Feature row (a runbook alone currently satisfies it).
+   Existing encoding-debt intent `opr-20261017-roundtrip-docs` still covers the mojibake; do not
+   duplicate it. **Mitigation rec (operator-owned):** make doc-acceptance machine-checked (D62 /
+   ROADMAP 46), not prose — plus a delegate clock-out docs-drift audit.
 
 ## NEXT SESSION
 
