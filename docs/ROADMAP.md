@@ -481,7 +481,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     `@earendil-works/pi-tui` (already a dependency of `pi-coding-agent@1.1.0`, so
     it is in-stack) over adopting a new framework; the browser/SSE client is the
     cheaper option if the interaction set stays small.
-89. **TUI: load a seat's full chat transcript when opening its detail view (operator request, 2026-10-16).**
+89. **TUI: load a seat's full chat transcript when opening its detail view (operator request, 2026-10-16) (DELIVERED `ed1ce0c`).**
     Today the conversation pane only carries the most recently **streaming** entries: the store read is a
     bounded 24-entry page (`SCAN_LIMIT`) and the scroll window cannot reach past that page
     (`docs/TUI-IMPLEMENTATION-PLAN.md` §G4, which leaves the "load older than the page" affordance open).
@@ -492,7 +492,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     *Acceptance:* opening a seat's detail view renders that seat's prior turns from the durable transcript
     (paged, never only the live tail), then follows new entries live; a golden/demo proves the backfill is
     present, shown FAILING against the current stream-only behaviour before it passes.
-90. **App-level syntax formatter (`format` verb) for seats and pre-commit use.** An explicit command a
+90. **App-level syntax formatter (`format` verb) for seats and pre-commit use (DELIVERED `d0fa7ad`).** An explicit command a
     seat can run over the files it changed — after edits, before `git add`/commit — so style is
     consistent and whitespace/EOL churn stops leaking into diffs. **Value:** the tree is genuinely mixed
     (`cli.mjs`, `src/broker.mjs`, `src/scheduler.mjs`, `src/checkup.mjs`, `src/driver.mjs` are
@@ -1311,6 +1311,8 @@ surface. A feature that is off must therefore cost nothing — not "little".
     than a hope.
     *Proof:* reproduce the loop deterministically (a scripted fixture), then show the chosen lever
     prevents it — falsifiable by disabling the lever.
+    **Wall-clock bound (#874 `7013294`) + named-pattern degenerate-text registry (#875 `50bc585`)
+    delivered; reasoning-effort lever (a) still open.**
 
 44. **A `reset`/`clean` verb for a seat whose context has degenerated.** Found 2026-10-11 while
     pushing `impl` through item 37(b): after the model emitted a 16 KB "OK. Let me call write."
@@ -1630,6 +1632,7 @@ missing halves, and 30 is the honest advert.
     conversation-owned summary through a **write submission**, so 28a must reconcile with the
     stale-submission/stranded logic (`reconcileStrandedSubmissions`, items 66/68) — a summary
     submission must not read as an in-flight task and suppress a wake. [internal check owed]
+    **28a delivered by #873 (`cc19f5b`); 28b (fresh conversation) still open.**
 
 29. **Make taking a fresh session a team practice, not a judgement call.** A verb nobody
     knows when to call is a verb that gets called at the wrong moment, which the evidence
@@ -1922,7 +1925,7 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     *Owner:* `advocate` (decision record) · *Output:* a `docs/DECISIONS.md` entry with the why.
     *Acceptance:* the entry names the alternatives rejected and the evidence class.
 
-46. **Make artifact ownership checkable — a `check` rule, not a prose grid.** The load-bearing
+46. **Make artifact ownership checkable — a `check` rule, not a prose grid (DELIVERED `ed2b5dc`).** The load-bearing
     finding: a decision-rights row not enforced by `check` (or the queue) is prose and goes stale. Add
     a `check` rule that every artifact class in the docs-ownership norm maps to a live owning seat,
     and (D62) every capability has a FEATURES row.
@@ -1941,6 +1944,7 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     evidence protocol.
     *Owner:* `impl` (author) · *Consulted:* `qa`/`auditor` · *Evidence:* `Agent_Ownership_Review.md` §2.4.
     *Acceptance:* a verifier item fails when it only acks a claim and passes when it re-runs the artifact.
+    **Evidence surface delivered by #715 (`50240f9`); re-execute enforcement still open (#851).**
 
 49. **Finish the research's unfinished passes.** The review explicitly did not verify the governance
     pass (NIST AI RMF, ISO/IEC 42001, EU AI Act Art. 14, multi-agent "accountability gap") or the
@@ -2211,7 +2215,7 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     `cli.mjs` `cmdResume`. *Acceptance:* a demo that forces terminal-task + placed-submission and shows
     the seat is re-woken after start/`resume`.
 
-69. **Refuse or route writes while the broker drives.** `resume`/`doctor`, `reset`, `send`, and
+69. **Refuse or route writes while the broker drives (DELIVERED `c2fa6ee`).** `resume`/`doctor`, `reset`, `send`, and
     `ps`/`queue` (which open a full harness just to read) must not become a second owner while a broker
     is alive: refuse with a clear message naming the spool, or route through it; `ps`/`queue` read via
     `openStore` like `status`. *Owner:* impl · *Where:* `cli.mjs`.
@@ -2322,7 +2326,7 @@ single-writer precondition is prose, which failed twice on 2026-10-16. `pm` sequ
 83. **Hard write guard on all write verbs.** The single most important recommendation; the precondition
     must be code, not a sentence. This **is** item **69** — do not duplicate; land it. *Acceptance:* see
     item 69.
-84. **`--dry-run` for `up --refresh` / `reset`.** Print the diff (which constitution doc / seat model
+84. **`--dry-run` for `up --refresh` / `reset` (DELIVERED `dfff51a`).** Print the diff (which constitution doc / seat model
     would change) before writing, so a blind write becomes reviewable. *Owner:* impl · *Where:*
     `cli.mjs`. *Acceptance:* `up --refresh --dry-run` names the seats and fields it would change and
     writes nothing.
