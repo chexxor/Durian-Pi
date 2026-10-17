@@ -1739,7 +1739,7 @@ not pinned).
     *Owner:* `impl` · *Consulted:* `qa`/`auditor` · *Acceptance:* a demo verifier that cannot edit and
     loops on findings, driven by the harness — not by the queue re-waking.
 
-54. **Wake-and-return in `drivePass` (replace the in-tick await).** **The review's rank-1 change
+54. **Wake-and-return in `drivePass` (replace the in-tick await) (DELIVERED `58cbac2`).** **The review's rank-1 change
     (highest value, lowest cost).** Stop awaiting the runs a pass woke inside the tick; let the commit
     subscription drive the next pass; keep the **one** global `waitForIdle` on loop exit (F11). This is
     what parked the loop ~15 minutes behind a degenerate `qa` run and held a spooled intent. Evidence:
@@ -1835,6 +1835,13 @@ only be trusted once the pass loop no longer parks on the slowest run). Item **6
 should not wait. **Correction (delegate, round 3):** the research agent read the scoped settle-wait in
 `drivePass` (D65) and concluded item 54 was implemented; it is **not** — `drivePass` still
 `await`s the runs it woke (`await settleSignal.race(wokenIdle)`), so wake-and-return is still pending.
+**Resolved (impl, #890):** that correction is now STALE. Item 54 LANDED as `58cbac2`
+("wake-and-return in the resident pass; drain once on loop exit"). `drivePass` carries a `waitForWakes`
+boundary (default true for the one-shot `run`); the resident broker passes `false`, returns without
+awaiting the runs it woke, and drains the ordinary scope ONCE on loop exit (F11) — the
+`settleSignal.race(wokenIdle)` await no longer exists in `src/broker.mjs`. Failing-first proof:
+`demo/broker-wake-return.test.mjs` (exit 0 — `drivePass` returns while a 4s run is in flight, and a
+spooled intent is delivered ~200ms in while it generates). The item-54 gate for 61–63 is satisfied.
 
 61. **Exit-code taxonomy + a durable operator down marker.** Give `serve` distinct exit codes
     (0 intended stop / 1 crash / 2 wedge / 0 give-up) via `process.exitCode` (never `process.exit()` —
