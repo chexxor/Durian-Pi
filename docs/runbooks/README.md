@@ -1,4 +1,4 @@
-﻿# durian-pi runbooks (SOPs)
+# durian-pi runbooks (SOPs)
 
 **Status:** working set. Audience: the **delegate** (operator-facing) and **seats** (a seat reads a
 runbook when woken into a situation it does not own). A runbook is an operating procedure, not a design
@@ -105,6 +105,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error`, or the broker repeats `wake-failed â€¦ unresolvable path` and one seat is never woken | yes |
 | [store-secret-detected.md](store-secret-detected.md) | a `secret_detected` notice: secret-shaped content is in the committed store | no |
 | [tool-result-redacted.md](tool-result-redacted.md) | a tool result shows a `[redacted by durian-pi: â€¦]` marker instead of its text | no |
+
 | [constitution-amendment.md](constitution-amendment.md) | you edited (or will edit) `constitution.txt`, or the 3 constitution-mirror demos fail their starter === constitution.txt assertion | no |
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language / emitting a tool call as text | yes |
 | [write-corruption-recovery.md](write-corruption-recovery.md) | a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line | maybe |

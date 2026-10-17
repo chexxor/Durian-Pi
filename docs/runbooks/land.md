@@ -58,6 +58,29 @@ ask "stop or not?" or "why did --suite fail?".
    Release its worktree first (`leaked-worktrees.md`) — a DIRTY worktree must be relocated, never
    force-removed.
 
+## Stacked (unlanded) base — every entry NAMES its base
+
+A **stacked entry** is a branch whose **base is unlanded** — it builds on work that is verified but not
+yet on `main`, so it cannot be merged onto `main` on its own. Stacking is inherent to a landing
+backlog: branches queue while new work builds on them.
+
+**Rule:** EVERY stacked landing entry **names its base** and **states how that base becomes reachable**
+— the exact branch/commit (`git -C <repo> log --oneline -1 <base>`) and the mechanism that lands it
+first: an earlier entry in this same pass (list it), a named already-verified branch, or the
+**base-ref capability (#1456)**. A stacked entry is never offered to the helper as if it were based on
+`main`.
+
+**Base-ref landed (impl #1456, 7219efb):** `prepare_workspace` and the `worktree` verb now accept a
+`base`/`ref` (`src/seattools.mjs` `prepareWorkspaceOptions`, `src/worktree.mjs`
+`createWorktree({ source, target, ref, branch })`), so a worktree CAN be provisioned at an unlanded
+tip. Stacking is still an ordering constraint for a landing pass — the base must be reachable before
+the entry lands — but it is no longer a provisioning blocker. See `SEAT-LIFECYCLE.md` §3 "Stacked
+(unlanded) base".
+
+**Durable fix:** the base-ref capability (**#1456**) makes stacking *work* by letting a worktree be
+created at an unlanded tip. `pause` (ROADMAP 131) and smaller, more frequent landings reduce how often
+it arises.
+
 ## Preconditions
 - The branch is **verified** (qa/auditor ack) and mergeable — see `merge.md`'s checklist. The helper's
   `--suite` gate would normally enforce this, but see the KNOWN GATE DEFECT above.
