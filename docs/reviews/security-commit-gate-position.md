@@ -93,6 +93,15 @@ full tokens as TOKEN_RE extracts them):
    token — the never-echo contract holds on both paths.
 
 ## Residual risk (named)
+- **Split/concat secrets pass the gate — ACCEPTED residual (qa #1366 falsification).** A provider
+  key reconstructed across string concatenation, a line break, or successive commits is invisible
+  to a per-token shape: qa's probe `const k = "sk-" + "Ab3dEf6h" + "9x…"` commits with **no
+  offender** (each fragment fails TOKEN_RE's 16+ or the anchored prefix test). This is impl's
+  DELIBERATE precision-first trade, documented in-code (6400e8e gate comment L168–172); impl is
+  NOT changing code for it. Severity LOW; the mitigation sits with the REVIEWER, not the gate:
+  review-tier scans (the leaked-secret Diagnose and the trust-boundary-review method) must eyeball
+  concatenation and reassembly of key-shaped values in diffs. Recorded **review-only** in the G-C
+  column when #1381 lands.
 - Split/sealed/encoded secrets and non-provider key material (SSH ed25519 blob bodies, age keys)
   pass the gate — accepted false-negative tier (T-scan); rotation discipline (leaked-secret Do) is
   the backstop, not the gate.
@@ -101,6 +110,15 @@ full tokens as TOKEN_RE extracts them):
   fail-closed by C2's generalization clause.
 - JWT (and any provider-prefix list) is a moving boundary: prefixes are added as classes are
   witnessed, not as a claim of completeness.
+
+## Falsification record (qa #1366) — confirmed sound, do not re-litigate
+For the same artifacts (`53f6049`, `6400e8e`), qa confirmed: a secret under a **non-key filename**
+is blocked; `-a`/`--all` staged content IS scanned via `git diff HEAD`; **no false positives** on a
+40-hex sha, an ordinary Windows path, or a 24-char alnum token; the refusal text carries
+`{path}` only and **never the value**; fail-open on git failure **returns null** (gate does not
+block). The last one confirms the CURRENT blocking behavior and is consistent with C2's analysis
+(the commit requires the same git); the LOUD-WARNING correction (C2/G-B) remains separately open
+with impl, unchanged by this record.
 
 ## Routing
 Impl follow-up (G-A/G-B/G-D + the PEM line pass): route to impl (pm). G-C is MY follow-up (the
