@@ -1252,7 +1252,10 @@ collision the team hit when it invented `#45`.
   orthogonal execution/changes/verification/acceptance result bound to revision,
   command, exit status and evidence, so a completion cannot read as a pass.
 - **RANK 4 — ordered context-pressure guard.** warn → preserve-and-settle → one
-  compaction; the *ordering* is the invariant. Feeds items 27/28.
+  compaction; the *ordering* is the invariant. Feeds items 27/28. **Amendment (2026-10-17):**
+  the guard must own the trigger and set the platform's automatic threshold *above* its own,
+  because the platform default cannot know a model's effective window or see the
+  degenerate/dirty-worktree state (follow-up research; item 27).
 - **RANK 5 — drift watchdog.** deterministic-first in-flight observation that can
   terminate as `drift_stop`. Feeds items 42/43.
 - **RANK 6 — independent runtime axes** (work mode × roster × peer topology).
@@ -1293,6 +1296,23 @@ the usable window is a fraction of the advertised one, the trigger should come f
 model's *measured* effective length (~60–70% of it) rather than being inherited, and the
 cheapest first lever is masking stale tool output, not summarizing.
 
+**Follow-up research landed 2026-10-17** (`docs/reviews/context-compaction-followup.md`,
+commissioned via `docs/reviews/context-compaction-followup-research-prompt.md`). Its headline
+changes the trigger question: durig's curated catalog sets `contextWindow: 1_048_576` for
+DeepSeek-V4.1-Flash and GLM-5.3-Flash (`src/providers/deepinfra-models.ts:156,166`), so the
+inherited auto-compaction threshold (`contextWindow − reserveTokens`) is ~1.03M tokens — while
+the report finds Z.AI's own GLM-5.3-Flash evaluation caps at **300K** (`advertised-elsewhere`)
+and the best DeepSeek-V4 practitioner data puts the precision-preserving band at **150–250K**
+(`community`). The inherited default is therefore ~3–4× past the operating point, i.e.
+automatic compaction effectively never fires before quality collapses. Items **92–97** below
+are the report's proposed work; items 27, 28, 30b and RANK 4 carry dated amendments. Two
+internals the report flagged **unverified** were then checked and resolved: masking is
+**already available** as `ContextEdit { target, action: "omit" | "replace" }`
+(`pi-durable/dist/types.d.ts:262`; item 92 is exposure, not invention), and `Usage.reasoning`
+is a **subset of `output`** (billed as output; inclusion in the *input* window remains
+provider-side and unmeasured). Items 92–97 are **registered in this backlog, not scheduled** —
+`pm` sequences them.
+
 What makes this ours rather than general: **a seat is a pi-durable conversation**
 (`src/rig.mjs`, the Seats doc) created once at `up` and reused for every `send`, so a seat's
 context accumulates across the whole project, and nothing in durig observes or controls that
@@ -1327,6 +1347,13 @@ missing halves, and 30 is the honest advert.
     write path and needs a `security.sec` position first.
     *Acceptance:* a demo proving the measure over a fixture transcript, and the notice
     appearing in `status`/`watch`.
+    *Amendment (2026-10-17, follow-up research).* The threshold basis is now concrete and
+    wrong-by-default: `contextWindow − reserveTokens` against a 1M configured window puts the
+    trigger at ~1.03M tokens, ~3–4× past the vendor's own operating point (GLM-5.3-Flash
+    evaluated to 300K; DeepSeek-V4 precision band 150–250K). The measure must report pressure
+    against a **measured effective** window, not the advertised one, and the ordered guard
+    (RANK 4 / #62) should be the authority that sets the platform threshold *above* its own
+    trigger. Item 97 is the probe/replay harness that measures the effective window.
 
 28. **A context-reduction surface: the `compact` verb the platform already has, and the
     fresh conversation it does not.** The research's strongest and least intuitive finding is
@@ -1362,6 +1389,17 @@ missing halves, and 30 is the honest advert.
     *Ordering:* 28a before 28b, because a compaction leaves a summary behind and a fresh
     conversation is a discontinuity the operator should be told about — so the cheaper,
     auditable lever should exist first and set the vocabulary.
+    *Amendment (2026-10-17, follow-up research).* 28a must be **blocked** on two states the
+    platform cannot see: a **degenerate stop reason** (a summary can reach a normal stop yet be
+    a stub or miss its required sections — reuse pi's structured-section validation) and a
+    **dirty item worktree** (a summary can lose which files were touched — Factory's
+    artifact-tracking finding; gate on the claimed item's worktree being clean, which the
+    single-writer broker already knows). The summary must be a fixed structured schema with a
+    token floor and **pinned constraints** (item 93), and the cheapest layer — per-entry masking
+    via `ContextEdit` (item 92) — must run *before* summarization. Also: pi-durable places a
+    conversation-owned summary through a **write submission**, so 28a must reconcile with the
+    stale-submission/stranded logic (`reconcileStrandedSubmissions`, items 66/68) — a summary
+    submission must not read as an in-flight task and suppress a wake. [internal check owed]
 
 29. **Make taking a fresh session a team practice, not a judgement call.** A verb nobody
     knows when to call is a verb that gets called at the wrong moment, which the evidence
@@ -1432,6 +1470,76 @@ missing halves, and 30 is the honest advert.
     *Acceptance:* a demo where a seat idle beyond the threshold takes a fresh conversation on
     its next item and still completes that item, and a seat idle under the threshold does
     not; the previous conversation is never deleted (28b).
+    *Amendment (2026-10-17, follow-up research).* State the cache-cold/task-boundary trigger as
+    the **default**, not an option: OpenAI documents that summarization/compaction "can change
+    the prefix and reset cache reuse" (`advertised-elsewhere`), so compaction is a deliberate
+    cache-invalidation event and belongs at boundaries.
+
+92. **The masking layer already exists — expose per-entry tool-result and thinking-block
+    clearing.** The follow-up research's cheapest-first ordering is `mask → summarise → fresh
+    session`, and its first layer is **already in the platform**: an entry can carry
+    `edits: [{ target, action: "omit" | "replace", messages? }]`
+    (`pi-durable/dist/types.d.ts:262`), which overrides an earlier visible entry's contribution
+    to the model context without touching the store. So this is exposure, not invention — a
+    durig surface that omits completed tool-result entries (and, where the provider permits,
+    replaces thinking blocks) before any summary runs.
+    *Invariants (hard):* never omit a tool result whose call is still open — OpenAI's API
+    requires every tool call to have a result; clear only completed pairs and never the most
+    recent keep window; the store keeps the raw entry, so masking is a reversible view.
+    *Domain caveat:* masking's advantage is strongest for verbose tool output; today's seats
+    mostly exchange succinct queue traffic, so this matters most once file tools land (item 4) —
+    but building it now makes the ordering available.
+    *Owner:* impl. *Acceptance:* a demo proving an omitted tool-result entry is absent from the
+    model context but present in `log`, and the open-call case is refused.
+
+93. **Constraint pinning — keep the standing rules verbatim outside any summary.** The
+    follow-up research's sharpest safety finding (Governance Decay) is that compaction's worst
+    loss is *silent constraint loss*, not recall loss, and that re-injecting the standing policy
+    verbatim restored compliance. durig already has a byte-stable per-seat prefix (persona +
+    constitution); this item makes it **explicitly outside the compactable range** and
+    re-asserted after every compaction and fresh session, then validates it with a
+    constraint-survival probe. Pairs with item 27's measure and item 97's harness.
+    *Owner:* impl (mechanism), qa (probe). *Acceptance:* a probe showing the constitution's
+    `P1/P2/P3` rules survive a compaction and a fresh-session handoff.
+
+94. **Cap compaction count per session, then force a fresh session.** Repeated compaction
+    compounds error (the research's chain finding: constraint violation rising across rounds). A
+    long-lived durig seat can compact many times in one session (the report plans for 10+ in
+    four hours). Cap the count and, past the cap, prefer the fresh-session lever (28b) with a
+    pointer-carrying handoff. *Owner:* impl; *depends on:* 27 (observability), 28b.
+    *Acceptance:* a session that hits the cap takes a fresh conversation at the next item
+    boundary and still completes the item.
+
+95. **Compaction-Eviction hardening — the summarizer treats in-context content as untrusted.**
+    The research's Eviction-Attack finding: in-context content (a tool result, a queue body) can
+    steer the summarizer to delete a constraint. The summary path must never treat task/tool
+    content as summarizer instructions, and secrets/PII must be scrubbed **at ingestion** (before
+    an entry enters the store) so the summarizer never sees them — extending the no-secrets
+    guard (#700). *Owner:* impl; *depends on:* 92/93. *Acceptance:* a demo where adversarial
+    content in a tool result cannot alter the summary's structured sections or drop a pinned
+    constraint.
+
+96. **Verifier and retry context isolation (fork vs isolate).** Fresh context is a correctness
+    property: the follow-up research confirms the deepagents rule — worker = fork, verifier =
+    isolated, researcher = isolated — and that a verifier must not inherit the author's
+    compaction summary, or the review is anchored. durig already runs `qa` as a separate
+    conversation on a different model family (and has a `no-verifier-seat` check); this item
+    extends `check` to assert the verifier is **not forked from / primed with the author's
+    summary**, and defines the retry rule: a re-wake of a failed attempt **isolates with a
+    structured failure handoff** (what was tried, why it failed, what is committed) rather than
+    forking the failed reasoning. *Owner:* lead (rule), qa/advocate (practice), impl (check).
+    *Acceptance:* a `check` rule that fails a verifier whose context descends from the author's
+    summary, and a demo of an isolated retry.
+
+97. **A compaction evaluation harness — probes + replay against the append-only store.** None
+    of the above is provable without a measurement. The report's design: reconstruct the
+    `ContextView` from the append-only store, swap in the compacted artifact, and fire
+    recall/artifact/continuation/decision probes graded by the existing blind judge
+    (`src/judge.mjs`), with artifact-tracking as the most sensitive metric. This is also how the
+    per-model **effective window** (item 27) gets measured: probe at a few lengths against the
+    live endpoint. *Owner:* qa (harness), impl (plumbing). *Acceptance:* the harness reports a
+    compacted-vs-full delta on a real past item, and item 27 consumes its effective-window
+    number instead of the advertised one.
 
 ## Deadlock and liveness prevention (raised 2026-10-12)
 

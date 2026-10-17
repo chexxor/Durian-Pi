@@ -3,11 +3,25 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate, **tenth pass** — fixed the general broker cooldown revisit gap
-and the spooled-intent wake gap, performed the operator-authorized broker reload, and delivered the
-operator's CRLF/EOL ruling. See **CLOCK-OUT (tenth pass)** immediately below.)_
+_Last refreshed: 2026-10-17 (delegate, **eleventh pass** — processed the operator's compaction
+follow-up research into ROADMAP/DECISIONS. See **NEXT SESSION** below; the tenth-pass clock-out is
+demoted to historical.)_
 
-## CLOCK-OUT — tenth pass (2026-10-16, delegate) — START HERE
+## NEXT SESSION — current item
+
+**Research processed (this pass):** `docs/reviews/context-compaction-followup.md` is folded into
+`docs/ROADMAP.md` (amendments to 27/28/30b/RANK 4; new items **92–97**), `docs/DECISIONS.md`
+(**D84**), and cross-linked from `docs/Managing_Long_Context_Length.md`. The new items are
+**registered, not scheduled** — delivered to `pm` for sequencing (intent
+`opr-20261017-compaction-followup`). Nothing was implemented.
+
+**Still the critical path (unchanged):** `#1040` landing train → `#1036` (land #916 → 2nd rig
+reload) → the `cli.mjs` chain → daemon. **Still on the operator:** `#1059` (KEEP vs reset
+`#940`'s `e3a8e53`), and the second rig reload after #916 lands.
+
+**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+
+## CLOCK-OUT — tenth pass (2026-10-16, delegate) — historical
 
 **HEAD at clock-in:** `f3c3179`. Delegate commits this session: the cooldown-revisit fix (`7a0ae0f` —
 `src/broker.mjs`, `src/driver.mjs`, `src/scheduler.mjs`, `demo/broker-cooldown-revisit.test.mjs`) and

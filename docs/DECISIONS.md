@@ -2078,3 +2078,46 @@ repo-wide rewrite (same class as the held #994 whole-tree Prettier normalize).
 repo-wide EOL rewrite and the #994 normalize still await an operator-declared quiet window.
 
 **Status:** ruled and delivered to `pm` (intent `opr-20261016-eol-policy-944`).
+
+## D84 — Compaction follow-up: guard-authoritative threshold, masking-first ordering, verifier isolation (delegate, 2026-10-17)
+
+**Decision.** The operator's compaction follow-up (`docs/reviews/context-compaction-followup.md`) is
+folded in as follows:
+- **Threshold:** the inherited pi-durable default (auto threshold ≈ `contextWindow − reserveTokens` ≈
+  1.03M for our 1M-configured models) is NOT the basis. The ordered context-pressure guard
+  (RANK 4 / #62) is authoritative and must set the platform threshold *above* its own trigger; the
+  trigger is ~60–70% of each model's **measured effective** window (report first cut 180–250K).
+  (ROADMAP 27 amendment.)
+- **Cheapest-first ordering:** mask → summarise → fresh session. Masking is exposed via pi-durable's
+  **existing** `ContextEdit { action: "omit" | "replace" }` (ROADMAP 92).
+- **Compaction safety:** 28a is blocked on a degenerate stop reason and on a dirty item worktree; the
+  summary is a fixed structured schema with a token floor and pinned constraints (93); compaction
+  count is capped with a forced fresh session past the cap (94); the summarizer treats in-context
+  content as untrusted (95).
+- **Verifier isolation:** fresh context is a correctness property — a verifier must not inherit the
+  author's summary; retries isolate with a structured failure handoff (96).
+- **Evaluation:** probes (recall/artifact/continuation/decision) + replay from the append-only store;
+  this also measures the effective window (97).
+
+**Why.** Grounded in `docs/reviews/context-compaction-followup.md` (each external claim carries a URL
++ evidence class). The decisive fact: our configured 1M window makes automatic compaction effectively
+unreachable, while the vendor's own GLM-5.3-Flash evaluation stops at 300K and the DeepSeek-V4
+precision band is 150–250K.
+
+**Design choice vs established practice (the distinction the report flags).** Most of this is
+practice-synthesis, NOT controlled result: the "forbid compaction on uncommitted work" invariant is a
+sound synthesis with no controlled study; the retry-isolation rule is inference; the 15× multi-agent
+figure does not transfer cleanly (a broker queue of long-lived seats is closer to the 4× agent
+multiplier); and masking's advantage is domain-specific (verbose tool output) — our seats' succinct
+queue traffic is the regime where summarization is competitive, so the ordering must be revisited
+when file tools land (ROADMAP item 4). The report's own **unverified** list (DeepSeek
+`reasoning_content` counting, served-vs-advertised window, summary-submission racing,
+compaction-count vs GPU starvation, fork-vs-isolate outcome) is carried into the roadmap items rather
+than treated as settled.
+
+**Two internals resolved during processing:** masking is already available (`ContextEdit`,
+`pi-durable/dist/types.d.ts:262`) — item 92 is exposure, not invention; and `Usage.reasoning` is a
+subset of `output` (provider-side input accounting still unmeasured).
+
+**Status:** accepted; ROADMAP items 27/28/30b/RANK 4 amended and 92–97 raised (registered, not
+scheduled); delivered to `pm` for sequencing.

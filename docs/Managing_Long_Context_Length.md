@@ -1,5 +1,18 @@
 I'll research this thoroughly across academic literature, vendor guidance, and open-weights model specifics.# Managing Long Agent Sessions: What the Research Says
 
+> **Update (2026-10-17).** A commissioned follow-up, `docs/reviews/context-compaction-followup.md`
+> (prompt: `docs/reviews/context-compaction-followup-research-prompt.md`), extends this doc and
+> sharpened four things that change our plan (ROADMAP items 27–30 + new 92–97). (1) **The trigger is
+> unreachable by default**: durig sets `contextWindow: 1_048_576` for DeepSeek-V4.1-Flash and
+> GLM-5.3-Flash, so the inherited auto-compaction threshold is ~1.03M tokens — ~3–4× past the
+> vendor's own operating point (GLM-5.3-Flash evaluated to 300K; DeepSeek-V4 precision band
+> 150–250K). (2) **Compaction's worst loss is silent constraint loss, not recall loss** ("Governance
+> Decay"); pin the constitution verbatim outside any summary (ROADMAP 93). (3) **Masking is already
+> available** in pi-durable as `ContextEdit { action: "omit" | "replace" }` — expose it before
+> summarizing (ROADMAP 92). (4) **Fresh context is a correctness property** for a verifier, not just a
+> cost choice (ROADMAP 96). This doc's method remains the baseline; the follow-up adds the external
+> evidence (URL + evidence class) and the per-model numbers above.
+
 ## The foundational finding: "context rot"
 
 Everything about when to compact flows from one empirical result. Model accuracy degrades as input length grows **even on trivial tasks, and well before the window is full**. Chroma's 2025 study of 18 frontier models (GPT-4.1, Claude 4, Gemini 2.5, Qwen3, etc.) found every one degraded with length, including 30%+ accuracy drops when the answer sat mid-document and a measurable loss from length alone [^1][^2]. This builds on the classic "lost in the middle" result (Liu et al.), which measured 20+ percentage-point drops on multi-document QA when the relevant document sat in the middle of a long context [^3]. Anthropic formalizes it: "as the number of tokens in the context window increases, the model's ability to accurately recall information from that context decreases" [^4].
