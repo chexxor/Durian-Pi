@@ -39,22 +39,31 @@ registration. Everything below this block is historical.)_
   prose "exclusive window" — this is the missing drain-to-quiescence primitive, adjacent to ROADMAP
   69/71/74 and the daemon 61-64.
 
-**The landing pass is LIVE.** pm issued **#1390 LANDING PASS GO NOW** (window OPEN 2026-10-17T08:17Z)
-over **20 branches** (the #1358 list grown with the 4 verified #1169 branches + 2 measured conflict pairs +
-#1394's impl-item-1109). impl is quiescing the broker and hit the runbook's **F11-drain case**: `serve
---stop` returned `"stopped": true`, `broker.json` is gone, but **pid 37376 is still alive and `genlock.0`
-is held** — impl is polling until the slot clears. **Do NOT force-kill pid 37376 while a genlock is held.**
+**The landing window closed QUIET BUT EMPTY.** pm issued **#1390 LANDING PASS GO NOW** (window OPEN
+2026-10-17T08:17Z) over **20 branches** (the #1358 list grown with the 4 verified #1169 branches + 2
+measured conflict pairs + #1394's impl-item-1109). impl claimed #1390 (08:22:36), quiesced the broker —
+`serve --stop` hit the F11 drain (`stopped:true` while pid 37376 held `genlock.0` = `scribe`), waited for
+that run to settle, and the broker then logged `EXIT pid=37376 reason=stop passes=606` at **08:32:10** —
+but then **deferred #1390 back to pm at 08:28:39 with NO result**.
+
+**OUTCOME: nothing landed.** main is UNCHANGED (`ffa1ea6`); none of the 20 branches is an ancestor of
+main. The store is now FREE (no `genlock.*`, no `serve`/`run`/`send` process, nothing written since
+08:32:10) — so a broker upgrade is safe to take — but the landings did not happen. **FLAG (structural):**
+a seat hosted BY the broker cannot stop that broker and then keep landing; #1390's GO needs a landing path
+that runs OUTSIDE the broker (or the broker restarted and the pass re-driven once the upgrade is done).
 
 ## NEXT SESSION
 
-**Current item (clock-out):** verify the **#1358 landing pass** once it runs — for each landed tip,
-confirm `git merge-base --is-ancestor <tip> main`, and confirm `#1317 @6400e8e` is among them. Then
-record the pause command's ROADMAP number (ask `pm`).
+**Current item (clock-out):** the store is QUIESCENT and free — broker exited (`EXIT pid=37376
+reason=stop` 08:32:10), no genlock, no driver process. **The landing pass #1390 is `deferred` to pm and
+landed NOTHING** (main unchanged at `ffa1ea6`). Next: either the operator takes the broker upgrade now,
+or restart the broker and re-drive the landing (#1390) — the pass needs a landing path outside the broker.
 
 **Known hazards / gates:**
 - **#1383** - the `land.mjs` genlock probe is wrong; do not trust it. Check the store's genlock state by
   hand.
-- **#1358** was HOLDing only on the operator declaring the window — now declared.
+- **#1390 deferred, empty** - re-route it; a broker-hosted seat cannot stop the broker and keep landing.
+- **#1358** window is spent (quiet but nothing landed); #1169's 4 branches remain unlanded with the rest.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
