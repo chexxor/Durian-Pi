@@ -221,9 +221,10 @@ Object / process-group name, the log path, and (later) the control socket — an
 **The key — contract owned by impl (ROADMAP 91 / #940).** The instance key is DERIVED from the store's
 **canonicalized absolute path** — realpath, case-fold, and 8.3-name normalization on Windows (the trap:
 `C:\DB\RIG.sqlite`, `c:\db\rig.sqlite` and `C:\DB\RIG~1.SQL` are ONE store). `--instance <name>` is a
-**human label only**; it never replaces the derived key. As of this writing the derivation does **not
-exist in code**, so this section fixes the CONTRACT the host adapters consume rather than inventing a
-second key:
+**human label only**; it never replaces the derived key. The derivation exists in `src/instance.mjs`
+(`canonicalStorePath` / `instanceKey` / `hostLockPath`; #940), proven by `demo/instance-key.test.mjs`
+(including the canonicalization trap), so the host adapters consume it rather than inventing a second
+key:
 
 - **Input:** the store's absolute path, exactly as `--db`/config resolution yields it.
 - **Output:** a stable token safe in a Task/label/unit/Job-Object/log/socket name (e.g. a short hex
