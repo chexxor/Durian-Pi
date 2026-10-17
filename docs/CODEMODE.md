@@ -111,7 +111,10 @@ model-authored scripts proves worth the authoring failure rate.
    (`docs/reviews/security-codemode-review.md`) proposes the threat model, the falsifiable controls
    **E1–E14**, and a **read-only T0 first cut** (no `fs.write`, `proc.exec`, `net.fetch`, `model.call`);
    `security.sec` must ratify or correct it before code. Open questions include where the audit sink
-   lives (git per D30, or the store) and whether `proc.exec` is admitted at all.
+   lives (git per D30, or the store) and whether `proc.exec` is admitted at all. **This gate stays
+   OPEN until `security.sec` returns** — it is an EXTERNAL consult the OPERATOR routes (the delegate
+   cannot ratify its own review). On return: fold the ratified controls into this file, record a
+   `D`-entry, and close gate 1.
 2. **Boundary first.** SC1–SC3 land and are proved before codemode exists, because the
    executors delegate to them.
 3. **Library review as requirements** — the four corrections above are acceptance criteria, and
@@ -119,6 +122,19 @@ model-authored scripts proves worth the authoring failure rate.
    unbounded VM.
 4. **Proof** — a demo where a script attempts an escape that the **grant** denies *and* one the
    **environment** denies independently, so neither layer is load-bearing alone.
+5. **Audit sink + mid-run bound (ROADMAP 128/129 — folded in here, NOT standalone starts).**
+   **129** — the broker AUDIT SINK must be the effect record *before* codemode lands: `result.calls`
+   carries `{name, status, durationMs}` only, no arguments and no output, so without the sink a
+   codemode execution is ONE OPAQUE LINE and a verifier cannot re-run what the author names (a
+   P1-Evidence prerequisite). **128** — a MID-RUN bound on a single long sandbox call: require a
+   deliberate `memoryLimitBytes` + `timeoutMs` (the library defaults are unlimited / 300 s), because
+   D64 cannot see a long in-sandbox call until the run SETTLES. See ROADMAP item 32's gate checklist.
+
+### Batchability rule
+
+Batch a step only if it is **idempotent / side-effect-free**, has **no human-approval gate**,
+consumes **no blind rate limit**, and is **not the failing-first checkpoint**. `commit` / `push` /
+approval stay **PER-STEP** — never batched.
 
 ## Relationship to the other seat-tool work
 
