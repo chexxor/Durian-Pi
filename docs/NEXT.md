@@ -40,11 +40,20 @@ registered. Everything below this block is historical.)_
    **input to the external `security.sec` position** (the delegate cannot ratify its own review); spooled
    `pm` intent `opr-20261017-codemode-security` (delivered `06:51:01Z`) to record it against ROADMAP 32
    and sequence the T0/T1/T2 tiers. **The operator must route the round to `security.sec`.**
+7. **`security` seat created and running** (operator-directed): durig had no seat owning security (the
+   `security.sec` consult was external). Added `security` to `rig.selfdev.json` (commit `f701837`; now
+   **10 seats**; GLM-5.3-Flash, deliberately NOT a verifier per `checkup`'s own comment, full working
+   tools via capability `review`), wired edges both ways + an ownership class, applied broker-safe
+   (`up` reported `created: ["security"]`; `ps` 10 seats; `check` clean of `store-missing-seat`; broker
+   restarted **pid 37376**, `START 07:03:35Z`). Restored the gitignored vendored catalogue
+   `vendor/eval/agency-agents` and borrowed its security personas (MIT). Spooled `pm` intent
+   `opr-20261017-security-seat` (delivered `07:17:02Z`): give `security` the codemode position, document
+   the seat, decide its standing surface.
 
 ## NEXT SESSION
 
-**Current item (clock-out):** ROADMAP **130 DELIVERED**; **codemode security round** written, awaiting
-the operator routing it to `security.sec`. The delegate's work this session is committed; the team's next
+**Current item (clock-out):** the **`security` seat is created and running** (10 seats, broker pid
+37376); ROADMAP **130 DELIVERED**; the codemode security round is waiting on the new seat's first job. The delegate's work this session is committed; the team's next
 action is `pm`'s — three `opr-20261017-*` intents were delivered (register/sequence 126–130, 126 waiting
 on #1192; fix the four mojibake docs; record the security round + tier gates). `#1194` (live-worktree
 reap defect) has landed. Nothing blocks the delegate. Live queue is unchanged: `#1151` (impl, claimed — seat-root fallback guard, order 3/3), `#1182` (impl,
