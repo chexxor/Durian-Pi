@@ -544,6 +544,16 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     SAME conversation; Enter sends via `writeIntent` and returns to the conversation; Esc cancels back
     to it; the footer advertises `i`; a driver/golden test proves the conversation is not replaced.
 
+**Sequencing (pm, 2026-10-17):** both behind the operator priority train (#1066) — pm did NOT pull
+them forward, and the impl items are HELD until pm releases.
+- **98** (feature: a seat's context consumption in the conversation view — the READ-SURFACE half of
+  item 27; MUST reuse item 27's measure, not a second) — owners: designer #1106 (design call:
+  denominator = recommended/effective window vs advertised 1M, tokens, cadence, 48-col floor,
+  colour/NO_COLOR, cost), advocate #1107 (user call), impl #1108 (implementation, GATED on those
+  rulings and items 27/97). The designer/advocate items are ADVISORY and may run now.
+- **99** (bug: the `i` input affordance drops the conversation; fix = treat input as an OVERLAY on
+  the current view) — owners: impl #1109 (fix, GATED), designer #1110 (footer/hint wording, advisory).
+
 ## Extensibility and distribution
 
 **Ruled 2026-10-11 (operator): one distribution, no editions** — chosen extension
@@ -1573,6 +1583,22 @@ missing halves, and 30 is the honest advert.
     live endpoint. *Owner:* qa (harness), impl (plumbing). *Acceptance:* the harness reports a
     compacted-vs-full delta on a real past item, and item 27 consumes its effective-window
     number instead of the advertised one.
+
+**Sequencing (pm, 2026-10-17, on the operator's behalf):** these six are ORDERED, all behind the
+operator priority train (#1066) — none ahead of #1040/#1036/#977/#1055/#975/#976/#964/#965/#966/#873.
+1. **97** — qa — compaction evaluation harness (probes + replay) + per-model effective-window
+   measurement. MEASURE-FIRST: the window measurement is a prerequisite for item 27 and #62/RANK 4
+   (the configured `contextWindow` 1_048_576 inherits a ~1.03M threshold that never fires).
+2. **92** — impl — expose masking via the existing `ContextEdit` (omit/replace); gates 28a's
+   "masking before summarization".
+3. **95** — impl — eviction hardening: untrusted in-context content + secret scrub at ingestion
+   (extends #700).
+4. **93** — impl — constraint pinning (constitution verbatim outside any summary + survival probe);
+   depends on 92.
+5. **94** — impl — compaction-count cap + forced fresh session past the cap.
+6. **96** — impl — verifier/retry context isolation (fork vs isolate).
+Queue items: #1087 (97), #1088 (92), #1089 (95), #1090 (93), #1091 (94), #1092 (96). D84's
+unverified list stays OPEN.
 
 ## Deadlock and liveness prevention (raised 2026-10-12)
 
