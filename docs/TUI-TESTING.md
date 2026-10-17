@@ -49,9 +49,11 @@ a small, dependency-free harness with a screen buffer and golden frames, then la
 |---|---|---|
 | Seat list + selection | 1/2 | `demo/tui-golden.test.mjs`, `demo/tui-client.test.mjs` |
 | Conversation view (D69) | 1/2 | `demo/tui-golden.test.mjs`, `demo/tui-conversation.test.mjs` |
+| Input overlay (`i`) on the current view | 1/2 | `demo/tui-input-overlay.test.mjs`, `demo/tui-golden.test.mjs` |
 | Streaming row / team-wide partials | 1/2 | `demo/tui-golden.test.mjs`, `demo/tui-multipane.test.mjs` |
 | Tool blocks / thinking parity | 1/2 | `demo/tui-golden.test.mjs`, `demo/tui-toolblock.test.mjs`, `demo/tui-thinking.test.mjs` |
 | 48-column floor | 2 | `demo/tui-golden.test.mjs` (`conversation-48`) |
+| Narrow footer (hint cut from the right) | 2 | `demo/tui-golden.test.mjs` (`conversation-44`), `demo/tui-input-overlay.test.mjs` |
 | Frame never overflows the viewport | 2 | `demo/tui-buffer.test.mjs` |
 | Cell-width wrapping | 1/2 | `demo/tui-buffer.test.mjs`, H4 |
 | Escape sanitisation | 1 | `demo/sanitize.test.mjs` |
