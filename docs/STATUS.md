@@ -360,3 +360,39 @@ impl to Dirty-source carry (amends F23 refusal, ASK F #506)).
 **Not added at the time (correct withholding):** the status seat last-activity row (#502 / ASK B) - I verified the field did NOT exist in the code then (cmdStatus/
 readRigHealth exposed no last-activity), so it was correctly not documented (never-document-what-does-not-exist, not copied on trust).
 **Superseded since:** the lastActivity field has LANDED - impl #618 cli status seat last-activity, ISO-8601 via readRigHealth (src/readapi.mjs sets seat.lastActivity = new Date(lastTs).toISOString()), and the FEATURES.md status row (section 2) now names it. The tokens/cost/model metrics row is #504's (lead-coordinated), not added here. Nothing pushed.
+
+## Updated 2026-10-17 (scribe — currency truth-up re-derived against current main, #1401)
+
+Re-derived from the #1233 truth-up (which could not land as-is) against current main, on top of the
+mojibake decode (#1400). Each claim grounded by the named demo, run in the item-1401 worktree (all
+exit 0 unless noted):
+
+- **#873 `compact` verb landed.** Manual context compaction — summarizes a seat's OLDER turns into a
+  `pi.compaction` summary entry so the model context shrinks without losing the durable transcript;
+  refuses a live generation lease and a driving broker; drives the compaction task to completion and
+  proves the summary entry landed. Proof: `demo/compact.test.mjs`; FEATURES.md §2/§5 already carry the
+  `compact` command and Context-compaction rows.
+- **#874 per-turn wall-clock bound landed** (`7013294`). A degeneration cause reading
+  `AssistantMessage.durationMs`, threshold 5 min (`maxTurnDurationMs: 5 * 60_000`), so a legitimately
+  slow turn is never reset — only a run that badly outgrows the bound. Proof: `demo/degeneration-duration.test.mjs` exit 0.
+- **#875 degenerate-text named-pattern registry landed.** `TEXT_PATTERNS` in `src/attention.mjs` — each
+  pattern a pure predicate over one assistant turn's text, reason `degenerate-text=<name>=<count>>=<bound>`,
+  validated against real turn fixtures (positive = real loop, negative = healthy turn); adds
+  `scripts/degen-scan.mjs` and the `docs/runbooks/degeneration-guard.md` runbook. Proof: `demo/degeneration-text.test.mjs` exit 0.
+- **#998 worktree recursive-carry fix landed** (`7901501`). `carryVisibleState` excludes linked worktree
+  roots (a sibling `item-<id>` or the just-created target appears in the source's status as an untracked
+  directory), so the dirty-source fork never copies a foreign checkout and never self-copies
+  (`ERR_FS_CP_EINVAL`). Proof: `demo/worktree-recursive-carry.test.mjs` exit 0.
+- **#1165/#1171 scratch-worktree landing helper landed** (`eb87766`). `scripts/land.mjs` merges the named
+  branches into a SCRATCH DETACHED worktree, runs the suite there (`--suite`), and advances `main` only
+  by a clean fast-forward; it is the pre-flight enforcement chokepoint (#1164 Q3) refusing a dirty tree,
+  a tree already mid-merge, and a held genlock slot; a conflict stops and reports the paths. Proof:
+  `demo/land-helper.test.mjs` exit 0.
+
+**Demo count re-measured:** 115 `demo/*.test.mjs` files on this checkout (read-only count). The broker
+upgrade `234e06e` validated the full demo suite 115/0 and the TUI suite 15/15 on pin `8efd314f` — I did
+NOT re-run all 115 (a full-suite run exceeds the per-turn bound, consistent with the #1337 note); the
+named demos above are the evidence for the rows. FEATURES.md §10 updated from the stale "49 offline tests".
+
+Base note: this truth-up is based on the decoded FEATURES.md/STATUS.md (scribe-item-1400) so it carries
+no mojibake, and is stacked after the decode for landing. Nothing pushed.
