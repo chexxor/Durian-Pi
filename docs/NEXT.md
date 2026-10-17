@@ -20,7 +20,9 @@ registered. Everything below this block is historical.)_
 2. **Runbook discoverability** added to `AGENTS.md`, the durig skill, and `constitution.txt` **P3
    Runbooks** (read the matching runbook before improvising, not just author). Commit `fa4b22f`; D90.
    The starter's inline constitution was synced afterward (`rig.starter.json`, commit `b52133f`) — the
-   P3 Runbooks rewrite had broken the 3 constitution-drift demos, now `demo/*.test.mjs` 115/0.
+   P3 Runbooks rewrite had broken the 3 constitution-drift demos, now `demo/*.test.mjs` 115/0. The
+   procedure now records this: `docs/runbooks/broker-safe-change.md` gained a front-matter block, a Do
+   step to sync the starter inline, and a Verify gate (`demo/starter.test.mjs`) — commit `8b46800`.
 3. **Seat constitution reload DONE (forced, operator-authorised):** with two genlocks held, backed up the
    store (`.spike/delegate/store-backup-20261017-054314`), force-killed the broker, ran `up --refresh`
    (9 seats, `constitution.changed=true`, no model resets), `resume` (recovered qa #50734 / impl #51153),
