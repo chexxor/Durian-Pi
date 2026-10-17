@@ -2207,3 +2207,48 @@ a degenerate sample. The genuinely healthy turns v1 also reset (`advocate` 36335
 
 **Status:** adopted (item #875). D78's detector `97a3c6d` stays reverted (`449e870`); this is a distinct
 design, validated before enabling as D78's lesson requires.
+
+## D88 — Defer the external PM adapter; elevate the task interface + storage format (operator, 2026-10-17)
+
+**Decision.** An external PM adapter is **deferred** and its backlog items are **parked** (ROADMAP
+116–123); the only PM work elevated is the **task interface + storage format** (ROADMAP 115): one stable
+`TaskSource` contract and a versioned `Task` schema, used by the internal queue and, when prioritized, by
+an external adapter. `RigQueue` stays the execution system of record; the external PM is a **human front
+door + status mirror** (PM → queue intake; queue → PM status). Design of record: `docs/PM-ADAPTERS.md`.
+
+**Why.** The whole motivation for an external PM is **a human adding and organizing work** — an interface
+concern, not agent throughput. The research (`docs/reviews/llm-agent-project-management-tools.md` +
+`-followup.md`) established feasibility and practice but no outcome evidence, so the benefit is unproven;
+building the adapter first would be high-cost, low-observed-value. The interface/schema is low-regret: it
+is useful internally (stable contract, versioned schema) and makes a future adapter a translation layer
+rather than a migration. The research also showed the human's organization is lost without a
+`priority`/`rank` the queue honors and an `assignee` distinct from the seat `to`.
+
+**Alternatives.** (a) Build the MCP adapter first — rejected: unproven value, and remote/HTTP vendor
+servers conflict with the no-seat-credential posture. (b) Treat the external PM as a peer system of
+record — rejected: it makes a second writer to task state, against the single-writer discipline.
+(c) Change nothing — rejected: the schema gap (no priority/order/human fields) is cheap to close now and
+expensive after other code depends on the current shape.
+
+**Status:** direction recorded; ROADMAP 115 elevated, 116–123 parked; `docs/PM-ADAPTERS.md` is the design
+of record.
+
+## D89 — Seat worktrees move out of the project root and must not inherit a dirty shared tree (delegate, 2026-10-17)
+
+**Decision.** The project root should not accumulate `item-*` worktrees: `prepare_workspace`'s worktree
+root moves to a single ignored location (a sibling `<root>.worktrees/`, or one hidden dir), and the
+broker sweep covers it (ROADMAP 125). Immediately, 28 terminal-item worktrees + 2 verification scratch
+were **relocated** to `../pi-opendurig.worktrees/` with `git worktree move` (no work discarded); the 5
+live/held/deferred worktrees remain in `item-*`.
+
+**Why.** Each claimed item gets its own git worktree (the isolation model), and they pile up because the
+safe sweep removes **clean** orphans only, while `carryVisibleState` copies the shared tree's in-flight
+changes into every new worktree — so most are *born dirty* and never swept. The clutter is filesystem-only
+(the worktrees are gitignored) but it makes the workspace intimidating for a human to read.
+
+**Alternatives.** (a) `git worktree remove` the dirty orphans — rejected: it would discard uncommitted
+work (D60). (b) Archive each worktree's diff to a patch — heavier and lossier than `git worktree move`,
+which keeps every file and branch. (c) Leave them — rejected: the operator asked for a tidy workspace.
+
+**Status:** relocation done (28 + 2 moved, 5 kept); ROADMAP 125 registered;
+`docs/runbooks/leaked-worktrees.md` documents the relocate-don't-destroy step.

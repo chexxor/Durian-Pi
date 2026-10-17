@@ -3,11 +3,43 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **eighteenth pass** — applied the operator's PM direction: defer the
-external adapter, elevate the task interface + storage format (115), park 116–123. Prior pass: digesting
-the PM-tools follow-up and 115–122. See **NEXT SESSION** below.)_
+_Last refreshed: 2026-10-17 (delegate, **nineteenth pass** — PM-adapter direction applied (D88), all
+tutor-app references removed, seat worktrees relocated out of the project root (D89), ROADMAP 102–125
+registered. Everything below this block is historical.)_
 
 ## NEXT SESSION
+
+**Current item (clock-out):** the delegate's work (this session) is done and committed; the team is
+mid-flight. Live queue: `#1151` (impl, claimed — seat-root fallback guard, order 3/3), `#1182` (impl,
+claimed — resume for #1151), `#1189` (qa, claimed — ROADMAP 97 harness; live runs pending operator spend),
+`#1190` (qa, claimed — VERIFY #1163, landing-safety B). `#1169`/`#1202` track the **landing-pass
+follow-up for the 4 SKIPPED branches** (#658/#662/#828/#837); `#1211` tracks the branch-deletion/git-guard
+interaction.
+
+**Known blocker:** none blocking the delegate. The operator holds **push** (`origin/main == main`). Four
+branches stay unlanded by design and are tracked (`#1169`). **Never delete a branch with
+`git rev-list --count main..<b>` > 0.**
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**What this session changed (all committed):**
+1. **PM adapter deferred** (operator direction, **D88**): only the **task interface + storage format**
+   (ROADMAP 115) is elevated; 116–123 are parked. Design: `docs/PM-ADAPTERS.md`.
+2. **Tutor-app references removed** from config, code, tests, the dead `rigs/tutor-pi.rig.json`, and 21
+   docs; affected demos green. Local `durig.config.json` `DURIG_DB` now points at `./selfdev.sqlite`.
+3. **Seat worktrees relocated** (ROADMAP 125, **D89**): 28 terminal + 2 verify scratch moved to
+   `../pi-opendurig.worktrees/`; 5 live/held worktrees remain in `item-*`.
+4. **Research SOP hardened:** `research-request.md` now requires a follow-up prompt and registering
+   proposed ROADMAP items.
+5. **ROADMAP 102–125** registered (git-merging tooling, PM adapters, TUI 124, worktrees 125).
+
+**Next-session checklist:**
+1. `DURIG_DB=./selfdev.sqlite node cli.mjs status` (read-only).
+2. Let the claimed items settle; do not poll. When the 4 skipped branches are ready, `#1169` routes them.
+3. `pm` sequences ROADMAP 102–125.
+4. Procedures: `docs/runbooks/merge.md`, `resolve-merge-conflict.md`, `leaked-worktrees.md`.
+
+## NEXT SESSION — SUPERSEDED (prior pass, historical)
 
 **Current item (clock-out):** wait for the team's **landing pass**, then verify + clean up. `pm` was
 routed to land the 15 verified-but-unlanded branches (`opr-20261017-landing-pass`, with the pre-flight
