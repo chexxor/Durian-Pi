@@ -28,7 +28,11 @@ non-interactive, so it is safe to call from an agent or a script.
 1. Read the current pointer (`docs/NEXT.md`) and the runbook (`docs/SELFDEV.md`).
 2. `git status --short -- .` — know what is uncommitted before you touch anything.
 3. `DURIG_DB=<store> node cli.mjs status` — the attention notices and non-terminal work.
-4. Resume from the pointer; do not re-derive priority from the roadmap.
+4. If you are in an **operating situation a runbook covers** (broker down/stalled, store corruption,
+   a degenerate seat, leaked worktrees, a merge/conflict, or you need external research), read the
+   matching `docs/runbooks/<symptom>.md` before improvising — the index is `docs/runbooks/README.md`,
+   and `docs/runbooks/research-request.md` governs commissioning research.
+5. Resume from the pointer; do not re-derive priority from the roadmap.
 
 ## The contract you must not break
 
@@ -158,5 +162,6 @@ uncommitted ones). Count it in the tree you are testing; do not trust README/FEA
 ## Where to read further
 
 `docs/SELFDEV.md` (the selfdev runbook) · `docs/NEXT.md` (current pointer) ·
-`docs/QUICKSTART.md` · `docs/FEATURES.md` · `docs/WORKFLOWS.md` ·
-`docs/SEAT-TOOLS.md` · `docs/STATUS.md` (history).
+`docs/runbooks/README.md` (operating procedures, symptom-indexed — **read the matching one before a
+recovery or an external research request**) · `docs/QUICKSTART.md` · `docs/FEATURES.md` ·
+`docs/WORKFLOWS.md` · `docs/SEAT-TOOLS.md` · `docs/STATUS.md` (history).

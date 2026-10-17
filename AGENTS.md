@@ -22,7 +22,11 @@ three actors straight is the whole job:
 2. Read **`docs/SELFDEV.md`** — the runbook: which team, which store, which worktree, the loop.
 3. `git status --short -- .` — know what is already uncommitted before you touch anything.
 4. `DURIG_DB=./selfdev.sqlite node cli.mjs status` — the team's attention and non-terminal work.
-5. Resume from `NEXT.md`. Do not re-derive the priority from the 1300-line roadmap.
+5. If this session is an **operating situation a runbook covers** — broker down/stalled, store
+   corruption, a degenerate seat, leaked worktrees, a merge/conflict, or you need external research —
+   read the matching `docs/runbooks/<symptom>.md` **before improvising**. The index (symptom → runbook)
+   is `docs/runbooks/README.md`; read `docs/runbooks/research-request.md` before commissioning research.
+6. Resume from `NEXT.md`. Do not re-derive the priority from the 1300-line roadmap.
 
 ## Clock out (before you stop)
 
@@ -44,5 +48,6 @@ three actors straight is the whole job:
 ## Where to read further
 
 `docs/SELFDEV.md` (runbook) · `docs/NEXT.md` (current pointer) ·
-`docs/Agent_Onboarding_Research.md` (why this entry point exists) · `docs/QUICKSTART.md` ·
-`docs/FEATURES.md` · `docs/ROADMAP.md`.
+`docs/runbooks/README.md` (operating procedures — **read the matching one before a recovery or an
+external research request**) · `docs/Agent_Onboarding_Research.md` (why this entry point exists) ·
+`docs/QUICKSTART.md` · `docs/FEATURES.md` · `docs/ROADMAP.md`.
