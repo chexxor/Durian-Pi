@@ -25,6 +25,16 @@ operator-sanctioned window (`docs/runbooks/seat-reset.md` § Context saturation)
 ~48k, coherent); `docs/incidents/` now **7 reports** (+`qa-context-degeneration`, sev2 mitigated);
 DECISIONS **D95**.
 
+**Routed this session (idea, not scheduled):** operator asked to explore a *simple core + extensions*
+redesign down the road. Shape delivered to `pm`: freeze the ASK E core (store seam, single-writer wake
+family, trust boundary, CLI contract, config, loader); widen the existing extension seam to register
+lazy CLI verbs so durig's own features (worktree, TUI, checkup, ambient measures, format, …) become
+opt-in extensions; opt-in via profile → named enable list (path for third-party) → per-seat scoping.
+Added goals: easier per-component testing and a substitutable extension-side interface (the core stays
+non-pluggable per ASK E constraints i–iv). Intent `opr-20261017-extension-boundary-idea` delivered to
+`pm` (`INTENT delivered=1 dead=0`, 22:46:47Z) to register as ROADMAP item **#132**, parked; body
+`.spike/delegate/intent-extension-boundary.md`.
+
 ## HANDOVER — 2026-10-17 (delegate clock-out; new agent takes the seat)
 
 **Your job next (operator): verify the team is following git procedures and branch management.**
