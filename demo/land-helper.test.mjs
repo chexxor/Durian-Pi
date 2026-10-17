@@ -190,6 +190,37 @@ try {
   check("a mid-merge tree refuses to land", midMerge.code !== 0 && /mid-merge/.test(midMerge.report?.error ?? ""), midMerge.report?.error);
   rmSync(join(repo, ".git", "MERGE_HEAD"));
 
+  console.log("\n7. the genlock probe resolves the LIVE store, not a silent wrong default (#1383)");
+  const landNoDb = (argv) => {
+    const env = { ...process.env };
+    delete env.DURIG_DB; // prove the resolution, not the env
+    const r = spawnSync(process.execPath, [LAND, ...argv, "--repo", repo], { cwd: repo, encoding: "utf8", timeout: TIMEOUT_MS, env });
+    let report = null;
+    try {
+      report = JSON.parse(r.stdout);
+    } catch {
+      report = null;
+    }
+    return { code: r.status ?? 1, report, raw: `${r.stdout}${r.stderr}` };
+  };
+  const featG = feature("feat-g", "g.txt", "from feat-g\n");
+  // A live genlock on a store OTHER than the old rig.sqlite default.
+  const liveSlot = join(repo, "selfdev.sqlite.genlock.0");
+  writeFileSync(liveSlot, JSON.stringify({ pid: process.pid, seat: "impl", since: new Date().toISOString() }));
+  const beforeResolve = mainSha(repo);
+  const resolved = landNoDb(["feat-g"]);
+  check("with NO --db the helper RESOLVES the live store and refuses", resolved.code !== 0, resolved.raw.slice(0, 200));
+  check("...and reports the LIVE store, not the rig.sqlite default", (resolved.report?.db ?? "").includes("selfdev.sqlite"), resolved.report?.db);
+  check("...and main did NOT advance", mainSha(repo) === beforeResolve);
+  const wrongDb = land(repo, ["feat-g"]);
+  check("an explicit --db rig.sqlite is NOT a silent pass while the live store is locked", wrongDb.code !== 0, wrongDb.raw.slice(0, 200));
+  check("...and the refusal NAMES the store holding the live lock", /selfdev\.sqlite/.test(wrongDb.report?.error ?? ""), wrongDb.report?.error);
+  check("...and main did NOT advance", mainSha(repo) === beforeResolve);
+  rmSync(liveSlot);
+  const afterClear = land(repo, ["feat-g"]);
+  check("with the live slot gone, the same landing succeeds", afterClear.code === 0, afterClear.raw.slice(0, 200));
+  check("...and feat-g is an ancestor of main", spawnSync("git", ["merge-base", "--is-ancestor", featG, "main"], { cwd: repo }).status === 0);
+
   console.log(
     failures === 0
       ? "\nPASS - the landing helper merges in a scratch worktree, fast-forwards main only when clean, and refuses a dirty tree / a held genlock / a conflict / a failing suite"

@@ -24,7 +24,9 @@
 //   node scripts/land.mjs <branch> [<branch>...] [--repo <dir>] [--db <path>] [--suite] [--keep] [--json]
 //
 //   --repo <dir>   the shared repository root (default: the repo containing cwd)
-//   --db <path>    the rig store, for the genlock pre-flight (default: DURIG_DB or ./rig.sqlite)
+//   --db <path>    the rig store, for the genlock pre-flight (default: DURIG_DB, else the store the
+//                  repo is ACTUALLY using — the live broker's `<db>.broker.json`, or the only store
+//                  with a live genlock — and only then `./rig.sqlite`; #1383)
 //   --suite        run every demo/*.test.mjs IN the scratch worktree and refuse to advance
 //                  main if any fails (exit 0 = pass)
 //   --keep         keep the scratch worktree on failure, so a conflict can be resolved there
@@ -118,7 +120,40 @@ if (branches.length === 0) {
 	report({ ok: false, command: "land", error: "land needs at least one <branch> to land" }, 1);
 }
 
-const dbPath = resolve(option("--db") ?? process.env.DURIG_DB ?? join(repoRoot, "rig.sqlite"));
+/* ───────── resolve the STORE the genlock probe should watch (#1383) ─────────
+ * The probe used to default to `<repo>/rig.sqlite` even when the rig's LIVE store was another
+ * file in the same repo — so it MISSED the live lock and the landing PROCEEDED. A chokepoint
+ * that silently watches the wrong store defeats the quiescence check it exists to enforce.
+ * Resolution order: --db/DURIG_DB, the live broker's `<db>.broker.json`, the only store with a
+ * live genlock, then the documented default. */
+function liveGenlockStores(root) {
+	const found = [];
+	if (!existsSync(root)) return found;
+	for (const name of readdirSync(root)) {
+		const m = /^(.*)\.genlock\.\d+$/.exec(name);
+		if (!m) continue;
+		const db = join(root, m[1]);
+		if (heldGenlocks(db).length > 0 && !found.includes(db)) found.push(db);
+	}
+	return found;
+}
+
+function resolveStore(root, explicit) {
+	if (explicit) return { path: resolve(explicit), why: "--db / DURIG_DB" };
+	const brokers = readdirSync(root).filter((n) => n.endsWith(".broker.json"));
+	if (brokers.length === 1) {
+		return {
+			path: join(root, brokers[0].slice(0, -".broker.json".length)),
+			why: "the live broker's <db>.broker.json",
+		};
+	}
+	const live = liveGenlockStores(root);
+	if (live.length === 1) return { path: live[0], why: "the only store with a live genlock" };
+	return { path: join(root, "rig.sqlite"), why: "the documented default" };
+}
+
+const store = resolveStore(repoRoot, option("--db") ?? process.env.DURIG_DB ?? null);
+const dbPath = store.path;
 
 const base = { ok: false, command: "land", repo: repoRoot, db: dbPath, branches };
 
@@ -154,6 +189,23 @@ if (existsSync(join(repoRoot, ".git", "MERGE_HEAD"))) {
 			error:
 				`refusing to land: ${join(repoRoot, ".git", "MERGE_HEAD")} exists — the shared tree is already ` +
 				`mid-merge. Finish that merge (or abort it) first.`,
+		},
+		1,
+	);
+}
+
+// #1383 VISIBILITY: a resolved store with NO live lock is NOT proof the rig is quiet — another
+// store in the SAME repo may be the one in use. Refuse loudly rather than pass silently.
+const liveElsewhere = liveGenlockStores(repoRoot).filter((p) => resolve(p) !== resolve(dbPath));
+if (liveElsewhere.length > 0) {
+	report(
+		{
+			...base,
+			error:
+				`refusing to land: the genlock probe resolved ${dbPath} (${store.why}) and it has NO live ` +
+				`holder — but ${liveElsewhere.join(", ")} in this repo DOES. A generation is in flight on ` +
+				`that store; re-run with --db ${liveElsewhere[0]} (or wait for it to settle).`,
+			liveStores: liveElsewhere,
 		},
 		1,
 	);
