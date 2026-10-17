@@ -481,7 +481,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     `@earendil-works/pi-tui` (already a dependency of `pi-coding-agent@1.1.0`, so
     it is in-stack) over adopting a new framework; the browser/SSE client is the
     cheaper option if the interaction set stays small.
-89. **TUI: load a seat's full chat transcript when opening its detail view (operator request, 2026-10-16).**
+89. **TUI: load a seat's full chat transcript when opening its detail view (operator request, 2026-10-16; DELIVERED `ed1ce0c`).**
     Today the conversation pane only carries the most recently **streaming** entries: the store read is a
     bounded 24-entry page (`SCAN_LIMIT`) and the scroll window cannot reach past that page
     (`docs/TUI-IMPLEMENTATION-PLAN.md` §G4, which leaves the "load older than the page" affordance open).
@@ -2161,7 +2161,7 @@ subscriber. **Portability is a first-class requirement** (Windows, macOS, Linux 
 trigger file, the kill-tree primitive, and the stop signal are OS-specific; `src/host.mjs` is identical
 everywhere (`docs/BROKER-SUPERVISION.md` §2 portability boundary).
 
-91. **Multiple durig instances on one machine (operator request, 2026-10-16).** Support more than one
+91. **Multiple durig instances on one machine (operator request, 2026-10-16; DELIVERED `e3a8e53`).** Support more than one
     durig installation / rig on a single computer, and make the OS-level host/daemon namespace-safe
     across them. Today the supervision design assumes "one host per store" (§8) and `durig daemon ...
     [--db <path>]`, but nothing defines an **instance identity** for the OS artifacts: two instances
@@ -2200,7 +2200,7 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     `cli.mjs` `cmdResume`. *Acceptance:* a demo that forces terminal-task + placed-submission and shows
     the seat is re-woken after start/`resume`.
 
-69. **Refuse or route writes while the broker drives.** `resume`/`doctor`, `reset`, `send`, and
+69. **Refuse or route writes while the broker drives (DELIVERED `c2fa6ee`).** `resume`/`doctor`, `reset`, `send`, and
     `ps`/`queue` (which open a full harness just to read) must not become a second owner while a broker
     is alive: refuse with a clear message naming the spool, or route through it; `ps`/`queue` read via
     `openStore` like `status`. *Owner:* impl · *Where:* `cli.mjs`.
@@ -2299,7 +2299,7 @@ Source: `docs/reviews/runbooks-sop-best-practices.md`. Verdict: durig's runbook 
 published practice; what is missing is **machinery** — nothing enforces them or detects rot, and the
 single-writer precondition is prose, which failed twice on 2026-10-16. `pm` sequences these.
 
-81. **`runbook-stale` / `runbook-unverified` check rules.** `runbook-stale` is an `error` when
+81. **`runbook-stale` / `runbook-unverified` check rules (DELIVERED `ef7f0d6`).** `runbook-stale` is an `error` when
     `last_verified` is old AND a file the runbook names changed since; `runbook-unverified` is `fix-now`
     when `Verify` has never run. Turns rot into a failing test. *Owner:* impl · *Where:*
     `src/checkup.mjs`, `docs/runbooks/*`. *Acceptance:* a stale and an unverified runbook each produce
@@ -2311,7 +2311,7 @@ single-writer precondition is prose, which failed twice on 2026-10-16. `pm` sequ
 83. **Hard write guard on all write verbs.** The single most important recommendation; the precondition
     must be code, not a sentence. This **is** item **69** — do not duplicate; land it. *Acceptance:* see
     item 69.
-84. **`--dry-run` for `up --refresh` / `reset`.** Print the diff (which constitution doc / seat model
+84. **`--dry-run` for `up --refresh` / `reset` (DELIVERED `dfff51a`).** Print the diff (which constitution doc / seat model
     would change) before writing, so a blind write becomes reviewable. *Owner:* impl · *Where:*
     `cli.mjs`. *Acceptance:* `up --refresh --dry-run` names the seats and fields it would change and
     writes nothing.

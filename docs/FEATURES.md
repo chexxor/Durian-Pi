@@ -40,7 +40,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | Command | Does | Flags | Surface |
 |---|---|---|---|
 | `init` | Scaffold a bare install so `up` can follow: write `rig.json` (a verbatim copy of the hardened starter `rig.starter.json` â€” seats pm/impl/qa/lead, edges, inline constitution â€” with only a `_readme` provenance note changed) and `durig.config.json` (the shipped defaults materialized from `durig.config.default.json`). npm-init-like: **refuses** (exit 1, naming the file) when either file already exists, checked rig-then-config and refused BEFORE any write, so a refusal never leaves a torn half-scaffold and never clobbers an existing file; the seed is audited through the same `auditRig` `check` uses (absent-store basis), so a drifted starter fails `init` loudly instead of scaffolding garbage. The scaffold audits clean (`check rig.json` exit 0, store rules skipped). Proof: `demo/init.test.mjs` | | `cli` |
-| `up <rig.json>` | Create/refresh seats, edges and constitution from a spec; idempotent | `--refresh` re-applies stored prompts, models **and** each seat's working directory | `cli` |
+| `up <rig.json>` | Create/refresh seats, edges and constitution from a spec; idempotent | `--refresh` re-applies stored prompts, models **and** each seat's working directory; `--dry-run` (with `--refresh`, and on `reset`) prints which seats/fields it WOULD change and writes nothing (#815, ROADMAP 84; proof `demo/dry-run.test.mjs`) | `cli` |
 | `worktree <path>` | Create an isolated per-item checkout for seats to write in. Forks the **visible state**: a dirty source no longer refuses â€” the uncommitted content is carried into the fork and returned as `{carried}` (and logged by the broker), so isolation does not depend on a pristine tree (#506), while the anti-stale rule keeps the fork matching what the tree visibly holds (#240). Deleted-but-uncommitted paths stay deleted. Dependencies are installed per worktree (`npm ci --prefer-offline`), never bridged with a `node_modules` junction (Git 2.42 deletes *through* junctions) | `--source <dir>` | `cli` |
 | `ps` | Seat roster with conversation ids and roles, each seat's configured `model`, and its worktree `root` when a non-default cwd is persisted | | `cli` |
 | `send <seat> <text>` | Steer a seat, wait for its reply, return it inline | `--stream` / `--no-stream`, `--body-file <path>` (or `-`), `--request-id <id>` (retry-safe) | `cli` |
@@ -54,7 +54,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | `events` | Durable read-only event feed with a monotonic `seq` cursor; a reconnect from the last `seq` resumes rather than replaying. No harness attach, nothing written | `--since <seq>`, `--follow` | `cli` |
 | `log <seat> [limit]` | A seat's conversation, turn-grouped. `--follow` also shows the in-flight **partial** as streaming â€” a `partial` object on JSON, a live region on a TTY â€” always distinct from committed turns | `--follow`, `--full`, `--tool-bg`, `--theme dark\|light`, `--human`/`--json` | `cli` |
 | `watch` | Follow rig state â€” human dashboard on a TTY, NDJSON when piped, with a per-seat `streaming` field and row | `--once`, `--human`/`--json` | `cli` |
-| `ui` | The read-only interactive TUI. Separate entrypoint: run `node ui.mjs` (or `npm run ui`); `cli.mjs` stays non-interactive (D21). Seat list + a rich full conversation view | `q`/Ctrl+C quit; `r` refresh; `â†‘â†“`/`j`/`k` select/scroll; `Enter` open the selected seat's conversation; `Esc` back | `tui` |
+| `ui` | The read-only interactive TUI. Separate entrypoint: run `node ui.mjs` (or `npm run ui`); `cli.mjs` stays non-interactive (D21). Seat list + a rich full conversation view; opening a seat **backfills that seat's full durable transcript in pages**, then continues following new entries live, instead of showing only the bounded latest stream (#927, ROADMAP 89; proof `demo/tui-backfill.test.mjs`) | `q`/Ctrl+C quit; `r` refresh; `â†‘â†“`/`j`/`k` select/scroll; `Enter` open the selected seat's conversation; `Esc` back | `tui` |
 | `intent` | Spool a message to a seat for the resident broker to deliver WITHOUT stopping it. Separate entrypoint: `node intent.mjs` (or `npm run intent`); the producer never opens the store | `<seat> --body-file <path\|->`, `--request-id <id>` | `cli` |
 | `status` | One-shot per-seat health plus attention notices; like `ps` it also surfaces each seat's `model` and its worktree `root` when a non-default cwd is persisted. Each seat row carries `lastActivity` â€” the newest admitted submission's input-entry timestamp, ISO-8601, absent when the seat has none | | `cli` |
 | `check <rig.json>` | Audit a rig file **and** the store against the research gaps | `--human`/`--json` | `cli` |
@@ -178,6 +178,8 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Broker intent-inbox** (`node intent.mjs`) | Deliver operator intent to a seat WITHOUT stopping the broker: the producer writes one atomic JSON file to `<db>.broker.inbox/` and never opens the store; the broker drains the spool at the START of each pass and submits each intent as a real operator input, so the seat is not double-woken. An unknown seat or failed submit is dead-lettered to `<db>.broker.inbox.error/` with its reason (never retried forever), and the drain is logged `INTENT delivered=â€¦ dead=â€¦`. Separate entrypoint â€” `cli.mjs` stays non-interactive (D21); a `send --async` alias follows once `cli.mjs` frees | `src/broker.mjs` `writeIntent`/`drainIntentInbox`, `intent.mjs` | `demo/broker-inbox.test.mjs` | cli |
 | **Concurrent seat attribution** | With N generation slots, each lease and `status` names the generation's own seat (AsyncLocalStorage), not the last-woken seat (fixes F34 under concurrency) | `src/genlock.mjs` | `demo/broker-seat-attr.test.mjs` | cli |
 | **Coordinator queue listing** | `peek_queue(all=true)` returns the full non-terminal listing uncapped, so a coordinator with no read tool can groom the queue | `src/rig.mjs` | `demo/coordinator-queue.test.mjs` | cli |
+| **Instance key + per-instance host lock** | Each install derives a stable instance key from the CANONICALISED store path, and the host's "single-instance" lock is PER INSTANCE rather than global, so two durig instances on one machine do not collide on the trigger, Job Object / process-group, log path or control-socket names (#940, ROADMAP 91) | `src/instance.mjs` | `demo/instance-key.test.mjs` | cli |
+| **Single-writer refusal while the broker drives** | `reset`/`compact`/`send` and the other write verbs REFUSE while a broker is alive, naming the spool and the repair, instead of opening a second harness and becoming a second owner (the failure that corrupted the store twice); `ps`/`queue` read through `openStore` and never become an owner (#910, ROADMAP 69) | `cli.mjs` | `demo/cli-broker-refuse.test.mjs` | cli |
 | **Zero durig SQL** | durig imports one storage opener and runs no SQL of its own | `cli.mjs:26` | architecture note, `docs/STATUS.md` | cli |
 
 ## 6. Observability
@@ -284,7 +286,7 @@ the file can be running something else â€” a rig spec declared its
 constitution inline while the store held a different one, so 13 seats ran without
 their team culture and no command said so (D25).
 
-Nine rules with stable ids, each with a subject and the exact fix:
+Thirteen rules with stable ids, each with a subject and the exact fix:
 
 | Rule | Severity |
 |---|---|
@@ -297,6 +299,18 @@ Nine rules with stable ids, each with a subject and the exact fix:
 | `no-verifier-seat` | fix-now |
 | `single-model-rig` | fix-now |
 | `seat-without-capabilities` | fix-now |
+| `runbook-stale` | error |
+| `runbook-unverified` | fix-now |
+| `ownership-seat-missing` | error |
+| `verification-without-evidence` | fix-now |
+
+The last four are the maintenance rules: `runbook-stale` (error) fires when a runbook was verified
+before a file it names changed, and `runbook-unverified` (fix-now) when its `Verify` has never run
+(#964, ROADMAP 81a; proof `demo/runbook-rules.test.mjs`). `ownership-seat-missing` (error) fires when
+an ownership class names an owner seat the rig does not declare (#714; proof `demo/ownership.test.mjs`).
+`verification-without-evidence` (fix-now) fires when a verification task is completed with only an
+acknowledgement and no re-runnable evidence — `complete_work` now carries an `evidence` field for it
+(#715; proof `demo/check-evidence.test.mjs`).
 
 `store-missing-seat` and `stray-seat` are the two directions of one disagreement
 between the rig file and the store, and they are not symmetric. A seat the file
