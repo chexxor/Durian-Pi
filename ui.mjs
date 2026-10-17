@@ -26,6 +26,7 @@ import { partialView } from "./src/viewmodel.mjs";
 import { SCAN_LIMIT, readOlderEntries, conversationExhausted } from "./src/rigstory.mjs";
 import { createConversationWindow, selectSeat, mergeNewest, oldestLoadedId, turnsOf, loadOlder } from "./src/tui/conversation.mjs";
 import { createUiDriver, decodeKeys } from "./src/tui/driver.mjs";
+import { createViewMode } from "./src/tui/viewmode.mjs";
 import { createTerminalScreen, PASTE_OFF } from "./src/tui/restore.mjs";
 import { createInputLine } from "./src/tui/input.mjs";
 import { writeIntent } from "./src/broker.mjs";
@@ -43,6 +44,8 @@ keys:
   ↑ / ↓ or k / j     seat list: select a seat; conversation: scroll the transcript
                      (at the loaded top, ↑ loads one older page of the seat's log)
   Enter              open the selected seat's conversation stream
+  i                  type an intent to the focused seat (Enter=send, Esc=cancel);
+                     an overlay on the current view — it never replaces it
   G / End            jump to the live tail (re-enable auto-follow)
   Esc                back to the seat list (press again to quit)
 
@@ -87,7 +90,7 @@ async function makeReadState(storage, ui, conv) {
     // auto-follow the first streaming seat; once they press a nav key — or open a
     // seat's conversation — their choice sticks (r does not steal focus back).
     ui.seatCount = health.seats.length;
-    if (!ui.navigated && ui.mode === "seats" && streamingSeat !== null) {
+    if (!ui.navigated && view.mode === "seats" && streamingSeat !== null) {
       const idx = health.seats.findIndex((s) => s.name === streamingSeat);
       if (idx >= 0) ui.selectedIndex = idx;
     }
@@ -104,7 +107,7 @@ async function makeReadState(storage, ui, conv) {
     // per-poll scan (a probe runs only while this view is open).
     let turns = [];
     let exhausted = null;
-    if (ui.mode === "conversation" && ui.focusSeat !== null) {
+    if (view.view === "conversation" && ui.focusSeat !== null) {
       if (conv.seat !== ui.focusSeat) selectSeat(conv, ui.focusSeat);
       mergeNewest(conv, health._pages?.[ui.focusSeat] ?? [], SCAN_LIMIT);
       if (conv.exhausted === null && focusConvId !== undefined) {
@@ -127,10 +130,12 @@ async function makeReadState(storage, ui, conv) {
       health,
       queueItems,
       selectedSeat: ui.seatCount > 0 ? focusSeat : null,
-      view: ui.mode,
+      // The view UNDER the overlay, never "input": the input row is an overlay on the
+      // current view (ROADMAP 99), so the renderer keeps drawing that view.
+      view: view.view,
       scroll: ui.scroll,
       exhausted,
-      inputText: ui.mode === "input" ? input.value : null,
+      inputText: view.inputting ? input.value : null,
     };
   };
 }
@@ -192,10 +197,13 @@ try {
   // Selection is owned here, not in the driver: the driver is a pure key/tick
   // machine, and this entrypoint already owns readState (the seat whose turns
   // are shown). `navigated` latches on the first nav key so auto-follow of a
-  // streaming seat never fights the operator's choice; `mode` is the seat list or
-  // the selected seat's focused conversation; `scroll` counts older turns when in
-  // the conversation view.
-  const ui = { selectedIndex: 0, navigated: false, seatCount: 0, mode: "seats", scroll: 0, focusSeat: null, convId: undefined };
+  // streaming seat never fights the operator's choice; `scroll` counts older turns
+  // when in the conversation view.
+  const ui = { selectedIndex: 0, navigated: false, seatCount: 0, scroll: 0, focusSeat: null, convId: undefined };
+  // The view (seat list | conversation) plus the INPUT OVERLAY state (ROADMAP 99): `i`
+  // is an overlay, never a third view, so closing it returns to the view it was opened
+  // over. Pure state, in src/tui/viewmode.mjs, so the transitions are testable headlessly.
+  const view = createViewMode();
   // The detail view's loaded window (ROADMAP 89): newest page + paged-in older
   // pages, owned by the entrypoint and driven by the keys below.
   const conv = createConversationWindow();
@@ -217,8 +225,8 @@ try {
       // Enter opens the selected seat's conversation; Enter again in the conversation
       // view is a no-op (Esc is the way back). Opening resets the loaded window, so
       // the detail view always starts at the newest page for the seat just opened.
-      if (ui.mode === "seats" && ui.seatCount > 0) {
-        ui.mode = "conversation";
+      if (view.mode === "seats" && ui.seatCount > 0) {
+        view.openConversation();
         ui.scroll = 0;
         selectSeat(conv, ui.focusSeat);
         void driver.tick();
@@ -227,8 +235,8 @@ try {
     onBack: () => {
       // Esc leaves the conversation view; at the seat list it quits (the pre-modes
       // behavior), so Esc is never a dead key.
-      if (ui.mode === "conversation") {
-        ui.mode = "seats";
+      if (view.view === "conversation") {
+        view.closeConversation();
         ui.scroll = 0;
         void driver.tick();
       } else {
@@ -245,7 +253,7 @@ try {
       enterInput();
     },
     onNavigate: (delta) => {
-      if (ui.mode === "conversation") {
+      if (view.view === "conversation") {
         // ↑ (−1) reveals older turns; ↓ (+1) returns toward the live tail. At the
         // LOADED top, ↑ loads ONE older page instead of a no-op — it does NOT
         // re-anchor to the tail (designer contract §1/§3). loadOlder keeps the
@@ -272,14 +280,16 @@ try {
 
   function enterInput() {
     if (ui.seatCount === 0) return; // no seat to address
-    ui.mode = "input";
+    if (!view.enterInput()) return; // already open: never clobber the remembered view
     input.clear();
     if (process.stdout.isTTY) process.stdout.write(PASTE_ON);
     void driver.tick();
   }
 
   function exitInput() {
-    ui.mode = "seats";
+    // Restore the view the overlay was opened over: a submit/cancel while typing over a
+    // conversation lands BACK in that conversation, not on the seat list (ROADMAP 99).
+    view.exitInput();
     input.clear();
     if (process.stdout.isTTY) process.stdout.write(PASTE_OFF);
     void driver.tick();
@@ -344,7 +354,7 @@ try {
     const clean = sync.consume(chunk);
     // In input mode every byte is text for the line, not a key: this is what keeps a
     // typed `q` from quitting and a pasted newline from submitting.
-    if (ui.mode === "input") {
+    if (view.inputting) {
       const events = input.feed(clean);
       if (events.submitted) submitInput();
       else if (events.cancelled) exitInput();

@@ -324,18 +324,56 @@ function renderStatusBar(health, seats, queueItems, width, color = false) {
 }
 
 /**
+ * Cut a footer hint to `width` cells from the RIGHT, keeping its internal spacing.
+ *
+ * `truncate` collapses runs of whitespace, which would silently rewrite the design's
+ * double-space separators AND break the conversation hint's budget arithmetic (designer
+ * #1115: the hint is exactly 44 cells, and 48 − 4 = 44). So this hint is measured and cut
+ * by CELLS, like every other width decision in this module.
+ */
+function truncateHint(hint, width) {
+	const flat = String(hint ?? "").trim();
+	if (textWidth(flat) <= width) return flat;
+	if (width <= 1) return sliceToWidth(flat, Math.max(width, 0));
+	return `${sliceToWidth(flat, width - 1)}…`;
+}
+
+/**
  * Render the footer (help / keybindings).
  */
 function renderFooter(width, color = false, view = "seats") {
+	// Conversation footer hint (designer #1115), EXACTLY this string: 44 cells, so at 48
+	// cols all five bindings fit whole (48 − 4 = 44). The order is deliberate — the row is
+	// cut from the right, so `q=quit` falls off first (Ctrl+C is always wired), then
+	// `i=input`; the navigation keys survive longest. `r` stays bound and functional but is
+	// not advertised here (it is a seat-list affordance).
 	const hint =
 		view === "input"
 			? " Enter=send  Esc=cancel "
 			: view === "conversation"
-				? " Esc=back  ↑↓=scroll  G=tail  q=quit "
+				? "Esc=back  ↑↓=scroll  G=tail  i=input  q=quit"
 				: " q=quit  r=refresh  ↑↓/jk=seat  Enter=open  i=input ";
-	const truncated = truncate(hint, width - 4);
-	const gutter = "└" + "─".repeat(Math.max(0, width - 2 - truncated.length));
+	// The seats/input hints are frozen byte-for-byte by the same ruling, so they keep the
+	// legacy whitespace-collapsing cut; only the conversation hint is cut by cells.
+	const truncated = view === "conversation" ? truncateHint(hint, width - 4) : truncate(hint, width - 4);
+	const gutter = "└" + "─".repeat(Math.max(0, width - 2 - textWidth(truncated)));
 	return { lines: [paint("gray", gutter + truncated, color)], height: 1 };
+}
+
+/**
+ * Render the type-to-seat input ROW.
+ *
+ * It is an OVERLAY affordance, drawn over whichever view is current, and it NAMES the seat
+ * the text will be sent to: over a conversation that is the conversation's seat, over the
+ * seat list the selected seat (designer #1115). The chip makes the target explicit instead
+ * of implied by focus — the two views address different seats, and a mis-send has no recall
+ * (the intent inbox is write-only).
+ */
+function renderInputRow(width, color, inputText, seatName) {
+	const chip = seatName ? `─ to ${sanitizeTerminalText(seatName)} ─ ` : "";
+	const cursor = "▏";
+	const budget = Math.max(0, width - 4 - textWidth(chip) - textWidth(cursor));
+	return `  ${paint("bold", "┃", color)} ${paint("dim", chip, color)}${truncate(inputText, budget)}${cursor}`;
 }
 
 /**
@@ -356,6 +394,12 @@ function renderFooter(width, color = false, view = "seats") {
  *   exist beyond the loaded set. `false` renders the "load older" invite, `true` renders
  *   "start of conversation"; `null` (default) leaves the top indicator at today's behaviour,
  *   so callers that do not know do not fabricate a state.
+ * @param {string} params.view — the view UNDER any input overlay: "seats" (default) or
+ *   "conversation". "input" is NOT a view (ROADMAP 99): while typing, pass the underlying
+ *   view plus `inputText`, and the input row is drawn OVER it instead of replacing it.
+ * @param {string|null} params.inputText — non-null while the type-to-seat overlay is open;
+ *   renders the input row (chip naming `selectedSeat`) over the current view and switches
+ *   the footer to the send/cancel hint.
  * @returns {Frame}
  */
 export function renderTui({
@@ -409,7 +453,10 @@ export function renderTui({
 		// DISPLAY LINES: a tools/thinking turn renders several lines, so a turn-count
 		// budget overflowed the viewport and pushed the live tail off-screen.
 		const streamingRows = streaming.lines.length > 0 ? streaming.lines.length + 2 : 0;
-		const reserve = 2 /*header*/ + 2 /*one indicator each side*/ + 5 /*status block + footer*/ + streamingRows;
+		// The input row is part of the fixed chrome while the overlay is open, so it is
+		// reserved too — otherwise the row would be appended past `height` and clipped.
+		const inputRows = inputText !== null ? 1 : 0;
+		const reserve = 2 /*header*/ + 2 /*one indicator each side*/ + 5 /*status block + footer*/ + streamingRows + inputRows;
 		const transcriptBudget = Math.max(4, height - reserve);
 		const { lines: transLines, above, below } = renderTranscript(
 			turns,
@@ -449,7 +496,11 @@ export function renderTui({
 		const { lines: statusLines } = renderStatusBar(health, seats, queueItems, width - 4, color);
 		lines.push(...statusLines);
 		lines.push(rule);
-		lines.push(...renderFooter(width, color, "conversation").lines);
+		// The input overlay rides ON TOP of the conversation: the transcript above stays put
+		// (that is the ROADMAP 99 fix — typing no longer replaces the view), the row names the
+		// conversation's seat, and the footer switches to the send/cancel hint.
+		if (inputText !== null) lines.push(renderInputRow(width, color, inputText, seatName));
+		lines.push(...renderFooter(width, color, inputText !== null ? "input" : "conversation").lines);
 		return new Frame(lines);
 	}
 
@@ -522,7 +573,7 @@ export function renderTui({
 	// The input row sits with the footer: typing targets the selected seat, so it is
 	// part of the seat-list view, not a separate screen.
 	if (inputText !== null) {
-		lines.push(`  ${paint("bold", "┃", color)} ${truncate(inputText, Math.max(0, width - 6))}▏`);
+		lines.push(renderInputRow(width, color, inputText, selectedSeat));
 	}
 	const { lines: footerLines } = renderFooter(width, color, inputText !== null ? "input" : "seats");
 	lines.push(...footerLines);
