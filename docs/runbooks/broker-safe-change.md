@@ -1,3 +1,14 @@
+---
+runbook: broker-safe-change
+symptom: "a model/constitution/reset change must apply without corrupting the store"
+writes: true
+precondition: "broker-stopped"
+last_verified: 2026-10-17
+verified_by: delegate
+evidence: "constitution reload fa4b22f + starter-inline sync b52133f; Verify run 2026-10-17"
+check_rule: null
+---
+
 # Apply a spec change safely (model / constitution / reset)
 
 ## When to use
@@ -35,12 +46,19 @@ stopping the broker, so the write you are about to make is the one you have alre
 2. Confirm no `serve` process remains (the check in Diagnose) AND `broker.json` is gone. If the pid is
    still alive after the drain and NO genlock is held (all runs settled), terminate it:
    `taskkill /F /PID <pid>`. Never terminate while a genlock slot exists.
-3. Apply the change:
+3. **If the change edited `constitution.txt`, sync the starter's inline copy — it does not update
+   itself.** `rig.starter.json` carries `constitutionInline`, and `demo/starter.test.mjs` (plus
+   `demo/commit-model.test.mjs` and `demo/seat-commit-instructions.test.mjs`) assert it equals
+   `constitution.txt`, EOL-insensitively. `[judgement]` Regenerate that one field to the new text — set
+   `constitutionInline` to the exact contents of `constitution.txt`, change nothing else. Do **not** run
+   `scripts/apply-commit-discipline.mjs`: it is a one-shot 2026 amendment that also overwrites
+   `P2 Authority`, so running it now would revert later edits.
+4. Apply the change:
    ```bash
    DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh
    ```
    The JSON reports `refreshed`, and for a model change `modelMismatch` / `modelReset`.
-4. Restart:
+5. Restart:
    ```bash
    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
    ```
@@ -52,6 +70,12 @@ stopping the broker, so the write you are about to make is the one you have alre
   node scripts/read-constitution.mjs   # prints whether prepare_workspace / P3 Language are present
   ```
 - The broker log shows a fresh `START` and `WAKE` lines.
+- **A `constitution.txt` change reached the starter.** If the change edited `constitution.txt`:
+  ```bash
+  node demo/starter.test.mjs   # exit 0 — the inline equals constitution.txt (EOL-insensitive)
+  ```
+  The same drift is asserted by `demo/commit-model.test.mjs` and `demo/seat-commit-instructions.test.mjs`;
+  all three must exit 0 before the change is called applied.
 
 ## If it fails
 - `up` or the next write dies with `Session failed after a storage error` → `store-corruption-recovery.md`
@@ -67,3 +91,9 @@ after `serve --stop` returned `stopped:false` and corrupted `impl`'s `pi.live` (
 2026-10-16 (again): `serve --stop` returned `"stopped": true` for pid 35812/30596 while each process
 remained alive in the F11 drain; the pid had to be force-killed once all runs had settled. Confirm the
 process, not the flag.
+2026-10-17: the P3 Runbooks rewrite (`fa4b22f`) changed `constitution.txt` but not `rig.starter.json`'s
+inline copy, so `demo/starter.test.mjs` and the two commit-instruction demos failed the drift assertion —
+and the change had been committed without the suite being run. Confirmed against `fa4b22f~1` (0
+differing lines before, 1 after) that the edit caused it, then synced (`b52133f`), suite 115/0. **Syncing
+the starter inline and running `demo/starter.test.mjs` is part of any constitution edit, not a separate
+task.**
