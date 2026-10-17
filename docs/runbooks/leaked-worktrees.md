@@ -13,10 +13,16 @@ git worktree list
 DURIG_DB=./selfdev.sqlite node cli.mjs queue   # which item ids are still live?
 ```
 A worktree whose item is terminal is an **orphan**. An orphan with uncommitted work is **dirty**.
+Since **#1194** the sweep also KEEPS an orphan that is **locked** or has a **branch checked out** — and
+every durig item worktree is on its item branch (#859) — so a clean orphan on a branch is *not* swept
+automatically.
 
 ## Do
-1. The broker sweeps **clean orphans** automatically at start and logs
-   `RECONCILE leases=… worktrees=…`; clean orphans need no manual step.
+1. At start the broker sweeps only a **dead, detached, unlocked** orphan and logs
+   `RECONCILE leases=… worktrees=…`. Since **#1194** it KEEPS — reporting `worktree-orphan-kept` — any
+   orphan that is **locked** or has a **branch checked out** (a live seat's workspace; #859). A clean
+   orphan still on a branch therefore needs a manual step: `git worktree unlock item-<id>`, then let the
+   next start sweep it, or relocate it (step 4).
 2. A **dirty** orphan is refused on purpose (never destroyed). Resolve it explicitly:
    ```bash
    git -C item-<id> status --short          # see what is at risk
@@ -48,3 +54,8 @@ is `git worktree remove --force` **only after** its work is committed or knowing
 data-loss path; it now refuses without `force` (D60). The leaked `item-635/636/638` hold uncommitted work
 and are correctly refused; they need their owner to commit or the operator to resolve. ROADMAP item 76
 adds the audit surface.
+
+2026-10-17 (#1194): the sweep reaped a LIVE worktree that was locked and on a branch — the seat's cwd
+fell back to the shared tree and a commit landed on `main` (#1186, #1196). It now KEEPS a locked or
+branch-checked-out orphan (`listWorktrees` also reports the lock honestly; a spread-order bug had hidden
+it). Because every item worktree is branch-based, the sweep now reaps only detached/unlocked orphans.
