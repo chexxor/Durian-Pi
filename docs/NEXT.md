@@ -7,6 +7,25 @@ _Last refreshed: 2026-10-17 (delegate, **nineteenth pass** — PM-adapter direct
 tutor-app references removed, seat worktrees relocated out of the project root (D89), ROADMAP 102–125
 registered. Everything below this block is historical.)_
 
+## DELEGATE NOTE — 2026-10-17 (runbook discoverability + research follow-up)
+
+**This session (committed):**
+1. **Followed `research-request.md` before replying** (the Diagnose step + the required prompt shape) and
+   wrote **`docs/reviews/reducing-llm-agent-tool-calls-followup-research-prompt.md`** — the grounded
+   follow-up to the operator's `docs/reviews/reducing-llm-agent-tool-calls.md` (durability, named-evidence
+   verification, single-writer, multi-agent queue, D77/D78 degeneration; corrections table requested).
+2. **Runbook discoverability added** to the delegate entry point (`AGENTS.md` clock-in + Where-to-read),
+   the durig skill (`.agents/skills/durig/SKILL.md`), and the seat constitution (`constitution.txt`
+   **P3 Runbooks** now requires *reading* the matching runbook before improvising, not just authoring).
+   Commits `fa4b22f` (onboarding) + `1702b72` (research).
+
+**PENDING — live apply to seats (needs a quiet window):** `constitution.txt` changed, and
+`up rig.selfdev.json --refresh --dry-run` confirms `constitution.changed=true` (`writes: 0`). At 05:40Z
+**two `genlock.*` were held** (a run in flight: broker just woke `impl`), so per `broker-safe-change.md`
+the stop was NOT run. Apply when no genlock is held: `serve --stop` (proceed only on `stopped:true`, then
+confirm no `serve` process and no `genlock.*`) → `up rig.selfdev.json --refresh` → restart
+`scripts/serve-noroot.ps1`. Verify with `node scripts/read-constitution.mjs` / the broker log.
+
 ## NEXT SESSION
 
 **Current item (clock-out):** the delegate's work (this session) is done and committed; the team is

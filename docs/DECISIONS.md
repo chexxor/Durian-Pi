@@ -2252,3 +2252,27 @@ which keeps every file and branch. (c) Leave them — rejected: the operator ask
 
 **Status:** relocation done (28 + 2 moved, 5 kept); ROADMAP 125 registered;
 `docs/runbooks/leaked-worktrees.md` documents the relocate-don't-destroy step.
+
+## D90 — Runbook discoverability is onboarding: the entry point and the constitution must say the runbooks exist and when to consult them (delegate, 2026-10-17)
+
+**Decision.** The delegate entry point (`AGENTS.md` clock-in + "Where to read further"), the durig skill
+(`.agents/skills/durig/SKILL.md` clock-in + references), and the seat **P3 Runbooks** rule in
+`constitution.txt` now name `docs/runbooks/` and its symptom index, and require **reading the matching
+runbook before improvising** on an operating situation it covers — not only authoring one when a procedure
+changes. The research runbook (`research-request.md`) is called out explicitly for commissioning research.
+
+**Why.** On 2026-10-17 the delegate answered a research-consume question before running the
+`research-request.md` **Diagnose** step and before writing the required prompt, because nothing in the
+first-read path said the runbooks existed or when to use them. `docs/runbooks/README.md` states the intent
+("a seat reads a runbook when woken into a situation it does not own"), but the constitution's P3 Runbooks
+only covered *authoring*, and the entry point/skill pointed at `SELFDEV.md` and `NEXT.md`, not the runbook
+set. A procedure nobody is told to read does not fire.
+
+**Alternatives.** (a) Add machinery that auto-suggests a runbook from `status`/`check` — deferred:
+executable `Diagnose` blocks are ROADMAP 85, and the immediate failure is discoverability, not retrieval.
+(b) Leave the pointer only in `SELFDEV.md`'s References — rejected: a fresh session and a fresh seat read
+the entry point/constitution first. (c) Prose reminder without the "before improvising" trigger — rejected:
+the trigger is the part that fires when a situation arrives.
+
+**Status:** committed (`fa4b22f`). The `constitution.txt` change is pending live application to seats via
+a broker-safe `up --refresh` (dry-run confirms `constitution.changed=true`); recorded in `docs/NEXT.md`.
