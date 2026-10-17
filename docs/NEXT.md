@@ -32,10 +32,29 @@ doc branches), 6 share `6c384ac`, 5 share `7b72b83`, 5 share `6195c99`.
   context `pm` 363k / `impl` 367k; `secret_detected` on qa `#75535` and scribe `#69744` (detection
   only — do not echo values; prior same-class findings were git-SHA false positives).
 
-**Owed / recommended (operator owns the landing decision):** (1) run one landing pass per `merge.md`
-for the 52 unlanded branches in a quiesced window, then restart the broker for #1703/#1704; (2) prune
-the 7 free-merged refs; (3) release the 56 merged-but-held worktrees per `leaked-worktrees.md`, then
-prune. **Never `-D` an `ahead>0` ref and never delete a snapshot.**
+**Actions taken (operator-authorized, 2026-10-17; deletion-safe):**
+- **Pruned 8 merged free refs** with `git branch -d` (each proved an ancestor of `main`; `main`
+  unchanged `f9f2480`, tree clean) — `devtools-item-1667`, `devtools-item-1745`, `impl-item-156`,
+  `qa-item-1638`, `qa-item-1696`, `qa-item-1764`, `scribe-item-1648`, `security-item-1581`.
+  117 → 114 refs (≈5 new refs were created live, so net −3).
+- **Worktree release: NOT SAFE — nothing removed.** Of the merged-but-held worktrees, **0 are
+  clean+unlocked**, 5 are clean+`locked` (keep per `leaked-worktrees.md`), and 52 are **dirty**
+  (uncommitted work → keep). No worktree was touched.
+- **Landing pass: BLOCKED / not started.** The rig is NOT quiescent — 2 live `genlock.*` held
+  continuously by broker pid `34700` (pm) for 90 s — and `scripts/land.mjs` refuses while a generation
+  is in flight. Stopping the live broker needs an operator-declared window (standing rule), so it was
+  **escalated, not taken**.
+
+**Read-only landing pre-flight (`git merge-tree`, per branch):** ~21 unlanded branches CONFLICT vs
+`main` (mostly `docs/runbooks/README.md`, `docs/DECISIONS.md`, `docs/FEATURES.md`, `cli.mjs`); ~36 merge
+CLEAN. Land only branches that are BOTH qa-VERIFIED and CLEAN — e.g. `impl-item-253`, `-965`, `-1108`,
+`-1465`, `-1535`, `-1547`, `-1553`, `-1557`, `-1585`, `-1589`, `-1610`, `-1698`, `devtools-item-912`.
+`impl-item-1703`/`-1704` are CLEAN but **NOT yet qa-verified** (#1808/#1811) — do not land before
+verification.
+
+**To resume:** operator declares the window → `serve --stop` (confirm exit + no genlock) → `resume` →
+`node scripts/land.mjs <verified-clean branches> --suite` → restart broker. **Never `-D` an `ahead>0`
+ref and never delete a snapshot.**
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; incoming agent: **verify the git repo branches**)
 
