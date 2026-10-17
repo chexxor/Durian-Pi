@@ -111,11 +111,18 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 	}
 	const run = [...runNewestFirst].reverse();
 
+	// Every per-TURN cause is counted over ASSISTANT turns only. A `pi.tool-result` entry is the
+	// TOOL's runtime, not a model turn: its `durationMs` is how long the tool ran, so a
+	// legitimate ~5-minute demo sweep was read as a ~5-minute MODEL stall and tripped the stall
+	// bound, resetting the seat in a hot loop (#1703). The harness's malformed-argument marker is
+	// the one exception: it rides the tool RESULT, so `malformed` stays over the whole run.
+	const assistantRun = run.filter((entry) => entry?.kind === "pi.assistant");
+
 	let toolTurns = 0;
 	let calls = 0;
 	let repeats = 0;
 	const recent = [];
-	for (const entry of run) {
+	for (const entry of assistantRun) {
 		const keys = toolCallKeys(entry);
 		if (keys.length > 0) toolTurns++;
 		for (const key of keys) {
@@ -130,25 +137,26 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 	// A tool call written as TEXT submits nothing to the harness, so it never becomes a
 	// validation rejection — the `malformed` count above is structurally blind to it. That
 	// run settled "done" while the seat did not act, so it is its own degenerate cause.
-	const pseudoToolCalls = countPseudoToolCalls(run);
+	const pseudoToolCalls = countPseudoToolCalls(assistantRun);
 	// A reply in another language is a separate fault from repetition: the run can be
 	// structurally clean and still be unusable to the operator, and a drifted turn
 	// self-conditions the next. `countLanguageDriftTurns` owns the script test.
-	const languageDrift = countLanguageDriftTurns(run, {
+	const languageDrift = countLanguageDriftTurns(assistantRun, {
 		minChars: o.minLanguageDriftChars,
 		minRatio: o.minLanguageDriftRatio,
 	});
 	// Degenerate PROSE: the same shape the D78 heuristic chased, but read by a NAMED-PATTERN
 	// registry so each shape is independently testable and the reason names the pattern. Counted
 	// per pattern, so a run can trip on one shape without the others.
-	const degenerateText = countTextPatternTurns(run);
-	const contextTokens = run.reduce((max, entry) => {
+	const degenerateText = countTextPatternTurns(assistantRun);
+	const contextTokens = assistantRun.reduce((max, entry) => {
 		const tokens = messageOf(entry)?.usage?.totalTokens;
 		return Number.isFinite(tokens) ? Math.max(max, tokens) : max;
 	}, 0);
-	// The slowest single turn of the run. `durationMs` is absent on legacy messages, so a run of
-	// old entries reads 0 and is never flagged on this cause.
-	const turnDurationMs = run.reduce((max, entry) => {
+	// The slowest single ASSISTANT turn of the run. `durationMs` is absent on legacy messages, so a
+	// run of old entries reads 0 and is never flagged on this cause. Tool-result durations are the
+	// TOOL's runtime and are deliberately excluded (#1703).
+	const turnDurationMs = assistantRun.reduce((max, entry) => {
 		const ms = messageOf(entry)?.durationMs;
 		return Number.isFinite(ms) ? Math.max(max, ms) : max;
 	}, 0);
