@@ -100,13 +100,20 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		calls: 0,
 	};
 	if (items.length === 0) return empty;
-	// A just-reset seat has not run since; skip so the reset is not re-applied in a loop.
-	if (items[0]?.kind === "pi.reset") return { ...empty, justReset: true };
 
-	// The current run: entries newer than the last wake, reversed to read forward in time.
+	// The current run: entries newer than the last wake OR the last reset, reversed to read
+	// forward in time. A `pi.reset` is a RUN BOUNDARY exactly like a wake — it starts a fresh
+	// context, so entries older than it are history. Without this, the run that was JUST reset
+	// still counted as the current run (a reset is not a `pi.user`), so the guard re-fired every
+	// pass: 20+ consecutive `pi.reset` entries with no intervening turn (#1704).
 	const runNewestFirst = [];
+	let justReset = false;
 	for (const entry of items) {
 		if (entry?.kind === "pi.user") break;
+		if (entry?.kind === "pi.reset") {
+			justReset = true;
+			break;
+		}
 		runNewestFirst.push(entry);
 	}
 	const run = [...runNewestFirst].reverse();
@@ -183,7 +190,7 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 
 	return {
 		degenerate: reasons.length > 0,
-		justReset: false,
+		justReset,
 		reasons,
 		toolTurns,
 		repeats,

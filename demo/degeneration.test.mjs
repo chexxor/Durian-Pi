@@ -312,5 +312,25 @@ check("a genuinely slow ASSISTANT turn still trips the bound (#1703)", () => {
   );
 });
 
+check("a run that continues after a reset does not re-trigger the guard (#1704)", () => {
+  // The observed loop: the reset was applied, the seat ran once more, and the OLD degenerate
+  // run was still counted (a reset is not a `pi.user`), so the guard re-fired every pass.
+  const a = assessRun([
+    assistant([["read", { path: "a" }]]), // the turn the seat ran AFTER the reset
+    reset(), // the reset already applied
+    pseudoCall(), // the OLD degenerate run, before the reset
+    user(),
+  ]);
+  assert.equal(a.justReset, true, "the reset is seen as the run boundary");
+  assert.equal(a.pseudoToolCalls, 0, "the pre-reset run is not re-counted");
+  assert.equal(a.degenerate, false, "the guard does not re-fire");
+});
+
+check("a reset at the top of the page is justReset, never degenerate (#1704)", () => {
+  const a = assessRun([reset(), assistant([["read", { path: "a" }]]), user()]);
+  assert.equal(a.justReset, true);
+  assert.equal(a.degenerate, false);
+});
+
 console.log(failures === 0 ? "\nPASS — degeneration detector verified" : `\nFAIL — ${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
