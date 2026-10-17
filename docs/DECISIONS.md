@@ -2276,3 +2276,26 @@ the trigger is the part that fires when a situation arrives.
 
 **Status:** committed (`fa4b22f`). The `constitution.txt` change is pending live application to seats via
 a broker-safe `up --refresh` (dry-run confirms `constitution.changed=true`); recorded in `docs/NEXT.md`.
+
+## D91 — A standing `security` seat, not only an external consult (delegate, 2026-10-17)
+
+**Decision.** durig declares a 10th seat, `security` (GLM-5.3-Flash), owning threat models, trust
+boundaries and secret hygiene. It is deliberately **not** a verifier — its name/role avoid `checkup`'s
+`VERIFIER_TERMS`, and `checkup`'s own comment anticipates this ("a security seat audits its own surface")
+— and it keeps full working tools. Edges are wired both ways and an ownership class added.
+
+**Why.** Every trust-boundary review (a socket, an execution surface, a dependency, a write path) waited
+on the operator routing an external consult, and no seat owned security: the team verifies *correctness*
+(qa/auditor) but owns no threat model. The seat's first outputs show the gap was real —
+`docs/runbooks/leaked-secret.md` (#1300), a HIGH finding that the commit path has no secret gate (#1315 →
+**#1317**), and the ratified codemode position (#1321, `docs/reviews/security-codemode-position.md`).
+
+**Alternatives.** (a) Keep the consult external-only — rejected: latency, no standing owner, no local
+knowledge of durig's boundaries. (b) Assign security to `qa`/`auditor` — rejected: they verify
+correctness, and `checkup` deliberately excludes a security seat from the verifier terms. (c) A seat with
+no working capability — rejected: it must read code and write positions. Persona method borrowed from the
+vendored agency-agents security personas (MIT; `vendor/eval/agency-agents/security/`), not invented.
+
+**Status:** created and running (`rig.selfdev.json` `f701837`; broker pid 37376). The external
+`security.sec` consult is superseded for durig's own surfaces; whether it is retired or kept for
+compliance/live-ops depth is `lead`'s ruling (queue #1318).

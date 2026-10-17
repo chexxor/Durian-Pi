@@ -53,18 +53,25 @@ registered. Everything below this block is historical.)_
    `vendor/eval/agency-agents` and borrowed its security personas (MIT). Spooled `pm` intent
    `opr-20261017-security-seat` (delivered `07:17:02Z`): give `security` the codemode position, document
    the seat, decide its standing surface.
+8. **Next priority decided + a redundant branch caught:** the `security` seat's first outputs are already
+   in the queue (`docs/runbooks/leaked-secret.md` #1300; HIGH finding #1315 → **#1317**; the ratified
+   codemode position #1321). Recommended **#1317** (commit-time secret gate) as the next priority; caught
+   that **`impl-item-1256` is a redundant duplicate** of `b52133f` (`git cherry` shows the patch already
+   on main), so it must NOT be landed (#1256/#1304/#1287 dropped). Spooled `opr-20261017-next-priority`
+   (`07:41:55Z`); recorded **D91** (the standing security seat).
 
 ## NEXT SESSION
 
-**Current item (clock-out):** the **`security` seat is created and running** (10 seats, broker pid
-37376); ROADMAP **130 DELIVERED**; the codemode security round is waiting on the new seat's first job. The delegate's work this session is committed; the team's next
-action is `pm`'s — three `opr-20261017-*` intents were delivered (register/sequence 126–130, 126 waiting
-on #1192; fix the four mojibake docs; record the security round + tier gates). `#1194` (live-worktree
-reap defect) has landed. Nothing blocks the delegate. Live queue is unchanged: `#1151` (impl, claimed — seat-root fallback guard, order 3/3), `#1182` (impl,
-claimed — resume for #1151), `#1189` (qa, claimed — ROADMAP 97 harness; live runs pending operator spend),
-`#1190` (qa, claimed — VERIFY #1163, landing-safety B). `#1169`/`#1202` track the **landing-pass
-follow-up for the 4 SKIPPED branches** (#658/#662/#828/#837); `#1211` tracks the branch-deletion/git-guard
-interaction.
+**Current item (clock-out):** the next priority is **#1317 — a commit-time secret gate** (the `security`
+seat's HIGH finding #1315: land #700's scanner as a pre-flight + a demo assertion). Delivered `pm` intent
+`opr-20261017-next-priority` (`07:41:55Z`): **#1317 first**; **do NOT land `impl-item-1256`** (redundant
+— `git cherry` proves the patch is already on main via `b52133f`); release **`#1227`/ROADMAP 126** (#1192
+verified by #1288); check liveness (`impl idle_with_queued_work` ×11, `qa admitted_not_started #57517`).
+
+The **`security` seat is created and running** (10 seats, broker pid 37376) and already produced
+`docs/runbooks/leaked-secret.md` (#1300), the #1315 HIGH finding, and the ratified codemode position
+(#1321). ROADMAP **130 DELIVERED**; **D91** records the seat decision. The team's in-flight queue has
+moved on — trust `status`/`queue`, not the older text below.
 
 **Known blocker:** none blocking the delegate. The operator holds **push** (`origin/main == main`). Four
 branches stay unlanded by design and are tracked (`#1169`). **Never delete a branch with
