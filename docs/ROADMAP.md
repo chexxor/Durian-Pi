@@ -2009,11 +2009,22 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     (verified artifact / code wins over prose when docs and code disagree) and **#397 Q4** (`done` /
     enforcement must be VERIFIED, not asserted — carry the check run + exit code, re-openable).
 
-70. **Read-boundary hardening.** One unreadable `pi.live` must not kill a command's whole pi-durable
+70. **Read-boundary hardening (DELIVERED `07ae6a6`).** One unreadable `pi.live` must not kill a command's whole pi-durable
     session: the F12 guard and the broker open path tolerate an unreadable document (skip + report, as
     `src/readapi.mjs` does), and startup reconciles the spool/leases/worktrees (folds item 66).
     *Owner:* impl · *Where:* `cli.mjs` `openHarness`, `src/broker.mjs`.
     *Acceptance:* a demo with a corrupt `pi.live` where `serve`/`run`/`send` still start and report it.
+    **Resolved (impl, #911):** item 70 is DELIVERED as `07ae6a6`. Most of the behaviour pre-dates the
+    item, and this register must not read as if #911 built all of it. Pre-existing (cited): `run`/`serve`
+    start and report the corrupt seat (`driver:"wake-failed"` + the unresolvable path, `failedSeats:["bad"]`)
+    and exit 0 (`driveOnce` P5/#110); `ps`/`queue`/`status` read through (`openStore`, D44); the F12
+    guard is not tripped by a `pi.live` corruption (`conv.agent()` reads the separate `pi.agent` doc);
+    and startup reconciles leases + orphaned worktrees (`reconcileBrokerStartup`) and drains the spool
+    per pass. THE GAP #911 actually closed: `send <bad>` exited 1 with a bare `unresolvable path`,
+    naming neither the seat nor the repair — `cmdSend` now catches `unresolvable path` on the
+    submit/wait path and fails legibly, naming the SEAT, the unreadable `pi.live`, and the repair
+    (D44 retire / `scripts/repair-pi-live.mjs`); other errors rethrow. Acceptance demo:
+    `demo/readboundary-corrupt-live.test.mjs`.
 
 71. **Command spool — writes as requests the broker applies (the mailbox).** Generalise the intent
     inbox from "deliver a message" to "apply an operation": `send`, `reset`, `stop`, and queue edits
