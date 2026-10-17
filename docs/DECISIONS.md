@@ -2345,3 +2345,51 @@ executable check applies (a narrative decision log). LANDING NOTE: main's D91 is
 seat-creation entry; scribe's standing-surface/consult ruling (lead #1297 as revised by #1316,
 branches scribe-item-1301/1323, currently numbered D91) must be renumbered (recommended D93) or
 folded into D91 at landing to avoid a collision.
+
+
+## D93 — The `security` seat's standing surface is runbook-only, and the external `security.sec` consult is on-escalation (lead #1297, revised by lead #1316; recorded by scribe #1301/#1323, 2026-10-17)
+
+**Decision.** Q1 — STANDING SURFACE = RUNBOOK ONLY (TWO runbooks; no standing review set). The `security`
+seat owns two runbooks under `docs/runbooks/`:
+- `docs/runbooks/leaked-secret.md` — the failure-mode SYMPTOM: a secret was committed → detect/respond
+  (ties #828 read-side detection + #837 redaction);
+- `docs/runbooks/security-trust-boundary-review.md` — the review METHOD: how to review a trust boundary;
+  reusable across reviews and broader than the leaked-secret scenario.
+There is NO standing `docs/reviews/security-*.md` set — reviews remain per-item artifacts
+(`docs/reviews/<topic>.md`), exactly as `qa`/`advocate` produce per-item reviews and own no standing set.
+Q2 — `security.sec` CONSULT = ON-ESCALATION (not retired, not fully retained). The internal seat handles
+routine security review (fast, free, always available); the external consult is engaged only when the
+seat escalates (high-stakes, uncertain, or beyond the seat's depth). CAVEAT (operator-facing): if a
+compliance requirement mandates independent external review regardless of the seat's judgment, that is a
+STANDING (non-discretionary) trigger — the operator must name it; absent that, on-escalation is the
+default. NOTE: capability `review`, not a verifier — so `security` does NOT take the verifier exemption
+(it works in worktrees when it has a claimed item), consistent with lead's #1222 blast-radius ruling.
+
+**Revised (#1316).** Lead's #1297 ruled "ONE runbook" (failure modes + review method); lead #1316 REVISED
+that on the seat's content-based report: the review method gets its OWN runbook and `leaked-secret.md`
+keeps ONLY the failure mode (the method section is MOVED, not duplicated). Rationale: ONE CONCERN PER
+ARTIFACT — a failure-mode runbook and a review method are distinct concerns; bundling makes
+`leaked-secret.md` do two jobs (respond to an incident AND teach a method). #1297's "one runbook" was a
+minimality instinct; the method's broader scope (any trust boundary, not just secrets) is the deciding
+factor. The new runbook must follow the runbook convention: front-matter per `_template.md`, a Diagnose
+step, and a Verify step that has actually run; plus its README symptom/mechanism row.
+
+**Why.** The smallest surface that makes the seat effective: runbooks for its failure modes and its
+review method, satisfying P3 Runbooks (a failure mode the work covers gets a runbook), without the
+maintenance burden of a standing review set. The consult is a depth/compliance backstop, not a routine
+path.
+
+**Alternatives.** Q1: (a) one runbook bundling failure mode + method — REVISED: two concerns in one
+artifact; (b) both a runbook AND a standing `security-*.md` set — rejected: a standing namespace goes
+stale and duplicates per-item reviews; (c) only a standing review set, no runbook — rejected: the team
+has security failure modes and runbooks are symptom-indexed procedures. Q2: (a) retire the external
+consult — rejected: it preserves depth the internal seat may lack on high-stakes/uncertain work;
+(b) keep it as a routine path — rejected: it would duplicate the seat.
+
+**Status:** ruling #1297 (as revised by #1316, delivered #1299/#1318) by `lead`; recorded by `scribe`
+(#1301, amended #1323). Routed: #1300/#1315 → `security` authored `docs/runbooks/leaked-secret.md`;
+#1322 → `security` authors `docs/runbooks/security-trust-boundary-review.md` (review method; front-matter
+per `_template.md`, Diagnose, Verify actually run; README row) and REMOVES the method section from
+`leaked-secret.md` (moved, not duplicated). OPEN FOR OPERATOR: the compliance caveat — name a mandated
+independent external review and it becomes a standing (non-discretionary) `security.sec` trigger rather
+than an escalation.
