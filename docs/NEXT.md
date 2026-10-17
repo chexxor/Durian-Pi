@@ -3,9 +3,9 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **sixteenth pass** — consumed the PM-tools research, registered
-ROADMAP 115–117, and added `docs/PM-ADAPTERS.md`. Prior pass: the git-merging follow-up, Aider review,
-and the competitor-review runbook. See **NEXT SESSION** below.)_
+_Last refreshed: 2026-10-17 (delegate, **seventeenth pass** — digested the PM-tools follow-up, corrected
+`docs/PM-ADAPTERS.md`, and registered ROADMAP 115–122. Prior pass: the PM-tools survey, `PM-ADAPTERS.md`,
+and 115–117. See **NEXT SESSION** below.)_
 
 ## NEXT SESSION
 
@@ -50,14 +50,12 @@ research SOP now **mandates** registering proposed items. ROADMAP items **102–
 HEAD `5dc9490`) → `docs/COMPETITORS.md` entry. **Owed:** route the follow-up as done; `pm` sequences
 102–117.
 
-**PM-tools research consumed (2026-10-17):** `docs/reviews/llm-agent-project-management-tools.md`
-reviewed (Agent Board / Linear MCP / Atlassian MCP citations spot-verified). Accepted direction in
-`docs/PM-ADAPTERS.md`; ROADMAP items **115–117** registered (TaskSource seam + state mapping, local/stdio
-MCP adapter, read-only external view). Key constraint: official tracker MCP servers are **remote/HTTP**,
-so the MCP client stays in the operator/broker path — seats keep no network. Follow-up prompt
-`docs/reviews/llm-agent-project-management-tools-followup-research-prompt.md` written and **owed to the
-operator to route**; the research SOP (`research-request.md`) now requires a follow-up prompt on every
-report consumption (or an explicit "topic closed").
+**PM-tools research consumed + follow-up digested (2026-10-17):** both reports reviewed; ROADMAP
+**115–122** registered. `docs/PM-ADAPTERS.md` folded the follow-up's corrections: (1) `src/confine.mjs`
+does **not** block seat egress (verified — path/env/command confinement only; the egress mechanism is
+unverified, item 118); (2) keep dependencies **advisory**, do not port Agent Board's enforced DAG;
+(3) target **GitHub first** (local stdio MCP), remote Linear/Atlassian operator-gated. The topic is
+externally closed — no further research prompt needed (the one open item is internal, 118).
 
 **Next-session checklist (the landing cleanup):**
 1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`

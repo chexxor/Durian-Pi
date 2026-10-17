@@ -30,11 +30,13 @@ rather than N bespoke REST integrations.
    are not 1:1, and the mapping must be idempotent and cycle-safe.
 
 ## durig constraints the report could not see
-- **No seat network egress.** Seats run with `inheritEnv:false`, an allowlisted env, and no network
-  capability (`src/confine.mjs`); the broker opened no socket (D11/D45). The **official Atlassian and
-  Linear MCP servers are remote/HTTP** (verified 2026-10-17), so a seat must not call them directly.
-  The MCP client belongs in the **operator/broker path** (which may have network), or must be a
-  **stdio/local** server. Inbound webhook wake implies a listening endpoint and is operator-gated.
+- **Seat network egress is NOT blocked by `src/confine.mjs`.** That file enforces path confinement, a
+  stripped env allowlist, and a `SECRET_NAME` refusal, but it contains no network/socket rule — a seat
+  shell could open a connection, and no other egress control was found (verified 2026-10-17). What a seat
+  genuinely lacks is a network **credential** and a network **tool**. The MCP client still belongs in the
+  **operator/broker path**, because that is where the tracker token lives and where the single writer runs;
+  a seat must never be given a tracker tool. Remote/HTTP MCP and inbound webhook wake remain
+  operator-gated. The egress mechanism is **unverified** (ROADMAP 118).
 - **Single writer.** Two writers to one store corrupted it twice; an adapter that both reads *and* writes
   the tracker must not let the tracker write `RigQueue` concurrently. Ingest is a broker-path operation.
 - **Native Windows**, no `wsl`/`docker`; a local MCP/board process must be Windows-runnable.
@@ -62,5 +64,21 @@ them would be a separate ruling. Task chaining (`nextTask`) likewise maps onto d
 - **A bespoke web UI first** — the TUI already covers the in-rig read surface.
 
 ## Work registered
-ROADMAP items **115–117** (`docs/ROADMAP.md`): the `TaskSource` seam + state mapping; the local/stdio MCP
-adapter; and a read-only external status view.
+ROADMAP items **115–122** (`docs/ROADMAP.md`): the `TaskSource` seam + state mapping (115); the local/stdio
+MCP adapter, GitHub first (116); the read-only external status view plus an inline status path for
+`pm`/`lead` (117); the egress-mechanism verification (118); the fake MCP server + sync-correctness metrics
+(119); one-way sync with external-id idempotency and second-writer detection (120); the state-projection
+module with advisory dependencies (121); and the Agent Board Windows operability spike (122).
+
+## Follow-up consumed (2026-10-17)
+The follow-up (`docs/reviews/llm-agent-project-management-tools-followup.md`) confirmed this direction and
+made three corrections, all folded above: (1) the no-egress claim is **not enforced** by `confine.mjs`;
+(2) keep dependencies **advisory** — do not port Agent Board's enforced DAG; (3) target **GitHub first** (a
+locally runnable stdio MCP server + ETag polling), with remote Linear/Atlassian operator-gated. The
+genuinely new work is only external-id idempotency on ingest, one-way sync + second-writer detection, state
+projection, and a fake-MCP-server evaluation harness — the rest of the "semantics to borrow" list is
+already satisfied by `claim_work`/`genlock`, `prepare_workspace`, the append-only store, the qa/auditor
+gate, `resume`, and the transcript.
+
+The topic is **externally closed**; no further research prompt is needed. The one open item is internal —
+locate what, if anything, blocks seat egress (ROADMAP 118).
