@@ -207,31 +207,76 @@ export async function reconcileStrandedSubmissions(harness, inspection, { contex
   return settled;
 }
 
+/** The id encoded in a worktree BRANCH ref (`impl-item-<N>` / `item-<N>`), or null. */
+function refItemId(ref) {
+  const m = /(?:^|[-/])item-(\d+)$/.exec(String(ref ?? ""));
+  return m ? Number(m[1]) : null;
+}
+
 /**
- * Remove `item-<id>` worktrees whose queue item is no longer live. A leaked worktree (a
- * crash before its item's cleanup, or the recorded recursive-nesting defect) is an
- * orphan; one still holding uncommitted work is refused by the clean-only guard in
+ * Remove `item-<id>` worktrees whose queue item is TERMINAL and which are unlocked and clean.
+ *
+ * A leaked worktree (a crash before its item's cleanup, or the recorded recursive-nesting
+ * defect) is an orphan; one still holding uncommitted work is refused by the clean-only guard in
  * `removeClaimedWorktree` and reported, never force-removed (D60).
+ *
+ * #1194 narrowed this to never reap a LOCKED or BRANCH-HELD worktree — but since every durig item
+ * worktree is branch-based (#859), that made the sweep nearly useless as a backstop. #1244 adds a
+ * TERMINAL-ITEM signal and ANDs it with the existing checks: a branch-held worktree is reaped
+ * ONLY when the branch ENCODES a queue item whose status is terminal, the worktree is UNLOCKED,
+ * and it is CLEAN. Terminal-ness is NECESSARY but never SUFFICIENT; every other case is KEPT and
+ * reported (`worktree-orphan-kept`), never silently discarded.
+ *
+ * RESIDUAL RISK (flagged, #1244): a TERMINAL item's worktree can still be IN USE — a verifier
+ * checking a completed artifact, or a post-done fix. The `locked` check is the guard for that: a
+ * verifier (or any in-flight holder) MUST `git worktree lock` the worktree it uses, or this sweep
+ * can remove it from under it. This removes the WORKTREE only — never the branch, so the ref and
+ * its commits survive (e.g. the #882/666017a case); branch cleanup is separate (#1209).
+ *
+ * `terminalItemIds` is the set of queue items whose status is terminal (done/cancelled). An id
+ * that is absent from it — non-terminal, or not in the store at all — is KEPT, and so is a
+ * branch-held worktree whose branch does not resolve an id (the safe default).
  */
-export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, onDiagnostic } = {}) {
+export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, onDiagnostic } = {}) {
   if (!repoPath) return [];
   const worktrees = await listWorktrees(repoPath);
   const removed = [];
+  const keep = (itemId, worktree, reason) =>
+    onDiagnostic?.({ kind: "worktree-orphan-kept", itemId, worktree, reason });
   for (const wt of worktrees) {
-    const match = /^item-(\d+)$/.exec(basename(wt.worktree));
-    if (!match) continue;
-    const itemId = Number(match[1]);
-    if (liveItemIds.has(itemId)) continue;
+    const pathMatch = /^item-(\d+)$/.exec(basename(wt.worktree));
+    if (!pathMatch) continue; // not one of durig's item worktrees
+    const pathId = Number(pathMatch[1]);
+    // #1244: the AUTHORITATIVE id is the one the branch ENCODES (`impl-item-<N>`). A branch-held
+    // worktree whose branch does not resolve an id is KEPT (safe default) — never reap a worktree
+    // we cannot tie to a queue item.
+    const branchId = wt.branch ? refItemId(wt.branch) : null;
+    if (wt.branch && branchId === null) {
+      keep(pathId, wt.worktree, "branch-unresolved");
+      continue;
+    }
+    const itemId = branchId ?? pathId;
+    // An ACTIVE item is never reaped — that is the #1194 safety.
+    if (liveItemIds?.has(itemId)) {
+      keep(itemId, wt.worktree, "live");
+      continue;
+    }
+    // #1194: a LOCKED worktree is held deliberately (a verifier, or a seat mid-run); keep it.
+    if (wt.locked) {
+      keep(itemId, wt.worktree, "locked");
+      continue;
+    }
+    // #1244: terminal-ness is NECESSARY but not SUFFICIENT. Reap only a worktree whose item is
+    // TERMINAL; a non-terminal or unknown id is kept.
+    if (!terminalItemIds?.has(itemId)) {
+      keep(itemId, wt.worktree, "not-terminal");
+      continue;
+    }
+    // The clean-only guard inside removeClaimedWorktree is the cleanliness check: a dirty
+    // worktree is refused and reported, never silently discarded (D60/#1194).
     const result = await removeClaimedWorktree({ worktree: wt.worktree });
     if (result?.removed) removed.push(itemId);
-    else {
-      onDiagnostic?.({
-        kind: "worktree-orphan-kept",
-        itemId,
-        worktree: wt.worktree,
-        reason: result?.refused ?? (result?.skipped ? "missing" : "not-removed"),
-      });
-    }
+    else keep(itemId, wt.worktree, result?.refused ?? (result?.skipped ? "missing" : "not-removed"));
   }
   return removed;
 }
@@ -248,12 +293,13 @@ export async function reconcileBrokerStartup(harness, { dbPath, context, onDiagn
   let worktrees = [];
   if (repoPath) {
     const queueDoc = await harness.documentState(RigQueue, undefined, context);
-    const liveItemIds = new Set(
-      (queueDoc?.value?.items ?? [])
-        .filter((it) => ["queued", "claimed", "deferred", "held"].includes(it.status))
-        .map((it) => it.id),
-    );
-    worktrees = await reconcileOrphanedWorktrees({ repoPath, liveItemIds, onDiagnostic });
+    const LIVE_STATUSES = ["queued", "claimed", "deferred", "held"];
+    const items = queueDoc?.value?.items ?? [];
+    const liveItemIds = new Set(items.filter((it) => LIVE_STATUSES.includes(it.status)).map((it) => it.id));
+    // #1244: the complement of the live set is the TERMINAL set (done/cancelled). An id that is
+    // in NEITHER set does not exist in the store, so its worktree is KEPT (safe default).
+    const terminalItemIds = new Set(items.filter((it) => !LIVE_STATUSES.includes(it.status)).map((it) => it.id));
+    worktrees = await reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, onDiagnostic });
   }
   return { leases, worktrees };
 }
