@@ -13,7 +13,7 @@ team that builds durig itself.
 
 ## The team
 
-Nine seats (`node cli.mjs ps`), with the author/reviewer pairs the culture requires:
+Ten seats (`node cli.mjs ps`), with the author/reviewer pairs the culture requires:
 
 | Seat | Role | Model | Notes |
 |---|---|---|---|
@@ -26,9 +26,11 @@ Nine seats (`node cli.mjs ps`), with the author/reviewer pairs the culture requi
 | `devtools` | toolchain | DeepSeek-V4.1-Flash | pi pin, `sync-pi.mjs` |
 | `auditor` | second verifier | GLM-5.3-Flash | do the tests prove it; edges |
 | `designer` | CLI/UX | GLM-5.3-Flash | surface and defaults |
+| `security` | security engineer | GLM-5.3-Flash | threat models, trust boundaries & secret hygiene; deliberately NOT a verifier (keeps working tools); owns `security-positions` |
 
 *(Models are the live values in `rig.selfdev.json`; the five GLM seats moved from `Qwen/Qwen3.6-35B-A3B`
-under **D51**. The author/verifier split is still a different model family — GLM vs DeepSeek.)*
+under **D51**, and the `security` seat was added 2026-10-17 (`f701837`) on the same GLM family — so it
+reviews DeepSeek-authored code on a different family. The author/verifier split is still GLM vs DeepSeek.)*
 
 ## Running it
 
@@ -151,6 +153,8 @@ docs role:
   scope, coordination records) are written by **`pm`**.
 - **Quality-assurance and architecture-level docs** (how verification proves a change, why the
   architecture is shaped the way it is) are written by **`qa`** and **`lead`**.
+- **Security positions** (threat models, trust boundaries, secret hygiene — `docs/reviews/security-*.md`)
+  are written by the seat that owns them — **`security`** (ownership class `security-positions`).
 
 **The `scribe` seat's scope** is narrower and downstream of that:
 

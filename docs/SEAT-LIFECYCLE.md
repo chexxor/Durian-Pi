@@ -62,7 +62,10 @@ Two layers hold the boundary (see `SEAT-TOOLS.md`, the M3 design):
 - **Tool sets** narrow on top of it: an author seats keeps `read`/`write`/`edit`/shell (+
   `prepare_workspace`); a **verifier** loses `write`/`edit` and reads a disposable snapshot; a
   **coordinator** (pm/lead, no working capability) keeps none of the **working** file/shell tools (it keeps only the protocol tools: `send_work`/`claim_work`/etc.). The author/verifier asymmetry is decided
-  by the seat's declared capabilities, not its name (`toolRemovalsFor`).
+  by the seat's declared capabilities, not its name (`toolRemovalsFor`). A working seat that is **not**
+  a verifier keeps the full working set — the `security` seat (capabilities `security` + `review`) is not
+  classified as a verifier (`seatsAreVerifier` keys on name/role, and "security engineer" matches no
+  `VERIFIER_TERMS`), so it keeps `write`/`edit`/`shell` and can write its positions.
 
 **The F12 seat-root guard (`cli.mjs:349-372`):** a **write-side** `send`/`run` whose `DURIG_SEAT_ROOT`
 differs from a seat's persisted `cwd` **fails closed**, naming both paths and the fix (`up --refresh`
