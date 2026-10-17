@@ -13,7 +13,10 @@ check_rule: null
 
 ## When to use
 You changed a seat's model in `rig.selfdev.json`, edited `constitution.txt`, or need a context reset, and
-it must take effect without corrupting the store.
+it must take effect without corrupting the store. If your change edits `constitution.txt`, you must ALSO
+regenerate `rig.starter.json`'s `constitutionInline` in the same change and run the three
+constitution-mirror demos (`demo/starter.test.mjs`, `demo/commit-model.test.mjs`,
+`demo/seat-commit-instructions.test.mjs`) before landing — see [constitution-amendment.md](constitution-amendment.md).
 
 ## Preconditions
 `up --refresh` and `reset` are **write verbs** — they open their own `Harness`. They must not run while
