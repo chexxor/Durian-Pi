@@ -136,6 +136,19 @@ export class WakeScheduler {
     return last === undefined || now - last >= this.#seatCooldownMs;
   }
 
+  /**
+   * Milliseconds until `name`'s cooldown elapses (0 when it is ready now). A
+   * candidate wake dropped by `seatFilter` is not lost: the caller uses this to
+   * schedule the pass that re-wakes it, rather than waiting for an unrelated
+   * commit — the general revisit gap.
+   */
+  msUntilSeatReady(name, now = this.#now()) {
+    if (this.#seatCooldownMs <= 0) return 0;
+    const last = this.#lastWakeBySeat.get(name);
+    if (last === undefined) return 0;
+    return Math.max(0, this.#seatCooldownMs - (now - last));
+  }
+
   /** Record that these seats were woken now, starting their cooldown. */
   recordWakes(names, now = this.#now()) {
     for (const name of names ?? []) this.#lastWakeBySeat.set(name, now);

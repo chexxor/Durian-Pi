@@ -3,9 +3,60 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate, **clock-out / ninth pass** — applied the thinkingLevel fix, restarted the broker, and routed four operator intents; the team registered all four. See **CLOCK-OUT (ninth pass)** immediately below.)_
+_Last refreshed: 2026-10-16 (delegate, **clock-out / tenth pass** — fixed the general broker cooldown
+revisit gap; the team has moved a long way past the ninth-pass pointer. See **CLOCK-OUT (tenth pass)**
+immediately below.)_
 
-## CLOCK-OUT — ninth pass (2026-10-16, delegate) — START HERE
+## CLOCK-OUT — tenth pass (2026-10-16, delegate) — START HERE
+
+**HEAD at clock-in:** `f3c3179`. Delegate commit this session: the cooldown-revisit fix —
+`src/broker.mjs`, `src/driver.mjs`, `src/scheduler.mjs`, `demo/broker-cooldown-revisit.test.mjs`.
+
+**WHAT THIS PASS DID (all verified):**
+1. **Fixed the still-owed general broker revisit gap (delegate-owned).** `selectWakes` produced real
+   candidates, `seatFilter` silently dropped cooldown-suppressed ones, and nothing re-ran a pass when
+   the cooldown later elapsed — so a seat whose run settled INSIDE the 30 s cooldown sat with queued
+   work until an unrelated commit. Fix: `driveOnce` reports dropped candidates via `onSuppressed`;
+   `WakeScheduler.msUntilSeatReady(name)` gives the wait; `runWakeLoop` schedules a revisit pass for
+   the earliest suppressed seat's deadline and un-parks to mark itself dirty (recomputed each pass so
+   a stale deadline cannot spin the loop). Proof: `demo/broker-cooldown-revisit.test.mjs` — RED against
+   pre-fix code (1 wake in 3000 ms), GREEN after (re-wake ~1545 ms in, after a 1500 ms cooldown).
+2. **Full demo suite: 95 pass / 3 fail.** The 3 failures are the PRE-EXISTING constitution-drift class
+   (`demo/commit-model.test.mjs`, `demo/seat-commit-instructions.test.mjs`, `demo/starter.test.mjs` —
+   starter inline vs `constitution.txt`), registered as **#976**; none touches this fix.
+
+**THE POINTER WAS STALE.** The ninth-pass pointer named **#885** (`cmdInit`) as priority; it has LANDED
+(`5cb8123`), and the team has since landed #915/#1013 (`7c2fb52`, `f3c3179`), verified
+#874/#875/#910/#911/#916/#890, and registered the TUI-89 / formatter-90 / multi-instance-91 /
+runbook-81/82/86 work. **Trust the queue + `status`, not the ninth-pass text below.**
+
+**PRIORITY — CURRENT CRITICAL PATH (all `impl`):**
+1. **LANDING TRAIN `#1040`** — land the verified DONE-on-branch artifacts in order: `#890` → (`#874`
+   `7013294`, then `#875` `50bc585`) → (`#910` `c2fa6ee`, then `#911` `07ae6a6`); **`git merge --no-ff`**,
+   explicit paths, never push, then mark the rows DELIVERED.
+2. **`#1036`** — land `#916` (`dd79fa3`); pairs with the #915 landing so one rig reload activates both.
+3. Then the serialized `cli.mjs` chain **`#934` → `#873` → `#966`** (one writer at a time; `#920` stays
+   on the ENV seam). Then the held daemon items **`#723` → `#724` → `#725`** (`impl` must release them).
+**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+
+**⚠ OPERATOR ITEMS PENDING (surface; delegate must not rule):**
+- **`#1032` — RESTART/RELOAD the rig (HIGHEST).** The running `serve` (pid 4644, started `21:58:43Z`)
+  loaded the OLD `src/worktree.mjs`, so the `#822` npm-ci fix on `main` is INERT and live
+  `prepare_workspace` still fails on fresh-item creation. Rides with `#1036`. **Cannot be done while a
+  `genlock.*` is held** — a genlock is held now (`impl` generating), so a safe window is required.
+- **`#944`/`#328` — CRLF / line-ending POLICY.** `lead` ruled the repo `.gitattributes`/EOL stance is
+  the OPERATOR's (an explicit `#328` "DO NOT START" hold); `#766` is re-scoped to EOL-insensitive
+  assertions, and the stale-selfdev-test / starter-content-drift halves are split to `#975`/`#976`.
+
+**BROKER:** pid `4644` (`scripts/serve-noroot.ps1`), started `21:58:43Z`; `genlock.0` held (`impl`).
+`status.attention` = deferred-awaiting-answer (old parked rows) + `generation_in_flight (impl)` +
+`queue-ageing` (145 min, the ancient deferred rows). Inbox empty. **Do NOT `serve --stop` while a
+`genlock.*` is held**; `"stopped": true` is not proof the process exited.
+
+**TREE:** clean at clock-in; this pass's edits committed with explicit paths. `item-*` worktrees are
+leaked/locked detachments (known defect `#998`), not tree dirt.
+
+## CLOCK-OUT — ninth pass (2026-10-16, delegate) — historical
 
 **HEAD at clock-out:** `d5c1dfb`. Delegate commits this session: `f579bb2` (thinkingLevel on the 5
 DeepSeek seats), `072bfe6` (ROADMAP 89 TUI), `b2ff656` (pointer), `89c50d4` (ROADMAP 90 formatter),

@@ -2002,3 +2002,32 @@ confirm it.
 
 **Status:** applied and committed; effectiveness is measured by the `step-repetition` metric (README:
 "measures repeated tool calls", so a prose-only loop is its documented blind spot).
+
+## D81 — A cooldown-suppressed wake is re-scheduled, not dropped (delegate, 2026-10-16)
+
+**Decision.** When a broker wake pass drops a real candidate because the seat is inside its per-seat
+cooldown (`WakeScheduler.seatFilter`), the loop now records when that seat becomes eligible and runs a
+revisit pass then. `driveOnce` reports each dropped candidate via a new `onSuppressed(name)` callback;
+`WakeScheduler.msUntilSeatReady(name)` returns the remaining cooldown; `runWakeLoop` schedules the
+earliest deadline and, in its idle wait, marks itself dirty at that time (recomputed every pass so a
+stale deadline cannot spin the loop; the wait is clamped to ≥ 1 ms).
+
+**Why.** The load-bearing rule is that only a wake-relevant commit or a reset runs a pass. A seat whose
+run settles INSIDE the cooldown window triggers a settle-commit pass, gets filtered out by the
+cooldown, and then — with no further commit — sits with queued work until an unrelated commit happens
+(the "general revisit gap"; observed in the sixth and eighth passes as an idle seat with queued work).
+The reset path was already special-cased (`7d62929` clears the cooldown); this generalizes it to the
+normal-settle case without weakening the cooldown's anti-hot-loop purpose.
+
+**Alternatives.** (a) Drop the cooldown entirely — rejected: it throttles a repeatedly re-woken stalled
+claim. (b) Poll for eligible seats every pass — rejected: burns passes and still needs the eligibility
+clock. (c) Have the cooldown expire fire a timer inside `WakeScheduler` — rejected: the scheduler is
+pure with respect to `now` (the loop owns time), so the deadline belongs to the loop.
+
+**Proof.** `demo/broker-cooldown-revisit.test.mjs`: one seat, two queued items, a 1500 ms cooldown; the
+first wake lands at once and the run settles inside the cooldown, so the settle pass must drop it. RED
+against pre-fix code (1 wake in 3000 ms); GREEN after (second wake ~1545 ms in, no external commit).
+Affected demos (scheduler, broker, broker-liveness, broker-wake-return, run, stalledclaim,
+driversurvive) stay green.
+
+**Status:** implemented and committed (delegate pass).

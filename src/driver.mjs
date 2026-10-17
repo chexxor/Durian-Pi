@@ -128,13 +128,25 @@ export async function probeSeatReadability(storage, candidates, context) {
  *
  * `onWoke(name)` fires once per SUBMITTED wake, so a caller can start that seat's
  * cooldown; a seat skipped by the probe never fires it.
+ *
+ * `onSuppressed(name)` fires for each candidate the `seatFilter` dropped (a seat
+ * inside its cooldown). The candidate is real work that this pass did NOT action,
+ * so the caller can schedule the pass that re-wakes it once the cooldown elapses
+ * instead of leaving it until an unrelated commit.
  */
 export async function driveOnce(
   harness,
-  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, seatFilter },
+  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, onSuppressed, seatFilter },
 ) {
   const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds });
-  const eligible = seatFilter === undefined ? candidates : candidates.filter(seatFilter);
+  const eligible =
+    seatFilter === undefined
+      ? candidates
+      : candidates.filter((wake) => {
+          const ready = seatFilter(wake);
+          if (!ready) onSuppressed?.(wake.name);
+          return ready;
+        });
   let wakes = eligible;
   if (storage !== undefined && eligible.length > 0) {
     const { wakeable, unreadable } = await probeSeatReadability(storage, eligible, context);

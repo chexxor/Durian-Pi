@@ -272,7 +272,7 @@ export async function reconcileBrokerStartup(harness, { dbPath, context, onDiagn
 export async function drivePass(
   harness,
   probeStorage,
-  { context, seatFilter, readBusySeats, onError, onWoke, currentSeat: initialSeat,
+  { context, seatFilter, readBusySeats, onError, onWoke, onSuppressed, currentSeat: initialSeat,
     dbPath, onDiagnostic, waitForWakes = true } = {},
 ) {
   // Deliver any spooled operator intent FIRST, so the submission it creates is visible
@@ -332,6 +332,7 @@ export async function drivePass(
     seatFilter,
     onError,
     onWoke: wrapOnWoke,
+    onSuppressed,
   });
   // F34: carry the last-woken seat name onto the generation so wrapProviderWithSlots
   // can name it in the genlock lease (otherwise seat:null because the broker process
@@ -393,6 +394,10 @@ export async function runWakeLoop({
   const escalations = [];
   let passes = 0;
   let stoppedBy = null;
+  // When a pass drops a real candidate because the seat is inside its cooldown,
+  // no commit may follow to trigger another pass. Record when that candidate
+  // becomes eligible so the idle loop re-runs a pass then (the revisit gap).
+  let cooldownRevisitAt = null;
   // Work may have been queued while nothing was running — the exact #238 finding
   // (three items queued with nothing driving) — so the first pass is forced
   // rather than waiting for a future commit.
@@ -450,6 +455,13 @@ export async function runWakeLoop({
       break;
     }
     if (!scheduler.shouldRun(now())) {
+      // A scheduled cooldown revisit is due: force the pass that re-wakes the seat
+      // the earlier pass had to drop. Re-check `shouldRun` with the dirty bit set.
+      if (cooldownRevisitAt !== null && now() >= cooldownRevisitAt) {
+        cooldownRevisitAt = null;
+        scheduler.markDirty();
+        continue;
+      }
       // Check for stop request before sleeping: on Windows there is no SIGTERM,
       // so `serve --stop` relies on a .stop file to interrupt an idle broker.
       if (dbPath && readStopRequest(dbPath) !== null) {
@@ -471,12 +483,21 @@ export async function runWakeLoop({
         if (remaining <= 0) continue; // deadline reached: re-check and exit at the top
         waitMs = waitMs > 0 ? Math.min(waitMs, remaining) : remaining;
       }
+      // Do not sleep past a scheduled cooldown revisit: the loop must wake to
+      // mark itself dirty at the deadline even if no stop request or commit does.
+      // Clamp to >= 1 so a deadline that raced past cannot produce a 0 (which
+      // `signal.wait` would treat as an indefinite park).
+      if (cooldownRevisitAt !== null) {
+        const untilRevisit = Math.max(1, cooldownRevisitAt - now());
+        waitMs = waitMs > 0 ? Math.min(waitMs, untilRevisit) : untilRevisit;
+      }
       await signal.wait(waitMs);
       continue;
     }
     scheduler.beginPass(now());
     const passStartedAt = now();
     const wokeThisPass = [];
+    const suppressedThisPass = new Set();
     try {
       await drivePass(harness, probeStorage, {
         context,
@@ -494,6 +515,7 @@ export async function runWakeLoop({
           wokeThisPass.push(name);
           logBrokerLine(dbPath, `WAKE ${name}`);
         },
+        onSuppressed: (name) => suppressedThisPass.add(name),
       });
       passes++;
       // Duration + the seats woken make a pass's liveness legible: a long
@@ -517,6 +539,20 @@ export async function runWakeLoop({
           for (const name of resetSeats) scheduler.clearSeatCooldown(name);
           scheduler.markDirty();
         }
+      }
+      // A cooldown-suppressed candidate is real work this pass did not action. No
+      // further commit may arrive to run another pass, so schedule one for the
+      // moment the earliest suppressed seat becomes eligible. `markDirty` in the
+      // idle branch below turns that deadline into an actual pass. Recompute from
+      // scratch each pass: a pass that suppresses nothing has nothing to revisit,
+      // and a stale deadline would spin the idle loop.
+      cooldownRevisitAt = null;
+      if (suppressedThisPass.size > 0) {
+        let soonestDelay = Infinity;
+        for (const name of suppressedThisPass) {
+          soonestDelay = Math.min(soonestDelay, scheduler.msUntilSeatReady(name, now()));
+        }
+        if (Number.isFinite(soonestDelay)) cooldownRevisitAt = now() + soonestDelay;
       }
     } finally {
       scheduler.endPass();
