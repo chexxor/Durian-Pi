@@ -137,21 +137,43 @@ export function redactText(text, call) {
  * are preserved untouched.
  */
 export function afterTool(call, result) {
-	const content = result?.content;
-	if (typeof content === "string") {
-		const redacted = redactText(content, call);
-		return redacted === content ? undefined : { ...result, content: redacted };
-	}
-	if (!Array.isArray(content)) return undefined;
+	if (result === null || typeof result !== "object") return undefined;
+	// pi-durable RENAMED the tool-result payload from `content` to `output` on
+	// pi's main branch (the pin durig is validated against; pi-main.pin.json,
+	// "a tool-result rename that breaks durig's tools"). The harness's
+	// `finalResult` builds `final.output` and reads the afterTool return value's
+	// `output` back, so an `afterTool` that writes `content` alone has its
+	// redaction DROPPED and the raw secret is committed (#1610). Redact every
+	// payload field the result actually carries and replace it in the SAME field,
+	// so the hook works against both the released `content` shape and the pinned
+	// `output` shape (and a tool that returns both, as the demo's does).
 	let changed = false;
-	const out = content.map((part) => {
-		if (part?.type !== "text" || typeof part.text !== "string") return part;
-		const redacted = redactText(part.text, call);
-		if (redacted === part.text) return part;
-		changed = true;
-		return { ...part, text: redacted };
-	});
-	return changed ? { ...result, content: out } : undefined;
+	const next = { ...result };
+	for (const field of ["output", "content"]) {
+		const payload = result[field];
+		if (typeof payload === "string") {
+			const redacted = redactText(payload, call);
+			if (redacted !== payload) {
+				next[field] = redacted;
+				changed = true;
+			}
+			continue;
+		}
+		if (!Array.isArray(payload)) continue;
+		let partChanged = false;
+		const out = payload.map((part) => {
+			if (part?.type !== "text" || typeof part.text !== "string") return part;
+			const redacted = redactText(part.text, call);
+			if (redacted === part.text) return part;
+			partChanged = true;
+			return { ...part, text: redacted };
+		});
+		if (partChanged) {
+			next[field] = out;
+			changed = true;
+		}
+	}
+	return changed ? next : undefined;
 }
 
 // The hook is REGISTERED by src/seatguard.mjs, as the sibling `afterTool` binding
