@@ -132,6 +132,27 @@ try {
 	check("git commit -a with a secret in the tree is BLOCKED", typeof blockedA?.block === "string", JSON.stringify(blockedA));
 	check("the -a block never echoes the value", !blockedA?.block?.includes(FAKE_KEY));
 
+	console.log("\n#1380 (G-B): a scan that CANNOT run fails OPEN but WARNS LOUDLY, echoing nothing");
+	const notRepo = mkdtempSync(join(tmpdir(), "durig-commit-norepo-"));
+	const prevRoot = process.env.DURIG_SEAT_ROOT;
+	process.env.DURIG_SEAT_ROOT = notRepo; // no git repo here -> `git diff --cached` fails
+	const errLines = [];
+	const origErr = console.error;
+	console.error = (...a) => errLines.push(a.join(" "));
+	let warnVerdict;
+	try {
+		warnVerdict = await commitCall("7", "git commit -m x");
+	} finally {
+		console.error = origErr;
+		process.env.DURIG_SEAT_ROOT = prevRoot;
+		rmSync(notRepo, { recursive: true, force: true });
+	}
+	const warned = errLines.join("\n");
+	check("the commit is ALLOWED (fail-open is ratified at this point)", warnVerdict === undefined, JSON.stringify(warnVerdict));
+	check("a SEATGUARD WARNING is printed", /SEATGUARD WARNING/.test(warned), warned);
+	check("the warning names the failure kind, never diff content", !/diff --git|\+\+\+ b\/|@@ /.test(warned), warned);
+	check("G-D: the warning path echoes NO secret value", !warned.includes(FAKE_KEY) && !warned.includes(AWS_KEY), warned);
+
 	console.log("\nnon-commit commands are untouched");
 	check("git status is allowed", (await commitCall("4", "git status")) === undefined);
 	check("a git commit with no staged secret is allowed", (await commitCall("5", "git commit --amend -m x")) === undefined);

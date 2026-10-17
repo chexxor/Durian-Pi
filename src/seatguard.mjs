@@ -209,7 +209,9 @@ export function secretOffendersInDiff(diffText) {
 
 /** The content a `git commit` would land: the index, plus the tree when -a/--all. */
 function stagedDiff(root, command) {
-	const opts = { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 };
+	// stderr is PIPED (not inherited): a failing git would otherwise dump its usage text to the
+	// broker's stderr, and #1380's warning path must print the failure kind and nothing else.
+	const opts = { encoding: "utf8", maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] };
 	const index = execFileSync("git", ["-C", root, "diff", "--cached", "--unified=0", "--no-color"], opts);
 	if (/(^|\s)(-a|--all)(\s|$)/.test(command)) {
 		return index + execFileSync("git", ["-C", root, "diff", "HEAD", "--unified=0", "--no-color"], opts);
@@ -222,8 +224,22 @@ function commitSecretRefusal(root, command) {
 	let diff;
 	try {
 		diff = stagedDiff(root, command);
-	} catch {
-		// No repo, no HEAD, or git missing: the gate cannot run, so it does not block.
+	} catch (err) {
+		// #1380 (G-B; security position @cf84825 C2): fail-OPEN is RATIFIED at THIS point — the
+		// commit needs the same git whose failure opened the gate, so an unscanned commit via
+		// this path is already impossible — but a SILENT fail-open is not: this file's own
+		// precedent (the cwd-snapshot warning) warns on the same shape of degraded service.
+		// MESSAGE ONLY: the failure kind, never diff content, never a token.
+		//
+		// STANDING GENERALIZATION (recorded, no code; position C2): at any FUTURE enforcement
+		// point that does NOT depend on the failing tooling (e.g. a broker-side receive hook
+		// scanning content the broker itself assembles), the same gate MUST fail CLOSED, and a
+		// security position is required BEFORE such a hook lands.
+		const raw = (err?.stderr && String(err.stderr).trim()) || err?.message || String(err);
+		const detail = String(raw).split(/\r?\n/)[0].trim().slice(0, 160);
+		console.error(
+			`SEATGUARD WARNING: the commit-time secret scan could not run (${detail}) — the commit proceeds UNSCANNED`,
+		);
 		return null;
 	}
 	const offenders = secretOffendersInDiff(diff);
