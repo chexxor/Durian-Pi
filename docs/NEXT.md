@@ -3,21 +3,29 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **eleventh pass** — processed the operator's compaction
-follow-up research into ROADMAP/DECISIONS. See **NEXT SESSION** below; the tenth-pass clock-out is
-demoted to historical.)_
+_Last refreshed: 2026-10-17 (delegate, **twelfth pass** — D85 language-drift guard, qa reset, and two
+operator TUI items 98/99 registered. See **NEXT SESSION** below.)_
 
 ## NEXT SESSION — current item
 
-**Research processed (this pass):** `docs/reviews/context-compaction-followup.md` is folded into
-`docs/ROADMAP.md` (amendments to 27/28/30b/RANK 4; new items **92–97**), `docs/DECISIONS.md`
-(**D84**), and cross-linked from `docs/Managing_Long_Context_Length.md`. The new items are
-**registered, not scheduled** — delivered to `pm` for sequencing (intent
-`opr-20261017-compaction-followup`). Nothing was implemented.
+**This pass (all done):**
+1. **D85 language-drift guard** implemented + committed (`06e08f8`): `isLanguageDriftTurn`/
+   `countLanguageDriftTurns` (`src/attention.mjs`), the `language-drift` cause in `assessRun`
+   (`src/degeneration.mjs`), and the English-only reset handoff (`src/supervisor.mjs`). qa
+   (GLM-5.3-Flash) had emitted a long Chinese recap after #1085. RED→GREEN `demo/degeneration.test.mjs`;
+   full suite **102/0**.
+2. **qa reset** (operator-authorized broker-safe stop): stopped pid 35640 (hung in the F11 drain, no
+   genlock → force-killed per the runbook), `reset qa` with an English-only handoff (the `pi.reset`
+   entry is in qa's log), restarted → **broker pid 13712** (`2026-10-17T02:12:18Z`), now running the
+   guard. qa resumed in English on #1102.
+3. **Two operator TUI items registered** — ROADMAP **98** (show a seat's context consumption in its
+   conversation view; designer+advocate consult) and **99** (BUG: the conversation view has no `i`
+   affordance and entering it drops the conversation). Delivered to `pm` (intent
+   `opr-20261017-tui-context-input`, `INTENT delivered=1 dead=0`).
 
-**Still the critical path (unchanged):** `#1040` landing train → `#1036` (land #916 → 2nd rig
-reload) → the `cli.mjs` chain → daemon. **Still on the operator:** `#1059` (KEEP vs reset
-`#940`'s `e3a8e53`), and the second rig reload after #916 lands.
+**Still the critical path (unchanged):** `#1040` landing train → `#1036` (land #916 → 2nd rig reload)
+→ the `cli.mjs` chain → daemon. **On the operator:** `#1059` is RESOLVED (lead ruled KEEP); the second
+rig reload after #916 lands; the #994 quiet window; push.
 
 **Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
 

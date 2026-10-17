@@ -511,6 +511,39 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     *Acceptance:* `format` normalizes a given file; `format --check` fails on an unformatted file and
     passes on a formatted one (shown FAILING first); the tool choice and pin are recorded; no auto-hook.
 
+98. **TUI: show a seat's context consumption in its conversation view (operator request, 2026-10-17).**
+    When the operator opens a specific seat's conversation, show how much of the seat's context budget
+    it is consuming. The operator's preferred shape is the pi harness's — e.g. `$6.016 31.4%/1.0M`
+    (cost so far · percent of the window · window size) — offered as an opinion, to be confirmed with
+    the **designer** and **user advocate** (the operator asked for both).
+    *This is the read-surface half of item 27* (context pressure) and must reuse its measure rather than
+    invent a second one. *The load-bearing design question:* what is "the maximum recommended context"?
+    A percentage against the **advertised** window is the false precision item 27 already warns about
+    (our two flagships advertise 1M while the vendor's own operating point is ~300K; item 97 measures
+    the effective window). So the denominator must be the recommended/effective window (item 27/97), or
+    the display must label the advertised window explicitly — a **designer + advocate call**.
+    *Also to decide:* tokens counted (newest turn's `usage` input+cacheRead+output; note `Usage.reasoning`
+    is a subset of output), the refresh cadence, the 48-column floor, colour/NO_COLOR, and whether cost
+    is shown (`$6.016`) or only the percent. *Owner:* designer (surface) + impl (data via item 27's
+    measure) + advocate (does the number change a decision — the "is it actionable" test).
+    *Acceptance:* a seat's conversation view shows the consumption and window; a golden frame pins it at
+    80×24; the denominator is the recommended window or is labelled advertised.
+
+99. **BUG (TUI): the conversation view has no `i` input affordance, and entering it drops the
+    conversation (operator report, 2026-10-17).** *Symptom:* in a seat's conversation view the footer
+    does not offer `i`, and pressing `i` leaves the conversation while typing, so the operator cannot
+    tell they can message the seat from there. *Root cause (verified in `src/tui/client.mjs`, `ui.mjs`):*
+    `renderTui` dispatches on `view`; the conversation branch is `view === "conversation"`, but `i` sets
+    `ui.mode = "input"` → `view === "input"` → the conversation branch is skipped and the **seat list**
+    renders with the input row appended. `renderFooter`'s conversation hint omits `i=input` (the seats
+    hint has it), and `exitInput` always returns to `"seats"`.
+    *Fix direction:* treat input as an **overlay** on the current view — remember the prior mode and
+    render the conversation with the input row, add `i=input` to the conversation footer, and return to
+    the conversation on submit/cancel. Confirm the footer/hint wording with the **designer**.
+    *Owner:* impl (TUI) + designer. *Acceptance:* from a conversation, `i` shows the input row over the
+    SAME conversation; Enter sends via `writeIntent` and returns to the conversation; Esc cancels back
+    to it; the footer advertises `i`; a driver/golden test proves the conversation is not replaced.
+
 ## Extensibility and distribution
 
 **Ruled 2026-10-11 (operator): one distribution, no editions** — chosen extension
