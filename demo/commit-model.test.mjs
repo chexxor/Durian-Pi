@@ -7,7 +7,8 @@
 // Asserts the model is carried in BOTH surfaces seats actually read:
 //   1. constitution.txt P2 Authority (always loaded);
 //   2. EVERY selfdev seat's instructions (Commit discipline block);
-// plus the mirror integrity from #474 (both constitutionInline copies byte-identical).
+// plus the mirror integrity from #474: starter's constitutionInline is byte-identical to
+// constitution.txt, and the selfdev rig SOURCES constitution.txt (a reference, not a copy, after 806ce7f).
 //
 // Failing-first: against the #474-only text these model assertions FAIL (RED); after
 // the #475 amendment they pass (GREEN).
@@ -57,9 +58,17 @@ try {
   check("starter constitutionInline === constitution.txt (EOL-insensitive)",
     lf(starter.constitutionInline) === lf(constitution),
     "content differs after EOL normalization — regenerate the starter (#976)");
-  check("selfdev constitutionInline === constitution.txt (EOL-insensitive)",
-    lf(selfdev.constitutionInline) === lf(constitution),
-    "content differs after EOL normalization — re-point the selfdev inline (#975)");
+  // #975: 806ce7f replaced selfdev's inline copy with a `constitution` REFERENCE, so
+  // `selfdev.constitutionInline` is undefined and comparing it proved nothing. The single-source
+  // guarantee is now structural: the selfdev rig must POINT at constitution.txt (and reading it is
+  // that same file), so a drifted inline copy cannot come back silently.
+  // Compared EOL-insensitively per #977/D83 (the disk file is CRLF, the read-back must not care).
+  check(
+    "selfdev constitution sources constitution.txt (single source, EOL-insensitive)",
+    selfdev.constitution === "constitution.txt" &&
+      lf(readFileSync(join(durigDir, selfdev.constitution), "utf8")) === lf(constitution),
+    "the selfdev rig must point at constitution.txt and that file must match what ships",
+  );
 
   console.log(failures === 0
     ? "\nPASS — commit model documented in the constitution and every seat's instructions"
