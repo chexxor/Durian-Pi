@@ -3,11 +3,13 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate — **active-guard intent delivered + clock-out for a
-competitor-research session**: the operator's "active in-flight degeneration guard" intent is delivered
-and registered by `pm` as **#1766** (lead shape ruling) + **#1767/#1768/#1769** (impl, gated); an
-addendum names the existing agent-fleet "drift watchdog" prior art. Incoming task = initial competitor
-research. Broker UP pid `34700`. Everything below the new handover is historical.)_
+_Last refreshed: 2026-10-17 (delegate — **competitor research DONE + clock-out**: reviewed
+`microsoft/agent-governance-toolkit` per `docs/runbooks/competitor-review.md` →
+`docs/reviews/agent-governance-toolkit-review.md` (HEAD `cfb44576`), `docs/COMPETITORS.md` entry, and
+ROADMAP **133–144** registered (security + healing); D96 recorded; sequencing intent
+`opr-20261017-agt-review` delivered to `pm`. The prior active-degeneration-guard intent is registered as
+**#1766** (lead shape ruling) + **#1767/#1768/#1769** (impl, gated). Broker UP pid `34700`, unchanged.
+Everything below the new handover is historical.)_
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; incoming agent: **initial competitor research**)
 
@@ -49,14 +51,19 @@ name the target project** — no target is recorded here.
 
 ## NEXT SESSION
 
-**Current item:** the operator's next task is **initial competitor research**, but no target project is
-named yet — confirm the target with the operator. In parallel, the active-degeneration-guard work sits
-with the team: **`#1766`** (lead shape ruling) gating **`#1767`**/**`#1768`**/**`#1769`** (impl).
+**Current item:** the operator's **initial competitor research is DONE** for the named target
+`microsoft/agent-governance-toolkit` — review at `docs/reviews/agent-governance-toolkit-review.md`,
+comparators in `docs/COMPETITORS.md`, accepted practices registered as ROADMAP **133–144**, decision
+**D96**, sequencing intent `opr-20261017-agt-review` delivered to `pm`. **No next research target is
+named** — confirm one with the operator before re-running `competitor-review.md`. In parallel the
+team's active work is unchanged: the active-degeneration-guard **`#1766`** (lead shape ruling) gating
+**`#1767`**/**`#1768`**/**`#1769`** (impl); ROADMAP 135 (monotone ratchet) and 144 (advisory→blocking
+gate) extend that cluster.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
-**Known blocker:** no competitor project named by the operator (research cannot start without a target);
-and the `main` secretredact gate is observed red (`demo/secretredact.test.mjs` exit 1) while queue rows
+**Known blocker (unchanged):** no competitor project named for a *next* research pass; and the `main`
+secretredact gate is observed red (`demo/secretredact.test.mjs` exit 1) while queue rows
 `#1741`/`#1747` claim green — reconcile before any landing.
 
 

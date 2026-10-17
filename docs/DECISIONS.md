@@ -2458,3 +2458,42 @@ did not see the reset it wrote.
 `opr-20261017-degeneration-guard-model-bound`); **NOT landed** — queued to `impl`. Incident:
 `docs/incidents/2026-10-17-qa-context-degeneration.md`; procedures: `docs/runbooks/degeneration-guard.md`,
 `docs/runbooks/seat-reset.md` § Context saturation.
+
+## D96 — Adopt the Microsoft Agent Governance Toolkit's fail-closed, ratchet, and agent-SRE patterns for durig's agent security and healing; reject its identity/mesh/compliance stack (delegate, 2026-10-17)
+
+**Decision.** The operator-directed competitor review of `microsoft/agent-governance-toolkit`
+(`docs/reviews/agent-governance-toolkit-review.md`, clone HEAD `cfb44576`, MIT) is accepted. Adopt into
+the backlog: (a) a single **fail-closed** seat-action decision point (deny on evaluation error, no
+fail-open flag) and a **structured refusal** shape (`rule_id`/version/action/timestamp); (b) a
+**monotone risk/context ratchet** (grow-only, never lowered by a later quiet turn, inherited on
+delegation) for the degeneration/context guard; (c) a **per-seat circuit breaker** that isolates a
+repeatedly-failing seat until an explicit `reset`; (d) a **structured incident lifecycle** with typed
+signals and dedup/correlation windows for `docs/incidents/` + `attention`; (e) **rollback + approval
+fields** on runbook steps (extending ROADMAP 81–88/87, not replacing); (f) **behavioural chaos faults**
+and rogue-detection **entropy/z-score** signals; (g) **orphan detection + credential rotation**; and
+(h) an **advisory→blocking graduation gate** with rollback. Registered as ROADMAP **133–144**.
+**Reject** its Ed25519/DID mesh, execution rings, 0–1000 trust scoring, multi-language SDKs, and
+compliance mappings as wrong-layer for a single-operator local rig; the least-privilege principle is
+already ROADMAP 60.
+
+**Why.** durig had no single named deny-on-error contract, its degeneration detector is blind to the
+chaotic (high-entropy) pole and can forget a signal once the assessment window moves, `src/supervisor.mjs`
+escalates a failing seat but never isolates it, and the new `docs/incidents/` class has no dedup or
+lifecycle. AGT's specs + Python/.NET/Go implementations supply verified designs for exactly these gaps.
+The role split is unchanged: AGT governs actions inside a process; durig owns durability, the store,
+seats, and the landing path, so nothing here replaces a durig component.
+
+**Evidence class.** `observed` for AGT's design and implementation paths (specs, ADRs, and the
+`agent-governance-python/...` modules cited per claim in the review); `inference` for the durig gap
+mapping, which cites durig's own `src/` files. AGT is a **public preview**: quarantine is a removed stub
+and the circuit breaker never enters `HALF_OPEN` (`docs/specs/AGENT-HYPERVISOR-EXECUTION-CONTROL-1.0.md`
+§13; `AGENT-SRE-GOVERNANCE-1.0.md` §6.1) — so each adopt is validated against code, not the spec.
+
+**Alternatives.** (a) Adopt AGT as a dependency — rejected: wrong layer (no durable queue/store/seats),
+and Python/.NET/Go with no Windows-first story here. (b) Skip the review as too enterprise — rejected:
+its fail-closed, ratchet, breaker, and incident-lifecycle designs are small, deterministic, and map
+directly onto the live degeneration-guard (#1766–#1769) and crash-proofing (ROADMAP 78) work.
+
+**Status:** accepted by the delegate per `docs/runbooks/competitor-review.md`; items registered
+**not scheduled**; sequencing intent `opr-20261017-agt-review` delivered to `pm`. Review:
+`docs/reviews/agent-governance-toolkit-review.md`; comparators: `docs/COMPETITORS.md`.

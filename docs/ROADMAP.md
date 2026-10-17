@@ -2430,6 +2430,99 @@ call count. `pm` sequences these.
 surface D64 was built for but cannot yet see; item 129 gates any codemode rollout; the metric
 recommendation (cost with the cache split) already lives in `docs/METRICS.md`.
 
+## Agent security & self-healing — from the Microsoft Agent Governance Toolkit review (2026-10-17)
+
+Source: `docs/reviews/agent-governance-toolkit-review.md` (clone `vendor/eval/agent-governance-toolkit`,
+HEAD `cfb44576`, MIT). Verdict: AGT is the best available reference for **action-layer governance and
+agent SRE**; adopt its fail-closed posture, structured denial, monotone risk ratchet, circuit breaker,
+incident lifecycle, and chaos/rogue-detection signal design; adapt its executable-runbook fields into the
+existing 81–88 machinery; **reject** its identity/mesh/ring/compliance stack as wrong-layer for a
+single-operator local rig. `pm` sequences these. Registered **not scheduled**. *(133–144.)*
+
+133. **Fail closed at a single seat-action decision point.** Give every seat action that can write or
+    execute one policy-decision seam whose *evaluation failure* is defined to **deny** (never silently
+    allow), with no fail-open configuration flag — the AGT ADR-0013 invariant
+    (`docs/adr/0013-fail-closed-on-policy-evaluation-errors.md`). durig's guards (`src/seatguard.mjs`,
+    `src/confine.mjs`) refuse individually but nothing names deny-on-error as the contract. *Owner:*
+    impl/lead · *Where:* `src/seatguard.mjs`, `src/confine.mjs`, `docs/SEAT-TOOLS.md`. *Acceptance:* an
+    error inside decision evaluation denies the action and records the error; a passing check proves the
+    rules ran, not that evaluation was skipped. *Consulted:* `security`.
+134. **Structured refusal shape.** A refusal carries `rule_id`, `action`/tool, source, policy/config
+    version, and timestamp, per AGT's `GovernanceError` (`docs/ERROR_HANDLING.md`). Today a durig refusal
+    is a string. *Owner:* impl · *Where:* `src/seatguard.mjs`, `src/confine.mjs`, event records.
+    *Acceptance:* a refused command names the rule that refused it and the refusal is machine-readable.
+135. **Monotone risk/context ratchet for the guard.** The degeneration/context guard reads a
+    **grow-only** accumulated state (a raised signal is never lowered by a later quiet turn), and any
+    inherited restriction survives delegation — the AGT `ContextEnvelope` max-lattice + grow-only
+    restriction design (`docs/security/context-accumulation-governance.md`,
+    `.../policies/context_envelope.py`). This realises D95's "context pressure is a seat-level signal that
+    persists" and extends the #1766–#1769 guard core rather than replacing it. *Owner:* impl/lead ·
+    *Where:* `src/degeneration.mjs`, `src/attention.mjs`. *Acceptance:* a demo where one high-pressure
+    turn followed by quiet turns still trips (the ratchet does not reset), and a delegated sub-run cannot
+    drop the parent's flag.
+136. **Threat-model boundary taxonomy.** Adopt AGT's four named trust boundaries (human→agent,
+    agent→agent, agent→tool, agent→platform) analysed STRIDE-style (`docs/security/threat-model.md`) as a
+    fixed checklist in durig's security review runbook, which today has the method but no taxonomy.
+    *Owner:* `security` · *Where:* `docs/runbooks/security-trust-boundary-review.md`. *Acceptance:* the
+    runbook lists the four boundaries with a durig-specific example each.
+137. **Per-seat circuit breaker with an explicit manual close.** After N consecutive failed runs, put the
+    seat in an observable **OPEN** state that refuses new wakes with work, until an explicit `reset`
+    closes it — the AGT SRE circuit breaker (`docs/specs/AGENT-SRE-GOVERNANCE-1.0.md` §6,
+    `.../cascade/circuit_breaker.py`). This is the actuator `src/supervisor.mjs` lacks (it escalates but
+    keeps re-waking), and the same fail-fast shape applies to any external sink delivery
+    (`docs/adr/0020-circuit-breaker-for-event-sink-delivery.md`). *Owner:* impl · *Acceptance:* a demo
+    where 3 consecutive failures open the breaker, a new wake is refused, and only `reset` closes it.
+138. **Approval gate as a step state, not prose.** A sensitive action that needs the operator can be
+    recorded as `requires_approval` (a pending state with a named approver) rather than an `intent`
+    sentence — AGT `require_approval` (`README.md`, `docs/tutorials/38-approval-workflows.md`). *Owner:*
+    impl/designer · *Where:* `src/seatguard.mjs`, `cli.mjs`. *Acceptance:* a gated action cannot execute
+    until an operator approval names it, and the approval is recorded.
+139. **Structured incident lifecycle for `docs/incidents/` + `attention`.** Give the incident class a
+    forward-only state (`DETECTED→ACKNOWLEDGED→INVESTIGATING→MITIGATING→RESOLVED`), typed signals with a
+    severity hint, and **dedup (600 s) + correlation (300 s) windows** so a repeated condition does not
+    re-surface as a fresh notice — AGT `IncidentDetector` (`docs/specs/AGENT-SRE-GOVERNANCE-1.0.md` §14,
+    `.../incidents/detector.py`). *Owner:* impl/scribe · *Where:* `src/attention.mjs`, `docs/incidents/`.
+    *Acceptance:* identical notices within the window produce one incident; the incident state is
+    forward-only. *Signal source:* the existing `attention` notices.
+140. **Runbook steps gain rollback + approval fields.** Add `rollback_action`, `requires_approval`, and
+    machine `trigger_conditions` as first-class step fields to the runbook schema — AGT
+    `.../incidents/runbooks/*.yaml` + `runbook_executor.py`. This **extends ROADMAP 81–88/87** (the gated
+    executable runtime); it does not compete with it, and it stays gated on item 87's per-model capability
+    check. *Owner:* delegate/impl · *Where:* `docs/runbooks/`, `src/checkup.mjs`. *Acceptance:* a runbook
+    step can name its rollback and approval requirement and the executor honours them, or the gap is
+    named.
+141. **Behavioural chaos faults + abort conditions + a resilience score.** Extend the ROADMAP 67 host
+    chaos suite with **agent-behaviour** faults — injected degeneration, a contradictory directive, a
+    deadlock — plus safety abort conditions and a pass/fail resilience score, not just a process exit code
+    (AGT `AGENT-SRE-GOVERNANCE-1.0.md` §7). *Owner:* qa (author) with impl · *Where:* `demo/`.
+    *Acceptance:* the suite injects a degeneration and a stall offline, aborts on a safety condition, and
+    reports a score against a baseline.
+142. **Add entropy + a frequency z-score to the degeneration detector.** `src/degeneration.mjs` counts
+    repeats and tool-turns (the *repetitive* pole) but is blind to the *chaotic* pole — many distinct
+    damaging calls. Add an action-entropy bound and a tool-call-frequency z-score over a sliding window,
+    the AGT rogue-detector signals (`docs/tutorials/05-agent-reliability.md`,
+    `.../anomaly/rogue_detector.py`). *Owner:* impl/qa · *Where:* `src/degeneration.mjs`,
+    `src/attention.mjs`. *Acceptance:* a seat emitting chaotic (high-entropy) calls is flagged, not only a
+    seat repeating one call.
+143. **Seat lifecycle: orphan detection + credential rotation.** Report a seat that is silent past a
+    threshold and owns no live work (an *orphan*), and provide a rotation path for the provider API key —
+    AGT's LifecycleManager / OrphanDetector (`docs/tutorials/30-agent-lifecycle.md`,
+    `.../lifecycle/orphan_detector.py`). durig has `docs/SEAT-LIFECYCLE.md` and a broker heartbeat but no
+    orphan report. *Owner:* `security`/impl · *Where:* `src/checkup.mjs`, `docs/SEAT-LIFECYCLE.md`.
+    *Acceptance:* `check` reports an orphaned seat and a rotation command exists for the DeepInfra key
+    (never printing the key).
+144. **Advisory→blocking graduation gate for the degeneration guard.** Turn "zero false positives before
+    enabling" into a dated checklist with a rollback to advisory mode and a 48 h deny-rate watch — AGT
+    `docs/operations/advisory-to-blocking-graduation.md`. *Owner:* delegate/`security` · *Where:*
+    `docs/runbooks/degeneration-guard.md`, `docs/DECISIONS.md`. *Acceptance:* the guard has a documented,
+    reversible graduation with the false-positive evidence attached; #1766's enable decision cites it.
+
+**Cross-links:** item **135** extends the #1766–#1769 guard core (do not duplicate); **137** is the
+actuator for the ROADMAP 42 supervisor and the crash-proofing cluster (ROADMAP 78); **140** extends
+ROADMAP 87 (gated executor), not a rival; **141** extends ROADMAP 67; **137/141** share the fail-fast
+breaker shape from AGT ADR-0020. **Rejected** (not registered): Ed25519/DID mesh, execution rings, trust
+scoring, the multi-language SDKs, and the compliance mappings — see the review's "Where it does not fit".
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for
