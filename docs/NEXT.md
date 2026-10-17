@@ -3,11 +3,11 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate — **stage-two recovery**: qa's saturated context was compacted
-in an operator-sanctioned window (367k→48k) after its runaway turn hung the broker's F11 drain; the
-degeneration-guard fixes are registered as `#1703`/`#1704`/`#1705` (queued to impl) but NOT landed, so
-this can recur. Broker is up again (pid `32840`). Top priority is still `#1610` MAIN IS RED. See
-`## NEXT SESSION` — everything below it is historical.)_
+_Last refreshed: 2026-10-17 (delegate — **stage-two recovery + clock-out**: qa's saturated context
+was compacted in an operator-sanctioned window (367k→48k) after its runaway turn hung the broker's F11
+drain; the degeneration-guard fixes are registered as `#1703`/`#1704`/`#1705` (queued to impl) but NOT
+landed, so this can recur. Broker restarted live (**pid `34700`**) after a dormant spell. Top priority is
+still `#1610` MAIN IS RED. See `## NEXT SESSION` — everything below it is historical.)_
 
 ## HANDOVER — 2026-10-17 (stage-two recovery; clock-out — NEWEST; read `## NEXT SESSION` below)
 
@@ -20,9 +20,10 @@ this can recur. Broker is up again (pid `32840`). Top priority is still `#1610` 
 operator-sanctioned window (`docs/runbooks/seat-reset.md` § Context saturation).
 **Do not:** push (operator holds it); stop the broker without an operator-declared window.
 
-**State at clock-out (2026-10-17T22:25Z):** broker UP pid `32840`; `main` HEAD `e0a33b1`, tree clean,
-not pushed; qa recovered (context 367,559 → ~48k, coherent); `docs/incidents/` now **7 reports**
-(+`qa-context-degeneration`, sev2 mitigated); DECISIONS **D95**.
+**State at clock-out (2026-10-17T22:28Z):** broker UP pid `34700` (restarted from a dormant pid 32840);
+`main` HEAD `1b87c89` (this session's docs), tree clean, not pushed; qa recovered (context 367,559 →
+~48k, coherent); `docs/incidents/` now **7 reports** (+`qa-context-degeneration`, sev2 mitigated);
+DECISIONS **D95**.
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; new agent takes the seat)
 
@@ -62,7 +63,7 @@ scribe's, landed).
 
 ## NEXT SESSION
 
-**Current item:** nothing blocks the delegate — the rig is **up** (broker pid `32840`) and the queue is
+**Current item:** nothing blocks the delegate — the rig is **up** (broker pid `34700`) and the queue is
 advancing. Work the **ordered list below**; item 1 (`#1610` MAIN IS RED) gates all landing. **Recommended
 change:** (a) promote item 6 (the crash-proofing cluster) above the product items 4/5, and (b) add the
 degeneration-guard fixes (`#1703`/`#1704`/`#1705`) as an immediate priority — they are the only thing
