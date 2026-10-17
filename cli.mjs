@@ -2308,6 +2308,10 @@ async function cmdCheck(rigFile, human, rest = []) {
   // from "read and empty" - an empty store is a real, reportable disagreement
   // with a rig file that declares seats.
   let storedSeats = null;
+  // The queue, for the verification-evidence rule (ROADMAP 48): a completed
+  // `VERIFY #N` item with no recorded evidence is an ack, not a re-run. Null
+  // until read, so "could not read" stays distinguishable from "read and empty".
+  let queueItems = null;
   if (!DB_EXISTED_AT_START) {
     stored = { reason: "absent" };
   } else {
@@ -2325,6 +2329,7 @@ async function cmdCheck(rigFile, human, rest = []) {
         stored = { reason: "read", text };
 
         storedSeats = (await readSeatList(storage)).map((s) => s.name);
+        queueItems = await readQueueItems(storage);
       } finally {
         await storage.close(BACKGROUND_CONTEXT);
       }
@@ -2332,7 +2337,7 @@ async function cmdCheck(rigFile, human, rest = []) {
       stored = { reason: "unreadable", error: String(err?.message ?? err) };
     }
   }
-  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, storedSeats, modelsBySeat });
+  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, storedSeats, modelsBySeat, queueItems });
   const seatCount = (spec.seats ?? []).length;
   if (human) {
     console.log(

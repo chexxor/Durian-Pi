@@ -210,6 +210,7 @@ try {
 		"runbook-stale": "demo/runbook-rules.test.mjs",
 		"runbook-unverified": "demo/runbook-rules.test.mjs",
 		"ownership-seat-missing": "demo/ownership.test.mjs",
+		"verification-without-evidence": "demo/check-evidence.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(
