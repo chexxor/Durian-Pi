@@ -1,17 +1,17 @@
-﻿# durig â€” status and handoff
+﻿# durig — status and handoff
 
 Written **2026-10-10** at the operator's request, pausing after the
 viewing/formatting milestone. Read this first when resuming; `docs/ROADMAP.md`
 holds the ordered next work and `docs/DECISIONS.md` the reasoning.
 
 Updated **2026-10-11**: the pi pin moved to `main`'s tip and the tuios patch was
-rebased onto upstream `main` â€” both rebuilt and re-verified (D17, and
+rebased onto upstream `main` — both rebuilt and re-verified (D17, and
 `../docs/TUIOS-PRS.md` in the project workspace). Later the same day `check` shipped (D25)
 and found that the converter was dropping OpenRig's rig-level `edges:` list (D26);
 the fix restored every lost send permission, the docs pod joined the rig (D27),
 and the corrected constitution was applied to the live store (backup:
 `C:/tmp/<store>.bak-2026-10-11`). Finally, measurement shipped (D28):
-`metrics`, four measures, metric notices on the attention channel â€” 21 demos. The
+`metrics`, four measures, metric notices on the attention channel — 21 demos. The
 OpenRig daemon was also recovered (dead since 2026-10-06, and reported as a
 starved event loop because a recycled PID was trusted as the daemon), and the
 owed `security.sec` consult was finally taken (D30).
@@ -20,7 +20,7 @@ Updated **2026-10-13 (direct implementation)**: the interactive client's **data
 layer** landed without choosing a screen (D40). ROADMAP items **7** (pure view
 model + peer navigation graph), **8** (one importable, read-only read API), and
 **40(c)** (the in-flight partial rendered as streaming, never as an entry) are
-built; `demo/viewmodel.test.mjs` and `demo/livestream.test.mjs` are demos 48â€“49 and
+built; `demo/viewmodel.test.mjs` and `demo/livestream.test.mjs` are demos 48–49 and
 the suite is 49/49. The TUI-vs-browser choice below is now a presentation decision,
 not a prerequisite. Still owed: independent `qa` verification of these three
 items, and the screen itself (item 17). Note the direct path: this work was done by
@@ -28,17 +28,17 @@ the operator's agent, not routed through the selfdev seats, because the team was
 blocked (one seat root at a time against `#148`'s worktree, and `impl`'s context
 was degenerate).
 
-Updated **2026-10-13 (delegate session â€” event-driven tranche + usability batch)**: drove the
+Updated **2026-10-13 (delegate session — event-driven tranche + usability batch)**: drove the
 selfdev team through the event-driven/Pi-integration work and a usability batch. All of it lives
 in the seat worktree `C:/tmp/durig-dev/pi-rebase/durig` (uncommitted); the live tree's direct
 work above is separate.
 
-- **PIECE 1 spike** (event-driven wake): DONE + qa-verified (#209/#215/#218). `.spike/pi-wake/` â€”
+- **PIECE 1 spike** (event-driven wake): DONE + qa-verified (#209/#215/#218). `.spike/pi-wake/` —
   a Pi extension polls `durig watch --once --json` and calls `pi.sendUserMessage`; both directions
   proven against the real global Pi in RPC mode (`prove-wake.mjs` exit 0).
-- **PIECE 2 feed**: DONE + qa-verified (#210/#223/#236), then **renamed** `src/readapi.mjs` â†’
+- **PIECE 2 feed**: DONE + qa-verified (#210/#223/#236), then **renamed** `src/readapi.mjs` →
   `src/eventfeed.mjs` to keep it separate from the shared read API (#240/#247). New
-  `events --since/--follow` verb â€” read-only, monotonic `seq` cursor.
+  `events --since/--follow` verb — read-only, monotonic `seq` cursor.
 - **PIECE 3** (resident broker) gate **RULED IN** (#237); registered **gated** (#238) on a D-entry
   that supersedes (not erases) D11, plus a security position only if it opens a socket. Not started.
 - **Usability fixes** (all done + qa-verified): #259 (help/exit contract), #260
@@ -48,12 +48,12 @@ work above is separate.
   status whitelist preserved (D41).
 - **Store-write contention** on the send path fixed (#257, D42); **`worktree` refuses a dirty
   source** (#255, D43); **worktree pin** corrected (##219, sha `7d75a0e`).
-- The worktree demo suite is now **50/50**. Findings F18â€“F29 recorded in `docs/DOGFOOD.md`.
+- The worktree demo suite is now **50/50**. Findings F18–F29 recorded in `docs/DOGFOOD.md`.
 - Nothing pushed; publishing and integration remain the operator's.
 
-Updated **2026-10-14 (delegate session â€” auto-wake investigation + repairs)**:
+Updated **2026-10-14 (delegate session — auto-wake investigation + repairs)**:
 - **`peek_queue` fix verified** (`demo/peekqueue.test.mjs` PASS): the tool now returns a **bounded
-  inline view** (status counts + first 20 items + a truncation footer) instead of only a file path â€”
+  inline view** (status counts + first 20 items + a truncation footer) instead of only a file path —
   the operator's complaint. Worktree; artifact **#293** to qa.
 - **Corrupt `pi.live` repair**: `impl`'s conversation was wedged (P5/#110,
   `unresolvable path ["generation","message","content",0]`). `stop`+`resume`, `reset`, and a
@@ -63,13 +63,13 @@ Updated **2026-10-14 (delegate session â€” auto-wake investigation + repair
   longer crash on one corrupt seat.
 - **Auto-wake finding**: only **read-only viewers** were running (`watch`, several `log --follow`);
   they cannot wake seats (D11), so `devtools` idled with 3 queued items + a stalled claim. `run` is an
-  external clock; the selfâ€‘driving/eventâ€‘driven wake is **PIECE 3 (#238), gated** â€” that is the next
-  session's priority. Findings F30â€“F33 and the longâ€‘wait/cacheâ€‘refresh note recorded in DOGFOOD.
+  external clock; the self‑driving/event‑driven wake is **PIECE 3 (#238), gated** — that is the next
+  session's priority. Findings F30–F33 and the long‑wait/cache‑refresh note recorded in DOGFOOD.
 - Nothing pushed.
 
-Updated **2026-10-14 (later delegate session â€” the resident broker landed)**:
+Updated **2026-10-14 (later delegate session — the resident broker landed)**:
 - **PIECE 3 (resident broker) is DONE and committed.** `serve` (`src/broker.mjs` + `src/scheduler.mjs`,
-  D45) reacts to the store's in-process commit stream â€” no external clock; `up` auto-starts it on a
+  D45) reacts to the store's in-process commit stream — no external clock; `up` auto-starts it on a
   TTY (`--no-serve`/`DURIG_NO_SERVE=1` opt out) and at most one runs per database (`<db>.broker.json`,
   D46). Commits `8337d0a` (scheduler, 1/2), `6cfef88` (`serve` + shared wake pass, 2/2), `ddf7cca`
   (auto-start, D46), `b542936` (`revise_work`/`cancel_work`, D47). Verified: the broker was observed
@@ -77,7 +77,7 @@ Updated **2026-10-14 (later delegate session â€” the resident broker landed
   `demo/broker.test.mjs`, `demo/scheduler.test.mjs`, `demo/autostart.test.mjs` all exit 0.
 - **F36 (the queue cannot be curated) is FIXED** by D47; the ~40-item triage it exposed
   (`docs/QUEUE-TRIAGE-2026-10-14.md`) is still owed.
-- **Next:** the broker's two registered follow-ups â€” **F34** (a broker-driven generation carries no
+- **Next:** the broker's two registered follow-ups — **F34** (a broker-driven generation carries no
   seat in the genlock lease, `src/genlock.mjs:83`) and **F35** (`serve --stop` on Windows tears down
   mid-pass; needs a cooperative, pass-settling stop). Item **#287** is a `claimed` but **stale** doc
   item whose content D45/D46 overtook; it needs re-scoping or cancelling.
@@ -133,7 +133,7 @@ Everything below was verified against the real store, not asserted from intent.
   documents and entry APIs. The format work is pure read-side rendering.
 - **The storage layer is unchanged.** Durig still imports
   `openNodeSqliteStorage` at one seam and runs no SQL of its own; every table
-  (`entries`, `submissions`, `documents`, `document_revisions`, â€¦) is pi-durable's
+  (`entries`, `submissions`, `documents`, `document_revisions`, …) is pi-durable's
   schema. Our four domain objects are versioned JSON documents keyed by `kind`.
 - **The JSON contract is unchanged.** stdout remains one JSON document per command;
   human views exist only when stdout is a terminal (D19).
@@ -176,7 +176,7 @@ implementation; D23 records the conclusion and ROADMAP.md carries the full gap
 table. Short version: **the architecture is on the right side of the evidence and
 is not changing.** Loss of conversation history, silent shared-state corruption and
 the absence of a coordination substrate are impossible or already answered here by
-construction, and observability â€” the part practitioners call hard â€” is where durig
+construction, and observability — the part practitioners call hard — is where durig
 over-invested.
 
 The gaps the research exposes are **protocol, not structure**: `complete_work` is
@@ -186,7 +186,7 @@ most frequent mode at 15.7%); there is no verb by which a seat can defer a decis
 to a human (FC2, 6.8%); and all 15 seats resolve to one model while per-seat models
 are already supported, so a bias is systemic rather than isolated. The roadmap was
 re-ordered accordingly: measurement first (now built, D28), then the one item that
-needs no new code â€” verifier model diversity â€” and the measures exist to judge it.
+needs no new code — verifier model diversity — and the measures exist to judge it.
 
 The document itself was corrected: the leftover chat preamble was removed, as were
 six unexplained percentages beside the reference list, and its MAST dataset size
@@ -205,25 +205,25 @@ confirmed rather than taken on trust.
    over SSE avoids that trade entirely. **The prerequisites now exist** (ROADMAP 7,
    8, 40c; D40), so this is purely a presentation choice rather than a build-order
    dependency.
-3. **Pods design** â€” namespace-scoped queues vs a flat queue with pod tags
+3. **Pods design** — namespace-scoped queues vs a flat queue with pod tags
    (deferred twice; the OpenRig converter currently drops pods with a warning).
 4. **The drill task set** (item 2's remaining half). A fixed set of tasks hard
    enough to move the measures, so two configurations are comparable. D24 labels a
    passive window **confounded**, so without this the before/after comparison
    item 3 wants measures "the rig got changed" and "the work changed" together.
-   This is a content decision â€” which tasks, and what counts as done â€” not a code
+   This is a content decision — which tasks, and what counts as done — not a code
    one, and `metrics` is built and waiting for it.
 5. **The scribe's security conditions, before it goes live (item 1b).**
    `security.sec` ruled the docs-pod seat **FAIL as scoped**: on a single-user host
    its read-all-transcripts grant is not controlled by persona prose, so it needs a
    fail-closed secret/PII gate (canary-falsifiable) plus a republish allowlist
-   before it may be applied â€” or drop the `devtools.dev` observation edge. It
+   before it may be applied — or drop the `devtools.dev` observation edge. It
    escalated to `advise.lead` (`qitem-20261011052428-c1e0716d`, urgent,
    `gate:spec-review`). Nothing is applied to the live rig yet, so this is a
    go/no-go on the *first* application, not a rollback. Declining is a legitimate
    answer; the dissent is recorded either way.
    **Sharpened 2026-10-11:** the M3 tools (item 4) are `registry.install(CodingTools)`
-   â€” read, write, edit and **bash** on this machine. That is arbitrary code
+   — read, write, edit and **bash** on this machine. That is arbitrary code
    execution handed to seats, so the M3 scope ruling is the security-relevant
    decision it was always going to be, and it wants the same treatment as this item
    (a `security.sec` position before it lands) rather than being read as "just add
@@ -250,25 +250,25 @@ confirmed rather than taken on trust.
 - **Cross-process updates are polled** at 750 ms; SQLite has no cross-process
   notification (D11, RESEARCH.md).
 
-Updated **2026-10-14 (later delegate session â€” lost-tranche recovery + structural safety)**:
+Updated **2026-10-14 (later delegate session — lost-tranche recovery + structural safety)**:
 - **Recovered the lost worktree tranche onto `main`** from branch `pi-rebase` (`3bf61b1`): #307
   claim-by-id, #308 worktree dirty-source guard, #309 `held`+hold/release, #310 store-write retry
   (`src/storewrite.mjs`), #311 event feed (`src/eventfeed.mjs` + `events`), #312 bounded `peek_queue`.
   **F34 (#299) fixed** (the genlock lease now names the driven seat). Suite 55/56.
-- **Guard incident:** a seat ran `git stash;` â€” the seatguard regex ended in `(\s|$)` so the `;`
+- **Guard incident:** a seat ran `git stash;` — the seatguard regex ended in `(\s|$)` so the `;`
   slipped through and it wiped the whole uncommitted tree; recovered from `stash@{0}`. **Phase 1
   (#329)** fixes the anchors (`\b` + `-C` forms) and makes refusals teach the safe path; the rule is
   now in the constitution (P3 Safety), `docs/SELFDEV.md`, and `docs/failing-first-recipe.md`.
 - **Web research** (`docs/Shared_Working_Tree_Safety_Research.md`) settled the design (D48):
   structural per-task worktrees + `npm ci --prefer-offline` + guard-as-backstop. **Phase 2 (#330)**
-  registered; blocked on Git â‰¥ 2.54 (host was 2.42.0).
+  registered; blocked on Git ≥ 2.54 (host was 2.42.0).
 - **Known regression to fix with #328:** #329 edited `constitution.txt` but did not regenerate
   `rig.starter.json`'s inline copy, so `demo/starter.test.mjs` now drifts on CONTENT as well as CRLF.
 - Nothing pushed.
 
-## Updated 2026-10-15 (delegate session â€” Phase 2, policy, concurrency, broker)
+## Updated 2026-10-15 (delegate session — Phase 2, policy, concurrency, broker)
 
-- **#330 Phase 2 DONE and qa-verified (#351â€“#356):** per-task worktree lifecycle in
+- **#330 Phase 2 DONE and qa-verified (#351–#356):** per-task worktree lifecycle in
   `src/worktree.mjs` (create-on-claim + branch, `git worktree lock`, remove-on-completion,
   per-worktree `npm ci --prefer-offline`, git-identity validation, rebase+`rerere`, cleanup only via
   `git worktree remove` refusing dirty/junction), and Windows Job-Object reaping in
@@ -278,8 +278,8 @@ Updated **2026-10-14 (later delegate session â€” lost-tranche recovery + st
   grantable to the delegate). `constitution.txt` P2 Authority, the `constitutionInline` copies in
   `rig.selfdev.json`/`rig.starter.json`, `AGENTS.md`, and the shared seat instructions updated;
   `demo/starter.test.mjs` is GREEN, clearing the #328 drift.
-- **Docs-ownership norm adopted:** docs are written by whoever has the most knowledge (devâ†’impl,
-  projectâ†’pm, QA/architectureâ†’qa/lead); **scribe** manages project-level docs (FEATURES/STATUS/README)
+- **Docs-ownership norm adopted:** docs are written by whoever has the most knowledge (dev→impl,
+  project→pm, QA/architecture→qa/lead); **scribe** manages project-level docs (FEATURES/STATUS/README)
   and delegates/owns the others. Recorded in `docs/SELFDEV.md` and `docs/WORKFLOWS.md`.
 - **Concurrency clarified and fixed:** one store/harness writer per DB; `DURIG_MAX_CONCURRENT_SEATS`
   generation slots; per-task worktrees allow concurrent editing; `serve` + the slot cap is the
@@ -305,18 +305,18 @@ in this session exited 0:
   per-worktree `npm ci --prefer-offline`, git-identity validation, rebase+`rerere`,
   `git worktree remove`-only cleanup, Job-Object reaping) and the corrected "no `node_modules`
   junction" worktree row were already present and accurate; I added the missing **guard/authority
-  row** (D50) to `docs/FEATURES.md` Â§2.
+  row** (D50) to `docs/FEATURES.md` §2.
 - **#398 (concurrency clarification):** `docs/SELFDEV.md` already stated the store/harness-not-files
   WHY; I recorded the three-layer model in `.agents/skills/durig/SKILL.md`, added **D53** to
-  `docs/DECISIONS.md`, and extended the FEATURES.md broker row (â€œsanctioned concurrency â€” one
-  writer per DB, N seatsâ€). WORKFLOWS.md is the advocate's separate item (out of #398's scope).
-- **#401 (broker operator switch):** added the â€œThe resident broker: switching it on and offâ€
+  `docs/DECISIONS.md`, and extended the FEATURES.md broker row (“sanctioned concurrency — one
+  writer per DB, N seats”). WORKFLOWS.md is the advocate's separate item (out of #398's scope).
+- **#401 (broker operator switch):** added the “The resident broker: switching it on and off”
   section to `README.md` (TTY `up` auto-start, `--no-serve`/`DURIG_NO_SERVE=1` opt-out,
   `serve --stop` reaps, raising `DURIG_MAX_CONCURRENT_SEATS` enables parallel work).
 - **#470/#471 (DECISIONS confirm + gate nudge):** D50 confirmed present and accurate
   (`docs/DECISIONS.md:1335`); D53 added as a test-grounded clarification.
 
-**Suite count I ran** (honest, not the full suite): **12 named demos, all exit 0** â€”
+**Suite count I ran** (honest, not the full suite): **12 named demos, all exit 0** —
 `demo/confine.test.mjs`, `demo/seatguard.test.mjs`, `demo/worktree-lifecycle.test.mjs`,
 `demo/job-object.test.mjs`, `demo/readapi.test.mjs`, `demo/tui-client.test.mjs`,
 `demo/viewmodel.test.mjs`, `demo/autostart.test.mjs`, `demo/singleflight.test.mjs`,
@@ -325,8 +325,8 @@ I did not run the whole suite (71 `demo/*.test.mjs` files exist in this tree, tw
 uncommitted), so I am not asserting a full-suite figure.
 
 **Outstanding in #469's scope:** TUI **C4** (#405) was reported "done but blocked" by qa, its
-corrected verification still owed; U1-U7 TUI re-prioritisation (#480â€“#487) is registered. The
-live tree is dirty (uncommitted broker/cli/pi-pin edits and two new demos) â€” operator owns the
+corrected verification still owed; U1-U7 TUI re-prioritisation (#480–#487) is registered. The
+live tree is dirty (uncommitted broker/cli/pi-pin edits and two new demos) — operator owns the
 commit decision. Nothing pushed.
 
 ## Updated 2026-10-15 (scribe project-level truth-up - groom, broker lifecycle, dirty-tree finding)
@@ -360,3 +360,39 @@ impl to Dirty-source carry (amends F23 refusal, ASK F #506)).
 **Not added at the time (correct withholding):** the status seat last-activity row (#502 / ASK B) - I verified the field did NOT exist in the code then (cmdStatus/
 readRigHealth exposed no last-activity), so it was correctly not documented (never-document-what-does-not-exist, not copied on trust).
 **Superseded since:** the lastActivity field has LANDED - impl #618 cli status seat last-activity, ISO-8601 via readRigHealth (src/readapi.mjs sets seat.lastActivity = new Date(lastTs).toISOString()), and the FEATURES.md status row (section 2) now names it. The tokens/cost/model metrics row is #504's (lead-coordinated), not added here. Nothing pushed.
+
+## Updated 2026-10-17 (scribe — currency truth-up re-derived against current main, #1401)
+
+Re-derived from the #1233 truth-up (which could not land as-is) against current main, on top of the
+mojibake decode (#1400). Each claim grounded by the named demo, run in the item-1401 worktree (all
+exit 0 unless noted):
+
+- **#873 `compact` verb landed.** Manual context compaction — summarizes a seat's OLDER turns into a
+  `pi.compaction` summary entry so the model context shrinks without losing the durable transcript;
+  refuses a live generation lease and a driving broker; drives the compaction task to completion and
+  proves the summary entry landed. Proof: `demo/compact.test.mjs`; FEATURES.md §2/§5 already carry the
+  `compact` command and Context-compaction rows.
+- **#874 per-turn wall-clock bound landed** (`7013294`). A degeneration cause reading
+  `AssistantMessage.durationMs`, threshold 5 min (`maxTurnDurationMs: 5 * 60_000`), so a legitimately
+  slow turn is never reset — only a run that badly outgrows the bound. Proof: `demo/degeneration-duration.test.mjs` exit 0.
+- **#875 degenerate-text named-pattern registry landed.** `TEXT_PATTERNS` in `src/attention.mjs` — each
+  pattern a pure predicate over one assistant turn's text, reason `degenerate-text=<name>=<count>>=<bound>`,
+  validated against real turn fixtures (positive = real loop, negative = healthy turn); adds
+  `scripts/degen-scan.mjs` and the `docs/runbooks/degeneration-guard.md` runbook. Proof: `demo/degeneration-text.test.mjs` exit 0.
+- **#998 worktree recursive-carry fix landed** (`7901501`). `carryVisibleState` excludes linked worktree
+  roots (a sibling `item-<id>` or the just-created target appears in the source's status as an untracked
+  directory), so the dirty-source fork never copies a foreign checkout and never self-copies
+  (`ERR_FS_CP_EINVAL`). Proof: `demo/worktree-recursive-carry.test.mjs` exit 0.
+- **#1165/#1171 scratch-worktree landing helper landed** (`eb87766`). `scripts/land.mjs` merges the named
+  branches into a SCRATCH DETACHED worktree, runs the suite there (`--suite`), and advances `main` only
+  by a clean fast-forward; it is the pre-flight enforcement chokepoint (#1164 Q3) refusing a dirty tree,
+  a tree already mid-merge, and a held genlock slot; a conflict stops and reports the paths. Proof:
+  `demo/land-helper.test.mjs` exit 0.
+
+**Demo count re-measured:** 115 `demo/*.test.mjs` files on this checkout (read-only count). The broker
+upgrade `234e06e` validated the full demo suite 115/0 and the TUI suite 15/15 on pin `8efd314f` — I did
+NOT re-run all 115 (a full-suite run exceeds the per-turn bound, consistent with the #1337 note); the
+named demos above are the evidence for the rows. FEATURES.md §10 updated from the stale "49 offline tests".
+
+Base note: this truth-up is based on the decoded FEATURES.md/STATUS.md (scribe-item-1400) so it carries
+no mojibake, and is stacked after the decode for landing. Nothing pushed.
