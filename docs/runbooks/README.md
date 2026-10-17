@@ -109,6 +109,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [degeneration-guard.md](degeneration-guard.md) | a seat was auto-reset (`pi.reset` naming `degenerate-text=...`); tell a real loop from a false positive, or add a shape | no |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
+| [land.md](land.md) | a verified branch must go onto `main`; land it with the helper (never mid-merge) | no |
 | [resolve-merge-conflict.md](resolve-merge-conflict.md) | a merge/landing pass stopped with conflict markers; the tree is mid-merge | no |
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
 | [research-request.md](research-request.md) | you need external research | no |
@@ -123,7 +124,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | Seats | seat-reset, compact-a-seat |
 | Write guard / source files | write-corruption-recovery |
 | Worktrees | leaked-worktrees |
-| Merge / conflicts | merge, resolve-merge-conflict |
+| Merge / conflicts | merge, land, resolve-merge-conflict |
 | Daemon / host | daemon-not-running |
 | Research | research-request, competitor-review |
 
