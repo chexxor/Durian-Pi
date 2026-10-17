@@ -113,3 +113,32 @@ Deloitte, PwC, G2) — marketing-grade, not evidence.
 
 **What it does not give us:** a runtime, durability, or grounding. It is
 reference text for our seats.
+
+---
+
+## aider — `Aider-AI/aider`
+
+- **Repo:** https://github.com/Aider-AI/aider
+- **Read at:** clone `../vendor/eval/aider`, HEAD `5dc9490` (shallow, 2026-10-17)
+- **What it is:** a terminal pair-programming agent (single repo, single agent). Not a multi-agent
+  substrate — read it for its **edit-and-verify mechanics**: per-model edit formats, a ranked repository
+  map, and a lint/test loop that repairs its own edits. Docs: `aider/website/docs/`; edit-format code:
+  `aider/coders/`.
+- **Review:** `docs/reviews/aider-review.md`.
+
+| What it does | Why it is worth learning from | durig counterpart |
+|---|---|---|
+| **Per-model edit format** (`--edit-format`: whole/diff/diff-fenced/udiff) with defaults per model (`aider/website/docs/more/edit-formats.md`, `troubleshooting/edit-errors.md`) | One format does not fit every model; format is a first-class config knob | one exact-match `edit` tool for all seats — measure per model (ROADMAP 102) |
+| **High-level diffs** — coherent code blocks, not surgical line edits; 30–50% fewer errors without it (`aider/website/docs/unified-diffs.md`) | The model edits better when the unit is a whole function | seat edit guidance |
+| **Bounded flexible patching** — normalize a failed hunk to a real diff, split into sub-hunks, vary context (`unified-diffs.md`, `aider/coders/editblock_coder.py`) | 9× fewer apply failures with flexibility | `edit` is exact-match; take the strategies, **reject the `SequenceMatcher` similarity fallback** (silent wrong-region) |
+| **Lint/test after every edit, auto-repair** (`--lint-cmd`/`--test-cmd`/`--auto-test`, `aider/website/docs/usage/lint-test.md`) | Catch a broken edit before it compounds | `node --check` + demo gate before accept (ROADMAP 106) |
+| **Repository map** — graph-ranked, token-budgeted (~1k) symbol map sent every request (`aider/website/docs/repomap.md`) | Gives the model repo-wide context cheaply | seats `read`/search; a repo-map section for seat prompts (ROADMAP 113) |
+| **Prompt-cache ordering + keepalive** (`aider/website/docs/usage/caching.md`) | Cache the stable prefix; ping to keep it warm | constitution-first byte-stable prefix; consider a keepalive (ROADMAP 114) |
+| **Architect/editor split** (`aider/website/docs/usage/modes.md`, `config/editor.md`) | Planner and applier are different skills | gated on measured apply failure |
+| **Keep context <~25k; drop irrelevant files** (`troubleshooting/edit-errors.md`) | Too much context makes models disobey the edit format | thin-context contract |
+
+**Not to borrow:** whole-file edit as a default (returns the entire file), auto-commit-per-edit (conflicts
+with one-commit-per-concern + explicit paths), and the raw fuzzy **similarity** fallback.
+
+**What it does not give us:** a runtime, durability, queue, seats, or verifier split. Edit/verify
+mechanics only.

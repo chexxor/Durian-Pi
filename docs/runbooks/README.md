@@ -112,6 +112,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [resolve-merge-conflict.md](resolve-merge-conflict.md) | a merge/landing pass stopped with conflict markers; the tree is mid-merge | no |
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
 | [research-request.md](research-request.md) | you need external research | no |
+| [competitor-review.md](competitor-review.md) | you want to learn from another project's tools/practices | no |
 
 ## Index (mechanism)
 
@@ -124,7 +125,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | Worktrees | leaked-worktrees |
 | Merge / conflicts | merge, resolve-merge-conflict |
 | Daemon / host | daemon-not-running |
-| Research | research-request |
+| Research | research-request, competitor-review |
 
 ## Template
 
