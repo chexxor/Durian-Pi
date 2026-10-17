@@ -172,6 +172,20 @@ operator/delegate to drive **variant (1)** (stop broker, hand-verify, land outsi
      procedure lives in `merge.md` / W6 / `BRANCH-AUDIT-2026-10-14.md`; nothing yet consolidates the
      BRANCH LIFECYCLE rules (naming, deletion safety, seatguard refusal, exclusive window). Route the
      canonical-docs part (`WORKFLOWS.md` W6 / `FEATURES.md`, team-owned) to `pm`.
+11. **LANDING PASS #1448 DRIVEN + LANDED** (delegate, operator-authorized, 2026-10-17 ~17:00Z).
+   - Broker was already down/quiescent (no `broker.json`, no `genlock.*`, no `serve` proc).
+   - **29 entries** landed in a scratch worktree via `scripts/land.mjs` + manual conflict resolution;
+     `main` fast-forwarded **`89879d7` -> `ba5115b`**. Scratch demo suite **123 pass / 0 fail**.
+   - Conflicts resolved: README/FEATURES/CODEMODE unions; the stacked `#1317 -> #1379 -> #1380` chain
+     (took the branch superset); `#828`/`#837` README+import unions; `demo/land-helper.test.mjs`
+     combined the #1383 + #1441 sections (branch renamed `feat-g-lock`).
+   - **Entry 11 (`impl-item-1151`) EXCLUDED** as instructed (D1 open).
+   - Broker restarted **pid 34756** `17:13:46Z`; inbox drained (`INTENT delivered=1` `17:13:47Z`).
+   - **Owed:** `pm` to mark the 29 queue rows landed/DELIVERED; prune the now-merged branches
+     (seatguard blocks author-seat deletion; delegate/operator may `git branch -d`, all now `ahead=0`).
+   - Rulings batch `opr-20261017-rulings-batch` delivered (zero-trust key-mgmt item; ROADMAP 97 spend
+     authorized; #718 defer; #920 both-together; agent-fleet resequence; #965/#966/#851 unstick; #876 close).
+   - **Still open:** branch-management/merge rules into the canonical docs; the (3) machine-check intent.
 
 ## NEXT SESSION
 
