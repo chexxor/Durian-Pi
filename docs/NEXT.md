@@ -33,11 +33,17 @@ registration. Everything below this block is historical.)_
 **A `pause` command was routed to the backlog (operator request).**
 - Intent `opr-20261017-pause-command` delivered to `pm` (08:16:46Z; `.spike/delegate/intent-pause-command.md`):
   a `pause`/`unpause` command that stops seats taking NEW work while in-flight work settles, so broker
-  upgrades run against a quiescent rig. **pm owns placement/numbering** — record the ROADMAP number here
-  once pm reports it.
+  upgrades run against a quiescent rig. **REGISTERED by pm as ROADMAP 130** — #1387 (docs-only) +
+  #1388 (implementation, BACKLOG — HOLD, do not start).
 - **Why it matters now:** today the only quiesce options are `serve --stop` (kills in-flight runs) and the
   prose "exclusive window" — this is the missing drain-to-quiescence primitive, adjacent to ROADMAP
   69/71/74 and the daemon 61-64.
+
+**The landing pass is LIVE.** pm issued **#1390 LANDING PASS GO NOW** (window OPEN 2026-10-17T08:17Z)
+over **20 branches** (the #1358 list grown with the 4 verified #1169 branches + 2 measured conflict pairs +
+#1394's impl-item-1109). impl is quiescing the broker and hit the runbook's **F11-drain case**: `serve
+--stop` returned `"stopped": true`, `broker.json` is gone, but **pid 37376 is still alive and `genlock.0`
+is held** — impl is polling until the slot clears. **Do NOT force-kill pid 37376 while a genlock is held.**
 
 ## NEXT SESSION
 
