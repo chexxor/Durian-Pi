@@ -36,6 +36,7 @@ export const CONFIG_KEYS = [
 	"DURIG_EXTENSIONS",
 	"DURIG_STREAM_TIMEOUT_MS",
 	"DURIG_STRANDED_MS",
+	"DURIG_CONTEXT_WINDOW",
 	"DURIG_SEAT_ROOT",
 	"DEEPINFRA_API_KEY",
 ];
@@ -180,6 +181,46 @@ export function strandedMsSetting(config) {
 		);
 	}
 	return ms;
+}
+
+/**
+ * The operator's DECLARED usable context window (ROADMAP 27's three-state denominator).
+ * This is the middle state: more trustworthy than a vendor's advertised figure, less than
+ * item 97's measured effective window (#1087). It is deliberately NOT the advertised
+ * number, so an operator can state the window their model actually gives them.
+ *
+ * `DURIG_CONTEXT_WINDOW` is either a bare positive number (one window for every model) or
+ * a JSON object keyed by model (`"zai-org/GLM-5.3-Flash": 200000` or `"GLM-5.3-Flash":
+ * 200000`) for the per-model case. Unset/blank/malformed returns null — a declaration that
+ * cannot be read is not a declaration, and the resolver then falls through to `advertised`.
+ *
+ * @param {Record<string, unknown>} [config]
+ * @param {string|null} [modelKey] the seat's resolved `provider/modelId` (from `modelsBySeat`)
+ * @returns {number|null}
+ */
+export function declaredContextWindow(config, modelKey = null) {
+	const raw = config?.DURIG_CONTEXT_WINDOW;
+	if (raw === undefined || raw === null || raw === "") return null;
+	if (typeof raw === "number") return Number.isFinite(raw) && raw > 0 ? raw : null;
+	const text = String(raw).trim();
+	if (text === "") return null;
+	if (text.startsWith("{")) {
+		let map;
+		try {
+			map = JSON.parse(text);
+		} catch {
+			return null;
+		}
+		if (!map || typeof map !== "object") return null;
+		const bare = modelKey != null && String(modelKey).includes("/") ? String(modelKey).slice(String(modelKey).indexOf("/") + 1) : null;
+		for (const key of [modelKey, bare].filter((k) => k != null)) {
+			const value = Number(map[key]);
+			if (Number.isFinite(value) && value > 0) return value;
+		}
+		return null;
+	}
+	const n = Number(text);
+	return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**

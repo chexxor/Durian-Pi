@@ -16,7 +16,8 @@ import { SCAN_LIMIT, readSeatPages } from "./rigstory.mjs";
 import { computeMetrics } from "./metrics.mjs";
 import { computeAttention, countMalformedToolCalls } from "./attention.mjs";
 import { failureStreak } from "./supervisor.mjs";
-import { strandedMsSetting } from "./config.mjs";
+import { strandedMsSetting, declaredContextWindow } from "./config.mjs";
+import { contextConsumption } from "./context.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
 import { partialView, peerGraph } from "./viewmodel.mjs";
 
@@ -98,7 +99,7 @@ export async function readRigHealth(
 	storage,
 	dbPath,
 	slots,
-	{ modelsBySeat = {}, entryLimit = SCAN_LIMIT, cfg = undefined } = {},
+	{ modelsBySeat = {}, entryLimit = SCAN_LIMIT, cfg = undefined, windowsBySeat = {} } = {},
 ) {
 	const seats = await readSeatList(storage);
 	const queueItems = await readQueueItems(storage);
@@ -198,6 +199,22 @@ export async function readRigHealth(
 		const partial = partialView(await readLiveState(storage, seat.conversationId));
 		if (partial?.hasContent) streaming[seat.name] = partial;
 	}
+	// ROADMAP 27 / #1192: the per-seat context-consumption measure, exposed on the health
+	// snapshot so `status`/`watch` and the TUI render it VERBATIM (the TUI owns no
+	// denominator logic). The three-state denominator travels with the value: `measured` is
+	// item 97's effective window (#1087) — reserved here and absent today; `declared` is the
+	// operator's config; `advertised` is the caller's catalog figure. The caller may supply
+	// any of the three per seat via `windowsBySeat`; `declared` otherwise falls back to
+	// `DURIG_CONTEXT_WINDOW`. See src/context.mjs for why the state is not optional.
+	const context = {};
+	for (const seat of seats) {
+		const supplied = windowsBySeat[seat.name] ?? {};
+		context[seat.name] = contextConsumption(pages[seat.name] ?? [], {
+			measured: supplied.measured ?? null,
+			declared: supplied.declared ?? declaredContextWindow(cfg, modelsBySeat[seat.name]),
+			advertised: supplied.advertised ?? null,
+		});
+	}
 	return {
 		seats,
 		queueItems,
@@ -211,6 +228,8 @@ export async function readRigHealth(
 		// Per-seat in-flight partials, so any client can show "streaming now"
 		// distinctly from committed turns.
 		streaming,
+		// Per-seat context consumption with its three-state denominator (ROADMAP 27, #1192).
+		context,
 		attention: [
 			...computeAttention(seats, queueItems, latestByConv, errorByConv, {
 				nowMs: Date.now(),
