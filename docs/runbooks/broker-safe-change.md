@@ -12,7 +12,13 @@ the broker is up. `stop` the broker first and **confirm it exited**.
 ```bash
 cat selfdev.sqlite.broker.json 2>/dev/null     # is a broker recorded?
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq 'node.exe' -and \$_.CommandLine -match 'cli.mjs serve' } | Select-Object ProcessId"
+# Review what the change would do — READ-ONLY, needs no broker stop (ROADMAP 84):
+DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run
 ```
+`--dry-run` names the seats and fields it would change (`model`, `instructions`, `cwd`,
+`thinkingLevel`), the seats it would create, the seats whose context the model change would reset, and
+whether the constitution or the edges would change — and writes **nothing**. Review it here, before
+stopping the broker, so the write you are about to make is the one you have already read.
 
 ## Do
 1. Stop the broker and **read the result**:

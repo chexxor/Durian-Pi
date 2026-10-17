@@ -29,11 +29,14 @@ through the broker inbox while the broker runs.
 ```bash
 DURIG_DB=./selfdev.sqlite node cli.mjs status
 DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 6
+# Preview the reset — READ-ONLY, needs no broker stop (ROADMAP 84):
+DURIG_DB=./selfdev.sqlite node cli.mjs reset <seat> --dry-run
 ```
 A repeating assistant entry with no tool calls, or CJK in the live stream, confirms a loop / wrong
 language. For the text-form tool call, **read the stored entry, not a screen capture**: the terminal
 STRIPS the DSML delimiter, so a screen read shows a clean `<parameter>` block and HIDES the fault
-(D77).
+(D77). The `reset --dry-run` preview names the seat and whether the reset would go through
+(`wouldReset`), or refuses because the seat holds a live lease — and writes **nothing**.
 
 ## Do
 **Preferred — steer without stopping (safe while the broker runs):** deliver an operator directive through
