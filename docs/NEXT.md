@@ -64,6 +64,11 @@ runbook-81/82/86 work. **Trust the queue + `status`, not the ninth-pass text bel
   (`eol=lf`, file-scoped). Repo-wide rewrite NOT approved. Delivered to `pm`.
 - Still operator-owned: the **#994** whole-tree Prettier normalize quiet window (trigger-gated). The
   operator holds push (origin/main == main).
+- **Priority order ACCEPTED (2026-10-17):** `#1040` (landing train) first, then `#1036` (land #916 →
+  2nd reload), `#977`+`#1055` (EOL), `#975`+`#976`, `#964`→`#965`→`#966`, `#873`, `#998`/`#1002`/`#993`,
+  then the held daemon `#723`→`#725`. Delivered to `pm` (inbox intent `opr-20261017-priority-order`;
+  broker logged `INTENT delivered=1 dead=0`). **Still open for the operator:** `#1059` (KEEP vs reset
+  `#940`'s shared-main commit `e3a8e53`).
 
 **BROKER:** pid `35640` (`scripts/serve-noroot.ps1`), started `2026-10-17T01:13:17Z`; loaded the
 delegate's broker fixes. Inbox empty (the EOL ruling was delivered). At start it woke `impl` + `qa`.
