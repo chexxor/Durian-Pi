@@ -2427,3 +2427,34 @@ crash opportunity), then removal.
 `opr-20261017-rulings-batch4`). Work items: ROADMAP 71 / #912 (spool, HELD -> prioritise), the
 read-only-open fix, `send` retirement / #252. **Flagged gap:** `cmdUp` (`cli.mjs:476-760`) has NO broker
 guard - `up --refresh` is not refused while a broker drives. No executable check applies yet.
+
+## D95 — The degeneration guard judges per-turn causes on ASSISTANT turns and its context bound against the seat MODEL's effective window; saturation is recovered by `compact`, not reset (delegate, 2026-10-17)
+
+**Decision.** `src/degeneration.mjs` `assessRun` must be corrected on four points: (1) per-turn causes
+(`turnDurationMs` and any other duration-derived cause) read **assistant** turns ONLY — a `pi.tool-result`
+entry's `durationMs` is TOOL time, not a model stall; (2) the run window must survive the broker's
+per-turn `pi.user` wake (assess across the last N turns, or treat context pressure as a seat-level signal
+that persists); (3) the context-pressure bound resolves from the seat's **model**, via the existing
+`DURIG_CONTEXT_WINDOW` seam (`src/config.mjs` `declaredContextWindow(config, modelKey)`) and the
+measured > declared > advertised denominator in `src/context.mjs` (ROADMAP 27) — not the fixed
+`maxContextTokens: 400_000`; (4) the reset must be idempotent against the handle that writes it (the
+broker's long-lived read handle must observe its own `pi.reset`, or the idempotence check is dead). The
+recovery for a saturated seat is **`compact`** (summarize the prefix, keep the transcript), run by the
+delegate/operator in an operator-declared broker-stop window — a seat cannot stop the broker it lives in.
+
+**Why.** The 2026-10-17 `qa-context-degeneration` incident: qa degraded at **367,559** tokens while its
+model `zai-org/GLM-5.3-Flash` **advertises ~1,048,576** — "advertised != usable" exactly as ROADMAP 27
+warns — and the guard fired **0** times because the per-turn `pi.user` wake kept the run window at 1–2
+turns so `contextTokens` never reached the fixed 400k. The SAME guard over-reset `impl` **285+** times:
+`#72059` is a tool-result (`ran=123 fail=0`) at `durationMs=301,935` misread as a 5-minute model turn,
+and the reset never stuck (20+ consecutive `pi.reset` ids 72099–72118) because the broker's read handle
+did not see the reset it wrote.
+
+**Alternatives.** (a) Lower the fixed constant — rejected: a guess that is wrong for every other model
+(the whole point is that the usable window is a property of the weights, per ROADMAP 97/#1087).
+(b) Add another prose pattern — rejected: the failure was not a text shape (D78 already taught this).
+
+**Status:** routed to `pm` as **`#1703`/`#1704`/`#1705`** (+ model-bound addendum
+`opr-20261017-degeneration-guard-model-bound`); **NOT landed** — queued to `impl`. Incident:
+`docs/incidents/2026-10-17-qa-context-degeneration.md`; procedures: `docs/runbooks/degeneration-guard.md`,
+`docs/runbooks/seat-reset.md` § Context saturation.

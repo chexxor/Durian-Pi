@@ -9,6 +9,21 @@ degeneration-guard fixes are registered as `#1703`/`#1704`/`#1705` (queued to im
 this can recur. Broker is up again (pid `32840`). Top priority is still `#1610` MAIN IS RED. See
 `## NEXT SESSION` — everything below it is historical.)_
 
+## HANDOVER — 2026-10-17 (stage-two recovery; clock-out — NEWEST; read `## NEXT SESSION` below)
+
+**Current item / queue ids:** the degeneration-guard fixes **`#1703`** (false positive) /
+**`#1704`** (reset idempotence) / **`#1705`** (false negative + model-aware context bound) — all
+`queued` to `impl`; the gate is **`#1610` MAIN IS RED** (`#1611`).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Blocker:** `main` is RED — no landing passes the `merge.md` gate.
+**Watch:** `qa` re-saturating (its guard is not fixed yet); recovery = `compact qa` in an
+operator-sanctioned window (`docs/runbooks/seat-reset.md` § Context saturation).
+**Do not:** push (operator holds it); stop the broker without an operator-declared window.
+
+**State at clock-out (2026-10-17T22:25Z):** broker UP pid `32840`; `main` HEAD `e0a33b1`, tree clean,
+not pushed; qa recovered (context 367,559 → ~48k, coherent); `docs/incidents/` now **7 reports**
+(+`qa-context-degeneration`, sev2 mitigated); DECISIONS **D95**.
+
 ## HANDOVER — 2026-10-17 (delegate clock-out; new agent takes the seat)
 
 **Your job next (operator): verify the team is following git procedures and branch management.**
