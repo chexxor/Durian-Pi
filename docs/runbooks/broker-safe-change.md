@@ -18,6 +18,9 @@ it must take effect without corrupting the store.
 ## Preconditions
 `up --refresh` and `reset` are **write verbs** — they open their own `Harness`. They must not run while
 the broker is up. `stop` the broker first and **confirm it exited**.
+**A broker-hosted seat cannot stop the broker it lives in and keep working** — the stop ends its own run
+(the F11 drain below; 2026-10-17: the exclusive landing window closed QUIET BUT EMPTY for exactly this
+reason). To quiesce for a LANDING pass, run the pass outside the broker (`land.md` Do step 0).
 
 ## Diagnose (read-only)
 ```bash
