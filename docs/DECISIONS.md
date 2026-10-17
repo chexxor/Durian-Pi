@@ -2031,3 +2031,50 @@ Affected demos (scheduler, broker, broker-liveness, broker-wake-return, run, sta
 driversurvive) stay green.
 
 **Status:** implemented and committed (delegate pass).
+
+## D82 — A spooled intent forces a broker pass (delegate, 2026-10-16)
+
+**Decision.** A resident broker now treats a non-empty `<db>.broker.inbox` like a wake-relevant change:
+when the wake loop is idle (`!scheduler.shouldRun`) and the inbox has a pending intent file, it marks
+itself dirty and runs a pass, which drains the inbox (`drainIntentInbox` runs at the START of a pass).
+
+**Why.** `intent.mjs` exists so the delegate can deliver operator intent WITHOUT stopping the broker
+(no second store writer). But `drainIntentInbox` only ran inside a pass, and a resident broker ran a
+pass only on a wake-relevant store commit or a reset. A producer never touches the store, so on an idle
+broker the operator's intent sat in the inbox until an unrelated commit happened to run a pass —
+observed this session when the CRLF/EOL ruling did not reach `pm` after a restart. This is the remaining
+half of item 66 ("drain each pass" was not enough; the inbox must FORCE a pass).
+
+**Alternatives.** (a) Have the producer write to the store — rejected: that is the second-writer class
+the whole intent-inbox mechanism avoids. (b) Watch the directory with `fs.watch` — rejected: adds a
+platform-specific watch and an event source to clean up, and the loop already re-checks every ~1 s when
+a dbPath is set. (c) Poll the inbox on a timer regardless of dirtiness — rejected: the idle re-check
+plus the dirty gate is exactly this, and `readIntentFiles` is cheap (an `existsSync` + directory read).
+
+**Proof.** `demo/broker-intent-wake.test.mjs`: one seat, no queued work, the broker idle; the test spools
+an intent with `writeIntent` and asserts the broker logs `INTENT delivered=1 dead=0`. RED against pre-fix
+code (no delivery in 3000 ms), GREEN after. No spin risk: `drainIntentInbox` submits+unlinks or
+dead-letters every file, so the inbox is empty after the pass.
+
+**Status:** implemented and committed (delegate pass).
+
+## D83 — Operator ruling: CRLF/EOL stance for the byte-equality tests (#944 / #328 / #766), 2026-10-16
+
+**Decision (the operator's).** `lead`'s #948 policy split is accepted, and the operator has ruled:
+- **APPROVED:** make the byte-equality assertions EOL-insensitive (normalize CRLF→LF before comparing)
+  in `demo/commit-model.test.mjs`, `demo/seat-commit-instructions.test.mjs`, `demo/starter.test.mjs` —
+  `lead`'s option 1; this is the fix for #766/#977.
+- **APPROVED:** add a `.gitattributes` — the narrow/file-scoped form (`eol=lf` on the specific tested
+  files), NOT repo-wide. A repo-wide `* text=auto eol=lf` is expressly NOT approved.
+- **Unchanged:** #975 (stale selfdev test — re-point/drop the `constitutionInline` assertion) and #976
+  (starter content drift — re-sync the inline) stay as their own items per `lead` #948.
+
+**Why.** #328 was logged with an explicit operator "do not start" hold on normalizing endings / adding
+`.gitattributes` (ROADMAP.md:61-62). `lead` declined to reverse an operator hold unilaterally and
+escalated. The operator lifted the hold for this scope only, while declining the stop-the-world
+repo-wide rewrite (same class as the held #994 whole-tree Prettier normalize).
+
+**Consequences.** `impl` may now land the EOL-insensitive fix and the file-scoped `.gitattributes`; the
+repo-wide EOL rewrite and the #994 normalize still await an operator-declared quiet window.
+
+**Status:** ruled and delivered to `pm` (intent `opr-20261016-eol-policy-944`).

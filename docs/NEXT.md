@@ -3,14 +3,15 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-16 (delegate, **clock-out / tenth pass** — fixed the general broker cooldown
-revisit gap; the team has moved a long way past the ninth-pass pointer. See **CLOCK-OUT (tenth pass)**
-immediately below.)_
+_Last refreshed: 2026-10-16 (delegate, **tenth pass** — fixed the general broker cooldown revisit gap
+and the spooled-intent wake gap, performed the operator-authorized broker reload, and delivered the
+operator's CRLF/EOL ruling. See **CLOCK-OUT (tenth pass)** immediately below.)_
 
 ## CLOCK-OUT — tenth pass (2026-10-16, delegate) — START HERE
 
-**HEAD at clock-in:** `f3c3179`. Delegate commit this session: the cooldown-revisit fix —
-`src/broker.mjs`, `src/driver.mjs`, `src/scheduler.mjs`, `demo/broker-cooldown-revisit.test.mjs`.
+**HEAD at clock-in:** `f3c3179`. Delegate commits this session: the cooldown-revisit fix (`7a0ae0f` —
+`src/broker.mjs`, `src/driver.mjs`, `src/scheduler.mjs`, `demo/broker-cooldown-revisit.test.mjs`) and
+the spooled-intent wake fix (`src/broker.mjs`, `demo/broker-intent-wake.test.mjs`).
 
 **WHAT THIS PASS DID (all verified):**
 1. **Fixed the still-owed general broker revisit gap (delegate-owned).** `selectWakes` produced real
@@ -21,9 +22,26 @@ immediately below.)_
    the earliest suppressed seat's deadline and un-parks to mark itself dirty (recomputed each pass so
    a stale deadline cannot spin the loop). Proof: `demo/broker-cooldown-revisit.test.mjs` — RED against
    pre-fix code (1 wake in 3000 ms), GREEN after (re-wake ~1545 ms in, after a 1500 ms cooldown).
-2. **Full demo suite: 95 pass / 3 fail.** The 3 failures are the PRE-EXISTING constitution-drift class
-   (`demo/commit-model.test.mjs`, `demo/seat-commit-instructions.test.mjs`, `demo/starter.test.mjs` —
-   starter inline vs `constitution.txt`), registered as **#976**; none touches this fix.
+2. **Fixed the spooled-intent wake gap (delegate-owned; closes item 66's incomplete half).** A resident
+   broker drains `<db>.broker.inbox` only at the START of a pass, but ran a pass only on a
+   wake-relevant commit — so an operator intent written by `intent.mjs` sat until an unrelated commit.
+   `runWakeLoop` now treats a non-empty inbox like a wake-relevant change (no spin risk: every file is
+   submitted+unlinked or dead-lettered within the pass). Proof: `demo/broker-intent-wake.test.mjs` — RED
+   against pre-fix code (no delivery in 3000 ms), GREEN after.
+3. **Operator-authorized broker reload DONE (#1032).** `serve --stop` reported `stopped: true`; each time
+   the process stayed alive in the F11 drain (the first, pid 4644, was force-killed with NO genlock at
+   the stop; the second, pid 6804, later exited on its own `reason=stop`). Restarted via
+   `scripts/serve-noroot.ps1`; constitution intact. The #822 npm-ci fix is now LIVE. **Final broker: pid
+   35640, started `2026-10-17T01:13:17Z`.** **Caveat:** `#916` (`dd79fa3`) is not yet landed, so `#1036`
+   must land it and a SECOND reload will be needed to activate that half.
+4. **Operator CRLF/EOL ruling delivered to `pm`** (inbox intent `opr-20261016-eol-policy-944`; broker
+   logged `INTENT delivered=1 dead=0`). Ruling (**D83**): EOL-insensitive assertions APPROVED (lead #948
+   option 1) and a narrow `.gitattributes` APPROVED (file-scoped `eol=lf`); repo-wide `* text=auto eol=lf`
+   NOT approved. #328's hold is lifted for this scope; #975/#976 remain separate.
+5. **Full demo suite: 97 pass / 3 fail** (two new demos this pass). The 3 failures are the PRE-EXISTING
+   constitution-drift class (`demo/commit-model.test.mjs`, `demo/seat-commit-instructions.test.mjs`,
+   `demo/starter.test.mjs` — starter inline vs `constitution.txt`), registered as **#976**; none touches
+   this pass's changes.
 
 **THE POINTER WAS STALE.** The ninth-pass pointer named **#885** (`cmdInit`) as priority; it has LANDED
 (`5cb8123`), and the team has since landed #915/#1013 (`7c2fb52`, `f3c3179`), verified
@@ -39,19 +57,19 @@ runbook-81/82/86 work. **Trust the queue + `status`, not the ninth-pass text bel
    on the ENV seam). Then the held daemon items **`#723` → `#724` → `#725`** (`impl` must release them).
 **Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
 
-**⚠ OPERATOR ITEMS PENDING (surface; delegate must not rule):**
-- **`#1032` — RESTART/RELOAD the rig (HIGHEST).** The running `serve` (pid 4644, started `21:58:43Z`)
-  loaded the OLD `src/worktree.mjs`, so the `#822` npm-ci fix on `main` is INERT and live
-  `prepare_workspace` still fails on fresh-item creation. Rides with `#1036`. **Cannot be done while a
-  `genlock.*` is held** — a genlock is held now (`impl` generating), so a safe window is required.
-- **`#944`/`#328` — CRLF / line-ending POLICY.** `lead` ruled the repo `.gitattributes`/EOL stance is
-  the OPERATOR's (an explicit `#328` "DO NOT START" hold); `#766` is re-scoped to EOL-insensitive
-  assertions, and the stale-selfdev-test / starter-content-drift halves are split to `#975`/`#976`.
+**⚠ OPERATOR DECISIONS — RECEIVED this session (recorded: D83):**
+- **`#1032` — rig reload: DONE** (final pid 35640). The `#916` half still needs landing (#1036) and a
+  second reload.
+- **`#944`/`#328` — CRLF/EOL: RULED** — EOL-insensitive assertions + a narrow `.gitattributes`
+  (`eol=lf`, file-scoped). Repo-wide rewrite NOT approved. Delivered to `pm`.
+- Still operator-owned: the **#994** whole-tree Prettier normalize quiet window (trigger-gated). The
+  operator holds push (origin/main == main).
 
-**BROKER:** pid `4644` (`scripts/serve-noroot.ps1`), started `21:58:43Z`; `genlock.0` held (`impl`).
-`status.attention` = deferred-awaiting-answer (old parked rows) + `generation_in_flight (impl)` +
-`queue-ageing` (145 min, the ancient deferred rows). Inbox empty. **Do NOT `serve --stop` while a
-`genlock.*` is held**; `"stopped": true` is not proof the process exited.
+**BROKER:** pid `35640` (`scripts/serve-noroot.ps1`), started `2026-10-17T01:13:17Z`; loaded the
+delegate's broker fixes. Inbox empty (the EOL ruling was delivered). At start it woke `impl` + `qa`.
+`status.attention` = deferred-awaiting-answer (old parked rows) + `queue-ageing`. **Do NOT `serve --stop`
+while a `genlock.*` is held**; `"stopped": true` is NOT proof the process exited — pid 4644 hung in the
+F11 drain and was force-killed, and pid 6804 exited on its own after a multi-minute drain.
 
 **TREE:** clean at clock-in; this pass's edits committed with explicit paths. `item-*` worktrees are
 leaked/locked detachments (known defect `#998`), not tree dirt.

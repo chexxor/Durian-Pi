@@ -462,6 +462,16 @@ export async function runWakeLoop({
         scheduler.markDirty();
         continue;
       }
+      // A spooled operator intent must not wait for an unrelated commit: the
+      // producer writes a file to `<db>.broker.inbox`, and only a PASS drains it
+      // (drainIntentInbox runs at the start of a pass). Treat a non-empty inbox
+      // like a wake-relevant change so the operator's intent is delivered promptly.
+      // Safe from spinning: every file is either submitted and unlinked or
+      // dead-lettered within the pass, so the inbox is empty again afterwards.
+      if (dbPath && readIntentFiles(dbPath).length > 0) {
+        scheduler.markDirty();
+        continue;
+      }
       // Check for stop request before sleeping: on Windows there is no SIGTERM,
       // so `serve --stop` relies on a .stop file to interrupt an idle broker.
       if (dbPath && readStopRequest(dbPath) !== null) {
