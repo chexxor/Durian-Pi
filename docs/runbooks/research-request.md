@@ -46,13 +46,19 @@ Check whether it has already been asked/answered: search `docs/reviews/` for the
    - Record any **design choice vs established practice** distinction the report flags.
    - For a **competitor/vendor review**, also add or update its `docs/COMPETITORS.md` entry — see
      `competitor-review.md`.
-4. `git add` the report and every folded doc, explicit paths, one concern per commit.
+4. **Write the follow-up prompt.** A report almost always leaves questions open. Before closing the topic,
+   write `docs/reviews/<topic>-followup-research-prompt.md` naming the unresolved questions — the areas we
+   did not consider, and the details we cannot apply without more evidence — and hand it to the operator
+   to route (the delegate cannot call the research agent). If the topic is genuinely closed, say so in the
+   consumption note instead of writing an empty prompt.
+5. `git add` the report and every folded doc, explicit paths, one concern per commit.
 
 ## Verify
 The report exists under `docs/reviews/`, every external claim carries a URL + evidence class, and each
 finding is mapped to a durig mechanism or explicitly listed as unverified. Every proposed item is either
 registered in `docs/ROADMAP.md` or explicitly rejected with a reason. The informing doc links to the
-report, and a competitor review has a `docs/COMPETITORS.md` entry.
+report, and a competitor review has a `docs/COMPETITORS.md` entry. Unresolved questions have a follow-up
+prompt (`<topic>-followup-research-prompt.md`) or the topic is explicitly declared closed.
 
 ## If it fails
 If the report leaves a question open, do not guess — extend the prompt or defer the decision with

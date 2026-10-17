@@ -54,7 +54,10 @@ HEAD `5dc9490`) → `docs/COMPETITORS.md` entry. **Owed:** route the follow-up a
 reviewed (Agent Board / Linear MCP / Atlassian MCP citations spot-verified). Accepted direction in
 `docs/PM-ADAPTERS.md`; ROADMAP items **115–117** registered (TaskSource seam + state mapping, local/stdio
 MCP adapter, read-only external view). Key constraint: official tracker MCP servers are **remote/HTTP**,
-so the MCP client stays in the operator/broker path — seats keep no network.
+so the MCP client stays in the operator/broker path — seats keep no network. Follow-up prompt
+`docs/reviews/llm-agent-project-management-tools-followup-research-prompt.md` written and **owed to the
+operator to route**; the research SOP (`research-request.md`) now requires a follow-up prompt on every
+report consumption (or an explicit "topic closed").
 
 **Next-session checklist (the landing cleanup):**
 1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`
