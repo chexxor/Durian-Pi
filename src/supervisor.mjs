@@ -162,17 +162,32 @@ export function planResets({ seats, assessmentsByConv }) {
 export async function applyResets(harness, plans, context) {
 	const applied = [];
 	for (const plan of plans ?? []) {
-		// A tool call emitted as text is a FORMAT fault, not a runaway loop: the handoff must name
-		// the fault and the fix, or the model re-anchors onto the same malformed habit.
-		const handoff = /pseudo-tool-call/.test(String(plan.detail ?? ""))
-			? `malformed tool call (${plan.detail}): your last turn wrote the tool call into the message ` +
+		// The handoff must name the CAUSE and the fix: a format fault, a wall-clock stall, and a
+		// generic runaway each need a different re-anchor, or the model repeats the same habit.
+		const detail = String(plan.detail ?? "");
+		let handoff;
+		if (/pseudo-tool-call/.test(detail)) {
+			// A tool call emitted as text is a FORMAT fault, not a runaway loop.
+			handoff =
+				`malformed tool call (${plan.detail}): your last turn wrote the tool call into the message ` +
 				`TEXT — a <parameter name="…"> block — instead of using the tool API, so the run ended ` +
 				`without acting. Your context is reset to break the pattern. Re-anchor from your durable ` +
 				`instructions and the queue; re-claim your item if you still hold it, and issue each tool ` +
-				`call through the tool channel, never as message text.`
-			: `degeneration guard reset (${plan.detail}): the run you were in outgrew its bounds, ` +
+				`call through the tool channel, never as message text.`;
+		} else if (/turn-duration/.test(detail)) {
+			// A single turn that ran past the wall-clock bound is a STALL, not a loop: name the time
+			// so the model re-anchors onto acting, not onto one long unbroken turn.
+			handoff =
+				`per-turn wall-clock bound (${plan.detail}): a single turn ran past the time bound ` +
+				`without progressing — the run is stalling, not working. Your context is reset to break ` +
+				`the stall. Re-anchor from your durable instructions and the queue; re-claim your item if ` +
+				`you still hold it, and keep each turn short: act, then report.`;
+		} else {
+			handoff =
+				`degeneration guard reset (${plan.detail}): the run you were in outgrew its bounds, ` +
 				`so your context is reset to break the loop. Re-anchor from your durable instructions ` +
 				`and the queue; re-claim your item if you still hold it.`;
+		}
 		const conv = await harness.conversation(plan.conversationId, context);
 		if (!conv) continue;
 		try {
