@@ -1,9 +1,10 @@
 # Codemode for seats — design plan
 
 **Status: design, not implemented.** Gated on (a) the boundary SC1–SC3 landing, (b) a
-`security.sec` position, and (c) the library review below being treated as requirements rather
-than notes. Basis: the operator's `CodeMode_JS_with_Effects_and_Policies.md` review, checked
-against the runtime source rather than taken on trust.
+`security.sec` position (**ratified**, item #1295 — see gate 1), and (c) the library review
+below being treated as requirements rather than notes. Basis: the operator's
+`CodeMode_JS_with_Effects_and_Policies.md` review, checked against the runtime source rather
+than taken on trust.
 
 ## What the operator's review got right, and what it got wrong
 
@@ -105,13 +106,41 @@ model-authored scripts proves worth the authoring failure rate.
 
 ## Gates before this lands
 
-1. **`security.sec` position** — a new dependency (`pi-codemode` + `quickjs-wasi`), a new
-   execution surface, and its own audit sink. No network capability is exposed in the first cut;
-   `net.fetch` and `model.call` are **not minted**, so no egress is added. The delegate's security round
-   (`docs/reviews/security-codemode-review.md`) proposes the threat model, the falsifiable controls
-   **E1–E14**, and a **read-only T0 first cut** (no `fs.write`, `proc.exec`, `net.fetch`, `model.call`);
-   `security.sec` must ratify or correct it before code. Open questions include where the audit sink
-   lives (git per D30, or the store) and whether `proc.exec` is admitted at all.
+1. **`security.sec` position — RATIFIED (#1295); gate 1 is CLOSED by this fold.** The position is
+   `docs/reviews/security-codemode-position.md` (branch `security-item-1295`, rev `4cba82f`). It
+   **ratifies with three corrections** the delegate's round
+   (`docs/reviews/security-codemode-review.md`, E1–E14) — which is the *input*, not the position — and
+   answers the round's six open questions. This gate is a new dependency (`pi-codemode` +
+   `quickjs-wasi`), a new execution surface, and its own audit sink. No network capability is exposed
+   in the first cut: `net.fetch` and `model.call` are **not minted**, so no egress is added.
+   *Corrections:* **C1** the `node:worker_threads` sandbox is a **thread in the broker process** —
+   language isolation only; with the same Windows user a thread escape reaches broker memory (the
+   store handle, the provider key in env), so T0 narrows the motivated-attacker surface but never
+   *proves* containment. **C2** the audit sink records **denied** effects too, not only allowed ones
+   (gate G1). **C3** every cite-by-reference library claim is re-verified before this gate declares
+   closed.
+   *Open questions, resolved:* **audit sink** — git-backed **append-only**, readable while the broker
+   is down, landing **before any tier** (G1 / ROADMAP **129**); the live store is not the forensics
+   record. **`proc.exec`** — never the boundary (E6), rejected in T0/T1; T2 only under containment
+   plus a new position (G8). **`model.call`** — not minted in the first cut (it spends the session's
+   credentials); minting it later needs per-call approval + budgets **and a new position** first.
+   **Host containment** — form is the implementer's pick (container/VM/AppContainer), but **without a
+   runnable deny-demonstration no containment exists** and no write/exec tier may land. **Mid-run
+   bound** — a security **control** (G2 / ROADMAP **128**): an in-sandbox loop is invisible to D64's
+   per-turn bounds until the run settles, so it lands **with** codemode, not after.
+   *Tier gating:* mint + SC1 (predicates-not-handles, no ambient surface, always-set bounds) is
+   sufficient for **T0** (read-only `fs.read` + `fs.list`) only. **T1 (write) and T2 (exec) stay
+   gated** on host containment + the audit sink; this fold releases no tier item.
+   *Position gates (all falsifiable; no codemode code lands until they hold):* **G1** audit sink first
+   (allowed **and denied**); **G2** mid-run bound; **G3** bounds fail closed (`memoryLimitBytes`/
+   `timeoutMs` unset ⇒ refuse to start); **G4** offline demo probes (E1/E3/E4/E7/E8/E11/E12/E14);
+   **G5** the two-layer denial proof — one escape denied by the grant predicate, another independently
+   by the confined environment; **G6** supply chain (pin + install-script review, E13); **G7** surface
+   equality — declared = granted = minted (E1/E14); **G8** any deviation (minting `tools`/`models`,
+   omitting bounds, a T0-only push, an unaudited effect, a `proc.exec` boundary) needs a **new**
+   `security.sec` position first.
+   *Not re-registered here:* 128/129 and the batchability rule were registered against item 32 by
+   #1235 (VERIFY #1293).
 2. **Boundary first.** SC1–SC3 land and are proved before codemode exists, because the
    executors delegate to them.
 3. **Library review as requirements** — the four corrections above are acceptance criteria, and
@@ -125,5 +154,7 @@ model-authored scripts proves worth the authoring failure rate.
 - `docs/SEAT-TOOLS.md` — the shell/tools boundary this depends on (SC1–SC3).
 - `docs/reviews/security-codemode-review.md` — the delegate security round: threat model **E1–E14**, the
   **T0 read-only** first cut, and the audit-sink/bounds prerequisites (ROADMAP **128/129**).
+- `docs/reviews/security-codemode-position.md` — the ratified `security.sec` position (item #1295):
+  E1–E14 ratified with corrections C1–C3, the six answered questions, and gates **G1–G8** (gate 1 above).
 - ROADMAP item 31 — the pi-warden port (the guard at `beforeTool`), which covers nested calls.
 - ROADMAP item 32 — this plan.
