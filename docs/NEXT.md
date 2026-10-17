@@ -34,14 +34,20 @@ registered. Everything below this block is historical.)_
    class (commit `48d9932`). Spooled a `pm` sequencing addendum (`opr-20261017-roundtrip-sequencing`,
    delivered `06:05:35Z`): **126 waits on #1192** (item 27's measure); **128/129 fold into codemode
    (item 32)'s `security.sec` gate**; **127 waits on ROADMAP 115 + a quiet tree**.
+6. **Codemode security round** (operator-directed): wrote `docs/reviews/security-codemode-review.md` —
+   the threat model + falsifiable controls **E1–E14**, a **read-only T0 first cut**, and the
+   audit-sink/bounds prerequisites — folded into `docs/CODEMODE.md` gate 1 (commit `d586495`). It is the
+   **input to the external `security.sec` position** (the delegate cannot ratify its own review); spooled
+   `pm` intent `opr-20261017-codemode-security` (delivered `06:51:01Z`) to record it against ROADMAP 32
+   and sequence the T0/T1/T2 tiers. **The operator must route the round to `security.sec`.**
 
 ## NEXT SESSION
 
-**Current item (clock-out):** ROADMAP **130 DELIVERED** (delegate). The delegate's other work this
-session is committed; the team's next action is `pm`'s — `opr-20261017-roundtrip-docs` +
-`opr-20261017-roundtrip-sequencing` were delivered (register/sequence ROADMAP 126–130 with 126 waiting
-on #1192; fix the four mojibake docs; confirm #1179). **Next round-trip item after 130: 126, once #1192
-lands.** Nothing blocks the delegate. Live queue is unchanged: `#1151` (impl, claimed — seat-root fallback guard, order 3/3), `#1182` (impl,
+**Current item (clock-out):** ROADMAP **130 DELIVERED**; **codemode security round** written, awaiting
+the operator routing it to `security.sec`. The delegate's work this session is committed; the team's next
+action is `pm`'s — three `opr-20261017-*` intents were delivered (register/sequence 126–130, 126 waiting
+on #1192; fix the four mojibake docs; record the security round + tier gates). `#1194` (live-worktree
+reap defect) has landed. Nothing blocks the delegate. Live queue is unchanged: `#1151` (impl, claimed — seat-root fallback guard, order 3/3), `#1182` (impl,
 claimed — resume for #1151), `#1189` (qa, claimed — ROADMAP 97 harness; live runs pending operator spend),
 `#1190` (qa, claimed — VERIFY #1163, landing-safety B). `#1169`/`#1202` track the **landing-pass
 follow-up for the 4 SKIPPED branches** (#658/#662/#828/#837); `#1211` tracks the branch-deletion/git-guard
