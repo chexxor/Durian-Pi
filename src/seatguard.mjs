@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { isAbsolute, resolve as resolveNodePath } from "node:path";
 import { refusalFor } from "./confine.mjs";
 import { SECRET_PREFIX_PATTERNS } from "./config.mjs";
+import { afterTool as redactToolResult } from "./secretredact.mjs";
 
 /** pi-durable's own write-path normalization (tools/path-utils.js): unicode
  * spaces collapse to a plain space and a leading "@" booking prefix is dropped,
@@ -293,8 +294,14 @@ export async function beforeTool(call, api, context) {
  *
  * A refusal is a `block`, which pi-durable surfaces as a blocked call rather than a crash, so a
  * seat can read the reason and `defer_work` on it instead of retrying variants of the command.
+ *
+ * The extension carries a SECOND, sibling hook: `afterTool` (src/secretredact.mjs) redacts a
+ * secret-shaped value out of a tool result at the commit boundary — same `ToolTask` surface, the
+ * other half of the round. Registered here rather than in a new extension because this one is
+ * already installed in cli.mjs's `openHarness`; a seat cannot be given a tool without both
+ * policies riding it.
  */
 export const SeatGuard = defineExtension({
 	name: "durig.guard",
-	hooks: [hook(ToolTask, { beforeTool })],
+	hooks: [hook(ToolTask, { beforeTool }), hook(ToolTask, { afterTool: redactToolResult })],
 });
