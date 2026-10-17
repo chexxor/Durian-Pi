@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { createWorktree, removeWorktree, repoRoot, uncommittedInSource } from "../src/worktree.mjs";
 
 const run = promisify(execFile);
@@ -155,6 +156,58 @@ try {
 		"a seat without a declared cwd keeps the harness default rather than guessing one",
 		cli.includes("seatCwd === undefined ? {} : { cwd: seatCwd }"),
 	);
+
+	console.log("\n#1456: a worktree can be forked from an UNLANDED base ref (worktree --ref)");
+	{
+		// The gap: no entry point could produce a worktree at an unlanded tip, so a fix that must edit
+		// a file at that tip (the #1444/entry-11 shape) had no sanctioned path. `createWorktree` already
+		// takes `ref`; the CLI verb never passed one.
+		const repo2 = join(base, "ref-repo");
+		const src2 = join(repo2, "durig");
+		await mkdir(src2, { recursive: true });
+		await writeFile(join(src2, "artifact.txt"), "on main\n");
+		await run("git", ["init", "-q", repo2]);
+		await run("git", ["-C", repo2, "add", "durig/artifact.txt"]);
+		await run("git", ["-C", repo2, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "main base"]);
+		await run("git", ["-C", repo2, "branch", "-M", "main"]);
+		// The unlanded tip: a commit on a branch `main` does not contain.
+		await run("git", ["-C", repo2, "checkout", "-q", "-b", "unlanded"]);
+		await writeFile(join(src2, "artifact.txt"), "on the unlanded tip\n");
+		await run("git", ["-C", repo2, "add", "durig/artifact.txt"]);
+		await run("git", ["-C", repo2, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "unlanded tip"]);
+		const tip = (await run("git", ["-C", repo2, "rev-parse", "HEAD"])).stdout.trim();
+		await run("git", ["-C", repo2, "checkout", "-q", "main"]);
+		const mainTip = (await run("git", ["-C", repo2, "rev-parse", "HEAD"])).stdout.trim();
+		check("the fixture has an unlanded tip distinct from main", tip !== mainTip, `tip ${tip} main ${mainTip}`);
+
+		const cliPath = fileURLToPath(new URL("../cli.mjs", import.meta.url));
+		const refTarget = join(base, "wt-ref");
+		let cliOk = true;
+		let cliErr = "";
+		try {
+			await run(process.execPath, [cliPath, "worktree", refTarget, "--source", src2, "--ref", "unlanded"]);
+		} catch (error) {
+			cliOk = false;
+			cliErr = String(error?.stderr ?? error?.message ?? error).slice(0, 200);
+		}
+		check("`worktree --ref` runs", cliOk, cliErr);
+		if (cliOk) {
+			const head = (await run("git", ["-C", refTarget, "rev-parse", "HEAD"])).stdout.trim();
+			check("the worktree sits at the UNLANDED tip, not main", head === tip, `got ${head}, tip ${tip}, main ${mainTip}`);
+			check(
+				"...so the unlanded content is present",
+				(await readFile(join(refTarget, "durig", "artifact.txt"), "utf8")).includes("unlanded"),
+			);
+		}
+
+		// Control: with no --ref the same verb forks HEAD (main) — so the check above is about `ref`.
+		const headTarget = join(base, "wt-head");
+		try {
+			await run(process.execPath, [cliPath, "worktree", headTarget, "--source", src2]);
+		} catch {}
+		const headNoRef = (await run("git", ["-C", headTarget, "rev-parse", "HEAD"])).stdout.trim();
+		check("without --ref the worktree forks HEAD (main), the old behaviour", headNoRef === mainTip, `got ${headNoRef}`);
+	}
 
 	console.log(failures === 0 ? "\nPASS — the worktree isolates" : `\nFAIL — ${failures} assertion(s) failed`);
 } finally {
