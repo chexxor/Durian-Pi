@@ -544,6 +544,26 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     SAME conversation; Enter sends via `writeIntent` and returns to the conversation; Esc cancels back
     to it; the footer advertises `i`; a driver/golden test proves the conversation is not replaced.
 
+101. **BUG (TUI): the conversation view collapses newlines when a seat's loaded transcript is streamed
+    to the viewport (operator report, 2026-10-17).** *Symptom:* opening a seat's conversation and
+    rendering its durable transcript (item 89's backfill) flattens every turn onto one truncated row, so
+    the author's line breaks and paragraph structure are lost before they reach the viewport.
+    *Root cause (verified in `src/tui/client.mjs` `transcriptTurnLines`):* the `operator`/`agent` branches
+    render through `truncate(...)` (imported from `src/watchview.mjs`), whose
+    `String(text).replace(/\s+/g, " ").trim()` collapses **every** whitespace run — `\n`, blank lines,
+    and indentation alike — before the row is cut with an ellipsis. The live partial path
+    (`renderPartial({ wrap: true })` → `wrapText`) flattens `\s+` the same way first, so the stream loses
+    newlines too. *Reproduced:* a three-line agent turn (`Line one\nLine two\n\nLine four stays
+    separate`) renders as the single row `◀ Line one Line two Line four stays separate`.
+    *Fix direction:* split the turn body on explicit newlines first, then wrap each line to the viewport
+    width, preserving blank lines — do NOT collapse `\s+`; the committed transcript and the live partial
+    must share ONE newline-preserving wrap, so history and stream read the same.
+    *Open call (designer):* the continuation gutter/blocks for a multi-line turn, and how a blank line
+    reads in the conversation view. *Owner:* impl (TUI) + designer (surface). *Acceptance:* a seat's
+    loaded transcript renders a multi-line turn as multiple viewport rows with its paragraph breaks
+    intact (a golden/test pins a three-line + blank-line turn); a line longer than the viewport still
+    wraps rather than truncating; the live partial uses the same rule.
+
 **Sequencing (pm, 2026-10-17):** both behind the operator priority train (#1066) — pm did NOT pull
 them forward, and the impl items are HELD until pm releases.
 - **98** (feature: a seat's context consumption in the conversation view — the READ-SURFACE half of

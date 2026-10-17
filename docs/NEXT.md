@@ -3,8 +3,9 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **thirteenth pass** — merged-branch cleanup, the merge/landing
-runbook (W6), and ROADMAP item 100 for landing-health metrics. See **NEXT SESSION** below.)_
+_Last refreshed: 2026-10-17 (delegate, **fourteenth pass** — added ROADMAP item 101, the TUI
+conversation-view newline bug. Prior pass: merged-branch cleanup, the merge/landing runbook (W6), and
+ROADMAP item 100 for landing-health metrics. See **NEXT SESSION** below.)_
 
 ## NEXT SESSION
 
@@ -19,6 +20,12 @@ holds **push**; the **#994** quiet window is undeclared. **Do NOT delete a branc
 `git rev-list --count main..<b>` > 0** — that loses unlanded work.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Backlog added this session (operator, 2026-10-17):** ROADMAP **item 101** — BUG (TUI): the
+conversation view collapses newlines when a seat's loaded transcript is streamed to the viewport
+(`src/tui/client.mjs` `transcriptTurnLines` renders operator/agent turns through `truncate`, whose
+`\s+` collapse destroys `\n`). Reproduced: a three-line turn renders as one truncated row. Adjacent to
+TUI 89/98/99; register via `pm`.
 
 **Next-session checklist (the landing cleanup):**
 1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`
