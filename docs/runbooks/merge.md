@@ -49,6 +49,12 @@ git worktree list --porcelain | grep -A1 '^worktree'
 unique work — confirm with `git cherry -v main <branch>`: a `+` line is a commit **not** in `main` (keep the
 branch); a `-` line is a patch-equivalent commit already in `main` (rebased duplicate).
 
+> **Point-in-time reports go stale.** A report that "file X is uncommitted in the shared tree" is a
+> point-in-time observation: it is true the moment it was read, and false the moment a landing happens.
+> Before acting on one (routing work, landing, or attributing ownership), **re-verify with
+> `git status` / `git ls-files`** at that moment — do not land or route off a stale report (2026-10-17:
+> two items routed from a stale "uncommitted merge.md / shared-tree docs" report were already landed).
+
 **Pre-flight each branch WITHOUT touching the working tree** (git 2.55; verified 2026-10-17). This merges
 into a tree object only, so it is safe to run while the broker drives, and it is how a landing pass knows
 its conflict set before the first `git merge`:
