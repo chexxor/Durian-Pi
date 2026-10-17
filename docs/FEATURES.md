@@ -280,7 +280,7 @@ feature.
 ## 7. Auditing a rig (`check`)
 
 `check` reads the rig file **and** the store, because a rig that looks correct in
-the file can be running something else â€” the tutor-pi spec declared its
+the file can be running something else â€” a rig spec declared its
 constitution inline while the store held a different one, so 13 seats ran without
 their team culture and no command said so (D25).
 
@@ -305,7 +305,7 @@ with `unknown seat`), and the fix is `up` â€” so it is an `error`, like an
 unapplied constitution. A seat the store holds and the file does not declare
 still has a conversation, a stored persona and a working address, and `up` never
 removes one, so it is a gap the operator closes by editing the file. Both
-directions were found live at once on the tutor-pi rig (a stray `worker`, a
+directions were found live at once on the live rig (a stray `worker`, a
 missing `scribe`), which is why the rule covers both rather than reporting half a
 real problem while looking complete.
 
@@ -346,7 +346,7 @@ while still reading as coverage.
 | Feature | What it does | Where | Proof | Surface |
 |---|---|---|---|---|
 | **OpenRig converter** | `rig.yaml` â†’ durig v2 spec: seats, personas (each seat's `guidance/role.md`), skills, guidance, pod edges, **rig-level cross-pod edges**, coordinator send permissions, and the culture file as `constitutionInline` | `scripts/from-openrig.mjs` | `demo/converter.test.mjs` | cli |
-| **Migrated rig** | The 15-seat tutor-pi rig, generated and committed | `rigs/tutor-pi.rig.json` | `node cli.mjs check rigs/tutor-pi.rig.json` | cli |
+| **Starter rig** | The packaged 4-seat starter rig | `rig.starter.json` | `node cli.mjs check rig.starter.json` | cli |
 | **Pods** | Converted with a warning; pod **structure** is dropped â€” **limited** (deferred, ROADMAP item 11) | `scripts/from-openrig.mjs` | converter stderr warnings | cli |
 | **Persona and skill mapping** | name, role, **`resources.guidance` (`guidance/role.md`) inlined as `# Role`**, model, skills (names + content), pod/team guidance and `delegates_to` map into the v2 spec without hand-editing | `scripts/from-openrig.mjs` | `demo/converter.test.mjs`, `docs/ACCEPTANCE.md` UAR-5 | cli |
 
@@ -363,7 +363,7 @@ norms and the shared skills but **dropped each seat's `guidance/role.md`**, so
 the migrated spec carried no per-seat persona. It now reads the agent's declared
 `resources.guidance` and inlines the file(s) as a `# Role` block ahead of the pod
 context; `demo/converter.test.mjs` asserts the persona text reaches the spec, and
-the committed `rigs/tutor-pi.rig.json` was regenerated (`up --refresh` re-applies
+the generated spec was regenerated (`up --refresh` re-applies
 it to the live store).
 
 ## 9. Upstream tracking

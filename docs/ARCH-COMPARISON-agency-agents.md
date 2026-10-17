@@ -14,7 +14,7 @@ strategy layer of playbooks, runbooks, and handoff templates.
 **Why this one is directly relevant:** it is the best public sample of
 **persona/skill authoring at scale** we have looked at. Our seats are
 `agent.yaml` + `guidance/role.md` + shared skills
-(`openrig/rigs/tutor-pi/agents/*`); this repo is a compatible, battle-tested
+(`the previous rig's agents/*`); this repo is a compatible, battle-tested
 template for the *content and quality bar* of those persona files. Unlike
 pi-multi-agent, nothing here is a runtime we would adopt — it is text we can
 borrow from.
@@ -28,7 +28,7 @@ borrow from.
 
 ## 1. Seat-by-seat mapping (our rig → their best comparator)
 
-Our seats come from `openrig/rigs/tutor-pi/rig.yaml` and `agents/*`. For each,
+Our seats come from `the previous rig's rig.yaml` and `agents/*`. For each,
 the closest agency-agents file and the one thing worth taking.
 
 | Our seat | Their closest file | Worth borrowing |
@@ -113,7 +113,7 @@ Our `shared:grounding` skill already says "cite page/section; fabricated
 citations are the cardinal sin". The borrow is to add a **confidence/source-type
 field** to the grounding skill and a **default-to-fail + minimum-N-evidence**
 rule to `shared:testing` / `shared:peer-review`. That is a concrete improvement
-to skills our seats already load, and it strengthens the tutor's grounding
+to skills our seats already load, and it strengthens the product's grounding
 promise (any textbook) without hard-coding TAPL.
 
 ## 4. Handoffs & verdicts — borrow the shapes
@@ -176,7 +176,7 @@ them genuinely distinct — the same "one concern per change" spirit.
   browser UI. Our verification is command/citation based; take the *principle*
   (visual/objective evidence), not the tooling.
 - **Their persona voice at face value.** Strong personality is good, but a
-  grounded textbook tutor must not adopt a persona that will answer from model
+  grounded product must not adopt a persona that will answer from model
   memory — never trade grounding for character.
 
 ## 8. Verdict and recommended next steps
@@ -208,7 +208,7 @@ text-only, additive changes:
 
 | # | Change | Where |
 |---|---|---|
-| 1 | `## Communication style` + `## Success metrics` on every seat | `openrig/rigs/tutor-pi/agents/*/guidance/role.md` (15 seats) |
+| 1 | `## Communication style` + `## Success metrics` on every seat | `the previous rig's agents/*/guidance/role.md` (15 seats) |
 | 2 | Confidence + source-type labelling (`stated`/`derived`/`contested`, primary > secondary > recall) | `agents/shared/skills/grounding/SKILL.md` |
 | 3 | Default-to-"not proven", boundary hunt, verify-independently | `agents/shared/skills/testing/SKILL.md`; `agents/shared/skills/peer-review/SKILL.md` (never review your own work) |
 | 4 | Handoff block, FAIL-verdict shape, retry limit (3) | `agents/shared/skills/delivery/SKILL.md` |
@@ -232,11 +232,11 @@ neither them nor the per-seat role text. Fixed:
   `agents/<seat>/guidance/role.md` (from `agent.yaml` `resources.guidance`) as a
   `# Role` block — previously dropped entirely.
 - `durig/demo/converter.test.mjs` asserts the role persona is inlined.
-- `durig/rigs/tutor-pi.rig.json` regenerated: 15 seats, same 15 edge groups,
+- the generated rig spec was regenerated: 15 seats, same 15 edge groups,
   same constitution; every seat now carries the new sections + skill text.
-- Applied live: `node cli.mjs up rigs/tutor-pi.rig.json --refresh` created
+- Applied live: `node cli.mjs up the generated rig spec --refresh` created
   `scribe`/`advocate` and refreshed 13 seats; 15/15 declared seats verified to
   carry `# Role` + `## Communication style` + `## Success metrics`.
-- `node cli.mjs check rigs/tutor-pi.rig.json` — **0 error** (was `store-missing-seat`);
+- `node cli.mjs check the generated rig spec` — **0 error** (was `store-missing-seat`);
   two pre-existing `fix-now` remain (stray `worker`; single-model rig).
 - Oracle: `demo/{converter,refresh,check,constitution}.test.mjs` all EXIT 0.

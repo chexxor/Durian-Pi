@@ -259,7 +259,7 @@ So the spool stays as the **out-of-process substrate** and `whenBusy:"steer"` be
 | **Human operator with approvals** | No operator concept. Closest primitive is a queued input; durig's `defer_work` → `DEFERRED_TO_HUMAN` is app-level [^3] | **Genuinely absent.** Keep. |
 | **Org edges / capability gates** | No. Ownership "is not an access-control capability" [^2] | **Genuinely absent.** Keep. |
 | **Multi-process deployment of seats** | Partial. The harness's rule is **one owner, many clients/conversations** [^6]. durig's seats are conversations *inside* the one broker; `genlock` exists for the separate `send`/`run` entrypoints [^7] | **Mostly not needed** once single-owner holds. `genlock` is durig's cost bound, not a deployment requirement. |
-| **Cross-project rigs** | No. Rigs are durig's (`tutor-pi` vs `durig selfdev`, separate stores) [^9] | **Genuinely absent.** Keep. |
+| **Cross-project rigs** | No. Rigs are durig's (one rig per store, separate stores) [^9] | **Genuinely absent.** Keep. |
 | **Commit policy on shared files** | No. The harness has `cwd` and an execution env, not git policy; D48 makes per-task worktrees load-bearing and the seatguard git-refusal a non-load-bearing backstop [^1] | **Genuinely absent.** Keep. |
 | **Doc gates** | No. D62: every capability carries its own doc acceptance [^1] | **Genuinely absent.** Keep. |
 | **Reset/degeneration guard** | Partial. The harness has task `abort`, checkpoints, `waiting` joins, compaction, and recovery (`running`→`pending`) [^2] [^2] | **Partly reimplemented.** Investigate which half durig's guard covers. |

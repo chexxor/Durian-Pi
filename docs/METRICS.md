@@ -165,7 +165,7 @@ advances**, never against a proxy signal: the removed seat-highlight cache pinne
 stale reading forever because it keyed on submission id while assistant turns kept
 appending entries.
 
-**Measured, not assumed** (2026-10-11, live `tutor-pi.sqlite`, 14 seats): one full
+**Measured, not assumed** (2026-10-11, live store, 14 seats): one full
 per-seat page scan of 24 entries each takes **0.9–1.4 ms**. `watch` polls every
 750 ms, so this is ~0.15% of the render interval — and it is not a new scan:
 `watch` already runs exactly this page fetch per render (`readSeatHighlights`), so

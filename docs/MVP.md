@@ -72,7 +72,7 @@ Proves: seats actually route work through the queue with a real model.
 ```powershell
 cd durig
 $env:DURIG_PROVIDER="deepinfra"; $env:DURIG_DB="$PWD\scratch-review.sqlite"
-node cli.mjs up rigs/tutor-pi.rig.json
+node cli.mjs up rig.starter.json
 node cli.mjs send pm "Delegate ONE small task to seat impl using send_work: implement a hello-world endpoint. Then reply ROUTED."
 node cli.mjs queue                 # expect: #1 [queued] pm->impl ...
 node cli.mjs send impl "Check your queue and handle any queued work."
@@ -86,14 +86,14 @@ the nine-demo suite covers everything else.
 ## Review recipe — config file + seat refresh (2026-10-10)
 
 Why: an operator with no `DURIG_DB` ran `send pm` and the CLI acted on the
-default `./rig.sqlite` instead of `tutor-pi.sqlite`; the rig "looked broken"
+default `./rig.sqlite` instead of the store; the rig "looked broken"
 while being pointed at the wrong database.
 
 ```powershell
 cd durig
 Copy-Item durig.config.example.json durig.config.json   # edit paths as needed
 node cli.mjs config            # proves source + resolved DURIG_DB
-node cli.mjs up rigs/tutor-pi.rig.json --refresh   # re-apply prompts/edges
+node cli.mjs up rig.starter.json --refresh   # re-apply prompts/edges
 ```
 
 Regression guards: `node demo/config.test.mjs` (precedence, discovery, error
@@ -179,7 +179,7 @@ docs/RESEARCH.md, "Live delivery of seat activity").
 `node cli.mjs check <rig.json>` reads the rig file **and** the store in one pass
 each, and reports what is structurally wrong with the exact fix. It reads both
 because a rig that looks right in the file can be running something else: the
-tutor-pi spec declared its constitution inline while the store held a different
+a rig spec declared its constitution inline while the store held a different
 one, so 13 seats ran without the team culture and no command said so.
 
 Severity says **who can fix it**. `error` means the rig cannot do its job until
@@ -189,12 +189,12 @@ cannot judge is reported **skipped with its reason**, never as a pass.
 
 ```powershell
 cd durig
-node cli.mjs check rigs/tutor-pi.rig.json --human   # readable report
-node cli.mjs check rigs/tutor-pi.rig.json           # JSON contract; exit 1 on errors
+node cli.mjs check rig.starter.json --human   # readable report
+node cli.mjs check rig.starter.json           # JSON contract; exit 1 on errors
 node demo/check.test.mjs                            # every rule + the CLI, offline
 ```
 
-Live proof: against the live tutor-pi store it reports `single-model-rig` for all
+Live proof: against the live store it reports `single-model-rig` for all
 14 seats, which is ROADMAP item 3's motivating finding. It used to report
 `unreachable-seat` for `ux`, `sec` and `dev` as well - the converter never read
 OpenRig's rig-level `edges:` list, so three seats could not initiate a send (D26)
@@ -221,9 +221,9 @@ the first cut:
 
 ```powershell
 cd durig
-node cli.mjs metrics rigs/tutor-pi.rig.json --human        # the deliberate table
-node cli.mjs metrics rigs/tutor-pi.rig.json                # JSON contract
-node cli.mjs metrics rigs/tutor-pi.rig.json --window all   # widen past the scan bound
+node cli.mjs metrics rig.starter.json --human        # the deliberate table
+node cli.mjs metrics rig.starter.json                # JSON contract
+node cli.mjs metrics rig.starter.json --window all   # widen past the scan bound
 node cli.mjs status                                        # the ambient pointer, if anything moved
 node demo/metrics.test.mjs                                 # every measure + honesty state, offline
 ```
@@ -362,8 +362,8 @@ the active extension set.
 
 ```powershell
 cd durig
-node cli.mjs metrics rigs/tutor-pi.rig.json --human    # first line is provenance
-node cli.mjs metrics rigs/tutor-pi.rig.json            # provenance in the JSON contract
+node cli.mjs metrics rig.starter.json --human    # first line is provenance
+node cli.mjs metrics rig.starter.json            # provenance in the JSON contract
 node demo/provenance.test.mjs
 ```
 
@@ -406,16 +406,16 @@ new mechanism. Both directions ship, because the live rig has both at once.
 
 ```powershell
 cd durig
-node cli.mjs check rigs/tutor-pi.rig.json --human
+node cli.mjs check rig.starter.json --human
 ```
 
-Live proof against `tutor-pi.sqlite` (verified 2026-10-11):
+Live proof against the store (verified 2026-10-11):
 
 ```
       scribe: the rig file declares a seat this store does not hold, so a send to it fails at runtime with "unknown seat"
-      fix: create it in this store: DURIG_DB=<this store> node cli.mjs up rigs/tutor-pi.rig.json
+      fix: create it in this store: DURIG_DB=<this store> node cli.mjs up rig.starter.json
       worker: this store holds a seat the rig file does not declare, so it keeps a conversation, a stored persona and an address nothing in the file accounts for
-      fix: declare it in rigs/tutor-pi.rig.json, or start from a fresh store: up adds and refreshes seats but never removes one
+      fix: declare it in rig.starter.json, or start from a fresh store: up adds and refreshes seats but never removes one
 FAIL  1 error · 2 fix-now · 5 passed
 ```
 

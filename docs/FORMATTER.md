@@ -92,7 +92,7 @@ changed, so `node --check` has nothing to apply to (both JSON files validated wi
 
 Full `demo/*.test.mjs` loop: **94/97 exit 0**. The 3 failures (`commit-model`, `seat-commit-instructions`,
 `starter`) are a **pre-existing, committed** drift unrelated to this item: `constitution.txt` (committed)
-contains the "P3 Runbooks" clause but `rig.starter.json` / `rigs/tutor-pi.rig.json` `constitutionInline`
+contains the "P3 Runbooks" clause but `rig.starter.json`'s `constitutionInline`
 (committed, clean) do not — the tests compare the two and fail with "the inline constitution has drifted
 from constitution.txt — regenerate the starter". Both compared files are clean in git, so the failures
 reproduce at HEAD regardless of this change; they trace to commit `fe0c74c` (P3 Runbooks) landing without

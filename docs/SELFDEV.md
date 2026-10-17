@@ -8,14 +8,8 @@ A **delegate for the operator**: an agent external to the team that does not do 
 three-actor model (operator / delegate / seats) is in `../AGENTS.md`. This runbook is the *durig*
 instance of it — the team whose job is building durig itself.
 
-There are two rigs in this workspace. Do not confuse them:
-
-| Rig | What it is | Store | Rig file |
-|---|---|---|---|
-| **tutor-pi** (OpenRig) | the live product team | `tutor-pi.sqlite` | managed by OpenRig, not this CLI |
-| **durig selfdev** | the team that builds durig | `selfdev.sqlite` | `rig.selfdev.json` |
-
-Everything below is the **selfdev** team.
+The team in this workspace is the **durig selfdev** team (`selfdev.sqlite`, `rig.selfdev.json`) — the
+team that builds durig itself.
 
 ## The team
 

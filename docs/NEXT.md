@@ -664,9 +664,9 @@ the owner; `vendor/eval/` (reference clones) and `vendor/pi-main/` are gitignore
 **7 pass** (flaky) + `config.test.mjs` (a legit #621 failing-first RED). Grounded causes and fixes:
 - **Inherited repo config**: demos spawn `cli.mjs` with `{...process.env}` and so pick up the local
   `durig.config.json` (`DURIG_MAX_CONCURRENT_SEATS: 4`, a real provider/model, and — the worst part —
-  `DURIG_DB: C:/Users/Alex/dsh-Projects/tapl-decompile/durig/tutor-pi.sqlite`, a DIFFERENT project's
+  `DURIG_DB` pointed at a DIFFERENT project's store,
   store, so a demo that forgets to override `DURIG_DB` reads the wrong database — this is the live
-  `no seats in …tutor-pi.sqlite` error seen in impl's log). Fix: a hermetic test env (temp `DURIG_DB`,
+  `no seats in …` error seen in impl's log). Fix: a hermetic test env (temp `DURIG_DB`,
   `DURIG_MAX_CONCURRENT_SEATS=1`, `DURIG_PROVIDER=faux`, and do not read the repo config).
 - **Live working tree**: tests `copyFileSync("rig.starter.json", …)` and read other tracked files a seat
   is mid-editing. Fix: read fixtures from HEAD (`git show HEAD:<path>`) or run the suite from a frozen

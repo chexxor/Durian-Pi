@@ -185,7 +185,7 @@ object — keep ours as the authority).
 - **Boot ordering.** The trigger starts before network/credentials; the first pass will fail provider
   calls. Use delayed auto-start and let backoff handle it — and document that a boot `WAKE`/provider
   error is expected, not a bug.
-- **Multiple stores.** `selfdev.sqlite` and `tutor-pi.sqlite` ⇒ one host per store, parameterized
+- **Multiple stores.** separate stores ⇒ one host per store, parameterized
   (`durig install --db <path>`), never hard-coded `rig.sqlite`. Every OS artifact the host installs is
   keyed by the store — see **Instance identity** below.
 - **Upgrade under load.** The trigger runs a fixed exe path; a new pinned pi or new code is picked up

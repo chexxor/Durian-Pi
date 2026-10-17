@@ -32,7 +32,7 @@ straight:
 - **durig** — the program: **seats** (personas/roles), the cross-seat **queue** (`RigQueue`) and router
   tools (`claim_work`, `complete_work`, `send_work`, `defer_work`), the **driver** that decides whom to
   wake, the **broker** that drives, and the **observers** (`status`/`watch`/`log`/`ui`).
-- **The store** — one SQLite file = one rig (`selfdev.sqlite`, `tutor-pi.sqlite`; `rig.sqlite` by
+- **The store** — one SQLite file = one rig (`selfdev.sqlite`; `rig.sqlite` by
   default). Everything durable lives here. `*.sqlite` is gitignored.
 - **The three actors** — the **operator/delegate** (intent, rulings), the **seats** (the team), and the
   **broker** (the scheduler/supervisor process).

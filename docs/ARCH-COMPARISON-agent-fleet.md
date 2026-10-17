@@ -104,7 +104,7 @@ Legend: **✔** covered · **⊕** covered *better than durig* · **◐** partia
 | Measurement / drift metrics | ◐ | budget/audit accounting + `/af-hub-report`; not a measure-with-bands surface |
 | Deterministic process / methodology | ⊕ | `PHILOSOPHY.md` + skills with anti-rationalization tables + `just flow` gates |
 | Windows-native operation | ◐ (partial/unverified) | `coms` named pipes + installer win32 handling exist; the sandbox has no Windows backend and no end-to-end Windows flow is documented |
-| Pluggable corpus / domain (the tutor) | ✘ (out of scope by design) | it is a **software-development** fleet (spec→plan→build→test→review→ship); the tutor domain is orthogonal |
+| Pluggable corpus / domain | ✘ (out of scope by design) | it is a **software-development** fleet (spec→plan→build→test→review→ship); a specific product domain is orthogonal |
 
 ## 3. What agent-fleet does *better* — the lessons to take (already listed in `COMPETITORS.md`)
 
@@ -131,8 +131,8 @@ Legend: **✔** covered · **⊕** covered *better than durig* · **◐** partia
   backend and no supported end-to-end Windows flow is documented — while our
   seats run on **native Windows**.
 - **Purpose mismatch**: agent-fleet encodes a *software-development* lifecycle. It
-  is a rig-level competitor, not a tutor; adopting it would not advance the
-  grounded-textbook-tutor goal, and its skills (spec/TDD/review/ship) are the
+  is a rig-level competitor, not a product domain; adopting it would not advance the
+  grounded-product goal, and its skills (spec/TDD/review/ship) are the
   wrong corpus for teaching TAPL.
 - **Coupling/direction**: it is a fast-moving product at the pi-coding-agent
   layer; durig's pin discipline exists to absorb exactly that kind of churn.
@@ -163,5 +163,5 @@ stack.** Concretely, in priority order:
 - **Restart semantics**: read `fleet-codex-operations.ts` ("durable command IDs
   suppress repeats after restart") and `herdr` snapshot/resume to state precisely
   what recovers, and how it differs from `harness.resume()`.
-- **The tutor domain**: confirm the tutor-pi goals are a *corpus* on top of a
+- **The product domain**: confirm the previous-rig goals are a *corpus* on top of a
   domain-agnostic rig, so the SDLC skills are not being asked to do teaching.

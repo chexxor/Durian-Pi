@@ -17,7 +17,7 @@ nothing useful is dropped by accident.
 
 | agent-fleet feature | What it is | durig today | Decision |
 |---|---|---|---|
-| **30 skills** (SDLC) + **11 reference checklists** (`definition-of-done`, `testing-patterns`, `prompting-patterns`, …) | Pre-written, auto-triggered procedures with exit criteria | seats get inline `instructions` + a 6-tool protocol; no skill library | **adapt** — a *small* skill/reference layer for durig's own seats; not 30 SDLC skills (tutor domain differs) |
+| **30 skills** (SDLC) + **11 reference checklists** (`definition-of-done`, `testing-patterns`, `prompting-patterns`, …) | Pre-written, auto-triggered procedures with exit criteria | seats get inline `instructions` + a 6-tool protocol; no skill library | **adapt** — a *small* skill/reference layer for durig's own seats; not 30 SDLC skills (our domain differs) |
 | **15 personas** | Reusable role definitions, each hooked to a skill | durig seats have inline roles; no reusable persona library | **adapt** — personas for the self-dev rig (see the topology work) |
 | **Skill × persona × command layering** ("the *how* / the *who* / the *when*") | A stated composition model | implicit in durig's router + PM | **borrow** — name it, so seats and skills compose predictably |
 | **`setup`/`doctor`/`uninstall`** with `--preset default/full`, platform-gated features, a dry-run plan, and reconciliation | Deterministic lifecycle; a bare workspace still comes configured | `up` + `check`; no repair, no presets | **borrow** — a `doctor --fix`-style repair path and a starter preset are core to the "polished distro" goal |

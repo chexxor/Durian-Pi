@@ -17,11 +17,11 @@ something we already run or already built - a demo, a rig we operate, or a norm 
 actually follows - rather than invented for this document. Where a workflow is not
 supported yet, it says so and names the item that would.
 
-**Owner:** the `workflows.advocate` seat (`openrig/rigs/tutor-pi/agents/advocate`). It
+**Owner:** the `workflows.advocate` seat (the previous rig's advocate agent). It
 owns this document and the workflow set, questions durig changes for workflow impact, and
 labels every workflow with the evidence class described under "Who owns this". It is
-deliberately not the tutor's learner-facing UX seat (`design.ux`) - that one owns the
-tutor's surface, this one owns durig's workflows - and it differs from the docs seat
+deliberately not the product's user-facing UX seat - that one owns the
+product surface, this one owns durig's workflows - and it differs from the docs seat
 (`scribe`) by owning the *workflow set* rather than the feature inventory.
 
 ## How to read a workflow
@@ -91,7 +91,7 @@ originator closes the item.
 
 **Must not break:** (a) the reviewer receives the *artifact*, not a summary of it -
 a summary cannot be checked; (b) closure does not happen on the author's word alone -
-silence is not a sign-off. This is exactly the team norm the tutor-pi rig already
+silence is not a sign-off. This is exactly the team norm the previous rig already
 encodes for its 2-member pods, and the reason `check` has a `no-verifier-seat` rule and a
 `single-model-rig` rule.
 
@@ -369,7 +369,7 @@ These are the three things `check` can already fail a rig for, so shipping them 
 retrieval for W2's evidence half, and that is an operator scope ruling (item 4), not a
 default anyone should inherit.
 - **not recommended by default** - terse-voice extensions (caveman's skill). It helps
-seat-to-seat coordination and is actively wrong for a tutor's student-facing
+seat-to-seat coordination and is actively wrong for a product's user-facing
 explanation, which is the role-scoping axis item 20 already identified. Under D29's
 cost rule ("off must cost nothing at all") it must therefore be off, and switchable per
 seat role rather than rig-wide.
@@ -398,7 +398,7 @@ loop #5), and the pods question (item 11).
 **Known gap in this document:** W2 is written as the intended workflow and is **not fully
 supported** - the evidence half is missing. Naming the loop lets us see that the
 verification workflow holds today only for artifacts a reviewer can read in a transcript,
-and that is a real limit on what the tutor rig can be trusted to do.
+and that is a real limit on what the product rig can be trusted to do.
 
 ## Docs ownership
 

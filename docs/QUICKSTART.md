@@ -37,7 +37,7 @@ Environment variables still win, but you can put any of these values in
 
 ```json
 {
-  "DURIG_DB": "C:/Users/you/.../durig/tutor-pi.sqlite",
+  "DURIG_DB": "./selfdev.sqlite",
   "DURIG_PROVIDER": "deepinfra",
   "DURIG_MODEL": "zai-org/GLM-5.3-Flash",
   "DEEPINFRA_API_KEY": "put-your-key-here"

@@ -78,7 +78,7 @@ runs `new Function('sandbox','with(sandbox){…}')` (arbitrary in-process JS);
 `app.use(cors())`; provider keys live in server config.
 
 **What it does not give us:** durability, seat/pod topology, skills, grounding,
-or a Windows story. It solves research-report generation, not textbook tutoring.
+or a Windows story. It solves research-report generation, not a grounded domain with real users.
 
 ---
 

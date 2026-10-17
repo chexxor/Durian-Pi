@@ -164,15 +164,15 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
 0. **Fix the dropped constitution. ✅ done.** `scripts/from-openrig.mjs` emits
    `constitutionInline`, but `cmdUp` read only `spec.constitution`, a file path —
    so the field was dead and a converted rig's constitution never landed.
-   Confirmed by reading storage: `tutor-pi.sqlite` held the 411-byte generic
-   `constitution.txt`, not the tutor-pi team culture, so all 13 seats ran without
+   Confirmed by reading storage: the live store held the 411-byte generic
+   `constitution.txt`, not the rig's team culture, so all 13 seats ran without
    the rig's own grounding rule while appearing correctly configured. Fixed in
    `cmdUp`, with `demo/constitution.test.mjs` covering inline, file, absent and
    both-set specs, shown to fail against the old behaviour before it passed.
-   *Applied 2026-10-11:* `DURIG_DB=./tutor-pi.sqlite node cli.mjs up
-   rigs/tutor-pi.rig.json`, after backing the store up to
-   `C:/tmp/tutor-pi.sqlite.bak-2026-10-11`; the stored text is now byte-identical to
-   the spec's `constitutionInline` (1094 bytes, `# tutor-pi team culture`).
+   *Applied 2026-10-11:* `DURIG_DB=<live store> node cli.mjs up
+   the generated rig spec, after backing the store up to
+   `C:/tmp/<live store>.bak-2026-10-11`; the stored text is now byte-identical to
+   the spec's `constitutionInline` (1094 bytes, the rig's team culture).
    *Open design question it exposed:* a rig constitution **replaces** the generic
    default rather than augmenting it, so those seats no longer carry the generic
    P1/P2/P3 priority framing. The team culture restates all four rules, so nothing
@@ -397,7 +397,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     later entry on its own, so column alignment and turn grouping differ between
     them. Small, self-contained.
 10a. **A `stray-seat` rule in `check`.** The store can hold a seat the spec does not
-    declare: the live `tutor-pi.sqlite` carries a `worker` left over from an
+    declare: the live store carries a `worker` left over from an
     earlier `up` of `rig.v2.json`, and `up` only ever adds or refreshes, so it
     stays and nothing says so. `check` already reads both sides in one pass, which
     is exactly this class of disagreement, so the rule is a fit rather than a new
@@ -563,6 +563,16 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     loaded transcript renders a multi-line turn as multiple viewport rows with its paragraph breaks
     intact (a golden/test pins a three-line + blank-line turn); a line longer than the viewport still
     wraps rather than truncating; the live partial uses the same rule.
+
+124. **TUI: show the work item the selected seat is actively working on (operator request, 2026-10-17).**
+    When the operator selects a seat (in the seat list and in that seat's conversation view), show the
+    details of the queue item the seat currently holds: `id`, `subject`, `body`, `status`, `from`/`to`,
+    and time-in-state. Today the TUI shows seat activity and the transcript but not the item the seat is
+    working on, so the operator must cross-reference `queue`/`status` by id. *Grounded in:* the `RigQueue`
+    document (`src/rig.mjs`), the read API (`src/readapi.mjs`), the TUI client (`src/tui/client.mjs`).
+    *Open call (designer):* where the block lives (header vs status area), its length cap, and the 48-col
+    floor. *Owner:* impl (TUI) + designer (surface). *Acceptance:* selecting a seat shows the claimed
+    item's id, subject, body, and status; a golden frame pins it at 80×24; no new write path.
 
 **Sequencing (pm, 2026-10-17):** both behind the operator priority train (#1066) — pm did NOT pull
 them forward, and the impl items are HELD until pm releases.
@@ -802,7 +812,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
    question of whether a plugin loads. (ii) **Telemetry is on by default** (`caveman telemetry off`,
    `DO_NOT_TRACK=1`), which is network egress, so a `security.sec` position comes
    **before** adoption under our own norms. (iii) **Scope it by seat role**: terse
-   is fine for seat-to-seat coordination and wrong for a textbook tutor's
+   is fine for seat-to-seat coordination and wrong for a product's
    student-facing explanation — the same seat-role axis `check`'s verifier rule
    already reasons about. **Correction 2026-10-11:** the savings ARE verifiable —
    entries carry `usage` and a `cost` breakdown (F4, `docs/DOGFOOD.md`), so a
@@ -2099,8 +2109,7 @@ spooled intent is delivered ~200ms in while it generates). The item-54 gate for 
     — see the CLI table in `docs/BROKER-SUPERVISION.md` §11. `install` emits the unit/plist/service config
     and the per-platform kill-tree primitive (Windows Job Object vs POSIX process group). Either way:
     delayed auto-start, log rotation, a stop/drain window **≥ 900 s** (> the 600 s stream timeout +
-    margin), restart-on-nonzero with backoff, and a store path parameter (`selfdev.sqlite`,
-    `tutor-pi.sqlite`) that refuses a network/synced filesystem on every OS. System-daemon mode removes
+    margin), restart-on-nonzero with backoff, and a store path parameter (`selfdev.sqlite`) that refuses a network/synced filesystem on every OS. System-daemon mode removes
     the console, so the TUI must be a remote client (item 52's `watchEvents()` path, gated on item 55);
     the per-user agent keeps it in-process. The account/identity recipe is in `docs/BROKER-SUPERVISION.md`
     §10.
@@ -2259,7 +2268,7 @@ recurrences; `pm` sequences them against 61–71.
     of dying, and surface it as attention. *Owner:* impl · *Where:* `cli.mjs` `cmdServe`, `src/broker.mjs`.
     *Acceptance:* a corrupt conversation degrades to a notice; the broker keeps driving.
 79. **Wrong-rig guard for the configured store path.** `durig.config.json` set `DURIG_DB` to another
-    project's store (`tapl-decompile/tutor-pi.sqlite`), so a bare command reads the wrong rig. Warn
+    project's store, so a bare command reads the wrong rig. Warn
     (or refuse) when the configured store is outside the seat root / differs from a repo-local DB.
     *Owner:* designer/impl · *Where:* `cli.mjs` entrypoint, `src/config.mjs`, `src/checkup.mjs`.
     *Acceptance:* the wrong-rig case is named, not silently obeyed.

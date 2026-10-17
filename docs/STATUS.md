@@ -9,8 +9,8 @@ rebased onto upstream `main` â€” both rebuilt and re-verified (D17, and
 `../docs/TUIOS-PRS.md` in the project workspace). Later the same day `check` shipped (D25)
 and found that the converter was dropping OpenRig's rig-level `edges:` list (D26);
 the fix restored every lost send permission, the docs pod joined the rig (D27),
-and the corrected constitution was applied to the live tutor-pi store (backup:
-`C:/tmp/tutor-pi.sqlite.bak-2026-10-11`). Finally, measurement shipped (D28):
+and the corrected constitution was applied to the live store (backup:
+`C:/tmp/<store>.bak-2026-10-11`). Finally, measurement shipped (D28):
 `metrics`, four measures, metric notices on the attention channel â€” 21 demos. The
 OpenRig daemon was also recovered (dead since 2026-10-06, and reported as a
 starved event loop because a recycled PID was trusted as the daemon), and the
@@ -357,5 +357,6 @@ FEATURES.md changes this item: added the ASK F broker-wired-worktree/dirty-sourc
 src/broker.mjs claim path, src/worktree.mjs uncommittedInSource + carryVisibleState,
 demo/worktree.test.mjs and demo/worktree-lifecycle.test.mjs (the row has since been renamed by
 impl to Dirty-source carry (amends F23 refusal, ASK F #506)).
-**Not added at the time (correct withholding):** the status seat last-activity row (#502 / ASK B) - I verified the field did NOT exist in the code then (cmdStatus/readRigHealth exposed no last-activity), so it was correctly not documented (never-document-what-does-not-exist, not copied on trust).
+**Not added at the time (correct withholding):** the status seat last-activity row (#502 / ASK B) - I verified the field did NOT exist in the code then (cmdStatus/
+readRigHealth exposed no last-activity), so it was correctly not documented (never-document-what-does-not-exist, not copied on trust).
 **Superseded since:** the lastActivity field has LANDED - impl #618 cli status seat last-activity, ISO-8601 via readRigHealth (src/readapi.mjs sets seat.lastActivity = new Date(lastTs).toISOString()), and the FEATURES.md status row (section 2) now names it. The tokens/cost/model metrics row is #504's (lead-coordinated), not added here. Nothing pushed.

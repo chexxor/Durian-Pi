@@ -13,7 +13,7 @@ file elsewhere; it is evidence to act on, and each one names where it lands.
 
 ```powershell
 cd durig
-$env:DURIG_DB="./dogfood.sqlite"          # keep it off the live tutor-pi store
+$env:DURIG_DB="./dogfood.sqlite"          # keep it off the live store
 node cli.mjs up rig.v2.json               # a 2-seat rig: pm + worker
 node cli.mjs send pm "<a real task>"      # must be work we actually want
 node cli.mjs status                       # attention + measures
@@ -21,7 +21,7 @@ node cli.mjs queue                        # did it route?
 node cli.mjs log worker 20                # what actually happened
 ```
 
-Isolate the database. The live `tutor-pi.sqlite` holds the real rig, and dogfood
+Isolate the database. The live store holds the real rig, and dogfood
 runs are noisy by nature.
 
 **Prefer a file for the prompt.** `send` takes text inline only, and a backtick in
