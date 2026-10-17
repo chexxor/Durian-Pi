@@ -29,12 +29,19 @@ registered. Everything below this block is historical.)_
    `FEATURES.md` (80), `STATUS.md` (32), `SELF-ADMIN.md` (13); `ROADMAP.md`/`WORKFLOWS.md` are clean.
    Spooled a `pm` intent (`opr-20261017-roundtrip-docs`) to fix the encoding + confirm the #1179
    registration lag; broker log `INTENT delivered=1 dead=0` at `05:56:48Z`.
+5. **ROADMAP 130 DELIVERED** (delegate): relabelled the "longer plans hurt accuracy" claim in
+   `docs/reviews/reducing-llm-agent-tool-calls.md` and gave `[^6]` its `advertised-elsewhere` evidence
+   class (commit `48d9932`). Spooled a `pm` sequencing addendum (`opr-20261017-roundtrip-sequencing`,
+   delivered `06:05:35Z`): **126 waits on #1192** (item 27's measure); **128/129 fold into codemode
+   (item 32)'s `security.sec` gate**; **127 waits on ROADMAP 115 + a quiet tree**.
 
 ## NEXT SESSION
 
-**Current item (clock-out):** the delegate's work this session is committed; the team's next action is
-`pm`'s — `opr-20261017-roundtrip-docs` was delivered (register/sequence ROADMAP 126–130 + fix the four
-mojibake docs + confirm #1179). Nothing blocks the delegate. Live queue is unchanged: `#1151` (impl, claimed — seat-root fallback guard, order 3/3), `#1182` (impl,
+**Current item (clock-out):** ROADMAP **130 DELIVERED** (delegate). The delegate's other work this
+session is committed; the team's next action is `pm`'s — `opr-20261017-roundtrip-docs` +
+`opr-20261017-roundtrip-sequencing` were delivered (register/sequence ROADMAP 126–130 with 126 waiting
+on #1192; fix the four mojibake docs; confirm #1179). **Next round-trip item after 130: 126, once #1192
+lands.** Nothing blocks the delegate. Live queue is unchanged: `#1151` (impl, claimed — seat-root fallback guard, order 3/3), `#1182` (impl,
 claimed — resume for #1151), `#1189` (qa, claimed — ROADMAP 97 harness; live runs pending operator spend),
 `#1190` (qa, claimed — VERIFY #1163, landing-safety B). `#1169`/`#1202` track the **landing-pass
 follow-up for the 4 SKIPPED branches** (#658/#662/#828/#837); `#1211` tracks the branch-deletion/git-guard
