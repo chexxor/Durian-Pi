@@ -14,7 +14,7 @@ import {
 	createWriteTool,
 } from "@earendil-works/pi-durable/tools";
 import { Type } from "@earendil-works/pi-ai";
-import { seatsAreVerifier } from "./checkup.mjs";
+import { seatsAreVerifier } from "./verifierrole.mjs";
 import { authorEnv, verifierEnv } from "./confine.mjs";
 import { RigQueue, Seats } from "./rig.mjs";
 import { prepareSeatWorkspace } from "./worktree.mjs";

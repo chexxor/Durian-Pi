@@ -74,11 +74,23 @@ import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readRigHealth, readSeatList } from "./src/readapi.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree } from "./src/worktree.mjs";
-import { auditRig, formatCheck } from "./src/checkup.mjs";
+import { mergeInProgress, mergeRefusal } from "./src/mergeguard.mjs";
 import { SeatGuard } from "./src/seatguard.mjs";
 import { SeatTools, fillRoster, makeSeatEnv, scopeSeatTools } from "./src/seattools.mjs";
 import { createWatchScreen, formatSnapshot } from "./src/watchview.mjs";
 import { readFeed } from "./src/eventfeed.mjs";
+
+// src/checkup.mjs is loaded LAZILY (dynamic import). It is a large audit module that
+// nothing on the hot path needs — `init` and `check` are its only callers — and loading it
+// at startup is how the 2026-10-17 incident became total: a `<<<<<<<` marker left in a
+// mid-merge checkup.mjs made cli.mjs fail to LOAD, so status/queue/run/serve all died with
+// a SyntaxError. NOTHING loaded on the hot path may import checkup statically again;
+// src/verifierrole.mjs exists for the one predicate metrics/seattools need at runtime.
+let checkupModule = null;
+async function loadCheckup() {
+  checkupModule ??= await import("./src/checkup.mjs");
+  return checkupModule;
+}
 
 // Effective configuration for this process: environment over
 // durig.config.json over built-in defaults (see src/config.mjs). Resolved
@@ -787,6 +799,7 @@ async function cmdInit() {
   } catch (err) {
     fail(`init: invalid JSON in the starter rig ${starterSource}: ${err?.message ?? err}`);
   }
+  const { auditRig } = await loadCheckup();
   const audit = auditRig({
     rig: starterSource,
     spec: starterSpec,
@@ -2460,6 +2473,7 @@ async function cmdCheck(rigFile, human, rest = []) {
       stored = { reason: "unreadable", error: String(err?.message ?? err) };
     }
   }
+  const { auditRig, formatCheck } = await loadCheckup();
   const result = auditRig({ rig: rigFile, spec, specConstitution, stored, storedSeats, modelsBySeat, queueItems });
   const seatCount = (spec.seats ?? []).length;
   if (human) {
@@ -2524,7 +2538,26 @@ usages:
 `;
 
 const [, , cmd, ...rest] = process.argv;
+
+// Verbs that MUTATE the store or the working tree. Read verbs are deliberately absent: a
+// seat must be able to DIAGNOSE a stuck merge, not be locked out of its own rig.
+const WRITE_VERBS = new Set([
+  "up", "init", "send", "run", "serve", "stop", "reset", "clean", "compact",
+  "resume", "doctor", "format", "worktree",
+]);
+
 try {
+  // Landing safety (lead #1164 Q2), checked FIRST — before any storage or provider work: a
+  // write verb must not act on a working tree that is mid-merge. The guard comes from a
+  // dependency-free module so it cannot be disabled by the very fault it exists to catch.
+  // Only MUTATIONS are refused: a `--dry-run` writes nothing, and `serve --stop` is a
+  // control action the operator must keep even mid-merge (a stuck merge is exactly when
+  // the broker most needs stopping).
+  const stoppingBroker = cmd === "serve" && rest.includes("--stop");
+  if (WRITE_VERBS.has(cmd) && !rest.includes("--dry-run") && !stoppingBroker) {
+    const merge = mergeInProgress(process.cwd());
+    if (merge) fail(mergeRefusal(cmd, merge));
+  }
   if (cmd === "up") {
     // Auto-start the resident broker for an INTERACTIVE `up` (stdout is a TTY, like the
     // human views in D19), so a terminal `up` leaves the queue self-driving; piped or
