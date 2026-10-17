@@ -52,10 +52,16 @@ main. The store is now FREE (no `genlock.*`, no `serve`/`run`/`send` process, no
 a seat hosted BY the broker cannot stop that broker and then keep landing; #1390's GO needs a landing path
 that runs OUTSIDE the broker (or the broker restarted and the pass re-driven once the upgrade is done).
 
-**Re-drive NOTED for pm (operator-requested):** intent `opr-20261017-redrive-1390` spooled
-(`.spike/delegate/intent-redrive-landing-1390.md`) — re-route #1390 with a landing path outside the
-broker, account for #1383, verify each tip. It sits in `selfdev.sqlite.broker.inbox/` until the broker
-restarts (operator is taking a broker upgrade).
+**Re-drive delivered + broker upgraded (operator-directed, 2026-10-17).**
+- The re-drive note `opr-20261017-redrive-1390` was drained on broker restart (`INTENT delivered=1
+dead=0` 08:46:20Z) and impl re-engaged #1390 (opened #1395).
+- **Broker upgrade DONE:** the pi runtime pin moved `4954d760` -> upstream tip `8efd314f` via
+  `node scripts/sync-pi.mjs --update --link` (5 packages built in `vendor/pi-main`). **Validated BEFORE
+  keeping:** demo suite **115/0**, `demo` PASS, TUI **15/15**. Committed `234e06e` (`pi-main.pin.json`
+  only; `--no-save` kept the lockfile clean — no new durig code was pending, origin 0 behind / 6 ahead).
+- Broker restarted on the new runtime: `START pid=37596` 08:46:18Z, PASS advancing, heartbeat fresh.
+- **Revert path if a regression appears:** `node scripts/sync-pi.mjs --unlink` (back to released
+  packages) + restore the pin sha with the edit tool (never `git restore`/`checkout --`).
 
 ## NEXT SESSION
 
