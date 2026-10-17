@@ -19,6 +19,8 @@
 // add-a-signal pattern as #145) — "we hope nobody echoes a key" becomes "if a
 // key lands, we SEE it".
 
+import { spawnSync } from "node:child_process";
+
 import * as config from "./config.mjs";
 
 // The value classifier. Reused from src/config.mjs (#700) when that export is
@@ -56,6 +58,55 @@ function familyOf(token) {
 	return "secret";
 }
 
+/* ── git-object echoes are NOT secrets (security #1620/#1712; lead #1660) ──
+ * A transcript that quotes a branch tip (`HEAD=<sha>`, `pin <sha>`, `commit <sha>`) is the single
+ * collision class that floods the notice — hundreds of secret-shaped locations, ONE class, ZERO key
+ * material. The exclusion test is NOT "looks like 40 hex": a real secret can be pure-hex40. It is
+ * "CONFIRMED a git object": a pure-hex run in a git-hash CONTEXT is probed with `git cat-file -e`,
+ * and ONLY a confirmed object is excluded, so a hex-encoded secret that is not an object STILL FIRES.
+ */
+const HEX_OBJECT_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
+// The words a git hash is quoted with in prose, immediately before the hash.
+const GIT_HASH_CONTEXT_RE = /(?:\b(?:head|commit|commits|tree|blob|tag|parent|parents|merge|base|sha|sha1|sha256|rev|revision|pin|object|tip|checkout|at)\b\s*[:=]?\s*|->\s*)$/i;
+// The `CTX=<hash>` / `CTX: <hash>` whole-chunk form (the token regex keeps `=`/`:` inside a token).
+const GIT_HASH_PAIR_RE = /^(?:head|commit|tree|blob|tag|parent|merge|base|sha|sha1|sha256|rev|revision|pin|object|tip)\s*[:=]\s*([0-9a-f]{40}|[0-9a-f]{64})$/i;
+
+const gitObjectMemo = new Map();
+/**
+ * Confirm a 40/64-hex string resolves as a git object in `cwd` — THE exclusion test (lead #1660).
+ * Memoized per (cwd, hash). A failure (not a repo, no such object, no git) is "not confirmed", so
+ * the token still fires — the fail-safe direction. Exported so a caller can reuse the probe.
+ *
+ * @param {string} hex a lowercase 40/64-hex string
+ * @param {string} [cwd]
+ * @returns {boolean}
+ */
+export function isGitObject(hex, cwd = process.cwd()) {
+	const key = `${cwd}\u0000${hex}`;
+	if (gitObjectMemo.has(key)) return gitObjectMemo.get(key);
+	let ok = false;
+	try {
+		ok = spawnSync("git", ["cat-file", "-e", `${hex}^{object}`], { cwd, stdio: "ignore" }).status === 0;
+	} catch {
+		ok = false;
+	}
+	gitObjectMemo.set(key, ok);
+	return ok;
+}
+
+/**
+ * Is this candidate a CONFIRMED git-object echo (and therefore not a secret)? `probe` decides
+ * objecthood (default: the real `git cat-file` check). A bare hex with NO git context is never an
+ * echo — it is judged as a value on its own.
+ */
+function isGitObjectEcho(value, text, at, probe) {
+	const pair = GIT_HASH_PAIR_RE.exec(value);
+	const hex = pair ? pair[1] : HEX_OBJECT_RE.test(value) ? value : null;
+	if (hex === null) return false;
+	if (!pair && !GIT_HASH_CONTEXT_RE.test(text.slice(0, at))) return false;
+	return probe(hex.toLowerCase()) === true;
+}
+
 // A candidate token is a run of characters with no whitespace, quotes, backticks
 // or the brackets that delimit a value in prose or in JSON. `=` and `:` are NOT
 // boundaries here — a high-entropy token may contain `=` (base64 padding) — so a
@@ -84,16 +135,21 @@ function candidateValues(raw, start) {
  * Secret-shaped tokens in one text segment.
  *
  * @param {string} text
+ * @param {{isGitObject?: (hex: string) => boolean}} [opts] `isGitObject` decides whether a
+ *   git-hash-context hex is a real git object; it defaults to the real `git cat-file -e` probe.
+ *   Pass a stub to keep the call pure in a unit test.
  * @returns {Array<{offset:number, family:string}>} one entry per secret-shaped
  *   token, naming its character offset and family — NEVER the token itself.
  */
-export function secretTokens(text) {
+export function secretTokens(text, { isGitObject: probe = isGitObject } = {}) {
 	const out = [];
 	if (typeof text !== "string" || !text) return out;
 	for (const m of text.matchAll(TOKEN_RE)) {
 		const raw = m[0];
 		const start = m.index ?? 0;
+		if (isGitObjectEcho(raw, text, start, probe)) continue; // the whole chunk is `HEAD=<sha>` etc.
 		for (const { value, at } of candidateValues(raw, start)) {
+			if (isGitObjectEcho(value, text, at, probe)) break; // the RHS is a confirmed git object
 			const family = familyOf(value);
 			if (family) {
 				out.push({ offset: at, family });
