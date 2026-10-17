@@ -2149,3 +2149,32 @@ a short CJK quotation and a CJK code span do NOT (negative fixtures); the superv
 handoff is asserted. RED before (the export is absent → import fails), GREEN after; full suite 102/0.
 
 **Status:** implemented and committed (delegate pass).
+
+## D86 — Landing is agent-owned with a per-type merge checklist; verify later, do not over-automate (2026-10-17)
+
+**Decision.** Landing a branch onto `main` is an **agent responsibility** defined by the **W6** workflow
+(`docs/WORKFLOWS.md`) and the checklist in `docs/runbooks/merge.md`: a **universal** gate (item id + one
+concern + explicit paths; independent review of the artifact; `node --check`; the covering demo with
+failing-first evidence; clean merge; no push; never merge a snapshot branch) plus a **type block**
+(bugfix / feature / research-spike / docs-only). There is deliberately **no `land` verb, no broker hook,
+no auto-merge**. Verification is **later and read-only**: the delegate re-runs the branch audit
+(the `merge.md` Diagnose block) and closes the gap measured by **ROADMAP item 100** (unlanded-verified
+count + time-to-land).
+
+**Why.** The 2026-10-17 audit found 15 branches with verified-but-unlanded work: landing was a **batched,
+untriggered step with no visibility**, so completions outpaced it and the branches accumulated while the
+store read `done`. The operator prefers **better agent instructions + trust, verified later**, over more
+machinery inside the broker/supervisor/durig itself (a stated, deliberately-unarticulated discomfort with
+over-automating the system's own operation).
+
+**Alternatives.** (a) Auto-land on `complete_work` — rejected: more broker/supervisor machinery, against
+the operator preference, and it would bypass the per-type gate. (b) A blocking `check` gate — rejected
+for now: verification is periodic, not stop-the-world, and an upstart project should not add ceremony
+that has not demonstrated value. (c) Leave it unwritten — rejected: the runbook + W6 are the instruction
+half, and item 100 is the value test.
+
+**Value test.** If item 100's unlanded count stays near 0 without prompting, the process earns its place;
+if it regularly exceeds a threshold, the landing step wants a different trigger — not more process.
+
+**Status:** docs landed (`d1326da`); ROADMAP item 100 registered; the one-time landing pass routed to
+`pm` (`opr-20261017-landing-pass` + pre-flight `opr-20261017-landing-preflight`).

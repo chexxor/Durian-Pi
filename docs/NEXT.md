@@ -8,16 +8,23 @@ runbook (W6), and ROADMAP item 100 for landing-health metrics. See **NEXT SESSIO
 
 ## NEXT SESSION
 
-**Current item:** the team's next work — `pm` releases the holds and runs the **landing pass** for the 15
-verified-but-unlanded branches (routed as `opr-20261017-landing-pass`), then the top-three: **`#1087`**
-(ROADMAP 97, qa, measure-first) → TUI **`#1109`** (99 bug) and **`#1108`** (98 feature) → **`#1151`**
-(seat-root guard). The delegate has done its part (cleanup + process docs); the landing execution is the
-team's.
+**Current item (clock-out):** wait for the team's **landing pass**, then verify + clean up. `pm` was
+routed to land the 15 verified-but-unlanded branches (`opr-20261017-landing-pass`, with the pre-flight
+`opr-20261017-landing-preflight`: 11 clean / 4 conflict). After it runs, re-audit and delete only the
+**merged** branches; then pick up the top-three: **`#1087`** (ROADMAP 97, qa, measure-first) → TUI
+**`#1109`** (99 bug) and **`#1108`** (98 feature) → **`#1151`** (seat-root guard).
 
-**Known blocker:** none blocking the delegate. The operator holds **push** (lands stay local until you
-push), and the **#994** Prettier-normalize quiet window is still undeclared.
+**Known blocker:** none blocking the delegate; the team's landing pass is the dependency. The operator
+holds **push**; the **#994** quiet window is undeclared. **Do NOT delete a branch with
+`git rev-list --count main..<b>` > 0** — that loses unlanded work.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Next-session checklist (the landing cleanup):**
+1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`
+2. Delete **only** `ahead=0` branches: `git branch -d <b>` (safe — refuses anything unmerged).
+3. Any still `ahead>0` means the landing pass is incomplete: report to `pm`; never `-D`.
+4. See `docs/runbooks/merge.md` for the per-type checklist and the audit.
 
 **This pass (all done):**
 1. **Branch cleanup:** deleted the 18 fully-merged local branches (`git branch -d`, all succeeded); 18
