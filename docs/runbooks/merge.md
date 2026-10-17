@@ -24,8 +24,16 @@ inverse is worse — landing unverified or un-scoped work is the shared-tree cor
 radius: a bad merge touches every seat's base tree.
 
 ## Preconditions
-- Git only — this opens **no store Harness**, so the broker need not be stopped.
-- **Serialized:** one landing at a time; do not merge while another commit/merge to `main` is in flight.
+- **Read-only diagnosis needs no broker stop; a landing pass does.** `Diagnose` below is git-only and
+  safe while the rig drives, but a merge changes the **shared working tree** — and the live rig reads it.
+  A conflicted merge leaves `.git/MERGE_HEAD` and `<<<<<<<` markers in tracked files; because `cli.mjs`
+  statically imports `src/checkup.mjs`, a conflict there makes **every** `node cli.mjs` verb fail to load
+  (`SyntaxError`). So a landing pass runs in an **exclusive window**: stop the broker
+  (`broker-safe-change.md`) and confirm **no `genlock.*` is held** before the first merge; restart it
+  after the pass verifies. This is the 2026-10-17 landing-safety incident (see
+  `docs/reviews/landing-safety-2026-10-17.md`).
+- **Serialized:** one landing at a time; never merge while another commit/merge to `main` is in flight or
+  another seat is generating.
 - The branch's worktree is **not mid-edit**: a linked worktree (`item-<id>`) must be clean, or removed,
   never merged while a seat holds uncommitted edits on it.
 - The branch is **verified** (qa/auditor ack) and **mergeable** (clean merge into current `main`).
@@ -52,7 +60,8 @@ branch that fails a row is not ready: send it back through W2; do not merge it "
       changes have designer/advocate sign-off.
 - [ ] `node --check` passes on every changed `.mjs`.
 - [ ] The covering demo passes, and the **failing-first evidence** is named (for code).
-- [ ] Merges cleanly into current `main`, or a named conflict-resolution plan exists.
+- [ ] Merges cleanly into current `main`, or a named conflict-resolution plan exists. A landing pass
+      with conflicts must never leave the shared tree mid-merge (see Do step 2).
 - [ ] No push/publish (the operator holds push).
 - [ ] **Never merge a snapshot/archive branch** (`item-148`, `selfdev-*`; `BRANCH-AUDIT-2026-10-14.md` —
       they sit on old bases and would revert `main`).
@@ -87,7 +96,10 @@ branch that fails a row is not ready: send it back through W2; do not merge it "
    ```bash
    git merge --no-ff <sha> -m "merge: land <branch> onto main (#<item>)"
    ```
-   Resolve conflicts in the merge commit; never force, never rebase `main`.
+   Resolve conflicts in the merge commit; never force, never rebase `main`. **Never leave the shared tree
+   mid-merge**: resolve to completion in the same operation, or `git merge --abort` immediately if you
+   cannot. For a multi-branch pass where any branch conflicts, prefer landing in a scratch/detached
+   worktree off `main` and advancing `main` only once the result is clean.
 3. Run the item's covering demo on the merged result.
 4. Remove the item's worktree if it is clean: `git worktree remove <path>` then `git worktree prune`.
 
@@ -100,8 +112,10 @@ node <the item's demo>                 # exit 0
 Then delete the branch: `git branch -d <branch>` (safe — `-d` refuses anything unmerged).
 
 ## If it fails
-- A conflict you cannot resolve cleanly: **stop and report**; send the branch back for a rebase (W2) and
-  name the conflict. Never force.
+- A conflict you cannot resolve cleanly: **`git merge --abort` before anything else** — an unresolved
+  shared tree breaks `cli.mjs` for the whole rig (`.git/MERGE_HEAD` in a statically-imported module makes
+  every verb a `SyntaxError`). Then **stop and report**; send the branch back for a rebase (W2) and name
+  the conflict. Never force.
 - `git branch -d <branch>` is refused by the seatguard (`refused by durig: would delete a branch`): the
   landing is still complete (the sha is an ancestor of `main`); leave the merged branch in place and
   report it — branch deletion is guard-blocked for author seats, so the operator (or a non-author seat)
