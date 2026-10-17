@@ -103,6 +103,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [broker-down-or-stalled.md](broker-down-or-stalled.md) | seats idle with queued work; no `serve` process; log stops | yes |
 | [broker-safe-change.md](broker-safe-change.md) | a model/constitution/reset change must apply without corrupting the store | yes |
 | [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error` | yes |
+| [store-secret-detected.md](store-secret-detected.md) | a `secret_detected` notice: secret-shaped content is in the committed store | no |
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language / emitting a tool call as text | yes |
 | [write-corruption-recovery.md](write-corruption-recovery.md) | a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line | maybe |
 | [compact-a-seat.md](compact-a-seat.md) | a seat's context is saturated and a reset would lose durable context | yes |
@@ -123,7 +124,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | Mechanism | Runbook(s) |
 |---|---|
 | Broker / `serve` | broker-down-or-stalled, broker-safe-change |
-| Store / `pi.live` | store-corruption-recovery |
+| Store / `pi.live` | store-corruption-recovery, store-secret-detected |
 | Seats | seat-reset, compact-a-seat |
 | Write guard / source files | write-corruption-recovery |
 | Worktrees | leaked-worktrees |
