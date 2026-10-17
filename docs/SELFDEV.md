@@ -46,12 +46,12 @@ node cli.mjs status                       # attention + non-terminal work
 node cli.mjs queue                        # the backlog
 node cli.mjs run                          # drive to quiescence
 node cli.mjs run --watch                   # stay resident
-node cli.mjs send pm --body-file <file>    # deliver the operator's intent (never inline)
+node intent.mjs pm --body-file <file>  # deliver operator intent via the spool (the broker delivers; never inline)
 node cli.mjs log impl 30                   # what actually happened
 ```
 
 **The seat root is not declared in `rig.selfdev.json`.** A seat resolves to the `cwd` of the
-`run`/`send` command that wakes it (dogfood F12), so running from `durig/` lets seats edit the live
+write-side command that wakes it (dogfood F12), so running from `durig/` lets seats edit the live
 tree. Isolate first:
 
 ```bash
@@ -86,23 +86,25 @@ dies, no claimed work is re-woken and nothing downstream can progress. Fix #110 
 ## Operational pitfalls (learned driving the team, 2026-10-13)
 
 - **Do not poll or wait on a background seat run; the operator notifies you when it completes.**
-  Dispatch the `send`/`run` detached, note the pid and the output file, and continue with read-only
+  Dispatch a heavy write as a backgrounded `run` (or spool a message via `intent.mjs` and read the
+  reply from `log`/`status`), note the pid and the output file, and continue with read-only
   work or hand back. Long bounded `sleep`/`tasklist` monitor loops waste the session and were
 explicitly retired by the operator (2026-10-15). When the operator says a run is done, read its
   `.out` (the JSON `settledStatus`) and the queue row, then take the next step.
 
 - **Two CLI *drivers* on one store is the anti-pattern — not concurrency itself.** The
-  store/harness is single-writer: two `send` processes collided on an entry id
+  store/harness is single-writer: two write-side processes collided on an entry id
   (`ID n already belongs to entry`) and one message was *silently dropped* (dogfood F24).
-  The `send` path retries (#310, D42), but `up`/`run` are not covered, and two drivers
-  double-wake (D45). This is a *store* rule, not a *files* rule: per-task worktrees let
+  The write path retries (#310, D42), but `up`/`run` are not covered, and two drivers
+  double-wake (D45). This is why writes go through the broker spool (`intent.mjs`) while the
+  broker drives. This is a *store* rule, not a *files* rule: per-task worktrees let
   different seats edit concurrently, and `genlock` already leases N cross-process
   generation slots (`DURIG_MAX_CONCURRENT_SEATS`). The sanctioned concurrency is **one
   broker (`serve`) owning the store and driving up to N seats**, each in its own
   worktree; for genuinely independent drivers, use separate databases.
-- **A `send` killed by the harness tool cap strands the seat.** Recover with
-  `node cli.mjs resume`; drive heavy work as a BACKGROUNDED `send` (PowerShell
-  `Start-Process`) or short `run --max-duration` chunks (dogfood F19, #252).
+- **A write-side process killed by the harness tool cap strands the seat.** Recover with
+  `node cli.mjs resume`; avoid long-lived backgrounded writes — drive heavy work as short
+  `run --max-duration` chunks, or spool a message via `intent.mjs` (dogfood F19, #252).
 - **A seat can degenerate into a repetition loop** (pseudo tool-calls emitted as
   text) and leave a claimed item stalled. `resume` finds nothing (the run ended);
   recover with `node cli.mjs reset <seat> <handoff>`, then re-drive (dogfood F29,
@@ -115,7 +117,7 @@ explicitly retired by the operator (2026-10-15). When the operator says a run is
   coordinator asked to edit a file will (correctly) refuse rather than fabricate.
 - **Operator priority cannot be expressed by oldest-first claiming.** Use
   `claim_work({ itemId })` (claim-by-id, #239) to claim a specific item; otherwise
-  START-NOW work runs via a direct `send` but stays `queued` (dogfood F18/F20).
+  START-NOW work spooled via `intent.mjs` still stays `queued` (dogfood F18/F20).
 - **A seat's worktree is not the live tree.** `ps`/`status` now show each seat's
   `root` (#261) — read it before trusting a "live" claim (dogfood F21).
 - **Never mutate the shared working tree.** The tree holds other seats' and the operator's

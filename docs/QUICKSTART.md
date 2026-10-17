@@ -54,7 +54,7 @@ node cli.mjs config     # source file + resolved DB/provider/model + key set/uns
 This matters because a command run without `DURIG_DB` silently uses
 `./rig.sqlite` — a different database than the rig you meant to steer.
 
-durig now defends against that: `ps`, `status`, `watch` and a failed `send`
+durig now defends against that: `ps`, `status`, `watch` and a failed write verb
 print a note on stderr when the database holds no seats, naming the file they
 actually used. Every one of those commands also reports the resolved `db` path
 in its JSON. If you see "no seats in ..." you are pointed at the wrong rig —
@@ -98,11 +98,23 @@ node cli.mjs status      # per-seat health; "attention": [] means nobody is bloc
 
 ## Step 4 — delegate some work
 
+The resident broker must be running to deliver input (it is started by `up` on an
+interactive terminal; if it is not, start it in a terminal with `node cli.mjs serve`
+and leave it running). Operator input goes through the **intent spool**, which the
+broker delivers without stopping:
+
 ```powershell
-node cli.mjs send pm "Please route a task to build the login widget to worker."
+"Please route a task to build the login widget to worker." | node intent.mjs pm --body-file -
 ```
 
-`send` steers the seat, WAITS for its run to settle, and prints the reply.
+`intent` writes one message to the broker's inbox and returns **immediately** — it
+spools; the broker delivers it to pm on its next pass. The reply shows up in the
+read verbs, not on the `intent` command:
+
+```powershell
+node cli.mjs log pm      # pm's conversation (newest turns below)
+node cli.mjs status      # per-seat health; pm shows the new work it is handling
+```
 
 The next two commands depend on your mode:
 
@@ -161,7 +173,7 @@ instead — every terminal then agrees without any setup.
 ## Step 6 — let the worker pick it up
 
 ```powershell
-node cli.mjs send worker "Check your queue."
+"Check your queue." | node intent.mjs worker --body-file -
 ```
 
 (Live mode:) The worker claims the item (`claim_work`) and reports completion
