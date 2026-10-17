@@ -948,7 +948,18 @@ surface. A feature that is off must therefore cost nothing — not "little".
     exposed, is a narrowing layer and never the boundary (F4's finding, the same reason a
     PowerShell allowlist is unsound). **No network capability is minted in the first cut**, so no
     egress is added.
-    *Gate:* a `security.sec` position (new dependency, new execution surface, its own audit sink).
+    *Gate checklist:* (1) a `security.sec` position — an EXTERNAL consult, OPERATOR-routed; the
+    delegate's security round (`docs/reviews/security-codemode-review.md`: falsifiable controls
+    E1–E14 + the read-only T0 first cut) is recorded against this item, and gate 1 stays OPEN until
+    `security.sec` returns; on return, fold the ratified controls into `docs/CODEMODE.md`, record a
+    `D`-entry, and close gate 1. (2) the boundary SC1–SC3 land first. (3) the library review's four
+    corrections stand as acceptance criteria. (4) **128** (a mid-run sandbox bound) and **129** (the
+    codemode audit sink) are folded in here as gate items, NOT standalone starts — 129 is a
+    P1-Evidence prerequisite (without it a codemode execution is one opaque line) and 128 bounds a
+    single long call that D64 cannot see until the run settles.
+    *Batchability rule:* batch a step only if it is idempotent / side-effect-free, has NO
+    human-approval gate, consumes NO blind rate limit, and is NOT the failing-first checkpoint;
+    commit / push / approval stay PER-STEP.
     *Proof:* a demo where one escape is denied by the grant predicate and another independently by
     the environment, so neither layer is load-bearing alone.
 
@@ -2366,11 +2377,13 @@ call count. `pm` sequences these.
     defaults are unlimited / 300 s), and surface `result.calls` duration in the completion evidence.
     *Owner:* impl · *Where:* `src/`, `docs/CODEMODE.md`. *Acceptance:* a sandbox call that outlives its
     bound is detected before the run settles, or the residual gap is named.
+    *Folded into item 32's gate checklist (ROADMAP 32) — not a standalone start.*
 129. **Narrow the codemode audit gap (a P1-Evidence prerequisite).** `result.calls` records
     `{name, status, durationMs}` only — no arguments, no output — so a verifier cannot re-run what the
     author names; the broker audit sink must be the effect record **before** codemode lands, as an
     acceptance criterion for P1 Evidence to survive. *Owner:* impl · *Where:* `src/`, `docs/CODEMODE.md`.
     *Acceptance:* a codemode execution's arguments and effect are recoverable from the audit sink.
+    *Folded into item 32's gate checklist (ROADMAP 32) — not a standalone start.*
 130. **Relabel the "longer plans hurt accuracy" claim (correction C1) — DELIVERED.** The first report's
     supporting source is a blog and no controlled dose-response study exists — downgraded to
     "over-planning is a plausible risk, not a measured result" and the claim + reference now carry the
