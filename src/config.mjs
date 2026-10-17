@@ -52,12 +52,22 @@ export const DEFAULTS_CONFIG_PATHS = [
  * in a diff (a full git sha in a JSON string is 40 hex chars). Security's posture:
  * prefer a false negative to a false positive, because a gate that refuses an
  * ordinary commit is an outage.
+ *
+ * #1379 (G-A, security's position @cf84825): extended with the leaked-secret
+ * runbook table's high-precision subset — AWS `AKIA`, Slack `xox`, the `gho_` and
+ * `github_pat_` families. JWT stays REVIEW-ONLY (sample JWTs are ordinary fixture
+ * content). PEM headers are NOT here: they cannot be tokens, so the gate matches
+ * them on the raw added LINE (see PEM_LINE_RE in src/seatguard.mjs).
  */
 export const SECRET_PREFIX_PATTERNS = [
 	/^sk-[A-Za-z0-9_-]{16,}$/, // OpenAI-style
 	/^hf_[A-Za-z0-9]{16,}$/, // HuggingFace
 	/^ghp_[A-Za-z0-9]{20,}$/, // GitHub PAT
+	/^gho_[A-Za-z0-9]{20,}$/, // GitHub OAuth token (#1379, G-A)
+	/^github_pat_[A-Za-z0-9_]{22,}$/, // GitHub fine-grained PAT (#1379, G-A)
 	/^AIza[0-9A-Za-z_-]{20,}$/, // Google API key
+	/^AKIA[A-Z0-9]{16}$/, // AWS access key id (#1379, G-A; uppercase-only body — a lowercase 40-hex sha still does not match)
+	/^xox[abprs]-[A-Za-z0-9-]{10,}$/, // Slack (#1379, G-A)
 ];
 
 export const SECRET_VALUE_PATTERNS = [
