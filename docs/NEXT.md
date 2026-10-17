@@ -3,9 +3,57 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **twentieth pass** — priority #1317 delivered + verified; the
-operator declared the EXCLUSIVE LANDING WINDOW for #1358; a `pause` command routed to pm for backlog
-registration. Everything below this block is historical.)_
+_Last refreshed: 2026-10-17 (delegate, **handover** — landing pass #1448 driven + landed; operator
+rulings routed; broker crash recovered. The NEXT TASK is a git-procedures / branch-management audit —
+see HANDOVER below. Everything below this block is historical.)_
+
+## HANDOVER — 2026-10-17 (delegate clock-out; new agent takes the seat)
+
+**Your job next (operator): verify the team is following git procedures and branch management.**
+- Ground in `docs/runbooks/merge.md` (the landing/merge gate + "Trust, but verify" audit) and
+  `docs/WORKFLOWS.md` W6. The docs-drift audit block is also in `merge.md`.
+- **Read-only first:** `git branch --format='%(refname:short)' | grep -v '^main$'` then per branch
+  `git rev-list --count main..<b>` (ahead=0 = merged). Never delete a branch with `ahead>0`; `git branch -d`
+  is safe (refuses unmerged). Both the **delegate** and the operator can prune; seats cannot (seatguard).
+- **OWED / check first:** the 29 branches just landed still need pruning; `pm` was asked to mark the
+  29 queue rows landed. Confirm both.
+- **Exact first command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**State at handover:**
+- `main` HEAD = `ee7e6e4` (+ the D94 decision commit). **Tree clean.** All 29 landing-pass entries are
+  ancestors of `main`; suite verified **123/0** in the scratch before the fast-forward. Entry 11
+  (`impl-item-1151`, D1 open) was EXCLUDED.
+- **Broker:** healthy, **pid 19720** (started `17:33:00Z`), passes advancing, inbox empty.
+- **Crash note:** the prior broker (pid 34756) died `~17:29Z` on `SessionFailed` (`wake-failed` qa/lead).
+  Mechanism (every store open takes `BEGIN IMMEDIATE` + DDL via migrations) is VERIFIED in code; the
+  specific cause is UNVERIFIED (nested `.cause` is not logged — a required diagnostic fix). Store backed
+  up at `.spike/store-backup-20261017-123250`.
+
+**Routed to `pm` this session (all `INTENT delivered`, inbox empty):** `opr-20261017-docs-drift-features`,
+`-roundtrip-docs` (pre-existing), `-rulings-batch`, `-rulings-batch2`, `-rulings-batch3`,
+`-rulings-batch4`, `-broker-routing`. Decisions logged: **D90, D91** (delegate) + **D94** (D92/D93 are
+scribe's, landed).
+
+**Open work the new agent inherits (registered/routed, do not re-derive):**
+- **Crash-proofing cluster (HIGH):** true read-only opens for all read verbs; broker survives a
+  per-conversation storage error (ROADMAP 78); a broker watchdog/auto-restart; serialise migrations;
+  log `SessionFailed.cause` on `wake-failed`.
+- **Command spool (ROADMAP 71 / #912, HELD):** the "all writes through the broker" item — prioritise.
+- **`send` retirement** + `up` broker-guard gap (flagged); **#156** (start,) + task-toolcall follow-up;
+  **test-suite partitioning by functional area (HIGH)**.
+- **Product:** test grouping, zero-trust API-key-management app (ROADMAP 60 milestone).
+
+## NEXT SESSION
+
+**Current item:** verify the team is following **git procedures and branch management** (operator task),
+starting with the owed cleanup of the landing pass — prune the 29 now-merged branches and confirm `pm`
+marked the landing-pass queue rows (**#1448**; superseded variants #1434/#1442/#1390).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Known blocker:** none blocking the delegate. Branch pruning is guard-blocked for author seats
+(seatguard refuses `git branch -d`), so the delegate/operator must prune; landing-pass entry 11
+(`impl-item-1151`, `#1151`) stays EXCLUDED (D1 open).
 
 ## DELEGATE NOTE — 2026-10-17 (priority delivered, landing window declared, pause command registered)
 

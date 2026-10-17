@@ -2393,3 +2393,37 @@ per `_template.md`, Diagnose, Verify actually run; README row) and REMOVES the m
 `leaked-secret.md` (moved, not duplicated). OPEN FOR OPERATOR: the compliance caveat — name a mandated
 independent external review and it becomes a standing (non-discretionary) `security.sec` trigger rather
 than an escalation.
+
+## D94 — Reduce crash exposure: reads get true read-only opens, writes go through the broker spool, `send` is retired (delegate, operator-accepted, 2026-10-17)
+
+**Decision.** Three coordinated changes to shrink the surface a user command can use to crash durig:
+(1) **Reads get true read-only opens** - every read verb (`ps`, `queue`, `status`, `log`, `events`,
+`watch`, `metrics`, `check`, `config`, `ui.mjs`) must open the store without migration DDL / without
+`BEGIN IMMEDIATE`, so a read cannot contend with the broker's single write lock. (2) **Writes go through
+the broker** - generalise the `intent` inbox into the command spool (ROADMAP 71 / #912): every mutating
+verb becomes a typed request the broker applies, its result read via `log`/`watch`/`events`. (3) **Retire
+`send`** (and its bounded-send item #252): it already refuses while a broker drives and opens a full
+writing harness - a second owner; its delivery job is `intent`.
+
+**Why.** The 2026-10-17 ~17:29Z broker crash (`SessionFailed`, `wake-failed` qa/lead) is the
+lock-contention class; the operator's directive is that a user command must not be able to crash durig.
+The mechanism is VERIFIED in code: `openStore` -> `SqliteStorage.open` ->
+`applySqliteMigrationsForSchema` runs a `BEGIN IMMEDIATE` transaction + `CREATE TABLE IF NOT EXISTS` on
+every open (`vendor/pi-main/.../storage/sqlite/node.js:114`, `.../migrations.js`), against the broker's
+single write lock, with a 5000 ms busy timeout. Splitting reads from writes lets reads stay fast and
+lock-free while writes get true single-writer serialisation.
+
+**Not verified (honesty).** The specific 17:29Z crash cause is UNVERIFIED: pi-durable throws a generic
+`SessionFailed` and nothing in durig logs its nested `cause` (`grep .cause` in `src/`/`cli.mjs` is
+empty), so the actual SQLite error was never captured. A required fix is to log `SessionFailed.cause`
+on `wake-failed`.
+
+**Alternatives.** (a) Route reads through the broker too - rejected: adds latency/complexity to solve
+what a read-only open solves directly (reads were historically safe only semantically, not in the lock
+sense). (b) Delete `send` outright - deferred in favour of a thin spool alias first (keeps the DX, zero
+crash opportunity), then removal.
+
+**Status:** accepted by the operator 2026-10-17; routed to `pm` (`opr-20261017-broker-routing`,
+`opr-20261017-rulings-batch4`). Work items: ROADMAP 71 / #912 (spool, HELD -> prioritise), the
+read-only-open fix, `send` retirement / #252. **Flagged gap:** `cmdUp` (`cli.mjs:476-760`) has NO broker
+guard - `up --refresh` is not refused while a broker drives. No executable check applies yet.
