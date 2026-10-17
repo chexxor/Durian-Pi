@@ -12,9 +12,11 @@
 // (the security position's F4).
 
 import { AgentDoc, ToolTask, defineExtension, hook } from "@earendil-works/pi-durable";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve as resolveNodePath } from "node:path";
 import { refusalFor } from "./confine.mjs";
+import { SECRET_PREFIX_PATTERNS } from "./config.mjs";
 
 /** pi-durable's own write-path normalization (tools/path-utils.js): unicode
  * spaces collapse to a plain space and a leading "@" booking prefix is dropped,
@@ -159,6 +161,71 @@ export function refusalForWrite({ root, path, content }) {
 }
 
 /**
+ * #1317 (security finding #1315, HIGH): the commit path had NO automated gate, so a
+ * secret-shaped line could be committed untouched. This is that gate — it runs on the
+ * seat's own `git commit` and reuses #700's scanner (src/config.mjs).
+ *
+ * Deliberately PRECISION-first: only the provider-PREFIX shapes are tested, NOT the
+ * blunt 40+ entropy rule, which fires on the hashes, ids and base64 that are ordinary
+ * in a diff (a full git sha is 40 hex chars). A gate that refuses an ordinary commit is
+ * an outage, so the trade is the false negative. The refusal names the FILE and never
+ * the value (a durable read must not carry the secret).
+ */
+const GIT_COMMIT_RE = /(^|[\s;&|"'()])git(\s+-C\s+\S+)?\s+commit\b/i;
+const TOKEN_RE = /[A-Za-z0-9_+=\-]{16,}/g;
+
+/** The added lines of a unified diff that carry a secret-shaped token. */
+export function secretOffendersInDiff(diffText) {
+	const offenders = [];
+	let path = null;
+	for (const raw of String(diffText ?? "").split(/\r?\n/)) {
+		if (raw.startsWith("+++ ")) {
+			path = raw.slice(4).replace(/^b\//, "");
+			continue;
+		}
+		if (!raw.startsWith("+")) continue;
+		const line = raw.slice(1);
+		for (const tok of line.match(TOKEN_RE) ?? []) {
+			if (SECRET_PREFIX_PATTERNS.some((re) => re.test(tok))) {
+				offenders.push({ path });
+				break;
+			}
+		}
+	}
+	return offenders;
+}
+
+/** The content a `git commit` would land: the index, plus the tree when -a/--all. */
+function stagedDiff(root, command) {
+	const opts = { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 };
+	const index = execFileSync("git", ["-C", root, "diff", "--cached", "--unified=0", "--no-color"], opts);
+	if (/(^|\s)(-a|--all)(\s|$)/.test(command)) {
+		return index + execFileSync("git", ["-C", root, "diff", "HEAD", "--unified=0", "--no-color"], opts);
+	}
+	return index;
+}
+
+/** The block text for a commit whose staged content carries a secret, or null. */
+function commitSecretRefusal(root, command) {
+	let diff;
+	try {
+		diff = stagedDiff(root, command);
+	} catch {
+		// No repo, no HEAD, or git missing: the gate cannot run, so it does not block.
+		return null;
+	}
+	const offenders = secretOffendersInDiff(diff);
+	if (offenders.length === 0) return null;
+	const files = [...new Set(offenders.map((o) => o.path ?? "(unknown)"))].join(", ");
+	return (
+		`refused by durig: the staged change carries a secret-shaped value in ${files} — ` +
+		"a commit is portable history the operator may publish, so the value would be burned the " +
+		"instant it lands. Read it from the ENVIRONMENT instead, remove it from the file, re-stage, " +
+		"and never echo the value in the message or a completion"
+	);
+}
+
+/**
  * Refuse a call, or let it through.
  *
  * `ToolHookCall.parent` is set for a nested call - one a running tool made through
@@ -184,7 +251,13 @@ export async function beforeTool(call, api, context) {
 		return undefined;
 	}
 	const refusal = refusalFor(command);
-	return refusal === null ? undefined : { block: refusal };
+	if (refusal !== null) return { block: refusal };
+	// #1317: a commit lands durable, portable history — gate its staged content.
+	if (GIT_COMMIT_RE.test(command)) {
+		const block = commitSecretRefusal(await seatGraphRoot(api, context), command);
+		if (block !== null) return { block };
+	}
+	return undefined;
 }
 
 /**

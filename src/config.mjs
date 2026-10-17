@@ -26,6 +26,77 @@ export const DEFAULTS_CONFIG_PATHS = [
 	"../durig.config.default.json",
 ];
 
+/**
+ * #700: secret-LOOKING values are refused in a config FILE (never in the
+ * environment). The disclosed finding: a live DEEPINFRA_API_KEY value sat in
+ * plain text in durig.config.json in a SHARED tree, and the durable transcript
+ * (which had echoed it) logged it too. A checked-in config file is exactly the
+ * wrong place for a secret — it is shared, diffed and copied — while the
+ * environment is the sanctioned channel (config.mjs already treats env as the
+ * highest-precedence source). So the guard's job is narrow and loud: refuse a
+ * config FILE whose VALUES look like credentials, name the KEY (never echo the
+ * value), and point at the environment.
+ *
+ * Deliberately NOT applied to env values: an operator setting DEEPINFRA_API_KEY
+ * in their shell is the intended use. Only file content is refused.
+ *
+ * Patterns are VALUE shapes, not key names — a secret is a secret under any key,
+ * and key-name matching would miss a secret pasted into DURIG_DB. Kept short and
+ * specific to avoid refusing ordinary paths (a Windows path with a colon is not a
+ * token): known provider prefixes, and long high-entropy runs.
+ */
+/**
+ * #1317: the provider-PREFIX shapes only. The commit-time gate (src/seatguard.mjs)
+ * tests tokens from a staged DIFF with these — deliberately NOT the blunt 40+
+ * entropy rule below, which fires on the hashes, ids and base64 that are ordinary
+ * in a diff (a full git sha in a JSON string is 40 hex chars). Security's posture:
+ * prefer a false negative to a false positive, because a gate that refuses an
+ * ordinary commit is an outage.
+ */
+export const SECRET_PREFIX_PATTERNS = [
+	/^sk-[A-Za-z0-9_-]{16,}$/, // OpenAI-style
+	/^hf_[A-Za-z0-9]{16,}$/, // HuggingFace
+	/^ghp_[A-Za-z0-9]{20,}$/, // GitHub PAT
+	/^AIza[0-9A-Za-z_-]{20,}$/, // Google API key
+];
+
+export const SECRET_VALUE_PATTERNS = [
+	...SECRET_PREFIX_PATTERNS,
+	// Long high-entropy run: letters AND digits, no path separators (a path with
+	// `/` or `\` is not a token), no whitespace.
+	/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9+_=-]{40,}$/,
+];
+
+/** Does a single config VALUE look like a credential? A non-string, or a
+ * string that is not all one token, is never refused. */
+export function looksLikeSecret(value) {
+	if (typeof value !== "string") return false;
+	const v = value.trim();
+	if (v.length < 16) return false;
+	return SECRET_VALUE_PATTERNS.some((re) => re.test(v));
+}
+
+/**
+ * Refuse a config FILE that carries a secret-looking value. Throws an error
+ * naming the offending KEY(s) and the file, but NEVER the value. Called on the
+ * raw file values BEFORE merge, so an env override cannot mask a leaked file
+ * secret (the file is the thing that is shared; the leak is the file).
+ *
+ * @param {Record<string, unknown>} fileValues parsed config-file content
+ * @param {string|null} source the file path (for the message)
+ */
+export function assertNoSecretsInFile(fileValues, source) {
+	const offenders = Object.entries(fileValues ?? {})
+		.filter(([, v]) => looksLikeSecret(v))
+		.map(([k]) => k);
+	if (offenders.length === 0) return;
+	throw new Error(
+		`secret-looking value(s) in config file ${source ?? "(unknown)"} for key(s): ${offenders.join(", ")} — ` +
+			"a config file is shared and committed; set the value in the ENVIRONMENT instead " +
+			"(e.g. DEEPINFRA_API_KEY) and remove it from the file",
+	);
+}
+
 /** Keys a config file may set, mirroring the environment variables. */
 export const CONFIG_KEYS = [
 	"DURIG_DB",
@@ -64,8 +135,11 @@ export async function loadShippedDefaults({ readFile, anchors = [] } = {}) {
 			throw err;
 		}
 		try {
-			return { values: JSON.parse(text) ?? {}, source: path };
+			const values = JSON.parse(text) ?? {};
+			assertNoSecretsInFile(values, path);
+			return { values, source: path };
 		} catch (err) {
+			if (err?.message?.includes("secret-looking value(s)")) throw err;
 			throw new Error(`invalid JSON in config file ${path}: ${err.message}`);
 		}
 	}
@@ -115,6 +189,9 @@ export async function loadConfig({ env = {}, readFile, defaults = {}, defaultsSo
 		} catch (err) {
 			throw new Error(`invalid JSON in config file ${path}: ${err.message}`);
 		}
+		// #700: the FILE is checked before merge, so an env value cannot mask a
+		// secret that is sitting in a shared, committed file.
+		assertNoSecretsInFile(fileValues, path);
 		source = path;
 		break;
 	}
