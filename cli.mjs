@@ -2227,6 +2227,21 @@ function resolveModelsBySeat(spec) {
   return modelsBySeat;
 }
 
+/** Every seat's ADVERTISED context window (the vendor catalog figure), keyed by seat.
+ * ROADMAP 27's three-state denominator calls this the least-trustworthy state, so the
+ * resolver in src/context.mjs prefers a `declared`/`measured` window whenever one exists;
+ * this is only the fallback. Absent for a seat whose model the catalog does not carry. */
+function resolveWindowsBySeat(spec) {
+  const { models, providerId } = buildModels();
+  const windowsBySeat = {};
+  for (const seat of spec?.seats ?? []) {
+    const r = resolveSeatModel(models, seat.model, providerId, MODEL_ID);
+    const advertised = models.getModel(r.provider, r.modelId)?.contextWindow;
+    if (Number.isFinite(advertised) && advertised > 0) windowsBySeat[seat.name] = { advertised };
+  }
+  return windowsBySeat;
+}
+
 /** --window N turns, or `all`. The default is the ambient scan bound, because a
  * bounded window is what keeps the reading cheap; widening it is deliberate. */
 function parseWindow(arg) {
@@ -2269,6 +2284,7 @@ async function cmdMetrics(rigFile, human, windowArg) {
   try {
     const health = await readRigHealth(storage, DB_PATH, maxSeats(), {
       modelsBySeat: spec ? resolveModelsBySeat(spec) : {},
+      windowsBySeat: spec ? resolveWindowsBySeat(spec) : {},
       entryLimit: parseWindow(windowArg),
       cfg: CFG,
     });
