@@ -3,8 +3,9 @@
 // commits without a worktree, `git add -A`, push.
 //
 // Pairs with #473 (the wired per-item worktree lifecycle) and #475 (the model).
-// Also pins the constitution mirrors byte-for-byte: constitution.txt must equal BOTH
-// rig.starter.json.constitutionInline and rig.selfdev.json.constitutionInline.
+// Also pins the constitution mirrors: constitution.txt must equal rig.starter.json's
+// constitutionInline (a COPY), and the selfdev rig must SOURCE constitution.txt (a reference
+// after 806ce7f). Both compared EOL-insensitively (#977/D83).
 //
 // Failing-first: against the UNAMENDED files the directive assertions fail (RED);
 // after the amendment (+ regeneration of the mirrors) they pass (GREEN).
@@ -61,9 +62,16 @@ try {
   check("rig.starter.json constitutionInline === constitution.txt (EOL-insensitive)",
     lf(starter.constitutionInline) === lf(constitution),
     "content differs after EOL normalization — regenerate the starter (#976)");
-  check("rig.selfdev.json constitutionInline === constitution.txt (EOL-insensitive)",
-    lf(selfdev.constitutionInline) === lf(constitution),
-    "content differs after EOL normalization — re-point the selfdev inline (#975)");
+  // #975/#1079: 806ce7f replaced selfdev's inline copy with a `constitution` REFERENCE, so
+  // `selfdev.constitutionInline` is undefined and the old byte compare proved nothing. Assert the
+  // structural single source instead: the selfdev rig POINTS at constitution.txt and that file
+  // matches what ships. Same shape as the #975 fix in demo/commit-model.test.mjs.
+  check(
+    "rig.selfdev.json sources constitution.txt (single source, EOL-insensitive)",
+    selfdev.constitution === "constitution.txt" &&
+      lf(readFileSync(join(durigDir, selfdev.constitution), "utf8")) === lf(constitution),
+    "the selfdev rig must point at constitution.txt and that file must match what ships",
+  );
 
   // 3. EVERY seat in the self-dev rig carries the block.
   check("selfdev has seats", Array.isArray(selfdev.seats) && selfdev.seats.length > 0);
