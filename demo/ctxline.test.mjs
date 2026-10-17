@@ -133,11 +133,40 @@ console.log("\n=== the floor: whole-piece ladder, never a basis-less percent ===
 {
 	// The widest rung is taken when nothing is narrower than the terminal.
 	const wide = formatContextLine(measure(302100), { width: 5 });
-	check(
-		"floor rung is still the whole token count",
-		strip(wide) === "  ctx 302.1k" || strip(wide) === "  ctx 302K",
-		JSON.stringify(strip(wide)),
-	);
+	check("floor rung is the token count", strip(wide) === "  ctx 302.1k", JSON.stringify(strip(wide)));
+}
+
+console.log("\n=== fit-based ladder (designer #1680 rulings; trigger = FIT, never a pinned width) ===");
+
+{
+	// conversation-44: the narrowest clean full frame - the full form fits (budget >= 22), so the
+	// ladder does NOT fire. This RETRACTS the earlier tokens-only-at-48 pin (a false width guess).
+	const wide44 = formatContextLine(measure(201000, "measured", 300000), { width: 44 });
+	check("44-col: full form fits, no rung fires", strip(wide44) === "  ctx 67.0%/300k [high]", JSON.stringify(strip(wide44)));
+	const wide60 = formatContextLine(measure(201000, "measured", 300000), { width: 60 });
+	check("60-col: full form, no rung fires", strip(wide60) === "  ctx 67.0%/300k [high]", JSON.stringify(strip(wide60)));
+}
+
+{
+	// The band word is the FIRST loss: a budget that drops it keeps the pair intact.
+	const dropped = formatContextLine(measure(201000, "measured", 300000), { width: 22 });
+	check("band drops first, pair stays", strip(dropped) === "  ctx 67.0%/300k", JSON.stringify(strip(dropped)));
+	check("...and the band word is gone", !dropped.includes("["));
+}
+
+{
+	// The advertised pair drops WHOLE (badge + window together) below fit: never tokens+window
+	// without the credential badge.
+	const sub = formatContextLine(measure(302100, "advertised", 1000000), { width: 24 });
+	check("sub-fit advertised: tokens-only floor", strip(sub) === "  ctx 302.1k", JSON.stringify(strip(sub)));
+	check("...badge and window are gone TOGETHER", !sub.includes("1.0M") && !sub.includes("advertised"), sub);
+}
+
+{
+	// >100% overflow: NO band (the unclamped percent is the whole signal).
+	const overflow = formatContextLine(measure(314000, "measured", 300000), { width: 80 });
+	check("overflow carries no band", !overflow.includes("["), JSON.stringify(strip(overflow)));
+	check("overflow keeps the unclamped percent", strip(overflow).includes("105%"), JSON.stringify(strip(overflow)));
 }
 
 console.log(

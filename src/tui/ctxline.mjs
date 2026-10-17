@@ -25,11 +25,19 @@
 // advertised-only form has no percent, so no band. The WORD carries the meaning and colour
 // is an accent on top, so the band survives NO_COLOR.
 //
+// The band rule, stated once so the next reader does not re-derive the #1128-vs-#1142
+// contradiction (designer #1680, verbatim): **bands attach to REMAINING-WINDOW readings — i.e.
+// when 0 < percent <= 100. At >100% the band is suppressed: the unclamped percent already states
+// the excess, and the band's job (proximity to degradation) is subsumed.**
+//
 // Reading of the spec for the one case it does not spell out (declared, >100%): the pair
 // stays atomic, so the badge rides the compressed pair — `ctx 314K/300K ·decl · 105%`.
 // Likewise the >100% form carries no band: the unclamped percent already IS the signal
 // there, and stacking `[crit]` on `105%` would encode one state twice.
 import { ANSI } from "../ansi.mjs";
+// Measure in terminal CELLS, not JavaScript code units — the same H4 helper and row budget the
+// other conversation rows use (client.mjs), so the ladder and the row harness agree (designer #1680).
+import { textWidth } from "../textwidth.mjs";
 
 /** The line's label. Fixed so a reader can grep the surface. */
 export const CONTEXT_LABEL = "ctx";
@@ -97,16 +105,12 @@ function rungsFor(measure) {
 
 	// No window: a bare token count is honest, a percentage with no window is not.
 	if (value === null || fraction === null) {
-		return { rungs: [`${CONTEXT_LABEL} ${tokens}`, `${CONTEXT_LABEL} ${compact}`], band: null };
+		return { rungs: [`${CONTEXT_LABEL} ${tokens}`], band: null };
 	}
 
 	if (basis === "advertised") {
 		return {
-			rungs: [
-				`${CONTEXT_LABEL} ${tokens}/${fmtWindow(value)} advertised`,
-				`${CONTEXT_LABEL} ${tokens}`,
-				`${CONTEXT_LABEL} ${compact}`,
-			],
+			rungs: [`${CONTEXT_LABEL} ${tokens}/${fmtWindow(value)} advertised`, `${CONTEXT_LABEL} ${tokens}`],
 			band: null,
 		};
 	}
@@ -128,8 +132,10 @@ function rungsFor(measure) {
 
 	const pair = `${CONTEXT_LABEL} ${pct.toFixed(1)}%/${fmtWindow(value)}${badge}`;
 	const band = bandFor(fraction);
+	// The floor is the token count (`ctx 302.1k`); the compact `ctx 314K` form belongs ONLY to the
+	// >100% overflow shape, so it is not a rung here (designer #1680 ruling 1, step 4).
 	return {
-		rungs: [band ? `${pair} [${band.word}]` : pair, pair, `${CONTEXT_LABEL} ${tokens}`, `${CONTEXT_LABEL} ${compact}`],
+		rungs: [band ? `${pair} [${band.word}]` : pair, pair, `${CONTEXT_LABEL} ${tokens}`],
 		band,
 	};
 }
@@ -147,7 +153,8 @@ function rungsFor(measure) {
 export function formatContextLine(measure, { width = Infinity, color = false } = {}) {
 	const inner = Number.isFinite(width) ? Math.max(0, width - 2) : Infinity;
 	const { rungs, band } = rungsFor(measure);
-	const chosen = rungs.find((r) => r.length <= inner) ?? rungs[rungs.length - 1];
+	// The budget is CELLS (designer #1680 ruling 1), through the shared H4 helper.
+	const chosen = rungs.find((r) => textWidth(r) <= inner) ?? rungs[rungs.length - 1];
 	// Colour is an ACCENT on the band WORD, never on the whole line: the word carries the
 	// meaning (it survives NO_COLOR), so colour must not become the signal.
 	const word = `[${band?.word}]`;
