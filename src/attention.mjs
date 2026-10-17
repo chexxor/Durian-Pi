@@ -115,6 +115,68 @@ export function countPseudoToolCalls(entries) {
 	return count;
 }
 
+const CJK_CHAR = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
+const LATIN_CHAR = /[A-Za-z]/;
+// Code spans are stripped before judging a reply's language: a code block may hold CJK data
+// (a quoted label, a fixture), and counting it would false-positive on a legitimate report.
+const CODE_SPAN = /```[\s\S]*?```|`[^`]*`/g;
+
+/**
+ * Did this assistant turn reply in a non-English (CJK) script? The constitution's P3
+ * Language rule is one line in a large system prompt, and a Chinese-family model (GLM,
+ * Qwen) drifts back to its native language under load; once a drifted turn is in the
+ * transcript it self-conditions every later turn, so the guard must reset the seat (D85).
+ *
+ * This is deliberately not "contains a CJK character": a reply that quotes a Chinese
+ * filename or error string is normal. The tell is a reply whose LETTERS are predominantly
+ * CJK — measured over CJK ideographs/kana vs Latin letters, with code spans excluded — so a
+ * Chinese quotation inside an English report cannot trip it, while a reply actually
+ * composed in Chinese does.
+ *
+ * @param {{kind?:string, model?:unknown}} entry one seat entry
+ * @param {{minChars?:number, minRatio?:number}} [opts]
+ * @returns {boolean}
+ */
+export function isLanguageDriftTurn(entry, opts = {}) {
+	const minChars = opts.minChars ?? 40;
+	const minRatio = opts.minRatio ?? 0.5;
+	const message = Array.isArray(entry?.model) ? entry.model[0] : entry?.model;
+	if (!message || message.role !== "assistant") return false;
+	const parts = Array.isArray(message.content) ? message.content : [];
+	const text = parts
+		.filter((part) => part?.type === "text")
+		.map((part) => part?.text ?? "")
+		.join("\n")
+		.replace(CODE_SPAN, "");
+	let cjk = 0;
+	let latin = 0;
+	for (const ch of text) {
+		if (CJK_CHAR.test(ch)) cjk++;
+		else if (LATIN_CHAR.test(ch)) latin++;
+	}
+	const letters = cjk + latin;
+	if (letters === 0) return false;
+	return cjk >= minChars && cjk / letters >= minRatio;
+}
+
+/**
+ * How many assistant turns in a page replied in a non-English script. The degeneration
+ * guard's own cause (the D77 shape): a language-drifted run is a fault the repetition and
+ * malformed counts cannot see, because the run is otherwise structurally clean.
+ *
+ * @param {Array<{kind?:string, model?:unknown}>} entries seat entries
+ * @param {{minChars?:number, minRatio?:number}} [opts]
+ * @returns {number}
+ */
+export function countLanguageDriftTurns(entries, opts = {}) {
+	let count = 0;
+	for (const entry of entries ?? []) {
+		if (entry?.kind !== "pi.assistant") continue;
+		if (isLanguageDriftTurn(entry, opts)) count++;
+	}
+	return count;
+}
+
 /**
  * The reason a run failed, plus the CAUSE when the entry knows it.
  *

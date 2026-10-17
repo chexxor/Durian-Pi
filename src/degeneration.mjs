@@ -11,7 +11,7 @@
 // not keep the seat resetting forever. A page already ending in `pi.reset` is skipped
 // outright, so a reset is not re-applied before the seat has run again (idempotence).
 
-import { countMalformedToolCalls, countPseudoToolCalls } from "./attention.mjs";
+import { countLanguageDriftTurns, countMalformedToolCalls, countPseudoToolCalls } from "./attention.mjs";
 
 /**
  * Conservative, operator-tunable trip points. Deliberately high: the repeat predicate
@@ -25,6 +25,13 @@ export const DEGEN_DEFAULTS = {
 	maxRepeats: 3, // identical tool calls within the run
 	maxMalformed: 2, // harness malformed-argument rejections within the run
 	maxPseudoToolCalls: 1, // a tool call emitted AS TEXT (no rejection to see): the run could not act
+	// A reply written in another language (a Chinese-family model drifting back to its native
+	// script). One clearly-CJK reply is the tell, because it self-conditions every later turn and
+	// nothing else would reset it. The two thresholds keep a quoted Chinese string inside an
+	// English report from tripping this.
+	maxLanguageDrift: 1, // assistant turns whose reply is predominantly CJK
+	minLanguageDriftChars: 40, // CJK characters that must appear in the reply
+	minLanguageDriftRatio: 0.5, // share of the reply's CJK+Latin letters that are CJK
 	maxContextTokens: 400_000, // newest turn's prompt size (a backstop, not the primary trip)
 	// Per-turn WALL-CLOCK, its OWN cause and NOT the prose detector. It reads a number the harness
 	// already persists (AssistantMessage.durationMs), not a parse of prose, so a healthy long
@@ -77,6 +84,7 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		repeats: 0,
 		malformed: 0,
 		pseudoToolCalls: 0,
+		languageDrift: 0,
 		contextTokens: 0,
 		turnDurationMs: 0,
 		calls: 0,
@@ -113,6 +121,13 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 	// validation rejection — the `malformed` count above is structurally blind to it. That
 	// run settled "done" while the seat did not act, so it is its own degenerate cause.
 	const pseudoToolCalls = countPseudoToolCalls(run);
+	// A reply in another language is a separate fault from repetition: the run can be
+	// structurally clean and still be unusable to the operator, and a drifted turn
+	// self-conditions the next. `countLanguageDriftTurns` owns the script test.
+	const languageDrift = countLanguageDriftTurns(run, {
+		minChars: o.minLanguageDriftChars,
+		minRatio: o.minLanguageDriftRatio,
+	});
 	const contextTokens = run.reduce((max, entry) => {
 		const tokens = messageOf(entry)?.usage?.totalTokens;
 		return Number.isFinite(tokens) ? Math.max(max, tokens) : max;
@@ -131,6 +146,9 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 	if (pseudoToolCalls >= o.maxPseudoToolCalls) {
 		reasons.push(`pseudo-tool-call=${pseudoToolCalls}>=${o.maxPseudoToolCalls}`);
 	}
+	if (languageDrift >= o.maxLanguageDrift) {
+		reasons.push(`language-drift=${languageDrift}>=${o.maxLanguageDrift}`);
+	}
 	if (contextTokens >= o.maxContextTokens) reasons.push(`context-tokens=${contextTokens}>=${o.maxContextTokens}`);
 	if (turnDurationMs >= o.maxTurnDurationMs) {
 		reasons.push(`turn-duration-ms=${turnDurationMs}>=${o.maxTurnDurationMs}`);
@@ -144,6 +162,7 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		repeats,
 		malformed,
 		pseudoToolCalls,
+		languageDrift,
 		contextTokens,
 		turnDurationMs,
 		calls,

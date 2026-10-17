@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { assessRun, DEGEN_DEFAULTS } from "../src/degeneration.mjs";
 import { applyResets, planResets } from "../src/supervisor.mjs";
-import { countPseudoToolCalls, isPseudoToolCallTurn } from "../src/attention.mjs";
+import { countLanguageDriftTurns, countPseudoToolCalls, isLanguageDriftTurn, isPseudoToolCallTurn } from "../src/attention.mjs";
 
 let failures = 0;
 function check(label, fn) {
@@ -136,6 +136,45 @@ check("the predicate matches the DSML-delimited form and the plain nested-parame
   assert.equal(isPseudoToolCallTurn(plainNested), true, "the plain nested pair is the same fault");
 });
 
+check("a reply composed in Chinese trips the language-drift bound", () => {
+  // The observed qa fault: after completing an item it emitted a long Chinese recap. The
+  // run is otherwise structurally clean, so only a script test can see it. The literal is
+  // deliberately >40 CJK chars and mostly-CJK, matching the real reply's shape.
+  const drifted = assistant([], {
+    text: "#1085 — 已验证并完成：这是一段很长的中文摘要，用来证明语言漂移检测器能够识别回复语言发生了变化，并且会重置该座席的上下文。",
+  });
+  assert.equal(isLanguageDriftTurn(drifted), true, "a predominantly-CJK reply is drift");
+  assert.equal(countLanguageDriftTurns([drifted]), 1);
+  const a = assessRun([drifted, user()]);
+  assert.equal(a.languageDrift, 1, "the run reports one drifted turn");
+  assert.equal(a.degenerate, true);
+  assert.ok(a.reasons.some((r) => r.startsWith("language-drift=")), a.reasons.join(","));
+});
+
+check("a short Chinese quotation inside an English reply is not drift", () => {
+  // A verifier legitimately quotes a CJK filename or error string; the guard must not reset
+  // a healthy English report just because it contains a few CJK characters.
+  const quoted = assistant([], {
+    text: 'The verifier named the file "配置文件.json" and moved on to the next check without comment.',
+  });
+  assert.equal(isLanguageDriftTurn(quoted), false, "a short CJK quote must not trip the guard");
+  assert.equal(assessRun([quoted, user()]).degenerate, false);
+});
+
+check("CJK inside a code span is not drift", () => {
+  // A code block may legitimately hold CJK data (a fixture label); code spans are excluded
+  // from the language ratio, so an English report that quotes code never trips the guard.
+  const fenced = assistant([], {
+    text:
+      "The fixture stores the Chinese label in a constant, which is expected data:\n\n" +
+      "```js\n" +
+      'const label = "这是一个很长的中文字符串，用来证明代码块中的内容不会被当作语言漂移，也不应触发重置守卫。";\n' +
+      "```\n\n" +
+      "This is a legitimate English report that quotes code.",
+  });
+  assert.equal(isLanguageDriftTurn(fenced), false, "fenced code must be excluded from the language test");
+});
+
 check("a context past the token bound is degenerate", () => {
   const entries = [assistant([["read", { path: "a" }]], { usage: { totalTokens: 999_999 } }), user()];
   const a = assessRun(entries);
@@ -160,7 +199,7 @@ check("only the CURRENT run is judged; an old degenerate run behind a wake is ig
 });
 
 check("defaults are conservative and complete", () => {
-  for (const key of ["maxToolTurns", "maxRepeats", "maxMalformed", "maxPseudoToolCalls", "maxContextTokens", "repeatHorizon"]) {
+  for (const key of ["maxToolTurns", "maxRepeats", "maxMalformed", "maxPseudoToolCalls", "maxLanguageDrift", "minLanguageDriftChars", "minLanguageDriftRatio", "maxContextTokens", "repeatHorizon"]) {
     assert.ok(Number.isFinite(DEGEN_DEFAULTS[key]), `missing default ${key}`);
   }
 });
@@ -204,6 +243,18 @@ await checkAsync("applyResets names the malformed-tool-call fault so the model r
 	);
 	assert.match(handoffs[0], /tool API/);
 	assert.match(handoffs[0], /pseudo-tool-call/);
+});
+
+await checkAsync("applyResets names the language-drift fault and restates English-only", async () => {
+	const handoffs = [];
+	const harness = { conversation: async () => ({ reset: async (handoff) => handoffs.push(handoff) }) };
+	await applyResets(
+		harness,
+		[{ seat: "qa", conversationId: 15, reason: "degeneration", detail: "language-drift=1>=1" }],
+		{},
+	);
+	assert.match(handoffs[0], /English/);
+	assert.match(handoffs[0], /language-drift/);
 });
 
 await checkAsync("applyResets reports a failing seat and still resets the others", async () => {

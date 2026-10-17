@@ -2121,3 +2121,31 @@ subset of `output` (provider-side input accounting still unmeasured).
 
 **Status:** accepted; ROADMAP items 27/28/30b/RANK 4 amended and 92–97 raised (registered, not
 scheduled); delivered to `pm` for sequencing.
+
+## D85 — Language drift is a degeneration cause: reset the seat (delegate, 2026-10-17)
+
+**Decision.** A seat's reply written predominantly in CJK (non-English) is now its own degeneration
+cause. `isLanguageDriftTurn`/`countLanguageDriftTurns` (`src/attention.mjs`) judge the VISIBLE reply
+text — CJK ideographs/kana vs Latin letters, code spans excluded — tripping at ≥40 CJK characters AND a
+≥0.5 CJK share of letters. `assessRun` (`src/degeneration.mjs`) reports `language-drift`, and the
+supervisor resets the seat with an English-only handoff.
+
+**Why.** The constitution's P3 Language rule is one line in a large system prompt; a Chinese-family
+model (GLM/Qwen) drifts back to its native script under load, and a drifted turn self-conditions every
+later turn — so an English directive alone cannot fix it. Observed live: `qa` (GLM-5.3-Flash) completed
+#1085 and emitted a long Chinese recap. The reset clears the contaminated context, which is the only
+thing that breaks the self-conditioning loop. This is the D77 shape (a fault the repetition/malformed
+counts cannot see, because the run is otherwise structurally clean), not the reverted D78 prose
+heuristic: it reads the reply's SCRIPT, a categorical property, and the two thresholds keep a quoted CJK
+string or a CJK code fixture from tripping it.
+
+**Alternatives.** (a) Instruction-only (strengthen the prompt) — rejected as insufficient: the rule
+already existed and failed. (b) Model change — trades away the verifier-independence (different family)
+guarantee; an operator/lead call, not a default. (c) Ratio over total characters — rejected:
+punctuation/spaces skew it; letters-only (CJK vs Latin) is the language signal.
+
+**Proof.** `demo/degeneration.test.mjs`: a predominantly-CJK reply trips `language-drift` and is reset;
+a short CJK quotation and a CJK code span do NOT (negative fixtures); the supervisor's English-only
+handoff is asserted. RED before (the export is absent → import fails), GREEN after; full suite 102/0.
+
+**Status:** implemented and committed (delegate pass).

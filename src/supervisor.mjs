@@ -182,6 +182,16 @@ export async function applyResets(harness, plans, context) {
 				`without progressing — the run is stalling, not working. Your context is reset to break ` +
 				`the stall. Re-anchor from your durable instructions and the queue; re-claim your item if ` +
 				`you still hold it, and keep each turn short: act, then report.`;
+		} else if (/language-drift/.test(detail)) {
+			// A reply in another language is a LANGUAGE fault: a Chinese-family model drifted back
+			// to its native script, and a drifted turn self-conditions later turns. The reset clears
+			// that context; the handoff must restate the rule, not merely name the fault.
+			handoff =
+				`language-drift guard reset (${plan.detail}): your last reply was written in a ` +
+				`language other than English. Think and write ONLY in English — reasoning, tool ` +
+				`probes, comments, commit messages and replies; never switch languages mid-task. ` +
+				`Your context is reset to break the pattern. Re-anchor from your durable ` +
+				`instructions and the queue; re-claim your item if you still hold it.`;
 		} else {
 			handoff =
 				`degeneration guard reset (${plan.detail}): the run you were in outgrew its bounds, ` +
