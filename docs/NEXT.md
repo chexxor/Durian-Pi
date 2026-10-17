@@ -3,10 +3,9 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **fourteenth pass** — added ROADMAP item 101 (TUI newline bug)
-and actioned the landing-safety incident: `merge.md` + `docs/reviews/landing-safety-2026-10-17.md`, intents
-to `pm`/`lead`. Prior pass: merged-branch cleanup, the merge/landing runbook (W6), and ROADMAP item 100.
-See **NEXT SESSION** below.)_
+_Last refreshed: 2026-10-17 (delegate, **fourteenth pass** — added ROADMAP item 101 (TUI newline bug),
+actioned the landing-safety incident, and reviewed the git-merging research. Prior pass: merged-branch
+cleanup, the merge/landing runbook (W6), and ROADMAP item 100. See **NEXT SESSION** below.)_
 
 ## NEXT SESSION
 
@@ -35,6 +34,15 @@ imports it, so every `node cli.mjs` verb died until impl resolved it. Delegate: 
 wrote `docs/reviews/landing-safety-2026-10-17.md`, and delivered intents `opr-20261017-landing-safety-pm`
 + `-lead` (both `INTENT delivered=1 dead=0` at 04:11:39Z). Committed `7051839`; ROADMAP item 101 in
 `9b0eb08`.
+
+**Git-merging research reviewed (operator, 2026-10-17):** consumed `docs/reviews/llm-prompting-for-git-merging.md`
+per the `research-request.md` SOP (spot-verified 3 load-bearing citations — Diff-XYZ 2510.12487,
+SWE-agent 2405.15793, Merge-Bench 2605.25890 — all real and accurately characterised). Added
+`docs/runbooks/resolve-merge-conflict.md` (deterministic-first, per-hunk, abstention, `git merge-tree
+--write-tree` pre-flight) + README index; wrote the follow-up prompt
+`docs/reviews/llm-prompting-for-git-merging-followup-research-prompt.md`. Committed `2d2f43f`.
+**Owed to the operator:** route the follow-up prompt to the research agent; do NOT register the proposed
+tooling items until `docs/reviews/llm-prompting-for-git-merging-followup.md` lands.
 
 **Next-session checklist (the landing cleanup):**
 1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`
