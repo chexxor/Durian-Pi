@@ -85,7 +85,10 @@ branch that fails a row is not ready: send it back through W2; do not merge it "
 ### Feature
 - [ ] Spec/design closed (designer + advocate when user-facing).
 - [ ] Tests at the right layer (unit; golden/floor for a TUI, with the floor case explicit).
-- [ ] Docs updated (`FEATURES`/README/runbook) or explicitly not needed.
+- [ ] **`FEATURES.md` row updated, OR the item states an explicit "no feature surface" note.** A
+      `README`/runbook mention alone does **not** satisfy this row (D62 doc-acceptance). A feature
+      that lands with neither is exactly the drift this gate exists to catch (2026-10-17 docs-drift
+      finding: `format`, `--dry-run`, instance key, TUI backfill, ROADMAP 69, the `check` rules).
 - [ ] Blast radius + rollback stated.
 - [ ] Serialization respected (e.g. one `cli.mjs` writer).
 
@@ -144,6 +147,23 @@ Then delete the branch: `git branch -d <branch>` (safe — `-d` refuses anything
 Landing is an agent responsibility, not an auto-gate. Verify later by running the Diagnose block
 periodically (delegate clock-out, or a `check` pass) and reporting the `ahead>0` set. The measurement
 that makes this worth doing — **unlanded-verified count and time-to-land** — is ROADMAP item 100.
+
+### Docs-drift audit (read-only)
+
+The same clock-out sweep catches a feature that landed without its doc (D62). For each `feat` commit
+since the last audit, print whether the same commit touched `FEATURES.md`/`ROADMAP.md`:
+
+```bash
+for c in $(git log --since="<last audit>" --pretty=%H --grep='^feat'); do
+  printf '%s  ->  %s\n' "$(git log -1 --pretty='%h %s' $c)" \
+    "$(git show --name-only --pretty=format: $c | grep -E 'docs/(FEATURES|ROADMAP)\.md' | tr '\n' ' ')"
+done
+```
+
+A `feat` commit with no `docs/FEATURES.md` touch (and no explicit "no feature surface" note in its item)
+is drift: **report it and route it to `pm`; do not patch the docs by hand.** This is a read-only net —
+the durable fix is a `check` rule (ROADMAP item 46's FEATURES-row half / D62), so drop this block once
+that rule exists (2026-10-17 docs-drift finding).
 
 ## Escalate to
 `pm` — to route a landing pass or open a landing item when the `ahead>0` set grows; `lead` — when a
