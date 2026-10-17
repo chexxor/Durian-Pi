@@ -25,6 +25,10 @@ A worktree whose item is terminal is an **orphan**. An orphan with uncommitted w
    Then let the next broker start sweep it, or remove it by hand with `git worktree remove item-<id>`
    once clean.
 3. Do not force-remove a dirty worktree while a seat may own it: check the queue item's status first.
+4. **Tidy without discarding:** a terminal orphan can be relocated out of the project root instead of
+   removed — `git worktree unlock <wt>` then `git worktree move <wt> <archive-dir>/<wt>` — which preserves
+   every uncommitted file and every branch. The delegate used `../pi-opendurig.worktrees/` (2026-10-17:
+   28 terminal worktrees + 2 verification scratch moved; 5 live/held worktrees left in place).
 
 > **Item branches (#859).** `prepare_workspace` now creates each item worktree ON its
 > `<seat>-item-<id>` branch, so a seat's commits land on a branch, not a detached HEAD. A worktree

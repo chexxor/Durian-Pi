@@ -574,6 +574,16 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     floor. *Owner:* impl (TUI) + designer (surface). *Acceptance:* selecting a seat shows the claimed
     item's id, subject, body, and status; a golden frame pins it at 80×24; no new write path.
 
+125. **Keep seat worktrees out of the project root (operator request, 2026-10-17).** `prepare_workspace`
+    creates each item's worktree at `<root>/item-<id>` (gitignored), so a long-lived rig accumulates
+    dozens of `item-*` directories a human must scroll past. Move the worktree root to a single ignored
+    location (a sibling `<root>.worktrees/`, or one hidden dir inside the repo), and have the broker
+    sweep terminal orphans there. Also fix **why they accumulate:** `carryVisibleState` copies the shared
+    tree's dirty state into every new worktree, so most are born dirty and the clean-only sweep never
+    removes them; a worktree should not inherit another item's in-flight changes. *Owner:* impl + lead.
+    *Acceptance:* the project root has no `item-*` after a run; the worktree location is documented; the
+    sweep covers it; a fresh worktree starts clean when the shared tree is clean.
+
 **Sequencing (pm, 2026-10-17):** both behind the operator priority train (#1066) — pm did NOT pull
 them forward, and the impl items are HELD until pm releases.
 - **98** (feature: a seat's context consumption in the conversation view — the READ-SURFACE half of
