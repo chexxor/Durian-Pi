@@ -114,6 +114,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
 | [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land — run the review method before the code | no |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
+| [branch-cleanup.md](branch-cleanup.md) | so many local git branches; merged branches were never pruned | no |
 | [land.md](land.md) | a verified branch must go onto `main`; land it with the helper (never mid-merge) | no |
 | [resolve-merge-conflict.md](resolve-merge-conflict.md) | a merge/landing pass stopped with conflict markers; the tree is mid-merge | no |
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
@@ -132,7 +133,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | Worktrees | leaked-worktrees |
 | Credentials / secrets | leaked-secret |
 | Review method | security-trust-boundary-review |
-| Merge / conflicts | merge, land, resolve-merge-conflict |
+| Merge / conflicts | merge, land, resolve-merge-conflict, branch-cleanup |
 | Daemon / host | daemon-not-running |
 | Research | research-request, competitor-review |
 

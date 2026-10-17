@@ -155,6 +155,19 @@ Landing is an agent responsibility, not an auto-gate. Verify later by running th
 periodically (delegate clock-out, or a `check` pass) and reporting the `ahead>0` set. The measurement
 that makes this worth doing — **unlanded-verified count and time-to-land** — is ROADMAP item 100.
 
+**Prune what this audit lands.** The `ahead=0` set is already on `main`, so delete it with `git branch -d`;
+`-d` refuses any ref that is unmerged or still checked out, so it cannot discard unique work. Classify
+first, because `git branch --merged` prints a leading `+` for a ref held by a linked worktree:
+```bash
+git branch --merged main | sed -E 's/^[*+ ]+//' | grep -v '^main$' | sort -u > merged.txt
+git worktree list --porcelain | awk '/^branch /{sub("refs/heads/","",$2); print $2}' | sort -u > held.txt
+comm -23 merged.txt held.txt            # free merged refs -> git branch -d
+comm -12 merged.txt held.txt            # worktree-held -> release via leaked-worktrees.md first
+```
+A ref whose `git cherry main <ref>` prints only `-` lines is a rebased duplicate already on `main`;
+delete it with `-D`. Never delete an `ahead>0` ref or a snapshot (`item-<N>`, `selfdev-*`): land the
+former, leave the latter. `branch-cleanup.md` carries the full procedure and its rollback.
+
 ### Docs-drift audit (read-only)
 
 The same clock-out sweep catches a feature that landed without its doc (D62). For each `feat` commit

@@ -3,9 +3,9 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate, **handover** — landing pass #1448 driven + landed; operator
-rulings routed; broker crash recovered. The NEXT TASK is a git-procedures / branch-management audit —
-see HANDOVER below. Everything below this block is historical.)_
+_Last refreshed: 2026-10-17 (delegate — **branch-maintenance audit done**: 52 merged/duplicate branches
+pruned, new `docs/runbooks/branch-cleanup.md` added; the `done`-but-unlanded set (33 commits) is the
+open finding and must be routed to `pm`. Everything below is historical.)_
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; new agent takes the seat)
 
@@ -45,15 +45,25 @@ scribe's, landed).
 
 ## NEXT SESSION
 
-**Current item:** verify the team is following **git procedures and branch management** (operator task),
-starting with the owed cleanup of the landing pass — prune the 29 now-merged branches and confirm `pm`
-marked the landing-pass queue rows (**#1448**; superseded variants #1434/#1442/#1390).
+**Current item:** the branch-management audit is **DONE**; the follow-up is the *unlanded work* it
+surfaced. 33 unique commits for `done` items are not on `main` (guard/confine stack `#1151, #1182,
+#1225, #1249, #1261, #1444, #1465, #1475, #1487, #1505, #1519`; docs `#1232, #1233, #1257, #1274,
+#1323, #1458, #1469, #1529, #1530, #1535, #1542, #1545, #1558, #1565`; plus `#1087, #1271, #1456`).
+**Route them to `pm` for one landing pass** — this is the `merge.md` Escalate-to, not a re-derive.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
-**Known blocker:** none blocking the delegate. Branch pruning is guard-blocked for author seats
-(seatguard refuses `git branch -d`), so the delegate/operator must prune; landing-pass entry 11
-(`impl-item-1151`, `#1151`) stays EXCLUDED (D1 open).
+**State at clock-out:**
+- `main` HEAD = `c0534ed`, **tree clean** — pruning deleted refs only, never touched the tree.
+- Local refs **128 → 76** (52 pruned: 50 merged `-d`, 2 patch-equivalent `-D`). **33 unlanded refs kept.**
+- **Owed pruning still open:** **42 merged branches are held by a worktree** (checked out in a linked
+  worktree, so `git branch -d` refuses). Release each only per `leaked-worktrees.md` (terminal +
+  unlocked + clean; a **locked** worktree is an intentional keep), then prune.
+- **Runbook:** `docs/runbooks/branch-cleanup.md` (indexed in `README.md`; cross-linked from `merge.md`
+  "Trust, but verify"). `last_verified: 2026-10-17`.
+
+**Known blocker:** none blocking the delegate. Seats cannot prune (seatguard); the delegate/operator
+must. Landing-pass entry 11 (`impl-item-1151`, `#1151`) stays EXCLUDED (D1 open).
 
 ## DELEGATE NOTE — 2026-10-17 (priority delivered, landing window declared, pause command registered)
 
