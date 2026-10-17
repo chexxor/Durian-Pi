@@ -209,6 +209,7 @@ try {
 		"seat-without-capabilities": "this file, control 6",
 		"runbook-stale": "demo/runbook-rules.test.mjs",
 		"runbook-unverified": "demo/runbook-rules.test.mjs",
+		"runbook-front-matter": "demo/runbook-frontmatter.test.mjs",
 		"ownership-seat-missing": "demo/ownership.test.mjs",
 		"verification-without-evidence": "demo/check-evidence.test.mjs",
 	};

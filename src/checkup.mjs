@@ -90,6 +90,11 @@ export const RULES = [
     what: "a runbook's Verify step has never run",
   },
   {
+    id: "runbook-front-matter",
+    severity: "fix-now",
+    what: "a runbook's front-matter block is missing, or its keys/values and skeleton sections do not conform to _template.md",
+  },
+  {
     id: "ownership-seat-missing",
     severity: "error",
     what: "an ownership class names an owner seat the rig does not declare",
@@ -135,6 +140,121 @@ export function hasEvidence(item) {
 }
 
 /**
+ * The MANDATORY runbook front-matter keys, in the order `docs/runbooks/README.md`
+ * ("Front-matter (mandatory)") and `docs/runbooks/_template.md` list them. `check_rule`
+ * is a REQUIRED key whose VALUE may legitimately be `null` — the key is what makes the
+ * block retrievable as a schema, which is the whole point of the block.
+ */
+export const RUNBOOK_FRONT_MATTER_KEYS = [
+  "runbook",
+  "symptom",
+  "writes",
+  "precondition",
+  "last_verified",
+  "verified_by",
+  "evidence",
+  "check_rule",
+];
+
+/** The only legal `precondition` values (the header is enforced in code, not prose — ROADMAP 69). */
+export const RUNBOOK_PRECONDITIONS = ["broker-stopped", "read-only", "none"];
+
+/**
+ * The fixed skeleton `_template.md` defines, in order. `Diagnose` is matched by
+ * prefix so "Diagnose (read-only)" and a bare "Diagnose" both conform; the other
+ * headings are exact, because the index and the readers rely on the same words.
+ */
+export const RUNBOOK_TEMPLATE_SECTIONS = [
+  "When to use",
+  "Impact",
+  "Preconditions",
+  "Diagnose (read-only)",
+  "Do",
+  "Verify",
+  "If it fails",
+  "Escalate to",
+  "Evidence",
+];
+
+const isNonEmptyString = (v) => typeof v === "string" && v.trim() !== "";
+const hasKey = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+/**
+ * The reasons a runbook's header/body fails `_template.md` conformity — a PURE
+ * function over plain data, so `auditRig` never touches the filesystem (ROADMAP 81a's
+ * input surface). Returns [] when the entry conforms.
+ *
+ * Judged: the mandatory keys are present; `runbook` mirrors the filename stem (the
+ * index key); `writes` is a boolean; `precondition` is one of the three legal values;
+ * `last_verified` is a date or `unverified`; `verified_by`/`evidence` are non-empty;
+ * `check_rule` is a string or null. When the caller also supplies the runbook's `body`,
+ * the `_template.md` skeleton sections are judged too; without a body the section half
+ * is simply not judged (the front-matter half still is).
+ *
+ * `_template.md` itself is EXEMPT: it carries placeholders (`<filename-stem>`) by design,
+ * and it is the thing conformity is measured against.
+ *
+ * @param {{file?:string, frontMatter?:object|null, body?:string}} [runbook]
+ * @returns {string[]} human-readable problems, [] when conformant
+ */
+export function runbookFrontMatterProblems(runbook) {
+  const file = String(runbook?.file ?? "");
+  const stem = file.split(/[\\/]/).pop().replace(/\.md$/i, "");
+  if (stem === "_template") return [];
+  const problems = [];
+  const fm = runbook?.frontMatter;
+  if (fm === null || typeof fm !== "object" || Array.isArray(fm)) {
+    problems.push("no front-matter block");
+  } else {
+    for (const key of RUNBOOK_FRONT_MATTER_KEYS) {
+      if (!hasKey(fm, key) || fm[key] === undefined) problems.push(`missing key \`${key}\``);
+    }
+    if (hasKey(fm, "runbook") && isNonEmptyString(fm.runbook) && fm.runbook.trim() !== stem) {
+      problems.push(`runbook: "${fm.runbook}" does not mirror the filename stem "${stem}"`);
+    }
+    if (hasKey(fm, "symptom") && !isNonEmptyString(fm.symptom)) {
+      problems.push("symptom: must be a non-empty string");
+    }
+    if (hasKey(fm, "writes") && typeof fm.writes !== "boolean") {
+      problems.push(`writes: must be true or false (got ${JSON.stringify(fm.writes)})`);
+    }
+    if (hasKey(fm, "precondition") && !RUNBOOK_PRECONDITIONS.includes(fm.precondition)) {
+      problems.push(
+        `precondition: must be one of ${RUNBOOK_PRECONDITIONS.join(" | ")} (got ${JSON.stringify(fm.precondition)})`,
+      );
+    }
+    if (
+      hasKey(fm, "last_verified") &&
+      fm.last_verified !== "unverified" &&
+      !(isNonEmptyString(fm.last_verified) && /^\d{4}-\d{2}-\d{2}$/.test(fm.last_verified.trim()))
+    ) {
+      problems.push(`last_verified: must be a YYYY-MM-DD date or "unverified" (got ${JSON.stringify(fm.last_verified)})`);
+    }
+    if (hasKey(fm, "verified_by") && !isNonEmptyString(fm.verified_by)) {
+      problems.push("verified_by: must name who verified it");
+    }
+    if (hasKey(fm, "evidence") && !isNonEmptyString(fm.evidence)) {
+      problems.push("evidence: must name the item(s)/commit(s) that proved it");
+    }
+    if (hasKey(fm, "check_rule") && fm.check_rule !== null && !isNonEmptyString(fm.check_rule)) {
+      problems.push("check_rule: must be a rule id or null");
+    }
+  }
+  const body = runbook?.body;
+  if (typeof body === "string") {
+    const headings = [...body.matchAll(/^##\s+(.+?)\s*$/gm)].map((m) => m[1]);
+    for (const want of RUNBOOK_TEMPLATE_SECTIONS) {
+      const found =
+        want === "Diagnose (read-only)"
+          ? headings.some((h) => /^Diagnose\b/.test(h))
+          : headings.includes(want);
+      if (!found) problems.push(`missing \`## ${want}\` section`);
+    }
+  }
+  return problems;
+}
+
+/**
  * @param {object} input
  * @param {string} input.rig            rig file path, for display
  * @param {object} input.spec           parsed rig file
@@ -142,7 +262,7 @@ export function hasEvidence(item) {
  * @param {{reason:"read",text:string}|{reason:"absent"}|{reason:"unreadable",error:string}} input.stored
  * @param {string[]|null} [input.storedSeats]  seat names the store holds, or null when it was not read
  * @param {Record<string,string>} [input.modelsBySeat]  seat name -> "provider/modelId"
- * @param {Array<{file:string, frontMatter:object|null, changedNamedFiles?:string[]}>} [input.runbooks]
+ * @param {Array<{file:string, frontMatter:object|null, body?:string, changedNamedFiles?:string[]}>} [input.runbooks]
  *   runbook data the CALLER read from docs/runbooks/* and passed as plain values (this module never
  *   touches the filesystem). Each entry carries the parsed front-matter and the files the runbook
  *   NAMES that changed since `last_verified`. Omit it entirely to leave the runbook rules unrun
@@ -349,19 +469,33 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
     );
   }
 
-  // 9. Runbook health (docs/runbooks/README.md maintenance policy; ROADMAP 81). auditRig stays
+  // 9. Runbook health (docs/runbooks/README.md maintenance policy; ROADMAP 81/82). auditRig stays
   //    PURE: the caller reads docs/runbooks/* and passes plain data - each runbook's parsed
-  //    front-matter plus the files it NAMES that changed since `last_verified`. A runbook whose
-  //    Verify step never ran is fix-now (unproven but harmless to a run); one verified before a file
-  //    it names changed is an ERROR, because its literal steps may no longer match the code.
-  //    Omitting `runbooks` leaves both rules SKIPPED with a reason - never a false pass.
+  //    front-matter (plus, when it has one, the body) and the files it NAMES that changed since
+  //    `last_verified`. A runbook whose Verify step never ran is fix-now (unproven but harmless to a
+  //    run); one verified before a file it names changed is an ERROR, because its literal steps may
+  //    no longer match the code; one whose header/skeleton does not conform to _template.md is
+  //    fix-now, because the block is how a seat or a rule retrieves the procedure's assumptions.
+  //    Omitting `runbooks` leaves all three rules SKIPPED with a reason - never a false pass.
   if (!Array.isArray(runbooks)) {
     const why = "no runbook data was supplied, so no runbook can be judged";
     skipped.push({ id: "runbook-stale", why });
     skipped.push({ id: "runbook-unverified", why });
+    skipped.push({ id: "runbook-front-matter", why });
   } else {
     for (const runbook of runbooks) {
       const file = runbook?.file ?? "(unnamed runbook)";
+      // Conformity to _template.md (ROADMAP 82): judged on every entry, independent of
+      // verification state — an unreadable header is a defect even when the Verify step ran.
+      const problems = runbookFrontMatterProblems(runbook);
+      if (problems.length > 0) {
+        add(
+          "runbook-front-matter",
+          file,
+          `${file} does not conform to _template.md: ${problems.join("; ")}`,
+          "fix the runbook's front-matter block / skeleton to match docs/runbooks/_template.md (see the README's schema)",
+        );
+      }
       const lastVerified = runbook?.frontMatter?.last_verified;
       if (lastVerified === undefined || lastVerified === null || lastVerified === "" || lastVerified === "unverified") {
         add(
