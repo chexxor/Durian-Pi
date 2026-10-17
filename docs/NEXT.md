@@ -51,11 +51,13 @@ HEAD `5dc9490`) → `docs/COMPETITORS.md` entry. **Owed:** route the follow-up a
 102–117.
 
 **PM-tools research consumed + follow-up digested (2026-10-17):** both reports reviewed; ROADMAP
-**115–122** registered. `docs/PM-ADAPTERS.md` folded the follow-up's corrections: (1) `src/confine.mjs`
+**115–123** registered. `docs/PM-ADAPTERS.md` folded the follow-up's corrections: (1) `src/confine.mjs`
 does **not** block seat egress (verified — path/env/command confinement only; the egress mechanism is
 unverified, item 118); (2) keep dependencies **advisory**, do not port Agent Board's enforced DAG;
-(3) target **GitHub first** (local stdio MCP), remote Linear/Atlassian operator-gated. The topic is
-externally closed — no further research prompt needed (the one open item is internal, 118).
+(3) target **GitHub first** (local stdio MCP), remote Linear/Atlassian operator-gated. The integration
+questions are externally closed; the **value case** (does an external tracker improve efficiency /
+correctness / effectiveness?) is **not** answered by the research — it is a decision + measurement
+(item 123). Other internal open item: the egress mechanism (118).
 
 **Next-session checklist (the landing cleanup):**
 1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`

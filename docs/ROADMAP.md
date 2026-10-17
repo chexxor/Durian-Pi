@@ -693,6 +693,12 @@ one-way and idempotent.
      localhost REST + MCP) runs on native Windows and is usable as a **read-only mirror candidate**; do
      not embed it. (Vibe Kanban is sunsetting and is not a candidate.) *Owner:* devtools + impl.
      *Acceptance:* a documented Windows run/no-run result; no dependency added.
+123. **Value case for an external tracker (decision + measurement).** The PM-tools research establishes
+     feasibility and practice, not benefit. Define what "efficiency / correctness / effectiveness" means
+     at the human-facing layer, then measure before adopting a tracker beyond an optional source/mirror:
+     intake latency, priority alignment, time-to-human-decision, duplicate work, blocked time. *Owner:*
+     lead + delegate (decision), qa (measurement). *Acceptance:* a documented value case with measured (or
+     explicitly unmeasured) criteria; the tracker stays optional.
 
 ## Extensibility and distribution
 

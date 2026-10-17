@@ -80,5 +80,47 @@ projection, and a fake-MCP-server evaluation harness — the rest of the "semant
 already satisfied by `claim_work`/`genlock`, `prepare_workspace`, the append-only store, the qa/auditor
 gate, `resume`, and the transcript.
 
-The topic is **externally closed**; no further research prompt is needed. The one open item is internal —
-locate what, if anything, blocks seat egress (ROADMAP 118).
+The integration questions are externally closed. Two things remain open: an internal one — locate what, if
+anything, blocks seat egress (ROADMAP 118) — and the **value case** below.
+
+## Value case — open (2026-10-17)
+The research answers **how** to integrate an external tracker and **what** the ecosystem does; it does
+**not** measure whether an external PM system makes an agent team more efficient, correct, or effective.
+None of the sources present outcome evidence, so "should we use one" is a decision for the operator,
+informed by measurement (ROADMAP 123), not settled by the reports. Separating the three:
+- **Correctness:** a tracker does not improve agent-execution correctness, and a tracker that becomes a
+  second writer *threatens* it. durig's correctness comes from the single-writer queue, the verification
+  gate, and the worktree boundary. (Follow-up: exactly-once is impossible and the consumer must be
+  idempotent; queue → tracker is authoritative, tracker → queue only create-once ingest.)
+- **Efficiency:** the gains are human/coordination, not agent throughput — the broker schedules seats and
+  never reads the tracker. The integration adds sync cost and rate-limit exposure (GitHub 5k/hr; Linear 3M
+  complexity/hr; Jira tiered).
+- **Effectiveness:** the real value is alignment and oversight — intake governance, priority, blocked/human
+  decisions, and cross-team interop — provided the human process uses it. Trackers have **no first-class
+  "awaiting a human decision" state**, so durig's `deferred_awaiting_answer` loses fidelity when mapped.
+
+The honest verdict: an external tracker is primarily a **human/org interface**, not an agent-efficiency
+lever; adopt the seam and the read-only view, keep the queue the control plane.
+
+## Other value an external tracker can add
+The research surfaced these as the value beyond "the agents read tickets":
+- **Intake governance / admission control** — labels/gates (`ai-ready`, `conductor:task`) decide what work
+  is allowed in, a human lever on correctness and alignment (survey archetype 1).
+- **Human oversight, assignment, and accountability** — a familiar surface where a person assigns,
+  watches, and audits, instead of reading transcripts (Emdash: human assigns; Agent Board's
+  `clientViewEnabled` read-only view).
+- **Cross-team / org interop** — work arrives from where the org already works (GitHub/Linear/Jira) and
+  results post back, cutting copy-paste and context switching.
+- **A durable, human-readable record that outlives the rig** — issue history, comments, links, and
+  provenance independent of the append-only store.
+- **Metrics and reporting** — cycle time, throughput, blocked time, and completion rates on the org's
+  existing dashboards (Agent Board stats); a possible feed for the landing-health measure (item 100).
+- **A human-in-the-loop decision surface** — a ticket is where a person already looks for a blocked item,
+  the natural home for a deferral the store cannot express as a tracker state.
+- **Traceability** — issue ↔ commit/PR linkage for compliance and bisectability.
+- **Onboarding and discoverability** — a board explains what the swarm is doing without the harness.
+- **Bulk planning** — epics/sprints/dependencies for humans; note durig keeps dependencies **advisory**.
+
+And the costs to weigh against them: a possible second writer / sync drift, rate limits, token/OAuth
+handling, prompt injection from tracker content, vendor coupling (Vibe Kanban is sunsetting), and building
+the seam before any benefit is measured.
