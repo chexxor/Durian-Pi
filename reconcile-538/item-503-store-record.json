@@ -1,0 +1,28 @@
+{
+ "id": 503,
+ "from": "pm",
+ "to": "lead",
+ "subject": "ASK C (lead, BACKLOG DESIGN): work-item layer — feature branch per work item, viewable by assigned seats, queue-items decoupled from work-items (1 work item : N queue items), persona branch review",
+ "body": "ASK C — BACKLOG DESIGN: work-item layer, feature branches, persona review. DESIGN FIRST (lead + designer/advocate proposal pass BEFORE implementation). NOT next. ONE concern (the design).\n\nSHAPE:\n1. each WORK ITEM is committed to a FEATURE BRANCH, in addition to its own worktree (#473 / D48 / D49);\n2. any seat ASSIGNED to a work item can VIEW its worktree/branch (collaboration);\n3. DECOUPLE queue items from work items — one work item may own MULTIPLE queue items (the work item is the \"user story\"; queue items are concrete delegated tasks);\n4. the branch enables BRANCH REVIEW by one or more seats, each as a different PERSONA (domain / security / documentation expert — maps onto qa/auditor/advocate/designer).\nRELATES TO: #473 worktree lifecycle, D48/D49, D50 item-scoped commits, the Router queue tools.\nFLOW: recommend a DESIGN/PROPOSAL pass (lead + designer/advocate) BEFORE implementation.\nACCEPTANCE: a recorded design proposal (shape + the seam/contract + how it preserves the one-store/one-broker invariants); then implementation items if adopted.\nCONSTRAINTS: one concern (the design); native Windows only; never push/publish.",
+ "optimizedVia": null,
+ "notice": false,
+ "status": "done",
+ "transitions": [
+  {
+   "at": "2026-10-15T20:15:34.675Z",
+   "event": "queued",
+   "by": "pm"
+  },
+  {
+   "at": "2026-10-15T20:21:59.574Z",
+   "event": "claimed",
+   "by": "lead"
+  },
+  {
+   "at": "2026-10-15T20:22:25.895Z",
+   "event": "done",
+   "by": "lead"
+  }
+ ],
+ "resultSummary": "ASK C — WORK-ITEM LAYER: DESIGN PROPOSAL (lead contribution to the lead+designer/advocate pass). Design only; NOT implementation. HONESTY: I cannot read #473/D48/D49/D50 or the Router tools (no read tool; pm relayed names not contents) — seams flagged for the designer/advocate pass to confirm before adoption.\n\nCORE MODEL (the decoupling):\n- WORKITEM = the \"user story\": a STORE RECORD {id, title, assignees[], featureBranchName, worktreeRef, status, reviews[]}. One WorkItem : N QueueItems.\n- QUEUEITEM = a concrete delegated task, gaining ONE optional additive field `workItemId?` (nullable => standalone items behave exactly as today). Nothing else on the queue item changes: status machine, claim-by-id, `held`, one-concern all untouched.\n\nTHE SEAM / WHY IT PRESERVES INVARIANTS:\n- The link is a SINGLE ADDITIVE FIELD on the queue item (same lesson as the HELD amendment: add a value, no new write path/schema beyond it).\n- A WorkItem is a STORE RECORD, NOT a git ref. The feature BRANCH is a git artifact; the work ITEM lives in the store. This is the load-bearing decision: making the branch the source of truth would (a) reintroduce git as a coordination surface and (b) contradict #146 (seats must not mutate git state).\n- All WorkItem records + `workItemId` links are read/written through the SAME SINGLE WRITER (A1: store/harness owned by the one `serve` broker). No second process touches them. This is how the design preserves one-store/one-broker.\n\nFOUR SHAPE ELEMENTS:\n1. FEATURE BRANCH per work item — YES, but created/advanced UNDER OPERATOR AUTHORITY (or the broker acting under it), NOT by seats. REQUIRED because of #146: seats cannot commit; the operator integrates. A \"feature branch per work item\" with seat commit authority would directly violate #146. Seats produce work in their worktrees; advancement into the feature branch is operator-gated.\n2. ASSIGNED SEATS CAN VIEW the worktree/branch — view is READ-ONLY and STORE-MEDIATED (the broker reports the work item's state/branch), NOT direct filesystem access. This is REQUIRED so `view` does NOT restore read tools to coordinator seats (would re-open F9 / #144). Keep F9 intact.\n3. DECOUPLE queue <-> work items (1:N) — via the additive `workItemId?` field; queue semantics otherwise unchanged.\n4. PERSONA BRANCH REVIEW — one or more seats review a branch, each as a PERSONA (domain/security/documentation <-> qa/auditor/advocate/designer), recorded on the WorkItem as {persona, reviewerSeat, verdict, notes}. CONSTRAINTS: reviewer != author; a persona review is a RECORD that INFORMS the operator's integration — it is NOT a merge authority held by seats (otherwise \"review\" silently becomes a seat-controlled merge gate).\n\nSCOPE GUARDRAILS (what this design must NOT do): (i) must not make git the coordination surface — store stays authoritative; (ii) must not give seats git-write authority (#146) — branch advancement operator-gated; (iii) must not restore read tools to coordinators (F9/#144) — view is store-mediated; (iv) must not bundle implementation into the design.\n\nIF ADOPTED, implementation decomposes into ONE-CONCERN items: C-1 `workItemId?` additive field + WorkItem store record (+ read path); C-2 operator-gated feature-branch lifecycle; C-3 store-mediated read-only view for assigned seats; C-4 persona review record. Each its own item + failing-first acceptance.\n\nSEAMS A DESIGNER/ADVOCATE PASS MUST CONFIRM BEFORE ADOPTION (I could not read them): #473 worktree lifecycle (a work item must REFERENCE a per-seat worktree, not create a competing one); D48/D49; D50 item-scoped commits (how operator-gated branch advancement interacts with item-scoped commits); the Router queue tools' additivity. Map to pm's recommended design-first pass.\n\nGROUNDING HONESTY: design proposal only; no code claim; I did not read #473/D48/D49/D50 or the Router tools. Constraint kept: one concern (the design); native Windows only; never push/publish."
+}

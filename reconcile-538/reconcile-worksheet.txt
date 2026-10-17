@@ -1,0 +1,27 @@
+Reconcile worksheet for #642 (impl) — grounding passages gathered from the queue store (selfdev.sqlite copy, document_revisions of durig.queue doc 29, applied with chord's applyImmutable).
+
+# 538 (from=pm, to=lead, status=done; done by lead 2026-10-15T21:14:40Z)
+BODY carries: read-only view listing work items <-> queue items (1:N) + completion status/result; DELIVER AS EXTENSION not core; RELATE TO #505 as first extension; read-only D11; depends on #503.
+RESULT (lead) carries: 4-part extension seam (discovery opt-in pull / lifecycle read-only short-lived / least privilege mediated read via broker+readapi with F24 no-second-DB-opener load-bearing / versioning); roll-up computed at read time; DEPENDENCY: #503 at least to C-1; guardrails (core must not require extension; no store-write; no git authority #146; no second writer; no direct DB handle).
+
+# 503 (from=pm, to=lead, status=done; result=lead's design proposal)
+Carries: WorkItem = store record {id, title, assignees[], featureBranchName, worktreeRef, status, reviews[]}; ONE WorkItem : N QueueItems via ONE additive nullable workItemId? on queue items; one store/one broker single writer A1; four shape elements (operator-gated feature branch; assigned-seat view read-only store-mediated; 1:N decoupling; persona review as RECORD not merge gate); C-1..C-4 decomposition: C-1 workItemId? field + WorkItem store record + read path; C-2 operator-gated branch lifecycle; C-3 store-mediated view; C-4 persona review record.
+
+# 610 (pm -> lead; ruled by lead) and its DONE #632 (lead -> pm):
+FIRST = TUI card; SECOND = status/CLI row; NO dedicated workitem verb (smallest surface; METRICS.md; matches #538 seam; D21).
+D (N:1 worktree) -> record (a): WorkItem HOLDS worktreeRef; queue items ride along; preserves #503's 1:N; avoids per-queue-item churn; consistent with #473 claimWorktree/removeClaimedWorktree (work-level resource). NON-OBVIOUS KERNEL: D49 create-on-claim/remove-on-complete binds to the WORKITEM's claim/complete, NOT each queue item's.
+E (dangling ref) -> ACCEPT: worktreeRef pointing at a REMOVED dir while children non-terminal MUST surface as attention notice, same channel as idle_with_queued_work (push-not-poll); same invariant-tracking class as stalled-claim/held/repeated-failure.
+R1-R4 confirmed as rejections: R1 review not merge gate; R2 no WorkItem field derived from git state (#503 store authoritative); R3 no restored read tools (F9/#144); R4 no new wake/execution path (#121).
+Binding: workItemId MUST be an EXPLICIT field, NOT derived from subject shape (fragile; false-positives vs DONE-notice items; cf Router isDoneNotice).
+
+# What #642 (my item) adds beyond #538's existing record — the six folds pm routed:
+1. First surface (TUI card / status row / no workitem verb) — NOT recorded in #538 body/result: NOWHERE in tmp-item-538.json does "TUI" or "first surface" appear. MISSING -> must record.
+2. Worktree binding (a) + D49 kernel — NOT in #538 record. MISSING -> must record.
+3. Dangling-ref attention notice — NOT in #538 record. MISSING -> must record.
+4. R1-R4 rejections — partially IN #538/503 (R1: persona review as record not merge gate — present in both 503 result and 538... check line "persona review is a RECORD that INFORMS the operator's integration — NOT a merge authority"; R3 store-mediated view — present). R2 (no field derived from git state) — NOT stated explicitly in #538 (store-authoritative is stated generally, the derived-from-git ban is not). R4 (no second wake path) — not stated in #538. The EXPLICIT R1-R4 list as a REJECTION SET is not recorded in #538.
+5. Explicit workItemId field, not subject-shape derivation (Router isDoneNotice false-positive) — NOT in #538 record. MISSING -> must record.
+
+# Where the record must land (given #538 is TERMINAL done and cannot be revised):
+The live holder of the #538 chain is pm (pm queued #610 to lead, pm created #642 and queued it to impl, pm's #632 result says ROUTED). So the reconciled #538 SHAPE record goes BACK to pm as a queue item: pm applies it by revising #538's parked/registered successor (or by attaching the fold to the #538 gate note pm owns). Routing back (not editing someone else's terminal item) also satisfies the constitution: commit/record only what is in my queue.
+
+# Version note for the shape record (accuracy): #538 result states DEPENDENCY = #503 at least to C-1; my item's gate adds: do not START until the C-1 read surface EXISTS in code.
