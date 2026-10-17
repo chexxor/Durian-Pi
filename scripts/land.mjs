@@ -16,6 +16,13 @@
 // holder. (seatguard's git-state block is defense-in-depth; the runbook and `check` are
 // ADVISORY ONLY and are never the thing that stops a bad landing.)
 //
+// lead #1429 condition (b): the pre-flight check above is a START-CHECK only — a generation
+// can start between it and the FF. So the FF-advance ALSO runs under an EXCLUSIVE lock the
+// helper HOLDS across it: it claims ALL N generation slots (a generation claims one of N, so
+// claiming every one makes new generations impossible) and releases on every exit path.
+// N is DURIG_MAX_CONCURRENT_SEATS; when the rig is UNCAPPED (unset/<=0) it creates no slot
+// files, so there is no slot to take and the FF runs unprotected — reported in `lock`.
+//
 // NOT built on purpose: a hunk-picker / `apply_patch` (the #714 conflict needed SYNTHESIS —
 // a union of both branches' rules — which selection cannot produce). Any conflict tool is
 // gated on MEASURED incidence (ROADMAP 100).
@@ -35,7 +42,7 @@
 // mid-merge.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 const args = process.argv.slice(2);
@@ -104,6 +111,116 @@ function heldGenlocks(dbPath) {
 		}
 	}
 	return held;
+}
+
+/* ─────────── the EXCLUSIVE landing lock (lead #1429 condition (b)) ───────────
+ * The FF-advance must happen under a lock HELD ACROSS it, not merely a start-check: a new
+ * generation can otherwise start between the check and the FF. The generation slots ARE that
+ * lock — every generation claims one of N — so claiming ALL N makes new generations
+ * impossible while we hold them. We hold them for the FF only (the critical section) and
+ * release on every exit path.
+ *
+ * N is DURIG_MAX_CONCURRENT_SEATS (the source cli.mjs's maxSeats() uses). When it is unset
+ * or <= 0 the rig runs UNCAPPED: it creates no slot files, so there is no generation slot to
+ * take and the landing proceeds without a held lock — reported loudly in `lock`. */
+
+/** The number of generation slots, or null when the rig is uncapped. */
+function resolveSlotCount(repoRoot) {
+	let raw = process.env.DURIG_MAX_CONCURRENT_SEATS;
+	if (raw === undefined || raw === "") {
+		try {
+			raw = JSON.parse(readFileSync(join(repoRoot, "durig.config.json"), "utf8")).DURIG_MAX_CONCURRENT_SEATS;
+		} catch {
+			raw = undefined;
+		}
+	}
+	const n = Number(raw);
+	return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
+// genlock's STALE_MS: longer than the provider stream timeout, so a legitimate long
+// generation is never age-stolen while a dead or wedged holder is reclaimed promptly.
+const LOCK_STALE_MS = 660_000;
+const LOCK_POLL_MS = 100;
+const LOCK_WAIT_MS = 660_000;
+
+/** Parse a slot file; null when absent, torn or unreadable (never evidence of a live run). */
+function readHolder(path) {
+	try {
+		return JSON.parse(readFileSync(path, "utf8"));
+	} catch {
+		return null;
+	}
+}
+
+/** A slot may be stolen when its holder is dead, or has aged past the stale window. */
+function slotIsStale(holder, now = Date.now()) {
+	if (!(holder && typeof holder.pid === "number") || !pidAlive(holder.pid)) return true;
+	const age = typeof holder.since === "string" ? now - Date.parse(holder.since) : Infinity;
+	return age > LOCK_STALE_MS;
+}
+
+/** Synchronous sleep — land.mjs is a sync script (spawnSync), so the acquire loop blocks. */
+function sleepSync(ms) {
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Claim ALL `slots` generation slots beside `dbPath`, WAITING for a live holder to release
+ * (lead: "if a generation is in flight, the lander WAITS for the lock"). Returns the claimed
+ * paths; releases any partial claim and throws on timeout.
+ */
+function acquireAllSlots(dbPath, slots, me) {
+	const claimed = [];
+	const deadline = Date.now() + LOCK_WAIT_MS;
+	for (let i = 0; i < slots; i += 1) {
+		const path = `${dbPath}.genlock.${i}`;
+		for (;;) {
+			try {
+				const fd = openSync(path, "wx");
+				try {
+					writeFileSync(fd, JSON.stringify(me));
+				} finally {
+					closeSync(fd);
+				}
+				claimed.push(path);
+				break;
+			} catch (err) {
+				if (err?.code !== "EEXIST") {
+					releaseAllSlots(claimed, me);
+					throw err;
+				}
+				if (slotIsStale(readHolder(path))) {
+					try {
+						unlinkSync(path); // steal from a dead or wedged holder
+					} catch {
+						// another process stole or released it first; retry the claim
+					}
+					continue;
+				}
+				if (Date.now() > deadline) {
+					releaseAllSlots(claimed, me);
+					throw new Error(
+						`timed out after ${LOCK_WAIT_MS} ms waiting for genlock slot ${path} ` +
+							`(held by pid ${readHolder(path)?.pid ?? "?"})`,
+					);
+				}
+				sleepSync(LOCK_POLL_MS);
+			}
+		}
+	}
+	return claimed;
+}
+
+/** Release the slots WE hold; a slot another process now owns is left alone. */
+function releaseAllSlots(paths, me) {
+	for (const path of paths) {
+		try {
+			if (readHolder(path)?.pid === me.pid) unlinkSync(path);
+		} catch {
+			// already gone
+		}
+	}
 }
 
 /* ───────── resolve the shared repo ───────── */
@@ -284,8 +401,31 @@ if (stillDirty.length > 0) {
 	);
 }
 
-const scratchHead = git(scratch, ["rev-parse", "HEAD"]).out;
-const ff = git(repoRoot, ["merge", "--ff-only", scratchHead]);
+const lockSlots = resolveSlotCount(repoRoot);
+const me = { pid: process.pid, seat: "impl-land", since: new Date().toISOString() };
+const lock = { slots: lockSlots, held: 0, waitedMs: 0 };
+let heldPaths = [];
+let scratchHead;
+let ff;
+try {
+	const lockStart = Date.now();
+	if (lockSlots !== null) {
+		heldPaths = acquireAllSlots(dbPath, lockSlots, me);
+		lock.held = heldPaths.length;
+	}
+	lock.waitedMs = Date.now() - lockStart;
+	// Test/diagnostic seam: hold the lock a moment so an external observer can see it held.
+	const holdMs = Number(process.env.DURIG_LAND_HOLD_FF_MS ?? "");
+	if (Number.isFinite(holdMs) && holdMs > 0) sleepSync(holdMs);
+	scratchHead = git(scratch, ["rev-parse", "HEAD"]).out;
+	ff = git(repoRoot, ["merge", "--ff-only", scratchHead]);
+} catch (err) {
+	releaseAllSlots(heldPaths, me);
+	if (!keepScratch) removeScratch();
+	report({ ...base, error: `cannot hold the exclusive landing lock: ${err?.message ?? err}`, merged, lock }, 1);
+} finally {
+	releaseAllSlots(heldPaths, me);
+}
 if (ff.code !== 0) {
 	if (!keepScratch) removeScratch();
 	report(
@@ -293,6 +433,7 @@ if (ff.code !== 0) {
 			...base,
 			error: `cannot fast-forward main to ${scratchHead}: ${ff.err}. Nothing was advanced.`,
 			merged,
+			lock,
 			scratch: keepScratch ? scratch : null,
 		},
 		1,
@@ -309,6 +450,7 @@ report(
 		repo: repoRoot,
 		main: { before: mainBefore.out, after: mainAfter },
 		merged,
+		lock,
 		suite: wantSuite ? suiteResults : null,
 	},
 	0,

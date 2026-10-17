@@ -14,8 +14,8 @@
 // Run: node demo/land-helper.test.mjs   (exit 0 = pass)
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,6 +50,8 @@ function land(repo, argv) {
     cwd: repo,
     encoding: "utf8",
     timeout: TIMEOUT_MS,
+    // The helper's FF lock is keyed on the rig's generation-slot cap; give the temp repo one.
+    env: { ...process.env, DURIG_MAX_CONCURRENT_SEATS: "2" },
   });
   let report = null;
   try {
@@ -121,13 +123,13 @@ try {
   check("the helper refuses (nonzero)", locked.code !== 0, locked.raw.slice(0, 200));
   check("...naming the genlock", /genlock/.test(locked.report?.error ?? ""), locked.report?.error);
   check("...and main did NOT advance", mainSha(repo) === beforeLock);
-  rmSync(slot);
+  rmSync(slot, { force: true });
   // A slot file that is NOT a live holder must not block a landing: the broker reconciles
   // stale slots, and a partial write parses as no holder at all (the code says so).
   writeFileSync(slot, '{"pid": 123, "seat"');
   const staleOk = land(repo, ["feat-b"]);
   check("a partial/unreadable slot (no live holder) does not block", staleOk.code === 0, staleOk.raw.slice(0, 200));
-  rmSync(slot);
+  rmSync(slot, { force: true });
 
   console.log("\n4. a CONFLICT stops in the scratch — the shared tree is never mid-merge");
   // feat-c and feat-d branch from the SAME pre-landing main and rewrite the same line, so
@@ -190,9 +192,102 @@ try {
   check("a mid-merge tree refuses to land", midMerge.code !== 0 && /mid-merge/.test(midMerge.report?.error ?? ""), midMerge.report?.error);
   rmSync(join(repo, ".git", "MERGE_HEAD"));
 
+  console.log("\n7. the FF holds an EXCLUSIVE lock across the advance, and releases it on every path");
+  const slotPaths = [0, 1].map((i) => join(repo, `rig.sqlite.genlock.${i}`));
+  const readSlot = (p) => {
+    try {
+      return JSON.parse(readFileSync(p, "utf8"));
+    } catch {
+      return null;
+    }
+  };
+  const waitFor = async (fn, ms) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      if (fn()) return true;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    return fn();
+  };
+  // Spawn the REAL helper asynchronously so the lock can be observed while it is held.
+  const landAsync = (branch, extraEnv) => {
+    const child = spawn(process.execPath, [LAND, branch, "--repo", repo, "--db", join(repo, "rig.sqlite")], {
+      cwd: repo,
+      env: { ...process.env, DURIG_MAX_CONCURRENT_SEATS: "2", ...(extraEnv ?? {}) },
+    });
+    child.out = "";
+    child.stdout.on("data", (d) => (child.out += d));
+    child.stderr.on("data", (d) => (child.out += d));
+    child.done = new Promise((r) => child.on("exit", (c) => r(c)));
+    return child;
+  };
+
+  console.log("7a. the lock is HELD across the FF, cannot be interleaved, and is released on success");
+  const featG = feature("feat-g", "g.txt", "from feat-g\n");
+  const heldRun = landAsync("feat-g", { DURIG_LAND_HOLD_FF_MS: "1200" });
+  const heldSeen = await waitFor(() => slotPaths.every((p) => readSlot(p)?.pid === heldRun.pid), 8000);
+  check("the lander HOLDS all N slots across the FF", heldSeen, slotPaths.map((p) => JSON.stringify(readSlot(p))).join(" "));
+  let claimErr = null;
+  try {
+    const fd = openSync(slotPaths[0], "wx");
+    closeSync(fd);
+  } catch (err) {
+    claimErr = err?.code ?? String(err);
+  }
+  check("a concurrent generation CANNOT claim a slot while the lock is held", claimErr === "EEXIST", String(claimErr));
+  const heldCode = await heldRun.done;
+  check("the landing completes (exit 0)", heldCode === 0, heldRun.out.slice(0, 200));
+  check("...and RELEASES the lock on the success path", slotPaths.every((p) => !existsSync(p)));
+  check("...and main advanced to feat-g",
+    spawnSync("git", ["merge-base", "--is-ancestor", featG, "main"], { cwd: repo }).status === 0);
+
+  console.log("7b. the lock is RELEASED on the failure path (the FF cannot apply)");
+  const featH = feature("feat-h", "h.txt", "from feat-h\n");
+  const failRun = landAsync("feat-h", { DURIG_LAND_HOLD_FF_MS: "1500" });
+  const failSeen = await waitFor(() => slotPaths.every((p) => readSlot(p)?.pid === failRun.pid), 8000);
+  check("the lock is held again for the second run", failSeen);
+  git(repo, ["commit", "--allow-empty", "-m", "concurrent commit while the lander holds the lock"]);
+  const failCode = await failRun.done;
+  check("the fast-forward FAILS once main has moved (nonzero)", failCode !== 0, failRun.out.slice(0, 200));
+  check("...and the lock is RELEASED on the failure path", slotPaths.every((p) => !existsSync(p)));
+  check("...and the branch did NOT land",
+    spawnSync("git", ["merge-base", "--is-ancestor", featH, "main"], { cwd: repo }).status !== 0);
+
+  console.log("7c. a generation that starts DURING the scratch merges makes the FF WAIT for the lock");
+  writeFileSync(
+    join(repo, "demo", "hold.test.mjs"),
+    [
+      'import { spawn } from "node:child_process";',
+      'import { writeFileSync } from "node:fs";',
+      "const dir = process.env.LAND_TEST_SLOT_DIR;",
+      "if (dir) {",
+      "  const ms = Number(process.env.LAND_TEST_HOLD_MS || 1500);",
+      '  const child = spawn(process.execPath, ["-e", `setTimeout(()=>{}, ${ms})`], { detached: true, stdio: "ignore" });',
+      "  child.unref();",
+      "  writeFileSync(`${dir}/rig.sqlite.genlock.0`, JSON.stringify({ pid: child.pid, seat: \"impl\", since: new Date().toISOString() }));",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-m", "test: a fixture that simulates a generation starting mid-landing"]);
+  const featI = feature("feat-i", "i.txt", "from feat-i\n");
+  const waitStart = Date.now();
+  const waited = spawnSync(process.execPath, [LAND, "feat-i", "--suite", "--repo", repo, "--db", join(repo, "rig.sqlite")], {
+    cwd: repo,
+    encoding: "utf8",
+    timeout: TIMEOUT_MS,
+    env: { ...process.env, DURIG_MAX_CONCURRENT_SEATS: "1", LAND_TEST_SLOT_DIR: repo, LAND_TEST_HOLD_MS: "1500" },
+  });
+  const waitedMs = Date.now() - waitStart;
+  check("the FF WAITS for the in-flight generation (elapsed >= 1s)", waited.status === 0 && waitedMs >= 1000, `exit ${waited.status} in ${waitedMs}ms`);
+  check("...and the landing advances main once the lock frees",
+    spawnSync("git", ["merge-base", "--is-ancestor", featI, "main"], { cwd: repo }).status === 0);
+  check("...and the lock is released (no slots remain)", [0, 1].every((i) => !existsSync(join(repo, `rig.sqlite.genlock.${i}`))));
+
   console.log(
     failures === 0
-      ? "\nPASS - the landing helper merges in a scratch worktree, fast-forwards main only when clean, and refuses a dirty tree / a held genlock / a conflict / a failing suite"
+      ? "\nPASS - the landing helper merges in a scratch worktree, fast-forwards main only when clean, holds an EXCLUSIVE lock across the FF (released on success and failure), and refuses a dirty tree / a held genlock / a conflict / a failing suite"
       : `\nFAIL - ${failures} check(s) failed`,
   );
 } catch (err) {
