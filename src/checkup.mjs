@@ -89,6 +89,11 @@ export const RULES = [
     severity: "fix-now",
     what: "a runbook's Verify step has never run",
   },
+  {
+    id: "ownership-seat-missing",
+    severity: "error",
+    what: "an ownership class names an owner seat the rig does not declare",
+  },
 ];
 
 const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
@@ -355,6 +360,45 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
           "re-run the runbook's Verify step and update last_verified, or fix the runbook to match the code",
         );
       }
+    }
+  }
+  // 10. ROADMAP 46 / D62: the docs-ownership norm maps each artifact CLASS to a live
+  //    owning seat, and a prose grid not enforced here goes stale. "Live" means NAMED IN
+  //    THE RIG SPEC, not registered in the store: the spec is the machine-readable source
+  //    for "the rig declares this seat", spec-vs-store drift is store-missing-seat /
+  //    stray-seat's job, and a store read here would restyle that rule and break this
+  //    module's purity. The block is OPTIONAL — absent means the rule is SKIPPED with its
+  //    reason (a bare rig is legitimately silent about ownership), never a silent pass.
+  //    Present means every named seat must be declared, else an error naming the seat(s)
+  //    and class(es) (fix: declare the seat, or correct the block). Only owner COLUMNS are
+  //    checked — a secondary/audit attribute is prose until its own rule is wanted.
+  const ownership = spec?.ownership;
+  if (ownership === undefined || ownership === null) {
+    skipped.push({
+      id: "ownership-seat-missing",
+      why: "the rig declares no `ownership` block, so there are no owner seats to check against its declared seats",
+    });
+  } else if (typeof ownership !== "object" || Array.isArray(ownership)) {
+    add(
+      "ownership-seat-missing",
+      "rig",
+      "the rig's `ownership` block is not an object of class -> owner-seat(s)",
+      "shape it as {\"<class>\": [\"<seat>\", ...]} keyed to the docs-ownership artifact classes",
+    );
+  } else {
+    const ghosts = [];
+    for (const [cls, owners] of Object.entries(ownership)) {
+      for (const owner of Array.isArray(owners) ? owners : [owners]) {
+        if (typeof owner !== "string" || !names.has(owner)) ghosts.push(`${owner} (class ${cls})`);
+      }
+    }
+    if (ghosts.length > 0) {
+      add(
+        "ownership-seat-missing",
+        ghosts.join(", "),
+        `${ghosts.length === 1 ? "an ownership class names an owner seat" : `${ghosts.length} ownership classes name owner seats`} the rig does not declare: ${ghosts.join(", ")}`,
+        `declare the seat(s) in ${rig} and run: node cli.mjs up ${rig}, or correct the ownership block`,
+      );
     }
   }
 

@@ -119,6 +119,14 @@ try {
 			assert.ok(c.why, `rule ${c.id} skips without a reason`);
 			continue;
 		}
+		// The starter deliberately declares no `ownership` block (a bare starter rig
+		// must stay clean — ROADMAP 46 / #714), so that rule is SKIPPED with a reason,
+		// not passed. Every other rule must genuinely run and pass.
+		if (c.id === "ownership-seat-missing") {
+			assert.equal(c.status, "skipped", `the starter must skip ${c.id}, got "${c.status}"`);
+			assert.ok(c.why, `${c.id} must state why it was skipped`);
+			continue;
+		}
 		assert.equal(c.status, "pass", `rule ${c.id} is "${c.status}", not "pass": ${c.why ?? ""}`);
 	}
 
@@ -201,6 +209,7 @@ try {
 		"seat-without-capabilities": "this file, control 6",
 		"runbook-stale": "demo/runbook-rules.test.mjs",
 		"runbook-unverified": "demo/runbook-rules.test.mjs",
+		"ownership-seat-missing": "demo/ownership.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(
