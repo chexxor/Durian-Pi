@@ -181,6 +181,15 @@ operator/delegate to drive **variant (1)** (stop broker, hand-verify, land outsi
      combined the #1383 + #1441 sections (branch renamed `feat-g-lock`).
    - **Entry 11 (`impl-item-1151`) EXCLUDED** as instructed (D1 open).
    - Broker restarted **pid 34756** `17:13:46Z`; inbox drained (`INTENT delivered=1` `17:13:47Z`).
+   - **Broker CRASH + recovery (~17:29Z):** pid 34756 died on `Session failed after a storage error`
+     (`wake-failed` qa conv 15 / lead conv 21) — the known **lock-contention** class (read commands
+     running open-time migrations against the broker's write lock; stale `log --follow` viewers
+     aggravate it), NOT corruption (`status` opens fine, no `unreadable pi.live`). Store backed up to
+     `.spike/store-backup-20261017-123250`; broker restarted **pid 19720** `17:33:00Z`; batch-2/3
+     intents delivered; no new storage errors. **If it recurs:** the durable fix is skipping migrations
+     for read-only opens (registered), and the per-conversation survival is ROADMAP 78.
+   - Post-landing attention includes `scribe:secret_detected` and `null:step-repetition` — new notices
+     from the landed secret-detection (#828/#837) and degeneration guards; expected, not a failure.
    - **Owed:** `pm` to mark the 29 queue rows landed/DELIVERED; prune the now-merged branches
      (seatguard blocks author-seat deletion; delegate/operator may `git branch -d`, all now `ahead=0`).
    - Rulings batch `opr-20261017-rulings-batch` delivered (zero-trust key-mgmt item; ROADMAP 97 spend
