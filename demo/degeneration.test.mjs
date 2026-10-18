@@ -32,11 +32,16 @@ async function checkAsync(label, fn) {
 }
 
 // Entries are newest-first (storage order), the way readSeatPages returns them.
-function assistant(toolCalls = [], { usage = null, text = "" } = {}) {
+function assistant(toolCalls = [], { usage = null, text = "", durationMs = null } = {}) {
   const content = [];
   if (text) content.push({ type: "text", text });
   for (const [name, args] of toolCalls) content.push({ type: "toolCall", name, arguments: args });
-  return { kind: "pi.assistant", model: [{ role: "assistant", content, ...(usage ? { usage } : {}) }] };
+  return {
+    kind: "pi.assistant",
+    model: [
+      { role: "assistant", content, ...(usage ? { usage } : {}), ...(durationMs !== null ? { durationMs } : {}) },
+    ],
+  };
 }
 const user = (text = "You have queued work.") => ({
   kind: "pi.user",
@@ -45,6 +50,11 @@ const user = (text = "You have queued work.") => ({
 const malformed = () => ({
   kind: "pi.tool-result",
   model: [{ isError: true, content: [{ type: "text", text: '<harness> [error] Validation failed for tool "edit": path required' }] }],
+});
+// A tool RESULT carries the TOOL's runtime in `durationMs` — NOT a model turn (#1703).
+const toolResult = (durationMs) => ({
+  kind: "pi.tool-result",
+  model: [{ role: "tool", content: [{ type: "text", text: "ok" }], durationMs }],
 });
 const reset = () => ({ kind: "pi.reset", model: [{ role: "user", content: [{ type: "text", text: "reset" }] }] });
 // The model's recurrent fault: a tool call written into the message TEXT. Observed in two shapes —
@@ -74,8 +84,7 @@ console.log("\n=== degeneration guard: assessRun ===\n");
 
 check("a short healthy run is not degenerate", () => {
   const a = assessRun([assistant([["read", { path: "a" }]]), assistant([["read", { path: "b" }]]), user()]);
-  assert.equal(a.degenerate, false);
-  assert.deepEqual(a.reasons, []);
+  assert.equal(a.degenerate, false);  assert.deepEqual(a.reasons, []);
 });
 
 check("a run past the tool-turn bound is degenerate", () => {
@@ -278,6 +287,29 @@ await checkAsync("applyResets reports a failing seat and still resets the others
   assert.equal(applied.length, 1);
   assert.equal(applied[0].seat, "b");
   assert.deepEqual(resetCalls, [2]);
+});
+
+check("a slow TOOL result is not a slow ASSISTANT turn (#1703)", () => {
+  // The defect: a legitimate ~5-minute demo sweep ran as a TOOL, and the guard read the tool
+  // result's durationMs as the MODEL's turn duration, resetting the seat in a hot loop.
+  const a = assessRun([
+    toolResult(301_935), // newest first: the tool result...
+    assistant([["powershell", { command: "npm test" }]], { durationMs: 2_075 }), // ...from a fast turn
+    user(),
+  ]);
+  assert.equal(a.turnDurationMs, 2_075, "the tool's runtime is not a turn duration");
+  assert.equal(a.degenerate, false, "a slow tool run does not reset the seat");
+  assert.deepEqual(a.reasons, []);
+});
+
+check("a genuinely slow ASSISTANT turn still trips the bound (#1703)", () => {
+  const a = assessRun([assistant([], { durationMs: 301_935 }), user()]);
+  assert.equal(a.turnDurationMs, 301_935, "the assistant turn's duration is counted");
+  assert.equal(a.degenerate, true, "the real stall is still caught");
+  assert.ok(
+    a.reasons.some((r) => r.startsWith("turn-duration-ms=")),
+    `the reason names the duration cause; got ${a.reasons.join(", ")}`,
+  );
 });
 
 console.log(failures === 0 ? "\nPASS — degeneration detector verified" : `\nFAIL — ${failures} check(s) failed`);
