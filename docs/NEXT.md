@@ -3,7 +3,37 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T17:44Z (delegate — broker dormant-stall FIXED (`0c0d4d3`); live broker on the fix; independent verify routed)._
+_Last refreshed: 2026-10-18T18:42Z (delegate — broker dormant-stall fixed AND the first fix's gap fixed (`991567d`); incidents filed; clocked out)._
+
+> **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T18:42Z).**
+> - **Broker dormant-stall — fixed, then a gap in the first fix found and fixed.** `0c0d4d3` scheduled the
+>   wake retry INSIDE the pass `try` after `supervise()`, so a `wake-failed` followed by a later throw in
+>   the SAME pass (the supervisor hitting the same storage error) still parked the broker — **recurrence
+>   7** (pid 12944, `PASS 29` frozen `17:57:16Z` for ~36 min). **`991567d`** moves the retry scheduling
+>   after the `finally`, so it runs on success AND on throw; `demo/broker-wake-retry.test.mjs` now has 3
+>   scenarios (plain, retry-disabled, same-pass-throw). Live broker **pid 14436** (`START 18:38:20Z`),
+>   `WAKE pm,impl,scribe`, no new `wake-failed`.
+> - **Incident reports filed** (per the operator): new `docs/incidents/2026-10-18-host-resource-exhaustion.md`
+>   (sev2) and `docs/incidents/2026-10-18-local-provider-empty-key.md` (sev2);
+>   `2026-10-18-broker-dormant-stalled.md` updated with recurrences 4–7 and the fix; index + runbook
+>   Evidence updated.
+> - **Verification owed:** the broker fix (`0c0d4d3` + `991567d`) was written by the delegate under an
+>   operator directive and is committed to `main`; an independent verify was routed to auditor earlier —
+>   it must now cover `991567d` too. Until then, treat it as unverified (the delegate's demo is not the
+>   verify).
+> - **Owed (new detection gap):** `cmdServe`'s `onDiagnostic` logs only `wake-failed`/`escalated`, **not
+>   `pass-failed`** — a swallowed pass throw is invisible in `.spike/serve.err`. Fold into ROADMAP 78
+>   (log `SessionFailed.cause` on failure); watchdog still owed (ROADMAP 61–64); underlying
+>   per-conversation storage error still UNVERIFIED (pi-durable).
+> - **Host environment (parallel):** node processes die with `Zone Allocation failed` / `NewArray
+>   Allocation failed` past ~25–100 MB (5.7 GB free of 34 GB), so read verbs and the dense demo loop are
+>   flaky; **re-run a failure in isolation before calling it a regression** (lead `#2122`, `#2126`).
+> - **Also in flight:** D105 enforcement `#2123` (impl) + docs `#2124` (scribe) + verify `#2125`; the
+>   local-provider fix `#2114` (devtools) + verify; the `format` gate is NOT repo-clean (untouched files
+>   fail), so it is not a usable gate today.
+> - **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Do not:** stop the broker without a runbook/declared window; `git add -A`; treat the delegate's
+>   demo as the seat verify.
 
 > **NEXT SESSION START HERE — the broker dormant-stall is FIXED and live; independent verify routed
 > (2026-10-18T17:44Z).** Operator: "Please fix the broker."
