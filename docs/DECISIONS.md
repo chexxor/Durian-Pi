@@ -2726,7 +2726,7 @@ routing; acceptance is a demo proving a local-provider seat gets a `pi.reset` bo
 consecutive work items while a non-local seat does not, plus `node --check`, the full suite, and a
 non-author verify.
 
-## D107 — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127)
+## D111 — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127)
 
 **Decision.** TUI cost/spend pricing is supplied by a per-provider pricing EXTENSION. A price is
 UNAVAILABLE unless an extension supplies it; the former blocker — an operator-supplied vendor price
@@ -2749,7 +2749,7 @@ absence condition.
 tracked at held item #1135. No pricing extension exists yet, so the surface currently renders
 unavailable by this rule.
 
-## D108 — durable-tui: `ui.mjs` / `npm run ui` is the FALLBACK surface and is to be RETIRED (operator, 2026-10-18)
+## D112 — durable-tui: `ui.mjs` / `npm run ui` is the FALLBACK surface and is to be RETIRED (operator, 2026-10-18)
 
 **Decision.** `ui.mjs` / `npm run ui` is the FALLBACK (not a co-existing surface); the poller stays as
 last resort. `ui.mjs` will eventually be RETIRED once the durable TUI proves the multi-seat surface.
