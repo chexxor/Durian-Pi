@@ -120,6 +120,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
 | [research-request.md](research-request.md) | you need external research | no |
 | [competitor-review.md](competitor-review.md) | you want to learn from another project's tools/practices | no |
+| [resume-while-broker-runs.md](resume-while-broker-runs.md) | you want to run `resume`/`doctor` but the broker is up | no |
 
 ## Index (mechanism)
 
@@ -131,6 +132,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | Seats | seat-reset, compact-a-seat |
 | Write guard / source files | write-corruption-recovery |
 | Worktrees | leaked-worktrees |
+| Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
 | Credentials / secrets | leaked-secret |
 | Review method | security-trust-boundary-review |
 | Merge / conflicts | merge, land, resolve-merge-conflict, branch-cleanup |

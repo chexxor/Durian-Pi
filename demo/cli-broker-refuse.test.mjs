@@ -113,12 +113,15 @@ try {
 
 	console.log("\n=== CLI write verbs refuse while the broker drives ===\n");
 
-	for (const [label, args] of [
-		["resume", ["resume"]],
-		["reset", ["reset", "worker"]],
-		["send", ["send", "worker", "hello"]],
+	for (const [label, args, extra] of [
+		// #1931: `resume`/`doctor` is a DOCUMENTED REFUSAL, not a spool route — the broker already
+		// settles stranded submissions at startup and every pass, so the message names WHY and the
+		// runbook, and must NOT advise stopping a live broker.
+		["resume", ["resume"], { why: /settles stranded submissions ITSELF/, runbook: /resume-while-broker-runs\.md/ }],
+		["reset", ["reset", "worker"], null],
+		["send", ["send", "worker", "hello"], null],
 		// #1589: `up` opened a harness with NO guard, so `up --refresh` was a second owner.
-		["up --refresh", ["up", rigFile, "--refresh"]],
+		["up --refresh", ["up", rigFile, "--refresh"], null],
 	]) {
 		await check(`${label} refuses with a live broker`, async () => {
 			const { exitCode, json, stdout } = await runCli(args);
@@ -126,8 +129,14 @@ try {
 			assert.ok(json, `${label} must print one JSON doc; got ${stdout.slice(0, 200)}`);
 			assert.equal(json.ok, false, `${label} must report ok:false`);
 			assert.match(String(json.error), /refuses to run while a resident broker/, `names the reason: ${json.error}`);
-			assert.match(String(json.error), /serve --stop/, "names the stop verb");
-			assert.match(String(json.error), /intent\.mjs/, "names the spool route");
+			if (extra) {
+				assert.match(String(json.error), extra.why, `names why: ${json.error}`);
+				assert.match(String(json.error), extra.runbook, "names the runbook");
+				assert.doesNotMatch(String(json.error), /serve --stop/, "must NOT advise stopping a live broker");
+			} else {
+				assert.match(String(json.error), /serve --stop/, "names the stop verb");
+				assert.match(String(json.error), /intent\.mjs/, "names the spool route");
+			}
 		});
 	}
 

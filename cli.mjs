@@ -175,13 +175,14 @@ function noteEmptyRig(seatCount) {
  * unaffected; a write either waits for `serve --stop` or goes through the spool
  * (`intent.mjs`), which the broker drains as operator input.
  */
-function refuseWhileBrokerDrives(verb) {
+function refuseWhileBrokerDrives(verb, detail) {
   const broker = readBrokerState(DB_PATH);
   if (!brokerAlive(broker)) return;
   fail(
     `${verb} refuses to run while a resident broker is driving ${DB_PATH} (pid ${broker.pid}): ` +
-      `a second owner crashes the broker and corrupts run-control docs. Stop it with "serve --stop", ` +
-      `or route the request through the spool: node intent.mjs <seat> --body-file <file>`,
+      `a second owner crashes the broker and corrupts run-control docs. ` +
+      (detail ??
+        `Stop it with "serve --stop", or route the request through the spool: node intent.mjs <seat> --body-file <file>`),
   );
 }
 
@@ -972,7 +973,18 @@ async function cmdQueue() {
 async function cmdResume() {
   // ROADMAP 69: `resume` is a compound WRITE (it settles stranded submissions),
   // so a second owner while the broker drives is the 2026-10-16 crash. Refuse.
-  refuseWhileBrokerDrives("resume");
+  // ROADMAP 71 / #912 residue 3/3 (#1931): the refusal is the CHOICE, and it names WHY. With a broker
+  // alive the broker ALREADY settles stranded submissions — at startup (`reconcileBrokerStartup`) and at
+  // the start of every pass (`reconcileStrandedSubmissions`, logged `STRANDED settled=N`) — so an
+  // external `resume` has nothing to do, and running it would be the SECOND WRITER that crashed the
+  // broker on 2026-10-16. Do NOT stop a live broker to run this; restart a dormant one instead.
+  refuseWhileBrokerDrives(
+    "resume/doctor",
+    `the broker settles stranded submissions ITSELF — at startup and at the start of every pass ` +
+      `(logged "STRANDED settled=N") — so there is nothing for an external resume to do while it drives, ` +
+      `and running one would be a second writer. Do NOT stop a live broker for this; if it is dormant, ` +
+      `restart it so its startup pass re-settles. See docs/runbooks/resume-while-broker-runs.md.`,
+  );
   const { harness } = await openHarness();
   try {
     const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
