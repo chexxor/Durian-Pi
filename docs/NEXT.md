@@ -7,13 +7,13 @@ _Last refreshed: 2026-10-18 (delegate — compaction analysis delivered; compact
 
 ## NEXT SESSION — continue this session's goals
 
-**Current item:** **#1904** (done by `devtools`; branch `devtools-item-1904` @ `d3d6be3`, 1 ahead of `main`, NOT merged) → verifier **#1903** (qa), prioritised via **#1916**; on PASS land with `scripts/land.mjs --suite` in a declared window.
+**Current item:** **#1904** (compact as a command-spool op) done by `devtools` @ `d3d6be3`; verify moved to **#1940 → auditor** (`#1903` cancelled — qa degraded). Prerequisite **#1936 → devtools** (Gemma-4 fallback catalog). On #1940 PASS: one operator-declared window — qa → Mistral, add qa2 (Gemma 4), land `devtools-item-1904` (`scripts/land.mjs --suite`).
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
-**Known blocker:** qa **#1903** still `queued` (not verified; qa showing a degenerate turn shape) and **`qa2` on Gemma 4 is blocked on a fallback-catalog entry** (intent filed); the landing needs the operator-declared broker-stop window. Watch the 37(b) stranded `admitted_not_started` and the main-red **#1610** gate.
+**Known blocker:** the window needs the operator to declare the broker stop; dependencies **#1936** (catalog) and **#1940** (auditor verify) are not yet landed/passed. Watch the recurring 37(b) `admitted_not_started` and the main-red **#1610** gate.
 
-**Live now:** (1) auditor routing DONE — pm moved 5 verifications to `auditor` (#1923–#1927); (2) **`qa2` prepared** at `.spike/delegate/rig.selfdev.qa2.json` on **`google/gemma-4-31B-it`** — but it is NOT in `fallbackModels()` and the live catalog fetch is not wired, so a catalog entry is required (intent filed); vendor best-practice gap: Gemma thinking needs `<|think|>` in the system prompt (durig maps `thinkingLevel` to `reasoning_effort`) and durig has no per-seat sampling config; (3) ROADMAP 71 residue (queue edits as ops, `up`/`resume` via spool) filed to pm.
+**Live now:** (1) incidents appended — broker-dormant-stalled recurrence @02:37Z (`database is locked`; broker recovered pid 37496) and qa-context-degeneration recurrence; (2) window-sequencing + scribe-docs-drift intents delivered to pm; (3) branch liability: **60 unmerged branches, 51 for DONE items** (landing backlog).
 
 **Delegate actions this session (operator-directed):**
 - Delivered the requested written analysis: pi-durable is BUILT for live compaction (post's

@@ -92,3 +92,60 @@ were cleared; `node cli.mjs resume` cleared 1 stranded submission; the broker wa
 ## Links
 `docs/runbooks/broker-down-or-stalled.md` · `docs/incidents/2026-10-17-broker-crash.md` (same class) ·
 `docs/BROKER-SUPERVISION.md` · ROADMAP 61–64 and 78 · queue `#1698`
+
+---
+
+## Recurrence — 2026-10-18T02:37Z (same day, pid 28168)
+
+**Appended, not rewritten** (per `docs/incidents/README.md`). This is the same dormant shape, but with a
+**new error signature** and a second observer (the operator). It confirms the incident is **not** fixed.
+
+### What happened
+- Broker pid `28168` (START `01:48:36Z`) stayed **alive** with a fresh `broker.json`, but its log's
+  last line was `PASS 176 ms=5049` at **02:37:27Z** — then no `PASS` for ~4 minutes while work was
+  queued and **no `genlock.*` was held**.
+- The operator noticed first ("it looks like the auditor is stuck on an output" / "is the broker
+  down?"). The auditor was in fact mid-verification; the stall meant it was never re-woken.
+- **Two spooled operator intents sat undrained** in `<db>.broker.inbox` (the Gemma-4 catalog
+  prerequisite and the `#1903`→auditor move) until the restart — same signature as `#1841`/worktree in
+  the first occurrence.
+
+### New evidence (why the first fix is insufficient)
+`.spike/serve.err` at the stall shows a **different nested error than the first occurrence**:
+```
+{"ok":false,"command":"serve","driver":"wake-failed","seat":"devtools","conversationId":4930,"error":"Error: database is locked"}
+{"ok":false,"command":"serve","driver":"wake-failed","seat":"auditor","conversationId":4936,"error":"Error: database is locked"}
+{"ok":false,"command":"serve","driver":"wake-failed","seat":"pm","conversationId":3,"error":"SessionFailed: Session failed after a storage error; close and reopen it"}
+{"ok":false,"command":"serve","driver":"wake-failed","seat":"qa","conversationId":15,"error":"SessionFailed: Session failed after a storage error; close and reopen it"}
+```
+`database is locked` (SQLite busy/lock contention) is a **new** cause class on top of the first
+occurrence's `Session failed after a storage error`. Context: **transient `cli.mjs serve --max-duration`
+test brokers were observed running from an `item-1931` worktree** at the same time (see Evidence).
+Whether those opened the selfdev store or only their own scratch DB is **UNVERIFIED**, but concurrent
+store openers are exactly the class that produces `database is locked` (the store open takes
+`BEGIN IMMEDIATE` + migration DDL).
+
+### Resolution (2026-10-18, delegate, per `broker-down-or-stalled.md`)
+`MSYS_NO_PATHCONV=1 taskkill /F /PID 28168` (no genlock held → safe) → `node cli.mjs resume`
+(`found: 3`; impl/auditor/devtools `run-cancelled`) → `scripts/serve-noroot.ps1` → `START pid=37496`
+(02:41:57Z); on restart the two undrained intents were delivered and passes resumed (PASS 176 → PASS 56
+on the new process). qa recovered and generated; auditor resumed verification.
+
+### Prevention (unchanged, now with a second occurrence)
+1. **Log `SessionFailed.cause` AND the `database is locked` variant** on `wake-failed`.
+2. **A broker watchdog/auto-restart** (ROADMAP 61–64) — fresh heartbeat + stale `PASS` must trigger a
+   supervised restart.
+3. **The dormant-revisit gap** — a failed wake does not re-arm the scheduler. This is the durable fix.
+4. **Investigate concurrent store openers** — a `serve`/`run`/test broker from an item worktree must
+   not open the shared selfdev store (wrong-`DURIG_DB` / relative-path resolution).
+
+### Evidence (recurrence)
+- `selfdev.sqlite.broker.log` last line at diagnosis: `2026-10-18T02:37:27.401Z PASS 176 ms=5049 woke=-`;
+  next lines after restart: `...02:41:57Z START pid=37496`.
+- `selfdev.sqlite.broker.json` at diagnosis: `{"pid":28168,...,"heartbeatAt":1792291036831}` — fresh.
+- `ls selfdev.sqlite.genlock.*` → **none** (safe to terminate).
+- `.spike/serve.err` tail: the four `wake-failed` objects above; plus worktree-sweep refusals
+  (`refusing to remove item-1841/item-1894/...`).
+- `Get-CimInstance Win32_Process` → `cli.mjs serve --max-duration 3` and `... --max-duration 5` running
+  from `C:\Users\Alex\dsh-Projects\pi-opendurig\item-1931\cli.mjs` (transient).
+- `node cli.mjs resume` → `{"found":3,"actions":[impl 81006, auditor 81147, devtools 81215 all run-cancelled]}`.
