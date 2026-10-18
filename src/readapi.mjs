@@ -39,6 +39,30 @@ export async function readSeatList(storage, context = BACKGROUND_CONTEXT) {
 	}));
 }
 
+/**
+ * Each seat's PERSISTED root (`pi.agent`.cwd) — the strongest liveness signal the worktree
+ * audit (ROADMAP 76) has: a worktree that is some seat's current cwd is IN USE regardless of
+ * its item's queue status. Read-only; an unreadable `pi.agent` reads as null, never fatal.
+ */
+export async function readSeatRoots(storage, context = BACKGROUND_CONTEXT) {
+	const seats = await readSeatList(storage, context);
+	const roots = [];
+	for (const seat of seats) {
+		try {
+			const rec = await storage.findDocument(
+				{ kind: "pi.agent", scope: { kind: "conversation", conversationId: seat.conversationId } },
+				"current",
+				context,
+			);
+			const cwd = rec ? (await storage.document(rec.id, "current", context))?.value?.cwd ?? null : null;
+			if (cwd) roots.push({ name: seat.name, cwd });
+		} catch {
+			// A viewer must survive an unreadable pi.agent: skip this seat's root.
+		}
+	}
+	return roots;
+}
+
 /** The queue's items, newest-current document. Returns [] for an absent store so
  * a first-run read is empty rather than exceptional. */
 export async function readQueueItems(storage, context = BACKGROUND_CONTEXT) {
