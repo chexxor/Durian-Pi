@@ -3,18 +3,36 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18 (delegate clock-out — QA + impl recovered; next: pi-durable compaction research)._
+_Last refreshed: 2026-10-18 (delegate — compaction analysis delivered; compact-as-spool-op filed as #1904 to devtools)._
 
 ## NEXT SESSION — continue this session's goals
+
+**Current item:** **#1904** — `compact` as a command-spool op applied by the broker (ROADMAP 71 / #912 addendum), owned by `devtools` (OPERATOR PRIORITY), verifier **#1903** (qa, gated on devtools's branch). Filed this session by the delegate; `devtools` claimed it and is progressing. `impl` is untouched on **#1881**.
+
+**Delegate actions this session (operator-directed):**
+- Delivered the requested written analysis: pi-durable is BUILT for live compaction (post's
+  "Compaction" section — a task that runs while the conversation keeps going), but durig's `compact`
+  verb is a broker-stopped external writer (`refuseWhileBrokerDrives` + live-lease guard,
+  `cli.mjs:1140-1163`). It cannot run live because the CLI opens a SECOND harness whereas the spool
+  applies ops with the broker's OWN harness (single writer + scheduler).
+- Filed the fix as an OPERATOR PRIORITY item against ROADMAP 71 / #912's vocabulary:
+  **#1904 → `devtools`** ("`compact` as a command-spool op applied by the broker"), verify
+  **#1903 → qa** gated on devtools's branch. devtools is the ROADMAP 71 owner and was idle; this
+  avoids pre-empting impl.
+- `impl` untouched — stays on **#1881** (worktree audit). No `impl2` seat created (operator chose
+  action (a) only).
+- Intent bodies: `.spike/delegate/intent-compact-live-spool.md` (+ the `-devtools` update).
+
+**Watch:** devtools is progressing on #1904 (branch `devtools-item-1904`, worktree `item-1904`,
+entry ids advancing). A 37(b) `admitted_not_started` notice appeared for devtools but was stale —
+per the 37(b) note, do NOT cycle the broker for it.
 
 **Goals in flight (operator, 2026-10-18):** (1) get `pause`/`unpause` (#1388 / ROADMAP 131) implemented;
 (2) get the **worktree-audit + leak fix (ROADMAP 76)** registered and implemented; (3) keep reclaiming
 the branch/worktree sprawl safely.
 
-**NEXT AGENT JOB (operator, 2026-10-18):** read a webpage on **pi-durable**, analyse it, and explain to
-the operator **why our pi-durable app cannot run a compaction on the live app while it is running**
-(today `compact` is a broker-stopped write verb — `docs/runbooks/compact-a-seat.md`). Deliver the written
-analysis; no code change unless the operator directs.
+**NEXT AGENT JOB:** none outstanding from the operator. Resume the standing goals above; watch
+**#1904** (devtools) → **#1903** (qa).
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
