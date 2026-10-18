@@ -3,7 +3,53 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T18:42Z (delegate — broker dormant-stall fixed AND the first fix's gap fixed (`991567d`); incidents filed; clocked out)._
+_Last refreshed: 2026-10-18T18:59Z (delegate — HOST COMMIT EXHAUSTION killed the broker twice tonight; operator rebooting to raise the page file; durable-TUI priority queued)._
+
+> **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T18:59Z).**
+> - **Why nothing was running: the host commit charge is exhausted — NOT a durig bug.** `systeminfo`:
+>   Virtual Memory Available **294 MB** of 37,672 MB (In Use 37,378 MB) while physical RAM had ~6 GB
+>   free. The page file was a manually-fixed **4,982 MB** on `C:` (`AutomaticManagedPagefile = FALSE`).
+>   Every node allocation then fails at tiny heaps — which is also why `cli.mjs status` "OOMs" and `git`
+>   forks fail `0xC000012D` (ENVIRONMENT, cf. #2121 /
+>   `docs/incidents/2026-10-18-host-resource-exhaustion.md`; biggest committer `strata-poly.exe` ~13 GB,
+>   plus firefox/streaming apps and a long-lived `node ui.mjs` viewer pid 5276). **Re-run any failure in
+>   isolation before calling it a regression.**
+> - **Operator action in flight:** reboot to set `C:\pagefile.sys` fixed **32,768 MB** (Initial =
+>   Maximum) → commit limit ~**64 GB**. Nothing is verifiable until the reboot lands; then confirm
+>   `systeminfo` shows real commit headroom.
+> - **Broker is DOWN.** pid `14436` died abnormally (`START` with no `EXIT`; log froze `PASS 11`
+>   @18:39:01Z); a recovery restart `pid 16612` then OOM-died ~52 s in (`.spike/serve.err`:
+>   `FATAL ERROR: Zone Allocation failed - process out of memory`, `[16612]`), log froze `PASS 6`
+>   @18:51:27Z. `broker.json` is stale; `genlock.0/1/2` are stale (holder pid 16612 gone); submissions
+>   for pm/impl/scribe/auditor are stranded.
+> - **Recovery owed after the reboot** (`docs/runbooks/broker-down-or-stalled.md`): `resume`, then
+>   restart WITHOUT `DURIG_SEAT_ROOT` and WITH the local-seat env — `scripts/serve-noroot.ps1` sets only
+>   `DURIG_DB`, and **#2114's placeholder key is NOT on `main`** (`src/providers/local.mjs` still returns
+>   `""` when `DURIG_LOCAL_API_KEY` is unset; the fix is branch `devtools-item-2114 @9ba3c8a`, landing
+>   list #2137). So a plain restart BREAKS the local seats (`devtools`/`qa`). Set
+>   `DURIG_LOCAL_BASE_URL/MODEL/CONTEXT` (already in `durig.config.json`) + `DURIG_LOCAL_API_KEY=local`
+>   on the launcher. Verify a live `START`, `WAKE`, advancing `PASS`, and a fresh heartbeat across
+>   several passes — **a fresh heartbeat is NOT health; read the last `PASS`.**
+> - **Provider state (cleared):** DeepInfra works (impl ran 18:39Z, real cost). The `designer … 402`
+>   attention is STALE (last run 07:24Z, before the operator's top-up). PolyStrata is up on
+>   `127.0.0.1:8080` serving `qwen3.6-35b-a3b-ud-q3_k_m` (65536 ctx).
+> - **OPERATOR PRIORITY — durable-TUI (durian-pi) migration.** Operator: "we must make progress towards
+>   the design and implementation of the durian-pi TUI." Scope is RULED (D102 / #2105 / #2108): the Pi
+>   TUI REPLACES `ui.mjs` as the multi-seat surface; `ui.mjs` becomes the fallback; non-default landing
+>   so both work during the slow migration. The phases are registered and specced
+>   (`docs/reviews/durable-tui-phase1-build-spec.md`) but ALL are `deferred` (parked on the 402, now
+>   cleared): **#2095** (devtools: pin `@earendil-works/pi-coding-agent` EXACTLY `1.3.0`) → **#2096**
+>   (impl: Phase 1 non-default entrypoint on its OWN store, fail-closed ownership guard) with **#2103**
+>   (designer UX proposal) + **#2104** (advocate review) in parallel; then #2097 Phase 2, #2098 Phase 3.
+>   Rebrand #2109–#2112. **NEXT AGENT: deliver an operator-priority intent to `pm` to un-park and
+>   sequence #2095 → #2096 (+ #2103 / #2104).**
+> - **Also in flight:** #2123 (D105 local per-item reset, `queued` to impl; was the 81-min queue-ageing
+>   item) — impl was on **#1498** (P1 FF-lock prerequisite) before the broker died; #2124 (scribe docs,
+>   claimed), #2125 (auditor verify, gated).
+> - **Exact next command after reboot:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Do not:** restart the broker without the local key env; `git add -A`; `serve --stop` to force a
+>   `resume` while a broker lives; treat pre-reboot failures as regressions.
+
 
 > **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T18:42Z).**
 > - **Broker dormant-stall — fixed, then a gap in the first fix found and fixed.** `0c0d4d3` scheduled the
