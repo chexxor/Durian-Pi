@@ -58,8 +58,10 @@ submissions (qa `#76883`, impl `#77152`). Quiesced, one **landing pass** landed 
 branches: `#1610` (fixed MAIN-RED `secretredact`), `#912` (ROADMAP 71 command spool — pause's AC4
 prerequisite), `#253`, `#965`, `#1108`, `#1535`, `#1547`, `#1553`, `#1557`, `#1585`, `#1589`, `#1698`.
 `main` `a89ac36` → `45845e0`; scratch suite **131/0**; shared-tree `secretredact` GREEN. **8 more
-merged refs pruned**. `impl-item-1465` still conflicts vs `main` (`src/seattools.mjs`, inter-branch with
-`#253`/`#1108`) → route for a **W2 rebase**. Broker restarted pid `36204` (00:16:55Z).
+merged refs pruned**. `impl-item-1465` **resolved and landed** (`main` `1f8d25a`): the conflict was a
+1-line **import union** in `src/seattools.mjs` (ours `#253` adds `AgentDoc`; theirs `#1465` adds
+`import { join } from "node:path"`); resolved by merging `main` into the branch (`074667c`), suite
+**131/0**, branch pruned. Broker restarted pid `36204` (00:16:55Z).
 
 **Pause/unpause priority (operator):** prerequisite satisfied; intent `intent-pause-priority` spooled to
 `pm` (`.spike/delegate/intent-pause-priority.md`, `INTENT delivered=1 dead=0`) to **unpark #1388** and
