@@ -189,5 +189,59 @@ try {
 	}
 }
 
+/* ─── 5. git-object echoes are NOT secrets (#1658; security #1620/#1712, lead #1660) ── */
+console.log("\nsecretTokens — git-object echoes do not fire; a hex secret still does");
+// The empty tree: a REAL git object present in every repository (no fixture needed).
+const REAL_OBJECT = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+// A 40-hex string with letters AND digits that is NOT a git object (verified: cat-file exits 128).
+const NOT_AN_OBJECT = "0123456789abcdef0123456789abcdef01234567";
+check("HEAD=<real git object> does NOT fire", secretTokens(`HEAD=${REAL_OBJECT}`).length === 0, JSON.stringify(secretTokens(`HEAD=${REAL_OBJECT}`)));
+check("pin <real git object> does NOT fire", secretTokens(`pin ${REAL_OBJECT}`).length === 0);
+check("commit <real git object> does NOT fire", secretTokens(`commit ${REAL_OBJECT}`).length === 0);
+// THE BINDING GUARD: a pure-hex40 that is NOT a git object STILL FIRES — even inside a git
+// context. A blanket "pure-hex40" exclusion (or a context match alone) would lose this.
+check("bare non-object 40-hex still fires", secretTokens(NOT_AN_OBJECT).some((t) => t.family === "high-entropy-token"));
+check("HEAD=<non-object 40-hex> STILL FIRES", secretTokens(`HEAD=${NOT_AN_OBJECT}`).length === 1, JSON.stringify(secretTokens(`HEAD=${NOT_AN_OBJECT}`)));
+check("commit <non-object 40-hex> STILL FIRES", secretTokens(`commit ${NOT_AN_OBJECT}`).length === 1);
+// The checker is what decides: a stub proves both directions without touching the repo.
+check("a stub probe that CONFIRMS objecthood excludes the token", secretTokens(`HEAD=${NOT_AN_OBJECT}`, { isGitObject: () => true }).length === 0);
+check("a stub probe that DENIES objecthood keeps the token", secretTokens(`HEAD=${REAL_OBJECT}`, { isGitObject: () => false }).length === 1);
+// The real secret families are untouched by the narrowing.
+check("sk-<hex> still fires", secretTokens(`sk-${"a1b2c3d4e5f6a7b8"}`).some((t) => t.family === "openai-key"));
+check("the committed-secret vector still fires", secretTokens(`the key is ${SECRET}`).some((t) => t.family === "openai-key"));
+check(
+	"a git-object echo raises no finding and no notice",
+	secretNotices(
+		scanEntriesForSecrets({ name: "s", conversationId: 1 }, [
+			{ id: 1, kind: "pi.assistant", model: [{ role: "assistant", content: [{ type: "text", text: `HEAD=${REAL_OBJECT}` }] }] },
+		]),
+	).length === 0,
+);
+
+/* ─── 6. attribution: the notice points at the TRUE segment ───────────────── */
+console.log("\nentryTextSegments — the where label matches the real segment index");
+const mixedEntry = {
+	id: 9,
+	kind: "pi.assistant",
+	model: [
+		{
+			role: "assistant",
+			content: [
+				{ type: "text", text: "before" },
+				{ type: "toolCall", arguments: { key: `sk-${"c".repeat(24)}` } },
+			],
+		},
+	],
+};
+const mixedSegs = entryTextSegments(mixedEntry);
+check("a text part keeps its own index", mixedSegs[0]?.where === "content[0].text", JSON.stringify(mixedSegs));
+check("a toolCall part keeps its own index", mixedSegs[1]?.where === "content[1].arguments", JSON.stringify(mixedSegs));
+const mixedFindings = scanEntriesForSecrets({ name: "s", conversationId: 1 }, [mixedEntry]);
+check(
+	"the finding points at the toolCall segment, not the text one",
+	mixedFindings.length === 1 && mixedFindings[0].where === "content[1].arguments",
+	JSON.stringify(mixedFindings),
+);
+
 console.log(failures === 0 ? "\nPASS — secret detection verified" : `\nFAIL — ${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
