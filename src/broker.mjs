@@ -21,7 +21,7 @@ import { RigQueue, Seats } from "./rig.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
 import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
-import { listWorktrees, removeClaimedWorktree } from "./worktree.mjs";
+import { listWorktrees, removeClaimedWorktree, uncommittedCount } from "./worktree.mjs";
 
 /**
  * Seats whose latest settled submission is an operator stop (`aborted:<reason>`).
@@ -328,6 +328,117 @@ function refItemId(ref) {
 }
 
 /**
+ * The KEEP-REASONS the worktree audit and the orphan sweep share (ROADMAP 76). `reapable` is
+ * the ONLY reason the sweep acts on; every other reason is a KEEP, reported so the operator can
+ * see WHY a tree is still there instead of guessing.
+ */
+export const WORKTREE_KEEP_REASONS = [
+  "seat-root",
+  "non-item",
+  "branch-unresolved",
+  "live",
+  "locked",
+  "not-terminal",
+  "dirty",
+  "reapable",
+];
+
+/**
+ * Classify every worktree by the SAME rule the orphan sweep uses (ROADMAP 76 / #1244). Pure: the
+ * caller supplies the queue sets, the seat roots and the per-worktree uncommitted COUNT, so the
+ * decision is testable without a git repo. One entry per worktree, carrying the queue status, the
+ * uncommitted count, the lock state and the keep-reason.
+ *
+ * @param {{worktrees?:Array<{worktree:string,branch?:string|null,locked?:boolean}>,
+ *   liveItemIds?:Set<number>, terminalItemIds?:Set<number>, seatRoots?:Array<string>,
+ *   statusById?:Map<number,string>, dirty?:Record<string,number>}} input
+ */
+export function classifyWorktrees({
+  worktrees = [],
+  liveItemIds = new Set(),
+  terminalItemIds = new Set(),
+  seatRoots = [],
+  statusById = new Map(),
+  dirty = {},
+} = {}) {
+  const norm = (p) => String(p ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const roots = new Set(seatRoots.map(norm));
+  const out = [];
+  for (const wt of worktrees) {
+    const path = wt?.worktree;
+    if (!path) continue;
+    const key = norm(path);
+    const uncommitted = Number.isFinite(dirty[key]) ? dirty[key] : null;
+    const entry = {
+      worktree: path,
+      branch: wt.branch ?? null,
+      itemId: null,
+      status: null,
+      uncommitted,
+      locked: wt.locked === true,
+      keepReason: "non-item",
+    };
+    const pathMatch = /^item-(\d+)$/.exec(basename(path));
+    const pathId = pathMatch ? Number(pathMatch[1]) : null;
+    entry.itemId = pathId;
+    if (roots.has(key)) {
+      entry.keepReason = "seat-root";
+      out.push(entry);
+      continue;
+    }
+    if (pathId === null) {
+      out.push(entry);
+      continue;
+    }
+    const branchId = wt.branch ? refItemId(wt.branch) : null;
+    if (wt.branch && branchId === null) {
+      entry.itemId = pathId;
+      entry.keepReason = "branch-unresolved";
+      out.push(entry);
+      continue;
+    }
+    const itemId = branchId ?? pathId;
+    entry.itemId = itemId;
+    entry.status = statusById.get(itemId) ?? null;
+    if (liveItemIds.has(itemId)) entry.keepReason = "live";
+    else if (entry.locked) entry.keepReason = "locked";
+    else if (!terminalItemIds.has(itemId)) entry.keepReason = "not-terminal";
+    else if (uncommitted === null || uncommitted > 0) entry.keepReason = "dirty";
+    else entry.keepReason = "reapable";
+    out.push(entry);
+  }
+  return out;
+}
+
+/**
+ * Gather and classify every registered worktree (ROADMAP 76 audit surface). READ-ONLY: it runs
+ * `git worktree list` and a `git status` per tree, and writes nothing. `seatRoots` are the seats'
+ * persisted `pi.agent.cwd` (the strongest liveness signal); `statusById` maps a queue item id to
+ * its status for the report.
+ */
+export async function auditWorktrees({
+  repoPath,
+  liveItemIds = new Set(),
+  terminalItemIds = new Set(),
+  statusById = new Map(),
+  seatRoots = [],
+} = {}) {
+  if (!repoPath) return [];
+  const worktrees = await listWorktrees(repoPath);
+  const dirty = {};
+  for (const wt of worktrees) {
+    if (!wt?.worktree) continue;
+    const key = String(wt.worktree).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    try {
+      dirty[key] = await uncommittedCount(wt.worktree);
+    } catch {
+      dirty[key] = null;
+    }
+  }
+  return classifyWorktrees({ worktrees, liveItemIds, terminalItemIds, seatRoots, statusById, dirty });
+}
+
+/**
  * Remove `item-<id>` worktrees whose queue item is TERMINAL and which are unlocked and clean.
  *
  * A leaked worktree (a crash before its item's cleanup, or the recorded recursive-nesting
@@ -351,46 +462,24 @@ function refItemId(ref) {
  * that is absent from it — non-terminal, or not in the store at all — is KEPT, and so is a
  * branch-held worktree whose branch does not resolve an id (the safe default).
  */
-export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, onDiagnostic } = {}) {
+export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots = [], onDiagnostic } = {}) {
   if (!repoPath) return [];
-  const worktrees = await listWorktrees(repoPath);
+  const entries = await auditWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots });
   const removed = [];
   const keep = (itemId, worktree, reason) =>
     onDiagnostic?.({ kind: "worktree-orphan-kept", itemId, worktree, reason });
-  for (const wt of worktrees) {
-    const pathMatch = /^item-(\d+)$/.exec(basename(wt.worktree));
-    if (!pathMatch) continue; // not one of durig's item worktrees
-    const pathId = Number(pathMatch[1]);
-    // #1244: the AUTHORITATIVE id is the one the branch ENCODES (`impl-item-<N>`). A branch-held
-    // worktree whose branch does not resolve an id is KEPT (safe default) — never reap a worktree
-    // we cannot tie to a queue item.
-    const branchId = wt.branch ? refItemId(wt.branch) : null;
-    if (wt.branch && branchId === null) {
-      keep(pathId, wt.worktree, "branch-unresolved");
+  for (const entry of entries) {
+    // `reapable` is the ONLY reason the sweep acts on; every other reason is a KEEP, reported
+    // with the SAME reason vocabulary the audit surface shows (ROADMAP 76).
+    if (entry.keepReason !== "reapable") {
+      if (entry.keepReason !== "non-item" && entry.keepReason !== "seat-root") {
+        keep(entry.itemId, entry.worktree, entry.keepReason);
+      }
       continue;
     }
-    const itemId = branchId ?? pathId;
-    // An ACTIVE item is never reaped — that is the #1194 safety.
-    if (liveItemIds?.has(itemId)) {
-      keep(itemId, wt.worktree, "live");
-      continue;
-    }
-    // #1194: a LOCKED worktree is held deliberately (a verifier, or a seat mid-run); keep it.
-    if (wt.locked) {
-      keep(itemId, wt.worktree, "locked");
-      continue;
-    }
-    // #1244: terminal-ness is NECESSARY but not SUFFICIENT. Reap only a worktree whose item is
-    // TERMINAL; a non-terminal or unknown id is kept.
-    if (!terminalItemIds?.has(itemId)) {
-      keep(itemId, wt.worktree, "not-terminal");
-      continue;
-    }
-    // The clean-only guard inside removeClaimedWorktree is the cleanliness check: a dirty
-    // worktree is refused and reported, never silently discarded (D60/#1194).
-    const result = await removeClaimedWorktree({ worktree: wt.worktree });
-    if (result?.removed) removed.push(itemId);
-    else keep(itemId, wt.worktree, result?.refused ?? (result?.skipped ? "missing" : "not-removed"));
+    const result = await removeClaimedWorktree({ worktree: entry.worktree });
+    if (result?.removed) removed.push(entry.itemId);
+    else keep(entry.itemId, entry.worktree, result?.refused ?? (result?.skipped ? "missing" : "not-removed"));
   }
   return removed;
 }
@@ -401,7 +490,7 @@ export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, termin
  * against a temp database (every demo) never scans an unrelated checkout —
  * `listWorktrees` returns [] for a path that is not a git repo.
  */
-export async function reconcileBrokerStartup(harness, { dbPath, context, onDiagnostic } = {}) {
+export async function reconcileBrokerStartup(harness, { dbPath, context, onDiagnostic, probeStorage } = {}) {
   const leases = reconcileGenerationSlots(dbPath, { onDiagnostic });
   const repoPath = dbPath ? dirname(resolve(dbPath)) : null;
   let worktrees = [];
@@ -413,9 +502,41 @@ export async function reconcileBrokerStartup(harness, { dbPath, context, onDiagn
     // #1244: the complement of the live set is the TERMINAL set (done/cancelled). An id that is
     // in NEITHER set does not exist in the store, so its worktree is KEPT (safe default).
     const terminalItemIds = new Set(items.filter((it) => !LIVE_STATUSES.includes(it.status)).map((it) => it.id));
-    worktrees = await reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, onDiagnostic });
+    // ROADMAP 76: a worktree that is some seat's persisted cwd (`pi.agent`.cwd) is IN USE, so the
+    // sweep must not reap it even when its item is terminal and the tree is clean.
+    const seatRoots = await readSeatRootsFromStorage(probeStorage, harness, context);
+    worktrees = await reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots, onDiagnostic });
   }
   return { leases, worktrees };
+}
+
+/**
+ * The seats' persisted roots (`pi.agent`.cwd), read through the raw storage handle the broker
+ * owns (the driving harness would fail its whole session on one bad read). Best-effort: an
+ * unreadable agent document is skipped, never fatal.
+ */
+async function readSeatRootsFromStorage(probeStorage, harness, context) {
+  const roots = [];
+  if (!probeStorage?.findDocument) return roots;
+  try {
+    const seatsDoc = await harness.documentState(Seats, undefined, context);
+    for (const seat of Object.values(seatsDoc?.value?.seats ?? {})) {
+      try {
+        const rec = await probeStorage.findDocument(
+          { kind: "pi.agent", scope: { kind: "conversation", conversationId: seat.conversationId } },
+          "current",
+          context,
+        );
+        const cwd = rec ? (await probeStorage.document(rec.id, "current", context))?.value?.cwd ?? null : null;
+        if (cwd) roots.push(cwd);
+      } catch {
+        // skip an unreadable seat root
+      }
+    }
+  } catch {
+    // no seats yet: nothing to protect
+  }
+  return roots;
 }
 
 /**
@@ -574,7 +695,7 @@ export async function runWakeLoop({
   // failure is reported, never allowed to stop the broker from driving.
   if (dbPath) {
     try {
-      const reconciled = await reconcileBrokerStartup(harness, { dbPath, context, onDiagnostic });
+      const reconciled = await reconcileBrokerStartup(harness, { dbPath, context, onDiagnostic, probeStorage });
       if (reconciled.leases.length > 0 || reconciled.worktrees.length > 0) {
         logBrokerLine(
           dbPath,

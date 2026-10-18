@@ -299,7 +299,16 @@ async function uncommittedWork(worktree) {
 }
 
 /**
- * Remove a worktree.
+ * The COUNT of uncommitted paths in a worktree (node_modules excluded). The audit surface
+ * reports this number; the D60 clean gate is the same predicate (`removeClaimedWorktree`).
+ * A path git cannot read returns 1 (fail-closed), never a false "clean".
+ */
+export async function uncommittedCount(worktree) {
+	return (await uncommittedWork(worktree)).length;
+}
+
+/**
+ * Remove a worktree. 
  *
  * `force` is required rather than defaulted, because removing a worktree discards whatever is in
  * it: a caller has to say that is what it means. The default fails loudly instead of quietly
@@ -478,9 +487,22 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
  * worktree still holding uncommitted work is refused by `removeClaimedWorktree`
  * (a seat must commit or the operator must clean it — D60).
  */
-export async function removeSeatWorkspace({ worktreeRoot, itemId, force = false }) {
+export async function removeSeatWorkspace({ worktreeRoot, itemId, force = false, releaseIfRefused = false }) {
 	const worktreePath = join(worktreeRoot, `item-${itemId}`);
-	return removeClaimedWorktree({ worktree: worktreePath, force });
+	const result = await removeClaimedWorktree({ worktree: worktreePath, force });
+	if (!result.removed && releaseIfRefused) {
+		// LEAK SOURCE A (#1881 / ROADMAP 76). A dirty worktree is refused (D60, correct — never
+		// discard uncommitted work), but leaving it LOCKED forever is the leak: 58 terminal items
+		// still held a lock. RELEASE it, so the orphan sweep can reap the tree once it is clean and
+		// the audit reports it as unlocked+dirty instead of hiding it behind a lock.
+		try {
+			await releaseWorktreeLock(worktreePath);
+			result.released = true;
+		} catch {
+			// Already gone, or unlock failed; the sweep/audit will surface it either way.
+		}
+	}
+	return result;
 }
 
 /**
