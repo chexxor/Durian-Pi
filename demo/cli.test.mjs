@@ -116,6 +116,18 @@ try {
 		"a completed send reports the reply it produced",
 	);
 	assert.match(send.stderr, /waiting for its run to settle/, "the wait is explained");
+	// #1585 (operator batch 4): `send` is deprecated in favour of the spool. The notice
+	// rides STDERR (a diagnostic), so stdout stays the one-JSON-doc contract above.
+	assert.match(
+		send.stderr,
+		/send is DEPRECATED/,
+		"the deprecation notice is shown on the send it deprecates",
+	);
+	assert.match(
+		send.stderr,
+		/intent\.mjs/,
+		"the notice names the replacement (the spool)",
+	);
 
 	// --- log: transcript shape, and the limit argument ---------------------
 	const log = json(cli(["log", "alpha", "10"]));

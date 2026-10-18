@@ -1714,6 +1714,18 @@ async function cmdStop(seatName, reason) {
 // loop needed). With a live view (default when stderr is a terminal) the
 // generation streams to stderr, labelled per seat; stdout stays one JSON doc.
 async function cmdSend(seatName, text, { stream = false, requestId = null } = {}) {
+  // ROADMAP 92 / operator batch 4 (#1585): `send` is being RETIRED in stages —
+  // deprecate (this notice) -> thin alias over the spool -> remove. It opens a FULL
+  // writing harness, so it is a second owner whenever a broker drives (the crash
+  // class this rig has already paid for twice), and `refuseWhileBrokerDrives` below
+  // makes it unusable in resident mode anyway. The replacement already exists: the
+  // spool (`node intent.mjs <seat> --body-file <file>`), which the broker drains as
+  // operator input, plus `log`/`status` for the reply. The notice goes to STDERR: it
+  // is a diagnostic, and stdout stays the one-JSON-doc contract.
+  console.error(
+    "send is DEPRECATED (opens a full writing harness = a second owner): prefer " +
+      "`node intent.mjs <seat> --body-file <file>` (the broker delivers) and `log`/`status` for the reply",
+  );
   // ROADMAP 69: `send` submits an input and drives the run — a second owner and
   // scheduler while the broker drives. Refuse once, before the write retry, so a
   // live broker never races it (withStoreWriteRetry only covers the entry-id race).
