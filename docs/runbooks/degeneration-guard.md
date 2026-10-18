@@ -105,3 +105,8 @@ fired; `impl` was over-reset from a tool-result duration. Fixes routed as `#1703
 ## Evidence
 Item #875 (named-pattern registry, real fixtures, zero-FP scan); D78 REVERTED in `docs/DECISIONS.md`;
 the reverted attempt `97a3c6d`, the revert `449e870`.
+2026-10-18 (recurrence, `docs/incidents/2026-10-17-qa-context-degeneration.md`): a THIRD occurrence —
+qa's repeat/garbled shape while holding 8–9 queued items; it did not claim `#1903` even after a priority
+nudge (`#1916`), blocking a landing (routed to `auditor` as `#1940`). COUPLED with the broker
+dormant-stall (`2026-10-18-broker-dormant-stalled.md`), so do not attribute every missed claim to the
+model alone. Guard fixes (#1703/#1704/#1705) still not landed.
