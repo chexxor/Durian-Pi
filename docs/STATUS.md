@@ -129,9 +129,9 @@ Everything below was verified against the real store, not asserted from intent.
 **Not changed (and this is the important half):**
 
 - **Persistence is untouched.** No new document kind, no new field, no schema or
-  migration. Durig still writes only through pi-durable's existing `defineDoc`
+  migration. durian-pi still writes only through pi-durable's existing `defineDoc`
   documents and entry APIs. The format work is pure read-side rendering.
-- **The storage layer is unchanged.** Durig still imports
+- **The storage layer is unchanged.** durian-pi still imports
   `openNodeSqliteStorage` at one seam and runs no SQL of its own; every table
   (`entries`, `submissions`, `documents`, `document_revisions`, …) is pi-durable's
   schema. Our four domain objects are versioned JSON documents keyed by `kind`.
