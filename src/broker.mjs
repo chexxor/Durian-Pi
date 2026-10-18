@@ -678,7 +678,12 @@ export async function runWakeLoop({
         onDiagnostic,
         onError: (failure) => {
           failedSeats.add(failure.name);
-          onDiagnostic({ kind: "wake-failed", ...failure });
+          onDiagnostic({
+            kind: "wake-failed",
+            name: failure.name,
+            conversationId: failure.conversationId,
+            ...describeError(failure.error),
+          });
         },
         onWoke: (name) => {
           scheduler.recordWakes([name], now());
@@ -724,6 +729,11 @@ export async function runWakeLoop({
         }
         if (Number.isFinite(soonestDelay)) cooldownRevisitAt = now() + soonestDelay;
       }
+    } catch (error) {
+      // #1587 part 2: a per-conversation storage error inside the pass must NOT kill the
+      // resident broker (the 17:29Z death). Log it WITH its nested cause and keep driving;
+      // the loop's idle pacing keeps a persistent failure from becoming a hot spin.
+      onDiagnostic({ kind: "pass-failed", ...describeError(error) });
     } finally {
       scheduler.endPass();
     }
@@ -758,6 +768,21 @@ export function brokerLogPath(dbPath) {
     return null;
   }
   return `${dbPath}.broker.log`;
+}
+
+/* ------------------------------ broker diagnostics ------------------------------ */
+/**
+ * A diagnostic-safe view of a failure, INCLUDING its nested cause chain (#1587 part 2).
+ * The CAUSE is the only place a storage error names its real reason — `SessionFailed`
+ * wraps the underlying failure, so logging only the outer message left the 17:29Z broker
+ * death unexplained. Error MESSAGES only, never a payload (same discipline as #828/#700).
+ */
+function describeError(error) {
+  const chain = [];
+  for (let e = error, depth = 0; e && depth < 6; e = e.cause, depth++) {
+    chain.push(`${e.name ?? "Error"}: ${e.message ?? String(e)}`);
+  }
+  return { error: chain[0] ?? null, cause: chain.length > 1 ? chain.slice(1).join(" <- ") : null };
 }
 
 /** Append one line to `<db>.broker.log`. */
