@@ -2354,6 +2354,19 @@ single-writer precondition is prose, which failed twice on 2026-10-16. `pm` sequ
     precondition, last_verified, evidence) so a seat, a human, or a `check` rule reads the same fields.
     *Owner:* impl/scribe · *Where:* `docs/runbooks/`, `src/checkup.mjs`. *Acceptance:* a runbook missing
     front-matter is a `check` finding.
+    **✅ DELIVERED (2026-10-17)** — rule `runbook-front-matter` (`fix-now`) in `src/checkup.mjs`:
+    `RUNBOOK_FRONT_MATTER_KEYS` (the README's eight keys, `check_rule` required-with-null-allowed),
+    `RUNBOOK_PRECONDITIONS`, `RUNBOOK_TEMPLATE_SECTIONS`, and the PURE
+    `runbookFrontMatterProblems(runbook)` (it takes the caller's plain data — 81a's input surface — and
+    never touches the filesystem). It judges key presence, `runbook:` mirroring the filename stem, the
+    value shapes (`writes` boolean, `precondition` in the legal set, `last_verified` date-or-`unverified`,
+    non-empty `verified_by`/`evidence`, `check_rule` string-or-null), and — when the caller supplies the
+    `body` — the `_template.md` skeleton sections. `_template.md` itself is exempt (it carries
+    placeholders). Severity `fix-now`: an unreadable header is a defect, not a wrong procedure (unlike
+    `runbook-stale`, an `error`). Proof: `demo/runbook-frontmatter.test.mjs`; `demo/runbook-rules.test.mjs`
+    fixtures were completed to conform (a fixture with only `last_verified` is no longer "healthy").
+    *Not here:* the `cli.mjs` CALLER that reads `docs/runbooks/*` and feeds `auditRig` — that is item
+    **86** (#966), serialized behind the `cli.mjs` chain.
 83. **Hard write guard on all write verbs.** The single most important recommendation; the precondition
     must be code, not a sentence. This **is** item **69** — do not duplicate; land it. *Acceptance:* see
     item 69.
