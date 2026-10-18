@@ -2100,6 +2100,28 @@ should adopt, keep, or reject. The operator's framing: today's permissions are a
     **Evidence class:** externally-cited (`advertised-elsewhere`) for the permission models;
     `observed` for the durig baseline.
 
+132. **A dedicated API-key-management component — secret storage, injection and rotation (NOT STARTED; the operator owns the design).**
+    Registered 2026-10-17 (operator ruling, delegate-relayed). Today a provider key reaches durig either
+    as a plaintext value in `durig.config.json` — **verified gitignored (`.gitignore:8`), and explicitly
+    NOT a concern: do not pursue the plaintext-key remediation registered as #690** — or as an environment
+    variable (`DEEPINFRA_API_KEY`; `src/config.mjs` reads it and the `config` verb discloses it only as
+    `set`/`unset`, while a secret-looking VALUE in a config FILE is refused by name, never echoed).
+    Nothing in durig **owns** that secret: no component is responsible for storing it, injecting it into
+    a consumer's runtime, or rotating it. This registers a **separate application/component that owns
+    API-key management as a dedicated thing** — storage, injection and rotation — so a key is a managed
+    artifact with its own boundary, not a config string each consumer reads for itself.
+    **This is a REGISTRATION, not a GO.** The operator owns the design; do not start the work ahead of
+    this milestone (item 60's research, `docs/reviews/zero-trust-zero-agent.md`), and do not open a new
+    trust boundary or execution surface before the `security.sec` position (item 55).
+    *Owner:* `impl` (implementation) · *Design:* operator · *Consulted:* `security` (the secret-handling
+    design — storage / injection / rotation) and `lead` (sequencing).
+    *Where:* a separate component, deliberately NOT folded into `cli.mjs`.
+    *Depends:* item 55 (the `security.sec` position) before any new trust boundary; item 60's research for
+    the posture it must satisfy.
+    *Acceptance:* to be set with the operator's design — this entry registers the component, it does not
+    specify it.
+    **Status:** registered, not scheduled. `pm` sequences it.
+
 ## Broker supervision and a service host (design recorded 2026-10-16)
 
 Source: **`docs/BROKER-SUPERVISION.md`** (design of record), itself grounded in
