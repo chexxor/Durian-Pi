@@ -181,6 +181,7 @@ export async function enqueueItem(
 	body,
 	optimizedVia = null,
 	notice = false,
+	tier = null,
 ) {
 	const queue = await tx.doc(RigQueue);
 	const id = queue.nextId++;
@@ -195,10 +196,37 @@ export async function enqueueItem(
 		optimizedVia,
 		// A protocol notice (a DONE ack), not work: completing it enqueues nothing.
 		notice,
+		// Ratcheting task tier (RANK 2 borrow): the PM's size for the request,
+		// assigned at intake and LATCHED onto the item's chain (its DONE notice,
+		// verification item and follow-ups inherit it). null = not tiered.
+		...(tier ? { tier } : {}),
 		status: "queued",
 		transitions: [{ at: new Date().toISOString(), event: "queued", by: from }],
 	});
 	return id;
+}
+
+// Ratcheting task tier (RANK 2 borrow; source vendor/eval/agent-fleet @ 7c34dde
+// docs/ARCHITECTURE.md "Task-tier budgets": the tier is task-scoped and ratcheted
+// - lowering is free, raising needs a stated reason). Durig maps the PM S/M/L onto
+// the ordered tiers trivial < small < feature < project. Raising = moving to a
+// HIGHER index; lowering = same or lower. A new intake (new subject from the
+// operator) starts a NEW tier; the chain (DONE notice, verification, follow-up)
+// latches onto the originating item's tier.
+export const RATCHET_TIERS = ["trivial", "small", "feature", "project"];
+
+/**
+ * The base task of a queue-item subject: strip the leading `DONE #<n>: ` (and
+ * any QUESTION prefix) so a follow-up, verification or DONE notice of the same
+ * task compares against the same originating subject. Used by the raise guard.
+ */
+export function baseTaskSubject(subject) {
+	return String(subject ?? "").replace(/^(DONE|QUESTION) #\d+: /, "");
+}
+
+/** Index in RATCHET_TIERS, or -1 if not a known tier. */
+export function tierIndex(tier) {
+	return RATCHET_TIERS.indexOf(String(tier ?? ""));
 }
 
 // Tool results cross the content->output rename in @earendil-works/pi-durable:
@@ -297,6 +325,17 @@ const Router = defineExtension({
 				optimize: Type.Optional(Type.Boolean({
 					description: "Rewrite body through the instruction optimizer before enqueueing (costs one model call).",
 				})),
+				tier: Type.Optional(Type.Union([
+					Type.Literal("trivial"),
+					Type.Literal("small"),
+					Type.Literal("feature"),
+					Type.Literal("project"),
+				], {
+					description: "Ratchet tier for this task (trivial/small/feature/project); assigned at intake and latched onto the chain. Raising above an existing tier needs a `reason`.",
+				})),
+				reason: Type.Optional(Type.String({
+					description: "Required when RAISING the tier for an existing task; lowering is free so a reason is optional then.",
+				})),
 			}),
 			replay: "safe", // pure durable-state write; rerun after crash is idempotent-safe at doc level
 			execute: async (args, api, context) => {
@@ -326,7 +365,27 @@ const Router = defineExtension({
 					}
 					const id = await api.commit(async (tx) => {
 						await assertSendAllowed(tx, me, args.to, args.requires);
-						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia);
+						// Ratcheting tier raise guard: raising an already-tiered task's chain
+						// to a HIGHER tier requires a stated reason; lowering is free (RANK 2
+						// borrow, ARCHITECTURE.md "survives the next message ... raising needs a
+						// stated reason"). The reference tier is the newest existing item with
+						// the SAME base task subject (the originating item / its chain).
+						const tier = args.tier;
+						if (tier) {
+							const queue = await tx.doc(RigQueue);
+							const base = baseTaskSubject(args.subject);
+							const existing = [...queue.items]
+								.reverse()
+								.find((it) => tierIndex(it.tier) >= 0 && baseTaskSubject(it.subject) === base);
+							const newIdx = tierIndex(tier);
+							const oldIdx = existing ? tierIndex(existing.tier) : -1;
+							if (oldIdx >= 0 && newIdx > oldIdx && !(args.reason && args.reason.trim())) {
+								throw new Error(
+									`raising tier ${existing.tier}->${tier} for this task needs a stated reason`,
+								);
+							}
+						}
+						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null);
 					}, context);
 					return toolText(`queued item #${id} for ${args.to}${optimizedVia ? ` (body optimized via ${optimizedVia})` : ""}`);
 				} catch (err) {
@@ -504,6 +563,10 @@ const Router = defineExtension({
 							args.resultSummary,
 							null,
 							true,
+							// Ratcheting tier LATCH: the DONE notice inherits the completed
+							// item's tier, so the chain (DONE -> verification -> follow-up)
+							// keeps the same ratio tier across the task's life (RANK 2).
+							item.tier ?? null,
 						);
 					}
 					return `ok`;
