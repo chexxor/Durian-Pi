@@ -1042,24 +1042,6 @@ export async function runWakeLoop({
         }
         if (Number.isFinite(soonestDelay)) cooldownRevisitAt = now() + soonestDelay;
       }
-      // A failed wake is real work this pass did NOT action, and — unlike a
-      // cooldown-suppressed candidate — nothing else will re-arm the loop. Without a
-      // scheduled retry the broker rests in `signal.wait` with the seat never driven:
-      // the dormant-stall recurrence. `selectWakes` still sees the seat's queued work,
-      // so a retry pass needs no extra bookkeeping. `Math.min` with any cooldown
-      // revisit already chosen so both waits are honoured at the earlier deadline.
-      consecutiveWakeFailures = failedThisPass.size > 0 ? consecutiveWakeFailures + 1 : 0;
-      // `wakeRetryMs <= 0` disables the retry, which reproduces the pre-fix behaviour
-      // (one pass, then dormant) so a demo can prove the contrast without reverting code.
-      if (failedThisPass.size > 0 && wakeRetryMs > 0) {
-        const backoff = Math.min(
-          wakeRetryMs * 2 ** (consecutiveWakeFailures - 1),
-          wakeRetryMaxMs,
-        );
-        const retryAt = now() + backoff;
-        cooldownRevisitAt = cooldownRevisitAt === null ? retryAt : Math.min(cooldownRevisitAt, retryAt);
-        logBrokerLine(dbPath, `WAKE-RETRY in=${backoff}ms seats=${[...failedThisPass].join(",")}`);
-      }
     } catch (error) {
       // #1587 part 2: a per-conversation storage error inside the pass must NOT kill the
       // resident broker (the 17:29Z death). Log it WITH its nested cause and keep driving;
@@ -1067,6 +1049,33 @@ export async function runWakeLoop({
       onDiagnostic({ kind: "pass-failed", ...describeError(error) });
     } finally {
       scheduler.endPass();
+    }
+    // Post-pass scheduling runs even when THIS pass threw. A wake failure emitted before
+    // an unrelated later throw (e.g. `superviseOnce` hitting the SAME storage error) must
+    // still re-arm the loop: recurrence 7 (2026-10-18T17:57Z) reproduced exactly this — a
+    // `wake-failed` for pm, then a pass that threw before reaching the scheduler, left the
+    // broker parked with a fresh heartbeat and a frozen `PASS` for ~36 min.
+    cooldownRevisitAt = null;
+    if (suppressedThisPass.size > 0) {
+      let soonestDelay = Infinity;
+      for (const name of suppressedThisPass) {
+        soonestDelay = Math.min(soonestDelay, scheduler.msUntilSeatReady(name, now()));
+      }
+      if (Number.isFinite(soonestDelay)) cooldownRevisitAt = now() + soonestDelay;
+    }
+    // A failed wake is real work this pass did NOT action, and — unlike a
+    // cooldown-suppressed candidate — nothing else will re-arm the loop. Without this
+    // scheduled retry the broker rests in `signal.wait` with the seat never driven.
+    // `selectWakes` still sees the seat's queued work, so the retry needs no bookkeeping.
+    // The backoff doubles per CONSECUTIVE failing pass and is capped, so a persistent
+    // error stays legible without hot-looping; `wakeRetryMs <= 0` disables the retry,
+    // reproducing the pre-fix shape a demo uses to prove the contrast.
+    consecutiveWakeFailures = failedThisPass.size > 0 ? consecutiveWakeFailures + 1 : 0;
+    if (failedThisPass.size > 0 && wakeRetryMs > 0) {
+      const backoff = Math.min(wakeRetryMs * 2 ** (consecutiveWakeFailures - 1), wakeRetryMaxMs);
+      const retryAt = now() + backoff;
+      cooldownRevisitAt = cooldownRevisitAt === null ? retryAt : Math.min(cooldownRevisitAt, retryAt);
+      logBrokerLine(dbPath, `WAKE-RETRY in=${backoff}ms seats=${[...failedThisPass].join(",")}`);
     }
     // F35: cooperative stop — a `serve --stop` command writes a .stop file
     // instead of process.kill (which does not deliver SIGTERM on Windows). The

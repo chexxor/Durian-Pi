@@ -8,7 +8,9 @@
 // commit follows to trigger another pass. With `wakeRetryMs > 0` the loop schedules a
 // retry pass (backoff doubling per consecutive failing pass, capped); with
 // `wakeRetryMs: 0` the retry is disabled, which reproduces the pre-fix behaviour so the
-// contrast is proven in one run.
+// contrast is proven in one run. A third scenario covers the subtler shape that caused
+// recurrence 7: the SAME pass later throws (the supervisor hits the same storage error)
+// — the retry must still be scheduled, so it is decided after the pass settles.
 //
 // Run: node demo/broker-wake-retry.test.mjs  (exit 0 = pass)
 
@@ -78,7 +80,7 @@ function flakyProbe(storage) {
 	};
 }
 
-async function runScenario({ wakeRetryMs, maxDurationMs }) {
+async function runScenario({ wakeRetryMs, maxDurationMs, superviseThrows = false }) {
 	const { harness, storage } = await makeHarness();
 	const logPath = join(dir, `scenario-retry-${wakeRetryMs}.db`);
 	const logFile = `${logPath}.broker.log`;
@@ -105,6 +107,13 @@ async function runScenario({ wakeRetryMs, maxDurationMs }) {
 			wakeRetryMs,
 			wakeRetryMaxMs: 120,
 			dbPath: logPath,
+			// A supervisor that throws AFTER the wake failure: the pass must still schedule
+			// its retry, or the broker parks (recurrence 7).
+			supervise: superviseThrows
+				? () => {
+						throw new Error("supervise boom");
+					}
+				: null,
 			isStopping: () => false,
 		});
 
@@ -148,11 +157,25 @@ const scenarios = [
 		minPasses: 2,
 		maxPasses: Infinity,
 	},
+	{
+		label: "retry enabled + the pass later throws",
+		wakeRetryMs: 30,
+		maxDurationMs: 1500,
+		superviseThrows: true,
+		expectWake: true,
+		expectRetryLogged: true,
+		minPasses: 2,
+		maxPasses: Infinity,
+	},
 ];
 
 try {
 	for (const s of scenarios) {
-		const r = await runScenario({ wakeRetryMs: s.wakeRetryMs, maxDurationMs: s.maxDurationMs });
+		const r = await runScenario({
+			wakeRetryMs: s.wakeRetryMs,
+			maxDurationMs: s.maxDurationMs,
+			superviseThrows: s.superviseThrows === true,
+		});
 		check(
 			`[${s.label}] the failed wake is reported`,
 			r.diagnostics.some((d) => d.kind === "wake-failed"),
