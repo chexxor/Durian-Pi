@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T06:25Z (delegate — durable-tui merge pack delivered; operator RULED scope (b), designer+advocate UX consult routed; rename proposal escalated; rig paused, broker down)._
+_Last refreshed: 2026-10-18T06:52Z (delegate — merge pack + scope (b) ruling + UX consult routed; product rebrand `durig`→`durian-pi` routed; broker UP; local repo rename still needs a window)._
 
 > **DELEGATE SESSION (2026-10-18) — durable-tui merge pack delivered; rename blocked on a window.**
 > The operator directed: (1) proceed with the durable-tui merge procedure; (2) gap-analyze the spike vs
@@ -23,9 +23,15 @@ _Last refreshed: 2026-10-18T06:25Z (delegate — durable-tui merge pack delivere
 > - `docs/reviews/project-rename-durian-pi.md` — rename hazard + safe procedure. **NOT executed**: 140
 >   worktrees / 139 admin dirs / live processes hold the tree; a string-only rename would make docs
 >   false (they name the real `../pi-opendurig.worktrees/`). Needs a GitHub rename + a declared window.
-> Two intents spooled to `pm`: **`66d95f69-17bf-4707-8c23-40326e7b8d70`** (merge) and
-> **`e6d5eea0-ec71-44c0-9a38-df229c073625`** (rename). **NEXT:** on `unpause`, pm drains both and
-> registers the phases (`impl` merge, `devtools` pin + rename mechanics, `qa`/`auditor` verify).
+> - **REBRAND (operator): `durig` → `durian-pi`** across all tracked text + identifiers (267 files,
+>   24 `DURIG_*` env vars, `durig.config.json`, `.durig/`, the skill dirs), with deprecated aliases for
+>   the env vars + config filename so the live rig keeps working. Intent
+>   `9fa09419-2160-4b3b-b2eb-04bbd32c54e2` delivered to `pm`; the new multi-seat TUI is the
+>   **durian-pi TUI**.
+> Four intents delivered to `pm` (merge `66d95f69…`, rename `e6d5eea0…`, UX consult `92682546…`,
+> rebrand `9fa09419…`). **RIG STATE: broker UP** (`serve` pid 4004, PASS advancing) after `unpause` +
+> `resume` (2 stranded submissions cleared); inbox empty. **NEXT:** pm registers/routes the four items;
+> the LOCAL repo rename still needs a window (GitHub repo already renamed to `Durian-Pi`).
 
 > **RIG PAUSED (operator, 2026-10-18T05:38Z) — system reboot pending.** The broker was dormant (pid 3088,
 > last `PASS 178` at 05:23:05Z, no genlock) and had not drained the spooled `pause`; it was terminated

@@ -2640,3 +2640,28 @@ their opinions.
 **Status.** Ruled. The consultation intent is spooled (`92682546-ad8e-4406-9efb-c7b1208e38c3`) for PM to
 route on unpause. Phase 1 (own-store, fail-closed base) proceeds unchanged. Phase 2 starts after the
 designer/advocate UX proposal is accepted and the ROADMAP 55 security position is written.
+
+## D103 — Product rebrand `durig` → `durian-pi`, with deprecated aliases for env vars and config paths (operator, 2026-10-18)
+
+**Decision.** The product is renamed `durig` → `durian-pi` across all tracked text and identifiers:
+`package.json` `name`; the 24 `DURIG_*` env vars become `DURIAN_PI_*`; `durig.config.json` becomes
+`durian-pi.config.json`; `durig.config.default.json` / `durig.config.example.json` are renamed; the
+`.durig/` scratch dir becomes `.durian-pi/`; `skills/durig/` and `.agents/skills/durig/` become
+`durian-pi`; docs, demos and `.gitignore` follow. The config/env loader accepts the old `DURIG_*` names
+and the old `durig.config.json` as deprecated aliases; the new name wins when both are set. The new
+multi-seat TUI is named the **durian-pi TUI**.
+
+**Why.** The operator renamed the repository to `Durian-Pi` and directed the product follow. A hard
+identifier break strands the live selfdev rig and every documented command (`DURIG_DB`, `DURIG_SEAT_ROOT`,
+`DURIG_MAX_CONCURRENT_SEATS`, …). Tested aliases make the rename complete while the running system
+stays reachable; they are a supported feature with one documented deprecation, not a stub.
+
+**Alternatives.** (a) Prose-only rename leaving env vars/paths as `DURIG_*` — rejected: not a rebrand,
+and two names persist indefinitely. (b) Hard rename with no aliases — rejected: breaks the live rig,
+scripts and runbooks simultaneously. (c) Delegate hand-edits the shared tree — rejected: the broker is
+UP and seats run in worktrees, so the shared tree must not be mutated.
+
+**Status.** Delivered to `pm` for registration (intent `9fa09419-2160-4b3b-b2eb-04bbd32c54e2`); owners:
+devtools (env/config/paths/scripts), impl (code), scribe (docs), qa (verify). Acceptance: a demo proves
+the new names load and the old aliases resolve (new wins); after the rename `git grep -i durig` returns
+only the deliberate alias/deprecation sites; full `demo/*.test.mjs` + `npm run test:tui` green.
