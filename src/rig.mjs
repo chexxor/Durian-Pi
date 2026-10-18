@@ -182,6 +182,7 @@ export async function enqueueItem(
 	optimizedVia = null,
 	notice = false,
 	tier = null,
+	held = false,
 ) {
 	const queue = await tx.doc(RigQueue);
 	const id = queue.nextId++;
@@ -200,8 +201,12 @@ export async function enqueueItem(
 		// assigned at intake and LATCHED onto the item's chain (its DONE notice,
 		// verification item and follow-ups inherit it). null = not tiered.
 		...(tier ? { tier } : {}),
-		status: "queued",
-		transitions: [{ at: new Date().toISOString(), event: "queued", by: from }],
+		// A HELD/PARKED item (operator queue-hygiene directive, #1885) is created
+		// unclaimable and does NOT wake the recipient: a "registered, do not start"
+		// backlog row must not occupy a working seat's oldest-first claim slot.
+		// `release_work` restores it to queued when it should become claimable.
+		status: held ? "held" : "queued",
+		transitions: [{ at: new Date().toISOString(), event: held ? "held" : "queued", by: from }],
 	});
 	return id;
 }
@@ -314,13 +319,19 @@ const Router = defineExtension({
 		defineTool({
 			name: "send_work",
 			description:
-				"Send a work item to another seat. The seat claims it from its queue.",
+				"Send a work item to another seat. The seat claims it from its queue. " +
+				"Pass `held: true` to create it UNCLAIMABLE and un-waking (a parked backlog registration): " +
+				"it does not occupy the recipient's oldest-first claim slot and does not wake it until released.",
 			parameters: Type.Object({
 				to: Type.String({ description: "recipient seat name" }),
 				subject: Type.String(),
 				body: Type.String(),
 				requires: Type.Optional(Type.String({
 					description: "capability the recipient must advertise",
+				})),
+				held: Type.Optional(Type.Boolean({
+					description:
+						"Create the item PARKED (status held): unclaimable and no wake, so a 'registered, do not start' backlog row cannot starve a working seat. Release it later with release_work.",
 				})),
 				optimize: Type.Optional(Type.Boolean({
 					description: "Rewrite body through the instruction optimizer before enqueueing (costs one model call).",
@@ -385,9 +396,13 @@ const Router = defineExtension({
 								);
 							}
 						}
-						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null);
+						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null, args.held === true);
 					}, context);
-					return toolText(`queued item #${id} for ${args.to}${optimizedVia ? ` (body optimized via ${optimizedVia})` : ""}`);
+					const label =
+						args.held === true
+							? `parked item #${id} for ${args.to} (held; release with release_work(${id}) to make it claimable)`
+							: `queued item #${id} for ${args.to}`;
+					return toolText(`${label}${optimizedVia ? ` (body optimized via ${optimizedVia})` : ""}`);
 				} catch (err) {
 					return toolText(`SEND_WORK_ERROR: ${err && err.stack ? err.stack : String(err)}`);
 				}
@@ -733,7 +748,7 @@ const Router = defineExtension({
 		defineTool({
 			name: "release_work",
 			description:
-				"Restore a held item to queued, so the driver can re-wake the seat.",
+				"Restore a held item to queued, so the driver can re-wake the seat. The recipient may release an item addressed to it; the SENDER may release a held item it created (e.g. a parked backlog registration).",
 			parameters: Type.Object({ itemId: Type.Number() }),
 			replay: "safe",
 			execute: async (args, api, context) => {
@@ -742,8 +757,8 @@ const Router = defineExtension({
 					const queue = await tx.doc(RigQueue);
 					const item = queue.items.find((it) => it.id === args.itemId);
 					if (!item) return `unknown item #${args.itemId}`;
-					if (item.to !== me)
-						return `item #${args.itemId} is addressed to ${item.to}, not you`;
+					if (item.to !== me && item.from !== me)
+						return `item #${args.itemId} is addressed to ${item.to} (from ${item.from}); only the sender or recipient may release it`;
 					if (item.status !== "held")
 						return `item #${args.itemId} is not held (status=${item.status})`;
 					item.status = "queued";
