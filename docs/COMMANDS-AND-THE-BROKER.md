@@ -123,7 +123,7 @@ are spooled for the owner to apply (safe).**
 | `resume` / `doctor` | settle stranded submissions | **Yes** | **Refused** | second owner doing a compound write (the 2026-10-16 incident); `cmdResume` now refuses while a broker is alive (ROADMAP 69) |
 | `stop <seat>` | cross-process halt + settle | **Yes** | **By design, yes** | kills the generation-lease holder pid, then settles; `openHarness({resume:false})` |
 | `run [--watch]` | drive to quiescence | **Yes** | **Refused** | explicit guard: refuses if a broker is alive (two schedulers double-wake) |
-| `up` | create/refresh seats; maybe start the broker | **Yes** | depends | interactive TTY auto-starts the broker; `--no-serve`/`DURIG_NO_SERVE=1` opt out |
+| `up` | create/refresh seats; maybe start the broker | **Yes** | **Refused** | second writer: a resident broker already drives the store, and `cmdUp` refuses while it is alive (#1589). Exception: `up --dry-run` previews only and writes nothing, so it is **not** refused |
 | `serve [--stop]` | the broker itself; `--stop` is the off switch | **Yes** | — | the sole writer/scheduler |
 | `durig daemon …` *(planned)* | install the OS trigger → `src/host.mjs` → broker | host never opens the store | yes | supervisor, not scheduler (`BROKER-SUPERVISION.md`) |
 
