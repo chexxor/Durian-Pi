@@ -5,8 +5,8 @@ severity: sev1
 status: mitigated
 symptom: "the team has stopped working; the broker process is alive but its log stops"
 runbook: broker-down-or-stalled
-fix: "0c0d4d3, 991567d"
-prevention: "991567d/0c0d4d3 (dormant-revisit retry, incl. the same-pass-throw path) + ROADMAP 78 (log pass-failed cause; a hung/absent retry pass is invisible) + ROADMAP 61-64 (watchdog) + #2126"
+fix: "0c0d4d3, 991567d, 6e27ac2"
+prevention: "991567d/0c0d4d3/6e27ac2 (dormant-revisit retry: wake-failed, same-pass throw, AND whole-pass throw) + ROADMAP 78 (log pass-failed cause; a hung/absent retry pass is invisible) + ROADMAP 61-64 (watchdog) + #2126"
 last_reviewed: 2026-10-18
 ---
 
@@ -428,6 +428,37 @@ pass looks exactly like dormancy.
   "terminate and restart", never "trust the heartbeat".
 - The local-server dependency is documented in `docs/runbooks/local-provider-down.md`.
 
+### Recurrence 8 reproduced live — root cause found and fixed (2026-10-18T19:29Z)
+The shape recurred twice more on the recovered broker and was pinned (the earlier "open question" above is
+superseded):
+- pid `11816`: `PASS 33` at `19:16:30Z` (`ms=5047`, `wake-failed` **pm conv 3**) + `WAKE-RETRY in=2000ms
+  seats=pm`, then no `PASS` for ~4 min (fresh heartbeat, no genlock, low CPU).
+- pid `3416`: `PASS 7` at `19:22:58Z` (`ms=5056`, `wake-failed` **lead**) + `WAKE-RETRY in=2000ms
+  seats=lead`, then no `PASS`.
+
+**Root cause.** The retry re-armed only when a pass emitted a per-seat `wake-failed`. The retry pass can
+instead throw in a **store read that runs before any seat wake** — `documentState` / `inspect` /
+`reconcileStrandedSubmissions` / `readStoppedConvIds` in `drivePass`, which are NOT wrapped by `onError` —
+so the pass threw with `failedThisPass` empty and the post-`finally` retry (keyed only on
+`failedThisPass`) never ran. `991567d` fixed the "wake-failed then a later throw in the SAME pass" case,
+not a throw with no wake-failed at all.
+
+**Fix `6e27ac2`.** `runWakeLoop` records `passThrew` per pass and schedules the retry (same bounded
+backoff) when `failedThisPass.size > 0` **OR** the pass threw; a throw-only retry logs
+`WAKE-RETRY in=… seats=- pass-threw`. `demo/broker-wake-retry.test.mjs` gained the scenario "the retry
+pass throws in a store read (no wake-failed)": RED on the prior code (`passes=1`, seat never woken),
+GREEN now (`passes=2`, seat woken, `liveScans=2`); full `demo/*.test.mjs` **143/143**. Independent verify
+to be routed (the delegate authored this code).
+
+### Prevention (updated)
+- `991567d` + `0c0d4d3` + `6e27ac2` now cover the three shapes: wake-failed, wake-failed-then-same-pass
+  throw, and whole-pass throw.
+- **Still owed:** log the pass attempt BEFORE the work (or `pass-failed` + `SessionFailed.cause`,
+  ROADMAP 78), so a truly hung pass is distinguishable from a retry that never ran.
+- **Watchdog** (ROADMAP 61-64) would catch any residual shape: stale `PASS` + fresh heartbeat means
+  "terminate and restart", never "trust the heartbeat".
+- The local-server dependency is documented in `docs/runbooks/local-provider-down.md`.
+
 ### Evidence (recurrence 8)
 - `selfdev.sqlite.broker.log`: `START pid=10728` `19:06:13Z` .. `PASS 6 ms=5034 woke=-` `19:07:07Z` +
   `WAKE-RETRY in=2000ms seats=qa`, then no line until `START pid=11816` `19:10:52Z`.
@@ -441,3 +472,8 @@ pass looks exactly like dormancy.
   zero `wake-failed`.
 - Related: `docs/incidents/2026-10-18-host-resource-exhaustion.md` (why the broker died),
   `docs/runbooks/local-provider-down.md` (the PolyStrata dependency).
+- Live reproductions: pid `11816` `PASS 33 ms=5047` + `WAKE-RETRY seats=pm` (no `PASS` for ~4 min); pid
+  `3416` `PASS 7 ms=5056` + `WAKE-RETRY seats=lead` (no `PASS`). Both frozen heartbeats, no `genlock.*`.
+- Fix `6e27ac2`; RED->GREEN captured before/after in `demo/broker-wake-retry.test.mjs` (new scenario
+  `passes=1`, `submissions=0`, `liveScans=1` -> `passes=2`, `submissions>=1`, `liveScans=2`); full suite
+  143/143; restart pid `16368` (`19:29:58Z`) with no false dormancy.
