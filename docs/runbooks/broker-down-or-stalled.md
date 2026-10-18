@@ -61,3 +61,9 @@ stranded submissions, and the restart woke pm/impl/scribe. Item 54 makes a *stop
 2026-10-16 (dormant case b): pid 16628 was ALIVE with a fresh heartbeat, last `PASS 82` at `21:09:19`,
 **no pass for ~9.5 min**, no genlock, while `impl` held 23 queued items (`idle_with_queued_work`). The
 dormant-revisit gap is still owed; the diagnostic is the fresh heartbeat + stale `PASS` + no genlock.
+2026-10-18 (recurrence, `docs/incidents/2026-10-18-broker-dormant-stalled.md`): the broker stayed
+**alive with a fresh heartbeat** while its log froze at `PASS 1` for ~6.5 min; `.spike/serve.err` named
+`wake-failed … Session failed after a storage error` for impl (conv 9) and qa (conv 15). Recovery per
+this runbook: terminate the wedged pid (no genlock) -> `resume` (1 pm run) -> restart -> `START
+pid=15720`, `INTENT delivered=2`, passes resume. Note: a **fresh heartbeat is not a health signal** —
+read the last `PASS` line, not `broker.json`.

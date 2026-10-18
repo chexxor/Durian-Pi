@@ -82,6 +82,13 @@ evidence updated. Broker housekeeping this turn: killed a wedged broker (36204, 
 `resume` cleared 1 stranded qa run, restarted **pid 24744**, and killed an orphan second `serve` driver
 (35896, dead parent, no `broker.json`, no genlock).
 
+**Incident (2026-10-18, sev1, mitigated):** broker `24744` later **stalled while alive** — fresh
+heartbeat, log frozen at `PASS 1` for ~6.5 min — after a `wake-failed` storage error (impl conv 9, qa
+conv 15). Recovered per `broker-down-or-stalled.md` (terminate no-genlock pid → `resume` [1 pm run] →
+restart → **`START pid=15720`**, both spooled intents delivered). Filed
+`docs/incidents/2026-10-18-broker-dormant-stalled.md` + index row + runbook Evidence. **A fresh
+`broker.json` heartbeat is NOT a health signal — read the last `PASS` line.**
+
 **Pause/unpause priority (operator):** prerequisite satisfied; intent `intent-pause-priority` spooled to
 `pm` (`.spike/delegate/intent-pause-priority.md`, `INTENT delivered=1 dead=0`) to **unpark #1388** and
 route `pause`/`unpause` (ROADMAP 131 AC1–5) to `impl` now. Confirm `#1388` leaves `held`. **Watch:** the
