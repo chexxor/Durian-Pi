@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # C4 CLOSE-OUT (item #662) — reconcile against current HEAD: both requested demo blocks EXIST
 
 pm routed qa's #606/#638 verdict (PARTIAL; two absent demo blocks). This worktree's HEAD has since

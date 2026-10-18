@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # TUI client for durig — initial thinking (operator's agent, starting point)
 
 **Status:** initial thinking only — input for the team to decompose, not a decision.

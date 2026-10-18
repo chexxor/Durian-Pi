@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Research prompt — improve our TUI research and surface what we're overlooking
 
 You are a research assistant for a small engineering team. Your job is to **strengthen research we

@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 
 
 I'll work through this systematically. Let me start with the model-specific and measurement questions.I've hit the research budget, so here is the consolidated report. Note on method: I could not read the baseline docs in your repo (only the brief you attached was available to me), and I did not independently re-open your vendored `pi-durable` tree — so every statement about your own code is carried forward from your brief and marked **internal — unverified by me** where it matters. Everything else is externally sourced with a URL and an evidence class.

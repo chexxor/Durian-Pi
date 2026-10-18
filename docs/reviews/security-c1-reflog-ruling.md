@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Ruling #1505 — `git rev-parse HEAD@{1}` against the C1 metachar class: KEEP REFUSED
 
 Item: #1505 (security), asked by pm; inputs: impl #1503 / branch `impl-item-1444-fix` @ fec14b7,
