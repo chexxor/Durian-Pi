@@ -12,7 +12,7 @@
 // exist, this dies at import or on the first drain (the op is unknown and dead-lettered).
 // Run: node demo/broker-read.test.mjs   (exit 0 = pass)
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,6 +27,7 @@ import {
   awaitIntentResult,
   brokerAlive,
   drainIntentInbox,
+  intentResultDir,
   readBrokerState,
   writeBrokerState,
   writeIntent,
@@ -131,6 +132,27 @@ try {
     viaBroker,
     await readSeatList(storage, ctx),
     "readViaBroker returns the broker's payload (no store opened by the caller)",
+  );
+
+  // 3b. The client CONSUMES its result file. Without this, a `watch`/`ui.mjs` poll would
+  //     leave a fresh result every ~750 ms; the `health` view is multi-MB, so
+  //     <db>.broker.inbox.out grows without bound (the regression this asserts against).
+  const readResultFiles = () =>
+    readdirSync(intentResultDir(dbPath))
+      .filter((n) => n.endsWith(".json"))
+      .filter((n) => {
+        try {
+          return JSON.parse(readFileSync(join(intentResultDir(dbPath), n), "utf8")).op === "read";
+        } catch {
+          return false;
+        }
+      }).length;
+  const resultsBefore = readResultFiles();
+  await readViaBroker(dbPath, "queue", {}, { timeoutMs: 5000 });
+  assert.equal(
+    readResultFiles(),
+    resultsBefore,
+    "readViaBroker consumes its own result, so polling cannot accumulate result files",
   );
 
   console.log(

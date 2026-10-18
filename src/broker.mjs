@@ -246,10 +246,13 @@ const QUIESCE_POLL_MS = 100;
 async function applyRequest(harness, request, { seats, context, dbPath, probeStorage }) {
   const op = requestOp(request);
   // `read` is the one non-mutating spool op: the broker serves a view from its OWN
-  // storage so a second process never opens the database (see src/brokerread.mjs).
-  // It is applied with `probeStorage`, never a harness write, and returns a payload.
+  // storage so a second process never opens the database (see src/brokerread.mjs). It is
+  // applied with `harness.storage`, NOT the separate `probeStorage`: pi-durable's
+  // `document()` takes BEGIN IMMEDIATE even for a read, so a read on a SECOND connection
+  // contends with the harness's own commits in-process and times out the 5 s busy window
+  // (`PASS ms=5051` -> SessionFailed -> wedge). One pi-durable instance, one connection.
   if (op === "read") {
-    return await dispatchRead(probeStorage, request, { dbPath, context });
+    return await dispatchRead(harness.storage, request, { dbPath, context });
   }
   if (op === "message") {
     const seat = seats[request.to];
