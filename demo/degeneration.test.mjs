@@ -184,11 +184,39 @@ check("CJK inside a code span is not drift", () => {
   assert.equal(isLanguageDriftTurn(fenced), false, "fenced code must be excluded from the language test");
 });
 
-check("a context past the token bound is degenerate", () => {
-  const entries = [assistant([["read", { path: "a" }]], { usage: { totalTokens: 999_999 } }), user()];
-  const a = assessRun(entries);
-  assert.equal(a.degenerate, true);
+check("context pressure is a SEAT-LEVEL signal that SURVIVES a wake (#1823)", () => {
+  // The defect (#1705 Defect B): the per-turn wake kept the run window at 1-2 turns, so a seat
+  // that degraded at 367,559 tokens was never seen. Context is a seat-level state, so it is read
+  // from the newest assistant entry of the WHOLE page, wake or not.
+  const entries = [
+    user(), // a wake: the run window resets here...
+    assistant([["read", { path: "a" }]], { usage: { totalTokens: 367_559 } }), // ...but the seat's context survives
+  ];
+  const a = assessRun(entries, { contextWindowTokens: 1_048_576 });
+  assert.equal(a.contextTokens, 367_559, "the seat's current context is read across the wake");
+  assert.equal(a.degenerate, true, "the seat-level context trips");
   assert.ok(a.reasons.some((r) => r.startsWith("context-tokens=")), a.reasons.join(","));
+});
+
+check("the context trip is FLOOR and FRACTION and CEILING (#1823)", () => {
+  const withCtx = (tokens, window) => assessRun([assistant([["read", { path: "a" }]], { usage: { totalTokens: tokens } }), user()], { contextWindowTokens: window });
+  // FLOOR: below it, context alone never trips even past the fraction of a small window.
+  assert.equal(withCtx(60_000, 100_000).degenerate, false, "below the floor: no trip");
+  assert.equal(withCtx(60_000, 100_000).contextSkip, "below-floor");
+  // The qa datapoint: 367,559 vs an ADVERTISED 1,048,576 (~35%) must trip at fraction 0.35...
+  assert.equal(withCtx(367_559, 1_048_576).degenerate, true, "the qa degradation point trips");
+  // ...but a long HEALTHY session at 300k must NOT (zero false positives).
+  assert.equal(withCtx(300_000, 1_048_576).degenerate, false, "a healthy long session does not trip");
+  assert.equal(withCtx(300_000, 1_048_576).contextSkip, "below-trip");
+  // CEILING: a huge advertised window must not push the trip above the ceiling.
+  assert.equal(withCtx(700_000, 10_000_000).contextTrip, 600_000, "the trip is capped by the ceiling");
+});
+
+check("no resolved window => the context cause is SKIPPED with a why, never guessed (#1823)", () => {
+  const a = assessRun([assistant([["read", { path: "a" }]], { usage: { totalTokens: 999_999 } }), user()]);
+  assert.equal(a.degenerate, false, "no window: no context trip");
+  assert.equal(a.contextWindow, null);
+  assert.equal(a.contextSkip, "no-context-window");
 });
 
 check("idempotent: an entry page already ending in pi.reset is skipped", () => {
@@ -208,7 +236,7 @@ check("only the CURRENT run is judged; an old degenerate run behind a wake is ig
 });
 
 check("defaults are conservative and complete", () => {
-  for (const key of ["maxToolTurns", "maxRepeats", "maxMalformed", "maxPseudoToolCalls", "maxLanguageDrift", "minLanguageDriftChars", "minLanguageDriftRatio", "maxContextTokens", "repeatHorizon"]) {
+  for (const key of ["maxToolTurns", "maxRepeats", "maxMalformed", "maxPseudoToolCalls", "maxLanguageDrift", "minLanguageDriftChars", "minLanguageDriftRatio", "minContextTokens", "contextFraction", "contextCeilingTokens", "repeatHorizon"]) {
     assert.ok(Number.isFinite(DEGEN_DEFAULTS[key]), `missing default ${key}`);
   }
 });

@@ -41,7 +41,18 @@ export const DEGEN_DEFAULTS = {
 	// wasted turn, and the patterns themselves are conservative (see TEXT_PATTERNS). The registry
 	// names the pattern in the reason so a firing cause is legible.
 	maxDegenerateText: 1,
-	maxContextTokens: 400_000, // newest turn's prompt size (a backstop, not the primary trip)
+	// CONTEXT PRESSURE is a SEAT-LEVEL signal, not a per-run one (lead #1816 Q1): the seat's CURRENT
+	// context size is monotone and SURVIVES wakes, so it is read from the newest assistant entry of
+	// the WHOLE page. The trip is a raw-token FLOOR **AND** a FRACTION of the resolved window, with a
+	// CEILING (lead #1816 Q2): a pure fraction trips prematurely on a small window, and a huge
+	// ADVERTISED window must not push the trip ABOVE the real degradation point (qa degraded at
+	// 367,559 tokens against an advertised 1,048,576 — "advertised != usable").
+	minContextTokens: 200_000, // FLOOR: below this, context alone never trips
+	contextFraction: 0.35, // FRACTION of the resolved window — TUNABLE; calibrate on the fixtures BEFORE enabling
+	contextCeilingTokens: 600_000, // CEILING: the trip never exceeds this
+	// The RESOLVED window (measured > declared > advertised), supplied by the caller (the cli.mjs
+	// model-resolution half). null => the context cause is SKIPPED with a `why`, never guessed.
+	contextWindowTokens: null,
 	// Per-turn WALL-CLOCK, its OWN cause and NOT the prose detector. It reads a number the harness
 	// already persists (AssistantMessage.durationMs), not a parse of prose, so a healthy long
 	// document cannot trip it — the failure mode that reverted the D78 text heuristic. Deliberately
@@ -96,6 +107,9 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		languageDrift: 0,
 		degenerateText: {},
 		contextTokens: 0,
+		contextWindow: null,
+		contextTrip: null,
+		contextSkip: "no-entries",
 		turnDurationMs: 0,
 		calls: 0,
 	};
@@ -156,10 +170,16 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 	// registry so each shape is independently testable and the reason names the pattern. Counted
 	// per pattern, so a run can trip on one shape without the others.
 	const degenerateText = countTextPatternTurns(assistantRun);
-	const contextTokens = assistantRun.reduce((max, entry) => {
-		const tokens = messageOf(entry)?.usage?.totalTokens;
-		return Number.isFinite(tokens) ? Math.max(max, tokens) : max;
-	}, 0);
+	const contextTokens = (() => {
+		// CONTEXT PRESSURE is the SEAT's current size, read from the newest assistant entry of the
+		// WHOLE page (it survives wakes); every other cause above stays per-run (lead #1816 Q1).
+		for (const entry of items) {
+			if (entry?.kind !== "pi.assistant") continue;
+			const tokens = messageOf(entry)?.usage?.totalTokens;
+			if (Number.isFinite(tokens)) return tokens;
+		}
+		return 0;
+	})();
 	// The slowest single ASSISTANT turn of the run. `durationMs` is absent on legacy messages, so a
 	// run of old entries reads 0 and is never flagged on this cause. Tool-result durations are the
 	// TOOL's runtime and are deliberately excluded (#1703).
@@ -183,7 +203,18 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 			reasons.push(`degenerate-text=${pattern}=${count}>=${o.maxDegenerateText}`);
 		}
 	}
-	if (contextTokens >= o.maxContextTokens) reasons.push(`context-tokens=${contextTokens}>=${o.maxContextTokens}`);
+	const contextWindow =
+		Number.isFinite(o.contextWindowTokens) && o.contextWindowTokens > 0 ? o.contextWindowTokens : null;
+	// Trip at min(fraction*window, ceiling), and only ABOVE the raw-token floor (lead #1816 Q2).
+	const contextTrip =
+		contextWindow === null ? null : Math.min(contextWindow * o.contextFraction, o.contextCeilingTokens);
+	let contextSkip = null;
+	if (contextWindow === null) contextSkip = "no-context-window";
+	else if (contextTokens < o.minContextTokens) contextSkip = "below-floor";
+	else if (contextTokens < contextTrip) contextSkip = "below-trip";
+	if (contextTrip !== null && contextTokens >= o.minContextTokens && contextTokens >= contextTrip) {
+		reasons.push(`context-tokens=${contextTokens}>=${contextTrip}`);
+	}
 	if (turnDurationMs >= o.maxTurnDurationMs) {
 		reasons.push(`turn-duration-ms=${turnDurationMs}>=${o.maxTurnDurationMs}`);
 	}
@@ -199,6 +230,9 @@ export function assessRun(entriesNewestFirst, opts = {}) {
 		languageDrift,
 		degenerateText,
 		contextTokens,
+		contextWindow,
+		contextTrip,
+		contextSkip,
 		turnDurationMs,
 		calls,
 	};
