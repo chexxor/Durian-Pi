@@ -61,6 +61,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | `metrics [rig.json]` | Drift measures, each with its band, baseline and blind spot | `--window N\|all`, `--human`/`--json` | `cli` |
 | `optimize <text>` | Rewrite a draft instruction through the optimizer | | `cli` |
 | `config` | Show the effective settings and which source supplied each | | `cli` |
+| `format [--check] [-- <paths>]` | Format **explicit** files with the pinned prettier (a devDependency, loaded on demand), so style is consistent and whitespace/EOL churn stops leaking into diffs. Paths are required: no glob and no default tree, so a seat formats the files it changed, after its edits and before `git add`/commit. `--check` is a gate that writes nothing and exits non-zero on an unformatted file (sit it beside `node --check` in the demo loop). Deliberately **not** an on-write formatter (formatting between a seat's read and its edit makes the exact-match `oldText` stale) and **not** a global git hook (a hook rewrites files outside the staged set). The one-time whole-tree normalize is a separate, gated, stop-the-world change. Tool choice, pin and config: `docs/FORMATTER.md`; proof: `demo/format.test.mjs` | `--check` | `cli` |
 
 Five operator-facing behaviours are load-bearing:
 
