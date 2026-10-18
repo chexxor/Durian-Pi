@@ -85,7 +85,11 @@ same dormant shape recurred three more times (pids `7404`, `3604`, `6124`), each
 viewer (the concurrent-opener class), and recurrence 6 showed the fresh heartbeat was **frozen**, not
 merely stale (`PASS` frozen ~2.7 min). Recovery each time: stop (cooperative `serve --stop` where the
 process still answered) -> `resume` -> restart. **The dormant-revisit gap (prevention item 3) is now
-FIXED** by `0c0d4d3`: a pass that emitted any `wake-failed` schedules a retry with bounded exponential
-backoff and logs `WAKE-RETRY in=<ms>ms seats=<names>`, so a transient storage error self-heals instead
-of parking the broker (`demo/broker-wake-retry.test.mjs`). Still owed: `SessionFailed.cause` logging
-(ROADMAP 78) and a stale-`PASS`+heartbeat watchdog (ROADMAP 61-64).
+FIXED** by `0c0d4d3` +
+`991567d`: a pass that emitted any `wake-failed` schedules a retry with bounded exponential backoff and
+logs `WAKE-RETRY in=<ms>ms seats=<names>`, so a transient storage error self-heals instead of parking the
+broker (`demo/broker-wake-retry.test.mjs`, 3 scenarios). The scheduling is done AFTER the pass settles,
+because `0c0d4d3` alone still parked when the SAME pass threw later (`superviseOnce` hitting the same
+storage error) — recurrence 7. Still owed: `pass-failed` is not logged by `cmdServe`, so a swallowed
+pass throw is invisible; and `SessionFailed.cause` logging (ROADMAP 78) + a stale-`PASS`+heartbeat
+watchdog (ROADMAP 61-64).

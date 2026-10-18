@@ -5,8 +5,8 @@ severity: sev1
 status: mitigated
 symptom: "the team has stopped working; the broker process is alive but its log stops"
 runbook: broker-down-or-stalled
-fix: "0c0d4d3"
-prevention: "0c0d4d3 (dormant-revisit retry) + ROADMAP 78 (log SessionFailed.cause) + ROADMAP 61-64 (watchdog) + #2126"
+fix: "0c0d4d3, 991567d"
+prevention: "991567d/0c0d4d3 (dormant-revisit retry, incl. the same-pass-throw path) + ROADMAP 78 (log pass-failed cause) + ROADMAP 61-64 (watchdog) + #2126"
 last_reviewed: 2026-10-18
 ---
 
@@ -344,3 +344,48 @@ with the local env → **`START pid=12944`** (`17:41:30Z`), `WAKE impl`/`WAKE sc
 - `.spike/serve.err`: `wake-failed … auditor conv 4936 … Session failed after a storage error`.
 - `serve --stop` → `{"stopped":true,"pid":6124}`; `resume` → `{"found":3,…}`; restart pid `12944`.
 - Fix + demo: commit `0c0d4d3`; `node demo/broker-wake-retry.test.mjs` exit 0.
+
+---
+
+## Recurrence — 2026-10-18T17:57Z (seventh) — the first fix had a GAP
+
+**Appended, not rewritten** (per `docs/incidents/README.md`). This recurrence is the interesting one: it
+recurred **on the fixed broker** (pid `12944`, the `0c0d4d3` recovery), which exposed a hole in that fix.
+
+### What happened
+- `17:57:16Z` broker pid `12944`: `wake-failed … pm conv 3 … Session failed after a storage error`
+  (`PASS 29 ms=5042`), then **no `WAKE-RETRY` line and no further `PASS` for ~36 min** while
+  `broker.json` stayed fresh.
+
+### Root cause of the gap
+`0c0d4d3` scheduled the retry **inside the pass `try`, after `await supervise()`**. When
+`superviseOnce` hit the same storage error and threw, control jumped to `catch`, so the retry block —
+and the cooldown-revisit computation — never ran. The failure was invisible because `cmdServe`'s
+`onDiagnostic` logs only `wake-failed` and `escalated` to stderr, **not `pass-failed`**, so the throw
+left no trace. Net effect: a `wake-failed` followed by a later throw in the SAME pass still parked the
+broker.
+
+### Resolution
+Commit **`991567d`** moves the post-pass scheduling (cooldown revisit + failed-wake retry) **after the
+`finally`**, so it runs whether the pass completed or threw. `demo/broker-wake-retry.test.mjs` gained a
+third scenario ("retry enabled + the pass later throws") that fails on `0c0d4d3` and passes on
+`991567d`. Recovery: cooperative `serve --stop` (pid `12944`) -> `resume` (2 run-cancelled: impl
+`89511`, scribe `89514`) -> restart with the amended fix -> **`START pid=14436`** (`18:38:20Z`),
+`PASS 1 woke=pm,impl,scribe`, no new `wake-failed`.
+
+### Prevention (updated)
+- `991567d` (this fix) + `0c0d4d3`; `demo/broker-wake-retry.test.mjs` covers both the plain and the
+  throw-in-the-same-pass shapes.
+- **New detection gap, owed:** `cmdServe` does not log `pass-failed` (or its nested cause) to stderr, so
+  a swallowed pass throw is invisible. Fold into ROADMAP 78 (log `SessionFailed.cause` on failure).
+- Still owed: a watchdog keyed on stale `PASS`+heartbeat (ROADMAP 61-64).
+
+### Evidence (recurrence 7)
+- `selfdev.sqlite.broker.log`: `…17:57:16.844Z PASS 29 ms=5042 woke=-`, then no line until
+  `18:38:20.496Z START pid=14436`; zero `WAKE-RETRY` lines for pid `12944`.
+- `.spike/serve.err` (mtime `17:57:16Z`): the single `wake-failed` for pm conv 3; **no `pass-failed`**
+  (cmdServe does not emit it).
+- `git show -s --format=%cI 0c0d4d3` = `2026-10-18T12:40:57-05:00` (17:40:57Z) — the fix WAS on disk when
+  pid `12944` started (`START 17:41:30Z`), so this was a code gap, not a stale process.
+- `cli.mjs` `cmdServe` onDiagnostic handles only `wake-failed` and `escalated`.
+- Fix + demo: commit `991567d`; `node demo/broker-wake-retry.test.mjs` exit 0 (3 scenarios).
