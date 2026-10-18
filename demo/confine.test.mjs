@@ -5,11 +5,13 @@
 // here is paired with its unguarded control - the same discipline demo/starter.test.mjs uses
 // for `check`, where "0 findings" is meaningless unless the rules can be shown to fire.
 
+import { existsSync, rmdirSync } from "node:fs";
 import { mkdtemp, mkdir, rm, symlink, writeFile as write } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { authorEnv, verifierEnv } from "../src/confine.mjs";
+import { makeSeatEnv } from "../src/seattools.mjs";
 
 let failures = 0;
 const context = {};
@@ -289,6 +291,54 @@ try {
 		tempDir.ok === true && tempDir.value.startsWith(root),
 		tempDir.ok ? tempDir.value : tempDir.error?.message,
 	);
+	console.log("\n#1465: a READ-ONLY root outside the worktree (the shared .durig) — readable, never writable");
+	{
+		// `claim_work` writes an over-threshold item body to <shared>/.durig/<id>.md, but
+		// `prepare_workspace` narrows the seat's root to its worktree, so the body it was just handed
+		// became unreadable. The fix is an explicit READ-ONLY root: reads cross, writes never do.
+		const shared = join(outside, ".durig");
+		await mkdir(shared, { recursive: true });
+		await write(join(shared, "42.md"), "ITEM #42 body\n");
+		const roEnv = authorEnv(base, root, { readOnlyRoots: [shared] });
+
+		const read = await roEnv.readTextFile(join(shared, "42.md"), context);
+		check("the seat can READ the shared queue dir from a narrowed root", read.ok === true && read.value.includes("ITEM #42"), JSON.stringify(read));
+		denied(await roEnv.writeFile(join(shared, "43.md"), "x", context), "a WRITE to the shared queue dir is REFUSED");
+		denied(await roEnv.remove(join(shared, "42.md"), context), "a DELETE there is REFUSED");
+		// The exemption is exactly this directory — the rest of `outside` stays closed.
+		denied(await roEnv.readTextFile(join(outside, "secret.txt"), context), "a read outside the worktree AND the read-only root is still REFUSED");
+		// And the default wiring: `makeSeatEnv` derives <fallbackRoot>/.durig, so a seat gets it free.
+		const seatEnv = makeSeatEnv(
+			new Map([[1, { name: "impl", role: "implementation engineer", verifier: false }]]),
+			{ fallbackRoot: outside },
+		)({ conversationId: 1, cwd: root });
+		const viaSeat = await seatEnv.readTextFile(join(shared, "42.md"), context);
+		check("makeSeatEnv wires the shared .durig read-only by default", viaSeat.ok === true && viaSeat.value.includes("ITEM #42"), JSON.stringify(viaSeat));
+		denied(await seatEnv.writeFile(join(shared, "44.md"), "x", context), "...and that default is still read-only");
+
+		// qa #1489 (HIGH): a JUNCTION inside the worktree must not let a CREATE write THROUGH it.
+		// The plain-path check passes (the link path IS inside the root) and `canonicalPath` FAILS for a
+		// not-yet-existing destination, so the deny has to fall back to the deepest EXISTING ancestor.
+		const linkPath = join(root, "durig-link");
+		let junctionMade = false;
+		try {
+			await symlink(shared, linkPath, "junction");
+			junctionMade = true;
+		} catch (err) {
+			check("junction probe: the junction could not be created on this host", false, String(err?.message ?? err));
+		}
+		if (junctionMade) {
+			denied(await roEnv.writeFile(join(linkPath, "BOOM.txt"), "x", context), "a CREATE through a junction into the read-only root is REFUSED");
+			check("...and nothing landed in the read-only root", !existsSync(join(shared, "BOOM.txt")));
+			denied(await roEnv.writeFile(join(linkPath, "sub", "BOOM.txt"), "x", context), "a CREATE through a junction into a NON-EXISTENT subdir is REFUSED");
+			// Remove the junction BEFORE the generic cleanup, so rmSync cannot walk the link.
+			try {
+				rmdirSync(linkPath);
+			} catch {}
+			check("the junction was removed", !existsSync(linkPath));
+		}
+	}
+
 	console.log(failures === 0 ? "\nPASS — all confine canaries held" : `\nFAIL — ${failures} canary(ies) failed`);
 } finally {
 	await rm(root, { recursive: true, force: true });

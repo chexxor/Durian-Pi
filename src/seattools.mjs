@@ -6,6 +6,7 @@
 // position's conditions are.
 
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
+import { join } from "node:path";
 import { AgentDoc, configure, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import {
 	createEditTool,
@@ -217,7 +218,7 @@ export function seatHasReadTool(seat) {
  * `roster` is a live Map consulted per call, not a snapshot: the seat list is read through the
  * harness this function is an argument to, so it cannot be known at the moment it is passed.
  */
-export function makeSeatEnv(roster, { fallbackRoot = process.cwd() } = {}) {
+export function makeSeatEnv(roster, { fallbackRoot = process.cwd(), readOnlyRoots = [join(fallbackRoot, ".durig")] } = {}) {
 	return (target) => {
 		// The seat's OWN persisted cwd wins: `prepare_workspace` sets it to the item's
 		// worktree via `configure`, so a seat that prepared a workspace is confined to
@@ -230,7 +231,10 @@ export function makeSeatEnv(roster, { fallbackRoot = process.cwd() } = {}) {
 		// Fail CLOSED: a conversation that is not a known seat - the roster not read yet, or a
 		// conversation that is no seat at all - gets the read-only environment, never an
 		// unconfined one.
-		return seat && !seat.verifier ? authorEnv(base, root) : verifierEnv(base, root);
+		// #1465: the shared `.durig/` holds the item bodies `claim_work` writes for over-threshold
+		// results. The seat may READ it from any root (otherwise `prepare_workspace`, which narrows
+		// the root, makes the body it was just handed unreadable) and may never WRITE it.
+		return seat && !seat.verifier ? authorEnv(base, root, { readOnlyRoots }) : verifierEnv(base, root, { readOnlyRoots });
 	};
 }
 
