@@ -37,6 +37,12 @@ tail -8 .spike/serve.err 2>/dev/null
   that line appears and then **no `PASS`** for minutes (fresh heartbeat, no genlock, idle CPU), the retry
   pass either did not run or hung before its `PASS` line — a hung pass is invisible because `cmdServe`
   does not log `pass-failed` (ROADMAP 78). Same recovery as case (b).
+- **`WAKE-RETRY` logged repeatedly at ~0.5 s apart — a HOT LOOP** (2026-10-18): the opposite of case (b);
+  the broker SPINS. `WAKE-RETRY in=<ms>ms … pass-threw` lines whose timestamps are far closer together
+  than the logged `in=` mean the scheduled backoff is not gating the next pass, and `serve --stop` may not
+  be honoured (it was not). Recovery: `taskkill /F /PID <pid>` (only when no `genlock.*` is held), then
+  restart — a fresh broker's first pass drains any stranded intents (`INTENT delivered=<n>`). See
+  `docs/incidents/2026-10-18-broker-retry-hotloop.md`.
 
 ## Do
 1. If a **wedged** `serve` process exists and **no** genlock slot is held, terminate it:
@@ -118,3 +124,8 @@ emitted `wake-failed` for `qa` conv 15 (`Session failed after a storage error`) 
 CPU); terminated (no genlock) and restart -> `START pid=11816`, which ran 30+ passes with `qa` woken and
 zero `wake-failed`. `qa`'s three `Connection error.` runs in that window were the local server being down
 (`local-provider-down.md`).
+2026-10-18T20:27Z (hot loop, `docs/incidents/2026-10-18-broker-retry-hotloop.md`): the broker logged 823
+`WAKE-RETRY … pass-threw` lines (each `in=60000ms`) at ~0.5 s spacing, the intent inbox did not drain, and
+`serve --stop` returned `stopped:true` while pid `5840` kept spinning. `taskkill /F /PID 5840` (no genlock)
++ restart (`START pid=3296`) drained both spooled intents (`INTENT delivered=2 dead=0 dup=0`) and resumed
+passes.
