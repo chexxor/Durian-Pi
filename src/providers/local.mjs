@@ -54,10 +54,11 @@ export function createLocalProvider(spec, { createProvider, api }) {
 				name: "Local server (any key)",
 				// A keyless local server (PolyStrata) needs no credential, so the key
 				// comes from the ENVIRONMENT only - a literal here would put a secret
-				// in source. An empty value still satisfies pi-ai's required auth shape.
+				// in source. A non-secret placeholder is used when the env var is unset
+				// so that restart-proof local seats do not fail on an empty string.
 				resolve: async ({ ctx }) => {
-					const key = (await ctx?.env?.("DURIG_LOCAL_API_KEY")) ?? "";
-					return { auth: { apiKey: key }, source: key ? "DURIG_LOCAL_API_KEY" : "none" };
+					const key = (await ctx?.env?.("DURIG_LOCAL_API_KEY")) ?? "local-placeholder";
+					return { auth: { apiKey: key }, source: key === "local-placeholder" ? "none" : "DURIG_LOCAL_API_KEY" };
 				},
 			},
 		},
