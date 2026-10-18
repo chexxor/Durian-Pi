@@ -76,8 +76,11 @@ worktree"), `branch-cleanup.md` (step 5). Oracle **131/0**.
 `impl`/`qa` item trees + shared; ~9 non-terminal items). A follow-up reclaim of the **58 locked
 terminal-item** worktrees returned **0 — all dirty** (11 tracked-only, 8 both, 39 untracked-only); the
 blocker is uncommitted content, not the lock and not the missing view. Operator intent
-`intent-worktree-audit-priority` spooled to `pm` to implement **ROADMAP 76** (worktree audit surface) +
-`complete_work` teardown + qa verify-scratch cleanup. `leaked-worktrees.md` evidence updated.
+`intent-worktree-audit-priority` **delivered** to `pm` (`INTENT delivered=1`, 01:10:59Z) to implement
+**ROADMAP 76** (worktree audit surface) + `complete_work` teardown + qa verify-scratch cleanup; runbook
+evidence updated. Broker housekeeping this turn: killed a wedged broker (36204, stale state, no genlock),
+`resume` cleared 1 stranded qa run, restarted **pid 24744**, and killed an orphan second `serve` driver
+(35896, dead parent, no `broker.json`, no genlock).
 
 **Pause/unpause priority (operator):** prerequisite satisfied; intent `intent-pause-priority` spooled to
 `pm` (`.spike/delegate/intent-pause-priority.md`, `INTENT delivered=1 dead=0`) to **unpark #1388** and
