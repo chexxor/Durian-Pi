@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-10-18
 verified_by: delegate
-evidence: "2026-10-17: 52 merged/patch-equivalent branches pruned (128->76 refs, main unmoved, 33 unlanded kept). 2026-10-18: 20 merged refs pruned through the worktree-release/reclaim paths alone (1 free-merged; 2 terminal clean+locked releases; 17 verify-tree reclaims in leaked-worktrees.md), main unmoved, nothing forced"
+evidence: "2026-10-17: 52 merged/patch-equivalent branches pruned (128->76 refs, main unmoved, 33 unlanded kept). 2026-10-18: 20 merged refs pruned through the worktree-release/reclaim paths alone (1 free-merged; 2 terminal clean+locked releases; 17 verify-tree reclaims in leaked-worktrees.md), main unmoved, nothing forced. 2026-10-18 (delegate, operator-directed): 51 merged refs pruned in one pass (17 free + 34 worktree-held whose only content was generated scratch moved to .spike/delegate/quarantine), then 5 verified branches landed + pruned; refs 137->84, worktrees 167->130, main 95e7c0c->b3710f3, suite 138/0, nothing forced"
 check_rule: null
 ---
 
@@ -98,6 +98,17 @@ tree clean, all 33 unlanded refs intact.
 a held branch cannot be merged cleanly. The operator — to prune remote snapshot refs.
 
 ## Evidence
+2026-10-18 (delegate, operator-directed): a full sweep pruned **51 merged refs** — 17 free `-d` plus
+**34 worktree-held refs whose ONLY content was generated scratch** (untracked `verify-*`/`.verify*`,
+`.tmp-merged.txt`/`.tmp-held.txt`, `selfdev.sqlite.broker.inbox.out/`, `suite-batch*.txt`) with every
+nested verify tree clean. Because `git worktree remove` refuses on ANY untracked file, the scratch was
+**moved to `.spike/delegate/quarantine/<branch>/`** (preserved, not deleted), the lock released, then the
+worktree removed and the ref `-d`'d. A separate **landing pass** landed 5 verified branches
+(`devtools-item-1904`, `scribe-item-1968/1969/1970/1971`) via `scripts/land.mjs --suite` (suite 138/0,
+`main` `95e7c0c`->`b3710f3`) and pruned them. Net: refs **137->84**, worktrees **167->130**, `main`
+advanced once by a clean FF, tracked tree clean, **nothing forced**. ~46 merged refs remain held by
+dirty/real-content worktrees (see leaked-worktrees.md); 36 unlanded carry real work.
+
 2026-10-17: 52 refs pruned (50 merged `-d` + 2 patch-equivalent `-D`: `impl-item-1256`,
 `scribe-item-1532`); 42 merged-but-held and 33 unlanded kept; `main` unmoved. Follow-up owed: the 33
 unlanded commits (guard/confine stack `#1151…#1519`, docs `#1232…#1565`) reported to `pm`. Ops note

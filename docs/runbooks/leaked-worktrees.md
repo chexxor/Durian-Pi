@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-10-18
 verified_by: delegate
-evidence: "2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced)"
+evidence: "2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-18 (delegate): 34 more scratch-only merged worktrees released by MOVING the generated scratch to .spike/delegate/quarantine (untracked files block git worktree remove), refs 137->84, worktrees 167->130, nothing forced"
 check_rule: null
 ---
 

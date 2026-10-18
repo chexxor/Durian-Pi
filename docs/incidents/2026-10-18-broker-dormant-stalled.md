@@ -149,3 +149,61 @@ on the new process). qa recovered and generated; auditor resumed verification.
 - `Get-CimInstance Win32_Process` → `cli.mjs serve --max-duration 3` and `... --max-duration 5` running
   from `C:\Users\Alex\dsh-Projects\pi-opendurig\item-1931\cli.mjs` (transient).
 - `node cli.mjs resume` → `{"found":3,"actions":[impl 81006, auditor 81147, devtools 81215 all run-cancelled]}`.
+
+---
+
+## Recurrence — 2026-10-18T03:59Z (third, same day; pid 26228)
+
+**Appended, not rewritten** (per `docs/incidents/README.md`). Third occurrence; the repaired broker
+stalled again within ~3 minutes of starting. This recurrence NAMES a concrete aggravator observed
+directly: **stale long-lived `cli.mjs log … --follow` / `cli.mjs watch` viewers holding the shared
+store open**.
+
+### What happened
+- The delegate landed 5 verified branches via `scripts/land.mjs --suite` in an exclusive window
+  (broker stopped ~03:56Z, hand-verified quiescent, suite 138/0, `main` `95e7c0c`->`b3710f3`), then
+  restarted the broker: `START pid 26228` at `03:56:16Z`.
+- Subsequent log lines: `...03:59:05Z WAKE lead`, `PASS 23`, `PASS 24 ms=5065` at `03:59:10Z` — then
+  **no further `PASS` for ~21 min** while `broker.json` stayed fresh and **no `genlock.*` was held**.
+- `.spike/serve.err` tail showed the `database is locked` variant again, this time for **auditor**
+  (conv 4936) and **security** (conv 55605), i.e. the same wake-failed storage-error class.
+- The delegate's own spooled intent (`intent-branch-sprawl`, the branch-sprawl analysis) sat undrained
+  until the recovery restart — the same "spooled intents stranded" signature as the prior two.
+
+### Root cause (aggravator VERIFIED this time)
+`Get-CimInstance Win32_Process` showed **10 stale `node cli.mjs log <seat> --follow --full` viewers and
+one `node cli.mjs watch`**, with `CreationDate` from `2026-10-16 13:11` through `2026-10-17 23:12`
+(5–15 h old) — long-lived store openers. Read commands run open-time migrations against the broker's
+write lock; these viewers are exactly the lock-contention class named by the 2026-10-17 broker-crash
+record and `broker-down-or-stalled.md`. The specific `database is locked` cause is consistent with
+them; whether one of them (or a transient test broker) was the exact lock holder is not isolated.
+
+### Resolution
+Per `broker-down-or-stalled.md`: with no genlock held, terminate the wedged pid `26228`; **terminate
+the 10 stale log viewers + `watch`** (pids `26348 34956 37512 24280 17412 35560 19356 37992 3876 5016`);
+`node cli.mjs resume` (`found: 4`, four `run-cancelled`); restart -> `START pid=30808`
+(`04:20:52Z`). That process then stalled at `PASS 2` too, so a second cycle removed the wedged pid
+`30808`, `resume` (found 4) and restarted -> **`START pid=7220`**, after which `PASS 1..6` advanced with
+4 live genlocks and the previously stranded intent was delivered (`INTENT delivered=1 dead=0 dup=0`
+`04:20:56Z`, inbox drained).
+
+### Prevention (adds item 5 to the list above)
+1. Log `SessionFailed.cause` and the `database is locked` variant on `wake-failed`.
+2. A broker watchdog/auto-restart (ROADMAP 61–64) keyed on fresh-heartbeat + stale-`PASS`.
+3. The dormant-revisit gap — a failed wake must re-arm the scheduler.
+4. Forbid a `serve`/`run`/test broker or a read command from opening the shared store from an item
+   worktree (wrong/relative `DURIG_DB`).
+5. **Do not leave long-lived `log --follow` / `watch` viewers attached to the shared store while the
+   broker drives** — they are a documented lock-contention source. These accumulated over ~30 h; a
+   housekeeping sweep (or an `--attach` proxy that does not open the store) is owed.
+
+### Evidence (recurrence 3)
+- `selfdev.sqlite.broker.log` at diagnosis: last line `2026-10-18T03:59:10.305Z PASS 24 ms=5065 woke=-`.
+- `selfdev.sqlite.broker.json`: `{"pid":26228,...,"heartbeatAt":1792297190336}` — fresh at diagnosis.
+- `ls selfdev.sqlite.genlock.*` -> none (safe to terminate).
+- `.spike/serve.err` tail: `wake-failed ... auditor/conv 4936 ... Error: database is locked` (+ the
+  `SessionFailed` wrapper), and `security/conv 55605`.
+- `Get-CimInstance Win32_Process … cli.mjs log … / cli.mjs watch` -> 11 processes, CreationDate
+  `2026-10-16 13:11` .. `2026-10-17 23:12` (listed in Resolution).
+- Recovery log: `START pid=7220`, `PASS 1 ms=47 woke=pm,impl,lead,auditor,security`, `PASS 2..6`, 4
+  genlocks; `INTENT delivered=1 dead=0 dup=0`.

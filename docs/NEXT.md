@@ -3,9 +3,57 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T03:38Z (delegate clock-out — landing pass 26 branches to main 4a085f3; incidents filed; window pending)._
+_Last refreshed: 2026-10-18T04:35Z (delegate — branch-sprawl cleanup: 51 merged branches pruned + 5 verified branches landed; prevention routed to pm; broker dormant-stall recurrence #3 recovered)._
 
-## NEXT SESSION — fresh agent starts here (delegate clock-out, 2026-10-18T03:38Z)
+## NEXT SESSION — fresh agent starts here (delegate, 2026-10-18T04:35Z)
+
+**Current item:** finish the branch backlog. This session pruned **51 merged branches** and landed **5
+verified clean branches** (`devtools-item-1904` compact-spool + `scribe-item-1968/1969/1970/1971`
+docs-truth) via `scripts/land.mjs --suite` (suite **138/0**); `main` `95e7c0c → b3710f3`. Refs
+**137→84**, worktrees **167→130**. **36 unlanded branches remain** (3 clean-but-not-ready, 33 conflict,
+2 snapshots); ~46 merged refs stay held by dirty/real-content worktrees.
+
+**Queue id:** `#2017` (ROADMAP 76 stack landing: `impl-item-1891` → `impl-item-1907`); the landing-list
+rows completed this session (`#1912`, `#1982`, `#1999`, `#2009`, `#2014`) are now landed.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Known blocker:** the ~46 merged refs pinned by dirty worktrees need an operator ruling (discard vs
+archive vs owner commit); the model-swap window (`#1957`) needs an operator-declared broker stop. The
+rebase-and-land pass for the 33 conflicts needs `pm` to register + route it.
+
+**Root cause + prevention DESIGN routed to `pm`** in one intent (`intent-branch-sprawl`, delivered
+`04:20:56Z`, inbox drained): no code deletes item branches; `complete_work` retires the worktree but
+never merges/deletes the branch; landing is manual + window-gated; dirty worktrees pin branches; the
+process leaks `.tmp-*`/`broker.inbox.out` into every worktree; conflicts compound. Prevention items
+P1–P6 (continuous landing, prune-on-land, finish ROADMAP 76, gitignore leak artifacts, ROADMAP 100
+ratchet, rebase-before-land). **pm should register these and open the rebase-and-land pass.**
+
+**Plan for the 36 unlanded:** land STACK TIPS only (containment map in the intent): `impl-item-1444-fix`
+(guard stack), `impl-item-1727` (checkup), `impl-item-1705`+`1704` (degeneration), `devtools-item-1754`
+(provisioning), `impl-item-1604` (compacteval), `impl-item-1519` (confine), `impl-item-1891→1907`
+(ROADMAP 76), plus singletons. Snapshots `item-148`/`selfdev-borrow` must NEVER land. Each tip needs a
+rebase + re-verify before landing.
+
+**OPERATOR DECISION NEEDED:** ~46 merged refs are pinned by worktrees dirty with REAL content
+(14 tracked mods; probe scripts e.g. `qa-item-1271`, `security-item-1707`) — discard vs archive vs owner
+commit. The delegate touched none.
+
+**Incident:** broker dormant-stall recurred a **third time today** (`docs/incidents/2026-10-18-broker-dormant-stalled.md`,
+recurrence 3). NEW aggravator VERIFIED and fixed: **10 stale `cli.mjs log … --follow` viewers + 1
+`cli.mjs watch`** (5–15 h old) held the store → `database is locked` on wake. Killed; broker restarted
+pid `7220`, passes advancing, 4 genlocks. **Do not leave long-lived log/watch viewers attached to the
+shared store while the broker drives.**
+
+**State at this clock-out:** broker UP pid `7220` (START `04:20:52Z`… restarted; passes advancing).
+`main` `b3710f3`, **10 commits ahead of `origin/main` (`origin/main` = `95e7c0c`)** — unpushed (operator
+holds push). Tracked tree clean; scratch quarantined under `.spike/delegate/`. The **model-swap window
+(`#1957`) still awaits the operator's declared broker stop** (gate green, `#1936` landed).
+
+**Do not:** stop the broker without an operator window (a landing pass is one); leave log/watch viewers
+attached; force a dirty worktree; `-D` an `ahead>0` ref; land a snapshot.
+
+## (prior) NEXT SESSION — delegate clock-out, 2026-10-18T03:38Z
 
 **Current item:** the ROADMAP 71 / broker-spool landing cluster. **#1904** (`compact` spool op) is **verified** (verify **#1987 PASS**) but CLONE-CONFLICTs on `cli.mjs`; a rebase is routed (**#1912**, **#2018**). Next: land the rebased #1904, then the ROADMAP 76 stack (**#2017**), then the docs-truth items (**#1972**, gated on #1904 landing; **#2014**).
 
