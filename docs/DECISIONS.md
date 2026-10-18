@@ -2527,3 +2527,27 @@ signal of whether the prior review is complete.
 
 **Status:** implemented in `docs/runbooks/competitor-review.md` (commit `7000634`); no re-review has run
 yet, so the runbook's `last_verified` deliberately stays `unverified`.
+
+## D99 — Cleanup and reclaim are bounded by the clean gate: never force past uncommitted content to free a branch (delegate, 2026-10-18)
+
+**Decision.** A branch is deleted only when its work is **merged** (or patch-equivalent) AND its worktree
+is **clean** — or its only content is approved, verifiable pure scratch (`verify-*`/`wt-*`) whose nested
+worktrees are also clean. A dirty worktree is kept, and its branch with it. `--force`, `git clean`,
+`git reset --hard`, and `git checkout --` are never used to make a worktree removable.
+
+**Why.** On 2026-10-18 a mass reclaim of 58 locked terminal-item worktrees freed **0** — every one held
+uncommitted content (11 tracked-only, 8 tracked+untracked, 39 untracked-only) — and an earlier pass KEPT
+18 candidates because their nested verify trees held real probe scripts (e.g. `qa-probes-verdict.mjs`).
+"Dirty" is the only available signal separating reclaimable scratch from real work, so forcing past it
+would have silently destroyed verification artifacts. The clean gate is load-bearing, not an obstacle to
+clear.
+
+**Alternatives.** (a) `--force`/`git clean` to clear the sprawl — rejected: irreversible loss of
+uncommitted work, and it is exactly the destructive class the operator forbade; (b) delete the branch and
+leave the worktree — impossible (git refuses to delete a checked-out branch) and would orphan content;
+(c) archive-then-remove every worktree — rejected as disproportionate for the ~12 that are actually in
+use. The durable path is the **leak fix**: ROADMAP 76 audit surface + `complete_work` teardown + qa
+verify-scratch cleanup, so fewer worktrees are dirty in the first place.
+
+**Status:** adopted; procedure in `docs/runbooks/leaked-worktrees.md` § "Reclaiming a merged item-branch
+pinned by a verify worktree" and `docs/runbooks/branch-cleanup.md` step 5.

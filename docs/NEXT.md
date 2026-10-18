@@ -3,7 +3,41 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18 (delegate — branch audit + cleanup + landing pass DONE; `pause`/`unpause` prioritized)._
+_Last refreshed: 2026-10-18 (delegate clock-out; goals in flight below)._
+
+## NEXT SESSION — continue this session's goals
+
+**Goals in flight (operator, 2026-10-18):** (1) get `pause`/`unpause` (#1388 / ROADMAP 131) implemented;
+(2) get the **worktree-audit + leak fix (ROADMAP 76)** registered and implemented; (3) keep reclaiming
+the branch/worktree sprawl safely.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**State at clock-out:** broker **UP pid `15720`** (START `01:18:09Z`; heartbeat fresh; `PASS` advancing;
+2 genlocks = work in flight). `main` `abc2a0e`, tree clean, **not pushed**; the remote-tracking
+`origin/main` = `e8550b0` (a commit from THIS session — a push occurred, **UNVERIFIED**; the delegate did
+not push). `origin/main..main` = 1 unpushed (`abc2a0e`). 107 non-main refs; ~140 worktrees. Oracle
+**131/0**.
+
+**Open / watch:**
+- **Pause:** `#1841` (priority, queued to `impl`) + `#1843` (qa verify, deferred) + `#1878` (qa question:
+  no branch yet). **impl was starved** — oldest-first claiming hit HELD-BACKLOG registrations first
+  (`#1841` was 16th). The operator directive to `claim_work({ itemId: 1841 })` + `release_work(1388)` was
+  **delivered** to `impl` (and to `pm`). Watch `#1388` leave `held` and a pause branch appear, then qa
+  verify.
+- **Worktree audit:** operator intent delivered to `pm` to register/route **ROADMAP 76** + the leak
+  fixes (`complete_work` teardown unlock/remove; qa unlock+clean `verify-*` on verify completion). Watch
+  for the new queue id.
+- **Queue hygiene:** `pm` to create HELD-BACKLOG registrations `held`, NOT `queued` — they clog
+  oldest-first claiming for every working seat.
+- **Incident follow-ups:** `docs/incidents/2026-10-18-broker-dormant-stalled.md` (sev1, mitigated) —
+  reopen `#1698` with this evidence; log `SessionFailed.cause` on `wake-failed`; a broker watchdog
+  (ROADMAP 61–64/78). **A fresh `broker.json` heartbeat is NOT a health signal — read the last `PASS`.**
+- **Reclaim:** 58 locked terminal-item worktrees reclaimed **0 — all dirty**; the remaining safe reclaim
+  needs the leak fixed first (or the owner to commit/discard). Never `--force` a dirty worktree.
+
+**Do not:** push (operator holds it); `--force`/`git clean` a dirty worktree; delete an `ahead>0` ref or a
+snapshot; stop the broker without an operator window (unless it is wedged with no genlock → terminate).
 
 ## BRANCH AUDIT — 2026-10-17 (delegate; operator: "review the repo and branches")
 
