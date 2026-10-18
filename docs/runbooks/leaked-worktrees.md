@@ -20,9 +20,15 @@ Read-only to inspect. Removing a worktree is a git operation; never discard work
 
 ## Diagnose (read-only)
 ```bash
+node cli.mjs worktree audit              # every worktree: item status, uncommitted count, lock, keep-reason
 git worktree list
 DURIG_DB=./selfdev.sqlite node cli.mjs queue   # which item ids are still live?
 ```
+`worktree audit` (ROADMAP 76 / #1881) is the visibility surface: it lists every registered worktree
+with the **queue status** of its item, its **uncommitted path count**, its **lock state**, and the
+sweep's **keep-reason** (`live` / `locked` / `not-terminal` / `branch-unresolved` / `dirty` / `reapable`
+/ `seat-root`). It writes nothing. A tree that is some seat's persisted `pi.agent`.cwd is `seat-root`
+(IN USE); a nested `verify-*`/`wt-*` scratch appears as `non-item`.
 A worktree whose item is terminal is an **orphan**. An orphan with uncommitted work is **dirty**.
 Since **#1194** a **locked** orphan is KEPT. Since **#1244** a **branch-held** orphan (every durig
 item worktree is on its item branch, #859) is reaped **only when its item is TERMINAL, the worktree is
@@ -139,3 +145,12 @@ token taken at `createWorktree` (`src/worktree.mjs:385`) and released by the tea
 lingering lock on a terminal item means teardown did not run — informative, but it never justifies
 `--force` or `git clean` on a dirty tree. Permanent fix routed to `pm` as operator priority (ROADMAP 76
 audit surface + `complete_work` teardown + qa verify-scratch cleanup).
+
+2026-10-18 (#1881, ROADMAP 76): the audit surface shipped — `node cli.mjs worktree audit` and the
+shared `auditWorktrees`/`classifyWorktrees` rule (the sweep and the audit now agree). LEAK SOURCE A is
+fixed: `complete_work`'s teardown now RELEASES the lock on a refused (dirty) removal, so a terminal item
+no longer hides behind a lock — the tree is reported `dirty` by the audit and the sweep reaps it as soon
+as it is clean. The sweep ALSO honours `seat-root` (a worktree that is a live seat's cwd is never reaped).
+Demo `worktree-audit` covers the classification, the dirty-kept-with-correct-count rule, and the
+lock-release-on-refusal fix. LEAK SOURCES B (qa verify scratch) and C (stray `M rig.selfdev.json`) are
+now VISIBLE in the audit (as `non-item` and as an uncommitted count); preventing them is a follow-up.

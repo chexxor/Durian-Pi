@@ -599,7 +599,7 @@ const Router = defineExtension({
 					// seat's cwd to the shared tree keeps the next item from inheriting a
 					// removed directory.
 					try {
-						await removeSeatWorkspace({ worktreeRoot: process.cwd(), itemId: args.itemId });
+						await removeSeatWorkspace({ worktreeRoot: process.cwd(), itemId: args.itemId, releaseIfRefused: true });
 						await api.commit(async (tx) => {
 							await configure(tx, api.conversationId, { cwd: process.cwd() });
 						}, context);

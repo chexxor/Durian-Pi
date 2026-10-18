@@ -62,7 +62,7 @@ import {
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
-import { brokerAlive, clearBrokerState, clearStopRequest, drivePass, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest } from "./src/broker.mjs";
+import { brokerAlive, auditWorktrees, clearBrokerState, clearStopRequest, drivePass, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -71,7 +71,7 @@ import { formatMetrics } from "./src/metrics.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readRigHealth, readSeatList } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readRigHealth, readSeatList, readSeatRoots } from "./src/readapi.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree } from "./src/worktree.mjs";
 import { mergeInProgress, mergeRefusal } from "./src/mergeguard.mjs";
@@ -2219,6 +2219,50 @@ async function cmdOptimize(textParts) {
 // status: one-shot per-seat health report - queue depth, latest submission,
 // and attention notices for blocked seats. Same computation the watch
 // stream carries, for callers that want a single document and an exit code.
+/**
+ * `worktree audit` (ROADMAP 76 / #1881): a READ-ONLY surface listing every registered worktree
+ * with the queue status of its item, its UNCOMMITTED COUNT, its lock state, and the sweep's
+ * KEEP-REASON (`live`/`locked`/`not-terminal`/`branch-unresolved`/`dirty`/`reapable`/`seat-root`),
+ * so a leaked or dirty tree is visible and resolvable without guessing. Writes nothing.
+ */
+async function cmdWorktreeAudit() {
+  const storage = await openStore();
+  try {
+    const queueItems = await readQueueItems(storage);
+    const seatRoots = await readSeatRoots(storage);
+    const LIVE = ["queued", "claimed", "deferred", "held"];
+    const liveItemIds = new Set(queueItems.filter((it) => LIVE.includes(it.status)).map((it) => it.id));
+    const terminalItemIds = new Set(queueItems.filter((it) => !LIVE.includes(it.status)).map((it) => it.id));
+    const statusById = new Map(queueItems.map((it) => [it.id, it.status]));
+    const repoPath = dirname(resolve(DB_PATH));
+    const entries = await auditWorktrees({
+      repoPath,
+      liveItemIds,
+      terminalItemIds,
+      statusById,
+      seatRoots: seatRoots.map((r) => r.cwd),
+    });
+    const counts = {};
+    for (const e of entries) counts[e.keepReason] = (counts[e.keepReason] ?? 0) + 1;
+    out({
+      ok: true,
+      command: "worktree",
+      subcommand: "audit",
+      db: DB_PATH,
+      repo: repoPath,
+      total: entries.length,
+      counts,
+      reapable: entries.filter((e) => e.keepReason === "reapable").length,
+      dirty: entries.filter((e) => e.keepReason === "dirty").length,
+      locked: entries.filter((e) => e.keepReason === "locked").length,
+      seatRoots,
+      worktrees: entries,
+    });
+  } finally {
+    await storage.close(BACKGROUND_CONTEXT);
+  }
+}
+
 async function cmdStatus() {
   const storage = await openStore();
   try {
@@ -2576,7 +2620,10 @@ try {
     const serve = forced ?? (process.stdout.isTTY === true && process.env.DURIG_NO_SERVE !== "1");
     await cmdUp(rest[0], rest.includes("--refresh"), { serve, dryRun: rest.includes("--dry-run") });
   }
-  else if (cmd === "worktree") await cmdWorktree(rest);
+  else if (cmd === "worktree") {
+    if (rest[0] === "audit") await cmdWorktreeAudit();
+    else await cmdWorktree(rest);
+  }
   else if (cmd === "init") await cmdInit();
   else if (cmd === "ps") await cmdPs();
   else if (cmd === "send") {
