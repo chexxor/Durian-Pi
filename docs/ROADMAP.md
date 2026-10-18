@@ -1330,6 +1330,61 @@ surface. A feature that is off must therefore cost nothing — not "little".
     subsequent turn demonstrably excludes the prior turns (assert the reset boundary is the
     context head) — falsifiable by disabling the reset.
 
+152. **A simple core plus an opt-in extension layer (IDEA TO EXPLORE LATER — NOT SCHEDULED).**
+    Recorded 2026-10-17 at the operator's request, as an idea to explore later — explicitly *not*
+    scheduled, and *not* sequenced ahead of the critical path (`#1610` MAIN-RED, the crash-proofing
+    cluster). *Numbering:* the operator first proposed 132 (taken — the API-key-management item),
+    then 151; 151 is also taken (`competitor-review-covered`, below), so this entry takes the next
+    free number. When it is eventually picked up, route the interface/seam *design* to lead (an
+    architecture-level doc, plus a numbering decision).
+    *Why it is not a new mechanism.* The extension seam already exists: pi-durable's
+    `defineExtension({ name, sections, tools, hooks, tasks, wraps })` is installed by `src/rig.mjs`
+    (`Router`, ~line 271), `src/seatguard.mjs` (`SeatGuard`) and `src/seattools.mjs` (`SeatTools`),
+    and the loader exists (`src/extensions.mjs`; ROADMAP 23, done). The gap: the seam accepts only
+    *harness-level* contributions, from *external module paths*. durig's own features cannot
+    register a CLI verb or be lazily loaded — `cli.mjs` (~2.7k lines, ~25 verbs) statically imports
+    its feature modules (37 top-level imports; only `checkup` is lazy), so every verb pays the load
+    cost for every feature and "off" is not a real state (violates D29's cost rule).
+    *Proposed shape (record only).*
+    (1) Freeze the core to the ASK E "NOT candidates" (`docs/reviews/ask-e-extension-seam.md` §2):
+    the store seam (`src/rig.mjs`), the single-writer wake family (broker/driver/scheduler/genlock),
+    the trust boundary (`confine.mjs`/`seatguard.mjs`), the CLI dispatcher + JSON contract (D21),
+    config, and the extension loader (~8 modules).
+    (2) Widen the seam by one axis: an extension declares CLI verbs (a `commands` field), loaded
+    lazily per verb; `cli.mjs` becomes a dispatcher over a registry; an un-enabled extension's verb
+    does not exist and says "not enabled (enable it with ...)", distinct from "unknown command".
+    Extraction candidates (ASK E §1): `src/worktree.mjs`; the TUI (`src/tui/client.mjs`,
+    `src/tui/driver.mjs`, the view kit); `src/checkup.mjs`; then a second wave:
+    metrics/provenance/attention, format, optimizer/judge, degeneration/secretdetect.
+    (3) Opt-in surface, in order of user contact: Profile (data, not an edition — D29; "recommended
+    is mostly rig shape", D35); an enable list (bundled extensions by *name*; third-party by
+    explicit *path* — no auto-discovery, `src/extensions.mjs`); per-seat/per-role scoping via the
+    existing `configure(tx, convId, { extensions })` seam surfaced in the rig spec (e.g. terse-voice
+    stays off for user-facing roles, ROADMAP 20); `DURIG_EXTENSIONS` stays as the ad-hoc escape
+    hatch; `config`/`up`/`metrics` keep reporting the resolved/active set (provenance, ROADMAP 19).
+    (4) Off costs nothing (D29): lazy import; tools/sections enter the registry only when enabled —
+    no prompt tokens, no tools the model sees, no test/doc load.
+    (5) Easier to test: a defined extension contract lets each component be exercised in isolation
+    against a stub core instead of only through the whole CLI (today a feature's test surface is
+    entangled with `cli.mjs`, D21) — the *same direction* as the open "test-suite partitioning by
+    functional area" work (`docs/NEXT.md`); link them rather than duplicating.
+    (6) A better-defined interface so a different implementation can plug in. State it honestly: a
+    user may swap only in the *extension* layer (view kit, worktree strategy, formatter, retrieval,
+    TUI, ambient measures). The core is deliberately *not* pluggable — ASK E's binding constraints
+    (i)–(iv) forbid a plugin writing the store, a second writer path, git state-mutation authority,
+    or splitting the single writer. Any change requiring a second writer or a different store is
+    out of scope by construction.
+    *Constraints recorded with the item:* ASK E (i)–(iv); D29 (one distribution, no
+    `durig-core`/`durig` editions; profiles are data; off costs nothing); D21 (CLI stays
+    non-interactive, one JSON document per command). *Prerequisite:* the command spool
+    (#912 / ROADMAP 71) is what makes extension writes safe.
+    *Grounding (verified present):* `docs/reviews/ask-e-extension-seam.md`; `docs/DECISIONS.md`
+    D29, D35; `docs/ROADMAP.md` items 18, 19, 20, 23, 71 and this section; `src/extensions.mjs`;
+    `src/rig.mjs` (`Router`); `src/seatguard.mjs`; `src/seattools.mjs`; #538 (the work-item *view*
+    as the first extension case, done — the general seam remains unregistered); `docs/WORKFLOWS.md`
+    "Deriving 'recommended'". *Action now:* docs-only — this ROADMAP entry plus the two
+    cross-links; no implementation, no design now.
+
 ## Sharing publicly
 
 22. **Publish durig as its own repository — no releases yet.** The operator wants
