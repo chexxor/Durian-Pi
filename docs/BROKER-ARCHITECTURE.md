@@ -73,7 +73,11 @@ by resources and whose actors are expensive and stateful.
    `DURIG_MAX_CONCURRENT_SEATS` is *durig's* cost/GPU/provider bound. pi-durable's "Many conversations
    at once" imposes no such limit — you could run far more seats if they were free.
 3. **Non-deterministic, unbounded runs.** A seat can degenerate (the observed `qa` loop) and keep
-   generating. Nothing preempts it, so a supervisor cannot act mid-run; the guard resets *between* runs.
+   generating. Nothing preempts it — durig cannot time-slice a generation — so the old guard could only
+   reset *between* runs, and a turn that never settled was invisible to it (the `qa` incident). The
+   **active** guard closes that gap *cooperatively*: it observes the in-flight event stream, and once a
+   trigger fires it **halts** the run through the platform's own abort seam, **waits** for the lease to
+   be released, then **resolves** by cause. See "The guard's reset/termination policy" below.
 
 ## Multiplayer, correctly understood
 
@@ -115,14 +119,51 @@ See `docs/TUI-IMPLEMENTATION-PLAN.md` for the surface work; the broker fix is tr
 
 ## What is genuinely unlike Erlang
 
-- **No preemption.** Erlang can time-slice a process at any reduction; durig cannot cut a generation
-  mid-stream (provider-level) — that is the recorded "mid-run cut" gap.
+- **No preemption, only cooperation.** Erlang can time-slice a process at any reduction; durig cannot
+  cut a generation mid-stream at the provider level. What durig has instead is a **cooperative halt**:
+  the platform's abort seam (`Conversation.abort` / `abortTask`) signals the run's `AbortSignal`, and the
+  generation stops at its next await. That is why the guard's stop is a halt → wait-idle → resolve
+  ordering and never a process kill (see the policy section below).
 - **No heap isolation.** Seats run in one OS process; isolation is organizational (conversations,
   worktrees), not enforced by the runtime.
 - **Durable mailboxes.** An Erlang mailbox dies with the process; a durig conversation *is* the durable
   record, which is why a seat can be reset and re-anchored without losing history.
 - **No crash-only design.** Erlang's "let it crash" restarts a fresh process; durig must preserve the
   conversation and the claimed item across a reset.
+
+## The guard's reset/termination policy (design of record)
+
+This is the policy a guard follows once a run has to be stopped — the SUPERVISOR'S RESET/TERMINATION
+POLICY, now covering the **active** path, not only the between-runs reset. It is ONE mechanism, shared:
+the ordered CONTEXT-PRESSURE guard (ROADMAP 62: warn 80 → abort 90 → settle → one compaction) and the
+cause-based **degeneration guard** are two *triggers* on the same ordering core (`src/guard.mjs`). The
+triggers stay separate (cause-based vs context pressure); the ordering is built once.
+
+**The order is the invariant: `detect → halt → wait-idle → resolve`.**
+
+1. **detect** — a trigger decides WHAT fired, off the LIVE observation seam, not committed pages. The
+degeneration trigger is `src/inflight.mjs` (pi-durable's `watchEvents` agent event stream + a bounded
+wall-clock / model-aware-volume / named-prose rule set, #1767); the context-pressure trigger is #62.
+2. **halt** — `src/halt.mjs` `haltSeat`/`haltTask` calls the platform's cooperative abort. It may HALT
+   only: no delete, no history rewrite, no destructive op. In-process the generation lease is the
+   broker's own pid, so a self-`SIGKILL` is never the answer; the abort is admitted through the broker's
+   own harness, so the single-writer invariant holds.
+3. **wait-idle** — confirm the generation lease is released (`Conversation.waitForIdle` + a
+   `harness.inspect` check). This is what makes the next step admissible: `reset`/`compact` REFUSE a seat
+   holding a live lease, which is why the old boundary-reset-on-a-busy-seat was a silent no-op.
+4. **resolve** — cause-specific. Degeneration resolves through the existing boundary reset
+   (`applyResets`, whose cause-specific handoff mapping is REUSED, not duplicated); context pressure
+   resolves through one `compact`. The core NEVER resets a live lease — it halts and waits first.
+
+**Autonomy bounds (all six hold at every step).** (i) a legible terminal `aborted:<reason>`; (ii) the
+stop must not destroy durable work — committed pages are preserved; (iii) no firing on a healthy long
+turn — zero false positives before enabling (#875); (iv) BOUNDED AUTHORITY: halt only; (v) RECOVERABLE —
+the seat can be resumed (context compacted, not destroyed), and the CLAIMED QUEUE ITEM is untouched;
+(vi) cause-specific resolution; (vii) OBSERVABLE — a notice/record whenever it fires.
+
+**What this replaces.** The old path (`applyResets` on a busy seat) is the boundary-reset-only
+intervention; it remains the RESOLVE step's write, but it is now reached only after halt → wait-idle. A
+reset is still never applied to a live lease.
 
 ## Process lifecycle: who supervises the broker
 

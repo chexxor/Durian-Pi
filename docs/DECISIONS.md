@@ -2527,3 +2527,41 @@ signal of whether the prior review is complete.
 
 **Status:** implemented in `docs/runbooks/competitor-review.md` (commit `7000634`); no re-review has run
 yet, so the runbook's `last_verified` deliberately stays `unverified`.
+
+## D98 — The active degeneration guard halts cooperatively in one shared `detect → halt → wait-idle → resolve` ordering; its authority is HALT-only and the seat stays recoverable (delegate, 2026-10-17)
+
+**Decision.** A guard that may STOP an agent is a new authority, so it is stated here. The ordering
+`detect → halt → wait-idle → resolve` is ONE shared core (`src/guard.mjs` `haltIdleResolve`), used by
+BOTH the ordered CONTEXT-PRESSURE guard (ROADMAP 62) and the cause-based DEGENERATION guard; the two
+*triggers* stay siblings and are not folded together. The steps: **detect** off the LIVE observation seam
+(`src/inflight.mjs`, pi-durable's `watchEvents` agent event stream — NOT committed pages, so a turn that
+never settles is visible); **halt** through the platform's own cooperative abort seam
+(`Conversation.abort` / `harness.abortTask`, `src/halt.mjs`) — never `process.kill`, since in-process the
+generation lease is the broker's own pid; **wait-idle** until the generation lease is released
+(`Conversation.waitForIdle` + a `harness.inspect` check); **resolve** by cause — degeneration through the
+existing boundary reset (`applyResets`, its cause-specific handoff mapping REUSED), context pressure
+through one `compact`. The core NEVER resets a LIVE lease: it halts and waits first, which is precisely
+what the old boundary-reset path could not do.
+
+**Bounded authority (all seven hold).** (i) a legible terminal `aborted:<reason>`; (ii) no destruction of
+durable work — committed pages are preserved; (iii) no firing on a healthy long turn (zero false
+positives before enabling, #875); (iv) HALT only — no delete, no history rewrite, no destructive op;
+(v) RECOVERABLE — the seat can be resumed (context compacted, not destroyed) and the CLAIMED QUEUE ITEM
+is untouched; (vi) cause-specific resolution; (vii) OBSERVABLE — a notice/record whenever it fires.
+
+**Why.** The prior design could not act mid-run: detection was post-settlement (`assessRun` reads
+committed pages), the resident broker passes `waitForWakes:false`, and the only intervention was a
+boundary reset that `reset`/`compact` REFUSE on a seat holding a live lease — so a runaway turn blocked
+quiescence (F11) and stayed invisible (the 2026-10-17 `qa-context-degeneration` incident). Preemption is
+not available (durig cannot time-slice a generation), so the honest mechanism is a cooperative halt plus
+a wait for idle.
+
+**Alternatives.** (a) `process.kill` the holder — rejected: in-process the holder is the broker, so this
+is a self-kill; and it abandons the single-writer guarantee. (b) Reset on a busy seat — rejected: the
+platform refuses it (and it would corrupt the boundary). (c) Two orderings (one per trigger) — rejected
+by lead #1766/#1773: build the ordering ONCE, re-point the other trigger to it.
+
+**Status:** implemented (`src/inflight.mjs` #1767, `src/halt.mjs` #1768, `src/guard.mjs` + e2e
+`demo/guard.test.mjs` #1769); policy recorded in `docs/BROKER-ARCHITECTURE.md` § "The guard's
+reset/termination policy". The serve wiring (installing the trigger+core into the broker pass loop) is
+NOT in this change — the core and the end-to-end proof are. Wording to be aligned with `scribe`.
