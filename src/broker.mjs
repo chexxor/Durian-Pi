@@ -16,6 +16,7 @@
 import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync } from "node:fs";
 import { join, basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { CompactionEntry } from "@earendil-works/pi-durable";
 
 import { RigQueue, Seats } from "./rig.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
@@ -120,7 +121,7 @@ export function intentResultDir(dbPath) {
   return `${dbPath}.broker.inbox.out`;
 }
 
-function readIntentResult(dbPath, requestId) {
+export function readIntentResult(dbPath, requestId) {
   if (!requestId) return null;
   const path = join(intentResultDir(dbPath), `${requestId}.json`);
   if (!existsSync(path)) return null;
@@ -128,6 +129,56 @@ function readIntentResult(dbPath, requestId) {
     return JSON.parse(readFileSync(path, "utf8"));
   } catch {
     return null;
+  }
+}
+
+/**
+ * The dead-letter reason for `requestId`, or null when it was not dead-lettered. The error
+ * file is named after the ORIGINAL spool file (not the requestId), so this scans and matches
+ * on the parsed `requestId` — a producer must be able to tell "refused" from "still pending".
+ */
+export function readIntentError(dbPath, requestId) {
+  if (!requestId) return null;
+  const dir = intentErrorDir(dbPath);
+  if (!existsSync(dir)) return null;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".error.json")) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync(join(dir, name), "utf8"));
+    } catch {
+      continue;
+    }
+    if (parsed?.requestId !== requestId) continue;
+    const reasonPath = join(dir, `${name}.reason`);
+    try {
+      return readFileSync(reasonPath, "utf8");
+    } catch {
+      return "dead-lettered (no reason recorded)";
+    }
+  }
+  return null;
+}
+
+/**
+ * Await the broker's outcome for a spooled `requestId`: the recorded result, or the
+ * dead-letter reason, or a timeout. This is the producer half of the result channel — the
+ * CLI uses it so a routed write can report the broker's actual outcome instead of guessing.
+ */
+export async function awaitIntentResult(
+  dbPath,
+  requestId,
+  { timeoutMs = 120000, intervalMs = 200, now = Date.now, sleep } = {},
+) {
+  const wait = sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const deadline = now() + timeoutMs;
+  for (;;) {
+    const result = readIntentResult(dbPath, requestId);
+    if (result) return { ok: true, result };
+    const error = readIntentError(dbPath, requestId);
+    if (error) return { ok: false, reason: error };
+    if (now() >= deadline) return { ok: false, reason: "timed out awaiting the broker's result" };
+    await wait(intervalMs);
   }
 }
 
@@ -153,7 +204,7 @@ export function requestOp(request) {
  * a new mutating verb EXTENDS this list — the broker applies it in-process with its own
  * harness — rather than opening a second writer.
  */
-export const SPOOL_OPS = ["message", "stop", "reset"];
+export const SPOOL_OPS = ["message", "stop", "reset", "compact"];
 
 /**
  * Apply one typed request with the broker's OWN harness — the single writer. Throws on
@@ -214,6 +265,32 @@ async function applyRequest(harness, request, { seats, context, dbPath }) {
       throw new Error(result.reason === "unknown-seat" ? `unknown seat: ${seatName}` : result.reason);
     }
     return { op, seat: seatName, resetEntryId: result.resetEntryId, handoff: result.handoff ?? null };
+  }
+  if (op === "compact") {
+    // pi-durable's compaction is designed to run ALONGSIDE a live conversation: `compact()`
+    // commits a `pi.compaction` task that summarizes an old prefix and places a summary entry
+    // at a turn boundary (the transcript is kept). The broker applies it with its OWN harness —
+    // no external writer, no abort of the run. The live-generation-lease guard does NOT apply:
+    // it stops an OUTSIDE writer; the broker IS the owner, and pi-durable commits at the turn
+    // boundary. Report the summary entry id, not merely the task id (an enqueue-and-exit stub
+    // would claim success while nothing was summarized).
+    const seatName = request.to ?? request.seat;
+    const seat = seats[seatName];
+    if (!seat) throw new Error(`unknown seat: ${seatName}`);
+    const conv = await harness.conversation(seat.conversationId, context);
+    if (!conv) throw new Error(`no conversation for seat ${seatName}`);
+    const instructions =
+      typeof request.instructions === "string" && request.instructions.trim() !== ""
+        ? request.instructions
+        : undefined;
+    const taskId = await conv.compact(instructions, context);
+    await harness.waitForTask(taskId, context);
+    const after = await conv.entries({ order: "descending" }, 50, undefined, context);
+    const summary = after.items.find((e) => e.kind === CompactionEntry.kind);
+    if (!summary) {
+      throw new Error(`compact: no pi.compaction entry was written for seat ${seatName} (task ${taskId})`);
+    }
+    return { op, seat: seatName, taskId, instructions: instructions ?? null, summaryEntryId: summary.id };
   }
   throw new Error(`unknown op: ${op} (known: ${SPOOL_OPS.join(", ")})`);
 }

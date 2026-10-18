@@ -2561,3 +2561,31 @@ verify-scratch cleanup, so fewer worktrees are dirty in the first place.
 
 **Status:** adopted; procedure in `docs/runbooks/leaked-worktrees.md` § "Reclaiming a merged item-branch
 pinned by a verify worktree" and `docs/runbooks/branch-cleanup.md` step 5.
+
+## D100 — Compaction is applied by the broker through the command spool, not by an external writer (devtools, operator priority, 2026-10-18)
+
+**Decision.** `compact` joins the command-spool vocabulary (`SPOOL_OPS`, ROADMAP 71 / #912): with a
+broker alive, `cli.mjs compact` ROUTES the request (`op:compact`) through `<db>.broker.inbox` and AWAITS
+the result at `<db>.broker.inbox.out/<requestId>.json`; the broker applies it with its OWN harness
+(`src/broker.mjs` `applyRequest`). The direct path (a fresh harness) remains ONLY for the no-broker case.
+The live-generation-lease guard does NOT block the broker's own compaction.
+
+**Why.** pi-durable's compaction is BUILT to run alongside a live conversation: `conversation.compact()`
+commits a `pi.compaction` task that summarizes an old prefix at a turn boundary and places a summary
+entry (the transcript is kept). durig's old `compact` was an EXTERNAL writer — `refuseWhileBrokerDrives`
+plus the live-lease guard meant a live rig could not compact at all. Routing through the spool gives one
+writer and one scheduler (the invariants of `docs/COMMANDS-AND-THE-BROKER.md`), so compaction is a normal
+write like any other, not a stop-the-world operation. The lease guard exists to stop an OUTSIDE writer
+from rewriting a context head a running generation owns; the broker IS the owner and commits at the turn
+boundary, so it must not be blocked by a guard aimed at outsiders.
+
+**Alternatives.** (a) Keep refusing while the broker drives — rejected: it makes live compaction
+impossible, which is the operator's complaint; (b) the in-broker cooperative halt (`src/halt.mjs`,
+#1768/#1769) — rejected: halting a generation is a heavier, separate mechanism and pi-durable's native
+background compaction needs no halt (cross-linked, not depended on); (c) QUEUE the compaction behind the
+current generation (settle-then-compact) — kept only as a fallback if the native path proves to need it;
+the broker applying its own op is already the single owner.
+
+**Status:** adopted; `demo/compact-spool.test.mjs` proves a REAL `pi.compaction` entry lands via the
+broker, a duplicate `requestId` applies once, and the seat is not aborted. Procedure:
+`docs/runbooks/compact-a-seat.md`.
