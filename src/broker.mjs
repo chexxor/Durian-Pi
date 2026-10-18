@@ -21,6 +21,7 @@ import { CompactionEntry } from "@earendil-works/pi-durable";
 import { RigControl, RigQueue, Seats } from "./rig.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
+import { LOCAL_PROVIDER_ID } from "./providers/local.mjs";
 import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
 import { listWorktrees, removeClaimedWorktree, uncommittedCount } from "./worktree.mjs";
 
@@ -48,6 +49,103 @@ export async function readStoppedConvIds(probeStorage, seats, context) {
     }
   }
   return stopped;
+}
+
+/* ---------------------- D105: per-item fresh context boundary ---------------------- */
+// D105 (operator directive 2026-10-18; lead #2164 seam ruling (c)): a seat whose RESOLVED
+// provider is `local` draws a fresh `pi.reset` context boundary BEFORE it works each NEW
+// work item, so a small-window local model does not carry the previous item's transcript
+// into the next. The SIGNAL is the resolved `provider` recorded on the SEAT doc by `up`
+// (a bounded single-field write, landing-gated behind the closed cli.mjs writer slot —
+// #2017/#2110/#2144); the broker reads it from the seats doc it ALREADY loads, so no
+// per-wake cross-conversation model read is added. The ACT fires on the WAKE path,
+// BETWEEN runs, so the boundary lands before the wake this pass submits.
+//
+// Idempotence is carried by the `contextItemId` marker on the seat doc: the item the
+// CURRENT context is anchored on. A boundary is drawn at most once per item even across
+// a re-wake whose run never claimed. NON-LOCAL seats are untouched.
+
+/** The `pi.reset` handoff a per-item boundary carries. Names the cause and the fix. */
+export function localContextHandoff(itemId) {
+  return (
+    `fresh context boundary (D105): you are starting a NEW work item (#${itemId}). ` +
+    `Your context was reset so this item is worked from a clean context — the durable ` +
+    `transcript is kept. Re-anchor from your durable instructions and the item body; ` +
+    `call claim_work to take the item.`
+  );
+}
+
+/**
+ * The local-provider seats that must draw a fresh context boundary this pass. Pure:
+ * it decides, `applyLocalContextBoundaries` writes.
+ *
+ * A boundary is planned only BETWEEN runs: the seat holds no `claimed` item (never
+ * mid-item), no submission is in flight, no live generation lease is held, and the
+ * operator has not stopped it. It fires only for a seat whose recorded provider is
+ * `local`, and only once per NEW item (the `contextItemId` marker).
+ *
+ * @param {{seats?: Record<string,{conversationId:number|string, provider?:string, contextItemId?:number}>, items?: Array<{id:number,to:string,status:string}>, pendingConvIds?: Set, busySeats?: Set, stoppedConvIds?: Set, paused?: boolean}} input
+ * @returns {Array<{name:string, conversationId:number|string, itemId:number}>}
+ */
+export function planLocalContextBoundaries({
+  seats,
+  items,
+  pendingConvIds = new Set(),
+  busySeats = new Set(),
+  stoppedConvIds = new Set(),
+  paused = false,
+}) {
+  const plans = [];
+  for (const [name, seat] of Object.entries(seats ?? {})) {
+    // NON-LOCAL seats are UNCHANGED (D105: paid seats keep their durable context).
+    if (seat?.provider !== LOCAL_PROVIDER_ID) continue;
+    // While PAUSED the driver takes no NEW work, so no boundary is owed.
+    if (paused) continue;
+    const convId = seat.conversationId;
+    if (pendingConvIds.has(convId)) continue; // a run is in flight
+    if (busySeats.has(name)) continue; // a live generation lease is held
+    if (stoppedConvIds.has(convId)) continue; // operator stop: never resurrect
+    // BETWEEN items only: a claimed item means the seat is mid-item — never reset it.
+    if ((items ?? []).some((it) => it.to === name && it.status === "claimed")) continue;
+    // The item this wake will claim: the OLDEST queued item addressed to the seat
+    // (claim_work's own rule), so the boundary is drawn before the seat works it.
+    const next = (items ?? [])
+      .filter((it) => it.to === name && it.status === "queued")
+      .sort((a, b) => a.id - b.id)[0];
+    if (!next) continue; // no NEW work to draw a boundary for
+    if (seat.contextItemId === next.id) continue; // one boundary per NEW item
+    plans.push({ name, conversationId: convId, itemId: next.id });
+  }
+  return plans;
+}
+
+/**
+ * Draw each planned boundary through the EXISTING reset mechanism (`resetSeatContext`),
+ * so the live-lease refusal is REUSED, not bypassed, and the write is the same `pi.reset`
+ * `cli reset` uses — no new write path. The `contextItemId` marker is recorded AFTER the
+ * boundary lands, so a refused/failed reset is retried on a later pass rather than
+ * silently suppressed. A failure on one seat is reported and does not abandon the others.
+ */
+export async function applyLocalContextBoundaries(harness, plans, context, { dbPath, maxSeats = Infinity, onDiagnostic } = {}) {
+  const applied = [];
+  for (const plan of plans ?? []) {
+    try {
+      const result = await resetSeatContext(harness, plan.name, localContextHandoff(plan.itemId), dbPath, {
+        maxSeats,
+        context,
+      });
+      if (result.refused) continue; // unknown seat or a live lease: retry on a later pass
+      await harness.commit(async (tx) => {
+        const seat = (await tx.doc(Seats)).seats[plan.name];
+        if (seat) seat.contextItemId = plan.itemId;
+      }, context);
+      applied.push({ ...plan, resetEntryId: result.resetEntryId });
+    } catch (err) {
+      onDiagnostic?.({ kind: "context-boundary-failed", seat: plan.name, itemId: plan.itemId, error: String(err?.message ?? err) });
+      console.error(`broker: per-item context boundary failed for ${plan.name}: ${err?.message ?? err}`);
+    }
+  }
+  return applied;
 }
 
 /* ------------------------------ broker intent-inbox ------------------------------ */
@@ -757,6 +855,27 @@ export async function drivePass(
   const seats = seatsDoc?.value?.seats;
   const stoppedConvIds = await readStoppedConvIds(probeStorage, seats, context);
   const busySeats = readBusySeats ? await readBusySeats() : new Set();
+  // D105: a LOCAL-provider seat draws a fresh context boundary BEFORE it works each NEW
+  // item. Drawn on the wake path, before this pass submits its wakes, so the reset lands
+  // first and the seat claims its item from a clean context. A no-op for every other rig.
+  const boundaryPlans = planLocalContextBoundaries({
+    seats,
+    items: queueDoc?.value?.items,
+    pendingConvIds,
+    busySeats,
+    stoppedConvIds,
+    paused,
+  });
+  if (boundaryPlans.length > 0) {
+    const drawn = await applyLocalContextBoundaries(harness, boundaryPlans, context, {
+      dbPath,
+      maxSeats: maxSeatsFromEnv(),
+      onDiagnostic,
+    });
+    if (dbPath && drawn.length > 0) {
+      logBrokerLine(dbPath, `CONTEXT-BOUNDARY seats=${drawn.map((p) => p.name).join(",")}`);
+    }
+  }
   let wokenSeat = initialSeat ?? null;
   // The conversations THIS pass submitted a wake to. The settle-wait below is
   // scoped to them (#broker-liveness): the old global wait parked the loop on
