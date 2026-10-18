@@ -476,6 +476,14 @@ async function buildSeatPrompt(models, seat, providerId) {
 // per-seat model reaches a database created by an earlier durig version.
 // Edges and the constitution are always re-applied from the spec.
 async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false } = {}) {
+  // #1589: `up` opens a full harness — a second OWNER — and `--refresh` writes
+  // (re-applies prompts/models, resets conversations). While a resident broker
+  // drives the store that is the hazard `send`/`reset`/`compact`/`resume`/`run`
+  // already refuse: two owners crash the broker and corrupt run-control docs.
+  // `--dry-run` writes nothing and previews only, so it keeps working (the
+  // `reset` precedent) — but note it still OPENS a harness, which is the
+  // lock-contention half of #1587, not this item's concern.
+  if (!dryRun) refuseWhileBrokerDrives("up");
   const spec = JSON.parse(await readFile(rigFile, "utf8"));
   // A spec carries its constitution either inline (what the OpenRig converter
   // emits, since the text it read has no file on disk beside the spec) or as a
