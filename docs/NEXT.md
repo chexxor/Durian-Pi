@@ -63,13 +63,14 @@ merged refs pruned**. `impl-item-1465` **resolved and landed** (`main` `1f8d25a`
 `import { join } from "node:path"`); resolved by merging `main` into the branch (`074667c`), suite
 **131/0**, branch pruned. Broker restarted pid `36204` (00:16:55Z).
 
-**Branch/worktree cleanup (2026-10-18, operator-authorized "Option A"):** 20 merged refs pruned total —
-8 free-merged; 2 by releasing terminal clean+**locked** worktrees (`impl-item-1444`,
-`security-item-1807`); **17 via the verify-tree reclaim** (16 batch + 1 pilot) of qa `verify-*` trees
-whose only content was untracked scratch AND whose nested trees were clean. Worktrees **157→122**, refs
-**109→93**, tree clean, `main` unmoved, **nothing forced**. **18 candidates were KEPT** (nested trees held
-uncommitted probe scripts). Runbooks updated: `leaked-worktrees.md` (+ front-matter + § "Reclaiming a
-merged item-branch pinned by a verify worktree"), `branch-cleanup.md` (step 5). Oracle **131/0**.
+**Branch/worktree cleanup (2026-10-18, operator-authorized "Option A"):** 20 merged refs pruned via
+the worktree-release/reclaim paths — 1 free-merged (`qa-item-1709`); 2 by releasing terminal
+clean+**locked** worktrees (`impl-item-1444`, `security-item-1807`); **17 via the verify-tree reclaim**
+(16 batch + 1 pilot) of qa `verify-*` trees whose only content was untracked scratch AND whose nested
+trees were clean. Worktrees **157→122**, refs **109→93**, tree clean, `main` unmoved, **nothing forced**.
+**18 candidates were KEPT** (nested trees held uncommitted probe scripts). Runbooks updated:
+`leaked-worktrees.md` (+ front-matter + § "Reclaiming a merged item-branch pinned by a verify
+worktree"), `branch-cleanup.md` (step 5). Oracle **131/0**.
 
 **Pause/unpause priority (operator):** prerequisite satisfied; intent `intent-pause-priority` spooled to
 `pm` (`.spike/delegate/intent-pause-priority.md`, `INTENT delivered=1 dead=0`) to **unpark #1388** and

@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-10-18
 verified_by: delegate
-evidence: "2026-10-17: 52 merged/patch-equivalent branches pruned (128->76 refs, main unmoved, 33 unlanded kept). 2026-10-18: 20 merged refs pruned (8 free-merged; 2 by releasing terminal clean+locked worktrees; 17 via the verify-tree reclaim in leaked-worktrees.md), main unmoved, nothing forced"
+evidence: "2026-10-17: 52 merged/patch-equivalent branches pruned (128->76 refs, main unmoved, 33 unlanded kept). 2026-10-18: 20 merged refs pruned through the worktree-release/reclaim paths alone (1 free-merged; 2 terminal clean+locked releases; 17 verify-tree reclaims in leaked-worktrees.md), main unmoved, nothing forced"
 check_rule: null
 ---
 
