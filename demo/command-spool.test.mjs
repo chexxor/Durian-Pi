@@ -65,7 +65,7 @@ const submissions = async () => (await harness.inspect(ctx)).submissions ?? [];
 try {
   // 0. The vocabulary is a closed list, and an absent `op` means "message" (back-compat
   //    for producers written before the spool).
-  assert.deepEqual(SPOOL_OPS, ["message", "stop", "reset"], "the spool's op vocabulary");
+  assert.deepEqual(SPOOL_OPS, ["message", "stop", "reset", "compact"], "the spool's op vocabulary");
   assert.equal(requestOp({ to: "worker", content: "hi" }), "message", "an intent with no op is a message");
   assert.equal(requestOp({ op: "stop", to: "worker" }), "stop");
 

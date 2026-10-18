@@ -62,7 +62,8 @@ import {
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
-import { brokerAlive, auditWorktrees, clearBrokerState, clearStopRequest, drivePass, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest } from "./src/broker.mjs";
+import { brokerAlive, auditWorktrees, clearBrokerState, clearStopRequest, drivePass, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent, awaitIntentResult } from "./src/broker.mjs";
+import { randomUUID } from "node:crypto";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -1177,10 +1178,52 @@ async function cmdReset(seatName, handoff, { dryRun = false } = {}) {
 // CLI must resume and WAIT for the task (harness.waitForTask) and then prove a compaction entry
 // landed. An enqueue-and-exit stub would report success while nothing was ever summarized. A
 // manual compaction is foreground (`background = reason !== "manual"`), so waiting here is safe.
+/**
+ * Route a `compact` through the command spool (#1904): write the request, then AWAIT the
+ * broker's result. The broker applies it with its OWN harness; this process never opens a
+ * second one. The broker's actual outcome (or the dead-letter reason) is reported, never
+ * guessed.
+ */
+async function compactViaSpool(seatName, instructions, broker) {
+  const requestId = randomUUID();
+  const text = instructions !== undefined && instructions.trim() !== "" ? instructions : undefined;
+  writeIntent(DB_PATH, {
+    op: "compact",
+    to: seatName,
+    ...(text !== undefined ? { instructions: text } : {}),
+    requestId,
+    from: "operator",
+    createdAt: new Date().toISOString(),
+  });
+  const awaited = await awaitIntentResult(DB_PATH, requestId);
+  if (!awaited.ok) {
+    fail(`compact via the spool (broker pid ${broker.pid}): ${awaited.reason}`);
+  }
+  const r = awaited.result.result ?? {};
+  out({
+    ok: true,
+    command: "compact",
+    seat: seatName,
+    viaSpool: true,
+    requestId,
+    brokerPid: broker.pid,
+    taskId: r.taskId ?? null,
+    instructions: r.instructions ?? null,
+    summaryEntryId: r.summaryEntryId ?? null,
+    db: DB_PATH,
+  });
+}
+
 async function cmdCompact(seatName, instructions) {
-  // Same class as `reset`: compact writes a context boundary, so it must not race the broker's
-  // own writer (ROADMAP 69 / COMMANDS-AND-THE-BROKER §4).
-  refuseWhileBrokerDrives("compact");
+  // ROADMAP 71 addendum (#1904): while a broker drives, ROUTE through the command spool — the
+  // broker applies `compact` with its OWN harness (single writer/scheduler), so a live rig can
+  // compact WITHOUT stopping the broker. We must NOT open a second harness here.
+  const broker = readBrokerState(DB_PATH);
+  if (brokerAlive(broker)) {
+    return await compactViaSpool(seatName, instructions, broker);
+  }
+  // No broker: the DIRECT path (a fresh harness), guarded against a live generation lease —
+  // compact writes a context boundary, so it must not race a running generation's writer.
   const { harness } = await openHarness();
   try {
     const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);

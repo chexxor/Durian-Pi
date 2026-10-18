@@ -208,13 +208,16 @@ the correct shape for a daemon anyway. This is the direction `BROKER-ARCHITECTUR
 carry an `op`, and the broker APPLIES it with its own harness. The closed vocabulary is
 `src/broker.mjs` `SPOOL_OPS` — today `message` (the original intent; an absent `op` defaults to it),
 `stop` (settle the seat's pending submission to `aborted: <reason>` and abort its run task,
-in-process, no pid kill), and `reset` (draw the shared reset boundary, `src/reset.mjs`, lifted out of
-`cli.mjs` so the CLI and the broker apply the SAME mechanism). An unknown `op` is dead-lettered, never
+in-process, no pid kill), `reset` (draw the shared reset boundary, `src/reset.mjs`, lifted out of
+`cli.mjs` so the CLI and the broker apply the SAME mechanism), and `compact` (summarize the seat's
+old context LIVE — pi-durable's `conversation.compact()` runs alongside the conversation, so the
+broker applies it with its own harness and the seat's run is not aborted; #1904). An unknown `op` is dead-lettered, never
 applied. Each applied request records its outcome at `<db>.broker.inbox.out/<requestId>.json` (the
 **result channel**), and that file is also the **idempotency ledger**: a duplicate `requestId` is
-recognised on re-drain and applies ONCE. `intent.mjs` is the producer (`--op`, `--reason`, `--handoff`);
-it mints and prints the `requestId`. Remaining for full delivery: queue edits as ops (they need the
-queue/Router writers lifted out of `cli.mjs`). Acceptance demo: `demo/command-spool.test.mjs`.
+recognised on re-drain and applies ONCE. `intent.mjs` is the producer (`--op`, `--reason`, `--handoff`,
+`--instructions`); it mints and prints the `requestId`. Remaining for full delivery: queue edits as ops
+(they need the queue/Router writers lifted out of `cli.mjs`). Acceptance demos:
+`demo/command-spool.test.mjs`, `demo/compact-spool.test.mjs`.
 
 ---
 
