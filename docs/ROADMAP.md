@@ -2033,6 +2033,13 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     carries it verbatim onto the DONE notice (structured `evidence` + a readable line), so the next
     party receives a command to re-run instead of a summary to trust. Proof:
     `demo/evidence-handoff.test.mjs` (failing-first: the notice carried no evidence before).
+    **STATED LIMIT (lead `#2057`, part (B)):** for NON-VERIFY completions, the evidence field's
+    `artifact` stays ADVISORY. `hasEvidence()` (`src/checkup.mjs`) requires only a non-blank
+    `command` and a finite `exitCode` and does not check `artifact`, so the
+    `verification-without-evidence` rule guarantees a command was RUN, not that the re-run is
+    ADDRESSABLE — a non-VERIFY completion may carry an empty/absent `artifact`. The stricter half
+    (lead `#2057`, part (A): a non-blank `artifact` for VERIFY-marker items) is a CODE change routed
+    to `impl` and is NOT landed, so it is not described as done here.
 
 49. **Finish the research's unfinished passes.** The review explicitly did not verify the governance
     pass (NIST AI RMF, ISO/IEC 42001, EU AI Act Art. 14, multi-agent "accountability gap") or the
