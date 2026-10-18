@@ -291,6 +291,35 @@ correlational, and that limitation belongs in the workflow rather than in a foot
 
 ---
 
+## Local-provider seats: a fresh context per new work item (D104/D105)
+
+**Who:** any seat whose **resolved model provider is `local`** (D104) — the local-fleet seats
+(e.g. `qa` on the local PolyStrata model, served through `DURIG_LOCAL_CONTEXT`).
+**Trigger:** the seat picks up a NEW work item it has not claimed before.
+
+**Rule (D105, operator policy 2026-10-18):** a local seat draws a **fresh context boundary**
+before working each new item — the existing `pi.reset` mechanism (`resetSeatContext`,
+`src/reset.mjs`). One boundary per NEW item; **never mid-item**; never across a `claimed` item
+(a claim must survive the transition or the task is lost); never while the seat holds a live
+generation lease. The durable transcript is preserved; the next wake re-anchors the seat from
+its durable instructions plus the new item's body. Non-local (paid) seats are unchanged.
+
+**Must not break:** the boundary is drawn BEFORE the item's work, so a prior item's turns never
+condition the model on the next (the D105 motivation: local seats run a small window on one
+serialized GPU and have been the ones that degenerated — `qa-context-degeneration`); and the
+claim/lease invariants hold (no mid-item reset, no live-lease reset).
+
+**Status: policy RULED and recorded (D105); enforcement NOT yet landed.** The wake-path boundary
+is routed to `impl` (#2123); today only the manual `reset`/`clean` verb and the D64 degeneration
+guard draw a boundary. Read this as the decided policy, not a shipped capability, until the D105
+acceptance demo (a local seat gets a `pi.reset` boundary between two consecutive items; a
+non-local seat does not) passes.
+
+**Evidence:** `docs/DECISIONS.md` D104/D105; `src/reset.mjs` `resetSeatContext` (the mechanism);
+`impl` #2123 (the enforcement, pending).
+
+---
+
 ## The capability matrix
 
 Status is today's, not the wish:
