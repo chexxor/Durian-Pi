@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T05:12Z (delegate — operator window executed: model swap applied + impl-item-1841/1891/1907 landed; branch backlog continues; broker restarted)._
+_Last refreshed: 2026-10-18T05:18Z (delegate clock-out — handing the seat over; next: ROADMAP 71 residue, CLI mutating commands through the broker command spool)._
 
 > **Side spike (operator-requested, 2026-10-18) — pi TUI on pi-durable via an adapter. NOT a queue
 > item; no product code changed.** `.spike/durable-tui/` (gitignored) proves the real
@@ -14,7 +14,60 @@ _Last refreshed: 2026-10-18T05:12Z (delegate — operator window executed: model
 > `EntryRecord`s carry no timestamp, so the adapter synthesizes one. This does **not** change the
 > operational priority below.
 
-## NEXT SESSION — fresh agent starts here (delegate, 2026-10-18T05:12Z)
+## NEXT SESSION — fresh agent starts here (delegate, 2026-10-18T05:18Z)
+
+**Current item:** make the CLI drive its MUTATING commands through the broker's **command spool** — the
+ROADMAP 71 / #912 residue. Owner is **`devtools`**; the delegate delivers operator intent and verifies.
+Two residue items, both `deferred pm->devtools`:
+
+- **`#1929` (residue 1/3):** lift the queue/Router writers out of `cli.mjs` — make
+  `claim`/`complete`/`defer`/`hold`/`release`/`revise`/`cancel`/`send` **spool ops** applied by the broker
+  with its OWN harness (`SPOOL_OPS += …`; `applyRequest` applies them; `cli.mjs` **ROUTES** through the
+  spool when a broker owns the store, direct path only when no broker). Verify **`#1932`** (auditor),
+  gated on devtools's branch + tip.
+- **`#1930` (residue 2/3):** route **`up`**'s write path through the spool when a broker is alive (direct
+  path otherwise; no regression). Verify **`#1933`**.
+
+Both acceptance sets require: no second writer (cli.mjs opens NO store while the broker drives); the
+applied outcome observable in `<db>.broker.inbox.out/<requestId>.json`; a duplicate `requestId` applies
+once; a **failing-first** demo (RED on current `main`, GREEN on the branch); `node --check` clean; full
+`demo/*.test.mjs` loop green; docs (`docs/COMMANDS-AND-THE-BROKER.md` §7, FEATURES.md).
+
+**Queue id:** `#1929` (then `#1930`).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Known blocker:** none blocking the delegate. `#1929`/`#1930` are `deferred` pending `devtools`'s
+scope/sequencing answer. The cli.mjs writer slot: `#2031` said it stays CLOSED per `#1817` — but the
+three contending writers it named (`impl-item-1841`, `devtools-item-1904`, `impl-item-1907`) have **ALL
+landed** now, so re-check the slot before sequencing. `#2031` also holds `impl-item-1705` — leave it held
+(my earlier survey shows it rebases clean but its verify `#2024` is still pending).
+
+**Build rules that apply (do not violate):** implement `#1929`/`#1930` FULLY — no partial/stub paths
+(“for now”/“simplified”/disabled); every exported function declares its **return type**; comments explain
+**why** (constraint/invariant/workaround), not what.
+
+**What the previous session did (for context):** applied the operator's model swap (qa →
+`mistralai/Mistral-Small-3.2-24B-Instruct-2506`, added `qa2` → `google/gemma-4-31B-it`); landed
+`impl-item-1841` (pause/unpause — `SPOOL_OPS` = message/stop/reset/compact/pause/unpause),
+`impl-item-1891` and `impl-item-1907` (ROADMAP 76 verify-scratch reclaim + teardown); pruned 56 merged
+branches; archived 41 dirty worktrees out-of-tree. `main` = `origin/main` = `740f889` (pushed). Refs ~50.
+
+**State:** broker UP (restarted; passes advancing, 2 genlocks). `main` = `origin/main` = `740f889`.
+CLEAN-after-rebase unlanded tips (verify still pending — do NOT land): `impl-item-1705` (#2024),
+`impl-item-1558`, `impl-item-1274`, `auditor-item-1924`, `scribe-item-2021` (#2027). ~19 code-conflict
+tips remain (route to authoring seats or continue the delegate scratch-merge method; junction
+`node_modules`/`vendor` into an OUT-OF-REPO worktree or ~27 demos fail).
+
+> **CAUTION — a SECOND delegate session was active concurrently** (created `.spike/durable-tui/`,
+> 05:03Z). It may still be writing `docs/NEXT.md`/the store; reconcile before trusting them.
+
+**Do not:** leave `cli.mjs log … --follow`/`watch` viewers attached (they cause the recurring
+`database is locked` dormant stall — cleared twice this session); stop the broker without a declared
+window (`pause` now exists — prefer it); land a snapshot (`item-148`, `selfdev-borrow`); force a dirty
+worktree; `-D` an `ahead>0` ref.
+
+## (prior) NEXT SESSION — delegate clock-out, 2026-10-18T05:12Z
 
 **Current item:** the operator-directed combined window is DONE (model swap) and the landing pass is
 IN PROGRESS. This session: applied the model swap (qa → `mistralai/Mistral-Small-3.2-24B-Instruct-2506`,
