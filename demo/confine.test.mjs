@@ -127,6 +127,8 @@ try {
 	// cannot diverge its worktree from the reviewed source; read-only git still runs.
 	for (const command of [
 		"git checkout main",
+		"git switch main",
+		"git switch -c feature",
 		"git restore src/rig.mjs",
 		"git revert HEAD",
 		"git clean -fd",
@@ -157,11 +159,13 @@ try {
 		"git stash;",
 		"git reset;",
 		"git checkout;",
+		"git switch;",
 		"git restore;",
 		"git clean;",
 		"git revert;",
 		"git branch -D foo;",
 		"git -C . stash",
+		"git -C . switch main",
 		"git -C /a/path reset --hard HEAD~1",
 		"git add -A;",
 		"git add .;",
