@@ -843,6 +843,14 @@ export async function runWakeLoop({
   supervise = null,
   maxDurationMs = 0,
   maxPasses = Infinity,
+  // A wake that FAILS (a per-seat `wake-failed`, not a whole-pass throw) leaves the
+  // candidate un-actioned with no commit to re-trigger a pass, so the broker goes
+  // dormant (the 2026-10-18 recurrence: fresh heartbeat, frozen `PASS`). This is the
+  // delay before the retry pass; it doubles per CONSECUTIVE failing pass up to
+  // `wakeRetryMaxMs`, so a transient storage lock heals on its own while a persistent
+  // error cannot hot-loop the loop.
+  wakeRetryMs = 2_000,
+  wakeRetryMaxMs = 60_000,
   now = Date.now,
   startedAt = now(),
   isStopping = () => false,
@@ -856,6 +864,9 @@ export async function runWakeLoop({
   // no commit may follow to trigger another pass. Record when that candidate
   // becomes eligible so the idle loop re-runs a pass then (the revisit gap).
   let cooldownRevisitAt = null;
+  // Consecutive passes that dropped a wake via `wake-failed`; drives the retry
+  // backoff below. Any pass that failed no wake resets it to 0.
+  let consecutiveWakeFailures = 0;
   // Work may have been queued while nothing was running — the exact #238 finding
   // (three items queued with nothing driving) — so the first pass is forced
   // rather than waiting for a future commit.
@@ -966,6 +977,9 @@ export async function runWakeLoop({
     const passStartedAt = now();
     const wokeThisPass = [];
     const suppressedThisPass = new Set();
+    // Seats whose wake failed THIS pass (distinct from the cumulative `failedSeats`,
+    // which reports the whole run). Drives the retry schedule below.
+    const failedThisPass = new Set();
     try {
       await drivePass(harness, probeStorage, {
         context,
@@ -976,6 +990,7 @@ export async function runWakeLoop({
         onDiagnostic,
         onError: (failure) => {
           failedSeats.add(failure.name);
+          failedThisPass.add(failure.name);
           onDiagnostic({
             kind: "wake-failed",
             name: failure.name,
@@ -1026,6 +1041,24 @@ export async function runWakeLoop({
           soonestDelay = Math.min(soonestDelay, scheduler.msUntilSeatReady(name, now()));
         }
         if (Number.isFinite(soonestDelay)) cooldownRevisitAt = now() + soonestDelay;
+      }
+      // A failed wake is real work this pass did NOT action, and — unlike a
+      // cooldown-suppressed candidate — nothing else will re-arm the loop. Without a
+      // scheduled retry the broker rests in `signal.wait` with the seat never driven:
+      // the dormant-stall recurrence. `selectWakes` still sees the seat's queued work,
+      // so a retry pass needs no extra bookkeeping. `Math.min` with any cooldown
+      // revisit already chosen so both waits are honoured at the earlier deadline.
+      consecutiveWakeFailures = failedThisPass.size > 0 ? consecutiveWakeFailures + 1 : 0;
+      // `wakeRetryMs <= 0` disables the retry, which reproduces the pre-fix behaviour
+      // (one pass, then dormant) so a demo can prove the contrast without reverting code.
+      if (failedThisPass.size > 0 && wakeRetryMs > 0) {
+        const backoff = Math.min(
+          wakeRetryMs * 2 ** (consecutiveWakeFailures - 1),
+          wakeRetryMaxMs,
+        );
+        const retryAt = now() + backoff;
+        cooldownRevisitAt = cooldownRevisitAt === null ? retryAt : Math.min(cooldownRevisitAt, retryAt);
+        logBrokerLine(dbPath, `WAKE-RETRY in=${backoff}ms seats=${[...failedThisPass].join(",")}`);
       }
     } catch (error) {
       // #1587 part 2: a per-conversation storage error inside the pass must NOT kill the
