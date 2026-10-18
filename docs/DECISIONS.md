@@ -2691,3 +2691,37 @@ until the provider is funded, and the operator directed the delegate. (c) Proxy 
 **Status.** Implemented as operator-directed side work (`demo/local-provider.test.mjs`); `node --check`
 clean. This is product code written by the delegate under an operator directive and still owes a seat's
 independent review when the rig can run.
+
+## D105 — A local-provider seat starts a NEW context for each new work item; the durable transcript is kept (operator policy, 2026-10-18)
+
+**Decision.** A seat whose resolved model provider is `local` (D104) MUST draw a fresh context boundary
+when it picks up a new work item, BEFORE working that item — so a prior item's turns never condition the
+model on the next one. The boundary is the existing `pi.reset` mechanism (`resetSeatContext`,
+`src/reset.mjs`): prior turns leave the model CONTEXT, the durable transcript is preserved, and the next
+wake re-anchors the seat from its durable instructions plus the new queue item's body. Non-local seats
+are unchanged. The invariant is: one boundary per NEW item, **never mid-item**, never across a `claimed`
+item (a claim must survive the transition or the task is lost), and never while the seat holds a live
+generation lease. What exactly counts as a "new" item, how a re-claim/deferred item is treated, and the
+wake-path seam are the implementing seat's to design.
+
+**Why.** A locally-served model runs with a small window (selfdev: 64k served via `DURIG_LOCAL_CONTEXT`)
+on a single serialized GPU, and context rot degrades it well before the window fills
+(`docs/Managing_Long_Context_Length.md`); carrying a finished item's transcript into the next item is
+prefill cost plus reasoning contamination, and the local seats are the ones that have degenerated
+(`qa-context-degeneration`). A fresh context re-anchored from the durable instructions + the new item's
+grounding is both cheaper and more correct at a task boundary — the same reasoning as ROADMAP 29/30b,
+made non-optional and scoped to the local fleet. It complements D95, which judges the guard's context
+bound against the seat MODEL's effective window.
+
+**Alternatives.** (a) Leave it a judgement call / operator-managed `reset` — rejected by the operator: a
+policy that depends on someone remembering to call it is not a policy. (b) Apply fresh-per-item to ALL
+seats — rejected: paid seats can keep a prompt-cache-warm context, and ROADMAP 29 leaves their cadence
+to the `pm`/advocate practice. (c) `compact` instead of reset — rejected: compaction summarizes the old
+turns *into* the next context, carrying forward whatever was wrong with them; a local seat needs a clean
+boundary, not a summary of the prior item.
+
+**Status.** Policy RULED and recorded. Enforcement is NOT implemented — today only the manual
+`reset`/`clean` verb and the D64 degeneration guard draw a boundary. Routed to `pm` for registration +
+routing; acceptance is a demo proving a local-provider seat gets a `pi.reset` boundary between two
+consecutive work items while a non-local seat does not, plus `node --check`, the full suite, and a
+non-author verify.

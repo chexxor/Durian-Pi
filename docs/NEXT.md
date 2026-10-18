@@ -3,7 +3,31 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T17:16Z (delegate — `devtools` verified running on local Qwen; local-provider defect fixed on the local model; dormant broker recovered)._
+_Last refreshed: 2026-10-18T17:33Z (delegate — D105 local-per-item fresh-context policy RULED + routed; broker dormant-stall recurrence 5 recovered)._
+
+> **NEXT SESSION START HERE — D105 policy RULED and routed; broker recovered from TWO dormant stalls
+> (2026-10-18T17:33Z).** Operator: "ensure durig has a policy of starting a new context for any new work
+> item picked up by a local model." Delivered as **policy + routing** (the delegate does not implement):
+> - **Policy recorded as `D105`** (`docs/DECISIONS.md`): a seat whose resolved model provider is `local`
+>   (D104) MUST draw a fresh `pi.reset` boundary per NEW work item before working it; durable transcript
+>   kept; non-local seats unchanged; never mid-item, across a `claimed` item, or over a live lease.
+>   Mechanism = the existing `resetSeatContext` (`src/reset.mjs`).
+> - **Enforcement registered + routed by `pm`:** **#2123** (impl — enforcement + failing-first demo),
+>   **#2124** (scribe — `WORKFLOWS.md` rule + `FEATURES.md` row as MANAGED), **#2125** (auditor — gated
+>   non-author verify). **Nothing is implemented yet**; landing #2123 (+#2124, after #2125) makes the
+>   policy mechanical. Until then the policy is recorded, not enforced.
+> - **Broker dormant-stall recurrence 5** (pm conv 3, `PASS 40 ms=5049`) recovered per
+>   `broker-down-or-stalled.md`; recurrence 5 also terminated the long-lived `node ui.mjs` viewer (the
+>   documented concurrent-opener aggravator). Current broker **pid 6124** (`START 17:30:28Z`), passes
+>   advancing, no genlock, no new `wake-failed`. Backups: `.spike/store-backup-20261018-121156` (rec 4),
+>   `.spike/store-backup-20261018-123023` (rec 5); incident doc carries both recurrences.
+> - **Watch:** a fresh heartbeat is NOT health — read the last `PASS`. If it stalls again, the suspect
+>   class is concurrent store openers; the durable fixes are still owed (ROADMAP 78 cause logging, 61–64
+>   watchdog, dormant-revisit gap).
+> - **Environment risk (parallel; lead ruled #2122):** the `demo/*.test.mjs` loop is flaky under low
+>   memory (abort codes / fork failures); the failures pass in isolation. `#2126` (impl) registers a
+>   robustness backlog item. Do not treat a dense-loop failure as a code regression without an isolation
+>   re-run.
 
 > **NEXT SESSION START HERE — `devtools` on local Qwen is verified; the local-provider defect is FIXED
 > (pending verify/land), and the broker was recovered from a dormant-stall (2026-10-18T17:16Z).**

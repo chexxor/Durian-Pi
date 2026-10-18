@@ -256,3 +256,47 @@ store backup `.spike/store-backup-20261018-121156` → `node cli.mjs resume` (`f
   `pi.assistant` entries with `provider: local, model: qwen36` (`stopReason: toolUse`) implementing
   `#2114`.
 - Backup: `.spike/store-backup-20261018-121156`.
+
+---
+
+## Recurrence — 2026-10-18T17:30Z (fifth, same day; pid 3604)
+
+**Appended, not rewritten** (per `docs/incidents/README.md`). Same dormant shape, ~18 min after the
+fourth recovery; this time the wake failure landed on **pm** and the recovery removed the long-lived
+UI viewer named as the item-5 aggravator.
+
+### What happened
+- Broker pid `3604` (the recurrence-4 recovery, START `17:12:14Z`) ran clean for ~12 min, then a spooled
+  operator intent (the D105 local-per-item-context policy) triggered a pass at `17:24:59Z`:
+  `PASS 40 ms=5049` (the same ~5 s signature) with `wake-failed … Session failed after a storage error`
+  for **pm (conv 3)** in `.spike/serve.err`; the intent sat **undrained** and no `PASS` followed for ~5 min.
+  `broker.json`'s heartbeat was again frozen; no `genlock.*` was held.
+- The long-lived `node ui.mjs` (**pid 9756**, started ~09:36Z) was still attached to the shared store —
+  the concurrent-opener whose class recurrence 3 named.
+
+### Resolution (2026-10-18, delegate, per `broker-down-or-stalled.md`)
+`MSYS_NO_PATHCONV=1 taskkill /F /PID 3604` and `/PID 9756` (the UI viewer — **removed this time**, since
+it is the documented lock-contention class and the stall recurred despite leaving it); removed the stale
+`broker.json`; backup **`.spike/store-backup-20261018-123023`**; `node cli.mjs resume` (`found: 2` — lead
+sub `89013`, auditor sub `89027`, both `run-cancelled`); restart with the local env → `START pid=6124`
+(`17:30:28Z`); `INTENT delivered=1`; `WAKE lead`/`WAKE auditor`; `PASS 1 ms=30 woke=lead,auditor`; no new
+`wake-failed`. The stranded D105 intent was then delivered to `pm`, which registered + routed it
+(**#2123** impl enforcement, **#2124** scribe docs, **#2125** auditor gated verify).
+
+### Prevention
+Unchanged (items 1–5). This recurrence is evidence that item 5's viewer class is the live aggravator:
+the broker stalled **only** while `ui.mjs` was attached, and stalls did not reoccur after it was removed
+in the ~same interval — suggestive, not proof. The durable fixes owed remain: log
+`SessionFailed.cause` on `wake-failed` (ROADMAP 78), a watchdog keyed on stale `PASS`+heartbeat
+(ROADMAP 61–64), and the dormant-revisit gap (a failed wake must re-arm the scheduler).
+
+### Evidence (recurrence 5)
+- `selfdev.sqlite.broker.log`: `…17:24:59.421Z PASS 40 ms=5049 woke=-` then `17:30:28.078Z START pid=6124`.
+- `.spike/serve.err`: `{"driver":"wake-failed","seat":"pm","conversationId":3,"error":"SessionFailed:
+  Session failed after a storage error; close and reopen it"}`.
+- `Get-CimInstance Win32_Process` at diagnosis: one `cli.mjs serve` (3604) **plus** `npm run ui` (14256) /
+  `ui.mjs` (9756).
+- Recovery: `resume` → `{"found":2,"actions":[lead 89013 run-cancelled, auditor 89027 run-cancelled]}`;
+  intent out file `selfdev.sqlite.broker.inbox.out/opr-20261018-local-per-item-context.json`
+  (`delivered:true`, `17:30:31.208Z`).
+- Backup: `.spike/store-backup-20261018-123023`.
