@@ -25,8 +25,8 @@ node demo/offline-v2.mjs     # edge + capability gate
 # operate a rig (see docs/QUICKSTART.md for the guided walkthrough)
 node cli.mjs up rig.v2.json            # bootstrap seats (idempotent); a TTY also starts the broker (--no-serve opts out)
 node cli.mjs ps                        # roster
-node cli.mjs send pm "hello"           # steer a seat; waits; returns reply
-node cli.mjs send pm "hello" --request-id r-1   # retry-safe: same id, one submission
+"hello" | node intent.mjs pm --body-file -      # steer a seat via the spool; the broker delivers (reply in log/status)
+"hello" | node intent.mjs pm --body-file - --request-id r-1   # retry-safe: same id, one submission
 node cli.mjs queue                     # dump work queue
 node cli.mjs status                    # per-seat health + attention notices
 node cli.mjs run                       # drive the queue to quiescence once
@@ -50,7 +50,7 @@ clock (D45). How it is switched on and off for the operator:
 - **A TTY `up` auto-starts it.** Running `node cli.mjs up <rig.json>` on an
   interactive terminal starts the broker for that database. Opt **out** with
   `--no-serve`, or with the env var `DURIG_NO_SERVE=1` (the script-wide
-  opt-out). A piped or scripted `up`, and scripted `send`/`run`, **never**
+  opt-out). A piped or scripted `up`, and scripted write verbs, **never**
   silently spawn a daemon — the TTY `up` is the *only* auto-start.
   Proof: `demo/autostart.test.mjs` (TTY auto-starts; `--no-serve`/piped opt out;
   `run` and a second `serve` fail closed; `up --serve` is idempotent).
@@ -158,11 +158,11 @@ append-only change log, so this adds no write path and no stored state.
 | `DURIG_EXTENSIONS` | Comma-separated module paths to install as extensions. See "Extensions" below. |
 | `DURIG_STREAM_TIMEOUT_MS` | Total request timeout for one generation attempt, in milliseconds. Unset = the platform default (the `openai` SDK's 600000 ms). Raise it for a slow local model, or lower it to fail fast instead of waiting out ten minutes on a stalled endpoint. A non-positive or non-numeric value **fails the command** rather than silently taking the default. |
 
-The `send` path is **retry-safe**: `node cli.mjs send <seat> <text> --request-id <id>` makes
-one send one submission, so a retry carrying the same id reuses the existing submission
-instead of starting a second generation and returns the original reply (`reused: true`).
-An id is never derived from the text, because two deliberate identical sends are two
-requests. Without an id nothing changes.
+The `intent` path is **retry-safe**: `node intent.mjs <seat> --body-file <file> --request-id <id>`
+spools one submission, so a retry carrying the same id reuses the existing submission
+instead of starting a second generation (the harness dedupes by conversation + request-id;
+`src/broker.mjs` `writeIntent`). An id is never derived from the text, because two deliberate
+identical intents are two requests. Without an id nothing changes.
 
 ## Extensions
 

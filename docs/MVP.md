@@ -2,6 +2,12 @@
 
 Updated: 2026-10-08 (after repeat-call fix landed)
 
+> **Transition (2026-10-17, D94):** the `send` write verb is being retired. Operator input now goes
+> through **`intent.mjs`** (spooled; the resident broker delivers it on its next pass) and the reply is
+> read with `log`/`status`/`watch`. Dated review recipes below that still show `node cli.mjs send …`
+> record how the feature was verified while `send` existed — they are history, not the current way to
+> drive a seat.
+
 ## MVP bar
 
 "Functional for basic use-cases without major issues" means an operator
@@ -28,14 +34,14 @@ Updated: 2026-10-08 (after repeat-call fix landed)
 | 2 | Concurrent-claim race safety | **DONE 2026-10-08** — first-run PASS; no code changes needed |
 |   | Review recipe: `node demo/race.test.mjs` — expect `RACE OK: winner="ITEM #1 ..." loser=NO_QUEUED_WORK(isError:false) claimed-events=1` then `RACE TEST PASS`, exit 0. Two concurrent runs of the same seat contend for one item; exactly one wins, the loser gets a friendly non-error state, and the queue records exactly one claimed transition. |
 | 3 | `durig watch` — streaming queue/transitions for the operator | **DONE 2026-10-09** — poll-based NDJSON stream (D11); found + dodged a real trap: pi-durable watches are in-process-only |
-|   | Review recipe: `node demo/watch.test.mjs` — expect `WATCH OK: snapshot(seq1)=["First item"] live-update(seq2)=["First item","Second item"]` then `WATCH TEST PASS`, exit 0. Manual feel: `DURIG_DB=<db> node cli.mjs watch` in one terminal, `node cli.mjs queue` / a send in another; each change appears as a new JSON line within ~750 ms. `watch --once` prints one snapshot line and exits. |
+|   | Review recipe: `node demo/watch.test.mjs` — expect `WATCH OK: snapshot(seq1)=["First item"] live-update(seq2)=["First item","Second item"]` then `WATCH TEST PASS`, exit 0. Manual feel: `DURIG_DB=<db> node cli.mjs watch` in one terminal, `node cli.mjs queue` / an `intent` in another; each change appears as a new JSON line within ~750 ms. `watch --once` prints one snapshot line and exits. |
 | 4 | Blocked-seat surfacing — attention notice when a seat errors or idles with queued work | **DONE 2026-10-09** — `src/attention.mjs` (pure) + `durig status` cmd + attention carried in every `watch` line |
 |   | Review recipe: `node demo/blocked.test.mjs` — expect `BLOCKED OK: notices=["idle/idle_with_queued_work","failed/last_run_failed"]` then `BLOCKED TEST PASS`, exit 0. Manual feel: `DURIG_DB=<db> node cli.mjs status` prints per-seat health; enqueue work for a seat that never runs and its notice appears in the next `watch` line within ~750 ms. Two notice kinds only: idle_with_queued_work (work waiting, nothing in flight) and last_run_failed (terminal unanswered run, reason attached). A seat actively running or settled-and-empty stays silent. |
 | 5 | Quickstart doc — "boot a 2-seat rig in 5 minutes" | next | newcomer walkthrough followed verbatim |
 | 5 | Quickstart doc — "boot a 2-seat rig in 5 minutes" | **DONE 2026-10-09** — `docs/QUICKSTART.md`; steps verified mechanically in faux mode (up idempotent, ps/status/send/queue/watch all behaved as written); live-mode branches marked explicitly where faux differs |
 |   | Review recipe: open a fresh PowerShell, follow `docs/QUICKSTART.md` verbatim from Step 0 in faux mode; report any step that trips. Expected checkpoints: Step 2 prints created [pm, worker] then existing on rerun; Step 4 faux branch explains the empty queue and points at `demo/offline-v2.mjs`; Step 5 watch emits a health line immediately and on change. |
 | 6 | Single-seat-at-a-time mode (`DURIG_MAX_CONCURRENT_SEATS=1`) — serve all seats from one local model (e.g. Qwen on a 24 GB GPU) | **DONE 2026-10-09** — `src/genlock.mjs` cross-process slot leases at the provider seam (D12); waiting-vs-stuck surfaced via lease files in status/watch |
-|   | Review recipe: `node demo/singleflight.test.mjs` — expect `CAP OK: two concurrent seats finished with max 1 generation in flight`, then `SINGLEFLIGHT TEST PASS`, exit 0. Manual feel: `$env:DURIG_MAX_CONCURRENT_SEATS="1"; node cli.mjs send pm "..."` runs normally; while a LIVE generation holds the slot, another terminal's `status` shows attention `generation_in_flight`; simulate a wedged holder by writing a dead-pid JSON into `<db>.genlock.0` and status flips to `generation_stale`. Unset the env var and no lease machinery engages at all. |
+|   | Review recipe: `node demo/singleflight.test.mjs` — expect `CAP OK: two concurrent seats finished with max 1 generation in flight`, then `SINGLEFLIGHT TEST PASS`, exit 0. Manual feel (with the resident broker running): `$env:DURIG_MAX_CONCURRENT_SEATS="1"; "..." | node intent.mjs pm --body-file -` runs normally; while a LIVE generation holds the slot, another terminal's `status` shows attention `generation_in_flight`; simulate a wedged holder by writing a dead-pid JSON into `<db>.genlock.0` and status flips to `generation_stale`. Unset the env var and no lease machinery engages at all. |
 | 6 | Single-seat-at-a-time mode (`maxConcurrentSeats: 1`) — lets the operator serve all seats from one local model (e.g. Qwen on a 24 GB GPU) instead of paying per-token at a hosted provider | after #4 | new test: two seats with pending work under the limit; assert at most one generation in flight at any instant (faux provider counts concurrent starts), both seats still finish, and a waiting seat is distinguishable from a stuck one (pairs with #4) |
 
 #6 notes (scoped honestly):
@@ -72,10 +78,10 @@ Proves: seats actually route work through the queue with a real model.
 ```powershell
 cd durig
 $env:DURIG_PROVIDER="deepinfra"; $env:DURIG_DB="$PWD\scratch-review.sqlite"
-node cli.mjs up rig.starter.json
-node cli.mjs send pm "Delegate ONE small task to seat impl using send_work: implement a hello-world endpoint. Then reply ROUTED."
+node cli.mjs up rig.starter.json          # a TTY also starts the broker (else: node cli.mjs serve)
+"Delegate ONE small task to seat impl using send_work: implement a hello-world endpoint. Then reply ROUTED." | node intent.mjs pm --body-file -
 node cli.mjs queue                 # expect: #1 [queued] pm->impl ...
-node cli.mjs send impl "Check your queue and handle any queued work."
+"Check your queue and handle any queued work." | node intent.mjs impl --body-file -
 node cli.mjs queue                 # expect: #1 done + #2 DONE notice impl->pm
 Remove-Item scratch-review.sqlite*
 ```
@@ -85,7 +91,7 @@ the nine-demo suite covers everything else.
 
 ## Review recipe — config file + seat refresh (2026-10-10)
 
-Why: an operator with no `DURIG_DB` ran `send pm` and the CLI acted on the
+Why: an operator with no `DURIG_DB` ran a write-side command and the CLI acted on the
 default `./rig.sqlite` instead of the store; the rig "looked broken"
 while being pointed at the wrong database.
 
@@ -144,8 +150,8 @@ node cli.mjs watch --once --json    # the same snapshot, machine contract
 node demo/watchview.test.mjs        # formatters + CLI wiring, offline
 ```
 
-Live proof used to validate the view: start `watch --human`, then `send pm` a
-routing task and `send worker` to act on it — the panel moves through
+Live proof used to validate the view: start `watch --human`, then spool a routing task to
+`pm` and an action to `worker` via `intent.mjs` — the panel moves through
 `generation_in_flight` → `sent #1` → `has #1 queued` → `working on #1` → DONE
 notice, and the `↳` line follows what each seat says.
 
