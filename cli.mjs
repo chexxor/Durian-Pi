@@ -238,6 +238,7 @@ function maxSeats() {
 }
 
 import { resolveSeatModel } from "./src/seatmodel.mjs";
+import { resetSeatContext } from "./src/reset.mjs";
 
 // live: when set, the provider is wrapped so a running generation streams to
 // the terminal. Off for commands that only read state, so `watch`/`status`
@@ -1003,52 +1004,7 @@ async function cmdResume() {
 // deleting the transcript), then the newest-past-watermark reset entry id.
 // Returns the reset entry id, or null when the seat was refused (live lease) — the caller
 // reports refusals; this function never writes while a lease is held.
-async function resetSeatContext(harness, seatName, handoff, dbPath, { dryRun = false } = {}) {
-  const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-  const seatsVal = seatsDoc?.value?.seats ?? {};
-  const seat = seatsVal[seatName];
-  if (!seat) {
-    noteEmptyRig(Object.keys(seatsVal).length);
-    fail(`unknown seat: ${seatName}`);
-  }
-  const convId = seat.conversationId;
 
-  // Refuse when the seat holds a LIVE generation lease: resetting a running
-  // seat out from under its own generation corrupts the very boundary we are
-  // trying to draw. Same seatsWithLiveSlot guard the stranded notice and the
-  // resume verb compute (readGenerationSlots -> generatingSeat; ROADMAP 37a).
-  // Consulted only when genlock is actually configured (a finite cap).
-  const slots = maxSeats();
-  const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
-  const seatsWithLiveSlot = new Set(
-    genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat),
-  );
-  if (seatsWithLiveSlot.has(seatName)) {
-    return { refused: true, reason: "live-generation-lease" };
-  }
-
-  // An omitted or blank handoff means a plain reset (no new user message on
-  // the boundary); only a non-blank handoff becomes the `pi.reset` user message.
-  const resetHandoff = handoff !== undefined && handoff.trim() !== "" ? handoff : undefined;
-  // #84 dry run: the unknown-seat fail and the live-lease guard above are the
-  // SAME checks the apply path runs; only the boundary write is skipped.
-  if (dryRun) {
-    return { refused: false, dryRun: true, resetEntryId: null, handoff: resetHandoff ?? null };
-  }
-  const conv = await harness.conversation(convId, BACKGROUND_CONTEXT);
-  // Identify the reset entry THIS invocation wrote: a watermark before, then
-  // the newest pi.reset entry past it (the durable transcript keeps earlier
-  // resets too, so the newest-past-watermark is precisely ours, not a prior one).
-  const prior = await conv.entries({}, 20, undefined, BACKGROUND_CONTEXT);
-  const priorMaxId = prior.items.reduce((max, e) => Math.max(max, Number(e.id) || 0), 0);
-  await conv.reset(resetHandoff, BACKGROUND_CONTEXT);
-
-  const after = await conv.entries({ order: "descending" }, 50, undefined, BACKGROUND_CONTEXT);
-  const resetEntry = after.items.find(
-    (e) => e.kind === "pi.reset" && Number(e.id) > priorMaxId,
-  );
-  return { refused: false, resetEntryId: resetEntry?.id ?? null, handoff: resetHandoff ?? null };
-}
 
 // Model-change DETECTION for the cmdUp reset seam (#402; #148 half-2; lead #241):
 // the conversation's CONFIGURED model is what `configure` last wrote (AgentDoc.model —
@@ -1124,7 +1080,7 @@ async function cmdReset(seatName, handoff, { dryRun = false } = {}) {
   try {
     // Delegate to the SHARED boundary mechanism (#402): same unknown-seat fail,
     // same live-lease guard, same watermark + conversation.reset write path.
-    const result = await resetSeatContext(harness, seatName, handoff, DB_PATH, { dryRun });
+    const result = await resetSeatContext(harness, seatName, handoff, DB_PATH, { dryRun, maxSeats: maxSeats() });
     if (dryRun) {
       // A preview: name the seat and whether the write would happen; write NOTHING.
       out({
@@ -1140,6 +1096,10 @@ async function cmdReset(seatName, handoff, { dryRun = false } = {}) {
       return;
     }
     if (result.refused) {
+      if (result.reason === "unknown-seat") {
+        noteEmptyRig(result.seatCount ?? 0);
+        fail(`unknown seat: ${seatName}`);
+      }
       fail(`seat ${seatName} holds a live generation lease; refusing to reset a running seat`);
     }
     out({
