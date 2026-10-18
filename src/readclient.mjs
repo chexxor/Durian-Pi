@@ -12,8 +12,10 @@
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { awaitIntentResult, brokerAlive, readBrokerState, writeIntent } from "./broker.mjs";
+import { awaitIntentResult, brokerAlive, intentResultDir, readBrokerState, writeIntent } from "./broker.mjs";
 
 /** Is a live broker driving `dbPath`? The read verbs branch on this. */
 export function brokerAliveFor(dbPath) {
@@ -40,6 +42,12 @@ export async function readViaBroker(dbPath, view, params = {}, { timeoutMs = 120
     createdAt: new Date().toISOString(),
   });
   const awaited = await awaitIntentResult(dbPath, requestId, { timeoutMs });
+  // The result channel is the spool's IDEMPOTENCY LEDGER for mutating ops. A read is
+  // non-mutating and every call mints a fresh requestId, so the client consumes its own
+  // result here: a `watch`/`ui.mjs` poll would otherwise leave a fresh result file every
+  // ~750 ms (the `health` view is multi-MB), growing `<db>.broker.inbox.out/` without
+  // bound. `force: true` tolerates a result that was never written (a timeout).
+  rmSync(join(intentResultDir(dbPath), `${requestId}.json`), { force: true });
   if (!awaited.ok) throw new Error(`read ${view}: ${awaited.reason}`);
   const record = awaited.result;
   if (record && record.ok === false) throw new Error(`read ${view}: ${record.error ?? "broker read failed"}`);
