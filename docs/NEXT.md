@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-17 (delegate — **branch audit DONE**; the next item is the landing backlog)._
+_Last refreshed: 2026-10-18 (delegate — branch audit + cleanup + landing pass DONE; `pause`/`unpause` prioritized)._
 
 ## BRANCH AUDIT — 2026-10-17 (delegate; operator: "review the repo and branches")
 
@@ -52,9 +52,21 @@ CLEAN. Land only branches that are BOTH qa-VERIFIED and CLEAN — e.g. `impl-ite
 `impl-item-1703`/`-1704` are CLEAN but **NOT yet qa-verified** (#1808/#1811) — do not land before
 verification.
 
-**To resume:** operator declares the window → `serve --stop` (confirm exit + no genlock) → `resume` →
-`node scripts/land.mjs <verified-clean branches> --suite` → restart broker. **Never `-D` an `ahead>0`
-ref and never delete a snapshot.**
+**SESSION OUTCOME (2026-10-18, operator-authorized):** the broker was **force-stopped** (pid `34700`);
+store snapshotted to `.spike/delegate/store-backup-20261017-235444`; `resume` cleared 2 stranded
+submissions (qa `#76883`, impl `#77152`). Quiesced, one **landing pass** landed **12** verified
+branches: `#1610` (fixed MAIN-RED `secretredact`), `#912` (ROADMAP 71 command spool — pause's AC4
+prerequisite), `#253`, `#965`, `#1108`, `#1535`, `#1547`, `#1553`, `#1557`, `#1585`, `#1589`, `#1698`.
+`main` `a89ac36` → `45845e0`; scratch suite **131/0**; shared-tree `secretredact` GREEN. **8 more
+merged refs pruned**. `impl-item-1465` still conflicts vs `main` (`src/seattools.mjs`, inter-branch with
+`#253`/`#1108`) → route for a **W2 rebase**. Broker restarted pid `36204` (00:16:55Z).
+
+**Pause/unpause priority (operator):** prerequisite satisfied; intent `intent-pause-priority` spooled to
+`pm` (`.spike/delegate/intent-pause-priority.md`, `INTENT delivered=1 dead=0`) to **unpark #1388** and
+route `pause`/`unpause` (ROADMAP 131 AC1–5) to `impl` now. Confirm `#1388` leaves `held`. **Watch:** the
+`pm` guard is in a reset loop (context >400k) — `#1703`/`#1704` remain unlanded/unverified.
+
+**Never `-D` an `ahead>0` ref and never delete a snapshot.**
 
 ## HANDOVER — 2026-10-17 (delegate clock-out; incoming agent: **verify the git repo branches**)
 
