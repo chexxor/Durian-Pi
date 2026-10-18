@@ -233,7 +233,7 @@ try {
 
 	console.log("--- wrong-database guardrail ---");
 
-	// A second terminal that forgot DURIG_DB is the classic new-user trap: the
+	// A second terminal that forgot DURIAN_PI_DB is the classic new-user trap: the
 	// default ./rig.sqlite is created on demand, so every read command answers
 	// ok with zero seats and looks healthy. The note must name the database.
 	const strayDb = join(dir, "stray", "rig.sqlite");

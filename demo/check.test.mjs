@@ -105,7 +105,7 @@ try {
   );
 
   // 3. THE regression: the spec declares a constitution and the store holds a
-  //    different one. Nothing else in durig reports this, and it is invisible
+  //    different one. Nothing else in durian-pi reports this, and it is invisible
   //    from the rig file alone.
   const drifted = auditRig({
     rig: "example.rig.json",
@@ -187,7 +187,7 @@ try {
   });
   assert.ok(!ids(openEdges).includes("unreachable-seat"), "no declared edges means no reachability rule");
   // A seat absent from every edge is still reported even when nothing sends to
-  // it. That is deliberate: durig's queue delivers DONE notices without an
+  // it. That is deliberate: durian-pi's queue delivers DONE notices without an
   // edge, so this rule is not "cannot reply", it is "cannot delegate or
   // escalate" - which is exactly what the coordinator bug was, and the reason
   // the sharpened "is a target" form was rejected.

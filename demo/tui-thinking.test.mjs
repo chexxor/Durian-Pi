@@ -1,13 +1,13 @@
 // demo/tui-thinking.test.mjs — U5: THINKING parity in the TUI (TUI ⟷ log).
 //
-// ONE concern: both durig surfaces show the model's thinking — including a block
+// ONE concern: both durian-pi surfaces show the model's thinking — including a block
 // the provider redacted — and the two surfaces MATCH each other: the same
 // phrases ("thinking ›", "thinking (redacted by the provider)"), and neither
 // surface hides thinking the other one shows.
 //
 // Provider caveat (stated, NOT fixed): some providers withhold the reasoning
 // body but keep the block (part.redacted === true). pi's own handling of such
-// bodies is provider-dependent; durig cannot recover the body and does not try:
+// bodies is provider-dependent; durian-pi cannot recover the body and does not try:
 // the block's existence is itself the fact to report. Parity here is checked on
 // the reporting, in both surfaces, with the same words.
 //

@@ -22,7 +22,7 @@ Read-only to inspect. Removing a worktree is a git operation; never discard work
 ```bash
 node cli.mjs worktree audit              # every worktree: item status, uncommitted count, lock, keep-reason
 git worktree list
-DURIG_DB=./selfdev.sqlite node cli.mjs queue   # which item ids are still live?
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs queue   # which item ids are still live?
 ```
 `worktree audit` (ROADMAP 76 / #1881) is the visibility surface: it lists every registered worktree
 with the **queue status** of its item, its **uncommitted path count**, its **lock state**, its
@@ -30,7 +30,7 @@ with the **queue status** of its item, its **uncommitted path count**, its **loc
 `locked` / `not-terminal` / `branch-unresolved` / `dirty` / `reapable` / `seat-root`). It writes
 nothing. A tree that is some seat's persisted `pi.agent`.cwd is `seat-root` (IN USE).
 A worktree whose item is terminal is an **orphan**. An orphan with uncommitted work is **dirty**.
-Since **#1194** a **locked** orphan is KEPT. Since **#1244** a **branch-held** orphan (every durig
+Since **#1194** a **locked** orphan is KEPT. Since **#1244** a **branch-held** orphan (every durian-pi
 item worktree is on its item branch, #859) is reaped **only when its item is TERMINAL, the worktree is
 UNLOCKED and it is CLEAN** — every other case is KEPT and reported. Terminal-ness is necessary, never
 sufficient.
@@ -48,7 +48,7 @@ sufficient.
    `removeVerifyScratch({ worktree })` from `src/broker.mjs`.
 1. At start the broker sweeps orphans and logs `RECONCILE leases=… worktrees=…`. The **#1244 sweep
    contract** — a worktree is reaped only when **ALL** of these hold:
-   - it is a durig item worktree (dir `item-<id>`) whose **branch encodes a queue item**
+   - it is a durian-pi item worktree (dir `item-<id>`) whose **branch encodes a queue item**
      (`impl-item-<N>`/`item-<N>`); a branch that does not resolve an id is KEPT;
    - that item is **TERMINAL** (done/cancelled; an id not in the store is KEPT);
    - the worktree is **UNLOCKED**; and

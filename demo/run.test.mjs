@@ -4,7 +4,7 @@
 // only writes a row, so a routed chain dies after one hop unless an external
 // actor sends again — the "you have to keep poking it" behaviour. src/driver.mjs
 // is the missing clock: it wakes a seat that has queued work and nothing
-// advancing it, and `durig run` holds the harness open until the rig is
+// advancing it, and `durian-pi run` holds the harness open until the rig is
 // quiescent.
 //
 // Driven through the real Router tools on a real harness with scripted faux

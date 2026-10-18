@@ -27,7 +27,7 @@ So the design problem is discovery and placement, not rendering.
 
 ## The move: metrics join the attention channel
 
-durig already has the right concept. `computeAttention` emits machine-readable
+durian-pi already has the right concept. `computeAttention` emits machine-readable
 notices (`idle_with_queued_work`, `last_run_failed`) that surface in `status`, in
 `watch`'s footer, and as a yellow `!`. Extending that from *"a seat is blocked"* to
 *"the rig is drifting"* means metrics inherit discovery, placement and rendering
@@ -61,7 +61,7 @@ Two principles behind that table:
   redraws every commit, so naming `metrics` in its footer every render is nagging.
   `status` is run occasionally, so that is where discovery belongs — the same trick
   the empty-rig guardrail already uses ("Check with: node cli.mjs config").
-- **Push beats polling** — durig's own lesson. The strongest awareness mechanism is
+- **Push beats polling** — durian-pi's own lesson. The strongest awareness mechanism is
   a notice printed when a `send` settles and a measure crosses its band, in the
   command the operator was already running.
 

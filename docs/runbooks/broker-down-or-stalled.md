@@ -14,7 +14,7 @@ None for diagnosis. The fix writes, so it needs no other writer.
 
 ## Diagnose (read-only)
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs status
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq 'node.exe' -and \$_.CommandLine -match 'cli.mjs serve' } | Select-Object ProcessId,CreationDate"
 tail -12 selfdev.sqlite.broker.log        # last START? any EXIT? a long ms=? 
 cat selfdev.sqlite.broker.json 2>/dev/null  # a live pid, or gone?
@@ -55,9 +55,9 @@ tail -8 .spike/serve.err 2>/dev/null
    ```
 2. With the broker down, clear anything stranded while it was gone:
    ```bash
-   DURIG_DB=./selfdev.sqlite node cli.mjs resume
+   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs resume
    ```
-3. Restart the broker **without `DURIG_SEAT_ROOT`** (a seat's own prepared cwd wins; a global root trips
+3. Restart the broker **without `DURIAN_PI_SEAT_ROOT`** (a seat's own prepared cwd wins; a global root trips
    the F12 guard):
    ```bash
    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1

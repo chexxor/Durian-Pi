@@ -1,6 +1,6 @@
-﻿# durig — feature inventory
+# durian-pi — feature inventory
 
-What durig does **today**, where each piece lives, and what proves it. This is
+What durian-pi does **today**, where each piece lives, and what proves it. This is
 the "what exists" reference: `docs/ROADMAP.md` is what comes next,
 `docs/DECISIONS.md` is why, `docs/MVP.md` is how to demo anything here,
 `docs/QUICKSTART.md` is how to start from nothing, and `docs/WORKFLOWS.md` is
@@ -27,8 +27,8 @@ Section 11 is planned, section 12 is deliberately absent.
 | **Protocol primer** | A short protocol section appended to every seat prompt, so a migrated persona knows the tools exist | `cli.mjs` `buildSeatPrompt` | `demo/refresh.test.mjs` | `cli` |
 
 The rig defines **four pi-durable documents** — `durig.seats`, `durig.edges`,
-`durig.constitution`, `durig.queue` — and no other durig document: no
-schema ownership, no migration, no SQL. The one piece of durig state outside the
+`durig.constitution`, `durig.queue` — and no other durian-pi document: no
+schema ownership, no migration, no SQL. The one piece of durian-pi state outside the
 store is the generation-slot lease files (`src/genlock.mjs`, D12).
 
 ## 2. Operating surface (CLI)
@@ -39,7 +39,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 
 | Command | Does | Flags | Surface |
 |---|---|---|---|
-| `init` | Scaffold a bare install so `up` can follow: write `rig.json` (a verbatim copy of the hardened starter `rig.starter.json` — seats pm/impl/qa/lead, edges, inline constitution — with only a `_readme` provenance note changed) and `durig.config.json` (the shipped defaults materialized from `durig.config.default.json`). npm-init-like: **refuses** (exit 1, naming the file) when either file already exists, checked rig-then-config and refused BEFORE any write, so a refusal never leaves a torn half-scaffold and never clobbers an existing file; the seed is audited through the same `auditRig` `check` uses (absent-store basis), so a drifted starter fails `init` loudly instead of scaffolding garbage. The scaffold audits clean (`check rig.json` exit 0, store rules skipped). Proof: `demo/init.test.mjs` | | `cli` |
+| `init` | Scaffold a bare install so `up` can follow: write `rig.json` (a verbatim copy of the hardened starter `rig.starter.json` — seats pm/impl/qa/lead, edges, inline constitution — with only a `_readme` provenance note changed) and `durian-pi.config.json` (the shipped defaults materialized from `durian-pi.config.default.json`). npm-init-like: **refuses** (exit 1, naming the file) when either file already exists, checked rig-then-config and refused BEFORE any write, so a refusal never leaves a torn half-scaffold and never clobbers an existing file; the seed is audited through the same `auditRig` `check` uses (absent-store basis), so a drifted starter fails `init` loudly instead of scaffolding garbage. The scaffold audits clean (`check rig.json` exit 0, store rules skipped). Proof: `demo/init.test.mjs` | | `cli` |
 | `up <rig.json>` | Create/refresh seats, edges and constitution from a spec; idempotent | `--refresh` re-applies stored prompts, models **and** each seat's working directory | `cli` |
 | `worktree <path>` | Create an isolated per-item checkout for seats to write in. Forks the **visible state**: a dirty source no longer refuses — the uncommitted content is carried into the fork and returned as `{carried}` (and logged by the broker), so isolation does not depend on a pristine tree (#506), while the anti-stale rule keeps the fork matching what the tree visibly holds (#240). Deleted-but-uncommitted paths stay deleted. Dependencies are installed per worktree (`npm ci --prefer-offline`), never bridged with a `node_modules` junction (Git 2.42 deletes *through* junctions) | `--source <dir>` | `cli` |
 | `ps` | Seat roster with conversation ids and roles, each seat's configured `model`, and its worktree `root` when a non-default cwd is persisted | | `cli` |
@@ -66,12 +66,12 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 Five operator-facing behaviours are load-bearing:
 
 - **Wrong-database guard** — read commands name the resolved database and warn
-  when it holds no seats, because a missing `DURIG_DB` otherwise looks exactly
+  when it holds no seats, because a missing `DURIAN_PI_DB` otherwise looks exactly
   like a healthy quiet rig (D18).
 - **Failure honesty** — errors come back as `{ok:false,error}` with a nonzero
   exit instead of a stack trace; a `send` that does not settle as `done` says so
   on stderr.
-- **Seat-root guard** — a write-side `send`/`run` whose `DURIG_SEAT_ROOT`
+- **Seat-root guard** — a write-side `send`/`run` whose `DURIAN_PI_SEAT_ROOT`
   disagrees with a seat's persisted working directory **fails closed**, naming
   both paths and the fix. A seat's cwd is resolved once at `up` time and
   persisted; without this guard an operator who re-points a run at a new worktree
@@ -81,7 +81,7 @@ Five operator-facing behaviours are load-bearing:
   tool layer, `src/confine.mjs` `refusalFor` for the environment — one policy,
   so the two cannot drift). Read-only git (`status`/`log`/`diff`/`show`/`rev-parse`)
   passes; **`git commit` is allowed**, scoped and `-C` forms included; `git push`
-  **is refused** unless the operator granted `DURIG_ALLOW_PUSH=1` in durig's own
+  **is refused** unless the operator granted `DURIAN_PI_ALLOW_PUSH=1` in durian-pi's own
   environment (a seat's own inline assignment cannot forge it); and every
   destructive form — `reset`, `checkout`, `restore`, `revert`, `clean`, `stash`,
   `branch -D`, and unscoped `add -A`/`add .` — is refused with the reason as a
@@ -97,28 +97,28 @@ Five operator-facing behaviours are load-bearing:
 ## 3. Configuration
 
 One vocabulary for both the environment and the config files, resolved
-**env → `durig.config.json` → `durig.config.default.json` (shipped) → built-in
+**env → `durian-pi.config.json` → `durian-pi.config.default.json` (shipped) → built-in
 default** — a fresh install runs with no hand-written config at all (#491 C6):
 the shipped defaults file rides with the artifact (also looked up anchored to
-durig's own install directory), ships `DURIG_MAX_CONCURRENT_SEATS=1` so a bare
+durian-pi's own install directory), ships `DURIAN_PI_MAX_CONCURRENT_SEATS=1` so a bare
 install cannot stampede a local model, and `node cli.mjs config` names where
 each value came from (`defaultsSource`).
 
 | Key | Meaning |
 |---|---|
-| `DURIG_DB` | Storage path (default `./rig.sqlite`) — the shipped defaults file sets `./rig.sqlite` explicitly so the floor is visible, not implied |
-| `DURIG_SEAT_ROOT` | Fallback working directory for seats at `up` time (keeps a rig file portable by naming no host path). Persisted per seat, so a later write-side `send`/`run` with a different value **fails closed** rather than silently using the old tree |
-| `DURIG_PROVIDER` | `deepinfra` (default) or `faux` for offline runs |
-| `DURIG_MODEL` | Default model for seats without their own |
-| `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent generations rig-wide (unset = unlimited). **Shipped default: `1`** (#491 C6) — serialize rather than stampede a local model; an operator opts in to more |
-| `DURIG_OPTIMIZE` | `on`: run each persona through the optimizer during `up` |
-| `DURIG_EXTENSIONS` | Comma-separated pi-durable extension modules to install. A path that cannot load **fails the command** rather than being skipped, and `up` reports the names it installed. Proof: `demo/extensions.test.mjs` |
-| `DURIG_STREAM_TIMEOUT_MS` | Total request timeout for one generation attempt. Unset = platform default (`openai` SDK, 600000 ms). The only harness setting durig exposes, because it is the only one with no default and a real reason to move in both directions. Proof: `demo/config.test.mjs` |
+| `DURIAN_PI_DB` | Storage path (default `./rig.sqlite`) — the shipped defaults file sets `./rig.sqlite` explicitly so the floor is visible, not implied |
+| `DURIAN_PI_SEAT_ROOT` | Fallback working directory for seats at `up` time (keeps a rig file portable by naming no host path). Persisted per seat, so a later write-side `send`/`run` with a different value **fails closed** rather than silently using the old tree |
+| `DURIAN_PI_PROVIDER` | `deepinfra` (default) or `faux` for offline runs |
+| `DURIAN_PI_MODEL` | Default model for seats without their own |
+| `DURIAN_PI_MAX_CONCURRENT_SEATS` | Cap concurrent generations rig-wide (unset = unlimited). **Shipped default: `1`** (#491 C6) — serialize rather than stampede a local model; an operator opts in to more |
+| `DURIAN_PI_OPTIMIZE` | `on`: run each persona through the optimizer during `up` |
+| `DURIAN_PI_EXTENSIONS` | Comma-separated pi-durable extension modules to install. A path that cannot load **fails the command** rather than being skipped, and `up` reports the names it installed. Proof: `demo/extensions.test.mjs` |
+| `DURIAN_PI_STREAM_TIMEOUT_MS` | Total request timeout for one generation attempt. Unset = platform default (`openai` SDK, 600000 ms). The only harness setting durian-pi exposes, because it is the only one with no default and a real reason to move in both directions. Proof: `demo/config.test.mjs` |
 | `DEEPINFRA_API_KEY` | Ambient credential, read from env/config, never stored or printed |
 
-Discovery order: `$DURIG_CONFIG`, then `./durig.config.json`, then
-`./.durig/config.json`; the shipped defaults file is additionally looked up
-anchored to durig's install directory (`durig.config.default.json`)
+Discovery order: `$DURIAN_PI_CONFIG`, then `./durian-pi.config.json`, then
+`./.durian-pi/config.json`; the shipped defaults file is additionally looked up
+anchored to durian-pi's install directory (`durian-pi.config.default.json`)
 (#491 C6). `node cli.mjs config` prints the effective values, the source, and
 `defaultsSource`; the API key is reduced to `set`/`unset` so it is always safe to
 log. Proof: `demo/config.test.mjs` — merge order (env > file > defaults), a
@@ -129,12 +129,12 @@ Store-open failures name the store: every verb goes through one storage-open
 wrapper, so a failure reads `cannot open <resolved DB_PATH>: <cause>` (same
 JSON contract `{ok:false,error}` and exit 1 as any CLI failure) instead of bare
 sqlite wording that leaves the operator guessing which store was in play
-(#491 C7). The interactive `durig ui` renders the same wording on its failure
+(#491 C7). The interactive `durian-pi ui` renders the same wording on its failure
 path. Proof: `demo/errorwording.test.mjs` — directory-as-DB through the real
 CLI, exit 1, the exact resolved path in the error text before the cause.
 Provider options are imported from `src/providers/deepinfra-models.ts` — a vendored
 copy of the module the pi extension uses — so the catalog is single-sourced and
-durig stands alone (see `src/providers/PROVENANCE.md`).
+durian-pi stands alone (see `src/providers/PROVENANCE.md`).
 
 ## 4. Seats and models
 
@@ -161,7 +161,7 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Repeat-call tolerance** | A replayed tool call returns current state instead of erroring on a settled overlay | `src/rig.mjs` | `demo/repeat-call.test.mjs` | cli |
 | **Request-idempotent send** | `send --request-id` makes one send one submission: a retry carrying the same id reuses the existing submission rather than generating again, and returns the original reply. The id is never derived from the text, because two deliberate identical sends are two requests | `cli.mjs` `cmdSend` | `demo/cli.test.mjs` | cli |
 | **Self-driving queue** (`run`) | Wakes each seat that has queued work and nothing advancing it, holds the harness open until the runs it started settle, and exits at quiescence — the clock the queue was missing. A driver, not a wake inside the Router tools, because a stateless `send` closes its harness before a tool-woken run could finish (F11) | `src/driver.mjs`, `cli.mjs` `cmdRun` | `demo/run.test.mjs` | cli |
-| **Resident broker** (`serve`) | One long-lived process that owns the harness and wakes seats from the store's in-process commit stream — no external clock. The scheduler coalesces a burst of commits into one pass, floors pass starts, and cools off a per-seat retry so a re-woken stalled claim cannot hot-loop; the supervisor runs each pass. Restarted later, it still drives work queued while nothing ran. It is the single long-lived writer that *is* the harness (D45); read-only viewers still never wake a seat (D11). **Sanctioned concurrency — one writer per DB, N seats:** the store/harness is single-writer (one broker owns the store; a second `serve` or a `run` refuses while one drives, D46 — two drivers double-wake), while the *files* are deliberately concurrent (each seat edits its own per-task worktree, D49) and the *generations* are capped at `N = DURIG_MAX_CONCURRENT_SEATS` leased cross-process by `genlock` (D12). Sanctioned model: **one broker owns the store and drives up to N seats, each in its own worktree**; never two drivers on one DB; genuinely independent drivers use separate databases | `src/broker.mjs`, `src/scheduler.mjs`, `cli.mjs` `cmdServe` | `demo/broker.test.mjs`, `demo/scheduler.test.mjs`, `demo/autostart.test.mjs` | cli |
+| **Resident broker** (`serve`) | One long-lived process that owns the harness and wakes seats from the store's in-process commit stream — no external clock. The scheduler coalesces a burst of commits into one pass, floors pass starts, and cools off a per-seat retry so a re-woken stalled claim cannot hot-loop; the supervisor runs each pass. Restarted later, it still drives work queued while nothing ran. It is the single long-lived writer that *is* the harness (D45); read-only viewers still never wake a seat (D11). **Sanctioned concurrency — one writer per DB, N seats:** the store/harness is single-writer (one broker owns the store; a second `serve` or a `run` refuses while one drives, D46 — two drivers double-wake), while the *files* are deliberately concurrent (each seat edits its own per-task worktree, D49) and the *generations* are capped at `N = DURIAN_PI_MAX_CONCURRENT_SEATS` leased cross-process by `genlock` (D12). Sanctioned model: **one broker owns the store and drives up to N seats, each in its own worktree**; never two drivers on one DB; genuinely independent drivers use separate databases | `src/broker.mjs`, `src/scheduler.mjs`, `cli.mjs` `cmdServe` | `demo/broker.test.mjs`, `demo/scheduler.test.mjs`, `demo/autostart.test.mjs` | cli |
 | **Broker auto-start** (`up`) | A TTY `up` leaves the queue self-driving by starting the broker; a piped/scripted `up` never silently spawns a daemon. At most one broker per database (`<db>.broker.json`, the genlock pid convention); a second broker and `run` refuse while one drives (two drivers double-wake); `serve --stop` reaps it | `cli.mjs` `cmdUp`/`ensureBroker`/`cmdStopBroker`, `src/broker.mjs` | `demo/autostart.test.mjs` | cli |
 | **Stalled-claim re-wake** | Also wakes a seat holding a `claimed` item whose run died (no in-flight submission, no live lease), so an abandoned claim is re-driven with no human send. An operator-`stop`ped claim is never re-woken — the guard reads, read-only, the abort fact `stop` already writes — and a live/in-flight run is never double-woken | `src/driver.mjs` `selectWakes`, `cli.mjs` `cmdRun` | `demo/stalledclaim.test.mjs` | cli |
 | **Thin-context return** | A claim's `result` text returns a PATH, not an inline body, once it exceeds a threshold, so the coordinator's context is not flooded; the coordinator reads the file | `src/rig.mjs` `thinResultText` | `demo/thincontext.test.mjs` | cli |
@@ -170,11 +170,11 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Context compaction** (`compact`) | Summarizes a seat's OLDER turns into a `pi.compaction` summary entry so the model context shrinks WITHOUT losing the durable transcript; the verb drives the compaction task to completion and proves the summary entry landed (no enqueue-and-exit stub). With a broker alive it is applied by the broker through the command spool (#1904), live | `cli.mjs` `cmdCompact`, `src/broker.mjs` `op:compact` | `demo/compact.test.mjs`, `demo/compact-spool.test.mjs` | cli |
 | **Resume a stranded run** (`resume`/`doctor`) | Advances admitted-but-not-progressing submissions, so a run that was admitted but never scheduled is re-armed instead of looking idle (F11) | `cli.mjs` `cmdResume` | `demo/resume.test.mjs` | cli |
 | **No DONE-of-DONE** | A DONE notice cannot generate another DONE notice, so the notice chain terminates instead of echoing | `src/rig.mjs` `isDoneNotice` | `demo/notices.test.mjs` | cli |
-| **Seat-root guard** | A write-side `send`/`run` whose `DURIG_SEAT_ROOT` disagrees with a seat's persisted cwd fails closed, naming both paths and the fix; view-only commands and `up --refresh` are unaffected (dogfood F12) | `cli.mjs` `openHarness` | `demo/seatroot.test.mjs` | cli |
+| **Seat-root guard** | A write-side `send`/`run` whose `DURIAN_PI_SEAT_ROOT` disagrees with a seat's persisted cwd fails closed, naming both paths and the fix; view-only commands and `up --refresh` are unaffected (dogfood F12) | `cli.mjs` `openHarness` | `demo/seatroot.test.mjs` | cli |
 | **Concurrent store writes** | The `send` path is made safe for two CLI processes writing one store: a lost entry-id collision is retried instead of dying raw; a message that cannot be delivered is a guided refusal, not `ID n already belongs to entry`. **Known limit:** the `up`/`run` write paths are not yet covered | `src/storewrite.mjs` | `demo/storewrite.test.mjs` | cli |
 | **Dirty-source carry (amends F23 refusal, ASK F #506)** | `worktree` forks the visible state instead of failing closed on a dirty tree: uncommitted tracked edits + untracked files are copied into the fork, uncommitted deletions stay deleted, and the carried set is returned (`createWorktree(...).carried`) and logged by the broker — so one seat's in-progress work can no longer block another seat's worktree claim, and the fork is enumerated, not a “tree neither git nor the operator tracks”. **Never carries a linked worktree into a worktree (#998):** a sibling `item-<id>` or the just-created target appears in the source's status as an untracked directory; those roots are excluded from the carry so the fork never copies a whole foreign checkout and never self-copies into its own source (`cp(repo/item-2, repo/item-2/item-2)` → `ERR_FS_CP_EINVAL`) | `src/worktree.mjs` `carryVisibleState` | `demo/worktree.test.mjs` (amended F23 section), `demo/broker-dirty-fork.test.mjs`, `demo/worktree-recursive-carry.test.mjs` | cli |
 | **Per-task worktree lifecycle** | One worktree + branch per item: create-on-claim, `git worktree lock` while the item runs, remove on completion. `npm ci --prefer-offline` per worktree (never a junction); git-identity validation (`--show-toplevel` == the tree, `--absolute-git-dir` != `--git-common-dir`, `.git` is a file); rebase-before-merge with `rerere`; cleanup only via `git worktree remove`, refusing a dirty tree or any junction | `src/worktree.mjs` | `demo/worktree-lifecycle.test.mjs` | cli |
-| **Seat-prepared workspace (`prepare_workspace`)** | The workspace switch is a seat TOOL, not the broker: called after `claim_work` and before any filesystem work, it creates the item's isolated git worktree at `<root>/item-<id>` and persists THAT conversation's cwd to it via `configure`, so `makeSeatEnv` resolves each seat to its own tree. The broker no longer sets a process-global `DURIG_SEAT_ROOT` (which pointed every seat woken in one pass at one worktree) or creates worktrees itself. Idempotent on rerun (an existing worktree is reused, so a resume never nests one inside another, #506); `complete_work` retires it with `force:false`, so uncommitted work is never discarded. A dirty shared tree still forks + carries + reports (`carryVisibleState`), so isolation holds while seats are mid-edit | `src/seattools.mjs` `prepareWorkspace`, `src/worktree.mjs` `prepareSeatWorkspace`/`removeSeatWorkspace`, `src/rig.mjs` `complete_work`, `constitution.txt` | `demo/prepare-workspace.test.mjs`, `demo/broker-dirty-fork.test.mjs` | cli |
+| **Seat-prepared workspace (`prepare_workspace`)** | The workspace switch is a seat TOOL, not the broker: called after `claim_work` and before any filesystem work, it creates the item's isolated git worktree at `<root>/item-<id>` and persists THAT conversation's cwd to it via `configure`, so `makeSeatEnv` resolves each seat to its own tree. The broker no longer sets a process-global `DURIAN_PI_SEAT_ROOT` (which pointed every seat woken in one pass at one worktree) or creates worktrees itself. Idempotent on rerun (an existing worktree is reused, so a resume never nests one inside another, #506); `complete_work` retires it with `force:false`, so uncommitted work is never discarded. A dirty shared tree still forks + carries + reports (`carryVisibleState`), so isolation holds while seats are mid-edit | `src/seattools.mjs` `prepareWorkspace`, `src/worktree.mjs` `prepareSeatWorkspace`/`removeSeatWorkspace`, `src/rig.mjs` `complete_work`, `constitution.txt` | `demo/prepare-workspace.test.mjs`, `demo/broker-dirty-fork.test.mjs` | cli |
 | **Job-Object process reaping** | Windows has no SIGTERM; the seat's process tree is reaped by a Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) and the worktree is removed only after the tree is confirmed dead | `src/job-object.mjs` | `demo/job-object.test.mjs` | cli |
 | **Degeneration guard (D64, #874, #875)** | The broker's supervise pass resets a seat whose CURRENT run outgrows a conservative bound, writing the existing `pi.reset` boundary via `conversation.reset` so the next wake re-anchors the seat from its durable instructions. Two causes beyond tool-turn/context-token/step-repetition/malformed-call: a **per-turn wall-clock bound** as its own cause (#874) reading `AssistantMessage.durationMs` (a high 5-minute threshold, so a legitimately slow turn is never reset — a run that badly OUTGROWS a bound is), and a **named-pattern prose registry** (#875) where each pattern is a PURE predicate over one assistant turn's text, named in the reason as `degenerate-text=<name>=<count>>=<bound>` and proven against real turn fixtures (positive = real loop, negative = healthy turn). Diagnosis / adding a pattern: `docs/runbooks/degeneration-guard.md` | `src/degeneration.mjs`, `src/attention.mjs` `TEXT_PATTERNS`/`matchTextPatterns`, `src/supervisor.mjs`, `scripts/degen-scan.mjs` | `demo/degeneration-duration.test.mjs`, `demo/degeneration-text.test.mjs`, `docs/runbooks/degeneration-guard.md` | cli |
 | **Scratch-worktree landing helper (`scripts/land.mjs`)** | A landing pass never leaves the shared tree mid-merge: the helper merges the named branches into a SCRATCH DETACHED worktree, runs the suite there (`--suite`), and advances `main` only by a clean fast-forward once the result is clean (2026-10-17 landing-safety incident: a conflicted `src/checkup.mjs` in the shared tree killed every `node cli.mjs` verb). It is also the pre-flight ENFORCEMENT chokepoint (#1164 Q3): refuses to land on a tree with tracked modifications, on a tree already mid-merge, and on a held genlock slot; a conflict STOPS and reports the conflicted paths. Not built on purpose: a hunk-picker / `apply_patch` (conflicts needing SYNTHESIS cannot be produced by selection); any conflict tool is gated on measured incidence (ROADMAP 100) | `scripts/land.mjs` | `demo/land-helper.test.mjs`, `docs/runbooks/merge.md` | cli |
@@ -184,7 +184,7 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **`send` deprecation** | `send` is DEPRECATED in favour of the command spool: it prints a stderr notice and is being retired (7ecf275, #1585). It opens a FULL writing harness (a second owner), so it refuses while a broker drives anyway; the replacement is the spool (`node intent.mjs <seat> --body-file <file>`, which the broker drains as operator input) plus `log`/`status` for the reply. `send_work` (the seat routing tool) is unrelated and stays | `cli.mjs` `cmdSend` | `demo/cli.test.mjs` | cli |
 | **Concurrent seat attribution** | With N generation slots, each lease and `status` names the generation's own seat (AsyncLocalStorage), not the last-woken seat (fixes F34 under concurrency) | `src/genlock.mjs` | `demo/broker-seat-attr.test.mjs` | cli |
 | **Coordinator queue listing** | `peek_queue(all=true)` returns the full non-terminal listing uncapped, so a coordinator with no read tool can groom the queue | `src/rig.mjs` | `demo/coordinator-queue.test.mjs` | cli |
-| **Zero durig SQL** | durig imports one storage opener and runs no SQL of its own | `cli.mjs:26` | architecture note, `docs/STATUS.md` | cli |
+| **Zero durian-pi SQL** | durian-pi imports one storage opener and runs no SQL of its own | `cli.mjs:26` | architecture note, `docs/STATUS.md` | cli |
 
 ## 6. Observability
 
@@ -251,11 +251,11 @@ for, and both are the load-bearing assertions in the test:
 - **A dirty tree is a flag, not a footnote.** The revision then does not describe
   what ran, so printing the hash alone would imply more than it can support.
 - **No repository is `unknown`, never `clean`.** A published or vendored copy of
-  durig is absence of evidence, not evidence of cleanliness.
+  durian-pi is absence of evidence, not evidence of cleanliness.
 
-Scoping is deliberate: `git status -- .` counts only durig's own subtree, because
-the usual layout has durig inside a larger repository — measured here, an
-unscoped check reported 92 changed paths where durig's own subtree had 0, and a
+Scoping is deliberate: `git status -- .` counts only durian-pi's own subtree, because
+the usual layout has durian-pi inside a larger repository — measured here, an
+unscoped check reported 92 changed paths where durian-pi's own subtree had 0, and a
 flag that is always true is worse than no flag. Untracked files **do** count (a
 new extension module is genuinely part of the active set and genuinely absent
 from the revision); gitignored ones do not, which is why rig databases and
@@ -268,11 +268,11 @@ A seat is a **persistent conversation**: created once at `up` and reused for eve
 fixed. Model accuracy degrades well before a context window is full, so "how long
 has this seat been running" is a durability property, not a display detail.
 
-What durig does today, stated as it actually is (ROADMAP items 27–30):
+What durian-pi does today, stated as it actually is (ROADMAP items 27–30):
 
 | Property | State | Where |
 |---|---|---|
-| Compaction | **Inherited; exposed via the `compact` verb.** The platform compacts automatically and records each one as a `pi.compaction` entry carrying `reason ∈ {manual, threshold, overflow}`, and it also offers manual `Conversation.compact()`. durig now exposes `compact` (commands table): with a broker alive it ROUTES through the command spool (`op:compact`, #1904) so the broker applies it live; with no broker it opens its own harness and refuses a live generation lease — the guard is for OUTSIDE writers only. It deliberately does not override the automatic settings: `stream` is the only harness setting exposed, because it is the only one with no default | `src/config.mjs` `streamSettings` (24a); harness `types.ts` (items 27, 28a); `cli.mjs` `cmdCompact`, `src/broker.mjs` `SPOOL_OPS`/`op:compact` |
+| Compaction | **Inherited; exposed via the `compact` verb.** The platform compacts automatically and records each one as a `pi.compaction` entry carrying `reason ∈ {manual, threshold, overflow}`, and it also offers manual `Conversation.compact()`. durian-pi now exposes `compact` (commands table): with a broker alive it ROUTES through the command spool (`op:compact`, #1904) so the broker applies it live; with no broker it opens its own harness and refuses a live generation lease — the guard is for OUTSIDE writers only. It deliberately does not override the automatic settings: `stream` is the only harness setting exposed, because it is the only one with no default | `src/config.mjs` `streamSettings` (24a); harness `types.ts` (items 27, 28a); `cli.mjs` `cmdCompact`, `src/broker.mjs` `SPOOL_OPS`/`op:compact` |
 | Duplicate turns on a retry | **Avoided.** A retry carrying `--request-id` reuses the existing submission, so it adds no second turn to the seat's context | `cli.mjs` `cmdSend` (24d) |
 | Context pressure | **Not visible.** Nothing reports how full a seat's context is; the first signal is a seat behaving worse. Both inputs already exist in storage — per-entry `usage`, and `pi.compaction` markers that carry the reason | — (item 27) |
 | Starting a fresh conversation | **Not possible.** Eleven commands, none of which resets a conversation, and `up --refresh` re-applies the prompt without touching it | — (item 28b) |
@@ -347,7 +347,7 @@ reports **no findings**:
   because swapping the textbook is meant to be a config change, and a starter that
   mentioned TAPL would contradict that
 - an inline constitution, so the file is self-contained (`constitution` resolves
-  against the CWD, so a path would only work from durig's own directory)
+  against the CWD, so a path would only work from durian-pi's own directory)
 - a verifier seat on a **second model family** (`qa`), because one model for every
   seat makes a shared blind spot systemic — and a verifier is where that costs most
 - an outgoing edge for every seat: work down, reports back, escalation to `lead`
@@ -369,7 +369,7 @@ while still reading as coverage.
 
 | Feature | What it does | Where | Proof | Surface |
 |---|---|---|---|---|
-| **OpenRig converter** | `rig.yaml` → durig v2 spec: seats, personas (each seat's `guidance/role.md`), skills, guidance, pod edges, **rig-level cross-pod edges**, coordinator send permissions, and the culture file as `constitutionInline` | `scripts/from-openrig.mjs` | `demo/converter.test.mjs` | cli |
+| **OpenRig converter** | `rig.yaml` → durian-pi v2 spec: seats, personas (each seat's `guidance/role.md`), skills, guidance, pod edges, **rig-level cross-pod edges**, coordinator send permissions, and the culture file as `constitutionInline` | `scripts/from-openrig.mjs` | `demo/converter.test.mjs` | cli |
 | **Starter rig** | The packaged 4-seat starter rig | `rig.starter.json` | `node cli.mjs check rig.starter.json` | cli |
 | **Pods** | Converted with a warning; pod **structure** is dropped — **limited** (deferred, ROADMAP item 11) | `scripts/from-openrig.mjs` | converter stderr warnings | cli |
 | **Persona and skill mapping** | name, role, **`resources.guidance` (`guidance/role.md`) inlined as `# Role`**, model, skills (names + content), pod/team guidance and `delegates_to` map into the v2 spec without hand-editing | `scripts/from-openrig.mjs` | `demo/converter.test.mjs`, `docs/ACCEPTANCE.md` UAR-5 | cli |
@@ -394,7 +394,7 @@ it to the live store).
 
 | Feature | What it does | Where | Surface |
 |---|---|---|---|
-| **Pinned pi main** | `pi-main.pin.json` records the exact upstream commit durig is validated against. Rebased 2026-10-13 to `7d75a0e` (main tip, 42 commits, includes Release v1.2.0); spike break list EMPTY, committed tree 47/47 GREEN, live tree 49/49 | `pi-main.pin.json` | cli |
+| **Pinned pi main** | `pi-main.pin.json` records the exact upstream commit durian-pi is validated against. Rebased 2026-10-13 to `7d75a0e` (main tip, 42 commits, includes Release v1.2.0); spike break list EMPTY, committed tree 47/47 GREEN, live tree 49/49 | `pi-main.pin.json` | cli |
 | **Drift report** | Default `sync-pi` mode: is the pin still upstream's tip? A failed lookup reports *unavailable*, never "up to date" | `scripts/sync-pi.mjs` | cli |
 | **Build from source** | Sparse clone of the five tracked packages → `npm install` → build, reproducibly at the pin | `scripts/sync-pi.mjs --sync` | cli |
 | **Link / unlink** | Point `node_modules` at the built tree with `--no-save`, so `package.json` and a fresh clone stay on releases | `--link` / `--unlink` | cli |
@@ -455,10 +455,10 @@ worktree-reuse-deps · worktree-sweep ·
 
 Pointers, not promises — each is an item in `docs/ROADMAP.md`.
 
-- **Dogfood durig on our own work** — run our coordination through it, log what
+- **Dogfood durian-pi on our own work** — run our coordination through it, log what
   breaks in `docs/DOGFOOD.md`, fix or backlog; twelve findings (F1–F12) so far
   (item 10b, D31)
-- **Publish durig as its own repository** — `git subtree split`, vendor the
+- **Publish durian-pi as its own repository** — `git subtree split`, vendor the
   DeepInfra catalogue, pick a licence; repo only, no releases (item 22)
 - **An extension registry with named profiles** — one artifact, `core` / `recommended`
   / custom as configuration, each extension declaring its cost and blind spot
@@ -486,7 +486,7 @@ Pointers, not promises — each is an item in `docs/ROADMAP.md`.
 Decided against with reasons in `docs/DECISIONS.md` and `docs/ROADMAP.md`, so a
 reader does not mistake absence for an oversight.
 
-- **Reputation, veto and quorum arbitration** — durig's seats have no adversarial
+- **Reputation, veto and quorum arbitration** — durian-pi's seats have no adversarial
   objective and no competing claims over scarce resources (D23)
 - **Flat peer swarms** — the topology the evidence is most consistent about avoiding
 - **Textual interaction inside `cli.mjs`** — would break the JSON contract the
@@ -503,10 +503,10 @@ reader does not mistake absence for an oversight.
 
 ## Diagnostics
 
-- **`DURIG_DEBUG=1` prints the error stack** on a CLI failure; the default output
+- **`DURIAN_PI_DEBUG=1` prints the error stack** on a CLI failure; the default output
   stays the byte-stable one-line message. Added because `fail()` discarded the
   stack, which made the `run --watch` crash untraceable across several cycles.
 - **Thin-context returns carry a bounded preview plus a path.** A claim over the
   inline limit returns the head (<= `TOOL_RESULT_INLINE_LIMIT` chars) *and* the path
-  to `cwd/.durig/<id>.md`, because a coordinator seat has no read tool and a bare
+  to `cwd/.durian-pi/<id>.md`, because a coordinator seat has no read tool and a bare
   path made the body unreadable to it (found live on #100).

@@ -47,7 +47,7 @@ assert.equal(summary.says, "hello there", "the assistant utterance, not the user
 assert.equal(summary.toolName, "claim_work");
 
 // A turn that only calls a tool must not erase the last thing the seat said,
-// and the system prompt is durig's scaffolding, never the seat speaking.
+// and the system prompt is durian-pi's scaffolding, never the seat speaking.
 const emptyAssistant = {
 	kind: "pi.assistant",
 	model: [{ role: "assistant", content: [] }],

@@ -7,7 +7,7 @@
 way?"
 **Companions:** `docs/BROKER-ARCHITECTURE.md` (the in-process actor model — why seats aren't fully
 independent), `docs/BROKER-SUPERVISION.md` (the process lifecycle/daemon design of record),
-`docs/PI-DURABLE-INTEGRATION.md` (durig ↔ pi-durable mapping).
+`docs/PI-DURABLE-INTEGRATION.md` (durian-pi ↔ pi-durable mapping).
 
 ---
 
@@ -24,12 +24,12 @@ supplies the rule; a running process satisfies it. The rule, verbatim from the l
 > "One process owns a storage at a time; there is no cross-process locking." (`README.md:682`)
 
 So there is **no lock at the database level** — pi-durable simply assumes the embedding application
-keeps one owner. durig keeps its side by policy: **the broker is durig's chosen long-lived owner**, and
-`<db>.broker.json` plus the `run`/`serve` guards are how durig enforces it. The four nouns to keep
+keeps one owner. durian-pi keeps its side by policy: **the broker is durian-pi's chosen long-lived owner**, and
+`<db>.broker.json` plus the `run`/`serve` guards are how durian-pi enforces it. The four nouns to keep
 straight:
 
 - **pi-durable** — the library: durable conversations, submissions, tools, providers, `resume()`.
-- **durig** — the program: **seats** (personas/roles), the cross-seat **queue** (`RigQueue`) and router
+- **durian-pi** — the program: **seats** (personas/roles), the cross-seat **queue** (`RigQueue`) and router
   tools (`claim_work`, `complete_work`, `send_work`, `defer_work`), the **driver** that decides whom to
   wake, the **broker** that drives, and the **observers** (`status`/`watch`/`log`/`ui`).
 - **The store** — one SQLite file = one rig (`selfdev.sqlite`; `rig.sqlite` by
@@ -37,7 +37,7 @@ straight:
 - **The three actors** — the **operator/delegate** (intent, rulings), the **seats** (the team), and the
   **broker** (the scheduler/supervisor process).
 
-For the durig-versus-harness division of responsibilities, see the concept map in
+For the durian-pi-versus-harness division of responsibilities, see the concept map in
 `docs/PI-DURABLE-INTEGRATION.md` §2.
 
 ## 2. Multiplayer, precisely: one owner, many clients
@@ -50,11 +50,11 @@ one owner**, not many writers to one file. The library provides the client surfa
 - busy-conversation semantics — a client can steer a running conversation or queue a follow-up.
 
 There is no multi-writer mode and no cross-process lock; the embedding program must keep a single
-owner. durig currently **under-uses** the client surface — its observers read the store directly and
+owner. durian-pi currently **under-uses** the client surface — its observers read the store directly and
 poll (`D11`) instead of attaching to the owner's push stream, which is why the TUI feels single-player
 and why "adopt the owner's push stream" is a deferred item (`docs/BROKER-ARCHITECTURE.md`).
 
-The broker is **not** the only part of durig that touches the library, nor the only harness owner:
+The broker is **not** the only part of durian-pi that touches the library, nor the only harness owner:
 
 | Component | How it uses pi-durable |
 |---|---|
@@ -125,7 +125,7 @@ are spooled for the owner to apply (safe).**
 | `run [--watch]` | drive to quiescence | **Yes** | **Refused** | explicit guard: refuses if a broker is alive (two schedulers double-wake) |
 | `up` | create/refresh seats; maybe start the broker | **Yes** | **Refused** | second writer: a resident broker already drives the store, and `cmdUp` refuses while it is alive (#1589). Exception: `up --dry-run` previews only and writes nothing, so it is **not** refused |
 | `serve [--stop]` | the broker itself; `--stop` is the off switch | **Yes** | — | the sole writer/scheduler |
-| `durig daemon …` *(planned)* | install the OS trigger → `src/host.mjs` → broker | host never opens the store | yes | supervisor, not scheduler (`BROKER-SUPERVISION.md`) |
+| `durian-pi daemon …` *(planned)* | install the OS trigger → `src/host.mjs` → broker | host never opens the store | yes | supervisor, not scheduler (`BROKER-SUPERVISION.md`) |
 
 Rule of thumb for a maintainer: **if you are adding a verb that mutates state, decide whether it is a
 "read", an "inside-the-run" tool, or a "spool it for the broker" request. Do not add a fourth kind.**
@@ -245,7 +245,7 @@ recognised on re-drain and applies ONCE. `intent.mjs` is the producer (`--op`, `
 | `src/broker.mjs` | `drivePass`, `runWakeLoop`, `logBrokerLine`, broker state/log, the intent inbox (`writeIntent`/`drainIntentInbox`) |
 | `src/driver.mjs` | `selectWakes` / `driveOnce` — *whom* to wake |
 | `src/scheduler.mjs` | *when* a pass may run (floor, cooldown, coalescing) |
-| `src/genlock.mjs` | cross-process generation-slot leases (`DURIG_MAX_CONCURRENT_SEATS`) |
+| `src/genlock.mjs` | cross-process generation-slot leases (`DURIAN_PI_MAX_CONCURRENT_SEATS`) |
 | `src/storewrite.mjs` | the entry-id-conflict retry (`withStoreWriteRetry`) |
 | `src/supervisor.mjs` | the in-process escalation pass (distinct from the host daemon) |
 | `src/rig.mjs` | `Seats`, `RigQueue`, `Router`, personas |

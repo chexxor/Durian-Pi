@@ -1,7 +1,7 @@
 // demo/secrets.test.mjs — prove the #700 no-secrets-in-config guard.
 //
 // The disclosed finding: a live DEEPINFRA_API_KEY value sat in PLAIN TEXT in
-// durig.config.json in a SHARED tree. A config file is shared, diffed and
+// durian-pi.config.json in a SHARED tree. A config file is shared, diffed and
 // committed, so a secret in it leaks by design; the environment is the
 // sanctioned channel. The guard must therefore:
 //   - REFUSE a config FILE whose VALUES look like credentials, naming the KEY
@@ -59,7 +59,7 @@ assert.doesNotThrow(
 	"ordinary file values pass",
 );
 // A secret under an UNEXPECTED key is still a secret: the guard is value-shaped,
-// not key-named (key-name matching would miss a key pasted into DURIG_DB).
+// not key-named (key-name matching would miss a key pasted into DURIAN_PI_DB).
 assert.throws(
 	() => assertNoSecretsInFile({ DURIG_DB: FAKE_KEY }, "durig.config.json"),
 	/secret-looking value/,

@@ -142,7 +142,7 @@ Then delete the branch: `git branch -d <branch>` (safe — `-d` refuses anything
   shared tree breaks `cli.mjs` for the whole rig (`.git/MERGE_HEAD` in a statically-imported module makes
   every verb a `SyntaxError`). Then **stop and report**; send the branch back for a rebase (W2) and name
   the conflict. Never force.
-- `git branch -d <branch>` is refused by the seatguard (`refused by durig: would delete a branch`): the
+- `git branch -d <branch>` is refused by the seatguard (`refused by durian-pi: would delete a branch`): the
   landing is still complete (the sha is an ancestor of `main`); leave the merged branch in place and
   report it — branch deletion is guard-blocked for author seats, so the operator (or a non-author seat)
   must prune the merged branch.
