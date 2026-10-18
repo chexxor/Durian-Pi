@@ -5,6 +5,42 @@ backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
 _Last refreshed: 2026-10-18T19:32Z (delegate — host+rig recovery complete; recurrence 8 reproduced live, pinned, and FIXED (`6e27ac2`); broker+local LLM up; verify routed to `pm`)._
 
+_Last refreshed: 2026-10-18T20:05Z (delegate — operator-declared LANDING WINDOW ran: 8 branches landed, 11 conflict; durable-tui START + rebrand FINISH relayed to pm; live rig degraded — pm degeneration loop + uncommitted shared-tree WIP)._
+
+> **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T20:05Z).** — Operator decisions executed; landing window done.
+> - **LANDING WINDOW (operator-prioritized) — RAN.** Paused→stopped the broker, snapshot
+>   `.spike/store-backup-20261018-144324`, ran `scripts/land.mjs --suite` outside the broker. **8 landed**
+>   (now ancestors of `main` `4a50da6`): `devtools-item-2114`, `impl-item-1108`, `impl-item-1547`,
+>   `impl-item-1585`, `scribe-item-1972`, `scribe-item-2021`, `scribe-item-2052`, `scribe-item-2070`.
+>   **11 CONFLICTED** (need rebase + re-verify, route to authors; do NOT hand-merge into the shared tree):
+>   `devtools-item-1558`, `devtools-item-1754`, `devtools-item-2073`, `impl-item-1151`,
+>   `impl-item-1444-fix`, `impl-item-1529`, `impl-item-1609`, `impl-item-1727`, `impl-item-1823`,
+>   `impl-item-1705`, `impl-item-1769` (conflict files: `docs/runbooks/README.md`, `docs/DECISIONS.md`,
+>   `docs/FEATURES.md`, `docs/ROADMAP.md`, `src/broker.mjs`, `src/confine.mjs`, `src/seattools.mjs`,
+>   `src/checkup.mjs`, `src/degeneration.mjs`, `demo/starter.test.mjs`, `demo/degeneration.test.mjs`,
+>   `rig.selfdev.json`).
+> - **`main` IS GREEN.** The full suite reports 142/143 ONLY because of an UNCOMMITTED work-tree change,
+>   not `main`: `src/broker.mjs` has an uncommitted `configure` spool op (mtime `19:57:26Z`, HEAD blob
+>   `3676acb` lacks it, HEAD's `demo/command-spool.test.mjs` expects the 6-op vocabulary). **Do NOT touch
+>   it** — it is someone's in-flight work; it also makes `land.mjs` REFUSE (tracked modification), so the
+>   11 rebases cannot land until it is committed in its own worktree or moved. Identify the author first.
+> - **Operator decisions relayed to `pm`** (intent `1c6e76b3…`, delivered `19:56:24Z`): durable-tui
+>   **START NOW** (#2095 → #2096 + #2103/#2104); rebrand **FINISH** (#2109–#2112, #2143, #2144); **#1135**
+>   = pricing source is a per-provider EXTENSION, data UNAVAILABLE when no extension supplies it; **#2098**
+>   = `ui.mjs` eventually retired; **#2100** = GitHub rename DONE by operator (local rename still needs a
+>   window); **#2050** already decided (archive out-of-tree) — close the stale row.
+> - **Broker UP — pid `10932`** (`START 19:55:48Z`), unpaused. **The recurrence-8 fix is working live:**
+>   `PASS 124` + `WAKE-RETRY … pass-threw`, backing off `2s→4s→8s→16s→32s→60s` — the broker RETRIES a
+>   persistent pass-throw instead of going dormant. Restart needs the local env still (harmless now that
+>   `devtools-item-2114` landed, but keep it until D103's aliases land).
+> - **LIVE DEGRADATION to watch (not yet recovered):** the pass-throw cause is a `qa` conv-15
+>   `Session failed after a storage error` (`wake-failed`), plus **`pm` escalating `degeneration` 7× in a
+>   row** (`streaming: pm, auditor`). The local LLM (PolyStrata, `127.0.0.1:8080`) is up. `ui.mjs` pid
+>   `11256` still running.
+> - **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Do not:** `git add -A`; touch the uncommitted `configure` WIP; land a conflicted branch by hand;
+>   land the unverified set (`impl-item-1498`, `scribe-item-1232/1233/1257`).
+
 > **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T19:32Z).** — Recovery complete: broker UP and the
 > local LLM (PolyStrata) UP. The recurrent broker dormancy is now fixed (independently unverified).
 > - **Host is healthy.** The reboot landed; `C:\pagefile.sys` is now a fixed **32,768 MB**. Commit
