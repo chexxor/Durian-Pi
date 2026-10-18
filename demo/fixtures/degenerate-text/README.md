@@ -14,6 +14,7 @@ Provenance (entry id, conversation/seat, why it is here):
 | `impl-emit-loop-36368.txt` | 36368 | impl (conv 9) | F29 prose loop: coherent preamble, then `Emit. OK. Go. Now.` ~100x, ending "I sincerely apologize for the loop." |
 | `impl-emit-loop-36408.txt` | 36408 | impl (conv 9) | Same shape, another turn. |
 | `lead-completing-loop-36004.txt` | 36004 | lead (conv 21) | Ends in a wall of ~60 identical `Completing:` sentences. **This is the turn D78 cited as a healthy "lead ruling (123 fragments, 33 unique)"** — it is a genuine loop, so v1's lead reset was a TRUE positive (see docs/DECISIONS.md D81). |
+| `qa-context-degeneration-71502.txt` | 71502 | qa (conv 15) | Context-saturation collapse at 367,559 tokens against an advertised 1,048,576: a coherent self-diagnosis ("My recent turns have degraded into incoherent outputs again") that then breaks into a ~21k-char wall of repeated single tokens (`very`, `the`, `U`, `d`, `0`). The turn the SEAT-LEVEL context trip must catch (#1705 Defect B) — and the one the per-run window never saw, because a `pi.user` wake preceded it. |
 
 ## negative/ — real healthy turns (the registry MUST NOT flag these)
 
