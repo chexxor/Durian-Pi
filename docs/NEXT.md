@@ -11,15 +11,18 @@ _Last refreshed: 2026-10-18T21:12Z (delegate — skills review + D108/D109/D110 
 
 _Last refreshed: 2026-10-18T21:45Z (delegate — **broker-served reads LANDED (D111)**: CLI/UI reads go through the broker's pi-durable instance; full suite 144/144; broker healthy pid 15648, impl working)._
 
+_Last refreshed: 2026-10-18T23:58Z (delegate — residual lock contention fixed: the `read` op is served from the harness's OWN storage, one connection; reads consume their result file; regression demo added. Broker recovered pid 7220, 0 `pass-threw`, suite 144/144)._
+
 ## NEXT SESSION
-**Current item:** the re-opened **TUI migration — #2189** (Phase 1, queued to `impl`) with **#2187** (pin, claimed by `devtools`), but the immediate blocker is now CLOSED: the SQLite-lock class is fixed at the source by **D111 — broker-served reads** (no queue id; the delegate's own high-priority fix). The offending code was `SqliteStorage.document()` (pi-durable) taking `BEGIN IMMEDIATE` for a READ, so any second opener (a `log --follow`/`watch`/`ui.mjs` poll) stole the broker's write lock and poisoned its session. The broker now serves a `read` spool op with its own storage (`src/brokerread.mjs`); the CLI/UI are clients (`src/readclient.mjs`), and only with no broker does a verb open the store.
-**This session delivered:** D111 (`src/brokerread.mjs`, `src/readclient.mjs`, `src/broker.mjs` `op:read`, `cli.mjs`, `ui.mjs`, `src/tui/readstate.mjs`, `demo/broker-read.test.mjs` + 3 demos updated) plus D108/D109/D110 docs; broker recovered, `impl` working.
-**Owed:** a NON-AUTHOR verify of D111 (the delegate wrote it) and landing it on `main` (committed locally); the retry hot-loop defect (`f27a8772`) is still unlanded, so a persistent throw should still be bounded (`docs/runbooks/broker-down-or-stalled.md`).
+**Current item:** **#2189** — the TUI migration Phase 1 (queued to `impl`), with **#2187** (dependency pin, claimed by `devtools`).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
-**Blocker:** the uncommitted devtools `src/broker.mjs` WIP must be reconciled before any landing pass on this area.
+**Blocker:** the uncommitted devtools `src/broker.mjs` WIP must be reconciled before any landing pass here.
+**State:** the SQLite-lock class is fixed at the source by **D111 — broker-served reads** plus two follow-ups: (a) the `read` op is served from `harness.storage` (the SINGLE pi-durable connection), not the second `probeStorage` (whose `BEGIN IMMEDIATE` reads timed out the harness's commits → `SessionFailed` → wedge); (b) `readViaBroker` consumes its result file so `watch`/`ui.mjs` polling no longer grows `<db>.broker.inbox.out` (`demo/broker-read.test.mjs` guards it). Commits `5c946a1`, `8d48cb1`.
+**Remaining (#1587 part 4):** the broker's per-pass internal reads (`readStoppedConvIds`, `driveOnce`'s selection scan + `probeSeatReadability`) still use the separate `probeStorage` connection; unifying them carries the corruption-isolation trade-off (P5/#110) and is NOT done.
+**Owed:** a NON-AUTHOR verify of D111; the retry hot-loop defect (`f27a8772`) is still unlanded, so a persistent throw should still be bounded (`docs/runbooks/broker-down-or-stalled.md`).
 **Do not:** `git add -A`; land a conflicted branch by hand; set `DURIG_SEAT_ROOT` on the `serve` launcher.
 
-## NEXT SESSION (prior — superseded by the block above)
+## (prior clock-out — superseded by the block above)
 **Current item:** the **TUI migration is still the operator priority** (#2189 Phase 1 queued to `impl`, #2187 pin claimed by `devtools`, #2109/#2110 rebrand), but **the broker is WEDGED — no seat is progressing.** `selfdev.sqlite.broker.log` froze at `PASS 60` @`20:33:31Z`, then `WAKE-RETRY … pass-threw` every 60 s to now; `.spike/serve.err` names `wake-failed … pm conv 3 … Session failed after a storage error`. A kill+`resume`+restart was done at `20:47:55Z` (pid `5768`), but the same pass-throw returned, so the restart alone does NOT clear it — the next agent must repair the `pm` conversation (per `docs/runbooks/store-corruption-recovery.md`), not merely restart.
 **Spooled, undrained (broker wedged):** `.spike/delegate/intent-seat-notes.md` (D108) and `.spike/delegate/intent-worktree-git-skills.md` (D109/D110) sit in `selfdev.sqlite.broker.inbox/`; the first healthy pass drains them (`INTENT delivered=2`).
 **This session delivered (delegate lane, no product code):** `docs/reviews/agent-skills-review.md`; `vendor/eval/{anthropic-skills,agentskills-spec,awesome-agent-skills,superpowers}` clones; **D108** (seat notes), **D109** (non-interactive agent git), **D110** (worktree taxonomy/root).
@@ -27,7 +30,7 @@ _Last refreshed: 2026-10-18T21:45Z (delegate — **broker-served reads LANDED (D
 **Then:** follow `docs/runbooks/broker-down-or-stalled.md` (wedged shape) — `taskkill /F /PID <serve pid>` only with no live genlock, `resume`, restart with the local env; if the throw returns, `store-corruption-recovery.md` for `pm` conv 3. Confirm a fresh `PASS` and `INTENT delivered=2`.
 **Do not:** `git add -A`; touch the uncommitted devtools `src/broker.mjs` `configure` WIP; land a conflicted branch by hand; set `DURIG_SEAT_ROOT` on the `serve` launcher.
 
-## NEXT SESSION (prior — superseded by the block above)
+## (prior clock-out — superseded by the block above)
 **Current item:** **local-model reliability** — enforce **D107** (a local seat masks→summarizes its
 tool-call history WITHIN a long item, capped, then re-anchors) alongside **D105**/**#2123** (a fresh
 `pi.reset` BETWEEN items). All routed to `pm`: `37e9a77b…` (D107), `17fef81f…` (reliability findings),
