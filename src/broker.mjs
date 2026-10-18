@@ -980,6 +980,11 @@ export async function runWakeLoop({
     // Seats whose wake failed THIS pass (distinct from the cumulative `failedSeats`,
     // which reports the whole run). Drives the retry schedule below.
     const failedThisPass = new Set();
+    // A whole-pass throw (a store read OUTSIDE the per-seat wake path, e.g.
+    // `documentState`/`inspect`/`readStoppedConvIds`) is real work the pass did not action
+    // and emits no `wake-failed`, so the retry below must key on it too — otherwise a retry
+    // pass that throws goes dormant again (recurrence 8, 2026-10-18).
+    let passThrew = false;
     try {
       await drivePass(harness, probeStorage, {
         context,
@@ -1046,6 +1051,7 @@ export async function runWakeLoop({
       // #1587 part 2: a per-conversation storage error inside the pass must NOT kill the
       // resident broker (the 17:29Z death). Log it WITH its nested cause and keep driving;
       // the loop's idle pacing keeps a persistent failure from becoming a hot spin.
+      passThrew = true;
       onDiagnostic({ kind: "pass-failed", ...describeError(error) });
     } finally {
       scheduler.endPass();
@@ -1063,19 +1069,21 @@ export async function runWakeLoop({
       }
       if (Number.isFinite(soonestDelay)) cooldownRevisitAt = now() + soonestDelay;
     }
-    // A failed wake is real work this pass did NOT action, and — unlike a
+    // A failed wake OR a thrown pass is real work this pass did NOT action, and — unlike a
     // cooldown-suppressed candidate — nothing else will re-arm the loop. Without this
     // scheduled retry the broker rests in `signal.wait` with the seat never driven.
     // `selectWakes` still sees the seat's queued work, so the retry needs no bookkeeping.
-    // The backoff doubles per CONSECUTIVE failing pass and is capped, so a persistent
+    // The backoff doubles per CONSECUTIVE unactioned pass and is capped, so a persistent
     // error stays legible without hot-looping; `wakeRetryMs <= 0` disables the retry,
     // reproducing the pre-fix shape a demo uses to prove the contrast.
-    consecutiveWakeFailures = failedThisPass.size > 0 ? consecutiveWakeFailures + 1 : 0;
-    if (failedThisPass.size > 0 && wakeRetryMs > 0) {
+    const unactionedFailure = failedThisPass.size > 0 || passThrew;
+    consecutiveWakeFailures = unactionedFailure ? consecutiveWakeFailures + 1 : 0;
+    if (unactionedFailure && wakeRetryMs > 0) {
       const backoff = Math.min(wakeRetryMs * 2 ** (consecutiveWakeFailures - 1), wakeRetryMaxMs);
       const retryAt = now() + backoff;
       cooldownRevisitAt = cooldownRevisitAt === null ? retryAt : Math.min(cooldownRevisitAt, retryAt);
-      logBrokerLine(dbPath, `WAKE-RETRY in=${backoff}ms seats=${[...failedThisPass].join(",")}`);
+      const names = failedThisPass.size > 0 ? [...failedThisPass].join(",") : "-";
+      logBrokerLine(dbPath, `WAKE-RETRY in=${backoff}ms seats=${names}${passThrew ? " pass-threw" : ""}`);
     }
     // F35: cooperative stop — a `serve --stop` command writes a .stop file
     // instead of process.kill (which does not deliver SIGTERM on Windows). The

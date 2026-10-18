@@ -54,12 +54,30 @@ async function makeHarness() {
 // a nested cause like the production SessionFailed) and delegates everything else to the
 // real storage. `stats.liveScans` counts the pi.live probes so the demo can prove the
 // retry actually re-probed the seat.
-function flakyProbe(storage) {
+//
+// `failSecondScanSubmissions` models recurrence 8: the retry pass hits the SAME storage
+// error in a STORE READ (`readStoppedConvIds` -> `scanSubmissions`) BEFORE any seat wake,
+// so the pass throws with no `wake-failed` and `failedThisPass` stays empty. Without the
+// pass-throw re-arm the retry is never rescheduled and the broker goes dormant again.
+function flakyProbe(storage, { failSecondScanSubmissions = false } = {}) {
 	let failedOnce = false;
-	const stats = { liveScans: 0 };
+	let scanSubmissionsCalls = 0;
+	const stats = { liveScans: 0, scanSubmissionsCalls: 0 };
 	return {
 		stats,
-		scanSubmissions: (...a) => storage.scanSubmissions(...a),
+		scanSubmissions: (...a) => {
+			scanSubmissionsCalls += 1;
+			stats.scanSubmissionsCalls = scanSubmissionsCalls;
+			if (failSecondScanSubmissions && scanSubmissionsCalls === 2) {
+				const inner = new Error("database is locked");
+				inner.name = "SqliteError";
+				const outer = new Error("session failed while reading a document");
+				outer.name = "SessionFailed";
+				outer.cause = inner;
+				throw outer;
+			}
+			return storage.scanSubmissions(...a);
+		},
 		document: (...a) => storage.document(...a),
 		scanDocuments: (...a) => {
 			const q = a[0];
@@ -80,7 +98,7 @@ function flakyProbe(storage) {
 	};
 }
 
-async function runScenario({ wakeRetryMs, maxDurationMs, superviseThrows = false }) {
+async function runScenario({ wakeRetryMs, maxDurationMs, superviseThrows = false, failSecondScanSubmissions = false }) {
 	const { harness, storage } = await makeHarness();
 	const logPath = join(dir, `scenario-retry-${wakeRetryMs}.db`);
 	const logFile = `${logPath}.broker.log`;
@@ -94,7 +112,7 @@ async function runScenario({ wakeRetryMs, maxDurationMs, superviseThrows = false
 			convId = c.id;
 		}, ctx);
 
-		const probe = flakyProbe(storage);
+		const probe = flakyProbe(storage, { failSecondScanSubmissions });
 		const diagnostics = [];
 		const result = await runWakeLoop({
 			harness,
@@ -167,6 +185,19 @@ const scenarios = [
 		minPasses: 2,
 		maxPasses: Infinity,
 	},
+	// Recurrence 8: the retry pass throws in a STORE READ before any seat wake, so no
+	// `wake-failed` is emitted in that pass. The retry must still re-arm (a thrown pass is
+	// real work it did not action), or the broker parks again.
+	{
+		label: "retry enabled + the retry pass throws in a store read (no wake-failed)",
+		wakeRetryMs: 30,
+		maxDurationMs: 1500,
+		failSecondScanSubmissions: true,
+		expectWake: true,
+		expectRetryLogged: true,
+		minPasses: 2,
+		maxPasses: Infinity,
+	},
 ];
 
 try {
@@ -175,6 +206,7 @@ try {
 			wakeRetryMs: s.wakeRetryMs,
 			maxDurationMs: s.maxDurationMs,
 			superviseThrows: s.superviseThrows === true,
+			failSecondScanSubmissions: s.failSecondScanSubmissions === true,
 		});
 		check(
 			`[${s.label}] the failed wake is reported`,
