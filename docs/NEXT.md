@@ -3,9 +3,51 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T04:40Z (delegate — branch-sprawl cleanup: 51 merged pruned, 5 verified landed, 41 dirty worktrees archived out-of-tree; prevention routed to pm; broker dormant-stall recurrence #3 recovered)._
+_Last refreshed: 2026-10-18T05:12Z (delegate — operator window executed: model swap applied + impl-item-1841/1891/1907 landed; branch backlog continues; broker restarted)._
 
-## NEXT SESSION — fresh agent starts here (delegate, 2026-10-18T04:35Z)
+> **Side spike (operator-requested, 2026-10-18) — pi TUI on pi-durable via an adapter. NOT a queue
+> item; no product code changed.** `.spike/durable-tui/` (gitignored) proves the real
+> `InteractiveMode` boots headlessly against a pi-durable conversation: the durable transcript renders,
+> a durable generation streams live, and `session.prompt` becomes a durable submission. 16/16 tests
+> pass (`cd .spike/durable-tui && npm test`); run with `node run.mjs`; interface inventory, mapping
+> tables, findings and next steps are in its `README.md` (+ `evidence.md`). Key finding: durable
+> `EntryRecord`s carry no timestamp, so the adapter synthesizes one. This does **not** change the
+> operational priority below.
+
+## NEXT SESSION — fresh agent starts here (delegate, 2026-10-18T05:12Z)
+
+**Current item:** the operator-directed combined window is DONE (model swap) and the landing pass is
+IN PROGRESS. This session: applied the model swap (qa → `mistralai/Mistral-Small-3.2-24B-Instruct-2506`,
+added `qa2` → `google/gemma-4-31B-it`; `up --refresh`, qa context reset `86605`), and landed 3 verified
+branches via scratch merges with the full suite as the gate: **impl-item-1841** (pause/unpause;
+`SPOOL_OPS` now includes pause/unpause/compact), **impl-item-1891** then **impl-item-1907**
+(ROADMAP 76 verify-scratch reclaim + teardown). `main` `0afb559 → ce0b338`; suites 139/0, 140/0, 141/0.
+Landed branches pruned. Refs now **47**.
+
+**Queue id:** `#2000` (next landing-list: the guard stack tip `impl-item-1444-fix`); `#2017`
+(ROADMAP 76 stack) landed this session.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Known blocker:** 30 unlanded remain, 19 CONFLICT. CLEAN-after-rebase (verify pending, do NOT land yet):
+`impl-item-1705` (verify #2024), `impl-item-1558`, `impl-item-1274`, `auditor-item-1924`,
+`scribe-item-2021` (verify #2027). The CONFLICT set needs per-tip code merges (`src/broker.mjs`,
+`cli.mjs`, `src/degradation.mjs`, `src/checkup.mjs`) — route to authoring seats or continue the
+delegate scratch-merge method (vendored deps: junction `node_modules`/`vendor` into an OUT-OF-REPO
+worktree, else 27 demos fail).
+
+**Do not:** land a snapshot (`item-148`, `selfdev-borrow`); force a dirty worktree; `-D` an `ahead>0`
+ref; leave `cli.mjs log … --follow`/`watch` viewers attached.
+
+**State:** broker UP (restarted this window; passes advancing). `main` `ce0b338`, **23 ahead of
+`origin/main` (`95e7c0c`)** — unpushed (operator holds push). Tracked tree clean (except a concurrent
+session's `NEXT.md` side-spike block — see CAUTION).
+
+> **CAUTION — a SECOND delegate session was active concurrently** (created `.spike/durable-tui/` at
+> 05:03Z, wrote the block above, and ran `cli.mjs log … --follow` viewers + a `serve --max-duration` test
+> broker). Reconcile before trusting `NEXT.md` or the store.
+
+## (prior) NEXT SESSION — delegate clock-out, 2026-10-18T04:35Z
 
 **Current item:** finish the branch backlog. This session pruned **51 merged branches** (clean ones), landed **5
 verified clean branches** (`devtools-item-1904` compact-spool + `scribe-item-1968/1969/1970/1971`
