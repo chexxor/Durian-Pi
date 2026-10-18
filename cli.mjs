@@ -483,7 +483,29 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
   // `--dry-run` writes nothing and previews only, so it keeps working (the
   // `reset` precedent) — but note it still OPENS a harness, which is the
   // lock-contention half of #1587, not this item's concern.
-  if (!dryRun) refuseWhileBrokerDrives("up");
+  // #1589 + lead #1700 (B): the guard is CONDITIONAL on the WRITE path. `up --serve` doubles
+  // as "ensure the broker is up": when a broker already drives the store the reuse is a
+  // READ-ONLY check — report {started:false, reason:"already running"} and exit WITHOUT
+  // opening a harness (a second harness is the named hazard, not the reuse itself). `--refresh`
+  // and a plain `up` (which creates seats) still refuse while a broker drives.
+  const reuseBroker = serve && !refresh && !dryRun;
+  if (!dryRun && !reuseBroker) refuseWhileBrokerDrives("up");
+  if (reuseBroker) {
+    const driving = readBrokerState(DB_PATH);
+    if (brokerAlive(driving)) {
+      out({
+        ok: true,
+        command: "up",
+        db: DB_PATH,
+        created: [],
+        existing: [],
+        refreshed: [],
+        extensions: [],
+        broker: { started: false, reason: "already running", pid: driving.pid },
+      });
+      return;
+    }
+  }
   const spec = JSON.parse(await readFile(rigFile, "utf8"));
   // A spec carries its constitution either inline (what the OpenRig converter
   // emits, since the text it read has no file on disk beside the spec) or as a
