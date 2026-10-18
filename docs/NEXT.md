@@ -11,9 +11,9 @@ _Last refreshed: 2026-10-18 (delegate — compaction analysis delivered; compact
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
-**Known blocker:** qa **#1903** is still `queued` (not verified); the landing needs the operator-declared broker-stop window. Watch the 37(b) stranded `admitted_not_started` and the main-red **#1610** gate.
+**Known blocker:** qa **#1903** still `queued` (not verified; qa showing a degenerate turn shape) and **`qa2` on Gemma 4 is blocked on a fallback-catalog entry** (intent filed); the landing needs the operator-declared broker-stop window. Watch the 37(b) stranded `admitted_not_started` and the main-red **#1610** gate.
 
-**Live now:** (1) auditor routing DONE — pm moved 5 verifications to `auditor` (#1923–#1927); (2) **`qa2` prepared** at `.spike/delegate/rig.selfdev.qa2.json`, now on **`google/gemma-4-31B-it`** (third family, distinct from DeepSeek authors and GLM), for the NEXT window combined with the landing; (3) ROADMAP 71 residue (queue edits as ops, `up`/`resume` via spool) filed to pm.
+**Live now:** (1) auditor routing DONE — pm moved 5 verifications to `auditor` (#1923–#1927); (2) **`qa2` prepared** at `.spike/delegate/rig.selfdev.qa2.json` on **`google/gemma-4-31B-it`** — but it is NOT in `fallbackModels()` and the live catalog fetch is not wired, so a catalog entry is required (intent filed); vendor best-practice gap: Gemma thinking needs `<|think|>` in the system prompt (durig maps `thinkingLevel` to `reasoning_effort`) and durig has no per-seat sampling config; (3) ROADMAP 71 residue (queue edits as ops, `up`/`resume` via spool) filed to pm.
 
 **Delegate actions this session (operator-directed):**
 - Delivered the requested written analysis: pi-durable is BUILT for live compaction (post's
