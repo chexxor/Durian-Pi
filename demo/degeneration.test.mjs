@@ -212,6 +212,40 @@ check("the context trip is FLOOR and FRACTION and CEILING (#1823)", () => {
   assert.equal(withCtx(700_000, 10_000_000).contextTrip, 600_000, "the trip is capped by the ceiling");
 });
 
+check("qa's REAL conv-15 turns trip the context guard, and the fraction is calibrated on them (#1705)", () => {
+  // Real bytes and real usage from selfdev.sqlite conversation 15 (seat `qa`, model
+  // `zai-org/GLM-5.3-Flash`, advertised window 1,048,576 — vendor/pi-main/packages/ai/dist/providers/
+  // data/baseten.json). Every one of these turns arrived after a per-turn `pi.user` wake, which is
+  // exactly why the old per-run window never saw them (the defect). The token figures are the
+  // entries' own `usage.totalTokens`; the collapse (71502) is also stored verbatim as the prose
+  // fixture demo/fixtures/degenerate-text/positive/qa-context-degeneration-71502.txt.
+  const realQaTurns = [
+    [70742, 351_353], // "...Taskkill was listed only for the审理." — first visibly degenerate turn
+    [70973, 351_597], // "the ask carries the next: the ask carries the next..."
+    [71053, 352_581], // "seek the ask, seek at the queue, carry; routed."
+    [71502, 367_559], // self-diagnosis, then a ~21k-char repetition wall
+  ];
+  for (const [entry, tokens] of realQaTurns) {
+    // The wake is first: the run window resets there, but the seat's context does not.
+    const a = assessRun([assistant([["read", { path: "a" }]], { usage: { totalTokens: tokens } }), user()], {
+      contextWindowTokens: 1_048_576,
+    });
+    assert.equal(a.degenerate, true, `qa's entry ${entry} (${tokens} tokens) must trip; reasons=${a.reasons.join(",")}`);
+    assert.ok(a.reasons.some((r) => r.startsWith("context-tokens=")), a.reasons.join(","));
+    // The calibration itself: the trip must be BELOW the first degenerate turn, or the guard is
+    // blind for the whole 351k-367k band in which qa was already producing incoherent output.
+    assert.ok(
+      a.contextTrip < 351_353,
+      `the trip (${a.contextTrip}) must sit below qa's first degenerate turn (351,353)`,
+    );
+  }
+  // ...and calibrating for the real turns must not cost the healthy case its safety.
+  const healthy = assessRun([assistant([["read", { path: "a" }]], { usage: { totalTokens: 300_000 } }), user()], {
+    contextWindowTokens: 1_048_576,
+  });
+  assert.equal(healthy.degenerate, false, "a healthy 300k session still does not trip");
+});
+
 check("no resolved window => the context cause is SKIPPED with a why, never guessed (#1823)", () => {
   const a = assessRun([assistant([["read", { path: "a" }]], { usage: { totalTokens: 999_999 } }), user()]);
   assert.equal(a.degenerate, false, "no window: no context trip");

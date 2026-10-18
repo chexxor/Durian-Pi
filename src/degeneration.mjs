@@ -48,7 +48,14 @@ export const DEGEN_DEFAULTS = {
 	// ADVERTISED window must not push the trip ABOVE the real degradation point (qa degraded at
 	// 367,559 tokens against an advertised 1,048,576 — "advertised != usable").
 	minContextTokens: 200_000, // FLOOR: below this, context alone never trips
-	contextFraction: 0.35, // FRACTION of the resolved window — TUNABLE; calibrate on the fixtures BEFORE enabling
+	// FRACTION of the resolved window — CALIBRATED on qa's real conv-15 turns (#1705 Defect B), not anchored.
+	// The four cited turns, all against an advertised 1,048,576: 70742 = 351,353 tokens (the first
+	// visibly degenerate one), 70973 = 351,597, 71053 = 352,581, 71502 = 367,559 (the collapse). So the
+	// trip must sit at or below 351,353 / 1,048,576 = 0.335 to catch the FIRST degenerate turn; 0.35
+	// (367,002) missed the first three. 0.33 (346,030) catches all four and still clears the healthy
+	// 300,000 anchor (0.286). The lower end of that bracket rests on a synthetic healthy figure, so the
+	// wiring half must not ENABLE the trip until a real healthy-session measurement replaces it.
+	contextFraction: 0.33,
 	contextCeilingTokens: 600_000, // CEILING: the trip never exceeds this
 	// The RESOLVED window (measured > declared > advertised), supplied by the caller (the cli.mjs
 	// model-resolution half). null => the context cause is SKIPPED with a `why`, never guessed.
