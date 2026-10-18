@@ -1291,6 +1291,11 @@ surface. A feature that is off must therefore cost nothing — not "little".
     `frequency_penalty`/`presence_penalty` while clamping `top_p` up to 0.95; `repetition_penalty`
     is not in DeepInfra's documented set. (Recorded here so the next session does not re-propose
     it — see the 2026-10-11 review of that patch.)
+    *Recorded gap (2026-10-18, #1936):* durig has NO per-seat sampling surface — `configure(...)` sets
+    only model/instructions/cwd/thinkingLevel, and the provider carries no `temperature`/`top_p`/`top_k`.
+    DeepInfra's `google/gemma-4-31B-it` page recommends temperature=1.0, top_p=0.95, top_k=64, and there
+    is nowhere to put them. This is a GAP, not a change: adding a sampling surface is a separate
+    decision (a new per-seat config knob), deliberately NOT bundled with the catalog entry in #1936.
     *Candidate levers, best first:*
     (a) **Expose reasoning effort.** DeepInfra's V4.1-Flash doc lists `reasoning_effort` as an
     integer 1–100, but durig exposes no reasoning-effort control at all, so the model always runs
