@@ -100,7 +100,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 
 | Runbook | Use when | Writes? |
 |---|---|---|
-| [broker-down-or-stalled.md](broker-down-or-stalled.md) | seats idle with queued work; no `serve` process; log stops | yes |
+| [broker-down-or-stalled.md](broker-down-or-stalled.md) | seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale `PASS` (dormant); log stops after a storage error or `database is locked` | yes |
 | [broker-safe-change.md](broker-safe-change.md) | a model/constitution/reset change must apply without corrupting the store | yes |
 | [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error`, or the broker repeats `wake-failed … unresolvable path` and one seat is never woken | yes |
 | [store-secret-detected.md](store-secret-detected.md) | a `secret_detected` notice: secret-shaped content is in the committed store | no |

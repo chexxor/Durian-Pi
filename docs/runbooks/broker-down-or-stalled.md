@@ -24,6 +24,11 @@ tail -8 .spike/serve.err 2>/dev/null
 - `START` with **no** `EXIT` = the broker died abnormally.
 - A live `genlock` slot means a generation is in flight — do not kill the broker.
 - `serve.err` ending in `Session failed after a storage error` → go to `store-corruption-recovery.md`.
+- `serve.err` with **`Error: database is locked`** (SQLite busy/lock contention) is a SECOND dormant
+  signature (2026-10-18T02:37Z recurrence): the broker stays up, fresh heartbeat, but stops passing.
+  Concurrent store openers are the suspect class — a test/`serve --max-duration` broker from an item
+  worktree must not open the shared selfdev store. Same recovery as case (b): terminate (no genlock),
+  `resume`, restart.
 - **Alive but dormant** (case b): `START` present, `broker.json` heartbeat fresh, last `PASS` minutes
   old, no `genlock.*`. The broker rests in `signal.wait` with `scheduler.shouldRun()` false. A restart
   forces a startup pass (which also drains `.broker.inbox`) and re-wakes queued seats.
@@ -67,3 +72,10 @@ dormant-revisit gap is still owed; the diagnostic is the fresh heartbeat + stale
 this runbook: terminate the wedged pid (no genlock) -> `resume` (1 pm run) -> restart -> `START
 pid=15720`, `INTENT delivered=2`, passes resume. Note: a **fresh heartbeat is not a health signal** —
 read the last `PASS` line, not `broker.json`.
+2026-10-18T02:37Z (recurrence, `docs/incidents/2026-10-18-broker-dormant-stalled.md`): the SAME dormant
+shape, pid 28168, log froze at `PASS 176` while fresh-heartbeat and no genlock. `.spike/serve.err` showed
+a NEW signature — `Error: database is locked` (devtools/auditor) plus `Session failed after a storage
+error` (pm/qa) — proving #1698's pass-survival is INSUFFICIENT (the broker still stopped driving; the
+runbook also covers the surviving-pass proof `demo/broker-pass-survival.test.mjs`). Two spooled intents
+sat undrained. Recovery per this runbook: `taskkill /F /PID 28168` (no genlock) -> `resume` (3
+run-cancelled) -> restart (`START pid=37496`).
