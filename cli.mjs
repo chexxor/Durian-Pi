@@ -33,7 +33,8 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { closeSync, existsSync, openSync, unlinkSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { closeSync, existsSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 // Single source of truth for DeepInfra provider options, vendored into this tree
 // so durig is self-contained and publishable on its own
@@ -62,8 +63,7 @@ import {
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
-import { brokerAlive, auditWorktrees, clearBrokerState, clearStopRequest, drivePass, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent, awaitIntentResult } from "./src/broker.mjs";
-import { randomUUID } from "node:crypto";
+import { applyPauseOp, auditWorktrees, brokerAlive, clearBrokerState, clearStopRequest, drivePass, intentResultDir, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -1497,6 +1497,65 @@ async function ensureBroker() {
 // Node does not deliver SIGTERM, so the fallback is to write a .stop request file that
 // the broker polls between passes (F35). If the broker is still alive after 5s,
 // process.kill is the last resort.
+/**
+ * `pause` / `unpause` (ROADMAP 131): drain the rig to quiescence before a broker upgrade.
+ *
+ * Producer discipline (AC4): with a resident broker, this NEVER opens the store — it spools
+ * one request (`<db>.broker.inbox/`) that the broker applies with its OWN writer, so it is
+ * not a second writer (the reason ROADMAP 71 exists). With NO resident broker, this process
+ * is the sole writer, so it applies the flag directly with its own harness. `--wait` returns
+ * only once every seat has settled (AC5).
+ */
+async function cmdPause(paused, { wait = false, reason = undefined } = {}) {
+  const broker = readBrokerState(DB_PATH);
+  if (brokerAlive(broker)) {
+    const requestId = randomUUID();
+    writeIntent(DB_PATH, {
+      op: paused ? "pause" : "unpause",
+      to: null,
+      from: "operator",
+      wait,
+      ...(reason !== undefined ? { reason } : {}),
+      requestId,
+      createdAt: new Date().toISOString(),
+    });
+    const result = wait ? await awaitIntentResult(DB_PATH, requestId) : null;
+    out({
+      ok: true,
+      command: paused ? "pause" : "unpause",
+      db: DB_PATH,
+      appliedBy: "broker",
+      requestId,
+      paused,
+      ...(result ? { quiesced: result.result?.quiesced === true, waitedMs: result.result?.waitedMs ?? null } : {}),
+    });
+    return;
+  }
+  // No resident broker: this process is the only writer, so apply it directly.
+  const { harness } = await openHarness({ enforceSeatRoot: true });
+  try {
+    const result = await applyPauseOp(harness, { paused, by: "operator", reason, wait }, BACKGROUND_CONTEXT);
+    out({ ok: true, command: paused ? "pause" : "unpause", db: DB_PATH, appliedBy: "cli", paused: result.paused, ...(result.quiesced ? { quiesced: true, waitedMs: result.waitedMs } : {}) });
+  } finally {
+    await harness.close(BACKGROUND_CONTEXT);
+  }
+}
+
+/** Poll the broker's intent result file until it appears (the applied/refused outcome). */
+async function awaitIntentResult(dbPath, requestId, { timeoutMs = 15 * 60_000, pollMs = 100 } = {}) {
+  const path = join(intentResultDir(dbPath), `${requestId}.json`);
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      return JSON.parse(readFileSync(path, "utf8"));
+    } catch {
+      // Not yet written (or mid-write); keep polling until the deadline.
+    }
+    if (Date.now() >= deadline) fail(`${requestId}: timed out waiting for the broker to apply the request`);
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+}
+
 async function cmdStopBroker() {
   const state = readBrokerState(DB_PATH);
   if (!state) {
@@ -2757,6 +2816,12 @@ try {
     const human = rest.includes("--human") || (Boolean(process.stdout.isTTY) && !rest.includes("--json"));
     await cmdWatch(rest.includes("--once"), human);
   } else if (cmd === "status") await cmdStatus();
+  else if (cmd === "pause" || cmd === "unpause") {
+    // ROADMAP 131. `pause [--wait] [reason]`; `unpause` takes no reason.
+    const paused = cmd === "pause";
+    const reason = rest.filter((a) => !a.startsWith("--")).join(" ") || undefined;
+    await cmdPause(paused, { wait: rest.includes("--wait"), reason: paused ? reason : undefined });
+  }
   else if (cmd === "metrics") {
     // Same precedence as watch/check: an explicit flag wins, otherwise a
     // terminal gets the readable table and a pipe keeps the JSON contract (D19).

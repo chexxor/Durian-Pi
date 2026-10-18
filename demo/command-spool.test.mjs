@@ -64,10 +64,12 @@ const submissions = async () => (await harness.inspect(ctx)).submissions ?? [];
 
 try {
   // 0. The vocabulary is a closed list, and an absent `op` means "message" (back-compat
-  //    for producers written before the spool).
-  assert.deepEqual(SPOOL_OPS, ["message", "stop", "reset", "compact"], "the spool's op vocabulary");
+  //    for producers written before the spool). `pause`/`unpause` (ROADMAP 131, #1841) and
+  //    `compact` (ROADMAP 71, #1904) were added later.
+  assert.deepEqual(SPOOL_OPS, ["message", "stop", "reset", "compact", "pause", "unpause"], "the spool's op vocabulary");
   assert.equal(requestOp({ to: "worker", content: "hi" }), "message", "an intent with no op is a message");
   assert.equal(requestOp({ op: "stop", to: "worker" }), "stop");
+  assert.equal(requestOp({ op: "pause" }), "pause");
 
   // 1. A MESSAGE request end-to-end through the broker loop: the seat receives it and
   //    the result channel records the outcome under the requestId.

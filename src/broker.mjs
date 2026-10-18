@@ -18,7 +18,7 @@ import { join, basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { CompactionEntry } from "@earendil-works/pi-durable";
 
-import { RigQueue, Seats } from "./rig.mjs";
+import { RigControl, RigQueue, Seats } from "./rig.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
 import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
@@ -200,11 +200,43 @@ export function requestOp(request) {
 }
 
 /**
+ * Apply a rig-level `pause`/`unpause` (ROADMAP 131) with the caller's harness — the
+ * SINGLE writer. `pause` gates TAKING new work; it never touches an in-flight run
+ * (AC2: pause never kills). With `wait`, hold until every seat has settled, so
+ * `pause --wait` returns only at TRUE quiescence (AC5). Exported so the CLI's
+ * no-resident-broker path (where it is the sole writer) uses the SAME code.
+ */
+export async function applyPauseOp(harness, { paused, by = "operator", reason = null, wait = false } = {}, context) {
+  await harness.commit(async (tx) => {
+    const doc = await tx.doc(RigControl);
+    doc.paused = paused === true;
+    doc.pausedAt = paused === true ? new Date().toISOString() : null;
+    doc.pausedBy = paused === true ? String(by ?? "operator") : null;
+    doc.reason = paused === true && reason != null ? String(reason) : null;
+  }, context);
+  if (paused !== true || !wait) return { paused: paused === true };
+  const startedAt = Date.now();
+  for (;;) {
+    const live = await harness.inspect(context);
+    const tasks = (live.tasks ?? []).filter((t) => t.record?.state?.status === "running");
+    const subs = (live.submissions ?? []).filter((s) => s.status === "queued" || s.status === "placed");
+    if (tasks.length === 0 && subs.length === 0) {
+      return { paused: true, quiesced: true, waitedMs: Date.now() - startedAt };
+    }
+    await new Promise((r) => setTimeout(r, QUIESCE_POLL_MS));
+  }
+}
+
+/**
  * The operations the command spool accepts (ROADMAP 71). "Do not add a fourth kind":
  * a new mutating verb EXTENDS this list — the broker applies it in-process with its own
- * harness — rather than opening a second writer.
+ * harness — rather than opening a second writer. `pause`/`unpause` (ROADMAP 131) are
+ * rig-level: they carry no seat target.
  */
-export const SPOOL_OPS = ["message", "stop", "reset", "compact"];
+export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause"];
+
+/** How often `pause --wait` re-checks for quiescence while the broker drains (ROADMAP 131 AC5). */
+const QUIESCE_POLL_MS = 100;
 
 /**
  * Apply one typed request with the broker's OWN harness — the single writer. Throws on
@@ -291,6 +323,13 @@ async function applyRequest(harness, request, { seats, context, dbPath }) {
       throw new Error(`compact: no pi.compaction entry was written for seat ${seatName} (task ${taskId})`);
     }
     return { op, seat: seatName, taskId, instructions: instructions ?? null, summaryEntryId: summary.id };
+  }
+  if (op === "pause" || op === "unpause") {
+    return await applyPauseOp(
+      harness,
+      { paused: op === "pause", by: request.from, reason: request.reason, wait: request.wait },
+      context,
+    );
   }
   throw new Error(`unknown op: ${op} (known: ${SPOOL_OPS.join(", ")})`);
 }
@@ -643,6 +682,10 @@ export async function drivePass(
   }
   const seatsDoc = await harness.documentState(Seats, undefined, context);
   const queueDoc = await harness.documentState(RigQueue, undefined, context);
+  // ROADMAP 131: the rig-level paused flag. While set, the driver does not wake a seat
+  // to CLAIM new work (in-flight runs settle untouched).
+  const controlDoc = await harness.documentState(RigControl, undefined, context);
+  const paused = controlDoc?.value?.paused === true;
   const inspection = await harness.inspect(context);
   // Orphans first: a `placed` submission with no live task would otherwise read as
   // in-flight and hold its seat out of every wake. Settle them before building the
@@ -688,9 +731,12 @@ export async function drivePass(
     context,
     storage: probeStorage,
     seatFilter,
+    paused,
     onError,
     onWoke: wrapOnWoke,
     onSuppressed,
+    // AC3: a wake refused because the rig is paused is LEGIBLE, never silent.
+    onPaused: (name) => onDiagnostic?.({ kind: "wake-refused-paused", seat: name, reason: "rig paused" }),
   });
   // F34: carry the last-woken seat name onto the generation so wrapProviderWithSlots
   // can name it in the genlock lease (otherwise seat:null because the broker process

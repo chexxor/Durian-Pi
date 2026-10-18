@@ -32,7 +32,7 @@ export const WAKE_CONTENT =
  *     never re-woken (no double-wake; an operator-stopped item is never resurrected).
  * Pure, so the demo can assert the rule without a harness.
  *
- * @param {{seats?: Record<string,{conversationId:number|string}>, items?: Array<{to:string,status:string}>, pendingConvIds?: Set<number|string>, busySeats?: Set<string>, stoppedConvIds?: Set<number|string>}} input
+ * @param {{seats?: Record<string,{conversationId:number|string}>, items?: Array<{to:string,status:string}>, pendingConvIds?: Set<number|string>, busySeats?: Set<string>, stoppedConvIds?: Set<number|string>, paused?: boolean}} input
  * @returns {Array<{name:string, conversationId:number|string}>}
  */
 export function selectWakes({
@@ -41,11 +41,15 @@ export function selectWakes({
   pendingConvIds = new Set(),
   busySeats = new Set(),
   stoppedConvIds = new Set(),
+  paused = false,
 }) {
   const wakes = [];
   for (const [name, seat] of Object.entries(seats ?? {})) {
     const convId = seat.conversationId;
-    const hasQueued = (items ?? []).some((it) => it.to === name && it.status === "queued");
+    // ROADMAP 131: while PAUSED, do NOT wake a seat to CLAIM new work. In-flight work
+    // still settles, so the stalled-claim branch below stays open: pause gates TAKING
+    // new work, never FINISHING current work.
+    const hasQueued = !paused && (items ?? []).some((it) => it.to === name && it.status === "queued");
     // A stalled claim: the item is claimed but nothing is advancing it (no
     // submission in flight, no live lease) and the operator did not stop the seat's
     // run (its latest submission did not settle `aborted:<reason>`).
@@ -136,9 +140,19 @@ export async function probeSeatReadability(storage, candidates, context) {
  */
 export async function driveOnce(
   harness,
-  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, onSuppressed, seatFilter },
+  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, onSuppressed, onPaused, seatFilter, paused = false },
 ) {
-  const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds });
+  const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds, paused });
+  // Legible refusal (ROADMAP 131 AC3): while paused, a seat that WOULD have been woken
+  // for NEW queued work is reported, never silently skipped.
+  if (paused && typeof onPaused === "function") {
+    const woken = new Set(candidates.map((w) => w.name));
+    for (const [name, seat] of Object.entries(seats ?? {})) {
+      if (woken.has(name)) continue;
+      if (pendingConvIds.has(seat.conversationId) || busySeats.has(name)) continue;
+      if ((items ?? []).some((it) => it.to === name && it.status === "queued")) onPaused(name);
+    }
+  }
   const eligible =
     seatFilter === undefined
       ? candidates

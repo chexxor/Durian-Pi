@@ -11,7 +11,7 @@
 // store without becoming a driver.
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { RigQueue, Seats } from "./rig.mjs";
+import { RigControl, RigQueue, Seats } from "./rig.mjs";
 import { SCAN_LIMIT, readSeatPages } from "./rigstory.mjs";
 import { computeMetrics } from "./metrics.mjs";
 import { computeAttention, countMalformedToolCalls } from "./attention.mjs";
@@ -75,6 +75,33 @@ export async function readQueueItems(storage, context = BACKGROUND_CONTEXT) {
 	return value.items ?? [];
 }
 
+/**
+ * The rig-level control document (ROADMAP 131): `paused` and its provenance. Absent
+ * store reads as NOT paused, so a first-run/legacy store is unpaused rather than
+ * exceptional. Read-only: `status` renders it, it never writes it.
+ */
+export async function readRigControl(storage, context = BACKGROUND_CONTEXT) {
+	try {
+		const rec = await storage.findDocument(
+			{ kind: RigControl.definition.kind, scope: { kind: "session" } },
+			"current",
+			context,
+		);
+		if (!rec) return { paused: false, pausedAt: null, pausedBy: null, reason: null };
+		const value = (await storage.document(rec.id, "current", context))?.value ?? {};
+		return {
+			paused: value.paused === true,
+			pausedAt: value.pausedAt ?? null,
+			pausedBy: value.pausedBy ?? null,
+			reason: value.reason ?? null,
+		};
+	} catch {
+		// A viewer must survive a corrupt control document: read it as unpaused rather
+		// than killing `status`/`watch` (the same discipline as an unreadable pi.live).
+		return { paused: false, pausedAt: null, pausedBy: null, reason: null, unreadable: true };
+	}
+}
+
 /** The `pi.live` document for one conversation: run control, the in-flight
  * generation partial, and the current tool round. Absent when the conversation
  * never ran or storage has not materialized it, so {} reads as idle. This is the
@@ -128,6 +155,8 @@ export async function readRigHealth(
 ) {
 	const seats = await readSeatList(storage);
 	const queueItems = await readQueueItems(storage);
+	// ROADMAP 131: the rig-level paused state (read-only).
+	const control = await readRigControl(storage);
 
 	const latestByConv = new Map();
 	const failureStreakByConv = new Map();
@@ -250,6 +279,10 @@ export async function readRigHealth(
 	return {
 		seats,
 		queueItems,
+		// ROADMAP 131: the rig-level paused state, so `status`/`watch` report it and the
+		// operator KNOWS whether new work is being taken.
+		control,
+		paused: control.paused,
 		// The peer navigation graph over the same queue items, so a client can ask
 		// "who talks to whom" without re-deriving it from from/to (ROADMAP item 7,
 		// D21). Additive to the JSON contract: existing readers ignore it.

@@ -41,6 +41,21 @@ export const Constitution = defineDoc({
 });
 
 /**
+ * Rig-level control flags (ROADMAP 131, `pause`/`unpause`). ONE persisted flag: while
+ * `paused` is true the driver does NOT wake a seat to CLAIM new work and `claim_work`
+ * refuses a NEW claim — but in-flight work SETTLES (a claimed item still finishes; a
+ * stalled claim is still re-woken). Session singleton, like the roster: it is the
+ * broker's state, changed only by the broker's own writer (the command spool), so
+ * `pause` never becomes a second store writer.
+ */
+export const RigControl = defineDoc({
+	kind: "durig.control",
+	version: 1,
+	scope: "session",
+	initial: () => ({ paused: false, pausedAt: null, pausedBy: null, reason: null }),
+});
+
+/**
  * Gate for send_work: organizational edges (who may send to whom) and
  * capability requirements (A2A-style advertised tags). Throws with a
  * model-readable reason so the sending seat can self-correct.
@@ -418,6 +433,14 @@ const Router = defineExtension({
 				const { name: me, hasReadTool } = await mySeatReadability(api, context);
 				const found = await api.commit(async (tx) => {
 					const queue = await tx.doc(RigQueue);
+					// ROADMAP 131: while the rig is PAUSED, a seat is not allowed to CLAIM new
+					// work. It may still FINISH work it already holds, so the stalled-claim
+					// reveal below stays open. The refusal is legible (PAUSED), never silent.
+					const control = await tx.doc(RigControl);
+					const paused = control?.paused === true;
+					if (paused && args.itemId !== undefined) {
+						return { kind: "paused", by: control?.pausedBy ?? null, reason: control?.reason ?? null };
+					}
 					// Claim by id (lead #214 / #239): a seat names a specific item, so
 					// operator-priority work can be picked up even when older queued work
 					// sits ahead of it. The status whitelist is IDENTICAL to the oldest
@@ -445,8 +468,8 @@ const Router = defineExtension({
 							body: named.body,
 						};
 					}
-					// Normal claim: the oldest QUEUED item addressed to me.
-					const queued = queue.items.find(
+					// Normal claim: the oldest QUEUED item addressed to me. Suppressed while paused.
+					const queued = paused ? undefined : queue.items.find(
 						(it) => it.to === me && it.status === "queued",
 					);
 					if (queued) {
@@ -488,8 +511,17 @@ const Router = defineExtension({
 							body: stalled.body,
 						};
 					}
+					// Paused and nothing already held: a legible refusal, not a silent no-op.
+					if (paused) return { kind: "paused", by: control?.pausedBy ?? null, reason: control?.reason ?? null };
 					return null;
 				}, context);
+				if (found?.kind === "paused") {
+					const why = found.reason ? ` (reason: ${found.reason})` : "";
+					return toolText(
+						`PAUSED: the rig is paused${found.by ? ` by ${found.by}` : ""}${why} — new work is not claimable until ` +
+							"`unpause`. Work you ALREADY hold still completes: use complete_work / defer_work.",
+					);
+				}
 				if (!found) {
 					return toolText("NO_QUEUED_WORK");
 				}
