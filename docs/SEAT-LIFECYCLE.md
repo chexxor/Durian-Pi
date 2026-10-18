@@ -80,6 +80,13 @@ so no seat reads a key off disk. These are enforced in `src/confine.mjs`, proven
 `demo/confine.test.mjs` and `demo/seatguard.test.mjs`. Read `SEAT-TOOLS.md` for the full hazard list
 (H1–H4) rather than repeating them here.
 
+**The scratch-path rule — where notes/scratch go.** A seat's item notes and scratch files (working notes
+that are not part of the deliverable) must live **inside the item's worktree** (`item-<id>`), where the
+seat is confined and can write. The shared repo-root **`.durig/`** is a **gitignored notes directory**
+(`.gitignore:9`) and is **outside every seat's root**; a confined seat cannot write there, and that
+refusal is **by design** (SC1 + the seat-root guard), **not a bug**. A landing pass's per-branch report
+belongs in the **completion** (the pass row), not in a file.
+
 ---
 
 ## 3. The per-item worktree (`prepare_workspace`)
@@ -181,6 +188,7 @@ run, not just read:
 | removal uses `git worktree remove`, refuses dirty unless `force` (D60) | `src/worktree.mjs` `removeClaimedWorktree`/`removeSeatWorkspace` | the `if (!force)` dirty-refusal branch |
 | F12 seat-root guard fails closed on mismatch | `cli.mjs:349-372` | the `enforceSeatRoot && CFG.DURIG_SEAT_ROOT` block fails naming both paths |
 | SC1/SC3 confinement + env refusal | `src/confine.mjs`, `demo/confine.test.mjs`, `demo/seatguard.test.mjs` | env-absence and path-escape canaries exit 0 |
+| scratch-path rule: `.durig/` (`.gitignore:9`) is outside every seat's root; notes/scratch live in the worktree | `.gitignore:9`; `src/confine.mjs` + `demo/confine.test.mjs` | the `.durig/` gitignore entry; SC1 path-escape refusals exit 0 |
 | genlock lease / stalled-claim re-wake | `src/genlock.mjs`, `src/driver.mjs`; `demo/singleflight.test.mjs`, `demo/stalledclaim.test.mjs` | demo exit 0 |
 | reset writes a `pi.reset` boundary, keeps transcript | `cli.mjs` `cmdReset`; `demo/reset.test.mjs` | demo exit 0 |
 | leaked/dirty worktree handling | `docs/runbooks/leaked-worktrees.md` | its `Verify` step (`git worktree list`) |
