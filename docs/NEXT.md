@@ -7,7 +7,17 @@ _Last refreshed: 2026-10-18T19:32Z (delegate — host+rig recovery complete; rec
 
 _Last refreshed: 2026-10-18T20:35Z (delegate — D107 recorded + routed with D105/#2123; local-model reliability + lastActivity defects filed; filed AND recovered a broker retry hot-loop incident)._
 
+_Last refreshed: 2026-10-18T21:12Z (delegate — skills review + D108/D109/D110 recorded; seat-notes and worktree/git/skills intents spooled; **broker WEDGED again** on the `pm` conv-3 storage error)._
+
 ## NEXT SESSION
+**Current item:** the **TUI migration is still the operator priority** (#2189 Phase 1 queued to `impl`, #2187 pin claimed by `devtools`, #2109/#2110 rebrand), but **the broker is WEDGED — no seat is progressing.** `selfdev.sqlite.broker.log` froze at `PASS 60` @`20:33:31Z`, then `WAKE-RETRY … pass-threw` every 60 s to now; `.spike/serve.err` names `wake-failed … pm conv 3 … Session failed after a storage error`. A kill+`resume`+restart was done at `20:47:55Z` (pid `5768`), but the same pass-throw returned, so the restart alone does NOT clear it — the next agent must repair the `pm` conversation (per `docs/runbooks/store-corruption-recovery.md`), not merely restart.
+**Spooled, undrained (broker wedged):** `.spike/delegate/intent-seat-notes.md` (D108) and `.spike/delegate/intent-worktree-git-skills.md` (D109/D110) sit in `selfdev.sqlite.broker.inbox/`; the first healthy pass drains them (`INTENT delivered=2`).
+**This session delivered (delegate lane, no product code):** `docs/reviews/agent-skills-review.md`; `vendor/eval/{anthropic-skills,agentskills-spec,awesome-agent-skills,superpowers}` clones; **D108** (seat notes), **D109** (non-interactive agent git), **D110** (worktree taxonomy/root).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Then:** follow `docs/runbooks/broker-down-or-stalled.md` (wedged shape) — `taskkill /F /PID <serve pid>` only with no live genlock, `resume`, restart with the local env; if the throw returns, `store-corruption-recovery.md` for `pm` conv 3. Confirm a fresh `PASS` and `INTENT delivered=2`.
+**Do not:** `git add -A`; touch the uncommitted devtools `src/broker.mjs` `configure` WIP; land a conflicted branch by hand; set `DURIG_SEAT_ROOT` on the `serve` launcher.
+
+## NEXT SESSION (prior — superseded by the block above)
 **Current item:** **local-model reliability** — enforce **D107** (a local seat masks→summarizes its
 tool-call history WITHIN a long item, capped, then re-anchors) alongside **D105**/**#2123** (a fresh
 `pi.reset` BETWEEN items). All routed to `pm`: `37e9a77b…` (D107), `17fef81f…` (reliability findings),

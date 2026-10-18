@@ -2776,3 +2776,155 @@ between items, smart compaction within one). Acceptance: a demo proving a local 
 summarize at a transition) and continues an item across a compacted boundary, a cap that forces a fresh
 re-anchored session, a non-local seat unchanged, plus `node --check`, the full suite, and a non-author
 verify. D106 is claimed by the unlanded `scribe-item-2169`; recorders must not reuse 106.
+
+---
+
+## D108 — Seats record durable, topic-organized notes for future agents at item completion and at a reset/compaction boundary; a curator validates and purges (operator directive, 2026-10-18)
+
+**Decision.** Every seat MUST, before it completes a work item **or** crosses a reset/compaction
+boundary, record the durable knowledge it gained that a future agent or seat will plausibly need again
+— above all the answers it had to **discover with tool calls** — into **topic-organized note files**.
+The transcript is not the vehicle: it gets compacted (D107), reset between items (D105), and is unread
+by the next seat. The notes are the vehicle.
+
+**What earns a note (all three must hold).**
+- The fact was not already written down where a reader would find it in one step, and it took a tool
+  call (or a chain of them) to establish.
+- Another seat or item will plausibly need it again (durable, cross-item value).
+- It has a **verifiable anchor**: a path + symbol/line, a command, a URL, or a commit/issue id.
+
+Never record: a restatement of code one read returns; run-local or transient state (this run's pid, a
+one-off count); or anything already in the note file.
+
+**Shape of a note (machine-checkable by design).** One bullet per fact, carrying the question, the
+answer, the **provenance**, the day/commit it was established, a `confirmed` vs `reported` marking
+(only `confirmed` if the seat observed or re-ran it), and — where possible — a `staleIf` anchor check.
+That anchor is what makes decay *mechanical*: a checker re-resolves the path+symbol (or the commit)
+and flags or purges a note whose anchor no longer holds, instead of waiting for a human to re-read the
+whole base.
+
+**Topic files, and cross-seat access — YES.** Notes group into one file per topic
+(`docs/notes/<topic>.md` by default; the team sets the exact path), so a reader can load a whole topic
+at once and grep across topics. They are **shared across seats**, because the value is that an `impl`
+lookup saves `qa`/`devtools` the same tool calls. Two constraints are inherent and must be designed
+around, not assumed away:
+- **Worktree isolation (D49).** A seat works in its own per-item worktree, so a notes file in the main
+  tree is *invisible* in that worktree and a note written inside a worktree dies with it. The store must
+  therefore live somewhere every seat resolves regardless of worktree — a repo-committed `docs/notes/`
+  (visible once a worktree forks from a commit carrying it; a possibly-stale read) or an out-of-worktree
+  shared directory resolved by an absolute path/env var (always current, not versioned). The team picks
+  one and **states its staleness behavior**; a design that silently reads a stale or absent file is a
+  defect, not a nuance.
+- **One writer per file.** Concurrent seats must not interleave edits into one shared file; capture is
+  append-only, or the curator is the single writer.
+
+**Invalidation and a curator.** Information discovered yesterday is wrong today. The operator's
+strongest point is that purge cannot be left to chance: decay is partly mechanical (re-resolve the
+anchor / `staleIf`) and partly judgement (a source moved, an answer changed, two notes conflict). A
+**curator** duty — a periodic review-and-purge pass over the base, with authority to delete — is part
+of this tactic, not an optional extra. Whether that is a standing **seat** (the operator proposed one)
+or a periodic duty on an existing seat (e.g. `scribe`) is the **operator's call** — new seats are the
+operator's grant, so `pm` escalates it rather than creating one.
+
+**Capture prompt (the improvement the operator asked for).** The seat instruction should read:
+*before you finish — or before a reset/compaction boundary — record what you learned that is not
+already written down; one line per fact: the question, the answer, and where it came from; a note
+without provenance is not accepted; mark it `confirmed` only if you observed it; do not record what one
+read returns or what is true only for this run; if a note you relied on was wrong or stale, correct or
+delete it; keep the delta under a minute.* At a reset/compaction boundary, also write the short
+handoff (what you were doing, what is done, what is next, any blocker) — reuse the existing
+`resetSeatContext` handoff (`src/reset.mjs`); do not add a second boundary mechanism.
+
+**Why.** The team's scarcest, most expensive resource is a seat's context and the tool calls that fill
+it, and the same lookups recur across items and seats (the operator's framing: an agent will want to
+retrieve a whole topic's previously-queried information at once). Today that knowledge lives only in a
+transcript that is compacted, reset, and never read by the next seat — so it is found, then paid for
+again. Provenance + `staleIf` + a curator turn the base from a wiki that rots into something checkable.
+
+**Alternatives.** (a) Rely on the durable transcript — rejected: D105/D107 exist because the next
+context does not carry it. (b) A free-form handoff in the completion message — rejected at this scale:
+not topic-retrievable across seats, not checkable. (c) Curator-only capture (the notekeeper reads every
+conversation) — rejected as the *sole* mechanism: the author has the context in hand and pays almost
+nothing to record it, whereas a reader must re-derive it; the curator is for validation/purge, not
+primary capture. (d) No staleness mechanism — rejected: an un-audited base actively misleads.
+
+**Cross-refs.** D49 (per-item worktrees), D101–D103 (the durable-TUI/rebrand context this ships
+alongside), D105 (cross-item reset), D107 (intra-item compaction), `src/reset.mjs` (the handoff
+boundary).
+
+**Status.** Operator directive, RULED and recorded. **Not implemented.** Routed to `pm` for
+registration + decomposition + routing. Acceptance is FULL (no partial paths, no stubs): a seat that
+completes an item leaves a topic note with provenance and a `staleIf` anchor; the base is readable from
+a second seat while the first is in its own worktree; capture is wired to the reset/compaction
+boundary; a validating/purge path exists; demos prove each, plus `node --check`, the full suite, and a
+non-author verify.
+
+---
+
+## D109 — Agent-driven git runs are non-interactive; an interactive editor/pager/prompt must never block a seat or the delegate (operator directive, 2026-10-18)
+
+**Decision.** Every git invocation driven by an AGENT — a durig seat or the external delegate — MUST be
+non-interactive. Concretely:
+- The agent environment exports `GIT_EDITOR=:` and `GIT_SEQUENCE_EDITOR=:` (git runs the editor through
+the shell, so `:` is a no-op), `GIT_TERMINAL_PROMPT=0`, `GIT_MERGE_AUTOEDIT=no`, and a non-paging
+  `GIT_PAGER=cat`/`PAGER=cat`.
+- Agents commit with an explicit message (`-m` / `-F <file>`), amend with `--no-edit`, and merge with
+  `--no-edit`. A bare `git commit` is a defect, not a convenience.
+- The operator's OWN interactive `core.editor` is left untouched; the fix is scoped to agent runs.
+- A short `git` skill (K3, `docs/reviews/agent-skills-review.md`) carries these as exact commands.
+
+**Why.** The reported symptom is real and reproducible: `git var GIT_EDITOR` on this host returns
+`"…Microsoft VS Code\bin\code" --wait`. Any `git commit` without `-m` therefore launches VS Code and,
+because of `--wait`, BLOCKS the agent until a human closes the window. `GIT_TERMINAL_PROMPT=0` stops a
+credential prompt from hanging a headless run the same way, and a pager can swallow output. The
+non-interactive editor is the only fix that does not depend on every model remembering `-m` every
+time; the practice layer is the belt to that suspenders.
+
+**Where.** Three surfaces, all of which must carry the vars so a seat cannot lose them by tool choice:
+the seat environment built by `makeSeatEnv` (`src/seattools.mjs`, wrapping `NodeExecutionEnv`); the
+broker's own process env; and the launcher `scripts/serve-noroot.ps1` (convenience for the operator).
+
+**Status.** Ruled (delegate, operator directive). NOT implemented. Routed to `pm`; acceptance is a run
+whose bare `git commit` does not open an editor, plus `node --check`, the suite, and a non-author
+verify.
+
+---
+
+## D110 — Worktree naming and location standard: one taxonomy, one root, outside the working tree (operator directive, 2026-10-18)
+
+**Decision.** Worktrees follow ONE taxonomy and ONE resolved root.
+
+| Class | Path | Name / branch | Lifetime | Owner |
+|---|---|---|---|---|
+| Durable per-item workspace | `<WORKTREE_ROOT>/item-<id>` | `item-<id>` (branch `<seat>-item-<id>`) | until the item is terminal | the seat; retired by `complete_work` |
+| Verification scratch | `<WORKTREE_ROOT>/scratch/verify-<item>-<nonce>` | — | short | verifier |
+| Throwaway / broker scratch | `<WORKTREE_ROOT>/scratch/wt-<item>-<sha>` | — | swept by the broker | broker |
+| Archive (out of tree) | `<repo-parent>/<repo>.worktrees/` | preserved names | until reclaimed | operator |
+
+**The `item-<id>` basename is LOAD-BEARING and must not be renamed:** `src/worktree.mjs`
+`removeSeatWorkspace` recomputes `join(worktreeRoot, "item-<id>")`; `src/broker.mjs` parses
+`/^item-(\d+)$/` off the path basename and the branch ref; the `prepare_workspace` row in
+`docs/FEATURES.md` documents `<root>/item-<id>`. The drift is in the SCRATCH names and the ROOTS, not
+the durable name.
+
+**The root rule.** `WORKTREE_ROOT` is resolved ONCE (config/env `DURIG_WORKTREE_ROOT`) and defaults
+**outside the repository working tree**. It is never the repo root and never a subdirectory of another
+worktree. Creating a worktree inside the working tree is refused.
+
+**Why.** The observed state is 173 registered worktrees with no single root: 69 directly in the repo
+root, 67 in the `../pi-opendurig.worktrees/` archive, 9 under the OS temp dir, at least 4 NESTED inside
+another item worktree (`pi-opendurig/item-1669/…`, `item-1631`, `item-1266`, `item-1236`), and a long
+tail of one-offs. Today `prepare_workspace` defaults `worktreeRoot` to `process.cwd()`
+(`src/seattools.mjs` / `cli.mjs`), so worktrees land INSIDE the working tree: they show as untracked
+directories in `git status` (65 untracked `item-*` entries), they are swept by a careless `git add -A`,
+and `carryVisibleState` (`src/worktree.mjs`, #998) exists precisely because a sibling `item-<id>`
+appears in the source's status. A single out-of-tree root makes cleanup, sweeping, and status honest.
+
+**Constraint.** The root change is a behaviour change with live artifacts (the 65 root `item-*` dirs)
+and load-bearing cleanup regexes; the implementing item must ship a migration/compat path and prove the
+broker's item-status sweep still finds the durable worktrees. It must not silently orphan an existing
+worktree.
+
+**Status.** Ruled (delegate, operator directive). NOT implemented. Routed to `pm`; acceptance is the
+single resolved root, the refusal guard, cleanup/sweep parity, demos, `node --check`, the suite, and a
+non-author verify.
