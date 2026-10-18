@@ -16,6 +16,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve as resolveNodePath } from "node:path";
 import { refusalFor } from "./confine.mjs";
+import { resolveSeatRoot } from "./seatroot.mjs";
 import { SECRET_PREFIX_PATTERNS } from "./config.mjs";
 import { afterTool as redactToolResult } from "./secretredact.mjs";
 
@@ -48,7 +49,7 @@ async function seatGraphRoot(api, context) {
 			console.error(`SEATGUARD WARNING: seat cwd snapshot failed, using fallback root: ${err?.message ?? err}`);
 		}
 	}
-	return process.env.DURIG_SEAT_ROOT ?? process.cwd();
+	return resolveSeatRoot().root;
 }
 
 /** Tools whose whole argument is a command string, so that string is what to inspect. */
