@@ -2428,6 +2428,16 @@ crash opportunity), then removal.
 read-only-open fix, `send` retirement / #252. **Flagged gap:** `cmdUp` (`cli.mjs:476-760`) has NO broker
 guard - `up --refresh` is not refused while a broker drives. No executable check applies yet.
 
+**Addendum (2026-10-18, #1931) — `resume`/`doctor` stays a DOCUMENTED REFUSAL, not a spool op.** Of the
+ROADMAP 71 residue, the `resume`/`doctor` settle path is deliberately NOT routed: with a broker alive,
+the broker ALREADY settles stranded submissions itself — at startup (`reconcileBrokerStartup`) and at the
+start of every pass (`reconcileStrandedSubmissions`, logged `STRANDED settled=N`) — so an external
+`resume` has nothing to do, and routing it would add a second writer for work already done. The operator
+accepted EITHER route-or-document; this records the choice. The refusal message now NAMES the reason
+(`cli.mjs` `refuseWhileBrokerDrives("resume/doctor", <detail>)`) and points at
+`docs/runbooks/resume-while-broker-runs.md`. (The sibling `up` residue, #1930, is a real second writer and
+is being routed separately.)
+
 ## D95 — The degeneration guard judges per-turn causes on ASSISTANT turns and its context bound against the seat MODEL's effective window; saturation is recovered by `compact`, not reset (delegate, 2026-10-17)
 
 **Decision.** `src/degeneration.mjs` `assessRun` must be corrected on four points: (1) per-turn causes
