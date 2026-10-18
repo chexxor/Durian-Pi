@@ -1962,6 +1962,15 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     *Owner:* `impl` (author) · *Consulted:* `qa`/`auditor` · *Evidence:* `Agent_Ownership_Review.md` §2.4.
     *Acceptance:* a verifier item fails when it only acks a claim and passes when it re-runs the artifact.
     **Evidence surface delivered by #715 (`50240f9`); re-execute enforcement still open (#851).**
+    **RULED (2026-10-17):** qa's consult `#854` fixed the contract (extend `complete_work` with an
+    OPTIONAL structured `evidence` field + ONE `check` rule; keep free text as the narrative; no new
+    verbs) and lead's `#1553` ruled the enforcement binding on EVERY verifier item: run the named
+    command against the named artifact and confirm the exit code; a non-executable artifact is
+    independently INSPECTED and recorded; **no waiver by triviality — mere acceptance is never
+    verification.** The completion's evidence now also TRAVELS WITH THE HANDOFF: `complete_work`
+    carries it verbatim onto the DONE notice (structured `evidence` + a readable line), so the next
+    party receives a command to re-run instead of a summary to trust. Proof:
+    `demo/evidence-handoff.test.mjs` (failing-first: the notice carried no evidence before).
 
 49. **Finish the research's unfinished passes.** The review explicitly did not verify the governance
     pass (NIST AI RMF, ISO/IEC 42001, EU AI Act Art. 14, multi-agent "accountability gap") or the
