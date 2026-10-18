@@ -3,7 +3,29 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T09:46Z (delegate — QA now runs on a LOCAL model via PolyStrata; DeepInfra 402 still blocks the other seats)._
+_Last refreshed: 2026-10-18T16:45Z (delegate — durable-tui Phase 1 build spec written; team still 402-blocked except local `qa`; broker idle-healthy)._ 
+
+> **DURABLE-TUI MIGRATION — registered; pre-execution spec done; still blocked on a provider
+> (2026-10-18T16:45Z).** The phases are registered: **#2094** (Phase 0 ruling, done), **#2095** (pin
+> `@earendil-works/pi-coding-agent`, `devtools`), **#2096** (Phase 1 non-default own-store entrypoint,
+> `impl`), **#2097** (Phase 2 attach, gated), **#2098** (Phase 3, held); UX consult **#2103**
+> (`designer`) / **#2104** (`advocate`); rebrand **#2109–#2112**. This session advanced the delegate
+> lane only (no product code): `docs/reviews/durable-tui-phase1-build-spec.md` resolves the two gates
+> the merge plan left open and reconciles it with D103 — **#2095**: `pi-coding-agent` is release-only
+> (`npm view` → `1.3.0`), NOT in `pi-main.pin.json` `packages[]`, so pin it exactly in `package.json`
+> (not the monorepo pin); **#2096**: the ownership guard reuses `readBrokerState`/`brokerAlive`
+> (`src/broker.mjs`, heartbeat-hardened) + the live-genlock scan (`scripts/land.mjs`, the `#1383`
+> lesson), fails closed naming store+pid, and uses `DURIAN_PI_TUI_*` with `DURIG_TUI_*` aliases. It
+> also scopes `cwd`/worktree resolution to Phase 2 (Phase 1 resolves no seat).
+> **BLOCKER (unchanged, now with evidence): #2095/#2096/#2103 were all `deferred by supervisor` after
+> the 402 (`log designer`: `stopReason:"error", 402 … positive balance`).** Only `qa` runs
+> (`local/qwen36` via PolyStrata). **Operator decision needed to start the team:** (a) fund DeepInfra;
+> or (b) authorize pointing `devtools`+`impl` at the local PolyStrata provider (D104 per-seat:
+> `DURIG_LOCAL_BASE_URL` in the broker env, set the two seat models to `local/<id>`, `up --refresh`,
+> restart the broker in a declared window). Local serves ONE 35B Q3 model / 64k ctx on 24 GB VRAM —
+> adequate for Phase 1's mechanical work but serialized; one heavy seat at a time. **Broker state:**
+> UP pid `10424`, last `PASS 1` at 09:45Z — this is IDLE, **not stalled**: the queue holds **0
+> `queued`/`claimed`** items (85 deferred, 51 held), inbox empty, no genlock. Do not kill it.
 
 > **LOCAL INFERENCE (2026-10-18) — `qa` runs locally; DeepInfra 402 still blocks the rest.** PolyStrata
 > (`C:\Users\Alex\dsh-Projects\PolyStrata`) serves Qwen3.6-35B-A3B UD-Q3_K_M on
