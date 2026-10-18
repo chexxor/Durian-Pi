@@ -3,17 +3,19 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18 (delegate — compaction analysis delivered; compact-as-spool-op filed as #1904 to devtools)._
+_Last refreshed: 2026-10-18T03:38Z (delegate clock-out — landing pass 26 branches to main 4a085f3; incidents filed; window pending)._
 
-## NEXT SESSION — continue this session's goals
+## NEXT SESSION — fresh agent starts here (delegate clock-out, 2026-10-18T03:38Z)
 
-**Current item:** **#1904** (compact as a command-spool op) done by `devtools` @ `d3d6be3`; verify moved to **#1940 → auditor** (`#1903` cancelled — qa degraded). Prerequisite **#1936 → devtools** (Gemma-4 fallback catalog). On #1940 PASS: one operator-declared window — qa → Mistral, add qa2 (Gemma 4), land `devtools-item-1904` (`scripts/land.mjs --suite`).
+**Current item:** the ROADMAP 71 / broker-spool landing cluster. **#1904** (`compact` spool op) is **verified** (verify **#1987 PASS**) but CLONE-CONFLICTs on `cli.mjs`; a rebase is routed (**#1912**, **#2018**). Next: land the rebased #1904, then the ROADMAP 76 stack (**#2017**), then the docs-truth items (**#1972**, gated on #1904 landing; **#2014**).
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
-**Known blocker:** the window needs the operator to declare the broker stop; dependencies **#1936** (catalog) and **#1940** (auditor verify) are not yet landed/passed. Watch the recurring 37(b) `admitted_not_started` and the main-red **#1610** gate.
+**Known blocker:** none blocking the delegate. Broker **UP pid 35084** (START 03:15:29Z, passes advancing). The combined **window** (qa → `mistralai/Mistral-Small-3.2-24B-Instruct-2506`, add **qa2** → `google/gemma-4-31B-it`) still needs the operator-declared broker stop; prerequisite **#1936** (Gemma-4 catalog) has **LANDED**. `main` = **4a085f3**, **58 commits ahead of `origin/main`** (NOT pushed; operator holds push). Watch the recurring 37(b) `admitted_not_started` and the main-red `#1610` gate.
 
-**Live now:** (1) incidents appended — broker-dormant-stalled recurrence @02:37Z (`database is locked`; broker recovered pid 37496) and qa-context-degeneration recurrence; (2) window-sequencing + scribe-docs-drift intents delivered to pm; (3) branch liability: **60 unmerged branches, 51 for DONE items** (landing backlog).
+**What this session did:** delivered the pi-durable compaction analysis; filed #1904 (compact spool op) → devtools; appended incident recurrences (broker-dormant-stalled @02:37Z `database is locked`; qa-context-degeneration third occurrence); routed qa's verifications to auditor (#1923–#1927); prepared qa2 (`.spike/delegate/rig.selfdev.qa2.json`); ran a **landing pass that landed 26 branches** (main → `4a085f3`, suite green) — **25 conflict-set branches remain** (incl. #1904, which needs a rebase).
+
+**Do not:** re-propose reusing/copying vendor internals as a speed lever — the operator **DECLINED** it (dependency/provenance + upstream-drift risk); keep dependencies pinned. Do not create an `impl2` seat. Do not stop the broker without an operator-declared window (except a wedged broker with no genlock).
 
 **Delegate actions this session (operator-directed):**
 - Delivered the requested written analysis: pi-durable is BUILT for live compaction (post's
