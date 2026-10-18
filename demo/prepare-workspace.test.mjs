@@ -141,6 +141,48 @@ try {
   assert.ok(removed.removed, `removeSeatWorkspace removes it (${JSON.stringify(removed)})`);
   assert.ok(!existsSync(worktree), "the worktree path is gone");
 
+  // --- 6. #1456: the seat-facing tool can fork from an UNLANDED base ref ---
+  // The core already took `ref`; the gap was that `prepare_workspace` never passed one, so no entry
+  // point could put a worktree on an unlanded tip — which is what blocked stacking (#1444).
+  const seattools = await import("../src/seattools.mjs");
+  const prepTool = seattools.SeatTools.tools.find((tool) => tool.name === "prepare_workspace");
+  assert.ok(prepTool, "the prepare_workspace tool exists");
+  assert.equal(
+    prepTool.parameters?.properties?.base?.type, "string",
+    "prepare_workspace declares an optional `base` ref parameter",
+  );
+  assert.equal(
+    typeof seattools.prepareWorkspaceOptions, "function",
+    "the tool's option builder is exported so a demo can assert the threading",
+  );
+  const threaded = seattools.prepareWorkspaceOptions({ itemId: 7, seatName: "impl", base: "unlanded", source: "S" });
+  assert.equal(threaded.ref, "unlanded", "the base is threaded to the core as `ref`");
+  assert.equal(threaded.itemId, 7, "itemId still threads through");
+  assert.equal(threaded.seatName, "impl", "seatName still threads through");
+
+  // ...and the core really does fork that ref (the guarantee the tool now exposes).
+  const repo3 = join(base, "ref-repo");
+  const source3 = join(repo3, "durig");
+  await mkdir(source3, { recursive: true });
+  await writeFile(join(source3, "artifact.txt"), "on main\n");
+  await run("git", ["init", "-q", repo3]);
+  await run("git", ["-C", repo3, "add", "durig/artifact.txt"]);
+  await run("git", ["-C", repo3, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "main base"]);
+  await run("git", ["-C", repo3, "branch", "-M", "main"]);
+  await run("git", ["-C", repo3, "checkout", "-q", "-b", "unlanded"]);
+  await writeFile(join(source3, "artifact.txt"), "on the unlanded tip\n");
+  await run("git", ["-C", repo3, "add", "durig/artifact.txt"]);
+  await run("git", ["-C", repo3, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "unlanded tip"]);
+  const tip3 = (await run("git", ["-C", repo3, "rev-parse", "HEAD"])).stdout.trim();
+  await run("git", ["-C", repo3, "checkout", "-q", "main"]);
+  const atBase = await prepareSeatWorkspace({ source: source3, worktreeRoot: source3, itemId: 11, seatName: "impl", ref: "unlanded" });
+  assert.equal(
+    (await run("git", ["-C", atBase.worktree, "rev-parse", "HEAD"])).stdout.trim(), tip3,
+    "the prepared worktree sits at the unlanded base ref, not HEAD",
+  );
+  assert.match(await readFile(join(atBase.cwd, "artifact.txt"), "utf8"), /unlanded/, "...with the unlanded content present");
+  await removeSeatWorkspace({ worktreeRoot: source3, itemId: 11 });
+
   console.log("PREPARE-WORKSPACE PASS (idempotent per-item worktree; the seat's own cwd wins; npm ci path exercised)");
 } finally {
   delete process.env.DURIG_SEAT_ROOT;

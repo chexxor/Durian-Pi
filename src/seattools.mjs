@@ -28,6 +28,15 @@ function result(text) {
 }
 
 /**
+ * The options `prepare_workspace` hands `prepareSeatWorkspace`. Exported so a demo can assert the
+ * base ref is threaded through without a live broker (#1456): `base` is the tool's name for the
+ * core's `ref`, and `undefined` falls back to the core's `HEAD` default.
+ */
+export function prepareWorkspaceOptions({ source, itemId, seatName, base }) {
+	return { source, worktreeRoot: source, itemId, seatName, ref: base };
+}
+
+/**
  * `prepare_workspace` — the seat's OWN workspace switch (replaces the broker's
  * process-global `DURIG_SEAT_ROOT`, which pointed every seat woken in a pass at
  * one worktree). Called after `claim_work`, it creates the item's isolated git
@@ -44,6 +53,12 @@ const prepareWorkspace = defineTool({
 			Type.Number({
 				description:
 					"the claimed item to prepare the worktree for; defaults to your most recently claimed item",
+			}),
+		),
+		base: Type.Optional(
+			Type.String({
+				description:
+					"the ref/branch/commit to fork the worktree FROM (default: HEAD). Use it to stack on an unlanded tip; it must be a ref you can read.",
 			}),
 		),
 	}),
@@ -89,12 +104,14 @@ const prepareWorkspace = defineTool({
 			// item-<id>; `prepareSeatWorkspace` reproduces the source's repo-relative
 			// path, so a durig subdirectory keeps its cwd.
 			const source = process.cwd();
+			const base = typeof args.base === "string" && args.base.trim() !== "" ? args.base.trim() : undefined;
 			let workspace;
 			try {
-				workspace = await prepareSeatWorkspace({ source, worktreeRoot: source, itemId, seatName: me });
+				workspace = await prepareSeatWorkspace(prepareWorkspaceOptions({ source, itemId, seatName: me, base }));
 			} catch (err) {
 				return result(
-					`PREPARE_WORKSPACE_ERROR: cannot create a worktree from ${source} (is it a git repository?): ${err?.message ?? err}`,
+					`PREPARE_WORKSPACE_ERROR: cannot create a worktree from ${source}${base ? ` at base ${base}` : ""} ` +
+						`(is it a git repository, and is ${base ? `\`${base}\`` : "HEAD"} a readable ref?): ${err?.message ?? err}`,
 				);
 			}
 			// Persisted on this conversation's own agent, so the switch is per-seat and
@@ -103,8 +120,9 @@ const prepareWorkspace = defineTool({
 				await configure(tx, api.conversationId, { cwd: workspace.cwd });
 			}, context);
 			return result(
-				`WORKSPACE READY (${workspace.created ? "created" : "reused"}): ${workspace.cwd}\n` +
-					`Your file and shell tools now resolve inside this item's worktree. ` +
+				`WORKSPACE READY (${workspace.created ? "created" : "reused"}): ${workspace.cwd}` +
+					(base ? `\nForked from base ref ${base} (not HEAD).` : "") +
+					`\nYour file and shell tools now resolve inside this item's worktree. ` +
 					`Work and commit there; do not touch the shared tree.` +
 					(workspace.branch ? ` The worktree is on branch ${workspace.branch}; commit your item's files there.` : "") +
 					(workspace.carried.length > 0

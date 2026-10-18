@@ -884,13 +884,19 @@ async function cmdInit() {
 // tree - where an author seat can overwrite the operator's uncommitted work. This is how the
 // operator gets a tree to point them at instead, with node_modules bridged so the suite runs.
 async function cmdWorktree(args) {
-  const target = args.find((a) => !a.startsWith("--"));
+  const valueFlags = new Set(["--source", "--ref"]);
+  const target = args.find((a, i) => !a.startsWith("--") && !valueFlags.has(args[i - 1]));
   if (!target) fail("worktree needs a path, e.g. node cli.mjs worktree C:/tmp/durig-dev/item-1");
   const sourceAt = args.indexOf("--source");
   const source = sourceAt >= 0 ? args[sourceAt + 1] : process.cwd();
   if (sourceAt >= 0 && !source) fail("worktree --source needs a directory");
+  // --ref forks from an arbitrary ref (an UNLANDED branch tip, a tag, a commit) instead of HEAD, so
+  // a fix that must edit a file at that tip can be built without touching the shared tree (#1456).
+  const refAt = args.indexOf("--ref");
+  const ref = refAt >= 0 ? args[refAt + 1] : undefined;
+  if (refAt >= 0 && (!ref || ref.startsWith("--"))) fail("worktree --ref needs a ref (branch, tag or commit)");
   try {
-    out({ ok: true, command: "worktree", ...(await createWorktree({ source, target })) });
+    out({ ok: true, command: "worktree", ...(await createWorktree({ source, target, ref })) });
   } catch (error) {
     fail(`cannot create worktree: ${error?.message ?? error}`);
   }
