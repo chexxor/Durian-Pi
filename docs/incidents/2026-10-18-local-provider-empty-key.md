@@ -4,9 +4,9 @@ date: 2026-10-18
 severity: sev2
 status: mitigated
 symptom: "a seat on the local provider fails to run with `No API key for provider: local` after a broker restart"
-runbook: null
+runbook: local-provider-down
 fix: "#2114"
-prevention: "#2114 (placeholder-key fallback) + #2115/#2133 (non-author verify) + the restart-env note in docs/NEXT.md"
+prevention: "#2114 (placeholder-key fallback) + #2115/#2133 (non-author verify) + keep the PolyStrata local server running (docs/runbooks/local-provider-down.md) + the restart-env note in docs/NEXT.md"
 last_reviewed: 2026-10-18
 ---
 
@@ -66,6 +66,15 @@ still winning when set, plus `demo/local-provider.test.mjs` coverage; `#2115`/`#
 verify. Until it lands, the operational rule (recorded in `docs/NEXT.md`) is that a broker restart must
 export `DURIG_LOCAL_API_KEY`, or the local seats break again.
 
+## Related symptom — the local SERVER being down (2026-10-18T19:0xZ)
+A different failure of the same seat lane: when the PolyStrata server itself is down (e.g. after a host
+reboot) the seats fail with `model_error: Connection error.`, not the empty-key error. In this session
+`qa`'s three most recent runs were `local/qwen36`, `stopReason:"error"`, `errorMessage:"Connection
+ error."`; `/v1/models` returned nothing and nothing was listening on `:8080`. Restarting PolyStrata per
+the new `docs/runbooks/local-provider-down.md` restored it: HTTP 200 with `status.value=loaded` and a live
+chat completion. Diagnostic rule: `Connection error.` = the server is down; `No API key for provider:
+local` = the broker was restarted without `DURIG_LOCAL_API_KEY`. Check both before blaming durig.
+
 ## Evidence
 - `DURIG_DB=./selfdev.sqlite node cli.mjs log devtools 8`: a `pi.assistant` entry, `provider: local,
   model: qwen36`, `stopReason: "error"`, `errorMessage: "No API key for provider: local"` (timestamp
@@ -78,6 +87,10 @@ export `DURIG_LOCAL_API_KEY`, or the local seats break again.
   `DURIG_LOCAL_API_KEY`; `scripts/serve-noroot.ps1` sets only `DURIG_DB`.
 - Fix branch `devtools-item-2114` (`72efd09` fix, `9ad2df3` test) — `src/providers/local.mjs` returns
   `"local-placeholder"` when unset; queue `#2114`, verify `#2115`/`#2133`.
+- Server-down related symptom: `cli.mjs log qa` -> `provider: local, model: qwen36`, `stopReason: error`,
+  `errorMessage: "Connection error."` (3 consecutive); `netstat -ano | grep :8080` -> nothing listening;
+  after the restart, `/v1/models` -> HTTP 200 `{"status":{"value":"loaded"},"meta":{"n_ctx":65536}}` and
+  a `chat/completions` probe returned a valid `choices[0]` (~224 tok/s).
 
 ## Links
 `docs/DECISIONS.md` D104 (per-seat local provider) · `docs/NEXT.md` (the LOCAL PROVIDER block) ·

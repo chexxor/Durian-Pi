@@ -2,11 +2,11 @@
 incident: host-resource-exhaustion
 date: 2026-10-18
 severity: sev2
-status: mitigated
+status: resolved
 symptom: "`node cli.mjs status`/`queue` dies with `FATAL ERROR: Zone Allocation failed`; the demo suite is flaky"
 runbook: null
 fix: null
-prevention: "#2126 (suite robustness under low memory) + lead #2122 ruling"
+prevention: "operator raised C:\\pagefile.sys to a fixed 32,768 MB (commit limit ~64 GB) + #2126 (suite robustness under low memory) + lead #2122 ruling"
 last_reviewed: 2026-10-18
 ---
 
@@ -67,6 +67,22 @@ the broker log/store files directly.
   as real). A `check`/attention kind for "host allocation failing" would be the durable detection, but is
   not yet designed.
 
+## Resolution — post-reboot verification (2026-10-18T19:0xZ)
+The failure is consistent with **Windows commit-charge exhaustion**: the OS commit limit is RAM + the
+page file, and the page file was manually fixed at **4,982 MB** (`AutomaticManagedPagefile: False`), so
+total commit was ~37.7 GB (`systeminfo` reported 294 MB free). The operator rebooted and set
+`C:\pagefile.sys` to a fixed **32,768 MB** (Initial = Maximum). After the reboot allocations succeed
+again — `status`, `queue`, and the demo suite run, and the broker recovered and ran 30+ passes. Measured
+headroom now:
+- `Win32_OperatingSystem`: FreeVirtualMemory **55,254 MB** of **65,458 MB**; FreePhysicalMemory
+  **25,565 MB** of **32,690 MB**.
+- `Win32_PageFileUsage`: `C:\pagefile.sys` `AllocatedBaseSize` **32,768 MB**;
+  `Win32_ComputerSystem.AutomaticManagedPagefile` **False**.
+
+The exact process that had consumed the ~37 GB commit at detection is not attributed (a `strata-poly.exe`
+was the largest committer at the time), but the mechanism (commit limit = RAM + undersized page file) is
+now grounded.
+
 ## Evidence
 - `node -e "const os=require('os');console.log(os.freemem(),os.totalmem())"` → `5.68e9 / 34.28e9` bytes.
 - `node -e "Buffer.alloc(150*1024*1024,1)"` → `RangeError: Failed to allocate memory` at
@@ -79,6 +95,11 @@ the broker log/store files directly.
 - Full loop with one retry per failure: `TOTAL=143 PASS=139 FAIL=4`; each of the 4 exits 0 when run
   alone.
 - Lead `#2122` ruling + `#2126` registration (queue).
+- Post-reboot: `Get-CimInstance Win32_OperatingSystem | Select FreeVirtualMemory,TotalVirtualMemorySize,
+  FreePhysicalMemory,TotalVisibleMemorySize` -> `55254 MB / 65458 MB` and `25565 MB / 32690 MB`;
+  `Get-CimInstance Win32_PageFileUsage` -> `C:\pagefile.sys AllocatedBaseSize 32768`;
+  `AutomaticManagedPagefile False`. Same `status`/`queue`/demo commands that earlier died now succeed,
+  and the broker reached `PASS 32` by `19:14:01Z`.
 
 ## Links
 `docs/runbooks/broker-down-or-stalled.md` (the run the failure interrupted) ·

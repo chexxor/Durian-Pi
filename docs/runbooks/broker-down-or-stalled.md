@@ -32,6 +32,11 @@ tail -8 .spike/serve.err 2>/dev/null
 - **Alive but dormant** (case b): `START` present, `broker.json` heartbeat fresh, last `PASS` minutes
   old, no `genlock.*`. The broker rests in `signal.wait` with `scheduler.shouldRun()` false. A restart
   forces a startup pass (which also drains `.broker.inbox`) and re-wakes queued seats.
+- **`WAKE-RETRY` logged but no `PASS` follows** (2026-10-18 recurrence 8): the dormant-revisit fix
+  (`991567d`) re-arms the loop after a `wake-failed` and logs `WAKE-RETRY in=<ms>ms seats=<names>`. If
+  that line appears and then **no `PASS`** for minutes (fresh heartbeat, no genlock, idle CPU), the retry
+  pass either did not run or hung before its `PASS` line — a hung pass is invisible because `cmdServe`
+  does not log `pass-failed` (ROADMAP 78). Same recovery as case (b).
 
 ## Do
 1. If a **wedged** `serve` process exists and **no** genlock slot is held, terminate it:
@@ -47,6 +52,17 @@ tail -8 .spike/serve.err 2>/dev/null
    ```bash
    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
    ```
+   **Also export the local-seat environment when a seat uses the local provider.** `scripts/serve-noroot.ps1`
+   sets only `DURIG_DB`, and `DURIG_LOCAL_API_KEY` is not a config key (until `#2114` lands), so a plain
+   restart makes `qa`/`devtools` fail `No API key for provider: local`; the local server (PolyStrata,
+   `127.0.0.1:8080`) must also be running, or they fail `model_error: Connection error.`
+   (`local-provider-down.md`). Export the local env on the launcher:
+   ```powershell
+   $env:DURIG_LOCAL_BASE_URL='http://127.0.0.1:8080/v1'; $env:DURIG_LOCAL_MODEL='qwen36'; `
+   $env:DURIG_LOCAL_CONTEXT='65536'; $env:DURIG_LOCAL_API_KEY='local'; `
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
+   ```
+   (`DURIG_LOCAL_BASE_URL`/`_MODEL`/`_CONTEXT` also live in `durig.config.json`; only the key is env-only.)
 
 ## Verify
 ```bash
@@ -93,3 +109,12 @@ because `0c0d4d3` alone still parked when the SAME pass threw later (`superviseO
 storage error) — recurrence 7. Still owed: `pass-failed` is not logged by `cmdServe`, so a swallowed
 pass throw is invisible; and `SessionFailed.cause` logging (ROADMAP 78) + a stale-`PASS`+heartbeat
 watchdog (ROADMAP 61-64).
+2026-10-18T19:06Z (recurrence 8, `docs/incidents/2026-10-18-broker-dormant-stalled.md`): after the host
+commit-exhaustion reboot the broker was DOWN (dead pid `16612`, `PASS 6` at `18:51:27Z`); `resume`
+cleared 4 stranded submissions (pm `90494`, impl `90497`, scribe `90500`, auditor `90559`); restart with
+the local env (per step 3) -> `START pid=10728`, `WAKE pm,impl,scribe,auditor`, `PASS 1..6`. `PASS 6`
+emitted `wake-failed` for `qa` conv 15 (`Session failed after a storage error`) and logged
+`WAKE-RETRY in=2000ms seats=qa`, but no `PASS` followed for ~3.5 min (fresh heartbeat, no genlock, idle
+CPU); terminated (no genlock) and restart -> `START pid=11816`, which ran 30+ passes with `qa` woken and
+zero `wake-failed`. `qa`'s three `Connection error.` runs in that window were the local server being down
+(`local-provider-down.md`).

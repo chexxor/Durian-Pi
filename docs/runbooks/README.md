@@ -118,6 +118,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [land.md](land.md) | a verified branch must go onto `main`; land it with the helper (never mid-merge) | no |
 | [resolve-merge-conflict.md](resolve-merge-conflict.md) | a merge/landing pass stopped with conflict markers; the tree is mid-merge | no |
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
+| [local-provider-down.md](local-provider-down.md) | a `local/<id>` seat (`qa`/`devtools`) fails with `Connection error.` or `No API key for provider: local`; nothing listens on `127.0.0.1:8080` | no |
 | [research-request.md](research-request.md) | you need external research | no |
 | [competitor-review.md](competitor-review.md) | you want to learn from another project's tools/practices | no |
 | [resume-while-broker-runs.md](resume-while-broker-runs.md) | you want to run `resume`/`doctor` but the broker is up | no |
@@ -137,6 +138,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | Review method | security-trust-boundary-review |
 | Merge / conflicts | merge, land, resolve-merge-conflict, branch-cleanup |
 | Daemon / host | daemon-not-running |
+| Local provider (PolyStrata) | local-provider-down, broker-down-or-stalled |
 | Research | research-request, competitor-review |
 
 ## Template

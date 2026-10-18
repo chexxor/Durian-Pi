@@ -6,7 +6,7 @@ status: mitigated
 symptom: "the team has stopped working; the broker process is alive but its log stops"
 runbook: broker-down-or-stalled
 fix: "0c0d4d3, 991567d"
-prevention: "991567d/0c0d4d3 (dormant-revisit retry, incl. the same-pass-throw path) + ROADMAP 78 (log pass-failed cause) + ROADMAP 61-64 (watchdog) + #2126"
+prevention: "991567d/0c0d4d3 (dormant-revisit retry, incl. the same-pass-throw path) + ROADMAP 78 (log pass-failed cause; a hung/absent retry pass is invisible) + ROADMAP 61-64 (watchdog) + #2126"
 last_reviewed: 2026-10-18
 ---
 
@@ -389,3 +389,55 @@ third scenario ("retry enabled + the pass later throws") that fails on `0c0d4d3`
   pid `12944` started (`START 17:41:30Z`), so this was a code gap, not a stale process.
 - `cli.mjs` `cmdServe` onDiagnostic handles only `wake-failed` and `escalated`.
 - Fix + demo: commit `991567d`; `node demo/broker-wake-retry.test.mjs` exit 0 (3 scenarios).
+
+---
+
+## Recurrence — 2026-10-18T19:07Z (eighth) — the retry was scheduled but no pass followed
+
+**Appended, not rewritten** (per `docs/incidents/README.md`). This one differs from recurrence 7: the
+`WAKE-RETRY` line WAS emitted (so the `991567d` post-`finally` scheduling ran), yet no retry pass was
+observed. It also records the first recovery on a host whose commit charge has been restored.
+
+### What happened
+- The host commit-exhaustion reboot landed (page file now fixed 32 GB, ~55 GB free commit). The broker
+  was DOWN (dead pid `16612`, last `PASS 6` at `18:51:27Z`).
+- Recovery: `resume` cleared 4 stranded submissions (pm `90494`, impl `90497`, scribe `90500`, auditor
+  `90559`); restart with the local env (PolyStrata down) -> `START pid=10728` (`19:06:13Z`), `WAKE
+  pm,impl,scribe,auditor`, `PASS 1..6`.
+- `PASS 6` at `19:07:07Z` (`ms=5034`) emitted `wake-failed` for **qa conv 15** (`Session failed after a
+  storage error`) and logged `WAKE-RETRY in=2000ms seats=qa`. No `PASS` followed for ~3.5 min: heartbeat
+  stayed fresh (`19:07:57Z`, `19:08:57Z`), no `genlock.*`, broker CPU idle (2.7 s total). Terminated
+  (`taskkill /F`) and restarted -> `START pid=11816` (`19:10:52Z`), which ran 30+ passes, woke
+  `impl/qa/scribe/auditor/pm`, and logged **zero** `wake-failed`.
+
+### Open question / root cause
+**UNVERIFIED.** Two shapes fit and cannot be told apart from outside: (a) the retry pass never ran (the
+scheduled deadline did not produce a pass); or (b) the retry pass ran but **hung before its `PASS` line**
+(e.g. inside `drivePass`/`supervise`), which is invisible because `PASS` is logged only after the pass
+work and `cmdServe` does not log `pass-failed`. During this window the local inference server (PolyStrata)
+was also down, so a `qa` retry reaching for it is a candidate for (b). This is a **new detection/hardening
+gap**: the retry re-arms the scheduler but does not guarantee an observable subsequent pass, and a hung
+pass looks exactly like dormancy.
+
+### Prevention (updated)
+- `991567d` + `0c0d4d3` remain the fix for the scheduler dormancy.
+- **New, owed:** make a retry pass's start observable — log the pass attempt *before* the work, so a hung
+  retry is distinguishable from a retry that never ran. Fold into ROADMAP 78 (log `pass-failed` + the
+  nested `SessionFailed.cause`).
+- **Watchdog** (ROADMAP 61-64) would catch this regardless of shape: stale `PASS` + fresh heartbeat means
+  "terminate and restart", never "trust the heartbeat".
+- The local-server dependency is documented in `docs/runbooks/local-provider-down.md`.
+
+### Evidence (recurrence 8)
+- `selfdev.sqlite.broker.log`: `START pid=10728` `19:06:13Z` .. `PASS 6 ms=5034 woke=-` `19:07:07Z` +
+  `WAKE-RETRY in=2000ms seats=qa`, then no line until `START pid=11816` `19:10:52Z`.
+- `.spike/serve.err`: `{"driver":"wake-failed","seat":"qa","conversationId":15,"error":"SessionFailed:
+  Session failed after a storage error; close and reopen it"}` (this file is truncated on each restart, so
+  the line must be captured before the next launch).
+- `broker.json`: heartbeat `19:07:57Z` and `19:08:57Z` while the log had no pass since `19:07:07Z`.
+- PID `10728` CPU 2.7 s total and no `genlock.*` at diagnosis.
+- Recovery: `resume` -> `found=4` (pm/impl/scribe/auditor `run-cancelled`), then `found=3` (impl
+  `90581`, scribe `90584`, auditor `90587`); restart pid `11816` reached `PASS 32` by `19:14:01Z` with
+  zero `wake-failed`.
+- Related: `docs/incidents/2026-10-18-host-resource-exhaustion.md` (why the broker died),
+  `docs/runbooks/local-provider-down.md` (the PolyStrata dependency).

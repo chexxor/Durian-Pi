@@ -62,8 +62,8 @@ last_reviewed: YYYY-MM-DD
 | 2026-10-17 | sev1 | [broker-crash](2026-10-17-broker-crash.md) | seats idle with queued work; no `serve` process; the broker log stops | broker-down-or-stalled | open |
 | 2026-10-18 | sev1 | [broker-dormant-stalled](2026-10-18-broker-dormant-stalled.md) | the team has stopped working; the broker process is alive but its log stops | broker-down-or-stalled | mitigated |
 | 2026-10-18 | sev2 | [seat-unwakeable-corrupt-doc](2026-10-18-seat-unwakeable-corrupt-doc.md) | a seat is never woken; `serve.err` repeats `wake-failed … unresolvable path` | store-corruption-recovery | resolved |
-| 2026-10-18 | sev2 | [host-resource-exhaustion](2026-10-18-host-resource-exhaustion.md) | `node cli.mjs status`/`queue` dies with `FATAL ERROR: Zone Allocation failed`; the demo suite is flaky | null | mitigated |
-| 2026-10-18 | sev2 | [local-provider-empty-key](2026-10-18-local-provider-empty-key.md) | a seat on the local provider fails with `No API key for provider: local` after a broker restart | null | mitigated |
+| 2026-10-18 | sev2 | [host-resource-exhaustion](2026-10-18-host-resource-exhaustion.md) | `node cli.mjs status`/`queue` dies with `FATAL ERROR: Zone Allocation failed`; the demo suite is flaky | null | resolved |
+| 2026-10-18 | sev2 | [local-provider-empty-key](2026-10-18-local-provider-empty-key.md) | a seat on the local provider fails with `No API key for provider: local` after a broker restart | local-provider-down | mitigated |
 | 2026-10-17 | sev1 | [live-worktree-reap](2026-10-17-live-worktree-reap.md) | a commit lands on `main` from a seat whose cwd fell back to the shared tree | leaked-worktrees | resolved |
 | 2026-10-17 | sev1 | [seat-root-fallback-commit](2026-10-17-seat-root-fallback-commit.md) | a commit reached `main` and the shared tree moved to an item branch, no landing pass | leaked-worktrees | open |
 | 2026-10-17 | sev2 | [empty-landing-window](2026-10-17-empty-landing-window.md) | the exclusive landing window closes with no branches landed | land | resolved |

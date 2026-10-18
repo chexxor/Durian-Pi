@@ -3,7 +3,41 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T18:59Z (delegate — HOST COMMIT EXHAUSTION killed the broker twice tonight; operator rebooting to raise the page file; durable-TUI priority queued)._
+_Last refreshed: 2026-10-18T19:17Z (delegate — full host+rig recovery after the commit-exhaustion reboot; broker AND the local LLM are back up; recurrence 8 recorded; durable-TUI priority unchanged)._
+
+> **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T19:17Z).** — Recovery complete: broker UP (pid
+> `11816`) and the local LLM (PolyStrata) UP. Nothing is blocked.
+> - **Host is healthy.** The reboot landed; `C:\pagefile.sys` is now a fixed **32,768 MB**. Commit
+>   headroom **55,254 / 65,458 MB** free, physical **25,565 / 32,690 MB**. The `Zone Allocation failed`
+>   and `git` fork errors are gone. Root cause now grounded (commit limit = RAM + the old 4,982 MB page
+>   file) — `docs/incidents/2026-10-18-host-resource-exhaustion.md` is now **resolved**.
+> - **Broker UP — pid `11816`** (`START 19:10:52Z`, `PASS 32+`, `WAKE pm,impl,qa,scribe,auditor`,
+>   **zero `wake-failed`**, no genlock). Recovery: `resume` cleared 4 then 3 stranded submissions;
+>   restarted **without `DURIG_SEAT_ROOT` and WITH the local env** (`DURIG_LOCAL_API_KEY=local`, since
+>   #2114 is not on `main`). Step 3 of `broker-down-or-stalled.md` now carries that.
+> - **Local LLM UP.** PolyStrata restarted (launcher pid `9220`, listener `15268`, `strata-poly.exe`
+>   `5944`), serving `qwen3.6-35b-a3b-ud-q3_k_m` on `127.0.0.1:8080` (`n_ctx 65536`); `/v1/models` HTTP
+>   200 and a live completion verified. **New procedure: `docs/runbooks/local-provider-down.md`.**
+> - **Recurrence 8** (`docs/incidents/2026-10-18-broker-dormant-stalled.md`): on the first restart
+>   (pid `10728`) a `qa` conv-15 storage error logged `WAKE-RETRY in=2000ms seats=qa` but **no `PASS`**
+>   followed for ~3.5 min (fresh heartbeat, no genlock, idle CPU); the retry either never ran or hung
+>   before its `PASS` (invisible — `cmdServe` does not log `pass-failed`). **Owed: log a retry-pass
+>   attempt BEFORE the work (ROADMAP 78) + the stale-`PASS` watchdog (ROADMAP 61-64).**
+> - **`ui.mjs` viewer pid `11256` is STILL running** (the documented concurrent-opener aggravator); it
+>   did not block this recovery, but terminate it first if a recurrence 9 hits.
+> - **OPERATOR PRIORITY unchanged: durable-TUI (durian-pi) migration.** NEXT AGENT: deliver an intent to
+>   `pm` to un-park and sequence **#2095 → #2096** (+ #2103/#2104). Also queued: **#2123** (D105 impl),
+>   **#2124** (scribe, claimed), **#2125** (gated verify), **#2137** (landing list: `devtools-item-2114`
+>   @9ba3c8a — landing it removes the `DURIG_LOCAL_API_KEY` restart requirement).
+> - **`qa`:** `repeated_failure` (3× `Connection error.` while PolyStrata was down). Its only
+>   non-terminal item `#2145` is `deferred`, so there is no queued `qa` work to re-drive; confirm `qa`
+>   recovers on its next real wake now that the server is up.
+> - `main` = `ffdec3f`, 11 ahead of `origin/main` (unpushed; operator holds push). Docs updated this
+>   session: 3 incident reports + `broker-down-or-stalled.md` + new `local-provider-down.md` + runbook and
+>   incident indexes.
+> - **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Do not:** restart the broker without the local env; leave PolyStrata down; treat a fresh heartbeat
+>   as health (read the last `PASS`).
 
 > **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T18:59Z).**
 > - **Why nothing was running: the host commit charge is exhausted — NOT a durig bug.** `systeminfo`:
