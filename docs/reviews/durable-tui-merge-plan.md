@@ -59,9 +59,17 @@ HANDOFF §8.1 offers two products:
 - **(b) Use the adapter as the rendering core of a richer multi-seat operator TUI** — replace/augment
   `ui.mjs`; adds seat switching, the queue view, and the attach/security question.
 
-**Recommendation: do (a) first.** It is the only option that lets both TUIs run side by side with no
-shared code, and it defers the attach protocol — the expensive, security-gated part. Revisit (b) only
-after Phase 2 is verified. This is an operator/lead ruling; record it as a DECISION before code lands.
+**RULED (operator, 2026-10-18): option (b).** The durable TUI is the intended replacement for
+`durig ui` as durian-pi's multi-seat surface. The delegate recommended (a) first (lower risk, defers the
+attach protocol); the operator chose the destination directly. Consequences: the merge must add the
+multi-conversation / attach work that (a) deferred (ROADMAP 52 + 55), and `ui.mjs` becomes the fallback
+rather than a co-existing surface.
+
+**ADDED REQUIREMENT (operator, 2026-10-18): a team-status viewport.** The surface must show the state of
+the whole team (queue depth, per-seat state, attention), not only one conversation. The best UX for this
+is an OPEN DESIGN QUESTION — the operator directed a consultation with `designer` and `advocate`
+(intent `92682546-ad8e-4406-9efb-c7b1208e38c3`). Phase 2 must not hard-code a layout before that
+proposal exists.
 
 ---
 

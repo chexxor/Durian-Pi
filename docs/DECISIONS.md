@@ -2615,3 +2615,28 @@ rejected: destroys the working read-only viewer and D11's fallback evidence. (c)
 `docs/reviews/durable-tui-merge-plan.md` + `docs/reviews/durable-tui-gap-analysis.md`; Phase 0 scope
 ruling and registration pending. The `@earendil-works/pi-coding-agent` dependency pin is a `devtools`
 prerequisite.
+
+## D102 — The durable TUI replaces `durig ui` as the multi-seat surface (scope b); team-status UX is a design consultation (operator, 2026-10-18)
+
+**Decision.** The durable-TUI merge targets **scope (b)**: the real Pi `InteractiveMode` TUI becomes
+durian-pi's multi-seat operator surface and replaces `ui.mjs` as the primary view. `ui.mjs` remains the
+documented read-only fallback (D11). A **team-status viewport** is a required part of the surface. The
+operator delegates its UX to `designer` and `advocate`: PM registers the consultation and routes it to
+those two seats on unpause, and their written proposal (`docs/`, with a sketch) selects the layout.
+Phase 2 selects no layout until that proposal is accepted. This decision sets (b) as the destination and
+supersedes D101's "recommend (a) first" staging; the multi-conversation and attach work (ROADMAP 52 +
+55) is in scope.
+
+**Why.** (b) was the original intention for the durable TUI — one coherent place to run the team —
+rather than bolting a second single-seat console onto the existing viewer. The operator judged a
+whole-team status viewport essential to that surface but was explicit that its best UX is undecided,
+hence a design consultation rather than a delegate guess.
+
+**Alternatives.** (a) as the destination — rejected by the operator: it leaves the fleet view and the
+interactive console as two separate products and does not fulfill the original intention. A bespoke
+layout chosen by the delegate — rejected: UX is the design seats' ownership, and the operator asked for
+their opinions.
+
+**Status.** Ruled. The consultation intent is spooled (`92682546-ad8e-4406-9efb-c7b1208e38c3`) for PM to
+route on unpause. Phase 1 (own-store, fail-closed base) proceeds unchanged. Phase 2 starts after the
+designer/advocate UX proposal is accepted and the ROADMAP 55 security position is written.

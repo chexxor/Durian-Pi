@@ -3,15 +3,20 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T06:07Z (delegate clock-out — durable-tui merge plan + gap analysis delivered and spooled to `pm`; rename proposal escalated; rig still paused, broker down)._
+_Last refreshed: 2026-10-18T06:25Z (delegate — durable-tui merge pack delivered; operator RULED scope (b), designer+advocate UX consult routed; rename proposal escalated; rig paused, broker down)._
 
 > **DELEGATE SESSION (2026-10-18) — durable-tui merge pack delivered; rename blocked on a window.**
 > The operator directed: (1) proceed with the durable-tui merge procedure; (2) gap-analyze the spike vs
 > the current app; (3) rename `pi-opendurig` → `durian-pi`. Delivered as delegate analysis only (no
 > product code written — implementation is the team's):
-> - `docs/reviews/durable-tui-merge-plan.md` — phased merge (parallel, non-default entrypoint first on
->   its OWN store; the spike is a writer, so it must never open `selfdev.sqlite` while the broker
->   drives). Phase 0 scope ruling (a vs b) is an operator/lead call, pending.
+> - `docs/reviews/durable-tui-merge-plan.md` — phased merge (Phase 1: non-default entrypoint on its OWN
+>   store, fail-closed broker guard; the spike is a writer, so it must never open `selfdev.sqlite` while
+>   the broker drives). **SCOPE RULED (operator): option (b)** — the Pi TUI replaces `ui.mjs` as
+>   durian-pi's multi-seat surface, with a required team-status viewport. Its UX is a design
+>   consultation routed to `designer` + `advocate` (intent `92682546-ad8e-4406-9efb-c7b1208e38c3`);
+>   Phase 2 selects no layout before their proposal is accepted.
+> - `docs/DECISIONS.md` **D101** (parallel-entrypoint strategy) and **D102** (scope (b) ruling + UX
+>   consultation).
 > - `docs/reviews/durable-tui-gap-analysis.md` — 33-row capability matrix + P1/P2/P3 + DECIDE build list
 >   for the new TUI (seat switcher, attach/write seam, router tools, sanitise/secret-redaction, cwd,
 >   tests, dependency pin, `pi.system`/`reset`, halt guard, …).
