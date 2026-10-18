@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18 (delegate clock-out — QA recovery + impl corruption finding)._
+_Last refreshed: 2026-10-18 (delegate clock-out — QA + impl recovered; next: pi-durable compaction research)._
 
 ## NEXT SESSION — continue this session's goals
 
@@ -11,16 +11,20 @@ _Last refreshed: 2026-10-18 (delegate clock-out — QA recovery + impl corruptio
 (2) get the **worktree-audit + leak fix (ROADMAP 76)** registered and implemented; (3) keep reclaiming
 the branch/worktree sprawl safely.
 
+**NEXT AGENT JOB (operator, 2026-10-18):** read a webpage on **pi-durable**, analyse it, and explain to
+the operator **why our pi-durable app cannot run a compaction on the live app while it is running**
+(today `compact` is a broker-stopped write verb — `docs/runbooks/compact-a-seat.md`). Deliver the written
+analysis; no code change unless the operator directs.
+
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
-**Known blocker (NEW, 2026-10-18):** the broker cannot read `impl` conversation 9 — `serve.err` logs
-**12×** `PathError: unresolvable path: ["tools",0]` (dogfood **F14** corrupt-document class, #110), the
-exact precursor in `docs/incidents/2026-10-18-broker-dormant-stalled.md`; `impl` cannot be woken and qa
-wakes strand. Operator authorization needed for `broker-down-or-stalled.md` /
-`store-corruption-recovery.md`. Full detail in the **QA RECOVERY** section below.
+**Known blocker:** none blocking the delegate. `impl` conv 9's corrupt `pi.live` (doc `12105`) was
+**repaired** this session — `impl` is woken and working again (see the **QA + IMPL RECOVERY** section
+below and `docs/incidents/2026-10-18-seat-unwakeable-corrupt-doc.md`). Watch for the **37(b)** stranded
+`admitted_not_started` (a substrate defect, not a seat fault) and the main-red `#1610` landing gate.
 
-**State at clock-out:** broker **UP pid `17564`** (START `01:43:05Z`; heartbeat fresh; `PASS` advancing).
-`main` `abc2a0e`, tree clean, **not pushed**; the remote-tracking
+**State at clock-out:** broker **UP pid `28168`** (START `01:48:36Z`; `PASS 28` advancing; `WAKE impl`
+and `WAKE qa` fresh). `main` `fa645fb` (+ this session's ops-doc commit), **not pushed**; the remote-tracking
 `origin/main` = `e8550b0` (a commit from THIS session — a push occurred, **UNVERIFIED**; the delegate did
 not push). `origin/main..main` = 1 unpushed (`abc2a0e`). 107 non-main refs; ~140 worktrees. Oracle
 **131/0**.
@@ -45,7 +49,7 @@ not push). `origin/main..main` = 1 unpushed (`abc2a0e`). 107 non-main refs; ~140
 **Do not:** push (operator holds it); `--force`/`git clean` a dirty worktree; delete an `ahead>0` ref or a
 snapshot; stop the broker without an operator window (unless it is wedged with no genlock → terminate).
 
-## QA RECOVERY — 2026-10-18 (delegate, operator-authorized window)
+## QA + IMPL RECOVERY — 2026-10-18 (delegate, operator-authorized window)
 
 **QA's context degraded in place (the recurring `qa-context-degeneration` incident).** Evidence: `log qa`
 entry `#79843` — QA's own words *"I'm in trouble. My context is degrading... This is the second time."*;
@@ -64,10 +68,15 @@ verify; produced a full partner-check verdict). `malformed_tool_call` and the fi
 both cleared. **A fresh `admitted_not_started` can reappear** (37(b) is the known substrate defect, not a
 qa fault) — do not keep cycling the broker for it.
 
-**WATCH — impl conversation is unreadable by the broker.** `serve.err` logs **12×**
-`{"driver":"wake-failed","seat":"impl","conversationId":9,"error":"PathError: unresolvable path:
-[\"tools\",0]"}` and 1× pm `SessionFailed: Session failed after a storage error` — the dogfood **F14**
-corrupt-document class (#110). See the Known blocker in **NEXT SESSION** above.
+**IMPL RECOVERED (same window).** `impl` conv 9's `pi.live` (doc `12105`) was corrupt in the alive-broker
+shape — `.spike/serve.err` logged `PathError: unresolvable path: ["tools",0]` **12×** while the broker
+stayed alive, `status` stderr named `unreadable pi.live for conversation 9`, and `attention` showed
+`impl last_run_failed: aborted`. Per `store-corruption-recovery.md`: stop (pid `17564`, confirmed gone) →
+backup `.spike/store-backup-20261017-204831` → `node scripts/repair-pi-live.mjs ./selfdev.sqlite 9`
+(retired doc `12105`, `seq 847092`) → restart (**pid `28168`**, `START 01:48:36Z`). Verified: `WAKE impl`
+/ `PASS 16 woke=impl`, `status` stderr clean, `impl` preparing `item-1881`. Incident:
+`docs/incidents/2026-10-18-seat-unwakeable-corrupt-doc.md`; the runbook gained this shape + the
+`["tools",0]` variant + mandatory front-matter.
 
 ## BRANCH AUDIT — 2026-10-17 (delegate; operator: "review the repo and branches")
 
