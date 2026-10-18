@@ -5,8 +5,8 @@ severity: sev1
 status: mitigated
 symptom: "the team has stopped working; the broker process is alive but its log stops"
 runbook: broker-down-or-stalled
-fix: null
-prevention: "ROADMAP 78 (log SessionFailed.cause on wake-failed + a broker watchdog/auto-restart) and the dormant-revisit gap"
+fix: "0c0d4d3"
+prevention: "0c0d4d3 (dormant-revisit retry) + ROADMAP 78 (log SessionFailed.cause) + ROADMAP 61-64 (watchdog) + #2126"
 last_reviewed: 2026-10-18
 ---
 
