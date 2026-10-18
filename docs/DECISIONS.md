@@ -2725,3 +2725,54 @@ boundary, not a summary of the prior item.
 routing; acceptance is a demo proving a local-provider seat gets a `pi.reset` boundary between two
 consecutive work items while a non-local seat does not, plus `node --check`, the full suite, and a
 non-author verify.
+
+---
+
+## D107 — A local-provider seat compacts its tool-call history WITHIN a long work item; the cross-item boundary stays a `pi.reset` (operator policy, 2026-10-18)
+
+**Decision.** When a local-provider seat (D104) must work ONE item across many turns and will exceed
+its small served window, it MUST compact the tool-call history so the information it learned SURVIVES
+well enough to keep progressing — and do so REPEATEDLY until the item finishes. This is the **intra-item
+complement to D105**: D105 draws a fresh `pi.reset` at the **cross-item** boundary (between two items),
+whereas this covers the case where no clean boundary is available because the item is mid-flight.
+D105's "`compact` instead of reset — rejected" is hereby SCOPED to the cross-item boundary; it does not
+forbid intra-item compaction.
+
+**How (the ordering is the invariant; D84 governs the mechanics):**
+- **Mask before you summarize.** Omit/replace bulky TOOL RESULTS first (pi-durable `ContextEdit
+  { action: "omit" | "replace" }`, ROADMAP 92) — keep the decision/path, drop the dump. Cheapest first.
+- **Summarize at a phase transition**, not mid-reasoning (the best point is "after localizing the issue,
+  before beginning the edit" — `docs/Managing_Long_Context_Length.md`); a fixed threshold can fire where
+  context is hardest to summarize.
+- **Preserve the pointers, not the bodies:** item id + claim state, artifact paths / branches / SHAs,
+  acceptance criteria, and the decisions taken. Thin tool returns (`thinResultText`, FEATURES 167) mean
+  there is less to carry. The summary is a structured schema with a token floor (ROADMAP 93) and the
+  summarizer treats in-context content as untrusted (95).
+- **Cap the repeats, then RE-ANCHOR.** Past the compaction cap, force a fresh session re-anchored from
+  the durable instructions + the item and its artifacts (ROADMAP 94) — "repeat until degradation" becomes
+  "repeat to a cap, then re-anchor".
+- **Trigger on the MEASURED effective window**, not the advertised one (quantization shrinks effective
+  long-context accuracy); this depends on `status` reporting the local seat's `window.denominator`, which
+  is currently `null` (delegate defect filed).
+- **Hard invariants carry over from D105:** never drop a `claimed` item across a compaction, never
+  compact over a live generation lease, and a VERIFIER must not inherit an author's summary (D84/96).
+
+**Why.** A 64k local seat on one serialized GPU cannot finish a turn-heavy item in one window; without
+compaction it either hard-stops or, worse, keeps stale exploration that impairs reasoning long before the
+window fills. Today the mechanism is the WRONG one and is not operator-controlled: durig passes no
+compaction settings to `Harness.open`, so pi-durable's default applies — `reserveTokens 16384`,
+`backgroundTokens 32768` — i.e. background compaction from **~25 %** and blocking at **~75 %** of the
+served 64k window. Live evidence: `qa` carries five `pi.compaction` summaries while consuming only
+~18.9k/64k. Recorded because relying on that accidental default is not a policy.
+
+**Alternatives.** (a) `pi.reset` MID-item — rejected: it discards the in-progress work and can drop the
+claim. (b) Let the seat exceed the window and hard-fail — rejected: no progress, and the failure lands
+as a lost run. (c) Re-compact without a cap — rejected: unbounded summarization compounds loss; D84/94
+caps and re-anchors.
+
+**Status.** Policy RULED and recorded (operator, 2026-10-18). Enforcement is NOT implemented; route to
+`pm` for registration + routing ALONGSIDE D105's `#2123` (the two are one reliability story: reset
+between items, smart compaction within one). Acceptance: a demo proving a local seat compacts (mask →
+summarize at a transition) and continues an item across a compacted boundary, a cap that forces a fresh
+re-anchored session, a non-local seat unchanged, plus `node --check`, the full suite, and a non-author
+verify. D106 is claimed by the unlanded `scribe-item-2169`; recorders must not reuse 106.
