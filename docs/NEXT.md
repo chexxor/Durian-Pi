@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18 (delegate clock-out; goals in flight below)._
+_Last refreshed: 2026-10-18 (delegate clock-out — QA recovery + impl corruption finding)._
 
 ## NEXT SESSION — continue this session's goals
 
@@ -13,8 +13,14 @@ the branch/worktree sprawl safely.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
-**State at clock-out:** broker **UP pid `15720`** (START `01:18:09Z`; heartbeat fresh; `PASS` advancing;
-2 genlocks = work in flight). `main` `abc2a0e`, tree clean, **not pushed**; the remote-tracking
+**Known blocker (NEW, 2026-10-18):** the broker cannot read `impl` conversation 9 — `serve.err` logs
+**12×** `PathError: unresolvable path: ["tools",0]` (dogfood **F14** corrupt-document class, #110), the
+exact precursor in `docs/incidents/2026-10-18-broker-dormant-stalled.md`; `impl` cannot be woken and qa
+wakes strand. Operator authorization needed for `broker-down-or-stalled.md` /
+`store-corruption-recovery.md`. Full detail in the **QA RECOVERY** section below.
+
+**State at clock-out:** broker **UP pid `17564`** (START `01:43:05Z`; heartbeat fresh; `PASS` advancing).
+`main` `abc2a0e`, tree clean, **not pushed**; the remote-tracking
 `origin/main` = `e8550b0` (a commit from THIS session — a push occurred, **UNVERIFIED**; the delegate did
 not push). `origin/main..main` = 1 unpushed (`abc2a0e`). 107 non-main refs; ~140 worktrees. Oracle
 **131/0**.
@@ -38,6 +44,30 @@ not push). `origin/main..main` = 1 unpushed (`abc2a0e`). 107 non-main refs; ~140
 
 **Do not:** push (operator holds it); `--force`/`git clean` a dirty worktree; delete an `ahead>0` ref or a
 snapshot; stop the broker without an operator window (unless it is wedged with no genlock → terminate).
+
+## QA RECOVERY — 2026-10-18 (delegate, operator-authorized window)
+
+**QA's context degraded in place (the recurring `qa-context-degeneration` incident).** Evidence: `log qa`
+entry `#79843` — QA's own words *"I'm in trouble. My context is degrading... This is the second time."*;
+garbled output ("extras impossible without"), 2 malformed `complete_work` calls (`#79839`, `#79843`),
+`status` `qa: malformed_tool_call (2)` + `generation_in_flight`. Context `230,090` tokens. The guard did
+not reset it (Defect B false negative; `#1705` still deferred).
+
+**Fix applied (broker-stopped window):** backup `.spike/delegate/store-backup-20261017-203234` →
+`serve --stop` (pid `15720`) → `resume` (cleared impl submission `79391`) → `compact qa` (taskId `79861`,
+`summaryEntryId 79862`) → restart. A **second** cycle was needed: `compact` left submission `#79865`
+`admitted_not_started` (item 37(b)) → stop (pid `29432`) → `resume` (cleared `#79865`) → restart
+(**pid `17564`**, `START 01:43:05Z`).
+
+**Result:** QA context `230,090 → ~54k`; coherent, on-task turns (re-executed the `#1843` pause/unpause
+verify; produced a full partner-check verdict). `malformed_tool_call` and the first `admitted_not_started`
+both cleared. **A fresh `admitted_not_started` can reappear** (37(b) is the known substrate defect, not a
+qa fault) — do not keep cycling the broker for it.
+
+**WATCH — impl conversation is unreadable by the broker.** `serve.err` logs **12×**
+`{"driver":"wake-failed","seat":"impl","conversationId":9,"error":"PathError: unresolvable path:
+[\"tools\",0]"}` and 1× pm `SessionFailed: Session failed after a storage error` — the dogfood **F14**
+corrupt-document class (#110). See the Known blocker in **NEXT SESSION** above.
 
 ## BRANCH AUDIT — 2026-10-17 (delegate; operator: "review the repo and branches")
 
