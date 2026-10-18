@@ -3,24 +3,26 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T04:35Z (delegate — branch-sprawl cleanup: 51 merged branches pruned + 5 verified branches landed; prevention routed to pm; broker dormant-stall recurrence #3 recovered)._
+_Last refreshed: 2026-10-18T04:40Z (delegate — branch-sprawl cleanup: 51 merged pruned, 5 verified landed, 41 dirty worktrees archived out-of-tree; prevention routed to pm; broker dormant-stall recurrence #3 recovered)._
 
 ## NEXT SESSION — fresh agent starts here (delegate, 2026-10-18T04:35Z)
 
-**Current item:** finish the branch backlog. This session pruned **51 merged branches** and landed **5
+**Current item:** finish the branch backlog. This session pruned **51 merged branches** (clean ones), landed **5
 verified clean branches** (`devtools-item-1904` compact-spool + `scribe-item-1968/1969/1970/1971`
-docs-truth) via `scripts/land.mjs --suite` (suite **138/0**); `main` `95e7c0c → b3710f3`. Refs
-**137→84**, worktrees **167→130**. **36 unlanded branches remain** (3 clean-but-not-ready, 33 conflict,
-2 snapshots); ~46 merged refs stay held by dirty/real-content worktrees.
+docs-truth) via `scripts/land.mjs --suite` (suite **138/0**), and — on the operator's ruling —
+**archived 41 dirty merged-ref worktrees out-of-tree** to `../pi-opendurig.worktrees/` (content moved
+byte-for-byte, then the merged ref freed with `git switch --detach` + `git branch -d`; nothing discarded).
+`main` `95e7c0c → b3710f3 → e072392` (docs commit). **Refs 137→46**, worktrees 167→135. **38 unlanded
+branches remain** (was 36; live seats created new ones during the session).
 
 **Queue id:** `#2017` (ROADMAP 76 stack landing: `impl-item-1891` → `impl-item-1907`); the landing-list
 rows completed this session (`#1912`, `#1982`, `#1999`, `#2009`, `#2014`) are now landed.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
-**Known blocker:** the ~46 merged refs pinned by dirty worktrees need an operator ruling (discard vs
-archive vs owner commit); the model-swap window (`#1957`) needs an operator-declared broker stop. The
-rebase-and-land pass for the 33 conflicts needs `pm` to register + route it.
+**Known blocker:** the model-swap window (`#1957`) needs an operator-declared broker stop. The
+rebase-and-land pass for the 33 conflicts needs `pm` to register + route it. (The dirty-worktree
+operator decision is RESOLVED: archived out-of-tree.)
 
 **Root cause + prevention DESIGN routed to `pm`** in one intent (`intent-branch-sprawl`, delivered
 `04:20:56Z`, inbox drained): no code deletes item branches; `complete_work` retires the worktree but
@@ -35,9 +37,12 @@ ratchet, rebase-before-land). **pm should register these and open the rebase-and
 (ROADMAP 76), plus singletons. Snapshots `item-148`/`selfdev-borrow` must NEVER land. Each tip needs a
 rebase + re-verify before landing.
 
-**OPERATOR DECISION NEEDED:** ~46 merged refs are pinned by worktrees dirty with REAL content
-(14 tracked mods; probe scripts e.g. `qa-item-1271`, `security-item-1707`) — discard vs archive vs owner
-commit. The delegate touched none.
+**ARCHIVED (operator ruling, 2026-10-18):** the 41 merged refs pinned by worktrees dirty with real
+content were **archived out-of-tree**, not discarded — `git worktree move` to
+`../pi-opendurig.worktrees/` (files preserved byte-for-byte, spot-verified by md5), then `git switch
+--detach` (working tree untouched) and `git branch -d` (merged-only). They remain registered worktrees
+at the archive path (6.3 GB); recover any item by re-linking or inspecting there. The 41 dirs are gone
+from the project root.
 
 **Incident:** broker dormant-stall recurred a **third time today** (`docs/incidents/2026-10-18-broker-dormant-stalled.md`,
 recurrence 3). NEW aggravator VERIFIED and fixed: **10 stale `cli.mjs log … --follow` viewers + 1
@@ -45,9 +50,10 @@ recurrence 3). NEW aggravator VERIFIED and fixed: **10 stale `cli.mjs log … --
 pid `7220`, passes advancing, 4 genlocks. **Do not leave long-lived log/watch viewers attached to the
 shared store while the broker drives.**
 
-**State at this clock-out:** broker UP pid `7220` (START `04:20:52Z`… restarted; passes advancing).
-`main` `b3710f3`, **10 commits ahead of `origin/main` (`origin/main` = `95e7c0c`)** — unpushed (operator
-holds push). Tracked tree clean; scratch quarantined under `.spike/delegate/`. The **model-swap window
+**State at this clock-out:** broker UP pid `7220` (restarted; passes advancing).
+`main` `e072392`, **ahead of `origin/main` (`origin/main` = `95e7c0c`)** — unpushed (operator
+holds push). Tracked tree clean; scratch + archived refs under `.spike/delegate/` and
+`../pi-opendurig.worktrees/`. The **model-swap window
 (`#1957`) still awaits the operator's declared broker stop** (gate green, `#1936` landed).
 
 **Do not:** stop the broker without an operator window (a landing pass is one); leave log/watch viewers

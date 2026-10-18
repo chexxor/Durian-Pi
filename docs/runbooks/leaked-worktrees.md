@@ -154,3 +154,11 @@ as it is clean. The sweep ALSO honours `seat-root` (a worktree that is a live se
 Demo `worktree-audit` covers the classification, the dirty-kept-with-correct-count rule, and the
 lock-release-on-refusal fix. LEAK SOURCES B (qa verify scratch) and C (stray `M rig.selfdev.json`) are
 now VISIBLE in the audit (as `non-item` and as an uncommitted count); preventing them is a follow-up.
+
+2026-10-18 (archive-out-of-tree, operator ruling): 41 merged item-branches pinned by worktrees **dirty
+with real content** (tracked mods, probe scripts, nested verify trees) were **archived, not discarded** —
+`git worktree move` to `../pi-opendurig.worktrees/` preserved every file (spot-verified md5), then
+`git switch --detach` freed the branch (working tree untouched) and `git branch -d` removed the merged
+ref. 41 dirs left the project root; `main` unmoved; nothing forced. The archived worktrees stay
+registered at the archive path (~6.3 GB) and are recoverable. This is the resolution for the class the
+"Reclaiming a merged item-branch" section must KEEP (dirty/real content): relocate rather than discard.
