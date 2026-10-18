@@ -287,7 +287,7 @@ the file can be running something else — a rig spec declared its
 constitution inline while the store held a different one, so 13 seats ran without
 their team culture and no command said so (D25).
 
-Nine rules with stable ids, each with a subject and the exact fix:
+Fourteen rules with stable ids, each with a subject and the exact fix:
 
 | Rule | Severity |
 |---|---|
@@ -300,6 +300,23 @@ Nine rules with stable ids, each with a subject and the exact fix:
 | `no-verifier-seat` | fix-now |
 | `single-model-rig` | fix-now |
 | `seat-without-capabilities` | fix-now |
+| `runbook-stale` | error |
+| `runbook-unverified` | fix-now |
+| `ownership-seat-missing` | error |
+| `verification-without-evidence` | fix-now |
+| `feature-row-missing` | fix-now |
+
+The last five are the maintenance rules. `runbook-stale` (error) fires when a runbook was verified
+before a file it names changed, and `runbook-unverified` (fix-now) when its `Verify` has never run
+(#964, ROADMAP 81a; proof `demo/runbook-rules.test.mjs`). `ownership-seat-missing` (error) fires when
+an ownership class names an owner seat the rig does not declare (#714; proof `demo/ownership.test.mjs`).
+`verification-without-evidence` (fix-now) fires when a verification task is completed with only an
+acknowledgement and no re-runnable evidence — `complete_work` now carries an `evidence` field for it
+(#715; proof `demo/check-evidence.test.mjs`). `feature-row-missing` (fix-now) fires when a `feat`
+commit landed with no `docs/FEATURES.md` row and no explicit "no feature surface" note (D62 /
+ROADMAP 46's FEATURES-row half; proof `demo/feature-row.test.mjs`) — the machine-checked form of the
+merge gate's Feature row. The rule's input is plain data the CALLER reads from git
+(`src/featuredocs.mjs`), so it is SKIPPED with its reason until a caller supplies it.
 
 `store-missing-seat` and `stray-seat` are the two directions of one disagreement
 between the rig file and the store, and they are not symmetric. A seat the file

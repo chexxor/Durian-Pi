@@ -1932,6 +1932,11 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     *Owner:* `impl` (author) · *Consulted:* `advocate`, `devtools` · *Where:* `src/checkup.mjs`.
     *Acceptance:* failing-first demo — a rig naming a non-existent owner seat fails `check`; the
     current rig passes.
+    *FEATURES-row half (D62) BUILT:* rule `feature-row-missing` (`src/checkup.mjs`), fed by
+    `src/featuredocs.mjs` (the `git log --grep '^feat'` sweep as plain data); proof
+    `demo/feature-row.test.mjs`. Severity `fix-now` (a missing doc row does not stop the rig working;
+    the merge gate is where it blocks). The `check` CLI caller does not supply the git-history data
+    yet, so the rule reports SKIPPED there — wiring it into `cli.mjs` is a separate, serialized item.
 
 47. **Surface decision (in flight).** A capability states CLI/TUI/both — the research confirms this is
     the one genuinely missing decision class. Routed 2026-10-16 to `advocate` (`WORKFLOWS.md` W4) and

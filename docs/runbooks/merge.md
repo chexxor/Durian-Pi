@@ -182,8 +182,11 @@ done
 
 A `feat` commit with no `docs/FEATURES.md` touch (and no explicit "no feature surface" note in its item)
 is drift: **report it and route it to `pm`; do not patch the docs by hand.** This is a read-only net —
-the durable fix is a `check` rule (ROADMAP item 46's FEATURES-row half / D62), so drop this block once
-that rule exists (2026-10-17 docs-drift finding).
+the durable fix is the `check` rule `feature-row-missing` (ROADMAP item 46's FEATURES-row half / D62,
+`src/checkup.mjs`; proof `demo/feature-row.test.mjs`), which reads exactly this sweep through
+`src/featuredocs.mjs`. **That rule exists, but the `check` CLI caller does not supply it the git-history
+data yet, so `check` reports it SKIPPED** — keep this block until that wiring lands (tracked
+separately), then drop it (2026-10-17 docs-drift finding).
 
 ## Escalate to
 `pm` — to route a landing pass or open a landing item when the `ahead>0` set grows; `lead` — when a

@@ -119,6 +119,14 @@ try {
 			assert.ok(c.why, `rule ${c.id} skips without a reason`);
 			continue;
 		}
+		// The FEATURES-row rule (ROADMAP 46 / D62) needs git-history data the CLI does
+		// not supply yet (the wiring is a separate, serialized item), so it is
+		// legitimately SKIPPED here - and must say why.
+		if (c.id === "feature-row-missing") {
+			assert.equal(c.status, "skipped", `rule ${c.id} is "${c.status}", not "skipped": the CLI passes no git-history data yet`);
+			assert.ok(c.why, `rule ${c.id} skips without a reason`);
+			continue;
+		}
 		// The starter deliberately declares no `ownership` block (a bare starter rig
 		// must stay clean — ROADMAP 46 / #714), so that rule is SKIPPED with a reason,
 		// not passed. Every other rule must genuinely run and pass.
@@ -212,6 +220,7 @@ try {
 		"runbook-front-matter": "demo/runbook-frontmatter.test.mjs",
 		"ownership-seat-missing": "demo/ownership.test.mjs",
 		"verification-without-evidence": "demo/check-evidence.test.mjs",
+		"feature-row-missing": "demo/feature-row.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(

@@ -104,6 +104,11 @@ export const RULES = [
     severity: "fix-now",
     what: "a verification task was completed with only an acknowledgement, not re-runnable evidence",
   },
+  {
+    id: "feature-row-missing",
+    severity: "fix-now",
+    what: "a feat commit landed with no docs/FEATURES.md row and no stated \"no feature surface\" note",
+  },
 ];
 
 const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
@@ -268,9 +273,13 @@ export function runbookFrontMatterProblems(runbook) {
  *   NAMES that changed since `last_verified`. Omit it entirely to leave the runbook rules unrun
  *   (they are then reported skipped, never as a false pass).
  * @param {Array<object>|null} [input.queueItems]  the store's queue items, or null when the queue was not read
+ * @param {Array<{sha:string, subject:string, touchedFeatures:boolean, noSurfaceNote:boolean}>|null} [input.featureDocs]
+ *   the `feat` commits the CALLER read from git history (src/featuredocs.mjs) and whether each
+ *   touched docs/FEATURES.md; null when the history was not read. Omit it to leave the
+ *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -580,6 +589,35 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
         ids,
         `${acked.length === 1 ? "verification item" : `${acked.length} verification items`} ${ids} completed without evidence — the completion is an ack, not a re-run, so nothing can be re-checked`,
         "re-run the artifact and record it when completing a verification item: complete_work(<id>, <summary>, { command, exitCode, artifact }) — an ack alone is not a sign-off (W2)",
+      );
+    }
+  }
+  // 12. ROADMAP 46 (FEATURES-row half) / D62: a shipped capability carries its own doc
+  //    acceptance — the docs/FEATURES.md row — or its item records an explicit "no feature
+  //    surface" note. The merge gate (docs/runbooks/merge.md) enforces this by hand with a
+  //    `git log --grep '^feat'` sweep; a prose gate goes stale, so it is checked here. The
+  //    input is plain data the CALLER read from git (src/featuredocs.mjs) for the same reason
+  //    the runbook rules take plain data: checkup never runs a subprocess. Absent input means
+  //    the history was not read => SKIPPED with its reason, never a silent pass (D25).
+  //    Severity is fix-now, not error: a missing doc row does not stop the rig working, so it
+  //    must not fail a script — the merge gate is where it blocks. Stated limit (mirrors the
+  //    block this replaces): only `feat` commits, and only a SAME-commit touch of the doc.
+  if (!Array.isArray(featureDocs)) {
+    skipped.push({
+      id: "feature-row-missing",
+      why: "no git-history data was supplied, so shipped capabilities cannot be checked against docs/FEATURES.md",
+    });
+  } else {
+    const drifted = featureDocs.filter((c) => c && c.touchedFeatures !== true && c.noSurfaceNote !== true);
+    if (drifted.length > 0) {
+      const named = drifted
+        .map((c) => `${String(c?.sha ?? "?").slice(0, 8)} ${firstLine(c?.subject ?? "(no subject)", 64)}`)
+        .join("; ");
+      add(
+        "feature-row-missing",
+        drifted.map((c) => String(c?.sha ?? "?").slice(0, 8)).join(", "),
+        `${named} — a feat commit with no docs/FEATURES.md row and no "no feature surface" note, so a shipped capability has no doc entry (D62)`,
+        "add the docs/FEATURES.md row for each, or record an explicit \"no feature surface\" note in its item",
       );
     }
   }
