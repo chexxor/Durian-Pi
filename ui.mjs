@@ -15,7 +15,6 @@
 // Usage: node ui.mjs [--help]   (reads DURIG_DB / durig.config.json like every other verb)
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { readFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -29,6 +28,7 @@ import { createViewMode } from "./src/tui/viewmode.mjs";
 import { createTerminalScreen, PASTE_OFF } from "./src/tui/restore.mjs";
 import { createInputLine } from "./src/tui/input.mjs";
 import { writeIntent } from "./src/broker.mjs";
+import { readData } from "./src/readclient.mjs";
 import { composeFrame } from "./src/tui/paint.mjs";
 import { createSyncState, SYNC_QUERY } from "./src/tui/sync.mjs";
 
@@ -104,15 +104,11 @@ if (!process.stdout.isTTY) {
   process.exit(2);
 }
 
-let storage;
 try {
   if (!existsSync(DB_PATH)) {
     process.stderr.write(`no store at ${DB_PATH} — run "node cli.mjs up rig.starter.json" first (or set DURIG_DB)\n`);
     process.exit(2);
   }
-  storage = await openNodeSqliteStorage(DB_PATH).catch((err) => {
-    throw new Error(`cannot open ${DB_PATH}: ${err?.message ?? err}`);
-  });
 
   // Selection is owned here, not in the driver: the driver is a pure key/tick
   // machine, and this entrypoint already owns readState (the seat whose turns
@@ -127,7 +123,7 @@ try {
   // The detail view's loaded window (ROADMAP 89): newest page + paged-in older
   // pages, owned by the entrypoint and driven by the keys below.
   const conv = createConversationWindow();
-  const readState = await makeReadState(storage, ui, conv, view, { input, cfg: CFG, dbPath: DB_PATH });
+  const readState = await makeReadState(ui, conv, view, { input, cfg: CFG, dbPath: DB_PATH });
   process.stdin.setRawMode(true);
   process.stdin.resume();
   screen.enter();
@@ -182,7 +178,12 @@ try {
         const maxScroll = Math.max(0, loaded.length - 1);
         if (delta < 0 && ui.scroll >= maxScroll && ui.convId !== undefined && conv.exhausted !== true) {
           void loadOlder(conv, (oldest) =>
-            readOlderEntries(storage, ui.convId, oldest, SCAN_LIMIT, BACKGROUND_CONTEXT),
+            readData(
+              DB_PATH,
+              "older",
+              { conversationId: ui.convId, oldestLoadedId: oldest, limit: SCAN_LIMIT },
+              (s) => readOlderEntries(s, ui.convId, oldest, SCAN_LIMIT, BACKGROUND_CONTEXT),
+            ),
           ).then(() => driver.tick());
           return;
         }
@@ -239,11 +240,6 @@ try {
       try {
         await driver.cleanup();
       } finally {
-        try {
-          await storage.close(BACKGROUND_CONTEXT);
-        } catch (err) {
-          process.stderr.write(`storage close: ${err?.message ?? err}\n`);
-        }
         process.exit(0);
       }
     };

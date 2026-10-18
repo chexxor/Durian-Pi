@@ -114,7 +114,7 @@ are spooled for the owner to apply (safe).**
 
 | Path | Effect | Opens the store? | Safe while the broker runs? | Why |
 |---|---|---|---|---|
-| `status`, `watch`, `log`, `events`, `metrics`, `check`, `config`, `ui.mjs` | read | storage read-only (`openStore`) | **Yes** | D11: viewers never wake seats; they read the storage layer directly |
+| `status`, `watch`, `log`, `events`, `metrics`, `check`, `config`, `ui.mjs` | read | **broker-served** via the `read` spool op when a broker is alive; direct `openStore` only when none is (D111) | **Yes** | D11: viewers never wake seats. The broker owns the pi-durable instance, and `SqliteStorage.document()` takes `BEGIN IMMEDIATE` even for a read, so a second opener steals its write lock — the read is served by the broker instead |
 | `ps`, `queue` | read the roster / queue via `openStore` (storage only) | **Yes** | **Yes** | reads only — no harness, no second owner (fixed, ROADMAP 69) |
 | `intent.mjs <seat> --body-file …` | spool an input for a seat | **No** (writes a file) | **Yes** | the broker drains `<db>.broker.inbox/` and submits it as operator input (`src/broker.mjs` `drainIntentInbox`) |
 | seat tools (`claim_work`, `complete_work`, `send_work`, `defer_work`, …) | queue/transcript writes | inside whatever session drives the run | **Yes** when the broker drives | the tools run inside the seat's run, so the session that started the run is the sole writer for that write |
@@ -211,7 +211,10 @@ carry an `op`, and the broker APPLIES it with its own harness. The closed vocabu
 in-process, no pid kill), `reset` (draw the shared reset boundary, `src/reset.mjs`, lifted out of
 `cli.mjs` so the CLI and the broker apply the SAME mechanism), and `compact` (summarize the seat's
 old context LIVE — pi-durable's `conversation.compact()` runs alongside the conversation, so the
-broker applies it with its own harness and the seat's run is not aborted; #1904). An unknown `op` is dead-lettered, never
+broker applies it with its own harness and the seat's run is not aborted; #1904), `pause`/`unpause`
+(ROADMAP 131), `configure` (set a seat's model), and `read` (D111: serve a viewer read from the
+broker's OWN `Storage` so no second process opens the database — the client half is
+`src/readclient.mjs`, the view set is `src/brokerread.mjs`). An unknown `op` is dead-lettered, never
 applied. Each applied request records its outcome at `<db>.broker.inbox.out/<requestId>.json` (the
 **result channel**), and that file is also the **idempotency ledger**: a duplicate `requestId` is
 recognised on re-drain and applies ONCE. `intent.mjs` is the producer (`--op`, `--reason`, `--handoff`,

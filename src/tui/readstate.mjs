@@ -16,6 +16,7 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 
 import { readQueueItems, readLiveState, readRigHealth } from "../readapi.mjs";
+import { readData } from "../readclient.mjs";
 import { partialView } from "../viewmodel.mjs";
 import { SCAN_LIMIT, conversationExhausted } from "../rigstory.mjs";
 import { selectSeat, mergeNewest, oldestLoadedId, turnsOf } from "./conversation.mjs";
@@ -23,7 +24,6 @@ import { selectSeat, mergeNewest, oldestLoadedId, turnsOf } from "./conversation
 /**
  * Build the poll closure the driver calls each tick.
  *
- * @param storage  the opened store (read-only reads; D11)
  * @param ui       the entrypoint's selection/scroll state
  * @param conv     the conversation window (src/tui/conversation.mjs)
  * @param view     the view-mode state (src/tui/viewmode.mjs): the view UNDER any input
@@ -31,14 +31,27 @@ import { selectSeat, mergeNewest, oldestLoadedId, turnsOf } from "./conversation
  *   the heart of #1607 — the entrypoint builds it inside its main try block, so a
  *   module-level closure cannot close over it.
  * @param {object} deps  `{ input, cfg, dbPath }` — the entrypoint's input line, resolved
- *   config, and store path.
+ *   config, and store path. The store is read through `readData` (the broker's own
+ *   storage when one drives), so this closure opens no database of its own.
  */
-export async function makeReadState(storage, ui, conv, view, { input, cfg, dbPath } = {}) {
+export async function makeReadState(ui, conv, view, { input, cfg, dbPath } = {}) {
   const slots = Number(cfg?.DURIG_MAX_CONCURRENT_SEATS ?? "");
   const bounded = Number.isFinite(slots) && slots > 0 ? slots : 999;
   return async () => {
-    const health = await readRigHealth(storage, dbPath, bounded, { cfg });
-    const queueItems = health.queueItems ?? (await readQueueItems(storage));
+    const health = await readData(
+      dbPath,
+      "health",
+      {
+        slots: bounded,
+        entryLimit: SCAN_LIMIT,
+        modelsBySeat: {},
+        windowsBySeat: {},
+        strandedMs: cfg?.DURIG_STRANDED_MS ?? null,
+        contextWindow: cfg?.DURIG_CONTEXT_WINDOW ?? null,
+      },
+      (s) => readRigHealth(s, dbPath, bounded, { cfg }),
+    );
+    const queueItems = health.queueItems ?? (await readData(dbPath, "queue", {}, (s) => readQueueItems(s)));
     // Streaming partials, U2: EVERY actively-generating seat at once (team-wide),
     // keyed off live generation (`partialView(live).hasContent`) — NEVER queue depth.
     const liveBySeat = {};
@@ -46,7 +59,12 @@ export async function makeReadState(storage, ui, conv, view, { input, cfg, dbPat
     let streamingSeat = null;
     const partials = [];
     for (const seat of health.seats) {
-      liveBySeat[seat.name] = await readLiveState(storage, seat.conversationId);
+      liveBySeat[seat.name] = await readData(
+        dbPath,
+        "live",
+        { conversationId: seat.conversationId },
+        (s) => readLiveState(s, seat.conversationId),
+      );
       const pv = partialView(liveBySeat[seat.name]);
       if (pv?.hasContent) {
         partials.push({ ...pv, seat: seat.name });
@@ -83,7 +101,12 @@ export async function makeReadState(storage, ui, conv, view, { input, cfg, dbPat
       if (conv.exhausted === null && focusConvId !== undefined) {
         const oldest = oldestLoadedId(conv);
         if (oldest !== null) {
-          conv.exhausted = await conversationExhausted(storage, focusConvId, oldest, BACKGROUND_CONTEXT);
+          conv.exhausted = await readData(
+            dbPath,
+            "exhausted",
+            { conversationId: focusConvId, oldestLoadedId: oldest },
+            (s) => conversationExhausted(s, focusConvId, oldest, BACKGROUND_CONTEXT),
+          );
         }
       }
       turns = turnsOf(conv);

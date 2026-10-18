@@ -2928,3 +2928,44 @@ worktree.
 **Status.** Ruled (delegate, operator directive). NOT implemented. Routed to `pm`; acceptance is the
 single resolved root, the refusal guard, cleanup/sweep parity, demos, `node --check`, the suite, and a
 non-author verify.
+
+---
+
+## D111 — Every CLI/UI read is served by the broker's pi-durable instance through the read spool; no second store opener (operator directive, 2026-10-18)
+
+**Decision.** When a broker is alive, the CLI's read verbs (`ps`, `queue`, `status`, `watch`, `log`,
+`events`, `metrics`, `check`, `worktree audit`) and `ui.mjs` MUST read through the broker, not by
+opening the store themselves. The broker serves a `read` spool op with its OWN `Storage`/
+`viewState`, and the result lands in the command spool's existing result channel
+(`<db>.broker.inbox.out/<requestId>.json`); `src/readclient.mjs` is the client half. Only when NO
+broker is alive does a read verb open the store directly — it is then the sole owner.
+
+**Why.** pi-durable is a library with **one owner per process**, and its own model is "one owner,
+many clients". `SqliteStorage.document()` wraps a READ in `this.db.transaction(...)`, which is
+`BEGIN IMMEDIATE` (`vendor/pi-main/packages/durable/src/storage/sqlite/storage.ts:552`, `.../sqlite/node.ts:146`)
+— a WRITE lock even for a read. So a second process that opens the store (a `log --follow` / `watch` /
+`ui.mjs` poll) takes the broker's write lock; the broker's `SqliteStorage` then waits out its 5 s busy
+timeout and throws `SessionFailed`, poisoning the whole broker session (the 2026-10-18 wedges). The
+library offers no cross-process socket, so the CLI cannot be an in-process client of the broker; the
+spool is the client surface. This SUPERSEDES D94's rejection of routing reads through the broker for
+the read path: a true read-only open is not a seam (`document()` still needs `BEGIN IMMEDIATE`, and
+`SqliteStorageOptions` is `{prefix}` only), so the broker must be the only opener. D94's writes-through-
+the-spool half stands.
+
+**How.** `src/brokerread.mjs` is the closed set of read views (`seats`, `queue`, `roots`, `health`,
+`live`, `entries`, `feed`, `document`, `exhausted`, `older`) applied by `dispatchRead` over the broker's
+`probeStorage`; `read` joins `SPOOL_OPS`. The client sends the non-secret config subset only (never the
+provider key). Coarse views, not a storage-method proxy: `readRigHealth` makes dozens of storage calls
+per poll, and a round-trip per call would make `status` take minutes. The resident broker passes
+`waitForWakes:false`, so its passes do not park on runs — a spooled read is answered at the next pass
+(bounded by the ~1 s idle re-check).
+
+**Trade-off (accepted).** A read now depends on a live broker answering: if the broker is truly hung, a
+read waits/times out instead of reading a stale-ish store. That is the correct shape — a hung broker is
+the incident, and a second opener is what wedged it.
+
+**Status.** Implemented. Evidence: `demo/broker-read.test.mjs` (views equal the direct readapi calls; an
+unknown view is dead-lettered; `readViaBroker` round-trips through the broker's instance);
+`demo/command-spool.test.mjs` (vocabulary) and `demo/cli-broker-refuse.test.mjs` (read verbs work while a
+broker drives) updated; live: `status`/`queue`/`ps`/`log` each drained an `INTENT delivered=1` from the
+running broker.

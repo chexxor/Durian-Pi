@@ -41,7 +41,11 @@ tail -8 .spike/serve.err 2>/dev/null
   the broker SPINS. `WAKE-RETRY in=<ms>ms … pass-threw` lines whose timestamps are far closer together
   than the logged `in=` mean the scheduled backoff is not gating the next pass, and `serve --stop` may not
   be honoured (it was not). Recovery: `taskkill /F /PID <pid>` (only when no `genlock.*` is held), then
-  restart — a fresh broker's first pass drains any stranded intents (`INTENT delivered=<n>`). See
+  restart — a fresh broker's first pass drains any stranded intents (`INTENT delivered=<n>`). If the
+  `pass-threw` RETURNS after that restart (a PERSISTENT cause — the log shows clean passes then freezes),
+  the restart is insufficient: read `.spike/serve.err` for the named `wake-failed … <seat> conv <N> …
+  Session failed after a storage error`, and repair that conversation with
+  `scripts/repair-pi-live.mjs <db> <N>` (`store-corruption-recovery.md`) BEFORE restarting. See
   `docs/incidents/2026-10-18-broker-retry-hotloop.md`.
 
 ## Do
@@ -129,3 +133,9 @@ zero `wake-failed`. `qa`'s three `Connection error.` runs in that window were th
 `serve --stop` returned `stopped:true` while pid `5840` kept spinning. `taskkill /F /PID 5840` (no genlock)
 + restart (`START pid=3296`) drained both spooled intents (`INTENT delivered=2 dead=0 dup=0`) and resumed
 passes.
+2026-10-18T20:56-21:15Z (hot loop recurrence, `docs/incidents/2026-10-18-broker-retry-hotloop.md`): the
+restart alone was INSUFFICIENT. `START pid=5768` (`20:47:55Z`) ran clean to `PASS 90 ms=5056`
+(`20:56:54Z`), then re-entered the ~0.5 s `WAKE-RETRY … pass-threw` spin (`1414` lines by `21:15:43Z`)
+with a fresh heartbeat. `.spike/serve.err` named `wake-failed … pm conv 3 … Session failed after a
+storage error` BOTH before and after the restart — a persistent cause. Recovery: terminate (no genlock),
+then `repair-pi-live.mjs ./selfdev.sqlite 3`, then restart.

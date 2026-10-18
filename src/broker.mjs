@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import { CompactionEntry } from "@earendil-works/pi-durable";
 
 import { RigControl, RigQueue, Seats } from "./rig.mjs";
+import { dispatchRead } from "./brokerread.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
 import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
@@ -233,7 +234,7 @@ export async function applyPauseOp(harness, { paused, by = "operator", reason = 
  * harness — rather than opening a second writer. `pause`/`unpause` (ROADMAP 131) are
  * rig-level: they carry no seat target.
  */
-export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause"];
+export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause", "read"];
 
 /** How often `pause --wait` re-checks for quiescence while the broker drains (ROADMAP 131 AC5). */
 const QUIESCE_POLL_MS = 100;
@@ -242,8 +243,14 @@ const QUIESCE_POLL_MS = 100;
  * Apply one typed request with the broker's OWN harness — the single writer. Throws on
  * an unknown op or seat; the drain dead-letters the throw with its reason.
  */
-async function applyRequest(harness, request, { seats, context, dbPath }) {
+async function applyRequest(harness, request, { seats, context, dbPath, probeStorage }) {
   const op = requestOp(request);
+  // `read` is the one non-mutating spool op: the broker serves a view from its OWN
+  // storage so a second process never opens the database (see src/brokerread.mjs).
+  // It is applied with `probeStorage`, never a harness write, and returns a payload.
+  if (op === "read") {
+    return await dispatchRead(probeStorage, request, { dbPath, context });
+  }
   if (op === "message") {
     const seat = seats[request.to];
     if (!seat) throw new Error(`unknown seat: ${request.to}`);
@@ -378,7 +385,7 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
       continue;
     }
     try {
-      const result = await applyRequest(harness, request, { seats, context, dbPath });
+      const result = await applyRequest(harness, request, { seats, context, dbPath, probeStorage });
       if (requestId) {
         writeIntentResult(dbPath, requestId, { requestId, op, ok: true, result, at: new Date().toISOString() });
       }

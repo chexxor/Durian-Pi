@@ -12,6 +12,7 @@
 //
 // Run: node demo/ui-readstate.test.mjs  (exit 0 = pass)
 
+import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -25,15 +26,12 @@ function check(label, ok, detail = "") {
   else { failures += 1; console.log(`  FAIL ${label}${detail ? ` -- ${detail}` : ""}`); }
 }
 
-// An empty rig: findDocument returns null, so readSeatList/readQueueItems see no seats
-// and no queue, and readRigHealth returns a well-formed empty snapshot. `dbPath` points
-// at a non-existent store so the generation-slot probe reads no slot files.
-const storage = {
-  findDocument: async () => null,
-  document: async () => null,
-  scanSubmissions: async () => ({ items: [] }),
-};
-const dbPath = join(tmpdir(), "durig-1607-no-such-store.sqlite");
+// An empty rig, read through the SAME path the entrypoint uses. With no broker alive
+// `readData` opens this store directly (and creates it), so the closure is exercised
+// end-to-end rather than against an injected fake. `readSeatList`/`readQueueItems` see
+// no seats and no queue, and `readRigHealth` returns a well-formed empty snapshot.
+const dir = mkdtempSync(join(tmpdir(), "durig-1607-"));
+const dbPath = join(dir, "empty.sqlite");
 const cfg = { DURIG_MAX_CONCURRENT_SEATS: "2" };
 
 function freshUi() {
@@ -48,7 +46,7 @@ try {
 
   // --- 1. the closure RESOLVES and reports the view it was given --------------
   const view = createViewMode(); // defaults to the seat list
-  const readState = await makeReadState(storage, freshUi(), createConversationWindow(), view, { input, cfg, dbPath });
+  const readState = await makeReadState(freshUi(), createConversationWindow(), view, { input, cfg, dbPath });
   check("makeReadState returns a poll closure", typeof readState === "function");
 
   let state;
@@ -68,13 +66,13 @@ try {
   // `view.view` is read on the conversation branch as well (the other broken line).
   const convView = createViewMode();
   convView.openConversation();
-  const convState = await (await makeReadState(storage, freshUi(), createConversationWindow(), convView, { input, cfg, dbPath }))();
+  const convState = await (await makeReadState(freshUi(), createConversationWindow(), convView, { input, cfg, dbPath }))();
   check("state.view === view.view (conversation)", convState.view === "conversation", JSON.stringify(convState.view));
 
   // --- 3. the INPUT OVERLAY reports its text and never becomes the view -------
   const inputView = createViewMode();
   inputView.enterInput();
-  const inputState = await (await makeReadState(storage, freshUi(), createConversationWindow(), inputView, { input, cfg, dbPath }))();
+  const inputState = await (await makeReadState(freshUi(), createConversationWindow(), inputView, { input, cfg, dbPath }))();
   check("input overlay: state.view stays the underlying view (seats)", inputState.view === "seats", JSON.stringify(inputState.view));
   check("input overlay: state.inputText is the input line's value", inputState.inputText === input.value, JSON.stringify(inputState.inputText));
 
@@ -86,4 +84,5 @@ try {
   failures += 1;
 }
 
+rmSync(dir, { recursive: true, force: true });
 process.exit(failures === 0 ? 0 : 1);

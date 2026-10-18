@@ -77,3 +77,8 @@ logging `wake-failed`.
 for impl conv 9, now in the alive-broker `["tools",0]` shape. `repair-pi-live.mjs ./selfdev.sqlite 9`
 retired it (`retired:[{id:12105,...}]`, `seq:847092`); the broker then logged `WAKE impl` /
 `PASS 16 woke=impl`. Backup: `store-backup-20261017-204831`.
+2026-10-18 (recurrence, `docs/incidents/2026-10-18-broker-retry-hotloop.md`): `pm` conv **3** — the
+broker wedged on `wake-failed … pm conv 3 … Session failed after a storage error` and a plain
+terminate+restart did NOT clear it (clean passes, then a re-spin). `node scripts/repair-pi-live.mjs
+./selfdev.sqlite 3` is the prerequisite before the restart. This is the first `pm` recurrence; prior
+ones were `impl` conv 9 / `qa` conv 15 / `lead` conv 22.

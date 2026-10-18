@@ -2,11 +2,11 @@
 incident: broker-retry-hotloop
 date: 2026-10-18
 severity: sev1
-status: mitigated
+status: open
 symptom: "the broker stays alive but spins: `WAKE-RETRY … pass-threw` every ~0.5s, the intent inbox never drains, and `serve --stop` does not stop it"
 runbook: broker-down-or-stalled
 fix: null
-prevention: "queued defect (delegate intent f27a8772) to bound the inbox-driven re-trigger and honour .stop on the throwing path + ROADMAP 78 (log pass-failed)"
+prevention: "queued defect (delegate intent f27a8772) to bound the inbox-driven re-trigger and honour .stop on the throwing path + ROADMAP 78 (log pass-failed); AND when the throwing seat's document is corrupt, `store-corruption-recovery.md` (`repair-pi-live.mjs`) is a PREREQUISITE — a plain terminate+restart does NOT clear a persistent throw (recurrence 2026-10-18T20:56Z)"
 last_reviewed: 2026-10-18
 ---
 
@@ -83,6 +83,29 @@ Terminated the spinning broker (`taskkill /F`, no genlock), then restarted with 
   `demo/broker-wake-retry.test.mjs` covers wake-failed, same-pass-throw, and store-read-throw — but NOT a
   persistent throw with a pending intent, which is this shape.
 - Defect intent `f27a8772` (`.spike/delegate/intent-defect-retry-hotloop.md`).
+
+## Recurrence — 2026-10-18T20:56Z→21:15Z: a PERSISTENT throw defeats the restart remedy
+
+**What is new.** The original hot loop was cured by terminate + restart because its trigger was
+transient. This recurrence proves the remedy is INSUFFICIENT when the throwing cause is PERSISTENT.
+Broker pid `5768` was started (a fresh run after the previous `taskkill`) at `20:47:55Z` and ran clean
+passes for ~9 min (`PASS 61..90`), then froze on `PASS 90 ms=5056` @`20:56:54Z` and never passed again.
+It emitted the bounded `WAKE-RETRY` schedule, then reverted to the unbounded ~0.5 s spin:
+`21:15:52.776`, `53.276`, `53.776`, … (`1414` `WAKE-RETRY` lines by `21:15:43Z`). The restart cannot
+clear a corrupt `pm` conv-3 document, so each retry pass throws on the same read and re-marks the
+scheduler dirty — the same Root cause as above, now with a non-transient trigger.
+
+**Consequence for the runbook (now recorded there):** whenever the throwing seat's document is corrupt,
+`store-corruption-recovery.md` (`scripts/repair-pi-live.mjs <db> <conversationId>`) is a PREREQUISITE of
+the hot-loop recovery, not an alternative to it. A bare terminate+restart loops again.
+
+**Evidence (recurrence).**
+- `selfdev.sqlite.broker.log`: `START pid=5768` @`20:47:55.929Z`; clean `PASS 61..90`; last
+  `PASS 90 ms=5056` @`20:56:54.743Z`; then `WAKE-RETRY … pass-threw`, ~0.5 s apart from ~`21:15:2xZ`;
+  `1414` `WAKE-RETRY` lines total.
+- `.spike/serve.err`: `wake-failed … pm conv 3 … Session failed after a storage error` — the SAME text
+  before and after the `20:47:55Z` restart, i.e. the restart did not clear the trigger.
+- `broker.json` heartbeat stayed fresh while `PASS` was frozen — a fresh heartbeat is NOT health.
 
 ## Links
 `docs/runbooks/broker-down-or-stalled.md` · `docs/incidents/2026-10-18-broker-dormant-stalled.md`

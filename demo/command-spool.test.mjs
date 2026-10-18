@@ -63,10 +63,15 @@ const readResult = (requestId) => JSON.parse(readFileSync(resultFile(requestId),
 const submissions = async () => (await harness.inspect(ctx)).submissions ?? [];
 
 try {
-  // 0. The vocabulary is a closed list, and an absent `op` means "message" (back-compat
-  //    for producers written before the spool). `pause`/`unpause` (ROADMAP 131, #1841) and
-  //    `compact` (ROADMAP 71, #1904) were added later.
-  assert.deepEqual(SPOOL_OPS, ["message", "stop", "reset", "compact", "pause", "unpause"], "the spool's op vocabulary");
+  // 0. The vocabulary is a CLOSED list: an absent `op` defaults to "message" so producers
+  //    written before the spool keep working, and a mutating verb EXTENDS this array rather
+  //    than opening a second writer. The additions so far are `pause`/`unpause` (ROADMAP 131,
+  //    #1841), `compact` (ROADMAP 71, #1904) and `read` (D111, broker-served reads).
+  assert.deepEqual(
+    SPOOL_OPS,
+    ["message", "stop", "reset", "compact", "pause", "unpause", "read"],
+    "the spool's op vocabulary",
+  );
   assert.equal(requestOp({ to: "worker", content: "hi" }), "message", "an intent with no op is a message");
   assert.equal(requestOp({ op: "stop", to: "worker" }), "stop");
   assert.equal(requestOp({ op: "pause" }), "pause");

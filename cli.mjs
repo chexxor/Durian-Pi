@@ -74,6 +74,7 @@ import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readRigHealth, readSeatList, readSeatRoots } from "./src/readapi.mjs";
+import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree } from "./src/worktree.mjs";
 import { mergeInProgress, mergeRefusal } from "./src/mergeguard.mjs";
@@ -936,32 +937,40 @@ async function cmdWorktree(args) {
 // storage layer read-only (like `status`) rather than a full harness — a
 // short-lived harness is a second OWNER, and opening one while the broker drives
 // is the hazard ROADMAP 69 removes (docs/COMMANDS-AND-THE-BROKER.md §4).
-async function cmdPs() {
-  const storage = await openStore();
-  try {
-    const seats = await readSeatList(storage);
-    noteEmptyRig(seats.length);
-    out({
-      ok: true,
-      command: "ps",
-      db: DB_PATH,
-      seats,
-    });
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
-  }
+/**
+ * The non-secret config subset the broker's `health` view needs. The provider key lives in
+ * CFG and must never cross the spool, so only these keys are sent; the broker reconstructs
+ * the two values `readRigHealth` reads from config.
+ */
+function healthParams({ modelsBySeat = {}, windowsBySeat = {}, entryLimit = SCAN_LIMIT } = {}) {
+  return {
+    slots: maxSeats(),
+    entryLimit,
+    modelsBySeat,
+    windowsBySeat,
+    strandedMs: CFG.DURIG_STRANDED_MS ?? null,
+    contextWindow: CFG.DURIG_CONTEXT_WINDOW ?? null,
+  };
 }
 
-// queue: every work item with status and transitions. A READ via `openStore`, for
-// the same reason as `ps`.
+// ps: roster with per-seat conversation id and role. A READ, so it goes through the
+// broker when one drives (see src/readclient.mjs); with no broker it opens the storage
+// directly and is the sole owner.
+async function cmdPs() {
+  const seats = await readData(DB_PATH, "seats", {}, (storage) => readSeatList(storage));
+  noteEmptyRig(seats.length);
+  out({
+    ok: true,
+    command: "ps",
+    db: DB_PATH,
+    seats,
+  });
+}
+
+// queue: every work item with status and transitions. A READ, routed the same way.
 async function cmdQueue() {
-  const storage = await openStore();
-  try {
-    const items = await readQueueItems(storage);
-    out({ ok: true, command: "queue", items });
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
-  }
+  const items = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
+  out({ ok: true, command: "queue", items });
 }
 
 // resume (alias: doctor): the deliberate way to advance admitted-but-not-progressing
@@ -2034,7 +2043,6 @@ async function cmdSend(seatName, text, { stream = false, requestId = null } = {}
 async function cmdLog(seatName, limitStr, { follow = false, human = false, full = false, toolBg = false, theme = "dark" } = {}) {
   const parsed = Number(limitStr);
   const limit = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 20;
-  const storage = await openStore();
   const interactive = Boolean(process.stdout.isTTY);
   const color = human && interactive && !process.env.NO_COLOR;
   let stopping = false;
@@ -2100,7 +2108,8 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
     process.stdout.write(`${lines.join("\n")}\n`);
   };
   const pollPartial = async (conversationId) => {
-    const partial = partialView(await readLiveState(storage, conversationId));
+    const live = await readData(DB_PATH, "live", { conversationId }, (s) => readLiveState(s, conversationId));
+    const partial = partialView(live);
     if (human) {
       renderStreaming(partial);
       return;
@@ -2140,8 +2149,8 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
       entries: entries.map(asJson),
     });
   };
-  try {
-    const seats = await readSeatList(storage);
+  {
+    const seats = await readData(DB_PATH, "seats", {}, (s) => readSeatList(s));
     const seat = seats.find((s) => s.name === seatName);
     if (!seat) {
       noteEmptyRig(seats.length);
@@ -2150,11 +2159,11 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
 
     // Newest `limit`, then reversed: a reader wants the recent end of a long
     // transcript, but once it is chosen the order shown must be chronological.
-    const page = await storage.scanEntries(
-      { conversationId: seat.conversationId, order: "descending" },
-      limit,
-      undefined,
-      BACKGROUND_CONTEXT,
+    const page = await readData(
+      DB_PATH,
+      "entries",
+      { conversationId: seat.conversationId, limit, order: "descending" },
+      (s) => s.scanEntries({ conversationId: seat.conversationId, order: "descending" }, limit, undefined, BACKGROUND_CONTEXT),
     );
     const history = [...page.items].reverse();
     print(history);
@@ -2172,11 +2181,11 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
       }
       let next;
       try {
-        next = await storage.scanEntries(
-          { conversationId: seat.conversationId, order: "ascending", minEntryId: lastId + 1 },
-          200,
-          undefined,
-          BACKGROUND_CONTEXT,
+        next = await readData(
+          DB_PATH,
+          "entries",
+          { conversationId: seat.conversationId, order: "ascending", minEntryId: lastId + 1, limit: 200 },
+          (s) => s.scanEntries({ conversationId: seat.conversationId, order: "ascending", minEntryId: lastId + 1 }, 200, undefined, BACKGROUND_CONTEXT),
         );
       } catch (err) {
         // A failed poll must not kill the view silently; report and keep going
@@ -2191,8 +2200,6 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
       }
       await pollPartial(seat.conversationId);
     }
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
   }
 }
 
@@ -2229,15 +2236,16 @@ const SERVE_SEAT_COOLDOWN_MS = 30_000;
 // committed state, so a late/reconnecting subscriber resumes from `--since`
 // rather than replaying. One JSON event per line; diagnostics on stderr.
 async function cmdEvents({ sinceSeq = 0, follow = false } = {}) {
-  const storage = await openStore();
   let stopping = false;
   process.on("SIGINT", () => {
     stopping = true;
   });
   let cursor = Number.isFinite(sinceSeq) ? sinceSeq : 0;
-  try {
+  {
     do {
-      const { events, nextSeq } = await readFeed(storage, BACKGROUND_CONTEXT, { sinceSeq: cursor });
+      const { events, nextSeq } = await readData(DB_PATH, "feed", { sinceSeq: cursor }, (s) =>
+        readFeed(s, BACKGROUND_CONTEXT, { sinceSeq: cursor }),
+      );
       for (const event of events) console.log(JSON.stringify(event));
       // Advance the cursor past what we emitted, so a --follow poll never
       // replays the previous line and a reconnect resumes from `nextSeq`.
@@ -2245,13 +2253,10 @@ async function cmdEvents({ sinceSeq = 0, follow = false } = {}) {
       if (!follow || stopping) break;
       await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
     } while (!stopping);
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
   }
 }
 
 async function cmdWatch(once, human) {
-  const storage = await openStore();
   let seq = 0;
   let stopping = false;
   process.on("SIGINT", () => {
@@ -2290,21 +2295,22 @@ async function cmdWatch(once, human) {
     );
   };
   const slots = maxSeats();
-  const initial = await readRigHealth(storage, DB_PATH, slots, { cfg: CFG });
+  const initial = await readData(DB_PATH, "health", healthParams(), (s) =>
+    readRigHealth(s, DB_PATH, slots, { cfg: CFG }),
+  );
   // Watching the wrong database is silent by nature: no commits ever arrive.
   // Tell the operator up front which database is being watched.
   if (!human) noteEmptyRig(initial.seats.length);
   let last = JSON.stringify(initial);
   await render(initial);
-  if (once) {
-    await storage.close(BACKGROUND_CONTEXT);
-    return;
-  }
+  if (once) return;
   while (!stopping) {
     await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
     let health;
     try {
-      health = await readRigHealth(storage, DB_PATH, slots, { cfg: CFG });
+      health = await readData(DB_PATH, "health", healthParams(), (s) =>
+        readRigHealth(s, DB_PATH, slots, { cfg: CFG }),
+      );
     } catch (err) {
       // A failed poll must not kill the stream silently; report on stderr
       // and keep polling so transient storage races self-heal.
@@ -2317,7 +2323,6 @@ async function cmdWatch(once, human) {
       await render(health);
     }
   }
-  await storage.close(BACKGROUND_CONTEXT);
 }
 
 // optimize <text>: run a draft instruction/work request through the
@@ -2358,10 +2363,9 @@ async function cmdWorktreeScratchClean() {
 }
 
 async function cmdWorktreeAudit() {
-  const storage = await openStore();
-  try {
-    const queueItems = await readQueueItems(storage);
-    const seatRoots = await readSeatRoots(storage);
+  const queueItems = await readData(DB_PATH, "queue", {}, (s) => readQueueItems(s));
+  const seatRoots = await readData(DB_PATH, "roots", {}, (s) => readSeatRoots(s));
+  {
     const LIVE = ["queued", "claimed", "deferred", "held"];
     const liveItemIds = new Set(queueItems.filter((it) => LIVE.includes(it.status)).map((it) => it.id));
     const terminalItemIds = new Set(queueItems.filter((it) => !LIVE.includes(it.status)).map((it) => it.id));
@@ -2390,26 +2394,21 @@ async function cmdWorktreeAudit() {
       seatRoots,
       worktrees: entries,
     });
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
   }
 }
 
 async function cmdStatus() {
-  const storage = await openStore();
-  try {
-    const health = await readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG });
-    noteEmptyRig(health.seats.length);
-    out({ ok: true, command: "status", db: DB_PATH, ...health });
-    // `status` is the one-shot surface, so this is where the metrics command is
-    // discovered - and only when a measure has actually moved, because a
-    // pointer that prints every time stops being read.
-    const outOfBand = health.metrics.measures.filter((m) => m.state === "warn").length;
-    if (outOfBand > 0) {
-      console.error(`note: ${outOfBand} measure(s) out of band - see: node cli.mjs metrics`);
-    }
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
+  const health = await readData(DB_PATH, "health", healthParams(), (storage) =>
+    readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG }),
+  );
+  noteEmptyRig(health.seats.length);
+  out({ ok: true, command: "status", db: DB_PATH, ...health });
+  // `status` is the one-shot surface, so this is where the metrics command is
+  // discovered - and only when a measure has actually moved, because a
+  // pointer that prints every time stops being read.
+  const outOfBand = health.metrics.measures.filter((m) => m.state === "warn").length;
+  if (outOfBand > 0) {
+    console.error(`note: ${outOfBand} measure(s) out of band - see: node cli.mjs metrics`);
   }
 }
 
@@ -2478,14 +2477,23 @@ async function cmdMetrics(rigFile, human, windowArg) {
     ...gitProvenance(process.cwd()),
     active: activeSet(parseExtensionList(CFG.DURIG_EXTENSIONS ?? "")),
   };
-  const storage = await openStore();
-  try {
-    const health = await readRigHealth(storage, DB_PATH, maxSeats(), {
+  const health = await readData(
+    DB_PATH,
+    "health",
+    healthParams({
       modelsBySeat: spec ? resolveModelsBySeat(spec) : {},
       windowsBySeat: spec ? resolveWindowsBySeat(spec) : {},
       entryLimit: parseWindow(windowArg),
-      cfg: CFG,
-    });
+    }),
+    (storage) =>
+      readRigHealth(storage, DB_PATH, maxSeats(), {
+        modelsBySeat: spec ? resolveModelsBySeat(spec) : {},
+        windowsBySeat: spec ? resolveWindowsBySeat(spec) : {},
+        entryLimit: parseWindow(windowArg),
+        cfg: CFG,
+      }),
+  );
+  {
     noteEmptyRig(health.seats.length);
     if (human) {
       process.stdout.write(
@@ -2509,8 +2517,6 @@ async function cmdMetrics(rigFile, human, windowArg) {
       provenance,
       ...health.metrics,
     });
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
   }
 }
 
@@ -2637,23 +2643,23 @@ async function cmdCheck(rigFile, human, rest = []) {
     stored = { reason: "absent" };
   } else {
     try {
-      const storage = await openStore();
-      try {
-        const rec = await storage.findDocument(
-          { kind: Constitution.definition.kind, scope: { kind: "session" } },
-          "current",
-          BACKGROUND_CONTEXT,
-        );
-        const text = rec
-          ? ((await storage.document(rec.id, "current", BACKGROUND_CONTEXT))?.value?.text ?? "")
-          : "";
-        stored = { reason: "read", text };
-
-        storedSeats = (await readSeatList(storage)).map((s) => s.name);
-        queueItems = await readQueueItems(storage);
-      } finally {
-        await storage.close(BACKGROUND_CONTEXT);
-      }
+      const constitution = await readData(
+        DB_PATH,
+        "document",
+        { kind: Constitution.definition.kind, scope: { kind: "session" } },
+        async (storage) => {
+          const rec = await storage.findDocument(
+            { kind: Constitution.definition.kind, scope: { kind: "session" } },
+            "current",
+            BACKGROUND_CONTEXT,
+          );
+          const value = rec ? (await storage.document(rec.id, "current", BACKGROUND_CONTEXT))?.value : null;
+          return { found: Boolean(rec), value };
+        },
+      );
+      stored = { reason: "read", text: constitution.value?.text ?? "" };
+      storedSeats = (await readData(DB_PATH, "seats", {}, (s) => readSeatList(s))).map((s) => s.name);
+      queueItems = await readData(DB_PATH, "queue", {}, (s) => readQueueItems(s));
     } catch (err) {
       stored = { reason: "unreadable", error: String(err?.message ?? err) };
     }
