@@ -3,7 +3,29 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T17:33Z (delegate — D105 local-per-item fresh-context policy RULED + routed; broker dormant-stall recurrence 5 recovered)._
+_Last refreshed: 2026-10-18T17:44Z (delegate — broker dormant-stall FIXED (`0c0d4d3`); live broker on the fix; independent verify routed)._
+
+> **NEXT SESSION START HERE — the broker dormant-stall is FIXED and live; independent verify routed
+> (2026-10-18T17:44Z).** Operator: "Please fix the broker."
+> - **Root cause** (runbook `broker-down-or-stalled.md` prevention item 3): a per-seat `wake-failed`
+>   did not re-arm the scheduler, so the broker rested in `signal.wait` with a fresh heartbeat and a
+>   frozen `PASS`, and the seat was never driven.
+> - **Fix** `src/broker.mjs` `runWakeLoop` (commit **`0c0d4d3`**): after a pass that failed a wake,
+>   schedule a retry pass with bounded exponential backoff (`wakeRetryMs` 2 s, doubling per consecutive
+>   failing pass, capped at `wakeRetryMaxMs` 60 s; reset by a pass with no failure). New legible log
+>   line `WAKE-RETRY in=<ms>ms seats=<names>`; `wakeRetryMs <= 0` disables it. New
+>   `demo/broker-wake-retry.test.mjs` proves both shapes in one run (retry disabled = the dormant
+>   shape).
+> - **Live broker restarted with the fix:** pid **12944** (`START 17:41:30Z`), passes advancing, no new
+>   `wake-failed`. (A **sixth** recurrence — auditor conv 4936 — hit at `17:38Z`, just before the
+>   restart.)
+> - **Verify routed:** pm registered an independent verify to auditor
+>   (`VERIFY (non-author, INDEPENDENT) — broker dormant-stall fix @0c0d4d3`). The delegate wrote this
+>   code under an operator directive, so the seat verify is required — do not accept the delegate's run.
+> - **Still owed on the same incident (not this fix):** log the nested `SessionFailed.cause`
+>   (ROADMAP 78), a watchdog keyed on stale `PASS`+heartbeat (ROADMAP 61–64), and the underlying
+>   per-conversation storage error (pi-durable). This fix makes a transient error self-heal instead of
+>   going dormant; it does not remove the error.
 
 > **NEXT SESSION START HERE — D105 policy RULED and routed; broker recovered from TWO dormant stalls
 > (2026-10-18T17:33Z).** Operator: "ensure durig has a policy of starting a new context for any new work

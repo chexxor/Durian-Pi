@@ -300,3 +300,47 @@ in the ~same interval — suggestive, not proof. The durable fixes owed remain: 
   intent out file `selfdev.sqlite.broker.inbox.out/opr-20261018-local-per-item-context.json`
   (`delivered:true`, `17:30:31.208Z`).
 - Backup: `.spike/store-backup-20261018-123023`.
+
+---
+
+## Recurrence — 2026-10-18T17:38Z (sixth, same day; pid 6124) — and the dormant-revisit FIX
+
+**Appended, not rewritten** (per `docs/incidents/README.md`). This recurrence occurred while the fix for
+its own root cause was being written, and is the last one expected to go dormant: the fix below landed
+and the live broker now runs it.
+
+### What happened
+- Broker pid `6124` (the recurrence-5 recovery) hit `wake-failed … Session failed after a storage error`
+  for **auditor (conv 4936)** at `17:38:44Z` (`PASS 61 ms=5042`), then made **no further pass for
+  ~2.7 min while `broker.json` stayed fresh** and no `genlock` was held — the same dormant shape once more.
+
+### The fix (operator directive "Please fix the broker")
+Root cause (prevention item 3, confirmed): a per-seat `wake-failed` left the candidate un-actioned and
+nothing re-armed the loop, so the broker slept with the seat undriven. `src/broker.mjs` `runWakeLoop`
+now, after any pass that emitted `wake-failed`, schedules a retry pass with bounded exponential backoff
+(`wakeRetryMs` 2 s, doubling per consecutive failing pass, cap `wakeRetryMaxMs` 60 s; the counter resets
+on a pass with no failure) and logs `WAKE-RETRY in=<ms>ms seats=<names>`. `wakeRetryMs <= 0` disables
+the retry. Commit **`0c0d4d3`**; demo **`demo/broker-wake-retry.test.mjs`**.
+
+### Resolution
+With no genlock, the dormant broker cooperated with `cli.mjs serve --stop` (`stopped:true`);
+`node cli.mjs resume` cleared 3 stranded submissions (impl `89098`, scribe `89101`, pm `89481`); restart
+with the local env → **`START pid=12944`** (`17:41:30Z`), `WAKE impl`/`WAKE scribe`/`WAKE auditor`, no new
+`wake-failed`. Independent verify routed to auditor.
+
+### Prevention — status of the prior list
+1. Log `SessionFailed.cause` — still owed (pi-durable drops the nested cause; ROADMAP 78).
+2. Watchdog keyed on stale `PASS`+heartbeat — still owed (ROADMAP 61–64).
+3. **Dormant-revisit gap — ADDRESSED for per-seat wake failures by `0c0d4d3`.** A transient storage error
+   now gets a retry pass instead of going dormant; a persistent one retries at the 60 s cap and stays
+   legible (`WAKE-RETRY`), rather than freezing the broker.
+4. Second driver/opener of the shared store — still owed.
+5. Long-lived store viewers — the recurrence-5 recovery removed `ui.mjs`; recurrence 6 happened without
+   it, so item 5 is not the sole aggravator.
+
+### Evidence (recurrence 6)
+- `selfdev.sqlite.broker.log`: `…17:38:44.724Z PASS 61 ms=5042 woke=-`, then no line until
+  `17:41:30.976Z START pid=12944`.
+- `.spike/serve.err`: `wake-failed … auditor conv 4936 … Session failed after a storage error`.
+- `serve --stop` → `{"stopped":true,"pid":6124}`; `resume` → `{"found":3,…}`; restart pid `12944`.
+- Fix + demo: commit `0c0d4d3`; `node demo/broker-wake-retry.test.mjs` exit 0.
