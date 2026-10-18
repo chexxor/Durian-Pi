@@ -25,10 +25,10 @@ git worktree list
 DURIG_DB=./selfdev.sqlite node cli.mjs queue   # which item ids are still live?
 ```
 `worktree audit` (ROADMAP 76 / #1881) is the visibility surface: it lists every registered worktree
-with the **queue status** of its item, its **uncommitted path count**, its **lock state**, and the
-sweep's **keep-reason** (`live` / `locked` / `not-terminal` / `branch-unresolved` / `dirty` / `reapable`
-/ `seat-root`). It writes nothing. A tree that is some seat's persisted `pi.agent`.cwd is `seat-root`
-(IN USE); a nested `verify-*`/`wt-*` scratch appears as `non-item`.
+with the **queue status** of its item, its **uncommitted path count**, its **lock state**, its
+**kind** (`item` / `verify-scratch` / `non-item`), and the sweep's **keep-reason** (`live` /
+`locked` / `not-terminal` / `branch-unresolved` / `dirty` / `reapable` / `seat-root`). It writes
+nothing. A tree that is some seat's persisted `pi.agent`.cwd is `seat-root` (IN USE).
 A worktree whose item is terminal is an **orphan**. An orphan with uncommitted work is **dirty**.
 Since **#1194** a **locked** orphan is KEPT. Since **#1244** a **branch-held** orphan (every durig
 item worktree is on its item branch, #859) is reaped **only when its item is TERMINAL, the worktree is
@@ -162,3 +162,8 @@ with real content** (tracked mods, probe scripts, nested verify trees) were **ar
 ref. 41 dirs left the project root; `main` unmoved; nothing forced. The archived worktrees stay
 registered at the archive path (~6.3 GB) and are recoverable. This is the resolution for the class the
 "Reclaiming a merged item-branch" section must KEEP (dirty/real content): relocate rather than discard.
+2026-10-18 (#1891, leak source B): qa verify scratch (`.verify-*` / `verify*` / `wt-*`) is now a
+distinct audit **kind** (`verify-scratch`) and the sweep RECLAIMS the **unlocked + clean** ones (the
+verifier-must-lock protocol protects an in-use scratch; a dirty one is kept). Ordinary `non-item`
+worktrees are never reaped. Demo `worktree-scratch` covers the classification and the reclaim/keep
+split.

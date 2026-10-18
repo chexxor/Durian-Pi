@@ -460,6 +460,14 @@ export const WORKTREE_KEEP_REASONS = [
 ];
 
 /**
+ * qa's THROWAWAY verify-scratch naming (ROADMAP 76 leak source B, #1891): the scratch worktrees a
+ * verifier creates under (or beside) an item worktree, e.g. `.verify-8770005`, `verify1194-full`,
+ * `wt-658-41d0ec9`. They are throwaway by convention, so an UNLOCKED + CLEAN one is reapable just
+ * like a terminal item's tree — the verifier-must-lock protocol is what protects an in-use one.
+ */
+export const VERIFY_SCRATCH_RE = /^\.?(verify|wt)/i;
+
+/**
  * Classify every worktree by the SAME rule the orphan sweep uses (ROADMAP 76 / #1244). Pure: the
  * caller supplies the queue sets, the seat roots and the per-worktree uncommitted COUNT, so the
  * decision is testable without a git repo. One entry per worktree, carrying the queue status, the
@@ -492,6 +500,9 @@ export function classifyWorktrees({
       status: null,
       uncommitted,
       locked: wt.locked === true,
+      // WHAT the tree is (item / verify-scratch / non-item), separate from WHY it is kept, so the
+      // audit surfaces qa's scratch distinctly instead of lumping it into `non-item`.
+      kind: "non-item",
       keepReason: "non-item",
     };
     const pathMatch = /^item-(\d+)$/.exec(basename(path));
@@ -503,9 +514,19 @@ export function classifyWorktrees({
       continue;
     }
     if (pathId === null) {
+      // Not an `item-<id>` worktree. A verify-scratch tree (leak source B) is classified by the
+      // SAME keep decision as a terminal item: LOCKED is a keep, DIRTY is a keep, and an
+      // unlocked+clean scratch is reapable.
+      if (VERIFY_SCRATCH_RE.test(basename(path))) {
+        entry.kind = "verify-scratch";
+        if (entry.locked) entry.keepReason = "locked";
+        else if (uncommitted === null || uncommitted > 0) entry.keepReason = "dirty";
+        else entry.keepReason = "reapable";
+      }
       out.push(entry);
       continue;
     }
+    entry.kind = "item";
     const branchId = wt.branch ? refItemId(wt.branch) : null;
     if (wt.branch && branchId === null) {
       entry.itemId = pathId;
