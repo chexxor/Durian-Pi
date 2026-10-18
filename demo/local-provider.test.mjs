@@ -71,6 +71,8 @@ for (const key of ["DURIG_LOCAL_BASE_URL", "DURIG_LOCAL_MODEL", "DURIG_LOCAL_CON
 // 7. Auth key resolution: when DURIG_LOCAL_API_KEY is unset, a non-secret
 // placeholder is returned (restart-proof local seats). When set, the real key
 // is used and source is "DURIG_LOCAL_API_KEY".
+// The real pi-ai caller passes { ctx: authContext, credential, signal } to
+// resolve, so the stub must wrap env inside a ctx object.
 let authInput = null;
 const authProvider = createLocalProvider(spec, {
 	createProvider: (input) => {
@@ -82,12 +84,12 @@ const authProvider = createLocalProvider(spec, {
 assert.ok(authInput, "createProvider must receive the auth config");
 assert.ok(authInput.auth.apiKey.resolve, "auth must expose a resolve function");
 // Unset env → placeholder
-const unsetCtx = { env: async (k) => { if (k === "DURIG_LOCAL_API_KEY") return undefined; return undefined; } };
+const unsetCtx = { ctx: { env: async (k) => { if (k === "DURIG_LOCAL_API_KEY") return undefined; return undefined; } } };
 const unsetResult = await authInput.auth.apiKey.resolve(unsetCtx);
 assert.equal(unsetResult.auth.apiKey, "local-placeholder", "unset env must yield placeholder");
 assert.equal(unsetResult.source, "none", "unset env source must be 'none'");
 // Set env → real key
-const setCtx = { env: async (k) => { if (k === "DURIG_LOCAL_API_KEY") return "my-secret"; return undefined; } };
+const setCtx = { ctx: { env: async (k) => { if (k === "DURIG_LOCAL_API_KEY") return "my-secret"; return undefined; } } };
 const setResult = await authInput.auth.apiKey.resolve(setCtx);
 assert.equal(setResult.auth.apiKey, "my-secret", "set env must yield real key");
 assert.equal(setResult.source, "DURIG_LOCAL_API_KEY", "set env source must name the var");
