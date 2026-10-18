@@ -511,7 +511,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     *Acceptance:* `format` normalizes a given file; `format --check` fails on an unformatted file and
     passes on a formatted one (shown FAILING first); the tool choice and pin are recorded; no auto-hook.
 
-98. **TUI: show a seat's context consumption in its conversation view (operator request, 2026-10-17).**
+98. **TUI: show a seat's context consumption in its conversation view (operator request, 2026-10-17; part 1 DELIVERED `1b81368`, part 2 HELD).**
     When the operator opens a specific seat's conversation, show how much of the seat's context budget
     it is consuming. The operator's preferred shape is the pi harness's — e.g. `$6.016 31.4%/1.0M`
     (cost so far · percent of the window · window size) — offered as an opinion, to be confirmed with
@@ -1937,7 +1937,7 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     *Owner:* `advocate` (decision record) · *Output:* a `docs/DECISIONS.md` entry with the why.
     *Acceptance:* the entry names the alternatives rejected and the evidence class.
 
-46. **Make artifact ownership checkable — a `check` rule, not a prose grid (DELIVERED `ed2b5dc`).** The load-bearing
+46. **Make artifact ownership checkable — a `check` rule, not a prose grid (DELIVERED `ed2b5dc`, `03513c0`).** The load-bearing
     finding: a decision-rights row not enforced by `check` (or the queue) is prose and goes stale. Add
     a `check` rule that every artifact class in the docs-ownership norm maps to a live owning seat,
     and (D62) every capability has a FEATURES row.
@@ -1954,7 +1954,7 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     the one genuinely missing decision class. Routed 2026-10-16 to `advocate` (`WORKFLOWS.md` W4) and
     `scribe` (`FEATURES.md` `Surface` column).
 
-48. **Verification must re-execute evidence, not accept a claim.** The strongest evidence-backed
+48. **Verification must re-execute evidence, not accept a claim (DELIVERED `50240f9`, `b803a8d`).** The strongest evidence-backed
     finding: reviewer/peer agents measurably agree (sycophancy/conformity — measured wrong-peer
     adoption ~29.7%, disagreement collapse), so a verifier that only reads the author's summary is the
     collapse setup. This strengthens item 4 (real seat tools + verification evidence) and W2's
@@ -2241,7 +2241,7 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     `cli.mjs` `cmdResume`. *Acceptance:* a demo that forces terminal-task + placed-submission and shows
     the seat is re-woken after start/`resume`.
 
-69. **Refuse or route writes while the broker drives (DELIVERED `c2fa6ee`).** `resume`/`doctor`, `reset`, `send`, and
+69. **Refuse or route writes while the broker drives (DELIVERED `c2fa6ee`, `b8efebd`).** `resume`/`doctor`, `reset`, `send`, and
     `ps`/`queue` (which open a full harness just to read) must not become a second owner while a broker
     is alive: refuse with a clear message naming the spool, or route through it; `ps`/`queue` read via
     `openStore` like `status`. *Owner:* impl · *Where:* `cli.mjs`.
@@ -2268,13 +2268,15 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     (D44 retire / `scripts/repair-pi-live.mjs`); other errors rethrow. Acceptance demo:
     `demo/readboundary-corrupt-live.test.mjs`.
 
-71. **Command spool — writes as requests the broker applies (the mailbox).** Generalise the intent
+71. **Command spool — writes as requests the broker applies (the mailbox) (DELIVERED `646d08c`, `a3c0bef`).** Generalise the intent
     inbox from "deliver a message" to "apply an operation": `send`, `reset`, `stop`, and queue edits
     become request files with a `requestId` (idempotent re-drain) and a result channel, so the CLI/TUI/
     daemon stay *clients* of the owner (pi-durable's multiplayer model) instead of opening a second
     harness. *Owner:* devtools, delegate consulting · *Where:* `src/broker.mjs` + producers.
     *Acceptance:* a demo running a mutating request end-to-end while the broker drives; a duplicate
     `requestId` applies once.
+    **Addendum (#1904, not yet landed):** the `compact` op joins `SPOOL_OPS`, so a saturated seat is
+    compacted by a broker-applied request like the other ops.
 
 72. **Broker start provenance + lifecycle observability.** `START pid=<n> source=up|serve|daemon` (plus
     version/pin), so a reader can tell how the broker was launched; folds into items 61–62.
@@ -2344,7 +2346,7 @@ recurrences; `pm` sequences them against 61–71.
     2026-10-16, up to two days old), holding the store and muddying `ps`. The broker/`up` reaps viewers
     older than their originating session, or `status` names them. *Owner:* impl · *Where:* `cli.mjs`,
     `src/broker.mjs`. *Acceptance:* stale viewers are reaped or reported; no silent accumulation.
-78. **Broker crash forensics + survive a conversation storage error.** The broker died on `Session failed
+78. **Broker crash forensics + survive a conversation storage error (DELIVERED `d509e2f`).** The broker died on `Session failed
     after a storage error; close and reopen it` with no `EXIT` and no cause logged, stalling the queue
     (impl). Make the broker log the `cause` chain, skip the poisoned conversation for the pass instead
     of dying, and surface it as attention. *Owner:* impl · *Where:* `cli.mjs` `cmdServe`, `src/broker.mjs`.
