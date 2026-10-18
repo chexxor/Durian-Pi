@@ -5,13 +5,19 @@ backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
 _Last refreshed: 2026-10-18T19:32Z (delegate — host+rig recovery complete; recurrence 8 reproduced live, pinned, and FIXED (`6e27ac2`); broker+local LLM up; verify routed to `pm`)._
 
-_Last refreshed: 2026-10-18T20:27Z (delegate — D107 recorded (intra-item compaction for local seats) and routed with D105/#2123; local-model reliability intents filed)._
+_Last refreshed: 2026-10-18T20:35Z (delegate — D107 recorded + routed with D105/#2123; local-model reliability + lastActivity defects filed; filed AND recovered a broker retry hot-loop incident)._
 
 ## NEXT SESSION
 **Current item:** **local-model reliability** — enforce **D107** (a local seat masks→summarizes its
 tool-call history WITHIN a long item, capped, then re-anchors) alongside **D105**/**#2123** (a fresh
-`pi.reset` BETWEEN items). Both routed to `pm` (`37e9a77b…` D107, `17fef81f…` reliability, plus the
-`lastActivity` defect `b9dd9a08…`). **Next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+`pi.reset` BETWEEN items). All routed to `pm`: `37e9a77b…` (D107), `17fef81f…` (reliability findings),
+`b9dd9a08…` (lastActivity defect), `f27a8772…` (retry hot-loop defect). Incidents filed this session:
+`docs/incidents/2026-10-18-broker-retry-hotloop.md` (new) plus dormant-stall recurrence 8, host-resource
+exhaustion, local-provider. **Broker UP** pid `3296`; inbox drained. **Next command:**
+`DURIG_DB=./selfdev.sqlite node cli.mjs status`. **Watch:** the shared tree still carries devtools's
+uncommitted `src/broker.mjs` `configure` WIP — it makes `land.mjs` REFUSE (tracked modification) and the
+local suite read red while `main` is green; intent `6a38b05c…` asked `pm` to reconcile it (delegate did not
+touch it).
 
 > **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T20:05Z).** — Operator decisions executed; landing window done.
 > - **LANDING WINDOW (operator-prioritized) — RAN.** Paused→stopped the broker, snapshot
