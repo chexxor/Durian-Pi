@@ -3,7 +3,18 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T06:52Z (delegate — merge pack + scope (b) ruling + UX consult routed; product rebrand `durig`→`durian-pi` routed; broker UP; local repo rename still needs a window)._
+_Last refreshed: 2026-10-18T07:32Z (delegate — broker recovered; **BLOCKER: DeepInfra balance exhausted (402), no seat can generate**)._
+
+> **BLOCKER (2026-10-18T07:32Z) — provider balance exhausted; the team is stopped.** Every seat
+> (`pm`, `impl`, `qa`, `scribe`, `devtools`, `auditor`, `designer`) reports
+> `last_run_failed: model_error: 402: You need positive balance to do inference`, and the supervisor
+> escalated each after repeated failures. `#2103` (the operator-directed UX consultation) is `deferred`
+> to human; `#2104` (advocate) is `deferred` waiting on pm. **Operator action required: top up
+> DeepInfra** (provider = `deepinfra` in `durig.config.json`) or switch to a funded provider/key —
+> retrying or resetting seats cannot help. After funding: `resume`, re-queue `#2103`/`#2104`, let the
+> broker re-wake. Broker is UP (pid 8196, PASS advancing); store healthy (no corruption); backup at
+> `.spike/store-backup-20261018-022048`. **Security: the DeepInfra key lived in gitignored
+> `durig.config.json` and was echoed during diagnosis — rotate it.**
 
 > **DELEGATE SESSION (2026-10-18) — durable-tui merge pack delivered; rename blocked on a window.**
 > The operator directed: (1) proceed with the durable-tui merge procedure; (2) gap-analyze the spike vs
