@@ -7,7 +7,13 @@ _Last refreshed: 2026-10-18 (delegate — compaction analysis delivered; compact
 
 ## NEXT SESSION — continue this session's goals
 
-**Current item:** **#1904** — `compact` as a command-spool op applied by the broker (ROADMAP 71 / #912 addendum), owned by `devtools` (OPERATOR PRIORITY), verifier **#1903** (qa, gated on devtools's branch). Filed this session by the delegate; `devtools` claimed it and is progressing. `impl` is untouched on **#1881**.
+**Current item:** **#1904** (done by `devtools`; branch `devtools-item-1904` @ `d3d6be3`, 1 ahead of `main`, NOT merged) → verifier **#1903** (qa), prioritised via **#1916**; on PASS land with `scripts/land.mjs --suite` in a declared window.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Known blocker:** qa **#1903** is still `queued` (not verified); the landing needs the operator-declared broker-stop window. Watch the 37(b) stranded `admitted_not_started` and the main-red **#1610** gate.
+
+**Live now:** (1) auditor routing DONE — pm moved 5 verifications to `auditor` (#1923–#1927); (2) **`qa2` prepared** at `.spike/delegate/rig.selfdev.qa2.json`, now on **`google/gemma-4-31B-it`** (third family, distinct from DeepSeek authors and GLM), for the NEXT window combined with the landing; (3) ROADMAP 71 residue (queue edits as ops, `up`/`resume` via spool) filed to pm.
 
 **Delegate actions this session (operator-directed):**
 - Delivered the requested written analysis: pi-durable is BUILT for live compaction (post's
@@ -33,13 +39,6 @@ the branch/worktree sprawl safely.
 
 **NEXT AGENT JOB:** none outstanding from the operator. Resume the standing goals above; watch
 **#1904** (devtools) → **#1903** (qa).
-
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
-
-**Known blocker:** none blocking the delegate. `impl` conv 9's corrupt `pi.live` (doc `12105`) was
-**repaired** this session — `impl` is woken and working again (see the **QA + IMPL RECOVERY** section
-below and `docs/incidents/2026-10-18-seat-unwakeable-corrupt-doc.md`). Watch for the **37(b)** stranded
-`admitted_not_started` (a substrate defect, not a seat fault) and the main-red `#1610` landing gate.
 
 **State at clock-out:** broker **UP pid `28168`** (START `01:48:36Z`; `PASS 28` advancing; `WAKE impl`
 and `WAKE qa` fresh). `main` `fa645fb` (+ this session's ops-doc commit), **not pushed**; the remote-tracking
