@@ -62,7 +62,7 @@ import {
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
-import { brokerAlive, auditWorktrees, clearBrokerState, clearStopRequest, drivePass, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest } from "./src/broker.mjs";
+import { brokerAlive, auditWorktrees, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -2197,6 +2197,18 @@ async function cmdOptimize(textParts) {
  * KEEP-REASON (`live`/`locked`/`not-terminal`/`branch-unresolved`/`dirty`/`reapable`/`seat-root`),
  * so a leaked or dirty tree is visible and resolvable without guessing. Writes nothing.
  */
+/**
+ * `worktree scratch clean` (ROADMAP 76 leak source B prevention, #1907): unlock + remove every
+ * registered verify-scratch worktree — the explicit teardown a verifier runs when its VERIFY
+ * completes. A DIRTY scratch is REFUSED (never --force / git clean) and reported. Writes nothing to
+ * the store; git only.
+ */
+async function cmdWorktreeScratchClean() {
+  const repoPath = dirname(resolve(DB_PATH));
+  const { removed, kept } = await cleanVerifyScratch({ repoPath });
+  out({ ok: true, command: "worktree", subcommand: "scratch clean", repo: repoPath, removed, kept });
+}
+
 async function cmdWorktreeAudit() {
   const storage = await openStore();
   try {
@@ -2594,6 +2606,7 @@ try {
   }
   else if (cmd === "worktree") {
     if (rest[0] === "audit") await cmdWorktreeAudit();
+    else if (rest[0] === "scratch" && rest[1] === "clean") await cmdWorktreeScratchClean();
     else await cmdWorktree(rest);
   }
   else if (cmd === "init") await cmdInit();

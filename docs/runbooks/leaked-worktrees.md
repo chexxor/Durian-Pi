@@ -36,6 +36,16 @@ UNLOCKED and it is CLEAN** — every other case is KEPT and reported. Terminal-n
 sufficient.
 
 ## Do
+0. **A verify's scratch is torn down when the verify COMPLETES** (ROADMAP 76 leak source B
+   prevention, #1907). The verifier runs:
+   ```bash
+   node cli.mjs worktree scratch clean
+   ```
+   which UNLOCKS and REMOVES every registered verify-scratch worktree (`.verify-*` / `verify*` /
+   `wt-*`). A DIRTY scratch is REFUSED and reported — never `--force`, never `git clean`. This is the
+   explicit counterpart to the automatic sweep, which only reaps UNLOCKED scratch; a verifier that
+   locks its scratch while working (step 5) unlocks it here on completion. One tree at a time:
+   `removeVerifyScratch({ worktree })` from `src/broker.mjs`.
 1. At start the broker sweeps orphans and logs `RECONCILE leases=… worktrees=…`. The **#1244 sweep
    contract** — a worktree is reaped only when **ALL** of these hold:
    - it is a durig item worktree (dir `item-<id>`) whose **branch encodes a queue item**
@@ -160,3 +170,10 @@ distinct audit **kind** (`verify-scratch`) and the sweep RECLAIMS the **unlocked
 verifier-must-lock protocol protects an in-use scratch; a dirty one is kept). Ordinary `non-item`
 worktrees are never reaped. Demo `worktree-scratch` covers the classification and the reclaim/keep
 split.
+
+2026-10-18 (#1907, leak source B PREVENTION): the explicit teardown a verifier runs when its VERIFY
+completes — `node cli.mjs worktree scratch clean` (or `cleanVerifyScratch({repoPath})` /
+`removeVerifyScratch({worktree})` in src/broker.mjs). It UNLOCKS+REMOVES every verify-scratch tree;
+a DIRTY one is refused and its work preserved (never --force/clean). Demo `verify-scratch-cleanup`
+covers it. qa-side adoption is the remaining half (the mechanism is provided; the verifier must call
+it on completion).

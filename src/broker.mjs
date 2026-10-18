@@ -460,6 +460,39 @@ export async function auditWorktrees({
 }
 
 /**
+ * The EXPLICIT verify-scratch cleanup (ROADMAP 76 leak source B prevention, #1907). Call it when a
+ * VERIFY COMPLETES: it unlocks and removes every registered verify-scratch worktree (`.verify-*` /
+ * `verify*` / `wt-*`) — unlike the automatic sweep, which only reaps UNLOCKED scratch, this is the
+ * verifier saying "I am done, tear my scratch down". A DIRTY scratch is REFUSED (never `--force`,
+ * never `git clean`): its uncommitted work is preserved and reported in `kept`. `force` is the
+ * caller explicitly accepting that loss and is never passed by the CLI.
+ *
+ * @returns {Promise<{removed:string[], kept:Array<{worktree:string, reason:string}>}>}
+ */
+export async function cleanVerifyScratch({ repoPath, force = false } = {}) {
+  if (!repoPath) return { removed: [], kept: [] };
+  const worktrees = (await listWorktrees(repoPath)).filter((wt) =>
+    VERIFY_SCRATCH_RE.test(basename(wt?.worktree ?? "")),
+  );
+  const removed = [];
+  const kept = [];
+  for (const wt of worktrees) {
+    const result = await removeClaimedWorktree({ worktree: wt.worktree, force });
+    if (result?.removed) removed.push(wt.worktree);
+    else kept.push({ worktree: wt.worktree, reason: result?.refused ?? (result?.skipped ? "missing" : "not-removed") });
+  }
+  return { removed, kept };
+}
+
+/**
+ * Remove ONE verify-scratch worktree by path (the verifier's own scratch). Same contract as
+ * `cleanVerifyScratch`: unlock + remove, refuse a dirty tree unless the caller forces it.
+ */
+export async function removeVerifyScratch({ worktree, force = false } = {}) {
+  return removeClaimedWorktree({ worktree, force });
+}
+
+/**
  * Remove `item-<id>` worktrees whose queue item is TERMINAL and which are unlocked and clean.
  *
  * A leaked worktree (a crash before its item's cleanup, or the recorded recursive-nesting
