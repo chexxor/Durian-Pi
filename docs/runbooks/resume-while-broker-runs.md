@@ -70,4 +70,4 @@ proof is the settled submission's terminal status, visible in `status`/`log`.
 #1931 (2026-10-18): chose the DOCUMENTED REFUSAL over routing `resume` as a spool op, because the broker
 already applies the same settle every pass — routing would be redundant work AND a second writer. The
 refusal message (`cli.mjs` `refuseWhileBrokerDrives` for `resume/doctor`) names this reason and this
-runbook. Decision recorded in `docs/DECISIONS.md` (D101).
+runbook. Decision recorded in `docs/DECISIONS.md` (D94, addendum 2026-10-18).
