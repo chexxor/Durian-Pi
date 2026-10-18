@@ -69,7 +69,7 @@ touch it).
 >   `Session failed after a storage error` (`wake-failed`), plus **`pm` escalating `degeneration` 7× in a
 >   row** (`streaming: pm, auditor`). The local LLM (PolyStrata, `127.0.0.1:8080`) is up. `ui.mjs` pid
 >   `11256` still running.
-> - **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 > - **Do not:** `git add -A`; touch the uncommitted `configure` WIP; land a conflicted branch by hand;
 >   land the unverified set (`impl-item-1498`, `scribe-item-1232/1233/1257`).
 
@@ -80,7 +80,7 @@ touch it).
 >   and `git` fork errors are gone. Root cause now grounded (commit limit = RAM + the old 4,982 MB page
 >   file) — `docs/incidents/2026-10-18-host-resource-exhaustion.md` is **resolved**.
 > - **Broker UP — pid `16368`** (`START 19:29:58Z`, passes advancing, no `wake-failed`, no genlock),
->   restarted **without `DURIG_SEAT_ROOT` and WITH the local env** (`DURIG_LOCAL_API_KEY=local`, since
+>   restarted **without `DURIAN_PI_SEAT_ROOT` and WITH the local env** (`DURIAN_PI_LOCAL_API_KEY=local`, since
 >   #2114 is not on `main`). Step 3 of `broker-down-or-stalled.md` now carries that.
 > - **Dormancy recurrence 8 — PINNED AND FIXED (`6e27ac2`, delegate, operator-directed).** The retry
 >   re-armed only on a per-seat `wake-failed`; a retry pass that throws in a STORE READ before any wake
@@ -100,19 +100,19 @@ touch it).
 > - **OPERATOR PRIORITY unchanged: durable-TUI (durian-pi) migration.** NEXT AGENT: deliver an intent to
 >   `pm` to un-park and sequence **#2095 → #2096** (+ #2103/#2104). Also queued: **#2123** (D105 impl),
 >   **#2124** (scribe, claimed), **#2125** (gated verify), **#2137** (landing list: `devtools-item-2114`
->   @9ba3c8a — landing it removes the `DURIG_LOCAL_API_KEY` restart requirement).
+>   @9ba3c8a — landing it removes the `DURIAN_PI_LOCAL_API_KEY` restart requirement).
 > - **`qa`:** `repeated_failure` (3× `Connection error.` while PolyStrata was down). Its only
 >   non-terminal item `#2145` is `deferred`, so there is no queued `qa` work to re-drive; confirm `qa`
 >   recovers on its next real wake now that the server is up.
 > - `main` = `6e27ac2`, **13 ahead of `origin/main`** (unpushed; operator holds push). Docs updated this
 >   session: 3 incident reports + `broker-down-or-stalled.md` + new `local-provider-down.md` + runbook and
 >   incident indexes.
-> - **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 > - **Do not:** restart the broker without the local env; leave PolyStrata down; treat a fresh heartbeat
 >   as health (read the last `PASS`).
 
 > **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T18:59Z).**
-> - **Why nothing was running: the host commit charge is exhausted — NOT a durig bug.** `systeminfo`:
+> - **Why nothing was running: the host commit charge is exhausted — NOT a durian-pi bug.** `systeminfo`:
 >   Virtual Memory Available **294 MB** of 37,672 MB (In Use 37,378 MB) while physical RAM had ~6 GB
 >   free. The page file was a manually-fixed **4,982 MB** on `C:` (`AutomaticManagedPagefile = FALSE`).
 >   Every node allocation then fails at tiny heaps — which is also why `cli.mjs status` "OOMs" and `git`
@@ -129,11 +129,11 @@ touch it).
 >   @18:51:27Z. `broker.json` is stale; `genlock.0/1/2` are stale (holder pid 16612 gone); submissions
 >   for pm/impl/scribe/auditor are stranded.
 > - **Recovery owed after the reboot** (`docs/runbooks/broker-down-or-stalled.md`): `resume`, then
->   restart WITHOUT `DURIG_SEAT_ROOT` and WITH the local-seat env — `scripts/serve-noroot.ps1` sets only
->   `DURIG_DB`, and **#2114's placeholder key is NOT on `main`** (`src/providers/local.mjs` still returns
->   `""` when `DURIG_LOCAL_API_KEY` is unset; the fix is branch `devtools-item-2114 @9ba3c8a`, landing
+>   restart WITHOUT `DURIAN_PI_SEAT_ROOT` and WITH the local-seat env — `scripts/serve-noroot.ps1` sets only
+>   `DURIAN_PI_DB`, and **#2114's placeholder key is NOT on `main`** (`src/providers/local.mjs` still returns
+>   `""` when `DURIAN_PI_LOCAL_API_KEY` is unset; the fix is branch `devtools-item-2114 @9ba3c8a`, landing
 >   list #2137). So a plain restart BREAKS the local seats (`devtools`/`qa`). Set
->   `DURIG_LOCAL_BASE_URL/MODEL/CONTEXT` (already in `durig.config.json`) + `DURIG_LOCAL_API_KEY=local`
+>   `DURIAN_PI_LOCAL_BASE_URL/MODEL/CONTEXT` (already in `durian-pi.config.json`) + `DURIAN_PI_LOCAL_API_KEY=local`
 >   on the launcher. Verify a live `START`, `WAKE`, advancing `PASS`, and a fresh heartbeat across
 >   several passes — **a fresh heartbeat is NOT health; read the last `PASS`.**
 > - **Provider state (cleared):** DeepInfra works (impl ran 18:39Z, real cost). The `designer … 402`
@@ -152,7 +152,7 @@ touch it).
 > - **Also in flight:** #2123 (D105 local per-item reset, `queued` to impl; was the 81-min queue-ageing
 >   item) — impl was on **#1498** (P1 FF-lock prerequisite) before the broker died; #2124 (scribe docs,
 >   claimed), #2125 (auditor verify, gated).
-> - **Exact next command after reboot:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Exact next command after reboot:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 > - **Do not:** restart the broker without the local key env; `git add -A`; `serve --stop` to force a
 >   `resume` while a broker lives; treat pre-reboot failures as regressions.
 
@@ -183,7 +183,7 @@ touch it).
 > - **Also in flight:** D105 enforcement `#2123` (impl) + docs `#2124` (scribe) + verify `#2125`; the
 >   local-provider fix `#2114` (devtools) + verify; the `format` gate is NOT repo-clean (untouched files
 >   fail), so it is not a usable gate today.
-> - **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 > - **Do not:** stop the broker without a runbook/declared window; `git add -A`; treat the delegate's
 >   demo as the seat verify.
 
@@ -210,7 +210,7 @@ touch it).
 >   going dormant; it does not remove the error.
 
 > **NEXT SESSION START HERE — D105 policy RULED and routed; broker recovered from TWO dormant stalls
-> (2026-10-18T17:33Z).** Operator: "ensure durig has a policy of starting a new context for any new work
+> (2026-10-18T17:33Z).** Operator: "ensure durian-pi has a policy of starting a new context for any new work
 > item picked up by a local model." Delivered as **policy + routing** (the delegate does not implement):
 > - **Policy recorded as `D105`** (`docs/DECISIONS.md`): a seat whose resolved model provider is `local`
 >   (D104) MUST draw a fresh `pi.reset` boundary per NEW work item before working it; durable transcript
@@ -237,10 +237,10 @@ touch it).
 > (pending verify/land), and the broker was recovered from a dormant-stall (2026-10-18T17:16Z).**
 > Operator: "continue ensuring the devtools seat runs the local model of qwen." State: `rig.selfdev.json`
 > `devtools` = `local/qwen36`; PolyStrata `127.0.0.1:8080` serving `qwen3.6-35b-a3b-ud-q3_k_m`
-> (`n_ctx 65536`); broker **pid 3604** started with `DURIG_LOCAL_API_KEY=local` (placeholder) in its env (see below).
+> (`n_ctx 65536`); broker **pid 3604** started with `DURIAN_PI_LOCAL_API_KEY=local` (placeholder) in its env (see below).
 >
 > - **Defect routed + fixed.** Intent delivered to `pm` (`.spike/delegate/intent-local-provider-key.md`)
->   → registered **#2114** (devtools: non-secret placeholder key when `DURIG_LOCAL_API_KEY` is unset in
+>   → registered **#2114** (devtools: non-secret placeholder key when `DURIAN_PI_LOCAL_API_KEY` is unset in
 >   `src/providers/local.mjs`) and **#2115** (auditor, gated verify). devtools implemented #2114 **on
 >   `provider: local, model: qwen36`** → branch `devtools-item-2114 @72efd09` (worktree `item-2114`);
 >   **#2115 is `queued`** — the durable fix is NOT on `main` yet; land it after #2115 passes.
@@ -252,9 +252,9 @@ touch it).
 >   store backup **`.spike/store-backup-20261018-121156`** → restart with the local env → **pid 3604**,
 >   `PASS 1 woke=devtools,auditor`; `idle_with_queued_work` cleared; no new `wake-failed`. Incident
 >   recurrence appended to `docs/incidents/2026-10-18-broker-dormant-stalled.md`.
-> - **Restart requires the local key env.** `scripts/serve-noroot.ps1` sets only `DURIG_DB`; the restart
->   set `DURIG_LOCAL_BASE_URL/MODEL/CONTEXT` + `DURIG_LOCAL_API_KEY=local` (the placeholder). Config file
->   `durig.config.json` already carries the first three; only the key is env-only. Until the source fix
+> - **Restart requires the local key env.** `scripts/serve-noroot.ps1` sets only `DURIAN_PI_DB`; the restart
+>   set `DURIAN_PI_LOCAL_BASE_URL/MODEL/CONTEXT` + `DURIAN_PI_LOCAL_API_KEY=local` (the placeholder). Config file
+>   `durian-pi.config.json` already carries the first three; only the key is env-only. Until the source fix
 >   lands, a plain `scripts/serve-noroot.ps1` restart with no key **breaks local seats** again.
 > - **Suspect not removed:** a long-lived `node ui.mjs` (pid 17340, started ~09:36Z) holds the shared
 >   store — a concurrent-opener (lock-contention) suspect. Left running (operator's TUI); if the stall
@@ -267,15 +267,15 @@ touch it).
 > `rig.selfdev.json` `devtools` model → `local/qwen36` (operator-directed); `up --refresh` reset only
 > devtools; broker restarted (pid `7404`). **Verified end-to-end:** a spooled check message woke
 > devtools, which replied `provider: local, model: qwen36, stopReason: stop` (text `local/qwen36`).
-> **The model string was never the problem** — durig's provider is `local` + `DURIG_LOCAL_MODEL`, so the
-> seat string is `local/<DURIG_LOCAL_MODEL>` (`local/qwen36`); the pi CLI's `local-model/...` is pi's own
+> **The model string was never the problem** — durian-pi's provider is `local` + `DURIAN_PI_LOCAL_MODEL`, so the
+> seat string is `local/<DURIAN_PI_LOCAL_MODEL>` (`local/qwen36`); the pi CLI's `local-model/...` is pi's own
 > separate provider. The server ignores the request's `model` field either way.
 > **DEFECT (needs a seat fix + review):** `src/providers/local.mjs` resolves the auth key from
-> `DURIG_LOCAL_API_KEY` and defaults it to `""`, so the provider fails with
+> `DURIAN_PI_LOCAL_API_KEY` and defaults it to `""`, so the provider fails with
 > `No API key for provider: local` unless that undocumented var is set — its own comment says "resolve a
-> constant". Confirmed: the first wake errored, a restart with `DURIG_LOCAL_API_KEY=local` made it reply.
-> **Operational consequence:** the broker must be started with `DURIG_LOCAL_BASE_URL`,
-> `DURIG_LOCAL_MODEL=qwen36`, `DURIG_LOCAL_CONTEXT=65536`, `DURIG_LOCAL_API_KEY=<non-empty>` —
+> constant". Confirmed: the first wake errored, a restart with `DURIAN_PI_LOCAL_API_KEY=local` made it reply.
+> **Operational consequence:** the broker must be started with `DURIAN_PI_LOCAL_BASE_URL`,
+> `DURIAN_PI_LOCAL_MODEL=qwen36`, `DURIAN_PI_LOCAL_CONTEXT=65536`, `DURIAN_PI_LOCAL_API_KEY=<non-empty>` —
 > `scripts/serve-noroot.ps1` sets none of them, so a plain restart breaks local seats. Also: the old
 > NEXT claim that `qa` "runs locally" was **never true in this store** (qa's last runs were
 > `deepinfra/mistral…`, 402-terminated); only `devtools` has now run on local.
@@ -290,13 +290,13 @@ touch it).
 > (`npm view` → `1.3.0`), NOT in `pi-main.pin.json` `packages[]`, so pin it exactly in `package.json`
 > (not the monorepo pin); **#2096**: the ownership guard reuses `readBrokerState`/`brokerAlive`
 > (`src/broker.mjs`, heartbeat-hardened) + the live-genlock scan (`scripts/land.mjs`, the `#1383`
-> lesson), fails closed naming store+pid, and uses `DURIAN_PI_TUI_*` with `DURIG_TUI_*` aliases. It
+> lesson), fails closed naming store+pid, and uses `DURIAN_PI_TUI_*` with `DURIAN_PI_TUI_*` aliases. It
 > also scopes `cwd`/worktree resolution to Phase 2 (Phase 1 resolves no seat).
 > **BLOCKER (unchanged, now with evidence): #2095/#2096/#2103 were all `deferred by supervisor` after
 > the 402 (`log designer`: `stopReason:"error", 402 … positive balance`).** Only `qa` runs
 > (`local/qwen36` via PolyStrata). **Operator decision needed to start the team:** (a) fund DeepInfra;
 > or (b) authorize pointing `devtools`+`impl` at the local PolyStrata provider (D104 per-seat:
-> `DURIG_LOCAL_BASE_URL` in the broker env, set the two seat models to `local/<id>`, `up --refresh`,
+> `DURIAN_PI_LOCAL_BASE_URL` in the broker env, set the two seat models to `local/<id>`, `up --refresh`,
 > restart the broker in a declared window). Local serves ONE 35B Q3 model / 64k ctx on 24 GB VRAM —
 > adequate for Phase 1's mechanical work but serialized; one heavy seat at a time. **Broker state:**
 > UP pid `10424`, last `PASS 1` at 09:45Z — this is IDLE, **not stalled**: the queue holds **0
@@ -304,8 +304,8 @@ touch it).
 
 > **LOCAL INFERENCE (2026-10-18) — `qa` runs locally; DeepInfra 402 still blocks the rest.** PolyStrata
 > (`C:\Users\Alex\dsh-Projects\PolyStrata`) serves Qwen3.6-35B-A3B UD-Q3_K_M on
-> `http://127.0.0.1:8080/v1` (OpenAI-compatible; tool calls work). durig gained a **per-seat `local`
-> provider** (D104): with `DURIG_LOCAL_BASE_URL` set, a seat model `local/<id>` uses it while others
+> `http://127.0.0.1:8080/v1` (OpenAI-compatible; tool calls work). durian-pi gained a **per-seat `local`
+> provider** (D104): with `DURIAN_PI_LOCAL_BASE_URL` set, a seat model `local/<id>` uses it while others
 > keep the default. The selfdev `qa` seat is now `local/qwen36`; other seats still need funded
 > DeepInfra. Settings that make it reliable on 24 GB VRAM / 32 GB RAM: close games, engine
 > `--vram-reserve-mib 512` (stops `cudaGraphInstantiate` OOM), and `min_free_vram_mib` — a SERVER config
@@ -317,11 +317,11 @@ touch it).
 > `last_run_failed: model_error: 402: You need positive balance to do inference`, and the supervisor
 > escalated each after repeated failures. `#2103` (the operator-directed UX consultation) is `deferred`
 > to human; `#2104` (advocate) is `deferred` waiting on pm. **Operator action required: top up
-> DeepInfra** (provider = `deepinfra` in `durig.config.json`) or switch to a funded provider/key —
+> DeepInfra** (provider = `deepinfra` in `durian-pi.config.json`) or switch to a funded provider/key —
 > retrying or resetting seats cannot help. After funding: `resume`, re-queue `#2103`/`#2104`, let the
 > broker re-wake. Broker is UP (pid 8196, PASS advancing); store healthy (no corruption); backup at
 > `.spike/store-backup-20261018-022048`. **Security: the DeepInfra key lived in gitignored
-> `durig.config.json` and was echoed during diagnosis — rotate it.**
+> `durian-pi.config.json` and was echoed during diagnosis — rotate it.**
 
 > **DELEGATE SESSION (2026-10-18) — durable-tui merge pack delivered; rename blocked on a window.**
 > The operator directed: (1) proceed with the durable-tui merge procedure; (2) gap-analyze the spike vs
