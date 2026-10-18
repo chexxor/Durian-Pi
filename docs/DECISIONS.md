@@ -3126,3 +3126,14 @@ view; the CLI grows `answer`/`queue --waiting` and `status` grows a headline. Op
 D-number uses the next free slot; scribe's pending D113 lands first and lead #2452 re-derives numbers at
 land time. Evidence: the code citations above; no implementation is claimed.
 
+
+**Addendum (2026-10-18, #2073 — auditor #2061 boundary): a MID-FLIGHT compaction is REFUSED, legibly.**
+pi-durable's compaction does run alongside a live conversation, but its summary lands only at the seat's
+next TURN BOUNDARY, so the awaited window cannot see it: the task commits, the entry appears later, and
+the op wrongly dead-lettered as "no entry written" — a successful compaction reported as FAILED (the
+operator saw a refused compact whose entry landed a moment later). The broker now detects a RUNNING
+generation on the target seat and REFUSES the request, with a reason naming the boundary and the fix
+(`pause --wait`, or let the run settle). The required order is **QUIESCE → COMPACT → upgrade**. The op
+was NOT made to accept-and-report-pending: `ok:true` must keep meaning "a summary entry landed", which
+is the spool's whole value. `demo/compact-spool.test.mjs` now STAGES the in-flight case (a slow streaming
+faux reply) and asserts the legible refusal, that nothing is committed, and that the run is not aborted.
