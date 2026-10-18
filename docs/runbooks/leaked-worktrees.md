@@ -131,3 +131,11 @@ verify trees whose only content was untracked `verify-*`/`wt-*` scratch and whos
 clean; 157→122 worktrees, 109→93 refs, `main` unmoved, nothing forced. **18 candidates were KEPT**
 because a nested tree held uncommitted work (probe scripts such as `qa-probes-verdict.mjs`) — the
 clean-nested gate is what distinguishes reclaimable scratch from real verification work.
+
+2026-10-18 (locked-terminal follow-up): a reclaim pass over the **58 locked terminal-item worktrees
+reclaimed 0** — every one is dirty (11 tracked-only, 8 tracked+untracked, 39 untracked-only), so the
+clean gate refuses all. **The blocker is uncommitted content, not the lock.** The lock is a lifecycle
+token taken at `createWorktree` (`src/worktree.mjs:385`) and released by the teardown path (`:502`), so a
+lingering lock on a terminal item means teardown did not run — informative, but it never justifies
+`--force` or `git clean` on a dirty tree. Permanent fix routed to `pm` as operator priority (ROADMAP 76
+audit surface + `complete_work` teardown + qa verify-scratch cleanup).

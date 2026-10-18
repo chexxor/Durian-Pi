@@ -72,6 +72,13 @@ trees were clean. Worktrees **157→122**, refs **109→93**, tree clean, `main`
 `leaked-worktrees.md` (+ front-matter + § "Reclaiming a merged item-branch pinned by a verify
 worktree"), `branch-cleanup.md` (step 5). Oracle **131/0**.
 
+**Worktree audit + reclaim (2026-10-18):** ~136 worktrees, only ~12 in use (3 live seat roots —
+`impl`/`qa` item trees + shared; ~9 non-terminal items). A follow-up reclaim of the **58 locked
+terminal-item** worktrees returned **0 — all dirty** (11 tracked-only, 8 both, 39 untracked-only); the
+blocker is uncommitted content, not the lock and not the missing view. Operator intent
+`intent-worktree-audit-priority` spooled to `pm` to implement **ROADMAP 76** (worktree audit surface) +
+`complete_work` teardown + qa verify-scratch cleanup. `leaked-worktrees.md` evidence updated.
+
 **Pause/unpause priority (operator):** prerequisite satisfied; intent `intent-pause-priority` spooled to
 `pm` (`.spike/delegate/intent-pause-priority.md`, `INTENT delivered=1 dead=0`) to **unpark #1388** and
 route `pause`/`unpause` (ROADMAP 131 AC1–5) to `impl` now. Confirm `#1388` leaves `held`. **Watch:** the
