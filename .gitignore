@@ -6,6 +6,9 @@ node_modules/
 *.sqlite-wal
 *.sqlite-shm
 durig.config.json
+# Machine-local pi agent state: a local-model endpoint (and its key) can land
+# here, so it is host-specific like durig.config.json and never committed.
+.pi/
 .durig/
 # built upstream tree, reproducible from pi-main.pin.json
 vendor/pi-main/

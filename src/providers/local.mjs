@@ -52,7 +52,13 @@ export function createLocalProvider(spec, { createProvider, api }) {
 		auth: {
 			apiKey: {
 				name: "Local server (any key)",
-				resolve: async () => ({ auth: { apiKey: "local" }, source: "none" }),
+				// A keyless local server (PolyStrata) needs no credential, so the key
+				// comes from the ENVIRONMENT only - a literal here would put a secret
+				// in source. An empty value still satisfies pi-ai's required auth shape.
+				resolve: async ({ ctx }) => {
+					const key = (await ctx?.env?.("DURIG_LOCAL_API_KEY")) ?? "";
+					return { auth: { apiKey: key }, source: key ? "DURIG_LOCAL_API_KEY" : "none" };
+				},
 			},
 		},
 		models: [
