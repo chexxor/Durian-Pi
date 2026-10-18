@@ -31,6 +31,7 @@ import {
 import { basename, dirname, join } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
+import { reservationBlocks } from "./genlockreserve.mjs";
 
 // A legitimate generation can run to the provider stream timeout (600 s by default
 // for the openai-compatible providers). A 60 s age fallback steals such a live
@@ -136,6 +137,15 @@ export async function withGenerationSlot(options, fn) {
 	const me = { pid: process.pid, seat, since: new Date().toISOString() };
 	let path;
 	for (;;) {
+		// The LANDING lock has PRIORITY (#1497/#1498, lead #2054 precondition (c)): while a live
+		// lander is waiting for the slots, a NEW generation yields rather than racing it for the
+		// slot that just came free. Without this the lander lost every race — the holder re-claims
+		// within seconds, so "the FF waits for a live holder" never terminated (#1509).
+		// Fail-open on a dead/stale reservation: a crashed lander must never wedge generation.
+		if (reservationBlocks(dbPath, me)) {
+			await new Promise((r) => setTimeout(r, ACQUIRE_POLL_MS));
+			continue;
+		}
 		path = null;
 		for (const candidate of paths) {
 			if (!existsSync(candidate)) {

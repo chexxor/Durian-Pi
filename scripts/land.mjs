@@ -12,9 +12,13 @@
 // shared tree is never mid-merge, whatever a branch does.
 //
 // It is ALSO the ENFORCEMENT chokepoint for the pre-flight guard (#1164 Q3): it REFUSES to
-// land when the shared tree has TRACKED modifications or a genlock slot is held by a live
-// holder. (seatguard's git-state block is defense-in-depth; the runbook and `check` are
-// ADVISORY ONLY and are never the thing that stops a bad landing.)
+// land when the shared tree has TRACKED modifications or is already mid-merge, and when the
+// store it resolved is NOT the one holding the live lock (#1383). A live genlock holder beside
+// the RESOLVED store no longer refuses (#1497/#1498): the lander publishes a PRIORITY
+// reservation and WAITS for the slots at the FF (see the lock section below), because refusing
+// on exactly that condition made the waiting lock unreachable and stalled every landing while
+// any seat generated (#1509). (seatguard's git-state block is defense-in-depth; the runbook and
+// `check` are ADVISORY ONLY and are never the thing that stops a bad landing.)
 //
 // lead #1429 condition (b): the pre-flight check above is a START-CHECK only — a generation
 // can start between it and the FF. So the FF-advance ALSO runs under an EXCLUSIVE lock the
@@ -46,6 +50,17 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+// The PRIORITY reservation + the wait-with-priority claim (#1497/#1498, lead #2054 precondition
+// (c)). Imported from a deliberately DEPENDENCY-FREE module (node:fs/node:path only) so this
+// chokepoint still loads when the provider stack is broken — the #1164 Q3 rule this file's own
+// header states, and the reason it must NOT import src/genlock.mjs (which pulls pi-ai).
+import {
+	acquireAllSlotsSync,
+	isReservationPath,
+	releaseReservation,
+	releaseSlotsSync,
+	reserveSlots,
+} from "../src/genlockreserve.mjs";
 
 const args = process.argv.slice(2);
 // Options that take a VALUE — their value must not be mistaken for a branch name.
@@ -102,6 +117,10 @@ function heldGenlocks(dbPath) {
 	for (const name of readdirSync(dir)) {
 		if (!name.startsWith(prefix)) continue;
 		const path = join(dir, name);
+		// The PRIORITY reservation lives beside the numbered slots and shares their prefix. It is
+		// not a generation slot: counting it as a live holder would report the lander against
+		// itself (#1498).
+		if (isReservationPath(path)) continue;
 		let holder = null;
 		try {
 			holder = JSON.parse(readFileSync(path, "utf8"));
@@ -140,89 +159,14 @@ function resolveSlotCount(repoRoot) {
 	return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
 }
 
-// genlock's STALE_MS: longer than the provider stream timeout, so a legitimate long
-// generation is never age-stolen while a dead or wedged holder is reclaimed promptly.
-const LOCK_STALE_MS = 660_000;
-const LOCK_POLL_MS = 100;
-const LOCK_WAIT_MS = 660_000;
-
-/** Parse a slot file; null when absent, torn or unreadable (never evidence of a live run). */
-function readHolder(path) {
-	try {
-		return JSON.parse(readFileSync(path, "utf8"));
-	} catch {
-		return null;
-	}
-}
-
-/** A slot may be stolen when its holder is dead, or has aged past the stale window. */
-function slotIsStale(holder, now = Date.now()) {
-	if (!(holder && typeof holder.pid === "number") || !pidAlive(holder.pid)) return true;
-	const age = typeof holder.since === "string" ? now - Date.parse(holder.since) : Infinity;
-	return age > LOCK_STALE_MS;
-}
+// The slot constants, the stale rule, the claim loop and the release loop now live in
+// src/genlockreserve.mjs, shared with the broker's in-process gate (src/genlock.mjs) so the two
+// sides cannot disagree about what "held", "stale" or "waits" means. Only the blocking sleep
+// stays here: it is a script-local detail, not a rule.
 
 /** Synchronous sleep — land.mjs is a sync script (spawnSync), so the acquire loop blocks. */
 function sleepSync(ms) {
 	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-/**
- * Claim ALL `slots` generation slots beside `dbPath`, WAITING for a live holder to release
- * (lead: "if a generation is in flight, the lander WAITS for the lock"). Returns the claimed
- * paths; releases any partial claim and throws on timeout.
- */
-function acquireAllSlots(dbPath, slots, me) {
-	const claimed = [];
-	const deadline = Date.now() + LOCK_WAIT_MS;
-	for (let i = 0; i < slots; i += 1) {
-		const path = `${dbPath}.genlock.${i}`;
-		for (;;) {
-			try {
-				const fd = openSync(path, "wx");
-				try {
-					writeFileSync(fd, JSON.stringify(me));
-				} finally {
-					closeSync(fd);
-				}
-				claimed.push(path);
-				break;
-			} catch (err) {
-				if (err?.code !== "EEXIST") {
-					releaseAllSlots(claimed, me);
-					throw err;
-				}
-				if (slotIsStale(readHolder(path))) {
-					try {
-						unlinkSync(path); // steal from a dead or wedged holder
-					} catch {
-						// another process stole or released it first; retry the claim
-					}
-					continue;
-				}
-				if (Date.now() > deadline) {
-					releaseAllSlots(claimed, me);
-					throw new Error(
-						`timed out after ${LOCK_WAIT_MS} ms waiting for genlock slot ${path} ` +
-							`(held by pid ${readHolder(path)?.pid ?? "?"})`,
-					);
-				}
-				sleepSync(LOCK_POLL_MS);
-			}
-		}
-	}
-	return claimed;
-}
-
-/** Release the slots WE hold; a slot another process now owns is left alone. */
-function releaseAllSlots(paths, me) {
-	for (const path of paths) {
-		try {
-			if (readHolder(path)?.pid === me.pid) unlinkSync(path);
-		} catch {
-			// already gone
-		}
-	}
 }
 
 /* ───────── resolve the shared repo ───────── */
@@ -328,19 +272,12 @@ if (liveElsewhere.length > 0) {
 	);
 }
 
+// A live holder no longer REFUSES the landing (#1497/#1498, lead #2054 precondition (c)).
+// Refusing HERE was the structural bug: it made the waiting lock unreachable, so a coordinator
+// that generates continuously (pm re-claims a slot every ~20-30 s) blocked every landing
+// indefinitely (#1509: seven refusals in three minutes). Instead the lander PUBLISHES a priority
+// reservation and WAITS for the slots at the FF, where new generations yield to it.
 const genlocks = heldGenlocks(dbPath);
-if (genlocks.length > 0) {
-	report(
-		{
-			...base,
-			error:
-				`refusing to land: ${genlocks.length} genlock slot(s) are held by a live holder beside ${dbPath} — ` +
-				`a generation is in flight and the landing must wait for it to finish.`,
-			genlocks,
-		},
-		1,
-	);
-}
 
 /* ───────── land in a SCRATCH DETACHED worktree ───────── */
 
@@ -455,14 +392,28 @@ if (stillDirty.length > 0) {
 
 const lockSlots = resolveSlotCount(repoRoot);
 const me = { pid: process.pid, seat: "impl-land", since: new Date().toISOString() };
-const lock = { slots: lockSlots, held: 0, waitedMs: 0 };
+const lock = {
+	slots: lockSlots,
+	held: 0,
+	waitedMs: 0,
+	reserved: false,
+	liveHolders: genlocks.length,
+};
 let heldPaths = [];
 let scratchHead;
 let ff;
 try {
 	const lockStart = Date.now();
 	if (lockSlots !== null) {
-		heldPaths = acquireAllSlots(dbPath, lockSlots, me);
+		// PRIORITY FIRST: publish the reservation so new generations YIELD while we wait. A live
+		// reservation held by another lander is reported rather than treated as an error — we
+		// queue behind it and the slot wait below orders us.
+		const res = reserveSlots(dbPath, me);
+		lock.reserved = res.claimed;
+		if (!res.claimed) {
+			lock.queuedBehind = { pid: res.holder?.pid ?? null, seat: res.holder?.seat ?? null };
+		}
+		heldPaths = acquireAllSlotsSync(dbPath, lockSlots, me);
 		lock.held = heldPaths.length;
 	}
 	lock.waitedMs = Date.now() - lockStart;
@@ -472,11 +423,13 @@ try {
 	scratchHead = git(scratch, ["rev-parse", "HEAD"]).out;
 	ff = git(repoRoot, ["merge", "--ff-only", scratchHead]);
 } catch (err) {
-	releaseAllSlots(heldPaths, me);
+	releaseSlotsSync(heldPaths, me);
+	releaseReservation(dbPath, me);
 	if (!keepScratch) removeScratch();
 	report({ ...base, error: `cannot hold the exclusive landing lock: ${err?.message ?? err}`, merged, lock }, 1);
 } finally {
-	releaseAllSlots(heldPaths, me);
+	releaseSlotsSync(heldPaths, me);
+	releaseReservation(dbPath, me);
 }
 if (ff.code !== 0) {
 	if (!keepScratch) removeScratch();
@@ -500,6 +453,9 @@ report(
 		ok: true,
 		command: "land",
 		repo: repoRoot,
+		// The store the genlock probe RESOLVED (#1383) — reported so a caller can see the
+		// resolution, not just infer it from a refusal.
+		db: dbPath,
 		main: { before: mainBefore.out, after: mainAfter },
 		merged,
 		lock,
