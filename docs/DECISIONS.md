@@ -2728,6 +2728,32 @@ routing; acceptance is a demo proving a local-provider seat gets a `pi.reset` bo
 consecutive work items while a non-local seat does not, plus `node --check`, the full suite, and a
 non-author verify.
 
+## D106 — D105 seam: local-provider per-item context reset (lead `#2158`, 2026-10-18)
+
+**Decision.** The D105 enforcement seam is COMPOSED — signal and act are one seam:
+- **SIGNAL = option (c):** `up` records the RESOLVED `provider` on the SEAT doc;
+- **ACT:** the `pi.reset` boundary fires on the WAKE path in the broker, gated on that recorded field, between runs.
+
+(c) and the broker act compose.
+
+**Rejected.** (a) `cli.mjs` `superviseOnce` — reopens the writer slot closed in `#2031`/`#1817` and
+puts the boundary outside the wake path; (b) broker `drivePass` reading each seat's `pi.agent` model
+live on the HOT wake pass — a new cross-conversation read with no precedent plus a per-wake cost.
+
+**cli.mjs writer slot.** NOT reopened as a general writer; the `up` provider field is a BOUNDED
+single-field write, sequenced behind `impl-item-1907` (`#2017`) and coordinated with the D103 rebrand
+(`#2110`/`#2144`). PREFER routing the `up` write through devtools' spool (`#1930`) so `cli.mjs` is
+untouched; if the spool is not ready, the `up` half WAITS. No second concurrent `cli.mjs` writer.
+
+**Safety override (wins over scope).** The live-lease refusal STANDS — never reset an in-flight /
+claimed / leased seat; no mid-item boundary. Acceptance `#2125` governs.
+
+**Relation.** Complements (does NOT supersede) the D105 rule recorded in `scribe-item-2124` @007f073
+(MANAGED / decided-not-shipped); this entry records the SEAM now that it is being implemented (`#2123`).
+
+**Status.** Ruled by `lead` (`#2158`); recorded for `impl` (`#2123`) with verification routed to
+`auditor` (`#2125`). Lead's P1 note: the ruling rests on queue evidence, not a source re-read — `impl`
+flags if the seats doc or the wake path contradicts it.
 ---
 
 ## D107 — A local-provider seat compacts its tool-call history WITHIN a long work item; the cross-item boundary stays a `pi.reset` (operator policy, 2026-10-18)
