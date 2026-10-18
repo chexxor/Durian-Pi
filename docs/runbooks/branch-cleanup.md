@@ -3,9 +3,9 @@ runbook: branch-cleanup
 symptom: "so many local git branches; merged branches were never pruned"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-17
+last_verified: 2026-10-18
 verified_by: delegate
-evidence: "2026-10-17: 52 merged/patch-equivalent branches pruned (128→76 refs, main unmoved, 33 unlanded kept)"
+evidence: "2026-10-17: 52 merged/patch-equivalent branches pruned (128->76 refs, main unmoved, 33 unlanded kept). 2026-10-18: 20 merged refs pruned (8 free-merged; 2 by releasing terminal clean+locked worktrees; 17 via the verify-tree reclaim in leaked-worktrees.md), main unmoved, nothing forced"
 check_rule: null
 ---
 
@@ -65,9 +65,12 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
 4. **Do not delete** any `ahead>0` branch, and **never** delete a snapshot/archive branch
    (`item-<N>` pre-split snapshots, `selfdev-*`). They sit on old bases and are not work-in-flight
    (see `merge.md` "Never merge a snapshot").
-5. A **held** merged branch cannot be pruned until its worktree is released. Release it only per
-   `leaked-worktrees.md` (terminal + unlocked + clean; a **locked** worktree is an intentional keep),
-   then re-run Diagnose and step 2.
+5. A **held** merged branch cannot be pruned until its worktree is released, per `leaked-worktrees.md`.
+   Three cases: **(a) clean + unlocked + terminal** → `git worktree remove <wt>` then `git branch -d`;
+   **(b) clean but `locked`** → `git worktree unlock <wt>` → remove → `-d`, only when the item is
+   terminal (otherwise the lock means "in use" — keep it); **(c) dirty** → keep. `leaked-worktrees.md`
+   § "Reclaiming a merged item-branch pinned by a verify worktree" covers the qa `verify-*` tree case.
+   Then re-run Diagnose and step 2.
 6. `git worktree prune` to drop metadata for worktrees already removed by the sweep.
 7. Remote snapshot refs (`origin/selfdev-*`, `origin/item-148`, `origin/pi-rebase`) are the operator's:
    deleting them is a push, and the delegate holds no push grant.

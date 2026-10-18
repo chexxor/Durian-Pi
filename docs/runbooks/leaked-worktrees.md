@@ -1,3 +1,14 @@
+---
+runbook: leaked-worktrees
+symptom: "stray or dirty item-* worktrees; a merged item-branch that cannot be pruned"
+writes: false
+precondition: "read-only"
+last_verified: 2026-10-18
+verified_by: delegate
+evidence: "2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced)"
+check_rule: null
+---
+
 # Leaked or dirty `item-*` worktrees
 
 ## When to use
@@ -65,6 +76,31 @@ sufficient.
 > re-attaches the branch at the current HEAD, preserving any commits already made there. Do not
 > hand-roll a branch — the tool owns it.
 
+### Reclaiming a merged item-branch pinned by a verify worktree
+
+A merged item (its branch `ahead=0`) whose worktree is still checked out cannot be pruned until that
+worktree is released. Many are qa verify trees: the item worktree is dirty **only** with untracked
+`verify-*`/`wt-*` scratch, and each `verify-*` is itself a nested detached worktree. Reclaim them
+**only** when nothing can be lost:
+
+1. Qualify each candidate — ALL must hold:
+   - the branch is merged: `git rev-list --count main..<b>` is 0;
+   - the worktree has **no tracked modifications**: `git -C <wt> status --porcelain` shows only `??` lines;
+   - every untracked entry matches `verify-*`/`wt-*`/`.verify*` — a real artifact (a probe script, a
+     `position-*.md`, a store file) disqualifies it;
+   - **every nested worktree is CLEAN**: `git -C <nested> status --porcelain` is empty. A nested tree
+     holding even one untracked probe is uncommitted work — keep the whole candidate.
+2. Remove the nested trees first, then the parent:
+   `git worktree unlock <nested>; git worktree remove <nested>` … then `git worktree unlock <wt>;
+   git worktree remove <wt>`, then `git branch -d <branch>`.
+3. `git worktree prune`; then re-run the `branch-cleanup.md` Diagnose.
+
+**Never `--force`.** A parent or nested tree that still holds files makes `git worktree remove` refuse —
+that refusal is the safety net; keep the worktree and the branch. `-d` (never `-D`) refuses an unmerged
+branch. A **locked** worktree is an intentional keep; unlock one only when its item is done AND its
+content qualifies above. This is a mechanical, read-only-to-the-store git operation; the broker may keep
+driving.
+
 ## Verify
 `git worktree list` no longer lists the resolved worktree; `git status` is quiet for `item-*`.
 
@@ -89,3 +125,9 @@ branch-held orphan and KEEPS everything else, reporting `worktree-orphan-kept` w
 `not-terminal` / `branch-unresolved` / `dirty`. It removes the worktree, **never the branch**. Demos
 `broker-worktree-sweep` + `worktree-sweep` cover both the detached and the branch-held cases. The
 verifier-must-lock protocol (step 5) was adopted by qa and discharged as #1340.
+
+2026-10-18 (Option A reclaim): **17 merged item-branches reclaimed** (16 batch + 1 pilot) pinned by qa
+verify trees whose only content was untracked `verify-*`/`wt-*` scratch and whose nested trees were all
+clean; 157→122 worktrees, 109→93 refs, `main` unmoved, nothing forced. **18 candidates were KEPT**
+because a nested tree held uncommitted work (probe scripts such as `qa-probes-verdict.mjs`) — the
+clean-nested gate is what distinguishes reclaimable scratch from real verification work.
