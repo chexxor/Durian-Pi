@@ -3,10 +3,28 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T16:45Z (delegate — durable-tui Phase 1 build spec written; team still 402-blocked except local `qa`; broker idle-healthy)._ 
+_Last refreshed: 2026-10-18T16:57Z (delegate — DeepInfra funded; `devtools` switched to the local model and verified; local provider had a real defect)._ 
 
-> **DURABLE-TUI MIGRATION — registered; pre-execution spec done; still blocked on a provider
-> (2026-10-18T16:45Z).** The phases are registered: **#2094** (Phase 0 ruling, done), **#2095** (pin
+> **LOCAL PROVIDER — now genuinely verified, with a defect recorded (2026-10-18T16:57Z).** Operator
+> funded DeepInfra (402 blocker cleared) and directed switching `devtools` to the local LLM. Done:
+> `rig.selfdev.json` `devtools` model → `local/qwen36` (operator-directed); `up --refresh` reset only
+> devtools; broker restarted (pid `7404`). **Verified end-to-end:** a spooled check message woke
+> devtools, which replied `provider: local, model: qwen36, stopReason: stop` (text `local/qwen36`).
+> **The model string was never the problem** — durig's provider is `local` + `DURIG_LOCAL_MODEL`, so the
+> seat string is `local/<DURIG_LOCAL_MODEL>` (`local/qwen36`); the pi CLI's `local-model/...` is pi's own
+> separate provider. The server ignores the request's `model` field either way.
+> **DEFECT (needs a seat fix + review):** `src/providers/local.mjs` resolves the auth key from
+> `DURIG_LOCAL_API_KEY` and defaults it to `""`, so the provider fails with
+> `No API key for provider: local` unless that undocumented var is set — its own comment says "resolve a
+> constant". Confirmed: the first wake errored, a restart with `DURIG_LOCAL_API_KEY=local` made it reply.
+> **Operational consequence:** the broker must be started with `DURIG_LOCAL_BASE_URL`,
+> `DURIG_LOCAL_MODEL=qwen36`, `DURIG_LOCAL_CONTEXT=65536`, `DURIG_LOCAL_API_KEY=<non-empty>` —
+> `scripts/serve-noroot.ps1` sets none of them, so a plain restart breaks local seats. Also: the old
+> NEXT claim that `qa` "runs locally" was **never true in this store** (qa's last runs were
+> `deepinfra/mistral…`, 402-terminated); only `devtools` has now run on local.
+
+> **DURABLE-TUI MIGRATION — registered; pre-execution spec done (blocker since cleared: see the
+> LOCAL PROVIDER block above).** The phases are registered: **#2094** (Phase 0 ruling, done), **#2095** (pin
 > `@earendil-works/pi-coding-agent`, `devtools`), **#2096** (Phase 1 non-default own-store entrypoint,
 > `impl`), **#2097** (Phase 2 attach, gated), **#2098** (Phase 3, held); UX consult **#2103**
 > (`designer`) / **#2104** (`advocate`); rebrand **#2109–#2112**. This session advanced the delegate
