@@ -256,6 +256,29 @@ function commitSecretRefusal(root, command) {
 }
 
 /**
+ * #1966 layer (ii): the broker SPOOL directory (`<db>.broker.inbox`) is a CONTROL-PLANE
+ * surface — a spool request carries a PRODUCER-STAMPED `from`, so a seat that can write
+ * here could forge `from: "operator"` and drive a control-plane op (pause/configure) or
+ * a cross-seat reset/stop/compact. This path-deny NARROWS that surface.
+ *
+ * BEST-EFFORT, not the boundary: a shell defeats any string check (the F4 reason
+ * `refusalFor` is not the boundary either), so this is a LAYER under the authoritative
+ * `from`-gate in src/broker.mjs (`authorizeSpoolRequest`). The bypass is DOCUMENTED in
+ * demo/control-plane-gate.test.mjs, not hidden.
+ */
+const SPOOL_PATH_RE = /(?:^|[\\/])[^\\/\s]*\.broker\.inbox(?:\.error)?(?:[\\/]|$)/;
+export function refusalForSpoolPath(target) {
+	if (typeof target !== "string" || target === "") return null;
+	if (!SPOOL_PATH_RE.test(target)) return null;
+	return (
+		"refused by durig: that path is the broker SPOOL directory (a control-plane surface) — " +
+		"a seat may not write it. A spool request carries a producer-stamped `from`, so a write " +
+		"here could forge an operator control-plane request (pause/configure/reset). Use the " +
+		"operator CLI verbs instead; this is a layer, not the boundary (the `from`-gate refuses it)"
+	);
+}
+
+/**
  * Refuse a call, or let it through.
  *
  * `ToolHookCall.parent` is set for a nested call - one a running tool made through
@@ -265,6 +288,11 @@ function commitSecretRefusal(root, command) {
 export async function beforeTool(call, api, context) {
 	const command = SHELL_TOOLS.has(call?.name) ? call.arguments?.command : undefined;
 	if (typeof command !== "string") {
+		// #1966 layer (ii): a write/edit into the broker spool is refused before it lands.
+		if (call?.name === "write" || call?.name === "edit") {
+			const spool = refusalForSpoolPath(call.arguments?.path);
+			if (spool !== null) return { block: spool };
+		}
 		// #673: writes get the same refusal channel (`block`). Two corruption
 		// shapes are checked at call time: class 2 (stray control bytes) from the
 		// payload alone, class 1 (a multi-line source collapsed to one line) from
@@ -280,7 +308,8 @@ export async function beforeTool(call, api, context) {
 		}
 		return undefined;
 	}
-	const refusal = refusalFor(command);
+	// #1966 layer (ii): a shell command naming the spool directory is refused (best-effort).
+	const refusal = refusalFor(command) ?? refusalForSpoolPath(command);
 	if (refusal !== null) return { block: refusal };
 	// #1317: a commit lands durable, portable history — gate its staged content.
 	if (GIT_COMMIT_RE.test(command)) {

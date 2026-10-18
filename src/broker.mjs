@@ -232,13 +232,23 @@ function onlyReadIntents(dbPath) {
  * Move an undeliverable intent out of the spool into the error dir with its reason, so
  * a bad intent is surfaced once instead of being retried every pass forever.
  */
-function deadLetterIntent(dbPath, file, reason) {
+function deadLetterIntent(dbPath, file, reason, refusal = null) {
   try {
     const dir = intentErrorDir(dbPath);
     mkdirSync(dir, { recursive: true });
     const target = join(dir, `${basename(file).replace(/\.json$/, "")}.error.json`);
     renameSync(file, target);
     writeFileSync(`${target}.reason`, String(reason), "utf8");
+    // A structured refusal rides the dead-lettered record, so a producer can branch on
+    // the CODE (not parse prose) and an auditor can see WHY the gate said no.
+    if (refusal) {
+      try {
+        const parsed = JSON.parse(readFileSync(target, "utf8"));
+        writeFileSync(target, JSON.stringify({ ...parsed, refusal }), "utf8");
+      } catch (err) {
+        console.error(`BROKER: could not record refusal on ${target}: ${err?.message ?? err}`);
+      }
+    }
   } catch (err) {
     console.error(`BROKER: could not dead-letter intent ${file}: ${err?.message ?? err}`);
   }
@@ -329,6 +339,89 @@ function writeIntentResult(dbPath, requestId, result) {
  */
 export function requestOp(request) {
   return request?.op ?? "message";
+}
+
+/** The operator identity a control-plane spool request must carry (`from`). */
+export const OPERATOR = "operator";
+
+/**
+ * Control-plane spool ops (ROADMAP 71 control plane): they change RIG/SEAT control
+ * state, not conversation content, so they are OPERATOR-ONLY (lead #1952/#2215/#2216,
+ * security #2223). ONE set — a future control-plane op is added HERE, not given its own
+ * ad-hoc gate, so every future control-plane op inherits the rule.
+ */
+export const CONTROL_PLANE_OPS = new Set(["pause", "unpause", "configure"]);
+
+/**
+ * Ops that can act on a seat OTHER than the requester: a `from=<seat>` request for one
+ * of these is a cross-seat act (privilege escalation), so it is operator-only too. A
+ * self-target (`to === from`) stays allowed, so a seat may still stop/reset itself.
+ * Reviewed at implementation (item #1966): `stop`/`reset` act on a named seat's
+ * conversation, `compact` rewrites another conversation's model context.
+ */
+export const CROSS_SEAT_OPS = new Set(["stop", "reset", "compact"]);
+
+/**
+ * The authorization decision for one spool request. PURE, so the rule is testable with
+ * no broker and no store.
+ *
+ * DETECT-AND-LAYER, not a boundary (security #2223): `from` is PRODUCER-STAMPED inside
+ * the spool file and all seats share one OS user, so this refuses the non-operator case
+ * and LAYERS with the spool-dir write denial (seatguard path-deny + readOnlyRoots).
+ * Same-user forgeability of `from` is a KNOWN RESIDUAL (UNVERIFIED-FOR-PREVENTION) — the
+ * layers narrow it; they do not eliminate it. Never claim otherwise.
+ *
+ * @returns {{allowed:boolean, code:string, detail?:string}}
+ */
+export function authorizeSpoolRequest(request, { op = requestOp(request) } = {}) {
+  const from = request?.from ?? null;
+  if (CONTROL_PLANE_OPS.has(op)) {
+    if (from !== OPERATOR) {
+      return {
+        allowed: false,
+        code: "not-operator",
+        detail: `${op} is a control-plane op; only from="${OPERATOR}" may apply it (from=${JSON.stringify(from)})`,
+      };
+    }
+    // The CARVE-OUT is `up`'s: a spool request is always a RECONFIGURE. An explicit
+    // `isCreate` bit is refused here so a seat cannot mint a seat's initial doc by
+    // spooling one (the Q2 hole); creation is governed by `up`'s own in-tx check.
+    if (op === "configure" && request?.isCreate === true) {
+      return {
+        allowed: false,
+        code: "iscreate-not-permitted",
+        detail: "configure via the spool is a RECONFIGURE; seat creation is `up`'s and cannot be set through the spool",
+      };
+    }
+    return { allowed: true, code: "operator-control-plane" };
+  }
+  if (CROSS_SEAT_OPS.has(op)) {
+    const to = request?.to ?? request?.seat ?? null;
+    const crossSeat = to !== null && to !== undefined && to !== from;
+    if (crossSeat && from !== OPERATOR) {
+      return {
+        allowed: false,
+        code: "not-operator",
+        detail: `${op} targets another seat (${JSON.stringify(to)}); only from="${OPERATOR}" may act cross-seat (from=${JSON.stringify(from)})`,
+      };
+    }
+    return { allowed: true, code: crossSeat ? "operator-cross-seat" : "self-target" };
+  }
+  return { allowed: true, code: "content-op" };
+}
+
+/**
+ * Append ONE gate-decision audit row as JSONL beside the db (item #1966 shape (iii)):
+ * `{requestId, op, from, to, sourceFile, decision, code, at}`. Best-effort — a failed
+ * audit write must never block the broker — but it is REPORTED, never swallowed.
+ */
+export function appendGateAudit(dbPath, row) {
+  if (!dbPath) return;
+  try {
+    appendFileSync(`${dbPath}.broker.audit.log`, `${JSON.stringify({ at: new Date().toISOString(), ...row })}\n`, "utf8");
+  } catch (err) {
+    console.error(`BROKER: gate-audit append failed: ${err?.message ?? err}`);
+  }
 }
 
 /**
@@ -462,16 +555,26 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
     return { op, seat: seatName, resetEntryId: result.resetEntryId, handoff: result.handoff ?? null };
   }
   if (op === "compact") {
-    // pi-durable's compaction is designed to run ALONGSIDE a live conversation: `compact()`
-    // commits a `pi.compaction` task that summarizes an old prefix and places a summary entry
-    // at a turn boundary (the transcript is kept). The broker applies it with its OWN harness —
-    // no external writer, no abort of the run. The live-generation-lease guard does NOT apply:
-    // it stops an OUTSIDE writer; the broker IS the owner, and pi-durable commits at the turn
-    // boundary. Report the summary entry id, not merely the task id (an enqueue-and-exit stub
-    // would claim success while nothing was summarized).
+    // pi-durable's compaction runs ALONGSIDE a live conversation, but its summary lands only at the
+    // seat's next TURN BOUNDARY — so a MID-FLIGHT compaction's outcome cannot be awaited reliably
+    // (auditor #2061 boundary / #2073: the task commits, the `pi.compaction` entry appears only
+    // later, and the awaited window wrongly reports "no entry written"). Rather than commit a task
+    // whose result we cannot report, REFUSE legibly and name the fix: QUIESCE the seat first.
+    // When the seat IS quiescent the entry must land in the awaited window, or it is a real error.
     const seatName = request.to ?? request.seat;
     const seat = seats[seatName];
     if (!seat) throw new Error(`unknown seat: ${seatName}`);
+    const live = await harness.inspect(context);
+    const running = (live.tasks ?? []).find(
+      (t) => t.record?.conversationId === seat.conversationId && t.record?.state?.status === "running",
+    );
+    if (running) {
+      throw new Error(
+        `compact: seat ${seatName} is mid-generation (task ${running.record.id} running); a mid-flight ` +
+          `compaction's summary lands only at the turn boundary and cannot be awaited — quiesce first ` +
+          `(pause --wait, or let the run settle), then compact`,
+      );
+    }
     const conv = await harness.conversation(seat.conversationId, context);
     if (!conv) throw new Error(`no conversation for seat ${seatName}`);
     const instructions =
@@ -483,7 +586,9 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
     const after = await conv.entries({ order: "descending" }, 50, undefined, context);
     const summary = after.items.find((e) => e.kind === CompactionEntry.kind);
     if (!summary) {
-      throw new Error(`compact: no pi.compaction entry was written for seat ${seatName} (task ${taskId})`);
+      throw new Error(
+        `compact: the seat was quiescent but no pi.compaction entry was written for seat ${seatName} (task ${taskId})`,
+      );
     }
     return { op, seat: seatName, taskId, instructions: instructions ?? null, summaryEntryId: summary.id };
   }
@@ -537,6 +642,33 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
     if (!SPOOL_OPS.includes(op)) {
       deadLetterIntent(dbPath, file, `unknown op: ${op} (known: ${SPOOL_OPS.join(", ")})`);
       onDiagnostic?.({ kind: "intent-undeliverable", op, reason: "unknown op" });
+      deadLettered += 1;
+      continue;
+    }
+    // Operator-only gate for control-plane (and cross-seat) ops (#1966). The decision is
+    // AUDITED for every gated op (allowed and refused), then a refusal is dead-lettered
+    // with a STRUCTURED code so the producer reports "refused" rather than "pending".
+    const decision = authorizeSpoolRequest(request, { op });
+    if (CONTROL_PLANE_OPS.has(op) || CROSS_SEAT_OPS.has(op)) {
+      appendGateAudit(dbPath, {
+        requestId,
+        op,
+        from: request.from ?? null,
+        to: request.to ?? request.seat ?? null,
+        sourceFile: basename(file),
+        decision: decision.allowed ? "allowed" : "refused",
+        code: decision.code,
+      });
+    }
+    if (!decision.allowed) {
+      deadLetterIntent(dbPath, file, `refused: ${decision.code}: ${decision.detail}`, {
+        code: decision.code,
+        op,
+        from: request.from ?? null,
+        decision: "refused",
+        detail: decision.detail,
+      });
+      onDiagnostic?.({ kind: "intent-refused", op, code: decision.code, reason: decision.detail });
       deadLettered += 1;
       continue;
     }
