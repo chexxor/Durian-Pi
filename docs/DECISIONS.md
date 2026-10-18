@@ -2589,3 +2589,29 @@ the broker applying its own op is already the single owner.
 **Status:** adopted; `demo/compact-spool.test.mjs` proves a REAL `pi.compaction` entry lands via the
 broker, a duplicate `requestId` applies once, and the seat is not aborted. Procedure:
 `docs/runbooks/compact-a-seat.md`.
+
+## D101 — The durable-TUI spike merges as a parallel, single-owner entrypoint before any attach (delegate, operator directive, 2026-10-18)
+
+**Decision.** The `durable-tui` spike (the real pi `InteractiveMode` TUI on a pi-durable conversation;
+`.spike/durable-tui/HANDOFF.md`) merges into durig in phases. **Phase 1 lands it as a NON-DEFAULT
+entrypoint on its OWN store** (`npm run tui`; `ui.mjs`/`npm run ui` untouched) with a fail-closed guard
+that refuses a store a broker owns. Attaching it to a real seat's conversation (ROADMAP 52 + 55) is
+Phase 2; converging with `ui.mjs` is Phase 3. The Phase 0 scope ruling — per-seat Pi view (a) vs
+multi-seat operator TUI (b) — precedes code, with (a) recommended first.
+
+**Why.** durig's store has ONE writer (D42 / F24): the broker while it runs. `durig ui` is a read-only
+viewer (D11) whose only write is the intent spool (D68). The spike is a *writer* — it opens storage and
+a harness. Pointing it at `selfdev.sqlite` with the broker alive is the exact second-writer collision.
+Landing it as a separate entrypoint on a separate store yields "both TUIs working during a slow
+migration" at near-zero risk and defers the attach protocol (the security-gated part, ROADMAP 55) until
+it is designed.
+
+**Alternatives.** (a) Implement the adapter as a mode of `ui.mjs` immediately — rejected: couples the
+new surface to the old before the ownership/write seam is solved. (b) Replace `ui.mjs` outright —
+rejected: destroys the working read-only viewer and D11's fallback evidence. (c) Run the spike against
+`selfdev.sqlite` while the broker drives — rejected: a second writer.
+
+**Status:** delivered to `pm` (intent `66d95f69-17bf-4707-8c23-40326e7b8d70`) with
+`docs/reviews/durable-tui-merge-plan.md` + `docs/reviews/durable-tui-gap-analysis.md`; Phase 0 scope
+ruling and registration pending. The `@earendil-works/pi-coding-agent` dependency pin is a `devtools`
+prerequisite.

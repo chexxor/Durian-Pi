@@ -3,16 +3,47 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T05:18Z (delegate clock-out — handing the seat over; next: ROADMAP 71 residue, CLI mutating commands through the broker command spool)._
+_Last refreshed: 2026-10-18T06:07Z (delegate clock-out — durable-tui merge plan + gap analysis delivered and spooled to `pm`; rename proposal escalated; rig still paused, broker down)._
+
+> **DELEGATE SESSION (2026-10-18) — durable-tui merge pack delivered; rename blocked on a window.**
+> The operator directed: (1) proceed with the durable-tui merge procedure; (2) gap-analyze the spike vs
+> the current app; (3) rename `pi-opendurig` → `durian-pi`. Delivered as delegate analysis only (no
+> product code written — implementation is the team's):
+> - `docs/reviews/durable-tui-merge-plan.md` — phased merge (parallel, non-default entrypoint first on
+>   its OWN store; the spike is a writer, so it must never open `selfdev.sqlite` while the broker
+>   drives). Phase 0 scope ruling (a vs b) is an operator/lead call, pending.
+> - `docs/reviews/durable-tui-gap-analysis.md` — 33-row capability matrix + P1/P2/P3 + DECIDE build list
+>   for the new TUI (seat switcher, attach/write seam, router tools, sanitise/secret-redaction, cwd,
+>   tests, dependency pin, `pi.system`/`reset`, halt guard, …).
+> - `docs/reviews/project-rename-durian-pi.md` — rename hazard + safe procedure. **NOT executed**: 140
+>   worktrees / 139 admin dirs / live processes hold the tree; a string-only rename would make docs
+>   false (they name the real `../pi-opendurig.worktrees/`). Needs a GitHub rename + a declared window.
+> Two intents spooled to `pm`: **`66d95f69-17bf-4707-8c23-40326e7b8d70`** (merge) and
+> **`e6d5eea0-ec71-44c0-9a38-df229c073625`** (rename). **NEXT:** on `unpause`, pm drains both and
+> registers the phases (`impl` merge, `devtools` pin + rename mechanics, `qa`/`auditor` verify).
+
+> **RIG PAUSED (operator, 2026-10-18T05:38Z) — system reboot pending.** The broker was dormant (pid 3088,
+> last `PASS 178` at 05:23:05Z, no genlock) and had not drained the spooled `pause`; it was terminated
+> (no genlock) and `pause` applied directly (`appliedBy: cli`, `pausedBy: operator`). `status` reports
+> `paused: true`. The broker is **DOWN**. After reboot, the team takes NO new work until `unpause`.
+> Sequence post-reboot: `unpause`, then `resume` (dormancy stranded submissions), then restart the
+> broker. **Incident note:** `serve --stop` reported `state was stale; cleared` and cleared
+> `broker.json` while the broker process was **still alive** — an orphan-broker / second-writer hazard
+> worth a follow-up item.
 
 > **Side spike (operator-requested, 2026-10-18) — pi TUI on pi-durable via an adapter. NOT a queue
-> item; no product code changed.** `.spike/durable-tui/` (gitignored) proves the real
-> `InteractiveMode` boots headlessly against a pi-durable conversation: the durable transcript renders,
-> a durable generation streams live, and `session.prompt` becomes a durable submission. 16/16 tests
-> pass (`cd .spike/durable-tui && npm test`); run with `node run.mjs`; interface inventory, mapping
-> tables, findings and next steps are in its `README.md` (+ `evidence.md`). Key finding: durable
-> `EntryRecord`s carry no timestamp, so the adapter synthesizes one. This does **not** change the
-> operational priority below.
+> item; no product code changed. RETURNING TO MERGE? Read `.spike/durable-tui/HANDOFF.md` first.**
+> `.spike/durable-tui/` is a WORKING interactive app: `cd .spike/durable-tui && node tui.mjs` runs the
+> real `InteractiveMode` on a pi-durable conversation, generating with the operator's configured
+> provider (deepinfra plugin loads and works), running Pi's coding tools + code mode, supporting
+> `/compact` (running indicator, then a durable compaction boundary), and persisting to
+> `session.sqlite` so reopening resumes the transcript. 21/21 tests pass (`npm test`);
+> `node smoke-real-tools.mjs` proves the real provider calls a tool. Key integration seams: pass the
+> coding-agent `ModelRuntime` as `Harness.open`'s `models`; install `CodingTools`/`codemode` into the
+> durable registry; and re-emit durable's model-bearing `pi.compaction` entry through the TUI's
+> `entry_appended` path (not `compaction_end.result`). Other finding: durable `EntryRecord`s carry no
+> timestamp, so the adapter synthesizes one. `HANDOFF.md` holds the decisions, references, and merge
+> plan. This does **not** change the operational priority below.
 
 ## NEXT SESSION — fresh agent starts here (delegate, 2026-10-18T05:18Z)
 
