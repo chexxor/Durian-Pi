@@ -46,6 +46,7 @@ import {
   PROVIDER_ID,
   fallbackModels,
 } from "./src/providers/deepinfra-models.ts";
+import { createLocalProvider, localProviderSpec } from "./src/providers/local.mjs";
 import {
   Constitution,
   Edges,
@@ -330,6 +331,11 @@ function buildModels(live = null) {
         })
       : gated,
   );
+  // Register the local provider AFTER the default: resolveSeatModel reads the
+  // provider prefix only when it is registered, so a seat model "local/<id>"
+  // uses the local server while every other seat keeps the default provider.
+  const localSpec = localProviderSpec(CFG);
+  if (localSpec) models.setProvider(createLocalProvider(localSpec, { createProvider, api: ocApi }));
   return { models, providerId: "deepinfra" };
 }
 

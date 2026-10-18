@@ -3,7 +3,17 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T07:32Z (delegate — broker recovered; **BLOCKER: DeepInfra balance exhausted (402), no seat can generate**)._
+_Last refreshed: 2026-10-18T09:46Z (delegate — QA now runs on a LOCAL model via PolyStrata; DeepInfra 402 still blocks the other seats)._
+
+> **LOCAL INFERENCE (2026-10-18) — `qa` runs locally; DeepInfra 402 still blocks the rest.** PolyStrata
+> (`C:\Users\Alex\dsh-Projects\PolyStrata`) serves Qwen3.6-35B-A3B UD-Q3_K_M on
+> `http://127.0.0.1:8080/v1` (OpenAI-compatible; tool calls work). durig gained a **per-seat `local`
+> provider** (D104): with `DURIG_LOCAL_BASE_URL` set, a seat model `local/<id>` uses it while others
+> keep the default. The selfdev `qa` seat is now `local/qwen36`; other seats still need funded
+> DeepInfra. Settings that make it reliable on 24 GB VRAM / 32 GB RAM: close games, engine
+> `--vram-reserve-mib 512` (stops `cudaGraphInstantiate` OOM), and `min_free_vram_mib` — a SERVER config
+> key, NOT an engine arg. Verified: isolated `send qa` replied through PolyStrata; full suite 142/142
+> with the broker stopped.
 
 > **BLOCKER (2026-10-18T07:32Z) — provider balance exhausted; the team is stopped.** Every seat
 > (`pm`, `impl`, `qa`, `scribe`, `devtools`, `auditor`, `designer`) reports

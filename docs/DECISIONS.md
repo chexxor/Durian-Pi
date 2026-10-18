@@ -2665,3 +2665,29 @@ UP and seats run in worktrees, so the shared tree must not be mutated.
 devtools (env/config/paths/scripts), impl (code), scribe (docs), qa (verify). Acceptance: a demo proves
 the new names load and the old aliases resolve (new wins); after the rename `git grep -i durig` returns
 only the deliberate alias/deprecation sites; full `demo/*.test.mjs` + `npm run test:tui` green.
+
+## D104 — A per-seat local provider lets one seat use a locally-served model (delegate, operator directive, 2026-10-18)
+
+**Decision.** durig registers a second, OpenAI-compatible provider (`"local"`) alongside the default
+when `DURIG_LOCAL_BASE_URL` is set; a seat whose model is `local/<id>` resolves to it while every other
+seat keeps the default provider. New config keys: `DURIG_LOCAL_BASE_URL`, `DURIG_LOCAL_MODEL` (default
+`local`) and `DURIG_LOCAL_CONTEXT` (default 65536). Implemented in `src/providers/local.mjs`, wired in
+`cli.mjs` `buildModels`; the selfdev `qa` seat now uses `local/qwen36` (PolyStrata-served
+Qwen3.6-35B-A3B).
+
+**Why.** The operator's only funded inference was a local server (32 GB RAM / 24 GB VRAM); the DeepInfra
+402 had stopped the whole team. durig built exactly ONE provider per process, so no seat could use a
+second endpoint. The registry (`ModelsImpl`) already holds providers in a `Map`, and `resolveSeatModel`
+already reads a registered `provider/modelId` prefix — so the enabling change is small, additive, and
+off by default. Verified end-to-end: an isolated `send qa` returned the expected answer through
+PolyStrata, `up --refresh` resolved `qa` to `local/qwen36` (without the provider it would have stayed
+`deepinfra/local/qwen36`), and the full demo suite passed 142/142 with the broker stopped.
+
+**Alternatives.** (a) Point the whole rig at local by changing `DURIG_PROVIDER` — rejected: moves every
+seat, and still needs a provider registration. (b) Wait for the team — rejected: the team cannot run
+until the provider is funded, and the operator directed the delegate. (c) Proxy or impersonate DeepInfra
+— rejected: fragile and opaque.
+
+**Status.** Implemented as operator-directed side work (`demo/local-provider.test.mjs`); `node --check`
+clean. This is product code written by the delegate under an operator directive and still owes a seat's
+independent review when the rig can run.
