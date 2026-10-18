@@ -207,3 +207,52 @@ the 10 stale log viewers + `watch`** (pids `26348 34956 37512 24280 17412 35560 
   `2026-10-16 13:11` .. `2026-10-17 23:12` (listed in Resolution).
 - Recovery log: `START pid=7220`, `PASS 1 ms=47 woke=pm,impl,lead,auditor,security`, `PASS 2..6`, 4
   genlocks; `INTENT delivered=1 dead=0 dup=0`.
+
+---
+
+## Recurrence — 2026-10-18T17:12Z (fourth, same day; pid 7404)
+
+**Appended, not rewritten** (per `docs/incidents/README.md`). Same dormant shape and the same two
+seats as the 02:37Z recurrence, but with the **heartbeat itself frozen** (not merely stale-`PASS`).
+
+### What happened
+- Broker pid `7404` (START `16:54:02Z`) successfully woke `devtools` for a spooled check at `17:01:43Z`,
+  then queued work (pm `send_work` → `#2114` devtools / `#2115` auditor) arrived at `17:07:36Z`.
+- `17:08:04Z` the pass **failed to wake both seats**; after that the log froze at `PASS 10 ms=5048` and a
+  later spooled `stop` intent sat **undrained**. `broker.json`'s `heartbeatAt` stopped advancing too
+  (`17:10:05Z` grid), i.e. the process was **wedged**, unlike the prior fresh-heartbeat occurrences.
+- `.spike/serve.err`: `wake-failed … Session failed after a storage error; close and reopen it` for
+  **devtools (conv 4930)** and **auditor (conv 4936)** — the same pair and wrapper as 02:37Z (which
+  additionally showed `database is locked`). No `genlock.*` was held.
+
+### Resolution (2026-10-18, delegate, per `broker-down-or-stalled.md`)
+`MSYS_NO_PATHCONV=1 taskkill /F /PID 7404` (no genlock → safe) → removed the stale `broker.json` →
+store backup `.spike/store-backup-20261018-121156` → `node cli.mjs resume` (`found: 1`, pm
+`run-cancelled`, sub `88623`) → restart with the **local provider env set**
+(`DURIG_LOCAL_API_KEY=local`; config file supplies base/model/context) → `START pid=3604` (`17:12:14Z`);
+`INTENT delivered=1`; `WAKE devtools` / `WAKE auditor` / `PASS 1 ms=15 woke=devtools,auditor`; no new
+`wake-failed`; `idle_with_queued_work` cleared. The local-provider restart key was required because
+`scripts/serve-noroot.ps1` sets only `DURIG_DB` (defect fixed on the local model as queue `#2114`).
+
+### Prevention (unchanged; item 5 now has a live example)
+1. Log `SessionFailed.cause` / the `database is locked` variant on `wake-failed` (ROADMAP 78).
+2. A broker watchdog/auto-restart keyed on stale `PASS` **and** stale heartbeat (ROADMAP 61–64).
+3. The dormant-revisit gap — a failed wake must re-arm the scheduler.
+4. Forbid a second driver/opener of the shared store.
+5. **A long-lived `node ui.mjs` (pid 17340, started ~09:36Z) holds the shared store** — a live example
+   of the concurrent-opener class (item 5). It was **left running** (operator's TUI, not proven to be
+   the holder); terminate it before a deeper recovery if this recurs.
+
+### Evidence (recurrence 4)
+- `selfdev.sqlite.broker.log` at diagnosis: last line `2026-10-18T17:08:04.592Z PASS 10 ms=5048 woke=-`;
+  a later spooled intent was never drained until the restart.
+- `selfdev.sqlite.broker.json` at diagnosis: `{"pid":7404,…,"heartbeatAt":1792343405144}` — **frozen**
+  (`17:10:05Z`) while the wall clock read `17:11:48Z`.
+- `ls selfdev.sqlite.genlock.*` → none (safe to terminate); exactly one `cli.mjs serve` process.
+- `.spike/serve.err`: the two `wake-failed` objects above.
+- Recovery log: `START pid=3604`; `INTENT delivered=1 dead=0 dup=0`; `WAKE devtools`; `WAKE auditor`;
+  `PASS 1 ms=15 woke=devtools,auditor`; `PASS 2..16` clean.
+- Verification that `devtools` then ran on the local model: `cli.mjs log devtools` shows
+  `pi.assistant` entries with `provider: local, model: qwen36` (`stopReason: toolUse`) implementing
+  `#2114`.
+- Backup: `.spike/store-backup-20261018-121156`.

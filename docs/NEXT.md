@@ -3,7 +3,36 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-_Last refreshed: 2026-10-18T16:57Z (delegate — DeepInfra funded; `devtools` switched to the local model and verified; local provider had a real defect)._ 
+_Last refreshed: 2026-10-18T17:16Z (delegate — `devtools` verified running on local Qwen; local-provider defect fixed on the local model; dormant broker recovered)._
+
+> **NEXT SESSION START HERE — `devtools` on local Qwen is verified; the local-provider defect is FIXED
+> (pending verify/land), and the broker was recovered from a dormant-stall (2026-10-18T17:16Z).**
+> Operator: "continue ensuring the devtools seat runs the local model of qwen." State: `rig.selfdev.json`
+> `devtools` = `local/qwen36`; PolyStrata `127.0.0.1:8080` serving `qwen3.6-35b-a3b-ud-q3_k_m`
+> (`n_ctx 65536`); broker **pid 3604** started with `DURIG_LOCAL_API_KEY=local` (placeholder) in its env (see below).
+>
+> - **Defect routed + fixed.** Intent delivered to `pm` (`.spike/delegate/intent-local-provider-key.md`)
+>   → registered **#2114** (devtools: non-secret placeholder key when `DURIG_LOCAL_API_KEY` is unset in
+>   `src/providers/local.mjs`) and **#2115** (auditor, gated verify). devtools implemented #2114 **on
+>   `provider: local, model: qwen36`** → branch `devtools-item-2114 @72efd09` (worktree `item-2114`);
+>   **#2115 is `queued`** — the durable fix is NOT on `main` yet; land it after #2115 passes.
+> - **Dormant-broker stall — recurrence 4** (same shape as 02:37Z). While routing, broker pid `7404`
+>   was found stalled: heartbeat **frozen** (last `17:10:05Z`), `broker.log` frozen at `PASS 10`, the
+>   spooled intent undrained, no `genlock`; `.spike/serve.err` named `wake-failed … Session failed after
+>   a storage error` for **devtools (conv 4930)** and **auditor (conv 4936)**. Recovered per
+>   `broker-down-or-stalled.md`: `taskkill /F /PID 7404` → `resume` (1 pm `run-cancelled`, sub `88623`) →
+>   store backup **`.spike/store-backup-20261018-121156`** → restart with the local env → **pid 3604**,
+>   `PASS 1 woke=devtools,auditor`; `idle_with_queued_work` cleared; no new `wake-failed`. Incident
+>   recurrence appended to `docs/incidents/2026-10-18-broker-dormant-stalled.md`.
+> - **Restart requires the local key env.** `scripts/serve-noroot.ps1` sets only `DURIG_DB`; the restart
+>   set `DURIG_LOCAL_BASE_URL/MODEL/CONTEXT` + `DURIG_LOCAL_API_KEY=local` (the placeholder). Config file
+>   `durig.config.json` already carries the first three; only the key is env-only. Until the source fix
+>   lands, a plain `scripts/serve-noroot.ps1` restart with no key **breaks local seats** again.
+> - **Suspect not removed:** a long-lived `node ui.mjs` (pid 17340, started ~09:36Z) holds the shared
+>   store — a concurrent-opener (lock-contention) suspect. Left running (operator's TUI); if the stall
+>   recurs, terminate it and retry before deeper recovery.
+> - **Do not:** stop/restart the broker outside a runbook; `git add -A`; leave the launcher without the
+>   local env while #2114 is unlanded.
 
 > **LOCAL PROVIDER — now genuinely verified, with a defect recorded (2026-10-18T16:57Z).** Operator
 > funded DeepInfra (402 blocker cleared) and directed switching `devtools` to the local LLM. Done:
