@@ -2021,7 +2021,9 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     evidence protocol.
     *Owner:* `impl` (author) · *Consulted:* `qa`/`auditor` · *Evidence:* `Agent_Ownership_Review.md` §2.4.
     *Acceptance:* a verifier item fails when it only acks a claim and passes when it re-runs the artifact.
-    **Evidence surface delivered by #715 (`50240f9`); re-execute enforcement still open (#851).**
+    **Evidence surface delivered by #715 (`50240f9`); re-execute enforcement DELIVERED — rule
+    `verification-without-evidence` + `hasEvidence` in `src/checkup.mjs`, proven by
+    `demo/check-evidence.test.mjs` (exit 0); #851 answered by the #1877 close-out.**
     **RULED (2026-10-17):** qa's consult `#854` fixed the contract (extend `complete_work` with an
     OPTIONAL structured `evidence` field + ONE `check` rule; keep free text as the narrative; no new
     verbs) and lead's `#1553` ruled the enforcement binding on EVERY verifier item: run the named
