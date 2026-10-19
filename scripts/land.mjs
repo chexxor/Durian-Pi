@@ -50,6 +50,7 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { DEFAULTS_CONFIG_PATHS, DEFAULT_CONFIG_PATHS } from "../src/config.mjs";
 // The PRIORITY reservation + the wait-with-priority claim (#1497/#1498, lead #2054 precondition
 // (c)). Imported from a deliberately DEPENDENCY-FREE module (node:fs/node:path only) so this
 // chokepoint still loads when the provider stack is broken — the #1164 Q3 rule this file's own
@@ -145,16 +146,32 @@ function heldGenlocks(dbPath) {
  * or <= 0 the rig runs UNCAPPED: it creates no slot files, so there is no generation slot to
  * take and the landing proceeds without a held lock — reported loudly in `lock`. */
 
-/** The number of generation slots, or null when the rig is uncapped. */
-function resolveSlotCount(repoRoot) {
-	let raw = process.env.DURIG_MAX_CONCURRENT_SEATS;
-	if (raw === undefined || raw === "") {
+/** The first candidate file that declares a usable DURIG_MAX_CONCURRENT_SEATS, else undefined. */
+function readCapFrom(root, names) {
+	for (const name of names) {
 		try {
-			raw = JSON.parse(readFileSync(join(repoRoot, "durig.config.json"), "utf8")).DURIG_MAX_CONCURRENT_SEATS;
+			const raw = JSON.parse(readFileSync(join(root, name), "utf8")).DURIG_MAX_CONCURRENT_SEATS;
+			if (raw !== undefined && raw !== "") return raw;
 		} catch {
-			raw = undefined;
+			// absent or unreadable: try the next candidate
 		}
 	}
+	return undefined;
+}
+
+/** The number of generation slots, or null when the rig is uncapped.
+ *
+ * #2224(A): the lander MUST resolve the same N the broker does. The broker
+ * (`cli.mjs maxSeats()` over CFG) reads env > config file > the shipped DEFAULTS file. The
+ * old fallback here was `null` (uncapped), so on a config-less checkout (CI / fresh clone)
+ * the lander skipped BOTH the priority reservation and the exclusive slot claim while the
+ * broker was capped at the shipped default (1) -- and the lander could fast-forward main with
+ * a live generation in flight. The candidate paths come from src/config.mjs, so the two
+ * resolvers cannot drift apart again. */
+function resolveSlotCount(repoRoot) {
+	let raw = process.env.DURIG_MAX_CONCURRENT_SEATS;
+	if (raw === undefined || raw === "") raw = readCapFrom(repoRoot, DEFAULT_CONFIG_PATHS);
+	if (raw === undefined || raw === "") raw = readCapFrom(repoRoot, DEFAULTS_CONFIG_PATHS);
 	const n = Number(raw);
 	return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
 }

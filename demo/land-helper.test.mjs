@@ -343,6 +343,56 @@ try {
     spawnSync("git", ["merge-base", "--is-ancestor", featI, "main"], { cwd: repo }).status === 0);
   check("...and the lock is released (no slots remain)", [0, 1].every((i) => !existsSync(join(repo, `rig.sqlite.genlock.${i}`))));
 
+  console.log("\n9. the slot cap resolves like the BROKER: env > config file > SHIPPED defaults (#2224A)");
+  // The FF lock is only as wide as the lander's slot count, so the lander must resolve the SAME
+  // N the broker does (cli.mjs maxSeats() over CFG: env > config file > the shipped DEFAULTS
+  // file). The old lander read only `durig.config.json` and then fell back to UNCAPPED, while
+  // the broker fell back to the shipped default (1) -- on a config-less checkout the lander took
+  // NO lock while the broker was capped, and could fast-forward main with a generation in flight.
+  // `report.lock` exposes {slots, held}; slots=null is the truthful "uncapped" answer.
+  const landClean = (branch) => {
+    const env = { ...process.env };
+    delete env.DURIG_MAX_CONCURRENT_SEATS;
+    const r = spawnSync(process.execPath, [LAND, branch, "--repo", repo, "--db", join(repo, "rig.sqlite")], {
+      cwd: repo,
+      encoding: "utf8",
+      timeout: TIMEOUT_MS,
+      env,
+    });
+    return { code: r.status ?? 1, report: tryJson(r.stdout), raw: `${r.stdout}${r.stderr}` };
+  };
+
+  console.log("9a. NO env, NO config file: the SHIPPED defaults file supplies the cap");
+  const featJ = feature("feat-j", "j.txt", "from feat-j\n");
+  const shippedDefault = join(repo, "durig.config.default.json");
+  writeFileSync(shippedDefault, JSON.stringify({ DURIG_MAX_CONCURRENT_SEATS: 1 }));
+  const fromShipped = landClean("feat-j");
+  check("a config-less repo resolves the cap from the SHIPPED defaults (slots=1)", fromShipped.report?.lock?.slots === 1, JSON.stringify(fromShipped.report?.lock));
+  check("...and the lander actually HELD that slot", fromShipped.report?.lock?.held === 1, JSON.stringify(fromShipped.report?.lock));
+  check("...and the landing succeeded", fromShipped.code === 0, fromShipped.raw.slice(0, 200));
+  check("...and feat-j is an ancestor of main",
+    spawnSync("git", ["merge-base", "--is-ancestor", featJ, "main"], { cwd: repo }).status === 0);
+  rmSync(shippedDefault, { force: true });
+
+  console.log("9b. a `.durig/config.json` — the second discovery path the old lander IGNORED — supplies the cap");
+  const featK = feature("feat-k", "k.txt", "from feat-k\n");
+  mkdirSync(join(repo, ".durig"), { recursive: true });
+  writeFileSync(join(repo, ".durig", "config.json"), JSON.stringify({ DURIG_MAX_CONCURRENT_SEATS: 2 }));
+  const fromDotDurig = landClean("feat-k");
+  check("a `.durig/config.json` cap is honored (slots=2)", fromDotDurig.report?.lock?.slots === 2, JSON.stringify(fromDotDurig.report?.lock));
+  check("...and BOTH slots were held", fromDotDurig.report?.lock?.held === 2, JSON.stringify(fromDotDurig.report?.lock));
+  check("...and the landing succeeded", fromDotDurig.code === 0, fromDotDurig.raw.slice(0, 200));
+  rmSync(join(repo, ".durig", "config.json"), { force: true });
+
+  console.log("9c. NOTHING declares a cap: the rig is genuinely UNCAPPED and the lander takes no slot");
+  const featL = feature("feat-l", "l.txt", "from feat-l\n");
+  const uncapped = landClean("feat-l");
+  check("with no cap anywhere the rig is UNCAPPED (slots=null)", uncapped.report?.lock?.slots === null, JSON.stringify(uncapped.report?.lock));
+  check("...and NO slot is held", uncapped.report?.lock?.held === 0, JSON.stringify(uncapped.report?.lock));
+  check("...and the landing still succeeds", uncapped.code === 0, uncapped.raw.slice(0, 200));
+  check("...and feat-l is an ancestor of main",
+    spawnSync("git", ["merge-base", "--is-ancestor", featL, "main"], { cwd: repo }).status === 0);
+
   console.log(
     failures === 0
       ? "\nPASS - the landing helper merges in a scratch worktree, fast-forwards main only when clean, holds an EXCLUSIVE lock across the FF (released on success and failure), WAITS WITH PRIORITY for a live genlock holder, and refuses a dirty tree / a conflict / a failing suite"
