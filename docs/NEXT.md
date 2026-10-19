@@ -3,6 +3,59 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:50Z, delegate) — **LAND+PRUNE PASS RAN: 4 LANDED, 9 TERMINAL WORKTREES RELOCATED; 4 ITEMS ESCALATED TO THE OPERATOR**
+
+**Read this first.** Operator-directed landing/merging + worktree-pruning pass, then a second operator
+ask (relay the advocate's question + every item awaiting operator feedback). No push; no seat work.
+
+**Shipped this pass (`main` `fbfe772` → `a4dc769`):**
+- **LANDED 4 verified branches** with `scripts/land.mjs` (broker UP; `lock.waitedMs=41623`):
+  `impl-item-2356` @`02f1a36`, `impl-item-2360` @`4813a50`, `scribe-item-2658` @`90d1381`,
+  `scribe-item-1257` @`fe1434e`. Tips matched the pm landing-list tips exactly.
+- **Proved on `main`:** `node scripts/suite.mjs` = **pass=158 fail=1** — the one failure is
+  `demo/pitui.test.mjs` (the known `node_modules/@earendil-works/pi-tui` symlink — environmental, NOT a
+  regression; confirmed by direct run).
+- **PRUNED 9 terminal merged worktrees** by **relocate-out-of-tree** to `../pi-opendurig.worktrees/`
+  (lossless: `worktree unlock` → `move` → `switch --detach` → `branch -d`): `auditor-item-1924/2020/2141`,
+  `devtools-item-2631`, `impl-item-2233/2356/2360`, `scribe-item-1257/2658`. Refs **80→77** (the live rig
+  created refs during the pass); `main` unmoved by the prune; **nothing forced; no `ahead>0` ref deleted**.
+- **KEPT:** the 16 remaining merged-held refs (all `live`/`claimed`/`held`/`seat-root`) and **60 unlanded
+  refs** (no patch-equivalent duplicates — `git cherry` all `+`). `reapable: 0`.
+- **Precondition handling:** devtools' live `M scripts/land.mjs` (#2390 WIP) was parked to a NAMED stash
+  with a patch backup (`.spike/delegate/land-prune-2026-10-19b/shared-tree-landmjs.patch`) to satisfy the
+  clean-tree gate, then **restored byte-for-byte** (stash popped) after the landing. Artifacts:
+  `.spike/delegate/land-prune-2026-10-19b/` (`preflight.txt`, `land.out`, `suite-post-land.out`).
+- **HAZARD noted:** 9 seats (`pm`/`impl`/`qa`/`lead`/`scribe`/`devtools`/`auditor`/`security`/`architect`)
+  have cwd = the SHARED tree (the F12 seat-root fallback) — the standing `#1151` guard gap.
+
+**OPERATOR FEEDBACK OWED — 4 items escalated to the human** (all are supervisor 15-min escalations of a
+question the seat sent to `pm`, not genuine operator decisions; the delegate relayed them with
+recommendations): `#2698` (advocate — ETARGET at `prepare_workspace`), `#1705` (impl — stale tip),
+`#1966` (impl — window/#1780 sequencing), `#2543` (qa — ROADMAP 97 harness prerequisite). Plus the
+standing owed inputs `#994` (quiet window), `#1135` (pricing source), and the secret rotation for the
+`high-entropy-token` detection.
+
+**Open/owed:** the landing gate `#2679` is still RED (land without `--suite`); 53 unlanded branches
+CONFLICT (author rebase set `#2681`/`#2682`/`#2683`).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Do not:** `git add -A`; pop a stash blind; force a dirty worktree; delete an `ahead>0` ref; push
+(operator holds it); land an unverified branch.
+
+## NEXT SESSION
+**Current item:** RELAY THE 4 OPERATOR-FEEDBACK ITEMS — `#2698` (advocate), `#1705` (impl), `#1966`
+(impl), `#2543` (qa) — then verify `pm` routes the three delivered intents and drive the ordered work.
+The landing/prune pass is COMPLETE this session (`main` `a4dc769`; 4 landed, 9 terminal worktrees
+relocated). Every escalated item is a supervisor 15-min escalation of a question the seat sent to
+`pm`, not a true operator decision; the delegate relayed each with a recommendation.
+**Queue id:** `#2698` / `#1705` / `#1966` / `#2543` (operator feedback); landing gate `#2679` (+ verify
+`#2680`); the three `operator-next-*` intents delivered 08:29Z.
+**Blocker:** `scripts/land.mjs --suite` is RED in the helper's DETACHED scratch (the `shared-tree-on-main`
+check rule, `#2679`) — land without `--suite` and prove on `main` with `node scripts/suite.mjs` until it is
+fixed. Also 53 unlanded branches conflict (author rebase set `#2681`/`#2682`/`#2683`). Pending operator
+inputs: `#994` quiet window, `#1135` pricing source; operator-owned secret rotation for `#119203`.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:30Z, delegate) — **NEXT-WORK PRIORITIES DELIVERED TO `pm` (3 intents); LANDING GATE `#2679` FIRST, THEN BUG-FIX CLUSTER, THEN STANDING PRIORITIES**
 
 **Read this first.** The operator reviewed the roadmap+queue with the delegate, accepted the
@@ -99,23 +152,6 @@ devtools-local-model ask routed to `lead` and answered (`#2695` done, proposal `
 (`#2702`), and the stale escalations `#2068`/`#2072`/`#2455` routed for close. **No further delegate
 action pending.** The operator's next instruction: a new agent reviews the roadmap to choose the next
 work item.
-
-## NEXT SESSION
-**Current item:** VERIFY `pm` ROUTES THE THREE DELIVERED INTENTS, then drive the ordered work.
-The operator's next-work recommendation is delivered as three intents (see the 08:30Z clock-out block
-above): (1) fix the landing gate `#2679` first; (2) the ordered defect cluster `#2420` → 159 → 158 → 160
-→ the architect defects; (3) standing priorities `#2600` / `#2673`+`#2712` / `#2598` behind the cluster.
-The delegate's job now is to confirm `pm` decomposes/routes them (check `queue` for new rows and `log pm`)
-and to verify what lands — not to route. In flight already: the operator-waiting exploration (`#2698`
-advocate / `#2699` designer), the devtools-local-model proposal (`#2708`), `#2543` (`#2701` qa) and
-`#2703` (auditor verify), plus the 45-branch author-rebase set (`#2681`/`#2682`/`#2683`).
-**Queue id:** the three `operator-next-*` intents delivered 08:29Z (reply lands as new `pm` rows);
-landing gate is `#2679` (+ verify `#2680`).
-**Blocker:** `scripts/land.mjs --suite` is RED in the helper's DETACHED scratch (the `shared-tree-on-main`
-check rule, `#2679`) — land without `--suite` and prove on `main` with `node scripts/suite.mjs` until it is
-fixed. Pending operator inputs: `#994` quiet window, `#1135` pricing source; operator-owned secret
-rotation for `#119203`.
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T07:25Z, delegate) — **NEXT: IMPLEMENT THE STRANDED-SUBMISSION FIX (#2520 review continues); F12 seat-root fallback still live**
 
