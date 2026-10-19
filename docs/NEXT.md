@@ -3,6 +3,49 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T06:40Z, delegate) — **NEXT: IMPLEMENT THE STRANDED-SUBMISSION FIX; VERIFY THE ARCHITECT REVIEW (#2520)**
+
+Read this block first. The operator's "merge worktrees & branches" task is done for the safe, verified
+subset; the durable broker/liveness fix is the open work.
+
+**Shipped this session (delegate, operator-directed, no push):**
+- **LANDED** — `main` `7296569` → **`6335eb9`** (suite green): `scribe-item-2169` (DECISIONS.md D106) and
+  `security-item-2316` (security position UNION). Broker stopped for the window via `scripts/land.mjs --suite`.
+- **PRUNED** — merged refs `devtools-item-2412`, `auditor-item-2209`; four reapable worktrees
+  (`item-1754`, `item-2209`, `item-2459/item-1558`, verify-scratch `wt-test-2412`); `git worktree prune`.
+  Branches **92→90**, worktrees **170→165**. Dirty/locked orphans left untouched (never `--force`).
+- **PARKED (do NOT pop blind)** — the shared-tree devtools WIP (#2390 `scripts/land.mjs` + #1754
+  `src/worktree.mjs` + `package-lock.json`) is in **`stash@{0}`**; patch at
+  `.spike/delegate/landing-2026-10-19b/tracked-wip.patch`. Its author must reconcile it.
+- **INCIDENT (sev1, OPEN)** — `docs/incidents/2026-10-19-stranded-submission-seat-stall.md`: `impl`
+  stalled ~80 min on a `placed` submission whose conversation has a **live-but-not-running task**;
+  `reconcileStrandedSubmissions` (`src/broker.mjs:563-576`) treats ANY live task as an owner, so it
+  never settles and `selectWakes` suppresses every wake. Only `resume` clears it, and `resume` is
+  refused while the broker runs. The report contains the **exact patch, demo plan, and verification steps**.
+- **RECOVERY** — `resume` (broker stopped) settled 6 strands: `impl #105938`; `pm #107554/#107651/#109532`;
+  `devtools #110012/#110440`. devtools conv 4930 `pi.live` corruption repaired
+  (`node scripts/repair-pi-live.mjs ./selfdev.sqlite 4930`, retired doc 4931; backup
+  `.spike/store-backup-20261019-012422`). Broker healthy (`pid 7984`, PASS advancing).
+- **INTENT DELIVERED** — `architect-broker-code-review-2026-10-19-1` → `pm`; `pm` registered **#2520**
+  (architect code review of broker/CLI/UI/supervisor → ranked work items). Architect woken `06:33:11Z`,
+  actively working.
+
+**Open / owed:**
+- **`impl` is STILL stranded** (`#110509`) — needs the durable fix (below) or another
+  stop→resume→restart; it is the largest-share author seat and its queue keeps ageing.
+- **Implement + verify the durable resolution** from the incident (filter live owners in
+  `reconcileStrandedSubmissions` to `running`/`completing` tasks; failing-first demo; land; then set the
+  incident to `resolved` with `fix:`/`prevention:`).
+- **#2520** — the architect's review; verify the review doc + that `pm` registers the ranked items.
+- **Model failures:** `auditor` (400 Invalid request), `designer` (402 no balance) — provider-side.
+- Untracked scratch to quarantine: `fix-broker.mjs`, `nul`, `src/borker.mjs.head`, `temp-test-1754/`,
+  `wt-2073/`, `selfdev.sqlite.broker.inbox.out/`. **`pi-main.pin.json` is a seat's WIP — do not touch.**
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Do not:** `git add -A`; pop a stash blind; force a dirty worktree; delete an `ahead>0` ref; push
+(operator holds it); run `resume` while a `cli.mjs serve` process is alive (confirm the process is gone
+FIRST — that ordering error caused the conv-4930 corruption at 06:24).
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T05:45Z, delegate) — **NEXT TASK: MERGE WORKTREES & BRANCHES**
 
 The operator is handing off to a fresh agent to **merge worktrees and branches**. Read this first.
@@ -42,7 +85,21 @@ The operator is handing off to a fresh agent to **merge worktrees and branches**
 worktree; delete an `ahead>0` ref; pop a stash blind; push (the operator holds it).
 
 ## NEXT SESSION
-**Current item:** daemon-harness architecture research — **BOTH ROUNDS CONSUMED** (operator-directed).
+**Current item:** Implement + verify the durable fix for the stranded-submission seat stall
+(`docs/incidents/2026-10-19-stranded-submission-seat-stall.md`): filter the live-owner scan in
+`reconcileStrandedSubmissions` (`src/broker.mjs:563-576`) to tasks whose state is `running`/`completing`,
+add the failing-first demo, land it, then set the incident to `resolved`. In parallel, verify the
+architect's broker/CLI/UI/supervisor review doc and the ranked items it produces.
+**Queue id:** `#2520` (architect code review, `claimed`); the incident's fix is owed as a new `impl` item.
+**Blocker:** `impl` is permanently stranded (`admitted_not_started`, submission `#110509`): no broker
+self-heal fires and `resume` is refused while the broker runs. Separately `auditor` (400 Invalid request)
+and `designer` (402 no balance) are provider-blocked.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+---
+
+_HISTORICAL (superseded by this block and the 06:40Z clock-out above) — daemon-harness architecture
+research; **BOTH ROUNDS CONSUMED** (operator-directed)._ The stale detail follows:
 Round 1 (`docs/research/how-to-design-an-llm-harness-which-apps-use-a-daemon.md`) was rejected on its head-line
 root-cause claims (already present in pinned pi-durable 1.3.0); round 2
 (`docs/research/daemon-harness-architecture-followup.md`) is consumed in
