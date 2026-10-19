@@ -883,9 +883,18 @@ export async function cleanVerifyScratch({ repoPath, force = false } = {}) {
   const removed = [];
   const kept = [];
   for (const wt of worktrees) {
-    const result = await removeClaimedWorktree({ worktree: wt.worktree, force });
-    if (result?.removed) removed.push(wt.worktree);
-    else kept.push({ worktree: wt.worktree, reason: result?.refused ?? (result?.skipped ? "missing" : "not-removed") });
+    // #2602 (instance 3 of #1967): ONE bad tree must not abort the whole cleanup. A teardown can
+    // THROW — `removeClaimedWorktree` refuses a junction/symlink by throwing (Git 2.42 would delete
+    // THROUGH the junction) — so catch PER TREE and record it in `kept`. Without this catch the
+    // first un-removable scratch aborted the loop: every LATER scratch stayed un-cleaned (the leak)
+    // and the verify-completion call itself failed.
+    try {
+      const result = await removeClaimedWorktree({ worktree: wt.worktree, force });
+      if (result?.removed) removed.push(wt.worktree);
+      else kept.push({ worktree: wt.worktree, reason: result?.refused ?? (result?.skipped ? "missing" : "not-removed") });
+    } catch (err) {
+      kept.push({ worktree: wt.worktree, reason: "error", error: String(err?.message ?? err) });
+    }
   }
   return { removed, kept };
 }
