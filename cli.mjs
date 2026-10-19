@@ -1650,13 +1650,49 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   if (brokerAlive(existing)) {
     fail(`a broker is already running for ${DB_PATH} (pid ${existing.pid}); stop it with "serve --stop" first`);
   }
-  const { harness, storage: harnessStorage } = await openHarness({ enforceSeatRoot: true });
-  const probeStorage = await openStore();
   const scheduler = new WakeScheduler({
     minIntervalMs: 500,
     seatCooldownMs: SERVE_SEAT_COOLDOWN_MS,
   });
   const signal = createWakeSignal();
+  // #2572: the serve handles are CREATED here, so their LIFECYCLE lives here too. `openHandles`
+  // opens the harness + the probe storage AND subscribes, so a reopen restores the SAME
+  // invariant in ONE place: a reopen without a re-established commit subscription leaves the
+  // broker DORMANT (no stream -> no pass), which is exactly the failure the recovery exists for.
+  const openHandles = async () => {
+    const { harness, storage: harnessStorage } = await openHarness({ enforceSeatRoot: true });
+    const probeStorage = await openStore();
+    // Subscribe BEFORE the first pass so a commit that lands during startup is not missed. The
+    // listener must not throw, block, or call Session APIs: it only classifies and signals.
+    const unsubscribe = harness.subscribeCommits((publication) => {
+      scheduler.notify(publication);
+      if (scheduler.dirty) signal.raise();
+    });
+    return { harness, harnessStorage, probeStorage, unsubscribe };
+  };
+  let handles = await openHandles();
+  // F2 (#2572): a terminal `SessionFailed` needs a close+reopen of BOTH handles AND a fresh
+  // subscription, atomically. A failed close (a dead Session may refuse) must not block the
+  // reopen, so each teardown step is guarded; the loop swaps to the returned handles.
+  const reopen = async () => {
+    try {
+      handles.unsubscribe();
+    } catch {
+      /* removing a listener must not mask the reopen */
+    }
+    try {
+      await handles.harness.close(BACKGROUND_CONTEXT);
+    } catch {
+      /* a failed Session may refuse to close; the reopen below still recovers */
+    }
+    try {
+      await handles.probeStorage.close(BACKGROUND_CONTEXT);
+    } catch {
+      /* idem */
+    }
+    handles = await openHandles();
+    return { harness: handles.harness, probeStorage: handles.probeStorage, readStorage: handles.harnessStorage };
+  };
   // #473: determine worktree source (git repo root) from the current directory.
   // If not a git repo, worktree lifecycle is disabled.
   const { repoRoot } = await import("./src/worktree.mjs");
@@ -1670,13 +1706,6 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
       return null;
     }
   })();
-  // Subscribe BEFORE the first pass so a commit that lands during startup is not
-  // missed. The listener must not throw, block, or call Session APIs: it only
-  // classifies the commit and raises the signal.
-  const unsubscribe = harness.subscribeCommits((publication) => {
-    scheduler.notify(publication);
-    if (scheduler.dirty) signal.raise();
-  });
   const startedAt = Date.now();
   let stopping = false;
   const onSignal = () => {
@@ -1688,9 +1717,10 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   try {
     writeBrokerState(DB_PATH, { pid: process.pid, since: new Date().toISOString() });
     const result = await runWakeLoop({
-      harness,
-      probeStorage,
-      readStorage: harnessStorage,
+      harness: handles.harness,
+      probeStorage: handles.probeStorage,
+      readStorage: handles.harnessStorage,
+      reopen,
       scheduler,
       signal,
       context: BACKGROUND_CONTEXT,
@@ -1699,7 +1729,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
         const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
         return new Set(genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat));
       },
-      supervise: () => superviseOnce(harness, probeStorage, BACKGROUND_CONTEXT),
+      supervise: () => superviseOnce(handles.harness, handles.probeStorage, BACKGROUND_CONTEXT),
       onDiagnostic: (d) => {
         if (d.kind === "wake-failed") {
           console.error(
@@ -1745,11 +1775,11 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
     // Clear only OUR state: a newer broker that already took over must keep its file.
     clearBrokerState(DB_PATH, process.pid);
     clearStopRequest(DB_PATH);
-    unsubscribe();
+    handles.unsubscribe();
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
-    await harness.close(BACKGROUND_CONTEXT);
-    await probeStorage.close(BACKGROUND_CONTEXT);
+    await handles.harness.close(BACKGROUND_CONTEXT);
+    await handles.probeStorage.close(BACKGROUND_CONTEXT);
   }
 }
 
