@@ -2779,6 +2779,15 @@ summarize at a transition) and continues an item across a compacted boundary, a 
 re-anchored session, a non-local seat unchanged, plus `node --check`, the full suite, and a non-author
 verify. D106 is claimed by the unlanded `scribe-item-2169`; recorders must not reuse 106.
 
+**D107 parameters — local-seat compaction thresholds (lead `#2243`, superseding `#2230`/`#2235`, reconciled with this entry via `#2249`/`#2250`, 2026-10-18).** This ELABORATES D107's mechanism — it is NOT a separate/competing decision. LOCAL seats only; non-local seats are unchanged.
+
+- **Scope of replacement.** ONLY pi-durable's AUTOMATIC compaction policy is disabled/replaced. The triggers below are DURIG-LEVEL structured compaction (this entry); the repeats are durig-level.
+- **Trigger.** Denominator = the MEASURED effective window (`#2231`), NOT nominal `DURIG_LOCAL_CONTEXT` — provisional nominal until a measurement exists. BACKGROUND slot = the MASK trigger at **80 %** (D84 WARN); BLOCKING slot = the SUMMARIZE/re-anchor threshold at **90 %** (D84 ABORT), only at/after 90 % AND at a phase transition. So: 80 % mask / 90 % summarize.
+- **Repeat cap.** SUMMARIZE capped at **2 per item** (masks do not count — non-destructive); on the 3rd demand, FORCE a fresh re-anchored session (D107 item 4 / ROADMAP 94).
+- **D84 alignment.** D84's guard thresholds ARE the compaction triggers; when `#62` lands the guard EMITS them and this policy READS them — one source, no double-fire.
+- **Ordering (D107).** mask → summarize at a phase transition → preserve pointers → cap → re-anchor. This is what `#2233` (D107 implementation) builds.
+- **Relation.** Intra-item only; the cross-item boundary stays D105's per-item `pi.reset` (`#2123`).
+
 ---
 
 ## D108 — Seats record durable, topic-organized notes for future agents at item completion and at a reset/compaction boundary; a curator validates and purges (operator directive, 2026-10-18)
