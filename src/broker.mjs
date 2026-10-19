@@ -80,14 +80,22 @@ export function localContextHandoff(itemId) {
  * The local-provider seats that must draw a fresh context boundary this pass. Pure:
  * it decides, `applyLocalContextBoundaries` writes.
  *
- * A boundary is planned only BETWEEN runs: the seat holds no `claimed` item (never
- * mid-item), no submission is in flight, no live generation lease is held, and the
- * operator has not stopped it. It fires only for a seat whose recorded provider is
+ * A boundary is planned only BETWEEN runs: the seat holds no `claimed`, `deferred` or
+ * `held` item (never mid-item), no submission is in flight, no live generation lease is held,
+ * and the operator has not stopped it. It fires only for a seat whose recorded provider is
  * `local`, and only once per NEW item (the `contextItemId` marker).
  *
  * @param {{seats?: Record<string,{conversationId:number|string, provider?:string, contextItemId?:number}>, items?: Array<{id:number,to:string,status:string}>, pendingConvIds?: Set, busySeats?: Set, stoppedConvIds?: Set, paused?: boolean}} input
  * @returns {Array<{name:string, conversationId:number|string, itemId:number}>}
  */
+/**
+ * Item statuses that mean the seat is MID-ITEM. `deferred`/`held` are still HELD by the seat
+ * (it will resume them), so a boundary now would wipe the mid-item continuation context and
+ * the D105 handoff text would lie ("a NEW work item") while the seat still holds the item
+ * (#2337). Only `queued` is between-items work.
+ */
+const MID_ITEM_STATUSES = new Set(["claimed", "deferred", "held"]);
+
 export function planLocalContextBoundaries({
   seats,
   items,
@@ -106,8 +114,9 @@ export function planLocalContextBoundaries({
     if (pendingConvIds.has(convId)) continue; // a run is in flight
     if (busySeats.has(name)) continue; // a live generation lease is held
     if (stoppedConvIds.has(convId)) continue; // operator stop: never resurrect
-    // BETWEEN items only: a claimed item means the seat is mid-item — never reset it.
-    if ((items ?? []).some((it) => it.to === name && it.status === "claimed")) continue;
+    // BETWEEN items only: a claimed, deferred or held item means the seat is mid-item — never
+    // reset it (#2337: deferred/held are reachable through the live pass and are still mid-item).
+    if ((items ?? []).some((it) => it.to === name && MID_ITEM_STATUSES.has(it.status))) continue;
     // The item this wake will claim: the OLDEST queued item addressed to the seat
     // (claim_work's own rule), so the boundary is drawn before the seat works it.
     const next = (items ?? [])
