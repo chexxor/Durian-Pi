@@ -3,7 +3,7 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:10Z, delegate) — **LAND+PRUNE PASS DONE; `land.mjs --suite` GATE RED; 45-branch rebase set owed; oldest-WORKABLE claim delivered**
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:25Z, delegate) — **SESSION COMPLETE; NEXT AGENT: REVIEW THE ROADMAP TO PICK THE NEXT WORK ITEM; `land.mjs --suite` GATE RED; 45-branch rebase set owed**
 
 **Read this first.** Operator-directed session: (1) close out PM's stale human-queue; (2) land + prune
 branches/worktrees; (3) update the runbook; (4) a new operator change request.
@@ -63,18 +63,29 @@ branches/worktrees; (3) update the runbook; (4) a new operator change request.
 **Do not:** `git add -A`; force a dirty worktree; delete an `ahead>0` ref; pop a stash blind; push
 (operator holds it); land an unverified branch.
 
+**END-OF-SESSION (2026-10-19T08:25Z):** PM applied every operator directive from
+`operator-directives-2026-10-19-2` — `#2629` un-held and **claimed by designer** (fresh context,
+provider funded); the operator-waiting item registered (`#2697`) and routed for exploration to
+`advocate` (`#2698`, claimed) + `designer` (`#2699`) + `architect` (`#2700`, claimed); the
+devtools-local-model ask routed to `lead` and answered (`#2695` done, proposal `#2708`/`#2709`);
+`#2543` running (`#2701`), `#2325` verifying (`#2703`), `#1227` held (`#2705`), `#2098` "proven" defined
+(`#2702`), and the stale escalations `#2068`/`#2072`/`#2455` routed for close. **No further delegate
+action pending.** The operator's next instruction: a new agent reviews the roadmap to choose the next
+work item.
+
 ## NEXT SESSION
-**Current item:** Confirm `pm` applied the operator directives `operator-directives-2026-10-19-2` —
-(a) **designer** restarts with work (un-hold `#2629`; the provider is funded and the delegate reset its
-context), (b) `lead` is asked to propose a fix for **devtools' small local model degrading on large
-context**, and (c) a NEW backlog item to make "waiting on the operator" visible + answerable, explored
-first with `advocate` + `designer` + `architect`. Then finish the land+prune pass (the clean-but-unlanded
-`devtools-item-1558`/`temp-1558-rebase`, `devtools-item-2412`, `devtools-item-2494`, `impl-item-2356`,
-and the 45 conflicting branches' author rebases).
-**Queue id:** the new backlog item (PM to register) + `#2629` (designer) + `#2558`/`#2564`/`#2609`
-(`pm` landing lists); the `--suite` gate fix is owed as a new item.
+**Current item:** Clocked out for the day. **The operator's next instruction: review `docs/ROADMAP.md`**
+(together with the live queue) **to discover and pick the next thing to work on.** In flight already:
+the operator-waiting exploration (`#2697` registered; `#2698` advocate / `#2699` designer / `#2700`
+architect), the devtools-local-model proposal from `lead` (`#2695`/`#2708`), and `#2543`/`#2703`
+execution. The land+prune remainder still stands: the clean-but-unlanded `devtools-item-1558`/
+`temp-1558-rebase`, `devtools-item-2412`, `devtools-item-2494`, `impl-item-2356`, and the 45 conflicts'
+author rebases.
+**Queue id:** `#2697` (operator-waiting) + `#2695` (lead proposal); pick the next item from
+`docs/ROADMAP.md` + `node cli.mjs queue`.
 **Blocker:** `scripts/land.mjs --suite` is RED in the helper's DETACHED scratch (the `shared-tree-on-main`
 check rule) — land without `--suite` and prove on `main` with `node scripts/suite.mjs` until it is fixed.
+Pending operator inputs: `#994` quiet window, `#1135` pricing source.
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T07:25Z, delegate) — **NEXT: IMPLEMENT THE STRANDED-SUBMISSION FIX (#2520 review continues); F12 seat-root fallback still live**
