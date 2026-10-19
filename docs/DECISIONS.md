@@ -3086,10 +3086,7 @@ and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path
 LANDING NOTE: D-number assigned at LAND TIME — D113 is taken (spool-op authorization, scribe-item-2219);
 re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge (do not hard-code).
 
-<!-- NUMBER MINTED AT LAND TIME by the DECISIONS.md owner (scribe, #3047): this file has ONE writer
-     and its entries serialize in landing order, so the number is DERIVED, never hardcoded. The full
-     review + ADR text is docs/reviews/architecture-operator-wait-visibility.md. -->
-## D-<mint> — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
+## D113 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
 
 **Context.** The operator backlog asks that "waiting on the operator" be **visible and answerable**
 (operator-directives-2026-10-19-2 §3). The state already exists: `defer_work` (and the supervisor's
