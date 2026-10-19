@@ -364,8 +364,13 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
   // list is read through that harness, and `env` is an argument to opening it. Until the fill
   // runs, `makeSeatEnv` fails closed (read-only), so the gap is safe rather than open.
   const seatRoster = new Map();
+  // Keep the exact `Storage` object the harness is opened over: it is the broker's ONE
+  // pi-durable connection, and the spooled `read` op must be served from it (pi-durable
+  // exposes no `harness.storage`, and a second `openStore()` connection contends with the
+  // harness's own commits). The harness owns its lifecycle; callers must not close it.
+  const storage = await openStore();
   const harness = await Harness.open(
-    await openStore(),
+    storage,
     {
       models,
       registry,
@@ -420,7 +425,7 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
       );
     }
   }
-  return { harness, models, providerId, extensions: extensionNames(extensions) };
+  return { harness, models, providerId, extensions: extensionNames(extensions), storage };
 }
 
 // Normalize a path for equality comparison: absolute, separator-normalised, and
@@ -1364,7 +1369,7 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
   if (brokerAlive(broker)) {
     fail(`a resident broker is already driving ${DB_PATH} (pid ${broker.pid}); stop it with "serve --stop", or start the rig with "up --no-serve"`);
   }
-  const { harness } = await openHarness({ enforceSeatRoot: true });
+  const { harness, storage: harnessStorage } = await openHarness({ enforceSeatRoot: true });
   // A raw read-only handle for probing seat documents. The driving harness fails
   // its whole session on the first storage error, so an unreadable `pi.live` must
   // be detected through this handle BEFORE the harness opens that conversation
@@ -1404,6 +1409,7 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
       // long `run --watch` is resident is honoured. `serve` uses the same function.
       const { actioned } = await drivePass(harness, probeStorage, {
         context: BACKGROUND_CONTEXT,
+        readStorage: harnessStorage,
         readBusySeats: () => {
           // A live generation lease means the seat is already advancing; a dead one
           // does not, so only LIVE holders are treated as busy (same rule as the
@@ -1643,7 +1649,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   if (brokerAlive(existing)) {
     fail(`a broker is already running for ${DB_PATH} (pid ${existing.pid}); stop it with "serve --stop" first`);
   }
-  const { harness } = await openHarness({ enforceSeatRoot: true });
+  const { harness, storage: harnessStorage } = await openHarness({ enforceSeatRoot: true });
   const probeStorage = await openStore();
   const scheduler = new WakeScheduler({
     minIntervalMs: 500,
@@ -1683,6 +1689,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
     const result = await runWakeLoop({
       harness,
       probeStorage,
+      readStorage: harnessStorage,
       scheduler,
       signal,
       context: BACKGROUND_CONTEXT,

@@ -365,16 +365,20 @@ const QUIESCE_POLL_MS = 100;
  * Apply one typed request with the broker's OWN harness — the single writer. Throws on
  * an unknown op or seat; the drain dead-letters the throw with its reason.
  */
-async function applyRequest(harness, request, { seats, context, dbPath, probeStorage }) {
+async function applyRequest(harness, request, { seats, context, dbPath, probeStorage, readStorage }) {
   const op = requestOp(request);
   // `read` is the one non-mutating spool op: the broker serves a view from its OWN
-  // storage so a second process never opens the database (see src/brokerread.mjs). It is
-  // applied with `harness.storage`, NOT the separate `probeStorage`: pi-durable's
-  // `document()` takes BEGIN IMMEDIATE even for a read, so a read on a SECOND connection
-  // contends with the harness's own commits in-process and times out the 5 s busy window
-  // (`PASS ms=5051` -> SessionFailed -> wedge). One pi-durable instance, one connection.
+  // pi-durable instance so a second process never opens the database (see
+  // src/brokerread.mjs). It is applied with `readStorage` - the SAME `Storage` object the
+  // harness was opened over - not the separate `probeStorage`: pi-durable keeps the
+  // harness's storage private (`#storage`), and its `document()` takes BEGIN IMMEDIATE
+  // even for a read, so a read on the second probe connection contends with the harness's
+  // own commits in-process and times out the 5 s busy window (`PASS ms=5051` ->
+  // SessionFailed -> wedge). One pi-durable instance, one connection. A caller holding a
+  // single handle (a demo's `drainIntentInbox(harness, storage, ...)`) omits `readStorage`,
+  // so the fallback keeps that shape working.
   if (op === "read") {
-    return await dispatchRead(harness.storage, request, { dbPath, context });
+    return await dispatchRead(readStorage ?? probeStorage, request, { dbPath, context });
   }
   if (op === "configure") {
     // Bounded single-field write: `up` records the resolved provider on the seat's
@@ -492,7 +496,7 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
  * forever. Returns `{ delivered, deadLettered, duplicates }` — `duplicates` counts
  * requests whose `requestId` already had a recorded result (applied ONCE, not again).
  */
-export async function drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic } = {}) {
+export async function drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage } = {}) {
   if (!dbPath) return { delivered: 0, deadLettered: 0, duplicates: 0 };
   const files = readIntentFiles(dbPath);
   if (files.length === 0) return { delivered: 0, deadLettered: 0, duplicates: 0 };
@@ -528,7 +532,7 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
       continue;
     }
     try {
-      const result = await applyRequest(harness, request, { seats, context, dbPath, probeStorage });
+      const result = await applyRequest(harness, request, { seats, context, dbPath, probeStorage, readStorage });
       if (requestId) {
         writeIntentResult(dbPath, requestId, { requestId, op, ok: true, result, at: new Date().toISOString() });
       }
@@ -874,12 +878,12 @@ export async function drivePass(
   harness,
   probeStorage,
   { context, seatFilter, readBusySeats, onError, onWoke, onSuppressed, currentSeat: initialSeat,
-    dbPath, onDiagnostic, waitForWakes = true } = {},
+    dbPath, onDiagnostic, waitForWakes = true, readStorage } = {},
 ) {
   // Deliver any spooled operator intent FIRST, so the submission it creates is visible
   // to this pass's `inspect` and the seat is not also submitted a fixed wake.
   if (dbPath) {
-    const drained = await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic });
+    const drained = await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage });
     if (drained.delivered > 0 || drained.deadLettered > 0 || drained.duplicates > 0) {
       logBrokerLine(dbPath, `INTENT delivered=${drained.delivered} dead=${drained.deadLettered} dup=${drained.duplicates}`);
     }
@@ -1006,6 +1010,7 @@ export async function drivePass(
 export async function runWakeLoop({
   harness,
   probeStorage,
+  readStorage,
   scheduler,
   signal,
   context,
@@ -1129,7 +1134,7 @@ export async function runWakeLoop({
       if (dbPath && readIntentFiles(dbPath).length > 0) {
         if (onlyReadIntents(dbPath)) {
           try {
-            await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic });
+            await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage });
           } catch (err) {
             // A failed read drain must neither kill the idle loop nor spin it: fall back to a
             // real pass, which is where a storage failure is reported and retried with backoff.
@@ -1195,6 +1200,7 @@ export async function runWakeLoop({
         context,
         seatFilter: scheduler.seatFilter(now()),
         readBusySeats,
+        readStorage,
         waitForWakes: false,
         dbPath,
         onDiagnostic,
