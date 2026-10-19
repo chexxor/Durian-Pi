@@ -4,17 +4,23 @@
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
 ## NEXT SESSION
-**Current item:** daemon-harness architecture research — **CONSUMED** (operator-directed). The raw report
-is `docs/research/how-to-design-an-llm-harness-which-apps-use-a-daemon.md`; the grounded consumption note
-is `docs/reviews/daemon-harness-architecture-review.md`. Its head-line "root cause" claims (missing
-WAL/`busy_timeout`/in-process lock/`BEGIN IMMEDIATE`; model-inference-in-transaction) were **rejected as
-already present in pinned pi-durable 1.3.0**; its retry claim was already fixed by `#2237` (`3021fe2`).
-Accepted refinements are now **registered (not scheduled) as ROADMAP 153–158** for `pm` to sequence.
-**Queue id:** ROADMAP `153–158` (new, registered); `#2420` (bounded-grace stop addendum, `queued` to `impl`) still open; related `#2406` (read seam vs `pi-durable` version).
+**Current item:** daemon-harness architecture research — **BOTH ROUNDS CONSUMED** (operator-directed).
+Round 1 (`docs/research/how-to-design-an-llm-harness-which-apps-use-a-daemon.md`) was rejected on its head-line
+root-cause claims (already present in pinned pi-durable 1.3.0); round 2
+(`docs/research/daemon-harness-architecture-followup.md`) is consumed in
+`docs/reviews/daemon-harness-architecture-followup-review.md`. Its lifecycle/watchdog/spool advice is
+**already captured** by ROADMAP 61–67 and the broker's existing `requestId` ledger; the genuinely new
+local finding is that `node:sqlite` exposes `errcode`/`errstr` and that pi-durable's `BEGIN IMMEDIATE`
+**structurally excludes** the deferred-`BEGIN` `SQLITE_BUSY_SNAPSHOT` case. Accepted items now
+**ROADMAP 153–160** (registered, not scheduled) for `pm` to sequence; second-round prompt written at
+`docs/reviews/daemon-harness-architecture-followup-2-research-prompt.md`.
+**Queue id:** ROADMAP `153–160` (registered); `#2420` (bounded-grace stop addendum, `queued` to `impl`) still open; related `#2406` (read seam vs `pi-durable` version).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
-**Blocker:** the broker still honours a stop only at a pass boundary then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`); the residual `PASS-FAILED … cause=Error: database is locked` cause stays **UNVERIFIED** and is now scoped by follow-up research question 3 (`docs/reviews/daemon-harness-architecture-followup-research-prompt.md`).
+**Blocker:** the broker still honours a stop only at a pass boundary then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`). Round 2 corroborates the #2420 fix shape (drain deadline → cancel stream/tool → **unconditional** force fallback that does not depend on the wedge) and maps `taskkill /T /F` + Job Objects onto existing ROADMAP 61/63/64. The residual `PASS-FAILED … cause=Error: database is locked` is **narrowed** (retryable busy or `-shm` race; `BUSY_SNAPSHOT` excluded) and tracked as ROADMAP 159.
 
 _Last refreshed: 2026-10-19T05:0xZ (delegate — daemon-harness research consumed; ROADMAP 153–158 registered; rejection of the report's "missing pragma" root cause grounded in the pin; follow-up prompt written; no seat work, no push.)_
+
+_Last refreshed: 2026-10-19T05:5xZ (delegate — follow-up round 2 consumed; ROADMAP refined to 153–160; local probe closed the `node:sqlite` errcode question and structurally excluded `BUSY_SNAPSHOT`; second-round prompt written; no seat work, no push.)_
 
 _Last refreshed: 2026-10-18T19:32Z (delegate — host+rig recovery complete; recurrence 8 reproduced live, pinned, and FIXED (`6e27ac2`); broker+local LLM up; verify routed to `pm`)._
 
