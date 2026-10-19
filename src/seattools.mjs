@@ -16,7 +16,7 @@ import {
 } from "@earendil-works/pi-durable/tools";
 import { Type } from "@earendil-works/pi-ai";
 import { seatsAreVerifier } from "./verifierrole.mjs";
-import { authorEnv, verifierEnv } from "./confine.mjs";
+import { authorEnv, verifierEnv, NON_INTERACTIVE_GIT } from "./confine.mjs";
 import { RigQueue, Seats } from "./rig.mjs";
 import { describeSeatRoot, resolveSeatRoot } from "./seatroot.mjs";
 import { prepareSeatWorkspace } from "./worktree.mjs";
@@ -244,7 +244,7 @@ export function makeSeatEnv(roster, { fallbackRoot = process.cwd(), readOnlyRoot
 		// fallback for a seat that has not prepared one (a rig pointing every seat at
 		// one shared checkout), never a global override of a prepared root.
 		const root = resolveSeatRoot({ persistedCwd: target.cwd, fallbackRoot }).root;
-		const base = new NodeExecutionEnv({ cwd: root });
+		const base = new NodeExecutionEnv({ cwd: root, shellEnv: NON_INTERACTIVE_GIT });
 		const seat = roster.get(target.conversationId);
 		// Fail CLOSED: a conversation that is not a known seat - the roster not read yet, or a
 		// conversation that is no seat at all - gets the read-only environment, never an
