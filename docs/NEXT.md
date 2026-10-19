@@ -12,6 +12,13 @@ next agent can run.
 **Delivered:** `operator-answer-human-parked-2026-10-19-1` → `pm`, `delivered:true` `21:42:11Z`. Body:
 `.spike/delegate/human-decisions-2026-10-19/intent-answer-human-parked-items.md`. Census + the evidence
 behind every ruling: `.spike/delegate/human-decisions-2026-10-19/QUESTIONS-AND-RECOMMENDATIONS.md`.
+**Then:** `operator-followup-escalation-loop-2026-10-19-1` (loop-breaker, `21:49:49Z`) and
+**`operator-accepts-r1-r7-2026-10-19-1` (`21:52:23Z`) — the operator ACCEPTED R1–R7 in full**, so they are
+now OPERATOR RULINGS, not delegate recommendations; `pm` may not re-defer any of those rows to `human`.
+**`pm` is applying them live:** `#2806` cancelled `21:43:55Z`, `#2975`/`#2949` + all six stale escalations
+closed `21:35–21:45Z`, `#2987` closed `21:56:03Z` (*"LEFT deferredTo human — resumed and closed"*, with the
+reason recorded so the supervisor cannot re-age it). Remaining on `human` at `21:58Z`: `#2559`, `#2598`,
+`#2673`, `#2744`, `#2763`, `#2797`, `#2992` — all inside `pm`'s current turn. Re-check before acting.
 
 **The finding:** of **14 `deferred` rows, 10 carry `deferredTo:"human"`** — but they are only **5 real
 questions** (three about the same landing window), **1 already answered by evidence**, **1 that is a resume
@@ -111,8 +118,10 @@ land with `--suite` until the 5 `tui-durable-*` failures are fixed (report the e
 **Current item:** the queue-lifecycle redesign v2 **IS REGISTERED AND IN FLIGHT** — this supersedes the
 stale pointer immediately below. `pm` registered `M1`–`M7`; `M1` was built and verified, then `lead`
 **split it**: **`M1a` (`#3062`) is CLAIMED by `impl`, `M1b` (`#3063`) is HELD and axis-fenced** (`#3046`
-RULING 1b). The human-parked questions are answered
-(`operator-answer-human-parked-2026-10-19-1`, delivered `21:42:11Z`) — see the top block for R1–R7.
+RULING 1b). The human-parked questions are answered **(R1–R7 delivered `21:42:11Z` and ACCEPTED BY THE
+OPERATOR `21:52:23Z` — they are operator rulings now, not delegate suggestions)**; `pm` is applying them
+live (`#2806` cancelled, `#2987`/`#2975`/`#2949` + six stale escalations closed). See the top block for
+R1–R7.
 **Queue id:** `#2992` (land FIRST — CLEAN) · `#3062` (M1a build, claimed) · `#3056`/`#3069` (the
 `workable` removal — `pm` must give `impl` the intended SHAPE) · `#3011`/`#3031`/`#3035`/`#3046` +
 `#2744` (the serialized DECISIONS.md pass) · `#2797`/`#2806` (consolidate, land last) · `#2598` (release
