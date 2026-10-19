@@ -13,7 +13,7 @@
 // trigger is an in-process commit subscription with none of the cross-process
 // gap D11 documented. Read-only viewers keep D11's poll/read-storage rule.
 
-import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync, statSync } from "node:fs";
 import { join, basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { CompactionEntry, configure } from "@earendil-works/pi-durable";
@@ -320,6 +320,82 @@ function writeIntentResult(dbPath, requestId, result) {
   const path = join(dir, `${requestId}.json`);
   writeFileSync(path, JSON.stringify(result), "utf8");
   return path;
+}
+
+/**
+ * How long a spooled RESULT file is kept. Long enough that any live poller has consumed it
+ * (`awaitIntentResult` polls at 200 ms up to a 120 s timeout), short enough that a client
+ * that died mid-poll cannot leak it forever (#2497 / architect A4).
+ */
+export const INTENT_RESULT_TTL_MS = 10 * 60_000;
+
+/**
+ * Garbage-collect spooled RESULT files (`<db>.broker.inbox.out/`) older than `ttlMs`.
+ *
+ * The result dir is the idempotency ledger AND the producer's reply channel: a client that
+ * dies mid-poll leaves `<requestId>.json` behind with nobody to read it, and the `health`
+ * view is multi-MB, so the dir would grow without bound. A read client consumes its own
+ * result, but every other op (and every crashed poller) does not.
+ *
+ * GUARDED BY IN-FLIGHT: a result whose `requestId` still has a PENDING intent file in the
+ * inbox is SKIPPED — that request has not been applied yet (or a re-drain is about to
+ * consume it), so its ledger row is still load-bearing. Only a result with no pending
+ * request AND older than the TTL is removed.
+ *
+ * Age comes from the result's own `at` timestamp; a result with no usable timestamp falls
+ * back to the file's mtime, so a malformed row cannot leak forever either.
+ *
+ * @returns {{removed:number, kept:number}}
+ */
+export function gcIntentResults(dbPath, { ttlMs = INTENT_RESULT_TTL_MS, now = Date.now } = {}) {
+  const dir = intentResultDir(dbPath);
+  if (!existsSync(dir)) return { removed: 0, kept: 0 };
+  // In-flight = a pending intent file still names the requestId.
+  const inFlight = new Set();
+  for (const file of readIntentFiles(dbPath)) {
+    try {
+      const request = JSON.parse(readFileSync(file, "utf8"));
+      if (request?.requestId) inFlight.add(request.requestId);
+    } catch {
+      // Unreadable: the drain will dead-letter it, so it is not a live waiter.
+    }
+  }
+  let removed = 0;
+  let kept = 0;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".json")) continue;
+    const requestId = name.slice(0, -5);
+    if (inFlight.has(requestId)) {
+      kept += 1;
+      continue;
+    }
+    const path = join(dir, name);
+    let age = null;
+    try {
+      const at = Date.parse(JSON.parse(readFileSync(path, "utf8"))?.at ?? "");
+      age = Number.isFinite(at) ? now() - at : null;
+    } catch {
+      age = null;
+    }
+    if (age === null) {
+      try {
+        age = now() - statSync(path).mtimeMs;
+      } catch {
+        age = null;
+      }
+    }
+    if (age !== null && age >= ttlMs) {
+      try {
+        unlinkSync(path);
+        removed += 1;
+      } catch {
+        kept += 1;
+      }
+    } else {
+      kept += 1;
+    }
+  }
+  return { removed, kept };
 }
 
 /**
@@ -909,6 +985,17 @@ export async function drivePass(
     const drained = await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage });
     if (drained.delivered > 0 || drained.deadLettered > 0 || drained.duplicates > 0) {
       logBrokerLine(dbPath, `INTENT delivered=${drained.delivered} dead=${drained.deadLettered} dup=${drained.duplicates}`);
+    }
+    // #2497 (architect A4): bound the result ledger. A client that died mid-poll leaves its
+    // `<requestId>.json` behind with nobody to read it, and the `health` view is multi-MB, so
+    // the dir would grow without bound. Run the TTL/GC once per PASS (not on the read-poll
+    // path, which does not come through here), never touching a result whose request is still
+    // in flight. A GC failure is reported, never allowed to stop the pass.
+    try {
+      const gc = gcIntentResults(dbPath);
+      if (gc.removed > 0) logBrokerLine(dbPath, `INTENT-GC removed=${gc.removed} kept=${gc.kept}`);
+    } catch (err) {
+      onDiagnostic?.({ kind: "intent-gc-failed", error: String(err?.message ?? err) });
     }
   }
   const seatsDoc = await harness.documentState(Seats, undefined, context);
