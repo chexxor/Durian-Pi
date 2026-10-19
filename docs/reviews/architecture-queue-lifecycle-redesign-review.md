@@ -548,3 +548,111 @@ Three of these decide several findings:
 - I did not run the full demo suite (only the two demos that exercise the current held/attention
   behaviour, P4). No implementation exists yet, so there is nothing else to run.
 - Line numbers are as of `main` @ `6875bc8`; the shared tree is live, so re-run the probe before acting.
+
+---
+
+## 8. Closure — v2 disposition (item #3005)
+
+The proposal owner adjudicated all 17 findings in
+[`queue-lifecycle-redesign.md`](queue-lifecycle-redesign.md) **v2** (`defbc34` on `main`), §13. Method:
+I read v2 §1–§13 and checked each disposition against the **v2 text**, not the §13 table (a disposition
+row that names a section which does not actually contain the change is a finding in its own right — see
+R3).
+
+**Confirmed fixed (13): F2–F16.** Each landed in the named place and reads correctly:
+
+| Finding | Landed in v2 | Confirmed because |
+|---|---|---|
+| F2 | §3 `block.source`, §9.3 | only a `declared` `dependency` auto-opens; prose → `block.note`, never `blockedBy`; §9.5 corrected to visibility |
+| F3 | §3 `constraints[]`, §4.1 | auto-open requires **every** constraint to be a done queue gate |
+| F4 | §3 `dependency.reviewBy`, §5 `gate-stalled` | `#2630` now gets a clock **and** a kind |
+| F5 | §3 two namespaces, `roadmap-gate` | `RM-<n>` is not self-clearing |
+| F6 | §8 full 11-file table + mapping pair + lint | matches my measured site list |
+| F7 | §4.1 closing commit + pass backstop | `driver.mjs` explicitly keeps no write path |
+| F8 | §4.1 | QUESTION enqueue stays; `block` is metadata; `stage` unchanged |
+| F9 | §5 `computeQueueAttention` merged in `readRigHealth` | no queue notice in the seat loop |
+| F10 | §3 `backlog` (no clock), §9.2 far-out, §5 cap | the 60 gate-less rows get no clock |
+| F11 | §11.7 | citation withdrawn; ADR to be landed or dropped |
+| F12 | §11.6 | escalated to `lead` |
+| F13 | §9 cost note | the unit is the 10.4 MB document |
+| F14 | §9.1/§9.2 | one mapping for one stored status |
+| F15 | §7 | `gate-not-cancelled` on a declared `dependency` only |
+| F16 | §4.1 | `AUTOOPEN` log + `released-by-gate` |
+
+**Not fully incorporated — 4 residuals.** Each is small and lives in the normative statement or the
+legacy mapping; none is structural, and none reopens the mechanism.
+
+#### R1 — BLOCKER — (W) as written excludes `active` + `block: null`, i.e. the normal claimed item
+
+v2 §1: *"Every non-terminal item is `(stage === "open" && block === null)` **or** `block !== null` …"*.
+A `claimed` item is `stage: active, block: null` (v2 §2's own mapping table). It satisfies **neither**
+disjunct: the first demands `stage === "open"`, the second demands `block !== null`. So the invariant
+fails on the most common non-terminal shape, and any check derived from it fails on every claimed item.
+v1's `(b) active` case was dropped in the rewrite.
+
+**Fix.** Restate (W) as a disjunction over `block`, with `stage !== "closed"` implied by "non-terminal":
+`block === null` **or** (`block !== null` ∧ `block.resolver != null` ∧ (exempt(`block.reason`) ∨
+`block.reviewBy != null`)). `active` + `block: null` then satisfies it, as does `open` + `block: null`.
+
+#### R2 — MAJOR — `SELF_CLEARING` is undefined, and §1 disagrees with §3/§7 about `question`
+
+v2 §1 exempts a block from `reviewBy` when "its reason is self-clearing"; §3's table marks `question`'s
+`reviewBy` as **n/a**; §7's `item-park-reviewby` exempts "self-clearing/`backlog`". `SELF_CLEARING` is
+never defined, so §1 (which would require a `reviewBy` on a `question` block unless `question` is
+self-clearing) and §3/§7 disagree. The answer flow is external, not automatic, so `question` is not
+"self-clearing" in the strict sense — yet it must not carry a clock.
+
+**Fix.** Define the exemption set **once** and use it in §1, §3 and §7:
+`REVIEWBY_EXEMPT = new Set(["dependency", "question", "backlog"])` (equivalently `SELF_CLEARING =
+{"dependency","question"}` ∪ `backlog`). State that `question` is exempt because its trigger is the
+QUESTION enqueue (§4.1), not a clock.
+
+#### R3 — MAJOR — F17's disposition cites §8, but §8 does not contain the change
+
+§13's F17 row says **A** — "§8 (`seattools`, `peek_queue` projections)". §8's `src/rig.mjs` row names
+the eight tools, the QUESTION enqueue and `releaseDependents`; it does **not** name `claim_work`'s
+stalled-claim reveal (`src/rig.mjs:502-511`) or `peek_queue` (`src/rig.mjs:904`). The only §8 row
+resembling it is `src/seattools.mjs:85` → `stage==="active"`, which is a different site. So F17 is
+dispositioned as accepted but is not actually incorporated.
+
+**Fix.** Add to §8's `src/rig.mjs` row: (a) `claim_work`'s stalled-claim reveal requires
+`stage==="active" && block===null` (never hand a seat an item it is waiting on); (b) `peek_queue`
+projects `stage`/`block` and must still **list** blocked items (it is an oversight view, not a claim
+path).
+
+#### R4 — MAJOR — §2's `deferred` → stage mapping is not derivable from the stored transitions
+
+§2 says a `deferred` row's stage is "unchanged (`active` if the holder deferred; `open` if the supervisor
+escalated an unclaimed row)". But `applyEscalations` (`src/supervisor.mjs:114`) writes `status="deferred"`
+with a transition `{event:"deferred", by:"supervisor"}` (`:119-120`) and records **neither** the prior
+status **nor** whether the item was claimed. `planEscalations` escalates items that were `claimed` **or**
+`queued` (`src/supervisor.mjs:72`), so the `by:"supervisor"` marker alone cannot decide the stage: a
+supervisor escalation of a **claimed** item must map to `active` (the holder still owns it and will
+`resume_work`), of a **queued** item to `open`. `effectiveStage(item)` therefore has no correct input, and
+F1's fix is not testable until this is specified.
+
+**Fix.** Have `applyEscalations` record the stage it escalated from (`fromStage: "open"|"active"`,
+known from `item.status` before the write) and have `effectiveStage` read it; or, equivalently, derive it
+from the transition log (last `deferred` preceded by a `claimed` event by `item.to` → `active`, else
+`open`). The first is cheaper and unambiguous — prefer it. Add the supervisor row's `fromStage` write to
+§8.
+
+**Minor observations (no disagreement, for the record).**
+
+1. **A compound park is now `operator`/`schedule` with a queue constraint**, so its cleared queue gate
+   emits **no** `gate-cleared-unreleased` (§5 defines that kind for a declared `dependency` only). That is
+   correct — the window is the binding constraint and `parked-review-due` is its trigger — but state it in
+   §5, or a reader will look for the gate kind and not find it.
+2. **The §7 rule id `blockedBy-resolves` now resolves `constraints[].ref`**; the id is a stable API, so
+   keep it, but note in §7 that `blockedBy` is no longer a field name.
+3. **`orphan-no-progress` is redefined to `block === null`** (§5) — an unblocked item going stale. For a
+   `queued` item that overlaps `idle_with_queued_work` (seat scope). Keep both (queue scope catches a
+   blocked-free stale item whose seat is gone); note the overlap so a reader does not dedup them.
+4. **(W) is forward-only** (authored state, §1 + §7): the 2,988 legacy rows are policed by attention, not
+   by `check`. Accepted — it is what keeps a red `check` from stopping landings (advocate CR-1) — but it
+   means the invariant is *not* yet true of the store; say so in §1 so the claim is not read as a
+   present-tense property.
+
+**Verdict.** v2 is sound. R1–R4 must be folded in before implementation (all four are one-line
+normative/mapping corrections), and F12/F11 remain `lead`'s calls. No other disagreement; my F2/F3/F4
+concerns — the ones that could have made the design unsafe — are correctly fixed.
