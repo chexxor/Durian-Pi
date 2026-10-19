@@ -196,6 +196,30 @@ export function readIntentFiles(dbPath) {
 }
 
 /**
+ * Do ALL pending intent files ask only for the non-mutating `read` op (#2321)?
+ *
+ * A `read` must be served WITHOUT a wake pass: `watch` polls it every ~750 ms, and forcing a
+ * full pass per poll is what hammered the broker (#2237). The idle loop uses this to tell a
+ * watcher's poll apart from real work. An unreadable file is NOT read-only (the drain
+ * dead-letters it), and an empty inbox returns false so "nothing pending" is never read as
+ * "read-only".
+ */
+function onlyReadIntents(dbPath) {
+  const files = readIntentFiles(dbPath);
+  if (files.length === 0) return false;
+  for (const file of files) {
+    let request;
+    try {
+      request = JSON.parse(readFileSync(file, "utf8"));
+    } catch {
+      return false;
+    }
+    if (requestOp(request) !== "read") return false;
+  }
+  return true;
+}
+
+/**
  * Move an undeliverable intent out of the spool into the error dir with its reason, so
  * a bad intent is surfaced once instead of being retried every pass forever.
  */
@@ -1066,7 +1090,26 @@ export async function runWakeLoop({
       // like a wake-relevant change so the operator's intent is delivered promptly.
       // Safe from spinning: every file is either submitted and unlinked or
       // dead-lettered within the pass, so the inbox is empty again afterwards.
+      //
+      // #2321: a `read` is the one NON-mutating op, and `watch` polls it every ~750 ms.
+      // Forcing a full wake/supervisor pass per poll made the operator's own window into the
+      // team the thing that hammered the broker (~80 passes/min); those passes' probe reads
+      // contend with the harness's own commits and drive the hot loop that takes the broker
+      // down (#2237). Serve read-only intent HERE, in place, with the SAME drain a pass uses,
+      // and do NOT mark dirty: a read changes nothing, so there is no wake to evaluate. Any
+      // other op (a real message/pause/reset) still marks dirty and runs a full pass.
       if (dbPath && readIntentFiles(dbPath).length > 0) {
+        if (onlyReadIntents(dbPath)) {
+          try {
+            await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic });
+          } catch (err) {
+            // A failed read drain must neither kill the idle loop nor spin it: fall back to a
+            // real pass, which is where a storage failure is reported and retried with backoff.
+            onDiagnostic({ kind: "read-drain-failed", error: String(err?.message ?? err) });
+            scheduler.markDirty();
+          }
+          continue;
+        }
         scheduler.markDirty();
         continue;
       }
