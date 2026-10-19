@@ -54,3 +54,4 @@ pm-*.err
 # The broker's result channel beside the store (`<db>.broker.inbox.out/`); the
 # spool dirs above are already ignored, this is the `.out` sibling.
 *.sqlite.broker.inbox.out/
+nul
