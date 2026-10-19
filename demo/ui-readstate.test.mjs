@@ -76,6 +76,36 @@ try {
   check("input overlay: state.view stays the underlying view (seats)", inputState.view === "seats", JSON.stringify(inputState.view));
   check("input overlay: state.inputText is the input line's value", inputState.inputText === input.value, JSON.stringify(inputState.inputText));
 
+  // --- 4. the per-seat LIVE reads run as ONE parallel batch ------------------
+  // Each `readStore("live")` is a broker round-trip, so the old sequential `await`
+  // loop made a single UI frame cost one round-trip PER SEAT. Inject a fake that holds
+  // every live read open and records the peak overlap, proving the batch is parallel
+  // without needing a live broker. The health read comes from the fake too, so the
+  // closure's `health.seats` drives the per-seat reads.
+  const seats = [
+    { name: "a", conversationId: 1 },
+    { name: "b", conversationId: 2 },
+    { name: "c", conversationId: 3 },
+  ];
+  const fakeHealth = { seats, queueItems: [], _pages: {} };
+  let inFlight = 0;
+  let peak = 0;
+  const readStore = async (_db, view) => {
+    if (view === "health") return fakeHealth;
+    if (view === "live") {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      inFlight -= 1;
+      return {};
+    }
+    throw new Error(`the fake readStore does not serve view: ${view}`);
+  };
+  const parallelView = createViewMode();
+  const parallelState = await (await makeReadState(freshUi(), createConversationWindow(), parallelView, { input, cfg, dbPath, readStore }))();
+  check("per-seat live reads run concurrently (peak overlap === seat count)", peak === seats.length, `peak=${peak} seats=${seats.length}`);
+  check("the parallel batch still reports every seat", parallelState.seats.length === seats.length, `seats=${parallelState.seats.length}`);
+
   console.log(failures === 0
     ? "\nPASS — the REAL readState closure resolves and reports the view it was given"
     : `\nFAIL — ${failures} check(s) failed`);
