@@ -29,6 +29,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { uptime as osUptime } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { reservationBlocks } from "./genlockreserve.mjs";
@@ -41,6 +42,16 @@ import { reservationBlocks } from "./genlockreserve.mjs";
 const STALE_MS = 660_000;
 const LEASE_RENEW_MS = 20_000;
 const ACQUIRE_POLL_MS = 100;
+
+/**
+ * A cross-process MONOTONIC clock: seconds since boot, shared by every process on the host
+ * (unlike `performance.now()`, whose origin is per-process). Genlock ages are measured with
+ * THIS, never a raw wall-clock delta, so a clock step can neither wedge a slot nor steal a
+ * live holder (#2585 / architect A2): a BACKWARD step made a wall-clock age look fresh
+ * forever (the slot could never age out), and a FORWARD step made it look ancient (a live
+ * holder was stolen, exceeding the concurrency cap).
+ */
+const monotonicSeconds = () => osUptime();
 
 // In-process seat context (B2: per-concurrent-call seat attribution).
 // AsyncLocalStorage lets each concurrent generation carry its own seat name
@@ -70,12 +81,21 @@ export function holderAlive(holder) {
 }
 
 /**
- * Whether a slot may be stolen: its holder is dead, or it has aged past STALE_MS.
- * STALE_MS is longer than the provider stream timeout, and a live holder renews its
- * `since`, so a legitimate long generation is never age-stolen.
+ * Whether a slot may be stolen. PID LIVENESS is the PRIMARY test; the age (a MONOTONIC age
+ * since boot, never a wall-clock delta) is the SECONDARY. STALE_MS is longer than the provider
+ * stream timeout and a live holder renews its lease, so only a truly hung holder ages out.
+ *
+ * A holder with no `sinceUptime` (written by an older durig) falls back to the wall-clock age;
+ * the monotonic stamp is authoritative once present.
  */
-export function slotIsStale(holder, now = Date.now()) {
+export function slotIsStale(holder, { now = Date.now(), uptime = monotonicSeconds() } = {}) {
+	// PRIMARY: a dead holder is stealable whatever the clock says.
 	if (!holderAlive(holder)) return true;
+	// SECONDARY: a monotonic age. Only a live holder reaches here, and a live one renews, so this
+	// only ever ages out a hung holder — and no clock step can change it.
+	if (typeof holder?.sinceUptime === "number") {
+		return uptime - holder.sinceUptime > STALE_MS / 1000;
+	}
 	const age = holder?.since ? now - Date.parse(holder.since) : Infinity;
 	return age > STALE_MS;
 }
@@ -88,7 +108,7 @@ export function slotIsStale(holder, now = Date.now()) {
 function renewSlot(path, me) {
 	const tmp = `${path}.${process.pid}.renew`;
 	try {
-		writeFileSync(tmp, JSON.stringify({ ...me, since: new Date().toISOString() }));
+		writeFileSync(tmp, JSON.stringify({ ...me, since: new Date().toISOString(), sinceUptime: monotonicSeconds() }));
 		renameSync(tmp, path);
 	} catch (err) {
 		if (err?.code !== "ENOENT") {
@@ -134,7 +154,7 @@ export async function withGenerationSlot(options, fn) {
 	// B2: read seat from ALS context of the CURRENT async call (set by wrapProviderWithSlots
 	// seatLocalStorage.run wrapper). Falls back to options.seat (explicit) or env var (legacy).
 	const seat = seatLocalStorage.getStore() ?? options.seat ?? process.env.DURIG_ACTIVE_SEAT ?? null;
-	const me = { pid: process.pid, seat, since: new Date().toISOString() };
+	const me = { pid: process.pid, seat, since: new Date().toISOString(), sinceUptime: monotonicSeconds() };
 	let path;
 	for (;;) {
 		// The LANDING lock has PRIORITY (#1497/#1498, lead #2054 precondition (c)): while a live
