@@ -29,6 +29,12 @@ subset; the durable broker/liveness fix is the open work.
 - **INTENT DELIVERED** — `architect-broker-code-review-2026-10-19-1` → `pm`; `pm` registered **#2520**
   (architect code review of broker/CLI/UI/supervisor → ranked work items). Architect woken `06:33:11Z`,
   actively working.
+- **SEAT-ROOT RECOVERY** — the shared tree had been switched to `devtools-item-2412` because devtools'
+  cwd (`…\item-2412`) was a plain dir, **not a git worktree**, so its git/file ops hit the shared repo.
+  Fixed: WIP parked to `stash@{0}`; plain dir moved aside (`.spike/delegate/seat-root-recovery-2412/`);
+  `git switch main`; `git worktree add item-2412 devtools-item-2412`; WIP re-applied in the worktree.
+  Shared tree is clean on `main`; devtools now resolves to a real worktree. Recurrence recorded on
+  `docs/incidents/2026-10-17-seat-root-fallback-commit.md`.
 
 **Open / owed:**
 - **`impl` is STILL stranded** (`#110509`) — needs the durable fix (below) or another
