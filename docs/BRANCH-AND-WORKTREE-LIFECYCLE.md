@@ -237,3 +237,34 @@ surfaced the two limits that matter for any future investigation:
 
 Full query, coverage limits and conclusion: `docs/incidents/2026-10-19-scripts-directory-emptied-on-disk.md`
 § "Investigation".
+
+## 7. Pass log — measured, 2026-10-19 (pass #3)
+
+Appended rather than rewritten (conventions §6). One pass, `main` `f495091`→`66d0ce9`:
+
+| | before | after |
+|---|---|---|
+| refs | 94 | 89 |
+| registered worktrees | 210 | 208 |
+| `reapable` | 0 | 0 |
+| `counts` | — | `{seat-root:1, non-item:163, dirty:27, locked:11, live:8}` |
+| suite on `main` | `pass=172 fail=5` (`tui-durable-*` `./codemode`) | **`pass=178 fail=1`** (`pitui`, #2412) |
+
+Four things this pass proved about the MODEL, not the tooling:
+
+1. **A landing batch is atomic, and `merged[]` is not a landing report.** The helper merges into one
+   scratch tree, so a conflict on branch N aborts the whole call and `main` does not move — while the
+   report still lists branches 1..N-1 as `merged` (they merged *in the scratch*). §5's third gate must be
+   **re-evaluated against the new `main` after every landing**, in the same pass.
+2. **An `add/add` pair is order-independent and needs a superset test, not a rebase.** §4.1/§5 assume a
+   branch can be made landable by rebasing; two branches that both ADD the same path cannot be merged in
+   either order. `git diff --numstat A:path B:path` decides it: if the later branch deletes nothing and
+   contains the earlier one, the resolution is deterministic (take the superset) and belongs to the
+   **lander**, not the author.
+3. **"Gated on the landing" inverts the verified gate.** `#2993`/`#3104` are non-author verifies HELD
+   *on* the landing entry, so the normal order (verify → land) is impossible for those rows and a landing
+   pass cannot satisfy §5's first gate. A landing list that does this needs a ruling (land-then-verify on
+   `main`, with the release issued in the same breath), not a guess by the lander.
+4. **The seat root is the least stable fact in the model.** §2 says to expect the shared-tree fallback;
+   measured this pass, **11 of 11 seats** were back on the shared tree after earlier work had put `impl`
+   and `devtools` on their own item worktrees. Read `audit.seatRoots` fresh at the start of a pass.

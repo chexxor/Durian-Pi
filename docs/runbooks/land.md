@@ -217,6 +217,28 @@ Then prove the whole merged result ONCE on `main` (`node scripts/suite.mjs`) and
 `branch-cleanup.md` / `leaked-worktrees.md`.
 
 ## If it fails
+- **A BATCH ABORTS ATOMICALLY ON AN INTRA-BATCH CONFLICT — `main` is NOT advanced.** (2026-10-19, measured.)
+  `land.mjs b1 b2 b3` merges into ONE scratch tree, so a later branch can conflict with the **newer**
+  state that an earlier branch in the SAME call just created. The report then has a non-empty `merged[]`
+  AND `"ok": false` + `"scratch": null`. **`merged[]` lists what merged in the SCRATCH; it does NOT mean
+  it landed.** Measured case: `architect-item-2984` and `architect-item-3005` both ADD the same file, so
+  `land.mjs 2976 2744 2984 3005 2545 1966` reported `merged: [2976, 2744, 2984]` and stopped on 3005 —
+  and `git log main` was **unchanged**. Always confirm with `git log --oneline -1 main` before believing a
+  pass; then **re-preflight every remaining branch against the NEW `main`** (`git merge-tree`) and split
+  the batch — a branch that was CLEAN before the pass can be CONFLICT after one landing.
+- **Two branches that both ADD the same path cannot land in EITHER order** (`add/add`). Do not waste a
+  pass trying both orders, and do not reflexively route an author rebase — **check for a strict superset
+  first**, because then the resolution is deterministic and no judgement is involved:
+  ```bash
+  git diff --numstat <branchA>:<path> <branchB>:<path>     # added / deleted / path
+  ```
+  If `deleted` is 0 and `added` covers B's extra content, B contains A; the only correct resolution is
+  B's blob. (2026-10-19: `architect-item-3005` = 2984's 550 lines **+108**, 0 deletions, and `main`'s
+  blob after landing 2984 was byte-identical to 2984's — so 3005 was resolved to its own blob in a
+  scratch worktree, committed as `<branch>-rebased`, and landed. Record the resolution in the commit
+  message; it is regenerable evidence, not a hand merge.)
+  If neither side is a superset, that IS a semantic conflict: §Abstain — route the author rebase
+  (`resolve-merge-conflict.md` step 4).
 - **Refused on tracked modifications:** commit or stash the shared tree's work first (never blindly —
   the tree is shared with other seats; see the constitution), then re-run. When the tracked WIP is
   **another seat's** in-flight edit, do not `git add` it and do not `git checkout`/`restore` it: back the
@@ -224,6 +246,11 @@ Then prove the whole merged result ONCE on `main` (`node scripts/suite.mjs`) and
   (`git stash push -m "delegate: park <what> for <date> landing window" -- <paths>`), land, and **leave
   the stash for its author to reconcile** — never pop it blind. 2026-10-19: a D109
   non-interactive-git WIP was parked this way (patch `.spike/delegate/D109-shared-tree-wip-20261019.patch`).
+- **A full-sha value comes back as `[redacted by durig: ...]`.** The secret redactor classifies a bare
+  40-char git SHA as `high-entropy-token`, so `git rev-parse <ref>` / `git merge-tree --write-tree`
+  output can be replaced (incident `2026-10-19-git-sha-redacted-as-secret.md`). **Use `--short` ids and
+  the `--name-only`/`exit=` form** in every preflight and report; never conclude "the branch has no tip"
+  from a redacted line.
 - **Refused on a held genlock:** a generation is in flight. Wait for it to settle, or stop the broker
   (`broker-safe-change.md`), then re-run.
 - **The pass died when you stopped the broker** (your own run ended): that is the broker-hosted-seat
@@ -252,3 +279,26 @@ that seat's run (#1390: impl claimed it 08:22:36, quiesced the broker, and the s
 Do step 0 (the outside-broker path) is the fix; ROADMAP **131** (`pause`/`unpause`, #1388) is the
 durable one. Same session: **#1383** made the helper's genlock probe resolve the store in use and REFUSE
 a mis-resolved store.
+
+2026-10-19 (pass #3, delegate, broker UP): **6 landed, `main` `f495091`→`66d0ce9`** — `devtools-item-2976`
+@`e4e6244` (R1 row 1: the `prepare_workspace` recurrence fix), `impl-item-2744` @`47dd2ae` (docs-only; the
+landable RE-POINTED copy of the architect review with a `## D-<mint>` placeholder — the `@d1fde2d` tip with
+the hardcoded D114 was correctly NEVER landed), `architect-item-2984` @`5c50f34`, `architect-item-3005`
+(resolved as `<branch>-rebased` `328d838`, the add/add superset — see "If it fails"), `impl-item-2545`
+@`1e96d53`, `impl-item-1966` @`9aa2053`. `lock {slots:4, held:4, waitedMs:3944/1415, reserved:true}` — it
+waited for the slots with the broker UP; no stop was needed.
+**Suite on `main` after the pass: `pass=178 fail=1`** (`node scripts/suite.mjs`, rc=1) — the single failure
+is `demo/pitui.test.mjs` (#2412's resolution-path assertion). **The 5 `tui-durable-*` `./codemode` failures
+that blocked `--suite` are GONE** (baseline on the previous pass was `pass=172 fail=5`), so `--suite` is
+usable again except for `pitui`. **Mechanism (checked, not assumed):** all 8 `demo/tui-durable-*.test.mjs`
+exit 0, and `node_modules/@earendil-works/pi-durable` now RESOLVES TO THE VENDORED PIN
+(`-> vendor/pi-main/packages/durable`, `exports` includes `./codemode`), so the `ERR_PACKAGE_PATH_NOT_EXPORTED`
+cause is absent. That resolution is exactly what the just-landed `devtools-item-2976` now enforces on every
+`prepare_workspace` (`sync-pi --link` before/after `npm ci`) — so if these 5 reappear, the thing to check is
+**that symlink**, not the demos. **Not landed, with reasons:**
+`scribe-item-3035` (tip DRIFT: list pins `f450cdd`, tip is `f1f788f` — re-pin needed), `designer-item-2103`
+(DRIFT `a3dff23` vs `e4fd338` + CONFLICT), `devtools-item-2587` (CLEAN+MATCH but its non-author verify
+`#3104` is held *on* the landing — the gate is inverted, so it needs a ruling, not a pass),
+`impl-item-3017` (CLEAN+MATCH but SUPERSEDED — F12 says M1 must not define `workable`), the M1 pair
+`impl-item-3062`/`3056` (landing lists HELD, redesign slice in flight), and every CONFLICT branch
+(`git merge-tree --write-tree main <branch>` exits 1 → author non-force rebase + re-verify).

@@ -131,3 +131,29 @@ dirty/real-content worktrees (see leaked-worktrees.md); 36 unlanded carry real w
 unlanded commits (guard/confine stack `#1151…#1519`, docs `#1232…#1565`) reported to `pm`. Ops note
 that produced the `sed`: `git branch --merged main` prints `+ <ref>` for worktree-held refs, which
 silently corrupts a `main..$b` loop.
+
+2026-10-19 (prune pass #3, delegate, broker UP, right after 6 landings): refs **94 → 89**, worktrees
+**210 → 208**, `main` unmoved by the prune, nothing forced. **`worktree audit` reported `reapable: 0`** and
+that was the CORRECT answer, not a failed pass:
+- **5 merged+free refs `-d`'d** (`devtools-item-2976`, `impl-item-2744`, `architect-item-2984`,
+  `architect-item-3005-rebased`, `impl-item-2545`) immediately after their landings, then the diagnostic
+  sweep freed 4 more (`devtools-item-3036/3038/3082`, `scribe-item-3047` — all with tips ON `main`
+  already, i.e. branches that never carried a commit of their own).
+- **8 merged refs stayed HELD by `locked` worktrees** (`advocate-item-2104/2630`, `devtools-item-2559/2638/2969`,
+  `impl-item-1274/2744/2788`) — every one a live item or a lock, so step 5(b)'s "only when the item is
+  terminal" applies: **one** was terminal + clean (`impl-item-2744`, item cancelled) and was reclaimed
+  `unlock → remove → -d`; the rest were kept.
+- **`item-2104` REFUSED removal** — one untracked `selfdev.sqlite.broker.inbox.out/` left inside the
+  worktree. That refusal is the safety net (`never --force`); it was re-locked and reported. **New known
+  artifact:** a `*.broker.inbox.out/` (or `*.genlock.*`) INSIDE a worktree means the seat ran CLI commands
+  from that cwd — it is a store artifact, not authored work, but its presence still makes `remove` refuse,
+  so the reclaim for that tree needs an explicit decision rather than a force.
+- **A big worktree COUNT is not evidence of a leak:** 163 of 208 are the already-relocated
+  `../pi-opendurig.worktrees/*` trees (registered worktrees that live outside the repo, counted as
+  `kind: non-item`). They are preserved, deliberately, and re-print on every audit. Judge the pass by
+  `merged+free`, `dirty`, `locked` and `live` — not by the total.
+- **Seat roots drift back to the shared tree after a pass.** `audit.seatRoots` showed **all 11 seats**
+  rooted at the shared tree at the end of this pass (the same audit earlier in the session had `impl` on
+  `item-2744` and `devtools` on `item-2595`). `complete_work` teardown and the sweep flip a seat's cwd
+  back — this is the F12 fallback re-asserting, not a prune bug. **Re-read `seatRoots` at the START of a
+  pass** and re-point any seat you are about to depend on; do not assume yesterday's roots.
