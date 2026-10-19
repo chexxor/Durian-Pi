@@ -3,7 +3,79 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T21:45Z, delegate) — **THE 10 HUMAN-PARKED ITEMS ANSWERED AND DELIVERED TO `pm` (7 RULINGS); NO SEAT WORK, NO PUSH**
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T23:00Z, delegate) — **LAND+PRUNE PASS #3 (6 LANDED, `main` → `66d0ce9`), a LOCKED-WORKTREE DEADLOCK UNBLOCKED, and a 50-COMMIT DOCS AUDIT**
+
+**Read this first.** Three things this session: the operator asked why a seat was asking about a worktree
+that no longer existed (answered + fixed), then asked for a landing/worktree pass and a docs audit of the
+last 50 commits.
+
+**1. LANDED 6 — `main` `f495091` → `730d8b8` → `66d0ce9`.** `devtools-item-2976` @`e4e6244`,
+`impl-item-2744` @`47dd2ae` (the RE-POINTED `D-<mint>` copy), `architect-item-2984` @`5c50f34`,
+`architect-item-3005` (resolved `328d838`), `impl-item-2545` @`1e96d53`, `impl-item-1966` @`9aa2053`.
+**Suite on `main`: `pass=178 fail=1`** (`pitui` only) — **the 5 `tui-durable-*` `./codemode` failures are
+GONE** (baseline `pass=172 fail=5`); mechanism checked: `node_modules/@earendil-works/pi-durable` now
+resolves to `vendor/pi-main/packages/durable` and exports `./codemode`, which is what `#2976` now enforces
+in every worktree. **`land.mjs --suite` is usable again** — retire the standing "blocked on 5 failures" line.
+**A batch is ATOMIC and `merged[]` is NOT a landing report:** my first batch listed `merged: [2976,2744,2984]`
+while `main` never moved (it stopped on an intra-batch `add/add`). Re-preflight against the NEW `main` after
+every landing.
+
+**2. `#3052` WAS UNLANDABLE AS WRITTEN** — `2984`/`3005` both ADD the same review file, so they cannot merge
+in EITHER order. `3005` is a strict superset (`numstat` 108 added / 0 deleted; main's blob == 2984's blob
+`558e67e`), so it was resolved deterministically to 3005's blob in a throwaway worktree and landed as
+`architect-item-3005-rebased @328d838`. **`architect-item-3005 @0827b39` is deliberately LEFT (unmerged
+content superseded) — do not `-D` it; `pm` decides.**
+
+**3. PRUNE:** refs **94 → 89**, worktrees **210 → 208**, `reapable: 0` (a correct answer), 1 reclaimed
+(`impl-item-2744`), 1 correctly REFUSED (`item-2104` holds an untracked `*.broker.inbox.out/`). 163 of 208
+trees are the already-relocated `../pi-opendurig.worktrees/*` set — a big count is NOT a leak.
+
+**4. THE LOCKED-WORKTREE DEADLOCK (answered + unblocked).** `impl` could not rebase `designer-item-2103`
+because worktree `item-2103` **locked** held the branch, on item `#2103` which is **cancelled**. That is a
+deadlock-shaped pair no prune flags (branch held ⇒ cannot rebase; worktree locked ⇒ will not be reaped;
+nothing in `attention` fires). Freed losslessly with **`git -C item-2103 switch --detach`** (frees the branch,
+keeps every file, works where `worktree remove` refuses on untracked files). `impl` was told at 22:52Z; at
+23:00Z the tip was still `e4fd338` and still CONFLICTS, so **the rebase is OWED**.
+**No work item existed for the UNBLOCKING half** — `#3123` (held) only covers "audit should report retirement",
+and a held row is unclaimable, so nothing was happening. The proposed `check` rule is **"a locked worktree
+over a TERMINAL item whose branch is UNMERGED"**; `#3123` needs re-scoping or un-holding.
+
+**5. 50-COMMIT DOCS AUDIT — fixed in `9408f24`.** `docs/SELFDEV.md`'s seat table was materially WRONG (impl
+listed GLM, is DeepSeek-V4.1-Flash; qa listed GLM, is `local/qwen36`; devtools listed DeepSeek, is
+`local/qwen36`; `qa2`+`architect` omitted; "Ten seats" vs 12) and asserted the author/verifier split "is
+still GLM vs DeepSeek" — FALSE after `a5a4d00`/`e4d0222`. Table re-derived with the command inline; the RULE
+is stated instead of a slogan, and **`devtools` + `qa` share `local/qwen36`**, so devtools-authored tooling
+verified by `qa` is same-family → route to `auditor`/`qa2`. `docs/FEATURES.md`: the pi-pin row had the order
+BACKWARDS (`#2976` runs `sync-pi --link` BEFORE `npm ci`); added **Request TRACE** (`#2545`),
+**`blockedBy`** (`#2951`), **operator-only `pause`/`unpause`/`configure`** (`#1966`), 10→12 seats.
+
+**STILL OWED (routed to `pm`, not the delegate's to do):**
+- **`docs/DECISIONS.md` NUMBERING IS BROKEN ON `main`** — highest real number **D112**, and TWO unnumbered
+  placeholder headings are live (`## D###` @3060 from `90d1381`; `## D-<mint>` @3092 from `47dd2ae`).
+  **Release `#3089` and widen it to mint BOTH existing placeholders.** **`D113` is FREE** (`scribe-item-2219`
+  is unlanded and CONFLICTS: `fd4c233` dangling, tip `a822bbf`), so start at D113.
+- **`docs/STATUS.md` is stale** (last `2026-10-18`, i.e. none of the last 50 commits). Register a refresh
+  behind `#3089`; the 15 bugfix-cluster merges belong there.
+- Not landed, with reasons: `scribe-item-3035` (tip DRIFT `f450cdd`→`f1f788f`), `designer-item-2103` (drift +
+  conflict → rebase OWED), `devtools-item-2587` (verify `#3104` held ON the landing — inverted gate, needs a
+  ruling like `#2976` got), `impl-item-3017` (SUPERSEDED by F12), the M1 pair (lists HELD, slice in flight),
+  and every CONFLICT branch (author non-force rebase + re-verify).
+- Close the landed entries: `#2992`/`#3120`, `#3118`, `#3117`, `#3052`, `#3039`, `#2927`.
+
+**⚠ LIVE HAZARD AT CLOCK-OUT: the tracked tree is DIRTY — `package.json` + `package-lock.json`**
+(`@earendil-works/pi-coding-agent` `^1.3.0` → exact `1.3.0`, i.e. the Phase-1 pin-caret change / `#2969`).
+That is a seat editing the SHARED tree (F12 — **all 12 seats are rooted there** per `audit.seatRoots`), and
+it **blocks every landing pass**. Left untouched deliberately (it is someone's in-flight work). Next agent:
+find the owner (likely `devtools`, `#2638`/`#2969`) and have it land from a worktree — do not stash it blind.
+
+**Exact next command:** `node cli.mjs status` (`DURIG_DB=./selfdev.sqlite`) → then
+`git status --short -- . | grep -v '^??'` to see whether the dep-file dirt cleared, and
+`git rev-parse --short designer-item-2103` to see whether `impl` rebased (expected: a new short sha).
+**Do not:** land while the tracked tree is dirty; `git stash`/`restore`/`checkout --` that dep-file WIP;
+`-D` `architect-item-3005`; re-report "suite blocked by 5 tui-durable failures" (obsolete); push (operator
+holds the grant).
+
+## (superseded) CLOCK-OUT 2026-10-19T21:45Z (delegate) — **THE 10 HUMAN-PARKED ITEMS ANSWERED AND DELIVERED TO `pm` (7 RULINGS); NO SEAT WORK, NO PUSH**
 
 **Read this first.** Operator-directed: enumerate every queue item waiting on a human decision, and answer
 them back to `pm`. Done. **Nothing was landed or pruned this session** — the rulings unblock a pass the
@@ -115,27 +187,21 @@ completed branches, prune them, and prune worktrees no longer in use. Git-only; 
 land with `--suite` until the 5 `tui-durable-*` failures are fixed (report the exact `pass=N fail=M`).
 
 ## NEXT SESSION
-**Current item:** the queue-lifecycle redesign v2 **IS REGISTERED AND IN FLIGHT** — this supersedes the
-stale pointer immediately below. `pm` registered `M1`–`M7`; `M1` was built and verified, then `lead`
-**split it**: **`M1a` (`#3062`) is CLAIMED by `impl`, `M1b` (`#3063`) is HELD and axis-fenced** (`#3046`
-RULING 1b). The human-parked questions are answered **(R1–R7 delivered `21:42:11Z` and ACCEPTED BY THE
-OPERATOR `21:52:23Z` — they are operator rulings now, not delegate suggestions)**; `pm` is applying them
-live (`#2806` cancelled, `#2987`/`#2975`/`#2949` + six stale escalations closed). See the top block for
-R1–R7.
-**Queue id:** `#2992` (land FIRST — CLEAN) · `#3062` (M1a build, claimed) · `#3056`/`#3069` (the
-`workable` removal — `pm` must give `impl` the intended SHAPE) · `#3011`/`#3031`/`#3035`/`#3046` +
-`#2744` (the serialized DECISIONS.md pass) · `#2797`/`#2806` (consolidate, land last) · `#2598` (release
-behind `#3062`).
-**Blocker:** none operator-side. The throughput constraints are the landing pass (R1 order) and the
-single-writer DECISIONS.md serialization (R1b, incl. the `D113` dangling-commit pre-check). Standing:
-`impl-item-2574`/`2578`/`2777` still need an author non-force rebase + re-verify; `land.mjs --suite` is
-still RED on the 5 pre-existing `tui-durable-*` failures; push owed (operator holds the grant).
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` then re-preflight the R1 landing
-order:
-`for b in devtools-item-2976 impl-item-2420; do git merge-tree --write-tree main $b >/dev/null 2>&1 && echo "$b CLEAN" || echo "$b CONFLICT"; done`
-**Do not:** land on the strength of R1 without re-preflighting each branch (R1 gives the ORDER and the
-DRIVER, not a waiver of the three gates); `git add -A`; force a dirty worktree; delete an `ahead>0` ref;
-push (operator holds the grant); re-escalate the five answered questions to the human.
+**Current item:** `impl` must finish the **`designer-item-2103` rebase** (branch freed by the delegate at
+22:52Z; tip still `e4fd338` and CONFLICT at 23:00Z) so R2's consolidation can complete; and `scribe` must
+own the **`#3089` serialized `DECISIONS.md` pass** (it must now mint the TWO placeholders already on `main`,
+starting from **D113**, which is free).
+**Queue id:** `#2797` (rebase OWED) · `#3089` (DECISIONS mint) · `#2969`/`#2638` (the pin-caret WIP now dirtying
+the shared tree) · `#3123` (re-scope or un-hold the locked-worktree rule) · `#2951`/`#3062`/`#3056` (M1 slice,
+lists HELD) · `#2993`/`#3104` (the two inverted verify gates needing a ruling).
+**Blocker:** the **tracked tree is dirty** (`package.json` + `package-lock.json`, a seat's unpinned edit in
+the SHARED tree) — it blocks every landing pass until its owner moves it to a worktree. Also: `main`'s
+`DECISIONS.md` has two unnumbered headings, `docs/STATUS.md` is 50 commits stale, and **all 12 seats are
+rooted in the shared tree** (F12).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` then
+`git status --short -- . | grep -v '^??' && git rev-parse --short designer-item-2103`.
+
+## (superseded) NEXT SESSION — see the top of this file
 
 ## (superseded) CLOCK-OUT 2026-10-19T21:12Z (delegate) — **OPERATOR ACCEPTS v2 AS THE DESIGN OF RECORD; REDESIGN LEADS CAPABILITY WORK; IMPLEMENTATION DIRECTIVE DELIVERED TO `pm`**
 
