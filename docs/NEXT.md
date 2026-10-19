@@ -23,7 +23,11 @@ _Last refreshed: 2026-10-19T00:51Z (delegate, operator-directed — **WATCH inve
 
 _Last refreshed: 2026-10-19T01:30Z (delegate CLOCK-OUT — landing window + worktree cleanup + watch/hot-loop investigations; five intents delivered; git remote fixed. See the block below for the follow-up.)_
 
+_Last refreshed: 2026-10-19T01:46Z (delegate, operator-directed — operator watched `impl` call `complete_work` on a dirty workspace; verified and filed incident `docs/incidents/2026-10-19-worktree-carry-teardown-collision.md` and routed the defect as intent `worktree-carry-collision-2026-10-19-1` to `pm` (delivered 01:46:12Z). No product code, no worktree touched. **Priority unchanged: #2237/#2321 broker hot-loop.**)_
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T01:30Z, delegate)
+
+**Routed this session (delegate):** intent `worktree-carry-collision-2026-10-19-1` → `pm` (delivered `01:46:12Z`) — the CARRY/teardown collision: `createWorktree` carries the shared tree's tracked-dirty files into every item fork (`src/worktree.mjs:134`, ASK F/#506), and `complete_work`'s clean-only teardown refuses a dirty tree, so **while the shared tree is dirty (the parked `configure` WIP) every completed item leaks its worktree**. Evidence: `#2231` (`impl-item-2231 @166d51f`) and `#2224` (`impl-item-2224 @a2eaf7b`) still on disk dirty; `.spike/serve.err` refusals; also `item-2305`/`item-2315`/`item-2340`. Folded into the already-routed `worktree-rot-prevention-2026-10-19-1` so it is not a duplicate. **Leaked trees left untouched** (dirty orphans, never `--force`).
 
 **Current item (follow-up): the broker hot-loop / watch-support cluster.** Two defects, both already registered and routed to `impl`, **neither ȷet worked** (`queued`, not `claimed`):
 - **#2237** (queued → impl) — a persistent pass-throw **HOT-LOOPS** the broker (~0.5 s) and defeats `serve --stop`; bound the retry pacing so a persistent throw cannot spin.
@@ -42,16 +46,16 @@ _Last refreshed: 2026-10-19T01:30Z (delegate CLOCK-OUT — landing window + work
 **Landing window (operator task) — DONE:** `main` `0cd84f6 → d04f9af` (16 landed, suite green). The operator **pushed**; `origin` is now `https://github.com/chexxor/Durian-Pi.git` (the stale `Pi-OpenDurig.git` URL was fixed this session), `origin/main` = `d04f9af`, **0 ahead**.
 **Backlog — routed, NOT delegate-doable:** 43 unlanded refs: 39 conflicts (author rebase + re-verify; intent `route-conflicts-…`), 2 partial-rebrand (`auditor-item-2154`/`scribe-item-2143` — land with the rebrand stack, not alone). Never land snapshots `item-148`/`selfdev-borrow`.
 
-**Worktree cleanup (operator task) — DONE:** branches **90→64**, worktrees **183→143**, **0 stale registrations**. The remaining count is dominated by the **86 parked archive** at `../pi-opendurig.worktrees/` (detached, content preserved) plus leak residue; the delegate folded the vendored `superpowers` rules (**ownership / ignore-before-create / prune-after-remove**) into `docs/runbooks/leaked-worktrees.md`, and routed the code + guidance halves to `pm` (`worktree-rot-prevention-…`, `worktree-guidance-cleanup-…`). **The operator must rule on the archive** (keep / deregister / dispose) before it shrinks further.
+**Worktree cleanup (operator task) — DONE:** branches **90→64**, worktrees **183→143**, **0 stale registrations**. The remaining count is dominated by the **86 parked archive** at `../durian-pi.worktrees/` (detached, content preserved) plus leak residue; the delegate folded the vendored `superpowers` rules (**ownership / ignore-before-create / prune-after-remove**) into `docs/runbooks/leaked-worktrees.md`, and routed the code + guidance halves to `pm` (`worktree-rot-prevention-…`, `worktree-guidance-cleanup-…`). **The operator must rule on the archive** (keep / deregister / dispose) before it shrinks further.
 
-**Uncommitted in the shared tree:** the `configure` WIP (`src/broker.mjs`, `demo/command-spool.test.mjs`) — **DO NOT touch**; also parked in `git stash@{0}` (patch: `../pi-opendurig.worktrees/.quarantine/_session-scratch/configure-wip.patch`). `wt-2073/` is a mid-merge worktree (real work). `selfdev.sqlite.broker.inbox.out/` is the broker spool.
+**Uncommitted in the shared tree:** the `configure` WIP (`src/broker.mjs`, `demo/command-spool.test.mjs`) — **DO NOT touch**; also parked in `git stash@{0}` (patch: `../durian-pi.worktrees/.quarantine/_session-scratch/configure-wip.patch`). `wt-2073/` is a mid-merge worktree (real work) `selfdev.sqlite.broker.inbox.out/` is the broker spool.
 
 **Do not:** `git add -A`; `git reset --hard` / `git clean`; force a dirty worktree; delete an `ahead>0` ref; **push** (operator holds it); edit the `configure` WIP by hand; set `DURIG_SEAT_ROOT` on the `serve` launcher.
 
 ## NEXT SESSION
 **Current item:** **LANDING WINDOW — RAN; route the 39 conflicts.** The window opened and closed cleanly: broker stopped (it was hot-looping), `configure` WIP parked to `stash@{0}` (+ patch), 16 clean branches landed via `scripts/land.mjs --suite` (suite green), broker restarted. **41 branches remain unlanded** — see the split below. Standing priority behind it: **#2189** (TUI Phase 1, `impl`) / **#2187** (pin, `devtools`).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
-**Blocker:** the 39 conflicts need an **author rebase + re-verify** (per `docs/runbooks/resolve-merge-conflict.md`, the delegate does NOT guess a semantic merge). The `configure` WIP is parked in `git stash@{0}` (patch: `../pi-opendurig.worktrees/.quarantine/_session-scratch/configure-wip.patch`); reconcile it with `devtools-item-2182` before restoring for real.
+**Blocker:** the 39 conflicts need an **author rebase + re-verify** (per `docs/runbooks/resolve-merge-conflict.md`, the delegate does NOT guess a semantic merge). The `configure` WIP is parked in `git stash@{0}` (patch: `../durian-pi.worktrees/.quarantine/_session-scratch/configure-wip.patch`); reconcile it with `devtools-item-2182` before restoring for real.
 **Window result (2026-10-19T00:35Z):** `main` `0cd84f6 → d04f9af`; 16 landed (suite green): `auditor-item-1924/1940/2148/2150/2209`, `devtools-item-2095`, `impl-item-1274/1498/2123/2126`, `qa-item-2201/2279`, `scribe-item-2111/2124/2246`, `security-item-2220`. `main` is now **36 ahead of `origin/main`** (unpushed — operator holds push). **Broker: UP pid `15740`** (`WAKE pm`, 0 `pass-threw`). The wedge is NOT corruption — `repair-pi-live.mjs ./selfdev.sqlite 3` reported no unreadable `pi.live`. It is **contention**: `cli.mjs watch` polls every 750 ms and the idle loop runs a **full pass per read intent** (~80/min), accelerating the `probeStorage` contention residual (#1587 part 4) → `pass-threw` hot-loop. Watch support is delivered to `pm` (intent `broker-watch-support-2026-10-19-1`); until it lands, a running `watch` during active generations can re-trigger the hot-loop. DO NOT kill `watch` as the fix — the operator needs it; the fix is the broker change.
 **Conflict set to route to `pm` (39):** stack TIPS only — guard `impl-item-1444-fix` (broker/confine/seattools), degen `impl-item-1705`, checkup `impl-item-1727`, compacteval `impl-item-1604`, provision `devtools-item-1754`, spool `devtools-item-2073`, configure `devtools-item-2182`, halt `impl-item-1769`, operator-gate `impl-item-1966`, suite-partition `devtools-item-1558`, security position `impl-item-1519`/`security-item-1475`; doc-only `auditor-item-2179`, `impl-item-1529/1587`, `qa-item-1087`, `scribe-item-1232/1233/1257/1301/1323/1469/1565/2078/2169/2199/2219`; plus the stack SUBSETS (`impl-item-1151/1225/1249/1261/1609/1704/1823`, `item-9002/9003`, `auditor-item-2186`) which become redundant once their tip lands. **Never land snapshots `item-148`/`selfdev-borrow`.** The 2 remaining clean refs (`auditor-item-2154`, `scribe-item-2143`) are a PARTIAL rebrand (`constitution.txt` only) that breaks the `rig.starter.json` mirror — land them with the rebrand stack, not alone.
 **Do not:** `git add -A`; `git reset --hard` / `git clean`; edit the `configure` WIP by hand; land a conflicted branch by hand; delete an `ahead>0` ref; set `DURIG_SEAT_ROOT` on the `serve` launcher.
@@ -377,7 +381,7 @@ touch it).
 >   tests, dependency pin, `pi.system`/`reset`, halt guard, …).
 > - `docs/reviews/project-rename-durian-pi.md` — rename hazard + safe procedure. **NOT executed**: 140
 >   worktrees / 139 admin dirs / live processes hold the tree; a string-only rename would make docs
->   false (they name the real `../pi-opendurig.worktrees/`). Needs a GitHub rename + a declared window.
+>   false (they name the real `../durian-pi.worktrees/`). Needs a GitHub rename + a declared window.
 > - **REBRAND (operator): `durig` → `durian-pi`** across all tracked text + identifiers (267 files,
 >   24 `DURIAN_PI_*` env vars, `durian-pi.config.json`, `.durian-pi/`, the skill dirs), with deprecated aliases for
 >   the env vars + config filename so the live rig keeps working. Intent
@@ -502,7 +506,7 @@ session's `NEXT.md` side-spike block — see CAUTION).
 **Current item:** finish the branch backlog. This session pruned **51 merged branches** (clean ones), landed **5
 verified clean branches** (`devtools-item-1904` compact-spool + `scribe-item-1968/1969/1970/1971`
 docs-truth) via `scripts/land.mjs --suite` (suite **138/0**), and — on the operator's ruling —
-**archived 41 dirty merged-ref worktrees out-of-tree** to `../pi-opendurig.worktrees/` (content moved
+**archived 41 dirty merged-ref worktrees out-of-tree** to `../durian-pi.worktrees/` (content moved
 byte-for-byte, then the merged ref freed with `git switch --detach` + `git branch -d`; nothing discarded).
 `main` `95e7c0c → b3710f3 → e072392` (docs commit). **Refs 137→46**, worktrees 167→135. **38 unlanded
 branches remain** (was 36; live seats created new ones during the session).
@@ -531,7 +535,7 @@ rebase + re-verify before landing.
 
 **ARCHIVED (operator ruling, 2026-10-18):** the 41 merged refs pinned by worktrees dirty with real
 content were **archived out-of-tree**, not discarded — `git worktree move` to
-`../pi-opendurig.worktrees/` (files preserved byte-for-byte, spot-verified by md5), then `git switch
+`../durian-pi.worktrees/` (files preserved byte-for-byte, spot-verified by md5), then `git switch
 --detach` (working tree untouched) and `git branch -d` (merged-only). They remain registered worktrees
 at the archive path (6.3 GB); recover any item by re-linking or inspecting there. The 41 dirs are gone
 from the project root.
@@ -545,7 +549,7 @@ shared store while the broker drives.**
 **State at this clock-out:** broker UP pid `7220` (restarted; passes advancing).
 `main` `e072392`, **ahead of `origin/main` (`origin/main` = `95e7c0c`)** — unpushed (operator
 holds push). Tracked tree clean; scratch + archived refs under `.spike/delegate/` and
-`../pi-opendurig.worktrees/`. The **model-swap window
+`../durian-pi.worktrees/`. The **model-swap window
 (`#1957`) still awaits the operator's declared broker stop** (gate green, `#1936` landed).
 
 **Do not:** stop the broker without an operator window (a landing pass is one); leave log/watch viewers
@@ -1159,7 +1163,7 @@ branches stay unlanded by design and are tracked (`#1169`). **Never delete a bra
 2. **Tutor-app references removed** from config, code, tests, the dead `rigs/tutor-pi.rig.json`, and 21
    docs; affected demos green. Local `durian-pi.config.json` `DURIAN_PI_DB` now points at `./selfdev.sqlite`.
 3. **Seat worktrees relocated** (ROADMAP 125, **D89**): 28 terminal + 2 verify scratch moved to
-   `../pi-opendurig.worktrees/`; 5 live/held worktrees remain in `item-*`.
+   `../durian-pi.worktrees/`; 5 live/held worktrees remain in `item-*`.
 4. **Research SOP hardened:** `research-request.md` now requires a follow-up prompt and registering
    proposed ROADMAP items.
 5. **ROADMAP 102–125** registered (git-merging tooling, PM adapters, TUI 124, worktrees 125).
@@ -2014,10 +2018,10 @@ read-only, D11/D40).
 
 Exact next command (drive the selfdev team; the seat root is the live tree):
 
-`DURIAN_PI_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIAN_PI_DB=./selfdev.sqlite node cli.mjs send impl --body-file <body>`
+`DURIAN_PI_SEAT_ROOT=C:/Users/Alex/dsh-Projects/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs send impl --body-file <body>`
 
 and have impl `claim_work({ itemId: 480 })` FIRST — a plain `run` makes impl take its oldest queued row
-(impl has ~36). Bounded alternative: `DURIAN_PI_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIAN_PI_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`.
+(impl has ~36). Bounded alternative: `DURIAN_PI_SEAT_ROOT=C:/Users/Alex/dsh-Projects/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`.
 
 Known blocker: the store is **single-writer** — never run two `send`/`run`/`serve` at once. No
 genlock/broker is held at handoff.
@@ -2124,7 +2128,7 @@ the whole point of #473.
 - **Backups under `.spike/delegate/`**: `recovery-WIP.patch`, `storewrite-WIP.mjs`,
   `p2-6-scratch/` (the Job-Object attempts), `scratch-backup/` (the removed scratch), and the
   intent bodies used this session. `.spike/` is gitignored.
-- **Env**: run with `DURIAN_PI_DB=./selfdev.sqlite` and `DURIAN_PI_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig`.
+- **Env**: run with `DURIAN_PI_DB=./selfdev.sqlite` and `DURIAN_PI_SEAT_ROOT=C:/Users/Alex/dsh-Projects/durian-pi`.
   `durian-pi.config.json` sets `DURIAN_PI_MAX_CONCURRENT_SEATS=4` (local, gitignored) for concurrency testing.
 - **Native Windows only** — never `wsl`, `docker`, `docker-compose`.
 

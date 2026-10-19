@@ -96,7 +96,7 @@ sufficient.
 3. Do not force-remove a dirty worktree while a seat may own it: check the queue item's status first.
 4. **Tidy without discarding:** a terminal orphan can be relocated out of the project root instead of
    removed — `git worktree unlock <wt>` then `git worktree move <wt> <archive-dir>/<wt>` — which preserves
-   every uncommitted file and every branch. The delegate used `../pi-opendurig.worktrees/` (2026-10-17:
+   every uncommitted file and every branch. The delegate used `../durian-pi.worktrees/` (2026-10-17:
    28 terminal worktrees + 2 verification scratch moved; 5 live/held worktrees left in place).
 
 5. **RESIDUAL RISK — a TERMINAL item's worktree can still be IN USE** (a verifier checking a completed
@@ -194,7 +194,7 @@ now VISIBLE in the audit (as `non-item` and as an uncommitted count); preventing
 
 2026-10-18 (archive-out-of-tree, operator ruling): 41 merged item-branches pinned by worktrees **dirty
 with real content** (tracked mods, probe scripts, nested verify trees) were **archived, not discarded** —
-`git worktree move` to `../pi-opendurig.worktrees/` preserved every file (spot-verified md5), then
+`git worktree move` to `../durian-pi.worktrees/` preserved every file (spot-verified md5), then
 `git switch --detach` freed the branch (working tree untouched) and `git branch -d` removed the merged
 ref. 41 dirs left the project root; `main` unmoved; nothing forced. The archived worktrees stay
 registered at the archive path (~6.3 GB) and are recoverable. This is the resolution for the class the
@@ -211,3 +211,11 @@ completes — `node cli.mjs worktree scratch clean` (or `cleanVerifyScratch({rep
 a DIRTY one is refused and its work preserved (never --force/clean). Demo `verify-scratch-cleanup`
 covers it. qa-side adoption is the remaining half (the mechanism is provided; the verifier must call
 it on completion).
+
+2026-10-19 (CARRY/teardown collision): `createWorktree` CARRIES the shared tree's tracked-dirty files
+into every new item fork (`src/worktree.mjs:134`, ASK F/#506), while `complete_work`'s teardown is
+clean-only (D60) — so while the shared tree is dirty, a completed item's worktree can NEVER be removed
+and leaks on every completion. Observed on `item-2231` (`impl-item-2231 @166d51f`, 5 paths) and
+`item-2224` (`a2eaf7b`, 4), plus `item-2305`/`item-2315`/`item-2340`. Full record +
+`src/worktree.mjs:119/134/195/494/541-546` citations: `docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`;
+defect routed to `pm` (intent `worktree-carry-collision-2026-10-19-1`).
