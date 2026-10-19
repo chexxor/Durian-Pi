@@ -24,7 +24,7 @@ import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
 import { LOCAL_PROVIDER_ID } from "./providers/local.mjs";
 import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
-import { listWorktrees, removeClaimedWorktree, uncommittedCount } from "./worktree.mjs";
+import { listWorktrees, removeClaimedWorktree, uncommittedCount, pruneWorktrees } from "./worktree.mjs";
 
 /**
  * Seats whose latest settled submission is an operator stop (`aborted:<reason>`).
@@ -801,6 +801,10 @@ export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, termin
     if (result?.removed) removed.push(entry.itemId);
     else keep(entry.itemId, entry.worktree, result?.refused ?? (result?.skipped ? "missing" : "not-removed"));
   }
+  // PRUNE AFTER REMOVE (#2329): a directory deleted out-of-band leaves a STALE registration that
+  // keeps listing and confuses the audit (25 were cleared on 2026-10-19). Prune once at the end
+  // so the sweep self-heals those, whether or not it removed anything this pass.
+  await pruneWorktrees(repoPath);
   return removed;
 }
 
