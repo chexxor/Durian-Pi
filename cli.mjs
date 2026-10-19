@@ -60,6 +60,7 @@ import { describeConfig, loadConfig, loadShippedDefaults, streamSettings } from 
 import { applyEscalations, applyResets, failureStreak, planEscalations, planResets } from "./src/supervisor.mjs";
 import { assessRun } from "./src/degeneration.mjs";
 import {
+	leaseKillTarget,
 	readGenerationSlots,
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
@@ -1842,19 +1843,29 @@ async function cmdStop(seatName, reason) {
       return;
     }
 
-    // (ii) guarantee the halt: kill the cross-process driver that holds the lease.
+    // (ii) guarantee the halt: kill the cross-process driver that holds the lease — but ONLY
+    // after VERIFYING the lease still names the same live, renewing holder (A3, #2586): a
+    // recycled pid would otherwise kill an unrelated process. When the lease cannot be verified
+    // we PREFER SETTLING (step iii) over killing.
     let killed = null;
     let killError = null;
+    let killSkipped = null;
     let slotPath = null;
     if (holder && Number.isFinite(holder.pid)) {
-      killed = holder.pid;
       slotPath = `${DB_PATH}.genlock.${holder.slotIndex}`;
-      try {
-        process.kill(killed, "SIGKILL");
-      } catch (err) {
-        // The holder may already have died, which only helps the stop; the reason is
-        // captured and reported so a failed kill against a LIVE pid is not swallowed.
-        killError = String(err?.message ?? err);
+      const fresh = readGenerationSlots(DB_PATH, maxSeats()).find((g) => g.slotIndex === holder.slotIndex);
+      const target = leaseKillTarget(holder, fresh, seatName);
+      if (target.kill === null) {
+        killSkipped = target.skip;
+      } else {
+        killed = target.kill;
+        try {
+          process.kill(killed, "SIGKILL");
+        } catch (err) {
+          // The holder may already have died, which only helps the stop; the reason is
+          // captured and reported so a failed kill against a LIVE pid is not swallowed.
+          killError = String(err?.message ?? err);
+        }
       }
     }
 
@@ -1903,6 +1914,7 @@ async function cmdStop(seatName, reason) {
       reason: stopReason,
       killed,
       killError,
+      killSkipped,
       aborted: settled,
       db: DB_PATH,
     });

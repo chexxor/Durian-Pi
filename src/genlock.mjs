@@ -101,6 +101,32 @@ export function slotIsStale(holder, { now = Date.now(), uptime = monotonicSecond
 }
 
 /**
+ * A3 (#2586): whether `stop` may SIGKILL the lease holder's pid.
+ *
+ * A lease's pid can be RECYCLED to an unrelated process, so a blind kill is unsafe. Kill only
+ * when the lease is VERIFIED to still be the same, LIVE, renewing holder:
+ *   - the slot re-read (`fresh`) still names the SAME pid AND the SAME seat (it did not change
+ *     hands between the read and the kill), and
+ *   - the holder is NOT stale (a stale slot's pid may already belong to another process).
+ * Otherwise the caller PREFERS SETTLING the submission over killing. Pure, so it is asserted
+ * without spawning processes.
+ *
+ * Stated LIMIT: a genlock holder carries `{pid, seat, since, sinceUptime}` — no runToken — so the
+ * identity available at stop time is (pid, seat, freshness). A token would be a stronger check
+ * and belongs to the genlock work, not the stop path.
+ *
+ * @returns {{kill: number|null, skip: string|null}}
+ */
+export function leaseKillTarget(holder, fresh, seatName) {
+	if (!holder || !Number.isFinite(holder.pid)) return { kill: null, skip: "no holder pid" };
+	if (!fresh || fresh.pid !== holder.pid || fresh.generatingSeat !== seatName) {
+		return { kill: null, skip: "the lease changed or is gone since it was read" };
+	}
+	if (fresh.stale) return { kill: null, skip: "the lease is stale, so its pid may be recycled" };
+	return { kill: holder.pid, skip: null };
+}
+
+/**
  * Refresh a held slot's `since` so it never ages out while its generation is alive.
  * Written to a temp file and renamed, because a concurrent reader that parses a
  * half-written holder reads it as null and would steal a live lease.
