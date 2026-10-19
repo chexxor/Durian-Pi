@@ -5,7 +5,7 @@ writes: false
 precondition: "tree-clean"        # the broker may stay UP: the helper publishes a priority reservation and WAITS for the genlock slots at the FF (#1497/#1498)
 last_verified: 2026-10-19
 verified_by: delegate
-evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landing with the broker UP (lock {slots:4,held:4,waitedMs:31581,reserved:true}), main 4f9e7d6->7b6548e, suite 156 pass / 1 fail (only the pitui symlink)"
+evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 env fail) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 env fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679)"
 check_rule: null
 ---
 
@@ -40,17 +40,34 @@ ask "stop or not?" or "why did --suite fail?".
    `git merge-tree --write-tree main <branch>` (exit 0 = clean, nonzero = conflict).
 3. Land the clean set in ONE call: `node scripts/land.mjs <b1> <b2> ... --db ./selfdev.sqlite`.
    Read the JSON report; `lock.reserved:true` / `lock.waitedMs` show it waited for the slots.
-4. **KNOWN GATE DEFECT (2026-10-19): `--suite` is red on EVERY landing.** `--suite` runs each demo in
-   the helper's **detached** scratch worktree, and the `shared-tree-on-main` check rule (`50f981a`)
-   flags a detached HEAD — so `demo/check.test.mjs` fails there and the helper refuses with
-   `STOPPED: demo/check.test.mjs failed`. Until that rule is fixed (route it to the owning seat),
-   **land WITHOUT `--suite`, then prove the result on `main`**:
+4. **The `--suite` gate works again (FIXED 2026-10-19, `impl-item-2679` on `main`).** The defect was:
+   `--suite` runs each demo in the helper's **detached** scratch worktree, and the `shared-tree-on-main`
+   check rule (`50f981a`) flagged a detached HEAD — so `demo/check.test.mjs` failed there and the helper
+   refused with `STOPPED: demo/check.test.mjs failed`. The rule now **skips a LINKED worktree**
+   (`isLinkedWorktree`: per-worktree git dir vs the common git dir) while still firing on the **shared**
+   tree off `main`, so a landing scratch no longer trips it. **Prefer `--suite`** — it proves the merged
+   result before it becomes `main`:
+   ```bash
+   node scripts/land.mjs <b1> <b2> ... --db ./selfdev.sqlite --suite
+   ```
+   Prove it yourself before relying on it: create a scratch INSIDE the repo (the helper puts its own at
+   `<repo>/.land-scratch-<pid>`, so `node_modules` resolves upward) and run the rule's demo there:
+   ```bash
+   git worktree add --detach "$PWD/.gate-check" main
+   ( cd .gate-check && node demo/check.test.mjs; echo "exit=$?" )   # exit 0 at 3b79159 (was 1)
+   git worktree remove --force "$PWD/.gate-check"; git worktree prune
+   ```
+   A scratch **outside** the repo fails for an unrelated reason (`ERR_MODULE_NOT_FOUND
+   '@earendil-works/...'`) — that is not the rule, so do not read it as a regression. Whatever the helper
+   reports, still prove the final result on `main`:
    ```bash
    node scripts/suite.mjs        # 0 green / 1 real failure / 2 environmental
    ```
    The only failure you should see is `demo/pitui.test.mjs` (the `node_modules/@earendil-works/pi-tui`
    symlink — environmental, not a regression). A REAL failure means `git revert -m 1 <merge>` per
    "If it fails" below.
+   *(`--suite` was skipped for the 2026-10-19 passes while the rule was broken; the helper itself never
+   required it, and the post-landing `node scripts/suite.mjs` run is what proved those landings.)*
 5. Prune each landed ref (`git branch -d` refuses anything unmerged, so this is lossless):
    ```bash
    git merge-base --is-ancestor <branch> main && git branch -d <branch>
@@ -60,7 +77,9 @@ ask "stop or not?" or "why did --suite fail?".
 
 ## Preconditions
 - The branch is **verified** (qa/auditor ack) and mergeable — see `merge.md`'s checklist. The helper's
-  `--suite` gate would normally enforce this, but see the KNOWN GATE DEFECT above.
+  `--suite` gate proves the MERGED RESULT, but it does NOT prove the branch was verified: check the
+  landing list's tip against the branch tip and the gate item's status yourself (`land` is the
+  delegate's/operator's action, not the team's).
 - **A landing pass CANNOT be driven by a broker-hosted seat.** Quiescing requires stopping the broker,
   and stopping the broker ENDS the run of any seat hosted by it — so such a seat cannot stop the broker
   and then land and report. (2026-10-17: the exclusive landing window closed QUIET BUT EMPTY for exactly
@@ -146,6 +165,35 @@ After a real landing, confirm the branch is an **ancestor** of `main` (the workt
 ```bash
 git -C <repo> merge-base --is-ancestor <branch> main && echo LANDED
 ```
+
+## Landing a SET (a cluster): serial, re-preflighted, per-item gated
+
+When the landing list has a dozen verified entries (2026-10-19: the 13-item bugfix cluster, all touching
+`src/broker.mjs`/`cli.mjs`), do **not** hand them all to one helper call and do not trust a single
+preflight. Loop, re-preflighting against the **moving** `main` before each one:
+
+```bash
+for b in <branches in landing order>; do
+  git rev-parse --verify --quiet "$b" >/dev/null || { echo "$b MISSING"; continue; }
+  git merge-tree --write-tree main "$b" >/dev/null 2>&1 || { echo "$b CONFLICT (skip)"; continue; }
+  node scripts/land.mjs "$b" --db ./selfdev.sqlite > .spike/delegate/land-$b.out 2>&1 \
+    && echo "$b LANDED -> $(git rev-parse --short main)" || echo "$b FAILED"
+done
+```
+
+Three rules that pass proved:
+1. **Re-preflight per item, not once for the set.** Branches that were clean against the OLD `main`
+   conflict after the first few merge (`src/broker.mjs` is the collision surface). 2026-10-19: 15 of 18
+   landed; `impl-item-2574`, `impl-item-2578`, `impl-item-2777` conflicted only because `main` had moved.
+   Their landing list said "verified", so a batch call would have refused all 18 and hidden the 15 clean ones.
+2. **Never land a branch whose tip does not match its landing list.** Compare
+   `git rev-parse <branch>` against the `@<sha>` named in the landing-list item; a mismatch means the
+   branch moved after its verify, so the verify no longer covers it (`devtools-item-2261` on 2026-10-19).
+3. **Land in the order the item prescribes.** A stack names its order explicitly (`#2420` BEFORE `#2483`;
+   `#2483` also carries a rework gate) — read the landing-list body, not just the subject.
+
+Then prove the whole merged result ONCE on `main` (`node scripts/suite.mjs`) and prune per
+`branch-cleanup.md` / `leaked-worktrees.md`.
 
 ## If it fails
 - **Refused on tracked modifications:** commit or stash the shared tree's work first (never blindly —

@@ -112,6 +112,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [format-before-commit.md](format-before-commit.md) | my diff shows whitespace or line-ending churn I did not intend | no |
 | [degeneration-guard.md](degeneration-guard.md) | a seat was auto-reset (`pi.reset` naming `degenerate-text=...`); tell a real loop from a false positive, or add a shape | no |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
+| [tracked-files-missing-on-disk.md](tracked-files-missing-on-disk.md) | `git status` shows tracked DELETIONS nobody made; a whole directory (e.g. `scripts/`) is empty on disk while the index and `HEAD` still hold it | no |
 | [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
 | [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land â€” run the review method before the code | no |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
@@ -135,6 +136,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | Write guard / source files | write-corruption-recovery |
 | Constitution / starter mirror | constitution-amendment |
 | Worktrees | leaked-worktrees |
+| Missing files on disk | tracked-files-missing-on-disk |
 | Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
 | Credentials / secrets | leaked-secret |
 | Review method | security-trust-boundary-review |

@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-10-19
 verified_by: delegate
-evidence: "2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced"
+evidence: "2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced. 2026-10-19 (second pass): 9 merged+dirty+unlocked terminal trees relocated (2629/2683/2701/2720/2728/2737/2766/2772/2910) + 2 reapable removed (2632 merged, 2757 unmerged-so-ref-kept) + 4 landed-but-dirty trees relocated (1705/2600/2602/2643); worktrees 206->204, refs 111->83, nothing forced"
 check_rule: null
 ---
 
@@ -287,3 +287,16 @@ an intentional keep (a claimed item or a seat root). Result: 27 relocated in one
 `main` unmoved, nothing forced. The 4 refs that needed no relocation were clean+locked+terminal
 (`impl-item-1390`, `scribe-item-1531`, `impl-item-1585`, `impl-item-1108`): `git worktree unlock` ->
 `git worktree remove` -> `git branch -d`.
+
+**Two rules that must be applied per TREE, not per branch list (2026-10-19, second pass):**
+1. **Re-check the LOCK state from `git worktree list`'s TERSE output**, where it is annotated as a
+trailing ` locked`. A `--porcelain` parse is easy to get wrong: the `locked` line follows the `branch`
+line, so a naive "the next worktree's lock" association marks the wrong tree (it reported all 22 merged
+worktrees as LOCKED, including ones that were unlocked). Reading the terse line (`<path> <sha> [<branch>]
+locked`) is unambiguous. Getting this wrong in the SAFE direction wastes a pass; in the unsafe
+direction it would relocate a live seat root.
+2. **Relocating a tree does not always free only its own ref — check for followers.** Landing
+`impl-item-1705` (tip `349d5d3`) made `auditor-item-2757` (same tip, `ahead=4` at the start of the pass)
+an ANCESTOR of `main`, so its ref became prunable mid-pass. Re-run the `merged`/`held` classification
+AFTER each landing batch; a ref recorded as unmerged at Diagnose time can be safely `-d`'d later in the
+same pass (`git merge-base --is-ancestor` is the gate, never a remembered count).
