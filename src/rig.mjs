@@ -14,6 +14,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { seatHasReadTool } from "./seattools.mjs";
+import { normalizeBlock } from "./queue-lifecycle.mjs";
 import { removeSeatWorkspace } from "./worktree.mjs";
 
 /** Seat roster: name -> conversation id + role text. Session singleton. */
@@ -236,6 +237,12 @@ export function normalizeBlockedBy(list) {
  * `blockedBy` is the optional structured GATE (operator ruling on #2919; D53 supersedes D24): the
  * queue-item ids this work waits on. It rides THIS enqueue path — the one write path — rather than
  * a parallel store, and is omitted entirely when there is no gate (absence = unblocked).
+ *
+ * `requires` and `block` ride the same path (queue-lifecycle M1a, lead #3048): `requires` is the
+ * capability a claimant must advertise (persisted so claimability can read it — it was previously a
+ * send-time check only), and `block` is the structured park (`normalizeBlock` validates it, so the ONE
+ * write path is also the one place a malformed park cannot be stored). Both are omitted when absent:
+ * absence means "no capability requirement" / "unblocked", never "unknown, so hold".
  */
 export async function enqueueItem(
 	tx,
@@ -248,9 +255,14 @@ export async function enqueueItem(
 	tier = null,
 	held = false,
 	blockedBy = null,
+	requires = null,
+	block = null,
 ) {
 	const queue = await tx.doc(RigQueue);
 	const id = queue.nextId++;
+	const gateRequires =
+		typeof requires === "string" && requires.trim().length > 0 ? requires.trim() : null;
+	const gateBlock = block ? normalizeBlock(block) : null;
 	queue.items.push({
 		id,
 		from,
@@ -270,6 +282,12 @@ export async function enqueueItem(
 		// (docs/WORK-ITEM-SCHEMA.md §4/R5, §7). A plain array of ids so the `workable`
 		// predicate (#2673 / #2712) can read it without parsing prose.
 		...(blockedBy ? { blockedBy: [...blockedBy] } : {}),
+		// The capability a claimant must advertise, persisted so claimability can be decided per seat
+		// (F1: it was a send-time check only, so nothing could read it back). Absent = no requirement.
+		...(gateRequires ? { requires: gateRequires } : {}),
+		// The structured PARK (`block`), validated here so the ONE write path is also the one place a
+		// malformed park cannot be stored. Absent = unblocked (the legacy exemption, design §7).
+		...(gateBlock ? { block: gateBlock } : {}),
 		// A HELD/PARKED item (operator queue-hygiene directive, #1885) is created
 		// unclaimable and does NOT wake the recipient: a "registered, do not start"
 		// backlog row must not occupy a working seat's oldest-first claim slot.
@@ -392,18 +410,52 @@ const Router = defineExtension({
 				"Pass `held: true` to create it UNCLAIMABLE and un-waking (a parked backlog registration): " +
 				"it does not occupy the recipient's oldest-first claim slot and does not wake it until released. " +
 				"Pass `blockedBy: [ids]` to record a structured GATE (the queue-item ids this work waits on); " +
-				"omit it when there is no gate. Gates are ids, never prose.",
+				"omit it when there is no gate. Gates are ids, never prose. " +
+				"Pass `block` to record WHY a parked item is parked (reason + a mandatory resolver + reviewBy); " +
+				"omit it when the item is not parked. Pass `requires` for a capability the claimant must advertise.",
 			parameters: Type.Object({
 				to: Type.String({ description: "recipient seat name" }),
 				subject: Type.String(),
 				body: Type.String(),
 				requires: Type.Optional(Type.String({
-					description: "capability the recipient must advertise",
+					description:
+						"capability the recipient must advertise; it is checked now AND persisted on the item so claimability can read it",
 				})),
 				blockedBy: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), {
 					description:
 						"structured gate: the queue-item ids this work is blocked on (must resolve to terminal `done` before the item is workable). Omit when ungated.",
 				})),
+				block: Type.Optional(
+					Type.Object({
+						source: Type.Optional(
+							Type.Union([Type.Literal("declared"), Type.Literal("legacy")]),
+						),
+						reason: Type.String({
+							description:
+								"why the item is parked: dependency|question|operator|schedule|resource|manual|backlog|roadmap-gate",
+						}),
+						resolver: Type.String({
+							description:
+								"who or what clears the park (mandatory): a seat name, operator|human|automatic, #<id> or RM-<n>",
+						}),
+						constraints: Type.Optional(
+							Type.Array(
+								Type.Object({
+									kind: Type.String({ description: "queue|roadmap|window" }),
+									ref: Type.Optional(Type.Union([Type.String(), Type.Number()])),
+									note: Type.Optional(Type.String()),
+								}),
+							),
+						),
+						payload: Type.Optional(Type.Object({}, { additionalProperties: true })),
+						reviewBy: Type.Optional(
+							Type.Union([Type.String(), Type.Null()], {
+								description:
+									"when to look again (ISO date); omit for the per-reason default, null only for backlog/question",
+							}),
+						),
+					}),
+				),
 				held: Type.Optional(Type.Boolean({
 					description:
 						"Create the item PARKED (status held): unclaimable and no wake, so a 'registered, do not start' backlog row cannot starve a working seat. Release it later with release_work.",
@@ -450,6 +502,9 @@ const Router = defineExtension({
 						}
 					}
 					const gate = normalizeBlockedBy(args.blockedBy);
+					// The park is validated BEFORE the commit, so a malformed block is a legible refusal and
+					// never a half-written item (same discipline as the gate above).
+					const park = args.block ? normalizeBlock(args.block) : null;
 					const id = await api.commit(async (tx) => {
 						await assertSendAllowed(tx, me, args.to, args.requires);
 						// Ratcheting tier raise guard: raising an already-tiered task's chain
@@ -472,7 +527,7 @@ const Router = defineExtension({
 								);
 							}
 						}
-						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null, args.held === true, gate);
+						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null, args.held === true, gate, args.requires ?? null, park);
 					}, context);
 					const label =
 						args.held === true
