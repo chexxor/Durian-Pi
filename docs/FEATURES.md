@@ -216,6 +216,7 @@ nothing, opens no socket and adds no table.
 | `step-repetition` | direct | a tool call repeating one the seat made within its last 3 calls |
 | `unverified-completions` | proxy | `complete_work` with no retrieval call in the same turn |
 | `queue-ageing` | direct | minutes since the oldest queued item last changed state |
+| `pass-failed` | direct | `PASS-FAILED` lines the broker wrote to `<db>.broker.log` in the last 24h (ROADMAP 78) |
 | `shared-reviewer-model` | config-derived | a verifier seat sharing an author's model |
 
 Every value travels with its band, baseline, unit and blind spot, and a reading
