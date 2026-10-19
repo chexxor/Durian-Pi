@@ -2,7 +2,7 @@
 incident: broker-mjs-one-line-collapse
 date: 2026-10-19
 severity: sev2
-status: open
+status: resolved
 symptom: "a source file was silently collapsed to one line"
 runbook: write-corruption-recovery
 fix: null
@@ -68,6 +68,14 @@ git checkout -- src/broker.mjs        # OPERATOR ONLY (a seat cannot run checkou
 A non-operator recovery is: `git show HEAD:src/broker.mjs` and write that multi-line content back
 through the guarded `write` tool (never a scratch script or redirect).
 
+## Resolution — 2026-10-19T03:00Z (recovered)
+Recovered non-destructively by the delegate, operator-directed: the collapsed working-tree copy was
+saved to `.spike/delegate/broker.mjs.collapsed-backup-20261019`, then `HEAD`'s content was written back
+(`git show HEAD:src/broker.mjs`), and the file was converted to CRLF so `git status` is clean under the
+repo's `core.autocrlf=true`. **No `git checkout`/discard was used**; the `configure` WIP is preserved in
+`stash@{0}`. Verified: 1,429 lines, `node --check` clean, `import` exports 38 names, `git diff --quiet`
+exit 0. The connected wedge is a separate incident (`docs/incidents/2026-10-18-broker-retry-hotloop.md`).
+
 ## Prevention
 - The `#623` guard is a *narrow refusal*, not a boundary; this incident is evidence it did not cover a
   `fs.writeFileSync`/PowerShell path. Route a guard-coverage item (does `refusalForWrite` see only the
@@ -89,5 +97,6 @@ through the guarded `write` tool (never a scratch script or redirect).
 ## Links
 `docs/runbooks/write-corruption-recovery.md` (the #623 recovery; `git checkout --` is operator-only) ·
 `docs/incidents/2026-10-18-broker-retry-hotloop.md` (the concurrent wedge) ·
+`docs/incidents/2026-10-19-read-op-regression.md` (the follow-up: `main` cannot serve `read`) ·
 `docs/incidents/2026-10-18-broker-dormant-stalled.md` (mentions the collapse guard) ·
 `src/seatguard.mjs` (`refusalForWrite`).

@@ -35,7 +35,26 @@ _Last refreshed: 2026-10-19T02:33Z (delegate, operator-directed — **LANDED #23
 
 _Last refreshed: 2026-10-19T02:35Z (delegate, operator-directed — **operator priority routed**: intent `suite-concurrency-priority-2026-10-19-1` → `pm` (delivered `02:35:36Z`). Make the demo suite / `land.mjs --suite` run with BOUNDED concurrency (`DURIG_SUITE_CONCURRENCY`, isolation for the 61 spawn / 17 `git worktree` / 11 fixed-path / land-helper-genlock tests, flake proof) and sequence it AHEAD of other work, because each landing pass pays the ~5 min suite today. Owner suggested `devtools`, verify `qa`/`auditor`. Evidence in the intent + `.spike/delegate/intent-suite-concurrency-priority.md`.)_
 
-_Last refreshed: 2026-10-19T02:52Z (delegate CLOCK-OUT — git branch management is the operator's next task; see the block immediately below.)_
+_Last refreshed: 2026-10-19T03:24Z (delegate, operator-directed — recovered the collapsed `src/broker.mjs`; found `main` RED, applied the operator-directed `read`-op hotfix `3e17346` (suite 148/148); broker UP pid `12716`.)_
+
+## RESUME HERE (2026-10-19T03:24Z, delegate) — **`main` green again (`3e17346`); broker UP; verify routed**
+
+**Done this session (no push):**
+- Recovered the shared-tree `src/broker.mjs` (collapsed to ONE line, 0 exports, CLI fully broken): backed up the collapsed copy to `.spike/delegate/broker.mjs.collapsed-backup-20261019`; restored HEAD's content; converted to CRLF so `git status` is clean. No `git checkout`/discard; the `configure` WIP is safe in `stash@{0}`.
+- Ran a landing window for `impl-item-2229`, `impl-item-2231`, `scribe-item-2260`, `scribe-item-2331`, `scribe-item-2332` via `scripts/land.mjs --suite`. **It REFUSED: `main` itself was RED** (`demo/broker-read-nopass.test.mjs` — `unknown op: read`; then `demo/command-spool.test.mjs` — stale vocabulary). `main` was not advanced (was `3d102a6`).
+- Root cause: **`c5daca5` (#2211) dropped `"read"` from `SPOOL_OPS` and the handler**, while the tracked `src/brokerread.mjs` (D111) and the committed tests (#2321) required it. With the broker up, the ENTIRE CLI read surface (`status`/`queue`/`watch`) returned `unknown op: read`.
+- **Operator-directed hotfix `3e17346` on `main`** (option (a), union): re-added the `dispatchRead` import, `"read"` in `SPOOL_OPS` (with `"configure"`), the `op === "read"` handler (served from `harness.storage`); corrected `demo/command-spool.test.mjs` to the union. **Suite 148/148** (`scripts/suite.mjs`, `.spike/delegate/suite-read-op-fix.out`).
+- `repair-pi-live.mjs ./selfdev.sqlite 15`/`3`: **no unreadable `pi.live`** (not corruption). Store backup `.spike/store-backup-20261018-220116`.
+- **Broker restarted → pid `12716`** (local env, no seat root); `cli.mjs status`/`watch --once` → `"ok":true`. (An earlier pid `4796` was killed while `pm` held genlocks — a runbook violation; `resume` cleared the 4 stranded runs.)
+- Incidents: **new** `docs/incidents/2026-10-19-read-op-regression.md` (status `mitigated`, fix `3e17346`); `2026-10-19-broker-mjs-one-line-collapse.md` → **resolved**.
+
+**Non-author verify routed:** intent `intent-verify-read-op-hotfix.md` → `pm` (delivered `03:22:57Z`). Do not treat the delegate's suite run as the verify.
+
+**Backlog routed (delivered `03:04:44Z`):** the `read`-op regression (now DONE via `3e17346`) and broker `#2237` (bound the retry pacing) + ROADMAP 78 (`pass-failed`/`SessionFailed.cause`).
+
+**Next:** (1) confirm the non-author verify; (2) re-run the landing window for the 5 clean+verified branches (`scripts/land.mjs --suite`) now that `main` is green; (3) `#2237` is still the durable broker stop-the-spin fix — the `qa conv 15` storage error remains, so a restart can still re-wedge.
+
+**Do not:** `git add -A`; `git reset --hard`/`git clean`; pop `stash@{0}` blindly; force a dirty worktree; delete an `ahead>0` ref; push (operator holds it).
 
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T02:52Z, delegate) — **NEXT TASK: GIT BRANCH MANAGEMENT (operator-directed)**
 
