@@ -132,12 +132,19 @@ export async function ensureIgnored({ repo, target }) {
  * Windows). The failure message includes `err.message` as well as stderr, because
  * an ENOENT/EINVAL spawn failure has EMPTY stderr and the old message hid the cause.
  *
- * After `npm ci`, runs `node scripts/sync-pi.mjs --link` to point node_modules
- * at the built vendor/pi-main tree (the PINNED pi build). A plain `npm ci` from
- * HEAD's package-lock.json resolves to released registry packages (e.g.
- * @earendil-works/pi-durable@1.1.0) which may differ from the production set
- * built from the pin (#2412). The --link step restores parity with the
- * committed pin so worktrees reproduce the production dependency set.
+ * Pre-install: runs `node scripts/sync-pi.mjs --link` FIRST to point node_modules
+ * at the built vendor/pi-main tree (the PINNED pi build). The pi packages
+ * (@earendil-works/pi-agent-core, pi-durable, etc.) are not published to the npm
+ * registry, so `npm ci` alone would ETARGET on them. The --link step installs
+ * file: specifiers that resolve locally, allowing `npm ci` to succeed for the
+ * remaining registry-resolvable deps (chord, pi-ai, get-east-asian-width, js-yaml).
+ *
+ * Post-install: runs `--link` again to ensure the file: packages are firmly in
+ * place even if `npm ci` resolved a stale cached copy. The second pass is
+ * idempotent — `npm install --no-save` overwrites with the same file: target.
+ *
+ * This ordering fixes the #2801/#2976 recurrence where `npm ci` ran before
+ * --link and ETARGET-failed on unpublishable pi packages (#2412).
  */
 export async function installWorktreeDeps(worktreePath) {
 	const pkgPath = join(worktreePath, "package.json");
@@ -145,6 +152,23 @@ export async function installWorktreeDeps(worktreePath) {
 		return { ok: true, skipped: true, worktree: worktreePath };
 	}
 	const { file, prefixArgs } = resolveNpmInvocation();
+	const syncPi = join(worktreePath, "scripts", "sync-pi.mjs");
+
+	// Pre-install: point node_modules at the built vendor/pi-main tree BEFORE
+	// npm ci, so the unpublishable pi packages resolve from the local file:
+	// specifiers instead of the npm registry (which does not host them).
+	if (existsSync(syncPi)) {
+		try {
+			await run(file, [syncPi, "--link"], { cwd: worktreePath });
+		} catch (linkErr) {
+			// --link is best-effort: if vendor/pi-main is not built yet, the
+			// worktree still has the npm ci deps and can run demos that don't
+			// depend on pi-durable. The seat will see the version mismatch and
+			// can run --link manually or the operator can build the pin.
+			console.warn(`sync-pi --link (pre) in ${worktreePath}: ${linkErr.message}`);
+		}
+	}
+
 	let result;
 	try {
 		result = await run(file, [...prefixArgs, "ci", "--prefer-offline"], { cwd: worktreePath });
@@ -154,18 +178,14 @@ export async function installWorktreeDeps(worktreePath) {
 			`npm ci --prefer-offline failed in ${worktreePath}:\n${detail}`,
 		);
 	}
-	// Post-install: point node_modules at the built vendor/pi-main tree so the
-	// worktree reproduces the PINNED pi build (not the released registry set).
-	const syncPi = join(worktreePath, "scripts", "sync-pi.mjs");
+
+	// Post-install: re-run --link to ensure the file: packages are firmly in
+	// place even if `npm ci` resolved a stale cached copy. Idempotent.
 	if (existsSync(syncPi)) {
 		try {
 			await run(file, [syncPi, "--link"], { cwd: worktreePath });
 		} catch (linkErr) {
-			// --link is best-effort: if vendor/pi-main is not built yet, the
-			// worktree still has the npm ci deps and can run demos that don't
-			// depend on pi-durable. The seat will see the version mismatch and
-			// can run --link manually or the operator can build the pin.
-			console.warn(`sync-pi --link in ${worktreePath}: ${linkErr.message}`);
+			console.warn(`sync-pi --link (post) in ${worktreePath}: ${linkErr.message}`);
 		}
 	}
 	return { ok: true, worktree: worktreePath, stdout: result.stdout.trim() };
