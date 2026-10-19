@@ -242,6 +242,16 @@ routes a landing pass when several are outstanding. A user-facing change has des
 runs the covering demo on the merged result, removes the item's clean worktree, and deletes the branch
 with `git branch -d`. A branch that cannot merge cleanly goes back through W2 for a rebase - never force.
 
+**Worktree cleanup ownership (provenance):** whoever CREATES a worktree owns its cleanup. durian-pi
+reaps only the trees it creates - `item-<id>` (terminal + unlocked + clean) and qa's throwaway
+verify-scratch (`.verify-*` / `verify*` / `wt-*`, unlocked + clean). It NEVER reaps a tree a harness,
+a viewer, or the operator created: those classify as `non-item` and are always KEPT
+(`classifyWorktrees`, `src/broker.mjs`), and a tree that is a live seat's cwd is `seat-root` (also
+KEPT). The keep-reasons in `worktree audit` are the per-tree form of this rule, and the sweep acts
+on `reapable` alone. A removal is clean-only (D60): a dirty tree is refused and reported, never
+`--force`d. Source: the vendored `using-git-worktrees` / `finishing-a-development-branch` skills and
+the rototill design doc, "Provenance-based ownership".
+
 **The gate is a checklist the agent applies, not an auto-gate** (operator preference, 2026-10-17): a
 **universal** gate (item id + one concern + explicit paths; independent review of the artifact;
 `node --check`; the covering demo passes with failing-first evidence; clean merge; no push; never merge a

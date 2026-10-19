@@ -619,6 +619,16 @@ export const WORKTREE_KEEP_REASONS = [
  * `wt-658-41d0ec9`. They are throwaway by convention, so an UNLOCKED + CLEAN one is reapable just
  * like a terminal item's tree — the verifier-must-lock protocol is what protects an in-use one.
  */
+/**
+ * PROVENANCE / OWNERSHIP (WORKTREE-ROT 3/3, #2330): whoever CREATES a worktree owns its cleanup.
+ * durian-pi reaps only the trees it creates — `item-<id>` (terminal + unlocked + clean) and the
+ * verify-scratch below (unlocked + clean). Anything else is a harness/viewer/operator tree: it
+ * classifies as `non-item` and is ALWAYS kept, and a tree that is a live seat's cwd is `seat-root`
+ * (also kept). The keep-reasons in `classifyWorktrees` are the per-tree encoding of this rule, and
+ * `reconcileOrphanedWorktrees` acts on `reapable` alone — every other reason is a KEEP. Source: the
+ * vendored using-git-worktrees / finishing-a-development-branch skills and the rototill design doc,
+ * "Provenance-based ownership".
+ */
 export const VERIFY_SCRATCH_RE = /^\.?(verify|wt)/i;
 
 /**
