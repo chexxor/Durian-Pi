@@ -2437,7 +2437,7 @@ recurrences; `pm` sequences them against 61–71.
     2026-10-16, up to two days old), holding the store and muddying `ps`. The broker/`up` reaps viewers
     older than their originating session, or `status` names them. *Owner:* impl · *Where:* `cli.mjs`,
     `src/broker.mjs`. *Acceptance:* stale viewers are reaped or reported; no silent accumulation.
-78. **Broker crash forensics + survive a conversation storage error (DELIVERED `d509e2f`).** The broker died on `Session failed
+78. **Broker crash forensics + survive a conversation storage error (DELIVERED `d509e2f`; pacing/legibility half DELIVERED `3021fe2`).** The broker died on `Session failed
     after a storage error; close and reopen it` with no `EXIT` and no cause logged, stalling the queue
     (impl). Make the broker log the `cause` chain, skip the poisoned conversation for the pass instead
     of dying, and surface it as attention. *Owner:* impl · *Where:* `cli.mjs` `cmdServe`, `src/broker.mjs`.
