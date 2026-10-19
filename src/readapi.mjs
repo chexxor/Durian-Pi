@@ -195,15 +195,28 @@ export async function readRigHealth(
 	const pages = await readSeatPages(storage, BACKGROUND_CONTEXT, seats, entryLimit);
 	// The submission record carries no admission timestamp (scanSubmissions
 	// returns id/status/entry only), so recover it from the admitted input ENTRY's
-	// timestamp for the admitted_not_started notice; left undefined when that entry
-	// has fallen off the bounded page (ROADMAP 37a).
+	// timestamp for the admitted_not_started notice. When that entry has fallen off
+	// the BOUNDED page (ROADMAP 37a), fall back to the newest entry the page DOES
+	// carry, so `lastActivity` keeps meaning ACTIVITY (#2229).
 	for (const seat of seats) {
 		const latest = latestByConv.get(seat.conversationId);
 		const entryId = latest?.entry;
 		if (!latest || entryId == null) continue;
 		const admitted = (pages[seat.name] ?? []).find((e) => e.id === entryId);
 		const ts = admitted?.model?.[0]?.timestamp;
-		if (Number.isFinite(ts)) latest.admittedAt = ts;
+		if (Number.isFinite(ts)) {
+			latest.admittedAt = ts;
+			continue;
+		}
+		// #2229 (operator hit): the admission entry is off-page — a long conversation, or a
+		// compaction between admission and read — so `admittedAt` stayed undefined and the
+		// field was OMITTED, rendering an ACTIVE, mid-run seat as IDLE on `status`/`ui` (the
+		// operator concluded "the local seats are not taking work"). `lastActivity` means
+		// ACTIVITY, not "the last admitted submission": fall back to the NEWEST entry the
+		// seat's page actually carries (newest-first, so the first finite timestamp wins).
+		// Still no field when the page holds no timestamp at all — the honest empty state.
+		const newestTs = (pages[seat.name] ?? []).map((e) => e?.model?.[0]?.timestamp).find((t) => Number.isFinite(t));
+		if (Number.isFinite(newestTs)) latest.admittedAt = newestTs;
 	}
 	// ASK B (#502): project each seat's last activity onto its row. ISO-8601
 	// (Date.toISOString) keeps the JSON contract comparable across surfaces, and
