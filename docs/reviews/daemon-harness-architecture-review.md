@@ -91,8 +91,14 @@ flags, recorded here so it is not re-litigated:
 ## 5. Follow-up questions left open
 
 Written to `docs/reviews/daemon-harness-architecture-followup-research-prompt.md` for the operator to
-route: the exact OpenHands `LocalFileStore.lock()`/`FIFOLock` protocol; whether any *in-process*
-commit callback of ours can perform slow/foreign work; and the conformance-bench item schema.
+route. Twelve questions in three clusters: the lock/scale details (OpenHands' `LocalFileStore.lock()`
+and `FIFOLock` protocol, the resource-keyed lock manager, `node:sqlite` `database is locked` failure
+signatures under WAL, the conformance-bench schema, per-record append vs SQLite at our scale); the
+broker-lifecycle cluster (bounded graceful shutdown with a force fallback, a genuinely read-only second
+connection, wedge-vs-slow-pass liveness, spool delivery semantics, Windows process lifecycle); and the
+seam/scale cluster (suite concurrency/isolation, and the security model of the `Operations` seam).
+**One question moved back in-house:** whether *durian-pi's own* `runtime.commit` callbacks ever do slow
+or foreign work (pi-durable's generation path is verified clean; our code has not been audited for it).
 
 ## 6. What this means for the operator's question
 

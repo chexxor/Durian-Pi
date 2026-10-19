@@ -44,6 +44,49 @@ The accepted refinements are registered as ROADMAP 153–158. The questions belo
    than WAL SQLite, or does it trade a lock problem for an inode/fsync/latency problem? Any published
    numbers on append throughput and recovery time would decide whether ROADMAP 157 is worth opening.
 
+### The broker-lifecycle cluster (informs `#2420`, `#2406`, ROADMAP 61–64)
+
+6. **Bounded graceful shutdown with an unconditional force fallback.** How do the reference daemons
+   (OpenCode's server, OpenHands' Agent Server, Forge under PM2/systemd) terminate a *wedged* run: how
+   they bound the drain, what they cancel (stream vs tool call vs commit), and when they escalate to
+   `SIGKILL`/`TerminateProcess`. Give the concrete deadline/escape pattern. This is the design behind
+   our owed `#2420` (the broker currently waits `harness.waitForIdle()` unbounded).
+
+7. **A genuinely read-only second connection under WAL.** For a durable store that must be read while a
+   single writer owns it, what is the canonical recipe so the reader can never acquire or stall the
+   writer: SQLite URI `mode=ro`, `PRAGMA query_only`, `immutable=1`, or a snapshot read? Does a
+   long-lived read-only connection ever pin the WAL and stall the writer's checkpoint, and does
+   `node:sqlite` (`DatabaseSync`) differ from `better-sqlite3` here? This decides `#2406` and whether
+   our "no second store opener" rule is sufficient.
+
+8. **Distinguishing a wedged loop from a slow pass.** What liveness contract do the reference daemons
+   expose — a monotonic progress counter, a wall-clock deadline on each pass, a heartbeat that is
+   *separate* from liveness? How do they avoid both false positives (killing a slow model call) and
+   false negatives (a fresh heartbeat over a frozen loop)? Informs the ROADMAP 61–64 watchdog.
+
+9. **Durable spool / transactional-outbox delivery semantics.** For a file-spool that a resident
+   broker drains (our `intent.mjs` → `<db>.broker.inbox/`), what is the established practice for
+   idempotent/exactly-once delivery: `requestId` dedup, safe retry, stale/abandoned request garbage
+   collection, and ordering with the in-flight run of the target seat? Prior art from message-queue
+   outboxes is fine as long as it maps to a single-writer SQLite broker.
+
+10. **Windows-native daemon process lifecycle.** Since durian-pi is Windows-only, how do comparable
+    Node daemons handle signal delivery (`SIGTERM` is not delivered on Windows), process-tree
+    termination (Job Objects / `taskkill /T`), crash vs graceful-exit detection (exit codes, a
+    `down` marker), and running under a service manager. Any prior art on the stop-contract.
+
+### The seam / scale cluster (informs ROADMAP 153–156)
+
+11. **Test-suite concurrency and isolation that does not flake.** How do reference projects bound and
+    isolate tests that spawn processes, create git worktrees, or touch fixed paths, so a suite runs
+    concurrently without cross-test interference? We are trying to replace a ~5-minute serial suite
+    (`DURIG_SUITE_CONCURRENCY`) with bounded concurrency; give the isolation primitives they use.
+
+12. **Security model of the `Operations` relocation seam.** Pi gives each tool an `Operations`
+    interface as the single remoting seam. How is that seam constrained so a relocated or per-seat
+    scoped tool cannot escape its boundary (credential scope, filesystem scope, capability
+    enumeration)? Informs ROADMAP 156 and the per-seat tool-scoping gap (ROADMAP 18).
+
 ## Deliverable
 
 A written report at `docs/research/daemon-harness-architecture-followup.md`, with one section per
