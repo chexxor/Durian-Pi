@@ -71,7 +71,7 @@ export async function repoRoot(dir) {
 }
 
 /**
- * Run `npm ci --prefer-offline` in a worktree to make it usable.
+ * Run `npm ci --prefer-offline` in a worktree to make it usable checkout.
  * Called after createWorktree/claimWorktree because a fresh worktree has no
  * node_modules (gitignored, not bridged).
  *
@@ -82,6 +82,13 @@ export async function repoRoot(dir) {
  * without a shell (#822: a bare `execFile("npm", …)` is `spawn npm ENOENT` on
  * Windows). The failure message includes `err.message` as well as stderr, because
  * an ENOENT/EINVAL spawn failure has EMPTY stderr and the old message hid the cause.
+ *
+ * After `npm ci`, runs `node scripts/sync-pi.mjs --link` to point node_modules
+ * at the built vendor/pi-main tree (the PINNED pi build). A plain `npm ci` from
+ * HEAD's package-lock.json resolves to released registry packages (e.g.
+ * @earendil-works/pi-durable@1.1.0) which may differ from the production set
+ * built from the pin (#2412). The --link step restores parity with the
+ * committed pin so worktrees reproduce the production dependency set.
  */
 export async function installWorktreeDeps(worktreePath) {
 	const pkgPath = join(worktreePath, "package.json");
@@ -89,15 +96,30 @@ export async function installWorktreeDeps(worktreePath) {
 		return { ok: true, skipped: true, worktree: worktreePath };
 	}
 	const { file, prefixArgs } = resolveNpmInvocation();
+	let result;
 	try {
-		const result = await run(file, [...prefixArgs, "ci", "--prefer-offline"], { cwd: worktreePath });
-		return { ok: true, worktree: worktreePath, stdout: result.stdout.trim() };
+		result = await run(file, [...prefixArgs, "ci", "--prefer-offline"], { cwd: worktreePath });
 	} catch (err) {
 		const detail = [err.message, err.stderr].filter(Boolean).join("\n").trim();
 		throw new Error(
 			`npm ci --prefer-offline failed in ${worktreePath}:\n${detail}`,
 		);
 	}
+	// Post-install: point node_modules at the built vendor/pi-main tree so the
+	// worktree reproduces the PINNED pi build (not the released registry set).
+	const syncPi = join(worktreePath, "scripts", "sync-pi.mjs");
+	if (existsSync(syncPi)) {
+		try {
+			await run(file, [syncPi, "--link"], { cwd: worktreePath });
+		} catch (linkErr) {
+			// --link is best-effort: if vendor/pi-main is not built yet, the
+			// worktree still has the npm ci deps and can run demos that don't
+			// depend on pi-durable. The seat will see the version mismatch and
+			// can run --link manually or the operator can build the pin.
+			console.warn(`sync-pi --link in ${worktreePath}: ${linkErr.message}`);
+		}
+	}
+	return { ok: true, worktree: worktreePath, stdout: result.stdout.trim() };
 }
 
 /**
