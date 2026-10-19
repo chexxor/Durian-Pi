@@ -331,3 +331,14 @@ direction it would relocate a live seat root.
 an ANCESTOR of `main`, so its ref became prunable mid-pass. Re-run the `merged`/`held` classification
 AFTER each landing batch; a ref recorded as unmerged at Diagnose time can be safely `-d`'d later in the
 same pass (`git merge-base --is-ancestor` is the gate, never a remembered count).
+
+2026-10-19 (seat-side): `scribe` finished `#3035` (branch `scribe-item-3035 @ f450cdd`, tree retired on
+completion), then went looking for `item-3035` to amend an ADVISORY landing note, concluded "the worktree
+is gone … to amend I'd need to recreate it", and nearly rewrote a completed branch's tip for no semantic
+gain. Nothing was lost — the branch was intact and CLEAN against `main`. The gap was **audience**: this
+runbook (delegate-facing) already says the branch survives and gives the re-attach recipe, but seats read
+`WORK-ITEM-LIFECYCLE.md`, which did not. Fixed there (**§8a**: worktree ephemeral / branch durable, the
+three states, the re-attach recipe, and the never-amend-a-completed-branch rule). Record:
+`docs/incidents/2026-10-19-terminal-worktree-mistaken-for-lost-work.md`. **If a seat asks "where is my
+worktree?", point it at §8a rather than re-explaining** — and check whether the item was merely
+terminal (normal) or live (a keep, never a force).

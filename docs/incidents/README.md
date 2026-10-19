@@ -60,6 +60,8 @@ last_reviewed: YYYY-MM-DD
 
 | Date | Sev | Incident | Symptom | Runbook | Status |
 |---|---|---|---|---|---|
+| 2026-10-19 | sev2 | [git-sha-redacted-as-secret](2026-10-19-git-sha-redacted-as-secret.md) | a tool result is replaced by `[redacted … secret-shaped value (high-entropy-token)]` and the 40-character git SHA / tree OID the command printed is gone | store-secret-detected | open |
+| 2026-10-19 | sev3 | [terminal-worktree-mistaken-for-lost-work](2026-10-19-terminal-worktree-mistaken-for-lost-work.md) | a seat asks about "its" worktree as though it still exists (`cannot change to item-<id>`) and treats a reaped terminal tree as lost work | leaked-worktrees | open |
 | 2026-10-19 | sev2 | [held-rows-orphaned-by-cleared-gates](2026-10-19-held-rows-orphaned-by-cleared-gates.md) | an effort sits dormant with nothing broken: `held` rows whose gates finished are never released and no attention fires | stale-held-backlog | open |
 | 2026-10-17 | sev1 | [landing-safety](2026-10-17-landing-safety.md) | every `node cli.mjs` verb fails to load; the shared tree is left mid-merge | merge | resolved |
 | 2026-10-17 | sev1 | [broker-crash](2026-10-17-broker-crash.md) | seats idle with queued work; no `serve` process; the broker log stops | broker-down-or-stalled | open |

@@ -213,6 +213,42 @@ The delegate's lever for 1–3 is an **intent to `pm`** (`node intent.mjs pm --b
 `pm` owns routing and release. The delegate verifies the outcome; it does not claim or release items
 itself.
 
+## 8a. Your WORKTREE is ephemeral — your BRANCH is the artifact
+
+**A seat works in a worktree that does not outlive its item.** `prepare_workspace` creates `item-<id>` on
+branch `<seat>-item-<id>`; `complete_work`'s teardown, the broker sweep, or a maintainer's prune retires
+the **worktree**, and the **branch survives** — it is deleted only once it is merged into `main`. So after
+you finish an item, `item-<id>` being gone is **normal**, not lost work. Read the branch, never the tree:
+
+| What you see | What it means | What to do |
+|---|---|---|
+| `item-<id>` missing, item `done`, `<seat>-item-<id>` exists | retired on completion — **normal** | nothing; your commits are on the branch |
+| `item-<id>` missing, item **live** (`claimed`/`queued`) | reaped while live — a **keep** case, never a force | escalate (`runbooks/leaked-worktrees.md`); do not rebuild |
+| you never had an `item-<id>` worktree | the F12 seat-root fallback: your cwd is the **shared tree** | say so in your report; do not edit the shared tree |
+
+**Check it, don't assume it** (short ids — see `incidents/2026-10-19-git-sha-redacted-as-secret.md`,
+which redacts bare 40-char oids out of tool output):
+```bash
+node cli.mjs worktree audit            # per-seat roots + every worktree's state
+ls -d item-<id> 2>/dev/null; git rev-parse --short <seat>-item-<id>   # tree vs branch
+```
+
+**To touch a branch whose worktree was retired, RE-ATTACH — never rebuild:**
+```bash
+git worktree add ../<seat>-item-<id> <seat>-item-<id>   # re-attaches the branch at its existing tip
+```
+No commits are lost. Do **not** hand-roll a new branch for an item that already has one — the tool owns
+the branch name (`BRANCH-AND-WORKTREE-LIFECYCLE.md` §2).
+
+**Do NOT amend a completed item's branch to fix advisory prose.** A landing note that says "derive the
+D-number at land time" cannot be wrong in a way that matters, and amending rewrites the tip of a branch
+that a landing list may already pin — forcing a re-verify for no semantic gain. Fold the correction into
+the item that owns the file (e.g. the serialized `DECISIONS.md` pass) instead.
+
+*Why this section exists: `incidents/2026-10-19-terminal-worktree-mistaken-for-lost-work.md` — a seat spent
+turns re-deriving this and nearly amended a completed branch. The knowledge lived only in the delegate
+runbooks, which a seat does not open.*
+
 ## 9. Authoritative sources
 
 | Question | Source |
@@ -222,7 +258,8 @@ itself.
 | What wakes a seat? | this file §4; `src/driver.mjs` `selectWakes` |
 | What is surfaced to the operator? | this file §5; `src/attention.mjs` |
 | How do I unstick a parked row? | this file §8; `runbooks/stale-held-backlog.md` |
-| Why did this class break? | `incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md` |
+| Where is my worktree / my branch after the item is done? | this file §8a; `BRANCH-AND-WORKTREE-LIFECYCLE.md` §2 |
+| Why did this class break? | `incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md` · `incidents/2026-10-19-terminal-worktree-mistaken-for-lost-work.md` |
 | How should this be redesigned? | `reviews/queue-lifecycle-redesign.md` |
 
 ## 10. How to re-verify this document
