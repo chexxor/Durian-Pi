@@ -3,6 +3,33 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:30Z, delegate) — **NEXT-WORK PRIORITIES DELIVERED TO `pm` (3 intents); LANDING GATE `#2679` FIRST, THEN BUG-FIX CLUSTER, THEN STANDING PRIORITIES**
+
+**Read this first.** The operator reviewed the roadmap+queue with the delegate, accepted the
+next-work recommendation, and directed that it be delivered as intents to `pm`. No seat work and no
+push by the delegate.
+
+**Delivered this session (all `delivered:true`, 08:29:41–42Z):**
+- **`operator-next-landing-gate-2026-10-19-1`** — RESTORE THE LANDING GATE: sequence **`#2679`**
+  (`land.mjs --suite` refuses every landing; the `shared-tree-on-main` rule from `50f981a` fires in the
+  helper's detached scratch) AHEAD of other impl work; failing-first demo; non-author verify `#2680`.
+- **`operator-next-bugfix-cluster-2026-10-19-1`** — reaffirms `#2498` (defects outrank capabilities) and
+  folds the architect review's ranked broker defects (D112) into ONE ordered cluster: `#2420` → 159
+  (`#2496`) → 158 (`#2483`) → 160 (`#2497`) → `#2576`/`#2574`/`#2581`/`#2572`/`#2578`/`#2583`/`#2585`/
+  `#2586`/`#2588`. Capability items (153–157, `#2600`) must not jump it. Names the live symptom: `impl`
+  submission `#116651` and `auditor` `#118945` are `admitted_not_started` — the `#2576` defect.
+- **`operator-next-standing-priorities-2026-10-19-1`** — route `#2600` (durable-tui Phase 1, un-park and
+  start now; gate defined by `#2711`/`#2710`), `#2673`+`#2712` (oldest-WORKABLE claim + wake; verify
+  `#2675`), `#2598` (#1587 crash-proof CLI cluster) — all sequenced behind the defect cluster.
+
+**Operator-owned, NOT routed (flagged in the delegate's report):** the `secret_detected` notice
+(`pm` conv 3, entry `#119203`, high-entropy-token) — per `docs/runbooks/store-secret-detected.md` the
+operator must ROTATE the credential (detection-only; no purge verb). Seats must not handle the value.
+Still-owed inputs: `#994` quiet window, `#1135` pricing source.
+
+**Do not:** `git add -A`; pop a stash blind; force a dirty worktree; delete an `ahead>0` ref; push
+(operator holds it); land an unverified branch.
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:25Z, delegate) — **SESSION COMPLETE; NEXT AGENT: REVIEW THE ROADMAP TO PICK THE NEXT WORK ITEM; `land.mjs --suite` GATE RED; 45-branch rebase set owed**
 
 **Read this first.** Operator-directed session: (1) close out PM's stale human-queue; (2) land + prune
@@ -74,18 +101,20 @@ action pending.** The operator's next instruction: a new agent reviews the roadm
 work item.
 
 ## NEXT SESSION
-**Current item:** Clocked out for the day. **The operator's next instruction: review `docs/ROADMAP.md`**
-(together with the live queue) **to discover and pick the next thing to work on.** In flight already:
-the operator-waiting exploration (`#2697` registered; `#2698` advocate / `#2699` designer / `#2700`
-architect), the devtools-local-model proposal from `lead` (`#2695`/`#2708`), and `#2543`/`#2703`
-execution. The land+prune remainder still stands: the clean-but-unlanded `devtools-item-1558`/
-`temp-1558-rebase`, `devtools-item-2412`, `devtools-item-2494`, `impl-item-2356`, and the 45 conflicts'
-author rebases.
-**Queue id:** `#2697` (operator-waiting) + `#2695` (lead proposal); pick the next item from
-`docs/ROADMAP.md` + `node cli.mjs queue`.
+**Current item:** VERIFY `pm` ROUTES THE THREE DELIVERED INTENTS, then drive the ordered work.
+The operator's next-work recommendation is delivered as three intents (see the 08:30Z clock-out block
+above): (1) fix the landing gate `#2679` first; (2) the ordered defect cluster `#2420` → 159 → 158 → 160
+→ the architect defects; (3) standing priorities `#2600` / `#2673`+`#2712` / `#2598` behind the cluster.
+The delegate's job now is to confirm `pm` decomposes/routes them (check `queue` for new rows and `log pm`)
+and to verify what lands — not to route. In flight already: the operator-waiting exploration (`#2698`
+advocate / `#2699` designer), the devtools-local-model proposal (`#2708`), `#2543` (`#2701` qa) and
+`#2703` (auditor verify), plus the 45-branch author-rebase set (`#2681`/`#2682`/`#2683`).
+**Queue id:** the three `operator-next-*` intents delivered 08:29Z (reply lands as new `pm` rows);
+landing gate is `#2679` (+ verify `#2680`).
 **Blocker:** `scripts/land.mjs --suite` is RED in the helper's DETACHED scratch (the `shared-tree-on-main`
-check rule) — land without `--suite` and prove on `main` with `node scripts/suite.mjs` until it is fixed.
-Pending operator inputs: `#994` quiet window, `#1135` pricing source.
+check rule, `#2679`) — land without `--suite` and prove on `main` with `node scripts/suite.mjs` until it is
+fixed. Pending operator inputs: `#994` quiet window, `#1135` pricing source; operator-owned secret
+rotation for `#119203`.
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T07:25Z, delegate) — **NEXT: IMPLEMENT THE STRANDED-SUBMISSION FIX (#2520 review continues); F12 seat-root fallback still live**
