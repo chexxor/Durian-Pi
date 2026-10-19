@@ -3126,3 +3126,45 @@ view; the CLI grows `answer`/`queue --waiting` and `status` grows a headline. Op
 D-number uses the next free slot; scribe's pending D113 lands first and lead #2452 re-derives numbers at
 land time. Evidence: the code citations above; no implementation is claimed.
 
+## D-<mint> — One window resolver for every context bound: the degeneration guard's context threshold is RELATIVE to the seat's effective window (architect, item #2730, 2026-10-19)
+
+**Context.** The devtools small-local-model decay review (`docs/reviews/architecture-devtools-decay-review.md`,
+item #2730) found that the POST-SETTLEMENT degeneration guard uses an ABSOLUTE context bound —
+`DEGEN_DEFAULTS.maxContextTokens = 400_000`, compared as `contextTokens >= maxContextTokens` in
+`src/degeneration.mjs`, with `superviseOnce` calling `assessRun(...)` with no opts (`cli.mjs:1339`). For a
+local seat whose window is 64 k (`src/providers/local.mjs:25`, `DURIG_LOCAL_CONTEXT ?? 65536`) that bound
+can never be reached, so the context backstop is inert. The same seat's window is ALREADY resolved
+twice — `src/context.mjs` (`windowState`/`contextConsumption`, the three-state denominator) and
+`src/inflight.mjs` (`contextWindowFraction`, with the rule "No window => NO token bound"), plus
+`src/readapi.mjs` for display — yet the post-settlement guard consumes none of them. D84 already rules
+the trigger must be a FRACTION (~60-70%) of the measured effective window, with the ordered guard's
+abort above it (~90%); the post-settlement guard never implemented D84.
+
+**Decision.**
+1. **One resolver.** Every context bound in durig — the post-settlement `assessRun` context cause, the
+   in-flight `assessInflightTurn` volume bound, and the display fraction — MUST resolve the seat's window
+   through ONE function (`windowState` over `measured -> declared -> advertised`, with
+   `declaredContextWindow` supplying `declared`). No bound may carry its own absolute constant.
+2. **Relative, per-seat.** The context threshold is `window x fraction` (a per-seat/per-model parameter,
+   not a second hard-coded default), consistent with D84's ~60-70% trigger / ~90% abort.
+3. **No window => no token bound.** When no denominator resolves, the guard MUST NOT invent one
+   (ROADMAP 27); it falls back to the window-independent causes. (This is `inflight.mjs`'s existing rule,
+   generalized.)
+
+**Alternatives considered.**
+- *Keep the absolute 400 k and add a smaller absolute bound for local seats*: rejected — two constants
+  diverge and a third model re-opens the bug; the relative form has no constant to keep in sync.
+- *Only fix the display fraction, leave the guard absolute*: rejected — the guard is what ACTS; a correct
+  display with an inert guard is the current defect.
+- *Rely on the in-flight trigger alone*: insufficient today — `createInflightWatch` is built but UNWIRED
+  (grep: it appears only in `inflight.mjs`), and the post-settlement guard must still be correct for
+  runs the in-flight watch does not cover.
+
+**Consequences.** B and E of the review collapse into one change; a future guard cannot silently diverge
+on the denominator; the local seat's context backstop becomes live against the `declared` window today
+and upgrades to `measured` when #1087 lands, with no change of shape. Cost: `assessRun` gains a window
+input and `superviseOnce` must resolve it per seat (the resolver already exists).
+
+**Status.** Proposed (review, item #2730). `pm` sequences; the D-number is minted at land time per #3075
+(no number is reserved here; D113/D114 landed via scribe-item-3167). Evidence: the code citations above; no
+implementation is claimed.
