@@ -1,10 +1,12 @@
 # Queue lifecycle redesign — make a stuck item impossible, not just visible
 
-**Status:** delegate proposal **v2** (2026-10-19) for `lead` and the operator to rule on. Not a queue
-item and not a decision. **v2 incorporates the independent reviews by `architect` (#2984,
+**Status:** **ACCEPTED — design of record.** The operator accepted **v2** on 2026-10-19 and ruled that this
+redesign **leads capability work** (defect fixes and the prerequisites it depends on are not capability
+work and land first). v2 (2026-10-19) incorporates the independent reviews by `architect` (#2984,
 `docs/reviews/architecture-queue-lifecycle-redesign-review.md`, 4 blockers + 13 CRs) and `advocate`
 (#2985, `docs/reviews/advocate-queue-lifecycle-redesign.md`, 8 CRs); the disposition of every finding is
-in §13.** Where v1 and this document disagree, this document wins.
+in §13. Two scope questions remain for `lead` (F12, F11 — §11). Where v1 and this document disagree, this
+document wins.
 
 **Author:** delegate (operator-directed), 2026-10-19.
 **Companions:** [`WORK-ITEM-LIFECYCLE.md`](../WORK-ITEM-LIFECYCLE.md) (the model today) ·

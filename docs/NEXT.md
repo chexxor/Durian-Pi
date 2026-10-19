@@ -3,6 +3,38 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T21:12Z, delegate) — **OPERATOR ACCEPTS v2 AS THE DESIGN OF RECORD; REDESIGN LEADS CAPABILITY WORK; IMPLEMENTATION DIRECTIVE DELIVERED TO `pm`**
+
+**Read this first.** Operator ruling, 2026-10-19: **accept the v2 redesign**
+(`docs/reviews/queue-lifecycle-redesign.md`) as the design of record, and **it jumps ahead of capability
+work** (defect fixes and its prerequisites are not capability work and land first).
+
+**Delivered:**
+- `operator-start-queue-redesign-impl-2026-10-19-1` (`delivered:true` `21:03:15Z`) — register the
+  **complete** implementation (M1 field model + single mapping/`workable`; M2 propagation in the closing
+  commit + backstop; M3 check rules on authored state only; M4 queue-scope attention; M5 the ~11-file
+  seam migration; M6 lazy legacy mapping + `backlog`; M7 runbook wiring), route **F12/F11 to `lead`**,
+  and land the prerequisites `#2983` → `#2992` → `#2420`/`#2483`.
+- The acceptance + priority ruling is delivered to `pm` as a follow-up intent (`operator-accept-queue-
+  redesign-v2-2026-10-19-1`): record the decision (DECISIONS.md; derive the next free D-number — D113 is
+  reserved by an unlanded scribe item) and start the first slice.
+
+**STATE — verify before acting:**
+- **`pm` has NOT yet registered implementation items** (as of `21:10Z` the max id is ~2995 and none
+  reference the redesign build). First check: did `pm` register M1–M7 and route F12/F11 to `lead`?
+  `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print([(i['id'],i['status']) for i in d['items'] if i['id']>2995])"`
+- **Prerequisites are built but UNLANDED** (items read `done`; `main..branch` counts are 1–2):
+  `#2983` (`impl-item-2951 @8ca9ba9`, the `blockedBy` field; its gate `#2981` is done → releasable);
+  `#2992`/`#2993` (`devtools-item-2976 @e4e6244`, prepare_workspace recurrence fix); `impl-item-2420`
+  (ahead 1), `impl-item-2483` (ahead 2). **41 held landing lists** — a landing window is the throughput
+  constraint.
+- **Two scope questions for `lead` (F12, F11):** `#2673`'s `workable` is the same seam (one predicate or
+  two); the `waiting`-derivation ADR (D114) is unlanded.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print([(i['id'],i['status'],i['to']) for i in d['items'] if i['id']>2995])"`
+**Do not:** implement before `pm` registers items; `git add -A`; force a dirty worktree; push; ship a
+partial model (no stubs / "for now" scaffolding — a slice lands only when its model is complete).
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T21:05Z, delegate) — **REDESIGN REVIEW LOOP CLOSED: ARCHITECT (4 BLOCKERS + 13 CRs) + ADVOCATE (8 CRs) ADJUDICATED; PROPOSAL REVISED TO v2; 2 ITEMS ESCALATED TO `lead`**
 
 **Read this first.** Operator-directed: have `architect` and `advocate` review the queue-lifecycle
@@ -326,19 +358,19 @@ CONFLICT (author rebase set `#2681`/`#2682`/`#2683`).
 (operator holds it); land an unverified branch.
 
 ## NEXT SESSION
-**Current item:** the queue-lifecycle redesign is at **v2** (`docs/reviews/queue-lifecycle-redesign.md`),
-revised after independent `architect` (`#2984`) + `advocate` (`#2985`) review and a per-finding
-disposition (§13). It is a **document, not a queue item** — **it awaits the operator/`lead` ruling**
-before any build item is registered. Two items are escalated to `lead`: the `#2673` `workable` seam (F12)
-and the missing `waiting`-derivation ADR (F11); plus the revised `reviewBy` defaults and the
-read-only-first sequencing.
-**Queue id:** `#2984`/`#2985` (reviews, done) · `#2673` (workable seam — scope call) · `#2788`/`#2789`
-(waiting view/answer, held) · `#2797` (designer doc, queued for landing) · `#2630` (advocate review,
-re-held on the `#2797` landing) · `#2977` (TUI build-chain sequencing).
-**Blocker:** the redesign needs the operator/`lead` ruling; the TUI chain waits on the `#2797` landing +
-`pm` releasing `#2788`. Standing blockers unchanged: `impl-item-2574`/`2578`/`2777` need an author
-non-force rebase + re-verify; push owed (operator holds the grant).
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Current item:** the queue-lifecycle redesign **v2 is ACCEPTED by the operator as the design of record and
+leads capability work**. The implementation directive has been delivered to `pm`; **the next step is
+`pm` registering the M1–M7 build items** and `lead` ruling F12/F11, then landing the prerequisites
+(`#2983` → `#2992` → `#2420`/`#2483`). The first slice should be **M1** (field model + single
+mapping/`workable`).
+**Queue id:** `#2951`/`#2983` (`blockedBy` field — land) · `#2976`/`#2992`/`#2993`
+(prepare_workspace fix — land) · `#2673`/`#2677` (`workable` seam — lead) · `#2788`/`#2789`
+(waiting view/answer — fold into M4) · `#2420`/`#2483` (reliability fence).
+**Blocker:** `pm` has not registered the implementation items yet; F12/F11 await `lead`; the landing
+window is the throughput constraint (41 held landing lists). Standing blockers unchanged:
+`impl-item-2574`/`2578`/`2777` need an author non-force rebase + re-verify; push owed (operator holds the
+grant).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print([(i['id'],i['status'],i['to']) for i in d['items'] if i['id']>2995])"`
 
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:30Z, delegate) — **NEXT-WORK PRIORITIES DELIVERED TO `pm` (3 intents); LANDING GATE `#2679` FIRST, THEN BUG-FIX CLUSTER, THEN STANDING PRIORITIES**
 
