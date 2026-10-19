@@ -141,6 +141,18 @@ Until that lands, the operating procedure is
 [`docs/runbooks/stale-held-backlog.md`](../runbooks/stale-held-backlog.md), and the topic model for a
 future delegate is [`docs/WORK-ITEM-LIFECYCLE.md`](../WORK-ITEM-LIFECYCLE.md).
 
+**Append 2026-10-19T21:00Z (review loop closed).** The redesign was independently reviewed by `architect`
+(`#2984`) and `advocate` (`#2985`) at the operator's direction. Both supported the two-axis model and
+found real defects in v1: the architect raised **4 blockers + 13 change requests** (the v1 invariant was
+not a partition; v1 §9 re-introduced the prose-scanning unsticker v1 §10 rejected; the auto-release could
+fire on operator-window work; a stuck *gate* had no trigger or reminder), and the advocate raised **8
+change requests** (the check rules would have gone red across ~153 unmigrated rows and blocked landings;
+a `parked-review-due` firehose; `send_work({held:true})` cannot be deprecated before the roadmap ledger
+has a write surface). The proposal owner accepted **every** finding and revised the design as **v2**, with
+a per-finding disposition table in
+[`reviews/queue-lifecycle-redesign.md`](../reviews/queue-lifecycle-redesign.md) §13. Two items are
+escalated to `lead` (the `#2673` `workable` seam; the missing D114 ADR).
+
 ## Evidence
 
 - Status histogram (`done` 2350, `cancelled` 429, `held` 153, `claimed` 18, `deferred` 9, `queued` 2) and

@@ -3,6 +3,50 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T21:05Z, delegate) — **REDESIGN REVIEW LOOP CLOSED: ARCHITECT (4 BLOCKERS + 13 CRs) + ADVOCATE (8 CRs) ADJUDICATED; PROPOSAL REVISED TO v2; 2 ITEMS ESCALATED TO `lead`**
+
+**Read this first.** Operator-directed: have `architect` and `advocate` review the queue-lifecycle
+redesign, then the proposal owner (me) reviews their change requests.
+
+**Done this session:**
+- **Review request delivered** (`operator-queue-redesign-review-2026-10-19-1`, `delivered:true`
+  `20:37:55Z`). `pm` registered **`#2984`** (architect) and **`#2985`** (advocate); `#2986` was a
+  duplicate, cancelled.
+- **Both reviews delivered (read them):**
+  `docs/reviews/architecture-queue-lifecycle-redesign-review.md` (`@5c50f34`, architect-item-2984,
+  550 lines, **4 blockers + 13 CRs**) · `docs/reviews/advocate-queue-lifecycle-redesign.md`
+  (`@7387716`, advocate-item-2985, 161 lines, **8 CRs, 3 blocker-grade**).
+- **Every finding adjudicated; proposal revised to v2** —
+  `docs/reviews/queue-lifecycle-redesign.md` now carries a per-finding disposition table in **§13**.
+  **22 accepted, 1 accepted-with-refinement (CR-2), 0 declined.** The substantive corrections: v1's
+  invariant was not a partition (F1); v1 §9 re-introduced the prose-scanning unsticker v1 §10 rejected —
+  fixed by `block.source: declared|legacy` (F2); compound parks need `block.constraints[]` (F3); a stuck
+  gate needs `gate-stalled` + a `dependency.reviewBy` (F4); `blockedBy` needs `RM` ids (F5); propagation
+  belongs in the **closing commit**, not `driver.mjs` (F7); `defer_work`'s QUESTION enqueue **is** the
+  trigger (F8); queue-scope attention needs its own function (F9); a `backlog` reason + revised defaults
+  kill the `parked-review-due` firehose (F10/CR-2); **the check rules must judge AUTHORED blocks only**,
+  or they turn `check` red across ~153 unmigrated rows and stop every landing (CR-1);
+  `send_work({held:true})` must NOT be deprecated before the roadmap ledger has a write surface (CR-3);
+  and non-item-close gates (landings, operator windows) need constraints, not `dependency` (CR-6).
+- **Withdrawn from v1:** the D114 citation (no such landed decision — architect F11) and the claim that
+  the ~51 orphan candidates would auto-open (they would be *visible*; only declared dependencies auto-open
+  — architect F2).
+
+**Escalated to `lead` (scope, not the delegate's to decide):**
+- **F12** — `#2673`'s lead-ratified `workable(item,seat)` is the *same seam* as this design's claimability
+  (and its `requires` clause is not implementable — `requires` is not persisted). One predicate or two.
+- **F11/OQ7** — land the architect's draft ADR (review §4) or drop the `waiting`-derivation citation.
+- **OQ2 defaults / OQ5 sequencing** — revised defaults (operator 3 d, schedule 14 d, resource 3 d, manual
+  7 d, backlog none); read-only rules + queue-scope attention first, axis change behind the reliability
+  cluster.
+
+**Next:** deliver the v2 + this response to the reviewers via `pm` (loop closure), then await the
+operator/`lead` ruling before any build item is registered. The proposal is still a **document, not a
+queue item**.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print({i['id']:i['status'] for i in d['items'] if i['id'] in (2984,2985,2673,2788,2797,2630)})"`
+**Do not:** register build items before the ruling; `git add -A`; force a dirty worktree; push.
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T20:45Z, delegate) — **DURABLE-TUI STATUS RECONSTRUCTED + UNBLOCK INTENT DELIVERED; THE `held`-ORPHAN CLASS DOCUMENTED (1 INCIDENT, 1 TOPIC DOC, 1 REDESIGN PROPOSAL, 1 RUNBOOK)**
 
 **Read this first.** Operator-directed session: (1) explain why the durable-TUI migration is parked,
@@ -282,20 +326,19 @@ CONFLICT (author rebase set `#2681`/`#2682`/`#2683`).
 (operator holds it); land an unverified branch.
 
 ## NEXT SESSION
-**Current item:** the durable-TUI migration's held chain has been **released by intent**
-(`operator-durable-tui-unblock-2026-10-19-1`, delivered `20:22:19Z`) and the queue's `held`-orphan class
-is documented; the queue-lifecycle redesign is proposed and **awaits an operator/lead ruling** before it
-is registered. Verify `pm` acted, then drive the TUI chain (`#2788` → `#2826`/`#2804` → `#2626`).
-**Queue id:** `#2797` (designer doc `a3dff23` — queued for landing), `#2630` (advocate review — re-held
-on the `#2797` landing), `#2977` (build-chain sequencing), `#2788`/`#2789` (waiting view + answer op),
-`#2826`/`#2804` (render rules), `#2626` (Phase 2), `#2733` (proven gate), `#2098` (Phase 3), `#2969`
-(pin caret, devtools). The redesign itself is a doc, not yet an id
-(`docs/reviews/queue-lifecycle-redesign.md`).
-**Blocker:** the chain is now governed by `#2977` and waits on the `#2797` landing (which frees `#2630`)
-and on `pm` releasing `#2788`; the redesign needs an operator/lead ruling. Standing blockers unchanged:
-`impl-item-2574`/`2578`/`2777` need an author non-force rebase + re-verify; push owed (operator holds the
-grant).
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print({i['id']:i['status'] for i in d['items'] if i['id'] in (2630,2797,2788,2789,2826,2804,2626,2977)})"`
+**Current item:** the queue-lifecycle redesign is at **v2** (`docs/reviews/queue-lifecycle-redesign.md`),
+revised after independent `architect` (`#2984`) + `advocate` (`#2985`) review and a per-finding
+disposition (§13). It is a **document, not a queue item** — **it awaits the operator/`lead` ruling**
+before any build item is registered. Two items are escalated to `lead`: the `#2673` `workable` seam (F12)
+and the missing `waiting`-derivation ADR (F11); plus the revised `reviewBy` defaults and the
+read-only-first sequencing.
+**Queue id:** `#2984`/`#2985` (reviews, done) · `#2673` (workable seam — scope call) · `#2788`/`#2789`
+(waiting view/answer, held) · `#2797` (designer doc, queued for landing) · `#2630` (advocate review,
+re-held on the `#2797` landing) · `#2977` (TUI build-chain sequencing).
+**Blocker:** the redesign needs the operator/`lead` ruling; the TUI chain waits on the `#2797` landing +
+`pm` releasing `#2788`. Standing blockers unchanged: `impl-item-2574`/`2578`/`2777` need an author
+non-force rebase + re-verify; push owed (operator holds the grant).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:30Z, delegate) — **NEXT-WORK PRIORITIES DELIVERED TO `pm` (3 intents); LANDING GATE `#2679` FIRST, THEN BUG-FIX CLUSTER, THEN STANDING PRIORITIES**
 
