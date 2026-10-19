@@ -3085,3 +3085,49 @@ and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path
 (#2658).
 LANDING NOTE: D-number assigned at LAND TIME — D113 is taken (spool-op authorization, scribe-item-2219);
 re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge (do not hard-code).
+
+<!-- NUMBER MINTED AT LAND TIME by the DECISIONS.md owner (scribe, #3047): this file has ONE writer
+     and its entries serialize in landing order, so the number is DERIVED, never hardcoded. The full
+     review + ADR text is docs/reviews/architecture-operator-wait-visibility.md. -->
+## D-<mint> — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
+
+**Context.** The operator backlog asks that "waiting on the operator" be **visible and answerable**
+(operator-directives-2026-10-19-2 §3). The state already exists: `defer_work` (and the supervisor's
+escalation) park an item as `status:"deferred"` + `deferredTo:"human"` + `question` + an append-only
+`deferred` transition (`src/rig.mjs:115,692-700`), and `src/attention.mjs:359-366` already derives a
+`deferred_awaiting_answer` notice. What is missing is (a) an operator-facing **read view** that names
+this as "waiting on you", and (b) an **answer flow** — today only the **seat** can leave `deferred`
+(`resume_work`, `src/rig.mjs:721-745`), and a `deferred` item is **never** re-woken by `selectWakes`,
+so a dead seat strands it. Full design: `docs/reviews/architecture-operator-wait-visibility.md`.
+
+**Decision.**
+1. **Representation is reused, not extended.** `deferredTo === "human"` is the marker; an answer is
+   recorded as one more entry in the EXISTING append-only `transitions` array (`{event:"answered",
+   by:"operator"}`). No new field, no new document.
+2. **Visibility is a read-only derivation** over the persisted queue (the D24 shape): a `waiting` view
+   (operator vs seat, oldest-first, with `ageMs`), surfaced by `status` and `queue --waiting`, served
+   through the broker's read spool (D111).
+3. **The answer is one spool op** (`op:"answer"`, added to `SPOOL_OPS` at `src/broker.mjs:368`) that the
+   broker applies with its OWN harness — the sanctioned extension (ROADMAP 71), not a new write path:
+   append the `answered` transition + flip `deferred → claimed` (the `resume_work` flip) + deliver the
+   text as an operator input. A resumed item is re-woken by the stalled-claim branch
+   (`src/driver.mjs:56-64`), so the flow self-heals.
+
+**Alternatives considered.**
+- *Reuse `message` with zero new ops* (C1): no new vocabulary, but the resume depends on the seat acting,
+  so a dead seat leaves the item `deferred` forever (the seed-incident class). Kept as the fallback if
+  "no new write path" is read to bar a new op.
+- *Add `item.answer` / an answers document* (C3): rejected — a new schema, forbidden by the constraint
+  and contrary to D24's read-only ethos.
+- *Have the CLI open a harness and write the resume itself* (C4): rejected — a second writer (the
+  2026-10-16 corruption class); the write guard refuses it.
+
+**Consequences.** No schema migration; the answer is durable and legible in the audit trail; the operator
+can unblock a seat without the seat's cooperation. Cost: one op in the spool vocabulary and one read
+view; the CLI grows `answer`/`queue --waiting` and `status` grows a headline. Open policy questions
+(auto-resume vs seat-resume; seat-to-seat symmetry) are listed in the design doc §7 and are for `lead`.
+
+**Status.** Proposed (exploration, item #2700). Not sequenced; `pm` sequences design then decomposition.
+D-number uses the next free slot; scribe's pending D113 lands first and lead #2452 re-derives numbers at
+land time. Evidence: the code citations above; no implementation is claimed.
+
