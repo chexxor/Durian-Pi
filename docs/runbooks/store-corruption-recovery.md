@@ -55,7 +55,7 @@ For the alive-broker shape, verify all three:
 ```bash
 tail -6 selfdev.sqlite.broker.log          # expect `WAKE <seat>` and `PASS n woke=<seat>`
 tail -4 .spike/serve.err 2>/dev/null      # no new `wake-failed`
-DURIG_DB=./selfdev.sqlite node cli.mjs status >/dev/null   # stderr: no `unreadable pi.live`
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status >/dev/null   # stderr: no `unreadable pi.live`
 ```
 
 ## If it fails

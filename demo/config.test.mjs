@@ -1,4 +1,4 @@
-// Config-file tests: settings resolve as env > durig.config.json > built-in
+// Config-file tests: settings resolve as env > durian-pi.config.json > built-in
 // default, and the CLI reports them honestly.
 // Run: node demo/config.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
@@ -129,7 +129,7 @@ const runCliNew = (cwd, args, env) =>
 
 const runConfig = (env) => runCliNew(dir, ["config"], env);
 
-// A child env stripped of every DURIG_* key, so the file is the only source.
+// A child env stripped of every DURIAN_PI_* key, so the file is the only source.
 const cleanEnv = { ...process.env };
 for (const k of Object.keys(cleanEnv)) {
 	if (k.startsWith("DURIG_") || k === "DEEPINFRA_API_KEY") delete cleanEnv[k];
@@ -220,7 +220,7 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 	/* ------------------- the stream timeout: the one setting durig could not reach */
 
 	// Nothing set means no override, so the platform default stands rather than a
-	// made-up durig number. This is the assertion that keeps the default honest.
+	// made-up durian-pi number. This is the assertion that keeps the default honest.
 	assert.deepEqual(streamSettings({}), {}, "an unset timeout must not invent a value");
 	assert.deepEqual(streamSettings({ DURIG_STREAM_TIMEOUT_MS: "" }), {}, "an empty value is unset");
 	assert.deepEqual(

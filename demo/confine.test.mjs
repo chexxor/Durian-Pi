@@ -82,7 +82,7 @@ try {
 	console.log("\nSC3 — environment, and commands that leave the boundary");
 
 	// The canary the security position asked for: a command prints its environment, and a key
-	// that IS present in durig's own process must not reach it. A caller's explicit request for
+	// that IS present in durian-pi's own process must not reach it. A caller's explicit request for
 	// the key is included deliberately, because "the seat asked" is not a reason to hand it over.
 	if (typeof process.env.DEEPINFRA_API_KEY !== "string") {
 		console.log("  note — DEEPINFRA_API_KEY is unset here; the canary still asserts nothing key-shaped crosses");
@@ -293,7 +293,7 @@ try {
 	);
 	console.log("\n#1465: a READ-ONLY root outside the worktree (the shared .durig) — readable, never writable");
 	{
-		// `claim_work` writes an over-threshold item body to <shared>/.durig/<id>.md, but
+		// `claim_work` writes an over-threshold item body to <shared>/.durian-pi/<id>.md, but
 		// `prepare_workspace` narrows the seat's root to its worktree, so the body it was just handed
 		// became unreadable. The fix is an explicit READ-ONLY root: reads cross, writes never do.
 		const shared = join(outside, ".durig");
@@ -307,7 +307,7 @@ try {
 		denied(await roEnv.remove(join(shared, "42.md"), context), "a DELETE there is REFUSED");
 		// The exemption is exactly this directory — the rest of `outside` stays closed.
 		denied(await roEnv.readTextFile(join(outside, "secret.txt"), context), "a read outside the worktree AND the read-only root is still REFUSED");
-		// And the default wiring: `makeSeatEnv` derives <fallbackRoot>/.durig, so a seat gets it free.
+		// And the default wiring: `makeSeatEnv` derives <fallbackRoot>/.durian-pi, so a seat gets it free.
 		const seatEnv = makeSeatEnv(
 			new Map([[1, { name: "impl", role: "implementation engineer", verifier: false }]]),
 			{ fallbackRoot: outside },

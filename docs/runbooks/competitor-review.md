@@ -31,7 +31,7 @@ Three briefs for three moments. Add the project URL and the operator's question 
 
 > Given `<project url>` and this question — `<question>` — spend one read-only pass deciding whether a
 > full review is worth it. Report: what the project is in two sentences; its license and maturity
-> (stable / preview / archived, and version); the specific durig decisions it could inform; and a
+> (stable / preview / archived, and version); the specific durian-pi decisions it could inform; and a
 > recommend / do-not-recommend call with the reason. Do not answer the question yet.
 
 ### 2. Deep review — the default brief
@@ -118,13 +118,13 @@ because a delta only sees changed lines and cannot find a miss in unchanged code
    Extract the project's own **coverage/self-assessment table and the gaps it admits** — that honesty is
    the highest-value input, because it maps directly onto our gaps.
 6. **Write `docs/reviews/<name>-review.md`**: what it is (with the header from step 2); adoptable
-   practices as a table (practice · evidence path · durig counterpart); a **coverage matrix of durig
+   practices as a table (practice · evidence path · durian-pi counterpart); a **coverage matrix of durian-pi
    against the project's claimed control set** (have / lack / not-applicable); where it does **not** fit
    our constraints; and an explicit adopt / adapt / reject call per practice **and per standard** from
-   step 5. Each adopt names the durig mechanism it would change, and calls out a conflict with a
+   step 5. Each adopt names the durian-pi mechanism it would change, and calls out a conflict with a
    recorded `docs/DECISIONS.md` entry rather than silently contradicting one.
 7. **Add or update its `docs/COMPETITORS.md` entry** (the maintained list). One row per decision, with the
-   durig counterpart it should change or inform, and the pinned HEAD + cited paths.
+   durian-pi counterpart it should change or inform, and the pinned HEAD + cited paths.
 8. **Register the accepted practices as ROADMAP items** (`registered, not scheduled`) with owner and
    acceptance; reject the rest in the review with a reason. See `research-request.md` step 3.
 9. **Close the topic.** If questions remain, write `docs/reviews/<name>-followup-research-prompt.md` for
@@ -134,7 +134,7 @@ because a delta only sees changed lines and cannot find a miss in unchanged code
 ## Verify
 `vendor/eval/<name>` is cloned and its HEAD pinned; the review carries the **header** (HEAD + date, license,
 maturity, version, the question); every claim cites a path in that tree and is marked **`observed`** or
-**`advertised`**; the review carries a **surface-inventory table**, a **"not read" list**, a **durig
+**`advertised`**; the review carries a **surface-inventory table**, a **"not read" list**, a **durian-pi
 coverage matrix**, and a **per-standard adopt / adapt / reject table**; `docs/COMPETITORS.md` has the
 entry; each adopt call is either a registered `docs/ROADMAP.md` item or a named rejection; and any open
 question has a follow-up prompt or an explicit "closed". `git status` shows only the intended doc files.
@@ -149,14 +149,14 @@ question has a follow-up prompt or an explicit "closed". `git status` shows only
 | No pinned HEAD (or a bare branch name) | Claims are not reproducible; a re-review cannot diff |
 | Treating the spec as the implementation | Preview projects ship specs ahead of code (AGT `HALF_OPEN`, quarantine) |
 | Adopting a mechanism you could not verify from the tree | Adoption on faith; name it unverified instead |
-| Summarising without a durig counterpart per practice | Not actionable; no item can be registered |
+| Summarising without a durian-pi counterpart per practice | Not actionable; no item can be registered |
 | Burying the license until borrowing time | A copyleft surprise after the code is written |
 | Leaving open questions implicit | The topic never closes; the next reviewer re-derives it |
 
 ## Re-review (trigger-based)
 
 Re-run brief 3 when (a) upstream moves past the pinned HEAD **and** commits touch a mechanism we adopted
-or rejected; (b) a durig mechanism the review named changes; or (c) a `check` rule it references changes.
+or rejected; (b) a durian-pi mechanism the review named changes; or (c) a `check` rule it references changes.
 Do not re-review on a calendar. A review whose pin is stale for an adopted mechanism is a stale doc.
 
 ## Machinery (proposed)

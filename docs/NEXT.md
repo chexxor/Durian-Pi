@@ -1,4 +1,4 @@
-# durig — NEXT (current pointer)
+# durian-pi — NEXT (current pointer)
 
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
@@ -76,7 +76,7 @@ touch it).
 >   `Session failed after a storage error` (`wake-failed`), plus **`pm` escalating `degeneration` 7× in a
 >   row** (`streaming: pm, auditor`). The local LLM (PolyStrata, `127.0.0.1:8080`) is up. `ui.mjs` pid
 >   `11256` still running.
-> - **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 > - **Do not:** `git add -A`; touch the uncommitted `configure` WIP; land a conflicted branch by hand;
 >   land the unverified set (`impl-item-1498`, `scribe-item-1232/1233/1257`).
 
@@ -87,7 +87,7 @@ touch it).
 >   and `git` fork errors are gone. Root cause now grounded (commit limit = RAM + the old 4,982 MB page
 >   file) — `docs/incidents/2026-10-18-host-resource-exhaustion.md` is **resolved**.
 > - **Broker UP — pid `16368`** (`START 19:29:58Z`, passes advancing, no `wake-failed`, no genlock),
->   restarted **without `DURIG_SEAT_ROOT` and WITH the local env** (`DURIG_LOCAL_API_KEY=local`, since
+>   restarted **without `DURIAN_PI_SEAT_ROOT` and WITH the local env** (`DURIAN_PI_LOCAL_API_KEY=local`, since
 >   #2114 is not on `main`). Step 3 of `broker-down-or-stalled.md` now carries that.
 > - **Dormancy recurrence 8 — PINNED AND FIXED (`6e27ac2`, delegate, operator-directed).** The retry
 >   re-armed only on a per-seat `wake-failed`; a retry pass that throws in a STORE READ before any wake
@@ -107,19 +107,19 @@ touch it).
 > - **OPERATOR PRIORITY unchanged: durable-TUI (durian-pi) migration.** NEXT AGENT: deliver an intent to
 >   `pm` to un-park and sequence **#2095 → #2096** (+ #2103/#2104). Also queued: **#2123** (D105 impl),
 >   **#2124** (scribe, claimed), **#2125** (gated verify), **#2137** (landing list: `devtools-item-2114`
->   @9ba3c8a — landing it removes the `DURIG_LOCAL_API_KEY` restart requirement).
+>   @9ba3c8a — landing it removes the `DURIAN_PI_LOCAL_API_KEY` restart requirement).
 > - **`qa`:** `repeated_failure` (3× `Connection error.` while PolyStrata was down). Its only
 >   non-terminal item `#2145` is `deferred`, so there is no queued `qa` work to re-drive; confirm `qa`
 >   recovers on its next real wake now that the server is up.
 > - `main` = `6e27ac2`, **13 ahead of `origin/main`** (unpushed; operator holds push). Docs updated this
 >   session: 3 incident reports + `broker-down-or-stalled.md` + new `local-provider-down.md` + runbook and
 >   incident indexes.
-> - **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 > - **Do not:** restart the broker without the local env; leave PolyStrata down; treat a fresh heartbeat
 >   as health (read the last `PASS`).
 
 > **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T18:59Z).**
-> - **Why nothing was running: the host commit charge is exhausted — NOT a durig bug.** `systeminfo`:
+> - **Why nothing was running: the host commit charge is exhausted — NOT a durian-pi bug.** `systeminfo`:
 >   Virtual Memory Available **294 MB** of 37,672 MB (In Use 37,378 MB) while physical RAM had ~6 GB
 >   free. The page file was a manually-fixed **4,982 MB** on `C:` (`AutomaticManagedPagefile = FALSE`).
 >   Every node allocation then fails at tiny heaps — which is also why `cli.mjs status` "OOMs" and `git`
@@ -136,11 +136,11 @@ touch it).
 >   @18:51:27Z. `broker.json` is stale; `genlock.0/1/2` are stale (holder pid 16612 gone); submissions
 >   for pm/impl/scribe/auditor are stranded.
 > - **Recovery owed after the reboot** (`docs/runbooks/broker-down-or-stalled.md`): `resume`, then
->   restart WITHOUT `DURIG_SEAT_ROOT` and WITH the local-seat env — `scripts/serve-noroot.ps1` sets only
->   `DURIG_DB`, and **#2114's placeholder key is NOT on `main`** (`src/providers/local.mjs` still returns
->   `""` when `DURIG_LOCAL_API_KEY` is unset; the fix is branch `devtools-item-2114 @9ba3c8a`, landing
+>   restart WITHOUT `DURIAN_PI_SEAT_ROOT` and WITH the local-seat env — `scripts/serve-noroot.ps1` sets only
+>   `DURIAN_PI_DB`, and **#2114's placeholder key is NOT on `main`** (`src/providers/local.mjs` still returns
+>   `""` when `DURIAN_PI_LOCAL_API_KEY` is unset; the fix is branch `devtools-item-2114 @9ba3c8a`, landing
 >   list #2137). So a plain restart BREAKS the local seats (`devtools`/`qa`). Set
->   `DURIG_LOCAL_BASE_URL/MODEL/CONTEXT` (already in `durig.config.json`) + `DURIG_LOCAL_API_KEY=local`
+>   `DURIAN_PI_LOCAL_BASE_URL/MODEL/CONTEXT` (already in `durian-pi.config.json`) + `DURIAN_PI_LOCAL_API_KEY=local`
 >   on the launcher. Verify a live `START`, `WAKE`, advancing `PASS`, and a fresh heartbeat across
 >   several passes — **a fresh heartbeat is NOT health; read the last `PASS`.**
 > - **Provider state (cleared):** DeepInfra works (impl ran 18:39Z, real cost). The `designer … 402`
@@ -159,7 +159,7 @@ touch it).
 > - **Also in flight:** #2123 (D105 local per-item reset, `queued` to impl; was the 81-min queue-ageing
 >   item) — impl was on **#1498** (P1 FF-lock prerequisite) before the broker died; #2124 (scribe docs,
 >   claimed), #2125 (auditor verify, gated).
-> - **Exact next command after reboot:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Exact next command after reboot:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 > - **Do not:** restart the broker without the local key env; `git add -A`; `serve --stop` to force a
 >   `resume` while a broker lives; treat pre-reboot failures as regressions.
 
@@ -190,7 +190,7 @@ touch it).
 > - **Also in flight:** D105 enforcement `#2123` (impl) + docs `#2124` (scribe) + verify `#2125`; the
 >   local-provider fix `#2114` (devtools) + verify; the `format` gate is NOT repo-clean (untouched files
 >   fail), so it is not a usable gate today.
-> - **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+> - **Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 > - **Do not:** stop the broker without a runbook/declared window; `git add -A`; treat the delegate's
 >   demo as the seat verify.
 
@@ -217,7 +217,7 @@ touch it).
 >   going dormant; it does not remove the error.
 
 > **NEXT SESSION START HERE — D105 policy RULED and routed; broker recovered from TWO dormant stalls
-> (2026-10-18T17:33Z).** Operator: "ensure durig has a policy of starting a new context for any new work
+> (2026-10-18T17:33Z).** Operator: "ensure durian-pi has a policy of starting a new context for any new work
 > item picked up by a local model." Delivered as **policy + routing** (the delegate does not implement):
 > - **Policy recorded as `D105`** (`docs/DECISIONS.md`): a seat whose resolved model provider is `local`
 >   (D104) MUST draw a fresh `pi.reset` boundary per NEW work item before working it; durable transcript
@@ -244,10 +244,10 @@ touch it).
 > (pending verify/land), and the broker was recovered from a dormant-stall (2026-10-18T17:16Z).**
 > Operator: "continue ensuring the devtools seat runs the local model of qwen." State: `rig.selfdev.json`
 > `devtools` = `local/qwen36`; PolyStrata `127.0.0.1:8080` serving `qwen3.6-35b-a3b-ud-q3_k_m`
-> (`n_ctx 65536`); broker **pid 3604** started with `DURIG_LOCAL_API_KEY=local` (placeholder) in its env (see below).
+> (`n_ctx 65536`); broker **pid 3604** started with `DURIAN_PI_LOCAL_API_KEY=local` (placeholder) in its env (see below).
 >
 > - **Defect routed + fixed.** Intent delivered to `pm` (`.spike/delegate/intent-local-provider-key.md`)
->   → registered **#2114** (devtools: non-secret placeholder key when `DURIG_LOCAL_API_KEY` is unset in
+>   → registered **#2114** (devtools: non-secret placeholder key when `DURIAN_PI_LOCAL_API_KEY` is unset in
 >   `src/providers/local.mjs`) and **#2115** (auditor, gated verify). devtools implemented #2114 **on
 >   `provider: local, model: qwen36`** → branch `devtools-item-2114 @72efd09` (worktree `item-2114`);
 >   **#2115 is `queued`** — the durable fix is NOT on `main` yet; land it after #2115 passes.
@@ -259,9 +259,9 @@ touch it).
 >   store backup **`.spike/store-backup-20261018-121156`** → restart with the local env → **pid 3604**,
 >   `PASS 1 woke=devtools,auditor`; `idle_with_queued_work` cleared; no new `wake-failed`. Incident
 >   recurrence appended to `docs/incidents/2026-10-18-broker-dormant-stalled.md`.
-> - **Restart requires the local key env.** `scripts/serve-noroot.ps1` sets only `DURIG_DB`; the restart
->   set `DURIG_LOCAL_BASE_URL/MODEL/CONTEXT` + `DURIG_LOCAL_API_KEY=local` (the placeholder). Config file
->   `durig.config.json` already carries the first three; only the key is env-only. Until the source fix
+> - **Restart requires the local key env.** `scripts/serve-noroot.ps1` sets only `DURIAN_PI_DB`; the restart
+>   set `DURIAN_PI_LOCAL_BASE_URL/MODEL/CONTEXT` + `DURIAN_PI_LOCAL_API_KEY=local` (the placeholder). Config file
+>   `durian-pi.config.json` already carries the first three; only the key is env-only. Until the source fix
 >   lands, a plain `scripts/serve-noroot.ps1` restart with no key **breaks local seats** again.
 > - **Suspect not removed:** a long-lived `node ui.mjs` (pid 17340, started ~09:36Z) holds the shared
 >   store — a concurrent-opener (lock-contention) suspect. Left running (operator's TUI); if the stall
@@ -274,15 +274,15 @@ touch it).
 > `rig.selfdev.json` `devtools` model → `local/qwen36` (operator-directed); `up --refresh` reset only
 > devtools; broker restarted (pid `7404`). **Verified end-to-end:** a spooled check message woke
 > devtools, which replied `provider: local, model: qwen36, stopReason: stop` (text `local/qwen36`).
-> **The model string was never the problem** — durig's provider is `local` + `DURIG_LOCAL_MODEL`, so the
-> seat string is `local/<DURIG_LOCAL_MODEL>` (`local/qwen36`); the pi CLI's `local-model/...` is pi's own
+> **The model string was never the problem** — durian-pi's provider is `local` + `DURIAN_PI_LOCAL_MODEL`, so the
+> seat string is `local/<DURIAN_PI_LOCAL_MODEL>` (`local/qwen36`); the pi CLI's `local-model/...` is pi's own
 > separate provider. The server ignores the request's `model` field either way.
 > **DEFECT (needs a seat fix + review):** `src/providers/local.mjs` resolves the auth key from
-> `DURIG_LOCAL_API_KEY` and defaults it to `""`, so the provider fails with
+> `DURIAN_PI_LOCAL_API_KEY` and defaults it to `""`, so the provider fails with
 > `No API key for provider: local` unless that undocumented var is set — its own comment says "resolve a
-> constant". Confirmed: the first wake errored, a restart with `DURIG_LOCAL_API_KEY=local` made it reply.
-> **Operational consequence:** the broker must be started with `DURIG_LOCAL_BASE_URL`,
-> `DURIG_LOCAL_MODEL=qwen36`, `DURIG_LOCAL_CONTEXT=65536`, `DURIG_LOCAL_API_KEY=<non-empty>` —
+> constant". Confirmed: the first wake errored, a restart with `DURIAN_PI_LOCAL_API_KEY=local` made it reply.
+> **Operational consequence:** the broker must be started with `DURIAN_PI_LOCAL_BASE_URL`,
+> `DURIAN_PI_LOCAL_MODEL=qwen36`, `DURIAN_PI_LOCAL_CONTEXT=65536`, `DURIAN_PI_LOCAL_API_KEY=<non-empty>` —
 > `scripts/serve-noroot.ps1` sets none of them, so a plain restart breaks local seats. Also: the old
 > NEXT claim that `qa` "runs locally" was **never true in this store** (qa's last runs were
 > `deepinfra/mistral…`, 402-terminated); only `devtools` has now run on local.
@@ -297,13 +297,13 @@ touch it).
 > (`npm view` → `1.3.0`), NOT in `pi-main.pin.json` `packages[]`, so pin it exactly in `package.json`
 > (not the monorepo pin); **#2096**: the ownership guard reuses `readBrokerState`/`brokerAlive`
 > (`src/broker.mjs`, heartbeat-hardened) + the live-genlock scan (`scripts/land.mjs`, the `#1383`
-> lesson), fails closed naming store+pid, and uses `DURIAN_PI_TUI_*` with `DURIG_TUI_*` aliases. It
+> lesson), fails closed naming store+pid, and uses `DURIAN_PI_TUI_*` with `DURIAN_PI_TUI_*` aliases. It
 > also scopes `cwd`/worktree resolution to Phase 2 (Phase 1 resolves no seat).
 > **BLOCKER (unchanged, now with evidence): #2095/#2096/#2103 were all `deferred by supervisor` after
 > the 402 (`log designer`: `stopReason:"error", 402 … positive balance`).** Only `qa` runs
 > (`local/qwen36` via PolyStrata). **Operator decision needed to start the team:** (a) fund DeepInfra;
 > or (b) authorize pointing `devtools`+`impl` at the local PolyStrata provider (D104 per-seat:
-> `DURIG_LOCAL_BASE_URL` in the broker env, set the two seat models to `local/<id>`, `up --refresh`,
+> `DURIAN_PI_LOCAL_BASE_URL` in the broker env, set the two seat models to `local/<id>`, `up --refresh`,
 > restart the broker in a declared window). Local serves ONE 35B Q3 model / 64k ctx on 24 GB VRAM —
 > adequate for Phase 1's mechanical work but serialized; one heavy seat at a time. **Broker state:**
 > UP pid `10424`, last `PASS 1` at 09:45Z — this is IDLE, **not stalled**: the queue holds **0
@@ -311,8 +311,8 @@ touch it).
 
 > **LOCAL INFERENCE (2026-10-18) — `qa` runs locally; DeepInfra 402 still blocks the rest.** PolyStrata
 > (`C:\Users\Alex\dsh-Projects\PolyStrata`) serves Qwen3.6-35B-A3B UD-Q3_K_M on
-> `http://127.0.0.1:8080/v1` (OpenAI-compatible; tool calls work). durig gained a **per-seat `local`
-> provider** (D104): with `DURIG_LOCAL_BASE_URL` set, a seat model `local/<id>` uses it while others
+> `http://127.0.0.1:8080/v1` (OpenAI-compatible; tool calls work). durian-pi gained a **per-seat `local`
+> provider** (D104): with `DURIAN_PI_LOCAL_BASE_URL` set, a seat model `local/<id>` uses it while others
 > keep the default. The selfdev `qa` seat is now `local/qwen36`; other seats still need funded
 > DeepInfra. Settings that make it reliable on 24 GB VRAM / 32 GB RAM: close games, engine
 > `--vram-reserve-mib 512` (stops `cudaGraphInstantiate` OOM), and `min_free_vram_mib` — a SERVER config
@@ -324,11 +324,11 @@ touch it).
 > `last_run_failed: model_error: 402: You need positive balance to do inference`, and the supervisor
 > escalated each after repeated failures. `#2103` (the operator-directed UX consultation) is `deferred`
 > to human; `#2104` (advocate) is `deferred` waiting on pm. **Operator action required: top up
-> DeepInfra** (provider = `deepinfra` in `durig.config.json`) or switch to a funded provider/key —
+> DeepInfra** (provider = `deepinfra` in `durian-pi.config.json`) or switch to a funded provider/key —
 > retrying or resetting seats cannot help. After funding: `resume`, re-queue `#2103`/`#2104`, let the
 > broker re-wake. Broker is UP (pid 8196, PASS advancing); store healthy (no corruption); backup at
 > `.spike/store-backup-20261018-022048`. **Security: the DeepInfra key lived in gitignored
-> `durig.config.json` and was echoed during diagnosis — rotate it.**
+> `durian-pi.config.json` and was echoed during diagnosis — rotate it.**
 
 > **DELEGATE SESSION (2026-10-18) — durable-tui merge pack delivered; rename blocked on a window.**
 > The operator directed: (1) proceed with the durable-tui merge procedure; (2) gap-analyze the spike vs
@@ -349,7 +349,7 @@ touch it).
 >   worktrees / 139 admin dirs / live processes hold the tree; a string-only rename would make docs
 >   false (they name the real `../pi-opendurig.worktrees/`). Needs a GitHub rename + a declared window.
 > - **REBRAND (operator): `durig` → `durian-pi`** across all tracked text + identifiers (267 files,
->   24 `DURIG_*` env vars, `durig.config.json`, `.durig/`, the skill dirs), with deprecated aliases for
+>   24 `DURIAN_PI_*` env vars, `durian-pi.config.json`, `.durian-pi/`, the skill dirs), with deprecated aliases for
 >   the env vars + config filename so the live rig keeps working. Intent
 >   `9fa09419-2160-4b3b-b2eb-04bbd32c54e2` delivered to `pm`; the new multi-seat TUI is the
 >   **durian-pi TUI**.
@@ -402,7 +402,7 @@ once; a **failing-first** demo (RED on current `main`, GREEN on the branch); `no
 
 **Queue id:** `#1929` (then `#1930`).
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **Known blocker:** none blocking the delegate. `#1929`/`#1930` are `deferred` pending `devtools`'s
 scope/sequencing answer. The cli.mjs writer slot: `#2031` said it stays CLOSED per `#1817` — but the
@@ -447,7 +447,7 @@ Landed branches pruned. Refs now **47**.
 **Queue id:** `#2000` (next landing-list: the guard stack tip `impl-item-1444-fix`); `#2017`
 (ROADMAP 76 stack) landed this session.
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **Known blocker:** 30 unlanded remain, 19 CONFLICT. CLEAN-after-rebase (verify pending, do NOT land yet):
 `impl-item-1705` (verify #2024), `impl-item-1558`, `impl-item-1274`, `auditor-item-1924`,
@@ -480,7 +480,7 @@ branches remain** (was 36; live seats created new ones during the session).
 **Queue id:** `#2017` (ROADMAP 76 stack landing: `impl-item-1891` → `impl-item-1907`); the landing-list
 rows completed this session (`#1912`, `#1982`, `#1999`, `#2009`, `#2014`) are now landed.
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **Known blocker:** the model-swap window (`#1957`) needs an operator-declared broker stop. The
 rebase-and-land pass for the 33 conflicts needs `pm` to register + route it. (The dirty-worktree
@@ -525,7 +525,7 @@ attached; force a dirty worktree; `-D` an `ahead>0` ref; land a snapshot.
 
 **Current item:** the ROADMAP 71 / broker-spool landing cluster. **#1904** (`compact` spool op) is **verified** (verify **#1987 PASS**) but CLONE-CONFLICTs on `cli.mjs`; a rebase is routed (**#1912**, **#2018**). Next: land the rebased #1904, then the ROADMAP 76 stack (**#2017**), then the docs-truth items (**#1972**, gated on #1904 landing; **#2014**).
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **Known blocker:** none blocking the delegate. Broker **UP pid 35084** (START 03:15:29Z, passes advancing). The combined **window** (qa → `mistralai/Mistral-Small-3.2-24B-Instruct-2506`, add **qa2** → `google/gemma-4-31B-it`) still needs the operator-declared broker stop; prerequisite **#1936** (Gemma-4 catalog) has **LANDED**. `main` = **4a085f3**, **58 commits ahead of `origin/main`** (NOT pushed; operator holds push). Watch the recurring 37(b) `admitted_not_started` and the main-red `#1610` gate.
 
@@ -535,7 +535,7 @@ attached; force a dirty worktree; `-D` an `ahead>0` ref; land a snapshot.
 
 **Delegate actions this session (operator-directed):**
 - Delivered the requested written analysis: pi-durable is BUILT for live compaction (post's
-  "Compaction" section — a task that runs while the conversation keeps going), but durig's `compact`
+  "Compaction" section — a task that runs while the conversation keeps going), but durian-pi's `compact`
   verb is a broker-stopped external writer (`refuseWhileBrokerDrives` + live-lease guard,
   `cli.mjs:1140-1163`). It cannot run live because the CLI opens a SECOND harness whereas the spool
   applies ops with the broker's OWN harness (single writer + scheduler).
@@ -710,7 +710,7 @@ route `pause`/`unpause` (ROADMAP 131 AC1–5) to `impl` now. Confirm `#1388` lea
 landing gate + "Trust, but verify" audit), `docs/runbooks/branch-cleanup.md`, and `docs/WORKFLOWS.md`
 W6. **Read-only first.**
 
-**Exact first command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact first command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **Read-only audit (never destructive):**
 ```bash
@@ -749,7 +749,7 @@ write `docs/reviews/<name>-review.md`, update `docs/COMPETITORS.md`, register ad
 Check `docs/COMPETITORS.md` and `vendor/eval/` first so a project is not re-reviewed. **The operator must
 name the target project** — no target is recorded here.
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **State at clock-out:**
 - **Broker UP**, pid `34700` (heartbeat fresh; PASS advancing). Genlock held by `pm` at times.
@@ -787,7 +787,7 @@ handover). The competitor review (`microsoft/agent-governance-toolkit`) is DONE:
 named.** The team's active work is unchanged: the active-degeneration-guard **`#1766`** (lead shape
 ruling) gating **`#1767`**/**`#1768`**/**`#1769`** (impl).
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **Known blocker (unchanged):** `main` secretredact gate observed red (`demo/secretredact.test.mjs`
 exit 1) while queue rows `#1741`/`#1747` claim green — reconcile before any landing.
@@ -798,7 +798,7 @@ exit 1) while queue rows `#1741`/`#1747` claim green — reconcile before any la
 **Current item / queue ids:** the degeneration-guard fixes **`#1703`** (false positive) /
 **`#1704`** (reset idempotence) / **`#1705`** (false negative + model-aware context bound) — all
 `queued` to `impl`; the gate is **`#1610` MAIN IS RED** (`#1611`).
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 **Blocker:** `main` is RED — no landing passes the `merge.md` gate.
 **Watch:** `qa` re-saturating (its guard is not fixed yet); recovery = `compact qa` in an
 operator-sanctioned window (`docs/runbooks/seat-reset.md` § Context saturation).
@@ -812,7 +812,7 @@ DECISIONS **D95**.
 **Routed this session (idea, not scheduled):** operator asked to explore a *simple core + extensions*
 redesign down the road. Shape delivered to `pm`: freeze the ASK E core (store seam, single-writer wake
 family, trust boundary, CLI contract, config, loader); widen the existing extension seam to register
-lazy CLI verbs so durig's own features (worktree, TUI, checkup, ambient measures, format, …) become
+lazy CLI verbs so durian-pi's own features (worktree, TUI, checkup, ambient measures, format, …) become
 opt-in extensions; opt-in via profile → named enable list (path for third-party) → per-seat scoping.
 Added goals: easier per-component testing and a substitutable extension-side interface (the core stays
 non-pluggable per ASK E constraints i–iv). Intent `opr-20261017-extension-boundary-idea` delivered to
@@ -829,7 +829,7 @@ non-pluggable per ASK E constraints i–iv). Intent `opr-20261017-extension-boun
   is safe (refuses unmerged). Both the **delegate** and the operator can prune; seats cannot (seatguard).
 - **OWED / check first:** the 29 branches just landed still need pruning; `pm` was asked to mark the
   29 queue rows landed. Confirm both.
-- **Exact first command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+- **Exact first command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **State at handover:**
 - `main` HEAD = `ee7e6e4` (+ the D94 decision commit). **Tree clean.** All 29 landing-pass entries are
@@ -864,7 +864,7 @@ degeneration-guard fixes (`#1703`/`#1704`/`#1705`) as an immediate priority — 
 that stops the `qa-context-degeneration` incident and impl's false-positive reset loop recurring. Both
 recurring root causes now outrank UI/incident-rule polish.
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **Priority order (grounded in the queue + `status` attention):**
 1. **`#1610` / `#1611` — MAIN IS RED (blocker).** `node demo/secretredact.test.mjs` → exit 1 on `main`
@@ -874,7 +874,7 @@ recurring root causes now outrank UI/incident-rule polish.
    `pm`; it is the control for the new `seat-root-fallback-commit` incident.
 3. **`secret_detected` on `security`** — routed to `pm`; per `store-secret-detected.md` rotate the
    credential and treat the store as compromised.
-4. **`#1607` / `#1608`** — `durig ui` `view is not defined` fix + regression test.
+4. **`#1607` / `#1608`** — `durian-pi ui` `view is not defined` fix + regression test.
 5. **`#1609`** — incident-report `check` rules + `ownership` class + demo.
 6. **Crash-proofing cluster (PROMOTE — delegate recommendation):** ROADMAP 78 (survive a per-conversation
    storage error), true read-only opens, broker watchdog/auto-restart, serialise migrations, log
@@ -967,7 +967,7 @@ dead=0` 08:46:20Z) and impl re-engaged #1390 (opened #1395).
 - **Broker upgrade DONE:** the pi runtime pin moved `4954d760` -> upstream tip `8efd314f` via
   `node scripts/sync-pi.mjs --update --link` (5 packages built in `vendor/pi-main`). **Validated BEFORE
   keeping:** demo suite **115/0**, `demo` PASS, TUI **15/15**. Committed `234e06e` (`pi-main.pin.json`
-  only; `--no-save` kept the lockfile clean — no new durig code was pending, origin 0 behind / 6 ahead).
+  only; `--no-save` kept the lockfile clean — no new durian-pi code was pending, origin 0 behind / 6 ahead).
 - Broker restarted on the new runtime: `START pid=37596` 08:46:18Z, PASS advancing, heartbeat fresh.
 - **Revert path if a regression appears:** `node scripts/sync-pi.mjs --unlink` (back to released
   packages) + restore the pin sha with the edit tool (never `git restore`/`checkout --`).
@@ -976,11 +976,11 @@ dead=0` 08:46:20Z) and impl re-engaged #1390 (opened #1395).
 fix, which blocks landing entry 11) because **no entry point could make a worktree at an UNLANDED base**:
 `prepare_workspace` (`src/seattools.mjs:37`) and the `worktree` verb (`cli.mjs:870`) never pass `ref`,
 though the core (`prepareSeatWorkspace`/`createWorktree`) already accepts it. impl also hit refusals
-writing item notes into the shared, gitignored `.durig/` (outside its worktree). Intents delivered:
+writing item notes into the shared, gitignored `.durian-pi/` (outside its worktree). Intents delivered:
 `opr-20261017-impl-worktree-gap`, then `opr-20261017-worktree-capability-first` — operator directive:
 **fix the base-ref capability FIRST** (with a failing-first demo); **register** the rest. pm REGISTERED:
 **#1456** (capability fix), **#1458** (scratch-path docs), plus **#1453** (worktree-lifecycle test bug) and
-**#1465** (long item bodies unreadable after `prepare_workspace` — body lives in `<repo>/.durig/`).
+**#1465** (long item bodies unreadable after `prepare_workspace` — body lives in `<repo>/.durian-pi/`).
 
 ## NEXT SESSION
 
@@ -1000,7 +1000,7 @@ operator/delegate to drive **variant (1)** (stop broker, hand-verify, land outsi
 **Known blocker:** #1444 cannot proceed until a worktree can be based on the unlanded tip `85c5d95` — via
 #1456 (capability) or #1461 (plumbing workaround).
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 ## DELEGATE NOTE — 2026-10-17 (runbook discoverability, round-trip research, docs hygiene)
 
@@ -1014,7 +1014,7 @@ operator/delegate to drive **variant (1)** (stop broker, hand-verify, land outsi
    accurately characterised; the `CODEMODE.md` claims match the tree), registered **ROADMAP 126–130**,
    and cross-linked from `docs/CODEMODE.md` + `docs/METRICS.md`. **Topic closed** — no further external
    research requested. Commits `1702b72`, `c91692b`, `26ab58b`.
-2. **Runbook discoverability** added to `AGENTS.md`, the durig skill, and `constitution.txt` **P3
+2. **Runbook discoverability** added to `AGENTS.md`, the durian-pi skill, and `constitution.txt` **P3
    Runbooks** (read the matching runbook before improvising, not just author). Commit `fa4b22f`; D90.
    The starter's inline constitution was synced afterward (`rig.starter.json`, commit `b52133f`) — the
    P3 Runbooks rewrite had broken the 3 constitution-drift demos, now `demo/*.test.mjs` 115/0. The
@@ -1041,7 +1041,7 @@ operator/delegate to drive **variant (1)** (stop broker, hand-verify, land outsi
    **input to the external `security.sec` position** (the delegate cannot ratify its own review); spooled
    `pm` intent `opr-20261017-codemode-security` (delivered `06:51:01Z`) to record it against ROADMAP 32
    and sequence the T0/T1/T2 tiers. **The operator must route the round to `security.sec`.**
-7. **`security` seat created and running** (operator-directed): durig had no seat owning security (the
+7. **`security` seat created and running** (operator-directed): durian-pi had no seat owning security (the
    `security.sec` consult was external). Added `security` to `rig.selfdev.json` (commit `f701837`; now
    **10 seats**; GLM-5.3-Flash, deliberately NOT a verifier per `checkup`'s own comment, full working
    tools via capability `review`), wired edges both ways + an ownership class, applied broker-safe
@@ -1121,13 +1121,13 @@ moved on — trust `status`/`queue`, not the older text below.
 branches stay unlanded by design and are tracked (`#1169`). **Never delete a branch with
 `git rev-list --count main..<b>` > 0.**
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **What this session changed (all committed):**
 1. **PM adapter deferred** (operator direction, **D88**): only the **task interface + storage format**
    (ROADMAP 115) is elevated; 116–123 are parked. Design: `docs/PM-ADAPTERS.md`.
 2. **Tutor-app references removed** from config, code, tests, the dead `rigs/tutor-pi.rig.json`, and 21
-   docs; affected demos green. Local `durig.config.json` `DURIG_DB` now points at `./selfdev.sqlite`.
+   docs; affected demos green. Local `durian-pi.config.json` `DURIAN_PI_DB` now points at `./selfdev.sqlite`.
 3. **Seat worktrees relocated** (ROADMAP 125, **D89**): 28 terminal + 2 verify scratch moved to
    `../pi-opendurig.worktrees/`; 5 live/held worktrees remain in `item-*`.
 4. **Research SOP hardened:** `research-request.md` now requires a follow-up prompt and registering
@@ -1135,7 +1135,7 @@ branches stay unlanded by design and are tracked (`#1169`). **Never delete a bra
 5. **ROADMAP 102–125** registered (git-merging tooling, PM adapters, TUI 124, worktrees 125).
 
 **Next-session checklist:**
-1. `DURIG_DB=./selfdev.sqlite node cli.mjs status` (read-only).
+1. `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status` (read-only).
 2. Let the claimed items settle; do not poll. When the 4 skipped branches are ready, `#1169` routes them.
 3. `pm` sequences ROADMAP 102–125.
 4. Procedures: `docs/runbooks/merge.md`, `resolve-merge-conflict.md`, `leaked-worktrees.md`.
@@ -1152,7 +1152,7 @@ routed to land the 15 verified-but-unlanded branches (`opr-20261017-landing-pass
 holds **push**; the **#994** quiet window is undeclared. **Do NOT delete a branch with
 `git rev-list --count main..<b>` > 0** — that loses unlanded work.
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **Backlog added this session (operator, 2026-10-17):** ROADMAP **item 101** — BUG (TUI): the
 conversation view collapses newlines when a seat's loaded transcript is streamed to the viewport
@@ -1280,7 +1280,7 @@ runbook-81/82/86 work. **Trust the queue + `status`, not the ninth-pass text bel
 2. **`#1036`** — land `#916` (`dd79fa3`); pairs with the #915 landing so one rig reload activates both.
 3. Then the serialized `cli.mjs` chain **`#934` → `#873` → `#966`** (one writer at a time; `#920` stays
    on the ENV seam). Then the held daemon items **`#723` → `#724` → `#725`** (`impl` must release them).
-**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+**Exact next command (read-only):** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`.
 
 **⚠ OPERATOR DECISIONS — RECEIVED this session (recorded: D83):**
 - **`#1032` — rig reload: DONE** (final pid 35640). The `#916` half still needs landing (#1036) and a
@@ -1334,7 +1334,7 @@ STILL `queued` to `impl` — NOT landed. The delegate delivered a claim-by-id pr
 `node --check cli.mjs` + `demo/init.test.mjs`, commit explicit paths only, complete, report to qa.
 **lead #913 rules #885 lands FIRST** — it gates #910 (69), #911 (70), #912 (71), #873 (`compact`), and
 #934/#940/#927 (all edit `cli.mjs`). **Exact next command (read-only):**
-`DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+`DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`.
 
 **ORDER after #885:** #874 (wall-clock, first) → #873 (`compact`) → #875 (degen-text registry); then
 #910/#911 → #912. Registered from this session's intents: #920/#922/#923 (trace), #927/#928 (TUI 89;
@@ -1423,7 +1423,7 @@ A broker restart is the only reliable way to drain the inbox if it is dormant �
 restart. **Never `serve --stop` while a `genlock.*` is held** (the F11 drain hangs; `"stopped": true` is
 not proof the process exited — see `broker-safe-change.md`).
 
-**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+**Exact next command (read-only):** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`.
 
 ## SEVENTH PASS — 2026-10-16 (delegate)
 
@@ -1452,7 +1452,7 @@ not proof the process exited — see `broker-safe-change.md`).
   dormant-broker revisit gap is unfixed; the `cli.mjs` gate (#624) still blocks items 69/70/71/74/78.
 - **Broker:** restarted `pid 29372` (`scripts/serve-noroot.ps1`); the reverted guard is loaded (no
   degeneration escalations). Do NOT call `serve --stop` while a `genlock.*` is held.
-- **Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+- **Exact next command (read-only):** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`.
 
 ## SIXTH PASS — 2026-10-16 (delegate)
 
@@ -1479,7 +1479,7 @@ not proof the process exited — see `broker-safe-change.md`).
   per-seat cooldown suppresses the re-wake, and no further pass fires without a store commit, so a seat
   with queued work sits until an unrelated commit or a restart. Verified: pid 16628's last `PASS 82` at
   `21:09:19`, heartbeat fresh, no genlocks. Still owed.
-- **No compaction verb exists.** pi-durable ships `CompactionTask`, but durig calls it nowhere and
+- **No compaction verb exists.** pi-durable ships `CompactionTask`, but durian-pi calls it nowhere and
   `help` has no `compact`; ROADMAP #62 (owner: impl) is the ordered context-pressure + one-compaction
   item. `reset` is the only context-reducing verb — a full reset, not a summary.
 - **Open sqlite lock (transient, by design):** any opener can hit "database is locked" because EVERY
@@ -1487,7 +1487,7 @@ not proof the process exited — see `broker-safe-change.md`).
   lock; the adapter's busy_timeout is 5000 ms, so a retry succeeds. Aggravated by stale
   `log --follow` viewers holding connections. It clears when the broker is stopped (and viewers reaped);
   the durable fix (skip migrations for read-only opens) is a code item for the team.
-- **Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+- **Exact next command (read-only):** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`.
 
 > **Operator working agreement (2026-10-15): do not poll or wait on background seat runs.** Dispatch
 > the `send`/`run` detached, note the pid and its `.spike/delegate/*.out` file, then hand back. The
@@ -1536,9 +1536,9 @@ not proof the process exited — see `broker-safe-change.md`).
    after a NORMAL settle (not a reset) still waits for an unrelated commit; the reset path is fixed
    (`7d62929`). Fix by scheduling a pass when a candidate is cooldown-suppressed.
 
-**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+**Exact next command (read-only):** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`.
 **Restart a down broker:** `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1`
-(never set `DURIG_SEAT_ROOT`).
+(never set `DURIAN_PI_SEAT_ROOT`).
 
 **Do NOT commit the tree's other-seat work:** `cli.mjs`, `demo/init.test.mjs`, `src/seatguard.mjs`,
 `demo/seatguard.test.mjs`, `docs/ROADMAP.md`, `docs/SEAT-LIFECYCLE.md`. Stage explicit paths only.
@@ -1610,7 +1610,7 @@ call written into the CONTENT as `<parameter name="powershell">…` (entries `34
 `malformed-tool-call` metric stays 0 (its own documented blind spot). impl's model is
 `deepseek-ai/DeepSeek-V4.1-Flash` (deepinfra, `api: openai-completions`). **Fix LANDED (`f086382` +
 `c38815f`, D77):**
-durig now detects a tool call emitted as text (`isPseudoToolCallTurn`/`countPseudoToolCalls` in
+durian-pi now detects a tool call emitted as text (`isPseudoToolCallTurn`/`countPseudoToolCalls` in
 `src/attention.mjs`; `assessRun` trips on the FIRST one) and the supervisor resets the seat with a handoff
 naming the fault — NO translation layer (a synthesized half-parsed call would execute without the model's
 validation). **Grounding trap:** the terminal strips the DSML special-token delimiter, so a screen read of
@@ -1651,7 +1651,7 @@ conversation storage error). Both are **blocked on `cli.mjs`**. Anchors: item 65
 **Clean-path work available NOW (no `cli.mjs`):** **item 85** (run each runbook's read-only `Diagnose`
 block in CI — the set is currently unverified), **item 81** (`runbook-stale`/`runbook-unverified` `check`
 rules), **item 86** (runbook verification in the `check` provenance line) — `src/checkup.mjs` + `demo/` only.
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`.
 
 **Maintenance done (`806ce7f`):** broker stopped → `up rig.selfdev.json --refresh` → restarted
 (`pid 14536`, `START 2026-10-16T19:33:43Z`). `impl` is now `deepseek-ai/DeepSeek-V4.1-Flash`, and the
@@ -1701,14 +1701,14 @@ work). Resolve/land them (their owners, or an operator ruling) before items 69/7
 **Broker:** running `pid 14536` (`START 2026-10-16T19:33:43Z`); `.broker.json` carries `runToken` +
 `heartbeatAt` (item 65 identity). Start a down broker with
 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1` (never set
-`DURIG_SEAT_ROOT`). **Nothing restarts a dead broker — the supervision gap is items 61–64.** A broker that
+`DURIAN_PI_SEAT_ROOT`). **Nothing restarts a dead broker — the supervision gap is items 61–64.** A broker that
 died on a storage error stalled `impl` (2026-10-16); `resume` + restart recovered it.
 **Pending apply — one broker stop + `up --refresh`:** the **`P3 Runbooks`** rule in `constitution.txt`
 (`fe0c74c`) is not yet live for seats (the `P3 Language` rule and the impl→DeepSeek model were applied at
 `806ce7f`). ⚠️ On `serve --stop`, proceed **only** on `"stopped": true` — never `false`; that is how the
 store was corrupted twice. See `docs/runbooks/broker-safe-change.md`.
 **Owed:** wire `reconcileStrandedSubmissions` into `cli.mjs cmdResume` (blocked on `cli.mjs`).
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; restart a down broker with
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`; restart a down broker with
 `scripts/serve-noroot.ps1`. Design of record: `docs/BROKER-SUPERVISION.md` (D71/D72),
 `docs/COMMANDS-AND-THE-BROKER.md` (command paths + mailbox).
 
@@ -1733,7 +1733,7 @@ that never settled its submission. `resume` reports `run-cancelled` but does not
 start / in `resume`, settle any `placed`/`queued` submission whose task is terminal (folds into ROADMAP
 37(b) / item 66). qa owning the chaos suite (#727) is therefore not yet running.
 
-**Seat-root trap (do not repeat):** start the selfdev broker **without `DURIG_SEAT_ROOT`** — a seat's
+**Seat-root trap (do not repeat):** start the selfdev broker **without `DURIAN_PI_SEAT_ROOT`** — a seat's
 own prepared cwd wins (`src/seattools.mjs` `makeSeatEnv`), so a single global root conflicts with the
 per-item worktree model and trips the F12 guard. Use `scripts/serve-noroot.ps1`.
 
@@ -1744,9 +1744,9 @@ per-item worktree model and trips the F12 guard. Use `scripts/serve-noroot.ps1`.
 `deferred` (parked on questions, not claimable). After the restart, pm/impl/advocate/scribe were woken
 and progressing (advocate generating; impl working `demo/tui-client.test.mjs`).
 
-**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; broker log is
+**Exact next command (read-only):** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`; broker log is
 `selfdev.sqlite.broker.log`. Restart a down broker with `.spike/delegate/dispatch-serve-noroot.ps1`
-(never set `DURIG_SEAT_ROOT`) once no writer is in flight.
+(never set `DURIAN_PI_SEAT_ROOT`) once no writer is in flight.
 
 **Delegate clock-out this session (2026-10-16, second pass):** operational + incident recovery, no repo
 code changed (the `.spike/` repair scripts are gitignored). Committed only `docs/NEXT.md`. Added
@@ -1783,9 +1783,9 @@ the file would carry that work — leave it to that item's owner. (b) The workin
 files (`cli.mjs`, `docs/DECISIONS.md`, `docs/FEATURES.md`, `docs/STATUS.md`, `demo/init.test.mjs`) —
 **do not discard**.
 
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`; run the hermetic TUI
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`; run the hermetic TUI
 regression with `npm run test:tui`. If the broker is stopped, restart it with
-`DURIG_DB=./selfdev.sqlite node cli.mjs serve` once no writer is in flight.
+`DURIAN_PI_DB=./selfdev.sqlite node cli.mjs serve` once no writer is in flight.
 
 **State at this refresh (2026-10-16, delegate session, paused):** store is single-writer; the broker is
 the owner; `vendor/eval/` (reference clones) and `vendor/pi-main/` are gitignored.
@@ -1796,11 +1796,11 @@ the owner; `vendor/eval/` (reference clones) and `vendor/pi-main/` are gitignore
 `demo/*.test.mjs` while the broker drives gave **71/78**; re-running the 8 failures individually gave
 **7 pass** (flaky) + `config.test.mjs` (a legit #621 failing-first RED). Grounded causes and fixes:
 - **Inherited repo config**: demos spawn `cli.mjs` with `{...process.env}` and so pick up the local
-  `durig.config.json` (`DURIG_MAX_CONCURRENT_SEATS: 4`, a real provider/model, and — the worst part —
-  `DURIG_DB` pointed at a DIFFERENT project's store,
-  store, so a demo that forgets to override `DURIG_DB` reads the wrong database — this is the live
-  `no seats in …` error seen in impl's log). Fix: a hermetic test env (temp `DURIG_DB`,
-  `DURIG_MAX_CONCURRENT_SEATS=1`, `DURIG_PROVIDER=faux`, and do not read the repo config).
+  `durian-pi.config.json` (`DURIAN_PI_MAX_CONCURRENT_SEATS: 4`, a real provider/model, and — the worst part —
+  `DURIAN_PI_DB` pointed at a DIFFERENT project's store,
+  store, so a demo that forgets to override `DURIAN_PI_DB` reads the wrong database — this is the live
+  `no seats in …` error seen in impl's log). Fix: a hermetic test env (temp `DURIAN_PI_DB`,
+  `DURIAN_PI_MAX_CONCURRENT_SEATS=1`, `DURIAN_PI_PROVIDER=faux`, and do not read the repo config).
 - **Live working tree**: tests `copyFileSync("rig.starter.json", …)` and read other tracked files a seat
   is mid-editing. Fix: read fixtures from HEAD (`git show HEAD:<path>`) or run the suite from a frozen
   worktree.
@@ -1813,7 +1813,7 @@ the owner; `vendor/eval/` (reference clones) and `vendor/pi-main/` are gitignore
 Known blockers: none for the delegate work. The shared tree is dirty with #623's in-flight `cli.mjs`
 and a seat's `docs/STATUS.md` edit — **DO NOT discard**; stage explicit paths only. The resident
 broker is **stopped** (it exited `reason=stop` after the delegate session); restart it with
-`DURIG_DB=./selfdev.sqlite node cli.mjs serve` once no `send`/`run` writer is in flight (the advocate
+`DURIAN_PI_DB=./selfdev.sqlite node cli.mjs serve` once no `send`/`run` writer is in flight (the advocate
 consult is one). **Docs landed:** D63/D64 (`0ecf9cf`), D65 (`b81e171`), D66 (this session).
 
 _Historical (superseded): the #480-era notes below were written for the 2026-10-15 handoff._
@@ -1837,7 +1837,7 @@ _Historical (superseded): the #480-era notes below were written for the 2026-10-
   review's governance/cost passes (item 49). Surface decision (item 47) is already routed to
   advocate/scribe. Awaiting `pm` sequencing.
 - **pi-durable alignment (research landed; items 51–58)** — `docs/reviews/pi-durable-alignment.md` is
-  complete and its verdict is folded into `docs/ROADMAP.md` §“pi-durable alignment”. durig reimplements
+  complete and its verdict is folded into `docs/ROADMAP.md` §“pi-durable alignment”. durian-pi reimplements
   exactly two things the harness already provides: **client state** (the TUI poller → item 52, adopt,
   gated by the socket security position in item 55) and **busy-input** (`whenBusy:"steer"` → item 56).
   The rank-1 change is **wake-and-return in `drivePass`** (item 54). The review's explicit keep-list is
@@ -1847,7 +1847,7 @@ _Historical (superseded): the #480-era notes below were written for the 2026-10-
   end-user pages, and maintainer pages, projecting from `docs/` (no duplication); the framework is an
   open decision. Depends on item 22 (the public repo). Awaiting `pm` sequencing.
 - **Zero trust to zero agent (research requested 2026-10-16; ROADMAP item 60)** — narrow,
-  per-seat / per-item least-privilege permissions for durig's seats. Owner: operator's research agent;
+  per-seat / per-item least-privilege permissions for durian-pi's seats. Owner: operator's research agent;
   report at `docs/reviews/zero-trust-zero-agent.md`; depends on item 55 (a `security.sec` position)
   before any new trust boundary. An operator intent to `pm` to register/sequence item 60 is **spooled
   in `selfdev.sqlite.broker.inbox/`** (pending the next broker pass), alongside the two earlier pm
@@ -1891,7 +1891,7 @@ seat still generates). Commit `b81e171`. The narrative plan below is kept as the
 **Why delegate-owned:** the fix is to the process that DRIVES the queue (the broker). A routed item
 would sit behind the very broker it is meant to fix, so it must be done in the delegate seat directly
 (code + tests + commit), then handed to the operator. The operator explicitly preferred this over the
-durig team for that reason.
+durian-pi team for that reason.
 
 ### Symptom (observed 2026-10-16, pid 17424)
 `<db>.broker.log`: `PASS 5` at `02:26:13`, its wakes fired, then **no `PASS 6` for 40+ min** (still
@@ -1976,7 +1976,7 @@ tracked file on the snapshot is absent from `main`); `demo/pitui.test.mjs` is pr
 the local branch is already deleted; `docs/BRANCH-AUDIT-2026-10-14.md` records the recovery as
 executed. Do NOT re-apply the snapshot (D48: adapt onto `main`, never restore a whole snapshot).
 
-**Then (next queued item): #480 (U1) — build the `durig ui` driver (queue id #480; TOP PRIORITY; UNBLOCKED).**
+**Then (next queued item): #480 (U1) — build the `durian-pi ui` driver (queue id #480; TOP PRIORITY; UNBLOCKED).**
 The rest of the interactive-client series is **#481–#487 (U2–U7)**. U1 is the missing piece between
 `src/tui/client.mjs` (a headless renderer) and the operator: a separate entrypoint that owns raw mode
 + key handling + the poll loop and paints `renderTui` frames (`cli.mjs` stays non-interactive, D21;
@@ -1984,10 +1984,10 @@ read-only, D11/D40).
 
 Exact next command (drive the selfdev team; the seat root is the live tree):
 
-`DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs send impl --body-file <body>`
+`DURIAN_PI_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIAN_PI_DB=./selfdev.sqlite node cli.mjs send impl --body-file <body>`
 
 and have impl `claim_work({ itemId: 480 })` FIRST — a plain `run` makes impl take its oldest queued row
-(impl has ~36). Bounded alternative: `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIG_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`.
+(impl has ~36). Bounded alternative: `DURIAN_PI_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig DURIAN_PI_DB=./selfdev.sqlite node cli.mjs run --max-duration 300`.
 
 Known blocker: the store is **single-writer** — never run two `send`/`run`/`serve` at once. No
 genlock/broker is held at handoff.
@@ -2011,7 +2011,7 @@ genlock/broker is held at handoff.
 
 Then, in order:
 1. **#473** — wire worktrees into claim/completion: on claim, create the item's worktree+branch and
-   point the working seat's cwd/`DURIG_SEAT_ROOT` at it; on completion, commit ONLY the item's files
+   point the working seat's cwd/`DURIAN_PI_SEAT_ROOT` at it; on completion, commit ONLY the item's files
    on its branch, release the lock, `git worktree remove`. **#474 is GATED on #473** — do NOT put
    "commit before finishing" into any seat's instructions until the wiring is proven, or seats will
    commit from the shared tree and stage each other's work. #475 documents the model.
@@ -2067,7 +2067,7 @@ the whole point of #473.
   backlog, so `claim_work({itemId})` via a direct `send <seat> --body-file` is the way to prioritize;
   grooming is the structural fix.
 - **Two writers, precisely.** One *store/harness* writer per DB (two `run`/`send` drivers race on the
-  entry id, F24; `run`/`up` are not retried). Concurrency is `serve` + `DURIG_MAX_CONCURRENT_SEATS`.
+  entry id, F24; `run`/`up` are not retried). Concurrency is `serve` + `DURIAN_PI_MAX_CONCURRENT_SEATS`.
   Per-task worktrees will make concurrent *editing* safe once #473 lands.
 - **Full suite > 120 s** so a single tool call times out; loop `demo/*.test.mjs` per file with a long
   timeout, or background it. Baseline is now **68/68** (the old `starter.test.mjs` CRLF failure is FIXED).
@@ -2086,16 +2086,16 @@ the whole point of #473.
 
 - **No writer is running on `./selfdev.sqlite`** except the detached `send advocate` consult
   (`.spike/delegate/advocate-consult.*`) — do **not** start a second `serve`/`run`/`send` until it
-  exits, then restart the broker with `DURIG_DB=./selfdev.sqlite node cli.mjs serve`. Two drivers on
+  exits, then restart the broker with `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs serve`. Two drivers on
   one store double-wake (D45/D46).
 - **The tree is DIRTY with #621's in-flight work** (`cli.mjs`, `src/config.mjs`, `demo/config.test.mjs`,
-  `durig.config.default.json`) — **DO NOT discard**; it belongs to the claimed item. `item-1/`,`item-2/`
+  `durian-pi.config.default.json`) — **DO NOT discard**; it belongs to the claimed item. `item-1/`,`item-2/`
   are leaked worktrees (see the NEXT SESSION note).
 - **Backups under `.spike/delegate/`**: `recovery-WIP.patch`, `storewrite-WIP.mjs`,
   `p2-6-scratch/` (the Job-Object attempts), `scratch-backup/` (the removed scratch), and the
   intent bodies used this session. `.spike/` is gitignored.
-- **Env**: run with `DURIG_DB=./selfdev.sqlite` and `DURIG_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig`.
-  `durig.config.json` sets `DURIG_MAX_CONCURRENT_SEATS=4` (local, gitignored) for concurrency testing.
+- **Env**: run with `DURIAN_PI_DB=./selfdev.sqlite` and `DURIAN_PI_SEAT_ROOT=C:/Users/Alex/dsh-Projects/pi-opendurig`.
+  `durian-pi.config.json` sets `DURIAN_PI_MAX_CONCURRENT_SEATS=4` (local, gitignored) for concurrency testing.
 - **Native Windows only** — never `wsl`, `docker`, `docker-compose`.
 
 ## Traps (standing — do not repeat)

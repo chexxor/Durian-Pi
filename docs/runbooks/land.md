@@ -77,7 +77,7 @@ The helper's pre-flight, in code (the enforcement chokepoint):
    node scripts/land.mjs <branch> [<branch>...] [--repo <repo>] [--db <path>] [--suite] [--keep]
    ```
    - `--repo <dir>` — the shared repository root (default: the repo containing cwd).
-   - `--db <path>` — the rig store for the genlock pre-flight (default: `DURIG_DB`, else the store the
+   - `--db <path>` — the rig store for the genlock pre-flight (default: `DURIAN_PI_DB`, else the store the
      repo is ACTUALLY using — the live broker's `<db>.broker.json`, or the only store with a live
      genlock — and only then `<repo>/rig.sqlite`; #1383).
    - `--suite` — run every `demo/*.test.mjs` **in the scratch worktree** and refuse to advance `main` if

@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 
    # Research prompt — is durig using pi-durable as intended?
    ## Gap analysis: what durig reimplements vs. what the harness already provides, and how the TUI becomes a state-backed client

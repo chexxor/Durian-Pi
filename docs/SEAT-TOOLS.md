@@ -9,8 +9,8 @@ without the conditions below; complying with them means no escalation is needed.
 **Operator scope ruling (2026-10-11, D38): option (a) — full shell to author seats**, accepting
 the residual shell risk while codemode-with-permissions is developed. SC1–SC3 are **adopted, not
 waived**, and D38 records why: the acceptance had assumed pi's `arg-guard`/`guardrails` covered
-seats, and they do not (they are pi-coding-agent extensions; durig passes no `hooks` at all).
-A durig-side `beforeTool` guard therefore lands **with** the tools, not after them.
+seats, and they do not (they are pi-coding-agent extensions; durian-pi passes no `hooks` at all).
+A durian-pi-side `beforeTool` guard therefore lands **with** the tools, not after them.
 
 **SC1–SC3 implemented and proved (2026-10-11):** `src/confine.mjs` + `demo/confine.test.mjs` (the
 27th demo). Every canary is paired with its *unguarded control*, because a denial that also
@@ -55,7 +55,7 @@ author. A live scratch `up` / `check` / `ps` on a throwaway store confirms the r
 works with the wiring in place.
 
 **Workspace switch (D66, `prepare_workspace`):** the seat prepares its own item worktree — the
-broker no longer sets a process-global `DURIG_SEAT_ROOT`, and `makeSeatEnv` resolves the seat's own
+broker no longer sets a process-global `DURIAN_PI_SEAT_ROOT`, and `makeSeatEnv` resolves the seat's own
 persisted cwd first, so each conversation is confined to its own tree. Coordinator seats lose
 `prepare_workspace` with the rest of `COORDINATOR_REMOVALS`; verifiers keep it so they can work in a
 disposable copy. Proof: `demo/prepare-workspace.test.mjs`, amended `demo/seattools.test.mjs`.
@@ -66,16 +66,16 @@ can reach is the disposable copy it was pointed at.
 
 **The worktree exists now, which was the safety gate (2026-10-11):** `src/worktree.mjs`,
 `node cli.mjs worktree <path>` and `demo/worktree.test.mjs` (the 30th demo). Before this the
-boundary confined seats to *durig's live tree*, because nothing ever set a seat's `cwd` - so an
+boundary confined seats to *durian-pi's live tree*, because nothing ever set a seat's `cwd` - so an
 author seat could overwrite uncommitted operator work while every control looked satisfied. The
 verb adds a detached worktree and **bridges `node_modules` with a junction**, without which a
 fresh worktree cannot run the demo suite at all (`node_modules` is gitignored, and a directory
 symlink on Windows needs elevation a junction does not). `up` now records `seat.cwd ?? spec.cwd`
 per conversation, and leaves it alone when neither is declared.
 
-*Proved on the real repository, not only a throwaway one:* the verb resolved the repo to durig's
+*Proved on the real repository, not only a throwaway one:* the verb resolved the repo to durian-pi's
 **parent** project, and in the resulting worktree the demo suite ran, `node_modules` was bridged,
-and **`durig.config.json` was absent** - the key is gitignored, so a worktree has no key on disk
+and **`durian-pi.config.json` was absent** - the key is gitignored, so a worktree has no key on disk
 and no seat can read one. Removal requires `force: true` explicitly, so the safe default fails
 loudly instead of discarding work.
 
@@ -176,7 +176,7 @@ position adds one acceptance canary: **evidence must contain no key material**.
 review: a naive install hands `DEEPINFRA_API_KEY` to every command a seat runs. Fixed at the env
 layer by **SC3**, not by `prepare` alone.
 
-**H2 — the key is also in a file.** `durig.config.json` is untracked and gitignored, so a worktree
+**H2 — the key is also in a file.** `durian-pi.config.json` is untracked and gitignored, so a worktree
 contains no config — but per **F2** that was never the protection; SC1 is.
 
 **H3 — our guard does not cover seats.** `arg-guard.js` protects our harness, not a seat's shell
@@ -238,4 +238,4 @@ Must fail against the design as first written and pass with SC1–SC3:
 3. the five-canary demo above, falsified against the as-written design first;
 4. evidence in `complete_work` (independent), so `qa` re-checks rather than trusts;
 5. `rig.selfdev.json` (pm/impl/qa/lead, `qa` on a second model — item 3) and a worktree helper;
-6. then route durig its first real backlog item and let W2 become `observed`.
+6. then route durian-pi its first real backlog item and let W2 become `observed`.

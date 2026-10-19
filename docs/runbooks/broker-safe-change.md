@@ -27,7 +27,7 @@ reason). To quiesce for a LANDING pass, run the pass outside the broker (`land.m
 cat selfdev.sqlite.broker.json 2>/dev/null     # is a broker recorded?
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq 'node.exe' -and \$_.CommandLine -match 'cli.mjs serve' } | Select-Object ProcessId"
 # Review what the change would do — READ-ONLY, needs no broker stop (ROADMAP 84):
-DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run
 ```
 `--dry-run` names the seats and fields it would change (`model`, `instructions`, `cwd`,
 `thinkingLevel`), the seats it would create, the seats whose context the model change would reset, and
@@ -37,7 +37,7 @@ stopping the broker, so the write you are about to make is the one you have alre
 ## Do
 1. Stop the broker and **read the result**:
    ```bash
-   DURIG_DB=./selfdev.sqlite node cli.mjs serve --stop
+   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs serve --stop
    ```
    Proceed **only** on `"stopped": true`. On `"stopped": false` the pass did not settle inside the
    window: wait and run it again until it is `true`, or (if no genlock slot is held) terminate the pid.
@@ -58,7 +58,7 @@ stopping the broker, so the write you are about to make is the one you have alre
    `P2 Authority`, so running it now would revert later edits.
 4. Apply the change:
    ```bash
-   DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh
+   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh
    ```
    The JSON reports `refreshed`, and for a model change `modelMismatch` / `modelReset`.
 5. Restart:

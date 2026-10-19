@@ -1,4 +1,6 @@
-﻿# durig — decision log
+﻿> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
+# durig — decision log
 
 Each entry: decision, rationale, alternatives considered, status.
 Dates are 2026-10-07 unless noted.

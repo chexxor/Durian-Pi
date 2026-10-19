@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # durig MVP definition and burn-down
 
 Updated: 2026-10-08 (after repeat-call fix landed)

@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Work-items ↔ tasks, and where the system of record lives
 
 **Audience:** a maintainer deciding how durig should relate its queue to an external

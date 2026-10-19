@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # SECURITY POSITION — confine wrong-root refusal contract (D1)
 
 **Status: position by the `security` seat, item #1445, 2026-10-17. Ratifies/corrects impl's fix

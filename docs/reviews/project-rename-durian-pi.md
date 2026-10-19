@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Project rename: `pi-opendurig` → `durian-pi` (operator request)
 
 **Status:** blocked on an operator-declared quiesced window; **not executed**. Delegate analysis, 2026-10-18.

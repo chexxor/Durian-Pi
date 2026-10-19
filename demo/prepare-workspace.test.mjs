@@ -2,15 +2,15 @@
 // `prepare_workspace`), failing-first.
 //
 // The defect this closes: the broker used to create ONE worktree per pass for the
-// FIRST seat with queued work and set a process-global `DURIG_SEAT_ROOT`, so every
+// FIRST seat with queued work and set a process-global `DURIAN_PI_SEAT_ROOT`, so every
 // seat woken in that pass shared one root, and a seat's tools could be pointed at a
 // worktree it never claimed. This proves the replacement:
 //   - `prepareSeatWorkspace` creates the item's worktree idempotently (a second call
 //     reuses it, never nests one inside another — the #506 recursive-carry bug);
-//   - the worktree reproduces the source's path inside the repo, so a durig
+//   - the worktree reproduces the source's path inside the repo, so a durian-pi
 //     subdirectory keeps its `cwd`;
 //   - `makeSeatEnv` resolves a seat's OWN prepared cwd over the process-global
-//     `DURIG_SEAT_ROOT` (the per-seat/per-item switch);
+//     `DURIAN_PI_SEAT_ROOT` (the per-seat/per-item switch);
 //   - `removeSeatWorkspace` retires it;
 //   - `installWorktreeDeps` actually RUNS npm on a package.json-bearing tree
 //     (#822: the worktree fixture below has no package.json, so the old demo took

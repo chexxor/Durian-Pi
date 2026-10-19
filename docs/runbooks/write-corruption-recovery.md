@@ -13,7 +13,7 @@ check_rule: null
 
 ## When to use
 One of two observables:
-- A seat's `write` call returns the refusal **"refused by durig: this write would collapse a
+- A seat's `write` call returns the refusal **"refused by durian-pi: this write would collapse a
   multi-line source file (N lines) to a single line — that is the silent-corruption shape of the
   #623 incident…"**, or
 - a source file (`.mjs`/`.cjs`/`.js`/`.jsx`/`.ts`/`.mts`/`.cts`) is now **one long line** with no error

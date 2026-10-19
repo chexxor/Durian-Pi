@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 I'll research this in parallel: the actual durig repo mechanisms, plus established runbook/SOP practice and agent-execution literature.Now let me read the actual durig runbook docs and baseline docs.Now let me pull the key external sources on runbook practice and agent-executable SOPs.Let me confirm the specific Google SRE claims and maintenance-policy sources.# Runbooks / SOPs for an LLM-operated agent rig — best practice, and a concrete proposal for durig
 
 **Deliverable:** `docs/reviews/runbooks-sop-best-practices.md`

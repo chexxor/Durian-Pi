@@ -1,7 +1,7 @@
-﻿# Target workflows (ROADMAP item 21)
+# Target workflows (ROADMAP item 21)
 
 **Why this document exists.** The MVP bar, the feature inventory, the research gap table
-and `RESEARCH.md`'s topology notes each carried a piece of the answer to "what is durig
+and `RESEARCH.md`'s topology notes each carried a piece of the answer to "what is durian-pi
 for", and nothing carried all of it. The consequence was concrete: "recommended
 extensions" (item 18) and the build order were decided without a frame, and three
 decisions we *did* make deliberately (D21 non-interactive CLI, D22 seats are not
@@ -18,10 +18,10 @@ actually follows - rather than invented for this document. Where a workflow is n
 supported yet, it says so and names the item that would.
 
 **Owner:** the `workflows.advocate` seat (the previous rig's advocate agent). It
-owns this document and the workflow set, questions durig changes for workflow impact, and
+owns this document and the workflow set, questions durian-pi changes for workflow impact, and
 labels every workflow with the evidence class described under "Who owns this". It is
 deliberately not the product's user-facing UX seat - that one owns the
-product surface, this one owns durig's workflows - and it differs from the docs seat
+product surface, this one owns durian-pi's workflows - and it differs from the docs seat
 (`scribe`) by owning the *workflow set* rather than the feature inventory.
 
 ## How to read a workflow
@@ -29,7 +29,7 @@ product surface, this one owns durig's workflows - and it differs from the docs 
 - **must-not-break** is the honest centre. A workflow can be slow, awkward or verbose and
   still work; these are the failures that are not recoverable by a person noticing.
 - **done** is stated in terms of observable state, because "the seat said it finished" is
-  the thing durig exists to stop trusting.
+  the thing durian-pi exists to stop trusting.
 - **capability** is what has to exist for the loop to hold, which is the input to
   "recommended" at the end.
 
@@ -37,8 +37,8 @@ product surface, this one owns durig's workflows - and it differs from the docs 
 
 ## Driving model
 
-**Sanctioned concurrency model:** durig has **one** broker (the single writer) owning the
-store/harness and driving N seats up to the slot cap (`DURIG_MAX_CONCURRENT_SEATS`, D12:
+**Sanctioned concurrency model:** durian-pi has **one** broker (the single writer) owning the
+store/harness and driving N seats up to the slot cap (`DURIAN_PI_MAX_CONCURRENT_SEATS`, D12:
 it caps concurrent GENERATIONS, not seats-as-objects), each seat in its own worktree.
 The single-writer scope is the **store + harness** (not files): a seat's worktree provides
 file isolation; the store provides coordination isolation. Multiple `run`/`send`
@@ -281,7 +281,7 @@ because an unattributable movement is not evidence.
 whether it moved - or say `unknown`, which is a legitimate outcome.
 
 **Capability:** `check` (eight rules), `metrics` (four measures), config provenance
-(`DURIG_STREAM_TIMEOUT_MS` and friends), and a drill - **which does not exist** (item 2's
+(`DURIAN_PI_STREAM_TIMEOUT_MS` and friends), and a drill - **which does not exist** (item 2's
 other half). Without the drill a passive window is *confounded*: it cannot separate "the
 rig got worse" from "the work changed". So today this loop is honest but only
 correlational, and that limitation belongs in the workflow rather than in a footnote.
@@ -360,11 +360,11 @@ Today, honestly:
 | Workflow | Class | Why |
 |---|---|---|
 | W1 routed delegation | **observed** | dogfood finding F6 ran the full loop; QUICKSTART steps 4-6 |
-| W2 independent verification | **inferred** + advertised-elsewhere | the team norm and the pair-review contract, but **not yet observed under durig** - and its evidence half does not exist (item 4) |
+| W2 independent verification | **inferred** + advertised-elsewhere | the team norm and the pair-review contract, but **not yet observed under durian-pi** - and its evidence half does not exist (item 4) |
 | W3 blocked on a question | **observed (offline only)** | `demo/defer.test.mjs` drives the real tools; no live run has deferred an item yet |
 | W4 intake / decomposition / tracking | **observed** | the first dogfood session routed a real backlog item `pm` to `worker` through the queue |
 | W5 human oversight | **observed** | the operator reads `status`/`watch`/`log` against the live store routinely |
-| Operator loop (rig change) | **observed** | run on the live rig, e.g. the `DURIG_STREAM_TIMEOUT_MS` change |
+| Operator loop (rig change) | **observed** | run on the live rig, e.g. the `DURIAN_PI_STREAM_TIMEOUT_MS` change |
 
 That table is the honest scoreboard, and it is uncomfortable in the right way: **only one
 workflow is observed in a live multi-seat run**, because seats still cannot do real work
@@ -382,7 +382,7 @@ hypotheses, not of users.
 
 ## Deriving "recommended" (the point of this document)
 
-The first thing the matrix shows is that **"recommended" for durig is mostly rig shape,
+The first thing the matrix shows is that **"recommended" for durian-pi is mostly rig shape,
 not extensions.** Every workflow is served by the seed tools; what actually varies between
 a rig that works and one that does not is which seats exist, which model each runs, and
 which edges join them - and `check` already has rules for exactly those. So item 18's
@@ -457,7 +457,7 @@ delegation, `peek_queue` for tracking doc items to completion.
 A full RACI/DACI/RAPID/MOCHA grid is REJECTED as redundant (D74) - redundant against this
 document's role table, docs-ownership norm and capability matrix, and the queue's single
 claimer, whose single-Accountable-per-task assumption this team's artifact-keyed ownership
-contradicts. What durig keeps is the DECISION-AUTHORITY layer those frameworks exist to
+contradicts. What durian-pi keeps is the DECISION-AUTHORITY layer those frameworks exist to
 supply, recorded at decision-class granularity with the enforcement named so it cannot go
 stale unnoticed. Keyed to decision/artifact CLASS, never per task:
 

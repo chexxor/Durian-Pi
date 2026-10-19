@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Selfdev queue triage — 2026-10-14
 
 **Reviewed:** all 92 non-done items in `selfdev.sqlite` (51 queued, 9 claimed, 32 deferred), against

@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # security position — resident broker socket path (PIECE 3, item #411)
 
 **Status: recorded 2026-10-15, BEFORE any socket/broker-session code (the gate item #411 requires

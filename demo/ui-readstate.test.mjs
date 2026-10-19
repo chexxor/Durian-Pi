@@ -1,4 +1,4 @@
-// demo/ui-readstate.test.mjs — #1607: the REAL `durig ui` readState closure must RESOLVE.
+// demo/ui-readstate.test.mjs — #1607: the REAL `durian-pi ui` readState closure must RESOLVE.
 //
 // THE GAP THIS CLOSES: demo/ui-driver.test.mjs injects its OWN readState, so the
 // entrypoint's real closure (ui.mjs -> src/tui/readstate.mjs) had no headless coverage.

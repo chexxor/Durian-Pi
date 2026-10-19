@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # ASK E (re-scoped) — EXTRACTION-CANDIDATE INVENTORY (impl, item #658)
 
 Bounded per lead's re-scope: ~5-8 NAMED modules only. Sizes via LOC (Measure-Object) + bytes

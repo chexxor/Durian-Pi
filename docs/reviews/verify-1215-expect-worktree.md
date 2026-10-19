@@ -1,4 +1,6 @@
-﻿# Verification #1215 — #1151/#1182 `DURIG_EXPECT_WORKTREE` at 419ced7
+﻿> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
+# Verification #1215 — #1151/#1182 `DURIG_EXPECT_WORKTREE` at 419ced7
 
 *Verifier: qa. Artifact: 419ced7d138b9f4c666eb115d2ac54e851bede62 on `impl-item-1151`
 (parent 919e21a, merge-base with main 919e21a). All reruns in throwaway worktrees/clone; the

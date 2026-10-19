@@ -1,4 +1,4 @@
-# durig runbooks (SOPs)
+# durian-pi runbooks (SOPs)
 
 **Status:** working set. Audience: the **delegate** (operator-facing) and **seats** (a seat reads a
 runbook when woken into a situation it does not own). A runbook is an operating procedure, not a design
@@ -7,7 +7,7 @@ doc: the design lives in `BROKER-ARCHITECTURE.md` / `BROKER-SUPERVISION.md` /
 
 **Reviewed against research:** `docs/reviews/runbooks-sop-best-practices.md`. The merge/conflict procedure
 (`merge.md`, `resolve-merge-conflict.md`) additionally incorporates `docs/reviews/llm-prompting-for-git-merging.md`
-(deterministic-first, per-hunk resolution with abstention, 3-way context). durig's skeleton already
+(deterministic-first, per-hunk resolution with abstention, 3-way context). durian-pi's skeleton already
 matched published practice; the research's real finding is that the missing part is **machinery** —
 nothing enforces the conventions or detects rot, and the one guardrail that matters (never proceed on a
 false `stopped` signal) is prose, which failed twice on 2026-10-16. The conventions below incorporate
@@ -104,7 +104,7 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 | [broker-safe-change.md](broker-safe-change.md) | a model/constitution/reset change must apply without corrupting the store | yes |
 | [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error`, or the broker repeats `wake-failed … unresolvable path` and one seat is never woken | yes |
 | [store-secret-detected.md](store-secret-detected.md) | a `secret_detected` notice: secret-shaped content is in the committed store | no |
-| [tool-result-redacted.md](tool-result-redacted.md) | a tool result shows a `[redacted by durig: …]` marker instead of its text | no |
+| [tool-result-redacted.md](tool-result-redacted.md) | a tool result shows a `[redacted by durian-pi: …]` marker instead of its text | no |
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language / emitting a tool call as text | yes |
 | [write-corruption-recovery.md](write-corruption-recovery.md) | a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line | maybe |
 | [compact-a-seat.md](compact-a-seat.md) | a seat's context is saturated and a reset would lose durable context | yes |

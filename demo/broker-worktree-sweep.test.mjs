@@ -9,7 +9,7 @@
 // kept.
 //
 // #1194 NARROWED what counts as an orphan. A worktree that is LOCKED is held deliberately,
-// and one with a BRANCH CHECKED OUT is a live seat's workspace (durig puts every item worktree
+// and one with a BRANCH CHECKED OUT is a live seat's workspace (durian-pi puts every item worktree
 // ON its item branch, #859) whose removal made the seat's tools fall back to the SHARED tree
 // (2026-10-17: #1186, #1196). The sweep reports and KEEPS both (`worktree-orphan-kept`).
 //

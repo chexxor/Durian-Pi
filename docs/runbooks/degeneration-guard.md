@@ -28,7 +28,7 @@ under `broker-safe-change.md` (stop the broker, land, restart).
 ## Diagnose (read-only)
 Read the run the guard fired on and look at the tail of the flagged turn:
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 8
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat> 8
 ```
 A **real** loop ends in a wall of near-identical micro-sentences and stops acting —
 `Emit. OK. Go. Now.` / `Completing:` / `Deferring:` repeated dozens of times. A **healthy** turn may
@@ -66,7 +66,7 @@ defects that are NOT patterns to tighten:
   1–2 turns and `repeats`/`toolTurns`/`degenerate-text`/`turnDurationMs` never accumulate, while
   `contextTokens` never reaches the fixed `maxContextTokens: 400_000`. `qa` reached **367,559** tokens,
   produced incoherent output, and got **0** escalations. The context bound must come from the model's
-  EFFECTIVE window (the `DURIG_CONTEXT_WINDOW` seam / `src/context.mjs` denominator), not a constant:
+  EFFECTIVE window (the `DURIAN_PI_CONTEXT_WINDOW` seam / `src/context.mjs` denominator), not a constant:
   GLM-5.3-Flash *advertises* ~1,048,576 tokens yet degraded at 367k ("advertised != usable").
 - **FALSE POSITIVE — a tool duration read as a model stall.** `turnDurationMs` takes the max of
   `messageOf(entry)?.durationMs` over the whole run, INCLUDING `pi.tool-result` entries. A legitimate

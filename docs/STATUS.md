@@ -1,4 +1,4 @@
-﻿# durig — status and handoff
+# durian-pi — status and handoff
 
 Written **2026-10-10** at the operator's request, pausing after the
 viewing/formatting milestone. Read this first when resuming; `docs/ROADMAP.md`
@@ -34,7 +34,7 @@ in the seat worktree `C:/tmp/durig-dev/pi-rebase/durig` (uncommitted); the live 
 work above is separate.
 
 - **PIECE 1 spike** (event-driven wake): DONE + qa-verified (#209/#215/#218). `.spike/pi-wake/` —
-  a Pi extension polls `durig watch --once --json` and calls `pi.sendUserMessage`; both directions
+  a Pi extension polls `durian-pi watch --once --json` and calls `pi.sendUserMessage`; both directions
   proven against the real global Pi in RPC mode (`prove-wake.mjs` exit 0).
 - **PIECE 2 feed**: DONE + qa-verified (#210/#223/#236), then **renamed** `src/readapi.mjs` →
   `src/eventfeed.mjs` to keep it separate from the shared read API (#240/#247). New
@@ -70,7 +70,7 @@ Updated **2026-10-14 (delegate session — auto-wake investigation + repairs)**:
 Updated **2026-10-14 (later delegate session — the resident broker landed)**:
 - **PIECE 3 (resident broker) is DONE and committed.** `serve` (`src/broker.mjs` + `src/scheduler.mjs`,
   D45) reacts to the store's in-process commit stream — no external clock; `up` auto-starts it on a
-  TTY (`--no-serve`/`DURIG_NO_SERVE=1` opt out) and at most one runs per database (`<db>.broker.json`,
+  TTY (`--no-serve`/`DURIAN_PI_NO_SERVE=1` opt out) and at most one runs per database (`<db>.broker.json`,
   D46). Commits `8337d0a` (scheduler, 1/2), `6cfef88` (`serve` + shared wake pass, 2/2), `ddf7cca`
   (auto-start, D46), `b542936` (`revise_work`/`cancel_work`, D47). Verified: the broker was observed
   **auto-waking `devtools`** (its stalled #192) against `selfdev.sqlite` with no manual `run`/`send`;
@@ -129,9 +129,9 @@ Everything below was verified against the real store, not asserted from intent.
 **Not changed (and this is the important half):**
 
 - **Persistence is untouched.** No new document kind, no new field, no schema or
-  migration. Durig still writes only through pi-durable's existing `defineDoc`
+  migration. durian-pi still writes only through pi-durable's existing `defineDoc`
   documents and entry APIs. The format work is pure read-side rendering.
-- **The storage layer is unchanged.** Durig still imports
+- **The storage layer is unchanged.** durian-pi still imports
   `openNodeSqliteStorage` at one seam and runs no SQL of its own; every table
   (`entries`, `submissions`, `documents`, `document_revisions`, …) is pi-durable's
   schema. Our four domain objects are versioned JSON documents keyed by `kind`.
@@ -142,9 +142,9 @@ Everything below was verified against the real store, not asserted from intent.
 
 ## Facts needed to resume
 
-- Working directory: `durig/`. Default provider `deepinfra` (needs
-  `DEEPINFRA_API_KEY`); offline mode needs nothing (`DURIG_PROVIDER=faux`).
-- `DURIG_DB` selects the store; without it the default is `./rig.sqlite`. Use
+- Working directory: `durian-pi/`. Default provider `deepinfra` (needs
+  `DEEPINFRA_API_KEY`); offline mode needs nothing (`DURIAN_PI_PROVIDER=faux`).
+- `DURIAN_PI_DB` selects the store; without it the default is `./rig.sqlite`. Use
   `node cli.mjs config` to see what is actually in effect.
 - Dependency state: `node_modules` is **linked to pinned pi `main`** (`--link`),
   pin `42705224`, drift `false`, all 39 demos passing on it. A fresh clone is on
@@ -153,7 +153,7 @@ Everything below was verified against the real store, not asserted from intent.
 - The tuios patch is rebased onto upstream `main` as `6160892d` on branch
   `rebase/conpty-main` in `C:/tmp/tuios-rebase`; it is **not pushed**, because
   updating PR #596 needs a force-push and has not been authorized.
-- No build or lint step exists in `durig/package.json`. The check surface is the
+- No build or lint step exists in `durian-pi/package.json`. The check surface is the
   demo suite plus `node --check`.
 
 ## Test surface
@@ -176,7 +176,7 @@ implementation; D23 records the conclusion and ROADMAP.md carries the full gap
 table. Short version: **the architecture is on the right side of the evidence and
 is not changing.** Loss of conversation history, silent shared-state corruption and
 the absence of a coordination substrate are impossible or already answered here by
-construction, and observability — the part practitioners call hard — is where durig
+construction, and observability — the part practitioners call hard — is where durian-pi
 over-invested.
 
 The gaps the research exposes are **protocol, not structure**: `complete_work` is
@@ -281,7 +281,7 @@ Updated **2026-10-14 (later delegate session — lost-tranche recovery + structu
 - **Docs-ownership norm adopted:** docs are written by whoever has the most knowledge (dev→impl,
   project→pm, QA/architecture→qa/lead); **scribe** manages project-level docs (FEATURES/STATUS/README)
   and delegates/owns the others. Recorded in `docs/SELFDEV.md` and `docs/WORKFLOWS.md`.
-- **Concurrency clarified and fixed:** one store/harness writer per DB; `DURIG_MAX_CONCURRENT_SEATS`
+- **Concurrency clarified and fixed:** one store/harness writer per DB; `DURIAN_PI_MAX_CONCURRENT_SEATS`
   generation slots; per-task worktrees allow concurrent editing; `serve` + the slot cap is the
   sanctioned concurrency. A 4-slot test found and fixed four broker defects: `serve --max-duration`
   was not a real bound; F34 attributed every concurrent lease to the last-woken seat (now
@@ -307,12 +307,12 @@ in this session exited 0:
   junction" worktree row were already present and accurate; I added the missing **guard/authority
   row** (D50) to `docs/FEATURES.md` §2.
 - **#398 (concurrency clarification):** `docs/SELFDEV.md` already stated the store/harness-not-files
-  WHY; I recorded the three-layer model in `.agents/skills/durig/SKILL.md`, added **D53** to
+  WHY; I recorded the three-layer model in `.agents/skills/durian-pi/SKILL.md`, added **D53** to
   `docs/DECISIONS.md`, and extended the FEATURES.md broker row (“sanctioned concurrency — one
   writer per DB, N seats”). WORKFLOWS.md is the advocate's separate item (out of #398's scope).
 - **#401 (broker operator switch):** added the “The resident broker: switching it on and off”
-  section to `README.md` (TTY `up` auto-start, `--no-serve`/`DURIG_NO_SERVE=1` opt-out,
-  `serve --stop` reaps, raising `DURIG_MAX_CONCURRENT_SEATS` enables parallel work).
+  section to `README.md` (TTY `up` auto-start, `--no-serve`/`DURIAN_PI_NO_SERVE=1` opt-out,
+  `serve --stop` reaps, raising `DURIAN_PI_MAX_CONCURRENT_SEATS` enables parallel work).
 - **#470/#471 (DECISIONS confirm + gate nudge):** D50 confirmed present and accurate
   (`docs/DECISIONS.md:1335`); D53 added as a test-grounded clarification.
 
@@ -335,7 +335,7 @@ Session narrative for this session's landed work, recorded per ASK G (#508):
 
 - **Queue groomed to broker-safe.** pm cancelled 45 and impl cancelled 28 bookkeeping/stale rows
   (73 total); the queue was left at **39 real-work rows, 0 bookkeeping**, and stale claims
-  resolved (#289/#290/#291/#294/#335 and #287). Archive: .durig/queue-archive-2026-10-15.json.
+  resolved (#289/#290/#291/#294/#335 and #287). Archive: .durian-pi/queue-archive-2026-10-15.json.
 - **Resident broker driven, then force-cleared after a cooperative-stop hang, then restarted.**
   serve was started (pid 14180, <db>.broker.json); later it was **force-cleared** when
   serve --stop (cooperative) did not settle, per the runbook finding that a cooperative stop
@@ -343,7 +343,7 @@ Session narrative for this session's landed work, recorded per ASK G (#508):
   scribe reset (pid 33688). Runbook lesson: after a forced kill, check for and remove stale
   .genlock.N slots whose pid is dead and any stray cli.mjs (send|run|serve) processes.
 - **Dirty-tree / worktree-guard finding (ASK F).** The per-task worktree lifecycle is wired into
-  the broker's wake path (src/broker.mjs calls claimWorktree, sets the seat's DURIG_SEAT_ROOT,
+  the broker's wake path (src/broker.mjs calls claimWorktree, sets the seat's DURIAN_PI_SEAT_ROOT,
   removes on completion - #473). **Superseded by #506:** at #508 time the dirty-source guard
   (uncommittedInSource) REFUSED a dirty tree - pm's first broker wake failed on an uncommitted
   docs/NEXT.md and the seat fell back to the shared tree; that was a correct finding then. #506

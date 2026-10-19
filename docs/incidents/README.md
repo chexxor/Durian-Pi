@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # durig incident reports
 
 **Status:** working set. Audience: the **delegate**, the **operator**, and any seat reviewing project

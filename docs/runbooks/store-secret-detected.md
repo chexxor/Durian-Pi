@@ -20,9 +20,9 @@ alpha secret_detected   secret-shaped value in committed store content:
   entry #12 (pi.assistant) content[0].text@41 [openai-key]. The value is NOT shown here. …
 ```
 
-This is a **detection** signal, not prevention: durig cannot stop a secret from being written, because
-the transcript writer lives inside pi-durable and intercepting it would make durig a second writer on
-the broker's store (an A1 violation). So durig reads the committed entries and tells you WHERE a
+This is a **detection** signal, not prevention: durian-pi cannot stop a secret from being written, because
+the transcript writer lives inside pi-durable and intercepting it would make durian-pi a second writer on
+the broker's store (an A1 violation). So durian-pi reads the committed entries and tells you WHERE a
 secret-shaped value is — and never the value itself (a detection surface that echoed the secret would
 *be* the leak). Same discipline as the config guard (`config-secret-refused`).
 
@@ -37,7 +37,7 @@ Read-only. The Diagnose step only reads; it opens no writing harness.
 
 ## Diagnose (read-only)
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs status
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
 ```
 Look for `"kind":"secret_detected"` in the `attention` array (and the matching `secretFindings`), which
 name the seat, the entry id, the location inside the entry (`content[i].text` / `content[i].arguments`)
@@ -49,7 +49,7 @@ and the family (`openai-key`, `github-pat`, …). The value is deliberately abse
 2. **[judgement] Treat every copy as compromised** — the store, its backups, any transcript dump, any
    place the store was copied. Rotating is what makes those copies worthless; purging is hygiene.
 3. Purge the value from the store **only after stopping the broker and confirming it exited** (single
-   writer — see `broker-down-or-stalled`). There is currently **no durig verb that deletes a store
+   writer — see `broker-down-or-stalled`). There is currently **no durian-pi verb that deletes a store
    entry**; purging is an operator action (rebuild the store, or delete the offending entry out-of-band
    with the broker stopped). Name this as the current gap rather than pretending a verb exists.
 4. Do not paste the value into any queue item, doc, or commit while handling the incident — the notice

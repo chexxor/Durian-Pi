@@ -1,15 +1,15 @@
-# The durig selfdev team — operator-delegate runbook
+# The durian-pi selfdev team — operator-delegate runbook
 
 Read `docs/NEXT.md` first; this file is the standing reference behind it.
 
 ## Who this is for
 
 A **delegate for the operator**: an agent external to the team that does not do seat work. The
-three-actor model (operator / delegate / seats) is in `../AGENTS.md`. This runbook is the *durig*
-instance of it — the team whose job is building durig itself.
+three-actor model (operator / delegate / seats) is in `../AGENTS.md`. This runbook is the *durian-pi*
+instance of it — the team whose job is building durian-pi itself.
 
-The team in this workspace is the **durig selfdev** team (`selfdev.sqlite`, `rig.selfdev.json`) — the
-team that builds durig itself.
+The team in this workspace is the **durian-pi selfdev** team (`selfdev.sqlite`, `rig.selfdev.json`) — the
+team that builds durian-pi itself.
 
 ## The team
 
@@ -35,11 +35,11 @@ reviews DeepSeek-authored code on a different family. The author/verifier split 
 ## Running it
 
 The CLI is non-interactive and emits one JSON document per command. Two things must be right: the
-**store** (`DURIG_DB`) and the **seat root** (where seats may read and write).
+**store** (`DURIAN_PI_DB`) and the **seat root** (where seats may read and write).
 
 ```bash
-cd durig
-export DURIG_DB=./selfdev.sqlite          # the selfdev store (NOT rig.sqlite)
+cd durian-pi
+export DURIAN_PI_DB=./selfdev.sqlite          # the selfdev store (NOT rig.sqlite)
 export DEEPINFRA_API_KEY=...              # real runs need it
 node cli.mjs ps                           # seats present?
 node cli.mjs status                       # attention + non-terminal work
@@ -51,16 +51,16 @@ node cli.mjs log impl 30                   # what actually happened
 ```
 
 **The seat root is not declared in `rig.selfdev.json`.** A seat resolves to the `cwd` of the
-write-side command that wakes it (dogfood F12), so running from `durig/` lets seats edit the live
+write-side command that wakes it (dogfood F12), so running from `durian-pi/` lets seats edit the live
 tree. Isolate first:
 
 ```bash
-node cli.mjs worktree C:/tmp/durig-dev/<item>       # a checkout; its cwd is <item>/durig
-DURIG_SEAT_ROOT=<that>/durig DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh
-DURIG_SEAT_ROOT=<that>/durig DURIG_DB=./selfdev.sqlite node cli.mjs run --watch
+node cli.mjs worktree C:/tmp/durian-pi-dev/<item>       # a checkout; its cwd is <item>/durian-pi
+DURIAN_PI_SEAT_ROOT=<that>/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh
+DURIAN_PI_SEAT_ROOT=<that>/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs run --watch
 ```
 
-`up --refresh` re-points each seat's persisted `cwd`; the F12 guard fails closed if `DURIG_SEAT_ROOT`
+`up --refresh` re-points each seat's persisted `cwd`; the F12 guard fails closed if `DURIAN_PI_SEAT_ROOT`
 disagrees with what a seat already has, so re-point rather than guessing.
 
 ## How to find the next item (do not re-derive it)
@@ -68,7 +68,7 @@ disagrees with what a seat already has, so re-point rather than guessing.
 Priority is **not** the top of the 1300-line roadmap. It is:
 
 1. `docs/NEXT.md` — the current pointer, refreshed every session.
-2. `DURIG_DB=./selfdev.sqlite node cli.mjs queue` — the non-terminal rows
+2. `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs queue` — the non-terminal rows
    (`queued`/`claimed`/`deferred`).
 3. `node cli.mjs status` → `attention` — what the substrate already flags
    (`queue-ageing`, `admitted_not_started`, `generation_stale`, `deferred_awaiting_answer`).
@@ -99,7 +99,7 @@ explicitly retired by the operator (2026-10-15). When the operator says a run is
   double-wake (D45). This is why writes go through the broker spool (`intent.mjs`) while the
   broker drives. This is a *store* rule, not a *files* rule: per-task worktrees let
   different seats edit concurrently, and `genlock` already leases N cross-process
-  generation slots (`DURIG_MAX_CONCURRENT_SEATS`). The sanctioned concurrency is **one
+  generation slots (`DURIAN_PI_MAX_CONCURRENT_SEATS`). The sanctioned concurrency is **one
   broker (`serve`) owning the store and driving up to N seats**, each in its own
   worktree; for genuinely independent drivers, use separate databases.
 - **A write-side process killed by the harness tool cap strands the seat.** Recover with
@@ -190,7 +190,7 @@ needed it. (Operator note, 2026-10-15.)
 - `docs/DOGFOOD.md` — the findings that created it (F12 seat root, F13 claimed≠held, F14 corruption).
 - `docs/ROADMAP.md` — *"Deadlock and liveness prevention"* (P1–P6) and
   *"New-session onboarding for seats"* (O1–O4).
-- `.agents/skills/durig/SKILL.md` — driving the CLI.
+- `.agents/skills/durian-pi/SKILL.md` — driving the CLI.
 - `docs/runbooks/` — operating procedures (broker down/stall, safe spec change, store recovery, seat
   reset, leaked worktrees, the pre-written daemon runbook, and how to commission research). Read the
   matching runbook before improvising a recovery; the set is largely **unverified** until ROADMAP item

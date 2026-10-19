@@ -1,4 +1,4 @@
-// durig ONLINE demo: the same pm->worker delegation loop, but with real
+// durian-pi ONLINE demo: the same pm->worker delegation loop, but with real
 // DeepInfra model traffic instead of faux scripting.
 //
 // Requirements:

@@ -1,4 +1,4 @@
-// durig v2 offline demo: proves the org-edge + capability gate.
+// durian-pi v2 offline demo: proves the org-edge + capability gate.
 //
 // Scenario A (refusal): a THIRD seat "intruder" (no edge granting it access)
 // tries send_work -> worker. Must throw inside the commit; the tool catches

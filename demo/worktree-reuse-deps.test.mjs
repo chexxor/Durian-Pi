@@ -43,7 +43,7 @@ async function check(label, fn) {
 }
 
 try {
-	// The repo IS the source (durig's own tree), so `installWorktreeDeps(worktreeRoot)`
+	// The repo IS the source (durian-pi's own tree), so `installWorktreeDeps(worktreeRoot)`
 	// finds the package.json at the worktree root. A package.json with NO lockfile makes
 	// `npm ci` throw — the same trigger the existing prepare-workspace demo uses, offline.
 	await writeFile(join(base, "placeholder"), "");

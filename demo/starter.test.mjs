@@ -77,8 +77,8 @@ try {
 	);
 
 	// The constitution is inline so the file is self-contained (a `constitution`
-	// path resolves against the CWD, so it would only work from durig's own
-	// directory). That copy must not silently drift from the text durig ships.
+	// path resolves against the CWD, so it would only work from durian-pi's own
+	// directory). That copy must not silently drift from the text durian-pi ships.
 	// Compare EOL-insensitively (#977/D83): the inline carries LF, the disk file CRLF.
 	assert.equal(
 		lf(spec.constitutionInline),

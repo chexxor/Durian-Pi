@@ -51,7 +51,7 @@ branches first, schedule conflicts for a quiesced window.
    ```bash
    git worktree add --detach ../resolve-<item> main
    ```
-2. **Deterministic first — but never `git checkout`.** durig's seat guard (`src/confine.mjs`
+2. **Deterministic first — but never `git checkout`.** durian-pi's seat guard (`src/confine.mjs`
    `DENIED_COMMANDS`) refuses `git checkout`, `reset`, `restore`, `clean`, `stash`, and `revert` in a
    seat shell. Choose a side by reading the stage blobs and writing the chosen content:
    ```bash

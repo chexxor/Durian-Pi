@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Research request — reducing agent round-trips in a durable multi-seat rig (follow-up)
 
 **Ask:** hand this to the operator's research agent. Report to
