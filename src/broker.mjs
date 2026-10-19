@@ -348,12 +348,19 @@ export async function applyPauseOp(harness, { paused, by = "operator", reason = 
   }, context);
   if (paused !== true || !wait) return { paused: paused === true };
   const startedAt = Date.now();
+  const deadline = startedAt + pauseWaitMs();
   for (;;) {
     const live = await harness.inspect(context);
     const tasks = (live.tasks ?? []).filter((t) => t.record?.state?.status === "running");
     const subs = (live.submissions ?? []).filter((s) => s.status === "queued" || s.status === "placed");
     if (tasks.length === 0 && subs.length === 0) {
       return { paused: true, quiesced: true, waitedMs: Date.now() - startedAt };
+    }
+    // #2583/F10: BOUND the wait. A run that never settles must not hang `pause --wait` (and the
+    // broker-upgrade step that calls it) forever. Give up after the bound and report
+    // `quiesced:false` with the elapsed time, so the caller decides; both fields already exist.
+    if (Date.now() >= deadline) {
+      return { paused: true, quiesced: false, waitedMs: Date.now() - startedAt };
     }
     await new Promise((r) => setTimeout(r, QUIESCE_POLL_MS));
   }
@@ -369,6 +376,16 @@ export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpau
 
 /** How often `pause --wait` re-checks for quiescence while the broker drains (ROADMAP 131 AC5). */
 const QUIESCE_POLL_MS = 100;
+
+/**
+ * How long `pause --wait` waits for quiescence before giving up. BOUNDED on purpose (#2583/F10):
+ * a run that never settles must not hang the caller (the broker-upgrade step) forever. Env
+ * override `DURIG_PAUSE_WAIT_MS` so a demo can prove the bound without waiting a minute.
+ */
+function pauseWaitMs() {
+  const v = parseInt(process.env.DURIG_PAUSE_WAIT_MS, 10);
+  return Number.isFinite(v) && v > 0 ? v : 60_000;
+}
 
 /**
  * Apply one typed request with the broker's OWN harness — the single writer. Throws on
