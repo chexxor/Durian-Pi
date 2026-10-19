@@ -3,6 +3,44 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T05:45Z, delegate) — **NEXT TASK: MERGE WORKTREES & BRANCHES**
+
+The operator is handing off to a fresh agent to **merge worktrees and branches**. Read this first.
+
+**Shipped this session (delegate, no push):**
+- **Architect seat CREATED** (`3112962`): `rig.selfdev.json` gained `architect`
+  (`deepseek-ai/DeepSeek-V4.1-Flash`, `thinkingLevel` high), an `architecture` ownership class, and
+  edges to/from pm/lead/impl/qa/auditor/security/devtools/scribe/advocate/designer/qa2. Applied with
+  `up rig.selfdev.json --refresh`; broker restarted **pid `5116`**. Proposal
+  `docs/reviews/architect-seat-proposal.md`; kickoff sent to `architect`, first review requested of `pm`.
+- **Broker read path FIXED** (`a70c30d`): `dispatchRead(harness.storage)` referenced a field pi-durable
+  does not expose, dead-lettering every CLI read (`ps`/`queue`/`watch`/`ui`). `openHarness` now returns
+  its real `Storage`, threaded as `readStorage`. Incident `docs/incidents/2026-10-19-read-storage-handle.md`.
+- **UI quick win** (`968d491`): the per-seat live reads are fetched in ONE parallel batch (frame ~1.5 s,
+  was ~20 s+); injectable `readStore` + a concurrency assertion in `demo/ui-readstate.test.mjs`.
+- **`src/broker.mjs` UTF-16 corruption RESTORED** from HEAD (non-destructive; backup
+  `.spike/delegate/broker.mjs.utf16-backup-20261019`); recurrence recorded in
+  `docs/incidents/2026-10-19-broker-mjs-one-line-collapse.md`.
+- Durable TUI-attach fix queued to `pm` (`durable-tui-attach-2026-10-19-1`).
+
+**UNCOMMITTED — all `devtools` WIP; do NOT blindly commit or clobber:**
+- `scripts/land.mjs` (M) — **#2390** (claimed → `devtools`): bounded-concurrency suite
+  (`DURIG_SUITE_CONCURRENCY`); mid-implementation.
+- `src/worktree.mjs` + `package-lock.json` (M) — **#1754 / #2336** (`devtools`): provisioning consistency /
+  `npm ci` → `npm install --prefer-offline` + `sync-pi --sync`. `package-lock` upgrades pi-* 1.1.0 → 1.3.0.
+- **Suite:** `pass=149 fail=3` — `land-helper`, `prepare-workspace`, `worktree-reuse-deps`, all from the
+  devtools WIP above; not read-path regressions.
+- Untracked: `wt-2073/` (mid-merge worktree, `UU docs/DECISIONS.md`, `devtools-item-2073`),
+  `temp-test-1754/` (`devtools-item-1754` test worktree), `fix-broker.mjs` + `src/borker.mjs.head` +
+  `nul` (bypass/corruption scratch — quarantine, do not commit), `selfdev.sqlite.broker.inbox.out/`
+  (broker runtime spool; gitignore candidate).
+
+**Queue id:** `#2390` (suite concurrency, `devtools`, claimed); related `#1754`/`#2336` (provisioning) and `#2420` (bounded stop).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` — then `git status --short` and `git worktree list`
+**Blocker:** `devtools`' in-flight work is uncommitted in the shared tree (`scripts/land.mjs`, `src/worktree.mjs`, `package-lock.json`), so the suite reads `pass=149 fail=3` (`land-helper`, `prepare-workspace`, `worktree-reuse-deps`) until it is committed/landed; do not treat those as read-path regressions.
+**Do not:** `git add -A`; `git checkout`/`reset`/`clean`; commit another seat's WIP; force a dirty
+worktree; delete an `ahead>0` ref; pop a stash blind; push (the operator holds it).
+
 ## NEXT SESSION
 **Current item:** daemon-harness architecture research — **BOTH ROUNDS CONSUMED** (operator-directed).
 Round 1 (`docs/research/how-to-design-an-llm-harness-which-apps-use-a-daemon.md`) was rejected on its head-line
