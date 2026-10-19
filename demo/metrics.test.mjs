@@ -15,6 +15,7 @@ import {
 	formatMetrics,
 	formatValue,
 	measureHasTrend,
+	measurePassFailed,
 	measureQueueAgeing,
 	measureSharedReviewerModel,
 	measureStepRepetition,
@@ -295,4 +296,48 @@ assert.equal(empty.window.quietForMs, null, "an empty store has no quiet time to
 assert.deepEqual(empty.notices, [], "an empty store is silent, not alarming");
 assert.match(formatMetrics(empty, { color: false }), /no entries yet/, "an empty store says so rather than showing zeros");
 
-console.log("METRICS TEST PASS (repetition, unverified, queue ageing, shared model, bands, windows, notices, render)");
+/* --------------------------------------------- 8. pass-failed (broker log) */
+
+// #2643 (ROADMAP 78 / #2237): the broker's THROWN-pass lines are COUNTED, not just logged. The
+// measure reads <db>.broker.log — the only durable artifact of the `pass-failed` diagnostic.
+const LOG_NOW = Date.parse("2026-10-19T12:00:00.000Z");
+const logLine = (iso, body) => `${iso} ${body}`;
+const brokerLog = [
+	logLine("2026-10-19T11:59:00.000Z", "PASS 3 ms=12 woke=pm"),
+	logLine("2026-10-19T11:00:00.000Z", "PASS-FAILED Error: boom cause=SessionFailed: locked"),
+	logLine("2026-10-19T10:00:00.000Z", "PASS-FAILED Error: boom2"),
+	// OUTSIDE the 24h window (26h old) — must NOT count.
+	logLine("2026-10-18T10:00:00.000Z", "PASS-FAILED Error: ancient"),
+	// A similar but different line — not a PASS-FAILED record.
+	logLine("2026-10-19T11:30:00.000Z", "PASS-FAILED-PARTIAL nope"),
+].join("\n");
+
+assert.equal(measurePassFailed(brokerLog, { nowMs: LOG_NOW }).value, 2, "only PASS-FAILED lines inside the 24h window count");
+assert.equal(measurePassFailed(null, { nowMs: LOG_NOW }).value, null, "no log => null, never a false zero");
+assert.equal(measurePassFailed("", { nowMs: LOG_NOW }).value, null, "an empty log => null");
+assert.equal(
+	measurePassFailed(logLine("2026-10-19T11:00:00.000Z", "PASS 1 ms=2"), { nowMs: LOG_NOW }).value,
+	0,
+	"a log with no PASS-FAILED in the window => 0, not null",
+);
+assert.equal(
+	measurePassFailed("PASS-FAILED Error: partial", { nowMs: LOG_NOW }).value,
+	0,
+	"a partial tail line with no leading timestamp is skipped",
+);
+
+const pfMetrics = computeMetrics({ brokerLog, nowMs: LOG_NOW });
+const pfRow = pfMetrics.measures.find((m) => m.id === "pass-failed");
+assert.equal(pfRow.value, 2, "computeMetrics carries the pass-failed count");
+assert.equal(pfRow.state, "warn", "any PASS-FAILED in the window is a warn");
+assert.equal(pfRow.threshold, 1);
+assert.equal(MEASURES["pass-failed"].ambient, true, "pass-failed is ambient (an out-of-band notice)");
+assert.ok(pfMetrics.notices.some((n) => n.kind === "pass-failed"), "a warned pass-failed is an ambient notice");
+assert.match(pfRow.blind, /broker\.log/, "the blind spot names the log");
+
+const noLogRow = computeMetrics({ nowMs: LOG_NOW }).measures.find((m) => m.id === "pass-failed");
+assert.equal(noLogRow.value, null, "no log => no value");
+assert.equal(noLogRow.state, "silent", "no data => silent, never a false ok");
+console.log("  ok   pass-failed is counted from <db>.broker.log (windowed, ambient, silent without a log)");
+
+console.log("METRICS TEST PASS (repetition, unverified, queue ageing, shared model, pass-failed, bands, windows, notices, render)");

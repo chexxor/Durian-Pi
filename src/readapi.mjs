@@ -11,6 +11,7 @@
 // store without becoming a driver.
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { RigControl, RigQueue, Seats } from "./rig.mjs";
 import { SCAN_LIMIT, readSeatPages } from "./rigstory.mjs";
 import { computeMetrics } from "./metrics.mjs";
@@ -22,6 +23,38 @@ import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
 import { partialView, peerGraph } from "./viewmodel.mjs";
 import { LOCAL_PROVIDER_ID, localProviderSpec } from "./providers/local.mjs";
+
+/**
+ * The TAIL of `<db>.broker.log`, capped at `maxBytes` (the log is unbounded and NOT rotated, see
+ * the `pass-failed` measure's blind spot). Read-only; an absent/unreadable log reads as null, never
+ * as an empty pass. A partial first line (no leading ISO timestamp) is skipped by the counter.
+ * The path mirrors `brokerLogPath` in src/broker.mjs — inlined here so the read API does not pull
+ * the provider stack (broker.mjs imports pi-ai) into every read-only client.
+ */
+function readBrokerLogTail(dbPath, maxBytes = 256 * 1024) {
+	if (!dbPath) return null;
+	let fd = null;
+	try {
+		const path = `${dbPath}.broker.log`;
+		const size = statSync(path).size;
+		if (size === 0) return "";
+		const start = Math.max(0, size - maxBytes);
+		fd = openSync(path, "r");
+		const buf = Buffer.alloc(size - start);
+		readSync(fd, buf, 0, buf.length, start);
+		return buf.toString("utf8");
+	} catch {
+		return null;
+	} finally {
+		if (fd !== null) {
+			try {
+				closeSync(fd);
+			} catch {
+				// best-effort close; the read already succeeded or failed
+			}
+		}
+	}
+}
 
 /** The seats a store holds, as the plain {name, conversationId, role} shape a
  * renderer or client consumes. An absent session document is an empty rig, not
@@ -291,6 +324,9 @@ export async function readRigHealth(
 		// Say the window was cut only when a page actually hit the limit, so
 		// "bounded" is a fact about this reading rather than a standing claim.
 		bounded: Object.values(pages).some((items) => items.length >= entryLimit),
+		// #2643 (ROADMAP 78): the broker's own PASS-FAILED lines, so a thrown pass is MONITORED and
+		// not only logged. The only durable artifact of the `pass-failed` diagnostic is the log.
+		brokerLog: readBrokerLogTail(dbPath),
 	});
 	// The failure CAUSE is in the entry, not in the submission record: the record
 	// carries a category ("model_error"), the entry carries the provider's
