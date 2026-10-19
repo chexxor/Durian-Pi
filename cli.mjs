@@ -64,7 +64,7 @@ import {
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
-import { applyPauseOp, auditWorktrees, brokerAlive, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
+import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -2410,7 +2410,13 @@ async function cmdStatus() {
     readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG }),
   );
   noteEmptyRig(health.seats.length);
-  out({ ok: true, command: "status", db: DB_PATH, ...health });
+  // The broker's health (#2581 / BROKER-SUPERVISION §4): a fresh heartbeat alone is only
+  // LIVENESS; `lastPassAt` carries PROGRESS, so a wedged-but-alive broker reads `degraded`,
+  // not `up`. Read-only and cheap (one small file); the pass bound is the stream timeout + margin.
+  const broker = brokerHealth(readBrokerState(DB_PATH), {
+    streamTimeoutMs: streamSettings(CFG).stream?.timeoutMs ?? null,
+  });
+  out({ ok: true, command: "status", db: DB_PATH, ...health, broker });
   // `status` is the one-shot surface, so this is where the metrics command is
   // discovered - and only when a measure has actually moved, because a
   // pointer that prints every time stops being read.

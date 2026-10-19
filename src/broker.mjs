@@ -1095,13 +1095,22 @@ export async function runWakeLoop({
   }
   // Heartbeat: keep the state file fresh so a recycled pid cannot be mistaken for this
   // broker. The token carries across rewrites; only the broker owns this interval.
+  //
+  // The PROGRESS leg (#2581/F7): `lastPassAt` is the time of the last COMPLETED pass. A fresh
+  // heartbeat proves the event loop is turning (LIVENESS), not that passes are ADVANCING — a
+  // broker wedged in a stuck await keeps a fresh heartbeat with a frozen PASS. The heartbeat
+  // carries it so a status reader can tell "alive" from "healthy" (BROKER-SUPERVISION §4).
   let heartbeat = null;
+  let lastPassAt = null;
+  let stateSeed = null; // { pid, since, runToken } — the identity the heartbeat/progress rewrites keep
   if (dbPath) {
     const state = readBrokerState(dbPath);
     if (state && state.pid === process.pid) {
+      stateSeed = { pid: state.pid, since: state.since, runToken: state.runToken };
+      lastPassAt = typeof state.lastPassAt === "number" ? state.lastPassAt : now();
       heartbeat = setInterval(() => {
         try {
-          writeBrokerState(dbPath, { pid: state.pid, since: state.since, runToken: state.runToken });
+          writeBrokerState(dbPath, { ...stateSeed, lastPassAt });
         } catch (err) {
           console.error(`BROKER WARNING: heartbeat write failed: ${err?.message ?? err}`);
         }
@@ -1251,6 +1260,16 @@ export async function runWakeLoop({
         dbPath,
         `PASS ${passes} ms=${now() - passStartedAt} woke=${wokeThisPass.length > 0 ? wokeThisPass.join(",") : "-"}`,
       );
+      // The PROGRESS leg (#2581/F7): record that a pass COMPLETED, on the pass's own write (not
+      // the 20 s heartbeat), so `status` can tell a busy broker from a wedged one.
+      lastPassAt = now();
+      if (dbPath && stateSeed) {
+        try {
+          writeBrokerState(dbPath, { ...stateSeed, lastPassAt });
+        } catch (err) {
+          console.error(`BROKER WARNING: progress write failed: ${err?.message ?? err}`);
+        }
+      }
       if (supervise) {
         const plans = await supervise();
         for (const plan of plans) onDiagnostic({ kind: "escalated", ...plan });
@@ -1422,6 +1441,46 @@ export function brokerAlive(state, { now = Date.now() } = {}) {
   }
 }
 
+/** A pass may legitimately run as long as the model stream timeout; this much beyond it is
+ * still normal (pass startup, the drain), so PROGRESS is judged stale only past the sum. */
+export const BROKER_PROGRESS_MARGIN_MS = 60_000;
+/** The pass bound assumed when no `DURIG_STREAM_TIMEOUT_MS` is configured (a long call is
+ * minutes, not hours), so a rig with no explicit timeout still gets a progress check. */
+export const DEFAULT_PASS_TIMEOUT_MS = 300_000;
+
+/**
+ * The broker's HEALTH — "alive" is NOT "healthy" (#2581 / BROKER-SUPERVISION §4). Two legs:
+ * LIVENESS (the heartbeat; the event loop is turning) and PROGRESS (`lastPassAt`; passes are
+ * ADVANCING). A broker wedged in a stuck await keeps a fresh heartbeat with a frozen PASS, so
+ * a liveness-only check calls it up; this returns `degraded` instead.
+ *
+ * Pure: the caller supplies the stream timeout (cli.mjs reads it from config). Returns
+ * `{ state: "up"|"degraded"|"down", pid?, reason?, hbAgeMs?, passAgeMs?, progressTimeoutMs? }`.
+ */
+export function brokerHealth(state, { now = Date.now(), streamTimeoutMs = null } = {}) {
+  if (!state || typeof state.pid !== "number") return { state: "down", reason: "no broker state" };
+  const hbAgeMs = typeof state.heartbeatAt === "number" ? now - state.heartbeatAt : null;
+  // LIVENESS: the pid exists AND the heartbeat is fresh (brokerAlive is exactly this leg).
+  if (!brokerAlive(state, { now })) {
+    return { state: "down", reason: "not alive (the pid is gone or liveness is stale)", pid: state.pid, hbAgeMs };
+  }
+  // PROGRESS: a completed pass within the pass bound (stream timeout + margin).
+  const progressTimeoutMs =
+    (typeof streamTimeoutMs === "number" ? streamTimeoutMs : DEFAULT_PASS_TIMEOUT_MS) + BROKER_PROGRESS_MARGIN_MS;
+  const passAgeMs = typeof state.lastPassAt === "number" ? now - state.lastPassAt : null;
+  if (passAgeMs === null || passAgeMs > progressTimeoutMs) {
+    return {
+      state: "degraded",
+      reason: passAgeMs === null ? "no pass has completed yet" : "no pass within the progress timeout",
+      pid: state.pid,
+      hbAgeMs,
+      passAgeMs,
+      progressTimeoutMs,
+    };
+  }
+  return { state: "up", pid: state.pid, hbAgeMs, passAgeMs };
+}
+
 /** Read the broker state; an unreadable file is reported and treated as absent. */
 export function readBrokerState(dbPath) {
   const path = brokerStatePath(dbPath);
@@ -1435,8 +1494,8 @@ export function readBrokerState(dbPath) {
   }
 }
 
-export function writeBrokerState(dbPath, { pid, since, runToken = randomUUID(), heartbeatAt = Date.now() }) {
-  writeFileSync(brokerStatePath(dbPath), JSON.stringify({ pid, since, runToken, heartbeatAt }));
+export function writeBrokerState(dbPath, { pid, since, runToken = randomUUID(), heartbeatAt = Date.now(), lastPassAt = null }) {
+  writeFileSync(brokerStatePath(dbPath), JSON.stringify({ pid, since, runToken, heartbeatAt, lastPassAt }));
 }
 
 /**
