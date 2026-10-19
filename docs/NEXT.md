@@ -43,13 +43,16 @@ CONFLICT (author rebase set `#2681`/`#2682`/`#2683`).
 (operator holds it); land an unverified branch.
 
 ## NEXT SESSION
-**Current item:** RELAY THE 4 OPERATOR-FEEDBACK ITEMS — `#2698` (advocate), `#1705` (impl), `#1966`
-(impl), `#2543` (qa) — then verify `pm` routes the three delivered intents and drive the ordered work.
+**Current item:** OPERATOR FEEDBACK DELIVERED — `operator-feedback-rulings-2026-10-19-1` (delivered
+08:53:25Z): the operator accepted the delegate's rulings for `#2698` (advocate — retry after the `#2336`
+fix; register the missing runbook), `#1705` (rebase `9799cff` + delta re-verify `#2072` + land),
+`#1966` (build now; PM/lead rule the `#1780` sequencing), `#2543` (keep held+FUNDED; route the harness).
+VERIFY `pm` routes/advances these AND the three `operator-next-*` intents, then drive the ordered work.
 The landing/prune pass is COMPLETE this session (`main` `a4dc769`; 4 landed, 9 terminal worktrees
-relocated). Every escalated item is a supervisor 15-min escalation of a question the seat sent to
-`pm`, not a true operator decision; the delegate relayed each with a recommendation.
-**Queue id:** `#2698` / `#1705` / `#1966` / `#2543` (operator feedback); landing gate `#2679` (+ verify
-`#2680`); the three `operator-next-*` intents delivered 08:29Z.
+relocated).
+**Queue id:** `#2698` / `#1705` / `#1966` / `#2543` (operator feedback, answered by
+`operator-feedback-rulings-2026-10-19-1`); landing gate `#2679` (+ verify `#2680`); the three
+`operator-next-*` intents delivered 08:29Z.
 **Blocker:** `scripts/land.mjs --suite` is RED in the helper's DETACHED scratch (the `shared-tree-on-main`
 check rule, `#2679`) — land without `--suite` and prove on `main` with `node scripts/suite.mjs` until it is
 fixed. Also 53 unlanded branches conflict (author rebase set `#2681`/`#2682`/`#2683`). Pending operator
