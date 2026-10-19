@@ -3,6 +3,12 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## NEXT SESSION
+**Current item:** architecture research & analysis (operator-directed) — the broker lifecycle/stability cluster.
+**Queue id:** `#2420` (bounded-grace stop addendum, `queued` to `impl`); related `#2406` (read seam vs `pi-durable` version).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Blocker:** the broker honours a stop only at a pass boundary and then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`); `database is locked` contention still causes bounded `PASS-FAILED` retries.
+
 _Last refreshed: 2026-10-18T19:32Z (delegate — host+rig recovery complete; recurrence 8 reproduced live, pinned, and FIXED (`6e27ac2`); broker+local LLM up; verify routed to `pm`)._
 
 _Last refreshed: 2026-10-18T20:35Z (delegate — D107 recorded + routed with D105/#2123; local-model reliability + lastActivity defects filed; filed AND recovered a broker retry hot-loop incident)._
@@ -35,9 +41,53 @@ _Last refreshed: 2026-10-19T02:33Z (delegate, operator-directed — **LANDED #23
 
 _Last refreshed: 2026-10-19T02:35Z (delegate, operator-directed — **operator priority routed**: intent `suite-concurrency-priority-2026-10-19-1` → `pm` (delivered `02:35:36Z`). Make the demo suite / `land.mjs --suite` run with BOUNDED concurrency (`DURIG_SUITE_CONCURRENCY`, isolation for the 61 spawn / 17 `git worktree` / 11 fixed-path / land-helper-genlock tests, flake proof) and sequence it AHEAD of other work, because each landing pass pays the ~5 min suite today. Owner suggested `devtools`, verify `qa`/`auditor`. Evidence in the intent + `.spike/delegate/intent-suite-concurrency-priority.md`.)_
 
-_Last refreshed: 2026-10-19T03:24Z (delegate, operator-directed — recovered the collapsed `src/broker.mjs`; found `main` RED, applied the operator-directed `read`-op hotfix `3e17346` (suite 148/148); broker UP pid `12716`.)_
+_Last refreshed: 2026-10-19T04:25Z (delegate CLOCK-OUT — read-op hotfix + broker bounded-retry landed; 5+11 temp verify worktrees swept; docs truth-up audit filed; broker UP pid `17976`.)_
 
-## RESUME HERE (2026-10-19T03:24Z, delegate) — **`main` green again (`3e17346`); broker UP; verify routed**
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T04:25Z, delegate) — **NEXT TASK: ARCHITECTURE RESEARCH & ANALYSIS (operator-directed)**
+
+**Read this block first.** The operator will have the next agent do **architecture research + analysis**; the
+broker-stability cluster is the obvious subject. Rig is healthy: `main` = `12b0440` (0 ahead of origin —
+pushed), broker **UP pid `17976`** (`PASS` advancing, **0 `pass-threw`** since start), inbox empty.
+
+**Shipped this session (delegate did not push):**
+- **Read-op regression fixed** (`3e17346`): `c5daca5` (#2211) had dropped `read` from `SPOOL_OPS` + the
+  handler; restored as a UNION with `configure`, and corrected `demo/command-spool.test.mjs` (a second
+  stale red). The whole CLI read surface (`status`/`queue`/`watch`) had returned `unknown op: read`.
+- **Shared-tree `src/broker.mjs` collapse recovered** (was ONE line, 0 exports): collapsed copy backed up
+  to `.spike/delegate/broker.mjs.collapsed-backup-20261019`, HEAD restored + CRLF. Incident → resolved.
+- **Landed** `impl-item-2237` (@`3021fe2`: bounded retry + `.stop` on the throwing path + `PASS-FAILED …
+  cause=` logging — ROADMAP 78 remainder) and `impl-item-2298` (@`6683790`: land slot-cap resolver) with
+  `land.mjs --suite` (**152/152**). `16aa6bf` had already landed `#2412` (`sync-pi --link` after `npm ci`).
+- **Docs truth-up audit** `docs/reviews/docs-truth-audit-2026-10-19.md`; fixed two stale `FEATURES.md`
+  rows (`lastActivity` #2229; context pressure #2231). Remaining 4 gaps routed to `pm`
+  (`intent-docs-truth-up.md`, delivered).
+- **Worktrees swept:** 5 registered `%TEMP%/verify*` (junction-first, target-preserving) + 11 bare
+  `%TEMP%/verify*` skeletons. Registered worktrees 161→154.
+- **Runbooks updated:** `write-corruption-recovery` (CRLF note), `broker-down-or-stalled` (stop-defeat/
+  force-stop), `leaked-worktrees` (junction-blocked scratch), `land` (parking another seat's WIP).
+
+**Open threads / blockers:**
+- **Architecture subject — broker lifecycle stability.** The stop path is honoured only at a **pass
+  boundary** (`src/broker.mjs:1085`/`:1281`) then an unbounded `waitForIdle` (`:1293`); the operator's
+  **bounded-grace ruling** is `#2420` (`queued` to `impl`; `.spike/delegate/intent-2237-bounded-stop.md`,
+  delivered). `database is locked` contention still causes `PASS-FAILED` retries (now bounded/backed-off,
+  cause logged). `#2406` (read seam `harness.storage` vs `pi-durable` version) is `queued`.
+- **Durable decisions to record (`scribe`):** the daemon-stop ruling — "graceful stop MUST be bounded and
+  carry an unconditional force fallback; the supervisor/service manager always retains
+  `TerminateProcess`/`SIGKILL`". Check numbering: `DECISIONS.md` on `main` ends at **D111**; scribe's
+  unlanded branches hold **D112/D113**.
+- **Stashes (do NOT pop blind):** `stash@{0}` = D109 non-interactive-git WIP (patch
+  `.spike/delegate/D109-shared-tree-wip-20261019.patch`); `stash@{1}` = #2321-era parked shared WIP;
+  `stash@{2}` = configure WIP. Each needs its author.
+- **Kept orphan:** `%TEMP%/verify758c-134048` (full tree, **no `.git`**) left for `qa` to confirm/dispose.
+- **73 dirty worktrees** (CARRY/teardown leak, author-owned) — never force. **44 unlanded refs**; only
+  clean+verified may land (`security-item-2316` pair review `#2319` queued; docs verifies deferred/stale).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Do not:** `git add -A`; `git reset --hard`/`git clean`; pop a stash blind; force a dirty worktree; delete
+an `ahead>0` ref; push unless the operator grants it.
+
+## (prior) RESUME HERE (2026-10-19T03:24Z, delegate) — **`main` green again (`3e17346`); broker UP; verify routed**
 
 **Done this session (no push):**
 - Recovered the shared-tree `src/broker.mjs` (collapsed to ONE line, 0 exports, CLI fully broken): backed up the collapsed copy to `.spike/delegate/broker.mjs.collapsed-backup-20261019`; restored HEAD's content; converted to CRLF so `git status` is clean. No `git checkout`/discard; the `configure` WIP is safe in `stash@{0}`.
