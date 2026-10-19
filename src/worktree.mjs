@@ -10,7 +10,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { copyFile, cp, mkdir, rm, stat } from "node:fs/promises";
-import { join, relative, resolve, dirname, isAbsolute } from "node:path";
+import { join, relative, resolve, dirname, isAbsolute, sep } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
@@ -68,6 +68,55 @@ export async function repoRoot(dir) {
 	// git reports forward slashes on Windows; `resolve` normalises it so callers can compare and
 	// join it as an ordinary platform path instead of getting a path that only looks equal.
 	return resolve(stdout.trim());
+}
+
+/**
+ * Ensure a path is git-ignored BEFORE it is created, so a worktree/scratch
+ * directory never leaks into the shared tree's `git status` as `?? <dir>/`.
+ *
+ * This is durig's form of the vendored `using-git-worktrees` rule
+ * (vendor/eval/superpowers/skills/using-git-worktrees/SKILL.md, "Safety
+ * Verification"): run `git check-ignore -q <dir>` and make it ignored FIRST,
+ * "because an unignored worktree directory commits/leaks the whole tree".
+ *
+ * A target OUTSIDE the repository (or the repo root itself) cannot leak into it
+ * and is left alone. The rule is written to the repository's LOCAL exclude file
+ * (`<git-common-dir>/info/exclude`), NEVER to the tracked `.gitignore`: ignoring
+ * a runtime-created path is machine-local state, and editing a tracked file here
+ * would itself dirty the very tree the guard exists to keep clean.
+ *
+ * Idempotent: an already-ignored path is a no-op, and a rule already present in
+ * the exclude file is not appended twice. The rule is directory-anchored
+ * (`/<path>/`) so a FILE of a similar name is never swept up.
+ */
+export async function ensureIgnored({ repo, target }) {
+	const rel = relative(resolve(repo), resolve(target));
+	if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+		return { ignored: false, outside: true };
+	}
+	const relPosix = rel.split(sep).join("/");
+	try {
+		await run("git", ["-C", repo, "check-ignore", "-q", "--", relPosix]);
+		return { ignored: true, alreadyIgnored: true, pattern: relPosix };
+	} catch {
+		// exit 1 => not ignored yet; add the rule below.
+	}
+	const common = (await run("git", ["-C", repo, "rev-parse", "--git-common-dir"])).stdout.trim();
+	const excludePath = join(isAbsolute(common) ? common : resolve(repo, common), "info", "exclude");
+	const rule = `/${relPosix}/`;
+	let existing = "";
+	try {
+		existing = await readFile(excludePath, "utf8");
+	} catch {
+		// No exclude file yet — it is created below.
+	}
+	const present = existing.split(/\r?\n/).map((line) => line.trim()).includes(rule);
+	if (!present) {
+		await mkdir(dirname(excludePath), { recursive: true });
+		const separator = existing !== "" && !existing.endsWith("\n") ? "\n" : "";
+		await writeFile(excludePath, `${existing}${separator}${rule}\n`, "utf8");
+	}
+	return { ignored: true, added: rule, pattern: relPosix };
 }
 
 /**
@@ -152,6 +201,10 @@ export async function createWorktree({ source, target, ref = "HEAD", branch = nu
 			? ["worktree", "add", target, branch]
 			: ["worktree", "add", "-b", branch, target, ref]
 		: ["worktree", "add", "--detach", target, ref];
+	// IGNORE BEFORE CREATE (#2328): make the target git-ignored BEFORE `git worktree add`
+	// so the new directory never leaks into the source repo's `git status` (the vendored
+	// using-git-worktrees rule). A target outside the repo is a no-op.
+	await ensureIgnored({ repo: root, target });
 	await run("git", ["-C", root, ...addArgs]);
 	const carried = dirty.trim() === "" ? [] : await carryVisibleState({ source, target });
 
