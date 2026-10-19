@@ -35,7 +35,38 @@ _Last refreshed: 2026-10-19T02:33Z (delegate, operator-directed — **LANDED #23
 
 _Last refreshed: 2026-10-19T02:35Z (delegate, operator-directed — **operator priority routed**: intent `suite-concurrency-priority-2026-10-19-1` → `pm` (delivered `02:35:36Z`). Make the demo suite / `land.mjs --suite` run with BOUNDED concurrency (`DURIG_SUITE_CONCURRENCY`, isolation for the 61 spawn / 17 `git worktree` / 11 fixed-path / land-helper-genlock tests, flake proof) and sequence it AHEAD of other work, because each landing pass pays the ~5 min suite today. Owner suggested `devtools`, verify `qa`/`auditor`. Evidence in the intent + `.spike/delegate/intent-suite-concurrency-priority.md`.)_
 
-## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T01:30Z, delegate)
+_Last refreshed: 2026-10-19T02:52Z (delegate CLOCK-OUT — git branch management is the operator's next task; see the block immediately below.)_
+
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T02:52Z, delegate) — **NEXT TASK: GIT BRANCH MANAGEMENT (operator-directed)**
+
+**Read this whole block first. The shared tree is NOT clean and one tracked file is CORRUPT.**
+
+**Current item:** git branch management, requested by the operator. The delegate's prior branch/worktree work is in `docs/runbooks/branch-cleanup.md` + `docs/runbooks/leaked-worktrees.md` (the three rules: ownership, ignore-before-create, prune-after-remove).
+
+**⛔ BLOCKER FIRST — `src/broker.mjs` is collapsed to ONE line in the shared tree** (0 newlines; older content). `HEAD` is intact (1429 lines, `onlyReadIntents` present), so nothing is lost. **Restore it before anything else** (operator-only per `docs/runbooks/write-corruption-recovery.md`):
+```bash
+git checkout -- src/broker.mjs        # OPERATOR ONLY
+tr -cd '\n' < src/broker.mjs | wc -c # expect ~1429
+node --check src/broker.mjs           # expect clean
+```
+Until restored, every `node cli.mjs` verb imports `src/broker.mjs` as an empty module. Incident: `docs/incidents/2026-10-19-broker-mjs-one-line-collapse.md`.
+
+**Exact next command:** `git status --short -- .` → then `git worktree list` and `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (read-only).
+
+**State you inherit (2026-10-19T02:52Z):**
+- **`main` = `cf5bc40`** (delegate NEXT.md). Parents: `c5daca5` (a seat's `fix(broker): reconcile WIP against authoritative baseline (#2211)`), `6cfb3aa`, `d058e0a` (**the `#2321` landing** — on main). `origin/main` is far behind — **unpushed; the operator holds push.**
+- **Broker: pid `16864`, WEDGED again** since `02:40:38Z` (`wake-failed … qa conv 15 … Session failed after a storage error`; `WAKE-RETRY … pass-threw`). **Not restarted at clock-out.** A `cli.mjs watch` viewer (pid `14472`) is attached. Recovery per `docs/runbooks/broker-down-or-stalled.md`. `#2321` (the read-poll fix) IS on main and does not stop this persistent-storage-error wedge — see the recurrence in `docs/incidents/2026-10-18-broker-retry-hotloop.md`.
+- **Untracked scratch/leaks in the tree (do NOT commit):** `fix-broker.mjs` (a raw `fs.writeFileSync('src/broker.mjs', …)` — the guard-bypassing write), `peek-store.cjs`, `src/borker.mjs.head` (UTF-16, typo), `wt-2073/`, `selfdev.sqlite.broker.inbox.out/`.
+- **`stash@{0}`** = `delegate: park shared-tree tracked WIP for 2026-10-19 #2321 landing` (patch: `.spike/delegate/landing-2026-10-19/shared-tree-tracked.patch`). **Do NOT `git stash pop` blindly** — it holds the `configure` WIP + 7 doc/demo edits; reconcile with `devtools-item-2182` first. `stash@{1}` is the earlier configure-WIP park.
+- **Leaked item worktrees** (dirty orphans, never `--force`): `item-2224`, `item-2231`, `item-2305`, `item-2315`, `item-2340` — see `docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`. Plus `wt-2073/`.
+
+**Delivered to `pm` this session (all `delivered:true`):** `worktree-carry-collision-2026-10-19-1` (`01:46:12Z`), `prioritize-2321-verify-2026-10-19-1` (`02:19:10Z`, overtaken — qa had already verified as `#2373`), `suite-concurrency-priority-2026-10-19-1` (`02:35:36Z`).
+
+**Docs updated this session:** incidents `worktree-carry-teardown-collision` + index row; **new** incident `broker-mjs-one-line-collapse` + index row; `2026-10-18-broker-retry-hotloop` recurrence 2026-10-19; `docs/FEATURES.md` broker-served-reads row (`#2321`); **new** `docs/reviews/tui-attach-vs-poll.md` (the TUI poll → pi-durable attach reference: measure + all pi-durable/example/spike references for the Phase-2 attach work).
+
+**Do not:** `git add -A`; `git reset --hard`/`git clean`; force a dirty worktree; delete an `ahead>0` ref; **push** (operator holds it); restore `src/broker.mjs` without the operator; pop `stash@{0}` blindly; land a conflicted branch by hand.
+
+## (prior clock-out — 2026-10-19T01:30Z, delegate)
 
 **Routed this session (delegate):** intent `worktree-carry-collision-2026-10-19-1` → `pm` (delivered `01:46:12Z`) — the CARRY/teardown collision: `createWorktree` carries the shared tree's tracked-dirty files into every item fork (`src/worktree.mjs:134`, ASK F/#506), and `complete_work`'s clean-only teardown refuses a dirty tree, so **while the shared tree is dirty (the parked `configure` WIP) every completed item leaks its worktree**. Evidence: `#2231` (`impl-item-2231 @166d51f`) and `#2224` (`impl-item-2224 @a2eaf7b`) still on disk dirty; `.spike/serve.err` refusals; also `item-2305`/`item-2315`/`item-2340`. Folded into the already-routed `worktree-rot-prevention-2026-10-19-1` so it is not a duplicate. **Leaked trees left untouched** (dirty orphans, never `--force`).
 

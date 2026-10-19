@@ -7,7 +7,7 @@ symptom: "the broker stays alive but spins: `WAKE-RETRY … pass-threw` every ~0
 runbook: broker-down-or-stalled
 fix: null
 prevention: "queued defect (delegate intent f27a8772) to bound the inbox-driven re-trigger and honour .stop on the throwing path + ROADMAP 78 (log pass-failed); AND when the throwing seat's document is corrupt, `store-corruption-recovery.md` (`repair-pi-live.mjs`) is a PREREQUISITE — a plain terminate+restart does NOT clear a persistent throw (recurrence 2026-10-18T20:56Z)"
-last_reviewed: 2026-10-18
+last_reviewed: 2026-10-19
 ---
 
 # The broker hot-loops on a persistent pass throw, so spooled intents never drain and `serve --stop` is defeated
@@ -106,6 +106,37 @@ the hot-loop recovery, not an alternative to it. A bare terminate+restart loops 
 - `.spike/serve.err`: `wake-failed … pm conv 3 … Session failed after a storage error` — the SAME text
   before and after the `20:47:55Z` restart, i.e. the restart did not clear the trigger.
 - `broker.json` heartbeat stayed fresh while `PASS` was frozen — a fresh heartbeat is NOT health.
+
+## Recurrence — 2026-10-19: the read-poll fix landed but the wedge still recurs (a separate, persistent cause)
+
+**What happened.** Across 2026-10-19 the broker wedged and was restarted **four** times as the delegate
+recovered it: pids `4432` (died abnormally ~`02:03:49Z`, no `EXIT`), `6508`, `18200`, `12240` (each
+wedged within ~30 s–4 min of a clean `START`, `WAKE-RETRY … pass-threw`, `seats=-`), then `16864`. The
+read-poll root cause was fixed: **`#2321` was implemented, verified (`#2373`, qa), and LANDED to `main`
+`d058e0a`** by the delegate (landing window outside the broker; `--suite` 148/148). `onlyReadIntents` is
+now on `main`.
+
+**The fix is real but INCOMPLETE for this shape.** Even with `#2321` live (broker `16864` started
+`02:31:01Z` on the fixed `main`), the broker wedged again at `02:40:38Z` — `wake-failed … qa conv 15 …
+Session failed after a storage error`. `#2321` stops a *read* from forcing a pass; it does not address a
+**persistent per-conversation storage error**, which still throws whole passes. So there are two
+independent causes and only the read-poll one (the accelerant) is fixed: the storage error (`qa` conv 15,
+and earlier `auditor` conv 4936 / `pm` conv 3) remains, and a persistent throw still spirals despite the
+bounded backoff — see `#2237` (still `queued`) and ROADMAP 78.
+
+**Evidence (recurrence).**
+- `selfdev.sqlite.broker.log`: `START pid=18200` @`02:13:03Z` → `PASS 1…6` → `WAKE-RETRY … pass-threw`
+  @`02:13:33Z`; `START pid=12240` @`02:15:49Z` → `PASS 57 ms=5039` @`02:19:44Z` → `pass-threw`;
+  `START pid=16864` @`02:31:01Z` (post-landing, fixed `main`) → `pass-threw` @`02:40:38Z`.
+- `.spike/serve.err`: `wake-failed … qa conv 15 … Session failed after a storage error; close and reopen it` at `02:40:38Z`.
+- `main` = `cf5bc40`; `onlyReadIntents` present in `git show HEAD:src/broker.mjs` (count 2).
+- Concurrent: a `cli.mjs watch` viewer (pid `14472`) was attached; the shared-tree `src/broker.mjs` was
+  separately found collapsed to one line (see
+  `docs/incidents/2026-10-19-broker-mjs-one-line-collapse.md`).
+
+**Consequence:** a bare restart remains non-durable. The durable fixes owed are `#2237` (bound the
+persistent throw) and the underlying storage-error cause; recovery stays per
+`docs/runbooks/broker-down-or-stalled.md`.
 
 ## Links
 `docs/runbooks/broker-down-or-stalled.md` · `docs/incidents/2026-10-18-broker-dormant-stalled.md`
