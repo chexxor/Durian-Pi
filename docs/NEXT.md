@@ -31,6 +31,17 @@ branches/worktrees; (3) update the runbook; (4) a new operator change request.
 - **RUNBOOKS UPDATED** — `land.md` (QUICK PATH: broker-up landing, `merge-tree` preflight, the
   `--suite` defect + fallback), `branch-cleanup.md` + `leaked-worktrees.md` (the relocate-out-of-tree
   recipe + 2026-10-19 counts). Control-byte scanned.
+- **OPERATOR DIRECTIVES (later in the session)** — `operator-directives-2026-10-19-2` (delivered
+  `08:19:41Z`) asks `pm` to: (a) un-hold `#2629` and give **designer** work — the delegate already
+  `reset designer` to a fresh context (`resetEntryId 118848`) after the operator funded the provider;
+  (b) route to `lead` an ask to propose a fix for **devtools' small local model degrading on large
+  context**; (c) register a NEW backlog item to make "waiting on the operator" visible AND answerable,
+  explored first with `advocate` + `designer` + `architect`; (d) apply all 10 human-queue
+  recommendations (including closing stale escalations `#2049/#2068/#2072/#2568`). `#994` still needs
+  the operator's quiet-window declaration; `#1135` still needs the pricing-source decision.
+- **devtools #2336** — its provisioning WIP (pin.json 9 pkgs + `sync-pi.mjs` sparse `scripts/`) was
+  committed to `main` directly by a seat (`415a723`) plus a `nul` `.gitignore` (`bd36d8d`); review found
+  **no stray files and no redo needed**; the redundant `devtools-item-2336` ref was pruned.
 
 **Open / owed:**
 - **The `--suite` landing gate is RED** (detached scratch vs `shared-tree-on-main`) — needs the owning
@@ -43,8 +54,8 @@ branches/worktrees; (3) update the runbook; (4) a new operator change request.
 - **12 merged refs stay held** by locked/live/seat-root worktrees (`designer-item-2103`,
   `advocate-item-2104`, `impl-item-1274/1547`, `devtools-item-2459/2514/2559`,
   `auditor-item-1924/2020/2141`, `impl-item-2233`) — do not force.
-- **Shared-tree tracked WIP restored, do not touch:** `pi-main.pin.json` + `scripts/sync-pi.mjs`
-  (devtools, #2336 lineage).
+- **Shared tree is CLEAN** (devtools' pin/sync WIP was committed as `415a723`/`bd36d8d`, #2336). `main`
+  is `bd36d8d` + the delegate's docs commit; verify before assuming any WIP.
 - **PM degeneration** (context saturation then step-repetition) recurs; the auto-reset recovers it, but
   the durable fix is unlanded (D107 `#2233`).
 
@@ -53,11 +64,15 @@ branches/worktrees; (3) update the runbook; (4) a new operator change request.
 (operator holds it); land an unverified branch.
 
 ## NEXT SESSION
-**Current item:** Finish the land+prune pass — land the clean-but-unlanded branches
-(`devtools-item-1558`/`temp-1558-rebase`, `devtools-item-2412`, `devtools-item-2494`,
-`impl-item-2356`) once routed, and get the 45 conflicting branches rebased + re-verified by their
-authors. Fix the `land.mjs --suite` gate (detached scratch trips `shared-tree-on-main`).
-**Queue id:** `#2558`/`#2564`/`#2609` (`pm` landing lists); the `--suite` gate fix is owed as a new item.
+**Current item:** Confirm `pm` applied the operator directives `operator-directives-2026-10-19-2` —
+(a) **designer** restarts with work (un-hold `#2629`; the provider is funded and the delegate reset its
+context), (b) `lead` is asked to propose a fix for **devtools' small local model degrading on large
+context**, and (c) a NEW backlog item to make "waiting on the operator" visible + answerable, explored
+first with `advocate` + `designer` + `architect`. Then finish the land+prune pass (the clean-but-unlanded
+`devtools-item-1558`/`temp-1558-rebase`, `devtools-item-2412`, `devtools-item-2494`, `impl-item-2356`,
+and the 45 conflicting branches' author rebases).
+**Queue id:** the new backlog item (PM to register) + `#2629` (designer) + `#2558`/`#2564`/`#2609`
+(`pm` landing lists); the `--suite` gate fix is owed as a new item.
 **Blocker:** `scripts/land.mjs --suite` is RED in the helper's DETACHED scratch (the `shared-tree-on-main`
 check rule) — land without `--suite` and prove on `main` with `node scripts/suite.mjs` until it is fixed.
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
