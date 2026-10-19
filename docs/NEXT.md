@@ -4,10 +4,17 @@
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
 ## NEXT SESSION
-**Current item:** architecture research & analysis (operator-directed) — the broker lifecycle/stability cluster.
-**Queue id:** `#2420` (bounded-grace stop addendum, `queued` to `impl`); related `#2406` (read seam vs `pi-durable` version).
+**Current item:** daemon-harness architecture research — **CONSUMED** (operator-directed). The raw report
+is `docs/research/how-to-design-an-llm-harness-which-apps-use-a-daemon.md`; the grounded consumption note
+is `docs/reviews/daemon-harness-architecture-review.md`. Its head-line "root cause" claims (missing
+WAL/`busy_timeout`/in-process lock/`BEGIN IMMEDIATE`; model-inference-in-transaction) were **rejected as
+already present in pinned pi-durable 1.3.0**; its retry claim was already fixed by `#2237` (`3021fe2`).
+Accepted refinements are now **registered (not scheduled) as ROADMAP 153–158** for `pm` to sequence.
+**Queue id:** ROADMAP `153–158` (new, registered); `#2420` (bounded-grace stop addendum, `queued` to `impl`) still open; related `#2406` (read seam vs `pi-durable` version).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
-**Blocker:** the broker honours a stop only at a pass boundary and then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`); `PASS-FAILED … cause=Error: database is locked` was observed during the restart churn — cause **UNVERIFIED** (the log names no lock holder; not reproduced; clean since pid `17976`).
+**Blocker:** the broker still honours a stop only at a pass boundary then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`); the residual `PASS-FAILED … cause=Error: database is locked` cause stays **UNVERIFIED** and is now scoped by follow-up research question 3 (`docs/reviews/daemon-harness-architecture-followup-research-prompt.md`).
+
+_Last refreshed: 2026-10-19T05:0xZ (delegate — daemon-harness research consumed; ROADMAP 153–158 registered; rejection of the report's "missing pragma" root cause grounded in the pin; follow-up prompt written; no seat work, no push.)_
 
 _Last refreshed: 2026-10-18T19:32Z (delegate — host+rig recovery complete; recurrence 8 reproduced live, pinned, and FIXED (`6e27ac2`); broker+local LLM up; verify routed to `pm`)._
 

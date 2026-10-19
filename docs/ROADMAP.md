@@ -2729,6 +2729,56 @@ after the OWASP miss. `pm` sequences. Registered **not scheduled**.
     `src/checkup.mjs`. *Acceptance:* a missing `COMPETITORS.md` entry, or a stale pin, is a `check`
     finding. *Cross-links:* the runbook-machinery family ROADMAP 81/82.
 
+## Daemon-harness architecture — from the operator research (2026-10-19)
+
+Source: `docs/research/how-to-design-an-llm-harness-which-apps-use-a-daemon.md`, consumed and
+grounded in `docs/reviews/daemon-harness-architecture-review.md`. The report's "root cause" claims
+(WAL/`busy_timeout`, in-process FIFO lock, `BEGIN IMMEDIATE`, SQLite upgrade, inference-in-transaction)
+were **rejected as already present in the pinned pi-durable 1.3.0**; only the genuine refinements and
+one gated investigation are registered here. `pm` sequences. Registered **not scheduled**.
+
+153. **Resource-keyed lock manager over `genlock.mjs`.** Today the single `DURIAN_PI_MAX_CONCURRENT_SEATS`
+    lease serializes seats coarsely; model it on OpenHands' resource-lock manager so two seats run
+    concurrently unless they collide on the same file/terminal/browser. Our per-seat worktrees are the
+    isolation boundary. *Owner:* impl · *Where:* `src/genlock.mjs`. *Acceptance:* a demo shows two seats
+    touching disjoint resources both run, and two touching the same file serialize. *Cross-links:* the
+    survey's reference #2; `docs/reviews/daemon-harness-architecture-review.md` §3.
+
+154. **Broker event/SSE tap.** Expose the broker's event stream so the TUI, a script, or a web client
+    can subscribe to the same run (OpenCode's `/sse` fan-out) instead of the in-process `watchview.mjs`
+    poll. *Owner:* impl · *Where:* broker serve path + a client. *Acceptance:* an out-of-process client
+    observes turns/tool events for a live run without opening the store. *Cross-links:* the TUI Phase-2
+    attach work, `docs/reviews/tui-attach-vs-poll.md`, ROADMAP item 52 (`watchEvents`).
+
+155. **Uniform harness conformance probe set.** Replace the per-feature `demo/*.test.mjs` sprawl with a
+    uniform probe set over every seat path — basic turn, tool call, streaming, interrupt, model override,
+    policy denial (Omnigent's "test harnesses like hardware"). *Owner:* qa · auditor · *Where:* `demo/`.
+    *Acceptance:* each probe is a pass/fail legible without reading the implementation, and the suite
+    labels which harness property each probe covers. *Cross-links:* the suite-concurrency priority
+    (`DURIG_SUITE_CONCURRENCY`) already routed to `pm`.
+
+156. **Extension seam as a Pi-style `Operations` interface.** Give each tool an `Operations` interface as
+    the single remoting/scope seam (`BashOperations`, `EditOperations`, …), so execution can relocate and
+    per-seat tool scoping closes. *Owner:* devtools · impl · *Where:* the pi-durable extension install path
+    + `src/seattools.mjs`. *Acceptance:* a seat can be scoped to a tool subset without editing tool
+    definitions. *Cross-links:* ROADMAP item 18 (per-seat tool scoping); the survey's reference #4.
+
+157. **GATED investigation — move the audit/event trail off the SQLite write lock.** Only if evidence
+    still shows lock contention *after* D111 (broker-served reads) and the `harness.storage` read fix
+    (`8d48cb1`, `6140467`): evaluate OpenHands' per-record-file + `.lock` append-only model for the
+    transcript/audit so document writes stop sharing their lock with transcript churn. *Owner:* lead · impl.
+    *Acceptance:* a written finding that first demonstrates residual contention on the write lock (not
+    corruption, not a second opener), then a scoped change with a rollback. *Cross-links:* the survey's
+    reference #2; incident `2026-10-18-broker-retry-hotloop.md`.
+
+158. **Retry residual for a persistent pass-throw.** #2237 already added bounded exponential backoff,
+    `.stop` on the throwing path, and `PASS-FAILED … cause=`. What remains: jitter so independent brokers
+    do not resynchronize, retry only idempotent work (a non-idempotent "close and reopen" must not be
+    re-run blindly), and surface a controlled overload error when the budget is exhausted rather than
+    retrying forever. *Owner:* impl · *Where:* `src/broker.mjs` `runWakeLoop`. *Acceptance:* a demo shows a
+    persistent throw produces jittered, budget-bounded retries and then a terminal overload diagnostic.
+    *Cross-links:* `#2237`/`3021fe2`; `docs/reviews/daemon-harness-architecture-review.md` R6.
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for

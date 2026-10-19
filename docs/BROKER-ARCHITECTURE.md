@@ -8,6 +8,10 @@ own mechanisms (what the harness owns, what durian-pi adds, the pin), written fo
 pi-durable's.
 **Companion:** `docs/BROKER-SUPERVISION.md` — the process-lifecycle layer this document leaves out: how
 the broker is kept alive and healthy by a host daemon (stop/liveness contract, exit codes, heartbeats).
+**Prior art:** `docs/reviews/daemon-harness-architecture-review.md` — how this design compares to other
+daemon-based harnesses. It records that the storage discipline this broker relies on (`journal_mode=WAL`,
+`busy_timeout`, `BEGIN IMMEDIATE`, an in-process serial queue) is **already provided by pi-durable 1.3.0**,
+so the broker's own obligations are the single-writer rule and the wake-loop lifecycle.
 
 ## The model in one paragraph
 
