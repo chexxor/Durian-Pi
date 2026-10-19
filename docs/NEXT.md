@@ -3,6 +3,55 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T21:30Z, delegate) — **LAND+PRUNE PASS #2: 2 VERIFIED BRANCHES LANDED (`main` `a2d6b95`→`020e136`), 10 REFS PRUNED, 129 ORPHAN WORKTREES RELOCATED OUT-OF-TREE**
+
+**Read this first.** Operator-directed after the redesign was accepted: run the landing runbook to merge
+completed branches, prune them, and prune worktrees no longer in use. Git-only; the broker stayed UP.
+
+**Landed (verified + tip-matched + clean against `main`):**
+- **`impl-item-2951 @8ca9ba9`** (structured `blockedBy` gate field; verify `#2981`/`#2988` done) — the
+  base the redesign's M1 builds on.
+- **`devtools-item-2261 @f36ca3e`** (`git` skill: `git diff --no-color` row; re-verify `#2668`/`#2671`).
+- Landed with `scripts/land.mjs` **without `--suite`** because the suite is RED on `main` *before* the
+  landing (see below). `main` `a2d6b95` → **`020e136`**.
+
+**Evidence:**
+- **Suite on `main` (post-land): `pass=172 fail=5`** — all five are `demo/tui-durable-*.test.mjs`, all the
+  SAME pre-existing failure: `ERR_PACKAGE_PATH_NOT_EXPORTED: Package subpath './codemode' is not defined
+  by "exports" in @earendil-works/pi-durable` (the installed released pi-durable lacks the vendored
+  pin's `./codemode`; the #2412/#2413 version-visibility family). **Proved pre-existing**: I ran
+  `demo/tui-durable-boot.test.mjs` on `main` BEFORE the landing → exit 1, same error. The `--suite` gate
+  correctly refused the landing on this failure and did NOT advance `main`; the fallback (prior passes'
+  path) landed without `--suite` and this run proved the result on `main`.
+- `node demo/pitui.test.mjs` now **passes** (exit 0) — the `pi-tui` symlink is gone (a real dir).
+
+**Pruned / relocated:**
+- **Refs 96 → 86.** 10 merged refs pruned: 4 free (`advocate-item-3006`, `devtools-item-2608`,
+  `devtools-item-2966`, `impl-item-2951`), 6 via worktree release (`devtools-item-2261/2390/2514`,
+  `advocate-item-2698`, `scribe-item-2944` relocated; `impl-item-1547` unlocked+removed, clean+cancelled).
+- **129 orphan worktrees relocated** to `../pi-opendurig.worktrees/` (the operator-approved
+  relocate-out-of-tree path; every tracked+untracked file preserved), then `git worktree prune`. Project
+  root `item-*` dirs went **~155 → 24**. Archive now holds 170 trees.
+- **Kept (intentional):** 17 locked worktrees, `item-2188` (holds nested worktrees), 8 live-item trees
+  (held/claimed), and the scratch trees (`temp-*`, `wt-2073`, `.durig-verify-2336`). `main` UNMOVED by
+  the prune; **nothing forced**; tracked tree CLEAN.
+
+**STILL OWED / FYI:**
+- **The suite is RED on `main` (5 `tui-durable-*` failures, pre-existing).** This blocks `land.mjs
+  --suite` for EVERY future landing. Root cause: the installed `@earendil-works/pi-durable` ≠ the vendored
+  pin (missing `./codemode`). Land/re-pin it (`sync-pi --link`) or fix the import — likely the same family
+  as **#2412** / the `pi-build-version-visibility` incident.
+- `pm` can close the two landed landing lists (`#2983`, `#2667`); `#2951`/`#2261` are now ancestors of
+  `main`.
+- **The redesign implementation `M1–M7` is still not registered** — `pm` has been routing the ruling
+  escalations (`#3001`–`#3010`; F12 ruled via `#3003`/`#3004`). First slice = **M1**.
+- Standing: `impl-item-2574`/`2578`/`2777` still conflict (need author non-force rebase); `#2976` verify
+  `#2993` still held; push owed (operator holds the grant).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print([(i['id'],i['status'],i['to']) for i in d['items'] if i['id']>3010])"`
+**Do not:** `git add -A`; force a dirty worktree; delete an `ahead>0` ref; pop a stash blind; push;
+land with `--suite` until the 5 `tui-durable-*` failures are fixed (report the exact `pass=N fail=M`).
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T21:12Z, delegate) — **OPERATOR ACCEPTS v2 AS THE DESIGN OF RECORD; REDESIGN LEADS CAPABILITY WORK; IMPLEMENTATION DIRECTIVE DELIVERED TO `pm`**
 
 **Read this first.** Operator ruling, 2026-10-19: **accept the v2 redesign**
