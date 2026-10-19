@@ -24,13 +24,17 @@ that makes a stuck item impossible. No seat work, no push.
 - **`docs/runbooks/stale-held-backlog.md`** (new runbook) + indexes updated (`runbooks/README.md`,
   `incidents/README.md`).
 
-**STATE — verify before acting:**
-- **`pm` may or may not have acted on the unblock intent yet.** First check: is `#2630` released and is
-  `#2797` routed? `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print({i['id']:i['status'] for i in d['items'] if i['id'] in (2630,2797,2788,2826,2804,2626)})"`
-- **The durable-TUI chain (unchanged gates):** Phase 1 done+landed (`impl-item-2600 @3d07691`, merged
-  `34ba340`; qa `#2901`→`#2904` PASS). Held: `#2626` (Phase 2), `#2630` (advocate), `#2733` (gate),
-  `#2788`+`#2789` (waiting view/answer), `#2797` (designer doc land), `#2804`/`#2826` (render rules,
-  gated on `#2788`), `#2098` (Phase 3).
+**STATE — VERIFIED AFTER THE INTENT (pm acted at 20:23–20:33Z):**
+- **`pm` processed `operator-durable-tui-unblock-2026-10-19-1`.** `#2797` is **queued** (designer doc
+  `a3dff23` routed for landing); the pin caret is **`#2969`** (claimed by `devtools`); the durable-TUI
+  build-chain sequencing is **`#2977`** (`#2788` first → `#2789`/`#2804`/`#2826` → `#2626`).
+- **`#2630` is `held` again — correctly.** `pm` released it; `advocate` claimed it and re-held it
+  `20:27:04Z` because the proposal commits are only on `designer-item-2103` (not yet on `main`), so the
+  article it must review is not in the tree. This is a *legitimate dependency park* and a live instance of
+  the incident's class — it moves only when a person remembers; under the redesign it would be a
+  `blockedBy: [#2797]` auto-release. **Release `#2630` when `#2797` lands.**
+- **The rest of the chain is unchanged and held:** `#2626`, `#2733`, `#2788`, `#2789`, `#2826`, `#2804`,
+  `#2098`. `#2977` is the governor `pm` registered for them.
 - **The redesign proposal is NOT registered as a queue item** — it needs an operator/lead ruling before
   `pm` decomposes it (see its §11 open questions, incl. the sequencing recommendation to ship the
   read-only check rules + attention kinds first).
@@ -282,14 +286,16 @@ CONFLICT (author rebase set `#2681`/`#2682`/`#2683`).
 (`operator-durable-tui-unblock-2026-10-19-1`, delivered `20:22:19Z`) and the queue's `held`-orphan class
 is documented; the queue-lifecycle redesign is proposed and **awaits an operator/lead ruling** before it
 is registered. Verify `pm` acted, then drive the TUI chain (`#2788` → `#2826`/`#2804` → `#2626`).
-**Queue id:** `#2630` (advocate review — release), `#2797` (designer doc `a3dff23` — land), `#2788`/`#2789`
-(waiting view + answer op), `#2826`/`#2804` (render rules), `#2626` (Phase 2), `#2733` (proven gate),
-`#2098` (Phase 3). The redesign itself is a doc, not yet an id
+**Queue id:** `#2797` (designer doc `a3dff23` — queued for landing), `#2630` (advocate review — re-held
+on the `#2797` landing), `#2977` (build-chain sequencing), `#2788`/`#2789` (waiting view + answer op),
+`#2826`/`#2804` (render rules), `#2626` (Phase 2), `#2733` (proven gate), `#2098` (Phase 3), `#2969`
+(pin caret, devtools). The redesign itself is a doc, not yet an id
 (`docs/reviews/queue-lifecycle-redesign.md`).
-**Blocker:** the durable-TUI chain is released but `pm` may not have processed it; the redesign needs a
-ruling. Standing blockers unchanged: `impl-item-2574`/`2578`/`2777` need an author non-force rebase +
-re-verify; push owed (operator holds the grant).
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print({i['id']:i['status'] for i in d['items'] if i['id'] in (2630,2797,2788,2789,2826,2804,2626)})"`
+**Blocker:** the chain is now governed by `#2977` and waits on the `#2797` landing (which frees `#2630`)
+and on `pm` releasing `#2788`; the redesign needs an operator/lead ruling. Standing blockers unchanged:
+`impl-item-2574`/`2578`/`2777` need an author non-force rebase + re-verify; push owed (operator holds the
+grant).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print({i['id']:i['status'] for i in d['items'] if i['id'] in (2630,2797,2788,2789,2826,2804,2626,2977)})"`
 
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:30Z, delegate) — **NEXT-WORK PRIORITIES DELIVERED TO `pm` (3 intents); LANDING GATE `#2679` FIRST, THEN BUG-FIX CLUSTER, THEN STANDING PRIORITIES**
 

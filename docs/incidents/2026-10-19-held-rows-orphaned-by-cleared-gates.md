@@ -102,6 +102,23 @@ Partial, and not durable:
 - The remaining held rows are **not** individually unstuck by this incident; they are unstuck when the
   redesign lands (§Prevention).
 
+**Append 2026-10-19T20:33Z (post-resolution verification).** `pm` processed the intent within ~2 min and
+went further: `#2797` was released and is now `queued` (the designer doc is routed for landing); the pin
+caret was registered as `#2969` (claimed by `devtools`); and the durable-TUI build chain was registered as
+`#2977` (`#2788` first, then `#2789`/`#2804`/`#2826`, then `#2626`, with advocate's F6 acceptance anchors
+folded in). `#2630` was released and **advocate claimed it — then correctly re-held it at `20:27:04Z`**,
+reason recorded as prose in `heldReason`: the designer's proposal commits (`a3dff23`, `daa2f0c`) are
+contained only on `designer-item-2103`, so the article the review must judge is **not yet on `main`**
+(landing `#2797` pending).
+
+That re-hold is a **live instance of the defect this report names**, and a precise one: the park is
+*legitimate* — it is a `dependency` on a landing — but it is expressed only as free text
+("release when pm's crossref or the landing lands"), so nothing can query it, nothing fires when `#2797`
+lands, and the only way it moves is a person remembering. Under the redesign it is a
+`block: {reason: dependency, payload: {blockedBy: [#2797]}}` that **auto-opens when `#2797` closes**. This
+is the strongest argument for §4.1 of the proposal: the fix is not "release more" — it is to make the
+gate structural.
+
 ## Prevention
 
 The durable change is a queue-lifecycle redesign, proposed in
@@ -141,6 +158,10 @@ future delegate is [`docs/WORK-ITEM-LIFECYCLE.md`](../WORK-ITEM-LIFECYCLE.md).
 - Prose gates, measured: WORK-ITEM-SCHEMA §1 ("325 items; only 69 name a resolvable `#NNN`").
 - The intent delivery: `selfdev.sqlite.broker.inbox.out/operator-durable-tui-unblock-2026-10-19-1.json`
   (`delivered:true`) and the broker log line `INTENT delivered=1 dead=0 dup=0` at `20:22:19Z`.
+- `pm`'s response (verified from the live queue transitions): `#2797` held→released→revised→queued at
+  `20:23:55Z`–`20:24:04Z`; `#2630` released `20:23:55Z`, claimed by advocate `20:23:58Z`, **re-held by
+  advocate `20:27:04Z`** with the `heldReason` quoted above; `#2969` (pin caret) queued `20:23:55Z` and
+  claimed by `devtools` `20:29:27Z`; `#2977` (build-chain sequencing) held `20:32:54Z`.
 
 ## Links
 
