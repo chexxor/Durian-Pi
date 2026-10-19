@@ -1141,11 +1141,30 @@ export async function runWakeLoop({
   startedAt = now(),
   isStopping = () => false,
   dbPath = undefined,
+  // F2 (#2572): a `SessionFailed` is TERMINAL for pi-durable, so the broker must close+reopen
+  // its harness to recover. `reopen` is owned by the CALLER (cli.mjs, where the handles are
+  // CREATED) and must, ATOMICALLY, close+reopen BOTH handles AND re-subscribe before it
+  // returns; the loop stays dumb — it just calls it and swaps the handles it drives. Bounded by
+  // `reopenCap` (with backoff), so a persistent failure ends in a TERMINAL diagnostic instead
+  // of an endless reopen loop (the #2237 hot-loop class).
+  reopen = null,
+  reopenCap = 3,
+  reopenBackoffMs = 5_000,
 }) {
   const failedSeats = new Set();
   const escalations = [];
   let passes = 0;
   let stoppedBy = null;
+  // The handles the loop drives. `reopen` SWAPS them when a SessionFailed forces a recovery, so
+  // every use below reads the CURRENT handle, never the one captured at entry.
+  let h = harness;
+  let p = probeStorage;
+  let r = readStorage;
+  // Consecutive reopens since the last COMPLETED pass: a healthy broker may recover many times,
+  // but one that keeps failing to reopen hits the cap and stops with a terminal diagnostic.
+  let reopenAttempts = 0;
+  let sessionReopened = false;
+  let sessionFailedTerminal = false;
   // When a pass drops a real candidate because the seat is inside its cooldown,
   // no commit may follow to trigger another pass. Record when that candidate
   // becomes eligible so the idle loop re-runs a pass then (the revisit gap).
@@ -1169,7 +1188,7 @@ export async function runWakeLoop({
   // failure is reported, never allowed to stop the broker from driving.
   if (dbPath) {
     try {
-      const reconciled = await reconcileBrokerStartup(harness, { dbPath, context, onDiagnostic, probeStorage });
+      const reconciled = await reconcileBrokerStartup(h, { dbPath, context, onDiagnostic, probeStorage: p });
       if (reconciled.leases.length > 0 || reconciled.worktrees.length > 0) {
         logBrokerLine(
           dbPath,
@@ -1244,7 +1263,7 @@ export async function runWakeLoop({
       if (dbPath && readIntentFiles(dbPath).length > 0) {
         if (onlyReadIntents(dbPath)) {
           try {
-            await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage });
+            await drainIntentInbox(h, p, { dbPath, context, onDiagnostic, readStorage: r });
           } catch (err) {
             // A failed read drain must neither kill the idle loop nor spin it: fall back to a
             // real pass, which is where a storage failure is reported and retried with backoff.
@@ -1306,7 +1325,7 @@ export async function runWakeLoop({
     // pass that throws goes dormant again (recurrence 8, 2026-10-18).
     let passThrew = false;
     try {
-      await drivePass(harness, probeStorage, {
+      await drivePass(h, p, {
         context,
         seatFilter: scheduler.seatFilter(now()),
         readBusySeats,
@@ -1332,6 +1351,9 @@ export async function runWakeLoop({
         onSuppressed: (name) => suppressedThisPass.add(name),
       });
       passes++;
+      // A pass that COMPLETED clears the reopen budget: recovery succeeded, so a LATER failure
+      // starts a fresh bounded sequence rather than counting toward an old one.
+      reopenAttempts = 0;
       // Duration + the seats woken make a pass's liveness legible: a long
       // `ms=` with `woke=-` is a pass that waited, not one that worked.
       logBrokerLine(
@@ -1382,8 +1404,46 @@ export async function runWakeLoop({
         dbPath,
         `PASS-FAILED ${described.error ?? "unknown"}${described.cause ? ` cause=${described.cause}` : ""}${described.errcode !== undefined ? ` errcode=${described.errcode}` : ""}${described.errstr !== undefined ? ` errstr=${described.errstr}` : ""}`,
       );
+      // F2 (#2572): a `SessionFailed` is TERMINAL — retrying the same dead harness never
+      // recovers (every later call throws it again). Close+reopen via the caller's callback,
+      // bounded by `reopenCap`; past the cap the broker STOPS with a terminal diagnostic rather
+      // than looping forever on a dead Session.
+      if (reopen && isSessionFailed(error)) {
+        reopenAttempts++;
+        if (reopenAttempts > reopenCap) {
+          logBrokerLine(dbPath, `HARNESS-REOPEN-CAP-EXCEEDED attempts=${reopenAttempts}`);
+          onDiagnostic({ kind: "harness-reopen-cap-exceeded", attempts: reopenAttempts, ...described });
+          stoppedBy = "session-failed";
+          sessionFailedTerminal = true;
+        } else {
+          const delay = Math.min(reopenBackoffMs * 2 ** (reopenAttempts - 1), wakeRetryMaxMs);
+          logBrokerLine(dbPath, `HARNESS-REOPEN attempt=${reopenAttempts} in=${delay}ms`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          try {
+            const next = await reopen();
+            if (next) {
+              h = next.harness ?? h;
+              p = next.probeStorage ?? p;
+              r = next.readStorage ?? r;
+            }
+            sessionReopened = true;
+          } catch (reopenError) {
+            const rd = describeError(reopenError);
+            logBrokerLine(dbPath, `HARNESS-REOPEN-FAILED ${rd.error ?? "unknown"}${rd.cause ? ` cause=${rd.cause}` : ""}`);
+            onDiagnostic({ kind: "harness-reopen-failed", ...rd });
+          }
+        }
+      }
     } finally {
       scheduler.endPass();
+    }
+    // A successful reopen re-arms the loop so recovery is IMMEDIATE, not at the next scheduled
+    // pass; a session that could not be recovered (cap exceeded) stops the broker terminally.
+    if (sessionFailedTerminal) break;
+    if (sessionReopened) {
+      sessionReopened = false;
+      scheduler.markDirty();
+      signal.raise();
     }
     // Post-pass scheduling runs even when THIS pass threw. A wake failure emitted before
     // an unrelated later throw (e.g. `superviseOnce` hitting the SAME storage error) must
@@ -1429,7 +1489,7 @@ export async function runWakeLoop({
   // scope here, exactly as the old global wait used to do at every pass. This
   // is the one place a global wait belongs.
   if (heartbeat) clearInterval(heartbeat);
-  await harness.waitForIdle(context);
+  await h.waitForIdle(context);
   // Close the audit opened by START: the reason the broker stopped (a `.stop` request, a
   // bound, or a signal) survives the process here instead of only on stdout.
   logBrokerLine(dbPath, `EXIT pid=${process.pid} reason=${stoppedBy ?? "unknown"} passes=${passes}`);
@@ -1482,6 +1542,23 @@ export function describeError(error) {
   if (errstr !== undefined) described.errstr = errstr;
   if (code !== undefined) described.code = code;
   return described;
+}
+
+/**
+ * Whether `error` (or any error in its `cause` chain) is pi-durable's terminal `SessionFailed`.
+ *
+ * pi-durable's failure model is TERMINAL: the first storage error fails the Session, and every
+ * later call on that harness throws `SessionFailed` (`dist/errors.js`: name "SessionFailed",
+ * message "Session failed after a storage error; close and reopen it", `cause` = the first
+ * error). Retrying the SAME harness therefore never recovers — only a close+reopen does (F2,
+ * #2572). Matched by NAME (not `instanceof`) so it survives two copies of the package being
+ * loaded, and walked through the cause chain because callers often wrap it.
+ */
+export function isSessionFailed(error) {
+  for (let e = error, depth = 0; e && depth < 8; e = e?.cause, depth++) {
+    if (e?.name === "SessionFailed") return true;
+  }
+  return false;
 }
 
 /** Append one line to `<db>.broker.log`. */
