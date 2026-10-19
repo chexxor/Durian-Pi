@@ -10,6 +10,7 @@
     "test:tui": "node demo/tui-suite.mjs",
     "cli": "node cli.mjs",
     "ui": "node ui.mjs",
+    "tui": "node tui.mjs",
     "intent": "node intent.mjs"
   },
   "dependencies": {
