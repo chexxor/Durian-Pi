@@ -3006,3 +3006,52 @@ unknown view is dead-lettered; `readViaBroker` round-trips through the broker's 
 `demo/command-spool.test.mjs` (vocabulary) and `demo/cli-broker-refuse.test.mjs` (read verbs work while a
 broker drives) updated; live: `status`/`queue`/`ps`/`log` each drained an `INTENT delivered=1` from the
 running broker.
+
+## D112 — Broker failures are SCOPE-CLASSIFIED and the process has ONE storage connection; a stop is only "stopped" when the pid is gone (architect, item #2520, 2026-10-19)
+
+**Context.** The broker review (`docs/reviews/architecture-broker-review.md`, item #2520) found the
+live reliability cluster (repeated `PASS-FAILED SessionFailed … cause=Error: database is locked`) is not
+a missing SQLite pragma — it is a **failure-scope** defect plus a **liveness-signal** defect. pi-durable's
+failure model is terminal (`vendor/pi-main/packages/durable/src/errors.ts`: *"The Session failed … Reopen
+the Session"*), while `runWakeLoop` retries the same dead Session forever and `drivePass` aborts the whole
+pass on any single storage error. Separately, `serve --stop` can report `stopped:true` while the broker
+still owns the store, because the heartbeat interval is cleared before the unbounded F11 drain
+(`src/broker.mjs:1321-1322`) and `brokerAlive` treats a >60 s stale heartbeat as dead (`:1379`), so a
+second writer is admitted into the 2026-10-16 double-writer corruption class.
+
+**Decision.** Three durable rules, each with a recovery path:
+1. **Failure is scoped and classified.** A per-seat failure is a `wake-failed` and MUST NOT abort the
+   pass (invariant: a fault in seat X never stops seat Y). A terminal `SessionFailed` is NOT retried
+   against the same Session; the broker MUST tear down and reopen the harness in-process (recover from
+   committed state) — a bounded, jittered retry with a terminal diagnostic is reserved for genuinely
+   retryable errors (ROADMAP 158).
+2. **One owner ⇒ one connection.** The broker MUST NOT hold a second pi-durable connection
+   (`probeStorage`); every read the broker serves — the `read` spool op, `readStoppedConvIds`,
+   `readSeatRoots`, `superviseOnce` — is served from the harness's own `Storage`. This extends D111 from
+   "no second *process* opener" to "no second *connection*", the invariant D111's own rationale states.
+3. **Liveness, progress, and stopping are distinct signals.** `.broker.json` carries a `lastPassAt`
+   progress leg and a `stopping` state; `serve --stop` reports `stopped:true` only when the pid is
+   provably gone, and clears state with the pid guard (`clearBrokerState(dbPath, pid)`). "Alive" is never
+   reported as "healthy" without progress.
+
+**Alternatives considered.**
+- *Retry harder / tune `busy_timeout`* (the rejected "missing pragma" theory): rejected — the failure is
+  terminal in the Session, not a timeout, and the review's version probe shows the pinned semantics are
+  already `BEGIN IMMEDIATE` + `busy_timeout`; a longer timeout only widens the window.
+- *Treat `SessionFailed` as a crash and exit non-zero for a host to restart* (option B): correct once
+  `src/host.mjs` exists, but no host exists today, so a crash is just a permanent outage; the in-process
+  reopen (option A) is the reversible choice now and composes with B later.
+- *Keep `probeStorage` as a cheap raw reader*: rejected — `SqliteStorage.document()` takes `BEGIN
+  IMMEDIATE` even for a read, so the "raw reader" still takes the one write lock and can time out the
+  harness's 5 s busy window (`PASS ms=5051` → `SessionFailed`).
+
+**Consequences.** F2/F4/F6/F8/F1/F7/F9 in the review are retired by this decision's three rules; each has
+its own failing-first demo in the review's disposition. Cost: a reopen path must preserve an in-flight
+run's durability (pi-durable recovers from committed state, so the risk is bounded to a run that had not
+committed); `status` grows one field. `probeStorage` removal is mechanical but touches
+`readStoppedConvIds`/`readSeatRoots`/`superviseOnce` call sites and their demos.
+
+**Status.** Proposed (architect review, item #2520). Implementation items are handed to `pm`; `lead`
+rules scope if the failure-scope policy conflicts with scheduled work. Evidence so far: the review's
+grep/`node --check`/demo baseline and the version probe (see the review's Evidence section). No
+implementation is claimed here.
