@@ -3,9 +3,9 @@ runbook: branch-cleanup
 symptom: "so many local git branches; merged branches were never pruned"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-18
+last_verified: 2026-10-19
 verified_by: delegate
-evidence: "2026-10-17: 52 merged/patch-equivalent branches pruned (128->76 refs, main unmoved, 33 unlanded kept). 2026-10-18: 20 merged refs pruned through the worktree-release/reclaim paths alone (1 free-merged; 2 terminal clean+locked releases; 17 verify-tree reclaims in leaked-worktrees.md), main unmoved, nothing forced. 2026-10-18 (delegate, operator-directed): 51 merged refs pruned in one pass (17 free + 34 worktree-held whose only content was generated scratch moved to .spike/delegate/quarantine), then 5 verified branches landed + pruned; refs 137->84, worktrees 167->130, main 95e7c0c->b3710f3, suite 138/0, nothing forced"
+evidence: "2026-10-17: 52 merged/patch-equivalent branches pruned (128->76 refs, main unmoved, 33 unlanded kept). 2026-10-18: 20 merged refs pruned through the worktree-release/reclaim paths alone (1 free-merged; 2 terminal clean+locked releases; 17 verify-tree reclaims in leaked-worktrees.md), main unmoved, nothing forced. 2026-10-18 (delegate, operator-directed): 51 merged refs pruned in one pass (17 free + 34 worktree-held whose only content was generated scratch moved to .spike/delegate/quarantine), then 5 verified branches landed + pruned; refs 137->84, worktrees 167->130, main 95e7c0c->b3710f3, suite 138/0, nothing forced. 2026-10-19: 9 verified branches landed (main 4f9e7d6->7b6548e, suite 156 pass/1 env fail) + refs 108->73 pruned (27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/, 4 clean+locked+terminal removed), main unmoved by the prune, nothing forced"
 check_rule: null
 ---
 
@@ -70,7 +70,11 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
    **(b) clean but `locked`** → `git worktree unlock <wt>` → remove → `-d`, only when the item is
    terminal (otherwise the lock means "in use" — keep it); **(c) dirty** → keep. `leaked-worktrees.md`
    § "Reclaiming a merged item-branch pinned by a verify worktree" covers the qa `verify-*` tree case.
-   Then re-run Diagnose and step 2.
+   **When (c) is dirty and the branch IS merged, the operator-approved resolution is to RELOCATE the
+   worktree out-of-tree** (`git worktree move` to `../pi-opendurig.worktrees/`, then `switch --detach`,
+   then `-d`) — it preserves every file and frees the ref; the full copyable loop and counts are in
+   `leaked-worktrees.md` (2026-10-19). Most durian-pi item worktrees are dirty with CARRY residue, so
+   this is the COMMON path, not the exception. Then re-run Diagnose and step 2.
 6. `git worktree prune` to drop metadata for worktrees already removed by the sweep.
 7. Remote snapshot refs (`origin/selfdev-*`, `origin/item-148`, `origin/pi-rebase`) are the operator's:
    deleting them is a push, and the delegate holds no push grant.

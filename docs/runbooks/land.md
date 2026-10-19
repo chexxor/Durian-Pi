@@ -2,10 +2,10 @@
 runbook: land
 symptom: "a verified branch is not on main; land it without ever leaving the shared tree mid-merge"
 writes: false
-precondition: "broker-stopped"
-last_verified: 2026-10-17
-verified_by: impl
-evidence: "node demo/land-helper.test.mjs -> exit 0 (helper scripts/land.mjs; items #1165/#1171, #1383 probe fix, #1399 outside-broker path)"
+precondition: "tree-clean"        # the broker may stay UP: the helper publishes a priority reservation and WAITS for the genlock slots at the FF (#1497/#1498)
+last_verified: 2026-10-19
+verified_by: delegate
+evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landing with the broker UP (lock {slots:4,held:4,waitedMs:31581,reserved:true}), main 4f9e7d6->7b6548e, suite 156 pass / 1 fail (only the pitui symlink)"
 check_rule: null
 ---
 
@@ -25,8 +25,42 @@ conflicted branch left `.git/MERGE_HEAD` and `<<<<<<<` markers in `src/checkup.m
 detached worktree**, and `main` advances only by a **clean fast-forward**. The shared tree is never
 mid-merge, whatever a branch does.
 
+## QUICK PATH (verified 2026-10-19) — land with the broker UP, prove on `main`
+
+`scripts/land.mjs` now **waits** for the generation slots instead of refusing while a seat generates
+(#1497/#1498), so the common pass does NOT need to stop the broker. The one hard precondition is a
+**clean tracked tree** (untracked scratch does not block). Do exactly this and you will not have to
+ask "stop or not?" or "why did --suite fail?".
+
+1. Park another seat's tracked WIP, if any, to a NAMED stash and save a patch first
+   (never `git checkout`/`restore` it):
+   `git diff -- <paths> > <patch>; git stash push -m "delegate: park <what> for <date> landing" -- <paths>`
+   Restore it with `git stash pop` when the landing is done.
+2. Preflight each candidate read-only — this tells you landed vs conflict WITHOUT a suite run:
+   `git merge-tree --write-tree main <branch>` (exit 0 = clean, nonzero = conflict).
+3. Land the clean set in ONE call: `node scripts/land.mjs <b1> <b2> ... --db ./selfdev.sqlite`.
+   Read the JSON report; `lock.reserved:true` / `lock.waitedMs` show it waited for the slots.
+4. **KNOWN GATE DEFECT (2026-10-19): `--suite` is red on EVERY landing.** `--suite` runs each demo in
+   the helper's **detached** scratch worktree, and the `shared-tree-on-main` check rule (`50f981a`)
+   flags a detached HEAD — so `demo/check.test.mjs` fails there and the helper refuses with
+   `STOPPED: demo/check.test.mjs failed`. Until that rule is fixed (route it to the owning seat),
+   **land WITHOUT `--suite`, then prove the result on `main`**:
+   ```bash
+   node scripts/suite.mjs        # 0 green / 1 real failure / 2 environmental
+   ```
+   The only failure you should see is `demo/pitui.test.mjs` (the `node_modules/@earendil-works/pi-tui`
+   symlink — environmental, not a regression). A REAL failure means `git revert -m 1 <merge>` per
+   "If it fails" below.
+5. Prune each landed ref (`git branch -d` refuses anything unmerged, so this is lossless):
+   ```bash
+   git merge-base --is-ancestor <branch> main && git branch -d <branch>
+   ```
+   Release its worktree first (`leaked-worktrees.md`) — a DIRTY worktree must be relocated, never
+   force-removed.
+
 ## Preconditions
-- The branch is **verified** (qa/auditor ack) and mergeable — see `merge.md`'s checklist.
+- The branch is **verified** (qa/auditor ack) and mergeable — see `merge.md`'s checklist. The helper's
+  `--suite` gate would normally enforce this, but see the KNOWN GATE DEFECT above.
 - **A landing pass CANNOT be driven by a broker-hosted seat.** Quiescing requires stopping the broker,
   and stopping the broker ENDS the run of any seat hosted by it — so such a seat cannot stop the broker
   and then land and report. (2026-10-17: the exclusive landing window closed QUIET BUT EMPTY for exactly
@@ -53,9 +87,12 @@ The helper's pre-flight, in code (the enforcement chokepoint):
 
 ## Do
 0. **Quiesce, then drive OUTSIDE the broker.** A broker-hosted seat cannot do this (Preconditions).
-   Either stop the broker first (`broker-safe-change.md`) and then drive the pass with a plain
+    Either stop the broker first (`broker-safe-change.md`) and then drive the pass with a plain
    `node cli.mjs run`/`send` (no broker hosting), or run `scripts/land.mjs` as a **DETACHED** process
-   with the broker already stopped and quiescent. Then **hand-verify quiescence** — `"stopped": true`
+   with the broker already stopped and quiescent. **As of 2026-10-19 this stop is OPTIONAL** — the
+   helper publishes a priority reservation and waits for the slots, so a plain external caller can
+   land with the broker UP (see the QUICK PATH). Stop it only when you want the guarantee that no seat
+   generates. If you DO stop it, **hand-verify quiescence** — `"stopped": true`
    is NOT proof of exit: on 2026-10-17 the F11 drain held on a seat's lease and pid 37376 stayed alive
    ~8 minutes after `--stop` returned true (it exited only at `08:32:10`, `EXIT pid=37376 reason=stop
    passes=606`). Confirm BOTH:

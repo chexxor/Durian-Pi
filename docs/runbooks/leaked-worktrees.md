@@ -3,9 +3,9 @@ runbook: leaked-worktrees
 symptom: "stray or dirty item-* worktrees; a merged item-branch that cannot be pruned"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-18
+last_verified: 2026-10-19
 verified_by: delegate
-evidence: "2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-18 (delegate): 34 more scratch-only merged worktrees released by MOVING the generated scratch to .spike/delegate/quarantine (untracked files block git worktree remove), refs 137->84, worktrees 167->130, nothing forced"
+evidence: "2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced"
 check_rule: null
 ---
 
@@ -265,3 +265,25 @@ un-reapable because their `node_modules` is a Windows junction/symlink, which th
 (Git 2.42 deletes through a junction). Their repeated
 `worktree: unlock of <path> did not apply: … is not locked` line on broker start is benign (already
 unlocked). The safe junction-first reclaim is now documented above.
+
+2026-10-19 (delegate, operator-directed land+prune pass — the CURRENT recipe to copy): most merged
+item worktrees are DIRTY with the shared tree's CARRY residue (`src/worktree.mjs:134`) plus generated
+scratch, so the clean-only removal guard refuses all of them and `worktree audit` reports
+`reapable: 0`. Do NOT force them and do NOT `git clean`. The working recipe is the **relocate-out-of-tree**
+path (step 4 above), per the 2026-10-18 operator ruling:
+```bash
+AR=../pi-opendurig.worktrees        # the existing archive; 86 trees already there
+for b in <merged-branch>; do
+  wt=<its worktree path>
+  git worktree move "$wt" "$AR/$(basename "$wt")"
+  git -C "$AR/$(basename "$wt")" switch --detach     # frees the branch
+  git merge-base --is-ancestor "$b" main && git branch -d "$b"
+done
+git worktree prune
+```
+This preserves every file (tracked and untracked) and removes the merged ref. Only touch worktrees
+whose branch is MERGED (`git branch --merged main`) and that are UNLOCKED — a locked/live worktree is
+an intentional keep (a claimed item or a seat root). Result: 27 relocated in one batch, refs 108->73,
+`main` unmoved, nothing forced. The 4 refs that needed no relocation were clean+locked+terminal
+(`impl-item-1390`, `scribe-item-1531`, `impl-item-1585`, `impl-item-1108`): `git worktree unlock` ->
+`git worktree remove` -> `git branch -d`.

@@ -3,6 +3,65 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:10Z, delegate) — **LAND+PRUNE PASS DONE; `land.mjs --suite` GATE RED; 45-branch rebase set owed; oldest-WORKABLE claim delivered**
+
+**Read this first.** Operator-directed session: (1) close out PM's stale human-queue; (2) land + prune
+branches/worktrees; (3) update the runbook; (4) a new operator change request.
+
+**Shipped this session (delegate, no push):**
+- **HUMAN-QUEUE (task 1)** — PM was stuck in a degeneration reset loop (context 401k, 15 consecutive
+  `pi.reset`); it re-anchored and applied the two already-answered human-queue rounds. Delivered a
+  census + nudge `pm-close-stale-human-queue-2026-10-19-1` (delivered `07:30:19Z`); the operator
+  confirmed PM is working through the close-outs.
+- **LANDED 9 verified branches** with `scripts/land.mjs` **with the broker UP** (#1498
+  wait-with-priority; `lock.reserved:true`): `architect-item-2520`, `impl-item-2328/2329/2330/2337`,
+  `scribe-item-2597/2458/2461`, `devtools-item-2259`. `main` `4f9e7d6` → `7b6548e` (the last commit,
+  `#2654`, is the operator's own direct commit — not a seat). Suite on `main`: **pass=156 fail=1**,
+  the one failure `demo/pitui.test.mjs` (the known `node_modules/@earendil-works/pi-tui` symlink).
+- **PRUNED refs 108 → 73**: 4 clean+locked+terminal worktrees removed (`impl-item-1390`,
+  `scribe-item-1531`, `impl-item-1585`, `impl-item-1108`); **27 dirty merged worktrees relocated** to
+  `../pi-opendurig.worktrees/` (`git worktree move` + `switch --detach` + `branch -d`; every file
+  preserved, nothing forced). `main` unmoved by the prune.
+- **BLOCKER ROUTED** — `land.mjs --suite` is RED on EVERY landing: the suite runs in the helper's
+  DETACHED scratch, where the `50f981a` `shared-tree-on-main` check rule fires, so
+  `demo/check.test.mjs` fails. Routed to `pm` (`landing-prune-report-2026-10-19-1`, delivered
+  `08:03:44Z`). Workaround now in `land.md`.
+- **NEW OPERATOR CHANGE REQUEST delivered** — `operator-oldest-workable-claim-2026-10-19-1`
+  (delivered `08:03:44Z`): a seat should claim the oldest **WORKABLE** item, not the oldest item.
+- **RUNBOOKS UPDATED** — `land.md` (QUICK PATH: broker-up landing, `merge-tree` preflight, the
+  `--suite` defect + fallback), `branch-cleanup.md` + `leaked-worktrees.md` (the relocate-out-of-tree
+  recipe + 2026-10-19 counts). Control-byte scanned.
+
+**Open / owed:**
+- **The `--suite` landing gate is RED** (detached scratch vs `shared-tree-on-main`) — needs the owning
+  seat to fix (the rule must ignore a linked/detached scratch) + a failing-first demo. Until then land
+  WITHOUT `--suite`, then prove on `main` with `node scripts/suite.mjs`.
+- **45 unlanded branches conflict** against `main`; need author rebase + re-verify (list in
+  `.spike/delegate/cleanup-2026-10-19/merge-preflight.txt`). Clean-but-unlanded, not yet routed into a
+  landing list: `devtools-item-1558`/`temp-1558-rebase`, `devtools-item-2412`, `devtools-item-2494`,
+  `impl-item-2356`, `temp-2073-rebase` (conflict).
+- **12 merged refs stay held** by locked/live/seat-root worktrees (`designer-item-2103`,
+  `advocate-item-2104`, `impl-item-1274/1547`, `devtools-item-2459/2514/2559`,
+  `auditor-item-1924/2020/2141`, `impl-item-2233`) — do not force.
+- **Shared-tree tracked WIP restored, do not touch:** `pi-main.pin.json` + `scripts/sync-pi.mjs`
+  (devtools, #2336 lineage).
+- **PM degeneration** (context saturation then step-repetition) recurs; the auto-reset recovers it, but
+  the durable fix is unlanded (D107 `#2233`).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Do not:** `git add -A`; force a dirty worktree; delete an `ahead>0` ref; pop a stash blind; push
+(operator holds it); land an unverified branch.
+
+## NEXT SESSION
+**Current item:** Finish the land+prune pass — land the clean-but-unlanded branches
+(`devtools-item-1558`/`temp-1558-rebase`, `devtools-item-2412`, `devtools-item-2494`,
+`impl-item-2356`) once routed, and get the 45 conflicting branches rebased + re-verified by their
+authors. Fix the `land.mjs --suite` gate (detached scratch trips `shared-tree-on-main`).
+**Queue id:** `#2558`/`#2564`/`#2609` (`pm` landing lists); the `--suite` gate fix is owed as a new item.
+**Blocker:** `scripts/land.mjs --suite` is RED in the helper's DETACHED scratch (the `shared-tree-on-main`
+check rule) — land without `--suite` and prove on `main` with `node scripts/suite.mjs` until it is fixed.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T07:25Z, delegate) — **NEXT: IMPLEMENT THE STRANDED-SUBMISSION FIX (#2520 review continues); F12 seat-root fallback still live**
 
 **Read this first.** The devtools #2412 root-cause guard and the policy surface landed this session; the
