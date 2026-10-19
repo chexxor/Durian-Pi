@@ -302,3 +302,37 @@ cause is absent. That resolution is exactly what the just-landed `devtools-item-
 `impl-item-3017` (CLEAN+MATCH but SUPERSEDED — F12 says M1 must not define `workable`), the M1 pair
 `impl-item-3062`/`3056` (landing lists HELD, redesign slice in flight), and every CONFLICT branch
 (`git merge-tree --write-tree main <branch>` exits 1 → author non-force rebase + re-verify).
+
+2026-10-19 (pass #4, delegate, broker UP): **4 landed, `main` `abda45b`→`ee651e0`** — `impl-item-2420`
+@`8770e4b` (bounded graceful broker stop; fresh non-author verify `#3171` **done**), `devtools-item-2638`
+@`e991830` (D109 HARD pin), `impl-item-2797` @`2828ad4` (the 3-doc designer landing + README union) and
+`devtools-item-2587` @`de9ac4d` (batched TUI `live` view). `lock {slots:4, held:4, waitedMs:18274,
+reserved:true}` — it waited 18s for the slots with the broker UP.
+**Prune: refs 95→88, worktrees 201→200, and 10 terminal trees relocated out-of-tree** (see
+`branch-cleanup.md`). `main` unmoved by the prune; nothing forced.
+
+### ⚠ THE SUITE CAN GO RED *AND BACK GREEN* WITH NO COMMIT — CHECK THE PIN BEFORE TRUSTING ANY VERDICT
+
+Measured twice on 2026-10-19. After pass #3 the suite was `pass=178 fail=1`; 20 minutes later, with **no
+relevant commit landed**, it was `pass=174 fail=5`, all five `demo/tui-durable-*.test.mjs` failing
+`ERR_PACKAGE_PATH_NOT_EXPORTED: './codemode'` — then `pass=178 fail=1` again after one command.
+
+**Cause:** `node_modules/@earendil-works/pi-durable` is a **symlink to `vendor/pi-main/packages/durable`**
+(the pinned build, which exports `./codemode`). A plain `npm install`/`npm ci` **in the shared tree** replaces
+that symlink with the registry build (`pi-durable@1.1.0`), which does not. The trigger both times was a seat
+running an install while making a dependency change (#2969's exact-pin edit at 22:47Z; its `package.json` +
+`package-lock.json` were dirty at the same timestamp).
+
+**Diagnose it in one line — and do it BEFORE believing a suite verdict:**
+```bash
+ls -la node_modules/@earendil-works/ | grep -E 'pi-durable|pi-tui'   # '->' = pinned/link, 'd' = CLOBBERED
+node -e "const p=require('./node_modules/@earendil-works/pi-durable/package.json');console.log(p.version, Boolean(p.exports['./codemode']))"
+#   expected: 1.3.0 true        clobbered: 1.1.0 false
+```
+**Fix (one command, does not dirty the tree):** `node scripts/sync-pi.mjs --link`.
+
+**Why this matters for a landing:** a red suite here is NOT a regression in the merged result, and reporting
+it as one sends the team chasing a phantom. Equally, a GREEN run right after an install proves less than it
+looks — it may be measuring the registry set, not the pinned build. `devtools-item-2976` (now on `main`) makes
+`prepare_workspace` run `sync-pi --link` around `npm ci` in every WORKTREE, which is why a worktree is safe
+and the **shared tree** is the exposed one.

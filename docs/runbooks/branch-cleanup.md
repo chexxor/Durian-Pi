@@ -157,3 +157,24 @@ that was the CORRECT answer, not a failed pass:
   `item-2744` and `devtools` on `item-2595`). `complete_work` teardown and the sweep flip a seat's cwd
   back — this is the F12 fallback re-asserting, not a prune bug. **Re-read `seatRoots` at the START of a
   pass** and re-point any seat you are about to depend on; do not assume yesterday's roots.
+
+2026-10-19 (prune pass #4, delegate, broker UP, after 4 landings): refs **95 → 88**, worktrees **201 → 200**,
+`main` unmoved by the prune, nothing forced.
+- **6 merged+free refs `-d`'d** (`devtools-item-2587`, `devtools-item-2969`, `impl-item-2420`,
+  `impl-item-2797`, `impl-item-3164`, `scribe-item-3121`).
+- **2 merged-but-held refs freed by RELOCATION** (the dirty-but-merged path, § "relocate out-of-tree"):
+  `advocate-item-2104` (item **cancelled**, clean tracked, but holding an untracked
+  `selfdev.sqlite.broker.inbox.out/` — so `worktree remove` would have REFUSED) and `devtools-item-2638`
+  (item **done**, unlocked, dirty with **`scripts/land.mjs`** + `package-lock.json` — real WIP, preserved
+  byte-for-byte). Both moved to `../pi-opendurig.worktrees/`, detached, then `-d`.
+- **8 more TERMINAL item trees relocated out of the project root** (`item-1225/1249/1261/1704/1769/1823/1469/2103`);
+  project root item dirs **20 → 12**, and every tree's `git status` entry count was verified **identical
+  before and after** the move (1:1, including one with **269** entries) — that equality is the lossless proof,
+  so record it, do not assume it.
+- **Kept (live):** `item-723`/`1274`/`2630`/`2788` (`held`), `2559` (`deferred`), `2993` (`queued`), plus the
+  `item-2188/*` nested rebase scratch (relocate nested-first or not at all) — and `item-2103`, which stays
+  **detached** on purpose (it held `designer-item-2103`; detaching is how the branch was freed for a rebase).
+- **A `git cherry` `+` is not proof a branch is unique.** `architect-item-3005 @0827b39` shows `+` (its patch
+  ID differs from the landed `architect-item-3005-rebased`) yet `git diff main:<path> 3005:<path>` is **empty**
+  — same content, different patch shape. Compare the TREES before concluding "unlanded"; do not delete on a
+  `-D` hunch and do not re-land a duplicate.
