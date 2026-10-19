@@ -34,7 +34,7 @@ alive, read `.spike/serve.err` — repeated `PathError: unresolvable path: [...]
 the seat-level signature. Confirm no `genlock.*` is held before the write.
 
 ## Do
-1. Stop the broker and confirm it exited (runbook `broker-safe-change.md` step 1–2).
+1. Stop the broker and confirm it exited (runbook `broker-safe-change.md` step 1–2). **`stopped:true` is NOT exit** — the pid can linger in its F11 drain for minutes. Do NOT run `resume`, `repair-pi-live`, or any other write while that process is alive: a second writer at that moment leaves the corrupt partial this runbook exists to fix. On 2026-10-19 a `resume` run during the drain poisoned `devtools` conv 4930 (`unresolvable path: ["generation","message","content",0]`). Confirm no `cli.mjs serve` process remains — kill the lingering pid (`taskkill /F /PID <pid>`) only when no `genlock.*` is held — BEFORE the write.
 2. **Back up the store** before any write; the `-shm` copy fails while a process still holds it, which is
    itself a signal the broker is not stopped:
    ```bash

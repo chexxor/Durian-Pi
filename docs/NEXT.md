@@ -3,6 +3,57 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T07:25Z, delegate) — **NEXT: IMPLEMENT THE STRANDED-SUBMISSION FIX (#2520 review continues); F12 seat-root fallback still live**
+
+**Read this first.** The devtools #2412 root-cause guard and the policy surface landed this session; the
+stranded-submission liveness fix is still open.
+
+**Shipped this session (delegate, operator-directed, no push):**
+- **LANDED** — `main` `7296569` → `6335eb9`: `scribe-item-2169` (DECISIONS.md D106) + `security-item-2316`
+  (security position UNION), via `scripts/land.mjs --suite` in a broker-stopped window.
+- **PRUNED** — merged refs `devtools-item-2412` + `auditor-item-2209`; 4 reapable worktrees; `git worktree
+  prune`. Branches 92→90, worktrees 170→165 at that point.
+- **INCIDENT (sev1, OPEN)** — `docs/incidents/2026-10-19-stranded-submission-seat-stall.md`: a `placed`
+  submission whose conversation has a live-but-not-running task is never settled by
+  `reconcileStrandedSubmissions` (`src/broker.mjs:563-576`), so the seat never wakes; only `resume`
+  (refused while the broker runs) clears it. The report **carries the exact patch, demo plan, and
+  verification steps** (the next implementation task).
+- **RECOVERY** — `resume` (broker stopped) settled 6 strands; devtools conv 4930 `pi.live` repaired
+  (`node scripts/repair-pi-live.mjs ./selfdev.sqlite 4930`, retired doc 4931; backup
+  `.spike/store-backup-20261019-012422`).
+- **SEAT-ROOT FIX LANDED (`50f981a` on main)** — `prepare_workspace` now REFUSES a leftover non-worktree
+  cwd (`src/worktree.mjs`), the `check` rule **`shared-tree-on-main`** flags the shared tree off `main`
+  (`src/checkup.mjs` + `readSharedTreeBranch` in `src/featuredocs.mjs` + `cli.mjs`), and `constitution.txt`
+  P3 Safety carries a `git rev-parse --show-toplevel` self-check (`rig.starter.json` inline synced).
+  Demos: `demo/prepare-workspace.test.mjs`, `demo/shared-tree-on-main.test.mjs`; starter/check rule-ledger
+  controls updated. Recurrence recorded on `docs/incidents/2026-10-17-seat-root-fallback-commit.md`
+  (now `mitigated`); recovery procedure added to `docs/runbooks/leaked-worktrees.md`.
+- **INTENTS DELIVERED to `pm`** (all `delivered:true`): `architect-broker-code-review-2026-10-19-1`
+  (#2520, architect actively reviewing); `pm-triage-human-questions-2026-10-19-1`;
+  `operator-decisions-human-queue-2026-10-19-1`; `operator-answers-human-queue-2-2026-10-19-1`.
+
+**Open / owed:**
+- **Implement + verify the stranded-submission fix** from the incident (filter live owners in
+  `reconcileStrandedSubmissions` to `running`/`completing`; failing-first demo; land; then set that
+  incident to `resolved`). `impl` is still stranded (`#110509`) and re-strands after a broker kill.
+- **F12 seat-root fallback is STILL LIVE** — seats (`impl`, `pm`, `scribe`, `auditor`, `devtools`, ...)
+  run with the **shared tree** as cwd. While implementing `50f981a`, `impl` silently reverted the
+  `src/worktree.mjs` edit once; commit work early so a stray `git checkout` cannot drop it. The `#1151`
+  `DURIG_EXPECT_WORKTREE` mutation-point guard remains the outstanding control.
+- **Suite: `pass=152 fail=1`** — the one failure is `demo/pitui.test.mjs`: `node_modules/@earendil-works/pi-tui`
+  is a SYMLINK to `vendor/pi-main/packages/tui`, created by devtools' `sync-pi --link` at 06:38Z (#2412).
+  Environmental / other-item, **not** a regression; restore with `npm install` (or remove the symlink) if a
+  green suite is required before #2412 resolves it.
+- **Stashes (do NOT pop blind)** — `stash@{0}` = devtools #2412 shared-tree WIP (already re-applied in the
+  `item-2412` worktree, so a redundant backup); `stash@{1}` = devtools #2390/#1754 WIP; `stash@{2}` =
+  configure WIP. Each needs its author; the patch backups live under `.spike/delegate/`.
+- `#2520` architect review of broker/CLI/UI/supervisor in progress (ranked work items expected).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Do not:** `git add -A`; pop a stash blind; force a dirty worktree; delete an `ahead>0` ref; push
+(operator holds it); run `resume` while a `cli.mjs serve` process is alive (confirm the process exited
+FIRST — that ordering error caused the conv-4930 corruption at 06:24).
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T06:40Z, delegate) — **NEXT: IMPLEMENT THE STRANDED-SUBMISSION FIX; VERIFY THE ARCHITECT REVIEW (#2520)**
 
 Read this block first. The operator's "merge worktrees & branches" task is done for the safe, verified

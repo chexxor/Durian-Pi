@@ -164,6 +164,29 @@ simply not locked. Reclaim one junction-first, clean-only:
 2026-10-19: five registered `%TEMP%/verify*` trees (e.g. `verify1102-210800`, dated Oct 16) were found
 un-reapable for exactly this junction reason.
 
+### A seat's cwd is a plain directory, not a worktree (the shared tree switched branch)
+
+Symptom: `git worktree list` shows the **shared tree** on an item branch (e.g. `devtools-item-2412`),
+the shared tree's `git status` carries the seat's edits, and `worktree audit` reports a seat root that
+`git worktree list` has **no entry for** (so `git -C <that path> rev-parse --show-toplevel` resolves to
+the shared repo). The seat's git and file commands are therefore hitting the shared tree, and the old
+`prepare_workspace` reuse path switched the shared tree's branch (2026-10-19 devtools #2412). Recover
+WITHOUT discarding the seat's work:
+
+1. Snapshot the shared-tree WIP to `.spike/`: patch (`git diff > <patch>`) and copy any untracked files.
+2. Park the tracked WIP: `git stash push -u -m "delegate: park <seat> WIP for seat-root recovery" -- <paths>`.
+3. `git switch main` on the shared tree (same SHA as the branch, so this is a clean ref switch).
+4. Move the leftover plain dir aside (never delete blind), then create a REAL worktree at the SAME path
+   the seat's cwd already names: `git worktree add <path> <seat>-item-<id>`.
+5. Re-apply the parked WIP inside the new worktree (`git -C <path> apply <patch>` plus the untracked
+   files). The seat's persisted cwd is unchanged, so it now resolves to the real worktree.
+6. `node cli.mjs worktree audit` must show the seat root and that worktree as `seat-root`.
+
+Prevention now in place: `prepare_workspace` refuses a leftover non-worktree (`50f981a`); the `check`
+rule `shared-tree-on-main` flags the state; `constitution.txt` P3 Safety tells the seat to run the
+`rev-parse --show-toplevel` self-check first. Full record:
+`docs/incidents/2026-10-17-seat-root-fallback-commit.md`.
+
 ## If it fails
 If a worktree will not remove (Windows file locks), close any process with it open and retry; the fallback
 is `git worktree remove --force` **only after** its work is committed or knowingly discarded.

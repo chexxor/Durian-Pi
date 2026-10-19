@@ -4,11 +4,11 @@
 incident: seat-root-fallback-commit
 date: 2026-10-17
 severity: sev1
-status: open
+status: mitigated
 symptom: "a commit reached main and the shared tree moved to an item branch, with no landing pass"
 runbook: leaked-worktrees
-fix: null
-prevention: "land the #1151 DURIG_EXPECT_WORKTREE wrong-root guard; require an item worktree for every writer seat; a check rule for shared-tree-on-main"
+fix: "50f981a"
+prevention: "prepare_workspace refuses a non-worktree cwd (50f981a, demo/prepare-workspace.test.mjs); check rule shared-tree-on-main (demo/shared-tree-on-main.test.mjs); constitution P3 self-check; still owed: #1151 DURIG_EXPECT_WORKTREE wrong-root guard"
 last_reviewed: 2026-10-19
 ---
 
@@ -67,6 +67,17 @@ treated `1b21d30` as an unverified landing for post-hoc review. Done 2026-10-17.
 
 *Detected by the operator asking why the shared tree was on a non-`main` branch; analysed and recovered
 by the delegate.*
+
+**Landed fix (`50f981a`, 2026-10-19).** The root cause is closed at the source: `prepareSeatWorkspace`
+(`src/worktree.mjs`) now calls `validateWorktreeIdentity` on an existing `item-<id>` path BEFORE any git
+mutation and fails closed if it is not a registered worktree, so it can no longer run
+`git checkout -B` against the shared repo. Defence in depth also landed: the `check` rule
+`shared-tree-on-main` (`src/checkup.mjs` + `readSharedTreeBranch` in `src/featuredocs.mjs`) fails the run
+when the shared tree is off `main` (or detached), and `constitution.txt` P3 Safety now tells every seat
+to confirm `git rev-parse --show-toplevel` equals its seat root before any mutating git command.
+Demos: `demo/prepare-workspace.test.mjs` (leftover refusal) and `demo/shared-tree-on-main.test.mjs`.
+**Still live:** other paths can still fall a seat's cwd back to the shared tree (F12); the `#1151`
+`DURIG_EXPECT_WORKTREE` wrong-root guard remains the outstanding mutation-point control.
 
 **Same class, new trigger.** The `devtools` seat's persisted root was
 `C:\Users\Alex\dsh-Projects\pi-opendurig\item-2412`, but **`item-2412` was not a registered git
