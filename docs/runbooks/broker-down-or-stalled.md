@@ -158,3 +158,9 @@ then `repair-pi-live.mjs ./selfdev.sqlite 3`, then restart.
 stopped it; `resume` cleared 3 stranded runs (scribe/auditor/devtools); the orphaned `genlock.0` (holder
 `4092`) was removed. Earlier the same day a wedged broker (pid `4296`) was likewise force-killed. The
 bounded-grace fix is routed: `#2237` + `.spike/delegate/intent-2237-bounded-stop.md`.
+2026-10-19 (read path exposed by a healthy restart, `docs/incidents/2026-10-19-read-storage-handle.md`):
+a broker restarted healthy (pid `17828`) dead-lettered every spooled CLI `read`
+(`read: the broker has no storage handle (probeStorage)`), so `ps`/`queue`/`watch`/`ui` all failed.
+Cause: `dispatchRead(harness.storage)`, a field pi-durable does not expose. Fix `a70c30d` (thread the
+harness's real `Storage`); restart pid `5116`. The CLI had read the store directly (`readLocal`) while
+the broker was down — which is why the broken handler stayed hidden until the restart.
