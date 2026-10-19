@@ -389,11 +389,35 @@ export async function uncommittedCount(worktree) {
  * it: a caller has to say that is what it means. The default fails loudly instead of quietly
  * deleting work, which is the same reason the guard refuses `git reset --hard`.
  */
+/**
+ * Prune STALE worktree registrations (#2329).
+ *
+ * `git worktree remove` deletes the tree AND its registration, but a directory removed OUT OF
+ * BAND (by a harness/viewer, or a crashed run) leaves the registration under `.git/worktrees/`
+ * behind: `git worktree list` keeps listing it and `worktree audit` cannot classify a tree whose
+ * path is gone. `git worktree prune` clears those, and the vendored
+ * `finishing-a-development-branch` skill (Step 6) makes it a post-removal step — "one line,
+ * prevents silent rot". Best-effort: a prune failure must never undo a successful removal.
+ */
+export async function pruneWorktrees(repoPath) {
+	if (!repoPath) return { pruned: false, reason: "no-repo" };
+	try {
+		await run("git", ["-C", repoPath, "worktree", "prune"]);
+		return { pruned: true, repo: repoPath };
+	} catch (error) {
+		console.warn(`worktree: prune in ${repoPath} failed: ${error.message}`);
+		return { pruned: false, reason: error.message };
+	}
+}
+
 export async function removeWorktree({ source, worktree, force = false }) {
 	const root = await repoRoot(source);
 	// No more junctions to unlink — the node_modules bridge was removed in #330.
 	const args = ["-C", root, "worktree", "remove", ...(force ? ["--force"] : []), worktree];
 	await run("git", args);
+	// PRUNE AFTER REMOVE (#2329): clear any stale registration the removal may have left (or that
+	// an out-of-band delete left) so `git worktree list` does not accumulate ghosts.
+	await pruneWorktrees(root);
 }
 
 // unlinkModulesBridge removed in #330 — no more junctions to drop.
@@ -674,6 +698,16 @@ export async function removeClaimedWorktree({ worktree, force = false }) {
 	}
 	// Forward-slash paths for -C on Windows.
 	const wtNorm = worktree.replace(/\\/g, "/");
+	// The COMMON repo root that owns the worktree REGISTRATIONS. `git -C <worktree> rev-parse
+	// --show-toplevel` returns the worktree's OWN root, which is gone after removal, so
+	// `git worktree prune` must run against the common dir's parent (#2329).
+	let commonRoot = null;
+	try {
+		const commonDir = (await run("git", ["-C", wtNorm, "rev-parse", "--git-common-dir"])).stdout.trim();
+		commonRoot = dirname(isAbsolute(commonDir) ? commonDir : resolve(wtNorm, commonDir));
+	} catch {
+		// Fall through to the walk-up root below.
+	}
 	// Find the repo root by walking up from the worktree path.
 	// A worktree's metadata lives in its source repo's .git/worktrees/<name>/,
 	// so the first .git directory encountered walking up is the repo root.
@@ -744,6 +778,10 @@ export async function removeClaimedWorktree({ worktree, force = false }) {
 			console.warn(`worktree: final rm of ${worktree} failed: ${rmErr.message}`);
 		}
 	}
+	// PRUNE AFTER REMOVE (#2329): this is the single choke point for every teardown path
+	// (removeWorktree, removeVerifyScratch/cleanVerifyScratch, and the broker sweep), so pruning
+	// here clears the stale registration of any OTHER out-of-band-deleted tree at the same time.
+	await pruneWorktrees(commonRoot ?? repoRoot);
 	return { worktree, removed: true };
 }
 
