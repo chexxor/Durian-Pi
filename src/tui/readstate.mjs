@@ -15,7 +15,7 @@
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 
-import { readQueueItems, readLiveState, readRigHealth } from "../readapi.mjs";
+import { readQueueItems, readRigHealth } from "../readapi.mjs";
 import { readData } from "../readclient.mjs";
 import { partialView } from "../viewmodel.mjs";
 import { SCAN_LIMIT, conversationExhausted } from "../rigstory.mjs";
@@ -56,30 +56,17 @@ export async function makeReadState(ui, conv, view, { input, cfg, dbPath, readSt
     const queueItems = health.queueItems ?? (await readStore(dbPath, "queue", {}, (s) => readQueueItems(s)));
     // Streaming partials, U2: EVERY actively-generating seat at once (team-wide),
     // keyed off live generation (`partialView(live).hasContent`) — NEVER queue depth.
-    // Fetch all seats' live state in ONE parallel batch: each `readData` is a broker
-    // round-trip (~1 s inbox poll + result poll), so the old sequential `await` loop
-    // made a single UI frame cost one round-trip PER SEAT. The producer writes intents
-    // atomically (tmp + rename), and the broker drains a batch of read intents in one
-    // pass, so the batch costs about one round-trip. Results are still consumed in seat
-    // order, so `partial`/`streamingSeat` stay deterministic.
+    // `readRigHealth` already batches all seats' `live` reads into `health.streaming`
+    // (one store pass), so we reuse it instead of making N additional round-trips.
+    // Results are still consumed in seat order, so `partial`/`streamingSeat` stay
+    // deterministic.
     const liveBySeat = {};
-    const liveResults = await Promise.all(
-      health.seats.map((seat) =>
-        readStore(
-          dbPath,
-          "live",
-          { conversationId: seat.conversationId },
-          (s) => readLiveState(s, seat.conversationId),
-        ),
-      ),
-    );
     let partial = null;
     let streamingSeat = null;
     const partials = [];
-    for (let i = 0; i < health.seats.length; i += 1) {
-      const seat = health.seats[i];
-      liveBySeat[seat.name] = liveResults[i];
-      const pv = partialView(liveResults[i]);
+    for (const seat of health.seats) {
+      liveBySeat[seat.name] = health.streaming?.[seat.name] ?? {};
+      const pv = partialView(liveBySeat[seat.name]);
       if (pv?.hasContent) {
         partials.push({ ...pv, seat: seat.name });
         if (streamingSeat === null) {
