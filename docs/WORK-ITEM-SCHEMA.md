@@ -294,7 +294,74 @@ Write-only first: new roadmap entries keep the integer id and gain no ceremony; 
 roadmap intent carry `roadmap: ["RM-<n>"]`. Backfill lazily — when a roadmap entry is next touched, add
 `deliveredBy`. Never renumber, never bulk-rewrite prose.
 
-### 11.5 Re-verify the roadmap claims
+### 11.5 Naming policy for a roadmap entry (the title itself)
+
+Measured over **189 entries** with a block parser (an entry = its numbered line plus wrapped continuation,
+up to the next entry or `##` heading, which is the ONLY way to see a wrapped title):
+
+| Inline state marker | Entries containing it |
+|---|---|
+| `done` / `✅` | 32 |
+| `DELIVERED` | 20 |
+| `GATED` | 12 |
+| `HELD` | 8 |
+| `PARTIAL` | 6 |
+| **any of the above** | **64 of 189 (34%)** |
+
+Counting only the **numbered line itself** (cheaper, and what a naive grep sees) gives just **16**
+`DELIVERED` and **0** `GATED` — the rest sit on a wrapped title line or in the entry body. That gap is
+itself the argument for the rules below: a state marker's *position* is unspecified, so no simple query
+finds it, and a reader cannot tell a delivered entry from a held one without reading prose. It is the same
+anti-pattern R2 forbids for queue items — a title or body saying `DELIVERED` contradicts a status field
+that says otherwise, with no referee.
+
+| Rule | Statement |
+|---|---|
+| **RM-R1 — State is a field** | An entry carries `status: proposed \| accepted \| in-progress \| held \| delivered \| retired`. The title never states it |
+| **RM-R2 — Delivery is a link, not a word** | `deliveredBy: [#<queue id>, <sha>]` (R11). Legacy `(DELIVERED `sha`)` prose may remain; a NEW entry never adds it |
+| **RM-R3 — Title shape** | `<capability as a noun phrase>.` ≤ 120 chars — one sentence of intent, optionally plus the constraint that shapes it. No `TODO`, no `✅`, no `(part 1 …)`, no ticket id as the subject |
+| **RM-R4 — Gating is `blockedBy`** | An entry that cannot start lists its blockers as ids (queue or RM), never `GATED` in the title |
+| **RM-R5 — Own the intent, not the act** | An entry describes a durable capability. If it can only be stated as "do ticket #1234", it is a queue item, not a roadmap entry |
+
+### 11.6 Allocation policy — how a new roadmap number is minted
+
+Measured behaviour, which is sound and should be codified rather than left to habit:
+
+| Observation | Rule to adopt |
+|---|---|
+| Highest id is **160**, appended at the end of the file (lines 2753–2804) | **RM-A1 — next free integer, appended.** Mint `max+1`; never insert mid-sequence, never renumber |
+| **No gaps** anywhere in 0–160 | **RM-A2 — a retired entry keeps its integer** with `status: retired`. Numbers are never reused, so no past citation can ever point at different work. *(Policy, not observation: nothing has been retired yet, so there is no example to cite)* |
+| **13 lettered sub-items, only under parents 1, 10, 24, 30** | **RM-A3 — letters decompose an EXISTING entry** (`1a`, `10c`, `28a`, `30b`), never mint new work. A sub-item inherits its parent's section and is not a way to dodge the next integer |
+| Items sit under thematic `##` sections while numbers run globally | **RM-A4 — the section is grouping, the number is identity.** Moving an entry between sections never changes its id |
+| Numbers are **not** priority (RM-157 is "CONTINGENCY (not default)" and sits last) | **RM-A5 — number ≠ rank.** Sequencing belongs in an explicit rank/sequencing field or in `pm`'s sequencing notes, never in the number |
+| **No tool parses `ROADMAP <n>`** (verified: no code reads it) | **RM-A6 — cite as `RM-<n>[a-z]`.** Until a parser exists, every citation is prose that a human must reconcile — which is why §11.2's fields matter more than the format |
+
+### 11.7 Section headings — the part with NO id at all
+
+Measured: **28 `##` sections**, and only **13** carry a provenance parenthetical
+(`(raised 2026-10-17)`, `(2026-10-10)`, `— from the operator research (2026-10-19)`); **15 have none**
+(`Near-term`, `Mid-term`, `Milestones`, `Explicitly deferred (with reasons)`, …).
+
+**This is the weakest link in the roadmap schema: a section has a NAME and no ID.** Consequences a reader
+will hit:
+- **A section name is not stable.** Renaming or re-theming a heading silently orphans every reference that
+  used its words — exactly the failure mode `RM` ids were invented to prevent for items.
+- **Provenance is optional and inconsistently spelled** (`(raised …)` vs `(<date>)` vs `— from …`), so you
+  cannot mechanically answer "what was added in this research round?".
+- "Near-term" / "Mid-term" are **not** sequencing instructions in any enforceable sense (see RM-A5); they
+  are labels, and the items inside them mix delivered, held, and gated work.
+
+**Rules:**
+- **RM-S1 — Never cite a section by name.** Cite the item: `RM-157`, not "the daemon-harness section". If a
+  whole section is meant, cite its id range (`RM-153–160`) and verify the range resolves.
+- **RM-S2 — Every new section carries provenance** in ONE shape: `<Theme> (raised YYYY-MM-DD)`, with the
+  origin in the body (`from the operator research`, `from the AGT review`). One spelling, mechanisable.
+- **RM-S3 — Headings are not priority.** Do not add `Near-term`/`Mid-term`-style headings; put sequencing
+  in a rank field (§11.6, RM-A5). A heading that means "do this sooner" will be false within a week.
+- **RM-S4 — Do not rename a populated section.** Append a clarifying suffix instead; the items inside are
+  what readers navigate by, and their ids must outlive the heading.
+
+### 11.8 Re-verify the roadmap claims
 
 ```bash
 # 189 definitions, 161 distinct ints, 0..160 complete, 13 lettered sub-items, no true gaps
@@ -310,6 +377,30 @@ print(len(refs), len({int(n) for x in refs for n in re.findall(r'ROADMAP\s+(\d+)
 
 # roadmap -> queue mentions (expect ~69)
 grep -cE '#[0-9]{3,4}' docs/ROADMAP.md
+
+# state markers for 11.5 — BLOCK parser, because titles wrap (expect 32 done/check, 20 DELIVERED,
+# 12 GATED, 8 HELD, 6 PARTIAL, 64 entries with any marker)
+python -c "
+import re
+lines=open('docs/ROADMAP.md',encoding='utf-8').read().split(chr(10))
+blocks=[];cur=None
+for l in lines:
+    m=re.match(r'^\s*([0-9]+[a-z]?)\.\s+(.*)\$',l)
+    if m:
+        if cur: blocks.append(cur)
+        cur=[m.group(1),m.group(2)]; continue
+    if re.match(r'^\s*## ',l):
+        if cur: blocks.append(cur); cur=None
+        continue
+    if cur: cur[1]+=' '+l.strip()
+if cur: blocks.append(cur)
+n=lambda p: sum(1 for _i,t in blocks if re.search(p,t,re.I))
+print('entries:',len(blocks),'| done:',n(r'\bdone\b|✅'),'| DELIVERED:',n('DELIVERED'),'| GATED:',n(r'\bGATED\b'),'| HELD:',n(r'\bHELD\b'),'| PARTIAL:',n('PARTIAL'),'| any:',n(r'DELIVERED|\bGATED\b|\bHELD\b|PARTIAL|\bdone\b|✅'))
+"
+
+# section naming for 11.7 (expect 28 sections, 13 with provenance, 15 without)
+grep -c '^## ' docs/ROADMAP.md
+grep -E '^## ' docs/ROADMAP.md | grep -cE '\((raised|[0-9]{4}-[0-9]{2}-[0-9]{2})|— from '
 ```
 
 ## Evidence
