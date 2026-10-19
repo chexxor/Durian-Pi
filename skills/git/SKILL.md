@@ -67,11 +67,11 @@ to auto-accept the todo list.
 
 ```
 git status --porcelain
-git diff --cached
-git diff
+git diff --no-color --cached
+git diff --no-color
 ```
 
-Use `--porcelain` for machine-parseable status output.
+Use `--porcelain` for machine-parseable status output. Use `--no-color` for `git diff` to suppress color codes in automated contexts.
 
 ## Defect rules
 
