@@ -84,6 +84,14 @@ The helper's pre-flight, in code (the enforcement chokepoint):
 - **genlock**: it probes `<db>.genlock.*` beside the store with `node:fs` only (no provider stack). A slot
   whose JSON names an **ALIVE** pid blocks (signal `0`; only `ESRCH` means gone — `EPERM` means alive but
   unsignalable). A partial/unreadable slot is **not** evidence of a live run and does not block.
+- **slot cap** — `resolveSlotCount(repoRoot)` decides how many generation slots the lander claims, in
+  this order: `DURIG_MAX_CONCURRENT_SEATS` (env) > `durig.config.json` / `.durig/config.json`
+  (`DEFAULT_CONFIG_PATHS`) > the shipped defaults `durig.config.default.json` / `.durig/config.default.json`
+  / `../durig.config.default.json` (`DEFAULTS_CONFIG_PATHS`) > uncapped (`null`). Both path lists come from
+  `src/config.mjs`, the same module the broker's `maxSeats()` reads, so the lander and the broker cannot
+  drift (#2224/#1498). An UNCAPPED resolution is why a config-less checkout (CI / fresh clone) once
+  skipped both the priority reservation and the exclusive slot claim while the broker was capped at the
+  shipped default — the hazard #2224(A) closes.
 
 ## Do
 0. **Quiesce, then drive OUTSIDE the broker.** A broker-hosted seat cannot do this (Preconditions).
