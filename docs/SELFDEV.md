@@ -50,6 +50,13 @@ node intent.mjs pm --body-file <file>  # deliver operator intent via the spool (
 node cli.mjs log impl 30                   # what actually happened
 ```
 
+**The store and the rig must be passed as a PAIR — `selfdev.sqlite` + `rig.selfdev.json`.** The repo
+also holds `rig.json`, and `cli.mjs check` **defaults to `rig.json`**, so a bare `check` pairs the selfdev
+store with the wrong rig and reports seat-shape findings (`store-missing-seat`, `stray-seat`,
+`no-verifier-seat`, `single-model-rig`, `seat-without-capabilities`) that describe a rig nobody runs.
+Always name the rig: `DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json`. A `check` verdict
+without an explicit rig is not evidence about this rig.
+
 **The seat root is not declared in `rig.selfdev.json`.** A seat resolves to the `cwd` of the
 write-side command that wakes it (dogfood F12), so running from `durian-pi/` lets seats edit the live
 tree. Isolate first:
@@ -186,6 +193,9 @@ needed it. (Operator note, 2026-10-15.)
 
 ## References
 
+- **`docs/BRANCH-AND-WORKTREE-LIFECYCLE.md`** — the model behind a landing or pruning pass: refs,
+  worktrees, the three landing gates and which source is authoritative for each, the prune paths, and
+  the suite-verdict traps. Read it before `land.md` / `branch-cleanup.md` / `leaked-worktrees.md`.
 - `docs/Agent_Onboarding_Research.md` — why this runbook exists (the cold-start research).
 - `docs/DOGFOOD.md` — the findings that created it (F12 seat root, F13 claimed≠held, F14 corruption).
 - `docs/ROADMAP.md` — *"Deadlock and liveness prevention"* (P1–P6) and

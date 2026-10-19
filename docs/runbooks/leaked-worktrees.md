@@ -15,6 +15,13 @@ check_rule: null
 `git status` or `git worktree list` shows stray `item-<id>` worktrees, or `serve.err` logs
 `worktree: refusing to remove … N uncommitted path(s)`.
 
+## Impact
+Leaked worktrees are not just clutter: a dirty orphan pins its **item branch**, so the merged ref can
+never be pruned and `git branch`/worktree operations slow down while hiding the small set of genuinely
+unlanded work. The dirty files also exist **nowhere else** (the item's own commit is on the branch, but
+the residue is not), so a careless `--force` or `git clean` is real data loss. Blast radius of the
+git-only reclaim below is low — it touches no store — so the broker may keep driving.
+
 ## Preconditions
 Read-only to inspect. Removing a worktree is a git operation; never discard work you did not create.
 
@@ -191,6 +198,31 @@ rule `shared-tree-on-main` flags the state; `constitution.txt` P3 Safety tells t
 If a worktree will not remove (Windows file locks), close any process with it open and retry; the fallback
 is `git worktree remove --force` **only after** its work is committed or knowingly discarded.
 
+### The lock flag reads WRONG from `--porcelain`
+`git worktree list --porcelain` emits `locked` as its own line **after** the `branch` line, so a naive
+"next worktree's key" association attributes it to the FOLLOWING tree. Measured 2026-10-19: that parse
+reported **all 22** merged worktrees as LOCKED, including unlocked ones — wrong in the safe direction
+here, but the same mistake in the other direction would relocate a live seat root. Read the **terse**
+form, which annotates the flag on the same line (`<path> <sha> [<branch>] locked`):
+```bash
+git worktree list | grep ' locked$'                  # the locked set
+git worktree list | grep -E "\[$b\]( locked)?\$"     # one branch's line plus its lock flag
+```
+
+### A landing can make an UNRELATED ref prunable mid-pass
+Ref classification is point-in-time. Landing `impl-item-1705` (tip `349d5d3`) made
+`auditor-item-2757` — recorded `ahead=4` at Diagnose, same tip — an ancestor of `main`, so a ref that was
+unprunable at the start of the pass was safely `-d`'d at the end. Re-run the merged/held classification
+after each landing batch, and always gate on the live `git merge-base --is-ancestor <branch> main` rather
+than a remembered `ahead` count.
+
+## Escalate to
+`pm` — to open a landing pass for the `ahead>0` set, or an item for a leak source (CARRY, verify scratch,
+seat-root fallback) that keeps producing orphans; `lead` — when a branch cannot merge cleanly; the
+operator — for any worktree whose content must be **discarded** (never a delegate or seat decision),
+and for the lock-state ambiguity that would relocate a live seat root. Model of the whole lifecycle:
+`docs/BRANCH-AND-WORKTREE-LIFECYCLE.md`.
+
 ## Evidence
 2026-10-16 (item 73): `removeClaimedWorktree` used to fall through to `rm -rf` on a dirty tree — a latent
 data-loss path; it now refuses without `force` (D60). The leaked `item-635/636/638` hold uncommitted work
@@ -288,8 +320,7 @@ an intentional keep (a claimed item or a seat root). Result: 27 relocated in one
 (`impl-item-1390`, `scribe-item-1531`, `impl-item-1585`, `impl-item-1108`): `git worktree unlock` ->
 `git worktree remove` -> `git branch -d`.
 
-**Two rules that must be applied per TREE, not per branch list (2026-10-19, second pass):**
-1. **Re-check the LOCK state from `git worktree list`'s TERSE output**, where it is annotated as a
+**Two rules that must be applied per TREE, not per branch list (2026-10-19, second pass):**1. **Re-check the LOCK state from `git worktree list`'s TERSE output**, where it is annotated as a
 trailing ` locked`. A `--porcelain` parse is easy to get wrong: the `locked` line follows the `branch`
 line, so a naive "the next worktree's lock" association marks the wrong tree (it reported all 22 merged
 worktrees as LOCKED, including ones that were unlocked). Reading the terse line (`<path> <sha> [<branch>]

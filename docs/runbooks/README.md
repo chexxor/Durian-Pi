@@ -59,6 +59,34 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 8. **Ownership.** The delegate owns operator-surface runbooks; the team owns seat-runbooks; `scribe`
    keeps them true to the code like any other doc.
 
+## Topic docs — the map behind the procedures
+
+Runbooks are *steps for one situation*. **Topic docs are the *model* of a functional area** — the
+artifacts, their lifecycle, and which source is authoritative for each question — so a maintainer does
+not have to reassemble that model from three runbooks and the code. They live at the `docs/` root, named
+for the topic (`SEAT-LIFECYCLE.md`, `WORKFLOWS.md`, `BRANCH-AND-WORKTREE-LIFECYCLE.md`), and each carries
+a **`How to re-verify this document`** section: literal commands whose output is the claim's proof.
+
+| Topic doc | Covers | Runbooks it underlies |
+|---|---|---|
+| [../BRANCH-AND-WORKTREE-LIFECYCLE.md](../BRANCH-AND-WORKTREE-LIFECYCLE.md) | refs, worktrees, landing gates, prune paths, the store/rig pair, suite-verdict traps | land, branch-cleanup, leaked-worktrees, merge |
+| [../SEAT-LIFECYCLE.md](../SEAT-LIFECYCLE.md) | a seat from create to retire | seat-reset, compact-a-seat, degeneration-guard |
+
+**Rule for a topic doc:** a claim without a command that proves it is not allowed — mark it `UNVERIFIED`
+or drop it. That is what makes the doc audit-able instead of merely plausible.
+
+**Periodic verification (the contract).** A verifier re-runs `How to re-verify this document`, then
+bumps `last_verified` / `verified_by` / `evidence` in the header and fixes any claim the commands
+contradict. The **claim** is wrong when they disagree — never "fix" the rig to match the doc.
+
+> **CAVEAT — this is manual today.** The `runbook-stale`, `runbook-unverified` and
+> `runbook-front-matter` rules EXIST in `src/checkup.mjs` but `cli.mjs` never passes a `runbooks`
+> collection into `auditRig`, so `check` reports all three as `skipped — no runbook data was supplied`.
+> Nothing automatically verifies runbooks OR topic docs yet; that wiring is the gap (routed to `pm`).
+> Related false positive a verifier must know: `runbookFrontMatterProblems` expects TYPED front-matter
+> (`writes` as a boolean), so a naive YAML parse of the files reports `writes: must be true or false` for
+> **every** runbook — including all the pre-existing ones.
+
 ## Maintenance policy (from the research report)
 
 - **Re-verify on trigger, not calendar:** re-run `Verify` when (a) an incident touched the procedure,

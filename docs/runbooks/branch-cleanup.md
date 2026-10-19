@@ -28,6 +28,10 @@ Git-only, read-only with respect to the store; the broker does **not** need stop
 or force-remove any worktree as part of a branch prune — a checked-out branch must be released through
 `leaked-worktrees.md`, not here. The operator holds push (remote refs); see step 7.
 
+The **model** behind these steps (artifact ownership, the three prune paths, and which source is
+authoritative for each question) is `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md`; this runbook is the
+procedure.
+
 ## Diagnose (read-only)
 Classify every non-`main` ref as **merged** (`ahead=0`), **held** (checked out in a worktree), or
 **unlanded** (`ahead>0`). **The `sed` matters:** `git branch` prefixes a ref with `*` (current) or `+`
@@ -50,6 +54,15 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
 
 ## Do
 1. Re-run Diagnose **at this moment** — branch sets are point-in-time (the rig creates refs live).
+   **Re-run it again after each landing batch, not only once at the start.** Landing one branch can make
+   an unrelated ref merged: on 2026-10-19 landing `impl-item-1705` (tip `349d5d3`) turned
+   `auditor-item-2757` (same tip, `ahead=4` at Diagnose) into an ancestor of `main`, so a ref recorded as
+   unprunable at the start was safely `-d`'d at the end of the same pass. The gate is always the live
+   question, never a remembered `ahead` count:
+   `git merge-base --is-ancestor <branch> main && git branch -d <branch>`.
+   **Read the lock flag from `git worktree list`'s TERSE output** (`<path> <sha> [<branch>] locked`), not
+   from `--porcelain`: there `locked` is its own line AFTER `branch`, so a naive parse attributes it to
+   the following tree (2026-10-19: it reported all 22 merged worktrees as locked).
 2. Delete **merged + free** refs. `-d` refuses anything unmerged or still checked out, so it cannot
    lose work:
    ```bash
