@@ -64,7 +64,7 @@ import {
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
-import { applyPauseOp, auditWorktrees, brokerAlive, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
+import { applyPauseOp, auditWorktrees, brokerAlive, brokerProcessAlive, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -1578,14 +1578,26 @@ async function awaitIntentResult(dbPath, requestId, { timeoutMs = 15 * 60_000, p
   }
 }
 
+/**
+ * How long `serve --stop` waits for the broker PROCESS to exit before giving up without a
+ * forced kill. Env-overridable (`DURIG_STOP_WAIT_MS`) so a demo can prove the decision fast.
+ */
+function stopWaitMs() {
+  const v = parseInt(process.env.DURIG_STOP_WAIT_MS, 10);
+  return Number.isFinite(v) && v > 0 ? v : 60_000;
+}
+
 async function cmdStopBroker() {
   const state = readBrokerState(DB_PATH);
   if (!state) {
     out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "no broker is running" });
     return;
   }
-  if (!brokerAlive(state)) {
-    clearBrokerState(DB_PATH);
+  // "Stale" means the PROCESS is gone, not merely that its heartbeat is old: a broker
+  // draining a long pass stops refreshing its heartbeat but is still the writer (F1, #2574).
+  // Clearing a live writer's state is what admitted a second writer mid-drain.
+  if (!brokerProcessAlive(state.pid)) {
+    clearBrokerState(DB_PATH, state.pid);
     out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "state was stale; cleared" });
     return;
   }
@@ -1595,13 +1607,16 @@ async function cmdStopBroker() {
   // previous 5s window, so we give up to 60s for cooperative settlement. No forced
   // kill: the broker WILL exit once its pass settles — waiting longer honours that.
   writeStopRequest(DB_PATH);
-  const deadline = Date.now() + 60_000;
-  while (Date.now() < deadline && brokerAlive(state)) {
+  const waitMs = stopWaitMs();
+  const deadline = Date.now() + waitMs;
+  // Wait for the PROCESS to exit (signal 0), not for the heartbeat to lapse: `stopped:true`
+  // must mean the writer provably exited, so a second writer is admitted only after that
+  // (#2574). The pid guard on clearBrokerState keeps a NEWER broker's state file intact.
+  while (Date.now() < deadline && brokerProcessAlive(state.pid)) {
     await new Promise((r) => setTimeout(r, 100));
   }
-  const stillAlive = brokerAlive(state);
-  if (!stillAlive) {
-    clearBrokerState(DB_PATH);
+  if (!brokerProcessAlive(state.pid)) {
+    clearBrokerState(DB_PATH, state.pid);
     clearStopRequest(DB_PATH);
     out({
       ok: true,
@@ -1615,8 +1630,9 @@ async function cmdStopBroker() {
   }
   // Bounded grace period expired: the broker could not settle in time. Do not
   // force-kill — the operator should investigate with `status`.
+  const secs = Math.round(waitMs / 1000);
   console.warn(
-    `serve --stop: broker pid ${state.pid} did not exit within 60s; ` +
+    `serve --stop: broker pid ${state.pid} did not exit within ${secs}s; ` +
       `pass may still be in-flight — check with \`serve --stop\` again`,
   );
   out({
@@ -1626,7 +1642,7 @@ async function cmdStopBroker() {
     db: DB_PATH,
     stopped: false,
     pid: state.pid,
-    reason: "pass did not settle within 60s; no forced kill — check status again",
+    reason: `pass did not settle within ${secs}s; no forced kill — check status again`,
   });
 }
 
