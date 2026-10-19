@@ -20,7 +20,10 @@ deciding factor (157 stays contingency). No third round is owed. **Operator prio
 intent `prioritize-daemon-harness-reliability-2026-10-19-1` (`delivered:true` `04:52:23Z`) asks `pm` to
 register and sequence **ROADMAP 153–160 reliability-first**, tied to `#2420`; suggested order 159 → 158 →
 160 → 153 → 154 → 156 → 155 → 157(contingency only), with an explicit warning not to spend impl time on
-the rejected pragma claims.
+the rejected pragma claims. **SUPERSEDED by the operator's bug-fix-first ruling:** intent
+`bugfix-first-2026-10-19-1` (`delivered:true` `04:55:09Z`) orders the bug-fix cluster
+(`#2420`, 159, 158, 160) **ahead of all capability items** (153/154/156/155), with the standing rule
+that defects/regressions/lock/lifecycle fixes outrank new features.
 **Queue id:** ROADMAP `153–160` (registered); `#2420` (bounded-grace stop addendum, `queued` to `impl`) still open; related `#2406` (read seam vs `pi-durable` version).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 **Blocker:** the broker still honours a stop only at a pass boundary then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`). Round 2 corroborates the #2420 fix shape (drain deadline → cancel stream/tool → **unconditional** force fallback that does not depend on the wedge) and maps `taskkill /T /F` + Job Objects onto existing ROADMAP 61/63/64. The residual `PASS-FAILED … cause=Error: database is locked` is **narrowed** (retryable busy or `-shm` race; `BUSY_SNAPSHOT` excluded) and tracked as ROADMAP 159. **Read seam (`#2406`): the ruling is now settled** — no second connection; `immutable=1` is unsafe against a live writer (may return wrong results / `SQLITE_CORRUPT`), so reads stay broker-served (D111), and any reader must be short-lived.
