@@ -13,24 +13,50 @@ team that builds durian-pi itself.
 
 ## The team
 
-Ten seats (`node cli.mjs ps`), with the author/reviewer pairs the culture requires:
+**Twelve seats — and the table below is RE-DERIVED from `rig.selfdev.json`, not remembered.** A model
+change is an operator action that lands as a commit (`a5a4d00`, `e4d0222` both moved seats in one day), so
+any hand-copied table rots within hours. Verify before relying on it:
 
-| Seat | Role | Model | Notes |
+```bash
+python -c "import json;[print(s['name'], s.get('model')) for s in json.load(open('rig.selfdev.json'))['seats']]"
+```
+
+| Seat | Role | Model (live, `rig.selfdev.json`) | Notes |
 |---|---|---|---|
-| `pm` | program manager | DeepSeek-V4.1-Flash | intake, decomposition, routing, tracking |
-| `impl` | implementation | GLM-5.3-Flash | author for build items |
-| `qa` | verifier | GLM-5.3-Flash | independent; different model family from authors |
-| `lead` | technical lead | DeepSeek-V4.1-Flash | scope/priority rulings; escalation target |
-| `advocate` | workflow/design reviewer | GLM-5.3-Flash | owns `WORKFLOWS.md`, `SELF-ADMIN.md` |
-| `scribe` | documentation | DeepSeek-V4-Flash-0731 | keeps `FEATURES.md`/`STATUS.md` true |
-| `devtools` | toolchain | DeepSeek-V4.1-Flash | pi pin, `sync-pi.mjs` |
-| `auditor` | second verifier | GLM-5.3-Flash | do the tests prove it; edges |
-| `designer` | CLI/UX | GLM-5.3-Flash | surface and defaults |
-| `security` | security engineer | GLM-5.3-Flash | threat models, trust boundaries & secret hygiene; deliberately NOT a verifier (keeps working tools); owns `security-positions` |
+| `pm` | program manager | `deepseek-ai/DeepSeek-V4.1-Flash` | intake, decomposition, routing, tracking |
+| `impl` | implementation | `deepseek-ai/DeepSeek-V4.1-Flash` | author for build items |
+| `qa` | verifier | `local/qwen36` | independent; a DIFFERENT FAMILY from the author seats |
+| `qa2` | verifier (2) | `google/gemma-4-31B-it` | second verifier, third family |
+| `lead` | technical lead | `deepseek-ai/DeepSeek-V4.1-Flash` | scope/priority rulings; escalation target |
+| `architect` | systems architect | `deepseek-ai/DeepSeek-V4.1-Flash` | cross-cutting design, failure modes, durable decisions |
+| `advocate` | workflow/design reviewer | `zai-org/GLM-5.3-Flash` | owns `WORKFLOWS.md`, `SELF-ADMIN.md` |
+| `scribe` | documentation | `deepseek-ai/DeepSeek-V4-Flash-0731` | keeps `FEATURES.md`/`STATUS.md` true |
+| `devtools` | toolchain | `local/qwen36` | pi pin, `sync-pi.mjs` |
+| `auditor` | second verifier | `zai-org/GLM-5.3-Flash` | do the tests prove it; edges |
+| `designer` | CLI/UX | `zai-org/GLM-5.3-Flash` | surface and defaults |
+| `security` | security engineer | `zai-org/GLM-5.3-Flash` | threat models, trust boundaries & secret hygiene; deliberately NOT a verifier (keeps working tools); owns `security-positions` |
 
-*(Models are the live values in `rig.selfdev.json`; the five GLM seats moved from `Qwen/Qwen3.6-35B-A3B`
-under **D51**, and the `security` seat was added 2026-10-17 (`f701837`) on the same GLM family — so it
-reviews DeepSeek-authored code on a different family. The author/verifier split is still GLM vs DeepSeek.)*
+## The author/verifier split (state it precisely)
+
+The invariant is that **a verifier must not share a model family with the author of the change it
+verifies** — not that any particular two names hold a particular pair of models. Today that reads:
+
+- **authors** are `impl` (DeepSeek-V4.1-Flash) and, for docs/tooling, `scribe` (DeepSeek-V4-Flash-0731) and
+  `devtools` (`local/qwen36`);
+- **verifiers** are `qa` (`local/qwen36`), `qa2` (gemma), and `auditor` (GLM-5.3-Flash).
+
+So the pairwise requirement holds for the main loop (`impl` vs `qa`: DeepSeek vs local/qwen; `impl` vs
+`auditor`: DeepSeek vs GLM; `scribe` vs `auditor`: DeepSeek vs GLM) — **but it does NOT hold everywhere,
+and the exception is worth knowing: `devtools` and `qa` are BOTH `local/qwen36`**, so a `devtools`-authored
+tooling change verified by `qa` is verified on the author's own family. Route such a verify to `auditor`
+(GLM) or `qa2` (gemma) instead. Check the pair, do not trust a slogan: the old "GLM authors vs DeepSeek
+verifiers" reading is **FALSE** after the 2026-10-19 model moves and must not be quoted as policy.
+`security` stays outside the split by design (`VERIFIER_TERMS` does not match its name, so it keeps
+`write`/`edit`/`shell`).
+
+*(2026-10-19: this table previously listed `impl`/`qa`/`devtools` on the old Qwen pair and omitted `qa2`
+and `architect` entirely, while claiming "Ten seats" — the docs defect is recorded as a row in
+`docs/FEATURES.md` §4 and is why the derivation command is now inline.)*
 
 ## Running it
 
