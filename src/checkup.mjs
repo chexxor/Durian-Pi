@@ -109,6 +109,11 @@ export const RULES = [
     severity: "fix-now",
     what: "a feat commit landed with no docs/FEATURES.md row and no stated \"no feature surface\" note",
   },
+  {
+    id: "shared-tree-on-main",
+    severity: "error",
+    what: "the shared working tree is not on its integration branch, so a seat may be writing to a feature branch",
+  },
 ];
 
 const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
@@ -279,7 +284,7 @@ export function runbookFrontMatterProblems(runbook) {
  *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, sharedTreeBranch = null, sharedTreeExpected = "main" }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -620,6 +625,27 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
         "add the docs/FEATURES.md row for each, or record an explicit \"no feature surface\" note in its item",
       );
     }
+  }
+
+  // 13. The shared working tree must sit on its integration branch. A seat whose cwd fell back to
+  //    the shared tree once switched it onto an item branch (2026-10-19, devtools #2412 -
+  //    docs/incidents/2026-10-17-seat-root-fallback-commit.md): the landing basis breaks and
+  //    "live" writes land on a feature branch. `auditRig` is a pure function, so the CALLER reads
+  //    the branch (src/featuredocs.mjs) and passes it; no data means SKIPPED with a reason, never a
+  //    silent pass (D25). A detached HEAD reads as "" and is a finding like any other branch.
+  if (sharedTreeBranch === null || sharedTreeBranch === undefined) {
+    skipped.push({
+      id: "shared-tree-on-main",
+      why: "the current git branch was not supplied, so the shared working tree's branch cannot be checked",
+    });
+  } else if (sharedTreeBranch !== sharedTreeExpected) {
+    const on = sharedTreeBranch === "" ? "a detached HEAD" : `branch "${sharedTreeBranch}"`;
+    add(
+      "shared-tree-on-main",
+      sharedTreeBranch || "detached",
+      `the shared working tree is on ${on}, not "${sharedTreeExpected}" - a seat whose cwd falls back to the shared tree writes to a feature branch and the landing basis breaks`,
+      `switch the shared tree back: git switch ${sharedTreeExpected}; land item branches through the landing helper`,
+    );
   }
 
   const summary = { error: 0, "fix-now": 0, total: findings.length };

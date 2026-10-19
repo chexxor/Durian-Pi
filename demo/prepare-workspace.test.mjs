@@ -183,7 +183,42 @@ try {
   assert.match(await readFile(join(atBase.cwd, "artifact.txt"), "utf8"), /unlanded/, "...with the unlanded content present");
   await removeSeatWorkspace({ worktreeRoot: source3, itemId: 11 });
 
-  console.log("PREPARE-WORKSPACE PASS (idempotent per-item worktree; the seat's own cwd wins; npm ci path exercised)");
+  // --- 7. a leftover NON-worktree directory is REFUSED, and the shared tree is NOT switched ---
+  // 2026-10-19 (devtools #2412): a plain `item-<id>` dir left inside the shared tree (no `.git`)
+  // was "reused", so `ensureWorktreeBranch` ran `git checkout -B` against the SHARED repo and
+  // moved the shared tree onto the item branch. The guard validates identity before any git
+  // mutation, so the shared tree's branch cannot move.
+  const repo4 = join(base, "leftover-repo");
+  const source4 = join(repo4, "durig");
+  await mkdir(source4, { recursive: true });
+  await writeFile(join(source4, "artifact.txt"), "x\n");
+  await run("git", ["init", "-q", repo4]);
+  await run("git", ["-C", repo4, "add", "durig/artifact.txt"]);
+  await run("git", ["-C", repo4, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
+  await run("git", ["-C", repo4, "branch", "-M", "main"]);
+  const leftover = join(source4, "item-13");
+  await mkdir(leftover, { recursive: true });
+  await writeFile(join(leftover, "nul"), "");
+  let leftoverError = null;
+  try {
+    await prepareSeatWorkspace({ source: source4, worktreeRoot: source4, itemId: 13, seatName: "impl" });
+  } catch (err) {
+    leftoverError = err;
+  }
+  assert.ok(leftoverError, "a leftover non-worktree directory is refused, not reused");
+  assert.match(leftoverError.message, /leftover directory, not a registered git worktree/, "the refusal names the cause");
+  assert.equal(
+    (await run("git", ["-C", repo4, "branch", "--show-current"])).stdout.trim(),
+    "main",
+    "the shared tree's branch is UNCHANGED (the guard runs before any git mutation)",
+  );
+  await rm(leftover, { recursive: true, force: true });
+  const afterLeftover = await prepareSeatWorkspace({ source: source4, worktreeRoot: source4, itemId: 13, seatName: "impl" });
+  assert.equal(afterLeftover.created, true, "once the leftover is gone, the worktree is created");
+  assert.equal(await branchOf(afterLeftover.worktree), "impl-item-13", "on its item branch");
+  await removeSeatWorkspace({ worktreeRoot: source4, itemId: 13 });
+
+  console.log("PREPARE-WORKSPACE PASS (idempotent per-item worktree; the seat's own cwd wins; npm ci path exercised; a leftover non-worktree is refused)");
 } finally {
   delete process.env.DURIG_SEAT_ROOT;
   if (worktree && existsSync(worktree)) {

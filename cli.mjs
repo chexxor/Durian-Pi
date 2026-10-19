@@ -70,6 +70,7 @@ import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
 import { formatMetrics } from "./src/metrics.mjs";
+import { readSharedTreeBranch } from "./src/featuredocs.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
@@ -2672,7 +2673,11 @@ async function cmdCheck(rigFile, human, rest = []) {
     }
   }
   const { auditRig, formatCheck } = await loadCheckup();
-  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, storedSeats, modelsBySeat, queueItems });
+  // The shared tree's branch (2026-10-19, devtools #2412): a seat whose cwd fell back to the shared
+  // tree can switch it onto an item branch, which breaks the landing basis. null (no git / not a
+  // repo) leaves the rule SKIPPED with its reason rather than silently passing.
+  const sharedTreeBranch = readSharedTreeBranch({ root: process.cwd() });
+  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, storedSeats, modelsBySeat, queueItems, sharedTreeBranch });
   const seatCount = (spec.seats ?? []).length;
   if (human) {
     console.log(

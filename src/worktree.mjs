@@ -466,6 +466,22 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 	const inside = relative(repo, resolve(worktreeRoot));
 	const cwdFor = (worktree) => (inside === "" ? worktree : join(worktree, inside));
 	if (existsSync(worktreePath)) {
+		// A leftover directory at the item's path is not necessarily a WORKTREE. A first attempt can
+		// create `item-<id>` and fail before the registration is usable, and a removed worktree can
+		// leave its directory behind. Reusing it unvalidated made `ensureWorktreeBranch` run
+		// `git checkout -B` against whatever repository the path resolved to; when the leftover sits
+		// inside the shared tree with no `.git`, that switched the SHARED tree's branch and defeated
+		// isolation (2026-10-19, devtools #2412 - docs/incidents/2026-10-17-seat-root-fallback-commit.md).
+		// Validate identity BEFORE any git mutation and fail closed on a non-worktree.
+		try {
+			await validateWorktreeIdentity(worktreePath);
+		} catch (identityErr) {
+			throw new Error(
+				`item ${itemId}'s workspace path is a leftover directory, not a registered git worktree: ` +
+					`${worktreePath} (${identityErr?.message ?? identityErr}). Refusing to prepare a workspace ` +
+					`there - remove the leftover directory or restore the worktree, then retry.`,
+			);
+		}
 		// Reuse is only safe when the worktree is ACTUALLY provisioned. A first attempt can
 		// create the `item-<id>` dir and then FAIL inside installWorktreeDeps, leaving a dir
 		// with no `node_modules`; returning it as "provisioned" hands the seat a dep-less

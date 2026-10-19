@@ -52,6 +52,18 @@ function git(args, cwd) {
 }
 
 /**
+ * The shared working tree's current branch, or null when git/the repository is
+ * unavailable (the same UNKNOWN-not-clean rule as readFeatureDocs). A detached
+ * HEAD reads as "" - both a feature branch and a detached HEAD are the
+ * `shared-tree-on-main` condition: the shared tree must sit on the integration
+ * branch, or a seat whose cwd fell back to it writes to a feature branch
+ * (2026-10-19, devtools #2412 - docs/incidents/2026-10-17-seat-root-fallback-commit.md).
+ */
+export function readSharedTreeBranch({ root = process.cwd() } = {}) {
+	return git(["branch", "--show-current"], root);
+}
+
+/**
  * Parse `git log --pretty=format:@@@%H<US>%s --name-only` output into the plain
  * entries `check` consumes. Pure, so the mapping is asserted without git.
  *

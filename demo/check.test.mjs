@@ -95,6 +95,9 @@ try {
     // rule (ROADMAP 46 / D62): an empty feat set is a real "nothing to check".
     queueItems: [],
     featureDocs: [],
+    // The shared tree is on its integration branch, so this rule RUNS and passes rather than
+    // being skipped: the assertion below is "every rule ran and passed".
+    sharedTreeBranch: "main",
   });
   assert.deepEqual(ids(hardened), [], `hardened rig has no findings; got ${ids(hardened).join(", ")}`);
   assert.equal(hardened.exitCode, 0);
