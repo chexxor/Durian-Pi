@@ -16,10 +16,9 @@
 import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync } from "node:fs";
 import { join, basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { CompactionEntry } from "@earendil-works/pi-durable";
+import { CompactionEntry, configure } from "@earendil-works/pi-durable";
 
 import { RigControl, RigQueue, Seats } from "./rig.mjs";
-import { dispatchRead } from "./brokerread.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
 import { LOCAL_PROVIDER_ID } from "./providers/local.mjs";
@@ -356,7 +355,7 @@ export async function applyPauseOp(harness, { paused, by = "operator", reason = 
  * harness — rather than opening a second writer. `pause`/`unpause` (ROADMAP 131) are
  * rig-level: they carry no seat target.
  */
-export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause", "read"];
+export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause", "configure"];
 
 /** How often `pause --wait` re-checks for quiescence while the broker drains (ROADMAP 131 AC5). */
 const QUIESCE_POLL_MS = 100;
@@ -367,14 +366,23 @@ const QUIESCE_POLL_MS = 100;
  */
 async function applyRequest(harness, request, { seats, context, dbPath, probeStorage }) {
   const op = requestOp(request);
-  // `read` is the one non-mutating spool op: the broker serves a view from its OWN
-  // storage so a second process never opens the database (see src/brokerread.mjs). It is
-  // applied with `harness.storage`, NOT the separate `probeStorage`: pi-durable's
-  // `document()` takes BEGIN IMMEDIATE even for a read, so a read on a SECOND connection
-  // contends with the harness's own commits in-process and times out the 5 s busy window
-  // (`PASS ms=5051` -> SessionFailed -> wedge). One pi-durable instance, one connection.
-  if (op === "read") {
-    return await dispatchRead(harness.storage, request, { dbPath, context });
+  if (op === "configure") {
+    // Bounded single-field write: `up` records the resolved provider on the seat's
+    // conversation (D105/D106). The broker applies it with its own harness — no
+    // external writer, no cli.mjs change. The request carries { model: { provider, modelId? } }.
+    const seatName = request.to ?? request.seat;
+    const seat = seats[seatName];
+    if (!seat) throw new Error(`unknown seat: ${seatName}`);
+    const convId = seat.conversationId;
+    const model = request.model;
+    if (!model || typeof model.provider !== "string") {
+      throw new Error(`configure: missing model.provider for seat ${seatName}`);
+    }
+    await harness.commit(
+      (tx) => configure(tx, convId, { model }),
+      context,
+    );
+    return { op, seat: seatName, provider: model.provider, modelId: model.modelId ?? null };
   }
   if (op === "message") {
     const seat = seats[request.to];
