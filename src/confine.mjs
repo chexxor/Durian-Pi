@@ -246,6 +246,16 @@ const ENV_ALLOWLIST = [
 	"TERM",
 ];
 
+/** Non-interactive git vars: pin them so `git commit` (no -m) never opens VS Code and blocks the seat. */
+export const NON_INTERACTIVE_GIT = {
+	GIT_EDITOR: ":",
+	GIT_SEQUENCE_EDITOR: ":",
+	GIT_TERMINAL_PROMPT: "0",
+	GIT_MERGE_AUTOEDIT: "no",
+	GIT_PAGER: "cat",
+	PAGER: "cat",
+};
+
 /** A name that looks like a credential never crosses, whatever allowlist was configured. */
 const SECRET_NAME = /(key|token|secret|password|passwd|credential|cookie|authorization)/i;
 
@@ -406,6 +416,31 @@ export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_A
 		},
 		set cwd(value) {
 			base.cwd = value;
+		},
+
+		// Expose env properties so a demo can read the pinned vars (D109).
+		get env() {
+			return base.shellEnv;
+		},
+
+		// Direct property access for each pinned var, so `env[key]` works (D109).
+		get GIT_EDITOR() {
+			return base.shellEnv?.GIT_EDITOR;
+		},
+		get GIT_SEQUENCE_EDITOR() {
+			return base.shellEnv?.GIT_SEQUENCE_EDITOR;
+		},
+		get GIT_TERMINAL_PROMPT() {
+			return base.shellEnv?.GIT_TERMINAL_PROMPT;
+		},
+		get GIT_MERGE_AUTOEDIT() {
+			return base.shellEnv?.GIT_MERGE_AUTOEDIT;
+		},
+		get GIT_PAGER() {
+			return base.shellEnv?.GIT_PAGER;
+		},
+		get PAGER() {
+			return base.shellEnv?.PAGER;
 		},
 
 		// `joinPath` touches nothing; confining is the resolve step, not the join.
