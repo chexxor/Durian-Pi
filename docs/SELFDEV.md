@@ -100,6 +100,55 @@ DURIAN_PI_SEAT_ROOT=<that>/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs 
 `up --refresh` re-points each seat's persisted `cwd`; the F12 guard fails closed if `DURIAN_PI_SEAT_ROOT`
 disagrees with what a seat already has, so re-point rather than guessing.
 
+## Pinned-pi reproduction in worktrees
+
+pi is a fast-moving monorepo with no published dev channel. durig pins a specific commit in
+`pi-main.pin.json` (sha + package list) and builds from source via `scripts/sync-pi.mjs`.
+
+### How it works
+
+When a worktree is created, `installWorktreeDeps` runs `npm ci --prefer-offline` to install
+dependencies from the committed lockfile. This resolves to **released registry packages**
+(e.g. `@earendil-works/pi-durable@1.1.0`), which may differ from the production set built
+from the pin. A post-install step then runs `node scripts/sync-pi.mjs --link` to point
+`node_modules` at the locally built `vendor/pi-main` tree, restoring parity with the
+committed pin.
+
+### Manual reproduction
+
+If a worktree needs the pinned build but `--link` was not run (e.g. `vendor/pi-main` was
+not yet built), run it manually:
+
+```bash
+cd <worktree-path>/durian-pi
+node scripts/sync-pi.mjs --sync   # build the pinned commit in vendor/pi-main
+node scripts/sync-pi.mjs --link   # point node_modules at the built tree
+```
+
+`--sync` fetches the exact pinned commit (not the branch tip) and builds each package.
+`--link` installs `file:` specifiers so `node_modules` resolves to the built tree.
+
+### Drift detection
+
+Run `node scripts/sync-pi.mjs` (no flags) to check whether the pin is still at upstream
+tip. If it reports `drift: true`, the pin has moved and `--update` can advance it:
+
+```bash
+node scripts/sync-pi.mjs --update   # move pin to upstream tip, then build
+node scripts/sync-pi.mjs --link     # point node_modules at the new build
+```
+
+### Pin file format
+
+`pi-main.pin.json` contains:
+- `sha` — the exact commit to pin (string)
+- `packages` — array of `{ name, dir }` objects listing the workspaces to build
+- `repo` — upstream git URL (read by `sync-pi.mjs`)
+- `branch` — branch to track for drift detection
+- `pinnedAt` — ISO timestamp of the last update
+
+The `vendor/pi-main/` directory is gitignored; it is fully reproducible from the pin.
+
 ## How to find the next item (do not re-derive it)
 
 Priority is **not** the top of the 1300-line roadmap. It is:
