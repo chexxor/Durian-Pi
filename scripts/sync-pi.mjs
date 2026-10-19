@@ -138,7 +138,7 @@ export function upstreamSha(pin) {
 
 /** Materialize BUILD_DIR at the pinned sha (sparse: only the needed packages). */
 export function ensureBuildTree(pin) {
-	const dirs = pin.packages.map((p) => p.dir);
+	const dirs = [...new Set([...pin.packages.map((p) => p.dir), "scripts"])];
 	if (!existsSync(join(BUILD_DIR, ".git"))) {
 		mkdirSync(BUILD_DIR, { recursive: true });
 		git(BUILD_DIR, ["init", "--quiet"]);
