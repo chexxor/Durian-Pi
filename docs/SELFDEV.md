@@ -190,7 +190,7 @@ needed it. (Operator note, 2026-10-15.)
 - `docs/DOGFOOD.md` — the findings that created it (F12 seat root, F13 claimed≠held, F14 corruption).
 - `docs/ROADMAP.md` — *"Deadlock and liveness prevention"* (P1–P6) and
   *"New-session onboarding for seats"* (O1–O4).
-- `.agents/skills/durian-pi/SKILL.md` — driving the CLI.
+- `.agents/skills/driving-durian-pi/SKILL.md` — driving the CLI.
 - `docs/runbooks/` — operating procedures (broker down/stall, safe spec change, store recovery, seat
   reset, leaked worktrees, the pre-written daemon runbook, and how to commission research). Read the
   matching runbook before improvising a recovery; the set is largely **unverified** until ROADMAP item
