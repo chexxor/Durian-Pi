@@ -3,6 +3,79 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T17:33Z, delegate) — **LAND+PRUNE PASS STOPPED AT THE FIRST GATE: `scripts/` IS EMPTY ON DISK (#2889/#2890); PRUNE CLASSIFIED BUT NOT EXECUTED**
+
+**Read this first.** The operator asked for a branch-landing + worktree-pruning pass and then handed the
+session to a fresh agent. **Nothing was landed, nothing was pruned, nothing was committed to git beyond
+this pointer.** Do not re-derive: the diagnosis below is complete and its artifacts are on disk.
+
+**State inherited (verified this session):**
+- `main` = **`a70fc27`**, 2 commits ahead of `origin/main` (unpushed — the operator holds push).
+- **Shared tree: 9 tracked DELETIONS in `scripts/`** — the directory is EMPTY on disk
+  (`apply-commit-discipline`, `degen-scan`, `from-openrig`, `land`, `read-constitution`,
+  `repair-pi-live`, `serve-noroot.ps1`, `suite`, `sync-pi`). Already escalated as the deferred **#2889**
+  (`pm`→`lead`) / **#2890** (`lead`→`pm`), which call it operator-only and ask for `git restore scripts/`
+  then a broker restart. **New evidence this session: the deletion is NOT any branch's change** —
+  `git log --all --diff-filter=D -- scripts/` returns nothing, and BOTH the index (`git ls-files -s
+  scripts/` = 9) and `HEAD` (`git ls-tree HEAD scripts/` = 9) are intact. So the loss is unexplained, and
+  re-materialising the files from the index (`git checkout-index -f -- scripts/`) is **lossless** — there
+  is no on-disk content to discard. Seats are blocked from this by the active-seat guard; the delegate is
+  not. **This is the single unblocking action.**
+- **Broker: pid `7984`, started `06:24:31Z`** (`selfdev.sqlite.broker.json`) — i.e. it PREDATES the
+  `impl-item-2360` landing (`9694f84`, `@4813a50`), so `prepare_workspace` still forks `carry:true` and
+  every new item worktree inherits the shared tree's dirt (the #2588/#2889 leak symptom). `.spike/serve.err`
+  ends at 09:13Z with `complete_work … junction/symlink detected at undefined/node_modules` and repeated
+  `supervisor: escalated … reason: degeneration` (impl). Restart owed (operator ask 2 in #2890).
+- **`scripts/land.mjs` cannot parse** until the restore runs; `node scripts/suite.mjs` likewise. Landing
+  is therefore IMPOSSIBLE right now — that is why this pass stopped rather than guessing.
+
+**Pre-existing cycles to be aware of:** the unbounded-resume trap and the "never `git add -A`" rule still
+hold; 8 stashes exist (`stash@{0}` devtools #2412 WIP, `stash@{1}` devtools #2390/#1754 WIP, `stash@{2}`/`{3}`
+autostash, `{4}` D109, `{5}` #2321-era, `{6}` configure, `{7}` old) — **do not pop any of them blind.**
+
+**PRUNE — fully classified, safe to execute as step 2** (audit snapshot + lists in
+`.spike/delegate/land-prune-2026-10-19c/`: `merged.txt`, `held.txt`, `wtaudit.json`, `queue.json`).
+Counts at diagnosis: **111 refs, 206 registered worktrees**, audit `counts` =
+`{seat-root:1, non-item:56, dirty:126, locked:10, live:11, reapable:2}`.
+1. **Merged + free (delete now, lossless):** `impl-item-2588` (`ahead=0`). `git branch -d impl-item-2588`.
+2. **Reapable (clean+unlocked+terminal):** `auditor-item-2632` (`ahead=0`, merged → `git worktree remove`
+   then `git branch -d`); `auditor-item-2757` (`ahead=4`, **NOT merged** → remove the clean worktree only,
+   **keep the branch**; `-d` will and must refuse).
+3. **Merged + unlocked + DIRTY (relocate, never force)** — all `ahead=0`, item terminal, `unc=1..9`:
+   `designer-item-2629`, `scribe-item-2683`, `qa-item-2701`, `qa-item-2720`, `qa-item-2728`,
+   `qa-item-2737`, `qa-item-2766`, `qa-item-2772`, `scribe-item-2910`. Use the recipe in
+   `docs/runbooks/leaked-worktrees.md` (2026-10-19 block): `git worktree move <wt>
+   ../pi-opendurig.worktrees/<name>` → `git -C <new> switch --detach` →
+   `git merge-base --is-ancestor <b> main && git branch -d <b>`; then `git worktree prune`.
+4. **KEEP — intentional (locked or live), do not touch:** the 16 merged refs held by locked/live trees
+   (`impl-item-1274/1547`, `advocate-item-2104/2698`, `devtools-item-2390/2459/2514/2559/2595/2638`,
+   `impl-item-2788`, plus seat roots) and every `ahead>0` ref (unlanded work — landing window only).
+5. **Do not** relocate or remove anything under `item-2188/` (it holds nested worktrees:
+   `temp-1558-rebase`, `temp-1754-rebase`, `temp-2073-rebase`, `temp-test-1558/1754`) — nested-first, and
+   they are devtools' rebase scratch. The loose root dirs `temp-1558-original/`, `temp-1558-rebase2/`,
+   `temp-1754-rebase/`, `.durig-verify-2336/`, `wt-2073/` are untracked and left untouched.
+
+**Order for the next agent (do not reorder):**
+1. `git checkout-index -f -- scripts/` → verify `node --check scripts/land.mjs`, `node --check
+   scripts/suite.mjs`, `git status --short -- .` clean.
+2. Run the prune as classified above (git-only; the broker may stay up). Record before/after ref+worktree
+   counts and confirm `main` unmoved.
+3. Only then attempt landings — and only **verified** branches. `impl-item-2679` (`@99eecd2`, the
+   `shared-tree-on-main`-skips-a-LINKED-worktree fix, queue **#2829/#2830**, landing list **#2849**) is the
+   highest-value candidate: its non-author verify **#2680** is `held`, gated on exactly this gate fix — so
+   re-run that verify FIRST, do not land on the author's own evidence. Note `#2848` (devtools #2390) also
+   complains that the shared-tree `scripts/land.mjs` was BOM/orphan broken; after the restore, the
+   on-disk file is HEAD's version, so re-check `node --check` before trusting either report.
+4. Land with `node scripts/land.mjs <branch> --db ./selfdev.sqlite` and **no `--suite`** until the linked
+   worktree fix is on `main`; prove afterwards with `node scripts/suite.mjs` (expected only the
+   `demo/pitui.test.mjs` symlink failure). Then restart the broker (operator-granted) so `carry:false`
+   takes effect.
+
+**Exact next command:** `git checkout-index -f -- scripts/ && node --check scripts/land.mjs && node --check scripts/suite.mjs && git status --short -- .`
+**Do not:** run `git restore .`/`git checkout -- .`/`git reset --hard`/`git clean -fd`; `git add -A`; pop a
+stash blind; force a dirty worktree; delete an `ahead>0` ref; land an unverified branch; push (operator
+holds it).
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:50Z, delegate) — **LAND+PRUNE PASS RAN: 4 LANDED, 9 TERMINAL WORKTREES RELOCATED; 4 ITEMS ESCALATED TO THE OPERATOR**
 
 **Read this first.** Operator-directed landing/merging + worktree-pruning pass, then a second operator
@@ -43,21 +116,23 @@ CONFLICT (author rebase set `#2681`/`#2682`/`#2683`).
 (operator holds it); land an unverified branch.
 
 ## NEXT SESSION
-**Current item:** OPERATOR FEEDBACK DELIVERED — `operator-feedback-rulings-2026-10-19-1` (delivered
-08:53:25Z): the operator accepted the delegate's rulings for `#2698` (advocate — retry after the `#2336`
-fix; register the missing runbook), `#1705` (rebase `9799cff` + delta re-verify `#2072` + land),
-`#1966` (build now; PM/lead rule the `#1780` sequencing), `#2543` (keep held+FUNDED; route the harness).
-VERIFY `pm` routes/advances these AND the three `operator-next-*` intents, then drive the ordered work.
-The landing/prune pass is COMPLETE this session (`main` `a4dc769`; 4 landed, 9 terminal worktrees
-relocated).
-**Queue id:** `#2698` / `#1705` / `#1966` / `#2543` (operator feedback, answered by
-`operator-feedback-rulings-2026-10-19-1`); landing gate `#2679` (+ verify `#2680`); the three
-`operator-next-*` intents delivered 08:29Z.
-**Blocker:** `scripts/land.mjs --suite` is RED in the helper's DETACHED scratch (the `shared-tree-on-main`
-check rule, `#2679`) — land without `--suite` and prove on `main` with `node scripts/suite.mjs` until it is
-fixed. Also 53 unlanded branches conflict (author rebase set `#2681`/`#2682`/`#2683`). Pending operator
-inputs: `#994` quiet window, `#1135` pricing source; operator-owned secret rotation for `#119203`.
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Current item:** the operator-directed LAND + PRUNE pass, STOPPED at its first gate — restore the empty
+`scripts/` directory, then prune, then land verified branches. `scripts/land.mjs` and `scripts/suite.mjs`
+cannot even parse while the nine tracked deletions stand, so no landing was attempted (nothing was landed,
+nothing pruned, `main` unmoved at `a70fc27`). Full diagnosis + the classified prune list + the ordered plan
+are in the 17:33Z clock-out block at the top of this file; artifacts in
+`.spike/delegate/land-prune-2026-10-19c/`.
+**Queue id:** `#2889`/`#2890` (the `scripts/` wipe, operator action) and `#2848` (land.mjs BOM/orphan) gate
+everything; then landing gate `#2679` (artifact `#2829`/`#2830`, landing list `#2849`, non-author verify
+`#2680`); prune inputs `#2829`-independent.
+**Blocker:** the shared tree's `scripts/` is EMPTY on disk (9 tracked deletions). The index and `HEAD` are
+intact (9 and 9) and NO branch deletes `scripts/`, so re-materialising from the index is lossless — but the
+active-seat guard reserves the act for the operator/delegate, not a seat. Second blocker: the running broker
+(pid `7984`, started `06:24:31Z`) predates the `impl-item-2360` landing and still forks `carry:true`; restart
+after the restore. Pending operator inputs unchanged: `#994` quiet window, `#1135` pricing source,
+operator-owned secret rotation for `#119203`.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` then
+`git checkout-index -f -- scripts/ && node --check scripts/land.mjs && node --check scripts/suite.mjs && git status --short -- .`
 
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:30Z, delegate) — **NEXT-WORK PRIORITIES DELIVERED TO `pm` (3 intents); LANDING GATE `#2679` FIRST, THEN BUG-FIX CLUSTER, THEN STANDING PRIORITIES**
 
