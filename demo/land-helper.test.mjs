@@ -65,6 +65,48 @@ function land(repo, argv) {
 const tmp = mkdtempSync(join(tmpdir(), "durig-land-"));
 const repo = join(tmp, "repo");
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const tryJson = (s) => {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+};
+const waitFor = async (fn, ms) => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (fn()) return true;
+    await sleep(25);
+  }
+  return fn();
+};
+/**
+ * Spawn the REAL helper ASYNCHRONOUSLY so its wait/lock can be observed while it runs.
+ * `db === null` omits --db AND DURIG_DB, so the helper must RESOLVE the store itself (#1383).
+ */
+const landAsync = (argv, extraEnv = {}, db = join(repo, "rig.sqlite")) => {
+  const env = { ...process.env, DURIG_MAX_CONCURRENT_SEATS: "2", ...extraEnv };
+  if (db === null) delete env.DURIG_DB;
+  const args = [...argv, "--repo", repo];
+  if (db !== null) args.push("--db", db);
+  const child = spawn(process.execPath, [LAND, ...args], { cwd: repo, env });
+  child.out = "";
+  child.stdoutText = "";
+  child.stderrText = "";
+  child.stdout.on("data", (d) => {
+    child.out += d;
+    child.stdoutText += d;
+  });
+  child.stderr.on("data", (d) => {
+    child.out += d;
+    child.stderrText += d;
+  });
+  // 'close' (not 'exit') so stdout is fully flushed before the report is parsed.
+  child.done = new Promise((r) => child.on("close", (c) => r(c)));
+  return child;
+};
+
 try {
   console.log("\n=== landing safety A: scratch-worktree landing helper ===\n");
 
@@ -115,15 +157,24 @@ try {
   git(repo, ["checkout", "--", "a.txt"]);
   check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
 
-  console.log("\n3. a HELD genlock refuses to land");
+  console.log("\n3. a HELD genlock makes the lander WAIT with PRIORITY — it does NOT refuse (#1497/#1498)");
   const slot = join(repo, "rig.sqlite.genlock.0");
-  writeFileSync(slot, JSON.stringify({ pid: process.pid, seat: "impl", since: new Date().toISOString() }));
+  // A LIVE holder with a DIFFERENT pid, so "held by someone else" is genuinely exercised.
+  const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { stdio: "ignore" });
+  writeFileSync(slot, JSON.stringify({ pid: holder.pid, seat: "impl", since: new Date().toISOString() }));
   const beforeLock = mainSha(repo);
-  const locked = land(repo, ["feat-b"]);
-  check("the helper refuses (nonzero)", locked.code !== 0, locked.raw.slice(0, 200));
-  check("...naming the genlock", /genlock/.test(locked.report?.error ?? ""), locked.report?.error);
+  const lockedRun = landAsync(["feat-b"]);
+  const sawPriority = await waitFor(() => existsSync(join(repo, "rig.sqlite.genlock.priority")), 8000);
+  check("the lander PUBLISHES a priority reservation and WAITS (it does not refuse)", sawPriority, lockedRun.out.slice(0, 200));
+  check("...and it has NOT reported yet (it is waiting on the live holder)", lockedRun.out.trim() === "", lockedRun.out.slice(0, 200));
   check("...and main did NOT advance", mainSha(repo) === beforeLock);
-  rmSync(slot, { force: true });
+  rmSync(slot, { force: true }); // the holder's generation finishes and releases the slot
+  const lockedCode = await lockedRun.done;
+  check("once the holder releases, the landing COMPLETES", lockedCode === 0, lockedRun.out.slice(0, 300));
+  check("...and main advanced", mainSha(repo) !== beforeLock);
+  check("...and the priority reservation is RELEASED", !existsSync(join(repo, "rig.sqlite.genlock.priority")));
+  check("...and no generation slot is left held", [0, 1].every((i) => !existsSync(join(repo, `rig.sqlite.genlock.${i}`))));
+  holder.kill();
   // A slot file that is NOT a live holder must not block a landing: the broker reconciles
   // stale slots, and a partial write parses as no holder at all (the code says so).
   writeFileSync(slot, '{"pid": 123, "seat"');
@@ -193,35 +244,31 @@ try {
   rmSync(join(repo, ".git", "MERGE_HEAD"));
 
   console.log("\n7. the genlock probe resolves the LIVE store, not a silent wrong default (#1383)");
-  const landNoDb = (argv) => {
-    const env = { ...process.env };
-    delete env.DURIG_DB; // prove the resolution, not the env
-    const r = spawnSync(process.execPath, [LAND, ...argv, "--repo", repo], { cwd: repo, encoding: "utf8", timeout: TIMEOUT_MS, env });
-    let report = null;
-    try {
-      report = JSON.parse(r.stdout);
-    } catch {
-      report = null;
-    }
-    return { code: r.status ?? 1, report, raw: `${r.stdout}${r.stderr}` };
-  };
   const featG = feature("feat-g", "g.txt", "from feat-g\n");
   // A live genlock on a store OTHER than the old rig.sqlite default.
   const liveSlot = join(repo, "selfdev.sqlite.genlock.0");
   writeFileSync(liveSlot, JSON.stringify({ pid: process.pid, seat: "impl", since: new Date().toISOString() }));
   const beforeResolve = mainSha(repo);
-  const resolved = landNoDb(["feat-g"]);
-  check("with NO --db the helper RESOLVES the live store and refuses", resolved.code !== 0, resolved.raw.slice(0, 200));
-  check("...and reports the LIVE store, not the rig.sqlite default", (resolved.report?.db ?? "").includes("selfdev.sqlite"), resolved.report?.db);
+  // (a) NO --db: the helper must RESOLVE selfdev.sqlite — and WAIT on it, not pass silently.
+  const resolvedPriority = join(repo, "selfdev.sqlite.genlock.priority");
+  const resolvedRun = landAsync(["feat-g"], {}, null);
+  const sawResolve = await waitFor(() => existsSync(resolvedPriority), 8000);
+  check("with NO --db the helper RESOLVES the live store (its reservation lands beside selfdev.sqlite)", sawResolve, resolvedRun.out.slice(0, 200));
+  check("...and it WAITS on the resolved store rather than passing silently", resolvedRun.out.trim() === "", resolvedRun.out.slice(0, 200));
   check("...and main did NOT advance", mainSha(repo) === beforeResolve);
+  // (b) an explicit --db rig.sqlite is NOT a silent pass while ANOTHER store holds the live lock.
   const wrongDb = land(repo, ["feat-g"]);
   check("an explicit --db rig.sqlite is NOT a silent pass while the live store is locked", wrongDb.code !== 0, wrongDb.raw.slice(0, 200));
   check("...and the refusal NAMES the store holding the live lock", /selfdev\.sqlite/.test(wrongDb.report?.error ?? ""), wrongDb.report?.error);
   check("...and main did NOT advance", mainSha(repo) === beforeResolve);
-  rmSync(liveSlot);
-  const afterClear = land(repo, ["feat-g"]);
-  check("with the live slot gone, the same landing succeeds", afterClear.code === 0, afterClear.raw.slice(0, 200));
+  // (c) release the live lock: the resolved-store lander completes and NAMES the store it used.
+  rmSync(liveSlot, { force: true });
+  const resolvedCode = await resolvedRun.done;
+  const resolvedReport = tryJson(resolvedRun.stdoutText);
+  check("with the live slot gone, the same landing succeeds", resolvedCode === 0, resolvedRun.out.slice(0, 300));
+  check("...and the report NAMES the resolved store, not the rig.sqlite default", (resolvedReport?.db ?? "").includes("selfdev.sqlite"), resolvedReport?.db);
   check("...and feat-g is an ancestor of main", spawnSync("git", ["merge-base", "--is-ancestor", featG, "main"], { cwd: repo }).status === 0);
+  check("...and the priority reservation is released", !existsSync(resolvedPriority));
   console.log("\n8. the FF holds an EXCLUSIVE lock across the advance, and releases it on every path");
   const slotPaths = [0, 1].map((i) => join(repo, `rig.sqlite.genlock.${i}`));
   const readSlot = (p) => {
@@ -231,30 +278,11 @@ try {
       return null;
     }
   };
-  const waitFor = async (fn, ms) => {
-    const end = Date.now() + ms;
-    while (Date.now() < end) {
-      if (fn()) return true;
-      await new Promise((r) => setTimeout(r, 25));
-    }
-    return fn();
-  };
-  // Spawn the REAL helper asynchronously so the lock can be observed while it is held.
-  const landAsync = (branch, extraEnv) => {
-    const child = spawn(process.execPath, [LAND, branch, "--repo", repo, "--db", join(repo, "rig.sqlite")], {
-      cwd: repo,
-      env: { ...process.env, DURIG_MAX_CONCURRENT_SEATS: "2", ...(extraEnv ?? {}) },
-    });
-    child.out = "";
-    child.stdout.on("data", (d) => (child.out += d));
-    child.stderr.on("data", (d) => (child.out += d));
-    child.done = new Promise((r) => child.on("exit", (c) => r(c)));
-    return child;
-  };
+  // (waitFor/landAsync are hoisted to the top of the file — shared by sections 3, 7 and 8.)
 
   console.log("8a. the lock is HELD across the FF, cannot be interleaved, and is released on success");
   const featG2 = feature("feat-g-lock", "g2.txt", "from feat-g-lock\n");
-  const heldRun = landAsync("feat-g-lock", { DURIG_LAND_HOLD_FF_MS: "1200" });
+  const heldRun = landAsync(["feat-g-lock"], { DURIG_LAND_HOLD_FF_MS: "1200" });
   const heldSeen = await waitFor(() => slotPaths.every((p) => readSlot(p)?.pid === heldRun.pid), 8000);
   check("the lander HOLDS all N slots across the FF", heldSeen, slotPaths.map((p) => JSON.stringify(readSlot(p))).join(" "));
   let claimErr = null;
@@ -273,7 +301,7 @@ try {
 
   console.log("8b. the lock is RELEASED on the failure path (the FF cannot apply)");
   const featH = feature("feat-h", "h.txt", "from feat-h\n");
-  const failRun = landAsync("feat-h", { DURIG_LAND_HOLD_FF_MS: "1500" });
+  const failRun = landAsync(["feat-h"], { DURIG_LAND_HOLD_FF_MS: "1500" });
   const failSeen = await waitFor(() => slotPaths.every((p) => readSlot(p)?.pid === failRun.pid), 8000);
   check("the lock is held again for the second run", failSeen);
   git(repo, ["commit", "--allow-empty", "-m", "concurrent commit while the lander holds the lock"]);
@@ -317,7 +345,7 @@ try {
 
   console.log(
     failures === 0
-      ? "\nPASS - the landing helper merges in a scratch worktree, fast-forwards main only when clean, holds an EXCLUSIVE lock across the FF (released on success and failure), and refuses a dirty tree / a held genlock / a conflict / a failing suite"
+      ? "\nPASS - the landing helper merges in a scratch worktree, fast-forwards main only when clean, holds an EXCLUSIVE lock across the FF (released on success and failure), WAITS WITH PRIORITY for a live genlock holder, and refuses a dirty tree / a conflict / a failing suite"
       : `\nFAIL - ${failures} check(s) failed`,
   );
 } catch (err) {
