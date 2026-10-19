@@ -350,7 +350,7 @@ export async function applyPauseOp(harness, { paused, by = "operator", reason = 
   const startedAt = Date.now();
   for (;;) {
     const live = await harness.inspect(context);
-    const tasks = (live.tasks ?? []).filter((t) => t.record?.state?.status === "running");
+    const tasks = (live.tasks ?? []).filter(isAdvancingTask);
     const subs = (live.submissions ?? []).filter((s) => s.status === "queued" || s.status === "placed");
     if (tasks.length === 0 && subs.length === 0) {
       return { paused: true, quiesced: true, waitedMs: Date.now() - startedAt };
@@ -568,10 +568,34 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
 // longer receive an answer. `conv.commit` is the public way to reach
 // `tx.settleSubmission`; a live run always has its task committed with the
 // placement in one commit, so a settled orphan cannot race a starting run.
+//
+// "Live" means ADVANCING (see isAdvancingTask): a task that is merely ready, waiting,
+// sleeping or blocked is itself stalled and owns nothing. Counting it as an owner is
+// the defect (#2576): the submission never settles, `pendingConvIds` keeps suppressing
+// the wake, and the seat stalls as `admitted_not_started`.
 // Returns the ids it settled so the caller can stop counting them as pending.
+
+/**
+ * Whether a live task can still ADVANCE its conversation, so the conversation is
+ * genuinely owned and a `placed` submission must NOT be settled out from under it.
+ *
+ * The test is the DERIVED `state.kind` from pi-durable's TaskInspection
+ * (`#inspectTask`: running | completing | waiting | sleeping | blocked | ready),
+ * NOT the raw `record.state.status` — the two are different fields. A task that is
+ * `ready`/`waiting`/`sleeping`/`blocked` advances nothing (#2576).
+ *
+ * ONE definition, shared by the stranded-submission reconciler and the pause
+ * quiescence wait, so broker/notice/resume agree on what "advancing" means.
+ */
+export function isAdvancingTask(task) {
+  const kind = task?.state?.kind;
+  return kind === "running" || kind === "completing";
+}
+
 export async function reconcileStrandedSubmissions(harness, inspection, { context, onDiagnostic } = {}) {
   const liveConvIds = new Set();
   for (const task of inspection?.tasks ?? []) {
+    if (!isAdvancingTask(task)) continue; // a stalled task owns nothing (#2576)
     const convId = task?.record?.conversationId;
     if (convId !== undefined) liveConvIds.add(convId);
   }
