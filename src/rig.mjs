@@ -182,11 +182,60 @@ export function isTerminalItem(item) {
 }
 
 /**
+ * One rendered line for a queue item in `peek_queue` and in its `.durig/queue-<scope>.md` mirror.
+ * A GATED item shows its gate (`blockedBy=1,2`) so a seat reading its own queue sees what the work
+ * waits on, not merely that the work exists. Call this INSIDE the commit: `blockedBy` is an array
+ * field, and reading a doc proxy after the commit settles throws "Cannot use a settled overlay".
+ */
+function queueItemLine(it) {
+	const gate =
+		it.blockedBy && it.blockedBy.length ? ` blockedBy=${[...it.blockedBy].join(",")}` : "";
+	return `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}${gate}`;
+}
+
+/**
+ * Normalize a `blockedBy` gate to the item's structured shape: a plain array of POSITIVE INTEGER
+ * queue-item ids, or `null` when there is no gate.
+ *
+ * The gate is a FIELD, not prose (docs/WORK-ITEM-SCHEMA.md §4/R5). A prose value
+ * ("GATED on #1234") is REJECTED here rather than parsed — prose is the unqueryable form the field
+ * replaces, and 325 items already prove that form decays. Absence and an empty list both mean
+ * UNGATED (an item with no gate is unblocked, never "unknown, so hold" — §7), so both normalize to
+ * `null` and the field is omitted from the stored item.
+ *
+ * Duplicates collapse (a gate is a set); order is preserved so a listing is stable. This is the
+ * shape the `workable` predicate reads (#2673 claim selection / #2712 broker wake selection):
+ * `item.blockedBy` is either absent or an array of ids that must each resolve to a terminal `done`.
+ */
+export function normalizeBlockedBy(list) {
+	if (list === undefined || list === null) return null;
+	if (!Array.isArray(list)) {
+		throw new Error(
+			`blockedBy must be a list of queue-item ids, not ${typeof list === "string" ? `prose ${JSON.stringify(list)}` : typeof list}`,
+		);
+	}
+	const out = [];
+	for (const raw of list) {
+		if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1) {
+			throw new Error(
+				`blockedBy entry must be a positive integer queue-item id, got ${JSON.stringify(raw)}`,
+			);
+		}
+		if (!out.includes(raw)) out.push(raw);
+	}
+	return out.length ? out : null;
+}
+
+/**
  * Enqueue work. Called inside a transaction; returns the assigned item id.
  * `transitions` records who did what and when for the audit trail.
  *
  * `notice` marks a protocol acknowledgement (a DONE notice) rather than work, so
  * completing it can be recognised structurally instead of by its subject.
+ *
+ * `blockedBy` is the optional structured GATE (operator ruling on #2919; D53 supersedes D24): the
+ * queue-item ids this work waits on. It rides THIS enqueue path — the one write path — rather than
+ * a parallel store, and is omitted entirely when there is no gate (absence = unblocked).
  */
 export async function enqueueItem(
 	tx,
@@ -198,6 +247,7 @@ export async function enqueueItem(
 	notice = false,
 	tier = null,
 	held = false,
+	blockedBy = null,
 ) {
 	const queue = await tx.doc(RigQueue);
 	const id = queue.nextId++;
@@ -216,6 +266,10 @@ export async function enqueueItem(
 		// assigned at intake and LATCHED onto the item's chain (its DONE notice,
 		// verification item and follow-ups inherit it). null = not tiered.
 		...(tier ? { tier } : {}),
+		// The structured GATE: queue-item ids this item is blocked on, or ABSENT when ungated
+		// (docs/WORK-ITEM-SCHEMA.md §4/R5, §7). A plain array of ids so the `workable`
+		// predicate (#2673 / #2712) can read it without parsing prose.
+		...(blockedBy ? { blockedBy: [...blockedBy] } : {}),
 		// A HELD/PARKED item (operator queue-hygiene directive, #1885) is created
 		// unclaimable and does NOT wake the recipient: a "registered, do not start"
 		// backlog row must not occupy a working seat's oldest-first claim slot.
@@ -336,13 +390,19 @@ const Router = defineExtension({
 			description:
 				"Send a work item to another seat. The seat claims it from its queue. " +
 				"Pass `held: true` to create it UNCLAIMABLE and un-waking (a parked backlog registration): " +
-				"it does not occupy the recipient's oldest-first claim slot and does not wake it until released.",
+				"it does not occupy the recipient's oldest-first claim slot and does not wake it until released. " +
+				"Pass `blockedBy: [ids]` to record a structured GATE (the queue-item ids this work waits on); " +
+				"omit it when there is no gate. Gates are ids, never prose.",
 			parameters: Type.Object({
 				to: Type.String({ description: "recipient seat name" }),
 				subject: Type.String(),
 				body: Type.String(),
 				requires: Type.Optional(Type.String({
 					description: "capability the recipient must advertise",
+				})),
+				blockedBy: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), {
+					description:
+						"structured gate: the queue-item ids this work is blocked on (must resolve to terminal `done` before the item is workable). Omit when ungated.",
 				})),
 				held: Type.Optional(Type.Boolean({
 					description:
@@ -389,6 +449,7 @@ const Router = defineExtension({
 							optimizedVia = `${modelRef.provider}/${modelRef.modelId}`;
 						}
 					}
+					const gate = normalizeBlockedBy(args.blockedBy);
 					const id = await api.commit(async (tx) => {
 						await assertSendAllowed(tx, me, args.to, args.requires);
 						// Ratcheting tier raise guard: raising an already-tiered task's chain
@@ -411,7 +472,7 @@ const Router = defineExtension({
 								);
 							}
 						}
-						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null, args.held === true);
+						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null, args.held === true, gate);
 					}, context);
 					const label =
 						args.held === true
@@ -898,7 +959,7 @@ const Router = defineExtension({
 				// context write on a live rig, and it makes "what is mine?" an inference
 				// over other seats' history. all=true is the opt-in team-wide view.
 				const scope = args.all ? "all" : me;
-				const [items, header] = await api.commit(async (tx) => {
+				const [lines, header] = await api.commit(async (tx) => {
 					const queue = await tx.doc(RigQueue);
 					const filtered = queue.items.filter((it) =>
 						!isTerminalItem(it) && (args.all || it.to === me || it.from === me),
@@ -912,34 +973,29 @@ const Router = defineExtension({
 						? ` — ${countParts.join(", ")}`
 						: "";
 					const head = `QUEUE (${scope}): ${filtered.length} non-terminal${countSuffix}`;
-					// Snapshot to plain values: the commit releases its overlay, and a proxy
-					// read after settlement throws "Cannot use a settled overlay".
-					return [snapshot(filtered), head];
+					// Render to plain strings INSIDE the commit: the commit releases its overlay, and a
+					// proxy read (including an array field like `blockedBy`) after settlement throws
+					// "Cannot use a settled overlay".
+					return [filtered.map(queueItemLine), head];
 				}, context);
 				// Bounded inline view for per-seat queries to avoid context bloat.
 				// Team-wide (all=true) view is uncapped so coordinators can enumerate.
-				const N = args.all ? items.length : 20;
+				const N = args.all ? lines.length : 20;
 				const cwd = api.env?.cwd;
 				let footer = "";
 				if (cwd) {
 					const file = join(cwd, ".durig", `queue-${scope}.md`);
 					mkdirSync(join(cwd, ".durig"), { recursive: true });
-					const fullLines = items.map(
-						(it) => `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}`,
-					);
-					writeFileSync(file, [header, ...fullLines].join("\n") + "\n", "utf8");
-					if (items.length > N) {
-						footer = `\n… showing ${N} of ${items.length} (full list: ${file})`;
+					writeFileSync(file, [header, ...lines].join("\n") + "\n", "utf8");
+					if (lines.length > N) {
+						footer = `\n… showing ${N} of ${lines.length} (full list: ${file})`;
 					}
 				} else {
-					if (items.length > N) {
-						footer = `\n… showing ${N} of ${items.length} (no workspace for full list)`;
+					if (lines.length > N) {
+						footer = `\n… showing ${N} of ${lines.length} (no workspace for full list)`;
 					}
 				}
-				const displayLines = items.slice(0, N).map(
-					(it) => `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}`,
-				);
-				const body = (items.length ? [header, ...displayLines].join("\n") : "(empty)") + footer;
+				const body = (lines.length ? [header, ...lines.slice(0, N)].join("\n") : "(empty)") + footer;
 				return toolText(body);
 			},
 }),
