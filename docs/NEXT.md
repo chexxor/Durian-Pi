@@ -12,15 +12,20 @@ root-cause claims (already present in pinned pi-durable 1.3.0); round 2
 **already captured** by ROADMAP 61–67 and the broker's existing `requestId` ledger; the genuinely new
 local finding is that `node:sqlite` exposes `errcode`/`errstr` and that pi-durable's `BEGIN IMMEDIATE`
 **structurally excludes** the deferred-`BEGIN` `SQLITE_BUSY_SNAPSHOT` case. Accepted items now
-**ROADMAP 153–160** (registered, not scheduled) for `pm` to sequence; second-round prompt written at
-`docs/reviews/daemon-harness-architecture-followup-2-research-prompt.md`.
+**ROADMAP 153–160** (registered, not scheduled) for `pm` to sequence. The second follow-up
+(`docs/research/daemon-harness-architecture-followup-2.md`) is **consumed and the topic is CLOSED** in the
+same review note: `immutable=1` is ruled **unsafe for a live-WAL reader** (decides `#2406`), `filelock`'s
+Windows primitive is `LockFileEx` (auto-released on death, local-FS only), and append throughput is not a
+deciding factor (157 stays contingency). No third round is owed.
 **Queue id:** ROADMAP `153–160` (registered); `#2420` (bounded-grace stop addendum, `queued` to `impl`) still open; related `#2406` (read seam vs `pi-durable` version).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
-**Blocker:** the broker still honours a stop only at a pass boundary then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`). Round 2 corroborates the #2420 fix shape (drain deadline → cancel stream/tool → **unconditional** force fallback that does not depend on the wedge) and maps `taskkill /T /F` + Job Objects onto existing ROADMAP 61/63/64. The residual `PASS-FAILED … cause=Error: database is locked` is **narrowed** (retryable busy or `-shm` race; `BUSY_SNAPSHOT` excluded) and tracked as ROADMAP 159.
+**Blocker:** the broker still honours a stop only at a pass boundary then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`). Round 2 corroborates the #2420 fix shape (drain deadline → cancel stream/tool → **unconditional** force fallback that does not depend on the wedge) and maps `taskkill /T /F` + Job Objects onto existing ROADMAP 61/63/64. The residual `PASS-FAILED … cause=Error: database is locked` is **narrowed** (retryable busy or `-shm` race; `BUSY_SNAPSHOT` excluded) and tracked as ROADMAP 159. **Read seam (`#2406`): the ruling is now settled** — no second connection; `immutable=1` is unsafe against a live writer (may return wrong results / `SQLITE_CORRUPT`), so reads stay broker-served (D111), and any reader must be short-lived.
 
-_Last refreshed: 2026-10-19T05:0xZ (delegate — daemon-harness research consumed; ROADMAP 153–158 registered; rejection of the report's "missing pragma" root cause grounded in the pin; follow-up prompt written; no seat work, no push.)_
+_Last refreshed: 2026-10-19T05:0xZ (delegate — daemon-harness research consumed; ROADMAP 153–158 registered; rejection of the report's "missing pragma" root cause grounded in the pin; first follow-up prompt written; no seat work, no push.)_
 
-_Last refreshed: 2026-10-19T05:5xZ (delegate — follow-up round 2 consumed; ROADMAP refined to 153–160; local probe closed the `node:sqlite` errcode question and structurally excluded `BUSY_SNAPSHOT`; second-round prompt written; no seat work, no push.)_
+_Last refreshed: 2026-10-19T05:5xZ (delegate — first follow-up (12 questions) consumed; ROADMAP refined to 153–160; local probe closed the `node:sqlite` errcode question and structurally excluded `BUSY_SNAPSHOT`; second-round prompt written; no seat work, no push.)_
+
+_Last refreshed: 2026-10-19T06:1xZ (delegate — daemon-harness follow-up round 2 consumed; **topic CLOSED**; `immutable=1` ruled unsafe (`#2406`), Windows `filelock` = `LockFileEx`, throughput not a factor; ROADMAP 155/157 refined and cross-linked from `BROKER-ARCHITECTURE.md`; no seat work, no push.)_
 
 _Last refreshed: 2026-10-18T19:32Z (delegate — host+rig recovery complete; recurrence 8 reproduced live, pinned, and FIXED (`6e27ac2`); broker+local LLM up; verify routed to `pm`)._
 

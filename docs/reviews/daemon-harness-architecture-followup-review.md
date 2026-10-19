@@ -42,8 +42,21 @@ delegate analysis only; no product code, no queue item by itself.
 - **160 (new)** — verify the broker spool has no stale/poison-row gap (TTL + in-flight guard), given the `requestId` ledger already provides idempotency.
 - **156/153** — shape refined from Q2/Q12 (mutex-not-lease; seam-enforced scopes).
 
-## Still unverified (→ second-round prompt)
+## Round 2 (consumed 2026-10-19)
 
-Written to `docs/reviews/daemon-harness-architecture-followup-2-research-prompt.md`:
-Omnigent's exact probe schema/rubric (Q4); `filelock`'s Windows locking semantics (Q1); whether
-`immutable=1` is safe for a snapshot read (Q7); and a head-to-head append-throughput figure (Q5).
+Raw report: `docs/research/daemon-harness-architecture-followup-2.md`. The delegate re-fetched the two
+decisive primary sources directly and they confirm the report: [sqlite.org/uri.html](https://sqlite.org/uri.html)
+states the `immutable=1` failure mode verbatim, and Omnigent's
+`docs/harness-bench-design.md` confirms the bench's three-object split and verdict vocabulary.
+
+| Q | Round-2 finding | Disposition |
+|---|---|---|
+| 1 | Omnigent bench = **three objects** (self-declared `BenchProfile` / harness-agnostic probes on a generic event stream / per-transport drivers), a **seven-verdict** vocabulary, **P0 gates CI / P1 report-only**, `DRIFT` on declared-vs-observed mismatch, and a **mock LLM for deterministic triggers**. It never names a harness. | **Accept — feeds 155.** The complete field schemas are **not published**; recover them by reading `tests/harness_bench/` if 155 is scheduled (a public-repo read, not more research). We define our own interrupt/denial payloads on the observable event. |
+| 2 | `filelock` on Windows = `LockFileEx` over a 1-byte range, kernel-enforced; the OS releases it **on process death**, so no stale-reclaim logic is needed. It is **local-filesystem only** (SMB "less reliable"). | **Accept as reference — only if 157 opens.** On local NTFS this is *simpler* than our TTL lease (`genlock.mjs`). Aligns with ROADMAP 64's "refuse a network/synced filesystem". |
+| 3 | **`immutable=1` is unsafe for a live-WAL reader** — it skips all locking/change detection and, if the file changes, SQLite "might return incorrect query results and/or `SQLITE_CORRUPT` errors". | **Accept — definitive, decides `#2406`.** The read seam is a **short-lived `readOnly` connection, no `immutable`**, never holding a read transaction across a model call. pi-durable's node open path exposes no `readOnly`, which is why D111's broker-served reads remain correct. |
+| 4 | No benchmark exists for a few-thousand-record/minute one-file-per-record store; ~50 rec/s sits 2–3 orders below measured fsync (~3.5k/s) and WAL-insert (~33k/s) ceilings. **Throughput is not a deciding factor.** | **Accept.** ROADMAP 157 stays a **contingency** whose only justification is lock-contention relief, never speed. |
+
+**Topic closed.** No third-round prompt: Q4 is answered (not a factor), and Q1's remaining detail is in a
+public repo we can read ourselves if 155 is scheduled. Two claims remain inherently unverified and are
+explicitly not relied on: Omnigent's byte-level interrupt/denial payload, and any Windows file-per-record
+throughput number — both are to be measured on our hosts, not researched.

@@ -2752,15 +2752,17 @@ one gated investigation are registered here. `pm` sequences. Registered **not sc
 
 155. **Uniform harness conformance probe set.** Replace the per-feature `demo/*.test.mjs` sprawl with a
     uniform probe set over every seat path — basic turn, tool call, streaming, interrupt, model override,
-    policy denial (Omnigent's "test harnesses like hardware"). Use Omnigent's **modes × maturity matrix**
-    (Direct/Native × Fully supported/Maintained/Community) as the rubric skeleton: a probe passes only when
-    CI-verifiable, and a "fully supported" regression blocks release. Assert interrupt/policy-denial on the
-    *observable event* (a cancelled tool produces no observation; a denied call emits a denial and never
-    executes), not on timing. *Owner:* qa · auditor · *Where:* `demo/`. *Acceptance:* each probe is a
-    pass/fail legible without reading the implementation, and the suite labels which harness property each
-    probe covers. *Cross-links:* the suite-concurrency priority (`DURIG_SUITE_CONCURRENCY`) already routed
-    to `pm`; the exact probe data shape is an open research question
-    (`docs/reviews/daemon-harness-architecture-followup-2-research-prompt.md` Q1).
+    policy denial (Omnigent's "test harnesses like hardware"). Adopt Omnigent's **three-object split**
+    (a self-declared profile / harness-agnostic probes over a generic event stream / per-transport
+    drivers), its **seven-verdict vocabulary** (`SUPPORTED`/`UNSUPPORTED`/`PARTIAL`/`NOT_APPLICABLE`/
+    `UNKNOWN`/`SKIPPED`/`DRIFT`) with **P0 gating CI and P1 report-only**, a `DRIFT` verdict when observed
+    disagrees with declared, and a **mock LLM for deterministic triggers**. Assert interrupt/policy-denial
+    on the *observable event* (a cancelled tool produces no `TurnComplete`; a denied call emits a denial
+    and never executes), not on timing. *Owner:* qa · auditor · *Where:* `demo/`. *Acceptance:* each probe
+    is a pass/fail legible without reading the implementation, and the suite labels which harness property
+    each probe covers. *Cross-links:* the suite-concurrency priority (`DURIG_SUITE_CONCURRENCY`) already
+    routed to `pm`; Omnigent's exact field schemas are unpublished (`tests/harness_bench/` is the public
+    source to read), and `docs/reviews/daemon-harness-architecture-followup-review.md` "Round 2" Q1.
 
 156. **Extension seam as a Pi-style `Operations` interface.** Give each tool an `Operations` interface as
     the single remoting/scope seam (`BashOperations`, `EditOperations`, …), so execution can relocate and
@@ -2771,8 +2773,11 @@ one gated investigation are registered here. `pm` sequences. Registered **not sc
 157. **CONTINGENCY (not default) — move the audit/event trail off the SQLite write lock.** Investigate
     OpenHands' per-record-file + `.lock` append-only model *only if* evidence still shows lock contention
     *after* D111 (broker-served reads) and the `harness.storage` read fix (`8d48cb1`, `6140467`). The
-    follow-up research found **no throughput figure at our scale**, and the model trades a lock problem for
-    an inode/fsync/recovery-scan problem — so this is a contingency, not an improvement to schedule.
+    follow-up research found **no throughput figure at our scale**, and round 2 confirmed throughput is
+    **not a deciding factor** (~50 records/s is 2–3 orders below the measured fsync/WAL ceilings) — so
+    this is a contingency justified only by *lock-contention relief*, never speed. If it opens, `filelock`'s
+    Windows primitive is `LockFileEx` (kernel-enforced, **auto-released on process death**, no stale
+    reclaim) and is **local-filesystem only**.
     *Owner:* lead · impl. *Acceptance:* a written finding that first demonstrates residual contention on the
     write lock (not corruption, not a second opener), then a scoped change with a rollback. *Cross-links:*
     the survey's reference #2; incident `2026-10-18-broker-retry-hotloop.md`;
