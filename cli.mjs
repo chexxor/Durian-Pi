@@ -70,7 +70,7 @@ import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
 import { formatMetrics } from "./src/metrics.mjs";
-import { readSharedTreeBranch } from "./src/featuredocs.mjs";
+import { isLinkedWorktree, readSharedTreeBranch } from "./src/featuredocs.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
@@ -2677,7 +2677,22 @@ async function cmdCheck(rigFile, human, rest = []) {
   // tree can switch it onto an item branch, which breaks the landing basis. null (no git / not a
   // repo) leaves the rule SKIPPED with its reason rather than silently passing.
   const sharedTreeBranch = readSharedTreeBranch({ root: process.cwd() });
-  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, storedSeats, modelsBySeat, queueItems, sharedTreeBranch });
+  // A linked worktree (a landing scratch or a seat/item worktree) is NOT the shared tree, so the
+  // `shared-tree-on-main` rule is skipped there: scripts/land.mjs runs the suite in a DETACHED
+  // scratch worktree, where the branch reads as "" and the rule otherwise refused every landing
+  // (#2679). The reader is null when git/the repo is unavailable -> the rule is skipped, not passed.
+  const sharedTreeLinked = isLinkedWorktree({ root: process.cwd() });
+  const result = auditRig({
+    rig: rigFile,
+    spec,
+    specConstitution,
+    stored,
+    storedSeats,
+    modelsBySeat,
+    queueItems,
+    sharedTreeBranch,
+    sharedTreeLinked,
+  });
   const seatCount = (spec.seats ?? []).length;
   if (human) {
     console.log(

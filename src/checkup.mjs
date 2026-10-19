@@ -284,7 +284,7 @@ export function runbookFrontMatterProblems(runbook) {
  *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, sharedTreeBranch = null, sharedTreeExpected = "main" }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -633,7 +633,19 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
   //    "live" writes land on a feature branch. `auditRig` is a pure function, so the CALLER reads
   //    the branch (src/featuredocs.mjs) and passes it; no data means SKIPPED with a reason, never a
   //    silent pass (D25). A detached HEAD reads as "" and is a finding like any other branch.
-  if (sharedTreeBranch === null || sharedTreeBranch === undefined) {
+  //
+  //    LINKED worktrees are exempt: `scripts/land.mjs` runs the suite in a DETACHED scratch
+  //    worktree, and every seat/item worktree is linked too. There the branch reads as "" (scratch)
+  //    or names the item branch (seat), neither of which is the shared tree's branch - so the rule
+  //    fired on EVERY landing and refused them all (#2679). The caller reports linked-ness
+  //    (src/featuredocs.mjs `isLinkedWorktree`); a linked worktree is not the shared tree, so the
+  //    rule is SKIPPED with its reason rather than passed (passing would claim a check never run).
+  if (sharedTreeLinked === true) {
+    skipped.push({
+      id: "shared-tree-on-main",
+      why: "this is a LINKED worktree (a landing scratch or a seat/item worktree), not the shared tree, so the shared tree's branch cannot be observed from here",
+    });
+  } else if (sharedTreeBranch === null || sharedTreeBranch === undefined) {
     skipped.push({
       id: "shared-tree-on-main",
       why: "the current git branch was not supplied, so the shared working tree's branch cannot be checked",
