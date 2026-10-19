@@ -5,7 +5,7 @@ writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
 last_verified: 2026-10-19
 verified_by: delegate
-evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 env fail) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 env fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679)"
+evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679)"
 check_rule: null
 ---
 
@@ -63,8 +63,11 @@ ask "stop or not?" or "why did --suite fail?".
    ```bash
    node scripts/suite.mjs        # 0 green / 1 real failure / 2 environmental
    ```
-   The only failure you should see is `demo/pitui.test.mjs` (the `node_modules/@earendil-works/pi-tui`
-   symlink — environmental, not a regression). A REAL failure means `git revert -m 1 <merge>` per
+   The only failure you should see is `demo/pitui.test.mjs` — but it is NOT environmental: it is a
+   resolution-path ASSERTION (the `node_modules/@earendil-works/pi-tui` symlink to `vendor/pi-main`,
+   tracked at **#2412**), so the runner lists it under REAL FAILURES and the suite exits 1. Until #2412
+   lands, report the exact `pass=N fail=M` and prove a failure is new by comparing with the pre-change
+   baseline — never "green except pitui". A REAL NEW failure means `git revert -m 1 <merge>` per
    "If it fails" below.
    **Capture the exit code — never pipe the runner.** `node scripts/suite.mjs | tail -3` reports
    `tail`'s status, not the suite's (2026-10-19: this produced a false "SUITE_EXIT=0" report on a red
@@ -78,8 +81,8 @@ ask "stop or not?" or "why did --suite fail?".
    resolution-path ASSERTION, so the runner prints `FAIL`, lists it under REAL FAILURES, and the suite
    exits **1** — while this runbook (and `NEXT.md`) call that failure environmental. Both statements
    are true of different things and no artifact reconciles them, so **report the exact `pass=N fail=M`**
-   and prove a failure is new by comparing with the pre-change baseline. Full account:
-   `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §6.2.
+   and prove a failure is new by comparing with the pre-change baseline — never "green except pitui"
+   (owning item **#2412**; full account: `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §6.2).
    *(`--suite` was skipped for the 2026-10-19 passes while the rule was broken; the helper itself never
    required it, and the post-landing `node scripts/suite.mjs` run is what proved those landings.)*
 5. Prune each landed ref (`git branch -d` refuses anything unmerged, so this is lossless):
