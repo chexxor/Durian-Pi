@@ -18,6 +18,33 @@ check_rule: null
 ## Preconditions
 Read-only to inspect. Removing a worktree is a git operation; never discard work you did not create.
 
+## Ownership, ignore, and prune — three rules from the vendored skills
+
+Grounded in the vendored `superpowers` worktree skills
+(`vendor/eval/superpowers/skills/using-git-worktrees/SKILL.md`,
+`vendor/eval/superpowers/skills/finishing-a-development-branch/SKILL.md`, and
+`vendor/eval/superpowers/docs/superpowers/specs/2026-04-06-worktree-rototill-design.md`). These three
+rules stop the class this runbook mops up; adopt them at creation/teardown, not per-cleanup:
+
+1. **Provenance decides ownership** — whoever *creates* a worktree owns its cleanup. durian-pi owns the
+   trees it creates (`item-<id>`, and `.verify-*`/`verify*`/`wt-*` scratch); anything else is left alone.
+   Reap only what durian-pi created; the keep-reasons in `worktree audit` are the per-tree form of this
+   rule.
+2. **Ignore the worktree/scratch path BEFORE creating it** — the vendored skill runs
+   `git check-ignore -q <dir>` and commits a `.gitignore` entry first, because an unignored worktree
+   directory leaks the whole tree into `git status`. A durian-pi worktree whose generated scratch shows
+   as `??` in the shared tree (`selfdev.sqlite.broker.inbox.out/`, `.durig-test-wt-*`, `verify-*`) is
+   this rule violated; the fix is at creation/teardown, not per-cleanup.
+3. **Prune after every removal** — run `git worktree prune` after any `git worktree remove`/sweep. A
+   directory deleted out-of-band (or by a harness/viewer) leaves a stale registration that keeps
+   listing and can confuse the audit; pruning is "one line, prevents silent rot"
+   (`finishing-a-development-branch` Step 6). The 2026-10-19 pass found and cleared **25** such stale
+   registrations.
+
+Two more shape the `Do` steps: cleanup runs for **merge/discard only**, never for "keep" or an open PR
+(the vendored Bug #940 fix); and a refused removal (`contains modified or untracked files`) means the
+tree holds files that exist nowhere else — name them and ask, never `--force`.
+
 ## Diagnose (read-only)
 ```bash
 node cli.mjs worktree audit              # every worktree: item status, uncommitted count, lock, keep-reason
