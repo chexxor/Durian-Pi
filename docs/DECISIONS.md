@@ -2258,7 +2258,7 @@ which keeps every file and branch. (c) Leave them — rejected: the operator ask
 ## D90 — Runbook discoverability is onboarding: the entry point and the constitution must say the runbooks exist and when to consult them (delegate, 2026-10-17)
 
 **Decision.** The delegate entry point (`AGENTS.md` clock-in + "Where to read further"), the durig skill
-(`.agents/skills/durig/SKILL.md` clock-in + references), and the seat **P3 Runbooks** rule in
+(`.agents/skills/driving-durian-pi/SKILL.md` clock-in + references), and the seat **P3 Runbooks** rule in
 `constitution.txt` now name `docs/runbooks/` and its symptom index, and require **reading the matching
 runbook before improvising** on an operating situation it covers — not only authoring one when a procedure
 changes. The research runbook (`research-request.md`) is called out explicitly for commissioning research.
@@ -2648,7 +2648,7 @@ designer/advocate UX proposal is accepted and the ROADMAP 55 security position i
 **Decision.** The product is renamed `durig` → `durian-pi` across all tracked text and identifiers:
 `package.json` `name`; the 24 `DURIG_*` env vars become `DURIAN_PI_*`; `durig.config.json` becomes
 `durian-pi.config.json`; `durig.config.default.json` / `durig.config.example.json` are renamed; the
-`.durig/` scratch dir becomes `.durian-pi/`; `skills/durig/` and `.agents/skills/durig/` become
+`.durig/` scratch dir becomes `.durian-pi/`; `skills/durig/` and `.agents/skills/durig/` become `.agents/skills/driving-durian-pi/` and `.agents/skills/delegating-to-durian-pi/`
 `durian-pi`; docs, demos and `.gitignore` follow. The config/env loader accepts the old `DURIG_*` names
 and the old `durig.config.json` as deprecated aliases; the new name wins when both are set. The new
 multi-seat TUI is named the **durian-pi TUI**.
