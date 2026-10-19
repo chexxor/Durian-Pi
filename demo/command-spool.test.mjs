@@ -155,7 +155,27 @@ try {
     "a pi.reset boundary is in the transcript",
   );
 
-  // 3c. A reset for an unknown seat is REFUSED and dead-lettered by name, never a
+  // 3c. A `configure` op drives model/provider reconfiguration through the drain with
+  //     `by` provenance (auditor #2186 / #2182). The result records the resolved provider,
+  //     modelId, and the operator identity that initiated the change.
+  const R5 = "req-configure-1";
+  writeIntent(dbPath, {
+    op: "configure",
+    to: "worker",
+    from: "auditor",
+    model: { provider: "faux", modelId: "faux-seat" },
+    requestId: R5,
+  });
+  const configured = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
+  assert.deepEqual(configured, { delivered: 1, deadLettered: 0, duplicates: 0 }, `configure drain ${JSON.stringify(configured)}`);
+  const r5 = readResult(R5);
+  assert.equal(r5.ok, true, "the configure applied");
+  assert.equal(r5.result.seat, "worker");
+  assert.equal(r5.result.provider, "faux", "the result names the resolved provider");
+  assert.equal(r5.result.modelId, "faux-seat", "the result names the modelId");
+  assert.equal(r5.result.by, "auditor", "the result records the operator identity");
+
+  // 3d. A reset for an unknown seat is REFUSED and dead-lettered by name, never a
   //     silent no-op.
   writeIntent(dbPath, { op: "reset", to: "ghost", requestId: "req-reset-ghost", from: "operator" });
   const ghostReset = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
