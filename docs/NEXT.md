@@ -7,7 +7,7 @@ backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 **Current item:** architecture research & analysis (operator-directed) — the broker lifecycle/stability cluster.
 **Queue id:** `#2420` (bounded-grace stop addendum, `queued` to `impl`); related `#2406` (read seam vs `pi-durable` version).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
-**Blocker:** the broker honours a stop only at a pass boundary and then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`); `database is locked` contention still causes bounded `PASS-FAILED` retries.
+**Blocker:** the broker honours a stop only at a pass boundary and then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`); `PASS-FAILED … cause=Error: database is locked` was observed during the restart churn — cause **UNVERIFIED** (the log names no lock holder; not reproduced; clean since pid `17976`).
 
 _Last refreshed: 2026-10-18T19:32Z (delegate — host+rig recovery complete; recurrence 8 reproduced live, pinned, and FIXED (`6e27ac2`); broker+local LLM up; verify routed to `pm`)._
 
@@ -70,8 +70,8 @@ pushed), broker **UP pid `17976`** (`PASS` advancing, **0 `pass-threw`** since s
 - **Architecture subject — broker lifecycle stability.** The stop path is honoured only at a **pass
   boundary** (`src/broker.mjs:1085`/`:1281`) then an unbounded `waitForIdle` (`:1293`); the operator's
   **bounded-grace ruling** is `#2420` (`queued` to `impl`; `.spike/delegate/intent-2237-bounded-stop.md`,
-  delivered). `database is locked` contention still causes `PASS-FAILED` retries (now bounded/backed-off,
-  cause logged). `#2406` (read seam `harness.storage` vs `pi-durable` version) is `queued`.
+  delivered). `PASS-FAILED … cause=Error: database is locked` appeared during the restart churn — bounded/backed-off
+  and the cause IS logged, but the underlying **lock holder is UNVERIFIED**. `#2406` (read seam `harness.storage` vs `pi-durable` version) is `queued`.
 - **Durable decisions to record (`scribe`):** the daemon-stop ruling — "graceful stop MUST be bounded and
   carry an unconditional force fallback; the supervisor/service manager always retains
   `TerminateProcess`/`SIGKILL`". Check numbering: `DECISIONS.md` on `main` ends at **D111**; scribe's
