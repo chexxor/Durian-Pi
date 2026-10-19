@@ -424,23 +424,25 @@ export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_A
 		},
 
 		// Direct property access for each pinned var, so `env[key]` works (D109).
+		// HARD pin: return the constant from NON_INTERACTIVE_GIT directly,
+		// not via base.shellEnv, so the value cannot drift.
 		get GIT_EDITOR() {
-			return base.shellEnv?.GIT_EDITOR;
+			return NON_INTERACTIVE_GIT.GIT_EDITOR;
 		},
 		get GIT_SEQUENCE_EDITOR() {
-			return base.shellEnv?.GIT_SEQUENCE_EDITOR;
+			return NON_INTERACTIVE_GIT.GIT_SEQUENCE_EDITOR;
 		},
 		get GIT_TERMINAL_PROMPT() {
-			return base.shellEnv?.GIT_TERMINAL_PROMPT;
+			return NON_INTERACTIVE_GIT.GIT_TERMINAL_PROMPT;
 		},
 		get GIT_MERGE_AUTOEDIT() {
-			return base.shellEnv?.GIT_MERGE_AUTOEDIT;
+			return NON_INTERACTIVE_GIT.GIT_MERGE_AUTOEDIT;
 		},
 		get GIT_PAGER() {
-			return base.shellEnv?.GIT_PAGER;
+			return NON_INTERACTIVE_GIT.GIT_PAGER;
 		},
 		get PAGER() {
-			return base.shellEnv?.PAGER;
+			return NON_INTERACTIVE_GIT.PAGER;
 		},
 
 		// `joinPath` touches nothing; confining is the resolve step, not the join.
