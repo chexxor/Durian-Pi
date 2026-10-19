@@ -24,10 +24,24 @@ the rejected pragma claims. **SUPERSEDED by the operator's bug-fix-first ruling:
 `bugfix-first-2026-10-19-1` (`delivered:true` `04:55:09Z`) orders the bug-fix cluster
 (`#2420`, 159, 158, 160) **ahead of all capability items** (153/154/156/155), with the standing rule
 that defects/regressions/lock/lifecycle fixes outrank new features.
-**Operator grant delivered to `pm`:** add an **architect** seat on `deepseek-ai/DeepSeek-V4.1-Flash` —
-intent `add-architect-seat-2026-10-19-1` (`delivered:true` `04:58:09Z`), with a paste-ready seat,
-prompt/skill, and proposed `ownership`/`edges` in `docs/reviews/architect-seat-proposal.md`. `pm`+`lead`
-co-own `rig-roles-edges`; the delegate did not edit `rig.selfdev.json` or run `up --refresh`.
+**Operator-directed — architect seat CREATED and rig restarted (2026-10-19T05:03Z).** The delegate
+edited `rig.selfdev.json` (operator grant): new `architect` seat on `deepseek-ai/DeepSeek-V4.1-Flash`
+(`thinkingLevel` high), a new `architecture: ["architect"]` ownership class, and edges to/from
+pm/lead/impl/qa/auditor/security/devtools/scribe/advocate/designer/qa2. Applied via
+`up rig.selfdev.json --refresh`; broker restarted **pid `17828`** (`serve-noroot.ps1`, `START 05:03:11Z`,
+passes advancing, no new `pass-threw`). Kickoff sent to `architect` (`architect-kickoff-2026-10-19-1`,
+delivered `05:04:11Z`) and the first architecture-review item requested of `pm`
+(`architect-first-item-2026-10-19-1`). Proposal: `docs/reviews/architect-seat-proposal.md`.
+
+**⚠️ BLOCKER — the broker-served READ path is BROKEN (P0).** All CLI reads (`ps`/`queue`/`status`/`watch`)
+fail with `read: the broker has no storage handle (probeStorage)`. Cause: `src/broker.mjs:377`
+calls `dispatchRead(harness.storage, …)`, but pi-durable's `Harness` keeps storage in a private
+`#storage` field and exposes no `.storage` (probed on a real Harness: `typeof harness.storage ===
+"undefined"`). The proof demo `demo/broker-read.test.mjs` is RED (`delivered:0 deadLettered:1`).
+Introduced by `8d48cb1`, kept by `3e17346`. Masked while the broker was down/wedged (reads fell back to
+`readLocal`); exposed now that the broker is healthy and serves reads. Fix: have `openHarness` return the
+storage it passes to `Harness.open`, and use that handle for reads (one connection), reverting
+`applyRequest` to its `probeStorage` argument. Routed/owed — see `#2420` cluster.
 **Queue id:** ROADMAP `153–160` (registered); `#2420` (bounded-grace stop addendum, `queued` to `impl`) still open; related `#2406` (read seam vs `pi-durable` version).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 **Blocker:** the broker still honours a stop only at a pass boundary then awaits `harness.waitForIdle()` unbounded, so a wedged pass defeats Ctrl+C / `SIGTERM` / `serve --stop` (`#2420`). Round 2 corroborates the #2420 fix shape (drain deadline → cancel stream/tool → **unconditional** force fallback that does not depend on the wedge) and maps `taskkill /T /F` + Job Objects onto existing ROADMAP 61/63/64. The residual `PASS-FAILED … cause=Error: database is locked` is **narrowed** (retryable busy or `-shm` race; `BUSY_SNAPSHOT` excluded) and tracked as ROADMAP 159. **Read seam (`#2406`): the ruling is now settled** — no second connection; `immutable=1` is unsafe against a live writer (may return wrong results / `SQLITE_CORRUPT`), so reads stay broker-served (D111), and any reader must be short-lived.
