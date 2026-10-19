@@ -66,10 +66,11 @@ try {
   // 0. The vocabulary is a CLOSED list: an absent `op` defaults to "message" so producers
   //    written before the spool keep working, and a mutating verb EXTENDS this array rather
   //    than opening a second writer. The additions so far are `pause`/`unpause` (ROADMAP 131,
-  //    #1841), `compact` (ROADMAP 71, #1904) and `read` (D111, broker-served reads).
+  //    #1841), `compact` (ROADMAP 71, #1904), `read` (D111, broker-served reads) and
+  //    `configure` (D105/D106 seat-doc-write, #2182).
   assert.deepEqual(
     SPOOL_OPS,
-    ["message", "stop", "reset", "compact", "pause", "unpause", "read"],
+    ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure"],
     "the spool's op vocabulary",
   );
   assert.equal(requestOp({ to: "worker", content: "hi" }), "message", "an intent with no op is a message");
