@@ -3,7 +3,62 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T21:30Z, delegate) — **LAND+PRUNE PASS #2: 2 VERIFIED BRANCHES LANDED (`main` `a2d6b95`→`020e136`), 10 REFS PRUNED, 129 ORPHAN WORKTREES RELOCATED OUT-OF-TREE**
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T21:45Z, delegate) — **THE 10 HUMAN-PARKED ITEMS ANSWERED AND DELIVERED TO `pm` (7 RULINGS); NO SEAT WORK, NO PUSH**
+
+**Read this first.** Operator-directed: enumerate every queue item waiting on a human decision, and answer
+them back to `pm`. Done. **Nothing was landed or pruned this session** — the rulings unblock a pass the
+next agent can run.
+
+**Delivered:** `operator-answer-human-parked-2026-10-19-1` → `pm`, `delivered:true` `21:42:11Z`. Body:
+`.spike/delegate/human-decisions-2026-10-19/intent-answer-human-parked-items.md`. Census + the evidence
+behind every ruling: `.spike/delegate/human-decisions-2026-10-19/QUESTIONS-AND-RECOMMENDATIONS.md`.
+
+**The finding:** of **14 `deferred` rows, 10 carry `deferredTo:"human"`** — but they are only **5 real
+questions** (three about the same landing window), **1 already answered by evidence**, **1 that is a resume
+not a decision**, and **6 stale liveness escalations from a dead `pm`** (pm is alive again — `21:33:52Z`,
+generating; M1 verified `#3059`/`#3060`). Do not re-escalate any of them to the human.
+
+**The 7 rulings (all delivered):**
+- **R1 — the landing window is OPEN and the DELEGATE drives, broker stays UP.** `land.md` (2026-10-19) made
+  the broker stop OPTIONAL: `land.mjs` publishes a priority reservation and waits for slots, so an external
+  caller lands with the broker up. **No operator-declared window is needed** — that was the single question
+  behind `#2992`, `#2744`, `#2763`, `#2987`, `#2559`. Order: **`#2992` `devtools-item-2976` @`e4e6244`
+  FIRST** (CLEAN, `merge-tree` exit 0; releases the held qa verify `#2993`, unblocks `#2559`) → `#2763`
+  `impl-item-2420` @`e5b364f` (CONFLICT `cli.mjs`+`src/broker.mjs` → author non-force rebase + fresh
+  non-author verify, then re-pin) → `#2744` (after R1b) → `#2797` last.
+- **R1b — the DECISIONS.md writers serialize as ONE scribe pass**, minting free numbers at land time:
+  `#3011` → `#3031` → `#3035` → `#3046`. Pre-check `D113` first: its reservation rests on a DANGLING commit
+  `fd4c233` (branch `scribe-item-2219` is gone; `#2284` pins the sha), so `scribe` must decide
+  landable-from-sha (→ D113 reserved) or not (→ D113 free) BEFORE the mint. Then `#2744` lands with its
+  hardcoded `D114` rewritten to the number `#3011` actually minted.
+- **R2 — `#2797` KEEP + CONSOLIDATE, `#2806` CANCEL.** `#2806` pins `@daa2f0c`, an ANCESTOR of the tip
+  `e4fd338`, so it is a duplicate pin that would lose two docs. Re-point `#2797` to `e4fd338`; its subject
+  now carries THREE docs. The `docs/runbooks/README.md` conflict is a both-sides-add INDEX conflict — union
+  the rows (`resolve-merge-conflict.md`); nothing is a deletion.
+- **R3 — `#2630` stays HELD until `#2797` lands** (option (a), advocate's position): the GATED review must
+  judge text citable on `main`.
+- **R4 — the `#2698` acceptance shape IS citable at `#2955`.** Do not ask the operator for prose and do not
+  reconstruct from memory: the ruling "accepted as recommended" plus the `#2788`/`#2789`/`#2804`/ADR chain is
+  the shape; `scribe` records it from `#2955` in the R1b pass, and `#2698` stands with a one-line re-verify.
+- **R5 — `#2949` CLOSED by evidence**: the delegate restored `scripts/` from the index (9/9 files) and
+  `node --check scripts/land.mjs` exits 0 (re-verified this session). Close its deferral; purge the stale
+  `#2949` citation from any entry note that still calls it a live blocker.
+- **R6 — `#2598` RELEASE and RE-QUEUE** (its environment blocker is gone: `4a1fe16` IS an ancestor of
+  `main`, dep files in sync, npm does publish `pi-agent-core@1.3.0`), sequenced BEHIND `M1a` `#3062`.
+- **R7 — the six stale escalations consumed and closed** (`#2942`, `#2943`, `#2947`, `#2948`, `#2673`,
+  `#2797`): their premise (pm dead 3–4 runs) is void.
+
+**TOOL TRAP (hit this session):** `node cli.mjs queue|status` appends a trailing
+`note: N measure(s) out of band` line, so `json.load(sys.stdin)` fails with **`Extra data`**. Redirect to a
+file and use `json.JSONDecoder().raw_decode`, or strip the last line — do not conclude the store is corrupt.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` then re-preflight the R1 order:
+`for b in devtools-item-2976 impl-item-2420; do git merge-tree --write-tree main $b >/dev/null 2>&1 && echo "$b CLEAN" || echo "$b CONFLICT"; done`
+**Do not:** land anything on the strength of R1 without re-preflighting each branch (the ruling gives the
+ORDER and the DRIVER, not a waver of the three gates); `git add -A`; force a dirty worktree; delete an
+`ahead>0` ref; push (operator holds the grant); re-escalate the five questions above to the human.
+
+## (superseded) CLOCK-OUT 2026-10-19T21:30Z (delegate) — **LAND+PRUNE PASS #2: 2 VERIFIED BRANCHES LANDED (`main` `a2d6b95`→`020e136`), 10 REFS PRUNED, 129 ORPHAN WORKTREES RELOCATED OUT-OF-TREE**
 
 **Read this first.** Operator-directed after the redesign was accepted: run the landing runbook to merge
 completed branches, prune them, and prune worktrees no longer in use. Git-only; the broker stayed UP.
@@ -52,7 +107,28 @@ completed branches, prune them, and prune worktrees no longer in use. Git-only; 
 **Do not:** `git add -A`; force a dirty worktree; delete an `ahead>0` ref; pop a stash blind; push;
 land with `--suite` until the 5 `tui-durable-*` failures are fixed (report the exact `pass=N fail=M`).
 
-## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T21:12Z, delegate) — **OPERATOR ACCEPTS v2 AS THE DESIGN OF RECORD; REDESIGN LEADS CAPABILITY WORK; IMPLEMENTATION DIRECTIVE DELIVERED TO `pm`**
+## NEXT SESSION
+**Current item:** the queue-lifecycle redesign v2 **IS REGISTERED AND IN FLIGHT** — this supersedes the
+stale pointer immediately below. `pm` registered `M1`–`M7`; `M1` was built and verified, then `lead`
+**split it**: **`M1a` (`#3062`) is CLAIMED by `impl`, `M1b` (`#3063`) is HELD and axis-fenced** (`#3046`
+RULING 1b). The human-parked questions are answered
+(`operator-answer-human-parked-2026-10-19-1`, delivered `21:42:11Z`) — see the top block for R1–R7.
+**Queue id:** `#2992` (land FIRST — CLEAN) · `#3062` (M1a build, claimed) · `#3056`/`#3069` (the
+`workable` removal — `pm` must give `impl` the intended SHAPE) · `#3011`/`#3031`/`#3035`/`#3046` +
+`#2744` (the serialized DECISIONS.md pass) · `#2797`/`#2806` (consolidate, land last) · `#2598` (release
+behind `#3062`).
+**Blocker:** none operator-side. The throughput constraints are the landing pass (R1 order) and the
+single-writer DECISIONS.md serialization (R1b, incl. the `D113` dangling-commit pre-check). Standing:
+`impl-item-2574`/`2578`/`2777` still need an author non-force rebase + re-verify; `land.mjs --suite` is
+still RED on the 5 pre-existing `tui-durable-*` failures; push owed (operator holds the grant).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` then re-preflight the R1 landing
+order:
+`for b in devtools-item-2976 impl-item-2420; do git merge-tree --write-tree main $b >/dev/null 2>&1 && echo "$b CLEAN" || echo "$b CONFLICT"; done`
+**Do not:** land on the strength of R1 without re-preflighting each branch (R1 gives the ORDER and the
+DRIVER, not a waiver of the three gates); `git add -A`; force a dirty worktree; delete an `ahead>0` ref;
+push (operator holds the grant); re-escalate the five answered questions to the human.
+
+## (superseded) CLOCK-OUT 2026-10-19T21:12Z (delegate) — **OPERATOR ACCEPTS v2 AS THE DESIGN OF RECORD; REDESIGN LEADS CAPABILITY WORK; IMPLEMENTATION DIRECTIVE DELIVERED TO `pm`**
 
 **Read this first.** Operator ruling, 2026-10-19: **accept the v2 redesign**
 (`docs/reviews/queue-lifecycle-redesign.md`) as the design of record, and **it jumps ahead of capability
@@ -406,7 +482,10 @@ CONFLICT (author rebase set `#2681`/`#2682`/`#2683`).
 **Do not:** `git add -A`; pop a stash blind; force a dirty worktree; delete an `ahead>0` ref; push
 (operator holds it); land an unverified branch.
 
-## NEXT SESSION
+## (superseded) NEXT SESSION — see the top of this file
+**The pointer below is STALE: `pm` HAS since registered `M1`–`M7`, `M1` was built and verified, and `lead`
+split it into `M1a` (`#3062`, claimed) / `M1b` (`#3063`, held, axis-fenced). F12/F11 are RULED
+(`#3009`/`#3011`/`#3031`). Read the top block instead; kept for the accepted-v2 ruling text only.**
 **Current item:** the queue-lifecycle redesign **v2 is ACCEPTED by the operator as the design of record and
 leads capability work**. The implementation directive has been delivered to `pm`; **the next step is
 `pm` registering the M1–M7 build items** and `lead` ruling F12/F11, then landing the prerequisites
