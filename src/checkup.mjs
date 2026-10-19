@@ -102,7 +102,7 @@ export const RULES = [
   {
     id: "verification-without-evidence",
     severity: "fix-now",
-    what: "a verification task was completed with only an acknowledgement, not re-runnable evidence",
+    what: "a verification task was completed with only an acknowledgement, or with evidence that names no artifact — not re-runnable evidence (#2547)",
   },
   {
     id: "feature-row-missing",
@@ -147,6 +147,20 @@ export function hasEvidence(item) {
     typeof e.exitCode === "number" &&
     Number.isFinite(e.exitCode)
   );
+}
+
+/**
+ * #2547 (lead ruling A): whether a completion NAMES the artifact its evidence is about.
+ *
+ * The evidence contract is `{ command, exitCode, artifact }` (ROADMAP 48 / W2). A command and
+ * an exit code are re-runnable, but with no artifact the reader cannot tell WHICH revision was
+ * checked — the same command against a different rev is a different check — so the completion
+ * is not ADDRESSABLE. A blank or absent artifact is that gap; `hasEvidence` alone does not see
+ * it (kept separate so "is there evidence at all" and "is it addressable" stay distinct).
+ */
+export function hasArtifact(item) {
+  const e = item?.evidence;
+  return e != null && typeof e.artifact === "string" && e.artifact.trim() !== "";
 }
 
 /**
@@ -584,16 +598,20 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       why: "the queue could not be read, so completed verification tasks cannot be inspected",
     });
   } else {
+    // #2547 (lead ruling A): a completion is only re-checkable if it names the ARTIFACT the
+    // command ran against. A command + exit code with no artifact can be re-run against the
+    // WRONG revision, so a VERIFY item that records evidence without a non-blank `artifact`
+    // is as unaddressable as one with no evidence at all.
     const acked = queueItems.filter(
-      (it) => it?.status === "done" && isVerificationItem(it) && !hasEvidence(it),
+      (it) => it?.status === "done" && isVerificationItem(it) && (!hasEvidence(it) || !hasArtifact(it)),
     );
     if (acked.length > 0) {
       const ids = acked.map((it) => `#${it.id}`).join(", ");
       add(
         "verification-without-evidence",
         ids,
-        `${acked.length === 1 ? "verification item" : `${acked.length} verification items`} ${ids} completed without evidence — the completion is an ack, not a re-run, so nothing can be re-checked`,
-        "re-run the artifact and record it when completing a verification item: complete_work(<id>, <summary>, { command, exitCode, artifact }) — an ack alone is not a sign-off (W2)",
+        `${acked.length === 1 ? "verification item" : `${acked.length} verification items`} ${ids} completed without re-runnable evidence — the completion is an ack (or names no artifact), not a re-run, so nothing can be re-checked`,
+        "re-run the artifact and record it when completing a verification item: complete_work(<id>, <summary>, { command, exitCode, artifact }) — an ack alone is not a sign-off, and a command/exit code with no ARTIFACT cannot be re-checked (W2/#2547)",
       );
     }
   }

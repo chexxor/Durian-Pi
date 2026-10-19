@@ -42,7 +42,7 @@ import {
 	enqueueItem,
 	registerSeat,
 } from "../src/rig.mjs";
-import { auditRig, hasEvidence, isVerificationItem } from "../src/checkup.mjs";
+import { auditRig, hasArtifact, hasEvidence, isVerificationItem } from "../src/checkup.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -97,6 +97,28 @@ const evidenced = auditRig({
 });
 assert.equal(hasFinding(evidenced, "verification-without-evidence"), false, "an evidenced completion passes");
 assert.equal(ruleStatus(evidenced, "verification-without-evidence"), "pass");
+
+// #2547 (lead ruling A): a command + exit code with NO artifact is not ADDRESSABLE — the same
+// command against another revision is a different check — so it is a finding too. FAILING-FIRST:
+// before #2547 the rule only required `hasEvidence`, so this case passed silently.
+const noArtifact = auditRig({
+	...BASE,
+	queueItems: [{ id: 7, to: "qa", subject: "VERIFY #1: fix", status: "done", resultSummary: "ran it", evidence: { command: "node demo/x.test.mjs", exitCode: 0 } }],
+});
+assert.equal(hasFinding(noArtifact, "verification-without-evidence"), true, "evidence with no artifact is a finding (#2547)");
+assert.equal(ruleStatus(noArtifact, "verification-without-evidence"), "fail");
+
+const blankArtifact = auditRig({
+	...BASE,
+	queueItems: [{ id: 7, to: "qa", subject: "VERIFY #1: fix", status: "done", resultSummary: "ran it", evidence: { command: "node demo/x.test.mjs", exitCode: 0, artifact: "   " } }],
+});
+assert.equal(hasFinding(blankArtifact, "verification-without-evidence"), true, "a BLANK artifact is a finding (#2547)");
+assert.equal(ruleStatus(blankArtifact, "verification-without-evidence"), "fail");
+
+assert.equal(hasArtifact({ evidence: { command: "c", exitCode: 0, artifact: "abc" } }), true, "hasArtifact: a non-blank artifact");
+assert.equal(hasArtifact({ evidence: { command: "c", exitCode: 0, artifact: "  " } }), false, "hasArtifact: a blank artifact");
+assert.equal(hasArtifact({ evidence: { command: "c", exitCode: 0 } }), false, "hasArtifact: absent");
+assert.equal(hasArtifact({}), false, "hasArtifact: no evidence field at all");
 
 const nonVerifier = auditRig({ ...BASE, queueItems: [{ id: 8, to: "author", subject: "implement the widget", status: "done", resultSummary: "done" }] });
 assert.equal(hasFinding(nonVerifier, "verification-without-evidence"), false, "an ordinary done item is not inspected");
