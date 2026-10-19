@@ -1102,6 +1102,16 @@ export async function runWakeLoop({
         scheduler.markDirty();
         continue;
       }
+      // F35/#2237: honor a `serve --stop` BEFORE anything that can force another pass. A
+      // persistently-throwing pass with a pending intent re-marked the scheduler dirty every
+      // turn, so the stop was only seen at the END of a pass — an operator saw `serve --stop`
+      // return stopped:true (and clear broker.json) while the orphan kept looping. Checking
+      // here makes the stop authoritative regardless of the inbox or an active backoff.
+      if (dbPath && readStopRequest(dbPath) !== null) {
+        clearStopRequest(dbPath);
+        stoppedBy = "stop";
+        break;
+      }
       // A spooled operator intent must not wait for an unrelated commit: the
       // producer writes a file to `<db>.broker.inbox`, and only a PASS drains it
       // (drainIntentInbox runs at the start of a pass). Treat a non-empty inbox
@@ -1128,15 +1138,20 @@ export async function runWakeLoop({
           }
           continue;
         }
+        // #2237: a NON-read intent must not bypass the retry backoff. `shouldRun` only checks
+        // the floor + the dirty bit, so marking dirty here ran a pass NOW even while a retry
+        // was already scheduled — a persistently-throwing pass plus a pending intent hot-looped
+        // at the floor cadence (the observed 0.5 s `WAKE-RETRY ... in=60000ms` lines, and 120
+        // throwing passes in 1.2 s in the demo). While a failure backoff is active, WAIT for it:
+        // the pass at the deadline drains the intent and the retry schedule is honoured — and
+        // the wait yields the event loop, so a `.stop` written meanwhile is seen. With no failure
+        // pending, mark dirty at once (prompt delivery).
+        if (consecutiveWakeFailures > 0 && cooldownRevisitAt !== null && now() < cooldownRevisitAt) {
+          await signal.wait(Math.max(1, cooldownRevisitAt - now()));
+          continue;
+        }
         scheduler.markDirty();
         continue;
-      }
-      // Check for stop request before sleeping: on Windows there is no SIGTERM,
-      // so `serve --stop` relies on a .stop file to interrupt an idle broker.
-      if (dbPath && readStopRequest(dbPath) !== null) {
-        clearStopRequest(dbPath);
-        stoppedBy = "stop";
-        break;
       }
       // Never sleep past the deadline: with no further commits a resident broker
       // rests in `signal.wait`, and a signal only interrupts it on SIGINT/SIGTERM.
@@ -1242,7 +1257,15 @@ export async function runWakeLoop({
       // resident broker (the 17:29Z death). Log it WITH its nested cause and keep driving;
       // the loop's idle pacing keeps a persistent failure from becoming a hot spin.
       passThrew = true;
-      onDiagnostic({ kind: "pass-failed", ...describeError(error) });
+      const described = describeError(error);
+      onDiagnostic({ kind: "pass-failed", ...described });
+      // ROADMAP 78 / #2237: a throwing pass must be VISIBLE in `<db>.broker.log`, not only as a
+      // later `WAKE-RETRY ... pass-threw` line — the log is the only post-mortem surface (D46),
+      // and it could not answer "which pass threw, and why". Messages only, never a payload.
+      logBrokerLine(
+        dbPath,
+        `PASS-FAILED ${described.error ?? "unknown"}${described.cause ? ` cause=${described.cause}` : ""}`,
+      );
     } finally {
       scheduler.endPass();
     }
