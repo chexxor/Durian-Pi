@@ -47,6 +47,19 @@ tail -8 .spike/serve.err 2>/dev/null
   Session failed after a storage error`, and repair that conversation with
   `scripts/repair-pi-live.mjs <db> <N>` (`store-corruption-recovery.md`) BEFORE restarting. See
   `docs/incidents/2026-10-18-broker-retry-hotloop.md`.
+- **Stopping an unresponsive broker (foreground or detached).** `serve` traps `SIGINT`/`SIGTERM` into a
+  graceful stop: it only sets a stop flag, and the loop honours it at a **pass boundary**
+  (`src/broker.mjs:1085` and `:1281`), after which it still runs `await harness.waitForIdle()`
+  (`:1293`). A pass wedged on a hung wake/generation therefore defeats **Ctrl+C, `SIGTERM`, and
+  `serve --stop` alike**, and `serve --stop` can return `stopped:true` while the process lives. Escalate
+  to a hard stop (Windows) and clear the stranded run:
+  ```bash
+  powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -match 'cli.mjs serve' } | Select-Object ProcessId"
+  taskkill /F /PID <pid>          # or: Stop-Process -Id <pid> -Force
+  DURIAN_PI_DB=./selfdev.sqlite node cli.mjs resume
+  ```
+  A foreground `serve` in the operator's shell is expected to receive Ctrl+C; if it does not, it is
+  wedged, not detached. The bounded graceful stop is owed as `#2237`.
 
 ## Do
 1. If a **wedged** `serve` process exists and **no** genlock slot is held, terminate it:
@@ -139,3 +152,9 @@ restart alone was INSUFFICIENT. `START pid=5768` (`20:47:55Z`) ran clean to `PAS
 with a fresh heartbeat. `.spike/serve.err` named `wake-failed … pm conv 3 … Session failed after a
 storage error` BOTH before and after the restart — a persistent cause. Recovery: terminate (no genlock),
 then `repair-pi-live.mjs ./selfdev.sqlite 3`, then restart.
+2026-10-19 (stop-defeat, `#2237`): a foreground `node cli.mjs serve` (pid `4092`) hot-looped on
+`supervisor: escalated … seat: devtools, reason: degeneration`; repeated Ctrl+C had no effect and
+`serve --stop` had already returned `stopped:true` while the process lived. `Stop-Process -Id 4092 -Force`
+stopped it; `resume` cleared 3 stranded runs (scribe/auditor/devtools); the orphaned `genlock.0` (holder
+`4092`) was removed. Earlier the same day a wedged broker (pid `4296`) was likewise force-killed. The
+bounded-grace fix is routed: `#2237` + `.spike/delegate/intent-2237-bounded-stop.md`.

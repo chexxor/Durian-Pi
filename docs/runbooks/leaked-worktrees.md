@@ -147,6 +147,23 @@ driving.
 ## Verify
 `git worktree list` no longer lists the resolved worktree; `git status` is quiet for `item-*`.
 
+### A `%TEMP%/verify*` scratch that will not remove (junction `node_modules`)
+
+Verify scratch under `%TEMP%` often has a `node_modules` that is a Windows **junction/symlink**. The
+removal guard refuses any worktree containing a junction/symlink (Git 2.42 deletes THROUGH a junction
+and can destroy the target), so those trees leak and re-print on each broker start:
+`worktree: unlock of <path> did not apply: … is not locked`. That warning is **benign** — the tree was
+simply not locked. Reclaim one junction-first, clean-only:
+```bash
+ git -C <wt> status --porcelain           # MUST be empty (never force)
+ cmd /c rmdir "<wt>\node_modules"          # removes the LINK only — never `rm -rf` a junction
+ git worktree unlock <wt>                   # ignore "not locked"
+ git worktree remove <wt>
+ git worktree prune
+```
+2026-10-19: five registered `%TEMP%/verify*` trees (e.g. `verify1102-210800`, dated Oct 16) were found
+un-reapable for exactly this junction reason.
+
 ## If it fails
 If a worktree will not remove (Windows file locks), close any process with it open and retry; the fallback
 is `git worktree remove --force` **only after** its work is committed or knowingly discarded.
@@ -219,3 +236,9 @@ and leaks on every completion. Observed on `item-2231` (`impl-item-2231 @166d51f
 `item-2224` (`a2eaf7b`, 4), plus `item-2305`/`item-2315`/`item-2340`. Full record +
 `src/worktree.mjs:119/134/195/494/541-546` citations: `docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`;
 defect routed to `pm` (intent `worktree-carry-collision-2026-10-19-1`).
+
+2026-10-19 (junction-blocked scratch): five registered `%TEMP%/verify*` verify-scratch trees were found
+un-reapable because their `node_modules` is a Windows junction/symlink, which the removal guard refuses
+(Git 2.42 deletes through a junction). Their repeated
+`worktree: unlock of <path> did not apply: … is not locked` line on broker start is benign (already
+unlocked). The safe junction-first reclaim is now documented above.

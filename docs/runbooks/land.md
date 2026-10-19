@@ -104,7 +104,12 @@ git -C <repo> merge-base --is-ancestor <branch> main && echo LANDED
 
 ## If it fails
 - **Refused on tracked modifications:** commit or stash the shared tree's work first (never blindly —
-  the tree is shared with other seats; see the constitution), then re-run.
+  the tree is shared with other seats; see the constitution), then re-run. When the tracked WIP is
+  **another seat's** in-flight edit, do not `git add` it and do not `git checkout`/`restore` it: back the
+  diff up to a patch, park it to a **named** stash
+  (`git stash push -m "delegate: park <what> for <date> landing window" -- <paths>`), land, and **leave
+  the stash for its author to reconcile** — never pop it blind. 2026-10-19: a D109
+  non-interactive-git WIP was parked this way (patch `.spike/delegate/D109-shared-tree-wip-20261019.patch`).
 - **Refused on a held genlock:** a generation is in flight. Wait for it to settle, or stop the broker
   (`broker-safe-change.md`), then re-run.
 - **The pass died when you stopped the broker** (your own run ended): that is the broker-hosted-seat

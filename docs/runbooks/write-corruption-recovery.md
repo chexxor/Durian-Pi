@@ -53,6 +53,14 @@ confirms the #623 shape.
    ```
    A seat recovers by reading `git show HEAD:<path>` and writing that content back through the `write`
    tool — never by `git checkout`/`restore`, which the guard refuses.
+   **Line endings matter on this host.** `core.autocrlf=true` stores LF and checks out CRLF, so a
+   recovery that writes the file with **LF** leaves `git status` showing it modified even though its
+   normalized content equals `HEAD` (`git diff --quiet` exits 0 while `git status --porcelain` prints
+   ` M`). Write the recovered content back as CRLF, or `git add --renormalize`. A non-checkout operator
+   recovery that also preserves the damaged copy:
+   ```bash
+   cp <path> <path>.collapsed.bak && git show HEAD:<path> > <path>
+   ```
 3. If the seat intended to *serialize* (a `JSON.stringify` dump or a `Set-Content`-style one-liner),
    write it to a **new** `.json`/`.txt` filename instead of collapsing the source file in place.
 
@@ -62,7 +70,10 @@ Run the guard's own test — it encodes both the refusal and the healthy-rewrite
 node demo/seatguard.test.mjs     # expect: "PASS — the guard holds", exit 0
 ```
 For the recovered file itself, confirm it is multi-line again and the **item's** test still passes in
-the worktree: `node --check <path>` (clean) and the file's own demo.
+the worktree: `node --check <path>` (clean) and the file's own demo. Also confirm
+`git status --porcelain -- <path>` is **empty**: under `core.autocrlf=true` an LF recovery shows a
+phantom ` M` even though `git diff --quiet` exits 0. Write the content back as CRLF (or
+`git add --renormalize`).
 
 ## If it fails
 - The guard did **not** fire and a legitimate multi-line source was still collapsed: capture the exact
@@ -83,3 +94,9 @@ The #623 incident: a `write` handed the entire serialized payload of a source fi
 silent overwrite with no error. The guard added in commit `0102f3c` (`refusalForWrite`, #673; also the
 stray-control-byte check, #780), verified by `demo/seatguard.test.mjs` (exit 0). Last verified
 2026-10-16 against `0102f3c` in `item-806`.
+
+2026-10-19 (recurrence, `docs/incidents/2026-10-19-broker-mjs-one-line-collapse.md`): `src/broker.mjs`
+in the shared tree was found collapsed to one line (0 exports). Recovered non-destructively — the
+collapsed copy saved to `.spike/delegate/broker.mjs.collapsed-backup-20261019`, then `HEAD`'s content
+written back and **converted to CRLF** (the LF write left a phantom ` M` until then).
+`demo/seatguard.test.mjs` re-run as the Verify.
