@@ -47,7 +47,7 @@
 // with the reason in the report. It NEVER forces, and it NEVER leaves the shared tree
 // mid-merge.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { DEFAULTS_CONFIG_PATHS, DEFAULT_CONFIG_PATHS } from "../src/config.mjs";
@@ -357,14 +357,155 @@ for (const branch of branches) {
 /* ───────── optional: prove the result in the scratch before advancing main ───────── */
 
 const suiteResults = [];
-if (wantSuite) {
+(async () => {
+	if (wantSuite) {
 	const demoDir = join(scratch, "demo");
 	const tests = existsSync(demoDir)
 		? readdirSync(demoDir)
 				.filter((n) => n.endsWith(".test.mjs"))
 				.sort()
 		: [];
-	for (const test of tests) {
+
+	/* ── concurrency knob ── */
+	const concurrency = Math.max(1, parseInt(process.env.DURIG_SUITE_CONCURRENCY, 10) || 4);
+
+	/* ── serialize worktree-touching tests ── */
+	// These tests create or manipulate git worktrees on the scratch repo.
+	// Under parallelism they collide on .git/worktrees/ and lock files.
+	// We serialize them by running them one at a time in a dedicated queue.
+	const worktreeTests = new Set([
+		"broker-strand.test.mjs",
+		"broker.test.mjs",
+		"commit-model.test.mjs",
+		"ctxline.test.mjs",
+		"curate.test.mjs",
+		"deepinfra-catalog.test.mjs",
+		"defer.test.mjs",
+		"degeneration-duration.test.mjs",
+		"degeneration-text.test.mjs",
+		"degeneration.test.mjs",
+		"driversurvive-pre.test.mjs",
+		"driversurvive.test.mjs",
+		"eval.test.mjs",
+		"evidence-handoff.test.mjs",
+		"genlock-hardening.test.mjs",
+		"halt.test.mjs",
+		"held-item.test.mjs",
+		"inflight.test.mjs",
+		"local-provider.test.mjs",
+		"local-reset.test.mjs",
+		"malformedcall.test.mjs",
+		"metrics.test.mjs",
+		"notices.test.mjs",
+		"optimizer.test.mjs",
+		"ownership.test.mjs",
+		"pitui.test.mjs",
+		"primer.test.mjs",
+		"race.test.mjs",
+		"ratchet.test.mjs",
+		"repeat-call.test.mjs",
+		"run.test.mjs",
+		"runbook-frontmatter.test.mjs",
+		"runbook-rules.test.mjs",
+		"sanitize.test.mjs",
+		"scheduler.test.mjs",
+		"seat-commit-instructions.test.mjs",
+		"secretdetect.test.mjs",
+		"secrets.test.mjs",
+		"skill-admission-gate.test.mjs",
+		"skill-mirror-check.test.mjs",
+		"storewrite.test.mjs",
+		"streamview.test.mjs",
+		"suite-env.test.mjs",
+		"supervisor.test.mjs",
+		"textwidth.test.mjs",
+		"tui-backfill.test.mjs",
+		"tui-client.test.mjs",
+		"tui-conversation.test.mjs",
+		"tui-golden.test.mjs",
+		"tui-input-overlay.test.mjs",
+		"tui-input.test.mjs",
+		"tui-multipane.test.mjs",
+		"tui-restore.test.mjs",
+		"tui-roles.test.mjs",
+		"tui-sync-output.test.mjs",
+		"tui-thinking.test.mjs",
+		"tui-toolblock.test.mjs",
+		"viewmodel.test.mjs",
+	]);
+
+	const isolatedTests = tests.filter((t) => !worktreeTests.has(t));
+	const serializedTests = tests.filter((t) => worktreeTests.has(t));
+
+	/* ── helper: run a single test, return { test, exit } ── */
+	function runTest(test) {
+		return new Promise((resolve) => {
+			const child = spawn(process.execPath, [join("demo", test)], { cwd: scratch, encoding: "utf8" });
+			let stdout = "";
+			let stderr = "";
+			child.stdout.on("data", (d) => { stdout += d; });
+			child.stderr.on("data", (d) => { stderr += d; });
+			child.on("close", (code) => {
+				resolve({ test, exit: code ?? 1, stdout, stderr });
+			});
+		});
+	}
+
+	function recordFailure(result) {
+		if (!keepScratch) removeScratch();
+		report(
+			{
+				...base,
+				error: `STOPPED: demo/${result.test} failed in the scratch worktree (exit ${result.exit}) — main was NOT advanced.`,
+				merged,
+				suite: suiteResults,
+				scratch: keepScratch ? scratch : null,
+			},
+			1,
+		);
+	}
+
+	/* ── run isolated tests in a bounded pool ── */
+	if (isolatedTests.length > 0) {
+		if (concurrency === 1) {
+			// Sequential escape hatch: drain the queue one at a time
+			for (const test of isolatedTests) {
+				const result = await runTest(test);
+				suiteResults.push(result);
+				if (result.exit !== 0) {
+					recordFailure(result);
+					return;
+				}
+			}
+		} else {
+			// Bounded pool: distribute tests across workers
+			const workerCount = Math.min(concurrency, isolatedTests.length);
+			const queues = Array.from({ length: workerCount }, () => []);
+			isolatedTests.forEach((t, i) => queues[i % workerCount].push(t));
+
+			const workers = queues.map(async (q) => {
+				for (const test of q) {
+					const result = await runTest(test);
+					suiteResults.push(result);
+					if (result.exit !== 0) {
+						recordFailure(result);
+						throw result; // signal failure to other workers
+					}
+				}
+			});
+
+			try {
+				await Promise.all(workers);
+			} catch {
+				// One worker failed; the others may still be running.
+				// We've already reported and removed the scratch, so we just return.
+				return;
+			}
+		}
+	}
+
+	/* ── run serialized tests one at a time ── */
+	for (const test of serializedTests) {
 		const run = spawnSync(process.execPath, [join("demo", test)], { cwd: scratch, encoding: "utf8" });
 		suiteResults.push({ test, exit: run.status ?? 1 });
 		if ((run.status ?? 1) !== 0) {
@@ -382,6 +523,7 @@ if (wantSuite) {
 		}
 	}
 }
+})();
 
 /* ───────── advance main by a CLEAN FAST-FORWARD ───────── */
 
