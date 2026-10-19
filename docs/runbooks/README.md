@@ -71,6 +71,7 @@ a **`How to re-verify this document`** section: literal commands whose output is
 |---|---|---|
 | [../BRANCH-AND-WORKTREE-LIFECYCLE.md](../BRANCH-AND-WORKTREE-LIFECYCLE.md) | refs, worktrees, landing gates, prune paths, the store/rig pair, suite-verdict traps | land, branch-cleanup, leaked-worktrees, merge |
 | [../SEAT-LIFECYCLE.md](../SEAT-LIFECYCLE.md) | a seat from create to retire | seat-reset, compact-a-seat, degeneration-guard |
+| [../WORK-ITEM-LIFECYCLE.md](../WORK-ITEM-LIFECYCLE.md) | queue states and transitions, who may move an item, what wakes a seat, what is surfaced, why work gets stuck | stale-held-backlog, resume-while-broker-runs |
 
 **Rule for a topic doc:** a claim without a command that proves it is not allowed — mark it `UNVERIFIED`
 or drop it. That is what makes the doc audit-able instead of merely plausible.
@@ -141,6 +142,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [degeneration-guard.md](degeneration-guard.md) | a seat was auto-reset (`pi.reset` naming `degenerate-text=...`); tell a real loop from a false positive, or add a shape | no |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
 | [tracked-files-missing-on-disk.md](tracked-files-missing-on-disk.md) | `git status` shows tracked DELETIONS nobody made; a whole directory (e.g. `scripts/`) is empty on disk while the index and `HEAD` still hold it | no |
+| [stale-held-backlog.md](stale-held-backlog.md) | an effort has stalled with nothing broken; `held` rows are never released after their gates finish and no attention fires | no |
 | [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
 | [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land â€” run the review method before the code | no |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
@@ -166,6 +168,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Worktrees | leaked-worktrees |
 | Missing files on disk | tracked-files-missing-on-disk |
 | Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
+| Queue / parked work | stale-held-backlog |
 | Credentials / secrets | leaked-secret |
 | Review method | security-trust-boundary-review |
 | Merge / conflicts | merge, land, resolve-merge-conflict, branch-cleanup |

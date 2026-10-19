@@ -3,12 +3,111 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T18:05Z, delegate) — **LAND+PRUNE PASS COMPLETE: `scripts/` RESTORED, 17 BRANCHES LANDED (`main` `67228b9`→`3b79159`), 13 REFS PRUNED; 3 VERIFIED BRANCHES CONFLICT AGAINST THE MOVED `main` AND NEED AN AUTHOR REBASE**
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T20:45Z, delegate) — **DURABLE-TUI STATUS RECONSTRUCTED + UNBLOCK INTENT DELIVERED; THE `held`-ORPHAN CLASS DOCUMENTED (1 INCIDENT, 1 TOPIC DOC, 1 REDESIGN PROPOSAL, 1 RUNBOOK)**
+
+**Read this first.** Operator-directed session: (1) explain why the durable-TUI migration is parked,
+(2) release the stale-held rows, (3) document the incident and the topic, (4) propose a queue redesign
+that makes a stuck item impossible. No seat work, no push.
+
+**Delivered this session:**
+- **Intent `operator-durable-tui-unblock-2026-10-19-1` → `pm`** (`delivered:true` `20:22:19Z`). Asks `pm`
+  to `release_work(#2630)` (advocate review; its gate `#2629` is satisfied), route `#2797` (designer doc
+  `a3dff23`) for a landing window, and flag the Phase-1 pin caret (`^1.3.0` vs the build-spec's exact
+  `1.3.0`) to `devtools`. Body: `.spike/delegate/durable-tui-unblock-2026-10-19/intent-release-2630-and-land-designer-doc.md`.
+- **`docs/incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md`** (new, indexed) — the class: a
+  `held` row whose gate cleared is never released and nothing in `attention` fires. Live evidence: **153
+  held rows** (113 `impl`, median ~16 h held, 49 >24 h, ~51 whose cited gates are all terminal).
+- **`docs/WORK-ITEM-LIFECYCLE.md`** (new topic doc) — the queue's states/transitions, who may move an
+  item, what wakes a seat, what is surfaced, the stuck taxonomy, and an audit script.
+- **`docs/reviews/queue-lifecycle-redesign.md`** (new proposal) — the two-axis `stage`/`block` redesign
+  with mandatory resolvers, gate-completion auto-release, watchdog attention kinds, and check rules.
+- **`docs/runbooks/stale-held-backlog.md`** (new runbook) + indexes updated (`runbooks/README.md`,
+  `incidents/README.md`).
+
+**STATE — verify before acting:**
+- **`pm` may or may not have acted on the unblock intent yet.** First check: is `#2630` released and is
+  `#2797` routed? `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print({i['id']:i['status'] for i in d['items'] if i['id'] in (2630,2797,2788,2826,2804,2626)})"`
+- **The durable-TUI chain (unchanged gates):** Phase 1 done+landed (`impl-item-2600 @3d07691`, merged
+  `34ba340`; qa `#2901`→`#2904` PASS). Held: `#2626` (Phase 2), `#2630` (advocate), `#2733` (gate),
+  `#2788`+`#2789` (waiting view/answer), `#2797` (designer doc land), `#2804`/`#2826` (render rules,
+  gated on `#2788`), `#2098` (Phase 3).
+- **The redesign proposal is NOT registered as a queue item** — it needs an operator/lead ruling before
+  `pm` decomposes it (see its §11 open questions, incl. the sequencing recommendation to ship the
+  read-only check rules + attention kinds first).
+- **Pre-existing uncommitted `docs/runbooks/land.md`** (delegate-authored wording fix) is left unstaged.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Do not:** `git add -A`; commit another seat's WIP; force a dirty worktree; delete an `ahead>0` ref;
+`release_work` a row you are not the sender/recipient of; push (operator holds the grant).
+
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T20:15Z, delegate) — **LONG SESSION: LAND+PRUNE DONE (17 LANDED, 13 REFS PRUNED), WORK-ITEM SCHEMA WRITTEN, 4 SEAT-PATH/STORE FAULTS RECOVERED, MODEL ROLLED BACK; `pm` IS ALIVE AGAIN BUT HAS NOT YET PROCESSED 3 OPERATOR MESSAGES**
+
+**Read this first.** Three operator asks completed (land+prune, schema, queue replies) plus four live
+faults recovered. **`main` = `f6ed4e6`** (my last docs commit; `#2801` package-lock fix landed earlier as
+`4a1fe16`). Refs 85, worktrees 208, broker **pid 4744** (`state: up`, passes advancing).
+
+**STATE OF THE TEAM — read before acting:**
+- **`pm` was DEAD 18:44→20:05** and is now alive. Cause (verified): `last_run_failed: **no_model**` — the
+  operator's requested `deepseek-ai/DeepSeek-V4.1-Flash-1017` is ABSENT from the installed
+  `@earendil-works` catalogues (present only in the vendored pin `vendor/pi-main`), so the client could not
+  resolve it. **I reverted pm/impl/lead/architect to `DeepSeek-V4.1-Flash`**; `pm` took a turn at
+  20:05:42. **To use `-1017` you must first make the client know the id** (a `devtools` pin/`sync-pi`
+  item, e.g. `node scripts/sync-pi.mjs --link`), then re-point the seats. Do NOT just set the model back.
+- **THREE operator messages sit in `pm`'s conversation, delivered but NOT YET PROCESSED:**
+  `INTENT delivered=1` at 19:33:57Z (upstream reference feed) and 19:49:59Z (operator rulings, 9 items),
+  plus a nudge at 20:05:42Z. **First next-session check: did `pm` register items for them?** If not, re-send
+  from `.spike/delegate/land-prune-2026-10-19d/{intent-upstream-reference-feed,intent-operator-rulings-2026-10-19,nudge-pm}.md`.
+- **`devtools` seat root FIXED** (delegate action): its persisted `cwd` is now its own worktree
+  `.../item-2801` on branch `devtools-item-2801` — previously ALL 11 seats were rooted in the **shared
+  tree** (F12), which is how a seat write emptied `src/worktree.mjs`. `worktree audit` confirms. The other
+  10 seats are STILL rooted in the shared tree (`#1151` `DURIG_EXPECT_WORKTREE` remains the durable fix).
+- **`devtools` holds 13 claims (11 stale, 11–15.8h).** Releasing them is `pm`'s job now that it runs.
+
+**Four faults recovered this session (all documented):**
+1. `scripts/` empty on disk → restored from the index (`tracked-files-missing-on-disk.md`, new runbook).
+2. **`src/worktree.mjs` at 0 bytes** vs 40,762 in HEAD → broke every CLI verb at import; restored from
+   HEAD with CRLF. Runbook `write-corruption-recovery.md` gained the **0-byte shape** + the size-scan
+   one-liner that found it. Cause: a seat writing in the shared tree (now mitigated for `devtools` only).
+3. Broker `Session failed after a storage error` → `repair-pi-live.mjs ./selfdev.sqlite 4930` +
+   `resume`; store backed up to `.spike/store-backup-20261019-150150`. **My `taskkill /F` mid-write caused
+   it — do not force-kill a broker that has just accepted a stop; wait for the drain.**
+4. Broker wedge (18:54→19:25, 30 min silent, heartbeat fresh, no genlock): recovered by stop→resume→restart.
+   **Root cause UNVERIFIED** (process gone; no pass-completion log line exists). `#2420` (bounded stop) is
+   still unlanded and is what would contain this.
+
+**DELIVERED — `docs/WORK-ITEM-SCHEMA.md` (canonical, commit `f6ed4e6`):** the queue AND roadmap
+numbering/naming schema, fully measured: queue (2,948 items, 421 prose prefixes, 46% of titles lead with a
+signal about another item, 325 prose gates, 64/189 roadmap entries carry inline state, and
+`verification-without-evidence` flags 304 of which only 81 start with `VERIFY`); roadmap (161 ids 0–160 with
+**no gaps**, 13 lettered sub-items, no renumbering, max 160 appended at end, 28 sections of which only 13
+carry provenance); and the **correlation gap** (392 queue titles cite `ROADMAP <n>`, 69 roadmap mentions
+cite `#NNNN`, neither queryable). Normative: opaque ids, `kind` as a closed 10-value field, state never in
+titles, `blockedBy` not prose gates, `<seat>-item-<id>` names, `RM-<n>[a-z]` citations.
+
+**STILL OWED (not mine to do):**
+- **3 verified branches still conflict** against `main`: `impl-item-2574`, `impl-item-2578`,
+  `impl-item-2777` — need an AUTHOR non-force rebase + a FRESH non-author verify (the old `#2843`/`#2892`/
+  `#2897` covered superseded tips). Land serially, `merge-tree` preflight each. Then `#2420` → `#2483`.
+- `pm`: close the 18 satisfied landing lists; cancel `#2848` (moot); release devtools' stale claims;
+  register the 5 schema check rules from §8/§11.3.
+- **Push: 4+ commits unpushed.** `origin/main` = `e72db18`, which is MY commit but was **not pushed by me** —
+  the operator must confirm who pushed and whether to push the rest.
+- Operator-only: `#1135` pricing source (ruled: vendored table + `asOf` staleness rule), `#994` quiet window
+  (**ruled: do NOT declare yet**), `#119203` secret rotation, and the PAT offer for the upstream feed.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin)['items'];print(max(i['id'] for i in d))"` — if the highest id is still 2949, `pm` has not yet registered the three operator messages; re-send them (paths above).
+**Do not:** `git add -A`/commit another seat's WIP (`docs/NEXT.md` and `docs/runbooks/land.md` currently
+hold `pm`'s uncommitted edits — leave them); `git reset --hard`/`checkout --`/`clean -fd`; force a dirty
+worktree; delete an `ahead>0` ref; land on an old verify; `taskkill /F` a broker mid-drain; set the model to
+`-1017` again before the client can resolve it; push without the operator's grant.
+
+## (superseded) CLOCK-OUT 2026-10-19T18:05Z (delegate) — **LAND+PRUNE PASS COMPLETE: `scripts/` RESTORED, 17 BRANCHES LANDED (`main` `67228b9`→`3b79159`), 13 REFS PRUNED; 3 VERIFIED BRANCHES CONFLICT AGAINST THE MOVED `main` AND NEED AN AUTHOR REBASE**
 
 **Read this first.** The operator-directed land+prune pass that the 17:33Z block stopped at its first
 GATE was completed. `main` advanced `67228b9` → **`3b79159`**; suite **pass=175 fail=1**, the one failure
-being the known environmental `demo/pitui.test.mjs` (`node_modules/@earendil-works/pi-tui` symlink,
-#2412) — identical to the pre-landing baseline (pass=158/fail=1).
+being `demo/pitui.test.mjs` — a resolution-path ASSERTION (the `node_modules/@earendil-works/pi-tui`
+symlink, #2412), NOT environmental; reported as the exact pass/fail — identical to the pre-landing
+baseline (pass=158/fail=1).
 
 **Step 1 — `scripts/` restored (lossless).** `git ls-files scripts/ | xargs git checkout-index -f --`
 (note: `git checkout-index -f -- scripts/` does **not** recurse a directory — pass the file list).
@@ -128,8 +227,10 @@ Counts at diagnosis: **111 refs, 206 registered worktrees**, audit `counts` =
    complains that the shared-tree `scripts/land.mjs` was BOM/orphan broken; after the restore, the
    on-disk file is HEAD's version, so re-check `node --check` before trusting either report.
 4. Land with `node scripts/land.mjs <branch> --db ./selfdev.sqlite` and **no `--suite`** until the linked
-   worktree fix is on `main`; prove afterwards with `node scripts/suite.mjs` (expected only the
-   `demo/pitui.test.mjs` symlink failure). Then restart the broker (operator-granted) so `carry:false`
+   worktree fix is on `main`; prove afterwards with `node scripts/suite.mjs` and **report the exact
+   `pass=N fail=M`** — until #2412 lands, the expected one failure is `demo/pitui.test.mjs`, a
+   resolution-path ASSERTION (the `pi-tui` symlink), NOT environmental; prove any other failure is new by
+   comparing with the pre-change baseline. Then restart the broker (operator-granted) so `carry:false`
    takes effect.
 
 **Exact next command:** `git checkout-index -f -- scripts/ && node --check scripts/land.mjs && node --check scripts/suite.mjs && git status --short -- .`
@@ -147,8 +248,8 @@ ask (relay the advocate's question + every item awaiting operator feedback). No 
   `impl-item-2356` @`02f1a36`, `impl-item-2360` @`4813a50`, `scribe-item-2658` @`90d1381`,
   `scribe-item-1257` @`fe1434e`. Tips matched the pm landing-list tips exactly.
 - **Proved on `main`:** `node scripts/suite.mjs` = **pass=158 fail=1** — the one failure is
-  `demo/pitui.test.mjs` (the known `node_modules/@earendil-works/pi-tui` symlink — environmental, NOT a
-  regression; confirmed by direct run).
+  `demo/pitui.test.mjs` (the `node_modules/@earendil-works/pi-tui` symlink, #2412 — a resolution-path
+  ASSERTION, NOT environmental; confirmed by direct run).
 - **PRUNED 9 terminal merged worktrees** by **relocate-out-of-tree** to `../pi-opendurig.worktrees/`
   (lossless: `worktree unlock` → `move` → `switch --detach` → `branch -d`): `auditor-item-1924/2020/2141`,
   `devtools-item-2631`, `impl-item-2233/2356/2360`, `scribe-item-1257/2658`. Refs **80→77** (the live rig
@@ -177,23 +278,18 @@ CONFLICT (author rebase set `#2681`/`#2682`/`#2683`).
 (operator holds it); land an unverified branch.
 
 ## NEXT SESSION
-**Current item:** the operator-directed LAND + PRUNE pass is **COMPLETE** (see the 18:05Z clock-out at the
-top of this file): `scripts/` restored, 17 branches landed (`main` `67228b9`→`3b79159`, suite pass=175
-fail=1 pitui-env), 13 refs pruned, nothing forced. Next: unblock the 3 **verified** branches that conflict
-against the moved `main`.
-**Queue id:** `#2889`/`#2890` and `#2848` are **DISCHARGED** (scripts restored, land.mjs parses); `#2679`
-landed (`99eecd2` → `main`, so `land.mjs --suite` now passes in the detached scratch); landing lists for
-`#2496`/`#2497`/`#2547`/`#2572`/`#2576`/`#2581`/`#2583`/`#2585`/`#2586`/`#2600`/`#2602`/`#2643`/`#2460`/
-`#2462`/`#1705`/`#2849` are **landed** — those held items can be closed by `pm`.
-**Blocker:** `impl-item-2574` (#2843 `done`), `impl-item-2578` (#2892 `done`) and `impl-item-2777` (#2897
-`done`) are verified but `git merge-tree` conflicts against `main @3b79159`; they need an **author non-force
-rebase + re-verify** (do not force a landing). Also `impl-item-2420` then `impl-item-2483` (the #2237 stack
-must land in that order; #2483 also carries lead's Q1 rework #2783) and stale-tip `devtools-item-2261`
-(tip no longer matches its landing list). Pending operator inputs unchanged: `#994` quiet window, `#1135`
-pricing source, operator-owned secret rotation `#119203`. Push owed: 39 commits ahead of `origin/main` —
-**operator holds the push grant**.
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` then
-`for b in impl-item-2574 impl-item-2578 impl-item-2777; do git merge-tree --write-tree main $b >/dev/null 2>&1 && echo "$b CLEAN" || echo "$b CONFLICT"; done`
+**Current item:** the durable-TUI migration's held chain has been **released by intent**
+(`operator-durable-tui-unblock-2026-10-19-1`, delivered `20:22:19Z`) and the queue's `held`-orphan class
+is documented; the queue-lifecycle redesign is proposed and **awaits an operator/lead ruling** before it
+is registered. Verify `pm` acted, then drive the TUI chain (`#2788` → `#2826`/`#2804` → `#2626`).
+**Queue id:** `#2630` (advocate review — release), `#2797` (designer doc `a3dff23` — land), `#2788`/`#2789`
+(waiting view + answer op), `#2826`/`#2804` (render rules), `#2626` (Phase 2), `#2733` (proven gate),
+`#2098` (Phase 3). The redesign itself is a doc, not yet an id
+(`docs/reviews/queue-lifecycle-redesign.md`).
+**Blocker:** the durable-TUI chain is released but `pm` may not have processed it; the redesign needs a
+ruling. Standing blockers unchanged: `impl-item-2574`/`2578`/`2777` need an author non-force rebase +
+re-verify; push owed (operator holds the grant).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print({i['id']:i['status'] for i in d['items'] if i['id'] in (2630,2797,2788,2789,2826,2804,2626)})"`
 
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T08:30Z, delegate) — **NEXT-WORK PRIORITIES DELIVERED TO `pm` (3 intents); LANDING GATE `#2679` FIRST, THEN BUG-FIX CLUSTER, THEN STANDING PRIORITIES**
 
@@ -236,7 +332,8 @@ branches/worktrees; (3) update the runbook; (4) a new operator change request.
   wait-with-priority; `lock.reserved:true`): `architect-item-2520`, `impl-item-2328/2329/2330/2337`,
   `scribe-item-2597/2458/2461`, `devtools-item-2259`. `main` `4f9e7d6` → `7b6548e` (the last commit,
   `#2654`, is the operator's own direct commit — not a seat). Suite on `main`: **pass=156 fail=1**,
-  the one failure `demo/pitui.test.mjs` (the known `node_modules/@earendil-works/pi-tui` symlink).
+  the one failure `demo/pitui.test.mjs` (the `node_modules/@earendil-works/pi-tui` symlink, #2412 — a
+  resolution-path ASSERTION, NOT environmental).
 - **PRUNED refs 108 → 73**: 4 clean+locked+terminal worktrees removed (`impl-item-1390`,
   `scribe-item-1531`, `impl-item-1585`, `impl-item-1108`); **27 dirty merged worktrees relocated** to
   `../pi-opendurig.worktrees/` (`git worktree move` + `switch --detach` + `branch -d`; every file
@@ -331,8 +428,9 @@ stranded-submission liveness fix is still open.
   `DURIG_EXPECT_WORKTREE` mutation-point guard remains the outstanding control.
 - **Suite: `pass=152 fail=1`** — the one failure is `demo/pitui.test.mjs`: `node_modules/@earendil-works/pi-tui`
   is a SYMLINK to `vendor/pi-main/packages/tui`, created by devtools' `sync-pi --link` at 06:38Z (#2412).
-  Environmental / other-item, **not** a regression; restore with `npm install` (or remove the symlink) if a
-  green suite is required before #2412 resolves it.
+  It is a resolution-path ASSERTION, **not** environmental — the runner lists it under REAL FAILURES and
+  exits 1, so report the exact `pass=N fail=M`, never "green except pitui". Restore with `npm install`
+  (or remove the symlink) if a green suite is required before #2412 resolves it.
 - **Stashes (do NOT pop blind)** — `stash@{0}` = devtools #2412 shared-tree WIP (already re-applied in the
   `item-2412` worktree, so a redundant backup); `stash@{1}` = devtools #2390/#1754 WIP; `stash@{2}` =
   configure WIP. Each needs its author; the patch backups live under `.spike/delegate/`.

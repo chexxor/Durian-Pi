@@ -60,6 +60,7 @@ last_reviewed: YYYY-MM-DD
 
 | Date | Sev | Incident | Symptom | Runbook | Status |
 |---|---|---|---|---|---|
+| 2026-10-19 | sev2 | [held-rows-orphaned-by-cleared-gates](2026-10-19-held-rows-orphaned-by-cleared-gates.md) | an effort sits dormant with nothing broken: `held` rows whose gates finished are never released and no attention fires | stale-held-backlog | open |
 | 2026-10-17 | sev1 | [landing-safety](2026-10-17-landing-safety.md) | every `node cli.mjs` verb fails to load; the shared tree is left mid-merge | merge | resolved |
 | 2026-10-17 | sev1 | [broker-crash](2026-10-17-broker-crash.md) | seats idle with queued work; no `serve` process; the broker log stops | broker-down-or-stalled | open |
 | 2026-10-18 | sev1 | [broker-dormant-stalled](2026-10-18-broker-dormant-stalled.md) | the team has stopped working; the broker process is alive but its log stops | broker-down-or-stalled | mitigated |
