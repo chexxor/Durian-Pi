@@ -48,23 +48,23 @@ const throws = (fn) => {
 const DAY = 24 * 60 * 60 * 1000;
 const at = Date.parse("2026-10-19T00:00:00.000Z");
 
-/* ─── 1. scope: the field model only — no mapping, no predicate ────────────────────────────────── */
-console.log("\nthe slice is FIELD-ONLY: no mapping and no claimability predicate are exported");
-for (const banned of [
-	"effectiveStage",
-	"effectiveBlock",
-	"legacyStatus",
-	"canAutoOpen",
-	"workable",
-]) {
+/* ─── 1. scope: the field model here, and NO claimability predicate anywhere ───────────────────── */
+console.log("\nownership: no claimability predicate in this module (lead #3034)");
+for (const banned of ["workable", "capabilitiesOfSeat"]) {
 	check(
-		`\`${banned}\` is NOT exported here (later slice / owned elsewhere)`,
+		`\`${banned}\` is NOT exported (it belongs to #2673's predicate)`,
 		lifecycle[banned] === undefined,
 	);
 }
 check("the field model IS exported", typeof normalizeBlock === "function");
 check("the reason vocabulary is exported", Array.isArray(lifecycle.BLOCK_REASONS));
 check("the constraint-kind vocabulary is exported", Array.isArray(lifecycle.CONSTRAINT_KINDS));
+// M1a ships the field model alone; the stage/block MAPPING is M1b's half of the split and lands after
+// it, so on M1a's own branch the mapping is absent. On the M1b branch (which stacks on this one) the
+// mapping IS present, so this assertion is only made where it is true.
+if (typeof lifecycle.effectiveStage !== "function") {
+	check("the stage/block mapping is NOT here yet (M1b adds it)", true);
+}
 
 /* ─── 2. the block shape + the OQ2 defaults ───────────────────────────────────────────────────── */
 console.log("\nnormalizeBlock — the field shape and the OQ2 reviewBy defaults");
