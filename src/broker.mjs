@@ -1083,6 +1083,11 @@ export async function runWakeLoop({
   }
   for (;;) {
     if (isStopping()) {
+      // #2322: record the RECEIPT of the stop BEFORE terminating. Without this, a broker that
+      // was asked to stop is indistinguishable in `<db>.broker.log` from one that crashed —
+      // and a bare `START` with neither a `STOP-REQUESTED` line nor an `EXIT` is a process
+      // that died without ever running this exit path (a `taskkill`/kill).
+      logBrokerLine(dbPath, `STOP-REQUESTED source=signal pid=${process.pid}`);
       stoppedBy = "signal";
       break;
     }
@@ -1134,6 +1139,9 @@ export async function runWakeLoop({
       // Check for stop request before sleeping: on Windows there is no SIGTERM,
       // so `serve --stop` relies on a .stop file to interrupt an idle broker.
       if (dbPath && readStopRequest(dbPath) !== null) {
+        // #2322: record the receipt (see the signal site) so the log names the REQUEST, not
+        // just the graceful EXIT that follows it.
+        logBrokerLine(dbPath, `STOP-REQUESTED source=file pid=${process.pid}`);
         clearStopRequest(dbPath);
         stoppedBy = "stop";
         break;
@@ -1279,6 +1287,9 @@ export async function runWakeLoop({
     // instead of process.kill (which does not deliver SIGTERM on Windows). The
     // broker honours it here, after the pass in flight has settled.
     if (dbPath && readStopRequest(dbPath) !== null) {
+      // #2322: record the receipt (see the signal site) so the log names the REQUEST, not
+      // just the graceful EXIT that follows it.
+      logBrokerLine(dbPath, `STOP-REQUESTED source=file pid=${process.pid}`);
       clearStopRequest(dbPath);
       stoppedBy = "stop";
       break;
