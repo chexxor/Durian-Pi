@@ -3,7 +3,65 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
-## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T23:00Z, delegate) — **LAND+PRUNE PASS #3 (6 LANDED, `main` → `66d0ce9`), a LOCKED-WORKTREE DEADLOCK UNBLOCKED, and a 50-COMMIT DOCS AUDIT**
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T23:35Z, delegate) — **PASS #4: 4 LANDED (`main` → `ee651e0`), 10 TREES RELOCATED, AND THE SUITE-VERDICT TRAP DOCUMENTED**
+
+**Read this first.** Two operator asks this session: (1) "did you submit a work item for the worktree
+issue?" → answered below and the defect WAS registered; (2) run the landing + worktree runbook, then
+improve it.
+
+**1. THE WORKTREE DEFECT IS NOW A REAL CODE ITEM — `#3174`.** The previous handling only produced
+`#3123` (reporting), which `pm` cancelled and re-scoped to `#3165` (`worktree audit` retirement reporting +
+the locked-worktree rule) — still *held*, and still **not code**. Reading `src/worktree.mjs` after the
+operator suggested the fix belongs there found the actual root cause: **`prepareSeatWorkspace` keys the
+worktree PATH by ITEM (`item-<id>`) but the BRANCH by SEAT (`<seat>-item-<id>`)** (`:566-568`), and on reuse
+it unconditionally runs `git checkout -B <branch>` (`:602` → `:278`). So a second seat preparing the same
+item **silently steals the first seat's worktree**, and nothing ever asks *who holds the branch I need* —
+which is exactly why `impl` could not rebase `designer-item-2103`. **`#3174`** now asks for the holder
+resolution + the three refusals + a failing-first demo; **`#3175`** is `lead`'s naming question (item-keyed
+path vs seat-keyed branch; D110 territory).
+
+**2. PASS #4 LANDED 4 — `main` `abda45b` → `ee651e0`:** `impl-item-2420` @`8770e4b` (fresh non-author verify
+`#3171` done), `devtools-item-2638` @`e991830`, `impl-item-2797` @`2828ad4` (the 3-doc designer landing +
+README union), `devtools-item-2587` @`de9ac4d`. Ref **95 → 88**, worktrees **201 → 200**, **10 terminal trees
+relocated** out-of-tree, project-root item dirs **20 → 12**, `main` unmoved by the prune, nothing forced.
+**Suite on `main`: `pass=178 fail=1`** (`pitui`).
+
+**3. ⚠ THE SUITE CAN GO RED AND BACK GREEN WITH NO COMMIT — the most reusable finding of the day.** It bit
+twice in 20 minutes. `node_modules/@earendil-works/pi-durable` is a symlink to `vendor/pi-main/packages/durable`
+(pinned build, exports `./codemode`); a plain **`npm install`/`npm ci` in the SHARED TREE** replaces it with
+the registry build (`1.1.0`, no `./codemode`) and the five `tui-durable-*` demos fail. Diagnose in one line
+before believing ANY verdict — in either direction:
+```bash
+ls -la node_modules/@earendil-works/ | grep -E 'pi-durable|pi-tui'   # '->' pinned, 'd' CLOBBERED
+node scripts/sync-pi.mjs --link                                      # the fix; does not dirty the tree
+```
+Both `land.md` and `branch-cleanup.md` now carry it (`3d50976`).
+
+**4. THE `#2969` PIN WIP IS PARKED, FOR ITS AUTHOR.** The tree arrived dirty (`package.json` +
+`package-lock.json`: `^1.3.0` → exact `1.3.0`); the same install clobbered the pin in (3). Parked with a
+patch — **`stash@{0}` "delegate: park devtools #2969 exact-pin WIP for 2026-10-19f landing"**, patch at
+`.spike/delegate/land-2026-10-19f/devtools-pincaret-WIP.patch` (32 lines). **Do not pop it blind.** `devtools`
+must commit it on branch and register a landing entry (`pm` asked it to name the branch/tip at `#3153`).
+Tree is CLEAN as of clock-out.
+
+**5. ASKS ROUTED TO `pm` (`operator-pass4-report-2026-10-19-1`, delivered `23:30:56Z`), in priority order:**
+(1) **release the four verifies gated ON this pass's landings** (`#3147`, `#3151`, `#3158`, `#3104`, plus
+`#2993`) — the inverted-gate pattern is now systemic and a held verify is unclaimable; (2) settle the `#2969`
+WIP → branch → entry; (3) **mint the DECISIONS numbers** — `main` still has TWO unnumbered headings
+(`## D###` @3060, `## D-<mint>` @3092), highest real number is **D112**, and `scribe-item-3089`/`3035` are
+CLEAN but CONFLICT in that one file because they need the serialized pass; (4) rule the M1 order for
+`#3056`/`#3062` (CLEAN + verified, but `#3056` removes `workable` and `#3112` says STACKED);
+(5) cancel-or-repoint `designer-item-2103` (tip `81780e2`, now a **stranded duplicate** of the landed
+`impl-item-2797`).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` · then
+`git status --short -- . | grep -v '^??'` (expect CLEAN) · then re-run the candidate scan from
+`.spike/delegate/land-2026-10-19f/candidates.json` before any further pass.
+**Do not:** land a CONFLICT branch; land `architect-item-2700 @d1fde2d` (old hardcoded-D114 copy); `-D`
+`architect-item-3005` (content already on `main` as `328d838`); pop `stash@{0}`; trust a suite verdict without
+checking the pinned-pi symlink; push (operator holds the grant).
+
+## (superseded) CLOCK-OUT 2026-10-19T23:00Z (delegate) — **LAND+PRUNE PASS #3 (6 LANDED, `main` → `66d0ce9`), a LOCKED-WORKTREE DEADLOCK UNBLOCKED, and a 50-COMMIT DOCS AUDIT**
 
 **Read this first.** Three things this session: the operator asked why a seat was asking about a worktree
 that no longer existed (answered + fixed), then asked for a landing/worktree pass and a docs audit of the
@@ -187,19 +245,20 @@ completed branches, prune them, and prune worktrees no longer in use. Git-only; 
 land with `--suite` until the 5 `tui-durable-*` failures are fixed (report the exact `pass=N fail=M`).
 
 ## NEXT SESSION
-**Current item:** `impl` must finish the **`designer-item-2103` rebase** (branch freed by the delegate at
-22:52Z; tip still `e4fd338` and CONFLICT at 23:00Z) so R2's consolidation can complete; and `scribe` must
-own the **`#3089` serialized `DECISIONS.md` pass** (it must now mint the TWO placeholders already on `main`,
-starting from **D113**, which is free).
-**Queue id:** `#2797` (rebase OWED) · `#3089` (DECISIONS mint) · `#2969`/`#2638` (the pin-caret WIP now dirtying
-the shared tree) · `#3123` (re-scope or un-hold the locked-worktree rule) · `#2951`/`#3062`/`#3056` (M1 slice,
-lists HELD) · `#2993`/`#3104` (the two inverted verify gates needing a ruling).
-**Blocker:** the **tracked tree is dirty** (`package.json` + `package-lock.json`, a seat's unpinned edit in
-the SHARED tree) — it blocks every landing pass until its owner moves it to a worktree. Also: `main`'s
-`DECISIONS.md` has two unnumbered headings, `docs/STATUS.md` is 50 commits stale, and **all 12 seats are
-rooted in the shared tree** (F12).
+**Current item:** the worktree defect is now a real build item — **`#3174`** (`prepare_workspace` must
+resolve a branch it cannot hold + REFUSE to steal another seat's worktree), with **`#3175`** for `lead`'s
+naming question. `main` is at **`ee651e0`**, suite `pass=178 fail=1`, tracked tree CLEAN, `stash@{0}` holds
+devtools' `#2969` pin WIP.
+**Queue id:** `#3174` (the code fix) · `#3165` (still HELD; reporting half only) · `#3134`/`#3126` (blocked on
+the DECISIONS mint) · `#3146`/`#3150`/`#3157`/`#3103` (landed — close) · `#3147`/`#3151`/`#3158`/`#3104` (release
+these verifies) · `#3056`/`#3062` (M1 order ruling) · `#2797`/designer-item-2103 (cancel or re-point).
+**Blocker:** `docs/DECISIONS.md` has two unnumbered headings on `main` (highest real number **D112**), so the
+two clean `DECISIONS.md` branches cannot land; and the inverted verify gate needs a pm policy (verify held ON
+a landing is unclaimable unless released in the same breath). Standing: **82 unlanded refs**, mostly the
+conflict set needing author rebases; push owed (operator holds the grant).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` then
-`git status --short -- . | grep -v '^??' && git rev-parse --short designer-item-2103`.
+`git status --short -- . | grep -v '^??'` and `ls -la node_modules/@earendil-works/ | grep pi-durable`
+(`->` = pinned; `d` = run `node scripts/sync-pi.mjs --link` before trusting any suite result).
 
 ## (superseded) NEXT SESSION — see the top of this file
 
