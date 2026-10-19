@@ -21,6 +21,7 @@ import { contextConsumption } from "./context.mjs";
 import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
 import { partialView, peerGraph } from "./viewmodel.mjs";
+import { LOCAL_PROVIDER_ID, localProviderSpec } from "./providers/local.mjs";
 
 /** The seats a store holds, as the plain {name, conversationId, role} shape a
  * renderer or client consumes. An absent session document is an empty rig, not
@@ -61,6 +62,52 @@ export async function readSeatRoots(storage, context = BACKGROUND_CONTEXT) {
 		}
 	}
 	return roots;
+}
+
+/**
+ * Each seat's PERSISTED model (`pi.agent`.model) as `provider/modelId`, keyed by seat name.
+ *
+ * #2231: the store DOES record which model a seat runs — in the conversation's `pi.agent`
+ * document (`configure` writes it at `up`) — even though the roster (`durig.seats`) does not.
+ * The context denominator needs it: with no rig spec the read surface had no model key, so
+ * `declaredContextWindow` could not see a LOCAL seat's declared window and
+ * `window.denominator` stayed null. Read-only; an unreadable `pi.agent` reads as absent,
+ * never fatal (the same survival rule as `readSeatRoots`).
+ */
+export async function readSeatModels(storage, seats, context = BACKGROUND_CONTEXT) {
+	const models = {};
+	for (const seat of seats) {
+		try {
+			const rec = await storage.findDocument(
+				{ kind: "pi.agent", scope: { kind: "conversation", conversationId: seat.conversationId } },
+				"current",
+				context,
+			);
+			const model = rec ? (await storage.document(rec.id, "current", context))?.value?.model : null;
+			if (model && typeof model.provider === "string" && typeof model.modelId === "string") {
+				models[seat.name] = `${model.provider}/${model.modelId}`;
+			}
+		} catch {
+			// A viewer must survive an unreadable pi.agent: skip this seat's model.
+		}
+	}
+	return models;
+}
+
+/**
+ * The LOCAL provider's own declared context window, when this seat runs it (#2231).
+ *
+ * A local seat's window is declared in config (`DURIG_LOCAL_CONTEXT`, surfaced by
+ * `localProviderSpec`) rather than in `DURIG_CONTEXT_WINDOW`, so the generic
+ * `declaredContextWindow` misses it. It is a genuine DECLARATION, so it belongs in the
+ * `declared` state (never `advertised`), and only a seat whose model names the local
+ * provider gets it — a remote seat must not inherit the local window.
+ */
+function localSeatWindow(localSpec, modelKey) {
+	if (!localSpec) return null;
+	if (typeof modelKey !== "string" || !modelKey.startsWith(`${LOCAL_PROVIDER_ID}/`)) return null;
+	const n = Number(localSpec.contextWindow);
+	return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /** The queue's items, newest-current document. Returns [] for an absent store so
@@ -155,6 +202,14 @@ export async function readRigHealth(
 ) {
 	const seats = await readSeatList(storage);
 	const queueItems = await readQueueItems(storage);
+	// #2231: the roster carries no model, but each conversation's `pi.agent` does. Resolve the
+	// seats the caller did NOT already supply a model for, so a LOCAL seat's declared window is
+	// visible to the context denominator even when no rig spec was passed (the `status` path).
+	const agentModels = await readSeatModels(
+		storage,
+		seats.filter((seat) => !modelsBySeat[seat.name]),
+	);
+	const localSpec = localProviderSpec(cfg);
 	// ROADMAP 131: the rig-level paused state (read-only).
 	const control = await readRigControl(storage);
 
@@ -270,9 +325,15 @@ export async function readRigHealth(
 	const context = {};
 	for (const seat of seats) {
 		const supplied = windowsBySeat[seat.name] ?? {};
+		// An explicit, spec-supplied model wins over the persisted one (they agree today; the
+		// spec is the caller's deliberate answer).
+		const modelKey = modelsBySeat[seat.name] ?? agentModels[seat.name] ?? null;
 		context[seat.name] = contextConsumption(pages[seat.name] ?? [], {
 			measured: supplied.measured ?? null,
-			declared: supplied.declared ?? declaredContextWindow(cfg, modelsBySeat[seat.name]),
+			declared:
+				supplied.declared ??
+				declaredContextWindow(cfg, modelKey) ??
+				localSeatWindow(localSpec, modelKey),
 			advertised: supplied.advertised ?? null,
 		});
 	}
