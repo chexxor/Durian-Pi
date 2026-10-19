@@ -79,6 +79,9 @@ Priority is **not** the top of the 1300-line roadmap. It is:
    (`queued`/`claimed`/`deferred`).
 3. `node cli.mjs status` → `attention` — what the substrate already flags
    (`queue-ageing`, `admitted_not_started`, `generation_stale`, `deferred_awaiting_answer`).
+4. `docs/WORK-ITEM-LIFECYCLE.md` — when the next item is **blocked or parked**: the queue's states and
+   transitions, what wakes a seat (and what does not), and the read-only audit that finds `held` rows
+   whose gates already cleared. Procedure: `docs/runbooks/stale-held-backlog.md`.
 
 The join of (1) and (2) is the answer; the roadmap supplies the *why* behind the id. When the queue
 and `NEXT.md` disagree, trust the queue and correct `NEXT.md`.
@@ -193,6 +196,9 @@ needed it. (Operator note, 2026-10-15.)
 
 ## References
 
+- **`docs/WORK-ITEM-LIFECYCLE.md`** — the queue's states and transitions, who may move an item, what
+  wakes a seat, and the stuck taxonomy; read it before touching a parked/held item (procedure:
+  `docs/runbooks/stale-held-backlog.md`).
 - **`docs/BRANCH-AND-WORKTREE-LIFECYCLE.md`** — the model behind a landing or pruning pass: refs,
   worktrees, the three landing gates and which source is authoritative for each, the prune paths, and
   the suite-verdict traps. Read it before `land.md` / `branch-cleanup.md` / `leaked-worktrees.md`.
