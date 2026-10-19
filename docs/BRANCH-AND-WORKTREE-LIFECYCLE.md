@@ -16,7 +16,6 @@ places to answer one question.
 | `evidence` | a full land+prune pass: `main` `67228b9`→`3b79159` (17 branches), refs 111→83, worktrees 206→204, nothing forced; suite `pass=175 fail=1` (pitui) |
 
 ## How to re-verify this document (run these; they are the periodic check)
-
 Every factual claim below has a command. A verification pass runs this block and compares the results
 with the tables. If a command's output contradicts a claim, the **claim** is wrong — fix the doc, do not
 "fix" the rig.
@@ -218,3 +217,23 @@ restored an emptied `scripts/` directory (`tracked-files-missing-on-disk.md`), l
 branches (`main` `67228b9`→`3b79159`, suite `pass=175 fail=1`), pruned 13 refs (refs 111→83, worktrees
 206→204) — 12 by `-d`, 4 by relocation, 1 by the follower rule in §4.4 — with **nothing forced** and no
 `ahead>0` ref deleted. The traps in §4.2, §5, §6.1 and §6.2 were each hit and corrected during that pass.
+
+### Attacker/actor questions: query the SEAT HISTORIES, not only git
+When a working-tree change has no git explanation (files vanish, a file is edited by nobody), the seat
+conversations are the evidence that git cannot hold — a seat's tool calls are recorded there. Query them
+read-only through the sanctioned one-shot read, never a direct store handle while the broker runs:
+```bash
+node cli.mjs log <seat> 3000 --full      # one-shot, broker-served; --follow polls and forces passes
+```
+Each entry carries `model.timestamp` (epoch ms) and `toolName`, so a time window is filterable. In the
+2026-10-19 case that scan (22,042 entries, 12 seats) exonerated every seat with retained history, and
+surfaced the two limits that matter for any future investigation:
+- **Compaction destroys raw tool-call evidence** — a compacted seat keeps only a SUMMARY ("The
+  conversation history before this point was compacted…"), so a seat that compacted around the event
+  cannot be cleared from history alone.
+- **`git sparse-checkout` / a `skip-worktree` bit is NOT the signature** to look for: those leave
+  `git status` CLEAN. A tracked file reported ` D` means the file was removed from disk with the index
+  untouched — pure filesystem deletion, or a git verb that writes the worktree only.
+
+Full query, coverage limits and conclusion: `docs/incidents/2026-10-19-scripts-directory-emptied-on-disk.md`
+§ "Investigation".

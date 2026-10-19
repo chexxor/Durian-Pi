@@ -74,3 +74,46 @@ showing only pre-existing untracked scratch.
 - **Not prevented:** the actor that emptied the directory is still unknown. #2889/#2890 asked for the
   operator to identify it; until then this class can recur. A `check` rule that compares tracked-file
   presence on disk (`git ls-files` vs `fs.existsSync`) is the candidate durable control — not built.
+
+## Investigation 2026-10-19 — the SEAT HISTORIES were queried (they were not, originally)
+
+The first analysis searched git only (all refs, `--diff-filter=D`), the index, and the working tree. It
+did **not** query the seats' conversation histories, which is where a seat's tool calls are recorded — a
+gap the operator identified. The histories were then queried read-only through the sanctioned one-shot
+read (`node cli.mjs log <seat> <n> --full`; never a direct store handle while the broker runs).
+
+**What was established:**
+- **Seats CAN delete tracked files.** `powershell`, `write` and `edit` appear in the tool set of `impl`,
+  `qa`, `advocate`, `scribe`, `devtools`, `auditor`, `designer`, `security` and `architect` (`pm`, `lead`
+  are coordination-only: `claim_work`/`send_work`/`complete_work`/…). And every seat's root is the
+  **SHARED tree** (see `2026-10-17-seat-root-fallback-commit.md`), so seat confinement does not protect
+  the repo root. The mechanism therefore exists.
+- **No recorded tool call does it.** 22,042 retained entries across all 12 seats were scanned for a
+  destructive call (`Remove-Item`, `rm`, `rmdir`, `git rm`, `git clean`, `Move-Item`) — 86 matches, every
+  one a false positive (module source containing `unlink`/`rmSync`, or `Remove-Item` on probe files
+  *inside* item worktrees, e.g. `item-2608\.probe-2182.cjs`). Requiring `scripts/` and a removal verb in
+  the same entry gave 26 matches, all compaction summaries or `docs/NEXT.md` reads. **Nothing deleted
+  `scripts/`.**
+- **The git mechanisms that produce this exact signature are ruled out.** `core.sparseCheckout` is unset
+  and `.git/info/sparse-checkout` does not exist; `git ls-files -v scripts/` shows plain `H` entries, so
+  no `skip-worktree` bit masked them (a sparse/skipped checkout would leave `git status` CLEAN, not
+  deleted). `scripts/sync-pi.mjs` does use `git sparse-checkout init --cone` + `set … scripts`, but
+  scoped to its own `BUILD_DIR`, never the shared tree. No commit deletes the files.
+
+**Coverage limits — so this is not overclaimed:**
+- `log` returns the last N entries; older ones are dropped, and `assert`-style resets write boundaries.
+- **Compaction destroys raw evidence.** `devtools` compacted repeatedly at `08:16–08:23Z`, replacing its
+  history with summaries ("The conversation history before this point was compacted…"). `devtools` is
+  precisely the seat that was editing `scripts/land.mjs` (#2390) and `scripts/sync-pi.mjs` (#2336) at
+  that time, so **it is the one seat that cannot be exonerated from history alone** — its pre-compaction
+  tool calls no longer exist in a queryable form.
+
+**Conclusion: still UNVERIFIED, now with a bounded exoneration.** No seat is shown to have done it, and
+no git mechanism explains it; the remaining candidates are (a) a seat whose evidence was compacted away,
+and (b) an out-of-band process (editor, sync tool, AV quarantine, a human `rm`) that was never in any
+conversation. Do not record a culprit on this evidence.
+
+**Side finding worth its own item:** `auditor`'s conversation is a degenerate blob — thousands of lines
+of pseudo-tool-call noise across several languages, no usable transcript. It matches the documented
+degeneration class and means the `auditor` seat's history is contaminated (consistent with its repeated
+`400 Invalid request`). Route to `pm`.
