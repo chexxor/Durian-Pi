@@ -1293,7 +1293,7 @@ export async function runWakeLoop({
       // and it could not answer "which pass threw, and why". Messages only, never a payload.
       logBrokerLine(
         dbPath,
-        `PASS-FAILED ${described.error ?? "unknown"}${described.cause ? ` cause=${described.cause}` : ""}`,
+        `PASS-FAILED ${described.error ?? "unknown"}${described.cause ? ` cause=${described.cause}` : ""}${described.errcode !== undefined ? ` errcode=${described.errcode}` : ""}${described.errstr !== undefined ? ` errstr=${described.errstr}` : ""}`,
       );
     } finally {
       scheduler.endPass();
@@ -1366,13 +1366,35 @@ export function brokerLogPath(dbPath) {
  * The CAUSE is the only place a storage error names its real reason — `SessionFailed`
  * wraps the underlying failure, so logging only the outer message left the 17:29Z broker
  * death unexplained. Error MESSAGES only, never a payload (same discipline as #828/#700).
+ *
+ * #2496 (ROADMAP 159): the residual `database is locked` cause is UNVERIFIED, so the view
+ * also surfaces the SQLite `errcode`/`errstr` (and any string `code`) found anywhere in the
+ * cause chain. A message alone cannot tell ordinary writer contention from a mis-resolved
+ * store; the errcode can. The PROBE is the point — do not assert a cause before one is
+ * OBSERVED in a log.
+ *
+ * RECORDED FACT (#2496): pi-durable opens every transaction with `BEGIN IMMEDIATE`
+ * (vendor/pi-main/packages/durable/src/storage/sqlite/storage.ts), which takes the write
+ * lock UP FRONT and therefore STRUCTURALLY EXCLUDES the deferred-`BEGIN`
+ * `SQLITE_BUSY_SNAPSHOT` case. So a residual `database is locked` here cannot be a
+ * snapshot-busy; it is ordinary writer contention or a second/mis-resolved opener.
  */
-function describeError(error) {
+export function describeError(error) {
   const chain = [];
+  let errcode;
+  let errstr;
+  let code;
   for (let e = error, depth = 0; e && depth < 6; e = e.cause, depth++) {
     chain.push(`${e.name ?? "Error"}: ${e.message ?? String(e)}`);
+    if (errcode === undefined && e.errcode !== undefined) errcode = e.errcode;
+    if (errstr === undefined && e.errstr !== undefined) errstr = e.errstr;
+    if (code === undefined && typeof e.code === "string") code = e.code;
   }
-  return { error: chain[0] ?? null, cause: chain.length > 1 ? chain.slice(1).join(" <- ") : null };
+  const described = { error: chain[0] ?? null, cause: chain.length > 1 ? chain.slice(1).join(" <- ") : null };
+  if (errcode !== undefined) described.errcode = errcode;
+  if (errstr !== undefined) described.errstr = errstr;
+  if (code !== undefined) described.code = code;
+  return described;
 }
 
 /** Append one line to `<db>.broker.log`. */
