@@ -69,6 +69,7 @@ import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScr
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
+import { wrapProviderWithTrace } from "./src/providers/trace.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
 import { formatMetrics } from "./src/metrics.mjs";
 import { isLinkedWorktree, readSharedTreeBranch } from "./src/featuredocs.mjs";
@@ -264,12 +265,18 @@ function buildModels(live = null) {
         })
       : FAUX.provider;
     models.setProvider(
-      live
-        ? wrapProviderWithLiveView(gated, {
-            renderer: live,
-            getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
-          })
-        : gated,
+      wrapProviderWithTrace(
+        live
+          ? wrapProviderWithLiveView(gated, {
+              renderer: live,
+              getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+            })
+          : gated,
+        // ROADMAP 43c / #920 (#2545): the request TRACE attaches HERE, at the one provider seam every
+        // run path builds (send/up/run/serve and the optimizer), so one line covers all of them and
+        // cannot drift. Off unless DURIG_TRACE_REQUESTS=1; returns the provider unchanged when off.
+        { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
+      ),
     );
     return { models, providerId: "faux" };
   }
@@ -327,18 +334,27 @@ function buildModels(live = null) {
   // Live view sits OUTSIDE the slot gate: it labels the stream even while a
   // generation waits for a free slot, and never alters what consumers see.
   models.setProvider(
-    live
-      ? wrapProviderWithLiveView(gated, {
-          renderer: live,
-          getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
-        })
-      : gated,
+    wrapProviderWithTrace(
+      live
+        ? wrapProviderWithLiveView(gated, {
+            renderer: live,
+            getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+          })
+        : gated,
+      // The same one trace seam as the faux branch above (ROADMAP 43c / #920, #2545).
+      { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
+    ),
   );
   // Register the local provider AFTER the default: resolveSeatModel reads the
   // provider prefix only when it is registered, so a seat model "local/<id>"
   // uses the local server while every other seat keeps the default provider.
   const localSpec = localProviderSpec(CFG);
-  if (localSpec) models.setProvider(createLocalProvider(localSpec, { createProvider, api: ocApi }));
+  if (localSpec)
+    models.setProvider(
+      wrapProviderWithTrace(createLocalProvider(localSpec, { createProvider, api: ocApi }), {
+        getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+      }),
+    );
   return { models, providerId: "deepinfra" };
 }
 
