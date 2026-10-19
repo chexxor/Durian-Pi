@@ -65,7 +65,7 @@ import {
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
-import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
+import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, logBrokerLine, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -1601,7 +1601,10 @@ async function cmdStopBroker() {
     out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "no broker is running" });
     return;
   }
-  if (!brokerAlive(state)) {
+  // #2420: liveness is RAW pid existence. A stale heartbeat does NOT mean the process is
+  // gone — a broker wedged in a pass stops heartbeating while still running, and reading
+  // that as "dead" cleared a live broker's state and reported `stopped:true` for it.
+  if (!pidAlive(state.pid)) {
     clearBrokerState(DB_PATH);
     out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "state was stale; cleared" });
     return;
@@ -1612,11 +1615,15 @@ async function cmdStopBroker() {
   // previous 5s window, so we give up to 60s for cooperative settlement. No forced
   // kill: the broker WILL exit once its pass settles — waiting longer honours that.
   writeStopRequest(DB_PATH);
-  const deadline = Date.now() + 60_000;
-  while (Date.now() < deadline && brokerAlive(state)) {
+  // #2420: liveness here is RAW pid existence, not `brokerAlive`. `brokerAlive` also
+  // demands a fresh heartbeat, so a broker wedged in a pass reads as dead and this command
+  // reported `stopped:true` for a pid that was still running. The wait is a ceiling: the
+  // broker exits at its own stop grace, so this only has to outlast that.
+  const deadline = Date.now() + resolveStopGraceMs() + 5_000;
+  while (Date.now() < deadline && pidAlive(state.pid)) {
     await new Promise((r) => setTimeout(r, 100));
   }
-  const stillAlive = brokerAlive(state);
+  const stillAlive = pidAlive(state.pid);
   if (!stillAlive) {
     clearBrokerState(DB_PATH);
     clearStopRequest(DB_PATH);
@@ -1633,7 +1640,7 @@ async function cmdStopBroker() {
   // Bounded grace period expired: the broker could not settle in time. Do not
   // force-kill — the operator should investigate with `status`.
   console.warn(
-    `serve --stop: broker pid ${state.pid} did not exit within 60s; ` +
+    `serve --stop: broker pid ${state.pid} did not exit within the grace; ` +
       `pass may still be in-flight — check with \`serve --stop\` again`,
   );
   out({
@@ -1643,7 +1650,7 @@ async function cmdStopBroker() {
     db: DB_PATH,
     stopped: false,
     pid: state.pid,
-    reason: "pass did not settle within 60s; no forced kill — check status again",
+    reason: "did not exit within the stop grace; no forced kill — check status again",
   });
 }
 
@@ -1659,6 +1666,17 @@ async function cmdStopBroker() {
 // starts, and cools off a per-seat retry so a re-woken stalled claim cannot hot-loop.
 // The supervisor runs each pass, exactly as `run --watch`. Bounded with
 // --max-duration; SIGINT/SIGTERM stop after the pass in flight settles.
+// #2420: the bounded-stop grace, in ms. Default a few seconds; a non-positive value is
+// honoured (0 disables the bound), but an unparseable one falls back to the default so a
+// bad env cannot silently remove the bound.
+const STOP_GRACE_DEFAULT_MS = 5_000;
+function resolveStopGraceMs() {
+  const raw = process.env.DURIG_STOP_GRACE_MS;
+  if (raw === undefined || raw === "") return STOP_GRACE_DEFAULT_MS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : STOP_GRACE_DEFAULT_MS;
+}
+
 async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   if (stop) return cmdStopBroker();
   // One broker per database: a second would be a second driver, and its wakes would
@@ -1725,9 +1743,38 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   })();
   const startedAt = Date.now();
   let stopping = false;
+  let stopRequestedAt = null;
+  // #2420 (operator ruling): a resident daemon must have a BOUNDED graceful stop with an
+  // unconditional force fallback. `DURIG_STOP_GRACE_MS` is how long the broker may keep
+  // draining after a stop is requested: the loop exits with `stoppedBy=deadline` at the
+  // bound, and this timer is the LAST resort for a pass wedged inside a single hung call,
+  // where no loop or in-pass check is ever reached. 0 disables the force timer.
+  const stopGraceMs = resolveStopGraceMs();
+  let forceTimer = null;
   const onSignal = () => {
+    if (stopping) return;
     stopping = true;
+    stopRequestedAt = Date.now();
     signal.raise(); // interrupt a resting wait, so a signal is not stuck behind the floor
+    if (stopGraceMs > 0) {
+      forceTimer = setTimeout(() => {
+        // systemd TimeoutStopSec -> SIGKILL: the pass did not settle within the grace, so
+        // exit anyway rather than become an unkillable daemon.
+        try {
+          logBrokerLine(DB_PATH, `EXIT pid=${process.pid} reason=deadline passes=-`);
+        } catch {
+          // the log is best-effort on the force path
+        }
+        try {
+          clearBrokerState(DB_PATH, process.pid);
+          clearStopRequest(DB_PATH);
+        } catch {
+          // ignore: the process is leaving
+        }
+        console.error(JSON.stringify({ ok: true, command: "serve", forced: true, stoppedBy: "deadline" }));
+        process.exit(0);
+      }, stopGraceMs);
+    }
   };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
@@ -1775,6 +1822,8 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
       maxDurationMs,
       startedAt,
       isStopping: () => stopping,
+      stopGraceMs,
+      stopRequestedAt: () => stopRequestedAt,
       dbPath: DB_PATH,
       source: worktreeSource,
       worktreeRoot: process.cwd(),
@@ -1789,6 +1838,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
       stoppedBy: result.stoppedBy,
     });
   } finally {
+    if (forceTimer) clearTimeout(forceTimer);
     // Clear only OUR state: a newer broker that already took over must keep its file.
     clearBrokerState(DB_PATH, process.pid);
     clearStopRequest(DB_PATH);
