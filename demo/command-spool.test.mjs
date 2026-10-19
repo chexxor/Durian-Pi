@@ -67,7 +67,7 @@ try {
   //    written before the spool keep working, and a mutating verb EXTENDS this array rather
   //    than opening a second writer. The additions so far are `pause`/`unpause` (ROADMAP 131,
   //    #1841), `compact` (ROADMAP 71, #1904), `read` (D111, broker-served reads) and
-  //    `configure` (D105/D106 seat-doc-write, #2182).
+  //    `configure` (D105/D106 seat-doc-write, #2182; operator-only since #1966).
   assert.deepEqual(
     SPOOL_OPS,
     ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure"],
@@ -124,7 +124,9 @@ try {
   assert.ok(pendingBefore, "a submission is pending before the stop request");
 
   const R3 = "req-stop-1";
-  writeIntent(dbPath, { op: "stop", to: "worker", reason: "spool test", requestId: R3 });
+  // `from: "operator"` is REQUIRED: `stop` acts on a named seat, so #1966's gate makes
+  // it operator-only (this test stands in for the operator producing the intent).
+  writeIntent(dbPath, { op: "stop", to: "worker", reason: "spool test", requestId: R3, from: "operator" });
   const stopped = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
   assert.deepEqual(stopped, { delivered: 1, deadLettered: 0, duplicates: 0 }, `stop drain ${JSON.stringify(stopped)}`);
   const r3 = readResult(R3);
@@ -141,7 +143,7 @@ try {
 
   // 3b. A `reset` op draws the shared reset boundary (#402) with the broker's writer.
   const R4 = "req-reset-1";
-  writeIntent(dbPath, { op: "reset", to: "worker", handoff: "RESET-HANDOFF", requestId: R4 });
+  writeIntent(dbPath, { op: "reset", to: "worker", handoff: "RESET-HANDOFF", requestId: R4, from: "operator" });
   const reset = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
   assert.deepEqual(reset, { delivered: 1, deadLettered: 0, duplicates: 0 }, `reset drain ${JSON.stringify(reset)}`);
   const r4 = readResult(R4);
@@ -155,7 +157,7 @@ try {
 
   // 3c. A reset for an unknown seat is REFUSED and dead-lettered by name, never a
   //     silent no-op.
-  writeIntent(dbPath, { op: "reset", to: "ghost", requestId: "req-reset-ghost" });
+  writeIntent(dbPath, { op: "reset", to: "ghost", requestId: "req-reset-ghost", from: "operator" });
   const ghostReset = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
   assert.equal(ghostReset.deadLettered, 1, "a reset for an unknown seat is dead-lettered");
 
