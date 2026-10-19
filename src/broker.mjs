@@ -1159,7 +1159,7 @@ export async function drivePass(
   harness,
   probeStorage,
   { context, seatFilter, readBusySeats, onError, onWoke, onSuppressed, currentSeat: initialSeat,
-    dbPath, onDiagnostic, waitForWakes = true, readStorage } = {},
+    dbPath, onDiagnostic, waitForWakes = true, readStorage, shouldStop } = {},
 ) {
   // Deliver any spooled operator intent FIRST, so the submission it creates is visible
   // to this pass's `inspect` and the seat is not also submitted a fixed wake.
@@ -1256,6 +1256,9 @@ export async function drivePass(
     onError,
     onWoke: wrapOnWoke,
     onSuppressed,
+    // #2420: an in-pass stop predicate. Checked before each wake so a pass stops
+    // submitting NEW work the moment a stop is requested, not only at the loop boundary.
+    shouldStop,
     // AC3: a wake refused because the rig is paused is LEGIBLE, never silent.
     onPaused: (name) => onDiagnostic?.({ kind: "wake-refused-paused", seat: name, reason: "rig paused" }),
   });
@@ -1286,6 +1289,29 @@ export async function drivePass(
   }
 
   return { actioned, seats };
+}
+
+/**
+ * Await `promise` but never longer than `ms`; a `ms <= 0` skips the wait entirely.
+ *
+ * #2420: used to bound the FINAL drain when the broker is exiting on the stop deadline.
+ * The whole point of the bound is that a wedged pass or a live seat run must not hold the
+ * process open past its grace — so the timer is cleared the moment the wait settles, and
+ * a rejection from the guarded wait is swallowed (the process is leaving anyway).
+ */
+async function settleWithin(promise, ms) {
+  if (!(ms > 0)) return;
+  let timer;
+  try {
+    await Promise.race([
+      Promise.resolve(promise).catch(() => {}),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
@@ -1332,6 +1358,15 @@ export async function runWakeLoop({
   reopen = null,
   reopenCap = 3,
   reopenBackoffMs = 5_000,
+  // #2420 (operator ruling): a resident daemon must have a BOUNDED graceful stop with an
+  // unconditional force fallback. `stopGraceMs` bounds how long the loop may keep draining
+  // after a stop is REQUESTED — once it expires the loop exits with `stoppedBy="deadline"`
+  // rather than waiting on a wedged pass or a live seat run. 0 keeps the legacy unbounded
+  // cooperative drain (a one-shot `run` has no resident loop to protect).
+  stopGraceMs = 0,
+  // When the CALLER observed its own stop signal (ms since epoch), or null. Only the
+  // signal path needs it; a `.stop` file carries its own request time in its content.
+  stopRequestedAt = () => null,
 }) {
   const failedSeats = new Set();
   const escalations = [];
@@ -1354,6 +1389,29 @@ export async function runWakeLoop({
   // Consecutive passes that dropped a wake via `wake-failed`; drives the retry
   // backoff below. Any pass that failed no wake resets it to 0.
   let consecutiveWakeFailures = 0;
+  // #2420: the stop is bounded and interruptible. `stopKind()` names the pending stop;
+  // the grace deadline is measured from when it was REQUESTED (the signal's timestamp, or
+  // the timestamp the `.stop` file carries), not from when the loop happens to notice it —
+  // so a stop that arrived while a pass was running is not granted a fresh grace each turn.
+  const graceMs = Number.isFinite(stopGraceMs) && stopGraceMs > 0 ? stopGraceMs : 0;
+  const stopKind = () =>
+    isStopping() ? "signal" : dbPath && readStopRequest(dbPath) !== null ? "stop" : null;
+  const stopRequestedMs = () => {
+    const signalled = stopRequestedAt();
+    if (typeof signalled === "number") return signalled;
+    if (!dbPath) return null;
+    const raw = readStopRequest(dbPath);
+    const parsed = raw === null ? NaN : Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const graceExpired = () => {
+    if (graceMs <= 0) return false;
+    const at = stopRequestedMs();
+    return at !== null && now() - at >= graceMs;
+  };
+  // Handed to `driveOnce`: once a stop is pending, stop submitting NEW wakes so a long
+  // pass is interruptible (acceptance 3).
+  const shouldStopPass = () => stopKind() !== null;
   // Work may have been queued while nothing was running — the exact #238 finding
   // (three items queued with nothing driving) — so the first pass is forced
   // rather than waiting for a future commit.
@@ -1407,8 +1465,12 @@ export async function runWakeLoop({
     }
   }
   for (;;) {
+    // A raised SIGNAL (SIGINT/SIGTERM) stops at once. A `.stop` FILE is deliberately NOT
+    // checked here: F35's contract is that a request is honoured after the pass in flight
+    // settles (demo/stoprequest.test.mjs), and the idle/post-pass checks below are where it
+    // lands. The grace only decides WHETHER the drain is already over (`deadline`).
     if (isStopping()) {
-      stoppedBy = "signal";
+      stoppedBy = graceExpired() ? "deadline" : "signal";
       break;
     }
     if (maxDurationMs > 0 && now() - startedAt >= maxDurationMs) {
@@ -1432,9 +1494,12 @@ export async function runWakeLoop({
       // turn, so the stop was only seen at the END of a pass — an operator saw `serve --stop`
       // return stopped:true (and clear broker.json) while the orphan kept looping. Checking
       // here makes the stop authoritative regardless of the inbox or an active backoff.
-      if (dbPath && readStopRequest(dbPath) !== null) {
-        clearStopRequest(dbPath);
-        stoppedBy = "stop";
+      const idleStop = stopKind();
+      if (idleStop) {
+        // Read the deadline BEFORE clearing the file: the request time lives in its content.
+        const expired = graceExpired();
+        if (idleStop === "stop") clearStopRequest(dbPath);
+        stoppedBy = expired ? "deadline" : idleStop;
         break;
       }
       // A spooled operator intent must not wait for an unrelated commit: the
@@ -1524,6 +1589,7 @@ export async function runWakeLoop({
         waitForWakes: false,
         dbPath,
         onDiagnostic,
+        shouldStop: shouldStopPass,
         onError: (failure) => {
           failedSeats.add(failure.name);
           failedThisPass.add(failure.name);
@@ -1678,9 +1744,12 @@ export async function runWakeLoop({
     // F35: cooperative stop — a `serve --stop` command writes a .stop file
     // instead of process.kill (which does not deliver SIGTERM on Windows). The
     // broker honours it here, after the pass in flight has settled.
-    if (dbPath && readStopRequest(dbPath) !== null) {
-      clearStopRequest(dbPath);
-      stoppedBy = "stop";
+    const postStop = stopKind();
+    if (postStop) {
+      // Read the deadline BEFORE clearing the file: the request time lives in its content.
+      const expired = graceExpired();
+      if (postStop === "stop") clearStopRequest(dbPath);
+      stoppedBy = expired ? "deadline" : postStop;
       break;
     }
   }
@@ -1690,7 +1759,19 @@ export async function runWakeLoop({
   // scope here, exactly as the old global wait used to do at every pass. This
   // is the one place a global wait belongs.
   if (heartbeat) clearInterval(heartbeat);
-  await h.waitForIdle(context);
+	// The handle is `h`, not `harness`: main's reopen swap (`let h = harness`, reassigned after a
+	// SessionFailed recovery) moves it, so the drain must wait on the live handle.
+  // #2420: when the exit is on the DEADLINE (or the grace has already run out), do NOT park
+  // it on a wedged pass or a live seat run — bound the drain by whatever grace remains. The
+  // ordinary cooperative stop keeps F11's unbounded drain, so the harness is never closed
+  // over a live run.
+  if (stoppedBy === "deadline" || graceExpired()) {
+    const at = stopRequestedMs();
+    const remaining = graceMs > 0 && at !== null ? Math.max(0, graceMs - (now() - at)) : 0;
+    await settleWithin(h.waitForIdle(context), remaining);
+  } else {
+    await h.waitForIdle(context);
+  }
   // Close the audit opened by START: the reason the broker stopped (a `.stop` request, a
   // bound, or a signal) survives the process here instead of only on stdout.
   logBrokerLine(dbPath, `EXIT pid=${process.pid} reason=${stoppedBy ?? "unknown"} passes=${passes}`);
@@ -1847,6 +1928,26 @@ export function brokerHealth(state, { now = Date.now(), streamTimeoutMs = null }
     };
   }
   return { state: "up", pid: state.pid, hbAgeMs, passAgeMs };
+}
+
+/**
+ * Raw pid liveness: does this pid exist right now? No heartbeat gate.
+ *
+ * `brokerAlive` ALSO requires a fresh heartbeat, so a broker wedged inside a pass — one
+ * that stopped heartbeating but is still running — reads as DEAD through it. That is the
+ * wrong question for "has the process actually exited", and `serve --stop` reported
+ * `stopped:true` for a live pid because of it (#2420). Use THIS for pid-death checks; use
+ * `brokerAlive` for identity (is the pid still the broker that wrote the state).
+ */
+export function pidAlive(pid) {
+  if (typeof pid !== "number") return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM means the process exists but we cannot signal it — still alive.
+    return err?.code === "EPERM";
+  }
 }
 
 /** Read the broker state; an unreadable file is reported and treated as absent. */

@@ -140,7 +140,7 @@ export async function probeSeatReadability(storage, candidates, context) {
  */
 export async function driveOnce(
   harness,
-  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, onSuppressed, onPaused, seatFilter, paused = false },
+  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, onSuppressed, onPaused, seatFilter, paused = false, shouldStop },
 ) {
   const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds, paused });
   // Legible refusal (ROADMAP 131 AC3): while paused, a seat that WOULD have been woken
@@ -170,6 +170,10 @@ export async function driveOnce(
   }
   let actioned = 0;
   for (const wake of wakes) {
+    // #2420: a stop request must interrupt a pass MID-FLIGHT, not only at the loop
+    // boundary. Checked before each wake so no NEW wake is submitted once stopping; the
+    // wakes already submitted are left to settle.
+    if (typeof shouldStop === "function" && shouldStop()) break;
     try {
       const conv = await harness.conversation(wake.conversationId, context);
       if (!conv) continue;
