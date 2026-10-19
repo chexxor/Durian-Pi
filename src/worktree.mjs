@@ -178,7 +178,7 @@ export async function installWorktreeDeps(worktreePath) {
  * the new worktree, so the returned `cwd` is the same relative place a seat would otherwise have
  * had, and a rig's declared `cwd` keeps meaning when the tree underneath it changes.
  */
-export async function createWorktree({ source, target, ref = "HEAD", branch = null }) {
+export async function createWorktree({ source, target, ref = "HEAD", branch = null, carry = true }) {
 	const root = await repoRoot(source);
 	if (existsSync(target)) {
 		throw new Error(`refusing to reuse an existing path as a worktree: ${target}`);
@@ -191,6 +191,11 @@ export async function createWorktree({ source, target, ref = "HEAD", branch = nu
 	// and RETURN it. The anti-stale guarantee stays — the fork contains everything
 	// the source visibly held (#240) — but the fork is no longer “a tree neither
 	// git nor the operator tracks”: it is HEAD plus an enumerated, returned list.
+	// #2360: CARRY is OPT-IN (`carry`, default true). The SEAT path
+	// (claimWorktree/prepareSeatWorkspace) passes `carry: false`, so a seat's item worktree is a
+	// CLEAN HEAD checkout. The old unconditional carry copied the shared tree's dirty state into
+	// every fork, which made a completed item's worktree permanently un-removable (teardown is
+	// clean-only, D60) while the shared tree was dirty — the CARRY/teardown collision.
 	const dirty = await uncommittedInSource(source);
 	// Attach the item's own BRANCH when asked — the P2 commit discipline expects
 	// commits to land on `impl-item-N`, not a detached HEAD (#859). `-b` creates the
@@ -206,7 +211,7 @@ export async function createWorktree({ source, target, ref = "HEAD", branch = nu
 	// using-git-worktrees rule). A target outside the repo is a no-op.
 	await ensureIgnored({ repo: root, target });
 	await run("git", ["-C", root, ...addArgs]);
-	const carried = dirty.trim() === "" ? [] : await carryVisibleState({ source, target });
+	const carried = carry && dirty.trim() !== "" ? await carryVisibleState({ source, target }) : [];
 
 	const inside = relative(root, resolve(source));
 	const cwd = inside === "" ? target : join(target, inside);
@@ -485,7 +490,10 @@ export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = "HE
 	if (existsSync(target)) {
 		throw new Error(`worktree path already exists: ${target}`);
 	}
-	const result = await createWorktree({ source, target, ref, branch });
+	// #2360: the SEAT path forks HEAD-CLEAN (`carry: false`) so a completed item's worktree is
+	// never born dirty with the shared tree's foreign WIP and CAN be torn down (teardown is
+	// clean-only, D60). A direct caller can still opt into the anti-stale carry (#240).
+	const result = await createWorktree({ source, target, ref, branch, carry: false });
 	// Validate identity before returning — refuses if the worktree resolves
 	// back to the main checkout through a redirect.
 	await validateWorktreeIdentity(result.worktree);
