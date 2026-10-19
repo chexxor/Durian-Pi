@@ -286,3 +286,23 @@ DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys,collec
 
 If the code disagrees with a shape above, the **document** is wrong — correct it; never bend the
 lifecycle to match the doc.
+
+### 8a-note — a branch held by ANOTHER worktree (the landing-blocker sub-case)
+
+If `git` says *"`<branch>` is already checked out in the worktree `item-<id>`"*, your branch is not lost and
+your rebase is not wrong — **git will not let two trees hold one branch**. Look at the holder before
+concluding anything:
+
+```bash
+git worktree list | grep -E "\[<branch>\]"          # which tree holds it (and whether it is locked)
+```
+
+- **Holder is your own tree** → you are in it; there is nothing to do.
+- **Holder is a terminal item's tree** (`done`/`cancelled`) → this is a LANDING BLOCKER, and no seat can
+  free it safely from inside a seat run. **Report it; do not `--force`, do not rebuild.** The delegate frees
+  it losslessly with `git -C <path> switch --detach` (frees the branch, keeps every file).
+- **Holder is a live item's tree** → the branch is in use; it is not yours to move.
+
+Escalating here is correct but slow; say **which** of the three it is, and name the holder path, so the
+freed branch is one command away. See
+`incidents/2026-10-19-terminal-worktree-mistaken-for-lost-work.md` (RECURRENCE).
