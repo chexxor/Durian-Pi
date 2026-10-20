@@ -154,9 +154,12 @@ landable-now (1754/2188), needs-a-list (2616 etc.), verify-open (2969/3174), unc
 conflict families needing author rebase + fresh verify, 11 DRIFT pins, 17 snapshot/duplicate refs, and
 the two dirty verify scratches. Full per-branch table in `.spike/delegate/model-1017/preflight-final.tsv`.
 The biggest lever pm now owns: the stale **#2312/#2313** rebase-pass items that hide ~20 verified-against-
-an-older-main branches. **Final state at clock-out:** `main` `38081fd` (this session's code `4d96ae9`, docs
-`38081fd`), refs 93, worktrees 203, suite `pass=179 fail=1` (`pitui`). Two seat commits landed mid-session
-(`440d071` local-provider doc, `2b9a14b` session learnings) — neither touched the landing set.
+an-older-main branches. **Final state at clock-out:** `main` `5527dd3` (this session's code `4d96ae9`, docs through `5527dd3`),
+suite `pass=179 fail=1` (`pitui`). The pass ended at refs 93 / worktrees 203; by clock-out the seats had
+opened their rework branches (`devtools-item-3238` regenerating the manifest, `impl-item-3241` the
+encoding fix, `impl-item-3192`, `scribe-item-3035/3089`), so the live counts are **98 refs / 206
+worktrees** — that growth is the handoff working, not a prune regression. Two seat commits landed
+mid-session (`440d071` local-provider doc, `2b9a14b` session learnings); neither touched the landing set.
 
 **DOCS UPDATED this pass:** new incident
 `docs/incidents/2026-10-20-stale-derived-manifest-landing.md` (+ index row); `land.md` gained the
