@@ -1,6 +1,6 @@
 # durian-pi — NEXT (current pointer)
 
-## NEXT SESSION  (2026-10-20 — the ONLY live pointer; every later "NEXT SESSION" is history)
+## NEXT SESSION (2026-10-20 — the ONLY live pointer; every later "NEXT SESSION" is history)
 
 **Current item:** the `main` regression is **FIXED** — the delegate landed `revert-9c3aa02` as merge
 `798836b` (`main` `db96a05` -> `798836b`). Cause: a bare `git commit` by the delegate swept a seat's
@@ -122,7 +122,7 @@ at `.spike/delegate/queue-hygiene-2026-10-20/intent.md`). Counts: **held 227 · 
 queued 48**; only **2** rows carry `deferredTo:"human"`.
 
 **THE DEADLOCK (corrects what this file said one section above): `#3347` IS NOT DONE.** Its `done` at
-`05:23:22Z` claims *"branch tip identical to main, the commit was already on main"* — **false, proved by
+`05:23:22Z` claims _"branch tip identical to main, the commit was already on main"_ — **false, proved by
 the branch's own reflog**: the branch WAS at `dd2583b` (1 ahead of main, carrying `src/compacteval.mjs`),
 and `qa` rebased it **onto `0a38f1f`, i.e. onto itself**, producing an EMPTY branch. Now
 `qa-item-1087` is 0 ahead of main with no `compacteval.mjs`; `dd2583b` is **not** an ancestor of main and
@@ -190,8 +190,8 @@ all 5, HEAD held all 5 blobs, **`git log --all --diff-filter=D` EMPTY** -> never
 with the FILE-LIST form (`git ls-files <paths> | xargs -0 git checkout-index -f --`; a directory does not
 recurse). Verified: **0 deletions left**, `node --check` exit 0, byte-identical modulo CRLF. Nothing discarded.
 
-**ATTRIBUTED: `cli.mjs` +7/−0 is `impl`'s** — it adds the *"P5 / #110 exception … lead ruling #2874,
-option B"* comment, i.e. a **#2578 follow-up**. Main's `2bb0427` documents the exception "at both opens" but
+**ATTRIBUTED: `cli.mjs` +7/−0 is `impl`'s** — it adds the _"P5 / #110 exception … lead ruling #2874,
+option B"_ comment, i.e. a **#2578 follow-up**. Main's `2bb0427` documents the exception "at both opens" but
 `main:cli.mjs` does **not** contain it (`grep -c` -> 0) while the worktree does (-> 1). **Steered**
 (`operator-shared-tree-steer-impl-2026-10-20-1`, delivered `07:09:21Z`): confirm authorship, redo it in a
 worktree via `prepare_workspace`, commit on a branch + landing entry, and do NOT `checkout`/`restore`/`reset`
@@ -219,6 +219,7 @@ held BEFORE the local move. Done, then verified.
 **Model moves in `rig.selfdev.json`** (both ids were ALREADY in `fallbackModels()`, so no catalog edit was
 needed — that is the catalog-entry-first rule satisfied by inspection, and `demo/deepinfra-catalog.test.mjs`
 still passes with "12 rig seats resolve"):
+
 - `qa`: `local/swift-1.5-iq2_xs` -> **`Qwen/Qwen3.6-35B-A3B`** (its own pre-local DeepInfra verifier model).
 - `devtools`: `local/swift-1.5-iq2_xs` -> **`deepseek-ai/DeepSeek-V4.1-Flash`** (its own pre-local model).
   The author/verifier split still holds and is now CROSS-FAMILY again (devtools authors DeepSeek, qa
@@ -247,7 +248,6 @@ delete `*.genlock.*`, restart `scripts/serve-noroot.ps1`, then confirm `admitted
 **Suite after all of it: `pass=180 environmental=0 fail=1`** (`pitui`, #2412), unchanged from the pass #6
 baseline — the rig change touched no code.
 
-
 ## CLOCK-OUT (2026-10-20T03:00Z, delegate) — **#3174 LANDED (`main` `b4e88ff`), 3 LANDINGS/PRUNES, 4 LANDING-LIST DEFECTS CAUGHT, 1 VERIFIER INCIDENT RECOVERED**
 
 **Read this first.** The operator's priority stack was #3174 → landing/prune backlog → the M-series.
@@ -266,12 +266,13 @@ direction) and **#3185** (the path-naming migration `item-<id>-<seat>`, lead's r
 
 **2. The landing list was wrong FOUR times, and preflight caught each — not a landing.** This is the
 reusable part, and `merge-tree` alone would have missed two of them:
+
 - **#3256 said land `devtools-item-1754` AND `devtools-item-2188`.** They are **the same patch**
   (`git patch-id --stable` → identical `b50d9ae9…`, identical trees, identical blob). I landed ONE
   (`fa4e03d`); pm opened **#3340** to confirm `2188`'s content is on `main` (its commit is not an ancestor,
   so `git branch -d` correctly refuses — a CONTENT, not an ancestry, question).
 - **#3254 wanted `devtools-item-3238 @7284834`.** `merge-tree` → `CONFLICT (modify/delete):
-  demo/test-areas.json deleted in main and modified in …`. Cause: `0976cc4` reverted the WHOLE `#1558`
+demo/test-areas.json deleted in main and modified in …`. Cause: `0976cc4` reverted the WHOLE `#1558`
   stack, so the branch's base is gone. pm opened **#3341**: rebase the whole two-commit stack, then
   regenerate the manifest against the current `demo/` — the stale-derived-manifest rule again.
 - **#3134/#3126 were two landing lists for two CLEAN branches that CONFLICT WITH EACH OTHER** in either
@@ -325,6 +326,7 @@ measure in `warn` band 1 on every read. Passes are healthy (500+, ~5–25 ms) an
 known store-contention class, not a new wedge.
 
 ## NEXT SESSION
+
 **Current item:** the **serialized DECISIONS.md UNION pass** is the throughput unlock for the docs half
 (`#3268` → `#3343`), and the **owner rebase passes** (`#3259`/`#3260`/`#3288`/`#3292`/`#3341`/`#3347`) are
 the unlock for everything else. On the code side **`#3308`/`#3309` → `#3313`** (the operator's TUI
@@ -381,6 +383,7 @@ priority/overlap adjudication (claimed). Next session: check #3312's ruling, the
 Note: `send` is refused while the broker drives — use `node intent.mjs <seat> --body-file <file>`.
 
 ## NEXT SESSION
+
 **Current item:** the operator TUI slice — follow **#3312** (lead's priority/overlap ruling) and the
 build chain **#3307 → #3308/#3309 → #3313**, verifies **#3314/#3315**.
 **Queue id:** `#3312` (ruling) · `#3307`/`#3308`/`#3309`/`#3313` (build) · `#3314`/`#3315` (verify).
@@ -396,8 +399,8 @@ backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
 ## CLOCK-OUT / SESSION LOG (2026-10-20, delegate) — **HUMAN QUEUE CLEARED, 2 PASSES (11 BRANCHES, 10 TREES), 2 INCIDENTS + 1 ROOT CAUSE, 50-COMMIT DOCS AUDIT, LOCAL MODEL → SWIFT 1.5**
 
-*Read this with the `2026-10-20T01:10Z` block below (a parallel delegate session landed the concurrent suite and
-reverted one branch). This block records what THIS session did and what it learned, so nobody re-derives it.*
+_Read this with the `2026-10-20T01:10Z` block below (a parallel delegate session landed the concurrent suite and
+reverted one branch). This block records what THIS session did and what it learned, so nobody re-derives it._
 
 **1. The human queue — answered, not just relayed.** 10 rows sat on `deferredTo:"human"`; they were really
 **5 questions**, 1 already answered by evidence, 1 a resume, and 6 stale liveness escalations from a dead `pm`.
@@ -409,6 +412,7 @@ unclaimable, so "registered" is not "will happen" — check the held bucket, not
 **2. Two landing + worktree passes (#3, #4): 11 branches landed, 10 terminal trees relocated, refs 95→88.**
 `main` moved `f495091` → `66d0ce9` → `ee651e0`. Provenance and counts are in `land.md` / `branch-cleanup.md`
 (dated entries) — read those, not this summary. Four traps were added there because they cost real landings:
+
 - **A batch is ATOMIC and its `merged[]` is NOT a report** — it lists scratch merges whose `main` never moved.
 - **`add/add` conflicts are order-independent** — two branches that both ADD a path can merge in NEITHER order;
   run the `diff --numstat` superset test and resolve to the superset (that is how `architect-item-3005` landed
@@ -441,7 +445,7 @@ claimed to carry "the live values" while listing `impl` on GLM (it is DeepSeek-V
 `local/qwen36`, now Swift), `devtools` on DeepSeek (it was qwen36), omitting `qa2` + `architect`, saying "Ten
 seats" when there are 12, and asserting the author/verifier split "is still GLM vs DeepSeek" — **false**, and it
 hid that **`devtools` and `qa` shared `local/qwen36`**, i.e. same-family verification. Fixed, with the derivation
-command inline and the *rule* (a verifier must not share a family with the author) stated instead of a slogan.
+command inline and the _rule_ (a verifier must not share a family with the author) stated instead of a slogan.
 `FEATURES.md` had the pi-pin order BACKWARDS (`#2976` runs `sync-pi --link` **before** `npm ci`); added the
 missing Request TRACE (`#2545`), `blockedBy` (`#2951`) and operator-only `pause`/`unpause`/`configure` (`#1966`).
 
@@ -462,6 +466,7 @@ by itself. The discriminator is now in `runbooks/broker-down-or-stalled.md`: sto
 window, re-read `passAgeMs`.
 
 ## NEXT SESSION
+
 **Current item:** **`#3174`** — `prepare_workspace` must resolve a branch it cannot hold and REFUSE to steal
 another seat's worktree (root cause in `src/worktree.mjs:566-568`/`:602`/`:278`; full account in the sev3
 incident). **`#3175`** is the `lead` ruling on item-keyed path vs seat-keyed branch — do not let an implementer
@@ -492,6 +497,7 @@ Both are done; the pass found two branches that are NOT landable as-is (below) a
 seat arrived mid-pass.
 
 **Landed (kept):**
+
 - `scribe-item-3167` @`b0e9d75` — DECISIONS D113 (waiting ADR) + D114 (CARRY); merge `35f8ae6`.
 - `impl-item-3062` @`eb3b337` — M1a structured gate field; merge `a55535e`. (M1b `#3056` stays HELD per
   the ruling in `#3208`; `impl-item-3017` is superseded by it.)
@@ -572,6 +578,7 @@ force a dirty worktree; push (operator holds the grant).
 and to make the change actually take this time. Done, in that order: **catalog entry first**, then the rig.
 
 **What was done (commit names both):**
+
 1. **`src/providers/deepinfra-models.ts`** — added `deepseek-ai/DeepSeek-V4.1-Flash-1017` to
    `fallbackModels()` with the live-catalogue values fetched 2026-10-20 (1M ctx, 1M max output,
    $0.20/$0.60, reasoning, vision). `buildModels` (cli.mjs:253) reads ONLY this curated list plus the
@@ -587,6 +594,7 @@ and to make the change actually take this time. Done, in that order: **catalog e
    `scripts/serve-noroot.ps1`. Store backed up first to `.spike/store-backup-20261020-001106`.
 
 **Evidence (all run this session):**
+
 - `node demo/deepinfra-catalog.test.mjs` → exit 0 (`…-1017 present: 1048576 ctx; 12 rig seats resolve`).
 - Relevant demos exit 0: `seatmodel`, `refresh`, `up-model-reset`, `local-provider`.
 - Full suite: **pass=178 fail=1** (`pitui`, the known resolution-path failure — same as the last baseline).
@@ -599,6 +607,7 @@ and to make the change actually take this time. Done, in that order: **catalog e
 commits" row, now carry `-1017` and the **catalog-entry-first** prerequisite.
 
 **Owed / follow-ups (not done here):**
+
 - **Wire the live DeepInfra catalogue into `buildModels`** (`fetchDeepInfraModels` exists and is unused).
   Today every new seat model id needs a hand-added fallback entry + a suite run; the demo guard catches a
   missing one at test time, not automatically at startup. Register with `pm` if the operator wants it.
@@ -621,16 +630,16 @@ after the restart. Do not poll the store heavily while the broker is live.
 `C:\Users\Alex\dsh-Projects\PolyStrata-data` — the operator asked to keep local models together, so the new
 install was moved off `D:` with `robocopy /MOVE` and nothing was re-downloaded.
 
-| | value |
-|---|---|
-| served id | **`swift-1.5-iq2_xs`** (verified with `GET /v1/models`) |
-| context | **65536** (KV streaming auto-off: it wants ~0.9 GB RAM beside the ~48 GB IQ2_XS asks for, and this PC has 32) |
-| endpoint | `http://127.0.0.1:8080/v1` (unchanged) |
-| engine | **`engine\strata.exe` (the Qwen engine)** — the OLD model ran on `engine-poly\strata-poly.exe`, so this is a DIFFERENT ENGINE on the same port, not just a different model |
-| start | `run-swift-iq2_xs.bat` (config `strata-swift-iq2_xs.json`, regenerated with C: paths) |
-| fallback | `run-qwen36-ud-q3_k_m.bat` — still installed, still pointing at valid C: paths |
-| rig config | `durig.config.json`: `DURIG_LOCAL_MODEL=swift-1.5-iq2_xs` (was `qwen36`); `DURIG_LOCAL_CONTEXT=65536` |
-| seats | `rig.selfdev.json`: `qa` and `devtools` `local/qwen36` → **`local/swift-1.5-iq2_xs`** |
+|            | value                                                                                                                                                                      |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| served id  | **`swift-1.5-iq2_xs`** (verified with `GET /v1/models`)                                                                                                                    |
+| context    | **65536** (KV streaming auto-off: it wants ~0.9 GB RAM beside the ~48 GB IQ2_XS asks for, and this PC has 32)                                                              |
+| endpoint   | `http://127.0.0.1:8080/v1` (unchanged)                                                                                                                                     |
+| engine     | **`engine\strata.exe` (the Qwen engine)** — the OLD model ran on `engine-poly\strata-poly.exe`, so this is a DIFFERENT ENGINE on the same port, not just a different model |
+| start      | `run-swift-iq2_xs.bat` (config `strata-swift-iq2_xs.json`, regenerated with C: paths)                                                                                      |
+| fallback   | `run-qwen36-ud-q3_k_m.bat` — still installed, still pointing at valid C: paths                                                                                             |
+| rig config | `durig.config.json`: `DURIG_LOCAL_MODEL=swift-1.5-iq2_xs` (was `qwen36`); `DURIG_LOCAL_CONTEXT=65536`                                                                      |
+| seats      | `rig.selfdev.json`: `qa` and `devtools` `local/qwen36` → **`local/swift-1.5-iq2_xs`**                                                                                      |
 
 **Verified, not assumed:** `localProviderSpec(loadConfig().config)` returns
 `{"id":"local","baseUrl":"http://127.0.0.1:8080/v1","modelId":"swift-1.5-iq2_xs","contextWindow":65536}`;
@@ -639,6 +648,7 @@ is `ok:true`. A seat's model is read from `rig.selfdev.json` at wake (`cli.mjs:4
 run picks Swift up **without `up --refresh`** — the model is not persisted per conversation.
 
 **Notes for the next session:**
+
 - The old server was `strata-poly` (engine pid 5944, server 15268); both were stopped and 8080 is now the Qwen
   engine. If a seat stalls on the local provider, `docs/runbooks/local-provider-down.md` applies — but check
   `/v1/models` FIRST, and remember the ENGINE changed too, so an old log line about `strata-poly` is expected.
@@ -657,11 +667,11 @@ improve it.
 
 **1. THE WORKTREE DEFECT IS NOW A REAL CODE ITEM — `#3174`.** The previous handling only produced
 `#3123` (reporting), which `pm` cancelled and re-scoped to `#3165` (`worktree audit` retirement reporting +
-the locked-worktree rule) — still *held*, and still **not code**. Reading `src/worktree.mjs` after the
+the locked-worktree rule) — still _held_, and still **not code**. Reading `src/worktree.mjs` after the
 operator suggested the fix belongs there found the actual root cause: **`prepareSeatWorkspace` keys the
 worktree PATH by ITEM (`item-<id>`) but the BRANCH by SEAT (`<seat>-item-<id>`)** (`:566-568`), and on reuse
 it unconditionally runs `git checkout -B <branch>` (`:602` → `:278`). So a second seat preparing the same
-item **silently steals the first seat's worktree**, and nothing ever asks *who holds the branch I need* —
+item **silently steals the first seat's worktree**, and nothing ever asks _who holds the branch I need_ —
 which is exactly why `impl` could not rebase `designer-item-2103`. **`#3174`** now asks for the holder
 resolution + the three refusals + a failing-first demo; **`#3175`** is `lead`'s naming question (item-keyed
 path vs seat-keyed branch; D110 territory).
@@ -677,10 +687,12 @@ twice in 20 minutes. `node_modules/@earendil-works/pi-durable` is a symlink to `
 (pinned build, exports `./codemode`); a plain **`npm install`/`npm ci` in the SHARED TREE** replaces it with
 the registry build (`1.1.0`, no `./codemode`) and the five `tui-durable-*` demos fail. Diagnose in one line
 before believing ANY verdict — in either direction:
+
 ```bash
 ls -la node_modules/@earendil-works/ | grep -E 'pi-durable|pi-tui'   # '->' pinned, 'd' CLOBBERED
 node scripts/sync-pi.mjs --link                                      # the fix; does not dirty the tree
 ```
+
 Both `land.md` and `branch-cleanup.md` now carry it (`3d50976`).
 
 **4. THE `#2969` PIN WIP IS PARKED, FOR ITS AUTHOR.** The tree arrived dirty (`package.json` +
@@ -754,6 +766,7 @@ BACKWARDS (`#2976` runs `sync-pi --link` BEFORE `npm ci`); added **Request TRACE
 **`blockedBy`** (`#2951`), **operator-only `pause`/`unpause`/`configure`** (`#1966`), 10→12 seats.
 
 **STILL OWED (routed to `pm`, not the delegate's to do):**
+
 - **`docs/DECISIONS.md` NUMBERING IS BROKEN ON `main`** — highest real number **D112**, and TWO unnumbered
   placeholder headings are live (`## D###` @3060 from `90d1381`; `## D-<mint>` @3092 from `47dd2ae`).
   **Release `#3089` and widen it to mint BOTH existing placeholders.** **`D113` is FREE** (`scribe-item-2219`
@@ -792,7 +805,7 @@ behind every ruling: `.spike/delegate/human-decisions-2026-10-19/QUESTIONS-AND-R
 **`operator-accepts-r1-r7-2026-10-19-1` (`21:52:23Z`) — the operator ACCEPTED R1–R7 in full**, so they are
 now OPERATOR RULINGS, not delegate recommendations; `pm` may not re-defer any of those rows to `human`.
 **`pm` is applying them live:** `#2806` cancelled `21:43:55Z`, `#2975`/`#2949` + all six stale escalations
-closed `21:35–21:45Z`, `#2987` closed `21:56:03Z` (*"LEFT deferredTo human — resumed and closed"*, with the
+closed `21:35–21:45Z`, `#2987` closed `21:56:03Z` (_"LEFT deferredTo human — resumed and closed"_, with the
 reason recorded so the supervisor cannot re-age it). Remaining on `human` at `21:58Z`: `#2559`, `#2598`,
 `#2673`, `#2744`, `#2763`, `#2797`, `#2992` — all inside `pm`'s current turn. Re-check before acting.
 
@@ -802,6 +815,7 @@ not a decision**, and **6 stale liveness escalations from a dead `pm`** (pm is a
 generating; M1 verified `#3059`/`#3060`). Do not re-escalate any of them to the human.
 
 **The 7 rulings (all delivered):**
+
 - **R1 — the landing window is OPEN and the DELEGATE drives, broker stays UP.** `land.md` (2026-10-19) made
   the broker stop OPTIONAL: `land.mjs` publishes a priority reservation and waits for slots, so an external
   caller lands with the broker up. **No operator-declared window is needed** — that was the single question
@@ -847,16 +861,18 @@ ORDER and the DRIVER, not a waver of the three gates); `git add -A`; force a dir
 completed branches, prune them, and prune worktrees no longer in use. Git-only; the broker stayed UP.
 
 **Landed (verified + tip-matched + clean against `main`):**
+
 - **`impl-item-2951 @8ca9ba9`** (structured `blockedBy` gate field; verify `#2981`/`#2988` done) — the
   base the redesign's M1 builds on.
 - **`devtools-item-2261 @f36ca3e`** (`git` skill: `git diff --no-color` row; re-verify `#2668`/`#2671`).
-- Landed with `scripts/land.mjs` **without `--suite`** because the suite is RED on `main` *before* the
+- Landed with `scripts/land.mjs` **without `--suite`** because the suite is RED on `main` _before_ the
   landing (see below). `main` `a2d6b95` → **`020e136`**.
 
 **Evidence:**
+
 - **Suite on `main` (post-land): `pass=172 fail=5`** — all five are `demo/tui-durable-*.test.mjs`, all the
   SAME pre-existing failure: `ERR_PACKAGE_PATH_NOT_EXPORTED: Package subpath './codemode' is not defined
-  by "exports" in @earendil-works/pi-durable` (the installed released pi-durable lacks the vendored
+by "exports" in @earendil-works/pi-durable` (the installed released pi-durable lacks the vendored
   pin's `./codemode`; the #2412/#2413 version-visibility family). **Proved pre-existing**: I ran
   `demo/tui-durable-boot.test.mjs` on `main` BEFORE the landing → exit 1, same error. The `--suite` gate
   correctly refused the landing on this failure and did NOT advance `main`; the fallback (prior passes'
@@ -864,6 +880,7 @@ completed branches, prune them, and prune worktrees no longer in use. Git-only; 
 - `node demo/pitui.test.mjs` now **passes** (exit 0) — the `pi-tui` symlink is gone (a real dir).
 
 **Pruned / relocated:**
+
 - **Refs 96 → 86.** 10 merged refs pruned: 4 free (`advocate-item-3006`, `devtools-item-2608`,
   `devtools-item-2966`, `impl-item-2951`), 6 via worktree release (`devtools-item-2261/2390/2514`,
   `advocate-item-2698`, `scribe-item-2944` relocated; `impl-item-1547` unlocked+removed, clean+cancelled).
@@ -875,8 +892,9 @@ completed branches, prune them, and prune worktrees no longer in use. Git-only; 
   the prune; **nothing forced**; tracked tree CLEAN.
 
 **STILL OWED / FYI:**
+
 - **The suite is RED on `main` (5 `tui-durable-*` failures, pre-existing).** This blocks `land.mjs
-  --suite` for EVERY future landing. Root cause: the installed `@earendil-works/pi-durable` ≠ the vendored
+--suite` for EVERY future landing. Root cause: the installed `@earendil-works/pi-durable` ≠ the vendored
   pin (missing `./codemode`). Land/re-pin it (`sync-pi --link`) or fix the import — likely the same family
   as **#2412** / the `pi-build-version-visibility` incident.
 - `pm` can close the two landed landing lists (`#2983`, `#2667`); `#2951`/`#2261` are now ancestors of
@@ -891,6 +909,7 @@ completed branches, prune them, and prune worktrees no longer in use. Git-only; 
 land with `--suite` until the 5 `tui-durable-*` failures are fixed (report the exact `pass=N fail=M`).
 
 ## (superseded) NEXT SESSION — see the top of this file
+
 **The pointer below is stale: `main` is now `440d071`; the `DECISIONS.md` mint has landed (so `#3134`/`#3126`
 need RE-PREFLIGHT rather than waiting on a mint), and the local model is Swift 1.5.**
 **Current item:** the worktree defect is now a real build item — **`#3174`** (`prepare_workspace` must
@@ -917,16 +936,18 @@ conflict set needing author rebases; push owed (operator holds the grant).
 work** (defect fixes and its prerequisites are not capability work and land first).
 
 **Delivered:**
+
 - `operator-start-queue-redesign-impl-2026-10-19-1` (`delivered:true` `21:03:15Z`) — register the
   **complete** implementation (M1 field model + single mapping/`workable`; M2 propagation in the closing
   commit + backstop; M3 check rules on authored state only; M4 queue-scope attention; M5 the ~11-file
   seam migration; M6 lazy legacy mapping + `backlog`; M7 runbook wiring), route **F12/F11 to `lead`**,
   and land the prerequisites `#2983` → `#2992` → `#2420`/`#2483`.
 - The acceptance + priority ruling is delivered to `pm` as a follow-up intent (`operator-accept-queue-
-  redesign-v2-2026-10-19-1`): record the decision (DECISIONS.md; derive the next free D-number — D113 is
+redesign-v2-2026-10-19-1`): record the decision (DECISIONS.md; derive the next free D-number — D113 is
   reserved by an unlanded scribe item) and start the first slice.
 
 **STATE — verify before acting:**
+
 - **`pm` has NOT yet registered implementation items** (as of `21:10Z` the max id is ~2995 and none
   reference the redesign build). First check: did `pm` register M1–M7 and route F12/F11 to `lead`?
   `DURIG_DB=./selfdev.sqlite node cli.mjs queue | python -c "import json,sys;d=json.load(sys.stdin);print([(i['id'],i['status']) for i in d['items'] if i['id']>2995])"`
@@ -948,6 +969,7 @@ partial model (no stubs / "for now" scaffolding — a slice lands only when its 
 redesign, then the proposal owner (me) reviews their change requests.
 
 **Done this session:**
+
 - **Review request delivered** (`operator-queue-redesign-review-2026-10-19-1`, `delivered:true`
   `20:37:55Z`). `pm` registered **`#2984`** (architect) and **`#2985`** (advocate); `#2986` was a
   duplicate, cancelled.
@@ -968,11 +990,12 @@ redesign, then the proposal owner (me) reviews their change requests.
   `send_work({held:true})` must NOT be deprecated before the roadmap ledger has a write surface (CR-3);
   and non-item-close gates (landings, operator windows) need constraints, not `dependency` (CR-6).
 - **Withdrawn from v1:** the D114 citation (no such landed decision — architect F11) and the claim that
-  the ~51 orphan candidates would auto-open (they would be *visible*; only declared dependencies auto-open
+  the ~51 orphan candidates would auto-open (they would be _visible_; only declared dependencies auto-open
   — architect F2).
 
 **Escalated to `lead` (scope, not the delegate's to decide):**
-- **F12** — `#2673`'s lead-ratified `workable(item,seat)` is the *same seam* as this design's claimability
+
+- **F12** — `#2673`'s lead-ratified `workable(item,seat)` is the _same seam_ as this design's claimability
   (and its `requires` clause is not implementable — `requires` is not persisted). One predicate or two.
 - **F11/OQ7** — land the architect's draft ADR (review §4) or drop the `waiting`-derivation citation.
 - **OQ2 defaults / OQ5 sequencing** — revised defaults (operator 3 d, schedule 14 d, resource 3 d, manual
@@ -993,6 +1016,7 @@ queue item**.
 that makes a stuck item impossible. No seat work, no push.
 
 **Delivered this session:**
+
 - **Intent `operator-durable-tui-unblock-2026-10-19-1` → `pm`** (`delivered:true` `20:22:19Z`). Asks `pm`
   to `release_work(#2630)` (advocate review; its gate `#2629` is satisfied), route `#2797` (designer doc
   `a3dff23`) for a landing window, and flag the Phase-1 pin caret (`^1.3.0` vs the build-spec's exact
@@ -1008,12 +1032,13 @@ that makes a stuck item impossible. No seat work, no push.
   `incidents/README.md`).
 
 **STATE — VERIFIED AFTER THE INTENT (pm acted at 20:23–20:33Z):**
+
 - **`pm` processed `operator-durable-tui-unblock-2026-10-19-1`.** `#2797` is **queued** (designer doc
   `a3dff23` routed for landing); the pin caret is **`#2969`** (claimed by `devtools`); the durable-TUI
   build-chain sequencing is **`#2977`** (`#2788` first → `#2789`/`#2804`/`#2826` → `#2626`).
 - **`#2630` is `held` again — correctly.** `pm` released it; `advocate` claimed it and re-held it
   `20:27:04Z` because the proposal commits are only on `designer-item-2103` (not yet on `main`), so the
-  article it must review is not in the tree. This is a *legitimate dependency park* and a live instance of
+  article it must review is not in the tree. This is a _legitimate dependency park_ and a live instance of
   the incident's class — it moves only when a person remembers; under the redesign it would be a
   `blockedBy: [#2797]` auto-release. **Release `#2630` when `#2797` lands.**
 - **The rest of the chain is unchanged and held:** `#2626`, `#2733`, `#2788`, `#2789`, `#2826`, `#2804`,
@@ -1034,6 +1059,7 @@ faults recovered. **`main` = `f6ed4e6`** (my last docs commit; `#2801` package-l
 `4a1fe16`). Refs 85, worktrees 208, broker **pid 4744** (`state: up`, passes advancing).
 
 **STATE OF THE TEAM — read before acting:**
+
 - **`pm` was DEAD 18:44→20:05** and is now alive. Cause (verified): `last_run_failed: **no_model**` — the
   operator's requested `deepseek-ai/DeepSeek-V4.1-Flash-1017` is ABSENT from the installed
   `@earendil-works` catalogues (present only in the vendored pin `vendor/pi-main`), so the client could not
@@ -1051,6 +1077,7 @@ faults recovered. **`main` = `f6ed4e6`** (my last docs commit; `#2801` package-l
 - **`devtools` holds 13 claims (11 stale, 11–15.8h).** Releasing them is `pm`'s job now that it runs.
 
 **Four faults recovered this session (all documented):**
+
 1. `scripts/` empty on disk → restored from the index (`tracked-files-missing-on-disk.md`, new runbook).
 2. **`src/worktree.mjs` at 0 bytes** vs 40,762 in HEAD → broke every CLI verb at import; restored from
    HEAD with CRLF. Runbook `write-corruption-recovery.md` gained the **0-byte shape** + the size-scan
@@ -1072,6 +1099,7 @@ cite `#NNNN`, neither queryable). Normative: opaque ids, `kind` as a closed 10-v
 titles, `blockedBy` not prose gates, `<seat>-item-<id>` names, `RM-<n>[a-z]` citations.
 
 **STILL OWED (not mine to do):**
+
 - **3 verified branches still conflict** against `main`: `impl-item-2574`, `impl-item-2578`,
   `impl-item-2777` — need an AUTHOR non-force rebase + a FRESH non-author verify (the old `#2843`/`#2892`/
   `#2897` covered superseded tips). Land serially, `merge-tree` preflight each. Then `#2420` → `#2483`.
@@ -1105,15 +1133,16 @@ the `scripts/` wipe is gone and the landing helper parses. **#2848 (BOM/orphan `
 moot**: the on-disk file is HEAD's version and `node --check` exits 0.
 
 **Step 2 — prune (git-only, broker stayed UP).** Re-derived at this moment (the rig creates refs live):
+
 - Deleted merged+free `impl-item-2588`.
 - Removed the 2 `reapable` clean+unlocked+terminal worktrees: `auditor-item-2632` (+ `-d`);
   `auditor-item-2757` (worktree only — it was `ahead=4`, so the ref was KEPT as the runbook requires).
 - **Relocated out-of-tree** (`git worktree move` → `switch --detach` → `branch -d`, every file preserved)
-the 9 merged+dirty+unlocked terminal trees: `designer-item-2629`, `scribe-item-2683`, `qa-item-2701`,
-`qa-item-2720`, `qa-item-2728`, `qa-item-2737`, `qa-item-2766`, `qa-item-2772`, `scribe-item-2910`.
+  the 9 merged+dirty+unlocked terminal trees: `designer-item-2629`, `scribe-item-2683`, `qa-item-2701`,
+  `qa-item-2720`, `qa-item-2728`, `qa-item-2737`, `qa-item-2766`, `qa-item-2772`, `scribe-item-2910`.
 - `git worktree prune`. **11 refs freed, 2 worktrees removed, 9 relocated, `main` UNMOVED, nothing forced.**
 - KEPT (intentional): the 11 merged refs held by LOCKED worktrees (`advocate-item-2104/2698`,
-`devtools-item-2390/2459/2514/2559/2595/2638`, `impl-item-1274/1547/2788`).
+  `devtools-item-2390/2459/2514/2559/2595/2638`, `impl-item-1274/1547/2788`).
 
 **Step 3 — landings (delegate action, never mid-merge; `scripts/land.mjs`, broker UP, `lock.reserved:true`).**
 Landed **17 verified+clean+tip-matched branches** one at a time, re-preflighting `git merge-tree` against
@@ -1123,10 +1152,11 @@ landing-list #2849), `impl-item-1705`, `impl-item-2460`, `impl-item-2462`, `impl
 `impl-item-2583`, `impl-item-2585`, `impl-item-2586`, `impl-item-2600`, `impl-item-2602`,
 `impl-item-2643` (+ `impl-item-2679` first). That is the **whole bugfix cluster 2–12/13** plus the
 landing gate, docs, metrics and durable-TUI Phase 1.
+
 - Pruned every landed ref: 12 free `-d`, 4 by relocation (`impl-item-1705`, `impl-item-2600`,
-`impl-item-2602`, `impl-item-2643` — all dirty with CARRY residue).
+  `impl-item-2602`, `impl-item-2643` — all dirty with CARRY residue).
 - **Bonus:** landing `impl-item-1705` (tip `349d5d3`) made **`auditor-item-2757` an ancestor of `main`**,
-so that `ahead=4` ref was pruned too (`-d`, verified `main..2757` = 0).
+  so that `ahead=4` ref was pruned too (`-d`, verified `main..2757` = 0).
 
 **Counts.** Refs **111 → 83**; worktrees **206 → 204**; `main` `67228b9` → `3b79159`; tracked tree clean
 (only the 4 pre-existing untracked scratch dirs); not mid-merge; `scripts/` intact and parsing.
@@ -1157,6 +1187,7 @@ session to a fresh agent. **Nothing was landed, nothing was pruned, nothing was 
 this pointer.** Do not re-derive: the diagnosis below is complete and its artifacts are on disk.
 
 **State inherited (verified this session):**
+
 - `main` = **`a70fc27`**, 2 commits ahead of `origin/main` (unpushed — the operator holds push).
 - **Shared tree: 9 tracked DELETIONS in `scripts/`** — the directory is EMPTY on disk
   (`apply-commit-discipline`, `degen-scan`, `from-openrig`, `land`, `read-constitution`,
@@ -1164,7 +1195,7 @@ this pointer.** Do not re-derive: the diagnosis below is complete and its artifa
   (`pm`→`lead`) / **#2890** (`lead`→`pm`), which call it operator-only and ask for `git restore scripts/`
   then a broker restart. **New evidence this session: the deletion is NOT any branch's change** —
   `git log --all --diff-filter=D -- scripts/` returns nothing, and BOTH the index (`git ls-files -s
-  scripts/` = 9) and `HEAD` (`git ls-tree HEAD scripts/` = 9) are intact. So the loss is unexplained, and
+scripts/` = 9) and `HEAD` (`git ls-tree HEAD scripts/` = 9) are intact. So the loss is unexplained, and
   re-materialising the files from the index (`git checkout-index -f -- scripts/`) is **lossless** — there
   is no on-disk content to discard. Seats are blocked from this by the active-seat guard; the delegate is
   not. **This is the single unblocking action.**
@@ -1184,6 +1215,7 @@ autostash, `{4}` D109, `{5}` #2321-era, `{6}` configure, `{7}` old) — **do not
 `.spike/delegate/land-prune-2026-10-19c/`: `merged.txt`, `held.txt`, `wtaudit.json`, `queue.json`).
 Counts at diagnosis: **111 refs, 206 registered worktrees**, audit `counts` =
 `{seat-root:1, non-item:56, dirty:126, locked:10, live:11, reapable:2}`.
+
 1. **Merged + free (delete now, lossless):** `impl-item-2588` (`ahead=0`). `git branch -d impl-item-2588`.
 2. **Reapable (clean+unlocked+terminal):** `auditor-item-2632` (`ahead=0`, merged → `git worktree remove`
    then `git branch -d`); `auditor-item-2757` (`ahead=4`, **NOT merged** → remove the clean worktree only,
@@ -1192,7 +1224,7 @@ Counts at diagnosis: **111 refs, 206 registered worktrees**, audit `counts` =
    `designer-item-2629`, `scribe-item-2683`, `qa-item-2701`, `qa-item-2720`, `qa-item-2728`,
    `qa-item-2737`, `qa-item-2766`, `qa-item-2772`, `scribe-item-2910`. Use the recipe in
    `docs/runbooks/leaked-worktrees.md` (2026-10-19 block): `git worktree move <wt>
-   ../pi-opendurig.worktrees/<name>` → `git -C <new> switch --detach` →
+../pi-opendurig.worktrees/<name>` → `git -C <new> switch --detach` →
    `git merge-base --is-ancestor <b> main && git branch -d <b>`; then `git worktree prune`.
 4. **KEEP — intentional (locked or live), do not touch:** the 16 merged refs held by locked/live trees
    (`impl-item-1274/1547`, `advocate-item-2104/2698`, `devtools-item-2390/2459/2514/2559/2595/2638`,
@@ -1203,8 +1235,9 @@ Counts at diagnosis: **111 refs, 206 registered worktrees**, audit `counts` =
    `temp-1754-rebase/`, `.durig-verify-2336/`, `wt-2073/` are untracked and left untouched.
 
 **Order for the next agent (do not reorder):**
+
 1. `git checkout-index -f -- scripts/` → verify `node --check scripts/land.mjs`, `node --check
-   scripts/suite.mjs`, `git status --short -- .` clean.
+scripts/suite.mjs`, `git status --short -- .` clean.
 2. Run the prune as classified above (git-only; the broker may stay up). Record before/after ref+worktree
    counts and confirm `main` unmoved.
 3. Only then attempt landings — and only **verified** branches. `impl-item-2679` (`@99eecd2`, the
@@ -1231,6 +1264,7 @@ holds it).
 ask (relay the advocate's question + every item awaiting operator feedback). No push; no seat work.
 
 **Shipped this pass (`main` `fbfe772` → `a4dc769`):**
+
 - **LANDED 4 verified branches** with `scripts/land.mjs` (broker UP; `lock.waitedMs=41623`):
   `impl-item-2356` @`02f1a36`, `impl-item-2360` @`4813a50`, `scribe-item-2658` @`90d1381`,
   `scribe-item-1257` @`fe1434e`. Tips matched the pm landing-list tips exactly.
@@ -1265,6 +1299,7 @@ CONFLICT (author rebase set `#2681`/`#2682`/`#2683`).
 (operator holds it); land an unverified branch.
 
 ## (superseded) NEXT SESSION — see the top of this file
+
 **The pointer below is STALE: `pm` HAS since registered `M1`–`M7`, `M1` was built and verified, and `lead`
 split it into `M1a` (`#3062`, claimed) / `M1b` (`#3063`, held, axis-fenced). F12/F11 are RULED
 (`#3009`/`#3011`/`#3031`). Read the top block instead; kept for the accepted-v2 ruling text only.**
@@ -1289,6 +1324,7 @@ next-work recommendation, and directed that it be delivered as intents to `pm`. 
 push by the delegate.
 
 **Delivered this session (all `delivered:true`, 08:29:41–42Z):**
+
 - **`operator-next-landing-gate-2026-10-19-1`** — RESTORE THE LANDING GATE: sequence **`#2679`**
   (`land.mjs --suite` refuses every landing; the `shared-tree-on-main` rule from `50f981a` fires in the
   helper's detached scratch) AHEAD of other impl work; failing-first demo; non-author verify `#2680`.
@@ -1315,6 +1351,7 @@ Still-owed inputs: `#994` quiet window, `#1135` pricing source.
 branches/worktrees; (3) update the runbook; (4) a new operator change request.
 
 **Shipped this session (delegate, no push):**
+
 - **HUMAN-QUEUE (task 1)** — PM was stuck in a degeneration reset loop (context 401k, 15 consecutive
   `pi.reset`); it re-anchored and applied the two already-answered human-queue rounds. Delivered a
   census + nudge `pm-close-stale-human-queue-2026-10-19-1` (delivered `07:30:19Z`); the operator
@@ -1351,6 +1388,7 @@ branches/worktrees; (3) update the runbook; (4) a new operator change request.
   **no stray files and no redo needed**; the redundant `devtools-item-2336` ref was pruned.
 
 **Open / owed:**
+
 - **The `--suite` landing gate is RED** (detached scratch vs `shared-tree-on-main`) — needs the owning
   seat to fix (the rule must ignore a linked/detached scratch) + a failing-first demo. Until then land
   WITHOUT `--suite`, then prove on `main` with `node scripts/suite.mjs`.
@@ -1386,10 +1424,11 @@ work item.
 stranded-submission liveness fix is still open.
 
 **Shipped this session (delegate, operator-directed, no push):**
+
 - **LANDED** — `main` `7296569` → `6335eb9`: `scribe-item-2169` (DECISIONS.md D106) + `security-item-2316`
   (security position UNION), via `scripts/land.mjs --suite` in a broker-stopped window.
 - **PRUNED** — merged refs `devtools-item-2412` + `auditor-item-2209`; 4 reapable worktrees; `git worktree
-  prune`. Branches 92→90, worktrees 170→165 at that point.
+prune`. Branches 92→90, worktrees 170→165 at that point.
 - **INCIDENT (sev1, OPEN)** — `docs/incidents/2026-10-19-stranded-submission-seat-stall.md`: a `placed`
   submission whose conversation has a live-but-not-running task is never settled by
   `reconcileStrandedSubmissions` (`src/broker.mjs:563-576`), so the seat never wakes; only `resume`
@@ -1410,6 +1449,7 @@ stranded-submission liveness fix is still open.
   `operator-decisions-human-queue-2026-10-19-1`; `operator-answers-human-queue-2-2026-10-19-1`.
 
 **Open / owed:**
+
 - **Implement + verify the stranded-submission fix** from the incident (filter live owners in
   `reconcileStrandedSubmissions` to `running`/`completing`; failing-first demo; land; then set that
   incident to `resolved`). `impl` is still stranded (`#110509`) and re-strands after a broker kill.
@@ -1438,6 +1478,7 @@ Read this block first. The operator's "merge worktrees & branches" task is done 
 subset; the durable broker/liveness fix is the open work.
 
 **Shipped this session (delegate, operator-directed, no push):**
+
 - **LANDED** — `main` `7296569` → **`6335eb9`** (suite green): `scribe-item-2169` (DECISIONS.md D106) and
   `security-item-2316` (security position UNION). Broker stopped for the window via `scripts/land.mjs --suite`.
 - **PRUNED** — merged refs `devtools-item-2412`, `auditor-item-2209`; four reapable worktrees
@@ -1466,6 +1507,7 @@ subset; the durable broker/liveness fix is the open work.
   `docs/incidents/2026-10-17-seat-root-fallback-commit.md`.
 
 **Open / owed:**
+
 - **`impl` is STILL stranded** (`#110509`) — needs the durable fix (below) or another
   stop→resume→restart; it is the largest-share author seat and its queue keeps ageing.
 - **Implement + verify the durable resolution** from the incident (filter live owners in
@@ -1486,6 +1528,7 @@ FIRST — that ordering error caused the conv-4930 corruption at 06:24).
 The operator is handing off to a fresh agent to **merge worktrees and branches**. Read this first.
 
 **Shipped this session (delegate, no push):**
+
 - **Architect seat CREATED** (`3112962`): `rig.selfdev.json` gained `architect`
   (`deepseek-ai/DeepSeek-V4.1-Flash`, `thinkingLevel` high), an `architecture` ownership class, and
   edges to/from pm/lead/impl/qa/auditor/security/devtools/scribe/advocate/designer/qa2. Applied with
@@ -1502,6 +1545,7 @@ The operator is handing off to a fresh agent to **merge worktrees and branches**
 - Durable TUI-attach fix queued to `pm` (`durable-tui-attach-2026-10-19-1`).
 
 **UNCOMMITTED — all `devtools` WIP; do NOT blindly commit or clobber:**
+
 - `scripts/land.mjs` (M) — **#2390** (claimed → `devtools`): bounded-concurrency suite
   (`DURIG_SUITE_CONCURRENCY`); mid-implementation.
 - `src/worktree.mjs` + `package-lock.json` (M) — **#1754 / #2336** (`devtools`): provisioning consistency /
@@ -1520,6 +1564,7 @@ The operator is handing off to a fresh agent to **merge worktrees and branches**
 worktree; delete an `ahead>0` ref; pop a stash blind; push (the operator holds it).
 
 ## NEXT SESSION
+
 **Current item:** Implement + verify the durable fix for the stranded-submission seat stall
 (`docs/incidents/2026-10-19-stranded-submission-seat-stall.md`): filter the live-owner scan in
 `reconcileStrandedSubmissions` (`src/broker.mjs:563-576`) to tasks whose state is `running`/`completing`,
@@ -1623,13 +1668,14 @@ broker-stability cluster is the obvious subject. Rig is healthy: `main` = `12b04
 pushed), broker **UP pid `17976`** (`PASS` advancing, **0 `pass-threw`** since start), inbox empty.
 
 **Shipped this session (delegate did not push):**
+
 - **Read-op regression fixed** (`3e17346`): `c5daca5` (#2211) had dropped `read` from `SPOOL_OPS` + the
   handler; restored as a UNION with `configure`, and corrected `demo/command-spool.test.mjs` (a second
   stale red). The whole CLI read surface (`status`/`queue`/`watch`) had returned `unknown op: read`.
 - **Shared-tree `src/broker.mjs` collapse recovered** (was ONE line, 0 exports): collapsed copy backed up
   to `.spike/delegate/broker.mjs.collapsed-backup-20261019`, HEAD restored + CRLF. Incident → resolved.
 - **Landed** `impl-item-2237` (@`3021fe2`: bounded retry + `.stop` on the throwing path + `PASS-FAILED …
-  cause=` logging — ROADMAP 78 remainder) and `impl-item-2298` (@`6683790`: land slot-cap resolver) with
+cause=` logging — ROADMAP 78 remainder) and `impl-item-2298` (@`6683790`: land slot-cap resolver) with
   `land.mjs --suite` (**152/152**). `16aa6bf` had already landed `#2412` (`sync-pi --link` after `npm ci`).
 - **Docs truth-up audit** `docs/reviews/docs-truth-audit-2026-10-19.md`; fixed two stale `FEATURES.md`
   rows (`lastActivity` #2229; context pressure #2231). Remaining 4 gaps routed to `pm`
@@ -1640,6 +1686,7 @@ pushed), broker **UP pid `17976`** (`PASS` advancing, **0 `pass-threw`** since s
   force-stop), `leaked-worktrees` (junction-blocked scratch), `land` (parking another seat's WIP).
 
 **Open threads / blockers:**
+
 - **Architecture subject — broker lifecycle stability.** The stop path is honoured only at a **pass
   boundary** (`src/broker.mjs:1085`/`:1281`) then an unbounded `waitForIdle` (`:1293`); the operator's
   **bounded-grace ruling** is `#2420` (`queued` to `impl`; `.spike/delegate/intent-2237-bounded-stop.md`,
@@ -1663,6 +1710,7 @@ an `ahead>0` ref; push unless the operator grants it.
 ## (prior) RESUME HERE (2026-10-19T03:24Z, delegate) — **`main` green again (`3e17346`); broker UP; verify routed**
 
 **Done this session (no push):**
+
 - Recovered the shared-tree `src/broker.mjs` (collapsed to ONE line, 0 exports, CLI fully broken): backed up the collapsed copy to `.spike/delegate/broker.mjs.collapsed-backup-20261019`; restored HEAD's content; converted to CRLF so `git status` is clean. No `git checkout`/discard; the `configure` WIP is safe in `stash@{0}`.
 - Ran a landing window for `impl-item-2229`, `impl-item-2231`, `scribe-item-2260`, `scribe-item-2331`, `scribe-item-2332` via `scripts/land.mjs --suite`. **It REFUSED: `main` itself was RED** (`demo/broker-read-nopass.test.mjs` — `unknown op: read`; then `demo/command-spool.test.mjs` — stale vocabulary). `main` was not advanced (was `3d102a6`).
 - Root cause: **`c5daca5` (#2211) dropped `"read"` from `SPOOL_OPS` and the handler**, while the tracked `src/brokerread.mjs` (D111) and the committed tests (#2321) required it. With the broker up, the ENTIRE CLI read surface (`status`/`queue`/`watch`) returned `unknown op: read`.
@@ -1686,16 +1734,19 @@ an `ahead>0` ref; push unless the operator grants it.
 **Current item:** git branch management, requested by the operator. The delegate's prior branch/worktree work is in `docs/runbooks/branch-cleanup.md` + `docs/runbooks/leaked-worktrees.md` (the three rules: ownership, ignore-before-create, prune-after-remove).
 
 **⛔ BLOCKER FIRST — `src/broker.mjs` is collapsed to ONE line in the shared tree** (0 newlines; older content). `HEAD` is intact (1429 lines, `onlyReadIntents` present), so nothing is lost. **Restore it before anything else** (operator-only per `docs/runbooks/write-corruption-recovery.md`):
+
 ```bash
 git checkout -- src/broker.mjs        # OPERATOR ONLY
 tr -cd '\n' < src/broker.mjs | wc -c # expect ~1429
 node --check src/broker.mjs           # expect clean
 ```
+
 Until restored, every `node cli.mjs` verb imports `src/broker.mjs` as an empty module. Incident: `docs/incidents/2026-10-19-broker-mjs-one-line-collapse.md`.
 
 **Exact next command:** `git status --short -- .` → then `git worktree list` and `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (read-only).
 
 **State you inherit (2026-10-19T02:52Z):**
+
 - **`main` = `cf5bc40`** (delegate NEXT.md). Parents: `c5daca5` (a seat's `fix(broker): reconcile WIP against authoritative baseline (#2211)`), `6cfb3aa`, `d058e0a` (**the `#2321` landing** — on main). `origin/main` is far behind — **unpushed; the operator holds push.**
 - **Broker: pid `16864`, WEDGED again** since `02:40:38Z` (`wake-failed … qa conv 15 … Session failed after a storage error`; `WAKE-RETRY … pass-threw`). **Not restarted at clock-out.** A `cli.mjs watch` viewer (pid `14472`) is attached. Recovery per `docs/runbooks/broker-down-or-stalled.md`. `#2321` (the read-poll fix) IS on main and does not stop this persistent-storage-error wedge — see the recurrence in `docs/incidents/2026-10-18-broker-retry-hotloop.md`.
 - **Untracked scratch/leaks in the tree (do NOT commit):** `fix-broker.mjs` (a raw `fs.writeFileSync('src/broker.mjs', …)` — the guard-bypassing write), `peek-store.cjs`, `src/borker.mjs.head` (UTF-16, typo), `wt-2073/`, `selfdev.sqlite.broker.inbox.out/`.
@@ -1713,6 +1764,7 @@ Until restored, every `node cli.mjs` verb imports `src/broker.mjs` as an empty m
 **Routed this session (delegate):** intent `worktree-carry-collision-2026-10-19-1` → `pm` (delivered `01:46:12Z`) — the CARRY/teardown collision: `createWorktree` carries the shared tree's tracked-dirty files into every item fork (`src/worktree.mjs:134`, ASK F/#506), and `complete_work`'s clean-only teardown refuses a dirty tree, so **while the shared tree is dirty (the parked `configure` WIP) every completed item leaks its worktree**. Evidence: `#2231` (`impl-item-2231 @166d51f`) and `#2224` (`impl-item-2224 @a2eaf7b`) still on disk dirty; `.spike/serve.err` refusals; also `item-2305`/`item-2315`/`item-2340`. Folded into the already-routed `worktree-rot-prevention-2026-10-19-1` so it is not a duplicate. **Leaked trees left untouched** (dirty orphans, never `--force`).
 
 **Current item (follow-up): the broker hot-loop / watch-support cluster.** Two defects, both already registered and routed to `impl`, **neither ȷet worked** (`queued`, not `claimed`):
+
 - **#2237** (queued → impl) — a persistent pass-throw **HOT-LOOPS** the broker (~0.5 s) and defeats `serve --stop`; bound the retry pacing so a persistent throw cannot spin.
 - **#2321** (queued → impl) — `node cli.mjs watch` must work: a non-mutating `op:"read"` intent must NOT force a wake/supervisor pass (failing-first). This is the **operator requirement** (their window into the team) AND the wedge's accelerant.
 - **#2317** (queued → impl) — pm's corrected diagnosis: `pm` conv 3 is **NOT** corrupt; the wedge is **contention from per-poll wake passes**; fix = #2321.
@@ -1736,6 +1788,7 @@ Until restored, every `node cli.mjs` verb imports `src/broker.mjs` as an empty m
 **Do not:** `git add -A`; `git reset --hard` / `git clean`; force a dirty worktree; delete an `ahead>0` ref; **push** (operator holds it); edit the `configure` WIP by hand; set `DURIG_SEAT_ROOT` on the `serve` launcher.
 
 ## NEXT SESSION
+
 **Current item:** **LANDING WINDOW — RAN; route the 39 conflicts.** The window opened and closed cleanly: broker stopped (it was hot-looping), `configure` WIP parked to `stash@{0}` (+ patch), 16 clean branches landed via `scripts/land.mjs --suite` (suite green), broker restarted. **41 branches remain unlanded** — see the split below. Standing priority behind it: **#2189** (TUI Phase 1, `impl`) / **#2187** (pin, `devtools`).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 **Blocker:** the 39 conflicts need an **author rebase + re-verify** (per `docs/runbooks/resolve-merge-conflict.md`, the delegate does NOT guess a semantic merge). The `configure` WIP is parked in `git stash@{0}` (patch: `../durian-pi.worktrees/.quarantine/_session-scratch/configure-wip.patch`); reconcile it with `devtools-item-2182` before restoring for real.
@@ -1744,6 +1797,7 @@ Until restored, every `node cli.mjs` verb imports `src/broker.mjs` as an empty m
 **Do not:** `git add -A`; `git reset --hard` / `git clean`; edit the `configure` WIP by hand; land a conflicted branch by hand; delete an `ahead>0` ref; set `DURIG_SEAT_ROOT` on the `serve` launcher.
 
 ## (prior clock-out — superseded by the block above)
+
 **Current item:** the **TUI migration is still the operator priority** (#2189 Phase 1 queued to `impl`, #2187 pin claimed by `devtools`, #2109/#2110 rebrand), but **the broker is WEDGED — no seat is progressing.** `selfdev.sqlite.broker.log` froze at `PASS 60` @`20:33:31Z`, then `WAKE-RETRY … pass-threw` every 60 s to now; `.spike/serve.err` names `wake-failed … pm conv 3 … Session failed after a storage error`. A kill+`resume`+restart was done at `20:47:55Z` (pid `5768`), but the same pass-throw returned, so the restart alone does NOT clear it — the next agent must repair the `pm` conversation (per `docs/runbooks/store-corruption-recovery.md`), not merely restart.
 **Spooled, undrained (broker wedged):** `.spike/delegate/intent-seat-notes.md` (D108) and `.spike/delegate/intent-worktree-git-skills.md` (D109/D110) sit in `selfdev.sqlite.broker.inbox/`; the first healthy pass drains them (`INTENT delivered=2`).
 **This session delivered (delegate lane, no product code):** `docs/reviews/agent-skills-review.md`; `vendor/eval/{anthropic-skills,agentskills-spec,awesome-agent-skills,superpowers}` clones; **D108** (seat notes), **D109** (non-interactive agent git), **D110** (worktree taxonomy/root).
@@ -1752,6 +1806,7 @@ Until restored, every `node cli.mjs` verb imports `src/broker.mjs` as an empty m
 **Do not:** `git add -A`; touch the uncommitted devtools `src/broker.mjs` `configure` WIP; land a conflicted branch by hand; set `DURIG_SEAT_ROOT` on the `serve` launcher.
 
 ## (prior clock-out — superseded by the block above)
+
 **Current item:** **local-model reliability** — enforce **D107** (a local seat masks→summarizes its
 tool-call history WITHIN a long item, capped, then re-anchors) alongside **D105**/**#2123** (a fresh
 `pi.reset` BETWEEN items). All routed to `pm`: `37e9a77b…` (D107), `17fef81f…` (reliability findings),
@@ -1764,6 +1819,7 @@ local suite read red while `main` is green; intent `6a38b05c…` asked `pm` to r
 touch it).
 
 > **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T20:05Z).** — Operator decisions executed; landing window done.
+>
 > - **LANDING WINDOW (operator-prioritized) — RAN.** Paused→stopped the broker, snapshot
 >   `.spike/store-backup-20261018-144324`, ran `scripts/land.mjs --suite` outside the broker. **8 landed**
 >   (now ancestors of `main` `4a50da6`): `devtools-item-2114`, `impl-item-1108`, `impl-item-1547`,
@@ -1799,6 +1855,7 @@ touch it).
 
 > **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T19:32Z).** — Recovery complete: broker UP and the
 > local LLM (PolyStrata) UP. The recurrent broker dormancy is now fixed (independently unverified).
+>
 > - **Host is healthy.** The reboot landed; `C:\pagefile.sys` is now a fixed **32,768 MB**. Commit
 >   headroom **55,254 / 65,458 MB** free, physical **25,565 / 32,690 MB**. The `Zone Allocation failed`
 >   and `git` fork errors are gone. Root cause now grounded (commit limit = RAM + the old 4,982 MB page
@@ -1836,6 +1893,7 @@ touch it).
 >   as health (read the last `PASS`).
 
 > **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T18:59Z).**
+>
 > - **Why nothing was running: the host commit charge is exhausted — NOT a durian-pi bug.** `systeminfo`:
 >   Virtual Memory Available **294 MB** of 37,672 MB (In Use 37,378 MB) while physical RAM had ~6 GB
 >   free. The page file was a manually-fixed **4,982 MB** on `C:` (`AutomaticManagedPagefile = FALSE`).
@@ -1880,8 +1938,8 @@ touch it).
 > - **Do not:** restart the broker without the local key env; `git add -A`; `serve --stop` to force a
 >   `resume` while a broker lives; treat pre-reboot failures as regressions.
 
-
 > **CLOCK-OUT / NEXT SESSION START HERE (2026-10-18T18:42Z).**
+>
 > - **Broker dormant-stall — fixed, then a gap in the first fix found and fixed.** `0c0d4d3` scheduled the
 >   wake retry INSIDE the pass `try` after `supervise()`, so a `wake-failed` followed by a later throw in
 >   the SAME pass (the supervisor hitting the same storage error) still parked the broker — **recurrence
@@ -1902,7 +1960,7 @@ touch it).
 >   (log `SessionFailed.cause` on failure); watchdog still owed (ROADMAP 61–64); underlying
 >   per-conversation storage error still UNVERIFIED (pi-durable).
 > - **Host environment (parallel):** node processes die with `Zone Allocation failed` / `NewArray
->   Allocation failed` past ~25–100 MB (5.7 GB free of 34 GB), so read verbs and the dense demo loop are
+Allocation failed` past ~25–100 MB (5.7 GB free of 34 GB), so read verbs and the dense demo loop are
 >   flaky; **re-run a failure in isolation before calling it a regression** (lead `#2122`, `#2126`).
 > - **Also in flight:** D105 enforcement `#2123` (impl) + docs `#2124` (scribe) + verify `#2125`; the
 >   local-provider fix `#2114` (devtools) + verify; the `format` gate is NOT repo-clean (untouched files
@@ -1913,6 +1971,7 @@ touch it).
 
 > **NEXT SESSION START HERE — the broker dormant-stall is FIXED and live; independent verify routed
 > (2026-10-18T17:44Z).** Operator: "Please fix the broker."
+>
 > - **Root cause** (runbook `broker-down-or-stalled.md` prevention item 3): a per-seat `wake-failed`
 >   did not re-arm the scheduler, so the broker rested in `signal.wait` with a fresh heartbeat and a
 >   frozen `PASS`, and the seat was never driven.
@@ -1936,6 +1995,7 @@ touch it).
 > **NEXT SESSION START HERE — D105 policy RULED and routed; broker recovered from TWO dormant stalls
 > (2026-10-18T17:33Z).** Operator: "ensure durian-pi has a policy of starting a new context for any new work
 > item picked up by a local model." Delivered as **policy + routing** (the delegate does not implement):
+>
 > - **Policy recorded as `D105`** (`docs/DECISIONS.md`): a seat whose resolved model provider is `local`
 >   (D104) MUST draw a fresh `pi.reset` boundary per NEW work item before working it; durable transcript
 >   kept; non-local seats unchanged; never mid-item, across a `claimed` item, or over a live lease.
@@ -1971,7 +2031,7 @@ touch it).
 > - **Dormant-broker stall — recurrence 4** (same shape as 02:37Z). While routing, broker pid `7404`
 >   was found stalled: heartbeat **frozen** (last `17:10:05Z`), `broker.log` frozen at `PASS 10`, the
 >   spooled intent undrained, no `genlock`; `.spike/serve.err` named `wake-failed … Session failed after
->   a storage error` for **devtools (conv 4930)** and **auditor (conv 4936)**. Recovered per
+a storage error` for **devtools (conv 4930)** and **auditor (conv 4936)**. Recovered per
 >   `broker-down-or-stalled.md`: `taskkill /F /PID 7404` → `resume` (1 pm `run-cancelled`, sub `88623`) →
 >   store backup **`.spike/store-backup-20261018-121156`** → restart with the local env → **pid 3604**,
 >   `PASS 1 woke=devtools,auditor`; `idle_with_queued_work` cleared; no new `wake-failed`. Incident
@@ -2051,6 +2111,7 @@ touch it).
 > The operator directed: (1) proceed with the durable-tui merge procedure; (2) gap-analyze the spike vs
 > the current app; (3) rename `pi-opendurig` → `durian-pi`. Delivered as delegate analysis only (no
 > product code written — implementation is the team's):
+>
 > - `docs/reviews/durable-tui-merge-plan.md` — phased merge (Phase 1: non-default entrypoint on its OWN
 >   store, fail-closed broker guard; the spike is a writer, so it must never open `selfdev.sqlite` while
 >   the broker drives). **SCOPE RULED (operator): option (b)** — the Pi TUI replaces `ui.mjs` as
@@ -2070,10 +2131,10 @@ touch it).
 >   the env vars + config filename so the live rig keeps working. Intent
 >   `9fa09419-2160-4b3b-b2eb-04bbd32c54e2` delivered to `pm`; the new multi-seat TUI is the
 >   **durian-pi TUI**.
-> Four intents delivered to `pm` (merge `66d95f69…`, rename `e6d5eea0…`, UX consult `92682546…`,
-> rebrand `9fa09419…`). **RIG STATE: broker UP** (`serve` pid 4004, PASS advancing) after `unpause` +
-> `resume` (2 stranded submissions cleared); inbox empty. **NEXT:** pm registers/routes the four items;
-> the LOCAL repo rename still needs a window (GitHub repo already renamed to `Durian-Pi`).
+>   Four intents delivered to `pm` (merge `66d95f69…`, rename `e6d5eea0…`, UX consult `92682546…`,
+>   rebrand `9fa09419…`). **RIG STATE: broker UP** (`serve` pid 4004, PASS advancing) after `unpause` +
+>   `resume` (2 stranded submissions cleared); inbox empty. **NEXT:** pm registers/routes the four items;
+>   the LOCAL repo rename still needs a window (GitHub repo already renamed to `Durian-Pi`).
 
 > **RIG PAUSED (operator, 2026-10-18T05:38Z) — system reboot pending.** The broker was dormant (pid 3088,
 > last `PASS 178` at 05:23:05Z, no genlock) and had not drained the spooled `pause`; it was terminated
@@ -2251,6 +2312,7 @@ attached; force a dirty worktree; `-D` an `ahead>0` ref; land a snapshot.
 **Do not:** re-propose reusing/copying vendor internals as a speed lever — the operator **DECLINED** it (dependency/provenance + upstream-drift risk); keep dependencies pinned. Do not create an `impl2` seat. Do not stop the broker without an operator-declared window (except a wedged broker with no genlock).
 
 **Delegate actions this session (operator-directed):**
+
 - Delivered the requested written analysis: pi-durable is BUILT for live compaction (post's
   "Compaction" section — a task that runs while the conversation keeps going), but durian-pi's `compact`
   verb is a broker-stopped external writer (`refuseWhileBrokerDrives` + live-lease guard,
@@ -2282,6 +2344,7 @@ not push). `origin/main..main` = 1 unpushed (`abc2a0e`). 107 non-main refs; ~140
 **131/0**.
 
 **Open / watch:**
+
 - **Pause:** `#1841` (priority, queued to `impl`) + `#1843` (qa verify, deferred) + `#1878` (qa question:
   no branch yet). **impl was starved** — oldest-first claiming hit HELD-BACKLOG registrations first
   (`#1841` was 16th). The operator directive to `claim_work({ itemId: 1841 })` + `release_work(1388)` was
@@ -2304,7 +2367,7 @@ snapshot; stop the broker without an operator window (unless it is wedged with n
 ## QA + IMPL RECOVERY — 2026-10-18 (delegate, operator-authorized window)
 
 **QA's context degraded in place (the recurring `qa-context-degeneration` incident).** Evidence: `log qa`
-entry `#79843` — QA's own words *"I'm in trouble. My context is degrading... This is the second time."*;
+entry `#79843` — QA's own words _"I'm in trouble. My context is degrading... This is the second time."_;
 garbled output ("extras impossible without"), 2 malformed `complete_work` calls (`#79839`, `#79843`),
 `status` `qa: malformed_tool_call (2)` + `generation_in_flight`. Context `230,090` tokens. The guard did
 not reset it (Defect B false negative; `#1705` still deferred).
@@ -2345,8 +2408,8 @@ merge/delete)**. 156 worktrees, **116 `locked`**.
   `impl-item-156`, `qa-item-1638`, `qa-item-1764`, `scribe-item-1648`, `security-item-1581`.
 - **Merged but worktree-held (release per `leaked-worktrees.md`, then prune):** 56.
 - **No patch-equivalent duplicates** (every unlanded branch's `git cherry` is all `+`), but duplicate
-tips exist: `impl-item-1680` and `impl-item-1681` share `5a414de1`; 10 refs share `1b46411` (clock-out
-doc branches), 6 share `6c384ac`, 5 share `7b72b83`, 5 share `6195c99`.
+  tips exist: `impl-item-1680` and `impl-item-1681` share `5a414de1`; 10 refs share `1b46411` (clock-out
+  doc branches), 6 share `6c384ac`, 5 share `7b72b83`, 5 share `6195c99`.
 - **Landing backlog is the real liability:** last merge onto `main` was `7ba34c9` at 17:00Z (≈6.5 h
   ago); **no feature/fix has landed since**, while 52 branches with unique commits (many 13–19 h old)
   sit off `main`. 9 open `LANDING LIST` rows in the queue.
@@ -2358,6 +2421,7 @@ doc branches), 6 share `6c384ac`, 5 share `7b72b83`, 5 share `6195c99`.
   only — do not echo values; prior same-class findings were git-SHA false positives).
 
 **Actions taken (operator-authorized, 2026-10-17; deletion-safe):**
+
 - **Pruned 8 merged free refs** with `git branch -d` (each proved an ancestor of `main`; `main`
   unchanged `f9f2480`, tree clean) — `devtools-item-1667`, `devtools-item-1745`, `impl-item-156`,
   `qa-item-1638`, `qa-item-1696`, `qa-item-1764`, `scribe-item-1648`, `security-item-1581`.
@@ -2430,17 +2494,20 @@ W6. **Read-only first.**
 **Exact first command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **Read-only audit (never destructive):**
+
 ```bash
 git branch --format='%(refname:short)' | grep -v '^main$'
 for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done
 git worktree list
 ```
+
 - `ahead=0` = fully merged → safe to prune with `git branch -d` (refuses unmerged); seats cannot delete
-their own author branch (seatguard), the delegate/operator may.
+  their own author branch (seatguard), the delegate/operator may.
 - `ahead>0` = unlanded work → **never delete** it, not with `-d` and never with `-D`.
 - Release locked worktrees only per `docs/runbooks/leaked-worktrees.md`; never `--force` a dirty one.
 
 **State at clock-out:**
+
 - `main` HEAD `9fe43c9` (this clock-out commit, **unpushed**); tree clean; on `main`.
 - **A push to `origin` happened during this session** — `origin/main` moved `1b46411` → `7000634`, and the
   live remote (`git ls-remote origin refs/heads/main`) reports `7000634`. **The delegate did not run
@@ -2469,6 +2536,7 @@ name the target project** — no target is recorded here.
 **Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **State at clock-out:**
+
 - **Broker UP**, pid `34700` (heartbeat fresh; PASS advancing). Genlock held by `pm` at times.
 - `main` HEAD `8178c79`; tree clean; on `main`; **not pushed** (operator holds push).
 - **Observed:** `node demo/secretredact.test.mjs` exits **1** on this tree, so the `#1610` MAIN-RED gate
@@ -2509,7 +2577,6 @@ ruling) gating **`#1767`**/**`#1768`**/**`#1769`** (impl).
 **Known blocker (unchanged):** `main` secretredact gate observed red (`demo/secretredact.test.mjs`
 exit 1) while queue rows `#1741`/`#1747` claim green — reconcile before any landing.
 
-
 ## HANDOVER — 2026-10-17 (stage-two recovery; clock-out — NEWEST; read `## NEXT SESSION` below)
 
 **Current item / queue ids:** the degeneration-guard fixes **`#1703`** (false positive) /
@@ -2526,7 +2593,7 @@ operator-sanctioned window (`docs/runbooks/seat-reset.md` § Context saturation)
 ~48k, coherent); `docs/incidents/` now **7 reports** (+`qa-context-degeneration`, sev2 mitigated);
 DECISIONS **D95**.
 
-**Routed this session (idea, not scheduled):** operator asked to explore a *simple core + extensions*
+**Routed this session (idea, not scheduled):** operator asked to explore a _simple core + extensions_
 redesign down the road. Shape delivered to `pm`: freeze the ASK E core (store seam, single-writer wake
 family, trust boundary, CLI contract, config, loader); widen the existing extension seam to register
 lazy CLI verbs so durian-pi's own features (worktree, TUI, checkup, ambient measures, format, …) become
@@ -2539,6 +2606,7 @@ non-pluggable per ASK E constraints i–iv). Intent `opr-20261017-extension-boun
 ## HANDOVER — 2026-10-17 (delegate clock-out; new agent takes the seat)
 
 **Your job next (operator): verify the team is following git procedures and branch management.**
+
 - Ground in `docs/runbooks/merge.md` (the landing/merge gate + "Trust, but verify" audit) and
   `docs/WORKFLOWS.md` W6. The docs-drift audit block is also in `merge.md`.
 - **Read-only first:** `git branch --format='%(refname:short)' | grep -v '^main$'` then per branch
@@ -2549,6 +2617,7 @@ non-pluggable per ASK E constraints i–iv). Intent `opr-20261017-extension-boun
 - **Exact first command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **State at handover:**
+
 - `main` HEAD = `ee7e6e4` (+ the D94 decision commit). **Tree clean.** All 29 landing-pass entries are
   ancestors of `main`; suite verified **123/0** in the scratch before the fast-forward. Entry 11
   (`impl-item-1151`, D1 open) was EXCLUDED.
@@ -2564,6 +2633,7 @@ non-pluggable per ASK E constraints i–iv). Intent `opr-20261017-extension-boun
 scribe's, landed).
 
 **Open work the new agent inherits (registered/routed, do not re-derive):**
+
 - **Crash-proofing cluster (HIGH):** true read-only opens for all read verbs; broker survives a
   per-conversation storage error (ROADMAP 78); a broker watchdog/auto-restart; serialise migrations;
   log `SessionFailed.cause` on `wake-failed`.
@@ -2584,6 +2654,7 @@ recurring root causes now outrank UI/incident-rule polish.
 **Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **Priority order (grounded in the queue + `status` attention):**
+
 1. **`#1610` / `#1611` — MAIN IS RED (blocker).** `node demo/secretredact.test.mjs` → exit 1 on `main`
    (3 checks; a secret IS committed). Until green, **no landing passes the `merge.md` gate**.
 2. **Land the wrong-root guard (`#1151`) SOON (operator priority).** Land `impl-item-1444-fix` first
@@ -2602,12 +2673,13 @@ recurring root causes now outrank UI/incident-rule polish.
 9. **`#1388` / ROADMAP 131 (`pause`/`unpause`)** — kills the land-first / broker-window dance.
 
 **State at clock-out:**
+
 - **Broker:** **DOWN at clock-in, then recovered.** The handover's "pid `36488`, passes advancing" was
   stale: the last broker.log line was `PASS 93` at `19:32:35Z`, `START pid=36488` (`19:12:44Z`) had **no
   `EXIT`**, and there was no `serve` process / `broker.json` / `genlock` — it died ~16 min before the
   handover commit. Per `broker-down-or-stalled.md`: `resume` cleared 3 stranded submissions (impl #67700,
   security #67887, security #68025); a first restart (pid `14692`) **died ~6s later** on `Session failed
-  after a storage error` (crash loop); a second restart (**pid `37388`, `START 19:53:33Z`**) held and is
+after a storage error` (crash loop); a second restart (**pid `37388`, `START 19:53:33Z`**) held and is
   advancing (`WAKE impl`, `PASS 1-3`, 4 genlocks). NOT the `pi.live` corruption case (`log`/`status` read
   clean, no `unreadable`). Visible aggravator: **8 stale `log --follow`/`watch` viewers** (Oct 16-17) hold
   the store open. Recurrence recorded in `docs/incidents/2026-10-17-broker-crash.md`.
@@ -2626,6 +2698,7 @@ recurring root causes now outrank UI/incident-rule polish.
 (excluded last pass) lands via the `impl-item-1444-fix` chain.
 
 **Handover notes (this session):**
+
 - 6 incidents filed: landing-safety, broker-crash, live-worktree-reap, empty-landing-window,
   ui-view-undefined, seat-root-fallback-commit.
 - Delegate docs commits this session: `1663151`, `5ce0187`, `8b637d9`, `2c49158`, `bec594e`, `9ccfff7`;
@@ -2635,6 +2708,7 @@ recurring root causes now outrank UI/incident-rule polish.
 ## DELEGATE NOTE — 2026-10-17 (priority delivered, landing window declared, pause command registered)
 
 **Priority #1317 (commit-time secret gate) is DELIVERED and VERIFIED.**
+
 - `impl-item-1317 @6400e8e` (2 commits: `53f6049` cherry-picks #700's scanner; `6400e8e` wires the gate
   into `src/seatguard.mjs` + `demo/commit-secrets.test.mjs`). Delegate spot-checked the branch: both
   commits + all four files present, `6400e8e` not an ancestor of main (correctly unlanded).
@@ -2646,6 +2720,7 @@ recurring root causes now outrank UI/incident-rule polish.
   #1357. Codemode gate follow-ups opened: #1379/#1380/#1381.
 
 **The exclusive landing window is DECLARED (operator, 2026-10-17).**
+
 - `pm` intent `opr-20261017-landing-window` spooled (`.spike/delegate/intent-landing-window-declared.md`):
   run landing pass **#1358** per `docs/runbooks/land.md`; quiescing the broker is authorized as part of
   the window (#1360(b) answered).
@@ -2656,6 +2731,7 @@ recurring root causes now outrank UI/incident-rule polish.
   run settles — never `serve --stop` while a genlock is held.
 
 **A `pause` command was routed to the backlog (operator request).**
+
 - Intent `opr-20261017-pause-command` delivered to `pm` (08:16:46Z; `.spike/delegate/intent-pause-command.md`):
   a `pause`/`unpause` command that stops seats taking NEW work while in-flight work settles, so broker
   upgrades run against a quiescent rig. **REGISTERED on `impl-item-1387` as ROADMAP 131** — #1387
@@ -2679,6 +2755,7 @@ a seat hosted BY the broker cannot stop that broker and then keep landing; #1390
 that runs OUTSIDE the broker (or the broker restarted and the pass re-driven once the upgrade is done).
 
 **Re-drive delivered + broker upgraded (operator-directed, 2026-10-17).**
+
 - The re-drive note `opr-20261017-redrive-1390` was drained on broker restart (`INTENT delivered=1
 dead=0` 08:46:20Z) and impl re-engaged #1390 (opened #1395).
 - **Broker upgrade DONE:** the pi runtime pin moved `4954d760` -> upstream tip `8efd314f` via
@@ -2724,6 +2801,7 @@ operator/delegate to drive **variant (1)** (stop broker, hand-verify, land outsi
 ## DELEGATE NOTE — 2026-10-17 (runbook discoverability, round-trip research, docs hygiene)
 
 **This session (committed):**
+
 1. **Followed `research-request.md` before replying** (Diagnose step + the required prompt shape) and
    wrote `docs/reviews/reducing-llm-agent-tool-calls-followup-research-prompt.md`; then, after the report
    landed, **consumed** `docs/reviews/reducing-llm-agent-tool-calls-followup.md` — spot-verified the new
@@ -2783,43 +2861,46 @@ operator/delegate to drive **variant (1)** (stop broker, hand-verify, land outsi
    duplicate it. **Mitigation rec (operator-owned):** make doc-acceptance machine-checked (D62 /
    ROADMAP 46), not prose — plus a delegate clock-out docs-drift audit.
 10. **Docs-drift mitigation — (2)+(4) DONE, (3) pending** (operator approved 2026-10-17):
-   - **(2) merge gate tightened** — `docs/runbooks/merge.md` Feature block now requires a `FEATURES.md`
-     row OR an explicit "no feature surface" note; a runbook/README mention no longer suffices
-     (commit `634a5c3`).
-   - **(4) docs-drift audit added** — `merge.md` "Trust, but verify" now carries a read-only block
-     (`git log --grep '^feat'` vs `FEATURES`/`ROADMAP` touches); ran it on the last 30 h, it reproduces
-     the drift (only `cc19f5b`/compact touched `FEATURES.md`). **LIMITS:** `feat` commits only;
-     same-commit touch only; does not cover `DECISIONS.md`, runbooks, `STATUS.md`, or a doc added in a
-     LATER commit.
-   - **(3) machine check — NOT YET SPOOLED** (next delegate action): route to `pm` to register the
-     FEATURES-row half of ROADMAP 46 as a `check` rule.
-   - **Branch-management/merge rules into the canonical docs — OPEN** (operator directive): the merge
-     procedure lives in `merge.md` / W6 / `BRANCH-AUDIT-2026-10-14.md`; nothing yet consolidates the
-     BRANCH LIFECYCLE rules (naming, deletion safety, seatguard refusal, exclusive window). Route the
-     canonical-docs part (`WORKFLOWS.md` W6 / `FEATURES.md`, team-owned) to `pm`.
+
+- **(2) merge gate tightened** — `docs/runbooks/merge.md` Feature block now requires a `FEATURES.md`
+  row OR an explicit "no feature surface" note; a runbook/README mention no longer suffices
+  (commit `634a5c3`).
+- **(4) docs-drift audit added** — `merge.md` "Trust, but verify" now carries a read-only block
+  (`git log --grep '^feat'` vs `FEATURES`/`ROADMAP` touches); ran it on the last 30 h, it reproduces
+  the drift (only `cc19f5b`/compact touched `FEATURES.md`). **LIMITS:** `feat` commits only;
+  same-commit touch only; does not cover `DECISIONS.md`, runbooks, `STATUS.md`, or a doc added in a
+  LATER commit.
+- **(3) machine check — NOT YET SPOOLED** (next delegate action): route to `pm` to register the
+  FEATURES-row half of ROADMAP 46 as a `check` rule.
+- **Branch-management/merge rules into the canonical docs — OPEN** (operator directive): the merge
+  procedure lives in `merge.md` / W6 / `BRANCH-AUDIT-2026-10-14.md`; nothing yet consolidates the
+  BRANCH LIFECYCLE rules (naming, deletion safety, seatguard refusal, exclusive window). Route the
+  canonical-docs part (`WORKFLOWS.md` W6 / `FEATURES.md`, team-owned) to `pm`.
+
 11. **LANDING PASS #1448 DRIVEN + LANDED** (delegate, operator-authorized, 2026-10-17 ~17:00Z).
-   - Broker was already down/quiescent (no `broker.json`, no `genlock.*`, no `serve` proc).
-   - **29 entries** landed in a scratch worktree via `scripts/land.mjs` + manual conflict resolution;
-     `main` fast-forwarded **`89879d7` -> `ba5115b`**. Scratch demo suite **123 pass / 0 fail**.
-   - Conflicts resolved: README/FEATURES/CODEMODE unions; the stacked `#1317 -> #1379 -> #1380` chain
-     (took the branch superset); `#828`/`#837` README+import unions; `demo/land-helper.test.mjs`
-     combined the #1383 + #1441 sections (branch renamed `feat-g-lock`).
-   - **Entry 11 (`impl-item-1151`) EXCLUDED** as instructed (D1 open).
-   - Broker restarted **pid 34756** `17:13:46Z`; inbox drained (`INTENT delivered=1` `17:13:47Z`).
-   - **Broker CRASH + recovery (~17:29Z):** pid 34756 died on `Session failed after a storage error`
-     (`wake-failed` qa conv 15 / lead conv 21) — the known **lock-contention** class (read commands
-     running open-time migrations against the broker's write lock; stale `log --follow` viewers
-     aggravate it), NOT corruption (`status` opens fine, no `unreadable pi.live`). Store backed up to
-     `.spike/store-backup-20261017-123250`; broker restarted **pid 19720** `17:33:00Z`; batch-2/3
-     intents delivered; no new storage errors. **If it recurs:** the durable fix is skipping migrations
-     for read-only opens (registered), and the per-conversation survival is ROADMAP 78.
-   - Post-landing attention includes `scribe:secret_detected` and `null:step-repetition` — new notices
-     from the landed secret-detection (#828/#837) and degeneration guards; expected, not a failure.
-   - **Owed:** `pm` to mark the 29 queue rows landed/DELIVERED; prune the now-merged branches
-     (seatguard blocks author-seat deletion; delegate/operator may `git branch -d`, all now `ahead=0`).
-   - Rulings batch `opr-20261017-rulings-batch` delivered (zero-trust key-mgmt item; ROADMAP 97 spend
-     authorized; #718 defer; #920 both-together; agent-fleet resequence; #965/#966/#851 unstick; #876 close).
-   - **Still open:** branch-management/merge rules into the canonical docs; the (3) machine-check intent.
+
+- Broker was already down/quiescent (no `broker.json`, no `genlock.*`, no `serve` proc).
+- **29 entries** landed in a scratch worktree via `scripts/land.mjs` + manual conflict resolution;
+  `main` fast-forwarded **`89879d7` -> `ba5115b`**. Scratch demo suite **123 pass / 0 fail**.
+- Conflicts resolved: README/FEATURES/CODEMODE unions; the stacked `#1317 -> #1379 -> #1380` chain
+  (took the branch superset); `#828`/`#837` README+import unions; `demo/land-helper.test.mjs`
+  combined the #1383 + #1441 sections (branch renamed `feat-g-lock`).
+- **Entry 11 (`impl-item-1151`) EXCLUDED** as instructed (D1 open).
+- Broker restarted **pid 34756** `17:13:46Z`; inbox drained (`INTENT delivered=1` `17:13:47Z`).
+- **Broker CRASH + recovery (~17:29Z):** pid 34756 died on `Session failed after a storage error`
+  (`wake-failed` qa conv 15 / lead conv 21) — the known **lock-contention** class (read commands
+  running open-time migrations against the broker's write lock; stale `log --follow` viewers
+  aggravate it), NOT corruption (`status` opens fine, no `unreadable pi.live`). Store backed up to
+  `.spike/store-backup-20261017-123250`; broker restarted **pid 19720** `17:33:00Z`; batch-2/3
+  intents delivered; no new storage errors. **If it recurs:** the durable fix is skipping migrations
+  for read-only opens (registered), and the per-conversation survival is ROADMAP 78.
+- Post-landing attention includes `scribe:secret_detected` and `null:step-repetition` — new notices
+  from the landed secret-detection (#828/#837) and degeneration guards; expected, not a failure.
+- **Owed:** `pm` to mark the 29 queue rows landed/DELIVERED; prune the now-merged branches
+  (seatguard blocks author-seat deletion; delegate/operator may `git branch -d`, all now `ahead=0`).
+- Rulings batch `opr-20261017-rulings-batch` delivered (zero-trust key-mgmt item; ROADMAP 97 spend
+  authorized; #718 defer; #920 both-together; agent-fleet resequence; #965/#966/#851 unstick; #876 close).
+- **Still open:** branch-management/merge rules into the canonical docs; the (3) machine-check intent.
 
 ## NEXT SESSION
 
@@ -2841,6 +2922,7 @@ branches stay unlanded by design and are tracked (`#1169`). **Never delete a bra
 **Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`
 
 **What this session changed (all committed):**
+
 1. **PM adapter deferred** (operator direction, **D88**): only the **task interface + storage format**
    (ROADMAP 115) is elevated; 116–123 are parked. Design: `docs/PM-ADAPTERS.md`.
 2. **Tutor-app references removed** from config, code, tests, the dead `rigs/tutor-pi.rig.json`, and 21
@@ -2852,6 +2934,7 @@ branches stay unlanded by design and are tracked (`#1169`). **Never delete a bra
 5. **ROADMAP 102–125** registered (git-merging tooling, PM adapters, TUI 124, worktrees 125).
 
 **Next-session checklist:**
+
 1. `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status` (read-only).
 2. Let the claimed items settle; do not poll. When the 4 skipped branches are ready, `#1169` routes them.
 3. `pm` sequences ROADMAP 102–125.
@@ -2882,8 +2965,9 @@ TUI 89/98/99; register via `pm`.
 imports it, so every `node cli.mjs` verb died until impl resolved it. Delegate: corrected
 `docs/runbooks/merge.md` (landing pass needs an exclusive window; never leave the tree mid-merge),
 wrote `docs/incidents/2026-10-17-landing-safety.md`, and delivered intents `opr-20261017-landing-safety-pm`
-+ `-lead` (both `INTENT delivered=1 dead=0` at 04:11:39Z). Committed `7051839`; ROADMAP item 101 in
-`9b0eb08`.
+
+- `-lead` (both `INTENT delivered=1 dead=0` at 04:11:39Z). Committed `7051839`; ROADMAP item 101 in
+  `9b0eb08`.
 
 **Git-merging research reviewed (operator, 2026-10-17):** consumed `docs/reviews/llm-prompting-for-git-merging.md`
 per the `research-request.md` SOP (spot-verified 3 load-bearing citations — Diff-XYZ 2510.12487,
@@ -2920,12 +3004,14 @@ execution system of record; the schema (115) carries the human-owned fields (`pr
 `collection`/`assignee`) and separates intake (PM → queue) from status export (queue → PM).
 
 **Next-session checklist (the landing cleanup):**
+
 1. Audit: `for b in $(git branch --format='%(refname:short)' | grep -v '^main$'); do echo "$b ahead=$(git rev-list --count main..$b)"; done`
 2. Delete **only** `ahead=0` branches: `git branch -d <b>` (safe — refuses anything unmerged).
 3. Any still `ahead>0` means the landing pass is incomplete: report to `pm`; never `-D`.
 4. See `docs/runbooks/merge.md` for the per-type checklist and the audit.
 
 **This pass (all done):**
+
 1. **Branch cleanup:** deleted the 18 fully-merged local branches (`git branch -d`, all succeeded); 18
    local branches remain (17 with unique work + `main`).
 2. **Merge/landing process added:** `docs/runbooks/merge.md` (universal gate + per-type checklists
@@ -2956,6 +3042,7 @@ English-only handoff, broker restarted **pid 13712**, qa back in English); TUI i
 the spooled-intent wake fix (`src/broker.mjs`, `demo/broker-intent-wake.test.mjs`).
 
 **WHAT THIS PASS DID (all verified):**
+
 1. **Fixed the still-owed general broker revisit gap (delegate-owned).** `selectWakes` produced real
    candidates, `seatFilter` silently dropped cooldown-suppressed ones, and nothing re-ran a pass when
    the cooldown later elapsed — so a seat whose run settled INSIDE the 30 s cooldown sat with queued
@@ -2991,15 +3078,17 @@ the spooled-intent wake fix (`src/broker.mjs`, `demo/broker-intent-wake.test.mjs
 runbook-81/82/86 work. **Trust the queue + `status`, not the ninth-pass text below.**
 
 **PRIORITY — CURRENT CRITICAL PATH (all `impl`):**
+
 1. **LANDING TRAIN `#1040`** — land the verified DONE-on-branch artifacts in order: `#890` → (`#874`
    `7013294`, then `#875` `50bc585`) → (`#910` `c2fa6ee`, then `#911` `07ae6a6`); **`git merge --no-ff`**,
    explicit paths, never push, then mark the rows DELIVERED.
 2. **`#1036`** — land `#916` (`dd79fa3`); pairs with the #915 landing so one rig reload activates both.
 3. Then the serialized `cli.mjs` chain **`#934` → `#873` → `#966`** (one writer at a time; `#920` stays
    on the ENV seam). Then the held daemon items **`#723` → `#724` → `#725`** (`impl` must release them).
-**Exact next command (read-only):** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`.
+   **Exact next command (read-only):** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`.
 
 **⚠ OPERATOR DECISIONS — RECEIVED this session (recorded: D83):**
+
 - **`#1032` — rig reload: DONE** (final pid 35640). The `#916` half still needs landing (#1036) and a
   second reload.
 - **`#944`/`#328` — CRLF/EOL: RULED** — EOL-insensitive assertions + a narrow `.gitattributes`
@@ -3034,6 +3123,7 @@ DeepSeek seats), `072bfe6` (ROADMAP 89 TUI), `b2ff656` (pointer), `89c50d4` (ROA
 `d5c1dfb` (ROADMAP 91 multi-instance).
 
 **WHAT THE DELEGATE DID (all verified):**
+
 1. **impl degradation fixed** — `rig.selfdev.json` had no `thinkingLevel`, so DeepSeek seats ran with
    `thinking:{type:"disabled"}` + no `reasoning_effort` (pi-ai `openai-completions.js:668-679`) and
    every recent `impl` turn showed `usage.reasoning:0` (ROADMAP 43a). Added `thinkingLevel:"high"` to
@@ -3096,6 +3186,7 @@ is the OPERATOR's (#328 on hold). Same width as formatter item 90. The delegate 
 seats read `thinkingLevel="high"` from AgentState (`.spike/delegate/check-thinking.mjs`).
 
 **Four operator intents routed to `pm` (inbox; all delivered, `dead=0`):**
+
 - **request-TRACE surface** (`opr-20261016-request-trace`): a verb/env to dump the ACTUAL serialized
   request payload per model call, via pi-ai's unused `ProviderRequestOptions.onPayload`/`onResponse`/
   `fetch` seam (`types.d.ts:52-83`) — realizes ROADMAP 43(c) and lets a user see the real DeepInfra
@@ -3120,10 +3211,11 @@ false-reset lead/advocate/scribe/auditor/impl), `689416a` + `978574d` (pointer/r
 
 **PRIORITY 1 — operator ruling (routed to `pm`, intent delivered `21:39:38Z`, D79):** land ALL
 uncommitted shared-tree work on `main`:
+
 - `cli.mjs` + `demo/init.test.mjs` = **#624 `cmdInit`** (the gate; complete but in no commit);
 - `docs/SEAT-LIFECYCLE.md` = **#819 (scribe)**, after its #823 verify;
 - `docs/ROADMAP.md` edit = fold into its registering item.
-Explicit-path commits only; no push. **This unblocks items 69/70/71/74/78.**
+  Explicit-path commits only; no push. **This unblocks items 69/70/71/74/78.**
 
 **PRIORITY 2 — routed to `pm` (intent delivered `21:37:29Z`):** the three ordered build items —
 (1) `compact` verb; (2) a HIGH per-turn wall-clock bound as a separate guard cause (implement first);
@@ -3148,7 +3240,7 @@ not proof the process exited — see `broker-safe-change.md`).
   `.spike/delegate/intent-compact-wallclock-degentext.md`). Three ordered items, each with a
   runbook + FEATURES row + a D-entry:
   1. **`compact` verb** — expose pi-durable's `Conversation.compact` as `node cli.mjs compact <seat>
-     [instructions]`, mirroring `resetSeatContext` (unknown-seat fail + live-generation-lease refusal),
+[instructions]`, mirroring `resetSeatContext` (unknown-seat fail + live-generation-lease refusal),
      and make the verb truthful about how its background task completes (no enqueue-and-exit stub).
   2. **HIGH per-turn wall-clock bound** as a SEPARATE guard cause (propose ~5 min, operator-tunable),
      so a legitimately long text/tool turn never trips it. Implemented FIRST.
@@ -3182,7 +3274,7 @@ not proof the process exited — see `broker-safe-change.md`).
 - **REVERTED `97a3c6d` (D78): the prose-degeneration detector false-positived and was removed.** It
   did catch the real `impl` loop (entry `36368`: "Let me emit. Emit. OK. Go. Now." ~30× per turn while
   still emitting tool calls, so every structural signal read clean), but on the broker's FIRST pass it
-  also reset `lead`, `advocate`, `scribe`, and `auditor` — coherent transcripts with low *fragment*
+  also reset `lead`, `advocate`, `scribe`, and `auditor` — coherent transcripts with low _fragment_
   diversity. Sentence heuristics over markdown cannot separate a word-salad loop from a normal long
   document (the length cap discards the varied sentences and keeps the repeated ones). The guard is back
   to its pre-D78 structural signals; **the `impl` prose loop remains UNCAUGHT**. A signal that does not
@@ -3213,6 +3305,7 @@ not proof the process exited — see `broker-safe-change.md`).
 ## CLOCK-OUT — 2026-10-16 (delegate, fifth pass) — START HERE
 
 **What this session did (all LOCAL, unpushed):**
+
 - Applied the pending **P3 Runbooks** constitution (`up rig.selfdev.json --refresh --no-serve`); doc 28
   now carries `prepare_workspace` + `P3 Language` + `P3 Runbooks` (verified).
 - Fixed the **recurring `impl` stall**: a tool call written as TEXT using DeepSeek's **DSML**
@@ -3242,6 +3335,7 @@ not proof the process exited — see `broker-safe-change.md`).
 `selfdev.sqlite.genlock.*`). Log: `selfdev.sqlite.broker.log`.
 
 **Open decision / blocker needing an OPERATOR RULING:**
+
 1. **The `cli.mjs` gate.** The working-tree `cli.mjs` is **#624's complete-but-UNCOMMITTED** `cmdInit`
    artifact: `demo/init.test.mjs` exits 0, `node --check cli.mjs` is clean, queue row **#624 is `done`**,
    yet `cmdInit` is in **no commit** (`git log --all -S cmdInit` empty; no `item-*` worktree HEAD has it).
@@ -3250,8 +3344,8 @@ not proof the process exited — see `broker-safe-change.md`).
    NOT registered as queue rows.
 
 **Still owed (delegate):** the GENERAL broker revisit gap — a seat suppressed by the per-seat cooldown
-   after a NORMAL settle (not a reset) still waits for an unrelated commit; the reset path is fixed
-   (`7d62929`). Fix by scheduling a pass when a candidate is cooldown-suppressed.
+after a NORMAL settle (not a reset) still waits for an unrelated commit; the reset path is fixed
+(`7d62929`). Fix by scheduling a pass when a candidate is cooldown-suppressed.
 
 **Exact next command (read-only):** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`.
 **Restart a down broker:** `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1`
@@ -3286,8 +3380,9 @@ FIRST, re-apply the guard inside `item-700`, revert the shared-tree block with t
 `seat:impl` from `20:07:37Z`) and is generating. **Do not poll; hand back.**
 
 **Two defects found this session (feed item 69 / item 66):**
+
 1. **`serve --stop` returned `stopped:true` while pid 14536 was still alive** in its final F11 drain.
-   `runWakeLoop` clears the heartbeat interval *before* `await harness.waitForIdle`, so `brokerAlive`
+   `runWakeLoop` clears the heartbeat interval _before_ `await harness.waitForIdle`, so `brokerAlive`
    reads stale, `cmdStopBroker` clears `broker.json`, and the stop reports success. **Never trust
    `stopped:true` alone — confirm no `cli.mjs serve` process remains** (the runbook already requires this).
 2. **A spooled inbox intent drains only when a pass runs**, and passes fire only on wake-relevant store
@@ -3390,44 +3485,45 @@ front-matter, maintenance policy, agent-execution guardrails and anti-patterns; 
 `_template.md`, `daemon-not-running.md`, `research-request.md`; and **P3 Runbooks** was added to
 `constitution.txt` (applies on `up --refresh`). A request to author/maintain runbooks for its recent
 work was spooled to `pm` via the broker inbox. The set is **unverified** where a `Verify` step has not run.
+
 - **Item 68 DONE (`037213f`):** `reconcileStrandedSubmissions` settles a `placed` submission with no live
-task before the pending set is built, so the blocked seat re-wakes. Verified live: `STRANDED settled=2`
-→ `WAKE qa`, `WAKE lead`. `demo/broker-strand.test.mjs` (RED: symbol absent at HEAD).
+  task before the pending set is built, so the blocked seat re-wakes. Verified live: `STRANDED settled=2`
+  → `WAKE qa`, `WAKE lead`. `demo/broker-strand.test.mjs` (RED: symbol absent at HEAD).
 - **Item 54 DONE (`58cbac2`):** `drivePass` takes `waitForWakes`; `runWakeLoop` passes `false` and drains
-once on loop exit (F11). Fixes the loop park that made `serve --stop` hang. `demo/broker-wake-return.test.mjs`
-(RED: HEAD takes 4014ms; GREEN ~0.2s).
+  once on loop exit (F11). Fixes the loop park that made `serve --stop` hang. `demo/broker-wake-return.test.mjs`
+  (RED: HEAD takes 4014ms; GREEN ~0.2s).
 - **Item 66 DONE (`47507f1`):** every inbox intent carries a `requestId` (so a crash between submit and
-unlink re-drains idempotently), and the broker reconciles dead `genlock.*` leases at start (ESRCH only;
-EPERM holders kept) and logs `RECONCILE leases=N`. `demo/broker-reconcile.test.mjs`. The orphaned-worktree
-sweep is split to **item 73** — `removeClaimedWorktree` force-rm's a dirty tree, so a sweep needs a
-clean-only guard first.
+  unlink re-drains idempotently), and the broker reconciles dead `genlock.*` leases at start (ESRCH only;
+  EPERM holders kept) and logs `RECONCILE leases=N`. `demo/broker-reconcile.test.mjs`. The orphaned-worktree
+  sweep is split to **item 73** — `removeClaimedWorktree` force-rm's a dirty tree, so a sweep needs a
+  clean-only guard first.
 - **Item 73 DONE (`243f175`):** `removeClaimedWorktree` refuses a dirty worktree without `force` (D60;
-fixes a latent `rm -rf` data-loss path), and the broker sweeps orphaned `item-*` worktrees at start
-(clean removed; dirty reported and kept). `demo/broker-worktree-sweep.test.mjs` (RED before).
+  fixes a latent `rm -rf` data-loss path), and the broker sweeps orphaned `item-*` worktrees at start
+  (clean removed; dirty reported and kept). `demo/broker-worktree-sweep.test.mjs` (RED before).
 - **Item 65 DONE (`6fae68d`, `559f967`):** lease renewal + a 660 s staleness (above the 600 s stream
-timeout), an EPERM-safe `holderAlive`, and heartbeat-based broker identity so a reused pid is not the
-broker. The operator view and the acquire path now share `slotIsStale`. `demo/genlock-hardening.test.mjs`
-(RED before).
+  timeout), an EPERM-safe `holderAlive`, and heartbeat-based broker identity so a reused pid is not the
+  broker. The operator view and the acquire path now share `slotIsStale`. `demo/genlock-hardening.test.mjs`
+  (RED before).
 - **Next:** clean-path items are exhausted; items **69–71** need `cli.mjs` (dirty/blocked). The command
-spool (71) is the durable-plan unlock.
-**Language:** the `P3 Language` constitution rule (`a0ab993`) covers all seats once the constitution is
-re-applied (`up --refresh`); immediate English directives were spooled to `impl` and `qa` via the inbox.
-**⛔ Gate — `cli.mjs`:** dirty with two seats' in-flight work (`cmdInit`: `cli.mjs` + `demo/init.test.mjs`;
-`seatguard`: `src/seatguard.mjs` + `demo/seatguard.test.mjs`). **Do not commit those** (not this seat's
-work). Resolve/land them (their owners, or an operator ruling) before items 69/70/71/74/78.
-**Broker:** running `pid 14536` (`START 2026-10-16T19:33:43Z`); `.broker.json` carries `runToken` +
-`heartbeatAt` (item 65 identity). Start a down broker with
-`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1` (never set
-`DURIAN_PI_SEAT_ROOT`). **Nothing restarts a dead broker — the supervision gap is items 61–64.** A broker that
-died on a storage error stalled `impl` (2026-10-16); `resume` + restart recovered it.
-**Pending apply — one broker stop + `up --refresh`:** the **`P3 Runbooks`** rule in `constitution.txt`
-(`fe0c74c`) is not yet live for seats (the `P3 Language` rule and the impl→DeepSeek model were applied at
-`806ce7f`). ⚠️ On `serve --stop`, proceed **only** on `"stopped": true` — never `false`; that is how the
-store was corrupted twice. See `docs/runbooks/broker-safe-change.md`.
-**Owed:** wire `reconcileStrandedSubmissions` into `cli.mjs cmdResume` (blocked on `cli.mjs`).
-**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`; restart a down broker with
-`scripts/serve-noroot.ps1`. Design of record: `docs/BROKER-SUPERVISION.md` (D71/D72),
-`docs/COMMANDS-AND-THE-BROKER.md` (command paths + mailbox).
+  spool (71) is the durable-plan unlock.
+  **Language:** the `P3 Language` constitution rule (`a0ab993`) covers all seats once the constitution is
+  re-applied (`up --refresh`); immediate English directives were spooled to `impl` and `qa` via the inbox.
+  **⛔ Gate — `cli.mjs`:** dirty with two seats' in-flight work (`cmdInit`: `cli.mjs` + `demo/init.test.mjs`;
+  `seatguard`: `src/seatguard.mjs` + `demo/seatguard.test.mjs`). **Do not commit those** (not this seat's
+  work). Resolve/land them (their owners, or an operator ruling) before items 69/70/71/74/78.
+  **Broker:** running `pid 14536` (`START 2026-10-16T19:33:43Z`); `.broker.json` carries `runToken` +
+  `heartbeatAt` (item 65 identity). Start a down broker with
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1` (never set
+  `DURIAN_PI_SEAT_ROOT`). **Nothing restarts a dead broker — the supervision gap is items 61–64.** A broker that
+  died on a storage error stalled `impl` (2026-10-16); `resume` + restart recovered it.
+  **Pending apply — one broker stop + `up --refresh`:** the **`P3 Runbooks`** rule in `constitution.txt`
+  (`fe0c74c`) is not yet live for seats (the `P3 Language` rule and the impl→DeepSeek model were applied at
+  `806ce7f`). ⚠️ On `serve --stop`, proceed **only** on `"stopped": true` — never `false`; that is how the
+  store was corrupted twice. See `docs/runbooks/broker-safe-change.md`.
+  **Owed:** wire `reconcileStrandedSubmissions` into `cli.mjs cmdResume` (blocked on `cli.mjs`).
+  **Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status`; restart a down broker with
+  `scripts/serve-noroot.ps1`. Design of record: `docs/BROKER-SUPERVISION.md` (D71/D72),
+  `docs/COMMANDS-AND-THE-BROKER.md` (command paths + mailbox).
 
 **INCIDENT (2026-10-16, delegate) — a second writer crashed the broker and corrupted two run-control
 docs.** 🚨 Do **not** run `resume`/`doctor` (or any write verb) while the broker is running: they are
@@ -3512,6 +3608,7 @@ the owner; `vendor/eval/` (reference clones) and `vendor/pi-main/` are gitignore
 **Test flakiness under a live broker — finding + mitigations (2026-10-16):** running
 `demo/*.test.mjs` while the broker drives gave **71/78**; re-running the 8 failures individually gave
 **7 pass** (flaky) + `config.test.mjs` (a legit #621 failing-first RED). Grounded causes and fixes:
+
 - **Inherited repo config**: demos spawn `cli.mjs` with `{...process.env}` and so pick up the local
   `durian-pi.config.json` (`DURIAN_PI_MAX_CONCURRENT_SEATS: 4`, a real provider/model, and — the worst part —
   `DURIAN_PI_DB` pointed at a DIFFERENT project's store,
@@ -3536,6 +3633,7 @@ consult is one). **Docs landed:** D63/D64 (`0ecf9cf`), D65 (`b81e171`), D66 (thi
 _Historical (superseded): the #480-era notes below were written for the 2026-10-15 handoff._
 
 **Future work (candidate items — not yet queued):**
+
 - **TUI app implementation plan** — the operator-approved plan of record is
   `docs/TUI-IMPLEMENTATION-PLAN.md`. Its §C hardening items H1–H5 (sanitise untrusted text at every
   render boundary; synchronous restore on abnormal exit; DECSET 2026; grapheme/EAW-correct width;
@@ -3583,12 +3681,12 @@ _Historical (superseded): the #480-era notes below were written for the 2026-10-
   live long generation, swallows `EPERM`, trusts reused pids) and should land regardless. Per-user agent vs system daemon is an
   operator ruling. Registered, not scheduled — awaiting `pm` sequencing.
 - **Broker intent-inbox** — deliver intent to a seat WITHOUT stopping the broker (a file the broker
-drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guard, so routing needs a
-`serve --stop`, which interrupts in-flight work.
+  drains each pass, sibling to `.broker.stop`). Today `cmdSend` has no broker guard, so routing needs a
+  `serve --stop`, which interrupts in-flight work.
 - **Reset at WORK-ITEM boundaries only** (deferred mitigation 3): clear a seat's context when it
-finishes a work item — explicitly NOT finer item boundaries yet.
+  finishes a work item — explicitly NOT finer item boundaries yet.
 - **Mid-run cut** (optional): the degeneration guard resets BETWEEN runs; a provider-level turn cap
-would cut a single runaway run mid-flight. (Bounded runs are mitigated; this is the residual gap.)
+  would cut a single runaway run mid-flight. (Bounded runs are mitigated; this is the residual gap.)
 - **Worktree leak + recursion (NEW, observed 2026-10-16):** the broker's per-task worktrees
   (`item-1/`, `item-2/` in the repo root) are **not gitignored** and **not cleaned up**, so they
   pollute `git status`; and because the #506 fix “forks the visible state”, each new worktree
@@ -3611,6 +3709,7 @@ would sit behind the very broker it is meant to fix, so it must be done in the d
 durian-pi team for that reason.
 
 ### Symptom (observed 2026-10-16, pid 17424)
+
 `<db>.broker.log`: `PASS 5` at `02:26:13`, its wakes fired, then **no `PASS 6` for 40+ min** (still
 none at `03:10`). Measured pass intervals for this broker: 20.5, 20.3, 4.5, 27 min. Meanwhile `status`
 showed **pm idle with 9 queued DONE-notices** and **qa idle with 2 queued artifacts**
@@ -3618,20 +3717,23 @@ showed **pm idle with 9 queued DONE-notices** and **qa idle with 2 queued artifa
 queued work sat idle while a run was in flight.
 
 ### Root cause — what is VERIFIED vs INFERRED
+
 **Verified (code + vendored contract):**
+
 - `src/broker.mjs:146` (`drivePass`) calls `await harness.waitForIdle(context)` — the HARNESS method.
 - Its contract (`node_modules/@earendil-works/pi-durable/dist/harness/types.d.ts:668-669`):
+
   > `Harness.waitForIdle` — “Resolve when the ordinary ownership scope of **every** ownerless
   > conversation has no live non-background task.”
 
   (A per-conversation wait exists too: `Conversation.waitForIdle`, line 87.)
+
 - Therefore every pass blocks until **all** ownerless conversations are idle. And `src/scheduler.mjs`
   treats a submission settling as wake-relevant (“a submission settling … is exactly when a stalled
   claim becomes wakeable again”) — so the loop cannot act on that per-submission intent while parked in
   the global wait.
 - **Code path (the decisive one):** `src/broker.mjs:258-274` does `await drivePass(...)` and THEN
-  `passes++; logBrokerLine(dbPath, \`PASS ${passes}\`)`. So `PASS` is written **only after `drivePass`
-  returns**, and `drivePass` returns **only after line 146's `harness.waitForIdle` resolves**, which is
+  `passes++; logBrokerLine(dbPath, \`PASS ${passes}\`)`. So `PASS`is written **only after`drivePass`returns**, and`drivePass`returns **only after line 146's`harness.waitForIdle` resolves**, which is
   only when **every** ownerless conversation is idle. Consequence (a code-path FACT, not an inference):
   **no pass boundary — and therefore no next wake of ANY seat — until every in-flight run settles**; a
   seat that finished early is not re-woken until the slowest run finishes.
@@ -3644,11 +3746,13 @@ blocked by the single-writer rule plus the running broker. **The mechanism is co
 proportion is not.**
 
 ### The tool that exists to fix it
+
 `Scheduler.waitForIdle(conversationId | undefined, context)` and `Conversation.waitForIdle(context)`
 wait for **one** conversation (`harness/scheduler.d.ts:86`, `harness/types.d.ts:669`). The loop can
 wait per-WOKEN-seat and re-wake others as they settle.
 
 ### The fix (chosen direction)
+
 1. In `drivePass`, replace the single global `await harness.waitForIdle(context)` with a wait that
    settles when every conversation **this pass woke** is idle (track the woken conversation ids; wait
    on those only — do NOT wait on conversations this pass did not wake). A settle that the commit
@@ -3660,12 +3764,14 @@ wait per-WOKEN-seat and re-wake others as they settle.
 4. Keep the per-pass `supervise`, but it must not gate the wake path.
 
 ### Observability (part of the fix)
+
 - Log each pass with its DURATION and the seats it woke: `PASS <n> ms=<dur> woke=<a,b,c>`.
 - Add a liveness notice/measure: “seat has queued work and **no live generation lease** for > N s” —
-distinct from the existing `idle_with_queued_work`, which cannot tell “waiting for the pass” from
-“wedged”. Surface in `status` and as a `check` rule.
+  distinct from the existing `idle_with_queued_work`, which cannot tell “waiting for the pass” from
+  “wedged”. Surface in `status` and as a `check` rule.
 
 ### Tests (failing-first)
+
 - **New `demo/broker-liveness.test.mjs`:** two seats; make one run long (faux provider with a delay /
   multi-turn script), give the other queued work; assert the second seat's wake appears in the broker
   log within a bound (≈5 s) **while the first is still running**. RED against the current
@@ -3674,12 +3780,14 @@ distinct from the existing `idle_with_queued_work`, which cannot tell “waiting
   `broker-log`, `autostart` green; `node --check` clean; whole `demo/*.test.mjs` suite green.
 
 ### Acceptance
+
 - A long run on one seat does NOT delay waking another seat with queued work (proven by the demo).
 - Pass duration ≈ the pass's own work, not the longest run.
 - Never closes the harness with a live run (no stranded submissions).
 - `stop` / `serve --stop` / `--max-duration` semantics unchanged.
 
 ### Constraints / gotchas
+
 - **Restart the broker to test the fix** — editing source does not affect the running process.
 - Single-writer: only one `serve`/`run`/`send` at a time on `./selfdev.sqlite`.
 - The tree may hold in-flight seat work (#623 etc.) — **stage explicit paths only**, never `git add -A`.
@@ -3696,8 +3804,9 @@ executed. Do NOT re-apply the snapshot (D48: adapt onto `main`, never restore a 
 **Then (next queued item): #480 (U1) — build the `durian-pi ui` driver (queue id #480; TOP PRIORITY; UNBLOCKED).**
 The rest of the interactive-client series is **#481–#487 (U2–U7)**. U1 is the missing piece between
 `src/tui/client.mjs` (a headless renderer) and the operator: a separate entrypoint that owns raw mode
-+ key handling + the poll loop and paints `renderTui` frames (`cli.mjs` stays non-interactive, D21;
-read-only, D11/D40).
+
+- key handling + the poll loop and paints `renderTui` frames (`cli.mjs` stays non-interactive, D21;
+  read-only, D11/D40).
 
 Exact next command (drive the selfdev team; the seat root is the live tree):
 
@@ -3710,6 +3819,7 @@ Known blocker: the store is **single-writer** — never run two `send`/`run`/`se
 genlock/broker is held at handoff.
 
 **Session state (2026-10-15 delegate handoff — do not re-derive):**
+
 - **#473 (worktree lifecycle wiring) DONE and qa-VERIFIED.** qa's #477 verdict = PASS (68/68,
   `node --check` clean). qa's caveats: the demo does NOT exercise the live `drivePass` claim path
   (reviewed only), and 5 pre-existing silent-return catches remain (`src/broker.mjs:317,375`;
@@ -3727,6 +3837,7 @@ genlock/broker is held at handoff.
   make green require a live lease/in-flight submission.
 
 Then, in order:
+
 1. **#473** — wire worktrees into claim/completion: on claim, create the item's worktree+branch and
    point the working seat's cwd/`DURIAN_PI_SEAT_ROOT` at it; on completion, commit ONLY the item's files
    on its branch, release the lock, `git worktree remove`. **#474 is GATED on #473** — do NOT put
@@ -3753,14 +3864,14 @@ Then, in order:
 **`origin/main`** (pushed externally — NOT by the delegate), and only the handoff commit is local.
 Tree clean, suite **68/68**.
 
-| Commit | Content |
-|---|---|
-| `80ac4d5` | **#330 Phase 2** — per-task worktree lifecycle + Windows Job-Object reaping |
-| `5b21763` | **#384–#386/D50** — developer commit authority; commits scoped to the item |
+| Commit    | Content                                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------------------- |
+| `80ac4d5` | **#330 Phase 2** — per-task worktree lifecycle + Windows Job-Object reaping                                |
+| `5b21763` | **#384–#386/D50** — developer commit authority; commits scoped to the item                                 |
 | `5ecddd1` | **#428–#433** — broker bounds/cooperative-stop/log/concurrent attribution; `--help`; uncapped `peek_queue` |
-| `e28a653` | **TUI C3** client (`src/tui/client.mjs`) + read-layer proofs |
-| `82a89f2` | **docs** truth-up (FEATURES/STATUS/DECISIONS/SELFDEV/WORKFLOWS/SELF-ADMIN/NEXT) |
-| `ddd9c49` | **fix(test)** — broker demos no longer swallow cleanup errors |
+| `e28a653` | **TUI C3** client (`src/tui/client.mjs`) + read-layer proofs                                               |
+| `82a89f2` | **docs** truth-up (FEATURES/STATUS/DECISIONS/SELFDEV/WORKFLOWS/SELF-ADMIN/NEXT)                            |
+| `ddd9c49` | **fix(test)** — broker demos no longer swallow cleanup errors                                              |
 
 Note: `git grep -n "claimWorktree" -- cli.mjs src/` returns only `src/worktree.mjs` — the wiring is
 the whole point of #473.
@@ -3783,9 +3894,9 @@ the whole point of #473.
 - **The broker/driver order is oldest-first per seat.** New priority items sit behind a 60-item
   backlog, so `claim_work({itemId})` via a direct `send <seat> --body-file` is the way to prioritize;
   grooming is the structural fix.
-- **Two writers, precisely.** One *store/harness* writer per DB (two `run`/`send` drivers race on the
+- **Two writers, precisely.** One _store/harness_ writer per DB (two `run`/`send` drivers race on the
   entry id, F24; `run`/`up` are not retried). Concurrency is `serve` + `DURIAN_PI_MAX_CONCURRENT_SEATS`.
-  Per-task worktrees will make concurrent *editing* safe once #473 lands.
+  Per-task worktrees will make concurrent _editing_ safe once #473 lands.
 - **Full suite > 120 s** so a single tool call times out; loop `demo/*.test.mjs` per file with a long
   timeout, or background it. Baseline is now **68/68** (the old `starter.test.mjs` CRLF failure is FIXED).
 - **`edit` needs exact indentation and line endings.** The demo tests use 2-space indent; `src/rig.mjs`
