@@ -16,7 +16,10 @@ exiting the Pi session must restore the landing screen **on the SAME seat, live*
 poller polling), the crash/kill path must recover via the reaper, and a broker that does not resume must
 show an explicit NOT-LIVE state. Recorded: #3942 done, #3982/#3985; implementation is **#3983 LAUNCH +
 RETURN GLUE, held `blockedBy #3942 + #3954`**. The seam layer is **#3954** (impl, claimed). Phase 3 is
-explicitly downstream of a verified Phase 2.
+explicitly downstream of a verified Phase 2. **Since then impl's stack LANDED** as merge
+`6bb0fc7`: `17f11f1` (seam layer), `4ffc17f`, `b65d9e5` (launch/return glue), `16d8ed9`/`bd168d1`
+(exit key from the real bindings), `ca7aa93` (test), `088e4ee` (return path). #3954/#4089 are `done`,
+#3983 `cancelled` as superseded — re-check their verify gates before closing.
 
 **Queue id:** #3954 (seam layer) · #3983 (launch+return glue, held) · #3941/#3946/#3980 (Fix A +
 verifies) · #3943 (qa narrow verify of the already-landed slice) · #3948 (scribe pointer correction).
@@ -31,11 +34,12 @@ FILE still names `devtools local/swift-1.5-iq2_xs` while the STORE runs `deepinf
 `up --refresh`. Stale held landing rows also exist for devtools (#4035's `be663f2` is already on `main`;
 #4041/#4042 are a duplicate pair) — pm hygiene, not the seat.
 
-**Blocker:** **the shared tree is NOT clean** — `impl` is writing `src/tui/durable/attach.mjs`
-and `demo/tui-attach-seam.test.mjs` (both untracked, growing) directly in the shared checkout for #3954. That is the D49/F12 hazard;
-it is preserved, not to be deleted/stashed/committed, and it makes a suite run in `.` unable to prove
-`main`. Steered to `pm` (request `operator-tui-shared-tree-2026-10-20-1`). Last measured `main` baseline:
-`pass=185 fail=3` (`pitui` #2412, `broker-one-connection`, `seat-instruction-encoding`).
+**Blocker:** **none on the shared tree** — `impl`'s Phase 2 seam work is COMMITTED AND LANDED
+(`6bb0fc7`), and the tree is clean except the broker-generated untracked
+`selfdev.sqlite.broker.audit.log`. **TWO BROKERS were running on this store** (15768 + 23172); the
+duplicate 23172 was force-killed at ~22:23Z after a store backup, and single writer 15768 is passing.
+A **concurrent delegate session** is also committing here (its `f23113f` is in this history) — coordinate
+before landing, and never start a second `serve`/`up` without checking for a live broker first.
 
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
