@@ -66,6 +66,18 @@ above, then the index was cleared with mixed `git reset`. The four clean leaked 
 `git worktree remove`. **Main is clean except this pointer file.** Next: `pm` to register/review the
 archive branch (routed via `intent.mjs`).
 
+**LAND+PRUNE PASS (2026-10-20 ~19:10Z, delegate).** `main` `b063f10`, content-clean. Pruned **63 refs**
+(242→179) and released **9 worktrees** (52→47, locked 15→9), `main` unmoved, nothing forced: 54 merged+free
+`-d`'d; 5 clean terminal trees `unlock→remove→-d`; 4 dirty merged terminal trees RELOCATED to
+`../pi-opendurig.worktrees/` (status entries 1:1 verified) then `switch --detach` + `-d`. KEPT:
+`devtools-item-1558` (landed-then-reverted; author's input to #3238) and 5 live merged+held
+(`advocate-item-2630`, `designer-item-3922`, `impl-item-1274`, `impl-item-2788`, `qa-item-2993`).
+Landing preflight over the 172 unlanded (snapshots excluded): **101 clean / 59 conflict**. **Nothing landed:**
+the only current landing entries are HELD (#3891 carrier `impl-item-3869` @565cf2c; #3906
+`designer-item-3845` @37474a4). Prescribed order when released (#3879/#3885): `scribe-item-3785` @21fb14c
+first, then the re-cut carrier (DON'T also land superseded `impl-item-3656` @7cd542a), then rebase+land the
+`cccccd5→235e163→30f12aa` stack.
+
 ## CLOCK-OUT (2026-10-20 ~07:50Z, delegate) — **TEAM WAS DOWN ~20 MIN ON AN EXTERNAL 402; BROKER RESTARTED, 47/49 PARKED ITEMS RESUMED**
 
 Operator ask: "kick start the team". Diagnosed before touching anything; the cause was NOT the rig.
