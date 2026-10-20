@@ -2,13 +2,21 @@
 
 ## NEXT SESSION  (2026-10-20 — the ONLY live pointer; every later "NEXT SESSION" is history)
 
-**Current item:** report and fix the `main` regression, then land the operator's TUI slice. `main` is RED
-on 7 demos (measured in a clean detached worktree, sha `557ceb3`): `tui-landing`, `tui-status-bar`,
-`tui-conversation-header`, `landing-data`, `broker-one-connection`, `seat-instruction-encoding`, `pitui`.
-Five are the TUI slice's REAL width bug (`tui-landing`: 68-cell rows in a 57-cell terminal, every width
-40-67), so the landing is not clean — it is a defect to route to `pm` for impl/designer.
+**Current item:** the `main` regression is **FIXED** — the delegate landed `revert-9c3aa02` as merge
+`798836b` (`main` `db96a05` -> `798836b`). Cause: a bare `git commit` by the delegate swept a seat's
+STAGED 21-file work into `9c3aa02` (message said `docs(NEXT)`, delta was 20 files / +450-907), removing
+`src/tui/client.mjs` -286 etc. while the demos it removes stayed put. The revert restored those files.
+**Measured on `main` after the revert, clean detached worktree: `pass=185 fail=3`** (demos 188).
+The 4 TUI failures (`tui-landing`, `tui-status-bar`, `tui-conversation-header`, `landing-data`) are GONE.
+**Still red, and NOT caused by that commit — all three also fail at `deff39c`, its parent:**
+`broker-one-connection`, `pitui` (#2412), `seat-instruction-encoding`. Two of those are NEW against the
+documented `pass=180 fail=1` baseline and have no item: ask `pm` to mint them.
+**The seat's parked work is intact** at `stash@{0}` ("delegate: park a seat's 21-file shared-tree WIP for the
+9c3aa02 revert") plus a patch at `.spike/delegate/revert-9c3aa02-2026-10-20/` — its author must redo it on
+a BRANCH; do not pop the stash blind.
 **Queue id:** `#3313` (landing render) · `#3309` · `#3308` · `#3315`/`#3314` (verifies CANCELLED — re-register
-before accepting) · `#2412` (`pitui`) · the 7-failure regression has NO item yet: ask `pm` to mint one.
+before accepting) · `#2412` (`pitui`) · `broker-one-connection` + `seat-instruction-encoding` regressions have
+NO item yet.
 **Blocker:** `main` is red on 7 demos, so `land.mjs --suite` is unusable; land without it and prove on
 `main`. Also standing: the local PolyStrata model is DOWN (Swift/Qwen3.6 deleted, IQ3_S installing to
 `D:\PolyStrata-models`), and the shared tree carries ~107 dirty paths of seats' in-flight work, so a suite
