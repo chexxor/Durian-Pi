@@ -636,3 +636,31 @@ costs 1.5 GB of VRAM per 32K of context (measured); Qwen3.8 keeps its KV in RAM 
 32768` keeps the hot part on the card; ~13.7 KB/token of host RAM is ~0.9 GB per 64K conversation). On a 24 GB
 card the choice is always "model in VRAM" vs "slots in VRAM": a 54.8 GB requirement (IQ3_S) leaves room for
 roughly 2-3 slots at 32K, not the engine's 8.
+
+### Less-compressed Qwen3.8 variants: the disk + RAM arithmetic (2026-10-20)
+
+PolyStrata's `setup.py` MODELS table is authoritative for what an install costs. **Disk is
+`download + arena` (the pack duplicates the experts), not just the download**, and the arena cannot be
+avoided in low-RAM mode either -- low-RAM maps experts from the pack's `experts.bin` rather than copying
+them into RAM, so the file stays on disk.
+
+| Variant | Download | Arena (pack) | Disk needed | RAM for resident experts | Runs on 32 GB + 24 GB *well*? |
+|---|---:|---:|---:|---:|---|
+| IQ2_XS (**installed today**, Swift) | 68.0 GB | 35.5 GB | ~104 GB | 48 GB (we had 32 → low-RAM) | No -- it already ran in low-RAM mode |
+| IQ3_XXS | 75.8 GB | 42.9 GB | ~119 GB | 60 GB | No (low-RAM) |
+| **IQ3_S** | 83.6 GB | 50.3 GB | **~135 GB** | **62 GB** | No (low-RAM); **yes at 96 GB** |
+| UD-IQ4_XS | 93.7 GB | 59.5 GB | ~153 GB | ~72 GB | No |
+| UD-Q4_K_XL | 111.3 GB | 77.0 GB | ~188 GB | ~88 GB | No |
+| UD-Q5/Q6_K_XL, Q8_0 | 158-188 GB | 98-128 GB | 256-316 GB | 108-136 GB | No |
+
+This PC on 2026-10-20: **C: 54.1 GB free, D: 135.1 GB free**. So no less-compressed size fits as-is.
+Removing the Swift install (64 GB of GGUF + 35 GB pack) and the unused qwen36 pack/model (~16 GB) frees
+~115 GB on C:, taking it to ~169 GB -- enough for IQ3_S (~135 GB, ~34 GB headroom) or UD-IQ4_XS (~153 GB).
+`START-HERE.bat --data-dir D:\PolyStrata-data` can put the download on D: instead, but D:'s 135 GB fits
+IQ3_S only with ~0 headroom.
+
+**Consequence for the "which variant" question:** the compression ladder and the RAM ladder move together.
+Below ~60 GB of RAM every 3-bit-and-up Qwen3.8 runs in low-RAM mode, where experts stream from the pack on
+disk -- and that is exactly the state our Swift run was in (`resident RAM: 19.52 GiB` of a 35.5 GB arena,
+479 GB read from disk). So a fair test of a less-compressed variant needs the 96 GB RAM upgrade first;
+otherwise the test measures disk streaming, not the model.
