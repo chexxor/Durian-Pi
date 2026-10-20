@@ -622,7 +622,7 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 	const norm = (p) => resolve(p).replace(/\\/g, "/");
 	const targetPath = norm(worktreePath);
 	const refBranch = `refs/heads/${branch}`;
-	const branchHolder = (await listWorktrees(repo)).find(
+	const branchHolder = (await listWorktrees(repo, { strict: true })).find(
 		(w) => (w.branch === branch || w.branch === refBranch) && norm(w.worktree) !== targetPath,
 	);
 	if (branchHolder) {
@@ -930,8 +930,26 @@ export async function rebaseItemBranch({ worktreePath, targetBranch }) {
 /**
  * List existing worktrees for cleanup / audit. Returns an array of objects
  * with path, branch (null if detached), and locked status.
+ *
+ * #3605 — THE EMPTY LIST USED TO MEAN TWO THINGS: "no worktrees" and "could not determine
+ * worktrees". The second reading is the PERMISSIVE one, so a git failure answered "nothing holds
+ * this ref" — which is precisely the answer a safety check must not invent, because it AUTHORISES
+ * the action the check exists to prevent (`prepareSeatWorkspace`'s branch-holder guard reads it as
+ * "no other worktree holds this branch" and stops refusing).
+ *
+ * `strict` is how a caller STATES which reading it wants:
+ *   - `strict: true`  — a caller that DECIDES on the result. A failure THROWS, because "unknown"
+ *                       must never be mistakable for "empty".
+ *   - default (false) — a caller that REPORTS. The lenient `[]` is kept because a path that is not
+ *                       a git repository is a normal input for the audit surface (broker.mjs), but
+ *                       the failure is no longer SILENT: anything that is not the expected
+ *                       "not a git repository" case is written to stderr.
+ *
+ * Do not "fix" the default to fail-closed for every caller: the sweep and the audit legitimately
+ * read a non-repo path, and a throw there would take down a reporting surface over an expected
+ * input. The strict flag exists so the decision is made per call site, not globally.
  */
-export async function listWorktrees(repoPath) {
+export async function listWorktrees(repoPath, { strict = false } = {}) {
 	try {
 		const { stdout } = await run("git", ["-C", repoPath, "worktree", "list", "--porcelain"]);
 		const worktrees = [];
@@ -953,7 +971,19 @@ export async function listWorktrees(repoPath) {
 		}
 		if (current.worktree) worktrees.push({ branch: null, locked: false, ...current });
 		return worktrees;
-	} catch {
+	} catch (err) {
+		const detail = String(err?.stderr ?? err?.message ?? err).trim();
+		if (strict) {
+			throw new Error(
+				`could not list worktrees for ${repoPath} — refusing to answer "none" when the truth is ` +
+					`"unknown" (pass { strict: false } only for a caller that REPORTS rather than decides): ${detail}`,
+			);
+		}
+		// An unexpected failure is loud; the documented non-repo case stays quiet so the audit and the
+		// sweep do not fill the broker log with an expected input.
+		if (!/not a git repository/i.test(detail)) {
+			console.error(`worktree: could not list worktrees for ${repoPath}: ${detail}`);
+		}
 		return [];
 	}
 }
