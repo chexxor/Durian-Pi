@@ -167,6 +167,34 @@ try {
 	const nonAscii = await beforeTool(as_tool({ path: join(root, "unicode.md"), content: "caf\u00e9 \u2014 \u4e2d\u6587 \u{1f600}\n" }), {}, context);
 	check("non-ASCII text is not mistaken for control bytes (UTF-8 multibyte never drops below 0x80)", nonAscii === undefined, JSON.stringify(nonAscii));
 
+	console.log("\n#3961: a seat whose cwd DEGRADED to the shared checkout must not write or commit there");
+	// `complete_work` silently resets the persisted cwd to the broker's cwd (the shared tree), so the
+	// NEXT item's relative write or commit lands in the shared tree. This guard refuses it.
+	const degradedApi = { conversationId: "conv-degraded", snapshot: async () => ({ cwd: process.cwd() }) };
+	const degradedWrite = await beforeTool(as_tool({ path: "scratch-relative.js", content: "const z = 1;\n" }), degradedApi, context);
+	check(
+		"a RELATIVE-path write from the degraded cwd is refused, naming prepare_workspace",
+		degradedWrite?.block?.includes("SHARED checkout") && /prepare_workspace/.test(degradedWrite.block),
+		JSON.stringify(degradedWrite).slice(0, 200),
+	);
+	const degradedCommit = await beforeTool(
+		{ type: "toolCall", id: "d1", name: "bash", arguments: { command: "git commit -m x" } },
+		degradedApi,
+		context,
+	);
+	check(
+		"a commit from the degraded cwd is refused (it would land ON main, bypassing the landing pass)",
+		degradedCommit?.block?.includes("SHARED checkout") && /landing pass/.test(degradedCommit.block),
+		JSON.stringify(degradedCommit).slice(0, 200),
+	);
+	// An ABSOLUTE path is a deliberate target — left to the existing guards, not this one.
+	const degradedAbsolute = await beforeTool(as_tool({ path: join(root, "abs.js"), content: "const z = 1;\n" }), degradedApi, context);
+	check("an ABSOLUTE-path write from the degraded cwd is NOT refused by this guard", degradedAbsolute === undefined, JSON.stringify(degradedAbsolute));
+	// A seat whose persisted cwd is its OWN worktree (not the shared tree) is NOT refused.
+	const ownApi = { conversationId: "conv-own", snapshot: async () => ({ cwd: root }) };
+	const ownWrite = await beforeTool(as_tool({ path: "scratch-own.js", content: "const z = 1;\n" }), ownApi, context);
+	check("a seat with its OWN worktree cwd is NOT refused", ownWrite === undefined, JSON.stringify(ownWrite));
+
 	console.log(failures === 0 ? "\nPASS — the guard holds" : `\nFAIL — ${failures} assertion(s) failed`);
 } finally {
 	await rm(root, { recursive: true, force: true });
