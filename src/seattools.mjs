@@ -127,7 +127,11 @@ const prepareWorkspace = defineTool({
 					(workspace.branch ? ` The worktree is on branch ${workspace.branch}; commit your item's files there.` : "") +
 					(workspace.carried.length > 0
 						? `\nCarried the shared tree's visible changes: ${workspace.carried.join(", ")}`
-						: ""),
+						: "") +
+					// #3821: a worktree provisioned with a FAILED sync-pi --link must say so HERE, in the
+					// tool result the seat reads, not in a console.warn on a stream nobody sees. Empty when
+					// the pinned packages were linked or there is nothing to link.
+					(workspace.dependencyNote ?? ""),
 			);
 		} catch (err) {
 			return result(`PREPARE_WORKSPACE_ERROR: ${err && err.stack ? err.stack : String(err)}`);

@@ -119,6 +119,82 @@ export async function ensureIgnored({ repo, target }) {
 	return { ignored: true, added: rule, pattern: relPosix };
 }
 
+/** The installed version of `name` in a worktree's `node_modules` (null when absent/unreadable). */
+function installedVersion(worktreePath, name) {
+	try {
+		const pkg = JSON.parse(readFileSync(join(worktreePath, "node_modules", ...name.split("/"), "package.json"), "utf8"));
+		return typeof pkg.version === "string" ? pkg.version : null;
+	} catch {
+		return null;
+	}
+}
+
+/** The pi package whose version drifts in practice, and the one the tui demos need. */
+const PINNED_PACKAGE = "@earendil-works/pi-durable";
+
+/**
+ * Run `node scripts/sync-pi.mjs --link` in a worktree and REPORT what happened (#3821).
+ *
+ * Exported because it is the step that silently did nothing: `--link` needs a BUILT
+ * `vendor/pi-main`, which a fresh worktree never has, so it exits 1 with
+ * `nothing built yet; run --sync before --link` — and the caller downgraded that to a
+ * `console.warn` nobody reads. A caller must be able to assert this outcome without a
+ * terminal, so the result is data, not a warning.
+ */
+export async function linkWorktreeDeps(worktreePath) {
+	const syncPi = join(worktreePath, "scripts", "sync-pi.mjs");
+	if (!existsSync(syncPi)) return { attempted: false, ok: null, reason: null, detail: null };
+	const { file } = resolveNpmInvocation();
+	try {
+		await run(file, [syncPi, "--link"], { cwd: worktreePath });
+		return { attempted: true, ok: true, reason: null, detail: null };
+	} catch (linkErr) {
+		// The step reports its failure as JSON on STDOUT (`{ok:false, error:"..."}`) and exits 1, so
+		// stdout carries the reason. Dropping it here would leave the caller with "Command failed" and
+		// no cause — the same shape of silence this item is about.
+		const detail = [linkErr.message, linkErr.stdout, linkErr.stderr].filter(Boolean).join("\n").trim();
+		return { attempted: true, ok: false, reason: linkFailureReason(detail), detail };
+	}
+}
+
+/**
+ * Name WHY a `--link` failed, in the words the caller needs to act (#3821).
+ *
+ * The dominant case is not a mystery: a fresh worktree has no `vendor/pi-main`, so the
+ * step reports "nothing built yet; run --sync before --link". That is a MISSING
+ * PREREQUISITE, not a broken install, and it must not read like an unexplained failure.
+ */
+function linkFailureReason(detail) {
+	if (/nothing built yet/i.test(detail)) {
+		return "vendor/pi-main is not built in this worktree, so there is nothing to link to (the step says: run --sync first)";
+	}
+	return detail.split("\n")[0]?.slice(0, 300) || "the link step failed";
+}
+
+/**
+ * The seat-facing sentence for a provisioning record, or "" when there is nothing to say.
+ *
+ * This is the half that makes the defect non-silent (#3821): a worktree provisioned with a
+ * FAILED link step must say so where the SEAT will see it — the tool result — not in a
+ * `console.warn` on a stream nobody reads. It names the state, the version actually
+ * resolved, and the consequence (verdicts from this tree are not comparable).
+ */
+export function dependencyNoteFor(dependency) {
+	if (!dependency || dependency.state !== "unlinked") return "";
+	const have = dependency.worktreeVersion
+		? `${PINNED_PACKAGE} ${dependency.worktreeVersion} from the lockfile`
+		: `whatever the lockfile pins for ${PINNED_PACKAGE}`;
+	const want = dependency.sourceVersion
+		? `, while the seat root resolves ${dependency.sourceVersion}`
+		: "";
+	return (
+		`\nDEPENDENCY NOT LINKED in this worktree: the sync-pi --link step FAILED (${dependency.reason}). ` +
+		`This tree resolves ${have}${want}. A suite run here is NOT comparable with the seat root's, so ` +
+		`state which tree and dependency set a verdict came from; run \`node scripts/sync-pi.mjs --sync\` ` +
+		`(then prepare the workspace again) if you need parity.`
+	);
+}
+
 /**
  * Run `npm ci --prefer-offline` in a worktree to make it usable checkout.
  * Called after createWorktree/claimWorktree because a fresh worktree has no
@@ -146,28 +222,24 @@ export async function ensureIgnored({ repo, target }) {
  * This ordering fixes the #2801/#2976 recurrence where `npm ci` ran before
  * --link and ETARGET-failed on unpublishable pi packages (#2412).
  */
-export async function installWorktreeDeps(worktreePath) {
+export async function installWorktreeDeps(worktreePath, { source = null } = {}) {
 	const pkgPath = join(worktreePath, "package.json");
 	if (!existsSync(pkgPath)) {
-		return { ok: true, skipped: true, worktree: worktreePath };
+		return { ok: true, skipped: true, worktree: worktreePath, dependency: null };
 	}
 	const { file, prefixArgs } = resolveNpmInvocation();
-	const syncPi = join(worktreePath, "scripts", "sync-pi.mjs");
 
 	// Pre-install: point node_modules at the built vendor/pi-main tree BEFORE
 	// npm ci, so the unpublishable pi packages resolve from the local file:
 	// specifiers instead of the npm registry (which does not host them).
-	if (existsSync(syncPi)) {
-		try {
-			await run(file, [syncPi, "--link"], { cwd: worktreePath });
-		} catch (linkErr) {
-			// --link is best-effort: if vendor/pi-main is not built yet, the
-			// worktree still has the npm ci deps and can run demos that don't
-			// depend on pi-durable. The seat will see the version mismatch and
-			// can run --link manually or the operator can build the pin.
-			console.warn(`sync-pi --link (pre) in ${worktreePath}: ${linkErr.message}`);
-		}
-	}
+	//
+	// #3821: this step FAILS in every fresh worktree (no vendor/pi-main =>
+	// "nothing built yet; run --sync before --link"), and the old code only
+	// console.warned, so the worktree was silently provisioned with the locked
+	// package. Provisioning still continues — a runnable tree beats none — but the
+	// outcome is now RECORDED and reported to the caller, never downgraded to a
+	// warning nobody reads.
+	const preLink = await linkWorktreeDeps(worktreePath);
 
 	let result;
 	try {
@@ -179,16 +251,23 @@ export async function installWorktreeDeps(worktreePath) {
 		);
 	}
 
-	// Post-install: re-run --link to ensure the file: packages are firmly in
-	// place even if `npm ci` resolved a stale cached copy. Idempotent.
-	if (existsSync(syncPi)) {
-		try {
-			await run(file, [syncPi, "--link"], { cwd: worktreePath });
-		} catch (linkErr) {
-			console.warn(`sync-pi --link (post) in ${worktreePath}: ${linkErr.message}`);
-		}
-	}
-	return { ok: true, worktree: worktreePath, stdout: result.stdout.trim() };
+	// Post-install: run the link again to ensure the file: packages are firmly in
+	// place even if `npm ci` resolved a stale cached copy. Idempotent when it works.
+	const postLink = await linkWorktreeDeps(worktreePath);
+
+	// The worktree counts as LINKED only if a link actually succeeded. `ok === null`
+	// means there was no sync-pi script at all (nothing to link — not a failure).
+	const link = postLink.attempted ? postLink : preLink;
+	const state =
+		link.ok === null ? "no-sync-script" : link.ok === true ? "linked" : "unlinked";
+	const dependency = {
+		state,
+		packageName: PINNED_PACKAGE,
+		reason: link.ok === true ? null : link.reason,
+		worktreeVersion: installedVersion(worktreePath, PINNED_PACKAGE),
+		sourceVersion: source ? installedVersion(source, PINNED_PACKAGE) : null,
+	};
+	return { ok: true, worktree: worktreePath, stdout: result.stdout.trim(), dependency };
 }
 
 /**
@@ -540,10 +619,12 @@ export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = "HE
 	await run("git", ["-C", result.repo, "worktree", "lock", result.worktree]);
 	// Install deps — a fresh worktree has no node_modules, so it is unusable
 	// until dependencies are installed. npm ci --prefer-offline (~12 s, ~111 MB).
-	await installWorktreeDeps(result.worktree);
+	// #3821: the install's own RECORD (were the pinned pi packages linked, or did the
+	// tree fall back to the lockfile?) is returned instead of discarded.
+	const deps = await installWorktreeDeps(result.worktree, { source });
 	// Enable rerere so conflict resolutions are recorded for the merge-on-complete step.
 	await enableRerere(result.worktree);
-	return { ...result, itemLabel, locked: true };
+	return { ...result, itemLabel, locked: true, dependency: deps.dependency };
 }
 
 /**
@@ -619,6 +700,9 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 	// REFUSED rather than allowed to steal. No `--force`, no branch deletion, no worktree removal.
 	const terminal = isTerminalItemStatus(itemStatus);
 	const detachedHolders = [];
+	// #3821: the install record from a REPAIR on the reuse path (null when the existing
+	// worktree was already provisioned and nothing was re-checked).
+	let reusedDeps = null;
 	const norm = (p) => resolve(p).replace(/\\/g, "/");
 	const targetPath = norm(worktreePath);
 	const refBranch = `refs/heads/${branch}`;
@@ -678,7 +762,7 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 		// place rather than deleting the dir: it is a real git worktree the seat may have
 		// branched in, and the branch-naming lifecycle is #859/#995's concern.)
 		if (!isProvisioned(worktreePath)) {
-			await installWorktreeDeps(worktreePath);
+			reusedDeps = await installWorktreeDeps(worktreePath, { source });
 		}
 		// REUSE must still ensure the branch: a worktree from an older run (or one
 		// whose seat committed before the branch existed) may be on a detached HEAD.
@@ -694,6 +778,11 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 			locked: true,
 			holderDetached: detachedHolders[0] ?? null,
 			detachedHolders,
+			// #3821: a repair install reports its own outcome; an ALREADY-provisioned
+			// worktree was not re-checked here, so the state is UNKNOWN (null) rather than
+			// assumed linked — an assumed "linked" is the false green this item is about.
+			dependency: reusedDeps?.dependency ?? null,
+			dependencyNote: dependencyNoteFor(reusedDeps?.dependency),
 		};
 	}
 	const wt = await claimWorktree({ source, worktreeRoot, itemLabel, ref, branch });
@@ -708,6 +797,11 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 		locked: true,
 		holderDetached: detachedHolders[0] ?? null,
 		detachedHolders,
+		// #3821: what the install actually achieved, and the sentence that tells the seat —
+		// in the TOOL RESULT, not a warn on a stream nobody reads — that this tree's
+		// dependency state is not the seat root's.
+		dependency: wt.dependency ?? null,
+		dependencyNote: dependencyNoteFor(wt.dependency),
 	};
 }
 
