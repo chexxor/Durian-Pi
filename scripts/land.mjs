@@ -259,6 +259,37 @@ if (trackedChanges.length > 0) {
 	);
 }
 
+// #4139: a write to a REAPED worktree path recreates `item-<id>/` inside the repo. No other guard
+// sees it: the cwd guard refuses RELATIVE writes from a degraded cwd, but this write is ABSOLUTE
+// and the path LOOKS like a worktree; and `/item-*/` is IGNORED, so `git status --porcelain` never
+// shows it either. A directory named for an item has no business being a repo-root child - but a
+// LIVE worktree is legitimately `item-<id>/` at the root, so the test is REGISTRATION, not the name:
+// a root child that matches a worktree-name pattern and is NOT in `git worktree list` is stray.
+const WORKTREE_NAME = /^(item-\d+|verify.*|\.verify-.*|wt-.*|\.durig-test-wt-.*|\.land-scratch-.*)$/;
+const registered = new Set(
+	git(repoRoot, ["worktree", "list", "--porcelain"])
+		.out.split("\n")
+		.filter((l) => l.startsWith("worktree "))
+		.map((l) => resolve(l.slice("worktree ".length).trim())),
+);
+const strayWorktrees = readdirSync(repoRoot, { withFileTypes: true })
+	.filter((e) => e.isDirectory() && WORKTREE_NAME.test(e.name) && !registered.has(resolve(join(repoRoot, e.name))))
+	.map((e) => e.name);
+if (strayWorktrees.length > 0) {
+	report(
+		{
+			...base,
+			error:
+				`refusing to land: ${strayWorktrees.length} STRAY worktree directory(ies) at the repo root: ` +
+				`${strayWorktrees.join(", ")}. These are ignored by .gitignore, so \`git status\` does not show ` +
+				`them - a write to a REAPED worktree path recreates one inside the repo. They are disposable ` +
+				`checkouts (their work is on a branch), so remove them and re-run.`,
+			strayWorktrees,
+		},
+		1,
+	);
+}
+
 // A tree that is already mid-merge is refused too: the landing must not add to it.
 if (existsSync(join(repoRoot, ".git", "MERGE_HEAD"))) {
 	report(

@@ -157,6 +157,34 @@ try {
   git(repo, ["checkout", "--", "a.txt"]);
   check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
 
+  console.log("\n2b. a STRAY worktree directory at the repo root refuses to land (#4139)");
+  // A write to a REAPED worktree path recreates `item-<id>/` inside the repo. `/item-*/` is IGNORED,
+  // so `git status --porcelain` never shows it - the tracked/untracked rule above structurally cannot
+  // see this class. A directory named for an item has no business being a repo-root child.
+  const stray = join(repo, "item-9999");
+  mkdirSync(stray, { recursive: true });
+  writeFileSync(join(stray, "probe.mjs"), "// left by a write to a reaped worktree\n");
+  const beforeStray = mainSha(repo);
+  const strayRun = land(repo, ["feat-b"]);
+  check("the helper refuses (nonzero)", strayRun.code !== 0, strayRun.raw.slice(0, 200));
+  check("...naming the stray directory", /item-9999/.test(strayRun.report?.error ?? ""), strayRun.report?.error);
+  check("...and main did NOT advance", mainSha(repo) === beforeStray);
+  rmSync(stray, { recursive: true, force: true });
+
+  console.log("\n2c. a LIVE (registered) worktree is NOT stray - only the unregistered leftover is named");
+  // A live worktree is legitimately `item-<id>/` at the root, so the test is REGISTRATION, not the
+  // name. With BOTH present, the refusal must name the stray and NOT the registered one.
+  const live = join(repo, "item-8888");
+  git(repo, ["worktree", "add", "-b", "wt-live", live]);
+  const stray2 = join(repo, "item-9999");
+  mkdirSync(stray2, { recursive: true });
+  const mixed = land(repo, ["feat-b"]);
+  check("the refusal names the STRAY one", /item-9999/.test(mixed.report?.error ?? ""), mixed.report?.error);
+  check("...and NOT the registered one", !/item-8888/.test(mixed.report?.error ?? ""), mixed.report?.error);
+  rmSync(stray2, { recursive: true, force: true });
+  git(repo, ["worktree", "remove", "--force", live]);
+  check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
+
   console.log("\n3. a HELD genlock makes the lander WAIT with PRIORITY — it does NOT refuse (#1497/#1498)");
   const slot = join(repo, "rig.sqlite.genlock.0");
   // A LIVE holder with a DIFFERENT pid, so "held by someone else" is genuinely exercised.
