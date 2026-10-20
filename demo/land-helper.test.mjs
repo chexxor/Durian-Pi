@@ -116,6 +116,9 @@ try {
   git(repo, ["config", "user.name", "Test"]);
   writeFileSync(join(repo, "a.txt"), "line one\n");
   writeFileSync(join(repo, "demo", "ok.test.mjs"), "console.log('ok');\nprocess.exit(0);\n");
+  // The runtime store/slot files the genlock sections write beside the store are GITIGNORED in a
+  // real checkout; mirror that here, or the (correct) untracked-counts preflight refuses them.
+  writeFileSync(join(repo, ".gitignore"), "*.sqlite*\n/.land-scratch-*/\n.durig/\ndurig.config.default.json\n");
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "base"]);
   git(repo, ["branch", "-M", "main"]);
@@ -152,9 +155,22 @@ try {
   const beforeDirty = mainSha(repo);
   const dirty = land(repo, ["feat-b"]);
   check("the helper refuses (nonzero)", dirty.code !== 0, dirty.raw.slice(0, 200));
-  check("...naming the tracked modification", /tracked modification/.test(dirty.report?.error ?? ""), dirty.report?.error);
+  check("...and states the `.`-suite invalidity", /measures the SHARED TREE, not main/.test(dirty.report?.error ?? ""), dirty.report?.error);
+  check("...and names the dirty path", (dirty.report?.dirtyPaths ?? []).some((p) => p.includes("a.txt")), JSON.stringify(dirty.report?.dirtyPaths));
   check("...and main did NOT advance", mainSha(repo) === beforeDirty);
   git(repo, ["checkout", "--", "a.txt"]);
+  check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
+
+  console.log("\n2b. an UNTRACKED-only shared tree refuses to land (the third instance of this hazard)");
+  // Untracked and alone: staged/tracked are clean, so a TRACKED-ONLY check would have passed it,
+  // yet a suite run in `.` would measure a tree that exists on no branch.
+  writeFileSync(join(repo, "attach.mjs"), "export const attach = 1;\n");
+  const beforeUntracked = mainSha(repo);
+  const untrackedOnly = land(repo, ["feat-b"]);
+  check("an untracked-only dirty tree REFUSES", untrackedOnly.code !== 0, untrackedOnly.raw.slice(0, 200));
+  check("...and names the untracked path", (untrackedOnly.report?.dirtyPaths ?? []).some((p) => p.includes("attach.mjs")), JSON.stringify(untrackedOnly.report?.dirtyPaths));
+  check("...and main did NOT advance", mainSha(repo) === beforeUntracked);
+  rmSync(join(repo, "attach.mjs"));
   check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
 
   console.log("\n3. a HELD genlock makes the lander WAIT with PRIORITY — it does NOT refuse (#1497/#1498)");
