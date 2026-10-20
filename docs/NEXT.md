@@ -52,6 +52,40 @@ after the restart. Do not poll the store heavily while the broker is live.
 **Do not:** edit `rig.selfdev.json` to a new model id without first adding it to
 `fallbackModels()` and running `demo/deepinfra-catalog.test.mjs`; push (operator holds the grant).
 
+## LOCAL MODEL SWITCHED TO SWIFT 1.5 (2026-10-20, delegate, operator-directed)
+
+**The local provider now serves Swift 1.5, not Qwen3.6-35B-A3B.** Both models live under
+`C:\Users\Alex\dsh-Projects\PolyStrata-data` — the operator asked to keep local models together, so the new
+install was moved off `D:` with `robocopy /MOVE` and nothing was re-downloaded.
+
+| | value |
+|---|---|
+| served id | **`swift-1.5-iq2_xs`** (verified with `GET /v1/models`) |
+| context | **65536** (KV streaming auto-off: it wants ~0.9 GB RAM beside the ~48 GB IQ2_XS asks for, and this PC has 32) |
+| endpoint | `http://127.0.0.1:8080/v1` (unchanged) |
+| engine | **`engine\strata.exe` (the Qwen engine)** — the OLD model ran on `engine-poly\strata-poly.exe`, so this is a DIFFERENT ENGINE on the same port, not just a different model |
+| start | `run-swift-iq2_xs.bat` (config `strata-swift-iq2_xs.json`, regenerated with C: paths) |
+| fallback | `run-qwen36-ud-q3_k_m.bat` — still installed, still pointing at valid C: paths |
+| rig config | `durig.config.json`: `DURIG_LOCAL_MODEL=swift-1.5-iq2_xs` (was `qwen36`); `DURIG_LOCAL_CONTEXT=65536` |
+| seats | `rig.selfdev.json`: `qa` and `devtools` `local/qwen36` → **`local/swift-1.5-iq2_xs`** |
+
+**Verified, not assumed:** `localProviderSpec(loadConfig().config)` returns
+`{"id":"local","baseUrl":"http://127.0.0.1:8080/v1","modelId":"swift-1.5-iq2_xs","contextWindow":65536}`;
+a real completion returned `SWIFT-OK` at **102 tok/s** (prompt read 128 tok/s); `cli.mjs check rig.selfdev.json`
+is `ok:true`. A seat's model is read from `rig.selfdev.json` at wake (`cli.mjs:481`), so the next `qa`/`devtools`
+run picks Swift up **without `up --refresh`** — the model is not persisted per conversation.
+
+**Notes for the next session:**
+- The old server was `strata-poly` (engine pid 5944, server 15268); both were stopped and 8080 is now the Qwen
+  engine. If a seat stalls on the local provider, `docs/runbooks/local-provider-down.md` applies — but check
+  `/v1/models` FIRST, and remember the ENGINE changed too, so an old log line about `strata-poly` is expected.
+- The served name is only a label to PolyStrata ("model name: anything"), so a stale seat label still reaches
+  the server and would merely LIE about which model answered. Keep the rig label truthful.
+- Logs: install `PolyStrata\swift-setup.out`, server `PolyStrata\swift-server.out`. Both were launched HIDDEN,
+  which is why no console window shows the progress.
+- `D:\PolyStrata-data` is now an EMPTY leftover directory and `%APPDATA%\PolyStrata\settings.json`
+  `data_dir` was repointed to the C: path, so the empty dir is safe to delete.
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T23:35Z, delegate) — **PASS #4: 4 LANDED (`main` → `ee651e0`), 10 TREES RELOCATED, AND THE SUITE-VERDICT TRAP DOCUMENTED**
 
 **Read this first.** Two operator asks this session: (1) "did you submit a work item for the worktree
