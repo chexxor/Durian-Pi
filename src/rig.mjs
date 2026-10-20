@@ -183,6 +183,69 @@ export function isTerminalItem(item) {
 }
 
 /**
+ * THE WORKABLE PREDICATE (#2673, lead-ratified definition in #2677). "Is this item claimable
+ * BY THIS SEAT, right now?" — the question `claim_work` used to answer with `status ===
+ * "queued"` alone, which is why a row blocked on an unclosed gate or an unadvertised
+ * capability still occupied the oldest-claim slot and starved the work behind it.
+ *
+ * Returns `{ workable, reason }`. `reason` is the LEGIBLE skip code (null when workable):
+ *   `not-queued:<status>`   — the caller passed something it should not have;
+ *   `requires:<cap>`        — the seat does not advertise the capability the item demands;
+ *   `gate-open:#<id>(<st>)` — a recorded prerequisite is not DONE yet;
+ *   `gate-cancelled:#<id>`  — a recorded prerequisite was CANCELLED: the prerequisite was
+ *                             DROPPED, so the item may be stale. "terminal" != "done", and
+ *                             this is a POSITIVE non-workability, not an ambiguity.
+ *
+ * THE CONSERVATIVE DEFAULT (refinement 3) is load-bearing: a MISSING or AMBIGUOUS signal
+ * means WORKABLE. A false negative starves a workable item (invisible, and it looks exactly
+ * like an empty queue); a false positive hands the seat a maybe-blocked item it can still
+ * hold or defer, and the refusal is legible. So a gate id that names nothing in the queue is
+ * passed over as unknown rather than treated as unmet.
+ *
+ * CLAUSE 4 (a persisted provider/seat FAULT) is NOT implemented: no such field exists, and
+ * D24 forbids inventing a schema or write path for it. That gap is registered as backlog
+ * rather than faked with model-level guessing.
+ */
+export function workable(item, seat, { items = [], capabilities = [] } = {}) {
+	if (!item) return { workable: false, reason: "missing-item" };
+	if (item.status !== "queued") return { workable: false, reason: `not-queued:${item.status}` };
+	const required = typeof item.requires === "string" ? item.requires.trim() : "";
+	if (required !== "" && !capabilities.includes(required)) {
+		return { workable: false, reason: `requires:${required}` };
+	}
+	for (const id of item.blockedBy ?? []) {
+		const target = items.find((it) => it.id === id);
+		// Ambiguous (no such item in the queue): the conservative default says workable.
+		if (!target) continue;
+		if (target.status === "done") continue;
+		if (target.status === "cancelled") return { workable: false, reason: `gate-cancelled:#${id}` };
+		return { workable: false, reason: `gate-open:#${id}(${target.status})` };
+	}
+	return { workable: true, reason: null };
+}
+
+/**
+ * The OLDEST-WORKABLE SELECTION (#2673), extracted so the choice is testable without a
+ * harness: `claim_work` with no itemId must return the oldest item that is WORKABLE for this
+ * seat, and must REPORT every item it passed over — a starved item is otherwise
+ * indistinguishable from an empty queue.
+ *
+ * Only items addressed to `seat` and still `queued` are candidates; the scan stops at the
+ * first workable one, so the order is oldest-first and a later workable item is never
+ * preferred over an earlier one.
+ */
+export function selectOldestWorkable(items, seat, { capabilities = [] } = {}) {
+	const skipped = [];
+	for (const candidate of items ?? []) {
+		if (candidate.to !== seat || candidate.status !== "queued") continue;
+		const verdict = workable(candidate, seat, { items, capabilities });
+		if (verdict.workable) return { item: candidate, skipped };
+		skipped.push({ id: candidate.id, reason: verdict.reason });
+	}
+	return { item: null, skipped };
+}
+
+/**
  * One rendered line for a queue item in `peek_queue` and in its `.durig/queue-<scope>.md` mirror.
  * A GATED item shows its gate (`blockedBy=1,2`) so a seat reading its own queue sees what the work
  * waits on, not merely that the work exists. Call this INSIDE the commit: `blockedBy` is an array
@@ -584,10 +647,18 @@ const Router = defineExtension({
 							body: named.body,
 						};
 					}
-					// Normal claim: the oldest QUEUED item addressed to me. Suppressed while paused.
-					const queued = paused ? undefined : queue.items.find(
-						(it) => it.to === me && it.status === "queued",
-					);
+					// Normal claim: the OLDEST WORKABLE queued item addressed to me (#2673). The scan
+					// records every item it passes over and WHY, so a starved item is detectable
+					// instead of silently occupying the slot ahead of real work. Suppressed while paused.
+					const skipped = [];
+					let queued;
+					if (!paused) {
+						const seatsDoc = await tx.doc(Seats);
+						const capabilities = seatsDoc.seats[me]?.capabilities ?? [];
+						const picked = selectOldestWorkable(queue.items, me, { capabilities });
+						queued = picked.item ?? undefined;
+						skipped.push(...picked.skipped);
+					}
 					if (queued) {
 						queued.status = "claimed";
 						queued.transitions.push({
@@ -605,6 +676,7 @@ const Router = defineExtension({
 							from: queued.from,
 							subject: queued.subject,
 							body: queued.body,
+							skipped,
 						};
 					}
 					// Stalled-claim legal move (ROADMAP 42 / #118): no queued work, but
@@ -650,7 +722,14 @@ const Router = defineExtension({
 					found.kind === "stalled"
 						? `STALLED_CLAIM #${found.id} | from=${found.from} | subject=${found.subject} | status=claimed`
 						: `ITEM #${found.id} | from=${found.from} | subject=${found.subject} | status=claimed`;
-				const claimText = `${head}\n${found.body}`;
+				// LEGIBILITY (#2673 refinement 4): a skipped item must be SURFACED, not merely
+				// logged — an item starved behind an unclosed gate is otherwise indistinguishable
+				// from an empty queue, which is how these rows escalated to the operator.
+				const skipped = found.skipped ?? [];
+				const skippedLine = skipped.length
+					? `\n\nSKIPPED (addressed to you, not workable yet): ${skipped.map((s) => `#${s.id} (${s.reason})`).join(", ")}`
+					: "";
+				const claimText = `${head}\n${found.body}${skippedLine}`;
 				// Thin-context return contract: an over-threshold body goes to disk and
 				// the tool returns the structured head + a path, not the dump (see
 				// thinResultText / RANK-1 / #118 half 2).
