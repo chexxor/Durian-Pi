@@ -1,5 +1,42 @@
 # durian-pi — NEXT (current pointer)
 
+## CLOCK-OUT / SESSION LOG (2026-10-20 ~04:15Z, delegate) — LOCAL MODEL TAKEN DOWN, `qa`/`devtools` BACK ON DEEPINFRA
+
+Operator-directed: stop the PolyStrata local model and move the two local seats to DeepInfra models they
+held BEFORE the local move. Done, then verified.
+
+**Model moves in `rig.selfdev.json`** (both ids were ALREADY in `fallbackModels()`, so no catalog edit was
+needed — that is the catalog-entry-first rule satisfied by inspection, and `demo/deepinfra-catalog.test.mjs`
+still passes with "12 rig seats resolve"):
+- `qa`: `local/swift-1.5-iq2_xs` -> **`Qwen/Qwen3.6-35B-A3B`** (its own pre-local DeepInfra verifier model).
+- `devtools`: `local/swift-1.5-iq2_xs` -> **`deepseek-ai/DeepSeek-V4.1-Flash`** (its own pre-local model).
+  The author/verifier split still holds and is now CROSS-FAMILY again (devtools authors DeepSeek, qa
+  verifies Qwen) — the shared-family exception in SELFDEV was a property of the local era only.
+
+**Applied, not assumed:** store backed up (`/.spike/store-backup-*.sqlite`), `up --refresh --dry-run`
+named exactly those 2 resets, then the real `up rig.selfdev.json --refresh` wrote them (`resetEntryId`
+153838 / 153841). `cli.mjs check rig.selfdev.json` -> `ok:true`, exit 0. Both ids proved with a REAL
+completion against DeepInfra (HTTP 200; `deepseek-ai/DeepSeek-V4.1-Flash` returned the exact requested
+string). **`qa` note for the next session:** `Qwen/Qwen3.6-35B-A3B` is chatty — at `max_tokens:16` it
+returns an EMPTY `content` because its reasoning consumes the budget, and at 512 it leaks reasoning text
+into `content`. That is a model-quality property to watch in verifier output, not a resolution failure.
+
+**The local stack is DOWN:** PolyStrata server (pids 14652, 16592) and the `strata.exe` engine (820) were
+terminated; `127.0.0.1:8080` refuses connections (curl exit 7) and no seat references `local/` any more.
+
+**RECOVERY COST OF THE FORCE STOP (the operator asked for speed — record it honestly):** `serve --stop`
+returned `stopped:false` twice while `impl` held a genlock, so the broker (pid 4528) was killed. That left
+(a) **2 stranded genlock files** a dead pid still "held" — cleared by hand after confirming the pid was
+gone (`status` showed the exact attention: "held by pid 4528 (impl), which is gone"), and (b) **2 stranded
+submissions** (`impl` #153640, `auditor` #153251) reported as `admitted_not_started`. The restarted broker
+(pid 13228, passes advancing) re-drove the queue from there. **The store survived intact** — the backup was
+taken first and no write corruption appeared. Lesson: a kill is recoverable in this order — verify pid dead,
+delete `*.genlock.*`, restart `scripts/serve-noroot.ps1`, then confirm `admitted_not_started` clears.
+
+**Suite after all of it: `pass=180 environmental=0 fail=1`** (`pitui`, #2412), unchanged from the pass #6
+baseline — the rig change touched no code.
+
+
 ## CLOCK-OUT (2026-10-20T03:00Z, delegate) — **#3174 LANDED (`main` `b4e88ff`), 3 LANDINGS/PRUNES, 4 LANDING-LIST DEFECTS CAUGHT, 1 VERIFIER INCIDENT RECOVERED**
 
 **Read this first.** The operator's priority stack was #3174 → landing/prune backlog → the M-series.

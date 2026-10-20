@@ -25,13 +25,13 @@ python -c "import json;[print(s['name'], s.get('model')) for s in json.load(open
 |---|---|---|---|
 | `pm` | program manager | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | intake, decomposition, routing, tracking |
 | `impl` | implementation | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | author for build items |
-| `qa` | verifier | `local/swift-1.5-iq2_xs` | independent; a DIFFERENT FAMILY from the author seats (Swift 1.5 by UkisAI, a shorter-thinking fine-tune of Qwen3.8-Flash-Next, IQ2_XS) |
+| `qa` | verifier | `Qwen/Qwen3.6-35B-A3B` | independent; a DIFFERENT FAMILY from the author seats (Qwen, not DeepSeek) |
 | `qa2` | verifier (2) | `google/gemma-4-31B-it` | second verifier, third family |
 | `lead` | technical lead | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | scope/priority rulings; escalation target |
 | `architect` | systems architect | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | cross-cutting design, failure modes, durable decisions |
 | `advocate` | workflow/design reviewer | `zai-org/GLM-5.3-Flash` | owns `WORKFLOWS.md`, `SELF-ADMIN.md` |
 | `scribe` | documentation | `deepseek-ai/DeepSeek-V4-Flash-0731` | keeps `FEATURES.md`/`STATUS.md` true |
-| `devtools` | toolchain | `local/swift-1.5-iq2_xs` | pi pin, `sync-pi.mjs` |
+| `devtools` | toolchain | `deepseek-ai/DeepSeek-V4.1-Flash` | pi pin, `sync-pi.mjs` |
 | `auditor` | second verifier | `zai-org/GLM-5.3-Flash` | do the tests prove it; edges |
 | `designer` | CLI/UX | `zai-org/GLM-5.3-Flash` | surface and defaults |
 | `security` | security engineer | `zai-org/GLM-5.3-Flash` | threat models, trust boundaries & secret hygiene; deliberately NOT a verifier (keeps working tools); owns `security-positions` |
@@ -42,15 +42,19 @@ The invariant is that **a verifier must not share a model family with the author
 verifies** — not that any particular two names hold a particular pair of models. Today that reads:
 
 - **authors** are `impl` (DeepSeek-V4.1-Flash-1017) and, for docs/tooling, `scribe` (DeepSeek-V4-Flash-0731) and
-  `devtools` (`local/swift-1.5-iq2_xs`);
-- **verifiers** are `qa` (`local/swift-1.5-iq2_xs`), `qa2` (gemma), and `auditor` (GLM-5.3-Flash).
+  `devtools` (`deepseek-ai/DeepSeek-V4.1-Flash`);
+- **verifiers** are `qa` (`Qwen/Qwen3.6-35B-A3B`), `qa2` (gemma), and `auditor` (GLM-5.3-Flash).
 
-So the pairwise requirement holds for the main loop (`impl` vs `qa`: DeepSeek vs local/qwen; `impl` vs
+So the pairwise requirement holds for the main loop (`impl` vs `qa`: DeepSeek vs Qwen; `impl` vs
 `auditor`: DeepSeek vs GLM; `scribe` vs `auditor`: DeepSeek vs GLM) — **but it does NOT hold everywhere,
-and the exception is worth knowing: `devtools` and `qa` are BOTH `local/swift-1.5-iq2_xs`**, so a `devtools`-authored
-tooling change verified by `qa` is verified on the author's own family. Route such a verify to `auditor`
-(GLM) or `qa2` (gemma) instead. Check the pair, do not trust a slogan: the old "GLM authors vs DeepSeek
-verifiers" reading is **FALSE** after the 2026-10-19 model moves and must not be quoted as policy.
+and the exception is worth knowing: `qa2` (gemma) is the only verifier that differs from BOTH DeepSeek
+authors and Qwen `qa`, so a `qa`-authored check verified by `qa2` stays in-family only if the content is
+gemma's own.** Check the pair, do not trust a slogan: the old "GLM authors vs DeepSeek verifiers" reading
+is **FALSE** after the 2026-10-19 model moves and must not be quoted as policy. **Since 2026-10-20 the
+local provider is DOWN by operator direction** — `qa` and `devtools` are back on DeepInfra models they
+held before the local move, and a `devtools`-authored tooling change verified by `qa` is DeepSeek vs
+Qwen, i.e. cross-family again (the shared-family exception above was a property of the local era, not a
+standing rule).
 `security` stays outside the split by design (`VERIFIER_TERMS` does not match its name, so it keeps
 `write`/`edit`/`shell`).
 
