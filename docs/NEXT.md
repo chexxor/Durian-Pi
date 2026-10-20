@@ -163,10 +163,45 @@ exit 1, `pi-tui resolved somewhere unexpected … vendor/pi-main/packages/tui/di
 **contradicts `#3531`/`#3532`'s "pitui GREEN on main"** — one measurement is stale, so re-measure before
 acting on it. Fixing `#2412` is what restores `land.mjs --suite`, the single largest cost in a landing pass.
 
-**NEXT SESSION:** the human bucket is empty of real asks. Awaiting `lead`/`pm`: the #3347/1604 ruling, the
-#3428 rework re-cut, the 40 orphan dispositions, and the `#3341` / `3303->3385->3471` rulings. **New to
-watch: `qa2` is in rotation — it should be taking docs/metadata verifies and every rebase-shaped verify,
-with `auditor` on the high-stakes product checks.** Nothing pushed.
+**11. SHARED-TREE WIP — 5 MISSING FILES RESTORED, ONE HALF ATTRIBUTED TO `impl`, ONE HALF UNCLAIMED.**
+The operator believed someone was converting LF→CRLF. **That is not happening and no such item exists** —
+`core.autocrlf=true` just makes git print `LF will be replaced by CRLF`, `.gitattributes` has **zero**
+content change, and the real edits are code/docs. The only related item is **#994** (whole-tree Prettier,
+`held`, TRIGGER-GATED / DO NOT START).
+
+**Encoding census (all 511 tracked files, repo-scoped):** 506 valid UTF-8, **0 invalid UTF-8**, 0 UTF-16
+BOM, 0 NUL, **14 UTF-8 BOM** (`package-lock.json`, `docs/DECISIONS.md`, `scripts/sync-pi.mjs`, …). So a
+"re-encode everything to UTF-8" sweep is a **no-op that rewrites every byte**. If it is ever wanted: land
+the `tracked-encoding` rule first (`src/trackencoding.mjs` is **absent from main**; it is on
+`devtools-item-3342`/`3585`), then BOM-strip the 14 as its own item, never inside a feature change.
+`docs/SELFDEV.md`'s rule stands: **UTF-8 without BOM;** BOM is the harmful variant.
+
+**FIXED — 5 tracked files were absent from disk** (`demo/landing-data`, `tui-landing`, `tui-status-bar`,
+`tui-conversation-header`, `workable-claim`). Per `runbooks/tracked-files-missing-on-disk.md`: index listed
+all 5, HEAD held all 5 blobs, **`git log --all --diff-filter=D` EMPTY** -> never deliberately deleted. Restored
+with the FILE-LIST form (`git ls-files <paths> | xargs -0 git checkout-index -f --`; a directory does not
+recurse). Verified: **0 deletions left**, `node --check` exit 0, byte-identical modulo CRLF. Nothing discarded.
+
+**ATTRIBUTED: `cli.mjs` +7/−0 is `impl`'s** — it adds the *"P5 / #110 exception … lead ruling #2874,
+option B"* comment, i.e. a **#2578 follow-up**. Main's `2bb0427` documents the exception "at both opens" but
+`main:cli.mjs` does **not** contain it (`grep -c` -> 0) while the worktree does (-> 1). **Steered**
+(`operator-shared-tree-steer-impl-2026-10-20-1`, delivered `07:09:21Z`): confirm authorship, redo it in a
+worktree via `prepare_workspace`, commit on a branch + landing entry, and do NOT `checkout`/`restore`/`reset`
+the shared tree. Flagged to impl as INFERENCE from the diff text, not proof.
+
+**UNCLAIMED: the remaining 17 files** match **no branch** (blobs compared against all 166 local refs).
+Shape is a **docs pass**: `docs/SELFDEV.md` +432/−9, `docs/DECISIONS.md` **+31/−296** (a ledger
+CONSOLIDATION = the `#3268`/`#3343`/`#3481` UNION, scribe-owned), plus `demo/prepare-workspace` +87,
+`docs/runbooks/local-provider-down` +58, `broker-safe-change` +46, `src/worktree.mjs` +94/−7. Routed to `pm`
+(`operator-shared-tree-wip-2026-10-20-1`, delivered `07:09:56Z`) to identify per-file and route.
+**Patch preserved BEFORE the repair:** `.spike/delegate/shared-tree-wip-2026-10-20/shared-tree-wip.patch`
+(2312 lines). **Nobody may `git checkout -- .` / `restore .` / `reset --hard` / `clean -fd` the shared tree**
+— that work is recoverable right now and would not be after.
+
+**NEXT SESSION:** if the shared tree is still dirty, the 17-file WIP has no owner yet — re-check whether
+`impl` committed its `cli.mjs` half and whether `pm` identified the docs half. **This blocks every landing.**
+Also awaiting: the #3347/1604 ruling, the #3428 rework re-cut, the 40 orphan dispositions, the `#3341` /
+`3303->3385->3471` rulings. `qa2` is in rotation. Nothing pushed.
 
 ## CLOCK-OUT / SESSION LOG (2026-10-20 ~04:15Z, delegate) — LOCAL MODEL TAKEN DOWN, `qa`/`devtools` BACK ON DEEPINFRA
 
