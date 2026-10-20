@@ -81,11 +81,24 @@ async function persistedSeatCwd(api, context) {
  * guards (confine.mjs is the boundary). `process.cwd()` is the shared root because the guard runs
  * inside the broker/CLI process, which is started from the shared checkout.
  */
-async function sharedTreeRefusal(api, context, { path = null, command = null } = {}) {
+async function sharedTreeRefusal(api, context, { path = null, command = null, shell = false } = {}) {
 	// Only a KNOWN persisted cwd can be "degraded": with no persisted cwd the root is a fallback
 	// (DURIG_SEAT_ROOT / process cwd) and a seat that never prepared a workspace is not our case.
 	const seatRoot = await persistedSeatCwd(api, context);
 	if (seatRoot === null || !sameRoot(seatRoot, process.cwd())) return null;
+	// #3992: from a degraded cwd a seat must not RUN anything. A shell command can destroy work in the
+	// tree that is not its own (`git checkout`, `git reset`, `git clean`, a raw write script), and that
+	// is the operation that has actually destroyed work here. Refuse the whole shell tool rather than
+	// classify commands: a classifier that must decide whether `git checkout -- .` is destructive will
+	// be wrong. From a degraded cwd there is exactly ONE useful action - prepare_workspace; a seat that
+	// wants to inspect can do it from a correct cwd one call later.
+	if (shell) {
+		return (
+			`refused by durig: your seat cwd IS the SHARED checkout (${seatRoot}), not an item worktree - a ` +
+			`shell command here can destroy the shared tree. The cwd degrades to the shared tree after ` +
+			`complete_work; call prepare_workspace first, then run your command.`
+		);
+	}
 	if (path !== null) {
 		const p = String(path).replace(UNICODE_SPACES, " ");
 		if (isAbsolute(p) || p.startsWith("@")) return null;
@@ -365,14 +378,21 @@ export async function beforeTool(call, api, context) {
 		}
 		return undefined;
 	}
+	// #3961/#3992: a commit from the DEGRADED cwd (the shared checkout) lands ON main, bypassing the
+	// landing pass - refuse it with the precise diagnosis FIRST.
+	if (GIT_COMMIT_RE.test(command)) {
+		const degraded = await sharedTreeRefusal(api, context, { command });
+		if (degraded !== null) return { block: degraded };
+	}
+	// #3992: any OTHER shell command from a degraded cwd is refused outright, before any command
+	// classification - `run` is what has actually destroyed work in this repo.
+	const degradedShell = await sharedTreeRefusal(api, context, { shell: true });
+	if (degradedShell !== null) return { block: degradedShell };
 	// #1966 layer (ii): a shell command naming the spool directory is refused (best-effort).
 	const refusal = refusalFor(command) ?? refusalForSpoolPath(command);
 	if (refusal !== null) return { block: refusal };
 	// #1317: a commit lands durable, portable history — gate its staged content.
 	if (GIT_COMMIT_RE.test(command)) {
-		// #3961: a commit from the degraded (shared-checkout) cwd lands ON main; refuse it first.
-		const degraded = await sharedTreeRefusal(api, context, { command });
-		if (degraded !== null) return { block: degraded };
 		const block = commitSecretRefusal(await seatGraphRoot(api, context), command);
 		if (block !== null) return { block };
 	}

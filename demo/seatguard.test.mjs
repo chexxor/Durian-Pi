@@ -194,6 +194,23 @@ try {
 	const ownApi = { conversationId: "conv-own", snapshot: async () => ({ cwd: root }) };
 	const ownWrite = await beforeTool(as_tool({ path: "scratch-own.js", content: "const z = 1;\n" }), ownApi, context);
 	check("a seat with its OWN worktree cwd is NOT refused", ownWrite === undefined, JSON.stringify(ownWrite));
+	// #3992: from the degraded cwd a SHELL command is refused OUTRIGHT (it can destroy the shared tree).
+	const degradedShell = await beforeTool(
+		{ type: "toolCall", id: "d2", name: "bash", arguments: { command: "git checkout -- ." } },
+		degradedApi,
+		context,
+	);
+	check(
+		"#3992: a shell command from the degraded cwd is refused, naming prepare_workspace",
+		degradedShell?.block?.includes("SHARED checkout") && /prepare_workspace/.test(degradedShell.block),
+		JSON.stringify(degradedShell).slice(0, 200),
+	);
+	const ownShell = await beforeTool(
+		{ type: "toolCall", id: "d3", name: "bash", arguments: { command: "git status" } },
+		ownApi,
+		context,
+	);
+	check("#3992: a shell command from a seat's OWN worktree is NOT refused", ownShell === undefined, JSON.stringify(ownShell));
 
 	console.log(failures === 0 ? "\nPASS — the guard holds" : `\nFAIL — ${failures} assertion(s) failed`);
 } finally {
