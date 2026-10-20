@@ -37,23 +37,46 @@ export const EXIT_KEY_REJECTED = {
 /**
  * Choose the exit affordance, SUBJECT TO A COLLISION CHECK against the session's own bindings.
  *
- * @param {string[]} sessionBindings — the bindings the Pi session already uses, lower-cased.
- * @returns {{key:string|null, tried:string[], rejected:boolean, reason:string}}
+ * `bindings` is the result of `sessionBindingsFrom` (#4048), or a plain array for a caller that
+ * already knows the set. THE DIFFERENCE BETWEEN "NO BINDINGS" AND "BINDINGS UNKNOWN" IS EXPLICIT
+ * HERE AND MUST STAY SO: an array — including an empty one — is a KNOWN set; anything else (missing
+ * argument, `null`, a `{known:false}` result) is UNKNOWN and lands on the two-key fallback, because
+ * an unknown set must never read as an empty one.
+ *
+ * @param {string[]|{known:boolean, keys:string[], reason:string|null}|undefined|null} bindings
+ * @returns {{key:string|null, tried:string[], rejected:boolean, unknown?:boolean, reason:string}}
  */
-export function resolveExitKey(sessionBindings = []) {
-	const taken = new Set((Array.isArray(sessionBindings) ? sessionBindings : []).map((b) => String(b).toLowerCase()));
+export function resolveExitKey(bindings) {
+	const isArray = Array.isArray(bindings);
+	const known = isArray ? true : bindings?.known === true;
+	const list = isArray ? bindings : (bindings?.keys ?? []);
+	if (!known) {
+		const why = isArray ? null : (bindings?.reason ?? "no bindings were supplied");
+		return {
+			key: null,
+			tried: [],
+			rejected: true,
+			unknown: true,
+			reason:
+				`refused: the session's bindings are UNKNOWN (${why}), so NO candidate can be confirmed free. ` +
+				`An unknown binding set must not be read as an empty one — that would make ${EXIT_KEY_CANDIDATES[0]} look ` +
+				`free, and it is already bound (tui.editor.jumpForward). Use the documented TWO-KEY sequence.`,
+		};
+	}
+	const taken = new Set(list.map((b) => String(b).toLowerCase()));
 	const tried = [];
 	for (const candidate of EXIT_KEY_CANDIDATES) {
 		tried.push(candidate);
 		if (Object.prototype.hasOwnProperty.call(EXIT_KEY_REJECTED, candidate)) continue;
 		if (!taken.has(candidate)) {
-			return { key: candidate, tried, rejected: false, reason: null };
+			return { key: candidate, tried, rejected: false, unknown: false, reason: null };
 		}
 	}
 	return {
 		key: null,
 		tried,
 		rejected: true,
+		unknown: false,
 		reason:
 			`refused: every candidate exit key is already bound in this session (${tried.join(", ")}). ` +
 			`Do NOT fall back to Ctrl-C or Esc — ${EXIT_KEY_REJECTED["ctrl+c"]}; ${EXIT_KEY_REJECTED.esc}. ` +
@@ -62,7 +85,8 @@ export function resolveExitKey(sessionBindings = []) {
 }
 
 /**
- * THE SESSION'S ACTUAL BINDINGS, read from the library that owns them (#4021).
+ * THE SESSION'S ACTUAL BINDINGS, read from the library that owns them (#4021), and the state of
+ * NOT KNOWING them is its own value (#4048).
  *
  * `resolveExitKey` can only do the collision check from what it is TOLD, and a hardcoded list is the
  * one thing the ruling forbids: a key the session already uses is a key that does not work. pi-tui
@@ -71,26 +95,38 @@ export function resolveExitKey(sessionBindings = []) {
  *
  * MEASURED against pi-tui's defaults: `ctrl+]` is ALREADY BOUND (to `tui.editor.jumpForward`), so the
  * ruling's first choice collides on a real session and the ladder correctly falls to `ctrl+^`.
- * `ctrl+^` and `ctrl+\` are free today. That is the whole reason this helper exists — the decision
- * layer would otherwise pick a dead key and the operator would find out by being stuck.
+ * `ctrl+^` and `ctrl+\` are free today.
+ *
+ * THE DEGRADE IS `UNKNOWN`, NOT EMPTY — and that is the whole correction in #4048. An empty list
+ * makes EVERY key look free, so the ladder picks the first candidate, which is the one key we know is
+ * taken; a broken manager would then produce exactly the outcome the collision check exists to
+ * prevent, with no crash to explain it. So a source that is missing, throws, or answers nothing
+ * returns `{known: false, reason}`, and the ladder turns that into the two-key fallback, which cannot
+ * collide by construction. The no-throw property is kept: availability is not the thing to trade
+ * away — only what the ABSENCE means.
  *
  * Takes the manager as an argument so a demo can inject a fake one.
+ *
+ * @returns {{known:boolean, keys:string[], reason:string|null}}
  */
 export function sessionBindingsFrom(getKeybindings) {
-	if (typeof getKeybindings !== "function") return [];
+	const unknown = (reason) => ({ known: false, keys: [], reason });
+	if (typeof getKeybindings !== "function") return unknown("no keybinding source was supplied");
 	let resolved;
 	try {
 		resolved = getKeybindings()?.getResolvedBindings?.();
-	} catch {
-		return [];
+	} catch (err) {
+		return unknown(`the keybinding source threw: ${err?.message ?? err}`);
 	}
-	if (!resolved || typeof resolved !== "object") return [];
+	if (!resolved || typeof resolved !== "object") {
+		return unknown("the keybinding source returned no resolved bindings");
+	}
 	const keys = new Set();
 	for (const value of Object.values(resolved)) {
 		if (Array.isArray(value)) for (const key of value) keys.add(String(key).toLowerCase());
 		else if (typeof value === "string" && value !== "") keys.add(value.toLowerCase());
 	}
-	return [...keys];
+	return { known: true, keys: [...keys], reason: null };
 }
 
 /** The footer line the landing screen shows BEFORE entering (the key is documented on the way in). */
