@@ -101,6 +101,33 @@ sufficient.
    Then let the next broker start sweep it, or remove it by hand with `git worktree remove item-<id>`
    once clean.
 3. Do not force-remove a dirty worktree while a seat may own it: check the queue item's status first.
+### Retention for the relocated archive (`../pi-opendurig.worktrees/`)
+
+Relocating a dirty tree is **not a disposition** — it is a deferral, and nothing in this runbook ever
+reclaims the archive. Measured 2026-10-20: **179 registered worktrees, 179 carrying changes, 1,562 changed
+paths** (145 with their HEAD already MERGED into `main`, 34 UNMERGED), occupying ~20 GB. So the honest
+answer to "do these stay forever?" is: they do, unless someone applies the rule below.
+
+**The rule:** an archived tree is kept only while it holds something the repo cannot reproduce from a ref.
+That gives three tiers, and every removal goes through `git worktree remove` (never `Remove-Item` — these are
+REGISTERED worktrees and a hand-delete leaves 179 stale entries in `.git/worktrees/`).
+
+1. **Merged + clean** → remove outright (`git worktree remove <wt>`), then `git worktree prune`.
+2. **Merged + dirty** (the bulk: 145 trees today) → the branch content is already on `main`; the only value
+   is the uncommitted residue. Export it losslessly, then remove:
+   ```bash
+   git -C <wt> diff --binary > <archive>/<name>.patch
+   git -C <wt> status --porcelain | awk '$1=="??"{print $2}'   # copy these: they are NOT in the patch
+   git worktree remove --force <wt>
+   ```
+3. **Unmerged** (34 today) → the commits live on branch refs, so the refs preserve them; the tree itself is
+   only needed while someone may resume the work. Export the same two artifacts and remove, OR keep the tree
+   and record why in the item. Never keep one silently.
+
+**Never** hand-delete the whole directory: it is a registered-worktree set, and untracked files in it are
+invisible to a patch. **Do** sequence any bulk pass after heavy installs/builds — it is hundreds of `git`
+invocations and will fight a model pack build for the disk.
+
 4. **Tidy without discarding:** a terminal orphan can be relocated out of the project root instead of
    removed — `git worktree unlock <wt>` then `git worktree move <wt> <archive-dir>/<wt>` — which preserves
    every uncommitted file and every branch. The delegate used `../durian-pi.worktrees/` (2026-10-17:

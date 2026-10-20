@@ -268,15 +268,34 @@ async function branchExists(root, branch) {
  */
 async function ensureWorktreeBranch(worktreePath, branch) {
 	const wtNorm = worktreePath.replace(/\\/g, "/");
-	let current = "";
-	try {
-		current = (await run("git", ["-C", wtNorm, "branch", "--show-current"])).stdout.trim();
-	} catch {
-		current = "";
-	}
+	const current = await currentBranch(worktreePath);
 	if (current === branch) return { action: "already-on-branch", branch };
 	await run("git", ["-C", wtNorm, "checkout", "-B", branch]);
 	return { action: current === "" ? "created-at-detached-head" : `switched-from-${current}`, branch };
+}
+
+/** The SHORT branch a worktree has checked out ("" when detached or unreadable). */
+async function currentBranch(worktreePath) {
+	try {
+		return (await run("git", ["-C", worktreePath.replace(/\\/g, "/"), "branch", "--show-current"])).stdout.trim();
+	} catch {
+		return "";
+	}
+}
+
+/**
+ * Free the BRANCH a worktree holds WITHOUT touching its files (#3174).
+ *
+ * `git switch --detach` is the LOSSLESS op the delegate applied by hand to unblock the
+ * item-2103 landing (docs/incidents/2026-10-19-terminal-worktree-mistaken-for-lost-work.md,
+ * RECURRENCE): the branch is released so it can be checked out elsewhere, while every tracked
+ * file, every untracked file and the worktree's lock stay exactly where they are. `worktree
+ * remove` is NOT a substitute — it refuses on untracked files and destroys scratch a seat may
+ * still want.
+ */
+async function detachWorktreeBranch(worktreePath) {
+	await run("git", ["-C", worktreePath.replace(/\\/g, "/"), "switch", "--detach"]);
+	return { worktree: worktreePath, detached: true };
 }
 
 /**
@@ -546,6 +565,18 @@ export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = "HE
  * re-attached to that branch if it was detached, preserving any commits already
  * made there.
  */
+/** The queue statuses that mean an item is finished either way. */
+const TERMINAL_ITEM_STATUSES = new Set(["done", "cancelled"]);
+
+/**
+ * Is `status` a TERMINAL queue-item status (`done`/`cancelled`)? A missing or unrecognised
+ * status is NOT terminal — `prepareSeatWorkspace` fails CLOSED, refusing to free a branch it
+ * cannot prove is safe to reclaim (#3174).
+ */
+export function isTerminalItemStatus(status) {
+	return typeof status === "string" && TERMINAL_ITEM_STATUSES.has(status);
+}
+
 /**
  * Is an existing item worktree ACTUALLY provisioned? A tree with no `package.json`
  * needs no install; one with a `package.json` is only provisioned once `node_modules`
@@ -558,7 +589,7 @@ function isProvisioned(worktreePath) {
 	return existsSync(join(worktreePath, "node_modules"));
 }
 
-export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatName = null, ref = "HEAD" }) {
+export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatName = null, ref = "HEAD", itemStatus = null }) {
 	const repo = await repoRoot(source);
 	const itemLabel = `item-${itemId}`;
 	const worktreePath = join(worktreeRoot, itemLabel);
@@ -570,6 +601,43 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 	// declares no cwd still lands in the same relative place after the switch.
 	const inside = relative(repo, resolve(worktreeRoot));
 	const cwdFor = (worktree) => (inside === "" ? worktree : join(worktree, inside));
+
+	// --- #3174: resolve WHO HOLDS the branch BEFORE any git mutation, and NEVER steal ---
+	// `prepare_workspace` keys the worktree PATH by item but the BRANCH by seat, and on reuse it
+	// used to run `git checkout -B <branch>` unconditionally. Two real consequences followed:
+	// (1) a SECOND seat preparing the same item silently repurposed the first seat's worktree
+	// (its working state was switched and its branch left unheld) — the #2412 identity guard
+	// does not catch this, because that guard is about a leftover DIRECTORY that is not a
+	// worktree at all, whereas this is a VALID worktree belonging to someone else; (2) nothing
+	// asked who holds the BRANCH it needs, so a seat could not reach an item branch held by
+	// another worktree (the item-2103 blockage) with no in-product move.
+	//
+	// The holder's item is the item named in the branch (the item ids agree: we are preparing
+	// `item-<id>`). `itemStatus` is that item's queue status; when it is TERMINAL (done/cancelled)
+	// the branch is free to reclaim by DETACHING the holder (lossless). When it is LIVE — or
+	// unknown, because a caller that cannot vouch for liveness must fail CLOSED — the request is
+	// REFUSED rather than allowed to steal. No `--force`, no branch deletion, no worktree removal.
+	const terminal = isTerminalItemStatus(itemStatus);
+	const detachedHolders = [];
+	const norm = (p) => resolve(p).replace(/\\/g, "/");
+	const targetPath = norm(worktreePath);
+	const refBranch = `refs/heads/${branch}`;
+	const branchHolder = (await listWorktrees(repo)).find(
+		(w) => (w.branch === branch || w.branch === refBranch) && norm(w.worktree) !== targetPath,
+	);
+	if (branchHolder) {
+		if (!terminal) {
+			throw new Error(
+				`refusing to prepare item ${itemId}: branch ${branch} is checked out by another worktree ` +
+					`${branchHolder.worktree} (holder item ${itemId}). Detaching it would free the branch, but that is ` +
+					`safe only once the holder's item is TERMINAL (done/cancelled); it is not, so this is refused ` +
+					`rather than stolen. Finish or cancel the holder's item first, or prepare a different item.`,
+			);
+		}
+		await detachWorktreeBranch(branchHolder.worktree);
+		detachedHolders.push(resolve(branchHolder.worktree));
+	}
+
 	if (existsSync(worktreePath)) {
 		// A leftover directory at the item's path is not necessarily a WORKTREE. A first attempt can
 		// create `item-<id>` and fail before the registration is usable, and a removed worktree can
@@ -586,6 +654,21 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 					`${worktreePath} (${identityErr?.message ?? identityErr}). Refusing to prepare a workspace ` +
 					`there - remove the leftover directory or restore the worktree, then retry.`,
 			);
+		}
+		// The reused PATH may itself sit on ANOTHER seat's branch (a valid worktree that a second
+		// seat must not repurpose). Never `checkout -B` over it: detach it only when the item is
+		// TERMINAL (lossless — every file stays), otherwise REFUSE and name the path and item.
+		const current = await currentBranch(worktreePath);
+		if (current !== "" && current !== branch) {
+			if (!terminal) {
+				throw new Error(
+					`refusing to prepare item ${itemId}: ${worktreePath} is a valid worktree on branch ${current} ` +
+						`(another seat's item branch, item ${itemId}). Switching it to ${branch} would silently steal that ` +
+						`seat's working state. The holder's item must be TERMINAL (done/cancelled) first. Never steal, never force.`,
+				);
+			}
+			await detachWorktreeBranch(worktreePath);
+			detachedHolders.push(worktreePath);
 		}
 		// Reuse is only safe when the worktree is ACTUALLY provisioned. A first attempt can
 		// create the `item-<id>` dir and then FAIL inside installWorktreeDeps, leaving a dir
@@ -609,6 +692,8 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 			created: false,
 			carried: [],
 			locked: true,
+			holderDetached: detachedHolders[0] ?? null,
+			detachedHolders,
 		};
 	}
 	const wt = await claimWorktree({ source, worktreeRoot, itemLabel, ref, branch });
@@ -621,6 +706,8 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 		created: true,
 		carried: wt.carried ?? [],
 		locked: true,
+		holderDetached: detachedHolders[0] ?? null,
+		detachedHolders,
 	};
 }
 
