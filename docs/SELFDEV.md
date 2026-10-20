@@ -353,6 +353,18 @@ fit in the card, not the largest one the RAM can hold.
   from the expert room. **This is the failure mode to avoid on a 24 GB card.**
 - Single-request write speed with experts in VRAM: Qwen3.6 323 tok/s, Gemma 4 276, Ornith 264 (32K, benchmark).
 
+**Measured on THIS box, from the engine's own log (`strata-swift-iq2_xs.log`) — the evidence that the
+64 GB Swift model, not durig, was the RAM consumer:**
+`strata serve: resident RAM: 19.52 GiB of experts in RAM` with `479,244 MB read from the file` since start
+on a **31.9 GB** machine. So the engine alone held ~61% of RAM, and half a terabyte of expert traffic came
+off the disk because the 24 GB card holds only a fraction of a 64 GB model. **That is what a RAM upgrade
+buys: a higher resident-expert share and less disk traffic for THAT model — not concurrency.** PolyStrata
+documents no quality benchmark at all (its tables are speed only), so any "model A reasons better than
+model B" statement is UNVERIFIED here; the only quality signal in its docs is FAQ's Q3-vs-Q4 note ("take
+Q4 if you have the memory", speeds within ~10% once the card holds the model). Windows support, per
+`docs/FAQ.md`: Qwen3.6, Ornith 1.5, Gemma 4, Tiel Coder and Qwen3.8-Flash-Next — **LFM2.5 and MiniCPM-V are
+NOT in that list**; GLM is Linux-only.
+
 **Practical recipe on a 3090 (24 GB) + any amount of RAM:** pick a ≤17 GB quant of a 35B-A3B-class model, keep
 `--max-context` at 32768 (64K halves the slot count), set `"parallel": N` with N chosen so
 `N × slot GB < free VRAM` (2–3 at 64K, 3–4 at 32K for Q3_K_M), and cap durig with
