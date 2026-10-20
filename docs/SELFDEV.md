@@ -604,3 +604,35 @@ for the Coder -- those are the pre-2026-10-17 build; the model card's current fi
 100%**; (b) the same page says the Coder "reads long prompts the fastest of all", but its own table has
 Q2_0 at 2,650 tok/s against the Coder's 2,180 (that column is a 32K read; a 128K read is not in the
 table, so the claim is at best unverified).
+
+### Qwen3.8 variants per hardware configuration (2026-10-20)
+
+Requirements from PolyStrata `docs/MODELS.md` + `docs/DETAILS.md`. A size fits when **RAM holds the experts
+plus ~10 GB** (Windows + other programs); the dense part of shard 1 goes to the card.
+
+| Variant | Download | RAM for experts | RAM+VRAM total | Quality / note |
+|---|---:|---:|---:|---|
+| **Coder (IQ1_M)** | shard 1 = 29.6 GB | ~23 GB | fits a 32 GB PC | 95.7% of base SWE-bench Verified, 100% LCB; weak outside code and non-English |
+| Q2_0 | 66 GB | ~34 GB + 6 | 37.6 GB | fastest; "good" |
+| IQ2_XS | 68 GB | ~36 GB + 6 | 39.2 GB | "a bit better"; **the Swift 1.5 file on this PC** |
+| IQ3_XXS | 76 GB | ~43 GB + 6 | 47.0 GB | "best" of the small sizes |
+| **IQ3_S** | largest of the four | ~50 GB + 6 | **54.8 GB** | **matches the full model on the published tests** |
+| UD-IQ4_XS (Unsloth) | 94 GB | ~62 GB | ~72 GB | more quality, slower decode |
+| UD-Q4_K_XL | 111 GB | ~72 GB | ~88 GB | 93.1% same-top-token vs Q8_0 |
+| UD-Q5_K_XL / UD-Q6_K_XL / Q8_0 | 158 / 169 / 188 GB | ~98 / 108 / 126 GB | ~108 / 118 / 136 GB | needs 128-192 GB RAM |
+
+Swift 1.5 (a fine-tune) exists in the SAME sizes as the original, with about the same RAM and speed per token,
+and thinks much shorter before answering -- so wherever a size fits, "Swift <size>" is a drop-in.
+
+| Your configuration | Fits resident (recommended first) | Only via low-RAM/disk streaming | 2-4 seat verdict |
+|---|---|---|---|
+| **1x3090 24 GB + 32 GB** (today) | **Coder** (23 GB experts); **Q2_0 / IQ2_XS** via low-RAM mapping | IQ3_XXS, IQ3_S (experts 43-50 GB > 32 GB RAM) | Coder or IQ2_XS/Swift IQ2_XS. 24 GB is the slot budget: expect 1-2 concurrent seats, decode in the doc's 3090 range (~100-140 tok/s single stream) |
+| **1x3090 + 96 GB** | **IQ3_S** (54.8 GB, the quality pick), Q2_0/IQ2_XS/IQ3_XXS, Coder, Swift sizes; **UD-IQ4_XS (~72 GB)** too | UD-Q4_K_XL (~88 GB) only with nothing else running -- risky | IQ3_S, or Unsloth UD-IQ4_XS for more quality. ONE card, so 2-3 slots at 32K and decode bounded by that card |
+| **2x3090 48 GB + 32 GB** | **Coder** only (23 GB experts) | Q2_0/IQ2_XS in low-RAM mode; IQ3_XXS/IQ3_S much slower | Fastest per byte for code, but the RAM ceiling blocks the good general sizes -- this pairing wastes the second card |
+| **2x3090 48 GB + 96 GB** | **Everything through UD-IQ4_XS**; **IQ3_S is the sweet spot**; UD-Q4_K_XL with ~8 GB headroom | - | **Best for your goal**: IQ3_S (or Swift IQ3_S) with `"parallel": 2-3`; the split also raises prefill, which is what the token bill needs |
+
+**Slot budget (why concurrency stays small above the model size):** slots are paid out of VRAM. A Qwen3.6 slot
+costs 1.5 GB of VRAM per 32K of context (measured); Qwen3.8 keeps its KV in RAM above 64K (`--kv-resident
+32768` keeps the hot part on the card; ~13.7 KB/token of host RAM is ~0.9 GB per 64K conversation). On a 24 GB
+card the choice is always "model in VRAM" vs "slots in VRAM": a 54.8 GB requirement (IQ3_S) leaves room for
+roughly 2-3 slots at 32K, not the engine's 8.
