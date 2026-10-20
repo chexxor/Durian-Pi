@@ -11,6 +11,7 @@
 //   directions flow through one durable queue.
 import { configure, defineDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { seatHasReadTool } from "./seattools.mjs";
@@ -296,6 +297,82 @@ export async function enqueueItem(
 		transitions: [{ at: new Date().toISOString(), event: held ? "held" : "queued", by: from }],
 	});
 	return id;
+}
+
+/**
+ * A short, stable digest of a body — the caller's check that a revise LANDED (#3435).
+ * Truncated to 16 hex chars: this is a comparison handle for a human or a seat, not a
+ * security primitive (the body is not secret; the queue is readable).
+ */
+export function bodyDigest(body) {
+	return createHash("sha256").update(String(body ?? ""), "utf8").digest("hex").slice(0, 16);
+}
+
+/**
+ * The revise COMPARISON, as data (#3435): apply the submitted fields to `item` and say
+ * which of three things happened, so a caller can never mistake "nothing to change" for
+ * "your change was dropped".
+ *
+ *  - `revised`   — at least one field differed and was written (verified by re-reading it
+ *                  in the same call); `fields` names what landed.
+ *  - `no-change` — every submitted field is byte-identical to the stored one. Nothing was
+ *                  written, and the caller is TOLD so, with the stored digest.
+ *  - `mismatch`  — a field was submitted, the write was attempted, and the stored value
+ *                  still does not equal it. This is the case that used to be reported as
+ *                  success; the tool turns it into REVISE_WORK_ERROR.
+ *
+ * Pure apart from the `item` mutation it is asked to perform; no I/O, so a demo can drive
+ * all three outcomes without a store.
+ */
+export function applyRevise(item, { subject, body } = {}) {
+	const submitted = [];
+	const changed = [];
+	if (subject !== undefined) {
+		submitted.push("subject");
+		if (subject !== item.subject) {
+			item.subject = subject;
+			changed.push("subject");
+		}
+	}
+	if (body !== undefined) {
+		submitted.push("body");
+		if (body !== item.body) {
+			item.body = body;
+			changed.push("body");
+		}
+	}
+	// Verify inside the same call: a submitted field that did not land is a MISMATCH.
+	const failed = [];
+	if (subject !== undefined && item.subject !== subject) failed.push("subject");
+	if (body !== undefined && item.body !== body) failed.push("body");
+	const status = failed.length > 0 ? "mismatch" : changed.length > 0 ? "revised" : "no-change";
+	return {
+		status,
+		fields: status === "mismatch" ? failed : changed,
+		submitted,
+		digest: bodyDigest(item.body),
+		bodyBytes: Buffer.byteLength(String(item.body ?? ""), "utf8"),
+	};
+}
+
+/**
+ * The MESSAGE a revise returns (#3435), one shape per outcome so no caller can read a
+ * dropped change as a success:
+ *  - `revised`   → names the fields that landed AND the stored body digest + byte count, so
+ *                  the caller can compare against what they sent without re-reading;
+ *  - `no-change` → says "no change" in those words and that NOTHING was written, with the
+ *                  digest — the caller can still tell whether the stored text is the text
+ *                  they meant;
+ *  - `mismatch`  → an ERROR-shaped line (`REVISE_WORK_ERROR:`), never a success.
+ */
+export function reviseMessage(item, outcome) {
+	if (outcome.status === "mismatch") {
+		return `REVISE_WORK_ERROR: item #${item.id} did not take the submitted ${outcome.fields.join(", ")} (stored body sha256=${outcome.digest}); nothing was changed`;
+	}
+	if (outcome.status === "no-change") {
+		return `item #${item.id} no change — the submitted ${outcome.submitted.join(" and ")} already matches the stored text (body sha256=${outcome.digest}); nothing was written`;
+	}
+	return `item #${item.id} revised (${outcome.fields.join(", ")}); it stays queued for ${item.to}. Stored body sha256=${outcome.digest} (${outcome.bodyBytes} bytes) — compare it with what you sent to verify the write landed.`;
 }
 
 // Ratcheting task tier (RANK 2 borrow; source vendor/eval/agent-fleet @ 7c34dde
@@ -947,23 +1024,25 @@ const Router = defineExtension({
 						return `item #${args.itemId} is not queued (status=${item.status}); only unclaimed work can be revised`;
 					if (args.subject === undefined && args.body === undefined)
 						return "revise_work needs a subject and/or a body";
-					const fields = [];
-					if (args.subject !== undefined && args.subject !== item.subject) {
-						item.subject = args.subject;
-						fields.push("subject");
+					// #3435: the OUTCOME must be legible and checkable. A revise that produces no
+					// change used to be indistinguishable from a revise that was DROPPED — both
+					// came back as a success-shaped sentence — so the only way to notice a lost
+					// amendment was to re-read the item, which nobody does on a success path.
+					// `applyRevise` returns a status, the fields it actually wrote, and a digest of
+					// the STORED body so the caller can verify the write without re-reading.
+					const outcome = applyRevise(item, { subject: args.subject, body: args.body });
+					if (outcome.status === "mismatch") {
+						// A change was submitted and did NOT land. Never report that as success.
+						return reviseMessage(item, outcome);
 					}
-					if (args.body !== undefined && args.body !== item.body) {
-						item.body = args.body;
-						fields.push("body");
-					}
-					if (fields.length === 0) return `item #${item.id} unchanged`;
+					if (outcome.status === "no-change") return reviseMessage(item, outcome);
 					item.transitions.push({
 						at: new Date().toISOString(),
 						event: "revised",
 						by: me,
-						fields,
+						fields: outcome.fields,
 					});
-					return `item #${item.id} revised (${fields.join(", ")}); it stays queued for ${item.to}.`;
+					return reviseMessage(item, outcome);
 				}, context);
 				return toolText(out);
 			},
