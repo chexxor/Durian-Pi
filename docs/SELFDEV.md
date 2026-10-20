@@ -500,6 +500,9 @@ consequences, both the opposite of intuition:
    fits both cards' 48 GB and gets the split's prefill gain; a 64–75 GB model does not, and its prefill
    stays single-card speed.
 
+**SUPERSEDED ON QUALITY — read the BenchLM section below before acting on this table.** The speeds
+stand; the model CHOICE here was made without benchmarks and is wrong for authoring seats.
+
 **Ranked configurations for 2–4 concurrent seats (highest aggregate tokens/s first).** Measured points:
 Qwen3.6-35B-A3B with every expert in VRAM writes **323 tok/s** alone and **83.9 → 173.5 → 252.0 → 325.4
 tok/s** at 1/2/4/8 slots (R9700, Q4_K_XL); slot cost **1.5 GB per 32K** (3.0 GB per 64K) of VRAM;
@@ -522,3 +525,63 @@ Qwen3.6-35B-A3B gives answers of DeepSeek-V4.1-Flash quality on this team's work
 The only honest test is an A/B on real queue items — e.g. move the high-volume, low-judgment seats
 (`scribe`, `pm`, `qa2`, `designer`) to local first and keep `impl`/`lead`/`architect` on DeepSeek until the
 local results are inspected.
+
+### Local model quality: benchmark figures + quantization (2026-10-20)
+
+The config table above ranked local models on SPEED only. Capability scores and the quantisation penalty
+change the recommendation. Scores below are BenchLM as of 2026-10-19 (`benchlm.ai/models/<slug>`); Agentic
+and Coding are the two categories that match durig's work (tool use + a code change in a real repo).
+
+| Model | Overall | Agentic | Coding | Rows that decide it |
+|---|---|---|---|---|
+| **DeepSeek V4.1 Flash 1017** (the seat to replace) | 65.7 (#35/226) | 61.7 (#24, 82nd pct) | **60.9 (#18, 89th pct)** | Terminal-Bench 2.1 **90.6%**, DeepSWE **77.0%**, NL2Repo **68.2%**, Codeforces 3471, ProgramBench 29.1% |
+| Qwen3.8-Flash-Next (= the Swift 1.5 base) | 62.9 (#44) | **65.5 (#17, 88th pct)** | 51.6 (#42, 73rd pct) | SWE-bench Pro 62.5%, DeepSWE 58.7%, NL2Repo 48.1%, LiveCodeBench v6 91.9% |
+| GLM-5.3-Flash | 58.5 (#59) | 56.9 (#37, 72nd pct) | 48.1 (#47, 69th pct) | Terminal-Bench 2.1 84.3%, SWE-bench (Vals) 92.0%, DeepSWE 63.4%, NL2Repo 56.3% |
+| Qwen3.6-27B | 48.6 (#108) | 29.1 (#97, 26th pct) | 34.8 (#80, 47th pct) | SWE-bench Verified 77.2%, SWE-bench Pro 53.5%, Terminal-Bench 2.0 59.3%, NL2Repo 36.2% |
+| Gemma 4 26B A4B | 45.6 (#121) | **not measured** | 30.9 (#94, 38th pct) | LiveCodeBench 77.1%, MRCRv2 44.1% — and see the trap below |
+| **Qwen3.6-35B-A3B** (the speed pick above) | 43.5 (#128) | **30.2 (#96, 26th pct)** | 31.5 (#93, 39th pct) | SWE-bench Verified 73.4%, SWE-bench Pro 49.5%, Terminal-Bench 2.0 51.5%, **NL2Repo 29.4%** |
+| LFM2.5-24B-A2B | 37.7 (#150) | 31.0 (#94, 28th pct) | 25.3 (not ranked) | SWE-bench Verified 51.0%, tau3 8.0%, IFEval 96.8% |
+
+**What this says, plainly:**
+1. **The fast local pick is NOT a DeepSeek replacement.** Qwen3.6-35B-A3B is 26th agentic percentile against
+   DeepSeek's 82nd, and on NL2Repo (build a working repo from a description — the closest published analogue
+   to a durig queue item) it scores **29.4% against DeepSeek's 68.2%**. It is a coding specialist relative to
+   its own predecessors, but an independent comparison puts the MoE 4-20 points BELOW a dense 27B on coding
+   benchmarks: **pick it for throughput, never for peak quality.**
+2. **Qwen3.8-Flash-Next is the quality leader among the models PolyStrata can run here** — overall 62.9 vs
+   65.7, agentic percentile HIGHER than DeepSeek (88 vs 82), coding lower (73 vs 89); SWE-bench Pro 62.5%
+   even tops Claude Opus 4.6 Max (53.4) and its DeepSWE 58.7 beats DeepSeek-V4-Flash-0731 (54.4). Its CODING
+   gap to V4.1-Flash-1017 is what a verifier and a human reviewer must absorb.
+3. **Gemma 4 26B-A4B is a trap for coding agents:** SWE-bench Verified **17.4** (roughly 4-5x worse than
+   Qwen3.6-35B-A3B) while its LiveCodeBench looks respectable at 77.1 — and Google omitted SWE-bench from its
+   own table, which is why BenchLM's profile has NO agentic rows at all. Do not pick it on LiveCodeBench.
+4. **GLM-5.3-Flash is closest on the coding rows** (Terminal-Bench 2.1 84.3 vs 90.6; NL2Repo 56.3 vs 68.2)
+   and has 1M context — but PolyStrata needs 79-114 GB for it and has not run it on Windows.
+
+**QUANTIZATION erodes all of the above, and it is the deciding variable here** (PolyStrata `docs/MODELS.md`,
+`docs/QUANTS.md` — "same top token as Q8_0" is the repo's quality proxy):
+
+| Size | RAM+VRAM requirement | Same top token as Q8_0 | Verdict |
+|---|---:|---:|---|
+| Q2_0 | 37.6 GB | - | fastest, "good" |
+| IQ2_XS (**the Swift 1.5 file on this PC**) | 39.2 GB | below IQ3_S | fast, "better" — but a 2-bit size |
+| IQ3_XXS | 47.0 GB | - | "great" |
+| **IQ3_S** | **54.8 GB** | **87.7%** | "**best: matches the full model on the published tests**" |
+| UD-Q4_K_XL (Unsloth family) | ~88 GB of RAM for all experts | 93.1% | more quality, doubles the memory and slows decode |
+
+So the numbers quoted in the benchmark table are FULL-PRECISION capabilities; **Swift IQ2_XS and Qwen3.6
+UD-Q3_K_M run BELOW them.** For Qwen3.8-Flash-Next the quality-per-byte pick is **IQ3_S**, not IQ2_XS — it
+is the size the repo says matches the full model, and 54.8 GB still fits 96 GB with room for the OS and the
+KV host copy. Swift's own benefit is token efficiency, not raw accuracy: at high thinking it holds ~89.6%
+accuracy while cutting thinking tokens by 63.4%, which matters in an agent loop where every reasoning token
+is latency.
+
+**Revised recommendation for "replace DeepSeek V4.1 Flash across 2-4 concurrent seats":**
+2x RTX 3090 + **96 GB RAM**, running **Qwen3.8-Flash-Next at IQ3_S** (54.8 GB requirement) with
+`"parallel": 2-3` and a generous conversation cache. That is the configuration that keeps the quality gap as
+small as locally possible while still holding 2-3 seat contexts. Expect 2-card decode in the 100-140 tok/s
+range (measured 137 tok/s on a 2x3090 x16+x4 pair at one slot) and prefill near 1.8 k tok/s — the number that
+decides whether 385 M cached-prefix tokens/day are affordable. If a cheaper rig is the goal, Qwen3.8's
+**Coder variant (half the experts) reaches ~91% of the full model's SWE-bench Verified and 99% of
+LiveCodeBench and fits 32 GB RAM** — the best quality-per-dollar local option, at the cost of the general
+agentic spread.
