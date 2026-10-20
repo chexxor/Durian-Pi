@@ -591,3 +591,16 @@ retained, both at xhigh reasoning. The 2026-10-17 rebuild raised SWE-bench Verif
 earlier 91% figure quoted in older notes is that superseded build). Its own card warns the reduction is
 DIRECTED at code/agentic/vision/spatial and degrades elsewhere — so it is a coding seat, not a
 generalist, and the unpruned GSQ-RCO release is the general-purpose choice.
+
+**It IS the row PolyStrata's own MODELS.md calls "Coder (IQ1_M)"**, so the measured speeds apply to the
+file we would install (RTX 5070 12 GB / Ryzen 5 7600 / 64 GB, `docs/MODELS.md`): **55 tok/s short chat,
+43 tok/s at 128K context, 2,180 tok/s prompt read** -- slower to write than IQ2_XS (79/63) but far more
+prefill-friendly per GB, with shard 1 at 29.6 GB and experts ~23 GB of RAM (runs on a 32 GB PC, 262K
+context on 64 GB). PolyStrata puts an RTX 3090 at roughly **100-140 tok/s** for the Qwen3.8 sizes.
+
+**Two doc defects found while checking this, so nobody repeats them as fact:** (a) PolyStrata's
+`MODELS.md`/`DETAILS.md` still quote **91%/91.3% of SWE-bench Verified and 98.7-99% of LiveCodeBench**
+for the Coder -- those are the pre-2026-10-17 build; the model card's current figures are **95.7% and
+100%**; (b) the same page says the Coder "reads long prompts the fastest of all", but its own table has
+Q2_0 at 2,650 tok/s against the Coder's 2,180 (that column is a 32K read; a 128K read is not in the
+table, so the claim is at best unverified).
