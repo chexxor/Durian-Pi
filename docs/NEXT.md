@@ -21,6 +21,16 @@ explicitly downstream of a verified Phase 2.
 **Queue id:** #3954 (seam layer) · #3983 (launch+return glue, held) · #3941/#3946/#3980 (Fix A +
 verifies) · #3943 (qa narrow verify of the already-landed slice) · #3948 (scribe pointer correction).
 
+**Devtools health (reviewed 2026-10-20T22:25Z):** output and process are sound — #4099 @5f157f8 and
+#4083 @5129866 are scoped and green in a detached worktree, #4109 was cancelled only after proving it
+duplicated #4083, and #4080's "LANDED" claim for 3277 is true (`5e4dd4d` is an ancestor of `main`).
+**But its thinking was degenerate**: 10,787 "Hmm" fragments across 82 thinking turns, worst 686 in one
+turn, at **324,627** prompt tokens — one turn below the ~330k context trip. Compacted while idle
+(`intent.mjs devtools --op compact`, summaryEntryId **188025**, `pi.compaction` verified). Note the rig
+FILE still names `devtools local/swift-1.5-iq2_xs` while the STORE runs `deepinfra` — do NOT run
+`up --refresh`. Stale held landing rows also exist for devtools (#4035's `be663f2` is already on `main`;
+#4041/#4042 are a duplicate pair) — pm hygiene, not the seat.
+
 **Blocker:** **the shared tree is NOT clean** — `impl` is writing `src/tui/durable/attach.mjs`
 and `demo/tui-attach-seam.test.mjs` (both untracked, growing) directly in the shared checkout for #3954. That is the D49/F12 hazard;
 it is preserved, not to be deleted/stashed/committed, and it makes a suite run in `.` unable to prove
