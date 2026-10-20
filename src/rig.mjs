@@ -187,8 +187,13 @@ export async function cancelItem(tx, { item, me, reason }) {
 	item.transitions.push({ at: new Date().toISOString(), event: "cancelled", by: me, reason });
 	// The other party: the sender when the RECIPIENT cancels, the recipient when the SENDER does.
 	const other = item.from === me ? item.to : item.from;
+	// Three DIFFERENT situations send no notice, and the message is the whole interface the caller
+	// has (#3739): "there is no other party" is a correct outcome, "this item is itself a notice" is
+	// a classification, and conflating them hid a cancellation that reached nobody.
+	const selfOnly = typeof other !== "string" || other.length === 0 || other === me;
+	const noticeOfNotice = isNoticeItem(item);
 	let noticeId = null;
-	if (!isNoticeItem(item) && typeof other === "string" && other.length > 0 && other !== me) {
+	if (!noticeOfNotice && !selfOnly) {
 		noticeId = await enqueueItem(
 			tx,
 			me,
@@ -200,15 +205,19 @@ export async function cancelItem(tx, { item, me, reason }) {
 			item.tier ?? null,
 		);
 	}
-	const message =
-		noticeId === null
-			? `item #${item.id} cancelled: ${reason} (no notice sent — this item is itself a notice)`
-			: `item #${item.id} cancelled: ${reason} (notified ${other} as notice #${noticeId})`;
+	const why =
+		noticeId !== null
+			? `notified ${other} as notice #${noticeId}`
+			: selfOnly
+				? `no notice sent — there is no other party to notify`
+				: `no notice sent — this item is itself a notice`;
+	const message = `item #${item.id} cancelled: ${reason} (${why})`;
 	return { noticeId, other, message };
 }
 
 export function isDoneNotice(item) {
-	return item?.notice === true || /^DONE #\d+: /.test(String(item?.subject ?? ""));
+	if (typeof item?.notice === "boolean") return item.notice;
+	return /^DONE #\d+: /.test(String(item?.subject ?? ""));
 }
 
 /**
@@ -216,7 +225,8 @@ export function isDoneNotice(item) {
  * cancellation no longer looks like an item that silently vanished.
  */
 export function isCancellationNotice(item) {
-	return item?.notice === true || /^CANCELLED #\d+: /.test(String(item?.subject ?? ""));
+	if (typeof item?.notice === "boolean") return item.notice;
+	return /^CANCELLED #\d+: /.test(String(item?.subject ?? ""));
 }
 
 /**
@@ -226,7 +236,13 @@ export function isCancellationNotice(item) {
  * so a cancellation of a cancellation cannot loop.
  */
 export function isNoticeItem(item) {
-	return item?.notice === true || /^(?:DONE|CANCELLED) #\d+: /.test(String(item?.subject ?? ""));
+	// THE STRUCTURAL FLAG WINS (#3739). The subject-prefix fallback exists only for flag-less
+	// items that predate the flag; letting it override a structural non-notice is how a WORK item
+	// whose free-text subject happens to start "DONE #123: " got cancelled without notifying
+	// anyone, while the tool told the caller the item "is itself a notice". Subjects are free
+	// text, so the prefix cannot be the authority - only a missing flag can defer to it.
+	if (typeof item?.notice === "boolean") return item.notice;
+	return /^(?:DONE|CANCELLED) #\d+: /.test(String(item?.subject ?? ""));
 }
 
 /**

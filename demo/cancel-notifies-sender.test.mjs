@@ -101,6 +101,45 @@ try {
 	const notice5 = fifth.queue.items.find((it) => it.id === out5.noticeId);
 	check("the notice inherits the cancelled item's tier", notice5?.tier === "feature", JSON.stringify(notice5?.tier));
 
+	console.log("\n=== #3739: a WORK item whose SUBJECT starts \"DONE #123: \" is still WORK ===");
+	// Subjects are FREE TEXT: a real item can begin with those characters as prose. The structural
+	// flag is what decides, and every item the queue creates carries it (`enqueueItem` defaults
+	// `notice` to false). Before #3739 the subject-prefix fallback overrode that, so cancelling
+	// this item notified NOBODY and the message claimed the item "is itself a notice".
+	const sixth = fakeTx();
+	const lookalike = mkItem({
+		id: 700,
+		notice: false,
+		subject: "DONE #3384: please confirm the disposition before I close it",
+		status: "queued",
+	});
+	check("the structural flag wins over a notice-shaped subject", isNoticeItem(lookalike) === false);
+	const out6 = await cancelItem(sixth.tx, { item: lookalike, me: "lead", reason: "superseded by #3383" });
+	check("a notice IS sent for a notice-shaped WORK item", typeof out6.noticeId === "number", JSON.stringify(out6));
+	const notice6 = sixth.queue.items.find((it) => it.id === out6.noticeId);
+	check("and it reaches the SENDER", notice6?.to === "pm", JSON.stringify(notice6));
+	check("the message does NOT claim the item was a notice", !out6.message.includes("itself a notice"), out6.message);
+	check("the message names the notified party", out6.message.includes("notified pm"), out6.message);
+
+	console.log("\n=== #3739: the flag decides in BOTH directions ===");
+	check("notice:false + DONE subject is NOT a notice", isNoticeItem({ notice: false, subject: "DONE #1: x" }) === false);
+	check("notice:true + ordinary subject IS a notice", isNoticeItem({ notice: true, subject: "build the landing screen" }) === true);
+	check("a LEGACY flag-less DONE item still classifies (the fallback's only remaining job)", isNoticeItem({ subject: "DONE #1: x" }) === true);
+
+	console.log("\n=== #3739: from === to === me: no other party, and the message SAYS so ===");
+	const seventh = fakeTx();
+	const selfItem = mkItem({ id: 800, from: "impl", to: "impl", notice: false, subject: "self note", status: "queued" });
+	const out7 = await cancelItem(seventh.tx, { item: selfItem, me: "impl", reason: "no longer needed" });
+	check("no notice is enqueued when there is no other party", out7.noticeId === null && seventh.queue.items.length === 0, JSON.stringify(out7));
+	check("the message names the ACTUAL cause (no other party)", out7.message.includes("no other party to notify"), out7.message);
+	check("and it does NOT say the item was a notice", !out7.message.includes("itself a notice"), out7.message);
+
+	console.log("\n=== #3739: the two null-notice messages are DISTINGUISHABLE ===");
+	const eighth = fakeTx();
+	const realNotice = mkItem({ id: 900, notice: true, subject: "DONE #3384: x", status: "queued" });
+	const out8 = await cancelItem(eighth.tx, { item: realNotice, me: "lead", reason: "housekeeping" });
+	check("a notice-item cancellation keeps its own message", out8.message.includes("this item is itself a notice"), out8.message);
+	check("and the two causes read differently", out7.message !== out8.message, out7.message + " vs " + out8.message);
 	assert.ok(true);
 	console.log(
 		failures === 0
