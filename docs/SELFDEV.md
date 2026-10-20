@@ -662,5 +662,11 @@ IQ3_S only with ~0 headroom.
 **Consequence for the "which variant" question:** the compression ladder and the RAM ladder move together.
 Below ~60 GB of RAM every 3-bit-and-up Qwen3.8 runs in low-RAM mode, where experts stream from the pack on
 disk -- and that is exactly the state our Swift run was in (`resident RAM: 19.52 GiB` of a 35.5 GB arena,
-479 GB read from disk). So a fair test of a less-compressed variant needs the 96 GB RAM upgrade first;
-otherwise the test measures disk streaming, not the model.
+479 GB read from disk). **CORRECTION (operator, 2026-10-20): low-RAM mode does NOT reduce capability.** It changes WHERE the
+experts live (pack-mapped instead of copied into RAM) and therefore speed; the weights and the routing are
+the same model. PolyStrata's own notes support this: the KV-streaming variant "reads exactly the same
+values (only where the KV lives changes)", and the expert-placement switches that DO change bits are
+called out explicitly (e.g. `--pcie-frac 0` changes answers; `STRATA_EXCHANGE_ROTATE` gives "tokens
+identical"). The only genuine caveat is that GPU-vs-CPU compute paths can move the last bits, which is
+not a capability change. So a less-compressed variant can be tested on 32 GB; the price is throughput,
+not intelligence. The 96 GB upgrade is about speed and concurrency, not about making a size "work".
