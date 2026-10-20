@@ -23,7 +23,27 @@
 // So `beginOperatorWindow` (the contract) + a genuinely stopped broker + `acquireSeatStore` is
 // buildable and is what this module implements. The PAUSE-while-ALIVE variant is NOT buildable
 // against the current guard: it would need either a relinquish state the guard understands or a
-// second-writer window, and both are protocol changes that need a ruling, not an invention here.
+// second-writer window.
+//
+// ── RULED 2026-10-20 (#4004): STOP-AND-RESTART. NO RELINQUISH STATE. DO NOT RE-PROPOSE IT. ─────
+// The operator window is: record the contract -> STOP the broker -> acquire THROUGH the guard ->
+// session -> release on exit -> RESTART the broker. A relinquish state was considered and REFUSED,
+// for three reasons, in the order they bind:
+//   1. THE GUARD'S STRENGTH IS THAT IT DERIVES OWNERSHIP FROM LIVENESS, WHICH IS A FACT, NOT FROM A
+//      DECLARATION, WHICH IS A CLAIM. A relinquish flag makes "the store is free" something the
+//      broker SAYS rather than something the system can SEE — and a claim that can be stale,
+//      mis-set or forged is exactly what a boundary must not rest on. Do not authenticate a release
+//      you can instead observe.
+//   2. THIS SEAM IS A BRIDGE TO BE RETIRED, and seam (b) — the destination — never transfers
+//      ownership at all. A relinquish state would be new protocol infrastructure built to serve the
+//      seam we intend to delete.
+//   3. PRACTICALLY, the operator-initiated condition already requires the operator to be present:
+//      someone who is there to stop the broker is there to start it again.
+// WHAT THE RULING PRESERVES: acquisition still goes through `assessStoreOwnership` and still cannot
+// succeed while the broker is alive, so the fail-closed condition holds BY CONSTRUCTION rather than
+// by care. Nothing in the guard changes. And the RESTART is now a real requirement, not an implied
+// one: a session that ends with no broker is worse than the pause problem it replaced — that
+// obligation lives in the launch glue, not here.
 //
 // SCOPE: the seam only. NOT the launch glue (#3956), NOT the escape-sequence sanitizer (#3962),
 // NOT seam (b), NOT Phase 3.
