@@ -3,6 +3,60 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-20T01:10Z, delegate) — **LANDING+PRUNE PASS: 2 LANDED, 1 LANDED-THEN-REVERTED, `main` `9882632`→`4d96ae9`; THE SUITE IS NOW CONCURRENT (~64s, default 8)**
+
+**Read this first.** The operator asked for a landing + worktree-prune pass, then for a faster suite.
+Both are done; the pass found two branches that are NOT landable as-is (below) and one commit from a
+seat arrived mid-pass.
+
+**Landed (kept):**
+- `scribe-item-3167` @`b0e9d75` — DECISIONS D113 (waiting ADR) + D114 (CARRY); merge `35f8ae6`.
+- `impl-item-3062` @`eb3b337` — M1a structured gate field; merge `a55535e`. (M1b `#3056` stays HELD per
+  the ruling in `#3208`; `impl-item-3017` is superseded by it.)
+
+**LANDED THEN REVERTED — `devtools-item-1558` @`17cd7a2` (revert `0976cc4`).** Its own
+`demo/test-areas.test.mjs` fails on `main`: `demo/test-areas.json` does not map **57** newer demos
+(`blockedby-field`, `broker-*`, `queue-lifecycle-m1a`, …). The branch predates them. The branch ref is
+**kept deliberately** at `17cd7a2`; the fix is: regenerate the manifest against current `demo/`, re-run
+`demo/test-areas.test.mjs`, then re-land. Do not `-D` it (its content is reverted, not live).
+
+**STOPPED BY ITS OWN TEST — `devtools-item-2412` @`7933858` (not landed).** `node scripts/land.mjs
+… --suite` merged it cleanly with the other three, then `demo/command-spool.test.mjs` failed (`configure`
+dequeued `{delivered:0, deadLettered:1}`). Cause: `main` now carries the operator-only control-plane gate
+(`#1966`/`#2219` D113), and the branch predates it — its `configure` op has no operator provenance. The
+landing list `#2645` itself warned "the gate is NOT in effect at this branch"; it is now in effect. Needs
+the author to rebase/adapt, not a delegate decision.
+
+**Not landed, with reasons:** `impl-item-3174` (verify `#3216` still claimed), `impl-item-3192` (verify
+`#3222` queued), `devtools-item-2969` (verify `#3205` HELD on the landing — inverted gate; also needs the
+post-landing `sync-pi --link`), the `#2841` scribe rebase set (touches `rig.starter.json`/`constitution.txt`
+without the inline mirror sync), and every CONFLICT branch (~59 of 92 unlanded).
+
+**Prune:** refs **97 → 93** (12 merged refs at start; pruned `qa-item-3104`, `qa-item-3198`,
+`impl-item-3062`, `scribe-item-3167`; kept `devtools-item-1558`). Worktrees **203**, nothing forced.
+`worktree scratch clean` REFUSED 2 dirty scratches (`%TEMP%/wt-2199`, `./wt-2073`); 6 live item trees are
+locked (kept); 31 dirty item trees are already archived under `../pi-opendurig.worktrees/`; `reapable: 0`.
+No held ref was released: every merged-but-held ref is held by a LIVE or LOCKED tree.
+
+**Suite speedup (operator ask):** `scripts/suite.mjs` now runs a bounded pool — `--jobs N` /
+`DURIG_SUITE_JOBS` (1..32, **default 8**) — instead of sequential `spawnSync`, and gives each demo its own
+`TMP`/`TEMP`/`TMPDIR`. Measured here: sequential ~10 min → **8 jobs 64s**, 16 jobs 51s; all runs
+`pass=179 fail=1` (the `pitui` #2412 assertion), identical to the sequential baseline. The classifier and
+exit codes are unchanged. `demo/suite-env.test.mjs` now asserts `--jobs 0/33/abc` exit 2. Commit `4d96ae9`.
+**`land.mjs --suite` still cannot be used while `pitui` is red** — land without it, then prove on `main`.
+
+**A SEAT COMMITTED MID-PASS — `cafee74`** `chore(rig): local provider moves to Swift 1.5
+(swift-1.5-iq2_xs)` — it committed the dirty `rig.selfdev.json` I was leaving alone. It also mojibakes the
+em-dashes in every seat's instructions (`â€”`). The LIVE store was not refreshed, so `qa` still runs
+`local/qwen36` until someone runs `up rig.selfdev.json --refresh`. If that model move was unintended, it
+needs an operator ruling, not a delegate revert.
+
+**Exact next command:** `node scripts/suite.mjs` (expect `pass=179 fail=1`, `pitui`) · then
+`git status --short -- .` (clean) · then pick the next landing list from the held set, re-preflight each
+branch with `git merge-tree --write-tree main <branch>` before landing.
+**Do not:** land a CONFLICT branch; use `land.mjs --suite` while `pitui` is red; `-D` `devtools-item-1558`;
+force a dirty worktree; push (operator holds the grant).
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-20T00:25Z, delegate) — **THE FOUR DeepSeek SEATS ARE ON `deepseek-ai/DeepSeek-V4.1-Flash-1017` AND RUNNING; the catalog gap that caused the 2026-10-19 outage is closed and guarded**
 
 **Read this first.** The operator asked to switch the dev team to `deepseek-ai/DeepSeek-V4.1-Flash-1017`
