@@ -32,11 +32,11 @@ completion bodies" for `pm`, which cannot read a body it does not hold.
 | `devtools` | full: read, write, edit, shell, prepare_workspace, seatRoot | pm, impl, lead, security | can write/edit; project surfaces route through `scribe` |
 | `security` | full: read, write, edit, shell, prepare_workspace, seatRoot | pm, impl, lead, qa, auditor, designer, advocate, devtools, scribe, architect, qa2 | can write/edit; project surfaces route through `scribe` |
 | `architect` | full: read, write, edit, shell, prepare_workspace, seatRoot | pm, lead, impl, qa, auditor, security, devtools, scribe, advocate, designer, qa2 | can write/edit; project surfaces route through `scribe` |
-| `qa` | read + shell + prepare_workspace (verifier — **no write, no edit**) | pm, impl, lead, auditor, security, architect, qa2 | cannot write/edit (by tool scoping); routes doc changes through the author/`scribe` |
-| `qa2` | read + shell + prepare_workspace (verifier — no write, no edit) | pm, impl, lead, auditor, security, qa | cannot write/edit |
-| `auditor` | read + shell + prepare_workspace (verifier — no write, no edit) | pm, impl, lead, qa, security, architect, qa2 | cannot write/edit |
-| `advocate` | read + shell + prepare_workspace (**treated as a verifier** — no write, no edit) | pm, lead, designer, security | cannot write/edit |
-| `designer` | read + shell + prepare_workspace (**treated as a verifier** — no write, no edit) | pm, lead, advocate, impl, security | cannot write/edit |
+| `qa` | read + shell + prepare_workspace (verifier — write/edit TOOLS stripped; the retained shell can write, see the mechanism note) | pm, impl, lead, auditor, security, architect, qa2 | write/edit tools stripped; retained shell can write/commit (mechanism note); project surfaces route through author/`scribe` |
+| `qa2` | read + shell + prepare_workspace (verifier — write/edit TOOLS stripped; shell can write) | pm, impl, lead, auditor, security, qa | write/edit tools stripped; retained shell can write/commit |
+| `auditor` | read + shell + prepare_workspace (verifier — write/edit TOOLS stripped; shell can write) | pm, impl, lead, qa, security, architect, qa2 | write/edit tools stripped; retained shell can write/commit |
+| `advocate` | read + shell + prepare_workspace (**treated as a verifier by role text** — write/edit TOOLS stripped; shell can write) | pm, lead, designer, security | write/edit tools stripped; retained shell can write/commit |
+| `designer` | read + shell + prepare_workspace (**treated as a verifier by role text** — write/edit TOOLS stripped; shell can write) | pm, lead, advocate, impl, security | write/edit tools stripped; retained shell can write/commit |
 
 ## Uniform facts (no per-seat variance)
 
@@ -68,10 +68,26 @@ owner is the *may*.
   write, edit, shell, prepare_workspace (`COORDINATOR_REMOVALS`) — queue tools +
   seatRoot only. `pm` and `lead` are the coordinators in this rig.
 - **Verifier** (name/role matches `verif|qa|review|editor`, `src/verifierrole.mjs`):
-  loses write and edit (`VERIFIER_REMOVALS`) — reads and shells but cannot fix.
-  `qa`, `qa2`, `auditor` and — by their role text — `advocate` and `designer`.
+  loses write and edit TOOLS (`VERIFIER_REMOVALS`). `qa`, `qa2`, `auditor` and — by
+  their role text — `advocate` and `designer`.
 - **Working non-verifier:** keeps everything.
 - Wired at `cli.mjs:711` (`scopeSeatTools` during `up`).
+
+**Caveat — the write/edit TOOL strip is advisory, not a hard capability limit.**
+A verifier keeps the `shell` tool (only write/edit are removed), and the read-only
+environment refuses the FILE-API (`write`/`edit` tool calls via `readOnlyGuard`,
+`confine.mjs`) but does NOT block shell writes: `confine.mjs`'s `exec` wrapper
+pins cwd and strips env (SC3) and allows the command to run. So a
+verifier-classified seat can write files and `git commit` through its retained
+shell. The SC2 "disposable copy" guarantee holds only where the verifier's
+worktree IS a throwaway verify tree (the qa/auditor verify-scratch case) — it is
+not enforced at the confinement layer (`makeSeatEnv` passes the seat's real root,
+`seattools.mjs`). Measured against observed behaviour: `designer` delivered
+`24b7fc9` and `advocate` delivered its review (`7387716`), both real commits on
+main, which a write/edit-stripped-but-shell-armed seat can produce. The taxonomy
+question — `role text contains "review"` being a PROXY for "verifier" that
+mis-classifies seats whose job is to PRODUCE reviews — is a lead ruling, recorded
+in #3588, NOT asserted here as current behaviour.
 
 **How to re-verify this document** — the derivation command, run from the repo
 root against the current `rig.selfdev.json`:
