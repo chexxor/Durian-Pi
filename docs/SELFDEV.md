@@ -443,3 +443,29 @@ KB per verify window", so **the 4-lane link is not the bottleneck** for split tr
 not fit the faster ones." A 16 GB Qwen3.6 Q3 fits ONE 3090 with room for slots, so a second 3090 adds almost
 nothing for the concurrency-optimal model. It pays for the 64 GB Swift IQ2_XS (where one card holds a
 fraction of the experts) — i.e. the second card buys the BIG model, not more concurrency.
+
+### Two PolyStrata instances for twice the concurrency? (checked 2026-10-20 — no)
+
+The idea fails three times over, each for a checkable reason:
+
+1. **durig can only reach ONE local endpoint.** `src/providers/local.mjs` registers a single provider
+   (`localProviderSpec` returns one `baseUrl` + one `modelId`, and its header says "durig builds exactly
+   ONE provider per process, so every seat shares it"), and `src/seatmodel.mjs` resolves `local/<id>` to
+   `provider:"local", modelId:"<id>"` — the id is sent to THAT baseUrl. A second instance on port 8081 is
+   unreachable from the rig without a code change (a second provider id or a per-seat base URL).
+2. **On one 3090 the two instances split the same 24 GB.** Each engine gets half the expert cache, so more
+   experts fall back to CPU/disk and the GPU time-slices. PolyStrata's own docs anticipate exactly this:
+   `POST /unload?wait=1` exists "so a second server can really free the card", and `before_load` is
+   documented as "a command run before the model is loaded again, e.g. one that unloads another server's
+   model" — i.e. two servers on one card TAKE TURNS, they do not run together.
+3. **The supported way to widen concurrency is `"parallel": N` on ONE server.** PolyStrata's FAQ
+   ("Can several people use one server at once?"): with `"parallel"` "it answers up to N together, with
+   every model. On a card that holds most of the model's experts that writes more tokens a second in all:
+   on an RTX 5090 four Qwen3.6 chats at once came at **428 tokens/s together, one alone at 312 to 333**".
+   The engine caps at 8 slots.
+
+On TWO cards two instances CAN be legitimate — but for different reasons than concurrency: one instance
+with a layer split gives ONE model roughly twice the expert cache (see above), while two instances give you
+two independent models (say a coder and a verifier) at one card each. That is a choice about models, not
+about doubling slots, and durig cannot drive it from one rig today. Two engines also mean two copies of the
+weights in RAM: fine for a 16 GB model, impossible for the 64 GB Swift model at 96 GB.
