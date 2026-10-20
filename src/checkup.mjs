@@ -110,6 +110,11 @@ export const RULES = [
     what: "a feat commit landed with no docs/FEATURES.md row and no stated \"no feature surface\" note",
   },
   {
+    id: "duplicate-item",
+    severity: "fix-now",
+    what: "a non-terminal queue item is SAME-INTENT with an already-terminal item (same from/to/tier plus high subject overlap)",
+  },
+  {
     id: "shared-tree-on-main",
     severity: "error",
     what: "the shared working tree is not on its integration branch, so a seat may be writing to a feature branch",
@@ -117,6 +122,54 @@ export const RULES = [
 ];
 
 const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
+
+/**
+ * #4075: SAME-INTENT duplicate detection. The duplicate's cause is a ~10s retry OUTSIDE durig's
+ * source, so a re-issue carries a NEW tool-call id and #3192's originCallId dedup cannot catch it;
+ * and two of five observed pairs are REWORDED rather than replayed, so BYTE EQUALITY WOULD MISS
+ * THEM. The recoverable signal is INTENT: same from, same to, same tier, PLUS high subject overlap.
+ * These are exported so the demo pins the boundary rather than re-implementing it.
+ */
+const STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "of", "to", "for", "in", "on", "at", "by", "with",
+  "is", "are", "be", "it", "its", "this", "that", "as", "from", "into", "per", "not",
+]);
+const OVERLAP_THRESHOLD = 0.6;
+
+/** Content words of a subject, with a leading protocol marker (`DONE #N:` / `VERIFY #N:`) stripped. */
+export function subjectTokens(subject) {
+  return String(subject ?? "")
+    .toLowerCase()
+    .replace(/^[^:]*#\d+:\s*/, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+}
+
+/** Overlap of two subjects' content-word sets, normalised by the SMALLER set (0..1). */
+export function subjectOverlap(a, b) {
+  const A = new Set(subjectTokens(a));
+  const B = new Set(subjectTokens(b));
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  for (const w of A) if (B.has(w)) inter += 1;
+  return inter / Math.min(A.size, B.size);
+}
+
+/** A terminal item is finished either way: `done` (the work happened) or `cancelled`. */
+const TERMINAL_STATUSES = new Set(["done", "cancelled"]);
+export function isTerminalStatus(item) {
+  return TERMINAL_STATUSES.has(item?.status);
+}
+
+/** Same from + same to + same tier + high subject overlap. Byte equality is the STRONGEST signal,
+ * not the only one — this is the weaker, intent-level test that catches a REWORDED re-issue. */
+export function sameIntent(a, b) {
+  if (!a || !b || a.id === b.id) return false;
+  if (a.from !== b.from || a.to !== b.to) return false;
+  if ((a.tier ?? null) !== (b.tier ?? null)) return false;
+  return subjectOverlap(a.subject, b.subject) >= OVERLAP_THRESHOLD;
+}
 
 /** First line of a possibly-multiline text, bounded for display. */
 function firstLine(text, limit = 96) {
@@ -613,6 +666,32 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
         `${acked.length === 1 ? "verification item" : `${acked.length} verification items`} ${ids} completed without re-runnable evidence — the completion is an ack (or names no artifact), not a re-run, so nothing can be re-checked`,
         "re-run the artifact and record it when completing a verification item: complete_work(<id>, <summary>, { command, exitCode, artifact }) — an ack alone is not a sign-off, and a command/exit code with no ARTIFACT cannot be re-checked (W2/#2547)",
       );
+    }
+  }
+  // 13. #4075 (corrected #3460/#3459): SAME-INTENT duplicates, fired on a NON-TERMINAL item so a
+  //    seat is stopped before it spends the effort, not told afterwards. The cause is a ~10s retry
+  //    OUTSIDE durig, so #3192's originCallId dedup cannot catch a re-issue (a re-issue carries a
+  //    NEW tool-call id), and two of five observed pairs are REWORDED, so byte equality would miss
+  //    them. The test is same from/to/tier PLUS high subject overlap. When the queue could not be
+  //    read the rule is SKIPPED with its reason, never passed.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "duplicate-item",
+      why: "the queue could not be read, so duplicate items cannot be inspected",
+    });
+  } else {
+    const terminal = queueItems.filter((it) => isTerminalStatus(it));
+    const live = queueItems.filter((it) => it && !isTerminalStatus(it));
+    for (const it of live) {
+      const twin = terminal.find((t) => sameIntent(t, it));
+      if (twin) {
+        add(
+          "duplicate-item",
+          `#${it.id}`,
+          `#${it.id} is SAME-INTENT with the already-terminal #${twin.id} (same from/to/tier, subject overlap ${subjectOverlap(it.subject, twin.subject).toFixed(2)}) — the same request is in the queue twice, so working #${it.id} repeats work the terminal twin already settled`,
+          `cancel #${it.id} as a duplicate of #${twin.id} (point at the completed original), or state in the body why it is a deliberate second attempt`,
+        );
+      }
     }
   }
   // 12. ROADMAP 46 (FEATURES-row half) / D62: a shipped capability carries its own doc
