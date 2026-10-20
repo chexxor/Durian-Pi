@@ -3126,3 +3126,58 @@ view; the CLI grows `answer`/`queue --waiting` and `status` grows a headline. Op
 D-number uses the next free slot; scribe's pending D113 lands first and lead #2452 re-derives numbers at
 land time. Evidence: the code citations above; no implementation is claimed.
 
+## D### — The `architect` seat: DESIGNS + RECORDS the system shape; lead RULES scope, qa/auditor VERIFY (operator grant, lead #2503; 2026-10-19)
+
+**Decision.** Add an `architect` seat to the selfdev rig — model `deepseek-ai/DeepSeek-V4.1-Flash`,
+`thinkingLevel: high`, capabilities `design` + `review` — owning the `architecture` ownership class
+(`"architecture": ["architect"]` in `rig.selfdev.json`). The seat owns durig's cross-cutting design:
+subsystem boundaries, the failure modes at those seams with a recovery path for each, and the
+decisions that outlive any one work item (recorded as ADRs in `docs/DECISIONS.md`). Proposal and
+paste-ready seat: `docs/reviews/architect-seat-proposal.md`.
+
+**Role boundary (who does what).** The architect DESIGNS and RECORDS. It does **not** rule scope or
+priority — that is `lead`'s job, and the seat is instructed to escalate a scope conflict to `lead`
+rather than decide it. It does **not** verify an implementation — that is `qa`/`auditor`'s job, and
+the seat is not the verifier of record for its own design. The split is: `lead` RULES, `architect`
+DESIGNS + RECORDS, `qa`/`auditor` VERIFY.
+
+**Distinction vs `security`.** The architect DESIGNS security-relevant controls (a trust boundary, a
+seam, a recovery path) as part of system design; `security` RATIFIES/VERIFIES the security position.
+The architect's design authority does not make it the security authority — a control the architect
+designs still needs `security`'s position (a `docs/reviews/security-*.md`) and ratification.
+
+**Distinction vs `designer`.** `designer` owns UX / user-facing polish (CLI surface, defaults, error
+wording). `architect` owns system architecture (subsystem topology, failure modes, durability of the
+design). UX is one seam the architect reasons about; it is not the designer's role.
+
+**Edges (explicit; the applied set, devtools apply item, landed `3112962`).** Least-privilege framing:
+the architect routes design work and reviews across the team, so its OUTGOING set is broad; the
+INCOMING set (who may send to the architect) is restricted to the six seats that legitimately request
+a design review or escalate.
+- `architect.maySendTo` = [`pm`, `lead`, `impl`, `qa`, `auditor`, `security`, `devtools`, `scribe`,
+  `advocate`, `designer`, `qa2`] — route work through `pm`, escalate scope to `lead`, request a design
+  review from an author/verifier, hand an applied change to `impl`/`devtools`.
+- Who may send TO `architect` (edge list includes `architect`): `pm`, `impl`, `qa`, `lead`, `auditor`,
+  `security`. NOT wired from `devtools`, `scribe`, `advocate`, `designer`, `qa2`.
+- **architect ↔ `scribe`:** architect→`scribe` IS wired — the architect authors ADRs that land in
+  `docs/DECISIONS.md`, a `docs/` surface `scribe` manages, so the architect can hand an ADR to the
+  docs owner. `scribe`→architect is NOT wired (`scribe` routes doc work through `pm`).
+
+**No constitution change.** No change was made to `constitution.txt` (`rig.selfdev.json` still points
+at it); the boundary lives in this ADR. Per-seat skills are INLINED in the seat's `instructions` (the
+architecture-method skill is inlined in the seat prompt); the constitution is not the home for them.
+
+**Why.** Architecture-level docs were previously a side duty of `qa`/`lead`. The broker-lifecycle /
+lock / spool / read-seam work of recent sessions kept needing a seat that owns the cross-cutting
+design and its failure modes — distinct from `lead` (scope/priority rulings) and from the verifiers
+(does the artifact prove it). The vendored agency-agents architect personas (MIT,
+`vendor/eval/agency-agents/engineering/engineering-multi-agent-systems-architect.md` and
+`engineering-software-architect.md`) are the skill source, consistent with how the `security` seat
+borrows its persona.
+
+**Status.** Operator grant; ratified by `lead` (#2503); applied (devtools #2514, landed `3112962` —
+`up --refresh`, broker restarted pid 17828); recorded by `scribe` (#2515). This entry is the
+narrative record of the grant and boundary; no executable check applies (a decision log).
+LANDING NOTE: D-number assigned at LAND TIME — D111 is taken (read-spool decision) and D113
+(spool-op authorization); re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge
+(do not hard-code).
