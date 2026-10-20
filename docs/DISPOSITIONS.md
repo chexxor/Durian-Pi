@@ -2,7 +2,7 @@
 
 **Append-only ledger of branch dispositions — decisions, not existence.** A row
 records the immutable decision that a branch is `CANCEL` / `SUPERSEDED` / `LAND` /
-`KEEP-HELD` / `NOTHING-TO-LAND`, never whether the ref still exists. Ref existence is mutable and
+`KEEP-HELD` / `NOTHING-TO-LAND` / `SUPERSEDED-BY-EVENTS`, never whether the ref still exists. Ref existence is mutable and
 deleting a ref is a separate act requiring the author or the operator (rule R-B,
 #3270); the decision is not. A disposition that changes gets a **NEW row** citing
 the new deciding item id — a row is never edited or deleted.
@@ -53,15 +53,24 @@ as the squash-landing case, #3332). Worked examples below: `security-item-1475`
 ## Kinds of drop and disposition
 
 An inventory must record WHICH KIND a drop is, or the next pass re-litigates it as
-though it needed fresh merit. Three kinds:
+though it needed fresh merit. Each kind carries a **revival test** that tells the
+next disposer whether to CHECK or to DECIDE:
 
 - **CONDITIONAL DROP** — parked on a question, revived automatically when its
-  condition lapses; not a decision, gets NO row until it resolves.
+  condition lapses; not a decision, gets NO row until it resolves. *Revival test:*
+  has the named condition resolved the other way? **AUTOMATIC** — no new ruling.
 - **CANCELLED-ON-MERITS** — IS a decision (the work is not worth doing); needs a
-  new decision to revive.
+  new decision to revive. *Revival test:* is there a NEW DECISION to want it?
+  **JUDGEMENT**.
+- **SUPERSEDED-BY-EVENTS** — not defective, not deferred, simply overtaken (a
+  stale snapshot, a superseded allocation). *Revival test:* has the WORLD CHANGED
+  BACK so the content is current again? **VERIFICATION** — check something, do not
+  convene a decision.
 - **NOTHING-TO-LAND** — content already on main (by content comparison); the
-  branch is not defective and not deferred, it is simply finished elsewhere. The
-  case most likely to be misread as pending.
+  branch is not defective and not deferred, it is simply finished elsewhere — the
+  SUPERSEDED-BY-EVENTS case where "the events" = the content landed on main. The
+  case most likely to be misread as pending. *Revival test:* is it still on main?
+  **VERIFICATION**.
 
 `impl-item-1604` is the first case where the first two distinguished an outcome: it
 was dropped conditionally (the cancelled #2035 lapsed when #1087/ROADMAP 97 was
@@ -74,11 +83,17 @@ cited artifact (same path, clean, docs-only) AND the landed decision RESTS on it
 branch cannot be made un-cancellable merely by mentioning itself; extra content is
 split off rather than riding along.
 
+**One logical point that recurs.** Satisfying an "unless" clause in a rule never
+creates an OBLIGATION to land — it only removes one reason to cancel. When the
+pinning ground for a branch is gone, the disposition falls back to the default
+(is there a named live item that needs the content?); a cancellation derived this
+way follows the rule rather than overriding it.
+
 ## Columns
 
 | date | branch | sha | disposition | reason | deciding item id |
 |------|--------|-----|-------------|--------|------------------|
-| `date` | the branch name | the dispositioned tip sha | `CANCEL` / `SUPERSEDED` / `LAND` / `KEEP-HELD` / `NOTHING-TO-LAND` | why, including the probe evidence | the item id that decided it (authoritative) |
+| `date` | the branch name | the dispositioned tip sha | `CANCEL` / `SUPERSEDED` / `LAND` / `KEEP-HELD` / `NOTHING-TO-LAND` / `SUPERSEDED-BY-EVENTS` | why, including the probe evidence | the item id that decided it (authoritative) |
 
 ## Ledger
 
@@ -100,6 +115,7 @@ split off rather than riding along.
 | 2026-10-19 | advocate-item-2985 | 7387716 | LAND | adjudicated referent — citation target of landed defbc34 §12; CR-1..CR-8 adjudicated in §13 and CR-1 IS the landed §7 "authored state only" rule. The landed decision RESTS on this review, the discriminator (lead #3360): a review whose findings were adopted into a landed document is part of that decision's record and lands; a review nobody adjudicated is an opinion with no consumer and cancels. Docs-only, 1 file (docs/reviews/advocate-queue-lifecycle-redesign.md), 161 lines. The architect's sister review (#2984) was already on main, so main carried one resolved reference and one dangling one — strictly worse than two resolved. Deciding seat: pm | #3426 |
 | 2026-10-19 | auditor-item-2179 | fdfcd95 | NOTHING-TO-LAND | content already on main — its only commit (fdfcd95, the D106 record) conflicted, and the conflict was a CONTENT DUPLICATE: the identical D106 text is canonically on main via scribe-item-2169 @99b9860 (verified: `git merge-base --is-ancestor 99b9860 main` = yes). Rebase-skipped in a sandbox then executed; branch == main (ahead 0 / behind 0). NOT a stale pin — re-pointing it at a newer sha would claim a landing that already happened. Deciding seat: pm | #3426 |
 | 2026-10-19 | auditor-item-2186 | 6ccd26e | NOTHING-TO-LAND | superseded by a larger landed implementation — its only commit (6ccd26e, the configure spool op) conflicted with main, which already carries a LARGER implementation: SPOOL_OPS=[...,"read","configure"], CONTROL_PLANE_OPS includes configure, and the "configure via the spool is a RECONFIGURE" carve-out. Rebase-skipped as superseded; branch == main. The landed implementation descends from devtools-item-2182 @7933858. Deciding seat: pm | #3426 |
+| 2026-10-19 | scribe-item-3207 | c51813f | SUPERSEDED-BY-EVENTS | stale pre-#3234 mint-order snapshot: records "3089 mints D115-D119, 3035 mints D120", an allocation nobody is landing — #3167 landed D113/D114, #3089/#3035 were rebased, #3268 minted D121. PINS NO D-NUMBERS (probe #3411: 1 file, +1/-3, D-number strings descriptive only) — so NOT a #3075 cancellation. The live allocation is recorded in #3343's union entry, and the "scribe-item-3114 @3e7a297 is a DUPLICATE, do NOT land" warning is relocated there, where the mint work lives. Revival: verification only — has the world changed back, i.e. does a future clock-out want a written mint order? Deciding seat: pm | #3411 |
 
 > **NOTE (the two worked examples of content-not-ancestry):** `security-item-1475`
 > because ancestry said "not on main" while content said "already there", and
