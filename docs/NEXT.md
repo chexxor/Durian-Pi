@@ -84,9 +84,13 @@ landing-screen slice) is the live build chain, verifies `#3314`/`#3315` held beh
 **Queue id:** `#3268` (ledger union) · `#3343` (its landing list) · `#3376` (the #3174 entry — **moot,
 already landed; close it**) · `#3216` (superseded — close it; qa has been reset) · `#3349` (advocate
 review, gated on lead) · `#3346`/`#3355` (is `impl-item-1604` back in scope?) · `#3018` (M2).
-**Blocker:** none on #3174. Standing: (a) a derived manifest must be regenerated at land time, and (b)
-`pitui` (#2412) keeps `land.mjs --suite` unusable — land WITHOUT `--suite` and run the full
-`node scripts/suite.mjs` on `main` (baseline `pass=179 fail=1`).
+**Blocker:** none on #3174. Standing: (a) a derived mirror/manifest must be regenerated at land time —
+`constitution.txt` ⇒ regenerate `rig.starter.json` (#976; `auditor-item-2154` was **reverted** for skipping it,
+rework at `#3428`), and a demo manifest is regenerated against current `main`; (b) `pitui` (#2412) keeps
+`land.mjs --suite` unusable — land WITHOUT `--suite` and run the full `node scripts/suite.mjs` on `main`
+(baseline now **`pass=180 fail=1`**, `main` `13e60bc` + revert `cc96c0c`).
+**Landed 2026-10-20 pass #6 (close these entries):** `#3371` (designer landing-screen spec @`24b7fc9`),
+`#3349` (advocate review @`7387716`), `#3257` (FEATURES rows @`e8ce2a0`), `#3392` (impl-item-2578 @`2bb0427`).
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` · then
 `ls -la node_modules/@earendil-works/ | grep -E 'pi-durable|pi-tui'` (`->` pinned; `d`/missing = run
 `node scripts/sync-pi.mjs --link` first) · then `git status --short -- . | grep -v '^??'` (expect CLEAN).
@@ -95,6 +99,22 @@ review, gated on lead) · `#3346`/`#3355` (is `impl-item-1604` back in scope?) �
 was reverted); read the metrics `pass-failed` warn as a live wedge without checking `passAgeMs`; `-D` a ref
 that `git branch -d` refuses (that refusal IS the lossless check); re-open `#3216`; push (operator holds the
 grant).
+
+## CLOCK-OUT / SESSION LOG (2026-10-20 ~04:00Z, delegate) — LANDING PASS #6: 4 KEPT, 1 LANDED-THEN-REVERTED, `main` `351b03a`→`13e60bc` (revert `cc96c0c`)
+
+Landed and kept: **`designer-item-3307`** @`24b7fc9` (the landing-screen spec #3313/#3359 build against —
+#3371 closable), **`advocate-item-2985`** @`7387716` (closes proposal v2's dangling reference — #3349),
+**`impl-item-2616`** @`e8ce2a0` (FEATURES rows — #3257), **`impl-item-2578`** @`2bb0427` (cli.mjs comment +
+new `demo/broker-one-connection.test.mjs` — #3392). Refs 130→126.
+**`auditor-item-2154` @`fac647c` landed then REVERTED (`cc96c0c`)** — it renames `durig`→`durian-pi` and
+`DURIG_ALLOW_PUSH`→`DURIAN_PI_ALLOW_PUSH` in `constitution.txt` WITHOUT regenerating `rig.starter.json`'s
+`constitutionInline` mirror (#976), reddening THREE demos (starter / commit-model / seat-commit-instructions).
+Ref kept at `fac647c`; rework routed to `auditor` at #3428, whose preflight must add `demo/starter.test.mjs`
+because merge-tree is blind to a derived-mirror invariant. **Suite after revert: `pass=180 fail=1`** (`pitui`,
+#2412); pin checked first and intact. Full evidence: `docs/runbooks/land.md` pass #6 entry +
+`.spike/delegate/land-2026-10-20g/report.md` (delivered to pm, request `70d59f5d`).
+
+---
 
 ## CLOCK-OUT / SESSION LOG (2026-10-20 ~02:00Z, delegate) — OPERATOR TUI INTENT DELIVERED TO pm AND FULLY REGISTERED
 
