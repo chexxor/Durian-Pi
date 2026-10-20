@@ -1,5 +1,4 @@
   durig · impl · implementation engineer · conversation
-  no current item · idle
   ────────────────────────────────────────────────────────────────────────────
   ▶ Please check the queue.
   ◇ thinking › Read the queue, then claim the oldest item.
@@ -7,6 +6,6 @@
   ⚙ peek_queue all=true
 
   ────────────────────────────────────────────────────────────────────────────
-  ── seats: 4  │  uptime: 60m
+  ── seats: 4  │  queue: 0  │  uptime: 60m
   ────────────────────────────────────────────────────────────────────────────
 └──────────────────────────────────Esc=back  ↑↓=scroll  G=tail  i=input  q=quit

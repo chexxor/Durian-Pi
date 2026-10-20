@@ -138,9 +138,34 @@ re-verify+re-pin; **40** orphaned held rows whose every cited gate is terminal (
 spool op); **82** rows are DELIBERATELY parked (BACKLOG/TRIGGER/WINDOW) and must NOT be churned — the
 "all cited gates terminal" heuristic false-positives on them; **24** are genuinely unlanded (normal queue).
 
+**10. QUEUE VELOCITY — `qa2` WAS FULLY WIRED AND HAD NEVER BEEN USED. IT IS IN ROTATION NOW.**
+Operator asked why `qa` gets every verify when `qa2` exists. Measured: the org edge
+`pm -> [... ,"qa2"]` was ALWAYS allowed, the model resolves (`google/gemma-4-31B-it`, 262144 ctx,
+`reasoning=false`), the seat carries `capabilities:["verify","review"]` — and **`qa2` had received 0 items
+and 0 broker wakes EVER**, against `qa` **397** all-time inbound and `auditor` 92. Nothing was blocking it:
+every queued verify was minted from a template whose target was `qa`, and **`#2389`** (the item that would
+have decided whether qa2 is in rotation) was itself parked `held` as an unanswered conditional.
+
+Rulings + recommended split delivered to `pm` (request `operator-queue-velocity-2026-10-20-1`,
+`delivered:true` `06:46:37Z`). **`pm` applied them within ~90 seconds:** cancelled the three duplicate
+twins (`#3522`, `#3532`, `#3589`), claimed `#2389`, and **opened `#3616` — the FIRST item ever addressed to
+`qa2`, deliberately framed as a capability probe** (the docs-only `scribe-item-3311` verify, re-issued from
+`#3587`). **`qa2` woke at `06:48:05.968Z` (first `WAKE qa2` line in the entire broker log), ran 3 turns on
+`deepinfra/google/gemma-4-31B-it`, and COMPLETED at `06:50:01Z`.** Its verdict is CORRECT — independently
+re-checked: `02f0004` IS an ancestor of main, the diff is exactly `2 2 docs/ROADMAP.md`, 101/124 untouched.
+**One imprecision to note: it reported the BRANCH tip's ancestry (`2d709eb` not on main) rather than the
+DELIVERED sha's (`02f0004` on main), so its wording is loose even though the verdict is right — make the
+ref to check EXPLICIT in future verify bodies.**
+
+Also delivered in that intent and awaiting `pm`: **`pitui` is RED right now** (`node demo/pitui.test.mjs`
+exit 1, `pi-tui resolved somewhere unexpected … vendor/pi-main/packages/tui/dist/index.js`), which
+**contradicts `#3531`/`#3532`'s "pitui GREEN on main"** — one measurement is stale, so re-measure before
+acting on it. Fixing `#2412` is what restores `land.mjs --suite`, the single largest cost in a landing pass.
+
 **NEXT SESSION:** the human bucket is empty of real asks. Awaiting `lead`/`pm`: the #3347/1604 ruling, the
-#3428 rework re-cut, the 5 re-pins, the 40 orphan dispositions, plus the three rulings from pass #7
-(`#3341` manifest regen, the `3303->3385->3471` stack, #3311's missing verify). Nothing pushed.
+#3428 rework re-cut, the 40 orphan dispositions, and the `#3341` / `3303->3385->3471` rulings. **New to
+watch: `qa2` is in rotation — it should be taking docs/metadata verifies and every rebase-shaped verify,
+with `auditor` on the high-stakes product checks.** Nothing pushed.
 
 ## CLOCK-OUT / SESSION LOG (2026-10-20 ~04:15Z, delegate) — LOCAL MODEL TAKEN DOWN, `qa`/`devtools` BACK ON DEEPINFRA
 
