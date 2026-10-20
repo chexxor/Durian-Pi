@@ -198,8 +198,13 @@ export async function installWorktreeDeps(worktreePath) {
  * the new worktree, so the returned `cwd` is the same relative place a seat would otherwise have
  * had, and a rig's declared `cwd` keeps meaning when the tree underneath it changes.
  */
-export async function createWorktree({ source, target, ref = "HEAD", branch = null, carry = true }) {
+export async function createWorktree({ source, target, ref = null, branch = null, carry = true }) {
 	const root = await repoRoot(source);
+	// `ref === null` means "no base was asked for" and is distinct from an explicit `HEAD`; the
+	// distinction is what lets an existing item branch be re-attached without silently ignoring a
+	// base the caller DID ask for (#3807).
+	const explicitRef = ref !== null && ref !== undefined && ref !== "";
+	const baseRef = explicitRef ? ref : "HEAD";
 	if (existsSync(target)) {
 		throw new Error(`refusing to reuse an existing path as a worktree: ${target}`);
 	}
@@ -221,11 +226,37 @@ export async function createWorktree({ source, target, ref = "HEAD", branch = nu
 	// commits to land on `impl-item-N`, not a detached HEAD (#859). `-b` creates the
 	// branch; an EXISTING branch is attached rather than reset, so a leftover item
 	// branch that already carries commits is never silently rewound.
+	const branchAttached = branch ? await branchExists(root, branch) : false;
+	// #3807: `git worktree add <target> <branch>` checks out the EXISTING branch and IGNORES `ref`,
+	// so a caller that asked to fork from a base got a tree at the branch's own tip while being told
+	// "Forked from base ref X" — a false success about the one thing every verify depends on. When a
+	// base was asked for and the branch already exists, HONOUR it or REFUSE: never hand back a tree
+	// nobody asked for. (The reuse path has the same obligation and is reported, not re-forked.)
+	if (branchAttached && explicitRef) {
+		const want = await resolveRef(root, baseRef);
+		const tip = await resolveRef(root, `refs/heads/${branch}`);
+		if (want === "") {
+			throw new Error(
+				`refusing to create a worktree on branch ${branch}: you asked to fork from \`${showRef(baseRef)}\`, ` +
+					`which does not resolve to a commit here. Nothing was created. Name a readable ref (branch, tag ` +
+					`or commit), or drop the base to attach the existing branch at ${shortSha(tip)} as it is.`,
+			);
+		}
+		if (want !== tip) {
+			throw new Error(
+				`refusing to create a worktree on branch ${branch}: the branch ALREADY EXISTS at ${shortSha(tip)} ` +
+					`and you asked to fork from \`${showRef(baseRef)}\` (${shortSha(want)}). Attaching the existing branch would ` +
+					`leave the worktree at ${shortSha(tip)} — not the base you asked for — so it is refused rather than ` +
+					`silently ignored. Nothing was created. Drop the base to accept the branch as it is, prepare a ` +
+					`different item, or land/delete ${branch} first.`,
+			);
+		}
+	}
 	const addArgs = branch
-		? (await branchExists(root, branch))
+		? branchAttached
 			? ["worktree", "add", target, branch]
-			: ["worktree", "add", "-b", branch, target, ref]
-		: ["worktree", "add", "--detach", target, ref];
+			: ["worktree", "add", "-b", branch, target, baseRef]
+		: ["worktree", "add", "--detach", target, baseRef];
 	// IGNORE BEFORE CREATE (#2328): make the target git-ignored BEFORE `git worktree add`
 	// so the new directory never leaks into the source repo's `git status` (the vendored
 	// using-git-worktrees rule). A target outside the repo is a no-op.
@@ -244,7 +275,7 @@ export async function createWorktree({ source, target, ref = "HEAD", branch = nu
 	// The worktree is unusable without this step — the seat that needs it should run the install
 	// before working.
 
-	return { repo: root, worktree: resolve(target), cwd, carried, branch: branch ?? null };
+	return { repo: root, worktree: resolve(target), cwd, carried, branch: branch ?? null, branchAttached };
 }
 
 /** Whether `refs/heads/<branch>` exists in the repo at `root`. */
@@ -255,6 +286,40 @@ async function branchExists(root, branch) {
 	} catch {
 		return false;
 	}
+}
+
+/**
+ * The sha `ref` resolves to in the repo at `path` ("" when it does not resolve). Used to answer "is
+ * the tree at the base that was requested?" WITHOUT throwing on a ref the caller got wrong — the
+ * refusal has to name the problem, not be a raw git error (#3807).
+ */
+async function resolveRef(path, ref) {
+	if (!ref) return "";
+	try {
+		const { stdout } = await run("git", [
+			"-C",
+			path.replace(/\\/g, "/"),
+			"rev-parse",
+			"--verify",
+			"--quiet",
+			`${ref}^{commit}`,
+		]);
+		return stdout.trim();
+	} catch {
+		return "";
+	}
+}
+
+/** Short sha for a message. A bare 40-hex token is redacted as secret-shaped (#3128), so a full sha
+ * in a refusal would be swallowed out of the very message that has to say which commit it means. */
+function shortSha(sha) {
+	return typeof sha === "string" && sha !== "" ? sha.slice(0, 9) : "unknown";
+}
+
+/** How a caller-named base appears in a message: a branch/tag name verbatim, a bare hex sha SHORT
+ * (the redactor eats 40/64-hex, #3128 — the same rule the workspace text follows). */
+function showRef(ref) {
+	return /^[0-9a-f]{40}$/i.test(ref) || /^[0-9a-f]{64}$/i.test(ref) ? shortSha(ref) : String(ref);
 }
 
 /**
@@ -524,7 +589,7 @@ export async function validateWorktreeIdentity(worktreePath) {
  * `itemLabel` is used for the branch name (e.g. `wt/item-123`), kept short
  * to avoid MAX_PATH issues.
  */
-export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = "HEAD", branch = null }) {
+export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = null, branch = null }) {
 	const target = join(worktreeRoot, itemLabel);
 	if (existsSync(target)) {
 		throw new Error(`worktree path already exists: ${target}`);
@@ -589,7 +654,7 @@ function isProvisioned(worktreePath) {
 	return existsSync(join(worktreePath, "node_modules"));
 }
 
-export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatName = null, ref = "HEAD", itemStatus = null }) {
+export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatName = null, ref = null, itemStatus = null }) {
 	const repo = await repoRoot(source);
 	const itemLabel = `item-${itemId}`;
 	const worktreePath = join(worktreeRoot, itemLabel);
@@ -702,7 +767,10 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 		cwd: wt.cwd,
 		itemLabel,
 		branch,
-		branchAction: "created",
+		// #3807: "created" must mean the branch was CREATED from the base that was asked for. When an
+		// existing item branch was attached instead, say so — the caller decides from this whether the
+		// tree is the one it asked for.
+		branchAction: wt.branchAttached ? "attached-existing" : "created",
 		created: true,
 		carried: wt.carried ?? [],
 		locked: true,
