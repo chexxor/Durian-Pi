@@ -17,10 +17,11 @@ a BRANCH; do not pop the stash blind.
 **Queue id:** `#3313` (landing render) · `#3309` · `#3308` · `#3315`/`#3314` (verifies CANCELLED — re-register
 before accepting) · `#2412` (`pitui`) · `broker-one-connection` + `seat-instruction-encoding` regressions have
 NO item yet.
-**Blocker:** `main` is red on 7 demos, so `land.mjs --suite` is unusable; land without it and prove on
-`main`. Also standing: the local PolyStrata model is DOWN (Swift/Qwen3.6 deleted, IQ3_S installing to
-`D:\PolyStrata-models`), and the shared tree carries ~107 dirty paths of seats' in-flight work, so a suite
-run in `.` does NOT measure `main` — use a detached worktree.
+**Blocker:** `main` is red on **3** demos (was 7 — the revert fixed the TUI four), so `land.mjs --suite` is
+unusable; land without it and prove on `main`. Also standing: the local PolyStrata model is DOWN (Swift/Qwen3.6
+deleted, IQ3_S installing to `D:\PolyStrata-models`). **The shared tree is CLEAN as of this clock-out**
+(tracked dirty: 0) — but a suite run in `.` still measures the working tree, so prove `main` in a detached
+worktree.
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
 Then:
@@ -30,6 +31,46 @@ Then:
 `impl-item-3313` before 3308/3309 (stacked); use `land.mjs --suite` while `main` is red; delete
 `pi-opendurig.worktrees/` by hand (179 REGISTERED trees, all dirty, 34 unlanded, 13 with commits on no ref);
 push (operator holds the grant).
+
+## DELEGATE CLOCK-OUT (2026-10-20 ~07:45Z) — HANDOFF FOR THE NEXT AGENT
+
+**State at handoff:** `main` **`fa77f46`**, tracked tree **CLEAN**, nothing pushed, no scratch worktrees left.
+Suite on `main` (detached worktree): **`pass=185 fail=3`**, demos 188 — `broker-one-connection`, `pitui`
+(#2412), `seat-instruction-encoding`. The last two are NEW vs the documented `pass=180 fail=1` baseline and
+have **no queue item**.
+
+**⚠ A SEAT'S WORK IS PARKED — do not pop it blind.** `stash@{0}` = "delegate: park a seat's 21-file
+shared-tree WIP for the 9c3aa02 revert"; patches at `.spike/delegate/revert-9c3aa02-2026-10-20/`
+(`dirty-tree-before-revert.patch` 1905 lines, `9c3aa02-full-commit.patch` 1781 lines). Its author must redo
+it on a BRANCH; it will now conflict with the reverted state.
+
+**What this session did (one line each, evidence in the commits):**
+
+1. Triaged the 10 human-parked rows -> 2 real, 8 stale liveness escalations; deleted the redundant
+   `designer-item-2103` ref (`#3233`); delivered rulings to `pm`.
+2. Found `#3347` was a **FALSE COMPLETION** — `qa` rebased the branch ONTO ITSELF and dropped `dd2583b`;
+   `main` has no `src/compacteval.mjs`. `#3589`/`#3601` now cover it. `#3403` is correctly parked.
+3. Reset `qa` onto DeepInfra (resetEntryId 155811) -> `#3347` moved in 60s; **`qa2` put into rotation**
+   (first item ever, `#3616`, verdict correct).
+4. Landing pass #7: landed `devtools-item-3239` + `impl-item-3241`; **refused `devtools-item-3341`** because
+   its own new guard failed on current main (stale derived manifest = the `#1558` class).
+5. **SELF-INFLICTED INCIDENT, now reverted:** a bare `git commit` swept a seat's STAGED 21-file work onto
+   `main` as `9c3aa02`, breaking 4 TUI demos. Reverted via `revert-9c3aa02` (merge `798836b`).
+
+**Non-negotiables this session proved the hard way:**
+
+- **Never run a bare `git commit` in the shared tree** — always pass an explicit pathspec; the index may hold
+  another seat's staged work. Verify with `git show --name-only --format="" HEAD` after every commit.
+- **Measure the suite in a DETACHED worktree**, never in the shared tree.
+- **`merge-tree` clean is not currency** — run a branch's own new demo against current `main` before landing.
+- **`git log --all --diff-filter=D` being empty does NOT prove a missing file is safe to restore** — it cannot
+  see an _uncommitted intended_ deletion. That gap is what made the restore of 4 demo files wrong.
+- **Run the format gate on your own edits:** `node cli.mjs format --check -- <paths>`; it caught `docs/NEXT.md`
+  at exit 1 this session.
+
+**Open, awaiting `pm`/`lead`:** the `#3347`/`1604` ruling · `#3428` rework re-cut (needs a NEW commit, its
+re-pin is a no-op) · the 40 orphan held rows + 28 already-landed landing entries · `#3341` manifest regen ·
+`3303->3385->3471` stack ruling · the 2 new red demos with no item.
 
 ## CLOCK-OUT / SESSION LOG (2026-10-20 ~05:15Z, delegate) — **HUMAN QUEUE ANSWERED: 10 ROWS → 2 REAL, 8 STALE; #3233 REF DELETED, RULINGS DELIVERED TO `pm`**
 
