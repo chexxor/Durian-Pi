@@ -1,5 +1,68 @@
 # durian-pi — NEXT (current pointer)
 
+## CLOCK-OUT / SESSION LOG (2026-10-20 ~05:15Z, delegate) — **HUMAN QUEUE ANSWERED: 10 ROWS → 2 REAL, 8 STALE; #3233 REF DELETED, RULINGS DELIVERED TO `pm`**
+
+The operator asked what was waiting on a human. I enumerated the **10 non-terminal rows** carrying
+`deferredTo:"human"` (from `status`, filtered — not from the item bodies) and re-verified each premise by
+command. **Only 2 were real; 1 was already moot; 7 were stale liveness escalations.** The operator accepted
+the recommendations and I acted on them.
+
+**1. RULINGS DELIVERED — `pm`, request `operator-human-parked-2026-10-20-1`, `delivered:true` at
+`05:11:02.570Z`** (body: `.spike/delegate/human-parked-2026-10-20/intent.md`; `pm` woke `05:14:16Z`).
+Three rulings: R1 `#3233` closed-by-action + mint an `architect` item for a sanctioned
+`worktree prune-branch`; R2 `#3274` close as SUPERSEDED (not "verified"); R3 the 7 stale rows released or
+re-routed to their owning seats, **never re-escalated to the human**.
+
+**2. `#3233` EXECUTED — the ref is GONE.** `git branch -D designer-item-2103` -> `Deleted branch
+(was 81780e2)`, exit 0. Re-verified against current main `a836ed3` immediately before deleting:
+`git cherry main designer-item-2103` = 3 lines **all `-`**; **0** worktrees hold it. Recovery:
+`git branch designer-item-2103 81780e2`. This was the one row a seat could not close — `git branch -d`
+refuses a patch-equivalent ref and `-D` is blocked by the seat guard (`src/confine.mjs:190`), so the seat
+correctly refused rather than route around it. **The durable fix is a narrow sanctioned verb, NOT a wider
+force-delete grant.**
+
+**3. `#3274` IS MOOT — verified, and this is the reusable part.** Its premise ("config says swift-1.5, store
+serves qwen36") no longer describes the system: `rig.selfdev.json` has **zero `local/` models**; the local
+provider is **down** (`curl 127.0.0.1:8080/v1/models` -> `http=000`); the refresh is recorded as applied
+(resetEntryId 153838/153841). **`devtools` proved its move** — a post-move turn on
+`deepinfra/DeepSeek-V4.1-Flash`, `stopReason: stop`, completing **#3342 at `04:16:37Z`**.
+
+**4. `qa` IS THE LIVE BLOCKER, and it is invisible to `status`.** `qa` has **no post-move turn**: its last
+assistant turn is still `"provider": "local"`, followed by a `pi.reset` + `pi.user` with **no reply** — the
+server on 8080 is gone. So `qa` cannot run, which is why **`#3347` (step 1 of lead's #3355 sequence) has sat
+`queued` and unclaimed since `02:09:15Z`**, and why `#3403` stays parked (`dd2583b` is not an ancestor of
+main; `src/compacteval.mjs` absent). **Getting `qa` onto a live provider is the highest-value next action.**
+
+**5. THE 7 STALE ROWS ARE A KNOWN CLASS — do not answer them.** `#2559, #3260, #3263, #3277, #3287, #3288`
+("devtools has failed 4 runs in a row") and `#2673` ("waited on pm 15 min") are supervisor liveness
+escalations (`docs/runbooks/stale-held-backlog.md`), all dated `01:59Z`-or-earlier, i.e. before the local
+model was taken down. `devtools` is healthy (#3342 done, above); `pm` is alive (`04:11:17Z`). All **349**
+`PASS-FAILED` lines in the broker log are `SessionFailed … database is locked errcode=5` — the known
+store-contention class, **not** seat failures. **Lesson: a `deferredTo:human` row is not evidence of a
+question — check the seat's own transcript before relaying it.**
+
+**6. PRIME DIRECTIVE EXECUTED — `qa` IS ALIVE ON DEEPINFRA, `#3347` IS DONE.** `lead` deferred `#3494` to me
+("whoever holds the seat-restart lever"), so I ran the seat lever rather than leaving it parked:
+`reset qa --dry-run` -> `wouldReset:true` (no live lease), then `intent.mjs qa --op reset --handoff …`
+(request `operator-qa-reset-2026-10-20-1`, **resetEntryId 155811**, `05:22:17Z`) — broker-applied, **no broker
+stop, no store backup needed**, the write path `docs/runbooks/seat-reset.md` prescribes while the broker runs.
+Result: `#3347` was **claimed `05:22:24Z` and done `05:23:22Z`** (sat unclaimed 3h13m), and `qa` now has **three
+post-move assistant turns on `deepinfra / Qwen/Qwen3.6-35B-A3B`** (`stopReason: toolUse`). **The
+"unverified for target model" label is now satisfied for `qa`** — close `#3494` on the next `pm` pass.
+`#3347`'s finding: `qa-item-1087`'s commit is **already on main** (patch-equivalent, `git cherry` `+`), because
+`impl-item-1604` carries a duplicate copy — exactly what `#3403`'s re-cut exists to remove. **The 1604 chain
+is unblocked.**
+
+**7. `pm` APPLIED ALL THREE RULINGS IN ~5 MINUTES** (re-read from the queue, not from its own claim):
+`#3233` cancelled · `#3274` cancelled · `#3491` -> `architect` "`worktree prune-branch <name>`" (the durable
+fix, **not** a wider force-delete grant) · `#3492` -> `devtools` "resume your six parked items, operator ruled
+the escalations STALE" · `#3493` -> `impl` "resume `#2673` and replace its PROSE gate with a structured
+`blockedBy`" (done). The 7 stale rows went `deferred`/`held` -> **`claimed`** — real work, not re-escalation.
+
+**NEXT SESSION:** the 10-row human backlog is **empty of real asks** — 2 cancelled, 2 done, 5 claimed, `#3403`
+correctly parked. `#3403` now genuinely moves (`#3347` is done; verify -> land -> re-cut). Tracked tree was
+**dirty on `docs/SELFDEV.md` at clock-out** (a seat mid-edit, left untouched). Nothing pushed.
+
 ## CLOCK-OUT / SESSION LOG (2026-10-20 ~04:15Z, delegate) — LOCAL MODEL TAKEN DOWN, `qa`/`devtools` BACK ON DEEPINFRA
 
 Operator-directed: stop the PolyStrata local model and move the two local seats to DeepInfra models they
