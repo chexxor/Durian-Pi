@@ -403,3 +403,43 @@ this doc):
   Resizable BAR in BIOS, a 250 W EPS-8pin feed, **passive cooling** (server card — needs a fan shroud in a
   desktop case), no display output, and on most X570 boards the second x16-length slot is x4 from the
   CHIPSET, sharing its 4.0 x4 uplink with M.2/SATA/USB traffic.
+
+### A second RTX 3090 in the x4 slot: what the numbers say (2026-10-20)
+
+Answered from the PolyStrata tree; **no measurement exists for the x16-vs-x4 difference in isolation**, so
+the two kinds of evidence are quoted separately rather than blended.
+
+**One card vs two, same model (both cards on x16, 32K context, engine 0.1.26, medians of 3)** —
+`bench/results/2026-09-29-rtx3090-epyc-milan/matrix.md`:
+
+| | 1× 3090 | 2× 3090 auto | 2× 3090 best K | Δ decode |
+|---|---:|---:|---:|---:|
+| Coder IQ1_M, decode tok/s | **66.8** | 98.6 (K=19) | 103.3 (K=22) | **+48% … +55%** |
+| Coder IQ1_M, prompt tok/s | 2,502 | 2,704 | — | +8% |
+| IQ3_XXS, decode tok/s | 90.6 | 96.7 (K=24) | — | +7% |
+| IQ3_XXS, prompt tok/s | **2,160** | **1,159** | — | **−46%** |
+
+So a second card **often raises decode ~50% but does not reliably raise prefill — it can halve it.** Buy it for
+decode and VRAM, never for prompt speed. (Those runs say in their own limits section: "Verify PCIe
+generation/width under sustained load before claiming a direct x16-vs-x4 comparison.")
+
+**The only x16 + x4 datapoint in the tree** (`docs/MULTI_GPU.md`, community #1447, 2× 3090, GPU0 PCIe 4.0
+x16 + GPU1 x4, IQ3_S, `--resident-experts`, later engine): decode **137 tok/s**, prefill **1,798 tok/s** —
+comfortably above the x16+x16 IQ3_S numbers above, though engine version, CPU and settings differ, so this
+is suggestive, not a controlled comparison. The mechanism is documented: layer split moves "a few hundred
+KB per verify window", so **the 4-lane link is not the bottleneck** for split traffic.
+
+**Where the x4 gap DOES show up:**
+- **Placement tax.** On x16 + x4 the `auto` split can mis-price the narrow link (2× 3090 measured 114–119
+  tok/s at K=31 vs 130–136 at K=27, #2418) — ~12%, fixed by `STRATA_SPLIT_UNIFORM=1` (`"gpu_order":
+  "as_given"`) or a manual `"layer_split"`.
+- **Expert PCIe copies.** Link-miss scaling from the 4× gap makes the narrow card's missed-expert copies
+  dearer; the engine probes each link and lowers that card's `--pcie-frac`, so more expert work lands on the
+  CPU pool. Visible as lower decode on the narrow card's layer range, not as an error.
+- **Chipset sharing.** On most X570 boards the second slot is x4 from the chipset, sharing its 4.0 x4 uplink
+  with M.2/SATA/USB — a busy Gen4 NVMe competes.
+
+**Decision rule that matters more than the slot:** "More cards pay off when the model's routed experts do
+not fit the faster ones." A 16 GB Qwen3.6 Q3 fits ONE 3090 with room for slots, so a second 3090 adds almost
+nothing for the concurrency-optimal model. It pays for the 64 GB Swift IQ2_XS (where one card holds a
+fraction of the experts) — i.e. the second card buys the BIG model, not more concurrency.
