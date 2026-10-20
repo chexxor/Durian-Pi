@@ -164,3 +164,18 @@ a broker restarted healthy (pid `17828`) dead-lettered every spooled CLI `read`
 Cause: `dispatchRead(harness.storage)`, a field pi-durable does not expose. Fix `a70c30d` (thread the
 harness's real `Storage`); restart pid `5116`. The CLI had read the store directly (`readLocal`) while
 the broker was down — which is why the broken handler stayed hidden until the restart.
+
+2026-10-20 (delegate): **shape (b) recurred, and the obvious explanation was wrong.** pid 4528 was alive with
+a fresh heartbeat, **no pass for 51 minutes**, no genlock held, empty `serve.err` — the textbook wedge. The
+tempting conclusion was RAM starvation, because the local model (Swift 1.5 IQ2_XS) was holding ~22 GB of
+experts on a 32 GB box at 95% load. **The discriminator settled it:** stopping the model dropped the machine
+to 23% load / 24 GB free and the broker *still* did not pass, so it was the WEDGE, not starvation. It then
+cleared on its own and `passAgeMs` went to single seconds.
+**Reusable check, do it before naming a cause:**
+```bash
+ls -1 <db>.genlock*                       # none held => no pass in flight (not a slow pass)
+# stop the heavy local model, wait one pass window, re-read status:
+node cli.mjs status                       # passAgeMs resuming => starvation; unchanged => wedge
+```
+**Do not restart the broker while a 22 GB local model is loaded** — the restart needs ~1 GB of headroom to
+fork, and with 96% RAM it fails in ways that look like a store problem. Free the model first, then restart.

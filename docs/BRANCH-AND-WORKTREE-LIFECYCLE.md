@@ -268,3 +268,23 @@ Four things this pass proved about the MODEL, not the tooling:
 4. **The seat root is the least stable fact in the model.** §2 says to expect the shared-tree fallback;
    measured this pass, **11 of 11 seats** were back on the shared tree after earlier work had put `impl`
    and `devtools` on their own item worktrees. Read `audit.seatRoots` fresh at the start of a pass.
+
+## 8. Known defect — the path is item-keyed, the branch is seat-keyed
+
+`prepareSeatWorkspace` builds the worktree path from the ITEM (`item-<id>`) and the branch from the SEAT
+(`<seat>-item-<id>`), then calls `ensureWorktreeBranch`, which runs `git checkout -B <branch>` **whenever the
+current branch differs** (`src/worktree.mjs:566-568`, `:602`, `:278`). Two consequences:
+
+1. **A second seat preparing the same item silently steals the first seat's worktree** (it moves that tree
+   onto the caller's branch). `validateWorktreeIdentity` does not cover this — it rejects a leftover
+   *directory*, not a valid worktree owned by another seat.
+2. **Nothing asks who holds the BRANCH you need**, so a seat told to rebase an existing item branch gets
+   git's refusal and has no in-product move. That is how `impl` was blocked on `designer-item-2103`; the
+   delegate's hand fix is `git -C <holder> switch --detach` (frees the branch, keeps every file).
+
+So: **two seats can never work one item**, and a locked worktree over a terminal item's unmerged branch is a
+DEADLOCK nobody is told about (branch held ⇒ cannot rebase; worktree locked ⇒ will not be reaped; no
+attention kind fires). `pm` registered the fix as **`#3174`** (holder resolution + refusals + failing-first
+demo) and the naming question as **`#3175`** for `lead` (item-keyed path vs seat-keyed branch is D110
+territory). Until it lands, free a held branch with `switch --detach` — never by deleting the worktree or
+rebuilding the branch. Full account: `incidents/2026-10-19-terminal-worktree-mistaken-for-lost-work.md`.

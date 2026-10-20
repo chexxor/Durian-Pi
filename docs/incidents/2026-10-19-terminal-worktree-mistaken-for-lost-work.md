@@ -203,3 +203,37 @@ worktree will not be reaped (locked), and nothing in `attention` fires on it.
 blocker that presents as healthy. Until then: at the start of every landing pass, run
 `git worktree list` and cross-reference the LOCKED set against the queue's terminal items, then detach any
 terminal-item tree that holds an unmerged branch.
+
+## ROOT CAUSE IN CODE (found 2026-10-20, after both write-ups — this is the part that needs a fix)
+
+Neither the original analysis nor the RECURRENCE above named the mechanism. Reading `src/worktree.mjs`
+after the operator asked "could we update `prepare_workspace` to do that?" found it:
+
+```js
+// src/worktree.mjs:566-568 — the PATH is keyed by ITEM, the BRANCH by SEAT
+const worktreePath = join(worktreeRoot, `item-${itemId}`);
+const branch = seatName ? `${seatName}-${itemLabel}` : itemLabel;
+
+// :602 → :278 — on REUSE, whenever the branch differs, unconditionally:
+await run("git", ["-C", wtNorm, "checkout", "-B", branch]);
+```
+
+**Two consequences, both silent:**
+
+1. **A second seat preparing the same item STEALS the first seat's worktree.** `item-<id>` already exists
+   (designer's, on `designer-item-<id>`); the caller computes `impl-item-<id>`; `current !== branch`; so
+   `checkout -B` runs **inside designer's tree**, moving its working tree onto another branch. The `#2412`
+   guard (`validateWorktreeIdentity`) does not catch this: that guard rejects a leftover DIRECTORY that is
+   not a worktree, while this is a perfectly valid worktree belonging to someone else.
+2. **Nothing ever asks who holds the BRANCH that is needed.** So a seat asked to rebase an existing item
+   branch gets git's `already checked out in item-<id>` and has **no in-product move** — which is precisely
+   how `impl` was blocked on `designer-item-2103`, and why the workaround was to re-cut the content on a new
+   branch (`impl-item-2797 @2828ad4`) rather than rebase the original.
+
+**Registered as `#3174`** (holder resolution + three refusals + a failing-first demo) with **`#3175`** for
+`lead`, because the deeper fix — path keyed by item vs branch keyed by seat means **two seats can never work
+one item** — is a WORKTREE NAMING change (D110 territory) and must not be decided by the implementer.
+
+**Sequence note for whoever reads this:** the delegate unblocked the live case by hand
+(`git -C item-2103 switch --detach`). That hand step is the tell: when a human has to run git to make a
+seat's landing work, the seam belongs in the tool — which is exactly what `#3174` asks for.

@@ -237,3 +237,39 @@ needed it. (Operator note, 2026-10-15.)
   reset, leaked worktrees, the pre-written daemon runbook, and how to commission research). Read the
   matching runbook before improvising a recovery; the set is largely **unverified** until ROADMAP item
   85 runs its `Diagnose` blocks.
+
+## Operational pitfalls (learned driving the team, 2026-10-20)
+
+Each of these cost real turns this session; they are habits, not trivia.
+
+- **`queue`/`status` output is NOT pure JSON.** The CLI appends a trailing
+  `note: N measure(s) out of band — see: node cli.mjs metrics` line, so `json.load(sys.stdin)` dies with
+  `Extra data: line N column 1`. Redirect to a file and use `json.JSONDecoder().raw_decode`, or drop the
+  last line. **Do not conclude the store is corrupt** — the JSON above it is fine.
+- **`loadConfig()` does not return the config.** It returns `{config, source, defaultsSource}`; the effective
+  values are under **`.config`**. Reading it as the config yields `undefined` for every key, which makes an
+  ENABLED feature look disabled (this produced a wrong "the local provider is off" conclusion, briefly).
+- **Git Bash mangles Windows-native flags and paths.** `robocopy <src> <dst> /MOVE` arrives as
+  `C:/Program Files/Git/MOVE` (invalid), and `"...\$var"` yields a literal `$var` instead of expanding.
+  Wrap native tools: `cmd //c "robocopy <src> <dst> /MOVE /E …"`, and never put `\` immediately before
+  `$` inside double quotes.
+- **Python's `open`/`json.dump` default to cp1252 on Windows — and that silently corrupts repo files.**
+  A round-trip turned the em-dashes in `rig.selfdev.json`'s seat instructions into `\u00e2\u20ac\u201d`
+  (double-encoded). Always `io.open(path, encoding="utf-8", newline="")` plus `ensure_ascii=False`, and
+  **check the diff is 2 lines, not the whole file** — whole-file churn is the visible symptom. Prefer a
+  byte-level replace of just the strings you mean to change over a JSON round-trip.
+- **A hidden process has no window — say where its output goes.** Launching an installer or a model server
+  with `-WindowStyle Hidden` keeps the session clean, but then the operator cannot see progress and
+  "I don't see it running" is the *correct* reading of an empty screen. Name the log path in the same
+  breath (`…/swift-setup.out`), and give them a one-liner: `Get-Content <log> -Tail 5 -Wait`.
+- **A seat's model is read from `rig.selfdev.json` at wake (`cli.mjs:481`), not persisted per conversation.**
+  A model change therefore needs **no `up --refresh`** — the next run picks it up. `up --refresh` re-points
+  cwds; do not run it (a writing verb) while the broker drives, just to make a model change take effect.
+- **Check the machine before blaming the rig.** Swift 1.5 IQ2_XS holds **~22 GB of experts in RAM** on this
+  32 GB box (PolyStrata wants ~48 GB RAM+VRAM, so it runs in low-RAM mode). With ~1 GB free, forks fail
+  (`cygheap read copy failed`, `Resource temporarily unavailable`) and *every* tool call looks broken.
+  Measure: `GlobalMemoryStatusEx` in one python call; prefer one process per invocation.
+- **A WEDGED broker and a STARVED broker look identical** (alive, fresh heartbeat, no pass, no genlock, empty
+  log). Discriminator: stop the heavy local model and wait one pass — passes resume ⇒ starvation; nothing ⇒
+  wedge (`runbooks/broker-down-or-stalled.md`). Get this right before writing a root cause; 2026-10-20 I
+  nearly reported starvation as the cause after the model restart had already cleared it.

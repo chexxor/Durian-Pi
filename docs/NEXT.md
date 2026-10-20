@@ -3,6 +3,97 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / SESSION LOG (2026-10-20, delegate) — **HUMAN QUEUE CLEARED, 2 PASSES (11 BRANCHES, 10 TREES), 2 INCIDENTS + 1 ROOT CAUSE, 50-COMMIT DOCS AUDIT, LOCAL MODEL → SWIFT 1.5**
+
+*Read this with the `2026-10-20T01:10Z` block below (a parallel delegate session landed the concurrent suite and
+reverted one branch). This block records what THIS session did and what it learned, so nobody re-derives it.*
+
+**1. The human queue — answered, not just relayed.** 10 rows sat on `deferredTo:"human"`; they were really
+**5 questions**, 1 already answered by evidence, 1 a resume, and 6 stale liveness escalations from a dead `pm`.
+Seven rulings (R1–R7) were delivered; the operator **accepted them in full**, which turned them into operator
+rulings, and `pm` applied them (`#2806` cancelled, `#2987`/`#2975`/`#2949` + the six stale rows closed,
+`#2598` released, `#3089` released). **`#3123` was re-scoped to `#3165`.** Lesson: a `held` row is
+unclaimable, so "registered" is not "will happen" — check the held bucket, not just the deferred one.
+
+**2. Two landing + worktree passes (#3, #4): 11 branches landed, 10 terminal trees relocated, refs 95→88.**
+`main` moved `f495091` → `66d0ce9` → `ee651e0`. Provenance and counts are in `land.md` / `branch-cleanup.md`
+(dated entries) — read those, not this summary. Four traps were added there because they cost real landings:
+- **A batch is ATOMIC and its `merged[]` is NOT a report** — it lists scratch merges whose `main` never moved.
+- **`add/add` conflicts are order-independent** — two branches that both ADD a path can merge in NEITHER order;
+  run the `diff --numstat` superset test and resolve to the superset (that is how `architect-item-3005` landed
+  as `-rebased @328d838`).
+- **`git cherry +` is not proof a branch is unique** — compare the TREES (`git diff main:<p> <b>:<p>`).
+- **The suite can go red AND back green with no commit** — `npm install`/`npm ci` in the SHARED tree replaces the
+  pinned `node_modules/@earendil-works/pi-durable` symlink with the registry build (no `./codemode`), failing the
+  five `tui-durable` demos. One-line check before trusting ANY suite verdict, in either direction:
+  `ls -la node_modules/@earendil-works/ | grep pi-durable` (`->` pinned, `d` clobbered) → fix with
+  `node scripts/sync-pi.mjs --link`.
+
+**3. The worktree class has a CODE root cause, not just a doc gap.** A seat "asked about a worktree that no
+longer existed"; then `impl` could not rebase `designer-item-2103` because a **locked** worktree over a
+**cancelled** item held the branch. Reading `src/worktree.mjs` found the real defect: **the worktree PATH is
+item-keyed (`item-<id>`) while the BRANCH is seat-keyed (`<seat>-item-<id>`), and reuse runs
+`git checkout -B` unconditionally** — so a second seat preparing an item STEALS the first seat's worktree, and
+nothing ever asks who holds a needed branch. Registered **`#3174`** (fix + refusals + failing-first demo) and
+**`#3175`** (`lead`: item-keyed path vs seat-keyed branch is D110 territory). Hand-fix for today: free a held
+branch with `git -C <holder> switch --detach` — never delete the worktree, never rebuild the branch.
+
+**4. Two incident reports (both indexed):** `2026-10-19-terminal-worktree-mistaken-for-lost-work.md` (sev3, now
+with the code root cause above) and `2026-10-19-git-sha-redacted-as-secret.md` (**sev2** — a bare 40-char git
+SHA is classified `high-entropy-token` and redacted out of tool output; **confirmed live this session**: a
+`devtools` call doing `git rev-parse HEAD` came back as a redaction marker). Consequence to remember: it
+**blinds the landing tip-vs-pin gate** and can send the operator to rotate a credential that never existed.
+Workaround: use `--short` ids in playbooks and probes.
+
+**5. 50-commit docs audit — two docs were materially WRONG, not just stale.** `docs/SELFDEV.md`'s seat table
+claimed to carry "the live values" while listing `impl` on GLM (it is DeepSeek-V4.1-Flash), `qa` on GLM (it was
+`local/qwen36`, now Swift), `devtools` on DeepSeek (it was qwen36), omitting `qa2` + `architect`, saying "Ten
+seats" when there are 12, and asserting the author/verifier split "is still GLM vs DeepSeek" — **false**, and it
+hid that **`devtools` and `qa` shared `local/qwen36`**, i.e. same-family verification. Fixed, with the derivation
+command inline and the *rule* (a verifier must not share a family with the author) stated instead of a slogan.
+`FEATURES.md` had the pi-pin order BACKWARDS (`#2976` runs `sync-pi --link` **before** `npm ci`); added the
+missing Request TRACE (`#2545`), `blockedBy` (`#2951`) and operator-only `pause`/`unpause`/`configure` (`#1966`).
+
+**6. Local model → Swift 1.5** (see the block below): `swift-1.5-iq2_xs`, ctx 65536, on the **Qwen engine**
+(`engine\strata.exe`, not `strata-poly`), both models under `PolyStrata-data` on **C:** as the operator asked.
+
+**7. New durable lessons are in `docs/SELFDEV.md` "Operational pitfalls (2026-10-20)"** — read that section, it
+is cheaper than rediscovering them: the CLI's trailing `note:` line breaking `json.load`; `loadConfig()` returning
+`{config, source, defaultsSource}` (the values are `.config`); Git Bash mangling `robocopy /MOVE`; **Python
+`json.dump` defaulting to cp1252 and silently double-encoding `rig.selfdev.json`'s em-dashes** (I did this and had
+to fix it forward); hidden installers having no window; a seat's model being read from the rig at wake (no
+`up --refresh` needed); and **checking RAM before blaming the rig**.
+
+**8. A broker wedge happened during this session and the obvious explanation was WRONG.** pid 4528 alive, fresh
+heartbeat, **no pass for 51 minutes**, no genlock, empty log. The local model was at 95% RAM, so starvation
+looked certain — but stopping the model (23% load) still produced no pass, so it was the WEDGE. It then cleared
+by itself. The discriminator is now in `runbooks/broker-down-or-stalled.md`: stop the heavy model, wait a pass
+window, re-read `passAgeMs`.
+
+## NEXT SESSION
+**Current item:** **`#3174`** — `prepare_workspace` must resolve a branch it cannot hold and REFUSE to steal
+another seat's worktree (root cause in `src/worktree.mjs:566-568`/`:602`/`:278`; full account in the sev3
+incident). **`#3175`** is the `lead` ruling on item-keyed path vs seat-keyed branch — do not let an implementer
+decide it. Re-preflight the two `DECISIONS.md` branches (`#3134` `scribe-item-3089`, `#3126`
+`scribe-item-3035`) — the mint has LANDED, so they may be landable now.
+**Queue id:** `#3174` (the fix) · `#3175` (`lead`: naming) · `#3165` (the reporting half, still HELD) · `#3134` /
+`#3126` (re-preflight) · `#2993`/`#3104`/`#3147`/`#3151`/`#3158` (release the verifies gated ON landings that
+have happened) · `#3056`/`#3062` (M1 order needs a ruling) · `designer-item-2103` (cancel or re-point).
+**Blocker:** two, both real. (a) **RAM ceiling** — Swift IQ2_XS holds ~22 GB of experts on this 32 GB box, so
+load sits at 95-96%; forks fail (`cygheap read copy failed`, `Resource temporarily unavailable`) and tool calls
+look broken. Free the model before any broker restart or heavy pass. (b) **`docs/DECISIONS.md` is now MINTED
+but OUT OF ORDER** — `D114` sits at line 3060 and `D113` at 3087, so the ledger reads D112 → D114 → D113; flag
+it to `scribe` (append-only convention: do not rewrite another seat's ledger yourself).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` — then, before trusting any suite or
+landing verdict, `ls -la node_modules/@earendil-works/ | grep pi-durable` (`->` = pinned; `d` = run
+`node scripts/sync-pi.mjs --link` first), and `curl -s http://127.0.0.1:8080/v1/models` to confirm which local
+model is actually serving (the rig label is only a label to PolyStrata).
+**Do not:** restart the broker while the 22 GB local model is loaded (free it first); mint another `D` number
+(the ledger is mid-repair and out of order); land a CONFLICT branch or `architect-item-2700 @d1fde2d` (the old
+hardcoded-D114 copy — its content is on `main` as `impl-item-2744`); pop `stash@{0}` (devtools' `#2969` pin WIP);
+re-report "suite blocked by 5 `tui-durable` failures" without checking the pin symlink; push (operator holds the
+grant).
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-20T01:10Z, delegate) — **LANDING+PRUNE PASS: 2 LANDED, 1 LANDED-THEN-REVERTED, `main` `9882632`→`4d96ae9`; THE SUITE IS NOW CONCURRENT (~64s, default 8)**
 
 **Read this first.** The operator asked for a landing + worktree-prune pass, then for a faster suite.
@@ -381,7 +472,9 @@ completed branches, prune them, and prune worktrees no longer in use. Git-only; 
 **Do not:** `git add -A`; force a dirty worktree; delete an `ahead>0` ref; pop a stash blind; push;
 land with `--suite` until the 5 `tui-durable-*` failures are fixed (report the exact `pass=N fail=M`).
 
-## NEXT SESSION
+## (superseded) NEXT SESSION — see the top of this file
+**The pointer below is stale: `main` is now `440d071`; the `DECISIONS.md` mint has landed (so `#3134`/`#3126`
+need RE-PREFLIGHT rather than waiting on a mint), and the local model is Swift 1.5.**
 **Current item:** the worktree defect is now a real build item — **`#3174`** (`prepare_workspace` must
 resolve a branch it cannot hold + REFUSE to steal another seat's worktree), with **`#3175`** for `lead`'s
 naming question. `main` is at **`ee651e0`**, suite `pass=178 fail=1`, tracked tree CLEAN, `stash@{0}` holds
