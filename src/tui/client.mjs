@@ -21,7 +21,7 @@ import { formatDelta, formatArgs, themeToolRoles } from "../chatview.mjs";
 import { extractEntryText } from "../rigstory.mjs";
 import { ANSI } from "../ansi.mjs";
 import { sanitizeTerminalText } from "../sanitize.mjs";
-import { textWidth, sliceToWidth, firstCluster } from "../textwidth.mjs";
+import { textWidth, sliceToWidth, wrapLines } from "../textwidth.mjs";
 import { projectLanding } from "../readapi.mjs";
 
 function formatToolName(call) {
@@ -215,65 +215,45 @@ function renderSeatList(seats, activityMap, width, selectedSeat = null, color = 
 }
 
 /**
- * Wrap prose to `width` cells instead of truncating it. The conversation view is a
- * reading surface for a live stream: a single long assistant line must be readable
- * across the viewport, not cut off with an ellipsis (the skill's "truncate, do not
- * wrap" rule is for tables; a conversation is prose).
- */
-function wrapText(text, width) {
-	const flat = String(text ?? "").replace(/\s+/g, " ").trim();
-	const w = Math.max(1, width);
-	if (textWidth(flat) <= w) return [flat];
-	const out = [];
-	let line = "";
-	for (const word of flat.split(" ")) {
-		if (textWidth(word) > w) {
-			// Hard-split a token longer than the line (a URL or id) so it cannot
-			// silently overflow the frame. Cut by cells, never through a grapheme.
-			if (line !== "") {
-				out.push(line);
-				line = "";
-			}
-			let rest = word;
-			while (textWidth(rest) > w) {
-				const chunk = sliceToWidth(rest, w) || firstCluster(rest);
-				out.push(chunk);
-				rest = rest.slice(chunk.length);
-			}
-			line = rest;
-			continue;
-		}
-		if (line === "") line = word;
-		else if (textWidth(`${line} ${word}`) <= w) line += ` ${word}`;
-		else {
-			out.push(line);
-			line = word;
-		}
-	}
-	if (line !== "") out.push(line);
-	return out.length > 0 ? out : [""];
-}
-
-/**
  * The display lines for one conversation turn. Kept separate from the transcript
  * window so the conversation view can budget by LINES, not turns: a tools or thinking
  * turn renders several lines, and a turn-count budget silently overflows the viewport.
  */
 function transcriptTurnLines(turn, width, color) {
 	const lines = [];
+	// ROADMAP 101 (#4017): prose turns WRAP through the one shared newline-preserving wrapper
+	// (`wrapLines`), never through `truncate`'s `\s+` flatten. Two consequences that were bugs
+	// before: a multi-paragraph turn keeps its paragraphs (a blank line stays a blank line), and a
+	// long line wraps instead of ending in an ellipsis. The glyph rides the first line;
+	// continuations hang under the text, and a blank line stays EMPTY rather than becoming
+	// trailing spaces.
+	const hang = (body, first, rest) => {
+		body.forEach((line, i) => {
+			if (i === 0) lines.push(first(line));
+			else lines.push(line === "" ? "" : rest(line));
+		});
+	};
 	switch (turn.kind) {
 		case "operator": {
 			// The turn's text is either carried directly (fixtures pass `text`) or, on the
 			// real path, lives in the operator ENTRY — buildTurns keeps the entry, not a
 			// copy. Reading both is what stops the detail view rendering the operator's
 			// messages as blank rows (chatview's log reads the entry the same way).
-			const text = truncate(sanitizeTerminalText(turn.text ?? extractEntryText(turn.entries?.[0])?.text ?? ""), width - 8);
-			lines.push(`  ${paint("green", "▶", color)} ${paint("bold", text, color)}`);
+			const raw = sanitizeTerminalText(turn.text ?? extractEntryText(turn.entries?.[0])?.text ?? "");
+			hang(
+				wrapLines(raw, Math.max(1, width - 4)),
+				(line) => `  ${paint("green", "▶", color)} ${paint("bold", line, color)}`,
+				(line) => `    ${paint("bold", line, color)}`,
+			);
 			break;
 		}
 		case "agent": {
-			const text = truncate(sanitizeTerminalText(turn.text), width - 8);
-			lines.push(`  ${paint("cyan", "◀", color)} ${text}`);
+			const raw = sanitizeTerminalText(turn.text);
+			hang(
+				wrapLines(raw, Math.max(1, width - 4)),
+				(line) => `  ${paint("cyan", "◀", color)} ${line}`,
+				(line) => `    ${line}`,
+			);
 			break;
 		}
 		case "thinking": {
@@ -383,7 +363,7 @@ function renderPartial(partial, width, { roles = null, color = false, wrap = fal
 		const label = `${paint("yellow", "◇", color)} ${paint("dim", "thinking ›", color)} `;
 		const thinkingText = sanitizeTerminalText(partial.thinking);
 		const body = wrap
-			? wrapText(thinkingText, Math.max(4, width - 18))
+			? wrapLines(thinkingText, Math.max(4, width - 18))
 			: [truncate(thinkingText.split("\n")[0], width - 18)];
 		body.forEach((line, i) => lines.push(i === 0 ? `  ${label}${line}` : `             ${line}`));
 	} else if (partial.thinkingRedacted) {
@@ -394,7 +374,7 @@ function renderPartial(partial, width, { roles = null, color = false, wrap = fal
 	if (partial.text) {
 		const text = sanitizeTerminalText(partial.text);
 		const body = wrap
-			? wrapText(text, Math.max(4, width - 8))
+			? wrapLines(text, Math.max(1, width - 4))
 			: [truncate(text, width - 8)];
 		body.forEach((line, i) => lines.push(`  ${i === 0 ? paint("cyan", "●", color) : " "} ${line}`));
 	}
