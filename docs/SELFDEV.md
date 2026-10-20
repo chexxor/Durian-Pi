@@ -370,3 +370,36 @@ NOT in that list**; GLM is Linux-only.
 `N × slot GB < free VRAM` (2–3 at 64K, 3–4 at 32K for Q3_K_M), and cap durig with
 `DURIG_MAX_CONCURRENT_SEATS` at that same N so seats queue in durig rather than inside the model. The engine
 maxes at 8 slots, so 12 seats still queue above 8.
+
+### Adding a second GPU on a narrow slot: what the evidence does and does not say (2026-10-20)
+
+Operator hardware question: a Tesla P40 (24 GB, PCIe **3.0** x16) in an X570 board's **PCIe 4.0 x4** slot
+beside an RTX 3090. Grounded answers from the PolyStrata tree (which is the authority for the engine, not
+this doc):
+
+- **The link is the SMALL problem.** Layer split is *pipeline* parallelism: "a token crosses from one card
+  to the next **once per verify window** (a few hundred KB through pinned RAM), not twice per layer… cards
+  on x4 or x1 slots work, and the PCIe share of each card is probed on its own link" (`docs/MULTI_GPU.md`).
+  MEASURED on the closest rig in the docs — 2× RTX 3090, **GPU0 x16 + GPU1 x4**, IQ3_S: decode **137 tok/s**,
+  prefill **1,798 tok/s** (`docs/MULTI_GPU.md`, community report #1447). So a 4-lane second card still pulls
+  its weight.
+- **The tuning penalty is real but bounded:** on x16 + x4 the auto placement can mis-place by pricing the
+  narrow link's expert misses too high (2× 3090: K=31 at miss-cost ×4.20 gave **114–119 tok/s** against
+  **130–136** at K=27, #2418) — ~12%, and `STRATA_SPLIT_UNIFORM=1` (with `"gpu_order": "as_given"`) or a
+  manual `"layer_split"` fixes it. Symptoms are flat prefill across prompt lengths (an idle card) and a
+  decode below what the layer sweep says.
+- **The P40's real cost is the ARCHITECTURE, not the slot.** Pascal is compute capability 6.1, and
+  PolyStrata needs 7.5: a P40 runs only on the **experimental CUDA 12 engine** (`engine-cuda12\`, opt-in via
+  `--gpus`/`--cuda 12`), and **the engine is chosen per model by the OLDEST card** — so pairing it with a
+  3090 moves the WHOLE model, including the 3090's layers, off the ready-made CUDA 13 engine. Measured
+  single P40, IQ3_S: decode **30–33 tok/s** (0.1.30), **37–38** after the sm_61 changes; prompt 217–374
+  tok/s. Vertical: 2× P40 layer split, IQ3_S 131K ctx: decode **35.0 tok/s** (19.6 on one card for IQ2_XS).
+- **What this predicts for 3090 + P40:** in a pipeline split the steady-state rate is set by the slowest
+  stage, and `auto` does price unequal stages (measured on 2× A4000 made unequal: the new rule chose K=20 and
+  decode went 50.2 → 65.9 tok/s). So give the P40 FEWER layers than half, or the P40 stage throttles the
+  3090. **UNVERIFIED:** nothing in the repo benchmarks a mixed 3090 + P40 pair, and nothing benchmarks a P40
+  in an x4 slot. Treat the ~35–38 tok/s P40 figure as the ceiling for any split it takes an equal share of.
+- **Non-PCIe gotchas to check before buying** (board/firmware, not PolyStrata): Above-4G decoding /
+  Resizable BAR in BIOS, a 250 W EPS-8pin feed, **passive cooling** (server card — needs a fan shroud in a
+  desktop case), no display output, and on most X570 boards the second x16-length slot is x4 from the
+  CHIPSET, sharing its 4.0 x4 uplink with M.2/SATA/USB traffic.
