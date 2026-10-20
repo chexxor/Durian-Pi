@@ -330,3 +330,31 @@ e.g. 1→4 chats at once: 312–333 → 428–430 tok/s total on an RTX 5090, an
 laptop. So N concurrent seats each get *materially less* than a single seat's rate, while the team's
 aggregate rate improves modestly. With 12 seats on one 3090 expect aggregate tok/s to plateau well before
 12× a single-seat rate.
+
+### Which local model, if concurrency is the goal (PolyStrata inventory, read 2026-10-20)
+
+The bar is VRAM, not RAM: **the batch slots come out of the room the experts would have** (PolyStrata
+`docs/BATCHING.md`, `docs/QWEN36.md`). So the model that scales is the SMALLEST one whose experts still all
+fit in the card, not the largest one the RAM can hold.
+
+| Model (PolyStrata) | Weights | Engine / Windows | Slot cost | Why it matters here |
+|---|---|---|---|---|
+| Qwen3.6-35B-A3B UD-Q3_K_M | 16 GB (**already installed**) | `strata`/`strata-poly`, Windows | 45 KB/token fp32 → **1.5 GB per 32K slot**, 3.0 GB per 64K | leaves ~7 GB on a 3090 → 2–4 slots at 32K with the expert cache still full |
+| Tiel Coder 35B-A3B UD-Q3_K_XL | 13.6–17.2 GB | `strata-poly`, Windows | same arch/slot maths | Ornith 1.5 tuned for coding agents, MTP draft block |
+| Gemma 4 26B-A4B UD-Q3_K_M | 10.5–16.9 GB | `strata-poly`, Windows | 26B-A4B, less expert pressure | most VRAM headroom → most slots; tool calls in OpenAI's shape |
+| LFM2.5-24B-A2B | 11–25 GB | `strata-poly` | **30 of 40 layers have no attention** → 128K costs only ~2 GB more than 32K | cheapest long-context slots; licence: commercial use only under $10M/yr revenue |
+| Swift 1.5 IQ2_XS (the model we just took down) | 64 GB | `strata` | 13.7 KB/token host KV | experts can NOT fit 24 GB → concurrency buys little |
+| GLM 5.3 Flash / DeepSeek V4 Flash | 79–114 / 91 GB | Linux only | large | ~50% experts from VRAM even on a 32 GB card; slots steal expert room |
+
+**Measured scaling, by whether the experts fit** (PolyStrata's own numbers):
+- R9700 32 GB, **every expert in VRAM**, `--batch 8`: 1→8 requests = **83.9 → 325.4 tok/s aggregate** (3.9×).
+- RTX 3060 12 GB hybrid, 8K: 2/4/8 slots = 0.99×/**1.15×**/1.10× aggregate.
+- RTX A4000 16 GB, 32K: 4 slots = **0.76×** — concurrency LOST throughput because each slot took 1.5 GB
+  from the expert room. **This is the failure mode to avoid on a 24 GB card.**
+- Single-request write speed with experts in VRAM: Qwen3.6 323 tok/s, Gemma 4 276, Ornith 264 (32K, benchmark).
+
+**Practical recipe on a 3090 (24 GB) + any amount of RAM:** pick a ≤17 GB quant of a 35B-A3B-class model, keep
+`--max-context` at 32768 (64K halves the slot count), set `"parallel": N` with N chosen so
+`N × slot GB < free VRAM` (2–3 at 64K, 3–4 at 32K for Q3_K_M), and cap durig with
+`DURIG_MAX_CONCURRENT_SEATS` at that same N so seats queue in durig rather than inside the model. The engine
+maxes at 8 slots, so 12 seats still queue above 8.
