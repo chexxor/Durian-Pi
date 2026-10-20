@@ -1,5 +1,6 @@
 # durian-pi — NEXT (current pointer)
 
+
 ## NEXT SESSION (2026-10-20 — the ONLY live pointer; every later "NEXT SESSION" is history)
 
 **Current item:** the `main` regression is **FIXED** — the delegate landed `revert-9c3aa02` as merge
@@ -31,6 +32,39 @@ Then:
 `impl-item-3313` before 3308/3309 (stacked); use `land.mjs --suite` while `main` is red; delete
 `pi-opendurig.worktrees/` by hand (179 REGISTERED trees, all dirty, 34 unlanded, 13 with commits on no ref);
 push (operator holds the grant).
+
+### TROUBLESHOOT (2026-10-20 ~08:00Z, delegate) — "someone working in main again" = STAGED-ONLY INDEX
+
+**Queue id:** `#3654` (designer, resumed; the landing work is `#3313`).
+**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+**Blocker:** a live seat is running `git add` in the shared main checkout; do not commit there.
+
+**Finding.** `git diff HEAD` over tracked files is **empty** (the main worktree equals `HEAD`). What is
+wrong is the **index**: it holds an uncommitted staged changeset (8 files, ~471+/494-), and it **changed
+during observation** (`demo/broker-liveness-failsafe.test.mjs` + `demo/revise-work-contract.test.mjs`
+appeared, `src/broker.mjs` dropped; `.git/index` rewritten at `07:58:22Z`). So a live seat/session is
+running `git add` against the **shared checkout**. The seat active then was **`designer`** (item `#3654`
+resumed `07:44:40Z`; generation leases showed `designer` at `08:00Z`), re-deriving the landing-row work
+that `NEXT.md` already says is parked at `stash@{0}` and must be redone **on a branch, not popped blind**.
+`item-3654`'s worktree itself is clean and committed (`ee495e7`); the main-index copy is the duplicate.
+
+**Also true:** the staged set mixes #3398's broker-liveness test (already committed on
+`impl-item-3398` as `0c6fd76`) with a WIP that *removes* the ROADMAP-124 landing row from
+`client/viewmodel/readapi/rig`. A bare `git commit` here would land a stale duplicate and a silent
+revert. This is the same class as the documented `9c3aa02` incident (a bare delegate commit swept a
+seat's staged 21-file work).
+
+**Preserved:** `.spike/delegate/staged-WIP-20261020T075641Z.patch` (the staged set; it has since grown).
+**Do not** commit/stash/reset/checkout in main. Steer the seat to its item worktree; only after it stops,
+and with an owner ruling, clear the index with `git reset` (mixed; leaves the worktree intact).
+
+**RESOLVED (2026-10-20 ~18:50Z).** Broker pid 15760 was degraded (no pass for ~100 min) and was stopped
+cleanly (`EXIT reason=stop passes=4757`; no `cli.mjs serve` remains). The index set (15 files, 9 index-only)
+was archived to branch **`wip/shared-index-20261020`** (commit `5c8b34e`, parent `HEAD`) plus the patch
+above, then the index was cleared with mixed `git reset`. The four clean leaked worktrees in the repo root
+(`66a19af`, `temp-1558-original`, `temp-1558-rebase2`, `temp-2801-fix`) were removed with
+`git worktree remove`. **Main is clean except this pointer file.** Next: `pm` to register/review the
+archive branch (routed via `intent.mjs`).
 
 ## CLOCK-OUT (2026-10-20 ~07:50Z, delegate) — **TEAM WAS DOWN ~20 MIN ON AN EXTERNAL 402; BROKER RESTARTED, 47/49 PARKED ITEMS RESUMED**
 
