@@ -62,7 +62,13 @@ ask "stop or not?" or "why did --suite fail?".
    reports, still prove the final result on `main`:
    ```bash
    node scripts/suite.mjs        # 0 green / 1 real failure / 2 environmental
+   node scripts/suite.mjs --jobs 8   # same verdict; 8 demos in parallel (~60s vs ~10min)
    ```
+   The pool is safe because every demo is a separate process and the runner gives each one a
+   private `TMP`/`TEMP`/`TMPDIR`; a demo that only passes when run alone is NOT hermetic and its
+   failure under the pool is a real defect to fix in that demo, not in the runner. `--jobs` accepts
+   1..32 (or `DURIG_SUITE_JOBS`); the default is 8. At 16 a loaded box can hit the resource-abort
+   class (`0xC0000409`), which the runner still reports as ENVIRONMENTAL rather than green.
    The only failure you should see is `demo/pitui.test.mjs` — but it is NOT environmental: it is a
    resolution-path ASSERTION (the `node_modules/@earendil-works/pi-tui` symlink to `vendor/pi-main`,
    tracked at **#2412**), so the runner lists it under REAL FAILURES and the suite exits 1. Until #2412
