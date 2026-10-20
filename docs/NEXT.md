@@ -32,6 +32,57 @@ Then:
 `pi-opendurig.worktrees/` by hand (179 REGISTERED trees, all dirty, 34 unlanded, 13 with commits on no ref);
 push (operator holds the grant).
 
+## CLOCK-OUT (2026-10-20 ~07:50Z, delegate) — **TEAM WAS DOWN ~20 MIN ON AN EXTERNAL 402; BROKER RESTARTED, 47/49 PARKED ITEMS RESUMED**
+
+Operator ask: "kick start the team". Diagnosed before touching anything; the cause was NOT the rig.
+
+**The outage was provider-side.** From `07:22Z` to `07:25Z` **every** DeepInfra call returned
+`402 "You need positive balance to do inference."` It hit all seats (pm, impl, qa, scribe, devtools,
+auditor, designer). After 3 consecutive failed runs the **supervisor parked one item per seat on the
+human** (`deferredTo:"human"`, question `supervisor escalation: <seat> has failed 3 runs in a row...`) —
+**49 non-terminal rows**, which is what "the team stopped" actually looked like. **None was a question.**
+
+**It was NOT the account.** Re-probed at `07:31Z` with the configured key (identical to
+`durig.config.json`'s — compared by sha256, both `78e69f2a…`): all five seat models answer **200**
+(`DeepSeek-V4.1-Flash-1017`, `DeepSeek-V4-Flash-0731`, `Qwen/Qwen3.6-35B-A3B`, `zai-org/GLM-5.3-Flash`,
+`google/gemma-4-31B-it`), including a 16k-char prompt and `max_tokens:8192`. So the 402 was transient
+and had already cleared — **but the broker never recovered from it**, which is why the team stayed down.
+
+**The broker was WEDGED (runbook `broker-down-or-stalled.md`, case b).** pid `13228` alive, fresh
+heartbeat (`hbAgeMs` 1.8 s), **no pass for 391 s** vs a 360 s progress timeout, `state:"degraded"`,
+`reason:"no pass within the progress timeout"`, **no genlock held** (the discriminator), `serve.err` full
+of `supervisor: escalated … reason:repeated_failure`. Recovery, exactly as the runbook prescribes:
+
+1. `node cli.mjs serve --stop` -> `stopped:true`, and **verified pid 13228 GONE** (the runbook warns this
+   can return true while the process lives) and no `genlock.*` appeared.
+2. `node cli.mjs resume` -> withdrew **2 stranded submissions** (auditor `160589`, impl `161999`).
+3. `powershell -File scripts/serve-noroot.ps1` -> **`START pid=15760`**, passes advancing, seats waking.
+
+**Result: 0 x 402 since the restart**, and pm/impl/qa/devtools/designer are all producing successful
+assistant turns on their live DeepInfra models. Intents delivered via `intent.mjs` to the 6 affected
+seats (`kickstart-402-<seat>-2026-10-20`; broker logged `INTENT delivered=1` x6, inbox empty).
+**47 of the 49 parks went `deferred` -> `claimed` within minutes**; only `#3403` and `#3634` (both
+`impl`) remain `deferred`, and `impl` is mid-run. Nothing pushed.
+
+**THE REUSABLE FINDING — the rig FILE and the live STORE disagree, and the STORE is right.**
+`git log rig.selfdev.json` shows the operator-directed move `072e938` ("local model taken down; qa ->
+Qwen/Qwen3.6-35B-A3B and devtools -> deepseek-ai/DeepSeek-V4.1-Flash") was then **silently reverted by
+`595b714`, a "docs(NEXT)" commit**, which put both back on `local/swift-1.5-iq2_xs` (and also stripped the
+file's trailing newline). The store still serves the correct DeepInfra models, which is why `qa` ran
+`deepinfra/Qwen/Qwen3.6-35B-A3B` at `07:22Z` — **after** that revert. Proved read-only with
+`node cli.mjs up rig.selfdev.json --refresh --dry-run`, which names exactly two changes:
+`qa local/swift-1.5-iq2_xs` and `devtools local/swift-1.5-iq2_xs` (+ a stale devtools `cwd` `item-3642` ->
+`item-2801`). **DO NOT RUN `up --refresh`** until that file is restored to `072e938`'s values: it would
+repoint both seats at the **local provider, whose server does not exist on this box** (PolyStrata has no
+binaries — `AppData/Roaming/PolyStrata` holds only `settings.json`; `127.0.0.1:8080` refuses, curl exit 7).
+The IQ3_S weights ARE fully downloaded (`D:\PolyStrata-models\IQ3_S`, both shards + `.done`), so this is a
+**missing runtime, not a missing model**. Restoring the file is an operator decision — flagged, not decided.
+
+**Do not:** re-escalate the 49 outage parks to the human (they were never questions); run
+`up --refresh` while the disk rig names `local/*`; treat a `deferredTo:"human"` row as evidence of a
+question without reading the seat's transcript (this file's own lesson, confirmed again here); push
+(operator holds the grant).
+
 ## DELEGATE CLOCK-OUT (2026-10-20 ~07:45Z) — HANDOFF FOR THE NEXT AGENT
 
 **State at handoff:** `main` **`fa77f46`**, tracked tree **CLEAN**, nothing pushed, no scratch worktrees left.
