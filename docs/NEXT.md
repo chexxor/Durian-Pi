@@ -3,6 +3,55 @@
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
+## CLOCK-OUT / NEXT SESSION START HERE (2026-10-20T00:25Z, delegate) — **THE FOUR DeepSeek SEATS ARE ON `deepseek-ai/DeepSeek-V4.1-Flash-1017` AND RUNNING; the catalog gap that caused the 2026-10-19 outage is closed and guarded**
+
+**Read this first.** The operator asked to switch the dev team to `deepseek-ai/DeepSeek-V4.1-Flash-1017`
+and to make the change actually take this time. Done, in that order: **catalog entry first**, then the rig.
+
+**What was done (commit names both):**
+1. **`src/providers/deepinfra-models.ts`** — added `deepseek-ai/DeepSeek-V4.1-Flash-1017` to
+   `fallbackModels()` with the live-catalogue values fetched 2026-10-20 (1M ctx, 1M max output,
+   $0.20/$0.60, reasoning, vision). `buildModels` (cli.mjs:253) reads ONLY this curated list plus the
+   rig-default `MODEL_ID`; it does not fetch the live catalogue. That is the exact reason the 19 Oct move
+   failed (`no_model` on four seats, zero assistant turns).
+2. **`demo/deepinfra-catalog.test.mjs`** — now also asserts the `-1017` entry and its live values, and
+   **fails if ANY seat model in `rig.selfdev.json` is absent from the catalog** (skips `local/<id>`,
+   which is a separately registered provider). This is the regression guard for the outage class.
+3. **`rig.selfdev.json`** — pm, impl, lead and architect moved to `-1017` (scribe stays on
+   `DeepSeek-V4-Flash-0731`; it is a different model and was deliberately left on 19 Oct too). Applied
+   with `broker-safe-change`: `--dry-run` (named exactly those 4 + the devtools cwd), broker stopped with
+   `stopped:true` and the process confirmed gone, `up rig.selfdev.json --refresh` (4 model resets), then
+   `scripts/serve-noroot.ps1`. Store backed up first to `.spike/store-backup-20261020-001106`.
+
+**Evidence (all run this session):**
+- `node demo/deepinfra-catalog.test.mjs` → exit 0 (`…-1017 present: 1048576 ctx; 12 rig seats resolve`).
+- Relevant demos exit 0: `seatmodel`, `refresh`, `up-model-reset`, `local-provider`.
+- Full suite: **pass=178 fail=1** (`pitui`, the known resolution-path failure — same as the last baseline).
+- Live store: every one of the four seats' latest `pi.agent` base revision names
+  `deepinfra / deepseek-ai/DeepSeek-V4.1-Flash-1017`; **pm produced assistant turns on it at 00:12 and
+  finished a clean turn (`stopReason: stop`) at 00:15:55Z** — the model resolves and generates.
+- Broker after restart: pid 4528, `START`, `WAKE pm`, passes advancing, no `no_model`/`wake-failed` lines.
+
+**Docs:** `docs/SELFDEV.md` table + author line, and the `docs/FEATURES.md` "Model moves are operator
+commits" row, now carry `-1017` and the **catalog-entry-first** prerequisite.
+
+**Owed / follow-ups (not done here):**
+- **Wire the live DeepInfra catalogue into `buildModels`** (`fetchDeepInfraModels` exists and is unused).
+  Today every new seat model id needs a hand-added fallback entry + a suite run; the demo guard catches a
+  missing one at test time, not automatically at startup. Register with `pm` if the operator wants it.
+- impl/lead/architect have not been woken since the restart (their latest turns predate it); their base
+  revisions are `-1017`, so the next wake uses it. pm's run is the proof the id resolves.
+- Four seat contexts were reset by the model change, by design (#148/#154).
+
+**Caution observed:** the broker logged `database is locked` PASS-FAILED lines between 00:06 and 00:10
+while several `cli.mjs queue`/`status` reads were running; they cleared before the stop and none appeared
+after the restart. Do not poll the store heavily while the broker is live.
+
+**Exact next command:** `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status` · then
+`DURIAN_PI_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run` (expect no changes).
+**Do not:** edit `rig.selfdev.json` to a new model id without first adding it to
+`fallbackModels()` and running `demo/deepinfra-catalog.test.mjs`; push (operator holds the grant).
+
 ## CLOCK-OUT / NEXT SESSION START HERE (2026-10-19T23:35Z, delegate) — **PASS #4: 4 LANDED (`main` → `ee651e0`), 10 TREES RELOCATED, AND THE SUITE-VERDICT TRAP DOCUMENTED**
 
 **Read this first.** Two operator asks this session: (1) "did you submit a work item for the worktree

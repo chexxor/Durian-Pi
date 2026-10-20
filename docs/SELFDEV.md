@@ -23,12 +23,12 @@ python -c "import json;[print(s['name'], s.get('model')) for s in json.load(open
 
 | Seat | Role | Model (live, `rig.selfdev.json`) | Notes |
 |---|---|---|---|
-| `pm` | program manager | `deepseek-ai/DeepSeek-V4.1-Flash` | intake, decomposition, routing, tracking |
-| `impl` | implementation | `deepseek-ai/DeepSeek-V4.1-Flash` | author for build items |
+| `pm` | program manager | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | intake, decomposition, routing, tracking |
+| `impl` | implementation | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | author for build items |
 | `qa` | verifier | `local/qwen36` | independent; a DIFFERENT FAMILY from the author seats |
 | `qa2` | verifier (2) | `google/gemma-4-31B-it` | second verifier, third family |
-| `lead` | technical lead | `deepseek-ai/DeepSeek-V4.1-Flash` | scope/priority rulings; escalation target |
-| `architect` | systems architect | `deepseek-ai/DeepSeek-V4.1-Flash` | cross-cutting design, failure modes, durable decisions |
+| `lead` | technical lead | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | scope/priority rulings; escalation target |
+| `architect` | systems architect | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | cross-cutting design, failure modes, durable decisions |
 | `advocate` | workflow/design reviewer | `zai-org/GLM-5.3-Flash` | owns `WORKFLOWS.md`, `SELF-ADMIN.md` |
 | `scribe` | documentation | `deepseek-ai/DeepSeek-V4-Flash-0731` | keeps `FEATURES.md`/`STATUS.md` true |
 | `devtools` | toolchain | `local/qwen36` | pi pin, `sync-pi.mjs` |
@@ -41,7 +41,7 @@ python -c "import json;[print(s['name'], s.get('model')) for s in json.load(open
 The invariant is that **a verifier must not share a model family with the author of the change it
 verifies** — not that any particular two names hold a particular pair of models. Today that reads:
 
-- **authors** are `impl` (DeepSeek-V4.1-Flash) and, for docs/tooling, `scribe` (DeepSeek-V4-Flash-0731) and
+- **authors** are `impl` (DeepSeek-V4.1-Flash-1017) and, for docs/tooling, `scribe` (DeepSeek-V4-Flash-0731) and
   `devtools` (`local/qwen36`);
 - **verifiers** are `qa` (`local/qwen36`), `qa2` (gemma), and `auditor` (GLM-5.3-Flash).
 
