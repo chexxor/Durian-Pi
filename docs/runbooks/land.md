@@ -202,6 +202,30 @@ After a real landing, confirm the branch is an **ancestor** of `main` (the workt
 git -C <repo> merge-base --is-ancestor <branch> main && echo LANDED
 ```
 
+### What a check or a DEFAULT can and cannot tell you — the unknown-default principle
+
+Three primitives in this codebase answer "what if we do not know?" **differently, and all three are
+right.** The instinct to make them agree is the wrong one in every direction, so the rule is written
+here with the cost that decides each case:
+
+| Primitive | Unknown resolves to | Why — what a FALSE answer costs |
+|---|---|---|
+| liveness (`brokerAlive` / `pidAlive`, `impl-item-3398`) | **ALIVE** | a false DEAD admits a **SECOND WRITER**, which is the store-corruption class |
+| `workable` (#2673) | **WORKABLE** | a false unworkable **STARVES WORK INVISIBLY**; a false workable only hands a seat an item it can hold or defer |
+| `listWorktrees` (#3605) | **THROW**, for a deciding caller | a false EMPTY authorises an **IRREVERSIBLE DELETE** |
+
+**The rule: the default follows the COST of being wrong, not a house style.** "Be consistent with the
+other one" gives the wrong answer in two of these three cases, and it is the instinct a reviewer will
+have — three different answers to one question look like an inconsistency rather than three considered
+choices. State the cost per primitive and the direction becomes checkable instead of conventional.
+
+**Same shape for a probe: record WHAT IT PROVES, not only its result.** A hazard record that said "port
+8080 closed" silently became an all-clear when the port opened for an unrelated listener (`#3736` — the
+decisive question was whether the listener serves the model the rig names, and a port probe can never
+answer it). A `--suite` run on the branch tip proves nothing about the merge (`#3638`). A satisfied
+`blockedBy` proves nothing about whether the content landed (`#3681`). When a check's meaning is not
+written beside its result, a changed result reads as a cleared hazard.
+
 ## Landing a SET (a cluster): serial, re-preflighted, per-item gated
 
 When the landing list has a dozen verified entries (2026-10-19: the 13-item bugfix cluster, all touching
@@ -368,3 +392,9 @@ and proved with the full suite on `main` — the only way this pass could see th
 **Suite on `main` after the revert: `pass=179 fail=1`** (`pitui`, #2412). Prune: refs 97→93, worktrees
 203, `reapable: 0`, nothing forced (see `branch-cleanup.md`). The suite runner is now pooled — default 8
 demos at once, ~64s vs ~10min — so the post-landing proof is cheap enough to always run.
+
+2026-10-20 — **THE UNKNOWN-DEFAULT PRINCIPLE ADDED** (item #3744, part of the #3272 landing-note
+series): the liveness / `workable` / `listWorktrees` defaults, the cost rule that decides each direction,
+and the probe-meaning line, in a subsection of `## Verify` so the #3638 (check the MERGED tree) and
+#3656 (the no-`--suite` workaround with a checkable expiry) additions can sit beside it. The runbook's
+own Verify step was re-run with this change: `node demo/land-helper.test.mjs` → exit 0.
