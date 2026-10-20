@@ -71,10 +71,11 @@ function stripColors(text) {
 
 /* ───────── The landing row (ROADMAP 124, designer spec #3307) ───────── */
 
-// The DECLARED LANDING MINIMUM (spec §4), expressed in CONTENT cells: the spec's 44-column
-// terminal floor minus the 4-cell gutter this function is handed. Below it the classic
-// roster row is the honest fallback — "no broken columns ever".
-const LANDING_MIN_WIDTH = 40;
+// The DECLARED LANDING MINIMUM (spec §4): the spec's 44-column TERMINAL floor. This function is
+// now handed the terminal width (it used to get width-4, which is why this constant read 40); the
+// floor itself is unchanged — below 44 columns the classic roster row is the honest fallback,
+// "no broken columns ever".
+const LANDING_MIN_WIDTH = 44;
 // Fixed prefix of a landing row (spec §1): sel 2 + state 13 + name 9 + queue 9.
 const LANDING_FIXED_WIDTH = 33;
 
@@ -135,6 +136,31 @@ function briefColumn(row, cap) {
 }
 
 /**
+ * Pad a row to `width` CELLS (#3941). A row narrower than the frame is the blank stripe the
+ * operator reported, so every painted row ends at the frame edge. Never truncates: an
+ * over-wide row is the floor discipline's problem (it must not happen), not this helper's.
+ */
+function padToCells(row, width) {
+	const w = textWidth(row);
+	return w >= width ? row : row + " ".repeat(width - w);
+}
+
+/**
+ * Pad a FRAME to exactly `width` x `height` cells (#3941): the screen fills the terminal in
+ * both dimensions. Rows are padded to the frame width and blank rows are appended so the
+ * layout occupies the viewport instead of leaving 23-33 rows empty underneath it.
+ *
+ * Clipping to `height` is kept (a frame taller than the viewport would scroll and tear), but
+ * the budgets above are sized so it does not fire in the seats view.
+ */
+function fillFrame(lines, width, height) {
+	const out = lines.map((l) => padToCells(l, width));
+	const blank = " ".repeat(Math.max(0, width));
+	while (out.length < height) out.push(blank);
+	return out.slice(0, Math.max(0, height));
+}
+
+/**
  * Render the seat list section.
  * Returns { lines, width } where width is the used character width.
  */
@@ -154,7 +180,17 @@ function renderSeatList(seats, activityMap, width, selectedSeat = null, color = 
 	// actually left. The spec's own arithmetic at the 44-col rung (33 fixed + 12 = 45) does
 	// not close inside 44, so the clamp wins — a row that overflows is the one outcome the
 	// floor discipline forbids (reported on #3313).
-	const cap = landingRow ? Math.min(briefCap(width), Math.max(1, width - LANDING_FIXED_WIDTH)) : 0;
+	//
+	// #3941: the rung is a MINIMUM, not a ceiling. At wide sizes the brief and the action cell
+	// ABSORB the extra columns, so the row fills the terminal instead of stopping around 74
+	// cells and leaving everything to its right blank (the reported defect: a byte-identical
+	// row at 80, 120 and 160 columns). The floor arithmetic above is unchanged — `cap` can
+	// never exceed what is left after the fixed prefix.
+	const actionWanted = width >= 47;
+	const actionBudget = actionWanted ? Math.min(16, Math.max(0, width - LANDING_FIXED_WIDTH - briefCap(width) - 1)) : 0;
+	const cap = landingRow
+		? Math.max(1, Math.min(width - LANDING_FIXED_WIDTH - (actionBudget > 0 ? actionBudget + 1 : 0), width - LANDING_FIXED_WIDTH))
+		: 0;
 
 	// DEGRADE (spec §6.1): more seats than rows. The roster is bounded by `maxRows` (the
 	// frame's own budget); seats beyond it scroll with BOTH-END indicator rows, and the
@@ -194,15 +230,18 @@ function renderSeatList(seats, activityMap, width, selectedSeat = null, color = 
 			// and clamped to whatever the row has left so it can never overflow the frame
 			// (the spec's 16-cell cap does not close at the bottom of that band either).
 			const actionRoom = width - LANDING_FIXED_WIDTH - cap - 1;
-			const token = width >= 47 && actionRoom > 0 ? actionToken(partialsBySeat[seat.name]) : "";
+			const token = actionWanted && actionRoom > 0 ? actionToken(partialsBySeat[seat.name]) : "";
 			const action = token === "" ? "" : truncate(token, Math.min(16, actionRoom));
-			row = `${sel}${stateCol}${nameCol}${queueCol}${brief}${action ? ` ${action}` : ""}`;
+			// #3941: pad the row to the section width so the row reaches the frame edge; a short
+			// row is the blank stripe the operator reported.
+			row = padToCells(`${sel}${stateCol}${nameCol}${queueCol}${brief}${action ? ` ${action}` : ""}`, width);
 		} else {
 			const name = truncate(sanitizeTerminalText(seat.name), maxName - 1);
 			const role = truncate(sanitizeTerminalText(seat.role ?? ""), maxRole - 1);
 			const head = `${paint(act.tone, act.glyph, color)} ${pad(name, maxName)}${pad(role, maxRole)}`;
 			const focus = truncate(sanitizeTerminalText(act.focus), width - activityCol);
-			row = `${cursor} ${head}${focus}`;
+			// #3941: the fallback row fills the width too - a short row is the same blank stripe.
+			row = padToCells(`${cursor} ${head}${focus}`, width);
 		}
 		// Selection is reverse video + bold (the skill's canonical, most-readable
 		// current-row signal — see references/visual-patterns.md), reinforced by the
@@ -728,9 +767,51 @@ export function renderTui({
 	lines.push(`  ${truncate(header, Math.max(0, width - 2))}`);
 	lines.push(rule);
 
-	// Seat list (uses ~40% of height for seats)
-	const mainHeight = Math.max(10, Math.floor(width * 0.3));
-	const seatRows = Math.min(8, Math.max(3, Math.floor(mainHeight * 0.4)));
+	// ── BUDGETS FROM THE TERMINAL'S ROWS (#3941) ──────────────────────────────────
+	// The layout used to derive its height from the WIDTH (`Math.max(10, Math.floor(width *
+	// 0.3))` plus `Math.min(8, …)`), so a 120x40 or 160x50 terminal got a ~17-row frame and
+	// 23-33 blank rows underneath. Height now comes from `height`, the way the conversation
+	// view already sizes its transcript: the fixed chrome is reserved, the ROSTER takes what it
+	// needs (all seats when they fit), and the transcript preview gets the remainder.
+	const footerRows = 1 + (inputText !== null ? 1 : 0);
+	const statusRows = 4; // blank + rule + status line + rule
+	const fixedChrome = 2 /*header + rule*/ + statusRows + footerRows;
+
+	// The streaming block is measured BEFORE the roster so its rows are part of the budget
+	// rather than an afterthought that pushes the frame past the viewport.
+	const active = Array.isArray(partials)
+		? partials
+		: partial && partial.hasContent
+			? [partial]
+			: [];
+	const streamingLines = [];
+	if (active.length > 0) {
+		// F4/F5 (#2826, designer #2748): NO live partial means NO streaming section at all.
+		// The landing row's ACTION cell already answers "is anything running", so a
+		// placeholder would be a second, weaker signal for the same fact.
+		streamingLines.push("");
+		for (const p of active) {
+			streamingLines.push(paint("bold", `  ── streaming${p.seat ? `: ${p.seat}` : ""} ──`, color));
+			const row = renderPartial(p, width - 4, {
+				roles: color && toolBg ? themeToolRoles(theme) : null,
+				color,
+			});
+			streamingLines.push(...row.lines);
+		}
+	}
+
+	// The roster gets priority up to the number of seats it must paint; the transcript gets
+	// what is left, bounded as before. `seatRows` is a CAP that includes the two degrade
+	// indicators, so passing `seats.length` means "unbounded - paint them all".
+	const transcriptChrome = 3; // blank + "-- transcript --" + at least one line
+	const seatBudget = Math.max(3, height - fixedChrome - streamingLines.length - transcriptChrome);
+	const seatRows = Math.min(seats.length, seatBudget);
+	const transcriptRows = Math.max(
+		0,
+		Math.min(6, height - fixedChrome - streamingLines.length - Math.min(seats.length, seatBudget) - 2),
+	);
+
+	// Seat list
 	// ONE derivation for the roster (lead #3320): the state words and glyphs come from
 	// `seatActivity` (#2826) and the per-seat queue facts from `projectLanding` (#3308),
 	// both over the SAME health snapshot built at the top of this function. No second
@@ -739,42 +820,19 @@ export function renderTui({
 	const activityMap = {};
 	for (const seat of seats) activityMap[seat.name] = seatActivity(seat, snapshot);
 	const partialsBySeat = {};
-	for (const p of Array.isArray(partials) ? partials : partial && partial.hasContent ? [partial] : []) {
+	for (const p of active) {
 		if (p.seat) partialsBySeat[p.seat] = p;
 	}
-	const { lines: seatLines } = renderSeatList(seats, activityMap, width - 4, selectedSeat, color, landing, partialsBySeat, seatRows);
+	const { lines: seatLines } = renderSeatList(seats, activityMap, width, selectedSeat, color, landing, partialsBySeat, seatRows);
 	lines.push(...seatLines);
 
 	// Streaming / partial rows — U2: EVERY actively-generating seat at once, keyed off
 	// live generation (`partialView(live).hasContent`), never queue depth. Team-wide:
 	// one seat-labelled block per active seat; the legacy single `partial` argument
 	// keeps working (unnamed block) so the C3 contract doesn't break.
-	const active = Array.isArray(partials)
-		? partials
-		: partial && partial.hasContent
-			? [partial]
-			: [];
-	if (active.length === 0) {
-		// F4/F5 (#2826, designer #2748): NO live partial means NO streaming section at all.
-		// This used to paint the divider plus a `[idle]` placeholder whenever `partial` was
-		// absent, because `renderPartial(null)` returns one line — so an idle rig carried
-		// chrome (and an empty divider slot) for work that was not happening. The landing
-		// row's ACTION cell already answers "is anything running", so the placeholder was
-		// a second, weaker signal for the same fact.
-	} else {
-		lines.push("");
-		for (const p of active) {
-			lines.push(paint("bold", `  ── streaming${p.seat ? `: ${p.seat}` : ""} ──`, color));
-			const row = renderPartial(p, width - 4, {
-				roles: color && toolBg ? themeToolRoles(theme) : null,
-				color,
-			});
-			lines.push(...row.lines);
-		}
-	}
+	lines.push(...streamingLines);
 
 	// Transcript preview
-	const transcriptRows = Math.min(6, Math.max(2, Math.floor(mainHeight * 0.35)));
 	const { lines: transLines, height: transHeight } = renderTranscript(
 		turns,
 		{},
@@ -804,8 +862,10 @@ export function renderTui({
 	const { lines: footerLines } = renderFooter(width, color, inputText !== null ? "input" : "seats");
 	lines.push(...footerLines);
 
-	const frame = new Frame(lines);
-	return frame;
+	// #3941: FILL the viewport. Every row is padded to the frame width and blank rows are
+	// appended to the terminal height, so the layout occupies the screen instead of leaving a
+	// blank stripe to the right of the content and 20-30 empty rows underneath it.
+	return new Frame(fillFrame(lines, width, height));
 }
 
 /* ───────── Helper: extract tool result text ───────── */
