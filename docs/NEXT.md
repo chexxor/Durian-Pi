@@ -1,7 +1,38 @@
 # durian-pi — NEXT (current pointer)
 
+## NEXT SESSION (2026-10-20T21:05Z — TUI merge delegated; Q2 ruled REPLACE + RETURN; Fix A built, awaiting verify)
 
-## NEXT SESSION (2026-10-20 — the ONLY live pointer; every later "NEXT SESSION" is history)
+**Current item:** **Fix A (#3941) is DONE on `impl`'s branch but NOT landed** — designer surface review
+(#3980) and qa verify (#3946) are the gates. The landing screen was too narrow in both axes: flexible
+cells capped (~74 cols) and height derived from WIDTH (`Math.floor(width*0.3)`, `Math.min(8,…)`, and
+`composeFrame` clips but never pads), measured as a byte-identical row at 80/120/160 cols and a 17-row
+frame at 120x40 and 160x50.
+
+**Phase 2 (Enter → Pi):** lead ruled (#3949/#3957): operator-window NOW under three conditions
+(operator-initiated pause, fail-closed ownership, 60s stale-ownership reaper), broker-owned spool client
+as the DESTINATION gated on ROADMAP 55, read-only renderer ruled OUT as a seam. **The operator answered
+Q2: REPLACE the `npm run ui` screen in the SAME terminal, and the RETURN PATH IS PART OF THE FEATURE** —
+exiting the Pi session must restore the landing screen **on the SAME seat, live** (broker resumed,
+poller polling), the crash/kill path must recover via the reaper, and a broker that does not resume must
+show an explicit NOT-LIVE state. Recorded: #3942 done, #3982/#3985; implementation is **#3983 LAUNCH +
+RETURN GLUE, held `blockedBy #3942 + #3954`**. The seam layer is **#3954** (impl, claimed). Phase 3 is
+explicitly downstream of a verified Phase 2.
+
+**Queue id:** #3954 (seam layer) · #3983 (launch+return glue, held) · #3941/#3946/#3980 (Fix A +
+verifies) · #3943 (qa narrow verify of the already-landed slice) · #3948 (scribe pointer correction).
+
+**Blocker:** **the shared tree is NOT clean** — `impl` is writing `src/tui/durable/attach.mjs`
+and `demo/tui-attach-seam.test.mjs` (both untracked, growing) directly in the shared checkout for #3954. That is the D49/F12 hazard;
+it is preserved, not to be deleted/stashed/committed, and it makes a suite run in `.` unable to prove
+`main`. Steered to `pm` (request `operator-tui-shared-tree-2026-10-20-1`). Last measured `main` baseline:
+`pass=185 fail=3` (`pitui` #2412, `broker-one-connection`, `seat-instruction-encoding`).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Do not:** land the stale #3308/#3309/#3313 (or 2826/3437/3359) branches — superseded, see #3943; split
+the return path out of #3983; start Phase 3; push (operator holds the grant).
+
+## NEXT SESSION (2026-10-20 morning — STALE, kept as history: the main regression was fixed; the earlier pointer text follows)
 
 **Current item:** the `main` regression is **FIXED** — the delegate landed `revert-9c3aa02` as merge
 `798836b` (`main` `db96a05` -> `798836b`). Cause: a bare `git commit` by the delegate swept a seat's
@@ -49,7 +80,7 @@ that `NEXT.md` already says is parked at `stash@{0}` and must be redone **on a b
 `item-3654`'s worktree itself is clean and committed (`ee495e7`); the main-index copy is the duplicate.
 
 **Also true:** the staged set mixes #3398's broker-liveness test (already committed on
-`impl-item-3398` as `0c6fd76`) with a WIP that *removes* the ROADMAP-124 landing row from
+`impl-item-3398` as `0c6fd76`) with a WIP that _removes_ the ROADMAP-124 landing row from
 `client/viewmodel/readapi/rig`. A bare `git commit` here would land a stale duplicate and a silent
 revert. This is the same class as the documented `9c3aa02` incident (a bare delegate commit swept a
 seat's staged 21-file work).
