@@ -1,29 +1,27 @@
 # durian-pi — NEXT (current pointer)
 
-## NEXT SESSION  (2026-10-20, supersedes EVERY "NEXT SESSION" below — those are history)
+## NEXT SESSION  (2026-10-20 — the ONLY live pointer; every later "NEXT SESSION" is history)
 
-**Current item:** land the operator's TUI slice, then re-verify it. All three branches are CLEAN against
-`main` and none is merged: **`impl-item-3308`** (readapi per-seat queue size + claimed item, ahead 1),
-**`impl-item-3309`** (ROADMAP 101 newline-preserving wrap, ahead 1), **`impl-item-3313`** (landing-screen
-render, ahead 2 — STACKED, so it lands LAST). Their qa verifies **`#3314`/`#3315` were CANCELLED**, so the
-landing needs a FRESH non-author verify; the old ones prove nothing.
-**Queue id:** `#3313` (render, land last) · `#3309` · `#3308` · `#3315`/`#3314` (re-register before
-accepting) · `#2412` (`pitui`).
-**Blocker:** (a) `main` is RED on **7 demos**, MEASURED in a clean detached worktree of `main` (sha
-`557ceb3`): `tui-landing`, `tui-status-bar`, `tui-conversation-header`, `landing-data`,
-`broker-one-connection`, `seat-instruction-encoding`, `pitui` -> `pass=181 fail=7`, 188 demos. The TUI
-ones are a REAL width bug (`tui-landing`: rows 68 wide in a 57-wide terminal across widths 40-67), not
-harness noise; `land.mjs --suite` is therefore unusable -- land without it and prove on `main`. (b) The local PolyStrata model is DOWN by operator direction:
-the Swift + Qwen3.6 models were DELETED and IQ3_S is INSTALLING to `D:\PolyStrata-models` with its pack on
-C:. Until that finishes and the rig is re-pointed, `qa`/`devtools` stay on DeepInfra. (c) `qa2` is newly in
-rotation, so the verifier mix changed today — check `status` before assuming who can verify what.
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` · then re-preflight the stack in
-landing order before touching `main`:
-`for b in impl-item-3308 impl-item-3309 impl-item-3313; do git merge-tree --write-tree main $b >/dev/null 2>&1 && echo "$b CLEAN" || echo "$b CONFLICT"; done`
-**Do not:** land `impl-item-3313` before 3308/3309 (stacked); use `land.mjs --suite` while `pitui` is red;
-re-register ROADMAP 99 (fixed at `02f0004`); delete `pi-opendurig.worktrees/` by hand — all 179 entries are
-REGISTERED worktrees and every one carries uncommitted changes (patch-archive + `git worktree remove` is the
-lossless route); push (operator holds the grant).
+**Current item:** report and fix the `main` regression, then land the operator's TUI slice. `main` is RED
+on 7 demos (measured in a clean detached worktree, sha `557ceb3`): `tui-landing`, `tui-status-bar`,
+`tui-conversation-header`, `landing-data`, `broker-one-connection`, `seat-instruction-encoding`, `pitui`.
+Five are the TUI slice's REAL width bug (`tui-landing`: 68-cell rows in a 57-cell terminal, every width
+40-67), so the landing is not clean — it is a defect to route to `pm` for impl/designer.
+**Queue id:** `#3313` (landing render) · `#3309` · `#3308` · `#3315`/`#3314` (verifies CANCELLED — re-register
+before accepting) · `#2412` (`pitui`) · the 7-failure regression has NO item yet: ask `pm` to mint one.
+**Blocker:** `main` is red on 7 demos, so `land.mjs --suite` is unusable; land without it and prove on
+`main`. Also standing: the local PolyStrata model is DOWN (Swift/Qwen3.6 deleted, IQ3_S installing to
+`D:\PolyStrata-models`), and the shared tree carries ~107 dirty paths of seats' in-flight work, so a suite
+run in `.` does NOT measure `main` — use a detached worktree.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+Then:
+`git worktree add --detach .verify-main main && (cd .verify-main && node scripts/suite.mjs); git worktree remove --force .verify-main`
+
+**Do not:** treat a suite run in the shared tree as `main`'s result (it mixes uncommitted work); land
+`impl-item-3313` before 3308/3309 (stacked); use `land.mjs --suite` while `main` is red; delete
+`pi-opendurig.worktrees/` by hand (179 REGISTERED trees, all dirty, 34 unlanded, 13 with commits on no ref);
+push (operator holds the grant).
 
 ## CLOCK-OUT / SESSION LOG (2026-10-20 ~05:15Z, delegate) — **HUMAN QUEUE ANSWERED: 10 ROWS → 2 REAL, 8 STALE; #3233 REF DELETED, RULINGS DELIVERED TO `pm`**
 
