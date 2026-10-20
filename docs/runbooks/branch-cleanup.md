@@ -33,6 +33,16 @@ authoritative for each question) is `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md`; thi
 procedure.
 
 ## Diagnose (read-only)
+**Step 0 — the ledger first.** Before re-deriving a disposition for ANY branch,
+check `docs/DISPOSITIONS.md` FIRST: a branch that already has a row there is
+**not re-litigated** — it is **re-listed with its existing disposition**
+(`CANCEL` / `SUPERSEDED` / `LAND` / `KEEP-HELD`). The ledger records decisions, not
+ref existence, so a missing ref is not a missing row and a present ref is not a
+re-derivation. New dispositions are **appended** to the ledger by the deciding
+seat in the same pass (a new row with the new deciding item id) — never an edit to
+an old row. The probe method for proving a disposition is in the ledger's
+convention: blob identity at path, patch-id secondary, **content wins**.
+
 Classify every non-`main` ref as **merged** (`ahead=0`), **held** (checked out in a worktree), or
 **unlanded** (`ahead>0`). **The `sed` matters:** `git branch` prefixes a ref with `*` (current) or `+`
 (checked out in a **linked worktree**); an unstripped `+` corrupts every downstream loop:
@@ -98,6 +108,13 @@ git branch | wc -l            # decreased by exactly the pruned count; not below
 git log --oneline -1 main     # HEAD sha UNCHANGED from Diagnose
 git status --short -- .       # still clean
 # for any sha you deleted, prove it was landed BEFORE deleting: git merge-base --is-ancestor <sha> main
+```
+**The ledger rule (runs every pass, not only a prune):** every branch whose
+disposition is already recorded in `docs/DISPOSITIONS.md` is **re-listed from the
+ledger, never re-derived**:
+```bash
+grep -E 'architect-item-3005|security-item-1475' docs/DISPOSITIONS.md  # both rows present (CANCEL)
+git diff --exit-code docs/DISPOSITIONS.md                              # append-only: a row added this pass, none edited
 ```
 Every kept branch must still be listed. The 2026-10-17 run: 128 → 76 refs, `main` at `c0534ed`,
 tree clean, all 33 unlanded refs intact.
