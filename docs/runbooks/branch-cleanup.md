@@ -68,9 +68,18 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
    ```bash
    git branch -d $(cat merged.txt | comm -23 - held.txt)
    ```
-3. **Patch-equivalent duplicates** (a rebased copy already in `main`): confirm `git cherry main <b>`
-   prints only `-` lines, then delete with `-D` (the work *is* on `main`; `-d` would refuse a
-   non-ancestor):
+3. **Patch-equivalent duplicates** (a rebased copy already in `main`): the work *is* on `main`, so
+   `-d` refuses it (the tip is not an ancestor). **A seat cannot run `git branch -D`** — the seat
+   guard refuses it (`src/confine.mjs` `branchForceDelete`, #1211). Use the sanctioned verb (#3491):
+   it removes the ref ONLY when every commit is patch-equivalent to `main` AND no worktree holds it,
+   and it prints the recovery command:
+   ```bash
+   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs worktree prune-branch <branch>
+   ```
+   Refusals are loud (`ok:false`, exit 1) and name the reason: an unlanded `+` commit, a worktree
+   holding the ref, or an already-ancestor ref (that one needs `git branch -d`, which is allowed and
+   cannot lose work). An empty `git cherry` is NOT "all `-`" — never read it that way.
+   The operator, or a shell outside the seat guard, may still do it by hand:
    ```bash
    git cherry -v main <branch>          # every line must start with '-'
    git branch -D <branch>
