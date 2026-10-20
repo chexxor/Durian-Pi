@@ -142,7 +142,8 @@ em-dashes in every seat's instructions (`â€”`). The LIVE store was not refr
 `local/qwen36` until someone runs `up rig.selfdev.json --refresh`. If that model move was unintended, it
 needs an operator ruling, not a delegate revert.
 
-**PM HANDOFF (sent, and pm already registered the work):** intent `91d7fa4c` (the 1558/2412/cafee74
+**PM HANDOFF (both DELIVERED — broker log `INTENT delivered=1`: `91d7fa4c` at 01:11:12Z, `6fb0e63b` at
+01:19:29Z; pm already registered the work):** intent `91d7fa4c` (the 1558/2412/cafee74
 defects) → pm minted **#3238** (rework 1558, claimed by devtools), **#3239** (rework 2412, queued),
 **#3240** (verify the rebased configure tip), **#3241** (fix the cafee74 mojibake, claimed by impl),
 **#3242** (ruling deferred to lead; **#3244/#3245** ruled: encoding fix only, provider line FROZEN;
@@ -153,7 +154,9 @@ landable-now (1754/2188), needs-a-list (2616 etc.), verify-open (2969/3174), unc
 conflict families needing author rebase + fresh verify, 11 DRIFT pins, 17 snapshot/duplicate refs, and
 the two dirty verify scratches. Full per-branch table in `.spike/delegate/model-1017/preflight-final.tsv`.
 The biggest lever pm now owns: the stale **#2312/#2313** rebase-pass items that hide ~20 verified-against-
-an-older-main branches.
+an-older-main branches. **Final state at clock-out:** `main` `38081fd` (this session's code `4d96ae9`, docs
+`38081fd`), refs 93, worktrees 203, suite `pass=179 fail=1` (`pitui`). Two seat commits landed mid-session
+(`440d071` local-provider doc, `2b9a14b` session learnings) — neither touched the landing set.
 
 **DOCS UPDATED this pass:** new incident
 `docs/incidents/2026-10-20-stale-derived-manifest-landing.md` (+ index row); `land.md` gained the
