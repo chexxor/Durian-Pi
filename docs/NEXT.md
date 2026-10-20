@@ -78,6 +78,14 @@ the only current landing entries are HELD (#3891 carrier `impl-item-3869` @565cf
 first, then the re-cut carrier (DON'T also land superseded `impl-item-3656` @7cd542a), then rebase+land the
 `cccccd5→235e163→30f12aa` stack.
 
+**LANDED (operator-authorised, 2026-10-20 ~19:30Z): `scribe-item-3785` @21fb14c → `main` `bcb6b4a`**
+(`44dbe42`→`bcb6b4a`, helper scratch, clean FF; `lock {slots:4,held:4,reserved:true}`). Preflight:
+tip matched the list, `merge-tree` clean. Proven on `main`: suite **pass=185 fail=3 before AND after** — same
+three (`broker-one-connection`, `pitui`, `seat-instruction-encoding`), no new failure. Ref pruned; tracked tree
+clean. Caveat: its landing entry **#3828 is still `held`** and no separate non-author VERIFY item for
+`21fb14c` was found in the queue — landed on the operator's explicit go. Next in order is the carrier
+`impl-item-3869` @565cf2c (re-preflight against the NEW `main`).
+
 ## CLOCK-OUT (2026-10-20 ~07:50Z, delegate) — **TEAM WAS DOWN ~20 MIN ON AN EXTERNAL 402; BROKER RESTARTED, 47/49 PARKED ITEMS RESUMED**
 
 Operator ask: "kick start the team". Diagnosed before touching anything; the cause was NOT the rig.
