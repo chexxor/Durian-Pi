@@ -101,6 +101,20 @@ ask "stop or not?" or "why did --suite fail?".
    (owning item **#2412**; full account: `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §6.2).
    *(`--suite` was skipped for the 2026-10-19 passes while the rule was broken; the helper itself never
    required it, and the post-landing `node scripts/suite.mjs` run is what proved those landings.)*
+
+   **THIS FALLBACK HAS AN EXPIRY, AND IT IS NOT "WHEN `main` IS GREEN".** "Green" is unreachable (the
+   real content defects had no owner) and ambiguous (`pitui` is arguably CORRECT to fail against the
+   vendored junction). Delete this fallback when `main`'s red set is **EMPTY IN THE SEAT-ROOT DEPENDENCY
+   ENVIRONMENT** — i.e. the real content defects are fixed, and `pitui` is either fixed or the vendored
+   link is DECLARED INTENDED by whoever owns that call. An unreachable expiry is a workaround that never
+   expires: the next lander reads "remove when green", sees red forever, and concludes the fallback IS the
+   permanent procedure — which is the habit the condition exists to prevent.
+   **Every `--suite`-less proof must STATE THE DEPENDENCY SET IT RAN IN.** A proof from a worktree-local
+   `npm ci` and a proof from the seat root are not comparable, and the output does not distinguish them
+   (see the fresh-worktree note below). **And do NOT read "red on N" as environmental:** at the time of
+   writing the same commit reported 3 red in the seat root and 7 after a worktree-local `npm ci` — two of
+   those were REAL content defects, one was an environment guard and five were dependency-version
+   artefacts. A landing pass that treats the delta as noise will treat the real ones as noise too.
 5. Prune each landed ref (`git branch -d` refuses anything unmerged, so this is lossless):   ```bash
    git merge-base --is-ancestor <branch> main && git branch -d <branch>
    ```
@@ -446,3 +460,10 @@ around `npm ci` (`src/worktree.mjs` lines 155-188), but in a fresh worktree that
 present there, and the caller only `console.warn`s and continues — so the worktree stays on the lock's
 `pi-durable@1.1.0`. The suite was re-run in this worktree with that state and returned exactly the 7 red
 named in the new note; `node demo/land-helper.test.mjs` → exit 0.
+
+2026-10-20 — **THE `--suite`-LESS FALLBACK NOW HAS A REACHABLE EXPIRY** (item #3775, same #3272
+series): "remove when `main` is green" was unreachable (the real defects had no owner) and ambiguous
+(`pitui` is arguably correct to fail against the vendored junction), so it is restated as "red set EMPTY
+in the SEAT-ROOT dependency environment", with the requirement that every `--suite`-less proof STATE the
+dependency set it ran in. The runbook's own Verify step was re-run: `node demo/land-helper.test.mjs` →
+exit 0.
