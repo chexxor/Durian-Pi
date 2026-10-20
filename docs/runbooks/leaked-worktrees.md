@@ -124,6 +124,25 @@ REGISTERED worktrees and a hand-delete leaves 179 stale entries in `.git/worktre
    only needed while someone may resume the work. Export the same two artifacts and remove, OR keep the tree
    and record why in the item. Never keep one silently.
 
+**Resolve each tree's ITEM STATUS from the store before deciding** (operator's suggestion, 2026-10-20):
+the directory name carries the id (`item-<id>` or `<seat>-item-<id>`), so one `queue` read classifies the
+whole archive. Measured on the 179 trees: **179/179 map to a TERMINAL item** (done/cancelled), **0 live** --
+which is what makes a bulk pass defensible at all. A live (queued/claimed/deferred/held) item is the one
+case that keeps a tree unconditionally, and an id that is not in the store at all means someone must look
+before anything is deleted.
+
+**And check whether the tree's HEAD survives in a REF, because deleting a worktree deregisters its HEAD.**
+For the 34 unmerged trees here, **13 hold commits contained by NO ref** (`item-1704`, `item-2103`,
+`item-2154`, `item-2179`, `item-2182`, `item-2186`, `item-2515`, `item-2578`, `rel-item-673`, `700`, `705`,
+`746`, `860`) -- removing those trees would eventually let `gc` collect real work. Preserve them first:
+`git update-ref refs/heads/archived/<name> <sha>` (or `git bundle create`), THEN export the diff and remove.
+
+So the full decision is a three-question ladder, in this order:
+1. **Item live?** -> keep the tree (and say why in the item).
+2. **Item terminal?** -> export the uncommitted residue (`diff --binary` patch + copied untracked files).
+3. **HEAD not in any ref?** -> `git update-ref` an `archived/*` ref (or bundle) first. Then
+   `git worktree remove --force` and `git worktree prune`.
+
 **Never** hand-delete the whole directory: it is a registered-worktree set, and untracked files in it are
 invisible to a patch. **Do** sequence any bulk pass after heavy installs/builds — it is hundreds of `git`
 invocations and will fight a model pack build for the disk.
