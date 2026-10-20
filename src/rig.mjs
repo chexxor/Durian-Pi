@@ -742,7 +742,11 @@ const Router = defineExtension({
 				"Mark one of your claimed items done with a result. Sends a DONE notice back to the sender. " +
 				"Pass `evidence` ({command, exitCode, artifact?}) when you VERIFIED someone's work: it is what " +
 				"makes the completion re-checkable, and `check` reports a verifier item completed without it " +
-				"(ROADMAP 48 / W2). `resultSummary` stays the narrative; evidence is additive.",
+				"(ROADMAP 48 / W2). `resultSummary` stays the narrative; evidence is additive. " +
+				"When the item is a LANDING ENTRY, say WHICH of two things happened - `done` means \"this " +
+				"entry was PROCESSED\", not \"this artifact arrived\", and a reader holding a gate on it " +
+				"reads plain `done` as landed: write `LANDED at <sha>` or `ROUTED to <seat> as <id>, NOT YET " +
+				"LANDED` (#4073).",
 			parameters: Type.Object({
 				itemId: Type.Number(),
 				resultSummary: Type.String(),

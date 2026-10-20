@@ -231,6 +231,23 @@ Three rules that pass proved:
 Then prove the whole merged result ONCE on `main` (`node scripts/suite.mjs`) and prune per
 `branch-cleanup.md` / `leaked-worktrees.md`.
 
+## Closing the entry: LANDED vs ROUTED (say which)
+
+A landing entry's `complete_work` marks the ENTRY processed — it does NOT mean the artifact arrived.
+`done` is one word for two different facts, so the `resultSummary` must say which one happened:
+
+- **`LANDED at <sha>`** — the sha is on `main`. Verify before you write it:
+  `git merge-base --is-ancestor <sha> main` (exit 0).
+- **`ROUTED to <seat> as <id>, NOT YET LANDED`** — you preflighted and handed the landing to another
+  seat (the delegate lands; the author does not self-land), so the artifact is still absent from `main`.
+
+**WHY IT MATTERS.** A seat holding a gate on this entry reads `done` as "the fix is on `main`" and may
+build against it. `#4022` is the live instance: worked correctly and ROUTED to `impl` as `#4068`, yet
+`done` read as landed while `5e4dd4d` was not an ancestor of `main` and the lock still resolved `1.1.0`.
+The status field can only say one thing; the result text is where the distinction has to live. When you
+are the LANDER (not the router), the same rule applies from the other side: complete the entry only
+after the merge, with `LANDED at <sha>` naming the new `main` tip.
+
 ## If it fails
 - **A BATCH ABORTS ATOMICALLY ON AN INTRA-BATCH CONFLICT — `main` is NOT advanced.** (2026-10-19, measured.)
   `land.mjs b1 b2 b3` merges into ONE scratch tree, so a later branch can conflict with the **newer**
