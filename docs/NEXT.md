@@ -1,5 +1,27 @@
 # durian-pi — NEXT (current pointer)
 
+## NEXT SESSION  (2026-10-20, supersedes EVERY "NEXT SESSION" below — those are history)
+
+**Current item:** the operator's TUI slice is BUILT but UNLANDED. All three branches are CLEAN against
+`main` and none is merged: **`impl-item-3308`** (readapi per-seat queue size + claimed item, ahead 1),
+**`impl-item-3309`** (ROADMAP 101 newline-preserving wrap, ahead 1) and **`impl-item-3313`** (the landing
+screen render, ahead 2 — it is stacked on the other two, so it must land LAST). Their qa verifies
+`#3314`/`#3315` were CANCELLED, so a landing needs a fresh non-author verify, not the old ones.
+**Queue id:** `#3313` (render; land last) · `#3309` · `#3308` · `#3315`/`#3314` (verifies: cancelled —
+re-register before accepting) · `#2412` (`pitui`, the standing red demo).
+**Blocker:** (a) `pitui` (#2412) is a real assertion failure, so `land.mjs --suite` is unusable — land
+WITHOUT `--suite` and run `node scripts/suite.mjs` on `main` (baseline at `917f126`: **`pass=181 fail=1`**,
+182 demos); (b) the local PolyStrata model is **DOWN** by operator direction and both local seats are on
+DeepInfra (`qa` → `Qwen/Qwen3.6-35B-A3B`, `devtools` → `deepseek-ai/DeepSeek-V4.1-Flash`); a less-compressed
+local variant (IQ3_S, ~135 GB disk) is an OPERATOR action, not a seat's — see `docs/SELFDEV.md`
+"Less-compressed Qwen3.8 variants".
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` · then re-preflight the stack in
+order before landing anything:
+`for b in impl-item-3308 impl-item-3309 impl-item-3313; do git merge-tree --write-tree main $b >/dev/null 2>&1 && echo "$b CLEAN" || echo "$b CONFLICT"; done`
+**Do not:** land `impl-item-3313` before 3308/3309 (it is stacked); use `land.mjs --suite` while `pitui`
+is red; re-register ROADMAP 99 (fixed at `02f0004`); restart the local model expecting it to work — it is
+stopped and its seats were re-pointed; push (operator holds the grant).
+
 ## CLOCK-OUT / SESSION LOG (2026-10-20 ~05:15Z, delegate) — **HUMAN QUEUE ANSWERED: 10 ROWS → 2 REAL, 8 STALE; #3233 REF DELETED, RULINGS DELIVERED TO `pm`**
 
 The operator asked what was waiting on a human. I enumerated the **10 non-terminal rows** carrying

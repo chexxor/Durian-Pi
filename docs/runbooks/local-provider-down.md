@@ -3,9 +3,9 @@ runbook: local-provider-down
 symptom: "a local seat (qa/devtools) fails to run: `No API key for provider: local` or `model_error: Connection error.`; nothing listens on 127.0.0.1:8080"
 writes: false
 precondition: "none"
-last_verified: 2026-10-20
+last_verified: 2026-10-18
 verified_by: delegate
-evidence: "2026-10-20 reverse move (local DOWN) verified: up --refresh --dry-run named only qa+devtools, the real run recorded resetEntryId 153838/153841, `check rig.selfdev.json` ok:true, PolyStrata server+engine killed and :8080 refused (curl exit 7), `grep -c 'local/' rig.selfdev.json` = 0, and both replacement DeepInfra ids answered a real completion (HTTP 200). Earlier: 2026-10-18T19:10Z PolyStrata restart + live chat completion."
+evidence: "2026-10-18T19:10Z PolyStrata restart (pid 9220 -> listener 15268, strata-poly 5944); HTTP 200 on /v1/models + a live chat completion; qa's 3 `Connection error.` runs were the server being down"
 check_rule: null
 ---
 
@@ -102,59 +102,3 @@ Also: IQ2_XS holds ~22 GB of experts in RAM (PolyStrata wants ~48 GB of RAM+VRAM
 runs in low-RAM mode). If the machine is under memory pressure, a seat's local run can fail slowly rather
 than cleanly; the install tip (`"env": {"STRATA_RESIDENT_HEADROOM_GIB": "6"}` in `strata-swift-iq2_xs.json`,
 default 4) trades a little decode speed for ~2 GiB back to the system.
-
-## The REVERSE move — taking the local model DOWN (verified 2026-10-20)
-
-Operator-directed, so treat it as a planned operation rather than a recovery: seats that name `local/<id>`
-are moved back to their previous hosted models and the PolyStrata stack is stopped. This is a **model
-change**, so `broker-safe-change.md` governs the store half — do not shortcut it.
-
-**0. Catalog entry FIRST (the rule that prevented the 2026-10-19 outage).** `buildModels` reads only
-`fallbackModels()` in `src/providers/deepinfra-models.ts`; a seat naming an id that is missing from it dies
-`no_model` before any request. If the model you are returning to is already there, say so and prove it:
-`node demo/deepinfra-catalog.test.mjs` prints `… N rig seats resolve`.
-
-**1. Pick models by HISTORY, not by taste.** `git log -p -- rig.selfdev.json` shows what each seat held
-before the local move. Restore each seat's own previous model. Then re-check the author/verifier rule: the
-two seats that shared the local model (usually `qa` + `devtools`) become cross-family again as soon as they
-are back on different hosted families — but only if you actually picked different families.
-
-**2. Read the change before writing it** (read-only, no stop needed):
-```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run   # names the resets
-```
-
-**3. Quiesce, then write** (`broker-safe-change.md` steps 1–2), then:
-```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh   # records resetEntryId per seat
-DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json           # expect ok:true, exit 0
-```
-
-**4. STOP the PolyStrata stack — server AND engine.** The supervisor (`python … serve/server.py`) and the
-engine (`strata.exe --serve --pack …`) are separate processes; killing only the server leaves the engine
-holding VRAM and RAM:
-```bash
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='strata.exe'\" | Select-Object ProcessId,Name"
-netstat -ano | grep ':8080' | grep -i listen        # the listener pid is the server to stop
-```
-
-**Verify (all three, not one):**
-```bash
-netstat -ano | grep ':8080' | grep -i listen                 # expect NOTHING
-curl -s -m 3 http://127.0.0.1:8080/v1/models; echo "exit=$?" # expect exit=7 (connection refused)
-grep -c "local/" rig.selfdev.json                            # expect 0
-```
-Then prove the new model ids for real — a `/v1/models` listing is not inference. A one-line completion per
-id against DeepInfra (HTTP 200 + a `choices[0]` with `finish_reason`) is the check that would have caught
-the 2026-10-19 `no_model` class.
-
-**Watch the model's output shape, not just its status.** Measured 2026-10-20 on `Qwen/Qwen3.6-35B-A3B`
-(the restored `qa` model): with `max_tokens: 16` the completion comes back with an EMPTY `content` because
-its reasoning consumes the whole budget, and at 512 the reasoning text leaks into `content`. A smoke test
-that sends 16 tokens will read that as "broken"; it is not. **Give a reasoning model enough budget to
-finish before concluding anything about resolution.**
-
-**Leave the config, not just the rig.** `durig.config.json` still holds `DURIG_LOCAL_*`; keeping it makes
-the reverse move a two-line change later. Restarting is `local-provider-down.md`'s Do section plus
-`run-swift-iq2_xs.bat` — note the ENGINE differs between the two local models (`strata.exe` for Swift 1.5,
-`strata-poly.exe` for the older Qwen pack), so an old log line naming the other engine is expected.

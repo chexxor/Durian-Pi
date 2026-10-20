@@ -578,8 +578,7 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
   if (op === "configure") {
     // Bounded single-field write: `up` records the resolved provider on the seat's
     // conversation (D105/D106). The broker applies it with its own harness — no
-    // external writer, no cli.mjs change. The request carries { model: { provider, modelId? },
-    // by: <operator identity> }. `by` defaults to "operator" when absent.
+    // external writer, no cli.mjs change. The request carries { model: { provider, modelId? } }.
     const seatName = request.to ?? request.seat;
     const seat = seats[seatName];
     if (!seat) throw new Error(`unknown seat: ${seatName}`);
@@ -588,12 +587,11 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
     if (!model || typeof model.provider !== "string") {
       throw new Error(`configure: missing model.provider for seat ${seatName}`);
     }
-    const by = request.from ?? "operator";
     await harness.commit(
       (tx) => configure(tx, convId, { model }),
       context,
     );
-    return { op, seat: seatName, provider: model.provider, modelId: model.modelId ?? null, by };
+    return { op, seat: seatName, provider: model.provider, modelId: model.modelId ?? null };
   }
   if (op === "message") {
     const seat = seats[request.to];

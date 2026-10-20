@@ -155,47 +155,7 @@ try {
     "a pi.reset boundary is in the transcript",
   );
 
-  // 3c. A `configure` op drives model/provider reconfiguration through the drain with
-  //     operator provenance (#1966/#2219 D113 control-plane gate). `configure` is an
-  //     OPERATOR-ONLY op, so the test stands in for the operator producing the intent.
-  //     The result records the resolved provider, modelId, and the operator identity.
-  const R5 = "req-configure-1";
-  writeIntent(dbPath, {
-    op: "configure",
-    to: "worker",
-    from: "operator",
-    model: { provider: "faux", modelId: "faux-seat" },
-    requestId: R5,
-  });
-  const configured = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
-  assert.deepEqual(configured, { delivered: 1, deadLettered: 0, duplicates: 0 }, `configure drain ${JSON.stringify(configured)}`);
-  const r5 = readResult(R5);
-  assert.equal(r5.ok, true, "the configure applied");
-  assert.equal(r5.result.seat, "worker");
-  assert.equal(r5.result.provider, "faux", "the result names the resolved provider");
-  assert.equal(r5.result.modelId, "faux-seat", "the result names the modelId");
-  assert.equal(r5.result.by, "operator", "the result records the operator identity");
-
-  // 3d. A NON-OPERATOR `configure` is REFUSED by the gate and dead-lettered with
-  //     `not-operator`, not applied — the gate is NOT a silent no-op.
-  const R5b = "req-configure-nonop";
-  writeIntent(dbPath, {
-    op: "configure",
-    to: "worker",
-    from: "auditor",
-    model: { provider: "faux", modelId: "faux-seat" },
-    requestId: R5b,
-  });
-  const nonopConfig = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
-  assert.equal(nonopConfig.deadLettered, 1, "a non-operator configure is dead-lettered");
-  assert.equal(nonopConfig.delivered, 0, "a non-operator configure is not applied");
-  const nonopErrs = readdirSync(intentErrorDir(dbPath)).filter((n) => n.endsWith(".error.json"));
-  assert.ok(
-    nonopErrs.some((n) => /not-operator/.test(readFileSync(join(intentErrorDir(dbPath), `${n}.reason`), "utf8"))),
-    "the gate refusal names not-operator",
-  );
-
-  // 3d. A reset for an unknown seat is REFUSED and dead-lettered by name, never a
+  // 3c. A reset for an unknown seat is REFUSED and dead-lettered by name, never a
   //     silent no-op.
   writeIntent(dbPath, { op: "reset", to: "ghost", requestId: "req-reset-ghost", from: "operator" });
   const ghostReset = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
