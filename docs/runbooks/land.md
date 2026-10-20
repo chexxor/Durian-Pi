@@ -368,3 +368,28 @@ and proved with the full suite on `main` — the only way this pass could see th
 **Suite on `main` after the revert: `pass=179 fail=1`** (`pitui`, #2412). Prune: refs 97→93, worktrees
 203, `reapable: 0`, nothing forced (see `branch-cleanup.md`). The suite runner is now pooled — default 8
 demos at once, ~64s vs ~10min — so the post-landing proof is cheap enough to always run.
+
+2026-10-20 (pass #6, delegate, broker UP): **5 landed, 1 landed-then-reverted, `main` `351b03a`→`13e60bc`
+(+ revert `cc96c0c`).** Kept: `designer-item-3307` @`24b7fc9` (the landing-screen spec #3313/#3359 build
+against), `advocate-item-2985` @`7387716` (closes the proposal v2's dangling §12 reference),
+`impl-item-2616` @`e8ce2a0` (FEATURES rows), `impl-item-2578` @`2bb0427` (cli.mjs comment re-anchor + the
+new `demo/broker-one-connection.test.mjs`). Refs pruned 4 (126 remain).
+**REVERTED: `auditor-item-2154` @`fac647c` (merge `a65feee` → revert `cc96c0c`).** The branch renames
+`durig`→`durian-pi` and `DURIG_ALLOW_PUSH`→`DURIAN_PI_ALLOW_PUSH` in `constitution.txt` **without
+regenerating the `rig.starter.json` `constitutionInline` mirror** (#976). The drift guard fires in
+**three** demos — `starter`, `commit-model`, `seat-commit-instructions` — so a single red demo is not the
+whole finding. **Rule (now general): a branch touching `constitution.txt` MUST carry the regenerated
+`rig.starter.json` in the SAME commit, and its landing entry's preflight must run `demo/starter.test.mjs`,
+because `merge-tree` is structurally blind to a derived-mirror invariant.** This is the same trap recorded
+for the #2841 scribe rebase set; the ref is kept at `fac647c` (content reverted, not live), rework is with
+`auditor` at #3428.
+**Suite after the revert: `pass=180 environmental=0 fail=1`** (`pitui`, #2412) — verified with
+`node scripts/suite.mjs` unpiped so the exit code is real (baseline `pass=179 fail=1`; the +1 is the new
+`broker-one-connection` demo). Pin checked BEFORE the verdict:
+`node_modules/@earendil-works/pi-durable -> vendor/pi-main/packages/durable` (intact).
+**Not landed, with reasons:** `architect-item-2730-rebased` (entry #3377 gated on the #3343 mint order),
+`devtools-item-2969` (dep-file change needing an `npm ci` lockfile preflight; its verify #3205 is held ON
+the landing — inverted gate), `impl-item-3056` (M1b HELD by ruling #3112), `devtools-item-2188` (#3256
+cleared-to-land was superseded by #3260's rebase pass — ownership ambiguous), and the CONFLICT set
+(`impl-item-3017`, `impl-item-3192`, `impl-item-2483`, `architect-item-2730`, `devtools-item-2073`,
+`scribe-item-2143`).
