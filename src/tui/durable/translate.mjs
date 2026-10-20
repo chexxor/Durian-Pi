@@ -60,7 +60,7 @@ export function sessionEntryFromDurable(entry, timestamp, tokensBefore = 0) {
 			id: String(entry.id),
 			parentId: null,
 			timestamp,
-			summary: text.slice(start, end),
+			summary: sanitizeRenderable(text.slice(start, end)),
 			firstKeptEntryId: entry.head === undefined ? null : String(entry.head),
 			tokensBefore,
 		};
@@ -72,8 +72,35 @@ export function sessionEntryFromDurable(entry, timestamp, tokensBefore = 0) {
 		id: String(entry.id),
 		parentId: null,
 		timestamp,
-		message,
+		// #4009: the boundary where a durable entry becomes renderable data.
+		message: sanitizeRenderable(message),
 	};
+}
+
+import { sanitizeTerminalText } from "../../sanitize.mjs";
+
+/**
+ * THE ONE PLACE TEXT IS SANITISED ON THE DURABLE PATH (#4009).
+ *
+ * The landing/poller renderer applies `src/sanitize.mjs` at 20+ call sites; the DURABLE renderer
+ * applied it at none, and attach (#4006) points the durable renderer at a SEAT's conversation. The
+ * architecture gives us no hook inside pi's `InteractiveMode` — it owns the components — but it does
+ * give us this boundary: every durable entry becomes renderable data HERE, in three functions, so
+ * the rule lives in one exported helper instead of being sprinkled at call sites.
+ *
+ * WHY IT IS STILL NEEDED DESPITE pi: pi's own `stripAnsi` (dist/utils/ansi.js:36) covers OSC and CSI
+ * only. It does NOT cover Unicode FORMAT characters — bidi overrides (U+202A-202E, U+2066-2069) or
+ * zero-width/invisible ones — which is exactly the class #3962 added to the shared sanitizer. So on
+ * this path ANSI is handled by pi and the format class is not; `sanitizeTerminalText` covers both,
+ * and the ZWJ carve-out (emoji clusters) comes with it because it is the same shared module.
+ */
+export function sanitizeRenderable(value) {
+	if (typeof value === "string") return sanitizeTerminalText(value);
+	if (Array.isArray(value)) return value.map(sanitizeRenderable);
+	if (value === null || typeof value !== "object") return value;
+	const out = {};
+	for (const [key, entry] of Object.entries(value)) out[key] = sanitizeRenderable(entry);
+	return out;
 }
 
 /** The message a session entry wraps, without depending on the entry shape. */
@@ -105,7 +132,7 @@ function setAtPath(root, path, delta) {
 export function applyMessageChanges(message, changes) {
 	const next = structuredClone(message);
 	for (const change of changes) {
-		if (change.type === "message") return structuredClone(change.message);
+		if (change.type === "message") return sanitizeRenderable(structuredClone(change.message));
 		if (change.type === "block") {
 			next.content[change.contentIndex] = structuredClone(change.block);
 			continue;
@@ -127,7 +154,9 @@ export function applyMessageChanges(message, changes) {
 			block.arguments = setAtPath(block.arguments ?? {}, change.path, change.delta);
 		}
 	}
-	return next;
+	// #4009: the boundary where in-flight deltas become renderable data. Sanitising the ACCUMULATED
+	// message (rather than each delta) means a sequence split across two deltas is still caught.
+	return sanitizeRenderable(next);
 }
 
 /** The pi-ai assistant message event a coding-agent consumer expects alongside `message_update`. */
