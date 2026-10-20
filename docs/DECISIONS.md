@@ -3057,33 +3057,6 @@ grep/`node --check`/demo baseline and the version probe (see the review's Eviden
 implementation is claimed here.
 
 
-## D114 — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19)
-
-**Context.** The CARRY/teardown collision (incident
-`docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`): `createWorktree`'s CARRY (#506 /
-ASK F) copied the source tree's visible dirty state into EVERY fork, while teardown is clean-only
-(D60). So while the shared tree was dirty, a completed item's worktree was BORN dirty with foreign
-paths and could never be removed — every completion leaked a tree and pinned its branch.
-
-**Decision.** The seat path (`claimWorktree` → `prepareSeatWorkspace`) passes `carry: false`, so a
-seat's item worktree is a **clean HEAD checkout** and its teardown works even while the shared tree is
-dirty. CARRY remains an **explicit opt-in** (`carry: true`) for a direct caller that wants the
-anti-stale guarantee (#240). The clean-only refusal (D60) is UNCHANGED — no carried path is ever
-tolerated or force-removed. This **SUPERSEDES #506's seat-path carry** (the fork is no longer "a tree
-neither git nor the operator tracks": it is HEAD plus an enumerated, returned carry list).
-
-**Alternatives considered.** (1) Teardown tolerates carried-foreign paths — **rejected**: introduces a
-data-loss surface (a fingerprint bug could discard a seat's real uncommitted work) against D60's
-absolute rule. (3) An attention kind that surfaces the leak — **rejected**: it names the problem but
-does not fix it.
-
-**Status.** Accepted by `lead` (#2648, option 2 of #2360); implemented by `impl` (impl-item-2360
-@`4813a50`): `src/worktree.mjs` `createWorktree` gains `carry` (default true) and the seat path passes
-`carry: false`. Proof: `demo/worktree-carry-teardown.test.mjs` (new — seat fork born clean and
-`removeClaimedWorktree` succeeds; opt-in carry still carries), `demo/worktree-recursive-carry.test.mjs`
-and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path. Recorded by `scribe`
-(#2658).
-
 ## D113 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
 
 **Context.** The operator backlog asks that "waiting on the operator" be **visible and answerable**
@@ -3125,4 +3098,72 @@ view; the CLI grows `answer`/`queue --waiting` and `status` grows a headline. Op
 **Status.** Proposed (exploration, item #2700). Not sequenced; `pm` sequences design then decomposition.
 D-number uses the next free slot; scribe's pending D113 lands first and lead #2452 re-derives numbers at
 land time. Evidence: the code citations above; no implementation is claimed.
+
+## D114 — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19)
+
+**Context.** The CARRY/teardown collision (incident
+`docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`): `createWorktree`'s CARRY (#506 /
+ASK F) copied the source tree's visible dirty state into EVERY fork, while teardown is clean-only
+(D60). So while the shared tree was dirty, a completed item's worktree was BORN dirty with foreign
+paths and could never be removed — every completion leaked a tree and pinned its branch.
+
+**Decision.** The seat path (`claimWorktree` → `prepareSeatWorkspace`) passes `carry: false`, so a
+seat's item worktree is a **clean HEAD checkout** and its teardown works even while the shared tree is
+dirty. CARRY remains an **explicit opt-in** (`carry: true`) for a direct caller that wants the
+anti-stale guarantee (#240). The clean-only refusal (D60) is UNCHANGED — no carried path is ever
+tolerated or force-removed. This **SUPERSEDES #506's seat-path carry** (the fork is no longer "a tree
+neither git nor the operator tracks": it is HEAD plus an enumerated, returned carry list).
+
+**Alternatives considered.** (1) Teardown tolerates carried-foreign paths — **rejected**: introduces a
+data-loss surface (a fingerprint bug could discard a seat's real uncommitted work) against D60's
+absolute rule. (3) An attention kind that surfaces the leak — **rejected**: it names the problem but
+does not fix it.
+
+**Status.** Accepted by `lead` (#2648, option 2 of #2360); implemented by `impl` (impl-item-2360
+@`4813a50`): `src/worktree.mjs` `createWorktree` gains `carry` (default true) and the seat path passes
+`carry: false`. Proof: `demo/worktree-carry-teardown.test.mjs` (new — seat fork born clean and
+`removeClaimedWorktree` succeeds; opt-in carry still carries), `demo/worktree-recursive-carry.test.mjs`
+and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path. Recorded by `scribe`
+(#2658).
+## D121 — Local provider switched to Swift 1.5 on a DIFFERENT engine (operator-DIRECTED, 2026-10-20; recorded by scribe, item #3268)
+
+**Context.** The local provider previously served Qwen3.6-35B-A3B (UD-Q3_K_M) via PolyStrata on
+`engine-poly\strata-poly.exe`. The operator DIRECTED a switch to Swift 1.5 — model AND engine — this
+session (2026-10-20), and the revert (#3248) is cancelled. The change is committed as `cafee74`
+(`chore(rig): local provider moves to Swift 1.5`) and documented in `docs/SELFDEV.md`. Source:
+`docs/NEXT.md` "LOCAL MODEL SWITCHED TO SWIFT 1.5" (the authority over any summary).
+
+**Decision.** The local provider now serves **Swift 1.5** (`swift-1.5-iq2_xs`, context 65536) instead of
+Qwen3.6-35B-A3B, on a **DIFFERENT ENGINE**: `engine\strata.exe` (the Qwen engine), NOT
+`engine-poly\strata-poly.exe`. The engine change is as load-bearing as the model change — the entry is
+deliberately not model-only. In detail:
+- **Rationale:** shorter thinking before answering, at roughly equal quality.
+- **Models together:** both local models live under `C:\Users\Alex\dsh-Projects\PolyStrata-data` — the
+  operator required keeping local models together, so the new install was moved off `D:` with
+  `robocopy /MOVE` and nothing was re-downloaded.
+- **Fallback kept:** `qwen36` (`run-qwen36-ud-q3_k_m.bat`) remains installed as the fallback.
+- **Config:** `durig.config.json`: `DURIG_LOCAL_MODEL=swift-1.5-iq2_xs` (was `qwen36`),
+  `DURIG_LOCAL_CONTEXT=65536`; `rig.selfdev.json`: `qa` and `devtools` moved `local/qwen36` →
+  `local/swift-1.5-iq2_xs`. A seat's model is read from the rig at wake, so the next run picks Swift up
+  without `up --refresh`.
+- **Measured cost / fragility (the part future readers will need):** IQ2_XS holds ~22 GB of experts in
+  RAM on this 32 GB box (load 95-96%); PolyStrata wants ~48 GB RAM+VRAM so it runs in low-RAM mode,
+  leaving ~1 GB free and making heavy tooling fragile — forks can fail (`cygheap read copy failed`,
+  `Resource temporarily unavailable`) and tool calls can look broken. Free the model before any broker
+  restart or heavy pass.
+- **Verified:** `localProviderSpec` returns `modelId: swift-1.5-iq2_xs`, `contextWindow: 65536`; a real
+  completion returned `SWIFT-OK` at ~102 tok/s; `cli.mjs check rig.selfdev.json` is `ok:true`.
+
+**Why.** The operator directed the model + engine switch for faster, equal-quality local inference, and
+required keeping both local models on one C: tree with nothing re-downloaded. The engine change matters:
+`8080` now serves the Qwen engine, so an old `strata-poly` log line is expected, not a regression.
+
+**Alternatives rejected.** (a) Keep Qwen3.6-35B-A3B on `strata-poly` — rejected by the operator's
+direction; (b) switch the model only, keeping `engine-poly\strata-poly.exe` — rejected: the engine is
+part of what changed and must be recorded with it (R2 reframing: runtime-in-effect, engine included).
+
+**Status.** OPERATOR-DIRECTED (2026-10-20); recorded by `scribe` (item #3268) in the same serialized
+pass as the ledger-order fix. Config commit `cafee74`; documented in `docs/SELFDEV.md`. Note: the live
+store was never refreshed at the time of `cafee74` (qa still ran `local/qwen36` until a refresh —
+`#3281`); the decision records the DIRECTED switch and its engine, not a per-seat in-effect claim.
 
