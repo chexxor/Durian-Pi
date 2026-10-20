@@ -357,7 +357,7 @@ for (const branch of branches) {
 /* ───────── optional: prove the result in the scratch before advancing main ───────── */
 
 const suiteResults = [];
-(async () => {
+await (async () => {
 	if (wantSuite) {
 	const demoDir = join(scratch, "demo");
 	const tests = existsSync(demoDir)
