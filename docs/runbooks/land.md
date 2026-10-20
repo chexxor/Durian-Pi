@@ -101,6 +101,48 @@ ask "stop or not?" or "why did --suite fail?".
    (owning item **#2412**; full account: `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §6.2).
    *(`--suite` was skipped for the 2026-10-19 passes while the rule was broken; the helper itself never
    required it, and the post-landing `node scripts/suite.mjs` run is what proved those landings.)*
+
+#### ⚠ WHEN `main` IS ALREADY RED: land WITHOUT `--suite`, then prove on `main` — AND DELETE THIS SECTION WHEN IT CLEARS
+
+**The workaround, while `main` carries known-red demos:** land with `node scripts/land.mjs <b1> … --db
+./selfdev.sqlite` and **no `--suite`**, then prove the result on `main` in a clean DETACHED worktree.
+
+**Why:** `--suite` exists to prove the MERGED result *before* `main` moves. When `main` is already
+failing, that proof cannot distinguish the landing's own breakage from the pre-existing redness — it
+stops on the first red demo and tells you nothing about your branch. A first-failure loop over an
+already-red tree is not a weaker check, it is a misleading one.
+
+**THE EXPIRY IS A CONDITION, NOT A DATE — delete this whole section when:**
+```bash
+git worktree add --detach "$PWD/.main-check" main
+( cd .main-check && node scripts/suite.mjs --jobs 8 ); echo "exit=$?"
+git worktree remove --force "$PWD/.main-check"; git worktree prune
+#   The verdict depends on TWO things, so name BOTH (see "NAME THE TREE" below):
+#     the TREE — main's content. The shared tree carries seats' in-flight work and is not main.
+#     the DEPENDENCY SET — a worktree-local `npm ci` resolves the LOCKFILE, and the five
+#       `tui-durable-*` demos then fail as an INSTALL ARTEFACT that is not part of main's red set (#3766).
+#   delete this section when main's red set is EMPTY in the SEAT-ROOT dependency environment:
+#     exit=0 (pass=all, fail=0), OR every remaining red is an artefact you have ATTRIBUTED above,
+#     OR it is `pitui` with the vendored-link failure DECLARED INTENDED by whoever owns that call.
+#     `pitui` is not exempt by name alone: an unrecorded exemption is how an expiry becomes permanent.
+```
+A date rots; this can be checked. **A workaround that outlives its cause becomes a habit**, and the next
+lander cannot tell whether the two-step is required or merely traditional — which is how a temporary
+measure becomes permanent.
+
+**DO NOT RECORD THE CURRENT FAILURE LIST AS IF IT WERE DURABLE.** On 2026-10-20 the delegate measured 7
+red at `main` @`557ceb3` (broker-one-connection, landing-data, pitui, seat-instruction-encoding,
+tui-conversation-header, tui-landing, tui-status-bar); a few hours later, in a fresh worktree, four of
+those PASSED because their `src` had landed and a different five (`tui-durable-*`) failed for an
+unrelated dependency reason. The list has a shelf life of hours. **Re-measure before you plan around
+it** — the workaround is durable, the list is not.
+
+**AND NAME THE TREE WHEN YOU ANSWER "is `main` green?"** A suite run in the SHARED tree measures
+something else entirely: the shared tree carries seats' in-flight work (100+ dirty paths is normal),
+so it is neither `main` nor a candidate. A clean detached worktree is the only tree that answers the
+question. State which tree a verdict came from, or the verdict is not usable by anyone else — the same
+rule as the generated-artifact check above.
+
 5. Prune each landed ref (`git branch -d` refuses anything unmerged, so this is lossless):   ```bash
    git merge-base --is-ancestor <branch> main && git branch -d <branch>
    ```
