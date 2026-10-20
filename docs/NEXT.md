@@ -164,8 +164,17 @@ exit codes are unchanged. `demo/suite-env.test.mjs` now asserts `--jobs 0/33/abc
 **`land.mjs --suite` still cannot be used while `pitui` is red** — land without it, then prove on `main`.
 
 **A SEAT COMMITTED MID-PASS — `cafee74`** `chore(rig): local provider moves to Swift 1.5
-(swift-1.5-iq2_xs)` — it committed the dirty `rig.selfdev.json` I was leaving alone. It also mojibakes the
-em-dashes in every seat's instructions (`â€”`). The LIVE store was not refreshed, so `qa` still runs
+(swift-1.5-iq2_xs)` — it committed the dirty `rig.selfdev.json` I was leaving alone. CORRECTION (#3319,
+impl byte-checked): the SEAT INSTRUCTIONS were never damaged — at `cafee74` and at HEAD `rig.selfdev.json`
+carries 21 real U+2014 and ZERO mojibake sequences, as do `rig.starter.json`, `constitution.txt`,
+`AGENTS.md` and both `.agents` skills; `git show cafee74 -- rig.selfdev.json` touches only model strings.
+What looked like mojibake was a READ artefact (PowerShell 5.1 `Get-Content` decoding with the ANSI code
+page), not damage in the files. The `â€”` above is kept as an illustration of the failure mode; the real
+damage was a read-then-write round trip (`Get-Content | Set-Content -Encoding UTF8`) on
+`docs/runbooks/README.md` and `docs/reviews/docs-gap-audit-2026-10-17.md` — guarded by
+`demo/seat-instruction-encoding.test.mjs` (`src/text-integrity.mjs`, `scripts/fix-mojibake.mjs`,
+`docs/runbooks/docs-encoding-mojibake.md`). This paragraph sits OUTSIDE that guarded surface deliberately.
+The LIVE store was not refreshed, so `qa` still runs
 `local/qwen36` until someone runs `up rig.selfdev.json --refresh`. If that model move was unintended, it
 needs an operator ruling, not a delegate revert.
 
