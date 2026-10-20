@@ -59,9 +59,37 @@ fix, **not** a wider force-delete grant) · `#3492` -> `devtools` "resume your s
 the escalations STALE" · `#3493` -> `impl` "resume `#2673` and replace its PROSE gate with a structured
 `blockedBy`" (done). The 7 stale rows went `deferred`/`held` -> **`claimed`** — real work, not re-escalation.
 
-**NEXT SESSION:** the 10-row human backlog is **empty of real asks** — 2 cancelled, 2 done, 5 claimed, `#3403`
-correctly parked. `#3403` now genuinely moves (`#3347` is done; verify -> land -> re-cut). Tracked tree was
-**dirty on `docs/SELFDEV.md` at clock-out** (a seat mid-edit, left untouched). Nothing pushed.
+**8. LANDING PASS #7 (operator ask) — 2 LANDED, 1 CAUGHT BY PREFLIGHT, 2 GATED.** `main` `77b16a5` ->
+`cc82331`. Landed `devtools-item-3239` @`be663f2` (gate #3240 done) and `impl-item-3241` @`9de833f` (gate
+#3276 done), both pruned losslessly. Suite **before `pass=180 fail=1` -> after `pass=181 fail=1`** (demos
+181 -> 182; the new `seat-instruction-encoding` demo PASSES) — **no new failure, `pitui` #2412 unchanged**.
+The first attempt failed `cannot fast-forward main` because a seat advanced main during the 242 s slot wait;
+re-preflighted and re-ran (the runbook's prescribed response).
+
+**The reusable catch: `merge-tree` is CLEAN and the tip MATCHED, and the branch is still unlandable.**
+`devtools-item-3341` @`92f8a7a` (entry #3476) ships a STALE DERIVED MANIFEST — I merged it in a scratch
+worktree at current main and its own new guard failed:
+`demo/test-areas.test.mjs` -> "manifest does not cover the suite: `demo/broker-one-connection.test.mjs` is
+on disk but not mapped", exit 1. That is the **#1558 landed-then-reverted class verbatim**; the manifest was
+generated at its fork point. Routed to `devtools` to regenerate. **Never land a branch that adds or changes
+a test over a growing set without running that test against current main.**
+
+**Also not landed, with reasons:** `scribe-item-3471` @`7b8c941` (entry #3560 calls it "1 file +25/-1";
+the branch's real delta is **3 files, +151**, including a NEW `docs/DISPOSITIONS.md` — it is a STACK carrying
+`3385`+`3303`'s content, so landing it silently satisfies two other entries; `lead`/`pm` must rule) and
+`scribe-item-3311` @`2d709eb` (entry #3446: diff inspected and exactly as described — `docs/ROADMAP.md`
++2/-2 — but it has **no verify gate at all**, so it is ungated by the runbook's first gate).
+
+**Scan (147 refs): 38 LANDED · 55 CLEAN · 54 CONFLICT.** Of the 55 CLEAN only 24 are named by a live
+landing entry, and only **3** have a DONE verify gate. **Landing is verify-gated, not cleanliness-gated.**
+Rulings + all four findings delivered to `pm` (request `operator-land-pass7-2026-10-20-1`, `delivered:true`
+`06:16:27Z`).
+
+**NEXT SESSION:** the 10-row human backlog is **empty of real asks** (2 cancelled, 2 done, 5 claimed,
+`#3403` correctly parked). `#3403` now genuinely moves (`#3347` is done; verify -> land -> re-cut). The
+landing queue's next real work is the three rulings in the pass-#7 intent: `devtools` regenerates
+`demo/test-areas.json` (#3341), `lead`/`pm` rule the `3303->3385->3471` stack, and #3311 gets a verify.
+Nothing pushed.
 
 ## CLOCK-OUT / SESSION LOG (2026-10-20 ~04:15Z, delegate) — LOCAL MODEL TAKEN DOWN, `qa`/`devtools` BACK ON DEEPINFRA
 
