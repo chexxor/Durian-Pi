@@ -142,6 +142,27 @@ em-dashes in every seat's instructions (`â€”`). The LIVE store was not refr
 `local/qwen36` until someone runs `up rig.selfdev.json --refresh`. If that model move was unintended, it
 needs an operator ruling, not a delegate revert.
 
+**PM HANDOFF (sent, and pm already registered the work):** intent `91d7fa4c` (the 1558/2412/cafee74
+defects) → pm minted **#3238** (rework 1558, claimed by devtools), **#3239** (rework 2412, queued),
+**#3240** (verify the rebased configure tip), **#3241** (fix the cafee74 mojibake, claimed by impl),
+**#3242** (ruling deferred to lead; **#3244/#3245** ruled: encoding fix only, provider line FROZEN;
+store-vs-config drift is LABELED, not gated), **#3246** (DECISIONS entry for that ruling, held), and
+**#3243/#3247** corrected devtools landing lists (1558 + 2182 withdrawn). Second intent `6fb0e63b` sent
+the rest of the unlanded inventory: **85 unlanded branches (23 CLEAN / 62 CONFLICT)** grouped into
+landable-now (1754/2188), needs-a-list (2616 etc.), verify-open (2969/3174), unclassified-clean (10),
+conflict families needing author rebase + fresh verify, 11 DRIFT pins, 17 snapshot/duplicate refs, and
+the two dirty verify scratches. Full per-branch table in `.spike/delegate/model-1017/preflight-final.tsv`.
+The biggest lever pm now owns: the stale **#2312/#2313** rebase-pass items that hide ~20 verified-against-
+an-older-main branches.
+
+**DOCS UPDATED this pass:** new incident
+`docs/incidents/2026-10-20-stale-derived-manifest-landing.md` (+ index row); `land.md` gained the
+"merge-tree is not currency — run the branch's own new guard against current main" rule, the
+`--suite`-is-first-failure caveat, an If-it-fails entry for a branch's own guard failing after landing,
+and the pass evidence; `branch-cleanup.md` gained the pass #5 evidence (including "a reverted merge is a
+KEEP reason"); `FEATURES.md` gained the concurrent-runner row. `scripts/suite.mjs` change is committed
+at `4d96ae9`.
+
 **Exact next command:** `node scripts/suite.mjs` (expect `pass=179 fail=1`, `pitui`) · then
 `git status --short -- .` (clean) · then pick the next landing list from the held set, re-preflight each
 branch with `git merge-tree --write-tree main <branch>` before landing.

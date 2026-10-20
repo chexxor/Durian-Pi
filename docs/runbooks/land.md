@@ -38,6 +38,12 @@ ask "stop or not?" or "why did --suite fail?".
    Restore it with `git stash pop` when the landing is done.
 2. Preflight each candidate read-only — this tells you landed vs conflict WITHOUT a suite run:
    `git merge-tree --write-tree main <branch>` (exit 0 = clean, nonzero = conflict).
+   **`merge-tree` proves textual cleanliness, NOT currency.** If the branch adds or changes a test over a
+   GROWING set (a manifest, a count, an enumerated list), run that branch's own new/changed demo against
+   the CURRENT `main` before landing — 2026-10-20: `devtools-item-1558` was merge-tree CLEAN but its new
+   `demo/test-areas.test.mjs` failed on `main` because 57 newer demos were not in its committed manifest
+   (incident `2026-10-20-stale-derived-manifest-landing.md`). A derived artifact must be regenerated at
+   land time, not trusted from the branch's fork point.
 3. Land the clean set in ONE call: `node scripts/land.mjs <b1> <b2> ... --db ./selfdev.sqlite`.
    Read the JSON report; `lock.reserved:true` / `lock.waitedMs` show it waited for the slots.
 4. **The `--suite` gate works again (FIXED 2026-10-19, `impl-item-2679` on `main`).** The defect was:
@@ -46,7 +52,11 @@ ask "stop or not?" or "why did --suite fail?".
    refused with `STOPPED: demo/check.test.mjs failed`. The rule now **skips a LINKED worktree**
    (`isLinkedWorktree`: per-worktree git dir vs the common git dir) while still firing on the **shared**
    tree off `main`, so a landing scratch no longer trips it. **Prefer `--suite`** — it proves the merged
-   result before it becomes `main`:
+   result before it becomes `main`. **But `--suite` is a FIRST-FAILURE loop:** it stops at the first
+   non-zero demo, so while `pitui` (#2412) is known-red it never reaches the tests that sort after it
+   (2026-10-20: it stopped at 89 demos and never ran `test-areas`, which was the real new failure). When
+   `--suite` cannot be used, land WITHOUT it and run the FULL `node scripts/suite.mjs` on `main` — that is
+   the complete check, not a spot check:
    ```bash
    node scripts/land.mjs <b1> <b2> ... --db ./selfdev.sqlite --suite
    ```
@@ -91,8 +101,7 @@ ask "stop or not?" or "why did --suite fail?".
    (owning item **#2412**; full account: `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §6.2).
    *(`--suite` was skipped for the 2026-10-19 passes while the rule was broken; the helper itself never
    required it, and the post-landing `node scripts/suite.mjs` run is what proved those landings.)*
-5. Prune each landed ref (`git branch -d` refuses anything unmerged, so this is lossless):
-   ```bash
+5. Prune each landed ref (`git branch -d` refuses anything unmerged, so this is lossless):   ```bash
    git merge-base --is-ancestor <branch> main && git branch -d <branch>
    ```
    Release its worktree first (`leaked-worktrees.md`) — a DIRTY worktree must be relocated, never
@@ -267,6 +276,11 @@ Then prove the whole merged result ONCE on `main` (`node scripts/suite.mjs`) and
   re-land.
 - **`cannot fast-forward main`:** something advanced `main` while the scratch merge ran (the helper
   re-checks the tree before the FF). Re-run; the scratch result was clean.
+- **A branch's own NEW guard fails on `main` after landing** (e.g. a committed manifest that enumerates a
+  growing set): `git revert -m 1 <merge>` (do NOT fix forward on `main` — the artifact is the author's),
+  KEEP the branch ref because its content is now reverted rather than live, and route the rework to the
+  author via `pm` to regenerate the artifact against current `main`. 2026-10-20: `devtools-item-1558` →
+  revert `0976cc4`, rework `#3238`, ref kept at `17cd7a2`.
 - A demo red on the merged result after the fact: `git revert -m 1 <merge>` and report the exact failure
   to the author; do not fix forward on `main`.
 
@@ -342,3 +356,15 @@ it as one sends the team chasing a phantom. Equally, a GREEN run right after an 
 looks — it may be measuring the registry set, not the pinned build. `devtools-item-2976` (now on `main`) makes
 `prepare_workspace` run `sync-pi --link` around `npm ci` in every WORKTREE, which is why a worktree is safe
 and the **shared tree** is the exposed one.
+
+2026-10-20 (pass #5, delegate, broker UP): **2 landed, 1 landed-then-reverted, 1 stopped by its own
+test, `main` `9882632`→`4d96ae9`.** `scribe-item-3167` @`b0e9d75` (D113/D114) → `35f8ae6`;
+`impl-item-3062` @`eb3b337` (M1a) → `a55535e`. `devtools-item-1558` @`17cd7a2` landed (`abb9c54`) and
+was **REVERTED** (`0976cc4`) — its own `test-areas` guard failed on the current demo set; rework `#3238`,
+ref kept. `devtools-item-2412` @`7933858` was **STOPPED by `command-spool`** in the scratch: `main` now
+carries the operator-only control-plane gate (#1966/#2219 D113) and this branch predates it; rework
+`#3239`. `--suite` was unusable (stopped at `pitui` after 89 demos), so the three were landed without it
+and proved with the full suite on `main` — the only way this pass could see the `test-areas` failure.
+**Suite on `main` after the revert: `pass=179 fail=1`** (`pitui`, #2412). Prune: refs 97→93, worktrees
+203, `reapable: 0`, nothing forced (see `branch-cleanup.md`). The suite runner is now pooled — default 8
+demos at once, ~64s vs ~10min — so the post-landing proof is cheap enough to always run.

@@ -178,3 +178,19 @@ that was the CORRECT answer, not a failed pass:
   ID differs from the landed `architect-item-3005-rebased`) yet `git diff main:<path> 3005:<path>` is **empty**
   — same content, different patch shape. Compare the TREES before concluding "unlanded"; do not delete on a
   `-D` hunch and do not re-land a duplicate.
+
+2026-10-20 (prune pass #5, delegate, broker UP, after 2 landings + 1 revert): refs **97 → 93**, worktrees
+**203 → 203**, `main` unmoved by the prune, nothing forced.
+- **4 merged refs `-d`'d**: `qa-item-3104`, `qa-item-3198` (both tips already on `main`), then
+  `impl-item-3062` and `scribe-item-3167` after their landings.
+- **`devtools-item-1558` KEPT on purpose at `17cd7a2`** even though it is now an ancestor of `main`: it
+  was landed and then reverted (`0976cc4`), so its content is NOT live and the ref is the author's input
+  to rework `#3238`. `git branch -d` would have succeeded because the merge commit is in history; deleting
+  it would hide the pending work. Treat "reverted merge" as a KEEP reason, not as merged.
+- **Merged-but-held refs stayed**: `advocate-item-2630` (held), `devtools-item-2559` (deferred),
+  `impl-item-1274` (held), `impl-item-2788` (held), `qa-item-2993` (claimed), `qa-item-3216` (verify in
+  progress) — every one is held by a LOCKED/live tree, so step 5(b) applies: keep.
+- **`worktree scratch clean` REFUSED 2 dirty scratches** (`%TEMP%/wt-2199`, `./wt-2073`, 1 and 4 paths).
+  That is the clean-only guard working; the owner must finish or clean them, never `--force`. `reapable: 0`
+  was the correct answer: 162 non-item trees are the archived `../pi-opendurig.worktrees/` set, 6 live item
+  trees are locked, 33 dirty item trees are already archived, 4 seat-root trees are in use.
