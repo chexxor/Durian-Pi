@@ -16,12 +16,13 @@
 // Contract: `cli.mjs` stays NON-INTERACTIVE (D21). This module is a separate
 // entrypoint. log/watch/JSON surface is unchanged.
 
-import { pad, truncate } from "../watchview.mjs";
+import { pad, truncate, seatActivity } from "../watchview.mjs";
 import { formatDelta, formatArgs, themeToolRoles } from "../chatview.mjs";
 import { extractEntryText } from "../rigstory.mjs";
 import { ANSI } from "../ansi.mjs";
 import { sanitizeTerminalText } from "../sanitize.mjs";
 import { textWidth, sliceToWidth, firstCluster } from "../textwidth.mjs";
+import { projectLanding } from "../readapi.mjs";
 
 function formatToolName(call) {
 	return call?.name ?? "tool";
@@ -68,13 +69,76 @@ function stripColors(text) {
 	return text.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
-/* ───────── Core rendering ───────── */
+/* ───────── The landing row (ROADMAP 124, designer spec #3307) ───────── */
+
+// The DECLARED LANDING MINIMUM (spec §4), expressed in CONTENT cells: the spec's 44-column
+// terminal floor minus the 4-cell gutter this function is handed. Below it the classic
+// roster row is the honest fallback — "no broken columns ever".
+const LANDING_MIN_WIDTH = 40;
+// Fixed prefix of a landing row (spec §1): sel 2 + state 13 + name 9 + queue 9.
+const LANDING_FIXED_WIDTH = 33;
+
+/** The brief cap at `width` CONTENT cells: the spec's MEASURED ladder (§4), not a guess. */
+function briefCap(width) {
+	if (width >= 72) return 24; // spec 76-80 terminal
+	if (width >= 47) return 16; // spec 51-75 terminal
+	return 12; // spec 44-50 terminal — the declared minimum rung
+}
+
+/**
+ * The per-seat queue column (spec §1): `12q` normally, `0q · 1p` when the seat also
+ * holds parked work. `q` = queued + claimed, `p` = deferred + held — the broker's live
+ * status set, so a parked seat can never read as an idle row.
+ */
+function queueColumn(row) {
+	const q = row.queue.queued + row.queue.claimed;
+	const p = row.queue.deferred + row.queue.held;
+	return p > 0 ? `${q}q · ${p}p` : `${q}q`;
+}
+
+/**
+ * The ACTION token (spec §3), read from the SAME per-seat partial the streaming block
+ * renders — never a second derivation. `tool <name>` is the only token that carries a
+ * fact the state column cannot (WHAT it runs); the state column already says THAT it runs.
+ */
+function actionToken(partial) {
+	if (!partial) return "";
+	const calls = partial.toolCalls ?? [];
+	if (calls.length > 0) {
+		// The newest call that is not done: running first, else pending, else the newest.
+		const live =
+			calls.find((c) => c.status === "running") ??
+			calls.find((c) => c.status !== "done") ??
+			calls[calls.length - 1];
+		return truncate(`tool ${formatTuiToolName({ name: live?.name ?? "tool" })}`, 16);
+	}
+	if (partial.text) return "composing";
+	if (partial.thinking || partial.thinkingRedacted) return "thinking";
+	return "";
+}
+
+/**
+ * The BRIEF column (spec §2): `<#id> ` plus ONE truncated field, by cells with an
+ * ellipsis. The `#id` is NEVER truncated — it is the reference the conversation, the
+ * answer op and the queue dumps share. A parked seat's field is the QUESTION (the
+ * operator triage fact this screen exists for); a seat holding nothing renders `—`.
+ */
+function briefColumn(row, cap) {
+	const item = row.claimed ?? row.deferred;
+	if (!item) return "—";
+	const id = `#${item.id} `;
+	const source = sanitizeTerminalText(String((row.claimed ? item.subject : item.question ?? item.subject) ?? ""));
+	const room = cap - textWidth(id);
+	if (room <= 0) return id.trimEnd();
+	if (textWidth(source) <= room) return `${id}${source}`;
+	return `${id}${sliceToWidth(source, Math.max(0, room - 1))}…`;
+}
 
 /**
  * Render the seat list section.
  * Returns { lines, width } where width is the used character width.
  */
-function renderSeatList(seats, activityMap, width, selectedSeat = null, color = false) {
+function renderSeatList(seats, activityMap, width, selectedSeat = null, color = false, landing = null, partialsBySeat = {}, maxRows = 0) {
 	if (!seats?.length) {
 		return { lines: [paint("gray", "  (no seats yet)", color)], width: Math.max(18, 0) };
 	}
@@ -83,23 +147,69 @@ function renderSeatList(seats, activityMap, width, selectedSeat = null, color = 
 	const maxRole = Math.min(20, Math.max(...seats.map((s) => (s.role ?? "").length), 4) + 1);
 	const activityCol = 6 + maxName + maxRole;
 
+	// ONE row template, TWO widths (spec §0): the landing row above the declared minimum,
+	// the classic roster row below it. Same source, same glyphs, same selection rules.
+	const landingRow = width >= LANDING_MIN_WIDTH && landing !== null;
+	// The brief is the flexible cell: never wider than its rung AND never wider than what is
+	// actually left. The spec's own arithmetic at the 44-col rung (33 fixed + 12 = 45) does
+	// not close inside 44, so the clamp wins — a row that overflows is the one outcome the
+	// floor discipline forbids (reported on #3313).
+	const cap = landingRow ? Math.min(briefCap(width), Math.max(1, width - LANDING_FIXED_WIDTH)) : 0;
+
+	// DEGRADE (spec §6.1): more seats than rows. The roster is bounded by `maxRows` (the
+	// frame's own budget); seats beyond it scroll with BOTH-END indicator rows, and the
+	// window FOLLOWS THE SELECTION cursor so j/k past the edge enters the window.
+	const bounded = maxRows > 0 && seats.length > maxRows;
+	let visible = seats;
+	let above = 0;
+	let below = 0;
+	if (bounded) {
+		const body = Math.max(1, maxRows - 2);
+		const idx = Math.max(0, seats.findIndex((s) => s.name === selectedSeat));
+		const start = Math.max(0, Math.min(idx - Math.floor(body / 2), seats.length - body));
+		visible = seats.slice(start, start + body);
+		above = start;
+		below = seats.length - (start + visible.length);
+	}
+
 	const lines = [];
-	for (const seat of seats) {
+	if (above > 0) lines.push(paint("gray", `  ↑ ${above} more seat${above === 1 ? "" : "s"}`, color));
+	for (const seat of visible) {
 		const act = activityMap?.[seat.name] ?? { glyph: "○", tone: "gray", state: "idle", focus: "" };
-		const name = truncate(sanitizeTerminalText(seat.name), maxName - 1);
-		const role = truncate(sanitizeTerminalText(seat.role ?? ""), maxRole - 1);
-		const head = `${paint(act.tone, act.glyph, color)} ${pad(name, maxName)}${pad(role, maxRole)}`;
-		const focus = truncate(sanitizeTerminalText(act.focus), width - activityCol);
+		const isSelected = selectedSeat !== null && seat.name === selectedSeat;
 		// The selected row is marked with a cursor glyph in place of the leading
 		// space, so selection adds no width and every row keeps one 2-cell gutter.
-		const isSelected = selectedSeat !== null && seat.name === selectedSeat;
 		const cursor = isSelected ? "▸" : " ";
-		const row = `${cursor} ${head}${focus}`;
+		let row;
+		if (landingRow) {
+			const entry = landing.get(seat.name);
+			// Columns are padded to fixed widths so the action column aligns; the brief is
+			// the one flexible cell (spec §1: sel 2 + state 13 + name 9 + queue 9 = 33).
+			const sel = isSelected ? "▸ " : "  ";
+			const stateCol = `${paint(act.tone, act.glyph, color)} ${pad(act.state, 11)}`;
+			const nameCol = pad(truncate(sanitizeTerminalText(seat.name), 9), 9);
+			const queueCol = pad(entry ? queueColumn(entry) : "0q", 9);
+			const brief = pad(briefColumn(entry ?? { claimed: null, deferred: null }, cap), cap);
+			// The ACTION cell is the FIRST to collapse: gone below the 51-col rung (spec §4),
+			// and clamped to whatever the row has left so it can never overflow the frame
+			// (the spec's 16-cell cap does not close at the bottom of that band either).
+			const actionRoom = width - LANDING_FIXED_WIDTH - cap - 1;
+			const token = width >= 47 && actionRoom > 0 ? actionToken(partialsBySeat[seat.name]) : "";
+			const action = token === "" ? "" : truncate(token, Math.min(16, actionRoom));
+			row = `${sel}${stateCol}${nameCol}${queueCol}${brief}${action ? ` ${action}` : ""}`;
+		} else {
+			const name = truncate(sanitizeTerminalText(seat.name), maxName - 1);
+			const role = truncate(sanitizeTerminalText(seat.role ?? ""), maxRole - 1);
+			const head = `${paint(act.tone, act.glyph, color)} ${pad(name, maxName)}${pad(role, maxRole)}`;
+			const focus = truncate(sanitizeTerminalText(act.focus), width - activityCol);
+			row = `${cursor} ${head}${focus}`;
+		}
 		// Selection is reverse video + bold (the skill's canonical, most-readable
 		// current-row signal — see references/visual-patterns.md), reinforced by the
 		// ▸ glyph so it still reads in monochrome / NO_COLOR.
 		lines.push(isSelected ? paint("reverse", paint("bold", row, color), color) : row);
 	}
+	if (below > 0) lines.push(paint("gray", `  ↓ ${below} more seat${below === 1 ? "" : "s"}`, color));
 
 	return { lines, width: width };
 }
@@ -299,28 +409,112 @@ function renderPartial(partial, width, { roles = null, color = false, wrap = fal
 }
 
 /**
+ * The HUMAN phrase for an attention kind (#2826 item 2 / F2). The bar used to print the raw
+ * enum tag — `[admitted_not_started]` — which is the machine's word, not the operator's. An
+ * unmapped kind degrades to its tag with the separators opened out: readable, never raw, and
+ * never a silent blank.
+ */
+const ATTENTION_PHRASES = {
+	admitted_not_started: "submission not started",
+	deferred_awaiting_answer: "waiting on an answer",
+	idle_with_queued_work: "idle with queued work",
+	last_run_failed: "last run failed",
+	malformed_tool_call: "malformed tool call",
+	repeated_failure: "repeated failures",
+	pass_failed: "pass failed",
+	wake_failed: "wake failed",
+	wake_refused_paused: "wake refused (paused)",
+	generation_in_flight: "generating",
+	secret_detected: "secret-shaped value in the store",
+	worktree_orphan_kept: "orphan worktree kept",
+	"harness-reopen-failed": "harness reopen failed",
+	"harness-reopen-cap-exceeded": "harness reopen cap hit",
+	"context-boundary-failed": "context boundary failed",
+};
+
+function humanKind(kind) {
+	const key = String(kind ?? "");
+	const phrase = ATTENTION_PHRASES[key] ?? key.replace(/[-_]+/g, " ").toLowerCase();
+	return phrase || "notice";
+}
+
+/**
  * Render the status bar.
+ *
+ * #2826 item 2: the bar speaks in HUMAN phrases with seat attribution and the queue/parked
+ * split, and it counts only LIVE work. Before this it printed raw enum tags
+ * (`[admitted_not_started]`), attributed nothing, and counted every item ever enqueued —
+ * `done` and `cancelled` included — so the number grew as work finished.
  */
 function renderStatusBar(health, seats, queueItems, width, color = false) {
 	const seatCount = seats?.length ?? 0;
-	const queueCount = queueItems?.length ?? 0;
 	const uptime = health?.uptime != null ? `${Math.round(health.uptime / 60)}m` : "?";
 
-	const parts = [
-		paint("bold", `seats: ${seatCount}`, color),
-		paint("bold", `queue: ${queueCount}`, color),
-		paint("bold", `uptime: ${uptime}`, color),
-	];
+	// LIVE work only, split the way the landing rows split it: `queue` = queued + claimed (work
+	// waiting or in hand), `parked` = deferred + held (work stopped on a question or a gate).
+	const live = { queued: 0, claimed: 0, deferred: 0, held: 0 };
+	for (const item of queueItems ?? []) {
+		if (Object.hasOwn(live, item.status)) live[item.status] += 1;
+	}
+	const activeCount = live.queued + live.claimed;
+	const parkedCount = live.deferred + live.held;
+
+	const parts = [paint("bold", `seats: ${seatCount}`, color)];
+	// HIDE-WHEN-ZERO (the #2804 rule the bar keeps, spec #3307 §6.2): a bare `queue: 0` is
+	// chrome. When either half is non-zero the split is shown; when both are, they are ONE
+	// part so a narrow frame can only drop the pair, never half of it.
+	if (activeCount > 0 && parkedCount > 0) parts.push(paint("bold", `queue: ${activeCount} · parked ${parkedCount}`, color));
+	else if (activeCount > 0) parts.push(paint("bold", `queue: ${activeCount}`, color));
+	else if (parkedCount > 0) parts.push(paint("bold", `parked ${parkedCount}`, color));
+	parts.push(paint("bold", `uptime: ${uptime}`, color));
 
 	if (health?.attention?.length) {
 		for (const note of health.attention.slice(0, 3)) {
-			const text = truncate(`[${note.kind}]`, width - parts.join("  ").length - 2);
-			parts.push(text ? paint("yellow", text, color) : "");
+			// Seat attribution: a seat-scoped notice says WHOSE it is. Rig- and queue-scoped
+			// notices carry no seat and stay unattributed (the same explicit rule the roster
+			// uses, so a rig-wide notice never lands on a seat row).
+			const who = note.scope === "seat" && note.seat ? `${note.seat}: ` : "";
+			parts.push(paint("yellow", `${who}${humanKind(note.kind)}`, color));
 		}
 	}
 
 	const bar = `  ── ${parts.join("  │  ")} `;
-	return { lines: [bar], height: 1, width: bar.length };
+	// Bound the bar to the row (ROADMAP 124 floor acceptance: nothing overflows). Attention
+	// phrases are unbounded strings, so the assembled bar could exceed a narrow frame even
+	// though each part was truncated on its own. Degrade by dropping WHOLE parts from the
+	// right (the trailing uptime/notes go first, the seat count stays), and only slice
+	// mid-part if a single part cannot fit at all.
+	// `truncate` is not used here: it collapses the double-space separators the bar is built from.
+	let shown = parts;
+	const render = (list) => `  ── ${list.join("  │  ")} `;
+	// SIGNAL BEFORE CONVENIENCE: when the bar must lose something, it loses the LEAST
+	// actionable part first — the uptime clock — and only then the notices, right to left.
+	// Dropping strictly from the right (the old rule) killed the NOTICES first because they
+	// sit last, so the operator lost "something needs attention" to keep a clock nobody acts
+	// on. The seat count and the queue/parked split are never sacrificed here.
+	if (textWidth(render(shown)) > width) {
+		const dropOrder = [];
+		const uptimeIdx = shown.findIndex((part) => String(part).includes("uptime: "));
+		if (uptimeIdx >= 0) dropOrder.push(shown[uptimeIdx]);
+		for (let i = shown.length - 1; i >= 2; i -= 1) if (i !== uptimeIdx) dropOrder.push(shown[i]);
+		for (const victim of dropOrder) {
+			if (textWidth(render(shown)) <= width) break;
+			shown = shown.filter((part) => part !== victim);
+		}
+	}
+	// DEGRADATION MUST NOT LIE (#2826 item 4): when the split has to give way, collapse it to
+	// ONE honest combined total — `queue: 4` — rather than letting the row-cut leave a
+	// truncated split (`queue: 2 · par…`) that reads as a smaller number than it is.
+	const splitAt = shown.findIndex((part) => typeof part === "string" && part.includes("· parked "));
+	if (splitAt >= 0 && textWidth(render(shown)) > width) {
+		const collapsed = shown.slice();
+		collapsed[splitAt] = paint("bold", `queue: ${activeCount + parkedCount}`, color);
+		if (textWidth(render(collapsed)) <= width) shown = collapsed;
+	}
+	while (shown.length > 1 && textWidth(render(shown)) > width) shown = shown.slice(0, -1);
+	const fitted = render(shown);
+	const bounded = textWidth(fitted) > width && width > 1 ? `${sliceToWidth(fitted, width - 1)}…` : fitted;
+	return { lines: [bounded], height: 1, width: textWidth(bounded) };
 }
 
 /**
@@ -423,6 +617,16 @@ export function renderTui({
 	const lines = [];
 	const w = width;
 	const rule = "  " + "─".repeat(Math.max(0, w - 4));
+	// ONE snapshot for BOTH views (lead #3320 / spec #3307): the roster row and the
+	// conversation header read the same `projectLanding` projection over the same health
+	// data, so the two screens cannot disagree about what a seat is doing.
+	const snapshot = {
+		...health,
+		seats: health?.seats?.length ? health.seats : seats,
+		queueItems: health?.queueItems ?? queueItems,
+		attention: health?.attention ?? [],
+	};
+	const landing = new Map(projectLanding(snapshot).seats.map((row) => [row.name, row]));
 
 	// Conversation view (Enter on a seat): ONE seat's full stream, so the team-wide
 	// seat list and other seats' partials are deliberately absent — the operator
@@ -435,6 +639,20 @@ export function renderTui({
 		// narrow terminal (found by the 48-column golden buffer test). Keep the gutter
 		// outside the truncation so the indent matches the rules below.
 		lines.push(`  ${truncate(`durig · ${sanitizeTerminalText(seatName ?? "?")}${seat?.role ? ` · ${sanitizeTerminalText(seat.role)}` : ""} · conversation`, Math.max(0, width - 2))}`);
+		// #3359 / spec #3307 §0: the header names the seat's CURRENT WORK ITEM — id, subject
+		// and status — from the same landing projection the roster row reads. There is
+		// deliberately NO separate body block: the body IS the seat's own transcript below.
+		// A seat holding nothing says so, rather than showing a blank header line.
+		const entry = landing.get(seatName);
+		const item = entry?.claimed ?? entry?.deferred ?? null;
+		const statusWord = entry?.action ?? "idle";
+		const itemText = item
+			? entry.deferred
+				// A parked seat's status IS "parked on <who>", so the status word is not repeated.
+				? `#${item.id} ${sanitizeTerminalText(String(item.subject ?? ""))} · parked on ${entry.deferred.deferredTo ?? "an answer"}`
+				: `#${item.id} ${sanitizeTerminalText(String(item.subject ?? ""))} · ${statusWord}`
+			: `no current item · ${statusWord}`;
+		lines.push(`  ${truncate(itemText, Math.max(0, width - 2))}`);
 		lines.push(rule);
 
 		// The FOCUSED seat's partial, not whichever seat streams first: a conversation
@@ -456,7 +674,7 @@ export function renderTui({
 		// The input row is part of the fixed chrome while the overlay is open, so it is
 		// reserved too — otherwise the row would be appended past `height` and clipped.
 		const inputRows = inputText !== null ? 1 : 0;
-		const reserve = 2 /*header*/ + 2 /*one indicator each side*/ + 5 /*status block + footer*/ + streamingRows + inputRows;
+		const reserve = 3 /*header (seat line + item line)*/ + 2 /*one indicator each side*/ + 5 /*status block + footer*/ + streamingRows + inputRows;
 		const transcriptBudget = Math.max(4, height - reserve);
 		const { lines: transLines, above, below } = renderTranscript(
 			turns,
@@ -513,7 +731,18 @@ export function renderTui({
 	// Seat list (uses ~40% of height for seats)
 	const mainHeight = Math.max(10, Math.floor(width * 0.3));
 	const seatRows = Math.min(8, Math.max(3, Math.floor(mainHeight * 0.4)));
-	const { lines: seatLines } = renderSeatList(seats, null, width - 4, selectedSeat, color);
+	// ONE derivation for the roster (lead #3320): the state words and glyphs come from
+	// `seatActivity` (#2826) and the per-seat queue facts from `projectLanding` (#3308),
+	// both over the SAME health snapshot built at the top of this function. No second
+	// hand-rolled derivation, so the roster and the status bar cannot disagree about what
+	// a seat is doing.
+	const activityMap = {};
+	for (const seat of seats) activityMap[seat.name] = seatActivity(seat, snapshot);
+	const partialsBySeat = {};
+	for (const p of Array.isArray(partials) ? partials : partial && partial.hasContent ? [partial] : []) {
+		if (p.seat) partialsBySeat[p.seat] = p;
+	}
+	const { lines: seatLines } = renderSeatList(seats, activityMap, width - 4, selectedSeat, color, landing, partialsBySeat, seatRows);
 	lines.push(...seatLines);
 
 	// Streaming / partial rows — U2: EVERY actively-generating seat at once, keyed off
@@ -526,15 +755,12 @@ export function renderTui({
 			? [partial]
 			: [];
 	if (active.length === 0) {
-		const partialRows = renderPartial(partial && partial.hasContent ? partial : null, width - 4, {
-			roles: color && toolBg ? themeToolRoles(theme) : null,
-			color,
-		});
-		if (partialRows.lines.length > 0) {
-			lines.push("");
-			lines.push(paint("bold", "  ── streaming ──", color));
-			lines.push(...partialRows.lines);
-		}
+		// F4/F5 (#2826, designer #2748): NO live partial means NO streaming section at all.
+		// This used to paint the divider plus a `[idle]` placeholder whenever `partial` was
+		// absent, because `renderPartial(null)` returns one line — so an idle rig carried
+		// chrome (and an empty divider slot) for work that was not happening. The landing
+		// row's ACTION cell already answers "is anything running", so the placeholder was
+		// a second, weaker signal for the same fact.
 	} else {
 		lines.push("");
 		for (const p of active) {

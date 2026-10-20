@@ -7,6 +7,7 @@
 import { ANSI } from "./ansi.mjs";
 import { sanitizeTerminalText } from "./sanitize.mjs";
 import { textWidth, sliceToWidth } from "./textwidth.mjs";
+import { deriveSeatAction } from "./viewmodel.mjs";
 
 // Collapse whitespace before truncating: model prose arrives with newlines and
 // indentation that would otherwise break the one-line-per-seat layout.
@@ -27,60 +28,24 @@ export function pad(text, width) {
 }
 
 // Attention kinds are the vocabulary the rig already uses; the human view only
-// maps them to a glyph and a word, never re-derives the state itself.
+// maps them to a glyph and a word, never re-derives the state itself. The STATE and
+// the focus string come from `deriveSeatAction` in the shared view model (#2826 /
+// ROADMAP 124), so the landing screen and this row cannot disagree about what a seat
+// is doing; this function adds only the presentation (glyph + tone).
 export function seatActivity(seat, health, highlight) {
-	const items = health?.queueItems ?? [];
-	const claimed = items.find((it) => it.to === seat.name && it.status === "claimed");
-	const queued = items.find((it) => it.to === seat.name && it.status === "queued");
-	// Work the seat explicitly parked on an unanswered question. Rendered
-	// separately because it is not idleness and not work in progress: the seat is
-	// held by a question, and the row should say which one.
-	const deferred = items.find((it) => it.to === seat.name && it.status === "deferred");
-	const routed = items.find((it) => it.from === seat.name && it.status !== "done" && it.status !== "cancelled");
-	// Rig- and queue-scoped notices carry a null seat, so they are excluded
-	// EXPLICITLY rather than by the field being absent - otherwise a rig-wide
-	// notice lands on whichever seat row happens to match.
-	const notices = (health?.attention ?? []).filter(
-		(a) => a.scope === "seat" && a.seat === seat.name,
-	);
-	const failed = notices.find((a) => a.kind === "last_run_failed");
-	const generating = notices.find((a) => a.kind === "generation_in_flight");
+	const { state, focus } = deriveSeatAction(seat, health, highlight);
 
-	let glyph = "○";
-	let tone = "dim";
-	let state = "idle";
-	if (failed) {
-		glyph = "✖";
-		tone = "red";
-		state = "failed";
-	} else if (generating) {
-		glyph = "●";
-		tone = "green";
-		state = "generating";
-	} else if (claimed) {
-		glyph = "●";
-		tone = "green";
-		state = "working";
-	} else if (deferred) {
-		// After `claimed`: a seat that is also working on something else should
-		// read as working, not as parked.
-		glyph = "◌";
-		tone = "yellow";
-		state = "parked";
-	} else if (notices.length) {
-		glyph = "!";
-		tone = "yellow";
-		state = "waiting";
-	}
-
-	let focus;
-	if (claimed) focus = `working on #${claimed.id} ${claimed.subject}`;
-	else if (deferred)
-		focus = `parked on #${deferred.id} waiting on ${deferred.deferredTo ?? "an answer"}`;
-	else if (queued) focus = `has #${queued.id} queued: ${queued.subject}`;
-	else if (routed) focus = `sent #${routed.id}: ${routed.subject}`;
-	else if (highlight?.toolName) focus = `last action: ${highlight.toolName}`;
-	else focus = "no queue activity yet";
+	const PRESENTATION = {
+		failed: { glyph: "✖", tone: "red" },
+		generating: { glyph: "●", tone: "green" },
+		working: { glyph: "●", tone: "green" },
+		// After `working`: a seat that is also working on something else should
+		// read as working, not as parked. The order is enforced in the derivation.
+		parked: { glyph: "◌", tone: "yellow" },
+		waiting: { glyph: "!", tone: "yellow" },
+		idle: { glyph: "○", tone: "dim" },
+	};
+	const { glyph, tone } = PRESENTATION[state] ?? PRESENTATION.idle;
 
 	return { glyph, tone, state, focus };
 }
