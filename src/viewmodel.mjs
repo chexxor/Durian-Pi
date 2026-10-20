@@ -199,6 +199,62 @@ export function peerTargets(graph, seatName) {
 }
 
 /**
+ * The ACTION vocabulary a seat row may carry (#2826 owns it). `watch`'s human view and the
+ * landing screen (ROADMAP 124) must not coin parallel words for the same fact, so the words
+ * live here — in the shared view model — and both surfaces read them from one derivation.
+ *
+ * Ordered strongest-first: a reader that only knows "the first match wins" resolves a seat
+ * that is BOTH failed and generating to `failed`, which is what the operator needs to see.
+ */
+export const SEAT_ACTIONS = ["failed", "generating", "working", "parked", "waiting", "idle"];
+
+/**
+ * What one seat is DOING right now, as data: the vocabulary word, the queue item that is
+ * the subject of it, and a one-line focus string.
+ *
+ * This is the derivation the watch view used to own alone; it moved here so the landing
+ * projection (`projectLanding` in src/readapi.mjs) can reuse it instead of re-deriving the
+ * same predicate with its own enum. A renderer adds glyphs and tone on top; it does not
+ * decide the state.
+ *
+ * `health` is a readapi snapshot (`readRigHealth`), never a storage handle: this function
+ * does no I/O, so one batched read feeds every seat on the screen (#3103).
+ */
+export function deriveSeatAction(seat, health, highlight) {
+	const items = health?.queueItems ?? [];
+	const claimed = items.find((it) => it.to === seat.name && it.status === "claimed");
+	const queued = items.find((it) => it.to === seat.name && it.status === "queued");
+	// Work the seat explicitly parked on an unanswered question. Rendered
+	// separately because it is not idleness and not work in progress: the seat is
+	// held by a question, and the row should say which one.
+	const deferred = items.find((it) => it.to === seat.name && it.status === "deferred");
+	const routed = items.find((it) => it.from === seat.name && it.status !== "done" && it.status !== "cancelled");
+	// Rig- and queue-scoped notices carry a null seat, so they are excluded
+	// EXPLICITLY rather than by the field being absent - otherwise a rig-wide
+	// notice lands on whichever seat row happens to match.
+	const notices = (health?.attention ?? []).filter((a) => a.scope === "seat" && a.seat === seat.name);
+	const failed = notices.find((a) => a.kind === "last_run_failed");
+	const generating = notices.find((a) => a.kind === "generation_in_flight");
+
+	let state = "idle";
+	if (failed) state = "failed";
+	else if (generating) state = "generating";
+	else if (claimed) state = "working";
+	else if (deferred) state = "parked";
+	else if (notices.length) state = "waiting";
+
+	let focus;
+	if (claimed) focus = `working on #${claimed.id} ${claimed.subject}`;
+	else if (deferred) focus = `parked on #${deferred.id} waiting on ${deferred.deferredTo ?? "an answer"}`;
+	else if (queued) focus = `has #${queued.id} queued: ${queued.subject}`;
+	else if (routed) focus = `sent #${routed.id}: ${routed.subject}`;
+	else if (highlight?.toolName) focus = `last action: ${highlight.toolName}`;
+	else focus = "no queue activity yet";
+
+	return { state, focus, claimed: claimed ?? null, queued: queued ?? null, deferred: deferred ?? null, routed: routed ?? null, notices };
+}
+
+/**
  * The in-flight assistant partial, as a value. It is deliberately NOT a turn:
  * it has no entry id and no committed timestamp, the platform deletes it when the
  * run settles (`pi.live.generation` is removed at run end), and it may be
