@@ -3125,7 +3125,7 @@ does not fix it.
 `removeClaimedWorktree` succeeds; opt-in carry still carries), `demo/worktree-recursive-carry.test.mjs`
 and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path. Recorded by `scribe`
 (#2658).
-## D121 — Local provider switched to Swift 1.5 on a DIFFERENT engine (operator-DIRECTED, 2026-10-20; recorded by scribe, item #3268)
+## D121 — Local provider switched to Swift 1.5 on a DIFFERENT engine (operator-DIRECTED, 2026-10-20; recorded by scribe, item #3268; amended per lead #3280)
 
 **Context.** The local provider previously served Qwen3.6-35B-A3B (UD-Q3_K_M) via PolyStrata on
 `engine-poly\strata-poly.exe`. The operator DIRECTED a switch to Swift 1.5 — model AND engine — this
@@ -3144,8 +3144,8 @@ deliberately not model-only. In detail:
 - **Fallback kept:** `qwen36` (`run-qwen36-ud-q3_k_m.bat`) remains installed as the fallback.
 - **Config:** `durig.config.json`: `DURIG_LOCAL_MODEL=swift-1.5-iq2_xs` (was `qwen36`),
   `DURIG_LOCAL_CONTEXT=65536`; `rig.selfdev.json`: `qa` and `devtools` moved `local/qwen36` →
-  `local/swift-1.5-iq2_xs`. A seat's model is read from the rig at wake, so the next run picks Swift up
-  without `up --refresh`.
+  `local/swift-1.5-iq2_xs`. A seat's model is read from the rig at wake — but only AFTER the store is
+  refreshed (see DIRECTED vs NOT-YET-IN-EFFECT below); until then the effective runtime is unchanged.
 - **Measured cost / fragility (the part future readers will need):** IQ2_XS holds ~22 GB of experts in
   RAM on this 32 GB box (load 95-96%); PolyStrata wants ~48 GB RAM+VRAM so it runs in low-RAM mode,
   leaving ~1 GB free and making heavy tooling fragile — forks can fail (`cygheap read copy failed`,
@@ -3158,12 +3158,29 @@ deliberately not model-only. In detail:
 required keeping both local models on one C: tree with nothing re-downloaded. The engine change matters:
 `8080` now serves the Qwen engine, so an old `strata-poly` log line is expected, not a regression.
 
+**DIRECTED vs NOT-YET-IN-EFFECT (the distinction that keeps this entry honest).** The switch is
+operator-DIRECTED (this session) but is **NOT YET IN EFFECT**: the live store has NOT been refreshed, so
+the effective runtime is still `local/qwen36` on the poly engine until an operator refresh.
+`up <rig> --refresh` is operator-only under D113. The outstanding refresh is an OPEN STEP tracked by the
+standing waiting marker `#3274` (held by lead, deferred to the operator) — NOT `#3242` (which closed on
+the decision). An entry that says "the local model is swift-1.5" while the store serves qwen36 would
+itself be the doc-vs-runtime drift this entry exists to prevent.
+
+**R2 reframing — the landing rule from now on.** The landing constraint on provider-dependent tips is NOT
+"do not depend on an unratified change"; it is **DO NOT DEPEND ON A RUNTIME STATE THAT IS NOT IN EFFECT**.
+- RELEASE CONDITION: the store refresh is OBSERVED — a pass reports the effective model as
+  `swift-1.5-iq2_xs` on `strata.exe`. NOT the existence of this DECISIONS entry (documentation does not
+  change the runtime; gating a landing on a doc entry would invert mint-at-land #3075).
+- DEPENDENCY CLASS INCLUDES THE ENGINE, not just the model: the directive changed the engine binary,
+  which moves behaviour more than a model swap does — "unverified for target" covers engine-sensitive
+  results too.
+
 **Alternatives rejected.** (a) Keep Qwen3.6-35B-A3B on `strata-poly` — rejected by the operator's
 direction; (b) switch the model only, keeping `engine-poly\strata-poly.exe` — rejected: the engine is
 part of what changed and must be recorded with it (R2 reframing: runtime-in-effect, engine included).
 
 **Status.** OPERATOR-DIRECTED (2026-10-20); recorded by `scribe` (item #3268) in the same serialized
-pass as the ledger-order fix. Config commit `cafee74`; documented in `docs/SELFDEV.md`. Note: the live
-store was never refreshed at the time of `cafee74` (qa still ran `local/qwen36` until a refresh —
-`#3281`); the decision records the DIRECTED switch and its engine, not a per-seat in-effect claim.
-
+pass as the ledger-order fix, then amended per the lead addendum (#3280). Config commit `cafee74`;
+documented in `docs/SELFDEV.md`. The switch is DIRECTED but NOT YET IN EFFECT (see above) — the live
+store refresh is the open step tracked at `#3274`. A tip verified against qwen36/poly is still
+unverified for swift-1.5/strata until the refresh is observed, regardless of how ratified the config is.
