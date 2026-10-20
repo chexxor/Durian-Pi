@@ -68,6 +68,29 @@ land both: two claims on one tip will eventually produce two landing entries for
 the same content, and the second one lands a duplicate. *Worked example:*
 `impl-item-1151` and `impl-item-1261` both resolve to tip `85c5d95f6`.
 
+**Step 0d — a rebase is safe ONLY where a demo can catch the error it
+introduces.** Before attempting a rebase, ask what would FAIL if the resolution
+were wrong. If a demo or check would catch it, rebase. If the honest answer is
+"nothing would catch it", the conflict is a design decision wearing a rebase's
+clothes — reclassify it as a re-implementation or cancel it (Step 0b). This is
+the discriminator that makes "semantic vs mechanical" actionable: it names what
+to check, not just that the conflict is hard. *Why 2578 was rebasable:* its
+`cli.mjs` hunk needed RE-ANCHORING rather than "keep main" — main's #2572
+refactor had moved `openStore()` into an `openHandles` closure — and the branch's
+own demo caught the author's naive keep-main attempt ("the open at cli.mjs:1699
+documents the P5/#110 exception above it"); a demo existed that could see the
+wrong answer, so the rebase was safe to attempt. *Why the guard/carry stack was
+not:* there is NO demo that can catch a wrong wording across `src/broker.mjs`,
+`src/confine.mjs`, `src/seattools.mjs`, `src/config.mjs` and `cli.mjs` — the
+conflicts are semantic, and resolving them means picking one wording per hunk
+with nothing to tell you which is right. Same for the provider-field pair, where
+the field's in-effect value is unsettled so no test can adjudicate.
+
+**Cross-reference — merge-tree cannot see a derived-mirror invariant.** A branch
+can be textually clean and semantically stale (`constitution.txt` ↔
+`rig.starter.json` cost a land+revert, `a65feee`/`cc96c0c`); that shape is
+tracked as #3443 in the landing runbook.
+
 Classify every non-`main` ref as **merged** (`ahead=0`), **held** (checked out in a worktree), or
 **unlanded** (`ahead>0`). **The `sed` matters:** `git branch` prefixes a ref with `*` (current) or `+`
 (checked out in a **linked worktree**); an unstripped `+` corrupts every downstream loop:
@@ -141,10 +164,11 @@ ledger, never re-derived**:
 grep -E 'architect-item-3005|security-item-1475' docs/DISPOSITIONS.md  # both rows present (CANCEL)
 git diff --exit-code docs/DISPOSITIONS.md                              # append-only: a row added this pass, none edited
 ```
-**The two disposition rules (Step 0b / Step 0c) are present:**
+**The three disposition rules (Step 0b / Step 0c / Step 0d) are present:**
 ```bash
 grep -c 'Step 0b — a SEMANTIC conflict is NOT a "pending rebase"' docs/runbooks/branch-cleanup.md  # >= 1
 grep -c 'Step 0c — identical tips are ONE claim' docs/runbooks/branch-cleanup.md                     # >= 1
+grep -c 'Step 0d — a rebase is safe ONLY where a demo can catch the error' docs/runbooks/branch-cleanup.md # >= 1
 ```
 Every kept branch must still be listed. The 2026-10-17 run: 128 → 76 refs, `main` at `c0534ed`,
 tree clean, all 33 unlanded refs intact.
