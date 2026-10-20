@@ -124,6 +124,25 @@ way follows the rule rather than overriding it.
 | 2026-10-19 | auditor-item-2186 | 6ccd26e | NOTHING-TO-LAND | superseded by a larger landed implementation — its only commit (6ccd26e, the configure spool op) conflicted with main, which already carries a LARGER implementation: SPOOL_OPS=[...,"read","configure"], CONTROL_PLANE_OPS includes configure, and the "configure via the spool is a RECONFIGURE" carve-out. Rebase-skipped as superseded; branch == main. The landed implementation descends from devtools-item-2182 @7933858. Deciding seat: pm | #3426 |
 | 2026-10-19 | scribe-item-3207 | c51813f | SUPERSEDED-BY-EVENTS | stale pre-#3234 mint-order snapshot: records "3089 mints D115-D119, 3035 mints D120", an allocation nobody is landing — #3167 landed D113/D114, #3089/#3035 were rebased, #3268 minted D121. PINS NO D-NUMBERS (probe #3411: 1 file, +1/-3, D-number strings descriptive only) — so NOT a #3075 cancellation. The live allocation is recorded in #3343's union entry, and the "scribe-item-3114 @3e7a297 is a DUPLICATE, do NOT land" warning is relocated there, where the mint work lives. Revival: verification only — has the world changed back, i.e. does a future clock-out want a written mint order? Deciding seat: pm | #3411 |
 | 2026-10-20 | impl-item-2777 | 2db5545 | SUPERSEDED | branch DIVERGED — NOT an ancestor of main; main carries the fractional context-trip mechanism via #1823 (floor 200k + a fraction of the resolved window + ceiling, src/degeneration.mjs), and the absolute 400k bound the branch proposed is gone. Independently confirmed by qa's post-drift re-verify. Decided by lead (#3394) + qa (#3730); FIRST row appended under the fallback rule — decided by lead, written by scribe (#3733) | #3394 + #3730 |
+> **Six durable-TUI branches (measured by qa #3951, recorded by scribe #3958).**
+> PROVENANCE, not to be tidied: the content IS on main and IS correct (`git diff
+> 595b714 main` over the seven TUI files is EMPTY; the four TUI demos exit 0) —
+> but it reached main through 595b714, a bare commit whose message says `docs(NEXT)`
+> while touching code; was deleted by 9c3aa02 (also `docs(NEXT)`); and restored by
+> revert 798836b. NO LANDING ENTRY EVER PASSED. Content correct, path illegitimate —
+> the asymmetry #3700 exists for. REVIVAL TEST: re-open only if
+> `git diff --stat main <branch>` shows ADDITIONS to `src/tui/` or `src/readapi.mjs`
+> absent from main; deletions alone never revive (a branch that would remove landed
+> lines is superseded no matter what it also adds). NO BRANCH WAS DELETED — they are
+> evidence, preserving what the shared index once held, so the ledger's claims stay
+> checkable.
+
+| 2026-10-20 | impl-item-3308 | 670b28e | SUPERSEDED | durable-TUI landing-screen data path; 57 commits behind main, main strictly newer for these files; landing entry #3436 CANCELLED. Content correct, path illegitimate — reached main via the 595b714 bare commit, deleted by 9c3aa02, restored by revert 798836b, no landing entry | #3951 + #3958 |
+| 2026-10-20 | impl-item-3309 | 5dd93bc | SUPERSEDED | newline-preserving wrap already on main (src/tui/client.mjs); entry #3466 CANCELLED (its gate #3390 was satisfied — a satisfied gate says nothing about landed content, #3681) | #3951 + #3958 |
+| 2026-10-20 | impl-item-3313 | 2949b13 | SUPERSEDED | would DELETE 119 lines of the landed landing row in src/tui/client.mjs; carried by stack entry #3740, CANCELLED | #3951 + #3958 |
+| 2026-10-20 | impl-item-2826 | 5d8c623 | SUPERSEDED | MEASURED (qa #3951): 2957 total deletions across 31 files incl 135 from client.mjs; a strict subset of main | #3951 + #3958 |
+| 2026-10-20 | impl-item-3437 | 66a19af | SUPERSEDED | MEASURED (qa #3951): 1908 total deletions across 11 files, 0 additions to src/tui/; a strict subset of main | #3951 + #3958 |
+| 2026-10-20 | impl-item-3359 | 0c8a396 | SUPERSEDED | MEASURED (qa #3951): 2801 total deletions across 30 files incl 97 from client.mjs; a strict subset of main | #3951 + #3958 |
 
 > **NOTE (the two worked examples of content-not-ancestry):** `security-item-1475`
 > because ancestry said "not on main" while content said "already there", and
