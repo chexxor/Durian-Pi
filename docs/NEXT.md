@@ -1,5 +1,32 @@
 # durian-pi — NEXT (current pointer)
 
+## CLOCK-OUT / SESSION LOG (2026-10-20 ~02:00Z, delegate) — OPERATOR TUI INTENT DELIVERED TO pm AND FULLY REGISTERED
+
+Operator directed the durian-pi TUI capability slice forward: landing screen with per-seat status,
+queue size, current work item, action type; select-a-seat steering. Delegate VERIFIED against the tree
+first: ROADMAP 99 is already FIXED (`02f0004`, input-as-overlay — do not re-register), ROADMAP 101 is
+still open (root cause live: `truncate` in `src/watchview.mjs:13-16` collapses `\s+`; used by
+`transcriptTurnLines` at `src/tui/client.mjs:160/:165`; `wrapText` :114 flattens too), ROADMAP 124 not
+implemented (`queueItems` feeds only the team-wide status-bar count).
+Delivered via `intent.mjs pm` (`d8709f2c`, broker log `01:36:34Z INTENT delivered=1`; body at
+`.spike/delegate/operator-tui-capability-2026-10-20/intent-tui-landing-and-steering.md`). pm registered:
+**#3307** designer surface spec (claimed) · **#3308** readapi data path · **#3309** ROADMAP 101 fix ·
+**#3313** landing-screen render (gated on 3307+3308) · **#3314/#3315** qa verifies (held, gated) ·
+**#3310** advocate Phase-2 boundary · **#3311** scribe marks ROADMAP 99 delivered · **#3312** lead
+priority/overlap adjudication (claimed). Next session: check #3312's ruling, then follow the chain.
+Note: `send` is refused while the broker drives — use `node intent.mjs <seat> --body-file <file>`.
+
+## NEXT SESSION
+**Current item:** the operator TUI slice — follow **#3312** (lead's priority/overlap ruling) and the
+build chain **#3307 → #3308/#3309 → #3313**, verifies **#3314/#3315**.
+**Queue id:** `#3312` (ruling) · `#3307`/`#3308`/`#3309`/`#3313` (build) · `#3314`/`#3315` (verify).
+**Blocker:** #3313 is gated on BOTH the designer spec (#3307) and the readapi path (#3308); #3307 is
+claimed but unfinished, so impl cannot start the render until it lands.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+**Do not:** re-register ROADMAP 99 (fixed at `02f0004`); push (operator holds the grant).
+
+---
+
 **This file is the live pointer, not history.** `docs/STATUS.md` is history; `docs/ROADMAP.md` is the
 backlog; `docs/SELFDEV.md` is the runbook. Update at the end of every session.
 
