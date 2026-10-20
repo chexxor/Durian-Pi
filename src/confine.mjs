@@ -178,13 +178,21 @@ const DENIED_COMMANDS = [
 	// match — the whole class of bug that caused a seat to wipe the shared tree (RD #257).
 	// The -C <path> forms cover the case where a seat tries to redirect git into another
 	// checkout; refuse them the same way (RD #257).
-	{ re: /git\s+reset\b/i, why: "would restage or discard work a seat did not integrate" },
-	{ re: /git\s+checkout\b/i, why: "would change the seat's working tree or HEAD" },
+	// #3635: EVERY REFUSAL NAMES ITS OWN VERB. A refusal that does not name its rule forces the
+	// reader to GUESS, and a guess about a guard generalises to a CLASS of verbs. The measured case:
+	// `checkout`'s message said only "would change the seat's working tree or HEAD" while `switch`'s
+	// named itself, so when a COMPOUND command (`git checkout -b …; git rebase main`) was refused on
+	// its checkout segment, the generic wording made "both verbs are refused" feel confirmed and the
+	// seat never re-ran `git rebase` alone — a false claim that reached an operating note (#3379).
+	// The guard refuses the WHOLE command on the first matching rule, so one refusal says nothing
+	// about the other verbs in it: test them separately.
+	{ re: /git\s+reset\b/i, why: "would restage or discard work a seat did not integrate (`reset` — test a compound command's verbs separately)" },
+	{ re: /git\s+checkout\b/i, why: "would change the seat's working tree or HEAD (`checkout` — test a compound command's verbs separately)" },
 	{ re: /git\s+switch\b/i, why: "would change the seat's working tree or HEAD (`switch` is the modern `checkout`)" },
-	{ re: /git\s+restore\b/i, why: "would discard uncommitted work" },
-	{ re: /git\s+revert\b/i, why: "would rewrite committed work" },
-	{ re: /git\s+clean\b/i, why: "would discard untracked work" },
-	{ re: /git\s+stash\b/i, why: "would move uncommitted work out of the tree" },
+	{ re: /git\s+restore\b/i, why: "would discard uncommitted work (`restore`)" },
+	{ re: /git\s+revert\b/i, why: "would rewrite committed work (`revert`)" },
+	{ re: /git\s+clean\b/i, why: "would discard untracked work (`clean`)" },
+	{ re: /git\s+stash\b/i, why: "would move uncommitted work out of the tree (`stash`)" },
 	{
 		check: branchForceDelete,
 		why: "would force-delete a branch (`-D`/`--force`) — the safe `git branch -d` and branch create/rename are allowed",
@@ -197,7 +205,7 @@ const DENIED_COMMANDS = [
 	{ re: /git\s+add\s+\.(?:$|[\s;&|"'()])/i, why: "unscoped staging: stage only the explicit paths you changed, never git add -A or git add ." },
 	{
 		re: /git\s+push\b/i,
-		why: "publishing needs the operator's authorization; ask with defer_work, or have the operator relaunch durig with DURIG_ALLOW_PUSH=1",
+		why: "`push` needs the operator's authorization; ask with defer_work, or have the operator relaunch durig with DURIG_ALLOW_PUSH=1",
 		unless: () => operatorGranted("DURIG_ALLOW_PUSH"),
 	},
 	// git -C <path> <verb> redirects the git operation to another directory. Even when
