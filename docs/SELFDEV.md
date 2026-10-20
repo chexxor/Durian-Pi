@@ -469,3 +469,56 @@ with a layer split gives ONE model roughly twice the expert cache (see above), w
 two independent models (say a coder and a verifier) at one card each. That is a choice about models, not
 about doubling slots, and durig cannot drive it from one rig today. Two engines also mean two copies of the
 weights in RAM: fine for a 16 GB model, impossible for the 64 GB Swift model at 96 GB.
+
+### What the DeepInfra bill says the local rig must do (usage file 2026-10, read 2026-10-20)
+
+`deepinfra-usage-2026-10.csv`, 2026-10-01..2026-10-20 (19 days), $139.22 total, 8 models. The shape of the
+load matters more than the total:
+
+| Model | Cost | cached in | fresh in | out |
+|---|---:|---:|---:|---:|
+| **deepseek-ai/DeepSeek-V4.1-Flash** | **$60.83** | **7.307 B** | 119.9 M | 31.8 M |
+| zai-org/GLM-5.3-Flash | $25.23 | 1.084 B | 107.3 M | 3.73 M |
+| Qwen/Qwen3.6-35B-A3B | $25.16 | — | 246.4 M | 0.55 M |
+| deepseek-ai/DeepSeek-V4-Flash-0731 | $24.07 | 1.099 B | 114.7 M | 3.80 M |
+| deepseek-ai/DeepSeek-V4.1-Flash-1017 | $2.67 | 0.460 B | 8.4 M | 1.70 M |
+
+**Per day for the seat we want to replace: ~385 M cached-in, ~6.3 M fresh-in, ~1.7 M output.** Two
+consequences, both the opposite of intuition:
+
+1. **Output is trivial; PREFILL is the workload.** 1.7 M output tokens/day is nothing (at 60 tok/s that is
+   ~8 h of decode). The 385 M cached input tokens/day are the cost centre — and DeepInfra charges $0.004/M
+   for them, i.e. nearly free, whereas a local server must either re-read them or serve them from its
+   conversation cache. At a measured 1,800 tok/s prefill (the big Swift/Qwen3.8 model) 385 M/day is **59
+   hours a day** — impossible. At 8,000 tok/s it is 13 h/day — feasible only with a high cache hit rate.
+   **Any local plan must budget the conversation cache (`--conversation-cache-mib`/`-slots`) as a first-class
+   part of the configuration, not an afterthought.**
+2. **A layer split only speeds prefill when every expert is in VRAM.** `docs/MULTI_GPU.md` on the
+   strata-poly models: "A longer prompt with experts outside VRAM is read a layer at a time for all its
+   calls… the cards take turns… **So with no expert in VRAM two cards read a long prompt no faster than
+   one.** What a split adds there is VRAM." On a 2×3090 rig that decides the model choice: a ~21 GB model
+   fits both cards' 48 GB and gets the split's prefill gain; a 64–75 GB model does not, and its prefill
+   stays single-card speed.
+
+**Ranked configurations for 2–4 concurrent seats (highest aggregate tokens/s first).** Measured points:
+Qwen3.6-35B-A3B with every expert in VRAM writes **323 tok/s** alone and **83.9 → 173.5 → 252.0 → 325.4
+tok/s** at 1/2/4/8 slots (R9700, Q4_K_XL); slot cost **1.5 GB per 32K** (3.0 GB per 64K) of VRAM;
+prefill 4–5.8 k tok/s single-card. Estimates are marked.
+
+| Config | Model | Slots @ context | Expected aggregate | Notes |
+|---|---|---|---|---|
+| **2×3090 + 64–96 GB RAM** | Qwen3.6-35B-A3B **UD-Q4_K_XL** (~21 GB) | 4 @ 32K (6 GB KV spread over 2 cards) | **~250–350 tok/s** (measured band for 4 slots; 2-card prefill ~8–10 k, ESTIMATE) | all experts in 48 GB → split speeds prefill too; best fit for the cached-prefix workload |
+| 1×3090 + 32–96 GB RAM | Qwen3.6-35B-A3B **UD-Q3_K_M** (16 GB) | 4 @ 32K (22 GB total) | ~250 tok/s at 4 slots (measured 252) | RAM above ~32 GB buys nothing here; 64K allows only 2 slots |
+| 2×3090 + 96 GB RAM | Tiel Coder 35B-A3B UD-Q3_K_XL (17 GB) | 4–6 @ 32K | ~250–350 tok/s (ESTIMATE) | same maths as the row above, coding-agent tune |
+| 2×3090 + 96 GB RAM | Qwen3.8-Flash-Next **IQ3_S** (the "smart" option) | 2–4 @ 64K | decode ~137 tok/s measured at 1 slot; ~250–300 at 4 (ESTIMATE) | prefill stuck at ~1.8 k tok/s → 385 M cached tokens/day is NOT feasible without cache hits |
+| 1×3090 + 96 GB RAM | Swift 1.5 IQ2_XS (64 GB) | 1–2 | ~100 tok/s (measured earlier session) | quality ceiling, but the fee workload would swamp its prefill |
+
+**Query cost of the alternative:** at $139.22/19 days ≈ **$209/month** total, of which DeepSeek V4.1 Flash is
+~$91 and the whole DeepSeek family ~$131. A used 3090 (~$600) plus RAM (~$200) pays back in roughly 8–10
+months if local replaces the DeepSeek line, before electricity (~$25–30/month at 6 h/day of both cards).
+
+**UNVERIFIED, and it is the load-bearing unknown:** nothing in PolyStrata or this repo measures whether
+Qwen3.6-35B-A3B gives answers of DeepSeek-V4.1-Flash quality on this team's work. Its tables are speed only.
+The only honest test is an A/B on real queue items — e.g. move the high-volume, low-judgment seats
+(`scribe`, `pm`, `qa2`, `designer`) to local first and keep `impl`/`lead`/`architect` on DeepSeek until the
+local results are inspected.
