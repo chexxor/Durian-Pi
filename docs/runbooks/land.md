@@ -378,8 +378,46 @@ node -e "const p=require('./node_modules/@earendil-works/pi-durable/package.json
 **Why this matters for a landing:** a red suite here is NOT a regression in the merged result, and reporting
 it as one sends the team chasing a phantom. Equally, a GREEN run right after an install proves less than it
 looks — it may be measuring the registry set, not the pinned build. `devtools-item-2976` (now on `main`) makes
-`prepare_workspace` run `sync-pi --link` around `npm ci` in every WORKTREE, which is why a worktree is safe
-and the **shared tree** is the exposed one.
+`prepare_workspace` run `sync-pi --link` around `npm ci` in every WORKTREE — **but that does NOT make a fresh
+worktree safe** (measured 2026-10-20, see the next note): `vendor/pi-main` is not present in a fresh worktree,
+so the link fails with `nothing built yet; run --sync before --link` and `prepare_workspace` only
+`console.warn`s and continues. The worktree then sits on the lock's `pi-durable@1.1.0`, so BOTH the shared
+tree and a fresh worktree are exposed, for different reasons.
+
+### ⚠ A FRESH WORKTREE'S SUITE IS NOT MAIN'S SUITE — `npm ci` measures the LOCK, not `main`
+
+Measured 2026-10-20 on the same commit (`main` `11e87a0`), 188 demos:
+
+| Tree / dependency state | Red |
+|---|---|
+| seat root, `pi-durable@1.3.0` (the vendored link) | **3** — `broker-one-connection`, `pitui`, `seat-instruction-encoding` |
+| fresh item worktree after `prepare_workspace`'s `npm ci` | **7** — `broker-one-connection`, `seat-instruction-encoding`, and the five `tui-durable-*` (`boot`, `-compaction`, `-compaction-tui`, `-persistence`, `-tools`) |
+| detached worktree at `main` with the seat root's deps | **3** — identical to the seat root |
+
+**The two sets are NOT nested — read the names, not the counts.** `pitui` is red in the seat root and GREEN in
+a fresh worktree: it asserts that `pi-tui` does NOT resolve into `vendor/pi-main/packages/tui`, which is true
+there precisely because the link is missing. So 3 + 5 ≠ 7, and a verifier who assumes "main's set plus
+extras" will hunt for `pitui` in the wrong list.
+
+**So `main`'s real baseline is 3 red.** The five `tui-durable-*` are an INSTALL ARTEFACT: `package-lock.json`
+pins `@earendil-works/pi-durable` `1.1.0`, whose `exports` map has no `./codemode`, while
+`src/tui/durable/adapter.mjs` imports it — hence `ERR_PACKAGE_PATH_NOT_EXPORTED`. The pinned link that fixes
+this cannot be recreated in a fresh worktree, because `vendor/pi-main` is not there (see the note above).
+
+**What a verifier must do about it:**
+- Do NOT discount them silently. NAME them as the artefact, state that `main`'s baseline is 3 red, and say
+  which tree and dependency state your run measured — otherwise the next reader cannot tell "known artefact"
+  from "I decided this was fine".
+- The reverse direction is just as real: an AUTHOR in the shared tree sees GREEN where the verifier sees RED,
+  so "it passes for me" is not evidence about the verifier's tree.
+- Check the pin before believing either verdict (the one-line command is in the note above).
+
+The fix — bump the lock so `npm ci` reproduces the pinned set, plus a demo asserting the export map — is its
+own held item (`#3712`) and needs a landing slot. Until it lands, every verifier pays this.
+
+**The general form: a suite verdict must NAME THE TREE AND ITS DEPENDENCY STATE.** "The suite passes" is not
+a claim until it says where — the shared tree measures seats' in-flight work, a fresh worktree measures the
+lock rather than `main`, and a branch-tip run measures neither the merge nor `main` (`#3638`).
 
 2026-10-20 (pass #5, delegate, broker UP): **2 landed, 1 landed-then-reverted, 1 stopped by its own
 test, `main` `9882632`→`4d96ae9`.** `scribe-item-3167` @`b0e9d75` (D113/D114) → `35f8ae6`;
@@ -398,3 +436,13 @@ series): the liveness / `workable` / `listWorktrees` defaults, the cost rule tha
 and the probe-meaning line, in a subsection of `## Verify` so the #3638 (check the MERGED tree) and
 #3656 (the no-`--suite` workaround with a checkable expiry) additions can sit beside it. The runbook's
 own Verify step was re-run with this change: `node demo/land-helper.test.mjs` → exit 0.
+
+2026-10-20 — **THE FRESH-WORKTREE SUITE NOTE ADDED, and it CORRECTS the earlier claim above** (item #3766,
+same #3272 series). Measured on one commit, `main` `11e87a0`: seat root 3 red, fresh item worktree 7 red
+(the same 3 plus the five `tui-durable-*`), detached worktree at `main` with the seat root's deps 3 red.
+Root cause of the difference, checked rather than assumed: `prepare_workspace` DOES run `sync-pi --link`
+around `npm ci` (`src/worktree.mjs` lines 155-188), but in a fresh worktree that command fails with
+`{"ok": false, "error": "nothing built yet; run --sync before --link"}` because `vendor/pi-main` is not
+present there, and the caller only `console.warn`s and continues — so the worktree stays on the lock's
+`pi-durable@1.1.0`. The suite was re-run in this worktree with that state and returned exactly the 7 red
+named in the new note; `node demo/land-helper.test.mjs` → exit 0.
