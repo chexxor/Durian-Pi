@@ -316,23 +316,15 @@ for (const branch of branches) {
 	if (tip.code !== 0) {
 		report({ ...base, error: `pre-flight: cannot resolve branch '${branch}': ${tip.err}` }, 1);
 	}
-	// (2) ancestry: the branch must CONTAIN the base (a landable tip), or the base must already
-	// contain the branch (already landed — a re-run is a no-op, not a refusal). A tip that is
-	// NEITHER is stale: a landing would carry a tree that predates the base.
+	// (2) ancestry — a FAST PATH ONLY, never a refusal. If the branch CONTAINS the base it is
+	// definitely landable, so go straight to the merge; if the base CONTAINS the branch the work is
+	// already in main (a re-run). If NEITHER, ancestry can say only "not definitely landable", never
+	// "not landable" (#3272/#3337: content, not ancestry, proves landability), so we FALL THROUGH and
+	// let the merge-tree decide. A branch forked from an older main is a backlog's normal state, not
+	// a defect — refusing it would force a rebase where a clean merge would do.
 	const containsBase = git(repoRoot, ["merge-base", "--is-ancestor", baseSha.out, tip.out]).code === 0;
-	const alreadyLanded = git(repoRoot, ["merge-base", "--is-ancestor", tip.out, baseSha.out]).code === 0;
-	if (!containsBase && !alreadyLanded) {
-		report(
-			{
-				...base,
-				error:
-					`refusing to land '${branch}' (${tip.out.slice(0, 8)}): it neither contains the landing base ` +
-					`'${baseRef}' (${baseSha.out.slice(0, 8)}) nor is contained by it — the tip is stale, so a landing ` +
-					`would carry a tree that predates ${baseRef}. Rebase it onto ${baseRef} first, then re-run.`,
-			},
-			1,
-		);
-	}
+	const alreadyLanded = !containsBase && git(repoRoot, ["merge-base", "--is-ancestor", tip.out, baseSha.out]).code === 0;
+	const ancestry = containsBase ? "contains-base" : alreadyLanded ? "already-landed" : "neither";
 	// (3) committed conflict markers — invisible to (1) and (2).
 	const markers = git(repoRoot, ["grep", "-l", "^<<<<<<<", tip.out]);
 	if (markers.code === 0) {
@@ -348,6 +340,7 @@ for (const branch of branches) {
 					`${files.length} file(s) — a merge would import them into main, where every later verify would ` +
 					`measure a tree that contains them. Re-cut the branch; do NOT rebase it.`,
 				conflictMarkerFiles: files,
+				ancestry,
 			},
 			1,
 		);

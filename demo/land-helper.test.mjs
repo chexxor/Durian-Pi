@@ -195,33 +195,32 @@ try {
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "feat: feat-d"]);
   git(repo, ["switch", "main"]);
+  // feat-c and feat-d fork from the SAME pre-landing main and rewrite the same line. feat-c lands
+  // first (main advances); feat-d is then a STALE tip — it contains preC, not current main. The
+  // pre-flight does NOT refuse it (#3929): ancestry is a fast path and CONTENT proves landability,
+  // so feat-d reaches the merge and CONFLICTS there.
+  const landedC = land(repo, ["feat-c"]);
+  check("feat-c lands cleanly first", landedC.code === 0, landedC.raw.slice(0, 200));
   const beforeConflict = mainSha(repo);
-  // Both branches fork from preC, so at THIS multi-branch landing both contain the base and the
-  // ancestry pre-flight passes both; the SECOND merge (feat-d) conflicts with the first (feat-c).
-  const conflicted = land(repo, ["feat-c", "feat-d"]);
-  check("the helper stops (nonzero)", conflicted.code !== 0, conflicted.raw.slice(0, 200));
-  check("...reports the conflicted path", (conflicted.report?.conflicted ?? []).includes("a.txt"), JSON.stringify(conflicted.report?.conflicted));
+  const conflicted = land(repo, ["feat-d"]);
+  check("a STALE branch is NOT refused on ancestry — it reaches the merge", conflicted.code !== 0, conflicted.raw.slice(0, 200));
+  check("...and it STOPS on a CONFLICT, not a stale refusal",
+    (conflicted.report?.conflicted ?? []).includes("a.txt") && !/stale/.test(conflicted.report?.error ?? ""),
+    JSON.stringify(conflicted.report?.conflicted));
   check("...and main did NOT advance", mainSha(repo) === beforeConflict);
   check("THE POINT: the shared tree is NOT mid-merge", !existsSync(join(repo, ".git", "MERGE_HEAD")));
   const markers = spawnSync("git", ["grep", "-l", "<<<<<<<"], { cwd: repo, encoding: "utf8" });
   check("...and the shared tree has NO conflict markers", markers.stdout.trim() === "", markers.stdout);
   check("the scratch is removed by default", !git(repo, ["worktree", "list"]).includes(".land-scratch-"));
-  // --keep holds the scratch so a conflict can be resolved in it (the same multi-branch landing).
-  const kept = land(repo, ["feat-c", "feat-d", "--keep"]);
+  // --keep holds the scratch so a conflict can be resolved in it.
+  const kept = land(repo, ["feat-d", "--keep"]);
   check("--keep stops and NAMES the scratch", kept.code !== 0 && typeof kept.report?.scratch === "string", kept.raw.slice(0, 200));
   check("...and the scratch worktree really exists", existsSync(kept.report?.scratch ?? ""));
   if (kept.report?.scratch) {
     git(repo, ["worktree", "remove", "--force", kept.report.scratch]);
     git(repo, ["worktree", "prune"]);
   }
-  // Now land feat-c alone (main advances), so feat-d is STALE — and the ancestry pre-flight
-  // REFUSES it before any merge. That is the check this item adds.
-  const landedC = land(repo, ["feat-c"]);
-  check("feat-c lands cleanly alone", landedC.code === 0, landedC.raw.slice(0, 200));
-  const staleD = land(repo, ["feat-d"]);
-  check("a STALE branch (does not contain main) is REFUSED before any merge",
-    staleD.code !== 0 && /stale/.test(staleD.report?.error ?? ""), staleD.report?.error);
-  check("the shared tree stayed clean through every conflict run", git(repo, ["status", "--porcelain"]) === "");
+  check("the shared tree stayed clean through both conflict runs", git(repo, ["status", "--porcelain"]) === "");
 
   console.log("\n4b. the pre-flight REFUSES a branch carrying COMMITTED CONFLICT MARKERS (#3916)");
   // A branch that resolves AND has valid ancestry — it passes rev-parse and the ancestry check —
