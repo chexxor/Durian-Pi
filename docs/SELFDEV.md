@@ -581,7 +581,13 @@ is latency.
 `"parallel": 2-3` and a generous conversation cache. That is the configuration that keeps the quality gap as
 small as locally possible while still holding 2-3 seat contexts. Expect 2-card decode in the 100-140 tok/s
 range (measured 137 tok/s on a 2x3090 x16+x4 pair at one slot) and prefill near 1.8 k tok/s — the number that
-decides whether 385 M cached-prefix tokens/day are affordable. If a cheaper rig is the goal, Qwen3.8's
-**Coder variant (half the experts) reaches ~91% of the full model's SWE-bench Verified and 99% of
-LiveCodeBench and fits 32 GB RAM** — the best quality-per-dollar local option, at the cost of the general
-agentic spread.
+decides whether 385 M cached-prefix tokens/day are affordable. If a cheaper rig is the goal, the **Coder variant** is the best quality-per-dollar local option —
+`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-Coder-GGUF` (https://huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-Coder-GGUF),
+PolyStrata's `docs/MODELS.md` "Coder" row. Verified from the model card (2026-10-20): half the routed
+experts removed (256 of 512 per layer, 48 layers, 10 active), remaining weights at 3.5 bpw, **58.4 GB
+total of which only 29.6 GB must be resident** (the 28.8 GB n-gram shard can be served from disk);
+**SWE-bench Verified 79.20 vs the BF16 base's 82.80 = 95.7% retained**, LiveCodeBench v6 87.43 = 100%
+retained, both at xhigh reasoning. The 2026-10-17 rebuild raised SWE-bench Verified from 75.60 (an
+earlier 91% figure quoted in older notes is that superseded build). Its own card warns the reduction is
+DIRECTED at code/agentic/vision/spatial and degrades elsewhere — so it is a coding seat, not a
+generalist, and the unpruned GSQ-RCO release is the general-purpose choice.
