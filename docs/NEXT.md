@@ -117,6 +117,17 @@ clean. Caveat: its landing entry **#3828 is still `held`** and no separate non-a
 `21fb14c` was found in the queue — landed on the operator's explicit go. Next in order is the carrier
 `impl-item-3869` @565cf2c (re-preflight against the NEW `main`).
 
+**STOPPED — TWO BROKERS ON ONE STORE (2026-10-20 ~22:20Z, delegate).** The team is live again and another
+session is landing (`main` `bcb6b4a`→`d257f22`, 6 merges 22:00–22:08Z). Measured: **two `cli.mjs serve`
+processes — pid 15768 (started 20:35Z, owns `broker.json` and all 4 `genlock.*`) and pid 23172 (started
+22:00Z, owns no genlock)** — the single-writer violation, and the log already shows
+`database is locked` / `SessionFailed` at 22:19Z. I did the git-only prune (21 merged+free refs `-d`'d,
+kept `devtools-item-1558`; refs 214→193, `main` unmoved) and **did not land**: a second lander plus a
+second store writer makes a land pass unsafe. **Recommended: kill the duplicate 23172 (no genlocks),
+keep 15768** — `Stop-Process -Id 23172 -Force`, prove it is dead, then resume the pass. Carrier
+`impl-item-3869` @565cf2c is CLEAN against `d257f22`; #3891's hold is "by design so it does not occupy
+impl's claim slot; the delegate lands", i.e. it is landable once the writer is single again.
+
 ## CLOCK-OUT (2026-10-20 ~07:50Z, delegate) — **TEAM WAS DOWN ~20 MIN ON AN EXTERNAL 402; BROKER RESTARTED, 47/49 PARKED ITEMS RESUMED**
 
 Operator ask: "kick start the team". Diagnosed before touching anything; the cause was NOT the rig.
