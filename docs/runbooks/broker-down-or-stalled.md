@@ -81,7 +81,7 @@ tail -8 .spike/serve.err 2>/dev/null
    `127.0.0.1:8080`) must also be running, or they fail `model_error: Connection error.`
    (`local-provider-down.md`). Export the local env on the launcher:
    ```powershell
-   $env:DURIG_LOCAL_BASE_URL='http://127.0.0.1:8080/v1'; $env:DURIG_LOCAL_MODEL='qwen36'; `
+   $env:DURIG_LOCAL_BASE_URL='http://127.0.0.1:8080/v1'; $env:DURIG_LOCAL_MODEL='swift-1.5-iq2_xs'; `
    $env:DURIG_LOCAL_CONTEXT='65536'; $env:DURIG_LOCAL_API_KEY='local'; `
    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
    ```

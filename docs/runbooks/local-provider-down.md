@@ -34,7 +34,7 @@ curl -s -m 5 http://127.0.0.1:8080/v1/models
 DURIG_DB=./selfdev.sqlite node cli.mjs log qa 3
 ```
 - Nothing on `:8080` (or `curl` returns nothing) = the server is down.
-- `log qa` showing `"provider":"local","model":"qwen36"` with `"stopReason":"error"` and
+- `log qa` showing `"provider":"local","model":"swift-1.5-iq2_xs"` with `"stopReason":"error"` and
   `"errorMessage":"Connection error."` is the server-down signature.
 - `"errorMessage":"No API key for provider: local"` is a DIFFERENT cause — the broker restarted without
   `DURIG_LOCAL_API_KEY` (see `broker-down-or-stalled.md`).
@@ -67,7 +67,7 @@ Expect HTTP 200 with `"status": {"value": "loaded"}` and `"n_ctx": 65536`, e.g.
 Then confirm a real completion (not just the model list):
 ```bash
 curl -s -m 60 http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" \
-  -d '{"model":"qwen36","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":32}'
+  -d '{"model":"swift-1.5-iq2_xs","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":32}'
 ```
 A `choices[0]` with a `finish_reason` and non-zero `usage` proves inference works. The next local wake
 (queued work or a re-driven seat) should then end in `stopReason: "toolUse"`/`"stop"`, not `"error"`.
@@ -89,3 +89,16 @@ failed `model_error: Connection error.` Restarted per this runbook (`pid=9220` l
 "n_ctx":65536}`; a chat completion returned a valid `choices[0]` at ~224 tok/s. The related
 broker-restart-key requirement is in `broker-down-or-stalled.md`; the incident is
 `docs/incidents/2026-10-18-local-provider-empty-key.md`.
+
+2026-10-20 — **THE LOCAL MODEL IS NOW SWIFT 1.5, ON A DIFFERENT ENGINE.** The served id is
+**`swift-1.5-iq2_xs`** (UkisAI's shorter-thinking fine-tune of Qwen3.8-Flash-Next, IQ2_XS, ctx 65536) and it
+runs on **`engine\strata.exe`** — the Qwen engine — not `engine-poly\strata-poly.exe`. So the two shapes
+below are both stale in their PATHS: the start script is `run-swift-iq2_xs.bat` (config
+`strata-swift-iq2_xs.json`), and the model files are under
+`PolyStrata-data\models\swift-IQ2_XS\Swift-Qwen3.8-Flash-Next-GSQ-RCO-IQ2_XS-0000{1,2}-of-00002.gguf`.
+**Before following the qwen36 steps, read `/v1/models`** — the model and the engine can change
+independently of the rig, and following the old paths starts nothing while looking like a fix.
+Also: IQ2_XS holds ~22 GB of experts in RAM (PolyStrata wants ~48 GB of RAM+VRAM and this PC has 32, so it
+runs in low-RAM mode). If the machine is under memory pressure, a seat's local run can fail slowly rather
+than cleanly; the install tip (`"env": {"STRATA_RESIDENT_HEADROOM_GIB": "6"}` in `strata-swift-iq2_xs.json`,
+default 4) trades a little decode speed for ~2 GiB back to the system.
