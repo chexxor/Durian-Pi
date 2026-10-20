@@ -33,6 +33,64 @@ authoritative for each question) is `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md`; thi
 procedure.
 
 ## Diagnose (read-only)
+**Step 0 — the ledger first.** Before re-deriving a disposition for ANY branch,
+check `docs/DISPOSITIONS.md` FIRST: a branch that already has a row there is
+**not re-litigated** — it is **re-listed with its existing disposition**
+(`CANCEL` / `SUPERSEDED` / `LAND` / `KEEP-HELD`). The ledger records decisions, not
+ref existence, so a missing ref is not a missing row and a present ref is not a
+re-derivation. New dispositions are **appended** to the ledger by the deciding
+seat in the same pass (a new row with the new deciding item id) — never an edit to
+an old row. The probe method for proving a disposition is in the ledger's
+convention: blob identity at path, patch-id secondary, **content wins**.
+
+**Step 0b — a SEMANTIC conflict is NOT a "pending rebase" (ZOMBIE ITEM).** A rebase
+item whose conflict is semantic is not a rebase item. A rebase is a mechanical
+operation that PRESERVES intent; when the conflict spans a safety surface across
+hundreds of commits, a "rebase" is a re-implementation wearing a rebase's clothes
+— it resolves by picking one wording per hunk, which is guessing exactly where
+guessing is most dangerous. Such an item must be **RECLASSIFIED** as a
+re-implementation (fresh work against current `main`, with a current-code verify)
+or **CANCELLED** with the ref left intact. It must **NEVER** be left as "pending
+rebase": a pending rebase looks like queued work that will eventually happen, so
+nobody ever makes a decision about it, and it re-appears in every inventory
+forever. Name that state for what it is — a **ZOMBIE ITEM** — and treat finding one
+as a defect in the inventory rather than as backlog. *Worked example:* the
+guard/carry stack (`impl-item-1151`, `impl-item-1261`, `impl-item-1225`,
+`impl-item-1249`, `impl-item-1444-fix`) — measured 341–566 commits behind,
+conflicting across `src/broker.mjs`, `src/confine.mjs`, `src/seattools.mjs`,
+`src/config.mjs` and `cli.mjs`. Claims cancelled, refs intact per R-B, intent
+re-filed where it still matters (lead ruling #3383).
+
+**Step 0c — identical tips are ONE claim (a duplicate PAIR, not two items).** When
+two branch refs resolve to the SAME tip, keep ONE claim — the lower item id, i.e.
+the original — and cancel the other citing the shared tip. Never rebase, verify or
+land both: two claims on one tip will eventually produce two landing entries for
+the same content, and the second one lands a duplicate. *Worked example:*
+`impl-item-1151` and `impl-item-1261` both resolve to tip `85c5d95f6`.
+
+**Step 0d — a rebase is safe ONLY where a demo can catch the error it
+introduces.** Before attempting a rebase, ask what would FAIL if the resolution
+were wrong. If a demo or check would catch it, rebase. If the honest answer is
+"nothing would catch it", the conflict is a design decision wearing a rebase's
+clothes — reclassify it as a re-implementation or cancel it (Step 0b). This is
+the discriminator that makes "semantic vs mechanical" actionable: it names what
+to check, not just that the conflict is hard. *Why 2578 was rebasable:* its
+`cli.mjs` hunk needed RE-ANCHORING rather than "keep main" — main's #2572
+refactor had moved `openStore()` into an `openHandles` closure — and the branch's
+own demo caught the author's naive keep-main attempt ("the open at cli.mjs:1699
+documents the P5/#110 exception above it"); a demo existed that could see the
+wrong answer, so the rebase was safe to attempt. *Why the guard/carry stack was
+not:* there is NO demo that can catch a wrong wording across `src/broker.mjs`,
+`src/confine.mjs`, `src/seattools.mjs`, `src/config.mjs` and `cli.mjs` — the
+conflicts are semantic, and resolving them means picking one wording per hunk
+with nothing to tell you which is right. Same for the provider-field pair, where
+the field's in-effect value is unsettled so no test can adjudicate.
+
+**Cross-reference — merge-tree cannot see a derived-mirror invariant.** A branch
+can be textually clean and semantically stale (`constitution.txt` ↔
+`rig.starter.json` cost a land+revert, `a65feee`/`cc96c0c`); that shape is
+tracked as #3443 in the landing runbook.
+
 Classify every non-`main` ref as **merged** (`ahead=0`), **held** (checked out in a worktree), or
 **unlanded** (`ahead>0`). **The `sed` matters:** `git branch` prefixes a ref with `*` (current) or `+`
 (checked out in a **linked worktree**); an unstripped `+` corrupts every downstream loop:
@@ -98,6 +156,19 @@ git branch | wc -l            # decreased by exactly the pruned count; not below
 git log --oneline -1 main     # HEAD sha UNCHANGED from Diagnose
 git status --short -- .       # still clean
 # for any sha you deleted, prove it was landed BEFORE deleting: git merge-base --is-ancestor <sha> main
+```
+**The ledger rule (runs every pass, not only a prune):** every branch whose
+disposition is already recorded in `docs/DISPOSITIONS.md` is **re-listed from the
+ledger, never re-derived**:
+```bash
+grep -E 'architect-item-3005|security-item-1475' docs/DISPOSITIONS.md  # both rows present (CANCEL)
+git diff --exit-code docs/DISPOSITIONS.md                              # append-only: a row added this pass, none edited
+```
+**The three disposition rules (Step 0b / Step 0c / Step 0d) are present:**
+```bash
+grep -c 'Step 0b — a SEMANTIC conflict is NOT a "pending rebase"' docs/runbooks/branch-cleanup.md  # >= 1
+grep -c 'Step 0c — identical tips are ONE claim' docs/runbooks/branch-cleanup.md                     # >= 1
+grep -c 'Step 0d — a rebase is safe ONLY where a demo can catch the error' docs/runbooks/branch-cleanup.md # >= 1
 ```
 Every kept branch must still be listed. The 2026-10-17 run: 128 → 76 refs, `main` at `c0534ed`,
 tree clean, all 33 unlanded refs intact.
