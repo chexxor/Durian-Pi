@@ -61,6 +61,38 @@ export function resolveExitKey(sessionBindings = []) {
 	};
 }
 
+/**
+ * THE SESSION'S ACTUAL BINDINGS, read from the library that owns them (#4021).
+ *
+ * `resolveExitKey` can only do the collision check from what it is TOLD, and a hardcoded list is the
+ * one thing the ruling forbids: a key the session already uses is a key that does not work. pi-tui
+ * exports `getKeybindings()`, whose `getResolvedBindings()` maps each action to the key(s) bound to
+ * it, so the real set is available without guessing.
+ *
+ * MEASURED against pi-tui's defaults: `ctrl+]` is ALREADY BOUND (to `tui.editor.jumpForward`), so the
+ * ruling's first choice collides on a real session and the ladder correctly falls to `ctrl+^`.
+ * `ctrl+^` and `ctrl+\` are free today. That is the whole reason this helper exists — the decision
+ * layer would otherwise pick a dead key and the operator would find out by being stuck.
+ *
+ * Takes the manager as an argument so a demo can inject a fake one.
+ */
+export function sessionBindingsFrom(getKeybindings) {
+	if (typeof getKeybindings !== "function") return [];
+	let resolved;
+	try {
+		resolved = getKeybindings()?.getResolvedBindings?.();
+	} catch {
+		return [];
+	}
+	if (!resolved || typeof resolved !== "object") return [];
+	const keys = new Set();
+	for (const value of Object.values(resolved)) {
+		if (Array.isArray(value)) for (const key of value) keys.add(String(key).toLowerCase());
+		else if (typeof value === "string" && value !== "") keys.add(value.toLowerCase());
+	}
+	return [...keys];
+}
+
 /** The footer line the landing screen shows BEFORE entering (the key is documented on the way in). */
 export function enterHintFor(seat, key) {
 	const k = key ?? "(no free exit key — see the two-key sequence)";
