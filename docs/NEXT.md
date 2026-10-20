@@ -9,9 +9,11 @@ render, ahead 2 — STACKED, so it lands LAST). Their qa verifies **`#3314`/`#33
 landing needs a FRESH non-author verify; the old ones prove nothing.
 **Queue id:** `#3313` (render, land last) · `#3309` · `#3308` · `#3315`/`#3314` (re-register before
 accepting) · `#2412` (`pitui`).
-**Blocker:** (a) `demo/pitui.test.mjs` is RED — a seat measured it, it is not folklore — so `land.mjs
---suite` is unusable; land WITHOUT `--suite` and prove on `main` with `node scripts/suite.mjs` (baseline at
-`9c3aa02`: `pass=181 fail=1`, 182 demos). (b) The local PolyStrata model is DOWN by operator direction:
+**Blocker:** (a) `main` is RED on **7 demos**, MEASURED in a clean detached worktree of `main` (sha
+`557ceb3`): `tui-landing`, `tui-status-bar`, `tui-conversation-header`, `landing-data`,
+`broker-one-connection`, `seat-instruction-encoding`, `pitui` -> `pass=181 fail=7`, 188 demos. The TUI
+ones are a REAL width bug (`tui-landing`: rows 68 wide in a 57-wide terminal across widths 40-67), not
+harness noise; `land.mjs --suite` is therefore unusable -- land without it and prove on `main`. (b) The local PolyStrata model is DOWN by operator direction:
 the Swift + Qwen3.6 models were DELETED and IQ3_S is INSTALLING to `D:\PolyStrata-models` with its pack on
 C:. Until that finishes and the rig is re-pointed, `qa`/`devtools` stay on DeepInfra. (c) `qa2` is newly in
 rotation, so the verifier mix changed today — check `status` before assuming who can verify what.
