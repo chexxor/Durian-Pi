@@ -277,3 +277,56 @@ Each of these cost real turns this session; they are habits, not trivia.
   log). Discriminator: stop the heavy local model and wait one pass — passes resume ⇒ starvation; nothing ⇒
   wedge (`runbooks/broker-down-or-stalled.md`). Get this right before writing a root cause; 2026-10-20 I
   nearly reported starvation as the cause after the model restart had already cleared it.
+
+## Operational pitfalls (learned driving the team, 2026-10-20, second block)
+
+- **A model change you only made in `rig.selfdev.json` changes nothing in the STORE.** The rig file is read
+  at wake, but the queue, the recorded reset and every seat's context still describe the old model until
+  `up rig.selfdev.json --refresh` writes them; `--dry-run` first names the exact resets (`resetEntryId`
+  proves the write landed). Do not report a model move as done on the strength of the file diff.
+- **`serve --stop` is a REQUEST, not a kill.** It returns `stopped:false` while a generation lease exists,
+  and a stale stop request survives a forced kill — the restarted broker then exits after ONE pass with
+  `"stoppedBy": "deadline"`. That is a consumed request, not a crash: start it again. Full recovery order
+  (kill → prove pid dead → clear `*.genlock.*` → restart → confirm passes advance and
+  `admitted_not_started` clears) is in `runbooks/broker-safe-change.md`.
+- **Back up the store before any force stop.** `cp selfdev.sqlite .spike/store-backup-$(date +%Y%m%d-%H%M%S).sqlite`
+  costs a second and is the only insurance against the outcome a restart cannot fix.
+- **A `log <seat>` read can time out while the broker drives** (`SqliteStorage is closed` /
+  `read seats: apply failed`). That is store contention, not corruption and not a dead seat: read
+  `<db>.broker.log` (a plain file) for liveness, and retry the store read between passes.
+- **Judge a model by its OUTPUT SHAPE, not its HTTP status.** `Qwen/Qwen3.6-35B-A3B` (the `qa` model)
+  returns an EMPTY `content` at `max_tokens: 16` because its reasoning eats the budget, and leaks reasoning
+  text into `content` at 512. A 16-token smoke test reads as "model broken"; it is not. Give a reasoning
+  model room to finish before concluding a resolution failure.
+
+## Local-model capacity: what a RAM upgrade does and does not buy (measured 2026-10-20)
+
+Useful when the operator asks "can every seat run on the local model, and what does concurrency cost?".
+Numbers below are OBSERVED on this box unless marked as an estimate.
+
+| Item | Value | Source |
+|---|---|---|
+| This PC | 31.9 GB RAM, RTX 3090 24 GB VRAM, 16 logical CPUs | `Win32_ComputerSystem`, `nvidia-smi` |
+| Swift 1.5 IQ2_XS weights on disk | **64.1 GB** (2 shards: 39.8 + 28.4 GB); packed experts **35.4 GB** | pack `experts.bin.src.json` |
+| Older local pack (Qwen3.6-35B-A3B UD-Q3_K_M) | 16 GB | `PolyStrata-data/models/` |
+| KV cache (8-bit, KV streaming) | **~13.7 KB of RAM per context token → ~0.9 GB per 64K conversation** | PolyStrata `docs/DETAILS.md` |
+| Served concurrency, default | **ONE request at a time**, FIFO — every other seat queues | `serve/server.py:7`, `docs/BATCHING.md` |
+| Served concurrency, opt-in | `"parallel": N` / `--batch N`, **up to 8 slots**; each slot has its own position and attention rows | `docs/BATCHING.md` |
+
+**So: 96 GB is enough memory for the weights and several 64K contexts** (≈64 GB weights + 12 × 0.9 GB KV +
+node/OS ≈ 76 GB) — but memory is not the binding constraint on CONCURRENCY. Two others are:
+
+1. **The server serializes unless `"parallel": N` is set in `strata-swift-iq2_xs.json`.** Without it every
+   seat waits its turn no matter how much RAM you buy; with it the engine caps at 8 slots, so 12 seats still
+   queue above 8.
+2. **The 3090's 24 GB VRAM is unchanged by a RAM upgrade,** and each batch slot's attention rows come out of
+   the expert cache. A 64 GB model on a 24 GB card keeps most experts in RAM, so more concurrency competes
+   for the same memory bandwidth.
+
+**The price of concurrency, mechanically** (PolyStrata `docs/BATCHING.md`): a request alone keeps its
+speculative/MTP guesses; as soon as a second request shares a window, **all slots write "a token each at a
+time, without guesses"**. Measured on other cards, total throughput rises while per-request latency falls —
+e.g. 1→4 chats at once: 312–333 → 428–430 tok/s total on an RTX 5090, and 79 (sequential) → 105 total on a
+laptop. So N concurrent seats each get *materially less* than a single seat's rate, while the team's
+aggregate rate improves modestly. With 12 seats on one 3090 expect aggregate tok/s to plateau well before
+12× a single-seat rate.
