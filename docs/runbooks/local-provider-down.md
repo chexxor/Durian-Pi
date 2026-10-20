@@ -1,6 +1,6 @@
 ---
 runbook: local-provider-down
-symptom: "a local seat (qa/devtools) fails to run: `No API key for provider: local` or `model_error: Connection error.`; nothing listens on 127.0.0.1:8080"
+symptom: "a local seat (qa/devtools) fails to run: `No API key for provider: local` or `model_error: Connection error.`; `/v1/models` on 127.0.0.1:8080 does not list the model the seat's `local/<id>` names. NOTE the port may be OPEN and answering HTTP 200 while the provider is unusable - see Diagnose state 3"
 writes: false
 precondition: "none"
 last_verified: 2026-10-18
@@ -23,17 +23,46 @@ Only the seats pinned to the local provider are affected; the paid-provider seat
 server is down, every local-seat wake fails, the supervisor escalates the seat after repeated failures
 (`repeated_failure`), and the `qa`/`devtools` lane stalls until the server is restarted.
 
+**A listener on `:8080` is not the same as a working provider.** Something else can hold the port, or a
+PolyStrata instance can be up serving a DIFFERENT model than the one the rig names. In that state the
+port probe reads "safe" while every local wake still fails. That is why the decision below is made on
+the MODEL ID, never on the port.
+
+**Do not "fix" this with `node cli.mjs up --refresh`.** `up --refresh` reads `rig.selfdev.json` and
+pushes its provider strings into the store. What that costs depends on which state you are in, and the
+cheap version of the warning is wrong: measured 2026-10-20, the server on `:8080` ANSWERS a request that
+names `swift-1.5-iq2_xs` (it ignores the id and serves the loaded model, see Verify), so a refresh does
+not produce two dead seats - it moves every local seat onto whatever model is loaded while the rig still
+says `swift-1.5-iq2_xs`, with no error anywhere. A silent model substitution is harder to notice than an
+outage. Restoring provider values in `rig.selfdev.json` is an OPERATOR call (lead R1) - a seat doing it
+is a second seat-authored provider move.
+
 ## Preconditions
 None. Restarting `PolyStrata` is not a durig store write, so the broker may stay up. Do **not** stop the
 durig broker for this.
 
 ## Diagnose (read-only)
-```bash
-netstat -ano | grep ':8080' | grep LISTENING
-curl -s -m 5 http://127.0.0.1:8080/v1/models
-DURIG_DB=./selfdev.sqlite node cli.mjs log qa 3
+```powershell
+Get-NetTCPConnection -LocalPort 8080 -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess
+Get-CimInstance Win32_Process -Filter "ProcessId=<pid>" | Select-Object ProcessId,CommandLine
+curl.exe -s -m 5 http://127.0.0.1:8080/v1/models
+$env:DURIG_DB="./selfdev.sqlite"; node cli.mjs log qa 3
 ```
-- Nothing on `:8080` (or `curl` returns nothing) = the server is down.
+Literal on Windows: `curl` alone is PowerShell's alias for `Invoke-WebRequest` and rejects `-s -m 5`, so
+the binary is named `curl.exe`.
+Decide on the MODEL ID, not on the port. The model the rig names is `DURIG_LOCAL_MODEL` in
+`durig.config.json`, and the seat's `local/<id>` in `rig.selfdev.json` must name the SAME id. Compare it
+against the `id` values returned by `/v1/models`:
+
+| What you see | What it means |
+|---|---|
+| nothing listening on `:8080` (or `curl` returns nothing) | state 1 - the server is down: do the restart below |
+| `/v1/models` 200 and the configured id IS listed with `"status":{"value":"loaded"}` | state 2 - the provider is fine: the seat's failure is NOT the provider, look at the seat's log/keys |
+| `/v1/models` 200 and the configured id is ABSENT (a different id is listed) | state 3 - the port answers, the provider is unusable: this is the state a port probe cannot see. Restart with the config that serves the configured model (see the 2026-10-20 note in Evidence) |
+| `/v1/models` 200, configured id listed, `"status"` not `loaded` | state 4 - still loading or the load failed: poll, then read `server.err` |
+
+A port probe (`netstat`, `Test-NetConnection`) can only tell states 1 from 2/3/4 - it cannot tell a dead
+provider from an unrelated listener. Use it to find the PID, not to conclude.
 - `log qa` showing `"provider":"local","model":"swift-1.5-iq2_xs"` with `"stopReason":"error"` and
   `"errorMessage":"Connection error."` is the server-down signature.
 - `"errorMessage":"No API key for provider: local"` is a DIFFERENT cause — the broker restarted without
@@ -59,18 +88,24 @@ DURIG_DB=./selfdev.sqlite node cli.mjs log qa 3
    ```
 
 ## Verify
-```bash
-curl -s -m 5 http://127.0.0.1:8080/v1/models
+```powershell
+curl.exe -s -m 5 http://127.0.0.1:8080/v1/models
 ```
-Expect HTTP 200 with `"status": {"value": "loaded"}` and `"n_ctx": 65536`, e.g.
-`{"id":"qwen3.6-35b-a3b-ud-q3_k_m", …, "status":{"value":"loaded"}, "meta":{"n_ctx":65536}}`.
-Then confirm a real completion (not just the model list):
-```bash
-curl -s -m 60 http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" \
-  -d '{"model":"swift-1.5-iq2_xs","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":32}'
+Expect HTTP 200 with `"status": {"value": "loaded"}` and `"n_ctx": 65536` **for the id the rig names** —
+not merely for whichever id happens to be loaded. Then confirm a real completion (not just the model list):
+```powershell
+$body = @{ model = "swift-1.5-iq2_xs"; messages = @(@{ role = "user"; content = "Reply with exactly: OK" }); max_tokens = 32 } | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Uri http://127.0.0.1:8080/v1/chat/completions -Method Post -ContentType "application/json" -Body $body -TimeoutSec 60
 ```
-A `choices[0]` with a `finish_reason` and non-zero `usage` proves inference works. The next local wake
-(queued work or a re-driven seat) should then end in `stopReason: "toolUse"`/`"stop"`, not `"error"`.
+A `choices[0]` with a `finish_reason` and non-zero `usage` proves INFERENCE works. **It does not prove the
+configured model is the one being served.** Measured 2026-10-20: a request naming `swift-1.5-iq2_xs` came
+back with `"model": "qwen3.8-flash-next-iq3_s"` and `choices[0].message.content = "OK"` - the server
+ignores the requested id and serves whatever is loaded. So read `response.model` and compare it with the id
+you asked for; that field and the `/v1/models` list are the discriminators, and a completion is not.
+(`curl.exe -d "{...}"` does not survive PowerShell quoting - the server replies `Expecting property name
+enclosed in double quotes` - which is why the body is built with `ConvertTo-Json` here.)
+The next local wake (queued work or a re-driven seat) should then end in `stopReason: "toolUse"`/`"stop"`,
+not `"error"`.
 
 ## If it fails
 - Read `C:\Users\Alex\dsh-Projects\PolyStrata\server.err` and the tail of `server.out`.
@@ -89,6 +124,23 @@ failed `model_error: Connection error.` Restarted per this runbook (`pid=9220` l
 "n_ctx":65536}`; a chat completion returned a valid `choices[0]` at ~224 tok/s. The related
 broker-restart-key requirement is in `broker-down-or-stalled.md`; the incident is
 `docs/incidents/2026-10-18-local-provider-empty-key.md`.
+
+2026-10-20 (~09:50Z) — **STATE 3 MEASURED, and the reason the probe changed.** The rig names
+`local/swift-1.5-iq2_xs` for `qa` and `devtools` (committed by `595b714`, a "docs(NEXT)" commit; the
+working tree is clean for that file, so a checkout cannot undo it), and `durig.config.json` sets
+`DURIG_LOCAL_MODEL=swift-1.5-iq2_xs` with `DURIG_LOCAL_BASE_URL=http://127.0.0.1:8080/v1`. What is
+actually listening on `:8080` is pid `18492`, `python.exe` running PolyStrata
+`serve\server.py --engine strata --config strata-iq3_s.json --port 8080`, and `/v1/models` returns HTTP
+200 with exactly one id: `qwen3.8-flash-next-iq3_s` (`loaded`). So the port answers, PolyStrata answers,
+and the configured model is not served. **AND THE SUBSTITUTION IS SILENT:** a chat completion whose body
+names `swift-1.5-iq2_xs` returned HTTP 200 with `"model": "qwen3.8-flash-next-iq3_s"`,
+`"content": "OK"`, `finish_reason: stop`, `usage.total_tokens: 85` - the server ignores the requested id
+and serves whatever is loaded. So a local seat does not necessarily FAIL here; it can run, on a model the
+rig did not choose. Commands: `Get-NetTCPConnection -LocalPort 8080 -State Listen`,
+`Get-CimInstance Win32_Process -Filter "ProcessId=<pid>"`, `curl.exe -s -m 5 http://127.0.0.1:8080/v1/models`,
+and the `Invoke-RestMethod` body in Verify. **The `/v1/models` half of the Verify step FAILS today** (the
+configured id is absent) while the completion half PASSES - which is exactly why the completion cannot be
+the check. `last_verified` stays at 2026-10-18 deliberately: Verify has not passed since.
 
 2026-10-20 — **THE LOCAL MODEL IS NOW SWIFT 1.5, ON A DIFFERENT ENGINE.** The served id is
 **`swift-1.5-iq2_xs`** (UkisAI's shorter-thinking fine-tune of Qwen3.8-Flash-Next, IQ2_XS, ctx 65536) and it
