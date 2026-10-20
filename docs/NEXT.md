@@ -1,5 +1,101 @@
 # durian-pi — NEXT (current pointer)
 
+## CLOCK-OUT (2026-10-20T03:00Z, delegate) — **#3174 LANDED (`main` `b4e88ff`), 3 LANDINGS/PRUNES, 4 LANDING-LIST DEFECTS CAUGHT, 1 VERIFIER INCIDENT RECOVERED**
+
+**Read this first.** The operator's priority stack was #3174 → landing/prune backlog → the M-series.
+#3174 is now **on `main`**, and this file's previous pointer was already stale when the session opened (the
+queue was ~60 ids ahead of it). Every claim below is backed by a command run in this session.
+
+**1. THE DEFECT IS FIXED AND LANDED.** `impl-item-3174 @5961593` → merge **`b4e88ff`** (`main` was
+`c22075a`). Landed with `scripts/land.mjs` and the broker UP (`lock.reserved:true, held:4, waitedMs:36s`).
+All three gates checked by hand first: verified (#3374 **and** #3375, both narrow, fresh family — auditor is
+GLM vs impl's DeepSeek), tip matches the entry (#3376 names `5961593` = the branch tip = `evidence.artifact`),
+and `merge-tree main impl-item-3174` exit 0. **Suite on `main` after: `pass=179 fail=1`, only
+`demo/pitui.test.mjs` (#2412)** — identical to the pre-landing baseline. Ref pruned (`git branch -d`).
+Two follow-ups stay open by design: **#3219** (thread the item's queue status from `src/seattools.mjs` into
+`prepareSeatWorkspace` — until then `itemStatus` defaults `null` → not terminal → **refuse**, the safe
+direction) and **#3185** (the path-naming migration `item-<id>-<seat>`, lead's ruling B).
+
+**2. The landing list was wrong FOUR times, and preflight caught each — not a landing.** This is the
+reusable part, and `merge-tree` alone would have missed two of them:
+- **#3256 said land `devtools-item-1754` AND `devtools-item-2188`.** They are **the same patch**
+  (`git patch-id --stable` → identical `b50d9ae9…`, identical trees, identical blob). I landed ONE
+  (`fa4e03d`); pm opened **#3340** to confirm `2188`'s content is on `main` (its commit is not an ancestor,
+  so `git branch -d` correctly refuses — a CONTENT, not an ancestry, question).
+- **#3254 wanted `devtools-item-3238 @7284834`.** `merge-tree` → `CONFLICT (modify/delete):
+  demo/test-areas.json deleted in main and modified in …`. Cause: `0976cc4` reverted the WHOLE `#1558`
+  stack, so the branch's base is gone. pm opened **#3341**: rebase the whole two-commit stack, then
+  regenerate the manifest against the current `demo/` — the stale-derived-manifest rule again.
+- **#3134/#3126 were two landing lists for two CLEAN branches that CONFLICT WITH EACH OTHER** in either
+  order (both append to `docs/DECISIONS.md`, +154 and +53). pm replaced them with **#3343**: ONE serialized
+  ledger UNION branch. **#3234 is marked `done` but produced no union** — its "done" covers the rebase half
+  only. Verifies #3127/#3135/#3345 stay unclaimable until that union lands.
+- **#3344 (the #3174 entry) was held behind the looped verify** — the inverted-gate pattern. pm replaced it
+  with #3376 gated on a narrow re-verify; that is the shape that worked.
+
+**3. A verifier's scratch tree was UTF-16-CLOBBERED and its mass failure was about to be reported as a
+Windows bug.** qa's `#3216` tree had `src/worktree.mjs` rewritten as **UTF-16LE with a BOM** (84,784 B,
+sha `30ae2edd…`, `node --check` exit **1**), `worktree-old.mjs` a **byte-identical copy of that same corrupt
+file** (so the RED control was the corrupted file itself), and **no `node_modules`** — the ~120 "failures" it
+was concluding were "pre-existing Windows cleanup permission errors". I removed both trees (the branch was
+untouched), reset qa (entry `148969`), and re-issued the procedure. Record:
+`docs/incidents/2026-10-20-verifier-utf16-clobbered-scratch-tree.md` (`c22075a`, indexed).
+**The class is not one-off:** `temp-1754-rebase/src/worktree.mjs` is also UTF-16LE (2026-10-19 03:58Z).
+`main`'s tracked tree is clean — I scanned all 498 tracked files for NUL bytes. pm registered **#3342**:
+a `check` rule refusing tracked text files carrying a UTF-16 BOM or a NUL byte.
+
+**4. qa then LOOPED on the same item — 5 compactions, no written report — and the fix was a fresh FAMILY,
+not another reset.** The substance was proven twice (its own probes plus my independent RED/GREEN) but it
+never wrote it up. I stopped the run (`op stop`, `settled:true aborted:true`), put the evidence to pm, and pm
+reassigned a NARROW verify to `auditor` (#3374/#3375), which finished in minutes. **Lesson: a seat that will
+not close an item is a context problem — re-route to a fresh seat rather than sending more instructions.**
+qa is now reset (entry `152031`) with #3216 explicitly superseded.
+
+**5. Pruned / hygiene:** `devtools-item-1754` (merged), `impl-item-1704` (ahead=0 after impl's `#3258`
+rebase — its content was already `main`), `impl-item-3174` (merged), plus qa's four terminal scratch trees.
+Tracked tree CLEAN at clock-out.
+
+**6. What the backlog actually looks like now (measured at `main` `b4e88ff`).** After impl's rebase pass
+(#3335) exactly ONE branch became clean — `impl-item-1604 @bc41be1` — and it is **a scope question**:
+cancelled #2035 dropped it pending the `#1087` call, and `qa-item-1087 @dd2583b` is still CONFLICT (pm
+routed the ruling to lead, #3346/#3355, and the rebase to qa, #3347). Everything else in the rebase set is
+still CONFLICT and author-owned: `devtools-item-2073/2187/2459`, `impl-item-2574/2578/2777`,
+`qa-item-2792`, `security-item-1475`, `architect-item-2730`, `scribe-item-2515`. **Three authors reported a
+rebase "done" while the tip had not moved and still conflicts** (`security-item-1475` #3302,
+`architect-item-2730` #3331, `devtools-item-2459` #3288) — pm opened #3348 to reconcile. Also:
+`scribe-item-3207 @c51813f` is CLEAN but pins D-numbers → cancel candidate; `advocate-item-2985 @7387716`
+is CLEAN and docs-only but gated on lead's R-A refinement (#3351/#3360, landing entry #3349).
+
+**7. M-series state (priority 3).** M1a is on `main` (`a55535e`). M1b `impl-item-3056 @6ddf538` is CLEAN and
+verified (#3113) and **correctly held** by #3208 step 4. The duplicate registrations that made the release
+point ambiguous are gone: pm cancelled **#3063** (duplicate of #3056), **#3064** (duplicate of #3095) and
+**#3176** (duplicate of #3216). M2 (#3018) and #3025–#3030 remain held behind step 4 by design.
+
+**8. Broker/metric note.** `selfdev.sqlite.broker.log` carries **38 `PASS-FAILED` in the 24h window**, every
+one `SessionFailed … database is locked errcode=5` (last `01:25:52Z`), so `status` shows the `pass-failed`
+measure in `warn` band 1 on every read. Passes are healthy (500+, ~5–25 ms) and it cleared on its own — the
+known store-contention class, not a new wedge.
+
+## NEXT SESSION
+**Current item:** the **serialized DECISIONS.md UNION pass** is the throughput unlock for the docs half
+(`#3268` → `#3343`), and the **owner rebase passes** (`#3259`/`#3260`/`#3288`/`#3292`/`#3341`/`#3347`) are
+the unlock for everything else. On the code side **`#3308`/`#3309` → `#3313`** (the operator's TUI
+landing-screen slice) is the live build chain, verifies `#3314`/`#3315` held behind it.
+**Queue id:** `#3268` (ledger union) · `#3343` (its landing list) · `#3376` (the #3174 entry — **moot,
+already landed; close it**) · `#3216` (superseded — close it; qa has been reset) · `#3349` (advocate
+review, gated on lead) · `#3346`/`#3355` (is `impl-item-1604` back in scope?) · `#3018` (M2).
+**Blocker:** none on #3174. Standing: (a) a derived manifest must be regenerated at land time, and (b)
+`pitui` (#2412) keeps `land.mjs --suite` unusable — land WITHOUT `--suite` and run the full
+`node scripts/suite.mjs` on `main` (baseline `pass=179 fail=1`).
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status` · then
+`ls -la node_modules/@earendil-works/ | grep -E 'pi-durable|pi-tui'` (`->` pinned; `d`/missing = run
+`node scripts/sync-pi.mjs --link` first) · then `git status --short -- . | grep -v '^??'` (expect CLEAN).
+**Do not:** land a branch whose commit is not unique (compare `git patch-id --stable` and the TREES, not
+`git cherry`) — two "cleared" branches were one patch today; land `devtools-item-3238 @7284834` (its base
+was reverted); read the metrics `pass-failed` warn as a live wedge without checking `passAgeMs`; `-D` a ref
+that `git branch -d` refuses (that refusal IS the lossless check); re-open `#3216`; push (operator holds the
+grant).
+
 ## CLOCK-OUT / SESSION LOG (2026-10-20 ~02:00Z, delegate) — OPERATOR TUI INTENT DELIVERED TO pm AND FULLY REGISTERED
 
 Operator directed the durian-pi TUI capability slice forward: landing screen with per-seat status,
