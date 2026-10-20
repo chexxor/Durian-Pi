@@ -71,6 +71,28 @@ assert.match(rw.detail, /#42/, "the finding names the non-terminal item");
 assert.match(rw.detail, /#41/, "the finding names the terminal twin");
 console.log("  ok   reworded pair caught");
 
+/* ─── 2b. THE SUPERSESSION CARVE-OUT: a reissue that NAMES its predecessor ─ */
+console.log("\nthe supersession carve-out (a reissue names its predecessor)");
+// #4099: a REISSUE satisfies sameIntent BY DESIGN (same from/to/tier + near-identical subject +
+// a cancelled predecessor). It is a deliberate CORRECTION, not a duplicate, and it is recognised by
+// the citation. The decisive pair is these two: the SAME text, WITH and WITHOUT the `#<id>`.
+const supersession = audit([
+	{ id: 101, from: "pm", to: "devtools", tier: "small", status: "cancelled", subject: "update skill path references to S1 names" },
+	{ id: 102, from: "pm", to: "devtools", tier: "small", status: "queued", subject: "update skill path references to S1 names", body: "supersedes #101 against the new tip" },
+]);
+assert.equal(hasFinding(supersession, "duplicate-item"), false, "a live item that NAMES its predecessor is a SUPERSESSION, not a duplicate");
+const noCitation = audit([
+	{ id: 111, from: "pm", to: "devtools", tier: "small", status: "cancelled", subject: "update skill path references to S1 names" },
+	{ id: 112, from: "pm", to: "devtools", tier: "small", status: "queued", subject: "update skill path references to S1 names", body: "just do it again" },
+]);
+assert.equal(hasFinding(noCitation, "duplicate-item"), true, "the SAME text WITHOUT the citation IS a finding");
+const citedInSubject = audit([
+	{ id: 121, from: "pm", to: "devtools", tier: "small", status: "done", subject: "update skill path references to S1 names" },
+	{ id: 122, from: "pm", to: "devtools", tier: "small", status: "queued", subject: "update skill path references to S1 names (replaces #121)" },
+]);
+assert.equal(hasFinding(citedInSubject, "duplicate-item"), false, "a citation in the SUBJECT counts too");
+console.log("  ok   supersession carve-out holds");
+
 /* ─── 3. a byte-identical replay is also caught (the strongest signal) ───── */
 console.log("\nthe byte-identical replay");
 const replay = audit([
