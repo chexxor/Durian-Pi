@@ -18,6 +18,12 @@ regenerate `rig.starter.json`'s `constitutionInline` in the same change and run 
 constitution-mirror demos (`demo/starter.test.mjs`, `demo/commit-model.test.mjs`,
 `demo/seat-commit-instructions.test.mjs`) before landing — see [constitution-amendment.md](constitution-amendment.md).
 
+## Impact
+Applying a model/constitution/reset change while the broker is up can corrupt the store — `up --refresh`
+and `reset` open their own `Harness`, and a second writer while the broker drives is what corrupted the
+store twice. A `constitution.txt` change that does not regenerate `rig.starter.json`'s `constitutionInline`
+in the same change breaks the three constitution-mirror demos and the constitution drift checks. Blast
+radius: the store's integrity and the seat instructions that reach every seat.
 ## Preconditions
 `up --refresh` and `reset` are **write verbs** — they open their own `Harness`. They must not run while
 the broker is up. `stop` the broker first and **confirm it exited**.
@@ -89,6 +95,9 @@ stopping the broker, so the write you are about to make is the one you have alre
 - The change is not visible: confirm the single constitution source is `constitution.txt` in
   `rig.selfdev.json` (an `constitutionInline` field silently wins — ROADMAP item 75).
 
+## Escalate to
+`lead` — when a change must apply while the broker stays up (the pause/unpause mechanism, ROADMAP 131, is
+the durable fix); the operator — when the store is already corrupted (use `store-corruption-recovery.md` first).
 ## Evidence
 2026-10-16: a first refresh applied `prepare_workspace` but not `P3 Language` because `rig.selfdev.json`
 carried a shadowing `constitutionInline` (fixed, commit `806ce7f`); a second attempt ran `up --refresh`
