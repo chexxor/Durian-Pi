@@ -85,11 +85,40 @@ landing entry, and only **3** have a DONE verify gate. **Landing is verify-gated
 Rulings + all four findings delivered to `pm` (request `operator-land-pass7-2026-10-20-1`, `delivered:true`
 `06:16:27Z`).
 
-**NEXT SESSION:** the 10-row human backlog is **empty of real asks** (2 cancelled, 2 done, 5 claimed,
-`#3403` correctly parked). `#3403` now genuinely moves (`#3347` is done; verify -> land -> re-cut). The
-landing queue's next real work is the three rulings in the pass-#7 intent: `devtools` regenerates
-`demo/test-areas.json` (#3341), `lead`/`pm` rule the `3303->3385->3471` stack, and #3311 gets a verify.
-Nothing pushed.
+**9. QUEUE HYGIENE PASS (operator ask) — HUMAN BUCKET IS EMPTY OF REAL ASKS; 1 REAL DEADLOCK FOUND.**
+Report delivered to `pm` (request `operator-queue-hygiene-2026-10-20-1`, `delivered:true` `06:31:28Z`; body
+at `.spike/delegate/queue-hygiene-2026-10-20/intent.md`). Counts: **held 227 · claimed 9 · deferred 2 ·
+queued 48**; only **2** rows carry `deferredTo:"human"`.
+
+**THE DEADLOCK (corrects what this file said one section above): `#3347` IS NOT DONE.** Its `done` at
+`05:23:22Z` claims *"branch tip identical to main, the commit was already on main"* — **false, proved by
+the branch's own reflog**: the branch WAS at `dd2583b` (1 ahead of main, carrying `src/compacteval.mjs`),
+and `qa` rebased it **onto `0a38f1f`, i.e. onto itself**, producing an EMPTY branch. Now
+`qa-item-1087` is 0 ahead of main with no `compacteval.mjs`; `dd2583b` is **not** an ancestor of main and
+`main:src/compacteval.mjs` is **absent**. `#3403` gates on "after 1087 lands" — a step that now has
+nothing to land, so it can never start. **The parking is correct; the GATE is the defect.** Content is
+recoverable twice: `dd2583b` is in the reflog, and `impl-item-1604` @`bc41be1` **carries
+`src/compacteval.mjs`** and is unlanded. **Ruling needed from `lead`/`pm`: restore `dd2583b` and run the
+sequence, OR verify+land 1604 and cancel the re-cut.** Lesson: a rebase that reports "already on main"
+must be checked with `git merge-base --is-ancestor <old-tip> main`, never inferred from empty `main..branch`.
+
+**`#3494` (the qa-is-dead marker) — CLOSE IT, condition met.** `qa` has **12 consecutive assistant turns on
+`deepinfra / Qwen/Qwen3.6-35B-A3B`** after the reset. "0 assistant turns in the last 8" is a window
+artifact (all tool-results), not a dead seat — check a WIDER window before concluding a seat is stuck.
+
+**Cleanup classified for `pm` (no transitions made by the delegate):** **28** landing entries whose pinned
+tip is already an ancestor of main (close) — **except `#3428`/`#3430` `auditor-item-2154` @`fac647c`, which
+are landed-then-REVERTED: ancestry is true but content is not live, and the rework re-pins the SAME sha so
+re-landing is a NO-OP — it needs a NEW commit** (same stale-terminal-entry-against-a-moved-main trap as
+#1719); **5** entries with an UNRESOLVABLE tip pin (`#3510 #3526 #3542 #3561` + `#2687` sha-less) needing a
+re-verify+re-pin; **40** orphaned held rows whose every cited gate is terminal (incl. operator-priority
+`#2598`/`#2599`, the 18-branch rebase `#2681`, and `#2788`/`#2789` — the operator-waiting VIEW + `answer`
+spool op); **82** rows are DELIBERATELY parked (BACKLOG/TRIGGER/WINDOW) and must NOT be churned — the
+"all cited gates terminal" heuristic false-positives on them; **24** are genuinely unlanded (normal queue).
+
+**NEXT SESSION:** the human bucket is empty of real asks. Awaiting `lead`/`pm`: the #3347/1604 ruling, the
+#3428 rework re-cut, the 5 re-pins, the 40 orphan dispositions, plus the three rulings from pass #7
+(`#3341` manifest regen, the `3303->3385->3471` stack, #3311's missing verify). Nothing pushed.
 
 ## CLOCK-OUT / SESSION LOG (2026-10-20 ~04:15Z, delegate) — LOCAL MODEL TAKEN DOWN, `qa`/`devtools` BACK ON DEEPINFRA
 
