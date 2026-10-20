@@ -1,8 +1,11 @@
 # Seat tools (M3) — the scoped design
 
 **Status: REVIEWED — "BLOCK as specified → ADJUST (conditional pass)".** Nothing implemented.
-Position: `docs/reviews/security-sec-m3-seat-tools.md` (from
-`qitem-20261011173526-ebcb34a909ab71e8`, `gate:spec-review`). It escalated to `advise.lead`
+Position: **no standalone review file** — the review verdict ("BLOCK as specified → ADJUST")
+and SC1–SC3 are recorded **inline in this document**; the review was planned at
+`docs/reviews/security-sec-m3-seat-tools.md` but never written as a file (never committed, verified
+`git log --all --diff-filter=A` is empty). (from `qitem-20261011173526-ebcb34a909ab71e8`,
+`gate:spec-review`). It escalated to `advise.lead`
 (`qitem-20261011173739-402fac1b`) for the scope-vs-security conflict **if** the tools ship
 without the conditions below; complying with them means no escalation is needed.
 
