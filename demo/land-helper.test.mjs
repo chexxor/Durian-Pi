@@ -195,10 +195,10 @@ try {
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "feat: feat-d"]);
   git(repo, ["switch", "main"]);
-  const landedC = land(repo, ["feat-c"]);
-  check("feat-c lands cleanly first", landedC.code === 0, landedC.raw.slice(0, 200));
   const beforeConflict = mainSha(repo);
-  const conflicted = land(repo, ["feat-d"]);
+  // Both branches fork from preC, so at THIS multi-branch landing both contain the base and the
+  // ancestry pre-flight passes both; the SECOND merge (feat-d) conflicts with the first (feat-c).
+  const conflicted = land(repo, ["feat-c", "feat-d"]);
   check("the helper stops (nonzero)", conflicted.code !== 0, conflicted.raw.slice(0, 200));
   check("...reports the conflicted path", (conflicted.report?.conflicted ?? []).includes("a.txt"), JSON.stringify(conflicted.report?.conflicted));
   check("...and main did NOT advance", mainSha(repo) === beforeConflict);
@@ -206,15 +206,39 @@ try {
   const markers = spawnSync("git", ["grep", "-l", "<<<<<<<"], { cwd: repo, encoding: "utf8" });
   check("...and the shared tree has NO conflict markers", markers.stdout.trim() === "", markers.stdout);
   check("the scratch is removed by default", !git(repo, ["worktree", "list"]).includes(".land-scratch-"));
-  // --keep holds the scratch so a conflict can be resolved in it.
-  const kept = land(repo, ["feat-d", "--keep"]);
+  // --keep holds the scratch so a conflict can be resolved in it (the same multi-branch landing).
+  const kept = land(repo, ["feat-c", "feat-d", "--keep"]);
   check("--keep stops and NAMES the scratch", kept.code !== 0 && typeof kept.report?.scratch === "string", kept.raw.slice(0, 200));
   check("...and the scratch worktree really exists", existsSync(kept.report?.scratch ?? ""));
   if (kept.report?.scratch) {
     git(repo, ["worktree", "remove", "--force", kept.report.scratch]);
     git(repo, ["worktree", "prune"]);
   }
-  check("the shared tree stayed clean through both conflict runs", git(repo, ["status", "--porcelain"]) === "");
+  // Now land feat-c alone (main advances), so feat-d is STALE — and the ancestry pre-flight
+  // REFUSES it before any merge. That is the check this item adds.
+  const landedC = land(repo, ["feat-c"]);
+  check("feat-c lands cleanly alone", landedC.code === 0, landedC.raw.slice(0, 200));
+  const staleD = land(repo, ["feat-d"]);
+  check("a STALE branch (does not contain main) is REFUSED before any merge",
+    staleD.code !== 0 && /stale/.test(staleD.report?.error ?? ""), staleD.report?.error);
+  check("the shared tree stayed clean through every conflict run", git(repo, ["status", "--porcelain"]) === "");
+
+  console.log("\n4b. the pre-flight REFUSES a branch carrying COMMITTED CONFLICT MARKERS (#3916)");
+  // A branch that resolves AND has valid ancestry — it passes rev-parse and the ancestry check —
+  // but carries a committed conflict marker. Only the third check catches it, and this is the
+  // check that catches devtools-item-2187 (76 files of markers, both other checks pass).
+  const markerBranch = "feat-markers";
+  git(repo, ["switch", "-c", markerBranch, "main"]);
+  writeFileSync(join(repo, "m.txt"), "ok\n<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> other\n");
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-m", "feat: a branch with a committed conflict marker"]);
+  git(repo, ["switch", "main"]);
+  const beforeMarker = mainSha(repo);
+  const markerRefused = land(repo, [markerBranch]);
+  check("the helper REFUSES a branch with committed conflict markers", markerRefused.code !== 0, markerRefused.raw.slice(0, 200));
+  check("...and names the marker file", (markerRefused.report?.conflictMarkerFiles ?? []).includes("m.txt"), JSON.stringify(markerRefused.report?.conflictMarkerFiles));
+  check("...and main did NOT advance", mainSha(repo) === beforeMarker);
+  check("...and no scratch worktree is left", !git(repo, ["worktree", "list"]).includes(".land-scratch-"));
 
   console.log("\n5. --suite: a failing demo in the scratch refuses to advance main");
   const featE = feature("feat-e", "e.txt", "from feat-e\n");
