@@ -309,7 +309,10 @@ export async function beforeTool(call, api, context) {
 		return undefined;
 	}
 	// #1966 layer (ii): a shell command naming the spool directory is refused (best-effort).
-	const refusal = refusalFor(command) ?? refusalForSpoolPath(command);
+	// #4374: the refusal is given the seat root and cwd, so a PATH-AWARE entry (`checkout-index`)
+	// can resolve its TARGET instead of pattern-matching the verb.
+	const guardRoot = await seatGraphRoot(api, context);
+	const refusal = refusalFor(command, { root: guardRoot, cwd: guardRoot }) ?? refusalForSpoolPath(command);
 	if (refusal !== null) return { block: refusal };
 	// #1317: a commit lands durable, portable history — gate its staged content.
 	if (GIT_COMMIT_RE.test(command)) {

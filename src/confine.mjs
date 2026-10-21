@@ -187,7 +187,7 @@ const DENIED_COMMANDS = [
 	// The guard refuses the WHOLE command on the first matching rule, so one refusal says nothing
 	// about the other verbs in it: test them separately.
 	{ re: /git\s+reset\b/i, why: "would restage or discard work a seat did not integrate (`reset` — test a compound command's verbs separately)" },
-	{ re: /git\s+checkout\b/i, why: "would change the seat's working tree or HEAD (`checkout` — test a compound command's verbs separately)" },
+	{ re: /git\s+checkout(?![\w-])/i, why: "would change the seat's working tree or HEAD (`checkout` — test a compound command's verbs separately)" },
 	{ re: /git\s+switch\b/i, why: "would change the seat's working tree or HEAD (`switch` is the modern `checkout`)" },
 	{ re: /git\s+restore\b/i, why: "would discard uncommitted work (`restore`)" },
 	{ re: /git\s+revert\b/i, why: "would rewrite committed work (`revert`)" },
@@ -203,6 +203,28 @@ const DENIED_COMMANDS = [
 	// the explicit paths you changed.
 	{ re: /git\s+add\s+-A\b/i, why: "unscoped staging: stage only the explicit paths you changed, never git add -A or git add ." },
 	{ re: /git\s+add\s+\.(?:$|[\s;&|"'()])/i, why: "unscoped staging: stage only the explicit paths you changed, never git add -A or git add ." },
+	// #4374: `git checkout-index` is NOT a branch switch — it re-materialises files from the INDEX into
+	// the working tree, and it cannot move HEAD. It was swept into the branch-switch class by a `\b`
+	// boundary (`\b` sits between the final "t" and the hyphen of "checkout-index"), with a reason that
+	// was FACTUALLY WRONG about the verb, and NO CANARY pinned it either way. The decision is
+	// PATH-AWARE, like the write guard: the verb takes no path, so its TARGET is the CWD's worktree —
+	// restoring YOUR OWN dirt is what the runbooks prescribe (`tracked-files-missing-on-disk.md`), while
+	// re-materialising the SHARED tree is the 04:21Z hazard. The verb is identical; the two acts are
+	// opposite, so the TARGET decides.
+	{
+		re: /git\s+(?:-C\s+\S+\s+)?checkout-index\b/i,
+		// NOTE: a `check` predicate REPLACES the `re` test in refusalFor, so it must do the verb test
+		// itself; the `re` above is kept as documentation of the same pattern.
+		check: (text, ctx) => {
+			if (!/git\s+(?:-C\s+\S+\s+)?checkout-index\b/i.test(text)) return false;
+			const root = ctx?.root;
+			const cwd = ctx?.cwd ?? process.cwd();
+			// The seat's OWN worktree: legitimate, and the only recovery verb a dirty orphan has.
+			return !(typeof root === "string" && isInside(root, cwd));
+		},
+		why: () =>
+			"`checkout-index` re-materialises files from the INDEX into the SHARED tree, discarding uncommitted changes there — run it in your own item worktree; the shared tree is the delegate's/operator's to restore",
+	},
 	{
 		re: /git\s+push\b/i,
 		why: "`push` needs the operator's authorization; ask with defer_work, or have the operator relaunch durig with DURIG_ALLOW_PUSH=1",
@@ -213,7 +235,7 @@ const DENIED_COMMANDS = [
 	// (a redirecting seat cannot validate git identity; that is the operator's job).
 
 	{ re: /git\s+-C\s+\S+\s+reset\b/i, why: "same as `git reset` — discards or restages work" },
-	{ re: /git\s+-C\s+\S+\s+checkout\b/i, why: "same as `git checkout` — changes the working tree" },
+	{ re: /git\s+-C\s+\S+\s+checkout(?![\w-])/i, why: "same as `git checkout` — changes the working tree" },
 	{ re: /git\s+-C\s+\S+\s+switch\b/i, why: "same as `git switch` — changes the working tree" },
 	{ re: /git\s+-C\s+\S+\s+restore\b/i, why: "same as `git restore` — discards uncommitted work" },
 	{ re: /git\s+-C\s+\S+\s+revert\b/i, why: "same as `git revert` — rewrites committed work" },
@@ -284,13 +306,18 @@ function pickEnv(requested, allowlist) {
 	return kept;
 }
 
-/** The refusal a seat sees, phrased so it can act on it rather than retry blindly. */
-function refusalFor(command) {
+// The refusal a seat sees, phrased so it can act on it rather than retry blindly.
+//
+// `ctx` carries what a PATH-AWARE decision needs: the seat's root and the command's cwd. Most entries
+// are pure pattern matches; an entry whose `check` takes the context can resolve a TARGET rather than
+// pattern-match a verb (#4374, the same principle as the write-target resolver #4366/#4367).
+function refusalFor(command, ctx = {}) {
 	const text = Array.isArray(command) ? command.join(" ") : String(command);
 	for (const { re, why, unless, check } of DENIED_COMMANDS) {
-		if (!(check ? check(text) : re.test(text))) continue;
+		if (!(check ? check(text, ctx) : re.test(text))) continue;
 		if (unless?.() === true) continue;
-		return `refused by durig: ${why} — to test without your change, run the test RED BEFORE the fix, or use a throwaway detached worktree / temp copy (never revert the shared tree)`;
+		const detail = typeof why === "function" ? why(ctx) : why;
+		return `refused by durig: ${detail} — to test without your change, run the test RED BEFORE the fix, or use a throwaway detached worktree / temp copy (never revert the shared tree)`;
 	}
 	return null;
 }
@@ -500,7 +527,10 @@ export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_A
 		 * seat can `defer_work` on it instead of retrying variants.
 		 */
 		exec: async (command, options, context) => {
-			const refusal = refusalFor(command);
+			// #4374: the seat's `exec` runs with cwd = its own worktree, so the PATH-AWARE entries
+			// (checkout-index) resolve their TARGET correctly here too. Without this ctx a path-aware
+			// entry fails closed and refuses the seat its own restore.
+			const refusal = refusalFor(command, { root: confinedRoot, cwd: confinedRoot });
 			if (refusal) return err(new ExecutionError("spawn_error", refusal));
 			// A read-only seat may still RUN things - that is how a verifier reproduces a claim -
 			// but it must not write, so its cwd is pinned to the root and its environment is
