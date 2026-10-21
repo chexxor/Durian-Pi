@@ -1,6 +1,17 @@
 # durian-pi — NEXT (current pointer)
 
-## NEXT SESSION (2026-10-21T04:40Z — SHARED-TREE FLATTENING INCIDENT resolved to a path; two branches verified but NOT landed)
+## NEXT SESSION (2026-10-21T04:55Z — THREE BRANCHES LANDED and proven on main; shared-tree incident closed to its resolution path)
+
+**Current item:** the three verified TUI branches are **on `main`** and proven in a detached worktree —
+`a022635` (`impl-item-3941` @`e0efe71`, Fix A fill-terminal), `aabcacd` (`impl-item-4233` @`b5f463f`, the
+stacked action-runt band), `e79dd2f` (`impl-item-4158` @`2213801`, `ui.mjs` Enter → operator window).
+Landed with `scripts/land.mjs` from the shared root; two attempts failed on a fast-forward race with the
+concurrent delegate and were re-preflighted and re-run (runbook `land.md`). Post-landing proof in a
+detached worktree: `demo/tui-landing-fill.test.mjs`, `demo/tui-action-runt-band.test.mjs`,
+`demo/tui-enter-wiring.test.mjs` all **exit 0**; full suite on `main` **pass=200 fail=5** —
+`broker-one-connection`, `cli-broker-refuse` (new, registered by the other delegate), `next-pointer`
+(THIS file's pointer, now fixed by adding this line), `pitui` (#2412), `seat-instruction-encoding`.
+`src/tui/durable/enter.mjs` is now tracked by the landing, not hand-copied.
 
 **Incident (measured).** At `04:21:17Z` eight tracked files were rewritten as **single lines** (newlines
 → spaces), all the **`main` version** of exactly the Fix A file set (`src/textwidth.mjs`,
@@ -15,10 +26,10 @@ printed `ok:true` while merging into an ITEM WORKTREE (#4247) → the seat hand-
 
 **RESOLUTION PATH (delivered to `pm` as `operator-shared-tree-incident-2026-10-21-1`, 04:36:19Z):**
 
-1. **Land, from the SHARED ROOT, in order:** `impl-item-3941` @`e0efe71` (entry #4285) → `impl-item-4233`
-   @`b5f463f` (STACKED, #4259) → `impl-item-4158` @`2213801` (#4287). All three are **NOT on main**
-   (`git merge-base --is-ancestor` exit 1) while their landing entries are `done` — the #3681 shape again.
-   `src/tui/durable/enter.mjs` is UNTRACKED in the shared tree and must arrive by the landing.
+1. **DONE — landed and proven** (`a022635`, `aabcacd`, `e79dd2f`; three demos exit 0 on `main`). The
+   pre-landing record of the three, from the SHARED ROOT, in order: `impl-item-3941` @`e0efe71` (entry
+   #4285) → `impl-item-4233` @`b5f463f` (STACKED, #4259) → `impl-item-4158` @`2213801` (#4287).
+   `src/tui/durable/enter.mjs` arrived by the landing, not by a hand copy.
 2. **Fix `land.mjs` to refuse a non-root repo (#4247) — the fix is NOT on main** (`git log -- scripts/land.mjs`
    stops at `6683790`). This is the item that removes the incentive to hand-copy.
 3. **Guard:** refuse FILE writes into the shared root from a seat (`Set-Content`/`Out-File`/`>`/`cp`/`mv`),
@@ -29,11 +40,21 @@ printed `ok:true` while merging into an ITEM WORKTREE (#4247) → the seat hand-
 5. **Process:** a landing entry may not close on the tool's `ok:true`; the completion must carry the
    ancestry assertion + the `repo` field.
 
-**Blocker:** none on the tree (clean except `selfdev.sqlite.broker.audit.log` and the untracked
-`enter.mjs`). Broker pid 19216 passing. **Coordinate before landing** — a second delegate session is
-committing in this tree (its `c12d077`/`dcb8dec` are in the history) and qa's model was just swapped.
-**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue` then land `e0efe71` from the root
-with `scripts/land.mjs`, asserting `git merge-base --is-ancestor e0efe71 main` afterwards.
+**Blocker:** the **`land.mjs` non-root refusal (#4247) is not on main** — the hand-copy incentive that
+produced the flattening incident is still live; and `main` carries 4 known reds (`broker-one-connection`,
+`cli-broker-refuse`, `pitui` #2412, `seat-instruction-encoding`), so `land.mjs --suite` stops early and
+the full `node scripts/suite.mjs --jobs 8` on a detached `main` is the proof to use. Broker pid 19216
+passing; tree clean except `selfdev.sqlite.broker.audit.log`. **Coordinate before landing** — a second
+delegate session is committing in this tree (its `c12d077`/`dcb8dec`/`6c2e3a0` are in the history).
+
+**Queue id:** #4247 (land.mjs non-root refusal — the urgent one) · #4182/#4180 (broker trace, landed) ·
+#4124 (closed by lead's ruling) · #3946 (Fix A verify, done) · #4285/#4259/#4287 (landed) · #4251
+(round-trip double-stop defect) · the 52 breakdown + reconciler/sweep + watchdog (P3–P6, awaiting `pm`).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue` — then read #4247's state and land
+its fix from the shared root with `scripts/land.mjs`, asserting `git merge-base --is-ancestor <sha> main`
+afterwards; re-run `node scripts/suite.mjs --jobs 8` in a detached `main` worktree to confirm the red set
+is unchanged.
 
 ## NEXT SESSION (2026-10-21T02:40Z — operator re-reported both TUI asks; broker was DORMANT, restarted; Fix A gates now claimed; Enter→Pi has NO live wiring item)
 
