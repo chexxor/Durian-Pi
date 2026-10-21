@@ -57,12 +57,21 @@ PRESSURE TO HAND-FIX, and the hand-fix is what broke the tree. Never `>` / `Get-
 source file — use the `edit` tool or `cmd /c "git show <ref> > file"`; the encoding guard and detector
 are routed separately and give this rule teeth.
 
-**`git status --porcelain` IMMEDIATELY BEFORE the landing, as the last step before the command.** An earlier
-measurement is evidence about the past, not a precondition — #4271 measured the tree clean and was blocked
-later by ten dirty files, #4163 the same, and the 04:21Z flattening came from a seat acting on a STALE
-picture. In every case the measurement was TRUE WHEN TAKEN and false by the time it mattered. The shared
-tree CAN be dirtied by a seat at any time — that is not a defect, it is what a shared tree is — so there is
-no code change that makes the measurement durable: THE ONLY FIX IS TO TAKE IT AT THE MOMENT OF USE.
+**`git status --porcelain` IMMEDIATELY BEFORE the landing is BEST-EFFORT, not a guarantee — the LOCK is
+the serialisation.** The status check is a RACE, not a guard: measured `dirt=1`, then clean SECONDS later
+(the dirt was transient, written by another delegate mid-landing), with `main` moving twice underneath
+(`c7b6d30 → 9682817 → da01550`) under fresh landings from another seat. "CHECK STATUS, THEN LAND" HAS A
+WINDOW, and the window is however long it takes to type the landing command. **THE LOCK IS WHAT ACTUALLY
+MAKES IT SAFE; THE STATUS CHECK ONLY AVOIDS THE WORST CASE** — measured `waitedMs: 301749, liveHolders: 4`
+(five minutes waiting behind four live holders, another delegate landing concurrently): that IS the guard
+working, and it is why a concurrent lander is not a catastrophe. The status check CANNOT catch a write that
+lands between the check and the command; it catches the worst case — a tree left dirty for minutes by a
+seat that abandoned work. An earlier measurement is still evidence about the past, not a precondition
+(#4271 blocked by ten dirty files, #4163 the same, the 04:21Z flattening acted on a STALE picture; every
+measurement was TRUE WHEN TAKEN and false by the time it mattered), so take it AT THE MOMENT OF USE — but
+the lock, not the check, is what protects you. Same insight as the retired operator-confirmation gate
+(#4431): a human confirmation and a status snapshot are both SNAPSHOTS, and A SNAPSHOT CANNOT SUBSTITUTE FOR
+A SERIALISER — IT CAN ONLY AVOID THE OBVIOUS CASE.
 
 **AND IF IT IS DIRTY: STOP AND REPORT.** Do not clean it, do not stash it, do not restore it — the dirty tree
 may be a colleague's edit in flight, and this session has one incident that began with a seat deciding a
