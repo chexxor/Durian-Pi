@@ -1,13 +1,13 @@
 # Broker supervision and the daemon host — design of record
 
 **Status:** design recorded (2026-10-16, delegate), grounded in the external research at
-`docs/reviews/building-agent-systems-on-pi-research.md` and **re-verified against durig's code** at
+`docs/reviews/building-agent-systems-on-pi-research.md` and **re-verified against durian-pi's code** at
 every round (the research agent read the tree from round 3 on). **Registered, not scheduled:** roadmap
 items 61–67; `pm` sequences them. The host mechanism **logon Task vs Windows Service** is still an open
-operator question (§10) — and, since durig must adapt to macOS and Linux, the real axis is
+operator question (§10) — and, since durian-pi must adapt to macOS and Linux, the real axis is
 **per-user agent vs system daemon** across platforms.
 **Scope:** how the process that owns the store (`cli.mjs serve`) is kept alive and healthy on a host
-that can reboot, sleep, and kill processes — the "daemon" around durig.
+that can reboot, sleep, and kill processes — the "daemon" around durian-pi.
 **Companion:** `docs/BROKER-ARCHITECTURE.md` (the in-process event loop / actor model). This document
 covers the **process lifecycle** layer that the actor-model doc leaves out.
 
@@ -39,7 +39,7 @@ OS trigger (Task · launchd · systemd) ──▶ src/host.mjs  (PORTABLE superv
 - **Layer 2 — the broker (`cli.mjs serve`).** Unchanged as the sole writer; adds the exit-code taxonomy
   (§3) and the heartbeat writer (§4).
 
-**Portability boundary (the requirement: durig must adapt to macOS and Linux distros).** Only three
+**Portability boundary (the requirement: durian-pi must adapt to macOS and Linux distros).** Only three
 things are OS-specific, and each sits behind a small adapter so the host is byte-identical everywhere:
 (1) the **boot/login trigger** — a generated unit/plist/service file, not code; (2) the **kill-tree
 primitive** — Windows Job Object vs POSIX process group (`detached` + `kill(-pid)`); (3) the **stop
@@ -80,14 +80,14 @@ while crash and wedge restart. (The research confirmed the SCM skips failure act
 `SERVICE_STOPPED`, and that an operator service-stop is one — so the OS trigger is a backstop for the
 *host* dying, not the child-restart mechanism.)
 
-**durig-specific: set the code, do not `process.exit()`.** `cli.mjs` already follows this rule for
+**durian-pi-specific: set the code, do not `process.exit()`.** `cli.mjs` already follows this rule for
 `check` — *"Set the code rather than exiting: a piped JSON payload may still be draining, and
 process.exit would truncate it mid-write."* `cmdServe` currently sets **no** exit code; the taxonomy is
 `process.exitCode = exitCodeForStopReason(result.stoppedBy)` after `out(...)`.
 
 **Stop window must exceed the drain window.** A generation holds a slot for the **whole response**
 (`src/genlock.mjs` `wrapProviderWithSlots`) and a single model call can run to the provider SDK's
-request timeout (`DURIG_STREAM_TIMEOUT_MS`; 600000 ms for the openai provider when unset). The host's
+request timeout (`DURIAN_PI_STREAM_TIMEOUT_MS`; 600000 ms for the openai provider when unset). The host's
 drain window is therefore **900 s** (> 600 s + margin); the OS trigger's own stop timeout must also be
 ≥ that, or it force-kills a broker mid-run and strands the submission (F11). The **real** graceful stop
 is `serve --stop` → `.broker.stop` + `.broker.down` → broker drains and exits 0; the OS stop is for
@@ -124,7 +124,7 @@ and lean on pid liveness as the primary signal.
 
 ## 5. Durable markers — do not collide
 
-durig **already has a stop-request file** (F35): `stopRequestPath()` → **`<db>.broker.stop`**
+durian-pi **already has a stop-request file** (F35): `stopRequestPath()` → **`<db>.broker.stop`**
 (`src/broker.mjs`), written by `serve --stop`, polled by the broker between passes, and **cleared by the
 broker on exit**. That is an *ephemeral* "stop now" signal.
 
@@ -186,7 +186,7 @@ object — keep ours as the authority).
   calls. Use delayed auto-start and let backoff handle it — and document that a boot `WAKE`/provider
   error is expected, not a bug.
 - **Multiple stores.** separate stores ⇒ one host per store, parameterized
-  (`durig install --db <path>`), never hard-coded `rig.sqlite`. Every OS artifact the host installs is
+  (`durian-pi install --db <path>`), never hard-coded `rig.sqlite`. Every OS artifact the host installs is
   keyed by the store — see **Instance identity** below.
 - **Upgrade under load.** The trigger runs a fixed exe path; a new pinned pi or new code is picked up
   only on restart. Do a drain + restart, and put `version` + upstream pin in the heartbeat and the
@@ -213,7 +213,7 @@ object — keep ours as the authority).
 ### Instance identity — one store ⇔ one driver ⇔ one instance key
 
 **Invariant (state this first):** *one store ⇔ one driver ⇔ one instance key.* Every OS-level artifact
-the host installs is scoped by ONE key derived from the store, so two durig instances on one machine
+the host installs is scoped by ONE key derived from the store, so two durian-pi instances on one machine
 never share a name. Without it, two instances collide on the trigger name, the kill primitive's Job
 Object / process-group name, the log path, and (later) the control socket — and a host's
 "single-instance" lock would be global instead of per store.
@@ -236,11 +236,11 @@ tokens. Filesystem- and case-insensitive-safe.
 
 | Artifact | Keyed name (illustrative) | Notes |
 |---|---|---|
-| OS trigger | Windows Task `durig-<key>`; launchd label `com.durig.<key>`; systemd `durig-<key>.service` | item 64 adapters |
-| Kill primitive | Job Object / process-group name `durig-<key>` | `KILL_ON_JOB_CLOSE` (Windows) / `kill(-pid)` (POSIX) |
-| Log path | `<logdir>/durig-<key>.log` | `daemon logs` tails it |
+| OS trigger | Windows Task `durian-pi-<key>`; launchd label `com.durian-pi.<key>`; systemd `durian-pi-<key>.service` | item 64 adapters |
+| Kill primitive | Job Object / process-group name `durian-pi-<key>` | `KILL_ON_JOB_CLOSE` (Windows) / `kill(-pid)` (POSIX) |
+| Log path | `<logdir>/durian-pi-<key>.log` | `daemon logs` tails it |
 | Single-instance lock | `<db>.host.lock` (store-scoped) | PER INSTANCE, not global |
-| Control socket/pipe (future) | `\\.\pipe\durig-<key>` / a per-key socket | naming **waits on item 55** |
+| Control socket/pipe (future) | `\\.\pipe\durian-pi-<key>` / a per-key socket | naming **waits on item 55** |
 | Markers (already store-scoped) | `<db>.broker.json` / `.down` / `.stop` / `.inbox` | keep store-scoped; the lock keys the same way |
 
 **Rules.**
@@ -252,7 +252,7 @@ tokens. Filesystem- and case-insensitive-safe.
 - **Version coexistence.** Two installations on different pinned pi versions must NOT fight over one
   trigger: the key is store-derived, so different stores never collide, and a re-pin/upgrade of ONE
   instance restarts only its own trigger (items 64/72).
-- **Wrong-rig trap.** A bare `durig` must not discover another instance's `durig.config.json`/store
+- **Wrong-rig trap.** A bare `durian-pi` must not discover another instance's `durian-pi.config.json`/store
   (#491, D18): the resolved store (hence the key) comes from explicit `--db`/config discovery, never a
   global default.
 - **No control socket yet.** Naming any socket/pipe key waits on item 55 (the `security.sec` position).
@@ -299,26 +299,26 @@ impersonation/squatting vectors, and logon-SID scoping are recorded in the resea
 
 ## 11. CLI surface — one command, two modes, clean switch
 
-`durig daemon <subcommand>` is the single end-user surface; the platform adapter picks the mechanism,
+`durian-pi daemon <subcommand>` is the single end-user surface; the platform adapter picks the mechanism,
 so the user never names schtasks/launchctl/systemctl.
 
 | Command | Meaning |
 | --- | --- |
-| `durig daemon install [--user|--system] [--db <path>] [--print]` | Install the OS trigger. **`--user` is the default** (starts at login, runs as you). `--print` emits the generated unit/plist/task without applying it (the cross-platform testable path). |
-| `durig daemon switch --user|--system` | Migrate cleanly: drain the broker, uninstall the current trigger, install the target, start it, verify the heartbeat. The store is preserved. |
-| `durig daemon uninstall [--user|--system]` | Remove the trigger (default: whichever is installed); leaves the store. |
-| `durig daemon status` | Mode, platform mechanism, state, heartbeat age, and the switch hint. |
-| `durig daemon restart` / `stop` | Operator controls (`stop` writes `<db>.broker.down`). |
-| `durig daemon logs [-f]` | Tail the host/broker log. |
+| `durian-pi daemon install [--user|--system] [--db <path>] [--print]` | Install the OS trigger. **`--user` is the default** (starts at login, runs as you). `--print` emits the generated unit/plist/task without applying it (the cross-platform testable path). |
+| `durian-pi daemon switch --user|--system` | Migrate cleanly: drain the broker, uninstall the current trigger, install the target, start it, verify the heartbeat. The store is preserved. |
+| `durian-pi daemon uninstall [--user|--system]` | Remove the trigger (default: whichever is installed); leaves the store. |
+| `durian-pi daemon status` | Mode, platform mechanism, state, heartbeat age, and the switch hint. |
+| `durian-pi daemon restart` / `stop` | Operator controls (`stop` writes `<db>.broker.down`). |
+| `durian-pi daemon logs [-f]` | Tail the host/broker log. |
 
 **Mode names for end users:** `--user` = per-user agent (Windows Task, macOS LaunchAgent, `systemd
 --user`) — "starts when you log in, runs as you". `--system` = system daemon (Windows Service, macOS
 LaunchDaemon, systemd system unit) — "starts at boot, runs without a login".
 
-**Discoverability.** `durig up` and the first `serve` print a one-line hint when no daemon is installed:
-*"the broker stops when you log out — keep the team running with `durig daemon install` (user) or
-`durig daemon install --system` (always-on)."* `durig daemon status` always names the other mode and the
-`switch` command; `durig --help` lists `daemon`.
+**Discoverability.** `durian-pi up` and the first `serve` print a one-line hint when no daemon is installed:
+*"the broker stops when you log out — keep the team running with `durian-pi daemon install` (user) or
+`durian-pi daemon install --system` (always-on)."* `durian-pi daemon status` always names the other mode and the
+`switch` command; `durian-pi --help` lists `daemon`.
 
 **Rules.** `install` never silently picks `--system` — the user mode is the explicit default. `switch`
 is the only migration path and is idempotent (installing the mode already installed is a no-op message),
@@ -330,5 +330,5 @@ without an explicit command (never on first `run`).
 Durability and supervision are different jobs. pi-durable owns durability and `resume()`; the host owns
 exactly: **process liveness, boot/logout survival, backoff, give-up, and the stop handshake.** It must
 not own retries, scheduling, or resume — if it starts re-driving the queue, we get double-work. This is
-the BYOC split from the research report: Pi is the worker primitive; durig owns the broker above it; and
+the BYOC split from the research report: Pi is the worker primitive; durian-pi owns the broker above it; and
 the supervisor is a *host*, not a second scheduler.

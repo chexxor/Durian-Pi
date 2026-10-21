@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 
 
 I'll start by checking the sandbox for the baseline docs the request references, then begin research.No durig baseline docs are present in the sandbox — only the request itself. I'll note internal claims as unverified. Continuing research.Good material. Now filling the remaining gaps.One more research pass to close the remaining gaps.Final gap-filling pass.## Note on the deliverable

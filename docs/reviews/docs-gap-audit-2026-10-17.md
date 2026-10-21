@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 ---
 audit: documentation gap audit
 date: 2026-10-17

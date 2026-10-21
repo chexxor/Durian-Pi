@@ -95,6 +95,15 @@ try {
     // rule (ROADMAP 46 / D62): an empty feat set is a real "nothing to check".
     queueItems: [],
     featureDocs: [],
+    // An empty commit-message set is a real "nothing to check", so the encoding rule (#4349)
+    // RUNS and passes here rather than skipping.
+    commitMessages: [],
+    // An empty text-integrity set is a real "nothing to check", so the rule (#4371) RUNS and passes
+    // here rather than skipping.
+    textIntegrity: [],
+    // The shared tree is on its integration branch, so this rule RUNS and passes rather than
+    // being skipped: the assertion below is "every rule ran and passed".
+    sharedTreeBranch: "main",
   });
   assert.deepEqual(ids(hardened), [], `hardened rig has no findings; got ${ids(hardened).join(", ")}`);
   assert.equal(hardened.exitCode, 0);
@@ -105,7 +114,7 @@ try {
   );
 
   // 3. THE regression: the spec declares a constitution and the store holds a
-  //    different one. Nothing else in durig reports this, and it is invisible
+  //    different one. Nothing else in durian-pi reports this, and it is invisible
   //    from the rig file alone.
   const drifted = auditRig({
     rig: "example.rig.json",
@@ -187,7 +196,7 @@ try {
   });
   assert.ok(!ids(openEdges).includes("unreachable-seat"), "no declared edges means no reachability rule");
   // A seat absent from every edge is still reported even when nothing sends to
-  // it. That is deliberate: durig's queue delivers DONE notices without an
+  // it. That is deliberate: durian-pi's queue delivers DONE notices without an
   // edge, so this rule is not "cannot reply", it is "cannot delegate or
   // escalate" - which is exactly what the coordinator bug was, and the reason
   // the sharpened "is a target" form was rejected.

@@ -18,7 +18,7 @@ backup, or the store: `sk-ant…`, `AKIA…`, `ghp…`, `xox…`, `-----BEGIN…
 leak by pasting the value into a queue item, creating a second copy.
 
 ## Impact
-The value is **burned the instant it is written anywhere durig cannot unpublish**: a commit (portable
+The value is **burned the instant it is written anywhere durian-pi cannot unpublish**: a commit (portable
 history the operator may later push), `.spike/` patch backups, `selfdev.sqlite` and the spooled inbox
 (durable, readable by every seat — all seats run as the same Windows user, so file permissions are a
 norm, not a control), and session logs. Removing it from source is necessary but **never sufficient**:
@@ -69,7 +69,7 @@ scans the store broker-stopped.
    queue item, completion summary, or commit message — those are durable reads. If a queue item or
    log already carries the raw value, treat that copy as leak #2 and include it in the inventory.
 2. **Contain: rotate first.** The value is burned; only rotation (out-of-band, via the provider)
-   makes the leak benign. durig seats hold no provider credentials — request rotation with
+   makes the leak benign. durian-pi seats hold no provider credentials — request rotation with
    `defer_work` to the operator. Do not wait for cleanup to start this.
 3. **Remove from HEAD going forward.** In your own item worktree, replace the value with an env read
    or a boolean `set`/`unset` (see `describeConfig` in `src/config.mjs`), commit **explicit paths
@@ -77,8 +77,8 @@ scans the store broker-stopped.
    completion what was removed and where. This does NOT un-leak the history.
 4. **Inventory the copies.** `git log --all -S` + worktree list; the delegate adds `.spike/`, inbox
    and store. Report the list, then **leave history rewrite to the operator** — `filter-branch`/BFG/
-   force-rebase decisions belong to the person who holds push; durig never pushes without
-   `DURIG_ALLOW_PUSH`, so the leak is local until the operator publishes.
+   force-rebase decisions belong to the person who holds push; durian-pi never pushes without
+   `DURIAN_PI_ALLOW_PUSH`, so the leak is local until the operator publishes.
 5. **Close the mechanism that let the value in.** Controls confirmed at rev 7e5d16e:
    - `src/confine.mjs` L110/L122: an env name matching `SECRET_NAME`
      (`/(key|token|secret|password|passwd|credential|cookie|authorization)/i`) never crosses into a
@@ -98,7 +98,7 @@ runbook's own pattern table, and this file is the one sanctioned carrier of the 
 git grep -nE '<pattern 1>\|<pattern 2>' -- . ':!docs/runbooks/leaked-secret.md'   # exit 1 = clean
 git log --oneline --all -S'<class substring>' -- .        # no hits NEWER than the fix commit
 ```
-Rotation is operator-confirmed out-of-band; it is not verifiable from durig — say so in the completion
+Rotation is operator-confirmed out-of-band; it is not verifiable from durian-pi — say so in the completion
 rather than implying it was checked.
 
 ## If it fails
@@ -110,7 +110,7 @@ rather than implying it was checked.
   broker-stopped (see `broker-safe-change.md`).
 
 ## Escalate to
-- **Operator:** rotation, any history rewrite, publication status (push grant / `DURIG_ALLOW_PUSH`).
+- **Operator:** rotation, any history rewrite, publication status (push grant / `DURIAN_PI_ALLOW_PUSH`).
 - **Delegate:** store / inbox redaction (broker-stopped procedure).
 - **lead/pm:** landing #700's scanner and the #828/#837 tie-ins — they adopt; this seat recommends
   only.

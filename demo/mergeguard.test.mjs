@@ -93,7 +93,7 @@ try {
     refusal,
   );
 
-  // A LINKED worktree — `.git` is a FILE ("gitdir: ..."), which is how every durig item
+  // A LINKED worktree — `.git` is a FILE ("gitdir: ..."), which is how every durian-pi item
   // is checked out. If the guard did not follow that file it would be blind in exactly the
   // checkouts a seat works in.
   const linked = join(tmp, "linked");

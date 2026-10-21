@@ -39,6 +39,29 @@ radius: a bad merge touches every seat's base tree.
   never merged while a seat holds uncommitted edits on it.
 - The branch is **verified** (qa/auditor ack) and **mergeable** (clean merge into current `main`).
 
+## The mid-merge WRITE refusal (ROADMAP 111)
+Since `935b2c4` (the 2026-10-17 landing-safety incident) durig **refuses every WRITE verb while the
+working tree is mid-merge** (`.git/MERGE_HEAD` present). The guard is `src/mergeguard.mjs`, run FIRST
+in `cli.mjs` — before any storage or provider work — from a module that imports nothing but
+`node:fs`/`node:path`, so it cannot be disabled by the very fault it exists to catch (a conflicted
+`src/checkup.mjs` that kills the CLI's load).
+
+- **Refused** (exit non-zero): `up`, `init`, `send`, `run`, `serve`, `stop`, `reset`, `clean`,
+  `compact`, `resume`, `doctor`, `format`, `worktree`.
+- **Still usable — reads, so a stuck merge stays diagnosable:** `status`, `queue`, `ps`, `log`,
+  `watch`, `events`, `metrics`, `check`, `config`.
+- **Exempt (not mutations):** any `--dry-run`, and `serve --stop` — a stuck merge is exactly when the
+  broker most needs stopping.
+
+The refusal names the state, the `MERGE_HEAD` path, the merge commit, and the remedy ("Finish the
+merge … or abort it, then re-run `<verb>`"); it does not fall through to the verb's own arg/store
+error. The guard lives in CODE, not in prose, because prose is exactly what failed.
+
+Verify the guard:
+```bash
+node demo/mergeguard.test.mjs   # exit 0
+```
+
 ## Diagnose (read-only)
 ```bash
 git branch --format='%(refname:short)' | grep -v '^main$'
@@ -142,7 +165,7 @@ Then delete the branch: `git branch -d <branch>` (safe — `-d` refuses anything
   shared tree breaks `cli.mjs` for the whole rig (`.git/MERGE_HEAD` in a statically-imported module makes
   every verb a `SyntaxError`). Then **stop and report**; send the branch back for a rebase (W2) and name
   the conflict. Never force.
-- `git branch -d <branch>` is refused by the seatguard (`refused by durig: would delete a branch`): the
+- `git branch -d <branch>` is refused by the seatguard (`refused by durian-pi: would delete a branch`): the
   landing is still complete (the sha is an ancestor of `main`); leave the merged branch in place and
   report it — branch deletion is guard-blocked for author seats, so the operator (or a non-author seat)
   must prune the merged branch.

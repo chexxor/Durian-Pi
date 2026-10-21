@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # OWASP ASI Top 10 self-assessment for durig (ROADMAP 145)
 
 - **Date:** 2026-10-17 · **Owner:** seat `security` · **Item:** #1800 (gates 146–150) · **Revision 1**

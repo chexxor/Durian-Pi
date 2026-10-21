@@ -24,6 +24,11 @@ unresolvable path: [...]"}` while the broker's `PASS` keeps advancing and other 
 stderr names it once and the seat shows `last_run_failed: aborted`. The broker does **not** die — do not
 go to `broker-down-or-stalled.md` for this shape.
 
+## Impact
+A single unreadable `pi.live` document poisons the whole pi-durable session — `serve`/`run`/`send` all
+die with `Session failed after a storage error`, and (second shape) the broker keeps advancing while one
+seat is never woken. Doing nothing leaves the queue permanently dead or silently missing one seat's
+work; the fix is retiring the corrupt document and restarting, which is cheap once the shape is identified.
 ## Preconditions
 The broker is **stopped and verified** (see `broker-safe-change.md` step 1–2). No live generation.
 
@@ -34,7 +39,7 @@ alive, read `.spike/serve.err` — repeated `PathError: unresolvable path: [...]
 the seat-level signature. Confirm no `genlock.*` is held before the write.
 
 ## Do
-1. Stop the broker and confirm it exited (runbook `broker-safe-change.md` step 1–2).
+1. Stop the broker and confirm it exited (runbook `broker-safe-change.md` step 1–2). **`stopped:true` is NOT exit** — the pid can linger in its F11 drain for minutes. Do NOT run `resume`, `repair-pi-live`, or any other write while that process is alive: a second writer at that moment leaves the corrupt partial this runbook exists to fix. On 2026-10-19 a `resume` run during the drain poisoned `devtools` conv 4930 (`unresolvable path: ["generation","message","content",0]`). Confirm no `cli.mjs serve` process remains — kill the lingering pid (`taskkill /F /PID <pid>`) only when no `genlock.*` is held — BEFORE the write.
 2. **Back up the store** before any write; the `-shm` copy fails while a process still holds it, which is
    itself a signal the broker is not stopped:
    ```bash
@@ -55,7 +60,7 @@ For the alive-broker shape, verify all three:
 ```bash
 tail -6 selfdev.sqlite.broker.log          # expect `WAKE <seat>` and `PASS n woke=<seat>`
 tail -4 .spike/serve.err 2>/dev/null      # no new `wake-failed`
-DURIG_DB=./selfdev.sqlite node cli.mjs status >/dev/null   # stderr: no `unreadable pi.live`
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status >/dev/null   # stderr: no `unreadable pi.live`
 ```
 
 ## If it fails
@@ -69,6 +74,9 @@ writer that emits it is **not proven**. A 2026-10-18 recurrence on impl conv 9 (
 candidate, still UNVERIFIED. ROADMAP item 78 makes the broker survive this per-conversation instead of
 logging `wake-failed`.
 
+## Escalate to
+`lead` — when the corrupt document's writer cannot be identified and the repair needs a ruling; the
+operator — when the store is unrecoverable and must be restored from a backup.
 ## Evidence
 2026-10-16: docs 16 (qa) and 22 (lead) from a second-writer crash, and doc 12105 (impl) from an
 `up --refresh` run on a broker that had not stopped. Backups: `store-backup-20261016-121820`,
@@ -77,3 +85,8 @@ logging `wake-failed`.
 for impl conv 9, now in the alive-broker `["tools",0]` shape. `repair-pi-live.mjs ./selfdev.sqlite 9`
 retired it (`retired:[{id:12105,...}]`, `seq:847092`); the broker then logged `WAKE impl` /
 `PASS 16 woke=impl`. Backup: `store-backup-20261017-204831`.
+2026-10-18 (recurrence, `docs/incidents/2026-10-18-broker-retry-hotloop.md`): `pm` conv **3** — the
+broker wedged on `wake-failed … pm conv 3 … Session failed after a storage error` and a plain
+terminate+restart did NOT clear it (clean passes, then a re-spin). `node scripts/repair-pi-live.mjs
+./selfdev.sqlite 3` is the prerequisite before the restart. This is the first `pm` recurrence; prior
+ones were `impl` conv 9 / `qa` conv 15 / `lead` conv 22.

@@ -5,8 +5,8 @@
 // - `<pi-coding-agent>` (docs/themes.md, dist/.../theme/dark.json+light.json,
 //   tool-execution.js) is NOT vendored here. pi-tui@1.1.0 IS vendored: its components
 //   take per-role theme FUNCTIONS (e.g. SettingsListTheme.label/value/description),
-//   the contract durig's TUI mirrors.
-// - pi's role NAMES are already adopted in durig as a theme-token DECISION:
+//   the contract durian-pi's TUI mirrors.
+// - pi's role NAMES are already adopted in durian-pi as a theme-token DECISION:
 //   docs/RESEARCH.md "Tool backgrounds are a theme token | pi: toolPendingBg,
 //   toolSuccessBg, toolErrorBg | opt-in --tool-bg with --theme dark|light",
 //   implemented in src/chatview.mjs (TOOL_BG 48;5;236 dark / 48;5;253 light, opt-in).
@@ -15,7 +15,7 @@
 // (toolPendingBg/toolSuccessBg/toolErrorBg/toolTitle/toolOutput), theme-switchable
 // (dark/light), opt-in with NO_COLOR/untinted default — distinct from the agent's
 // prose rows, and success/failure never encoded by hue alone (glyphs differ).
-// Values are DERIVATIONS on durig's existing tint ramp (236/253 base family),
+// Values are DERIVATIONS on durian-pi's existing tint ramp (236/253 base family),
 // disclosed as such; no new hue family and no hard-coded automatic tint.
 //
 // Failing-first: the current TUI tints nothing (fg glyphs only) → the role assertions

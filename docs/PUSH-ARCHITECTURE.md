@@ -1,4 +1,4 @@
-# Event-driven durig and Pi-harness integration — initial thinking and design
+# Event-driven durian-pi and Pi-harness integration — initial thinking and design
 
 **Status:** initial thinking + design overview — input for `pm` (decomposition), `lead` (scope + D-entry
 ruling), `security` (if a socket is added), `advocate`/`designer` (workflow + surface). Not a decision.
@@ -16,13 +16,13 @@ gate (a `lead` ruling + a recorded D-entry) was satisfied by D45; no socket was 
 
 ## 1. Motivation
 
-`durig run` is a **clock**: it loops `driveOnce` (`src/driver.mjs`) until the queue is quiescent, and it
-must be re-invoked by an external actor. The operator's position: this is backwards. durig should be
+`durian-pi run` is a **clock**: it loops `driveOnce` (`src/driver.mjs`) until the queue is quiescent, and it
+must be re-invoked by an external actor. The operator's position: this is backwards. durian-pi should be
 **interactive/push-based** — it should wake seats when work is enqueued, not depend on an external cron.
 That is exactly **ROADMAP 38** (*"Self-driving queue: wake the seat when work is enqueued, instead of an
 external clock"*), and its architectural half is **ROADMAP 40(a)/38(b)** (*"one long-lived writer that
-**is** the harness"*). The operator also wants durig to work with an LLM harness like **Pi**, i.e. the
-operator's own agent session should be woken by durig events rather than polling.
+**is** the harness"*). The operator also wants durian-pi to work with an LLM harness like **Pi**, i.e. the
+operator's own agent session should be woken by durian-pi events rather than polling.
 
 The load-bearing constraint: **LLM harnesses are turn-based.** A tool call returns at completion, so a
 model cannot consume a continuous stream inside a turn. Push into a model therefore means **event
@@ -59,7 +59,7 @@ Three pieces; each is independently useful and the third depends on the first tw
 
 ```
                     ┌───────────────────────────────────────────────┐
-                    │  durig  (single writer)                       │
+                    │  durian-pi  (single writer)                       │
    enqueue/claim/   │  owns: harness + store + queue                │
    complete/…  ────▶│                                               │
                     │   store ──▶ change trigger ──▶ wake policy    │
@@ -79,8 +79,8 @@ Three pieces; each is independently useful and the third depends on the first tw
 
 ### 3.1 Durable event feed (read-only, additive)
 
-A single machine-readable stream of durig events with a **cursor**, so a late or reconnecting
-subscriber resumes rather than replaying history. durig already emits NDJSON (`watch` piped;
+A single machine-readable stream of durian-pi events with a **cursor**, so a late or reconnecting
+subscriber resumes rather than replaying history. durian-pi already emits NDJSON (`watch` piped;
 `log --follow --json`); this is a first-class, stable-schema version of that. Proposed shape — one
 JSON object per line:
 
@@ -99,7 +99,7 @@ JSON object per line:
 
 ### 3.2 Resident broker (the architecture decision)
 
-`durig serve` one long-lived process that **is** the harness (ROADMAP 38b/40a); the command name is
+`durian-pi serve` one long-lived process that **is** the harness (ROADMAP 38b/40a); the command name is
 the `lead`'s call. It:
 - observes queue transitions via the harness's **in-process** commit subscription — the cross-process
   gap in D11 only exists because readers are separate processes; a broker that owns the harness does
@@ -145,11 +145,11 @@ Relative to **1× = the cheapest useful piece** (about a day). Sizes are the tea
 
 | # | Piece | Relative | Touches / risk |
 |---|---|---|---|
-| 1 | **Pi extension subscriber** (watch the feed, `pi.sendMessage` wake) | **S · 1×** | No durig change; TS extension + a wake string. Spike-able in a day. |
+| 1 | **Pi extension subscriber** (watch the feed, `pi.sendMessage` wake) | **S · 1×** | No durian-pi change; TS extension + a wake string. Spike-able in a day. |
 | 2 | **Durable event feed** (`events --follow`, cursor) | **S–M · 1–2×** | Read-only, additive; reuses `src/readapi.mjs`. Work = event taxonomy + cursor. |
 | 3 | **Resident broker** (`serve`, push + wake on change) | **M–L · 3–4×** | Reuses `src/driver.mjs`; new: resident lifecycle, change trigger, fan-out, restart. **Needs a D-entry + `lead` ruling**; `security` if a socket. |
-| 4 | **Pi RPC bridge** (durig drives a Pi session) | **M · 2–3×** | New dep on `pi-coding-agent`; JSONL client + event mapping. |
-| 5 | **durig MCP server** (queue tools/resources) | **M · 2×** | Additive; tool path only, not a wake. |
+| 4 | **Pi RPC bridge** (durian-pi drives a Pi session) | **M · 2–3×** | New dep on `pi-coding-agent`; JSONL client + event mapping. |
+| 5 | **durian-pi MCP server** (queue tools/resources) | **M · 2×** | Additive; tool path only, not a wake. |
 | 6 | **Pi as the seat runtime** (replace pi-durable) | **L–XL · 8–12×** | Rewrites seat env, `seattools.mjs`/`confine.mjs`, transcripts, queue protocol, genlock. Deferred. |
 
 **Composition:** piece 1 alone is a valid, zero-risk first proof. The roadmap item is **2 + 3 + 1**
@@ -169,16 +169,16 @@ Relative to **1× = the cheapest useful piece** (about a day). Sizes are the tea
 
 ## 6. Next work item (the spike — start a new session here)
 
-**Goal:** prove the wake path end-to-end, with **no durig product change**.
+**Goal:** prove the wake path end-to-end, with **no durian-pi product change**.
 
 **Deliverable:** a small, checked, timeboxed spike (under `spikes/` or a scratch dir, never product
 code) containing:
-- a Pi extension that, from `session_start`, watches a durig change source and calls
+- a Pi extension that, from `session_start`, watches a durian-pi change source and calls
   `pi.sendMessage(...)` on a matching event; and
-- the durig-side trigger it watches — the existing `durig watch --once --json` poll, or `log --follow
+- the durian-pi-side trigger it watches — the existing `durian-pi watch --once --json` poll, or `log --follow
   --json`, is sufficient for the spike.
 
-**Proving test (falsifiable both directions):** drive a durig event (e.g. `send pm` creating a queue
+**Proving test (falsifiable both directions):** drive a durian-pi event (e.g. `send pm` creating a queue
 item) and observe the Pi session receive an injected message and start a turn; disable the watcher and
 the session receives nothing.
 
@@ -204,18 +204,18 @@ the known limits found.
 ## 8. Future improvement plans
 
 - **MCP server** (piece 5): expose `claim_work`/`complete_work`/queue resources so any MCP client can
-  read and route durig work. Complements the feed; does not replace the wake.
+  read and route durian-pi work. Complements the feed; does not replace the wake.
 - **Pi as the seat runtime** (piece 6): only if the decision is that seats should be full Pi sessions.
 - **Browser/multi-viewer client**: the feed (piece 2) is the enabling layer for the TUI client in
   `docs/UI-TUI-INITIAL-THINKING.md`; a browser would then be "just another subscriber."
-- **Self-driving loop end-state:** `durig serve` runs resident; `run` becomes a client of it or is
+- **Self-driving loop end-state:** `durian-pi serve` runs resident; `run` becomes a client of it or is
   retired; the queue advances with no external clock.
 
 ---
 
 ## 9. References
 
-- durig: `src/driver.mjs` (`selectWakes`, `driveOnce`, `WAKE_CONTENT`), `src/readapi.mjs`,
+- durian-pi: `src/driver.mjs` (`selectWakes`, `driveOnce`, `WAKE_CONTENT`), `src/readapi.mjs`,
   `src/viewmodel.mjs` (`buildTurns`, `partialView`), `cli.mjs` (`cmdRun`, `cmdWatch`, `cmdLog`),
   `src/genlock.mjs`.
 - decisions: D11 (watch polls storage), D21 (CLI stays non-interactive), D24 (measures read-only),

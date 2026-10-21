@@ -1,4 +1,4 @@
-# durig
+# durian-pi
 
 A minimal multi-agent rig layer built on [@earendil-works/pi-durable](https://github.com/earendil-works/pi/tree/main/packages/durable).
 Started 2026-10-07 as the candidate replacement for OpenRig after a
@@ -15,7 +15,7 @@ them.
 ## Quick start
 
 ```powershell
-cd durig
+cd durian-pi
 npm install --ignore-scripts
 
 # offline smoke (no keys, no network)
@@ -49,7 +49,7 @@ clock (D45). How it is switched on and off for the operator:
 
 - **A TTY `up` auto-starts it.** Running `node cli.mjs up <rig.json>` on an
   interactive terminal starts the broker for that database. Opt **out** with
-  `--no-serve`, or with the env var `DURIG_NO_SERVE=1` (the script-wide
+  `--no-serve`, or with the env var `DURIAN_PI_NO_SERVE=1` (the script-wide
   opt-out). A piped or scripted `up`, and scripted write verbs, **never**
   silently spawn a daemon — the TTY `up` is the *only* auto-start.
   Proof: `demo/autostart.test.mjs` (TTY auto-starts; `--no-serve`/piped opt out;
@@ -58,8 +58,8 @@ clock (D45). How it is switched on and off for the operator:
   broker cooperatively and clears `<db>.broker.json`, so the next `run` is
   allowed again. Proof: `demo/autostart.test.mjs` and
   `demo/broker-cooperative-stop.test.mjs`.
-- **Raising `DURIG_MAX_CONCURRENT_SEATS` is how parallel seat work is enabled.**
-  The broker may drive up to `N` seats at once, but `N = DURIG_MAX_CONCURRENT_SEATS`
+- **Raising `DURIAN_PI_MAX_CONCURRENT_SEATS` is how parallel seat work is enabled.**
+  The broker may drive up to `N` seats at once, but `N = DURIAN_PI_MAX_CONCURRENT_SEATS`
   (`N` cross-process generation leases via `src/genlock.mjs`). Unset = unlimited;
   `1` serializes all generations (e.g. one local model serving the whole rig); a
   higher `N` lets more seats generate in parallel, each in its own worktree.
@@ -149,14 +149,17 @@ append-only change log, so this adds no write path and no stored state.
 | `rig.starter.json` | **Start here for a real rig.** The hardened 4-seat starter: inline constitution, a verifier seat on a different model family, and an outgoing edge on every seat — so `check` reports no findings on a fresh copy. Generic by design; no corpus is baked in. Proof: `demo/starter.test.mjs` |
 | `rig.v2.json` | Rig spec: seats (`name`, `role`, `goal`, `constraints`, `backstory`, `capabilities`, `model` — bare id or `{provider}/{modelId}`, e.g. `deepinfra/meta-llama/Llama-3.3-70B-Instruct`; a leading segment is the provider only when it names a registered provider, so slash-containing ids like `zai-org/GLM-5.3-Flash` work bare —, `instructions`), `edges` (send permissions), `constitution` (file path) or `constitutionInline` (text; wins if both are set) |
 | `constitution.txt` | Priority-ordered team rules; highest applicable rule governs |
-| `DURIG_DB` | Storage path (default `./rig.sqlite`) |
-| `DURIG_PROVIDER` | `deepinfra` (default) or `faux` for offline runs |
-| `DURIG_MODEL` | Default model id for seats without their own |
+| `DURIAN_PI_DB` | Storage path (default `./rig.sqlite`) |
+| `DURIAN_PI_PROVIDER` | `deepinfra` (default) or `faux` for offline runs |
+| `DURIAN_PI_MODEL` | Default model id for seats without their own |
 | `DEEPINFRA_API_KEY` | Ambient credential; read from env only, never stored |
-| `DURIG_OPTIMIZE` | `on`: `up` runs each seat's persona through the instruction optimizer (one model call per seat) before storing; provenance recorded. See D13. |
-| `DURIG_MAX_CONCURRENT_SEATS` | Cap concurrent GENERATIONS across all seats (unset = unlimited). `1` serializes them so one local model (e.g. Qwen on a 24 GB GPU) can serve the whole rig. Waiting-vs-stuck is surfaced via lease files: `status`/`watch` report `generation_in_flight` (holder seat + since) or `generation_stale` (dead holder). See DECISIONS D12. |
-| `DURIG_EXTENSIONS` | Comma-separated module paths to install as extensions. See "Extensions" below. |
-| `DURIG_STREAM_TIMEOUT_MS` | Total request timeout for one generation attempt, in milliseconds. Unset = the platform default (the `openai` SDK's 600000 ms). Raise it for a slow local model, or lower it to fail fast instead of waiting out ten minutes on a stalled endpoint. A non-positive or non-numeric value **fails the command** rather than silently taking the default. |
+| `DURIAN_PI_OPTIMIZE` | `on`: `up` runs each seat's persona through the instruction optimizer (one model call per seat) before storing; provenance recorded. See D13. |
+| `DURIAN_PI_MAX_CONCURRENT_SEATS` | Cap concurrent GENERATIONS across all seats (unset = unlimited). `1` serializes them so one local model (e.g. Qwen on a 24 GB GPU) can serve the whole rig. Waiting-vs-stuck is surfaced via lease files: `status`/`watch` report `generation_in_flight` (holder seat + since) or `generation_stale` (dead holder). See DECISIONS D12. |
+| `DURIAN_PI_EXTENSIONS` | Comma-separated module paths to install as extensions. See "Extensions" below. |
+| `DURIAN_PI_STREAM_TIMEOUT_MS` | Total request timeout for one generation attempt, in milliseconds. Unset = the platform default (the `openai` SDK's 600000 ms). Raise it for a slow local model, or lower it to fail fast instead of waiting out ten minutes on a stalled endpoint. A non-positive or non-numeric value **fails the command** rather than silently taking the default. |
+
+**Deprecated aliases (D103).** The pre-rebrand `DURIG_*` env-var names and the old `durig.config.json`
+filename are still accepted by the loader as deprecated aliases; the new `DURIAN_PI_*` name wins when both are set.
 
 The `intent` path is **retry-safe**: `node intent.mjs <seat> --body-file <file> --request-id <id>`
 spools one submission, so a retry carrying the same id reuses the existing submission
@@ -166,14 +169,14 @@ identical intents are two requests. Without an id nothing changes.
 
 ## Extensions
 
-durig installs its own Router as a **pi-durable extension**, so extensions are not
-a new mechanism — they are the one this already uses. Point `DURIG_EXTENSIONS` at
+durian-pi installs its own Router as a **pi-durable extension**, so extensions are not
+a new mechanism — they are the one this already uses. Point `DURIAN_PI_EXTENSIONS` at
 modules that export an extension:
 
 ```jsonc
-// durig.config.json
+// durian-pi.config.json
 {
-  "DURIG_EXTENSIONS": "./extensions/timing.ts,./extensions/redact.ts"
+  "DURIAN_PI_EXTENSIONS": "./extensions/timing.ts,./extensions/redact.ts"
 }
 ```
 
@@ -205,7 +208,7 @@ permissions. Paths are never discovered automatically; listing one is trusting i
 exactly as you would a dependency.
 - **This is a pi-*durable* extension, not a pi *coding-agent* one.** Those target
 the interactive agent (slash commands, a TUI, project-trust prompts) and cannot
-load here: durig does not depend on `pi-coding-agent` and has no such surface (D21).
+load here: durian-pi does not depend on `pi-coding-agent` and has no such surface (D21).
 
 A path that cannot load **fails the command** rather than being skipped. A declared
 extension quietly missing is the same failure shape as a dropped constitution: the
@@ -224,7 +227,7 @@ src/attention.mjs     pure blocked-seat detection (feeds status + watch)
 src/checkup.mjs       pure rig audit rules + the human report (`cli.mjs check`)
 src/metrics.mjs       pure drift measures + the deliberate table (`cli.mjs metrics`)
 src/ansi.mjs          the one ANSI palette the human views share
-src/config.mjs        env > durig.config.json > defaults; `cli.mjs config`
+src/config.mjs        env > durian-pi.config.json > defaults; `cli.mjs config`
 demo/cli.test.mjs     the CLI contract: every command, exit code, error path
 demo/watchview.test.mjs  the human watch view: extraction, layout, wiring
 src/rigstory.mjs      read each seat's latest words + tool call from storage
@@ -236,20 +239,22 @@ demo/check.test.mjs   rig audit rules + the drift regression + CLI exit codes
 demo/metrics.test.mjs  drift measures + what a reading refuses to claim
 demo/converter.test.mjs  OpenRig rig.yaml -> v2 spec: rig-level edges, ids, personas
 docs/STATUS.md        start here: current state, decisions needed, resume facts
-docs/FEATURES.md      what durig does today, where each piece lives, and its proof
+docs/FEATURES.md      what durian-pi does today, where each piece lives, and its proof
 docs/ROADMAP.md       milestones + the research gap analysis
 docs/METRICS.md       metrics design: measures, surfacing, scope, traps (first cut built)
-docs/DOGFOOD.md       dogfooding log: what we ran on durig, what broke, where it lands
+docs/DOGFOOD.md       dogfooding log: what we ran on durian-pi, what broke, where it lands
 docs/REVIEW-pi-durable-demos.md  what the two pi-durable example projects show
-                        durig: ideas, gap analysis, patterns and hazards
-docs/PI-DURABLE-INTEGRATION.md  how durig builds on pi-durable: what the harness
-                        owns, what durig adds, and the pin contract
-docs/WORKFLOWS.md     what durig is for: the workflows, their must-not-break loops,
+                        durian-pi: ideas, gap analysis, patterns and hazards
+docs/PI-DURABLE-INTEGRATION.md  how durian-pi builds on pi-durable: what the harness
+                        owns, what durian-pi adds, and the pin contract
+docs/WORKFLOWS.md     what durian-pi is for: the workflows, their must-not-break loops,
                         and the capability each one needs
+docs/SEAT-CAPABILITY-PROFILE.md  per-seat tool surface, org-edge send targets, and doc-edit
+                        reach — so an assignment names a mechanism the assignee has
 docs/Managing_Long_Context_Length.md  long-context research: context rot, effective
                         windows, when to compact — the basis of ROADMAP 27-30
 scripts/sync-pi.mjs   build + link pi's main branch at a pinned commit
-pi-main.pin.json      the pinned upstream commit durig is validated against
+pi-main.pin.json      the pinned upstream commit durian-pi is validated against
 src/seatmodel.mjs     per-seat {provider}/{modelId} resolution
 src/optimizer.mjs     instruction optimizer + preservation guard (D13, D14)
 src/judge.mjs         blind pairwise prompt judge (D14)
@@ -267,7 +272,7 @@ demo/offline*.mjs     faux-model delegation loops (no keys needed)
 demo/online.mjs       real DeepInfra end-to-end test
 demo/optimizer-eval.mjs    optimizer effectiveness benchmark (guard + blind judge)
 demo/eval.test.mjs    mechanics test for the guard and judge
-scripts/from-openrig.mjs   OpenRig rig.yaml -> durig v2 converter (pods, per-seat role.md, skills, guidance, rig-level edges)
+scripts/from-openrig.mjs   OpenRig rig.yaml -> durian-pi v2 converter (pods, per-seat role.md, skills, guidance, rig-level edges)
 rig.starter.json          the packaged starter rig
 docs/                 QUICKSTART, FEATURES, MVP burn-down, STATUS, ROADMAP, METRICS, decisions D1-D37, research
 ```
@@ -288,8 +293,8 @@ the post-MVP backlog lives in docs/MVP.md.
 `@earendil-works/pi-durable` ships from a fast-moving monorepo (14 commits past
 the last release within a day, including API renames). There is **no dev/nightly
 npm dist-tag**, so `main` is the dev channel and must be **built from source**.
-`pi-main.pin.json` records the exact commit durig is validated against. See
-`docs/PI-DURABLE-INTEGRATION.md` for what durig takes from the harness, what it
+`pi-main.pin.json` records the exact commit durian-pi is validated against. See
+`docs/PI-DURABLE-INTEGRATION.md` for what durian-pi takes from the harness, what it
 adds around it, and what the pin means for both sides.
 
 ```powershell
@@ -306,11 +311,11 @@ and nothing un-installable-by-others can be committed. The build tree lives in
 reverts to the released packages.
 
 The tool-result field is returned as **both** `content` (1.1.0) and `output`
-(current main) by `toolText()` in `src/rig.mjs`, so durig is correct on either.
+(current main) by `toolText()` in `src/rig.mjs`, so durian-pi is correct on either.
 
 ## Licence
 
-MIT — see `LICENSE`. The same licence Pi and Pi Durable are under, since durig is
+MIT — see `LICENSE`. The same licence Pi and Pi Durable are under, since durian-pi is
 built on them.
 
 Vendored third-party code keeps its own notice:

@@ -1,14 +1,14 @@
 // F34: broker-driven generation records seat in the genlock lease.
 //
 // Root cause: wrapProviderWithSlots uses options.getSeat() which reads
-// process.env.DURIG_ACTIVE_SEAT. The broker never sets this env var, so
+// process.env.DURIAN_PI_ACTIVE_SEAT. The broker never sets this env var, so
 // broker-driven generations record seat:null.
 //
-// Fix: drivePass (src/broker.mjs) sets DURIG_ACTIVE_SEAT from the last
+// Fix: drivePass (src/broker.mjs) sets DURIAN_PI_ACTIVE_SEAT from the last
 // seat it woke, so wrapProviderWithSlots can name it in the genlock lease.
 //
 // This demo is deterministic: it checks that drivePass sets the env var
-// correctly by wrapping onWoke and verifying DURIG_ACTIVE_SEAT at the end.
+// correctly by wrapping onWoke and verifying DURIAN_PI_ACTIVE_SEAT at the end.
 //
 // Run: node demo/f34.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
@@ -62,19 +62,19 @@ try {
 	const slotPath = `${db}.genlock.0`;
 	check("no genlock slot before the pass", !existsSync(slotPath));
 
-	// Clear DURIG_ACTIVE_SEAT from any prior test.
+	// Clear DURIAN_PI_ACTIVE_SEAT from any prior test.
 	const savedEnv = process.env.DURIG_ACTIVE_SEAT;
 	delete process.env.DURIG_ACTIVE_SEAT;
 
 	try {
-		// Drive the pass. drivePass sets DURIG_ACTIVE_SEAT for the woken seat
-		// before waitForIdle, so DURIG_ACTIVE_SEAT should be "test-seat" during
+		// Drive the pass. drivePass sets DURIAN_PI_ACTIVE_SEAT for the woken seat
+		// before waitForIdle, so DURIAN_PI_ACTIVE_SEAT should be "test-seat" during
 		// the generation. After drivePass returns, it retains the last value.
 		await drivePass(harness, storage, {
 			context: ctx,
 			onWoke: (name) => { /* track woken seat */ },
 		});
-		// drivePass resolves after waitForIdle. DURIG_ACTIVE_SEAT should still
+		// drivePass resolves after waitForIdle. DURIAN_PI_ACTIVE_SEAT should still
 		// be set to the woken seat (set before waitForIdle in drivePass).
 		check(
 			"drivePass sets DURIG_ACTIVE_SEAT to the woken seat",

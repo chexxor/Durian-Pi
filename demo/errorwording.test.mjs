@@ -2,7 +2,7 @@
 // A store-open failure used to surface bare sqlite wording ("unable to open
 // database file") with no hint of WHICH store was in play, which is exactly
 // the wrong-DB trap a fresh install falls into. The rule under test: whenever
-// durig fails to open its storage, the error TEXT names the resolved path
+// durian-pi fails to open its storage, the error TEXT names the resolved path
 // (the same value `status` reports as "db"), with the underlying cause after it.
 import assert from "node:assert";
 import { mkdtempSync } from "node:fs";
@@ -31,8 +31,8 @@ const runCli = (args, env) =>
 // An UNOPENABLE store: a directory. sqlite cannot open a directory as a
 // database file, so the open fails deterministically on every platform — no
 // locks, no races, no provider, no network. A child env that carries no
-// DURIG_CONFIG and points DURIG_DB at that directory (env beats any config
-// file, so the repo's local durig.config.json cannot redirect the probe).
+// DURIAN_PI_CONFIG and points DURIAN_PI_DB at that directory (env beats any config
+// file, so the repo's local durian-pi.config.json cannot redirect the probe).
 const unopenable = mkdtempSync(join(tmpdir(), "durig-errorwording-"));
 const probeEnv = { ...process.env, DURIG_DB: unopenable };
 delete probeEnv.DURIG_CONFIG;

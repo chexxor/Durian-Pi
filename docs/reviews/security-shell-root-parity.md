@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Security position — F22: the spawned shell inherits the seat-root boundary (confine/seatguard parity)
 
 Item: #1581 (security), from pm START (operator batch 3, 2026-10-17); implements the position for

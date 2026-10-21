@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 When using an LLM agent that is long lived and doing lots of tool-calls, is it possible to ask it to reduce the number of toolcalls as few as possible by doing lots of planning up-front to consider all edge-cases that might produce more tool calls, then generate a program to run that will accomplish the goal, and successfully avoid multiple toolcalls?
 
 

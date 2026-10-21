@@ -32,7 +32,7 @@ None — this is a read-only decision. Do not stop the broker.
 
 ## Diagnose (read-only)
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs status
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
 tail -12 selfdev.sqlite.broker.log      # look for STRANDED settled=N / RECONCILE lines
 ```
 The broker settles a `queued`/`placed` submission whose run task is terminal at **startup**
@@ -48,7 +48,7 @@ heartbeat but a stale `PASS`) — that is `broker-down-or-stalled.md` case (b), 
    then restart.
 3. Only when NO broker is running is `resume`/`doctor` the right verb:
    ```bash
-   DURIG_DB=./selfdev.sqlite node cli.mjs resume
+   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs resume
    ```
 
 ## Verify

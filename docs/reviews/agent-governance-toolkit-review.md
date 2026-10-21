@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Competitor review — Microsoft Agent Governance Toolkit (`microsoft/agent-governance-toolkit`)
 
 *Read 2026-10-17 by the delegate. Clone pinned at HEAD `cfb44576824aab84bbceb9e94c667b975f128cd7`

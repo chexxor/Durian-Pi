@@ -1,4 +1,4 @@
-// seatguard.test.mjs — the durig-side guard's proof.
+// seatguard.test.mjs — the durian-pi-side guard's proof.
 //
 // The dangerous failure for a guard is not a wrong answer, it is a guard that silently never
 // fires: a hook registered against a mistyped task name blocks nothing and looks installed. So
@@ -89,7 +89,7 @@ try {
 	const push = await beforeTool(pushCall("git push origin main", "7"));
 	check("git push is refused by default", push?.block?.includes("operator's authorization"), JSON.stringify(push));
 
-	// The exemption reads durig's OWN environment, so an assignment the seat makes inside its own
+	// The exemption reads durian-pi's OWN environment, so an assignment the seat makes inside its own
 	// command changes only that child process. This is the assertion that makes the grant worth
 	// having: without it, "permissioned" would mean "a seat can permit itself".
 	const forged = await beforeTool(pushCall("$env:DURIG_ALLOW_PUSH=1; git push origin main", "8"));
