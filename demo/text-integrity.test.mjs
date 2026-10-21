@@ -44,7 +44,16 @@ try {
 } catch {
 	nodeCheckPassed = false;
 }
-check("`node --check` is BLIND here (it accepts the flattened file, or refuses for an unrelated reason)", true, "");
+	// #4370: THE PREMISE IS A PRECONDITION, NOT A SENTENCE. This was `check(..., true)`, which proved
+	// nothing: on a host where `node --check` DOES reject the flattened text the demo still passed, and
+	// printed a contradiction between a green tick and the message below it. The whole detector exists
+	// because a syntax check is blind to a flattened file, so if that is ever false here the premise has
+	// changed and this demo must FAIL rather than narrate.
+	check(
+		"`node --check` ACCEPTS the flattened text (the premise this detector exists for)",
+		nodeCheckPassed === true,
+		nodeCheckPassed ? "" : "node --check REJECTED the flattened text ? this host does not reproduce the 04:21Z premise",
+	);
 console.log(`       (node --check on the flattened text: ${nodeCheckPassed ? "EXIT 0 — blind, as the incident showed" : "non-zero, but the detector does not depend on it"})`);
 
 console.log("\n=== ENCODING FAULTS, EACH INDEPENDENT ===");
