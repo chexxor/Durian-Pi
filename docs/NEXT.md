@@ -1,5 +1,47 @@
 # durian-pi — NEXT (current pointer)
 
+## NEXT SESSION (2026-10-21T02:40Z — operator re-reported both TUI asks; broker was DORMANT, restarted; Fix A gates now claimed; Enter→Pi has NO live wiring item)
+
+**Current item:** the operator reports BOTH TUI asks still absent, and both are still true on `main`
+`b4bb4c7` — measured, not remembered.
+
+1. **Fill the terminal (#3941).** Headless `renderTui`, 12 seats: the first seat row is **57 cells at
+   80, 120 AND 160 cols (byte-identical)**, and painted rows vs viewport are **17/40 at 120x40** and
+   **17/50 at 160x50**. The fix is built on `impl-item-3941` @`e0efe71` (+5 demos) and its
+   `demo/tui-landing-fill.test.mjs` passes in a detached worktree (exit 0), but it is **NOT landed**.
+   Its gates #3945 + #3980 sat unclaimed ~5.5h, then were **claimed by `designer` at 02:34:02Z** after
+   the recovery below; #3946 (qa) stays `held` behind #3945. #3948's gate #3943 is `done`.
+2. **Enter → Pi (Phase 2).** `ui.mjs:140` still opens the read-only conversation view
+   (`grep -c durable ui.mjs` = 0). The seam + launch/return glue ARE on `main` (`6bb0fc7`:
+   `attach.mjs`/`launch.mjs`/`return.mjs` + 5 demos) but are imported by **demos only**; impl said it
+   in #4016 — "THE LIVE ROUND TRIP IS NOT WIRED". The item that owns REPLACE-in-same-terminal is
+   **#3996 `held`**; #3983 is cancelled as superseded; #4070 is `held` behind **#4068, which is `done`**.
+   **No live item owns the wiring** — that is the gap, not a missing ruling (Q2 ruled at #3982/#3985).
+
+**What the delegate did:** the rig was **dormant**, which is why nothing moved — broker pid 15768 had a
+fresh heartbeat but `lastPassAt` frozen at `00:29:54Z` for ~2h and **no genlock** (runbook
+`broker-down-or-stalled.md` case b). `serve --stop` (pid verified gone) → store backed up
+(`.spike/store-backup-20261020-213039`) → `resume` (withdrew designer's stranded submission 181515) →
+restart → **pid 16140, passes advancing**, designer claimed both gates. Operator status + the wiring
+ask delivered to `pm` (intent `operator-tui-status-2026-10-21-1`, `delivered:true` 02:36:40Z; body
+`.spike/delegate/tui-status/intent.md`). **Do not re-derive either measurement** — the script is
+`.spike/delegate/tui-status/measure-fill.mjs` (read-only).
+
+**Queue id:** #3945/#3980 (designer, claimed) → #3946 (qa verify, held) → land `impl-item-3941` ·
+#3996/#4070 (Enter→Pi wiring, both `held`) · #3948 (pointer correction, releasable).
+
+**Blocker:** none on the tree. `main` `b4bb4c7`, tracked tree clean except the broker-generated
+untracked `selfdev.sqlite.broker.audit.log`. Single broker pid 16140 (verify before any restart).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue` then read #3945/#3980 — if both
+are `done`, release #3946 and land `impl-item-3941` @`e0efe71` (preflight: its demo in a detached
+worktree at current `main`); if they are `held`/stale, the designer wake failed again (check
+`.spike/serve.err` for `wake-failed` and the 429 class).
+
+**Do not:** treat a fresh heartbeat as broker health (read the last `PASS` line); restart the broker
+while a `genlock.*` is held; run `up --refresh` (the rig FILE still names `local/*` while the store
+serves DeepInfra); split the return path out of the Enter→Pi work; push (operator holds the grant).
+
 ## NEXT SESSION (2026-10-20T21:05Z — TUI merge delegated; Q2 ruled REPLACE + RETURN; Fix A built, awaiting verify)
 
 **Current item:** **Fix A (#3941) is DONE on `impl`'s branch but NOT landed** — designer surface review
