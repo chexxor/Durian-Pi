@@ -6,6 +6,10 @@
 // IS SATISFIABLE BY A BROKEN IMPLEMENTATION — an always-allow passes the quoted case, an always-deny passes
 // the invocation case.
 import { refusalFor } from "../src/confine.mjs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -33,7 +37,6 @@ console.log("\n=== THE SAME VERBS AS ACTUAL INVOCATIONS ARE REFUSED ===");
 for (const cmd of [
 	"git reset --hard",
 	"git switch main",
-	"git restore .",
 	"git revert HEAD",
 	"git clean -fd",
 	"git stash",
@@ -41,6 +44,33 @@ for (const cmd of [
 ]) {
 	const r = refusalFor(cmd);
 	check(`invocation is REFUSED: ${cmd}`, typeof r === "string", "allowed — the guard has been widened into uselessness");
+}
+
+// #4641 made `restore` tree-aware, so its verdict must be measured against a KNOWN tree, not the
+// cwd of whatever ran the suite (that is what made this line flaky: a clean tree allows it).
+console.log("\n=== `restore` IS TREE-AWARE: refused when it would DISCARD, allowed when it is a no-op ===");
+{
+	const dir = mkdtempSync(join(tmpdir(), "confine-restore-"));
+	try {
+		const g = (...a) => execFileSync("git", ["-C", dir, ...a], { stdio: "ignore" });
+		g("init", "-q");
+		writeFileSync(join(dir, "tracked.txt"), "one\n");
+		g("add", "tracked.txt");
+		g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init");
+		writeFileSync(join(dir, "tracked.txt"), "one\ntwo\n"); // DIRTY: a restore would discard this
+		check(
+			"invocation is REFUSED: git restore . (dirty path)",
+			typeof refusalFor("git restore .", { root: dir, cwd: dir }) === "string",
+			"allowed — the guard has been widened into uselessness",
+		);
+		g("checkout", "--", "tracked.txt"); // CLEAN: a path restore is a no-op
+		check(
+			"and ALLOWED when every named path is clean (a no-op, #4641)",
+			refusalFor("git restore -- tracked.txt", { root: dir, cwd: dir }) === null,
+		);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 }
 
 console.log("\n=== AND THE ONE THAT WAS ALREADY RIGHT IS UNCHANGED ===");
