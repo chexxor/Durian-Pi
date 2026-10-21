@@ -1635,7 +1635,11 @@ export async function runWakeLoop({
       if (idleStop) {
         // Read the deadline BEFORE clearing the file: the request time lives in its content.
         const expired = graceExpired();
-        if (idleStop === "stop") clearStopRequest(dbPath);
+        if (idleStop === "stop") {
+          // #2322: record the receipt so the log names the REQUEST, not just the graceful EXIT.
+          logBrokerLine(dbPath, `STOP-REQUESTED source=file pid=${process.pid}`);
+          clearStopRequest(dbPath);
+        }
         stoppedBy = expired ? "deadline" : idleStop;
         break;
       }
