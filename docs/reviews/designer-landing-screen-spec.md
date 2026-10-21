@@ -89,61 +89,107 @@ facts, not per-seat streaming blocks — the per-seat streaming SECTION is remov
 layout (its duplicate signal moves into the ACTION column and the roster row that already names
 the seat).
 
-## 4. The width ladder, SHIPPED (rewritten 2026-10-28 per the #3810 oracle ruling, option (b) accepted)
+## 4. The width ladder, RE-DERIVED FOR (a) (the #4300 ruling; derivation commissioned in #4352)
 
-Rule (b): describe the ladder the code SHIPS, not one a composition demands - a spec demand a
-run does not honor is the exact defect this section has twice rewritten (#3483, ee495e7). All
-numbers below are `textWidth` output on this snapshot, measured on the builder that ships and
-pinned by the still-green demo (`node demo/tui-landing.test.mjs`, exit 0).
+The section keeps the rule it learned in the #3810 rewrite - describe the ladder the code SHIPS, or
+one it can be VERIFIED to ship; a spec demand a run does not honor is the exact defect this section
+has twice rewritten (#3483, ee495e7) - and the settled shape has moved once more: #4300 ruled option
+(a), so the NAME RUNG becomes 10 and the freed cell is spent AFTER the name (the gap between the
+name and the queue column lives in the name field's own right-hand padding; there is no separate
+separator to remember, the padding edge IS the separator). Nothing in the absorption model changes;
+one fixed cell moves, and this section books its cost. Everything below is either MEASURED on the
+builder at this snapshot or DERIVED from that measurement plus the one named delta: when impl lands
+(a) the new numbers are SUBSTITUTIONS, not further investigations. Until then the shipped builder is
+still the (b) state, `node demo/tui-landing.test.mjs` (exit 0 at this snapshot, 37 checks) stays the
+acceptance reference, and the pins re-cut per the golden accounting below.
 
-**First: why 44, in CONTENT cells, with the gutter named.** The ladder is a content-cell
-contract, not a terminal-column one. `renderSeatList` is handed `width - 4` (src/tui/client.mjs)
-- the roster body renders inside a 4-cell gutter - so every content number below maps to
-`terminal = content + 4`. The mode boundary is 40 CONTENT cells: the landing row exists from
-content 40, which is the 44-col terminal minimum. The retired "44 or 45?" argument dissolves
-under this mapping: "45" was the terminal reading of a content composition (33 + 11 + 1) and
-"44" the terminal reading of the shipped open - both were correct arithmetic over DIFFERENT
-denominators, and the shipped builder answers neither as a demand: it clamps.
+**The denominator, measured once and then trusted:** `renderSeatList` is handed the TERMINAL width -
+`renderTui` feeds it `getSize().width` untouched (src/tui/client.mjs) and the 80x24 golden pins rows
+of exactly 80 cells (measured: the 80x24 golden's brief is 30 cells = 80 - 33 - 17; the cap rungs
+rise at exactly 72/47 TERMINAL columns, the landing floor is 44). The (b) section's two-denominator
+table - content cells with a `(terminal in parentheses)` column - is retired by this rewrite: its
+parenthetical column ran four cells high against the code it described, and its "handed `width - 4`"
+premise has no counterpart in the live path (`renderTui` does not subtract a gutter before the
+roster call). One denominator lives on - the builder's own cells, which ARE terminal cells here - so
+a code change copies the formula below instead of converting a denominator. The (b) per-band brief
+prose that echoed those bands in §2 (`min(12, C - 33)` -> 7..12) retires with the (b) table; §2's
+band line re-points at B(w)/R(w) when (a) lands.
 
-**The three rules the builder ships** (each one a named clause in `renderSeatList`):
-- caps are MAXIMA, never demands: `briefCap` returns 24 at content >= 72, 16 from content 47,
-  else 12, and the real brief cap is `min(cap, content - 33)`;
-- the CLAMP wins, in one direction only: fields shrink to the space actually left; the row
-  renders NARROWER than its frame whenever the caps cannot be met - it never overflows, and
-  in the growth region it closes at exactly its content width (measured row == content at the
-  44..76 probe line);
-- the invariant is `row <= frame` for every width, asserted on the BUILT screen, not only on
-  the design probe: `demo/tui-landing.test.mjs` sweeps it shape-exhaustively (40..100) and
-  holds the 44x24 and 80x24 goldens. PASS is the acceptance reference for the ladder, not
-  this table's wording.
+**THE DERIVED FIXED PART - 33 -> 34, shown not assumed:** sel 2 (the cursor replaces the leading
+space: selection adds no width) + state 13 (glyph + space + the state padded to 11) + NAME 10
+(the rung (a) spends) + queue 9 = 34. The queue rung is not the payer and cannot be: the parked pole
+`4q · 175p` fills its nine cells EXACTLY today (measured), and the busiest seat must keep reading it
+whole - that is the constraint this derivation starts from. THE CONSTRAINT WAS NEVER TOTAL WIDTH;
+the cell was inside the row all along, and (a) pays for it where the row has slack: AFTER the name.
 
-**The shipped ladder** (content cells; terminal in parentheses). Fixed prefix: sel 2 + state
-13 + name 9 + queue 9 = 33 cells, padded:
+**WHY THE NAME RUNG IS WHERE THE CELL GOES (the #4300 rule, recorded here for future rungs):**
+- FIX THE CLASS, NOT THE INSTANCE: a boundary bought in the name field survives ANY column that
+  widens later (a longer state word, a new verb, a wider parked form); freeing the cell inside the
+  parked form would re-create the collision the first time a third form or a wider count appears.
+- CONSISTENCY BEATS COVERAGE - the principle that killed the refuted fourth option (right-align the
+  name in a FULL field): it widens the gap on bare rows and vanishes on full-name rows, leaving
+  parked rows ambiguous, so the reader cannot learn the rule. A fix that works on some rows and not
+  others teaches the operator there is no rule to learn; a uniform gap they can at least work around
+  is better than that.
+- (a) PAYS IN WORK, NOT IN LEGIBILITY: the rejected alternative compressed the parked pole
+  (`4q · 175p` -> `4q·175p`) to buy the same separator - spending legibility on the parked count,
+  the triage fact this screen exists for, to recover a one-cell gap on the name. This derivation is
+  the work (a) buys; WORK IS RECOVERABLE, a shipped legibility regression is not.
 
-| Content band (terminal) | What the row ships | Measured (demo fixture) |
-|---|---|---|
-| < 40 (< 44) | CLASSIC roster row - the honest fallback: no queue/brief/action cells, the focus line carries the fact, no broken columns ever | 40-col frame check, demo (d) |
-| 40..46 (44..50) | landing row; brief = `min(12, C - 33)` -> 7..12 cells; action hidden | 44x24 golden: row exactly 40, brief `#74 me…` - id + 3 readable subject cells + ONE ellipsis |
-| 47..50 (51..54) | landing row; brief `min(16, C - 33)` -> 14..16; action still hidden (no room for a separator + token) | row closes at 47..50 exactly |
-| 51..71 (55..75) | landing row; brief 16; action `min(16, C - 50)` -> 1..16 cells: the action cell opens at content 51 and grows one cell per content cell, reaching its 16-cell cap at content 66 | `tool …` at 51; `tool pow…` (9 cells) from content 59; `tool complete_w…` (16) at content 66 |
-| >= 72 (>= 76) | landing row; brief cap 24; action `min(16, C - 58)` | 80x24 golden: 76 content, brief `#74 merge the carry sta…`, action `tool complete_w…` |
+**THE ONE ACTION FORMULA, the constant derived as fixed + separator** (a future rung change
+substitutes the fixed value; the constant is never just a number again):
 
-**Why the bottom rung is 40 content cells and not fewer:** the clamp alone would keep the
-landing row composing at any width, but below content 40 the brief's leftover after
-`#74 ` falls under id-only noise (`#74 m…`, then `#74 …`), so the landing mode hands the fact
-over to the fallback while the brief is still legible at floor: id + a readable subject head
-+ the ellipsis. Under ~30 cols the H6 "terminal too small" truthful state takes over
-(existing behaviour, not redefined here).
+    A(w) = min(16, max(0, w - 35 - R(w))),   R(w) = 24 @ w >= 72 | 16 @ 47..71 | 12 @ w <= 46
+    B(w) = w - 34 - (A(w) > 0 ? A(w) + 1 : 0)
 
-**Legibility prose, unchanged in substance:** the `#id` is NEVER truncated and survives at
-every landing width (it is the reference shared with the conversation view, the answer op and
-the queue dumps); ONE `…` appended when a field truncates, NO ellipsis on `—` (nothing to
-summarize); the parked seat's brief reads the QUESTION (the operator triage fact this screen
-exists for). The ACTION token comes from the same per-seat partial the state column describes:
-WHAT it runs vs THAT it runs - and the 59 figure the earlier ladder carried is retained as a
-LANDMARK, not a rung: content 59 is where a nine-cell token (`tool <name-that-…`)
-first fits whole (33 + 16 + 1 + 9); at content 58 the same token ships truncated to eight
-cells. No per-band demanded widths are stated here because the builder states none.
+35 = 34 fixed + 1 brief/action separator (the (b) constant decomposed the same way: 33 fixed + 1).
+R is the brief's RESERVED rung (the (b) `briefCap` band: >= 72 / 47..71 / else, unchanged by (a) -
+the brief is not this change's payer) and 16 is the action's own ceiling. A yields 0 by itself below
+the 47 band, so no separate hidden rule exists; the code's `max(1, ...)` floor on B only arms below
+the 44 landing floor, where no landing row exists. The ACTION_MIN_ROOM mask (the token hides below
+9 cells of room) is the §3 show-rule, not a §4 rung: it decides whether the slot PAINTS, never where
+it opens - A is the ROOM, the mask is the display.
+
+**The derived runs** (from the formula; each (b) measured value sits one cell to the left):
+- 44..46: A = 0; B = w - 34 -> 10..12; the row closes at w exactly. At the 44 floor the brief clamps
+  to 10: `#74 merge…` - id + a readable subject head + ONE ellipsis, the id never truncated, the
+  floor discipline intact.
+- 47..51: A = 0 (the budget cannot open while w - 34 - 16 <= 0); B = w - 34 -> 13..17; action hidden.
+- 52..66: A = w - 51 runs 1..15 - the budget OPENS at 52 (was 51); B holds the brief rung at 16.
+  PAINT is the §3 mask's call, not this rung's: room < 9 stays blank, so at 59 (A = 8) the slot is
+  STILL blank and the slot first paints whole at 60 (A = 9).
+- 67..71: A pins at 16 (was 66); B = w - 51 -> 16..20, the brief re-takes the spare.
+- 72..74: the 24 rung steals back from the action: A = w - 59 -> 13..15 (visible, intended); B
+  holds 24.
+- 75..: A = 16 again (75 - 59 = 16); the brief absorbs unboundedly to its 24 cap; the row closes in
+  the frame at EVERY width (fixed + (A > 0 ? A + 1 : 0) + B = w by construction - the invariant the
+  demo sweeps 40..100).
+
+**The landmark moves with the rung:** 60 (was 59) is where a nine-cell token first fits whole
+(34 + 16 + 1 + 9). At 59 NOTHING truncates and nothing fragments: the room is 8, one cell short of
+§3's ACTION_MIN_ROOM, so the slot ships BLANK - a blank is the honest 8, an eight-cell fragment is
+not (that reading is the #4233 mask, unchanged by (a)). One cell, one paint-rung, one substitution.
+
+**GOLDEN ACCOUNTING - the count, and the rule that catches a lying golden:** the acceptance
+reference is `node demo/tui-landing.test.mjs`: 37 checks, exit 0 at this snapshot (measured by
+counting the `ok` lines), of which exactly THREE pin a row LITERALLY (the 80x24 golden rows 1-3;
+the "pins the three seat rows" check above them asserts only the row COUNT). The name cell and the
+fixed prefix sit LEFT of both the brief and the action cell in every pinned row, so a one-cell
+fixed-part change repaints every pinned string; the DERIVED projections impl re-pins at land time
+(verified arithmetic on the (b) builder with name 10 / fixed 34 / constant 35 only):
+
+    "▸ ● working    impl      2q       #74 merge the carry stack on… tool complete_w…"
+    "  ◌ parked     qa        0q · 1p  #92 supervisor escalation: w…                 "
+    "  ○ idle       advocate  0q       —                                             "
+
+(under the terminal-80 arithmetic the brief cap is DERIVED, so it reads w - 34 - 17 = 29: the fixed
+part took the cell, the brief keeps the books, nothing "absorbs" the (a) cell twice.) The other 34
+checks are presence-and-invariant assertions - state words, queue counts, substring content, the
+44/48-floor presence bounds, the 40..100 no-overflow sweep, NO_COLOR, selection, degrade - which
+the rung change does not touch by construction AND which must stay green; a red invariant after
+(a) lands is a regression no re-pin excuses. THE FALSIFIER: a pinned literal that does NOT move
+when the fixed part changes by one is not asserting the layout - query it at land time, do not
+silence it.
 
 ## 5. Selection affordance (unchanged; no redesign)
 
