@@ -116,6 +116,16 @@ export const RigQueue = defineDoc({
 export const DEFERRED_TO_HUMAN = "human";
 
 /**
+ * The `deferredTo` value meaning **nobody was asked** (#4574).
+ *
+ * DISTINCT FROM `DEFERRED_TO_HUMAN` ON PURPOSE. The default used to be `args.to ?? DEFERRED_TO_HUMAN`, so a
+ * deferral that named no target recorded the OPERATOR as its audience — a status standing in for a fact,
+ * where the fact is "nobody was actually asked". Every surface that branches on the value must be able to
+ * tell the two apart, which is why attention.mjs renders this one as a sentence rather than a name.
+ */
+export const DEFERRED_TO_NOBODY = "nobody";
+
+/**
  * Snapshot a pi-durable doc item (or array of items) into plain JS objects.
  *
  * A doc proxy resolves primitive properties fine, but the overlay THROWS
@@ -884,20 +894,36 @@ const Router = defineExtension({
 							return `item #${args.itemId} is addressed to ${item.to}, not you`;
 						if (item.status !== "claimed")
 							return `item #${args.itemId} is not claimed by you (status=${item.status})`;
-						// Asking a seat IS a send, so the org-edge and capability gates apply
-						// to it exactly as they do to send_work. Checked BEFORE any state
-						// changes, so a forbidden question cannot leave the item half-parked.
-						if (args.to) await assertSendAllowed(tx, me, args.to);
+						// #4574: A DEFERRAL IS NOT A SEND. The comment here used to read "Asking a seat IS a send, so the
+						// org-edge and capability gates apply to it exactly as they do to send_work" — AND THAT PREMISE WAS
+						// WRONG AND LOAD-BEARING. It read as documentation, so nobody tested it.
+						// THE CONSEQUENCE: the gate fired BEFORE anything was recorded, so an off-edge `to:` could only reach
+						// the default below — a FORCED ESCALATION to the operator whether or not the operator was the right
+						// decider, and #4124 read as an open question for hours while the seat it named had never been asked.
+						// SO THE TWO ACTS ARE SPLIT: `assertSendAllowed` governs the `enqueueItem` below — that IS a send and
+						// must keep refusing loudly — and it does NOT govern RECORDING a target. Parked is not sent.
+						let deliverable = false;
+						if (args.to) {
+							try {
+								await assertSendAllowed(tx, me, args.to);
+								deliverable = true;
+							} catch {
+								// The edge forbids SENDING to that seat. Record the target, deliver nothing: it can still ANSWER.
+								deliverable = false;
+							}
+						}
 						item.status = "deferred";
 						item.question = args.question;
-						item.deferredTo = args.to ?? DEFERRED_TO_HUMAN;
+						// #4574: and the default is HONEST. "nobody was asked" and "the operator was asked" are DIFFERENT
+						// FACTS; `args.to ?? DEFERRED_TO_HUMAN` made them indistinguishable and manufactured "human".
+						item.deferredTo = args.to ?? DEFERRED_TO_NOBODY;
 						item.transitions.push({
 							at: new Date().toISOString(),
 							event: "deferred",
 							by: me,
 							to: item.deferredTo,
 						});
-						if (args.to) {
+						if (args.to && deliverable) {
 							await enqueueItem(
 								tx,
 								me,
@@ -906,9 +932,15 @@ const Router = defineExtension({
 								args.question,
 							);
 						}
-						return args.to
-							? `item #${item.id} deferred to ${args.to}; that seat has the question. Resume your own item with resume_work(${item.id}) once it answers.`
-							: `item #${item.id} deferred to the human operator, who sees it on the status line. Resume it with resume_work(${item.id}) once you have the answer.`;
+							// #4574: the message reports what ACTUALLY happened, which is THREE cases, not two. A no-target
+							// deferral says NOBODY was asked — not that the operator was, which is the fact the old default invented.
+							if (!args.to) {
+								return `item #${item.id} deferred with NO target — nobody was asked, and deferredTo records that rather than naming the operator. The operator sees it on the status line; resume it with resume_work(${item.id}) once you have an answer.`;
+							}
+							if (!deliverable) {
+								return `item #${item.id} parked on ${args.to} — NOT delivered, because the org edge forbids sending to that seat, but the seat is recorded as the one that should ANSWER and it is visible through attention/status. Resume your own item with resume_work(${item.id}) once it answers.`;
+							}
+							return `item #${item.id} deferred to ${args.to}; that seat has the question. Resume your own item with resume_work(${item.id}) once it answers.`;
 					}, context);
 					return toolText(out);
 				} catch (err) {
