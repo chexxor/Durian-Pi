@@ -3210,6 +3210,44 @@ does not fix it.
 `removeClaimedWorktree` succeeds; opt-in carry still carries), `demo/worktree-recursive-carry.test.mjs`
 and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path. Recorded by `scribe`
 (#2658).
+LANDING NOTE: D-number assigned at LAND TIME — D113 is taken (spool-op authorization, scribe-item-2219);
+re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge (do not hard-code).
+## D### — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127)
+
+**Decision.** TUI cost/spend pricing is supplied by a per-provider pricing EXTENSION. A price is
+UNAVAILABLE unless an extension supplies it; the former blocker — an operator-supplied vendor price
+table — is REMOVED. The mechanism is threefold: (1) a per-provider pricing-extension interface;
+(2) the cost measure is derived from tokens through that extension; (3) when NO extension supplies
+prices, cost/spend renders "unavailable" — NEVER a fabricated or stale `$`.
+
+**Staleness.** Handled by the unavailable path: a stale price table must never render a `$`; with no
+live extension data, show unavailable.
+
+**Scope.** ROADMAP 98 stays TOKENS-ONLY (v1). This pricing decision is INDEPENDENT and NOT v1 —
+unscheduled. Owner is lead (mechanism); implementation routes to impl once scheduled. Held item #1135
+(TUI cost/spend: pricing instrument + SOURCE + staleness) is the mechanism's home.
+
+**Why.** A `$` figure with no live, current price behind it is worse than no figure: it fabricates a
+cost the product did not measure. The unavailable path keeps the UI honest under any staleness or
+absence condition.
+
+**Status.** RULED and recorded (operator re-scope, 2026-10-18, relayed via lead #2197). Unscheduled;
+tracked at held item #1135. No pricing extension exists yet, so the surface currently renders
+unavailable by this rule.
+
+## D### — durable-tui: `ui.mjs` / `npm run ui` is the FALLBACK surface and is to be RETIRED (operator, 2026-10-18)
+
+**Decision.** `ui.mjs` / `npm run ui` is the FALLBACK (not a co-existing surface); the poller stays as
+last resort. `ui.mjs` will eventually be RETIRED once the durable TUI proves the multi-seat surface.
+
+**Policy.** In the interim: MINIMAL / bugfix-only maintenance (no new features). Deprecation path =
+retire after Phases 1-2 land and the durable multi-seat surface is accepted.
+
+**Status.** Execution GATED on Phases 1-2 (#2096, #2097). Held item #2098 stays the retirement-trigger
+home (decide maintenance/retirement once the durable surface is accepted; keep the poller as last
+resort). RULED and recorded (operator, 2026-10-18, relayed via lead #2197).
+
+LANDING NOTE: D-numbers assigned at LAND TIME — re-derive the next FREE D-numbers by scanning `docs/DECISIONS.md` at merge (do not hard-code; the source items are #2199 / #2239).
 
 ## D-<mint> — One window resolver for every context bound: the degeneration guard's context threshold is RELATIVE to the seat's effective window (architect, item #2730, 2026-10-19)
 
