@@ -27,6 +27,7 @@ import {
 	awaitIntentResult,
 	drainIntentInbox,
 	intentResultDir,
+	readIntentError,
 	readIntentFiles,
 	runWakeLoop,
 	writeIntent,
@@ -38,7 +39,10 @@ const dbPath = join(dir, "compact.db");
 const seatName = "stuffed";
 const INSTRUCTIONS = "fold the early turns into a summary, keep the latest work";
 
-const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
+// A SLOW streaming provider: the mid-flight case (#2073) needs a REAL running generation, so the
+// long final turn must still be streaming when the compact request is spooled (auditor #2061 used
+// the same trick). Short seeded turns are unaffected.
+const faux = fauxProvider({ models: [{ id: "faux-seat" }], tokensPerSecond: 30, tokenSize: { min: 2, max: 3 } });
 const models = createModels();
 models.setProvider(faux.provider);
 const registry = createRegistry();
@@ -154,8 +158,62 @@ try {
 		rmSync(waitDir, { recursive: true, force: true });
 	}
 
+	// 8. MID-FLIGHT (#2073, auditor #2061 boundary): a compaction whose summary would land only at
+	//    the seat's NEXT TURN BOUNDARY is REFUSED legibly — never committed-then-mis-reported as
+	//    "no entry written" (which made a successful compaction look failed). Stage a REAL running
+	//    generation and spool a compact while it is in flight.
+	{
+		faux.setResponses([fauxAssistantMessage(fauxText("word ".repeat(120)))]);
+		const inFlight = await conv.submit(
+			{ type: "input", content: `the-long-final-turn ${"y".repeat(2000)}` },
+			ctx,
+		);
+		await new Promise((r) => setTimeout(r, 400));
+		const live = await harness.inspect(ctx);
+		const running = (live.tasks ?? []).filter((t) => t.record?.state?.status === "running");
+		assert.equal(
+			running.length,
+			1,
+			`STAGED: one run in flight when compact is spooled (got ${JSON.stringify((live.tasks ?? []).map((t) => t.record?.state?.status))})`,
+		);
+
+		const R5 = "req-compact-inflight";
+		writeIntent(dbPath, {
+			op: "compact",
+			to: seatName,
+			instructions: INSTRUCTIONS,
+			requestId: R5,
+			from: "operator",
+		});
+		const before = (await compactionIds()).size;
+		const inflight = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
+		assert.equal(
+			inflight.deadLettered,
+			1,
+			`a mid-flight compact is refused (dead-lettered), not silently accepted (${JSON.stringify(inflight)})`,
+		);
+		assert.equal(inflight.delivered, 0, "nothing was applied mid-flight");
+		const reason = readIntentError(dbPath, R5);
+		assert.match(String(reason), /mid-generation/, `the reason names the boundary: ${reason}`);
+		assert.match(String(reason), /pause --wait/, "the reason names the fix (quiesce first)");
+		assert.equal((await compactionIds()).size, before, "the refused request committed nothing");
+
+		// The staged run is NOT killed: it settles DONE and the full turn is committed.
+		await inFlight.wait(ctx);
+		const all2 = await conv.entries({}, 500, undefined, ctx);
+		assert.ok(
+			JSON.stringify(all2.items).includes("the-long-final-turn"),
+			"the in-flight turn committed in full (the run was not aborted)",
+		);
+		const subs = await storage.scanSubmissions({ conversationId: convId, order: "descending" }, 5, undefined, ctx);
+		assert.ok(
+			subs.items.every((s) => !String(s.reason ?? "").startsWith("aborted:")),
+			"no submission was aborted by the refusal",
+		);
+	}
+
 	console.log(
-		"COMPACT-SPOOL PASS (broker applies op:compact with its own harness; a real pi.compaction entry lands; duplicate requestId applies once; seat not aborted)",
+		"COMPACT-SPOOL PASS (broker applies op:compact when the seat is quiescent; a real pi.compaction entry lands; duplicate requestId applies once; MID-FLIGHT compact is refused legibly; seat not aborted)",
 	);
 } finally {
 	try {

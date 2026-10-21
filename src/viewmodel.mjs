@@ -236,12 +236,23 @@ export function deriveSeatAction(seat, health, highlight) {
 	const failed = notices.find((a) => a.kind === "last_run_failed");
 	const generating = notices.find((a) => a.kind === "generation_in_flight");
 
+	// #4449: THE ROW MUST NOT CONTRADICT ITSELF. Before this branch a seat with queued work and no
+	// claim fell through to `idle` and painted a hollow glyph beside a focus string reading "has #N
+	// queued" ? the word and the row disagreed. `queued` is the LAST non-idle state, below `waiting`,
+	// because a queue-only fact is calm: the count is already on the same row.
+	// THE SOURCE IS THIS FUNCTION'S OWN `queued` VARIABLE, not the attention notice
+	// `idle_with_queued_work`: that notice is `!inFlight`-gated in attention.mjs, so it switches off
+	// EXACTLY IN THE GAP BETWEEN GENERATION ATTEMPTS ? the gap the hollow row was measured in ? and a
+	// notice-driven state would flicker idle/waiting for the same seat.
+	// AND `waiting` SHEDS ONLY THAT ONE KIND for the same reason: otherwise the same seat flickers
+	// `! waiting` <-> `queued` as the gate opens and closes. Other seat-scoped kinds are unchanged.
 	let state = "idle";
 	if (failed) state = "failed";
 	else if (generating) state = "generating";
 	else if (claimed) state = "working";
 	else if (deferred) state = "parked";
-	else if (notices.length) state = "waiting";
+	else if (notices.some((a) => a.kind !== "idle_with_queued_work")) state = "waiting";
+	else if (queued) state = "queued";
 
 	let focus;
 	if (claimed) focus = `working on #${claimed.id} ${claimed.subject}`;
