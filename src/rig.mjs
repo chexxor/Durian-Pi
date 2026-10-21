@@ -902,6 +902,20 @@ const Router = defineExtension({
 						// decider, and #4124 read as an open question for hours while the seat it named had never been asked.
 						// SO THE TWO ACTS ARE SPLIT: `assertSendAllowed` governs the `enqueueItem` below — that IS a send and
 						// must keep refusing loudly — and it does NOT govern RECORDING a target. Parked is not sent.
+						// #4655: TWO FACTS, ONE CATCH — THAT WAS THE DEFECT. `assertSendAllowed` calls `seatId(tx, to)` FIRST,
+						// and `seatId` throws `unknown seat: <name>`. So an UNKNOWN NAME and an ORG-EDGE REFUSAL both landed in
+						// the single try/catch below, and an unknown target was recorded and rendered as a seat — the original
+						// defect in a new spelling. The resolver already exists; nothing new is needed, only SEPARATION.
+						// THE RULING: record the name (so the operator sees what was typed), mark it UNASKABLE rather than
+						// falling back to nobody, and NAME THE NAME in the sentence.
+						let knownSeat = true;
+						if (args.to) {
+							try {
+								await seatId(tx, args.to);
+							} catch {
+								knownSeat = false;
+							}
+						}
 						let deliverable = false;
 						if (args.to) {
 							try {
@@ -936,6 +950,11 @@ const Router = defineExtension({
 							// deferral says NOBODY was asked — not that the operator was, which is the fact the old default invented.
 							if (!args.to) {
 								return `item #${item.id} deferred with NO target — nobody was asked, and deferredTo records that rather than naming the operator. The operator sees it on the status line; resume it with resume_work(${item.id}) once you have an answer.`;
+							}
+							// #4655: AN UNKNOWN NAME IS ITS OWN CASE. Recording it and rendering it as a seat is the original defect;
+							// falling back to "nobody" would hide the typo. So it is recorded, marked unaskable, and NAMED.
+							if (!knownSeat) {
+								return `item #${item.id} parked on '${args.to}' — that target is NOT A KNOWN SEAT, so nobody has been asked. The name is recorded so you can see what was typed; correct it and defer again.`;
 							}
 							if (!deliverable) {
 								return `item #${item.id} parked on ${args.to} — NOT delivered, because the org edge forbids sending to that seat, but the seat is recorded as the one that should ANSWER and it is visible through attention/status. Resume your own item with resume_work(${item.id}) once it answers.`;

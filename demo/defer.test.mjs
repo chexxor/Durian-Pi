@@ -237,6 +237,39 @@ const queueAfterRelease = (await queueState()).items;
 const reQueued = queueAfterRelease.find((it) => it.id === 2 && it.status === "queued");
 assert.ok(reQueued, "#2 is back in queued status after release_work");
 
+
+	/* ---------- 7. #4655: an UNKNOWN seat name is recorded AND marked unaskable ---------- */
+	// THE ORIGINAL DEFECT IN A NEW SPELLING: an unknown name was recorded as a target and RENDERED AS A SEAT, so
+	// the row read "waiting on pmx" as though pmx existed and had been asked. THE RESOLVER ALREADY EXISTED —
+	// `assertSendAllowed` calls `seatId(tx, to)` FIRST, which throws `unknown seat: pmx` — so an UNKNOWN NAME
+	// and an ORG-EDGE REFUSAL were landing in ONE try/catch. They are different facts; this separates them.
+	// AND THE MESSAGE IS READ FROM THE TRANSCRIPT, NOT FROM `call`'s RETURN: the print-only probe showed
+	// `defer_work output: undefined` while the item WAS deferred — the tool's text arrives in the transcript.
+	// Asserting on the return value would have been an assertion about the wrong surface.
+	{
+		const items = (await queueState()).items;
+		const target = items.find((it) => it.to === "worker" && it.status === "queued");
+		const queueBefore = (await queueState()).items.length;
+		assert.ok(target, "the fixture must leave a queued item for the unknown-seat case");
+		await call("worker", "claim_work", {});
+		await call("worker", "defer_work", { itemId: target.id, question: "anyone?", to: "pmx" });
+		const after = await item(target.id);
+		assert.equal(after.status, "deferred", "an unknown target still PARKS the item rather than refusing");
+		assert.equal(after.deferredTo, "pmx", "and the NAME IS RECORDED, so the operator can see what was typed");
+		assert.notEqual(after.deferredTo, DEFERRED_TO_HUMAN, "and it does NOT fall back to the operator");
+		const said = await transcript("worker");
+		assert.match(said, /NOT A KNOWN SEAT/, "the sentence says the target is not a known seat, not that the org edge forbids it");
+		assert.match(said, /pmx/, "AND IT NAMES THE NAME — a sentence that does not is the defect again");
+		// A DELTA, NOT A GLOBAL SCAN: an earlier section already enqueued a QUESTION row for this item, so
+		// `.some(QUESTION #N)` would be true regardless of what THIS deferral did. The question is whether the
+		// unknown-seat deferral ADDED one.
+		assert.equal(
+			(await queueState()).items.length,
+			queueBefore,
+			"and nothing was DELIVERED to a seat that does not exist — the queue did not grow",
+		);
+	}
+
 await harness.close(ctx);
 console.log("DEFER TEST PASS (parks the item, is visible to a human, resumes, asks a seat, edge-gated, hold/release)");
 process.exit(0);
