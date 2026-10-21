@@ -530,7 +530,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     80×24; the denominator is the recommended window or is labelled advertised.
 
 99. **BUG (TUI): the conversation view has no `i` input affordance, and entering it drops the
-    conversation (operator report, 2026-10-17).** *Symptom:* in a seat's conversation view the footer
+    conversation (operator report, 2026-10-17; DELIVERED `02f0004`).** *Symptom:* in a seat's conversation view the footer
     does not offer `i`, and pressing `i` leaves the conversation while typing, so the operator cannot
     tell they can message the seat from there. *Root cause (verified in `src/tui/client.mjs`, `ui.mjs`):*
     `renderTui` dispatches on `view`; the conversation branch is `view === "conversation"`, but `i` sets
@@ -592,7 +592,7 @@ them forward, and the impl items are HELD until pm releases.
   colour/NO_COLOR, cost), advocate #1107 (user call), impl #1108 (implementation, GATED on those
   rulings and items 27/97). The designer/advocate items are ADVISORY and may run now.
 - **99** (bug: the `i` input affordance drops the conversation; fix = treat input as an OVERLAY on
-  the current view) — owners: impl #1109 (fix, GATED), designer #1110 (footer/hint wording, advisory).
+  the current view; **DELIVERED `02f0004`**) — owners: impl #1109 (fix, GATED), designer #1110 (footer/hint wording, advisory).
 
 100. **Measure landing health — unlanded verified branches and time-to-land (operator request,
     2026-10-17).** The branch backlog (2026-10-17: 15 verified-but-unlanded branches) is invisible today:

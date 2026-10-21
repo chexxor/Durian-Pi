@@ -75,3 +75,19 @@ operator — to rotate the credential and to authorise the store purge (no delet
 Item #828 (lead #824 part b). Detector: `src/secretdetect.mjs`; wired into `src/readapi.mjs`
 (`readRigHealth` → `secretFindings` + the `secret_detected` attention notice). Prove:
 `node demo/secretdetect.test.mjs` (2026-10-16).
+
+2026-10-19 — **FALSE-POSITIVE CLASS: a bare 40-character git SHA is classified `high-entropy-token`.**
+`git rev-parse <ref>` and `git merge-tree --write-tree` print a full object id, and the
+`high-entropy-token` pattern (`src/secretdetect.mjs:37`, duplicated at `src/secretredact.mjs:37`) matches
+exactly that character class, so the tool result is replaced by the redaction marker and the seat cannot
+read the id. Reproduced: `redactText('384913a82d191119ed7259bff9efa85967959279')` → marker; `'f450cdd'`
+(short) → unchanged. Six occurrences in one `log scribe 12` window. **Before escalating a
+`high-entropy-token` finding to the operator for ROTATION, check whether the value was a git object id** —
+rotating a credential that was never a credential is a real cost. Workaround until the pattern is
+narrowed: use `--short` ids in playbooks, or discard line 1 of a `--write-tree` result.
+Record: `docs/incidents/2026-10-19-git-sha-redacted-as-secret.md`. **SUPERSEDED (position P-6,
+2026-10-21): the blanket pure-hex skip this note implies is REFUTED.** The resolution-backed form
+(docs/reviews/security-sha-exemption-position.md) exempts a bare 40/64-hex ONLY when `isGitObject`
+confirms (`git cat-file -e <hex>^{object}`) and otherwise redacts/fires as today — FAILS CLOSED. Read the
+position before treating a `high-entropy-token` finding over git output as a false positive; the check
+still fires unless the value IS a git object id.

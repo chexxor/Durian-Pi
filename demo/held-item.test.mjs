@@ -71,13 +71,36 @@ try {
 			first = false;
 		} else faux.appendResponses(batch);
 		const c = await harness.conversation(roster[name].conversationId, ctx);
-		await (await c.submit({ type: "input", content: "go" }, ctx)).wait(ctx);
+		const run = await (await c.submit({ type: "input", content: "go" }, ctx)).wait(ctx);
+		// #4740: RETURN the task record.
+		return run;
 	};
 	const transcript = async (name) => {
 		const c = await harness.conversation(roster[name].conversationId, ctx);
 		const pg = await c.entries({}, 200, undefined, ctx);
 		return pg.items.map((e) => JSON.stringify(e)).join("\n");
 	};
+
+// #4740: THE TOOL'S REPLY IS ITS OWN ENTRY, AND `c.entries()` IS NEWEST-FIRST (observed). `answer` on the
+// task record is a DECOY — it points at the assistant's closing message, not the tool result.
+// AND THE PROBE LESSON, recorded where the next reader will hit it: a `console.log` of a PROXIED object is
+// not a neutral instrument. `JSON.stringify(proxy)` IS the "spread it after the commit callback returns" case,
+// so a probe that stringifies a doc proxy THROWS the very error it was meant to observe — which is how
+// PROBE-J went silent and sent me looking in the wrong place for a pass. THIS helper reads plain text out of
+// the entry and never stringifies the proxy itself.
+async function toolReply(name, toolName) {
+	const c = await harness.conversation(roster[name].conversationId, ctx);
+	const pg = await c.entries({}, 200, undefined, ctx);
+	const hits = pg.items.filter((x) => {
+		const m = Array.isArray(x.model) ? x.model : [];
+		return m.some((b) => b && b.role === "toolResult" && b.toolName === toolName);
+	});
+	if (hits.length === 0) return "";
+	const m = Array.isArray(hits[0].model) ? hits[0].model : [];
+	const block = m.find((b) => b && b.role === "toolResult" && b.toolName === toolName);
+	const parts = Array.isArray(block?.content) ? block.content : [];
+	return parts.map((c2) => (typeof c2 === "string" ? c2 : c2?.text ?? "")).join("");
+}
 
 	// pm sends a NORMAL item, then a HELD one (a parked backlog registration).
 	await call("pm", "send_work", { to: "worker", subject: "Normal work", body: "do it" });
@@ -104,6 +127,25 @@ try {
 	check("the sender may release the held item it created", (await item(2)).status === "queued", JSON.stringify(await item(2)));
 	await call("worker", "claim_work", {});
 	check("after release the item IS claimable", (await item(2)).status === "claimed", JSON.stringify(await item(2)));
+
+	// #4740: A CROSS-SEAT HELD SEND to a recipient holding NOTHING CLAIMED. A self-addressed send produced
+	// `#undefined`; a recipient with a `claimed` row makes the STALLED branch fire first (both measured).
+	// `pm` created every row here and holds none, so it is the recipient that works.
+	await call("worker", "send_work", { to: "pm", subject: "Parked backlog row for pm", body: "held", held: true });
+	const pmRows = (await queueState()).items.filter((x) => x.to === "pm");
+	check(
+		"pm holds a held row and NOTHING claimed — the state the describing branch needs",
+		pmRows.some((x) => x.status === "held") && !pmRows.some((x) => x.status === "claimed"),
+		JSON.stringify(pmRows.map((x) => `${x.id}:${x.status}`)),
+	);
+	await call("pm", "claim_work", {});
+	const said = await toolReply("pm", "claim_work");
+	// FOUR ASSERTIONS, and the NEGATIVE is one of them — a negative only EXCLUDES, so it cannot stand alone.
+	check("NOT the stalled-claim branch", !/STALLED_CLAIM/.test(said), said.slice(0, 160));
+	check("says the queue is NOT empty", /NOT an empty queue/.test(said), said.slice(0, 160));
+	check("NAMES the row", /#\d+/.test(said), said.slice(0, 160));
+	check("and its CURRENT status", /held/.test(said), said.slice(0, 160));
+
 } finally {
 	await harness.close(ctx);
 }

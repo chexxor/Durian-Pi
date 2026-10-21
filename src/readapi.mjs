@@ -11,6 +11,7 @@
 // store without becoming a driver.
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { RigControl, RigQueue, Seats } from "./rig.mjs";
 import { SCAN_LIMIT, readSeatPages } from "./rigstory.mjs";
 import { computeMetrics } from "./metrics.mjs";
@@ -20,8 +21,40 @@ import { strandedMsSetting, declaredContextWindow } from "./config.mjs";
 import { contextConsumption } from "./context.mjs";
 import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
-import { partialView, peerGraph } from "./viewmodel.mjs";
+import { deriveSeatAction, partialView, peerGraph } from "./viewmodel.mjs";
 import { LOCAL_PROVIDER_ID, localProviderSpec } from "./providers/local.mjs";
+
+/**
+ * The TAIL of `<db>.broker.log`, capped at `maxBytes` (the log is unbounded and NOT rotated, see
+ * the `pass-failed` measure's blind spot). Read-only; an absent/unreadable log reads as null, never
+ * as an empty pass. A partial first line (no leading ISO timestamp) is skipped by the counter.
+ * The path mirrors `brokerLogPath` in src/broker.mjs — inlined here so the read API does not pull
+ * the provider stack (broker.mjs imports pi-ai) into every read-only client.
+ */
+function readBrokerLogTail(dbPath, maxBytes = 256 * 1024) {
+	if (!dbPath) return null;
+	let fd = null;
+	try {
+		const path = `${dbPath}.broker.log`;
+		const size = statSync(path).size;
+		if (size === 0) return "";
+		const start = Math.max(0, size - maxBytes);
+		fd = openSync(path, "r");
+		const buf = Buffer.alloc(size - start);
+		readSync(fd, buf, 0, buf.length, start);
+		return buf.toString("utf8");
+	} catch {
+		return null;
+	} finally {
+		if (fd !== null) {
+			try {
+				closeSync(fd);
+			} catch {
+				// best-effort close; the read already succeeded or failed
+			}
+		}
+	}
+}
 
 /** The seats a store holds, as the plain {name, conversationId, role} shape a
  * renderer or client consumes. An absent session document is an empty rig, not
@@ -291,6 +324,9 @@ export async function readRigHealth(
 		// Say the window was cut only when a page actually hit the limit, so
 		// "bounded" is a fact about this reading rather than a standing claim.
 		bounded: Object.values(pages).some((items) => items.length >= entryLimit),
+		// #2643 (ROADMAP 78): the broker's own PASS-FAILED lines, so a thrown pass is MONITORED and
+		// not only logged. The only durable artifact of the `pass-failed` diagnostic is the log.
+		brokerLog: readBrokerLogTail(dbPath),
 	});
 	// The failure CAUSE is in the entry, not in the submission record: the record
 	// carries a category ("model_error"), the entry carries the provider's
@@ -393,4 +429,73 @@ export async function readRigHealth(
 		// Internal: watch derives highlights from these instead of re-scanning.
 		_pages: pages,
 	};
+}
+
+/**
+ * The queue statuses a LANDING row counts, in the order the renderer may show them.
+ * Deliberately the four LIVE statuses and nothing else: `done` and `cancelled` are
+ * terminal history, and counting them would make a seat's "queue size" grow forever as
+ * it finishes work — a number nobody could explain (ROADMAP 124's warning).
+ */
+export const LANDING_QUEUE_STATUSES = ["queued", "claimed", "held", "deferred"];
+
+/**
+ * The LANDING projection (ROADMAP 124): per seat, what it is working on and how much is
+ * waiting behind it, in the shape a landing screen renders.
+ *
+ * PURE over a `readRigHealth()` snapshot — it takes no storage handle and performs no I/O,
+ * so one batched read feeds every seat on the screen. That is the point of the seam
+ * (#3103: one spool round trip, never 1+N). A renderer that needs this data must call
+ * `readRigHealth` once and pass the result here; it must not loop `readQueueItems` per seat.
+ *
+ * Per seat:
+ *  - `action`  — the seat's current action, using the ONE vocabulary the status bar uses
+ *                (`SEAT_ACTIONS` in src/viewmodel.mjs, #2826). Not a parallel enum.
+ *  - `queue`   — `{ total, queued, claimed, held, deferred }`; `total` is the sum of those
+ *                four live statuses, so the composition is always explainable.
+ *  - `claimed` — `{ id, subject }` for the item the seat is working on, or `null`.
+ *                `null` is an explicit answer ("nothing claimed"), never a blank field.
+ *  - `deferred`— `{ id, subject, deferredTo }` when the seat is parked on a question.
+ *  - `notices` — the seat-scoped attention KINDS, unchanged from the health snapshot.
+ *  - `lastActivity` — passed through from the seat row, unchanged.
+ *
+ * The subject is returned as stored; the renderer owns truncation (it knows the width, this
+ * module does not), so a brief is never baked into the data path.
+ */
+export function projectLanding(health) {
+	const items = health?.queueItems ?? [];
+	const seats = (health?.seats ?? []).map((seat) => {
+		const mine = items.filter((it) => it.to === seat.name);
+		const counts = { queued: 0, claimed: 0, held: 0, deferred: 0 };
+		for (const item of mine) {
+			if (Object.hasOwn(counts, item.status)) counts[item.status] += 1;
+		}
+		const total = LANDING_QUEUE_STATUSES.reduce((n, status) => n + counts[status], 0);
+		const action = deriveSeatAction(seat, health);
+		const brief = (item) =>
+			item ? { id: item.id, subject: item.subject } : null;
+		return {
+			name: seat.name,
+			role: seat.role ?? null,
+			// Unchanged passthrough: the landing screen shows the same freshness the seat
+			// row already carries, so the two surfaces cannot disagree about "recently active".
+			lastActivity: seat.lastActivity ?? null,
+			action: action.state,
+			focus: action.focus,
+			queue: { total, ...counts },
+			claimed: brief(action.claimed),
+			deferred: action.deferred
+				? {
+						...brief(action.deferred),
+						deferredTo: action.deferred.deferredTo ?? null,
+						// The QUESTION is the operator-triage fact a landing row shows for a parked
+						// seat (designer spec #3307 §2), so it belongs in the data path rather than
+						// being re-read from the store by the renderer.
+						question: action.deferred.question ?? null,
+					}
+				: null,
+			notices: action.notices.map((n) => n.kind),
+		};
+	});
+	return { seats };
 }

@@ -1,8 +1,11 @@
 # Seat tools (M3) — the scoped design
 
 **Status: REVIEWED — "BLOCK as specified → ADJUST (conditional pass)".** Nothing implemented.
-Position: `docs/reviews/security-sec-m3-seat-tools.md` (from
-`qitem-20261011173526-ebcb34a909ab71e8`, `gate:spec-review`). It escalated to `advise.lead`
+Position: **no standalone review file** — the review verdict ("BLOCK as specified → ADJUST")
+and SC1–SC3 are recorded **inline in this document**; the review was planned at
+`docs/reviews/security-sec-m3-seat-tools.md` but never written as a file (never committed, verified
+`git log --all --diff-filter=A` is empty). (from `qitem-20261011173526-ebcb34a909ab71e8`,
+`gate:spec-review`). It escalated to `advise.lead`
 (`qitem-20261011173739-402fac1b`) for the scope-vs-security conflict **if** the tools ship
 without the conditions below; complying with them means no escalation is needed.
 
@@ -49,7 +52,7 @@ cannot drift into a hole.
 verifier seats through `scopeVerifierTools`. The test opens by asserting that **cli.mjs contains
 those calls**, because a module that is never installed protects nothing while looking finished,
 and only then proves behaviour: the tool set is read/write/edit/PowerShell + `prepare_workspace` with **no bash**, an
-author can write inside its root, a verifier **cannot** write whatever tools it was offered, an
+author can write inside its root, a verifier **cannot** write through the file API whatever tools it was offered (its shell can write — isolation is a convention, SC2 states the three facts), an
 **unknown conversation fails closed** rather than open, and an escape is refused even for an
 author. A live scratch `up` / `check` / `ps` on a throwaway store confirms the real path still
 works with the wiring in place.
@@ -61,8 +64,15 @@ persisted cwd first, so each conversation is confined to its own tree. Coordinat
 disposable copy. Proof: `demo/prepare-workspace.test.mjs`, amended `demo/seattools.test.mjs`.
 
 *The residual, stated plainly:* a verifier's **shell can still write**, because a shell cannot be
-made read-only - but it is now **bounded by the worktree below**, since the only tree a verifier
-can reach is the disposable copy it was pointed at.
+made read-only. Its writes are **not** isolated by a confinement guarantee — the disposable-copy
+premise is promised in `confine.mjs`'s docstring but `makeSeatEnv` passes the seat's real root —
+they are isolated only by **disposable-scratch policy** (the verify worktree is reaped and audited;
+qa/auditor hold because their worktrees happen to be scratch). This is the interim form, recorded
+verbatim for any doc that describes verifier capability:
+
+> **Verifier read-only is enforced at the file API and env layers. Shell-write isolation rests on
+> disposable-scratch policy (reaped, audited), NOT a confinement guarantee. NO VERIFICATION
+> ARGUMENT MAY CITE THE CURRENT STATE AS A GUARANTEE.**
 
 **The worktree exists now, which was the safety gate (2026-10-11):** `src/worktree.mjs`,
 `node cli.mjs worktree <path>` and `demo/worktree.test.mjs` (the 30th demo). Before this the
@@ -89,7 +99,7 @@ Conditions, all required before any code lands and each proved by a canary demo:
 | Id | Condition |
 |---|---|
 | **SC1** | A **root-confining `ExecutionEnv`** (`HarnessOptions.env`, `types.ts:551`) decorating `NodeExecutionEnv`, confining *all* filesystem access to the worktree root — `absolutePath`, `openBinaryReader`, `writeFile`, `createTemp*`, and `exec`'s `cwd` — rejecting absolute paths, `..`, and symlink escapes |
-| **SC2** | The verifier's **read-only is enforced at the filesystem layer** (deny `writeFile`/mutation), because its shell can write regardless of `write`/`edit` being omitted |
+| **SC2** | Verifier read-only, stated as three facts (the capability profiles must read these, never an unqualified adjective): **(1) FILE-API REFUSAL — ENFORCED**: deny `writeFile`/mutation via `readOnlyGuard` (demo half 1 proves it); **(2) ENV DISCIPLINE — ENFORCED**: cwd pinned + `inheritEnv:false` (SC3); **(3) SHELL-WRITE ISOLATION — CONVENTION**: a verifier's shell can still write regardless of `write`/`edit` being omitted; its writes are isolated only by disposable-scratch policy (reaped, audited), NOT a confinement guarantee, because `makeSeatEnv` passes the seat's real root, not a minted snapshot |
 | **SC3** | **`inheritEnv` forced false at the env layer** (not merely set in `prepare`), plus host non-negotiables (`wsl`, `docker`, destructive git) refused **structurally in `exec`**, never by string match |
 
 ## Revision note — what the review falsified in the first draft
@@ -130,18 +140,19 @@ bash alone (F2). Everything below is narrowing *on top of* SC1 — never instead
 | Seat role | Tools | Note |
 |---|---|---|
 | author (`impl`, `impl2`) | `read`, `write`, `edit`, shell | within the confined root |
-| verifier (`qa`, `qa2`) | `read`, shell | read-only enforced by **SC2**, not by tool omission |
+| verifier (`qa`, `qa2`) | `read`, shell | file-API refusal + env discipline ENFORCED; shell-write isolation a CONVENTION (SC2 states the three facts, not "read-only" unqualified) |
 | `pm`, `lead` | none | coordination only, as today |
 
 Still worth doing — it shrinks the surface and keeps the author/verifier asymmetry legible — but it
-is a **second layer**. The guarantee comes from SC2.
+is a **second layer**. The enforcement comes from SC2's file-API and env facts; shell-write isolation
+is the convention, not a guarantee.
 
 **SC2 resolved as a snapshot, not a read-only shell (agreed 2026-10-11).** The position asked the
 verifier's environment to deny "any `exec` that writes", which is **undecidable for a shell** —
-and is why its own strongest option was a separate low-privilege OS account. Instead the verifier's
+and is why its own strongest option was a separate low-privilege OS account. The intent is that the verifier's
 environment is rooted at a **disposable snapshot** of the author's worktree: writes land in the
 throwaway copy and are discarded, so the verifier **cannot alter the artifact it is verifying**,
-and it can still run the tests, which is its whole job. Read-only by filesystem semantics rather
+and it can still run the tests, which is its whole job. **That snapshot is NOT yet wired** — `makeSeatEnv` passes the seat's real root, so until C-1 lands, shell-write isolation is a **convention** (disposable-scratch policy, reaped and audited), not a confinement guarantee. Read-only by filesystem semantics rather
 than by OS identity, and implementable in `confine.mjs` alone. The stronger option — a distinct OS
 account or an AppContainer/job-object sandbox — remains an operator call if the snapshot is judged
 insufficient.
@@ -234,7 +245,7 @@ Must fail against the design as first written and pass with SC1–SC3:
 ## What ships after the conditions
 
 1. the confining `ExecutionEnv` (SC1) + env/structural refusals (SC3);
-2. per-seat tool sets wired via `configure`, with SC2's filesystem-level read-only for verifiers;
+2. per-seat tool sets wired via `configure`, with SC2's file-API read-only (three facts, not "read-only" unqualified) for verifiers;
 3. the five-canary demo above, falsified against the as-written design first;
 4. evidence in `complete_work` (independent), so `qa` re-checks rather than trusts;
 5. `rig.selfdev.json` (pm/impl/qa/lead, `qa` on a second model — item 3) and a worktree helper;

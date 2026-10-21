@@ -124,3 +124,20 @@ tree -> `pi-main.pin.json | 20 ++`, `scripts/sync-pi.mjs | 2`, `src/worktree.mjs
 
 ## Links
 `docs/incidents/2026-10-17-live-worktree-reap.md` · `docs/runbooks/leaked-worktrees.md` · queue `#1151`, `#1581`
+
+## 2026-10-19 — the mitigation holds, but every seat root is STILL the shared tree
+Re-measured at the land+prune pass: `node cli.mjs worktree audit` reports `seat-root: 1`, and its
+`seatRoots` list shows **all eleven seats** (`pm`, `impl`, `qa`, `lead`, `advocate`, `scribe`, `devtools`,
+`auditor`, `designer`, `security`, `architect`) with `cwd = C:\Users\Alex\dsh-Projects\pi-opendurig` —
+the shared tree itself.
+
+So the `prepare_workspace` refusal and the `shared-tree-on-main` check rule landed on 2026-10-19
+(`50f981a`) protect the *creation* path, but the fleet is still operating in the pre-existing F12 state:
+no seat runs in its own worktree, so a seat's git and file operations still target the shared tree. That
+is the standing background condition of every prune — it is why `seat-root` appears exactly once and why
+no `item-*` worktree is a seat root. It also means the shared tree can carry a seat's uncommitted work at
+any moment, which is why `git reset`/`checkout --`/`clean` remain forbidden to a delegate.
+
+**Open control:** the `#1151` `DURIG_EXPECT_WORKTREE` mutation-point guard is still the outstanding
+durable fix. Until it lands, re-check `audit.seatRoots` before any prune and never treat a worktree as
+idle because its item is terminal.
