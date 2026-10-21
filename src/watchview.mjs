@@ -43,6 +43,11 @@ export function seatActivity(seat, health, highlight) {
 		// read as working, not as parked. The order is enforced in the derivation.
 		parked: { glyph: "◌", tone: "yellow" },
 		waiting: { glyph: "!", tone: "yellow" },
+		// #4449: `queued` ? claimable work, nothing claimed/generating/failed. GLYPH U+25C9 ("\u25C9"),
+		// DIM. NOT a half-filled shape: a partial fill reads as PROGRESS THE SEAT HAS NOT MADE. Not
+		// green (working's tone) and not yellow (this fact is calm ? the count is already on the same
+		// row, so no alarm inflation). Sits BELOW `waiting` in the derivation's precedence.
+		queued: { glyph: "\u25C9", tone: "dim" },
 		idle: { glyph: "○", tone: "dim" },
 	};
 	const { glyph, tone } = PRESENTATION[state] ?? PRESENTATION.idle;

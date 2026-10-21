@@ -74,10 +74,33 @@ const healthWith = (queueItems, attention = []) => ({ seats: [seat], queueItems,
 
 assert.equal(seatActivity(seat, healthWith([]), {}).state, "idle");
 assert.equal(seatActivity(seat, healthWith([item({ to: "pm", status: "claimed" })]), {}).state, "working");
+// #4449: A QUEUED SEAT IS `queued`, NOT `waiting`. This assertion used to expect `waiting` because the
+// `idle_with_queued_work` notice was one of the seat-scoped kinds that produced it ? and that is exactly
+// the flicker the ruling removes: the notice is `!inFlight`-gated, so it switches off IN THE GAP BETWEEN
+// GENERATION ATTEMPTS and the row would flip `! waiting` <-> `queued` for the same seat. `waiting` now
+// sheds ONLY that kind; the state comes from the view model's own `queued` variable.
 assert.equal(
 	seatActivity(seat, healthWith([item({ to: "pm" })], [{ scope: "seat", seat: "pm", kind: "idle_with_queued_work" }])).state,
-	"waiting",
+	"queued",
 );
+// AND THE PAIR THE OPERATOR SAW IS PINNED IMPOSSIBLE, not merely 'non-idle': no row may be `idle` while
+// its queue cell shows q > 0. A golden asserting only 'queued seats have some non-idle glyph' would pass
+// while the row still lied in its FOCUS STRING.
+{
+	const row = seatActivity(seat, healthWith([item({ to: "pm" })]), {});
+	assert.notEqual(row.state, "idle", "a seat with queued work is NOT idle");
+	assert.equal(row.state, "queued", "it is `queued`");
+	assert.match(row.focus, /queued/, "and the focus string says so ? the word and the row agree");
+}
+// AND THE PRESENTATION MAP MUST CARRY IT: the `?? PRESENTATION.idle` fallback is how a MISSING entry
+// silently re-hollows the row, so completeness is asserted rather than assumed.
+{
+	const { seatActivity: sa } = await import("../src/watchview.mjs");
+	const view = sa(seat, healthWith([item({ to: "pm" })]), {});
+	assert.equal(view.state, "queued");
+	assert.equal(view.glyph, "\u25C9", "the queued glyph is U+25C9, not the idle hollow circle");
+	assert.equal(view.tone, "dim", "and dim: not green (working) and not yellow (calm fact)");
+}
 
 // A parked item is its own state, not generic waiting: the seat is held by a
 // question and the row has to name the blocker.
