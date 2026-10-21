@@ -351,6 +351,70 @@ if (liveElsewhere.length > 0) {
 // that generates continuously (pm re-claims a slot every ~20-30 s) blocked every landing
 // indefinitely (#1509: seven refusals in three minutes). Instead the lander PUBLISHES a priority
 // reservation and WAITS for the slots at the FF, where new generations yield to it.
+/* ───────── pre-flight: each BRANCH must be a landable object ─────────
+ * Three checks. The first two are the "a rebase dropped a commit" family; the third is a
+ * strictly worse failure the first two cannot see — a branch that would POISON main on merge.
+ * Measured: devtools-item-2187 @5a99b14 resolves AND has valid ancestry, yet carries committed
+ * conflict markers in 76 files; the first two checks pass it and only the third refuses it.
+ *   1. rev-parse <branch>                        — the tip resolves to a real sha
+ *   2. merge-base --is-ancestor <base> <branch>  — its ancestry includes the intended base
+ *   3. git grep -l '^<<<<<<<' <branch>           — EMPTY output = no committed markers
+ * NOTE the INVERTED exit code on (3): `git grep` exits 1 when there is NO match, so exit 1 is the
+ * PASS case and exit 0 (with output) is the finding. Any OTHER exit (git grep exits 128 on a
+ * git-level failure) is an ERROR, never a pass — "could not check" must not read as "clean".
+ */
+const baseRef = "main";
+const baseSha = git(repoRoot, ["rev-parse", baseRef]);
+if (baseSha.code !== 0) {
+	report({ ...base, error: `cannot resolve the landing base '${baseRef}': ${baseSha.err}` }, 1);
+}
+for (const branch of branches) {
+	const tip = git(repoRoot, ["rev-parse", branch]);
+	if (tip.code !== 0) {
+		report({ ...base, error: `pre-flight: cannot resolve branch '${branch}': ${tip.err}` }, 1);
+	}
+	// (2) ancestry — a FAST PATH ONLY, never a refusal. If the branch CONTAINS the base it is
+	// definitely landable, so go straight to the merge; if the base CONTAINS the branch the work is
+	// already in main (a re-run). If NEITHER, ancestry can say only "not definitely landable", never
+	// "not landable" (#3272/#3337: content, not ancestry, proves landability), so we FALL THROUGH and
+	// let the merge-tree decide. A branch forked from an older main is a backlog's normal state, not
+	// a defect — refusing it would force a rebase where a clean merge would do.
+	const containsBase = git(repoRoot, ["merge-base", "--is-ancestor", baseSha.out, tip.out]).code === 0;
+	const alreadyLanded = !containsBase && git(repoRoot, ["merge-base", "--is-ancestor", tip.out, baseSha.out]).code === 0;
+	const ancestry = containsBase ? "contains-base" : alreadyLanded ? "already-landed" : "neither";
+	// (3) committed conflict markers — invisible to (1) and (2).
+	const markers = git(repoRoot, ["grep", "-l", "^<<<<<<<", tip.out]);
+	if (markers.code === 0) {
+		const files = markers.out
+			.split("\n")
+			.map((l) => l.trim().replace(new RegExp(`^${tip.out}:`), ""))
+			.filter(Boolean);
+		report(
+			{
+				...base,
+				error:
+					`refusing to land '${branch}' (${tip.out.slice(0, 8)}): it carries COMMITTED CONFLICT MARKERS in ` +
+					`${files.length} file(s) — a merge would import them into main, where every later verify would ` +
+					`measure a tree that contains them. Re-cut the branch; do NOT rebase it.`,
+				conflictMarkerFiles: files,
+				ancestry,
+			},
+			1,
+		);
+	}
+	if (markers.code !== 1) {
+		report(
+			{
+				...base,
+				error:
+					`refusing to land '${branch}': the committed-conflict-marker check could not run (git grep exited ` +
+					`${markers.code}: ${markers.err || "no stderr"}). "Could not check" is not "clean".`,
+			},
+			1,
+		);
+	}
+}
+
 const genlocks = heldGenlocks(dbPath);
 
 /* ───────── land in a SCRATCH DETACHED worktree ───────── */

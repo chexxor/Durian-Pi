@@ -221,12 +221,18 @@ try {
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "feat: feat-d"]);
   git(repo, ["switch", "main"]);
+  // feat-c and feat-d fork from the SAME pre-landing main and rewrite the same line. feat-c lands
+  // first (main advances); feat-d is then a STALE tip — it contains preC, not current main. The
+  // pre-flight does NOT refuse it (#3929): ancestry is a fast path and CONTENT proves landability,
+  // so feat-d reaches the merge and CONFLICTS there.
   const landedC = land(repo, ["feat-c"]);
   check("feat-c lands cleanly first", landedC.code === 0, landedC.raw.slice(0, 200));
   const beforeConflict = mainSha(repo);
   const conflicted = land(repo, ["feat-d"]);
-  check("the helper stops (nonzero)", conflicted.code !== 0, conflicted.raw.slice(0, 200));
-  check("...reports the conflicted path", (conflicted.report?.conflicted ?? []).includes("a.txt"), JSON.stringify(conflicted.report?.conflicted));
+  check("a STALE branch is NOT refused on ancestry — it reaches the merge", conflicted.code !== 0, conflicted.raw.slice(0, 200));
+  check("...and it STOPS on a CONFLICT, not a stale refusal",
+    (conflicted.report?.conflicted ?? []).includes("a.txt") && !/stale/.test(conflicted.report?.error ?? ""),
+    JSON.stringify(conflicted.report?.conflicted));
   check("...and main did NOT advance", mainSha(repo) === beforeConflict);
   check("THE POINT: the shared tree is NOT mid-merge", !existsSync(join(repo, ".git", "MERGE_HEAD")));
   const markers = spawnSync("git", ["grep", "-l", "<<<<<<<"], { cwd: repo, encoding: "utf8" });
@@ -241,6 +247,23 @@ try {
     git(repo, ["worktree", "prune"]);
   }
   check("the shared tree stayed clean through both conflict runs", git(repo, ["status", "--porcelain"]) === "");
+
+  console.log("\n4b. the pre-flight REFUSES a branch carrying COMMITTED CONFLICT MARKERS (#3916)");
+  // A branch that resolves AND has valid ancestry — it passes rev-parse and the ancestry check —
+  // but carries a committed conflict marker. Only the third check catches it, and this is the
+  // check that catches devtools-item-2187 (76 files of markers, both other checks pass).
+  const markerBranch = "feat-markers";
+  git(repo, ["switch", "-c", markerBranch, "main"]);
+  writeFileSync(join(repo, "m.txt"), "ok\n<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> other\n");
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-m", "feat: a branch with a committed conflict marker"]);
+  git(repo, ["switch", "main"]);
+  const beforeMarker = mainSha(repo);
+  const markerRefused = land(repo, [markerBranch]);
+  check("the helper REFUSES a branch with committed conflict markers", markerRefused.code !== 0, markerRefused.raw.slice(0, 200));
+  check("...and names the marker file", (markerRefused.report?.conflictMarkerFiles ?? []).includes("m.txt"), JSON.stringify(markerRefused.report?.conflictMarkerFiles));
+  check("...and main did NOT advance", mainSha(repo) === beforeMarker);
+  check("...and no scratch worktree is left", !git(repo, ["worktree", "list"]).includes(".land-scratch-"));
 
   console.log("\n5. --suite: a failing demo in the scratch refuses to advance main");
   const featE = feature("feat-e", "e.txt", "from feat-e\n");
