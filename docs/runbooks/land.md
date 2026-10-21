@@ -54,6 +54,25 @@ PRESSURE TO HAND-FIX, and the hand-fix is what broke the tree. Never `>` / `Get-
 source file — use the `edit` tool or `cmd /c "git show <ref> > file"`; the encoding guard and detector
 are routed separately and give this rule teeth.
 
+**`git status --porcelain` IMMEDIATELY BEFORE the landing, as the last step before the command.** An earlier
+measurement is evidence about the past, not a precondition — #4271 measured the tree clean and was blocked
+later by ten dirty files, #4163 the same, and the 04:21Z flattening came from a seat acting on a STALE
+picture. In every case the measurement was TRUE WHEN TAKEN and false by the time it mattered. The shared
+tree CAN be dirtied by a seat at any time — that is not a defect, it is what a shared tree is — so there is
+no code change that makes the measurement durable: THE ONLY FIX IS TO TAKE IT AT THE MOMENT OF USE.
+
+**AND IF IT IS DIRTY: STOP AND REPORT.** Do not clean it, do not stash it, do not restore it — the dirty tree
+may be a colleague's edit in flight, and this session has one incident that began with a seat deciding a
+dirty tree was its problem to solve.
+
+**WHY THE TEMPTATION IS STRONG HERE:** a landing takes minutes and the tree can change in seconds, so the
+window between "I checked" and "I landed" is exactly where the failures live.
+
+**DIRTY IS NOT THE SAME AS ABANDONED.** Two tracked files (`docs/SELFDEV.md`, `rig.selfdev.json`) went dirty
+between two measurements and were clean again later — the resolution was NOT cleanup, it was that a
+legitimate config edit COMPLETED. An `M` in `git status` can be a colleague's work in progress, in which
+case the correct action is to WAIT rather than to dispose.
+
 ## When to use
 A verified branch (`<seat>-item-<id>`, or any branch) must go onto `main`, and you want the landing to
 be **structurally incapable** of leaving the shared working tree mid-merge. This is the tool form of
