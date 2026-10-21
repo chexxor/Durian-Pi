@@ -2015,8 +2015,13 @@ export function brokerAlive(state, { now = Date.now() } = {}) {
     process.kill(state.pid, 0);
     return true;
   } catch (err) {
-    // EPERM means the process exists but we cannot signal it — still alive.
-    return err?.code === "EPERM";
+    // FAIL-SAFE (#3398): dead ONLY when the OS says the process does not exist. Any other
+    // error — EPERM (exists, cannot signal), or a code we have never seen — means ALIVE.
+    // The bug this probe serves is a FALSE-DEAD report (`serve --stop` claiming
+    // `stopped:true` for a live broker), and a false-dead admits a SECOND WRITER: that is
+    // the corruption class. `=== "EPERM"` was fail-OPEN toward dead — it classified every
+    // unexpected code as gone, i.e. it failed exactly on the path nobody tests.
+    return err?.code !== "ESRCH";
   }
 }
 
@@ -2075,8 +2080,10 @@ export function pidAlive(pid) {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    // EPERM means the process exists but we cannot signal it — still alive.
-    return err?.code === "EPERM";
+    // FAIL-SAFE (#3398): dead ONLY on ESRCH. See `brokerAlive` above — unknown ⇒ ALIVE,
+    // because a false DEAD here reports `stopped:true` for a live broker and admits a
+    // second writer, while a false ALIVE only refuses to start one more.
+    return err?.code !== "ESRCH";
   }
 }
 
