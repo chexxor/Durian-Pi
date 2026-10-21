@@ -14,7 +14,7 @@ import { fauxAssistantMessage, fauxProvider, fauxText } from "@earendil-works/pi
 import { configure, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { extractEntryText, readSeatHighlights, summarizeEntries } from "../src/rigstory.mjs";
-import { createWatchScreen, formatSnapshot, pad, seatActivity, truncate } from "../src/watchview.mjs";
+import { createWatchScreen, formatSnapshot, pad, seatActivity, truncate , PRESENTATION } from "../src/watchview.mjs";
 
 console.log("--- entry extraction ---");
 
@@ -392,15 +392,15 @@ try {
 // of them asserted anywhere: the width table is well covered for CJK, emoji, ANSI and combining marks, and
 // the six glyphs this screen actually paints were covered by nothing.
 {
-	const glyphs = {
-		queued: "\u25C9",
-		idle: "\u25CB",
-		working: "\u25CF",
-		generating: "\u25CF",
-		parked: "\u25CC",
-		failed: "\u2716",
-		waiting: "!",
-	};
+	// #4591: DERIVED FROM THE MAP, NOT A LITERAL COPY OF IT. A literal is a copy that drifts: a new
+	// state added to PRESENTATION would not appear here, and the pin would decay back to "the painted
+	// glyphs are covered by nothing" one state at a time. THE MAP IS THE SET.
+	const glyphs = Object.fromEntries(
+		Object.entries(PRESENTATION).map(([name, p]) => [name, p.glyph]),
+	);
+	// AND THE COUNT IS ASSERTED, so a state REMOVED from the map is visible too — a loop over an empty
+	// or shrunken map passes silently, which is the same failure in the other direction.
+	assert.ok(Object.keys(glyphs).length >= 7, `the presentation map must carry at least the seven states this screen paints; got ${Object.keys(glyphs).length}`);
 	for (const [name, g] of Object.entries(glyphs)) {
 		assert.equal(textWidth(g), 1, `the ${name} glyph must be ONE cell, or every row it appears on shifts by one`);
 	}
