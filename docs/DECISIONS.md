@@ -1052,7 +1052,9 @@ provides. If it must be genuinely non-forgeable later, re-issue it as an operato
 commit.
 
 **Effect on the position:** `security.sec`'s dissent is preserved for the residual shell risk
-(`docs/reviews/security-sec-m3-seat-tools.md`); SC1–SC3 are **adopted**, not skipped.
+(inline in `docs/SEAT-TOOLS.md` — the review verdict and SC1–SC3; the planned
+`docs/reviews/security-sec-m3-seat-tools.md` was never written as a file); SC1–SC3 are **adopted**,
+not skipped.
 
 ## D39 — The driver probes seat documents through a raw handle, because a harness session fails closed (2026-10-12)
 
