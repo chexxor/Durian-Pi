@@ -1,6 +1,6 @@
 ---
 runbook: land
-symptom: "a verified branch is not on main; land it without ever leaving the shared tree mid-merge"
+symptom: "a verified branch is not on main (possibly stacked on an unlanded base - name it); land it without ever leaving the shared tree mid-merge"
 writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
 last_verified: 2026-10-19
@@ -169,6 +169,26 @@ conflicted branch left `.git/MERGE_HEAD` and `<<<<<<<` markers in `src/checkup.m
 detached worktree**, and `main` advances only by a **clean fast-forward**. The shared tree is never
 mid-merge, whatever a branch does.
 
+## Stacked (unlanded) base — every entry NAMES its base
+
+A **stacked entry** is a branch whose **base is unlanded** — it builds on work that is verified but not
+yet on `main`, so it cannot be merged onto `main` on its own. Stacking is inherent to a landing
+backlog: branches queue while new work builds on them.
+
+**Rule:** EVERY stacked landing entry **names its base** and **states how that base becomes reachable**
+— the exact branch/commit (`git -C <repo> log --oneline -1 <base>`) and the mechanism that lands it
+first: an earlier entry in this same pass (list it), a named already-verified branch, or the
+**base-ref capability (#1456)** once it lands. A stacked entry is never offered to the helper as if it
+were based on `main`.
+
+Why it matters (2026-10-17): until #1456 lands, a seat CANNOT be provisioned at an unlanded tip —
+`prepare_workspace` and the `worktree` verb never pass `ref` — so an unlanded base is both an ordering
+constraint for the pass and a provisioning blocker for new work (impl's #1444/#1454). See
+`SEAT-LIFECYCLE.md` §3 "Stacked (unlanded) base".
+
+**Durable fix:** the base-ref capability (**#1456**, PRIORITY per the operator) makes stacking *work* by
+letting a worktree be created at an unlanded tip. `pause` (ROADMAP 131) and smaller, more frequent
+landings reduce how often it arises, but only #1456 removes the blocker.
 ## QUICK PATH (verified 2026-10-19) — land with the broker UP, prove on `main`
 
 `scripts/land.mjs` now **waits** for the generation slots instead of refusing while a seat generates
