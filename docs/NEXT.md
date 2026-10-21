@@ -64,8 +64,11 @@ a BRANCH; do not pop the stash blind.
 before accepting) · `#2412` (`pitui`) · `broker-one-connection` + `seat-instruction-encoding` regressions have
 NO item yet.
 **Blocker:** `main` is red on **3** demos (was 7 — the revert fixed the TUI four), so `land.mjs --suite` is
-unusable; land without it and prove on `main`. Also standing: the local PolyStrata model is DOWN (Swift/Qwen3.6
-deleted, IQ3_S installing to `D:\PolyStrata-models`). **The shared tree is CLEAN as of this clock-out**
+unusable; land without it and prove on `main`. Also standing: the local PolyStrata model is UP and SERVING
+`qwen3.8-flash-next-iq3_s` on `127.0.0.1:8080` (IQ3_S installed to `D:\PolyStrata-models`, smoke test 4.9 tok/s
+low-RAM) but **no seat points at it**, and the seat models 595b714 silently reverted are restored (`qa` ->
+`Qwen/Qwen3.6-35B-A3B`, `devtools` -> `deepseek-ai/DeepSeek-V4.1-Flash`); `demo/local-model-pointer.test.mjs`
+now pins `local/<id>` seats to the provider's single id so the rig file and the machine config cannot drift apart. **The shared tree is CLEAN as of this clock-out**
 (tracked dirty: 0) — but a suite run in `.` still measures the working tree, so prove `main` in a detached
 worktree.
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
