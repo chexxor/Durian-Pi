@@ -757,7 +757,9 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
   // 14. A commit message must not carry a UTF-8 BOM (or a NUL / stray CR) - #4349. Four commits in
   //    one session carried a BOM because PowerShell's `Set-Content -Encoding utf8` writes one, and
   //    each was caught by hand; four catches is not a catch rate, it is a mechanism that does not
-  //    exist. A BOM is INVISIBLE IN EVERY NORMAL VIEW (`git log --oneline` renders it, `git show`
+  //    exist. (A FIFTH — 30270c0 — was NOT amended and IS in history, recorded as a known-reds
+  //    baseline in docs/STATUS.md; this rule's job is both to stop the next one and to keep finding
+  //    this one until the operator deals with it.) A BOM is INVISIBLE IN EVERY NORMAL VIEW (`git log --oneline` renders it, `git show`
   //    renders it, the author sees a clean subject) and surfaces only in a byte read - which is
   //    exactly what a check is for. The WHOLE message is checked, not just the subject: a BODY BOM
   //    corrupts a `Co-authored-by` trailer or a `Fixes #N` line, where the parser is strict. The
