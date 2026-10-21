@@ -73,13 +73,15 @@ import { wrapProviderWithTrace } from "./src/providers/trace.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
 import { formatMetrics } from "./src/metrics.mjs";
 import { isLinkedWorktree, readSharedTreeBranch } from "./src/featuredocs.mjs";
+import { readTextIntegrity, trackedChangedPaths } from "./src/textintegrity.mjs";
+import { readCommitMessages } from "./src/commitmsg.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readRigHealth, readSeatList, readSeatRoots } from "./src/readapi.mjs";
 import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
-import { createWorktree } from "./src/worktree.mjs";
+import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
 import { mergeInProgress, mergeRefusal } from "./src/mergeguard.mjs";
 import { SeatGuard } from "./src/seatguard.mjs";
 import { SeatTools, fillRoster, makeSeatEnv, scopeSeatTools } from "./src/seattools.mjs";
@@ -253,6 +255,25 @@ import { resetSeatContext } from "./src/reset.mjs";
 function buildModels(live = null) {
   if ((CFG.DURIG_PROVIDER ?? "deepinfra") === "faux") {
     FAUX = fauxProvider({ models: [{ id: MODEL_ID }] });
+    // #4658 (decision (a)): A TEST-ONLY DELAY KNOB, AND IT IS THE ONLY WAY A SPAWNED BROKER CAN HOLD A RUN.
+    // The construction above passes model IDS ONLY — no response factory — so a spawned broker answers
+    // INSTANTLY and `demo/broker-cooperative-stop` can never have a live generation when `--stop` arrives.
+    // That is why its "under load" banner was unasserted AND UNAVAILABLE: the fixture was not lazy, the seam
+    // had no slow model. An IN-PROCESS test would prove nothing about the exit path, and the exit path is
+    // where the seven-minute damage was.
+    //
+    // BEHAVIOUR-PRESERVING WHEN UNSET: with no `DURIG_FAUX_DELAY_MS` this block does not run and the provider
+    // is exactly what it was. Nothing about a normal run changes.
+    //
+    // SCOPED TO THE FAUX PROVIDER ON PURPOSE: it is a test seam for an offline provider, not a general
+    // latency control, and it is read only here — where the provider is already known to be faux.
+    const fauxDelayMs = Number(process.env.DURIG_FAUX_DELAY_MS ?? 0);
+    if (Number.isFinite(fauxDelayMs) && fauxDelayMs > 0) {
+    	// A step is consumed per provider call, so the list is long enough for any fixture's run count.
+    	const slowStep = () =>
+    		new Promise((resolve) => setTimeout(() => resolve(fauxAssistantMessage("faux delayed reply")), fauxDelayMs));
+    	FAUX.setResponses(Array.from({ length: 128 }, () => slowStep));
+    }
     const models = createModels();
     // Gate what MODELS see; keep FAUX pointing at the raw provider so
     // scripted responses keep flowing to the real implementation.
@@ -1019,10 +1040,20 @@ async function cmdResume() {
   // broker on 2026-10-16. Do NOT stop a live broker to run this; restart a dormant one instead.
   refuseWhileBrokerDrives(
     "resume/doctor",
-    `the broker settles stranded submissions ITSELF — at startup and at the start of every pass ` +
-      `(logged "STRANDED settled=N") — so there is nothing for an external resume to do while it drives, ` +
-      `and running one would be a second writer. Do NOT stop a live broker for this; if it is dormant, ` +
-      `restart it so its startup pass re-settles. See docs/runbooks/resume-while-broker-runs.md.`,
+    // #4170: the message must be TRUE for every class it implies. The broker settles STRANDED
+    // (`placed` with no advancing task) at startup and at the start of every pass — but it does NOT
+    // settle a NEVER-STARTED (`queued`) submission, which is a different class, and saying otherwise
+    // is why the operator's first instinct was to restart rather than to resume. The suppression half
+    // is now fixed (a `queued` row no longer holds its seat out of every wake); the settlement half
+    // for `queued` awaits the ADMISSION DEADLINE (ROADMAP 37(c)) — settling it without one would
+    // cancel submissions that are legitimately still being admitted.
+    `the broker settles STRANDED submissions ITSELF — those it PLACED but whose turn never finished — ` +
+      `at startup and at the start of every pass (logged "STRANDED settled=N"), so there is nothing for ` +
+      `an external resume to do while it drives, and running one would be a second writer. ` +
+      `NOTE: a NEVER-STARTED (\`queued\`) submission is NOT that class and is not settled this way; it ` +
+      `no longer suppresses its seat, and its settlement awaits an admission deadline (ROADMAP 37(c)). ` +
+      `Do NOT stop a live broker for this; if it is dormant, restart it so its startup pass re-settles. ` +
+      `See docs/runbooks/resume-while-broker-runs.md.`,
   );
   const { harness } = await openHarness();
   try {
@@ -1595,6 +1626,15 @@ async function awaitIntentResult(dbPath, requestId, { timeoutMs = 15 * 60_000, p
   }
 }
 
+/**
+ * How long `serve --stop` waits for the broker PROCESS to exit before giving up without a
+ * forced kill. Env-overridable (`DURIG_STOP_WAIT_MS`) so a demo can prove the decision fast.
+ */
+function stopWaitMs() {
+  const v = parseInt(process.env.DURIG_STOP_WAIT_MS, 10);
+  return Number.isFinite(v) && v > 0 ? v : 60_000;
+}
+
 async function cmdStopBroker() {
   const state = readBrokerState(DB_PATH);
   if (!state) {
@@ -1604,8 +1644,9 @@ async function cmdStopBroker() {
   // #2420: liveness is RAW pid existence. A stale heartbeat does NOT mean the process is
   // gone — a broker wedged in a pass stops heartbeating while still running, and reading
   // that as "dead" cleared a live broker's state and reported `stopped:true` for it.
+  // #2574: the pid guard keeps a NEWER broker's state file intact when we clear.
   if (!pidAlive(state.pid)) {
-    clearBrokerState(DB_PATH);
+    clearBrokerState(DB_PATH, state.pid);
     out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "state was stale; cleared" });
     return;
   }
@@ -1625,7 +1666,7 @@ async function cmdStopBroker() {
   }
   const stillAlive = pidAlive(state.pid);
   if (!stillAlive) {
-    clearBrokerState(DB_PATH);
+    clearBrokerState(DB_PATH, state.pid);
     clearStopRequest(DB_PATH);
     out({
       ok: true,
@@ -1696,6 +1737,13 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   // broker DORMANT (no stream -> no pass), which is exactly the failure the recovery exists for.
   const openHandles = async () => {
     const { harness, storage: harnessStorage } = await openHarness({ enforceSeatRoot: true });
+    // A raw read-only handle for probing seat documents — the SAME P5 / #110 exception as cmdRun,
+    // and the reason F8 is scoped rather than deleted (lead ruling #2874, option B): the driving
+    // harness fails its WHOLE session on the first storage error, so an unreadable `pi.live` must
+    // be detected through this separate handle BEFORE the harness opens that conversation. The
+    // spooled `read` op is still served from the harness Storage (`readStorage ?? probeStorage`),
+    // so this is a second CONNECTION for probing only, not a second reader of the store. One handle
+    // for the run; closed with the harness.
     const probeStorage = await openStore();
     // Subscribe BEFORE the first pass so a commit that lands during startup is not missed. The
     // listener must not throw, block, or call Session APIs: it only classifies and signals.
@@ -2513,6 +2561,24 @@ async function cmdWorktreeAudit() {
   }
 }
 
+/**
+ * `worktree prune-branch <name>` (#3491): remove a ref ONLY when every commit is patch-equivalent
+ * to main AND no worktree holds it — the sanctioned route for the class `git branch -d` refuses
+ * (a rebase-landed duplicate) and the seat guard refuses to force-delete. The guard is NOT
+ * widened; this verb is the narrow door (see `prunePatchEquivalentBranch`).
+ */
+async function cmdWorktreePruneBranch(name) {
+  if (!name) fail("worktree prune-branch needs a branch name, e.g. node cli.mjs worktree prune-branch designer-item-2103");
+  const repoPath = dirname(resolve(DB_PATH));
+  try {
+    const result = await prunePatchEquivalentBranch({ repoPath, branch: name });
+    out({ ok: true, command: "worktree", subcommand: "prune-branch", repo: repoPath, ...result });
+  } catch (error) {
+    // Refuse LOUDLY (ok:false + exit 1): a refusal is a report, not a retry signal.
+    fail(error);
+  }
+}
+
 async function cmdStatus() {
   const health = await readData(DB_PATH, "health", healthParams(), (storage) =>
     readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG }),
@@ -2524,14 +2590,16 @@ async function cmdStatus() {
   const broker = brokerHealth(readBrokerState(DB_PATH), {
     streamTimeoutMs: streamSettings(CFG).stream?.timeoutMs ?? null,
   });
-  out({ ok: true, command: "status", db: DB_PATH, ...health, broker });
-  // `status` is the one-shot surface, so this is where the metrics command is
-  // discovered - and only when a measure has actually moved, because a
-  // pointer that prints every time stops being read.
+  // #4403: the note is CARRIED IN THE JSON, not written to stderr. `status` IS the machine-readable
+  // queue view (stdout is JSON by default, and `--json` is accepted), but a consumer that merges
+  // streams (`2>&1`) parses the note as a JSON value and fails with "Invalid JSON primitive: note" —
+  // and it fails only when a measure drifts, so a read works until it does not. A diagnostic that
+  // can break the authoritative view must be IN the view: the human renderer shows it, a JSON
+  // consumer reads it structurally, and NEITHER has to parse the other's format.
   const outOfBand = health.metrics.measures.filter((m) => m.state === "warn").length;
-  if (outOfBand > 0) {
-    console.error(`note: ${outOfBand} measure(s) out of band - see: node cli.mjs metrics`);
-  }
+  const notes =
+    outOfBand > 0 ? [`${outOfBand} measure(s) out of band - see: node cli.mjs metrics`] : [];
+  out({ ok: true, command: "status", db: DB_PATH, ...health, broker, notes });
 }
 
 /** Every seat's resolved model, from the spec. One definition so `check`'s
@@ -2796,6 +2864,15 @@ async function cmdCheck(rigFile, human, rest = []) {
   // scratch worktree, where the branch reads as "" and the rule otherwise refused every landing
   // (#2679). The reader is null when git/the repo is unavailable -> the rule is skipped, not passed.
   const sharedTreeLinked = isLinkedWorktree({ root: process.cwd() });
+  // The recent commit messages (#4349): a BOM in a subject/body is invisible in every normal view,
+  // so it is read here and judged by the `commit-message-encoding` rule. null (no git / not a repo)
+  // leaves the rule SKIPPED with its reason rather than silently passing.
+  const commitMessages = readCommitMessages({ root: process.cwd(), limit: 50 });
+  // #4371: the text-integrity signal over the files that DIFFER from HEAD — the ones a seat just
+  // wrote, which is where the 04:21Z flattening appeared. null (no git / not a repo) leaves the rule
+  // SKIPPED with its reason rather than silently passing.
+  const changedPaths = trackedChangedPaths({ root: process.cwd() });
+  const textIntegrity = changedPaths === null ? null : readTextIntegrity({ root: process.cwd(), paths: changedPaths });
   const result = auditRig({
     rig: rigFile,
     spec,
@@ -2804,6 +2881,8 @@ async function cmdCheck(rigFile, human, rest = []) {
     storedSeats,
     modelsBySeat,
     queueItems,
+    commitMessages,
+    textIntegrity,
     sharedTreeBranch,
     sharedTreeLinked,
   });
@@ -2902,6 +2981,7 @@ try {
   else if (cmd === "worktree") {
     if (rest[0] === "audit") await cmdWorktreeAudit();
     else if (rest[0] === "scratch" && rest[1] === "clean") await cmdWorktreeScratchClean();
+    else if (rest[0] === "prune-branch") await cmdWorktreePruneBranch(rest[1]);
     else await cmdWorktree(rest);
   }
   else if (cmd === "init") await cmdInit();

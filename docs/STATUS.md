@@ -166,7 +166,16 @@ Everything below was verified against the real store, not asserted from intent.
 `seatguard`, `seattools`, `worktree`.
 
 They are the regression gate for the pi-main link as well as for feature work
-(D17). All 30 pass on the current tree.
+(D17). **KNOWN REDS BASELINE (2026-10-21): `check` and `starter` are RED for ONE cause.**
+`30270c0`'s commit message begins with a UTF-8 BOM (`ef bb bf` at byte 0, byte-level established) and the
+`commit-message-encoding` rule CORRECTLY finds it. The CLI reads REAL history (so `check` reports
+`commit-message-encoding` — the demo diff is exactly `+ 'commit-message-encoding'`), while the pure audit
+is fed `commitMessages: []` and the rule passes there. NEITHER SIDE IS WRONG — ONE IS FED REAL HISTORY AND
+THE OTHER IS FED NONE. THE FIX IS AN OPERATOR DECISION ABOUT MAIN'S HISTORY (amend or re-write `30270c0`),
+NOT a reconciliation: adding `commit-message-encoding` to the expected set would make `check` GREEN WHILE
+THE BOM REMAINS ON MAIN — a rule licensed in the ledger and unenforced in fact. A LEDGER EDITED TO MATCH A
+TRUE FINDING DOES NOT RECORD THE TRUTH; IT RETIRES IT. Until the operator decides, both demos fail for the
+right reason (recorded baseline, not a silent red).
 
 ## Research review (2026-10-10)
 
@@ -361,6 +370,18 @@ impl to Dirty-source carry (amends F23 refusal, ASK F #506)).
 readRigHealth exposed no last-activity), so it was correctly not documented (never-document-what-does-not-exist, not copied on trust).
 **Superseded since:** the lastActivity field has LANDED - impl #618 cli status seat last-activity, ISO-8601 via readRigHealth (src/readapi.mjs sets seat.lastActivity = new Date(lastTs).toISOString()), and the FEATURES.md status row (section 2) now names it. The tokens/cost/model metrics row is #504's (lead-coordinated), not added here. Nothing pushed.
 
+## Updated 2026-10-17 (scribe — docs truth-up for the landed work, #1233)
+
+The registration lag noted in #1233 was checked against `main` before writing; only work verifiably on `main` is recorded here, each claim grounded by the named demo (run in the item-1233 worktree, all exit 0 unless noted):
+
+- **#873 `compact` verb landed** (merge 2bce86e). Manual context compaction: summarizes a seat's OLDER turns into a `pi.compaction` summary entry so the model context shrinks without losing the durable transcript; refuses a live generation lease and a driving broker; drives the compaction task to completion and proves the summary entry landed. Proof: `demo/compact.test.mjs` exit 0. Already in FEATURES.md (compact row + Context-compaction row); no doc change needed beyond confirming it.
+- **#874 per-turn wall-clock bound landed** (7013294, merged via #1040). The degeneration guard's wall-clock cause reads `AssistantMessage.durationMs` (a number the harness already persists, not a parse of prose); the threshold is high (5 min) so a legitimately slow turn is never reset — only a run that badly outgrows the bound. Proof: `demo/degeneration-duration.test.mjs` exit 0.
+- **#875 degenerate-text registry landed** (merge e4ed785). The prose guard became a NAMED-PATTERN registry (`TEXT_PATTERNS` in `src/attention.mjs`), each pattern a pure predicate over one assistant turn's text, named in the reset reason as `degenerate-text=<name>=<count>>=<bound>`, and proven against real turn fixtures (`demo/fixtures/degenerate-text/` positive = real loop, negative = healthy turn). Replaces the D78 word/fragment heuristic that false-reset five healthy seats (reverted `449e870`). Adds `scripts/degen-scan.mjs` and the `docs/runbooks/degeneration-guard.md` runbook. Proof: `demo/degeneration-text.test.mjs` exit 0.
+- **#998 worktree recursive-carry fix landed** (7901501, merged via #1040). `carryVisibleState` now excludes LINKED worktree roots (a sibling `item-<id>` or the just-created target appears in the source's status as an untracked directory), so the dirty-source fork never copies a whole foreign checkout and never self-copies into its own source (`ERR_FS_CP_EINVAL`). Proof: `demo/worktree-recursive-carry.test.mjs` exit 0.
+- **#1165/#1171 scratch-worktree landing helper landed** (eb87766). `scripts/land.mjs` merges branches in a SCRATCH DETACHED worktree, runs the suite there (`--suite`), and advances `main` only by a clean fast-forward, so the shared tree is never mid-merge (the 2026-10-17 landing-safety incident). It is also the pre-flight enforcement chokepoint (#1164 Q3): refuses a dirty tree, a mid-merge tree, and a held genlock slot. Proof: `demo/land-helper.test.mjs` exit 0.
+- **#1109 / #1108 (TUI input overlay + context read-surface) NOT recorded** — they are NOT on `main` at this commit (2f0004 sits on unmerged branch `impl-item-1109`, 1 commit ahead of main; no #1108 landed commit exists). Per the never-document-what-is-not-there rule, they are withheld here and reported to pm as not-landed, not stale-documented.
+
+Proof-surface note: the FEATURES.md section 10 count was corrected to 115 demos with the honest measured state — 111 pass on this checkout; the 4 failures are pre-existing environmental (the starter constitution-drift family `starter`/`commit-model`/`seat-commit-instructions` per #976, and `worktree-lifecycle`'s Windows `git worktree remove` temp-permission cleanup artifact), not feature regressions. Nothing pushed.
 ## Updated 2026-10-17 (scribe — currency truth-up re-derived against current main, #1401)
 
 Re-derived from the #1233 truth-up (which could not land as-is) against current main, on top of the

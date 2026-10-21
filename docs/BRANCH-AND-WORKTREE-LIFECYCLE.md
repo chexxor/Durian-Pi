@@ -182,6 +182,57 @@ counts as green depends on accepting the symlink as environmental, which is a ju
 tooling asserts. Record the exact numbers (`pass=N fail=M`) in every report rather than "suite green",
 and confirm a *new* failure is new by comparing against the pre-change baseline.
 
+
+### 6.4 The environmental bucket is audited BY NAME, and "environmental 0->1" is a box-state change (#4535)
+
+pm reported `environmental` 0 -> 0 -> 1 across three same-day suite runs and no seat could say which
+demo moved. qa reproduced the bucket today at 0e29ce7 and named it:
+
+- Deterministic-clean run (8 jobs): `pass=207 environmental=0 fail=1` (only `seat-instruction-encoding`),
+  208 demos.
+- Same rev, load reproduction (2 suites concurrently, one at --jobs 24): `pass=206 environmental=1 fail=1`
+  whose stderr row NAMES the demo and quotes the classifier reason verbatim:
+  `ENV demo/tui-round-trip-terminal.test.mjs - STATUS_STACK_BUFFER_OVERRUN/fail-fast (0xC0000409)`.
+
+ARRANT facts the audit needs before believing that row (all quoted from src/suite.mjs):
+- `environmental` means ONLY: SIGABRT/SIGKILL as the child's signal ("aborted by <signal>"); exit code in
+  {0xC000012D on both signed and unsigned forms, 0xC0000409 both, 134=SIGABRT}; or stderr matching
+  `/STATUS_COMMITMENT_LIMIT|C000012D|commitment limit|C0000409|page file is too small/i`
+  ("stderr names a commit/memory starvation abort"). Everything else is `nonzero exit <code>` -> REAL fail.
+- EPERM is NOT an environmental reason: the #3796 case (tui-durable-persistence, Windows temp dir) is an
+  uncaught error, exits 1, and lands in FAIL. The bucket is NOT where that known-red hides.
+- The bucket is a BOX-STATE change, not a tree-state change: identical rev, load changed the verdict of a
+  2-second demo (tui-round-trip-terminal alone: 10/10 green). It is not rerunning that changes the tree.
+
+THE RULE: `fail=2` was true three times and meant three non-identical things; `environmental=1` is the
+same shape one column over, except that a non-failing bucket reads all-clear without an audit. Any suite
+report MUST carry the runner's per-row lines (stderr), because that is where the name and reason live:
+`ENV demo/<name> - <reason>`. A count without its rows cannot see the tree-dependent flips recorded by the sibling trap 6.3 (qa-item-4530) the same
+way it cannot detect a member that died of a resource abort.
+### 6.3 Tree-dependent reds are deterministic: two named tests, two measured rates (2026-10-21)
+
+pm filed these as "two flaky demos" (#4530): `pitui` green->red and `broker-one-connection`
+red->green, on trees that "did not touch these files", where `fail=2` was true three times and meant
+three different things. qa measured the same day:
+
+- **`pitui` is deterministic per tree - the 6.2 trap, reproduced.** Green 20/20 alone, 24/24 in a
+  same-tree 24-copy burst, green in a full-suite run. On worktree `item-2608`, exit 1 **every** run:
+  `AssertionError [ERR_ASSERTION]: pi-tui resolved somewhere unexpected: file:///C:/Users/Alex/dsh-Projects/pi-opendurig/vendor/pi-main/packages/tui/dist/index.js`
+  (`demo/pitui.test.mjs:26:8`) - the exact 6.2 resolution failure through the `@earendil-works/pi-tui`
+  symlink (#2412). Version/pin drift by tree, not a race in time.
+- **`broker-one-connection` is a pure SHAPE test** - text assertions over `cli.mjs`/`src/broker.mjs`;
+  no processes, no temp state. Verdict = that tree's bytes. On the current tree: 20/20 alone, 24/24
+  burst, suite green. On worktree `item-4308` (NO local edits; an old base): exit 1 every run with
+  `AssertionError: the open at cli.mjs:1709 documents the P5/#110 exception above it`; `item-4202`
+  (editing `broker.mjs`): same text at cli.mjs:1699. Hash-compare across 24 sibling worktrees: 15
+  carry different `cli.mjs` bytes - 14 via base age alone, 1 via an in-flight edit.
+
+**The rule the "did not touch" claim missed:** a tree that does not touch a file still carries its
+BASE's bytes of that file, and an old base is a different verifier. Measured: 45/45 green per test on
+same bytes; 4/4 red on the divergent trees above. So `fail=2 x3` was never two flaky tests in time -
+it was tree-vs-tree alternation (plus `seat-instruction-encoding`, a steady red with an owner). A
+baseline is a NAME, a measured rate, and a TREE - never a count.
+
 ## 7. What is NOT authoritative
 
 - **`docs/NEXT.md`** — a pointer, refreshed by hand. It has been wrong about the pass state more than
