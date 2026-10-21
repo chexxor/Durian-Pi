@@ -354,7 +354,29 @@ export async function createWorktree({ source, target, ref = null, branch = null
 	// The worktree is unusable without this step — the seat that needs it should run the install
 	// before working.
 
-	return { repo: root, worktree: resolve(target), cwd, carried, branch: branch ?? null, branchAttached };
+	// #4514 (decision (a)): THE CLI VERB'S JSON IS A CONTRACT, AND A CONTRACT WITH A HOLE LIES BY OMISSION.
+	// Before this, a `--ref` worktree's record carried NONE of `base`/`requestedBase`/`baseHonoured`, so a
+	// consumer reading the unified field set got `undefined` for every fork-point question — SILENTLY, because
+	// a missing field reads as "not applicable" rather than "wrong path". `cli.mjs` SPREADS this object
+	// straight into its JSON, so the absence was visible to anyone who asked the CLI what it had forked.
+	// AND `explicitRef`/`baseRef` DO NOT BECOME THE PUBLIC SPELLING: they are INTERNAL LOCALS. `--ref` IS a
+	// name for the base — the same fact the other two paths call `requestedBase` — so there is ONE vocabulary.
+	// Nulls when no `ref` was asked for: a value nobody requested must not be invented (the same convention as
+	// the REUSE path's `requestedBase === "" ? null : …`), while `base` is STILL reported — the fork point is
+	// a fact either way.
+	const forkPoint = await headSha(target);
+	const askedBase = explicitRef ? await resolveRef(root, baseRef) : "";
+	return {
+		repo: root,
+		worktree: resolve(target),
+		cwd,
+		carried,
+		branch: branch ?? null,
+		branchAttached,
+		base: forkPoint,
+		requestedBase: askedBase === "" ? null : askedBase,
+		baseHonoured: askedBase === "" ? null : askedBase === forkPoint,
+	};
 }
 
 /** Whether `refs/heads/<branch>` exists in the repo at `root`. */
