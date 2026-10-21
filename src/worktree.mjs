@@ -119,6 +119,82 @@ export async function ensureIgnored({ repo, target }) {
 	return { ignored: true, added: rule, pattern: relPosix };
 }
 
+/** The installed version of `name` in a worktree's `node_modules` (null when absent/unreadable). */
+function installedVersion(worktreePath, name) {
+	try {
+		const pkg = JSON.parse(readFileSync(join(worktreePath, "node_modules", ...name.split("/"), "package.json"), "utf8"));
+		return typeof pkg.version === "string" ? pkg.version : null;
+	} catch {
+		return null;
+	}
+}
+
+/** The pi package whose version drifts in practice, and the one the tui demos need. */
+const PINNED_PACKAGE = "@earendil-works/pi-durable";
+
+/**
+ * Run `node scripts/sync-pi.mjs --link` in a worktree and REPORT what happened (#3821).
+ *
+ * Exported because it is the step that silently did nothing: `--link` needs a BUILT
+ * `vendor/pi-main`, which a fresh worktree never has, so it exits 1 with
+ * `nothing built yet; run --sync before --link` — and the caller downgraded that to a
+ * `console.warn` nobody reads. A caller must be able to assert this outcome without a
+ * terminal, so the result is data, not a warning.
+ */
+export async function linkWorktreeDeps(worktreePath) {
+	const syncPi = join(worktreePath, "scripts", "sync-pi.mjs");
+	if (!existsSync(syncPi)) return { attempted: false, ok: null, reason: null, detail: null };
+	const { file } = resolveNpmInvocation();
+	try {
+		await run(file, [syncPi, "--link"], { cwd: worktreePath });
+		return { attempted: true, ok: true, reason: null, detail: null };
+	} catch (linkErr) {
+		// The step reports its failure as JSON on STDOUT (`{ok:false, error:"..."}`) and exits 1, so
+		// stdout carries the reason. Dropping it here would leave the caller with "Command failed" and
+		// no cause — the same shape of silence this item is about.
+		const detail = [linkErr.message, linkErr.stdout, linkErr.stderr].filter(Boolean).join("\n").trim();
+		return { attempted: true, ok: false, reason: linkFailureReason(detail), detail };
+	}
+}
+
+/**
+ * Name WHY a `--link` failed, in the words the caller needs to act (#3821).
+ *
+ * The dominant case is not a mystery: a fresh worktree has no `vendor/pi-main`, so the
+ * step reports "nothing built yet; run --sync before --link". That is a MISSING
+ * PREREQUISITE, not a broken install, and it must not read like an unexplained failure.
+ */
+function linkFailureReason(detail) {
+	if (/nothing built yet/i.test(detail)) {
+		return "vendor/pi-main is not built in this worktree, so there is nothing to link to (the step says: run --sync first)";
+	}
+	return detail.split("\n")[0]?.slice(0, 300) || "the link step failed";
+}
+
+/**
+ * The seat-facing sentence for a provisioning record, or "" when there is nothing to say.
+ *
+ * This is the half that makes the defect non-silent (#3821): a worktree provisioned with a
+ * FAILED link step must say so where the SEAT will see it — the tool result — not in a
+ * `console.warn` on a stream nobody reads. It names the state, the version actually
+ * resolved, and the consequence (verdicts from this tree are not comparable).
+ */
+export function dependencyNoteFor(dependency) {
+	if (!dependency || dependency.state !== "unlinked") return "";
+	const have = dependency.worktreeVersion
+		? `${PINNED_PACKAGE} ${dependency.worktreeVersion} from the lockfile`
+		: `whatever the lockfile pins for ${PINNED_PACKAGE}`;
+	const want = dependency.sourceVersion
+		? `, while the seat root resolves ${dependency.sourceVersion}`
+		: "";
+	return (
+		`\nDEPENDENCY NOT LINKED in this worktree: the sync-pi --link step FAILED (${dependency.reason}). ` +
+		`This tree resolves ${have}${want}. A suite run here is NOT comparable with the seat root's, so ` +
+		`state which tree and dependency set a verdict came from; run \`node scripts/sync-pi.mjs --sync\` ` +
+		`(then prepare the workspace again) if you need parity.`
+	);
+}
+
 /**
  * Run `npm ci --prefer-offline` in a worktree to make it usable checkout.
  * Called after createWorktree/claimWorktree because a fresh worktree has no
@@ -146,28 +222,24 @@ export async function ensureIgnored({ repo, target }) {
  * This ordering fixes the #2801/#2976 recurrence where `npm ci` ran before
  * --link and ETARGET-failed on unpublishable pi packages (#2412).
  */
-export async function installWorktreeDeps(worktreePath) {
+export async function installWorktreeDeps(worktreePath, { source = null } = {}) {
 	const pkgPath = join(worktreePath, "package.json");
 	if (!existsSync(pkgPath)) {
-		return { ok: true, skipped: true, worktree: worktreePath };
+		return { ok: true, skipped: true, worktree: worktreePath, dependency: null };
 	}
 	const { file, prefixArgs } = resolveNpmInvocation();
-	const syncPi = join(worktreePath, "scripts", "sync-pi.mjs");
 
 	// Pre-install: point node_modules at the built vendor/pi-main tree BEFORE
 	// npm ci, so the unpublishable pi packages resolve from the local file:
 	// specifiers instead of the npm registry (which does not host them).
-	if (existsSync(syncPi)) {
-		try {
-			await run(file, [syncPi, "--link"], { cwd: worktreePath });
-		} catch (linkErr) {
-			// --link is best-effort: if vendor/pi-main is not built yet, the
-			// worktree still has the npm ci deps and can run demos that don't
-			// depend on pi-durable. The seat will see the version mismatch and
-			// can run --link manually or the operator can build the pin.
-			console.warn(`sync-pi --link (pre) in ${worktreePath}: ${linkErr.message}`);
-		}
-	}
+	//
+	// #3821: this step FAILS in every fresh worktree (no vendor/pi-main =>
+	// "nothing built yet; run --sync before --link"), and the old code only
+	// console.warned, so the worktree was silently provisioned with the locked
+	// package. Provisioning still continues — a runnable tree beats none — but the
+	// outcome is now RECORDED and reported to the caller, never downgraded to a
+	// warning nobody reads.
+	const preLink = await linkWorktreeDeps(worktreePath);
 
 	let result;
 	try {
@@ -179,16 +251,23 @@ export async function installWorktreeDeps(worktreePath) {
 		);
 	}
 
-	// Post-install: re-run --link to ensure the file: packages are firmly in
-	// place even if `npm ci` resolved a stale cached copy. Idempotent.
-	if (existsSync(syncPi)) {
-		try {
-			await run(file, [syncPi, "--link"], { cwd: worktreePath });
-		} catch (linkErr) {
-			console.warn(`sync-pi --link (post) in ${worktreePath}: ${linkErr.message}`);
-		}
-	}
-	return { ok: true, worktree: worktreePath, stdout: result.stdout.trim() };
+	// Post-install: run the link again to ensure the file: packages are firmly in
+	// place even if `npm ci` resolved a stale cached copy. Idempotent when it works.
+	const postLink = await linkWorktreeDeps(worktreePath);
+
+	// The worktree counts as LINKED only if a link actually succeeded. `ok === null`
+	// means there was no sync-pi script at all (nothing to link — not a failure).
+	const link = postLink.attempted ? postLink : preLink;
+	const state =
+		link.ok === null ? "no-sync-script" : link.ok === true ? "linked" : "unlinked";
+	const dependency = {
+		state,
+		packageName: PINNED_PACKAGE,
+		reason: link.ok === true ? null : link.reason,
+		worktreeVersion: installedVersion(worktreePath, PINNED_PACKAGE),
+		sourceVersion: source ? installedVersion(source, PINNED_PACKAGE) : null,
+	};
+	return { ok: true, worktree: worktreePath, stdout: result.stdout.trim(), dependency };
 }
 
 /**
@@ -275,7 +354,29 @@ export async function createWorktree({ source, target, ref = null, branch = null
 	// The worktree is unusable without this step — the seat that needs it should run the install
 	// before working.
 
-	return { repo: root, worktree: resolve(target), cwd, carried, branch: branch ?? null, branchAttached };
+	// #4514 (decision (a)): THE CLI VERB'S JSON IS A CONTRACT, AND A CONTRACT WITH A HOLE LIES BY OMISSION.
+	// Before this, a `--ref` worktree's record carried NONE of `base`/`requestedBase`/`baseHonoured`, so a
+	// consumer reading the unified field set got `undefined` for every fork-point question — SILENTLY, because
+	// a missing field reads as "not applicable" rather than "wrong path". `cli.mjs` SPREADS this object
+	// straight into its JSON, so the absence was visible to anyone who asked the CLI what it had forked.
+	// AND `explicitRef`/`baseRef` DO NOT BECOME THE PUBLIC SPELLING: they are INTERNAL LOCALS. `--ref` IS a
+	// name for the base — the same fact the other two paths call `requestedBase` — so there is ONE vocabulary.
+	// Nulls when no `ref` was asked for: a value nobody requested must not be invented (the same convention as
+	// the REUSE path's `requestedBase === "" ? null : …`), while `base` is STILL reported — the fork point is
+	// a fact either way.
+	const forkPoint = await headSha(target);
+	const askedBase = explicitRef ? await resolveRef(root, baseRef) : "";
+	return {
+		repo: root,
+		worktree: resolve(target),
+		cwd,
+		carried,
+		branch: branch ?? null,
+		branchAttached,
+		base: forkPoint,
+		requestedBase: askedBase === "" ? null : askedBase,
+		baseHonoured: askedBase === "" ? null : askedBase === forkPoint,
+	};
 }
 
 /** Whether `refs/heads/<branch>` exists in the repo at `root`. */
@@ -560,6 +661,119 @@ export async function removeWorktree({ source, worktree, force = false }) {
 	await pruneWorktrees(root);
 }
 
+/**
+ * The worktree holding `branch`, or null. STRICT on purpose: `listWorktrees` swallows a git
+ * failure and returns `[]`, and a safety check that reads "nothing holds this ref" because git
+ * itself failed is a SILENT failure — it would authorise the delete it exists to prevent.
+ */
+async function worktreeHoldingBranch(repoPath, branch) {
+	let stdout;
+	try {
+		({ stdout } = await run("git", ["-C", repoPath, "worktree", "list", "--porcelain"]));
+	} catch (error) {
+		throw new Error(
+			`cannot read the worktree list (${String(error.stderr ?? error.message ?? error).trim()}); refusing to delete a ref while the check that protects it could not run`,
+		);
+	}
+	// Porcelain blocks are "worktree <path>" then "branch refs/heads/<name>"; `locked` and
+	// `detached` are their OWN lines (branch-cleanup.md step 1 — a naive parse attributes a
+	// `locked` line to the FOLLOWING tree).
+	let current = null;
+	for (const line of stdout.split("\n")) {
+		if (line.startsWith("worktree ")) current = line.slice("worktree ".length).trim();
+		else if (line.startsWith("branch ") && current) {
+			if (line.slice("branch ".length).trim() === `refs/heads/${branch}`) return current;
+		} else if (line.trim() === "") current = null;
+	}
+	return null;
+}
+
+/**
+ * `worktree prune-branch <name>` (#3491): the ONE sanctioned place a SEAT may remove a ref.
+ *
+ * WHY THIS EXISTS. `git branch -d` correctly refuses a ref whose tip is not an ancestor of main,
+ * and the seat guard refuses `git branch -D` (`src/confine.mjs` `branchForceDelete`, #1211). A
+ * branch landed by REBASE is exactly that shape — its content is on main by PATCH, not by
+ * ancestry — so before this verb no seat could clean one up and every cleanup pass escalated to
+ * the operator (`docs/runbooks/branch-cleanup.md` step 3, run by hand on `designer-item-2103`).
+ *
+ * WHAT IT IS NOT. Not a wider force-delete grant: the guard is untouched, and this door is the
+ * narrowest that admits the class. It removes a ref ONLY when BOTH hold, checked in this order:
+ *   1. `git cherry <main> <branch>` prints AT LEAST ONE line and EVERY line starts with `-`
+ *      (patch-equivalent). An ANCESTOR prints NOTHING — empty is NOT "all `-`", because vacuous
+ *      truth would hand this verb every ref in the repo. An ancestor needs no force delete.
+ *   2. no worktree holds the ref.
+ * Everything else is REFUSED with a reason the caller can act on, and nothing is removed.
+ *
+ * R-B still governs: this removes a REF whose content is provably on main; it cancels no CLAIM.
+ * The recovery command is printed on success because an unrecoverable delete is not recoverable
+ * evidence — the sha stays reachable by that command (and by reflog) after the ref is gone.
+ *
+ * Returns { branch, sha, mainRef, patchEquivalent, recovery }.
+ */
+export async function prunePatchEquivalentBranch({ repoPath, branch, mainRef = "main" }) {
+	const name = String(branch ?? "").trim().replace(/^refs\/heads\//, "");
+	if (!name) throw new Error("a branch name is required, e.g. `worktree prune-branch designer-item-2103`");
+	if (name === mainRef) throw new Error(`refusing to prune "${name}": it is the landing branch itself`);
+	const root = await repoRoot(repoPath);
+
+	// Condition 0 — it must be a LOCAL BRANCH. `--verify refs/heads/<name>` refuses a tag, a
+	// remote-tracking ref and a bare sha, so this verb can never delete something that is not one.
+	let sha;
+	try {
+		sha = (await run("git", ["-C", root, "rev-parse", "--verify", "--quiet", `refs/heads/${name}`])).stdout.trim();
+	} catch {
+		sha = "";
+	}
+	if (!sha) throw new Error(`refusing to prune "${name}": not a local branch (no refs/heads/${name} in ${root})`);
+
+	// Condition 1 — patch-equivalence, with the non-empty guard described above.
+	let cherryOut;
+	try {
+		({ stdout: cherryOut } = await run("git", ["-C", root, "cherry", mainRef, name]));
+	} catch (error) {
+		throw new Error(
+			`refusing to prune "${name}": cannot compare it with "${mainRef}" (${String(error.stderr ?? error.message ?? error).trim()})`,
+		);
+	}
+	const lines = cherryOut
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(Boolean);
+	if (lines.length === 0) {
+		throw new Error(
+			`refusing to prune "${name}": it is already an ANCESTOR of "${mainRef}" (git cherry prints nothing), so it is not a patch-equivalent duplicate. Use \`git branch -d ${name}\` — that route is allowed and cannot lose work.`,
+		);
+	}
+	const unlanded = lines.filter((l) => !l.startsWith("-"));
+	if (unlanded.length > 0) {
+		const shas = unlanded.map((l) => l.replace(/^\+\s*/, "")).join(", ");
+		throw new Error(
+			`refusing to prune "${name}": ${unlanded.length} of ${lines.length} commit(s) are NOT patch-equivalent to "${mainRef}" (unlanded: ${shas}). That work is not on main — land or rebase it first; this verb removes duplicates only.`,
+		);
+	}
+
+	// Condition 2 — no worktree may hold the ref.
+	const holder = await worktreeHoldingBranch(root, name);
+	if (holder) {
+		throw new Error(
+			`refusing to prune "${name}": it is checked out in the worktree at ${holder}. Release that worktree first (docs/runbooks/leaked-worktrees.md); never delete a ref out from under a tree.`,
+		);
+	}
+
+	// Both conditions hold. `-D` is required (git refuses `-d` for a non-ancestor) and is the
+	// narrowest possible use of it: every commit is provably on main by patch.
+	try {
+		await run("git", ["-C", root, "branch", "-D", name]);
+	} catch (error) {
+		throw new Error(
+			`git refused to delete "${name}" (${String(error.stderr ?? error.message ?? error).trim()}); the ref is unchanged`,
+		);
+	}
+	const recovery = `git branch ${name} ${sha}`;
+	return { branch: name, sha, mainRef, patchEquivalent: lines.length, recovery };
+}
+
 // unlinkModulesBridge removed in #330 — no more junctions to drop.
 
 /* ================================================================ */
@@ -636,10 +850,12 @@ export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = nul
 	await run("git", ["-C", result.repo, "worktree", "lock", result.worktree]);
 	// Install deps — a fresh worktree has no node_modules, so it is unusable
 	// until dependencies are installed. npm ci --prefer-offline (~12 s, ~111 MB).
-	await installWorktreeDeps(result.worktree);
+	// #3821: the install's own RECORD (were the pinned pi packages linked, or did the
+	// tree fall back to the lockfile?) is returned instead of discarded.
+	const deps = await installWorktreeDeps(result.worktree, { source });
 	// Enable rerere so conflict resolutions are recorded for the merge-on-complete step.
 	await enableRerere(result.worktree);
-	return { ...result, itemLabel, locked: true };
+	return { ...result, itemLabel, locked: true, dependency: deps.dependency };
 }
 
 /**
@@ -715,10 +931,13 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 	// REFUSED rather than allowed to steal. No `--force`, no branch deletion, no worktree removal.
 	const terminal = isTerminalItemStatus(itemStatus);
 	const detachedHolders = [];
+	// #3821: the install record from a REPAIR on the reuse path (null when the existing
+	// worktree was already provisioned and nothing was re-checked).
+	let reusedDeps = null;
 	const norm = (p) => resolve(p).replace(/\\/g, "/");
 	const targetPath = norm(worktreePath);
 	const refBranch = `refs/heads/${branch}`;
-	const branchHolder = (await listWorktrees(repo)).find(
+	const branchHolder = (await listWorktrees(repo, { strict: true })).find(
 		(w) => (w.branch === branch || w.branch === refBranch) && norm(w.worktree) !== targetPath,
 	);
 	if (branchHolder) {
@@ -774,7 +993,7 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 		// place rather than deleting the dir: it is a real git worktree the seat may have
 		// branched in, and the branch-naming lifecycle is #859/#995's concern.)
 		if (!isProvisioned(worktreePath)) {
-			await installWorktreeDeps(worktreePath);
+			reusedDeps = await installWorktreeDeps(worktreePath, { source });
 		}
 		// REUSE must still ensure the branch: a worktree from an older run (or one
 		// whose seat committed before the branch existed) may be on a detached HEAD.
@@ -799,6 +1018,15 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 			locked: true,
 			holderDetached: detachedHolders[0] ?? null,
 			detachedHolders,
+			// #3821: a repair install reports its own outcome; an ALREADY-provisioned
+			// worktree was not re-checked here, so the state is UNKNOWN (null) rather than
+			// assumed linked — an assumed "linked" is the false green this item is about.
+			dependency: reusedDeps?.dependency ?? null,
+			dependencyNote: dependencyNoteFor(reusedDeps?.dependency),
+			// #3558/#3807 (main): what base this REUSE actually sits on. Both field sets are
+			// kept because they answer different questions — `dependency*` is about the
+			// install, `base*` is about the fork point — and the object is the unit of merge,
+			// not the text.
 			base: actualBase,
 			requestedBase: requestedBase === "" ? null : requestedBase,
 			baseHonoured: requestedBase === "" ? null : requestedBase === actualBase,
@@ -821,6 +1049,12 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 		locked: true,
 		holderDetached: detachedHolders[0] ?? null,
 		detachedHolders,
+		// #3821: what the install actually achieved, and the sentence that tells the seat —
+		// in the TOOL RESULT, not a warn on a stream nobody reads — that this tree's
+		// dependency state is not the seat root's.
+		dependency: wt.dependency ?? null,
+		dependencyNote: dependencyNoteFor(wt.dependency),
+		// #3807 (main): and the fork point, which is a different fact from the install.
 		base: createdBase,
 		requestedBase: createdBase === "" ? null : createdBase,
 		baseHonoured: createdBase === "" ? null : true,
@@ -1046,8 +1280,26 @@ export async function rebaseItemBranch({ worktreePath, targetBranch }) {
 /**
  * List existing worktrees for cleanup / audit. Returns an array of objects
  * with path, branch (null if detached), and locked status.
+ *
+ * #3605 — THE EMPTY LIST USED TO MEAN TWO THINGS: "no worktrees" and "could not determine
+ * worktrees". The second reading is the PERMISSIVE one, so a git failure answered "nothing holds
+ * this ref" — which is precisely the answer a safety check must not invent, because it AUTHORISES
+ * the action the check exists to prevent (`prepareSeatWorkspace`'s branch-holder guard reads it as
+ * "no other worktree holds this branch" and stops refusing).
+ *
+ * `strict` is how a caller STATES which reading it wants:
+ *   - `strict: true`  — a caller that DECIDES on the result. A failure THROWS, because "unknown"
+ *                       must never be mistakable for "empty".
+ *   - default (false) — a caller that REPORTS. The lenient `[]` is kept because a path that is not
+ *                       a git repository is a normal input for the audit surface (broker.mjs), but
+ *                       the failure is no longer SILENT: anything that is not the expected
+ *                       "not a git repository" case is written to stderr.
+ *
+ * Do not "fix" the default to fail-closed for every caller: the sweep and the audit legitimately
+ * read a non-repo path, and a throw there would take down a reporting surface over an expected
+ * input. The strict flag exists so the decision is made per call site, not globally.
  */
-export async function listWorktrees(repoPath) {
+export async function listWorktrees(repoPath, { strict = false } = {}) {
 	try {
 		const { stdout } = await run("git", ["-C", repoPath, "worktree", "list", "--porcelain"]);
 		const worktrees = [];
@@ -1069,7 +1321,19 @@ export async function listWorktrees(repoPath) {
 		}
 		if (current.worktree) worktrees.push({ branch: null, locked: false, ...current });
 		return worktrees;
-	} catch {
+	} catch (err) {
+		const detail = String(err?.stderr ?? err?.message ?? err).trim();
+		if (strict) {
+			throw new Error(
+				`could not list worktrees for ${repoPath} — refusing to answer "none" when the truth is ` +
+					`"unknown" (pass { strict: false } only for a caller that REPORTS rather than decides): ${detail}`,
+			);
+		}
+		// An unexpected failure is loud; the documented non-repo case stays quiet so the audit and the
+		// sweep do not fill the broker log with an expected input.
+		if (!/not a git repository/i.test(detail)) {
+			console.error(`worktree: could not list worktrees for ${repoPath}: ${detail}`);
+		}
 		return [];
 	}
 }

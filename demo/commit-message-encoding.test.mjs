@@ -1,8 +1,9 @@
 // demo/commit-message-encoding.test.mjs — #4349: a commit message must not carry a UTF-8 BOM.
 //
 // Four commits in one session carried a BOM in the subject because PowerShell's
-// `Set-Content -Encoding utf8` writes one; each was caught by hand. FOUR CATCHES IS NOT A CATCH
-// RATE, IT IS A MECHANISM THAT DOES NOT EXIST — and a BOM is INVISIBLE IN EVERY NORMAL VIEW
+// `Set-Content -Encoding utf8` writes one; each was caught by hand. (A FIFTH — 30270c0 — was NOT
+// amended and IS in history, recorded as a known-reds baseline in docs/STATUS.md.) FOUR CATCHES IS NOT
+// A CATCH RATE, IT IS A MECHANISM THAT DOES NOT EXIST — and a BOM is INVISIBLE IN EVERY NORMAL VIEW
 // (`git log --oneline` renders it, `git show` renders it), so it surfaces only in a byte read.
 // That is what a check is for. The WHOLE message is checked, not just the subject: a body BOM
 // corrupts a `Co-authored-by` trailer or a `Fixes #N` line.

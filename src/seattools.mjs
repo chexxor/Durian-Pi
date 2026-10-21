@@ -171,7 +171,10 @@ const prepareWorkspace = defineTool({
 			await api.commit(async (tx) => {
 				await configure(tx, api.conversationId, { cwd: workspace.cwd });
 			}, context);
-			return result(workspaceReadyText(workspace, base));
+			// #3821 + main: main extracted the sentence into `workspaceReadyText`; #3821 adds the
+			// dependency note. Both survive by APPENDING the note to the extracted text rather than
+			// re-inlining the whole sentence — the function keeps its concern, the note keeps its own.
+			return result(workspaceReadyText(workspace, base) + (workspace.dependencyNote ?? ""));
 		} catch (err) {
 			return result(`PREPARE_WORKSPACE_ERROR: ${err && err.stack ? err.stack : String(err)}`);
 		}

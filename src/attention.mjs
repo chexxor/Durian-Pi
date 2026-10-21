@@ -46,7 +46,14 @@ export const MALFORMED_TOOL_CALL_NOTICE = 2;
  */
 const MALFORMED_ARGUMENTS_MARKER = /\[error\] Validation failed for tool "/;
 
-/** Did this entry record a tool call the harness rejected as malformed arguments? */
+/** Did this entry record a tool call the harness rejected as malformed arguments? */
+function deferredTargetPhrase(deferredTo) {
+	if (!deferredTo) return "waiting on an answer";
+	if (deferredTo === "nobody") return "waiting on an answer — NO TARGET was recorded, so nobody has been asked";
+	if (deferredTo === "human") return "waiting on human";
+	return `waiting on ${deferredTo}`;
+}
+
 export function isMalformedToolResult(entry) {
 	const message = Array.isArray(entry?.model) ? entry.model[0] : entry?.model;
 	if (message?.isError !== true) return false;
@@ -363,7 +370,10 @@ export function computeAttention(
 				scope: "seat",
 				seat: seat.name,
 				kind: "deferred_awaiting_answer",
-				detail: `${deferred.length} item(s) parked on a question; #${held.id} waiting on ${held.deferredTo ?? "an answer"}`,
+				// #4574: the target is rendered as WHAT IT MEANS, not echoed raw. A deferral with no target records
+				// `DEFERRED_TO_NOBODY`, and echoing it verbatim prints "waiting on nobody" — a new value silently
+				// taking the old branch in a new spelling.
+				detail: `${deferred.length} item(s) parked on a question; #${held.id} ${deferredTargetPhrase(held.deferredTo)}`,
 			});
 		}
 		const streak = failureStreakByConv.get(seat.conversationId) ?? 0;

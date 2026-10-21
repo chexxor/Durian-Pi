@@ -578,7 +578,8 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
   if (op === "configure") {
     // Bounded single-field write: `up` records the resolved provider on the seat's
     // conversation (D105/D106). The broker applies it with its own harness — no
-    // external writer, no cli.mjs change. The request carries { model: { provider, modelId? } }.
+    // external writer, no cli.mjs change. The request carries { model: { provider, modelId? },
+    // by: <operator identity> }. `by` defaults to "operator" when absent.
     const seatName = request.to ?? request.seat;
     const seat = seats[seatName];
     if (!seat) throw new Error(`unknown seat: ${seatName}`);
@@ -587,11 +588,12 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
     if (!model || typeof model.provider !== "string") {
       throw new Error(`configure: missing model.provider for seat ${seatName}`);
     }
+    const by = request.from ?? "operator";
     await harness.commit(
       (tx) => configure(tx, convId, { model }),
       context,
     );
-    return { op, seat: seatName, provider: model.provider, modelId: model.modelId ?? null };
+    return { op, seat: seatName, provider: model.provider, modelId: model.modelId ?? null, by };
   }
   if (op === "message") {
     const seat = seats[request.to];
@@ -1398,6 +1400,87 @@ async function settleWithin(promise, ms) {
     if (timer) clearTimeout(timer);
   }
 }
+/**
+ * Like `settleWithin`, but REPORTS whether the promise settled inside the bound (#4355).
+ *
+ * WHY TWO HELPERS EXIST AND WHY THIS IS NOT A REPLACEMENT. `settleWithin` returns NOTHING and swallows
+ * the outcome, which is correct for the DEADLINE path: there a bound that fires means "close now" and
+ * nobody needs to know. It is WRONG for the cooperative stop's abort escalation, which must act PRECISELY
+ * on the bound firing - abort only the conversations this run woke, and only when the wait ran out.
+ * Inferring that from elapsed time would be a race that is wrong under load, the same class as a success
+ * flag standing in for a fact. So this is added ALONGSIDE and `settleWithin` is left alone.
+ *
+ * THE SHAPE, decided and written down because the drain branches on it:
+ *   { settled: true,  error: null }    fulfilled inside the window
+ *   { settled: true,  error: <err> }   REJECTED inside the window - it SETTLED, and the caller is told how
+ *   { settled: false, noGrace: false } the bound FIRED; it is still running
+ *   { settled: false, noGrace: true }  `ms <= 0`: NO WAIT WAS REQUESTED
+ * THE LAST TWO ARE DIFFERENT FACTS and the drain must not conflate them: a missing grace means the caller
+ * gave no window, an expired one means we waited and ran out. `settleWithin`'s `if (!(ms > 0)) return;`
+ * collapses both into silence, which is exactly what a boolean contract cannot afford.
+ *
+ * A rejection is NEVER swallowed into `settled: false` - that would report a completed-with-error run as
+ * still-running, and the escalation would abort a conversation that had already finished.
+ *
+ * @param {Promise<unknown>} promise
+ * @param {number} ms
+ * @returns {Promise<{settled: boolean, error: unknown, noGrace: boolean}>}
+ */
+export async function settledWithin(promise, ms) {
+	if (!(ms > 0)) return { settled: false, error: null, noGrace: true };
+	let timer;
+	try {
+		const outcome = await Promise.race([
+			Promise.resolve(promise).then(
+				() => ({ settled: true, error: null }),
+				(error) => ({ settled: true, error }),
+			),
+			new Promise((resolve) => {
+				timer = setTimeout(() => resolve({ settled: false, error: null }), ms);
+			}),
+		]);
+		return { settled: outcome.settled, error: outcome.error ?? null, noGrace: false };
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
+
+/**
+ * #2483 (ROADMAP 158 / architect F6): classify a failure for the retry residual, so the
+ * retry path can name WHY it is retrying and a caller can narrow eligibility. Scans the
+ * whole cause chain (a storage failure is WRAPPED) for the markers `node:sqlite` and the
+ * harness surface. Classes:
+ *   - `overload`  — the store is contended/rate-limited (`SQLITE_BUSY`/`SQLITE_LOCKED`,
+ *                   "database is locked", overloaded/429). The common transient case.
+ *   - `storage`   — an I/O/protocol/timeout failure (retryable, not contention).
+ *   - `unknown`   — anything else; still retry-eligible (see RETRYABLE_CLASSES) but named so
+ *                   a persistent unknown failure is legible in the log and the diagnostic.
+ */
+export function classifyError(error) {
+  const parts = [];
+  for (let e = error, depth = 0; e && depth < 6; e = e.cause, depth++) {
+    parts.push(String(e.name ?? ""), String(e.message ?? ""), String(e.code ?? ""), String(e.errcode ?? ""), String(e.errstr ?? ""));
+  }
+  const text = parts.join(" ");
+  if (/SQLITE_BUSY|SQLITE_LOCKED|database is locked|database table is locked|overloaded|rate.?limit|too many requests|\b429\b/i.test(text)) {
+    return "overload";
+  }
+  if (/SQLITE_IOERR|SQLITE_PROTOCOL|SQLITE_CANTOPEN|disk i\/o|EAGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED|timeout/i.test(text)) {
+    return "storage";
+  }
+  return "unknown";
+}
+
+/**
+ * #2483: which failure classes a retry is ELIGIBLE for. The retried unit is a PASS, which is
+ * idempotent — a re-run re-submits a wake (the driver re-selects the same seat) and re-drains
+ * an intent (deduped by `requestId`) — so re-running it is safe for every class, and this set
+ * is deliberately permissive. It is the ONE place a narrower rule would live (e.g. F2's
+ * harness-reopen could make a non-reopenable class terminal at once); it is exported so a
+ * caller can assert the eligibility rule rather than infer it.
+ */
+export const RETRYABLE_CLASSES = new Set(["overload", "storage", "unknown"]);
 
 /**
  * The resident loop: run a pass whenever the scheduler says one is due, and
@@ -1430,6 +1513,13 @@ export async function runWakeLoop({
   // error cannot hot-loop the loop.
   wakeRetryMs = 2_000,
   wakeRetryMaxMs = 60_000,
+  // #2483 (ROADMAP 158 / F6): a retry BUDGET. After this many CONSECUTIVE unactioned passes
+  // the retry chain ENDS with a terminal, surfaced diagnostic instead of retrying forever.
+  wakeRetryBudget = 12,
+  // #2483: ± this fraction of jitter on each backoff, so two brokers (or two retry chains)
+  // cannot resynchronize on the same schedule. `random` is injectable so a demo is exact.
+  retryJitter = 0.25,
+  random = Math.random,
   now = Date.now,
   startedAt = now(),
   isStopping = () => false,
@@ -1474,6 +1564,10 @@ export async function runWakeLoop({
   // Consecutive passes that dropped a wake via `wake-failed`; drives the retry
   // backoff below. Any pass that failed no wake resets it to 0.
   let consecutiveWakeFailures = 0;
+  // #2483: the raw failure most recently seen (classified for the retry log/diagnostic), and
+  // a one-shot latch so the terminal budget diagnostic is surfaced ONCE per exhaustion.
+  let lastFailure = null;
+  let budgetExhaustedReported = false;
   // #2420: the stop is bounded and interruptible. `stopKind()` names the pending stop;
   // the grace deadline is measured from when it was REQUESTED (the signal's timestamp, or
   // the timestamp the `.stop` file carries), not from when the loop happens to notice it —
@@ -1555,6 +1649,11 @@ export async function runWakeLoop({
     // settles (demo/stoprequest.test.mjs), and the idle/post-pass checks below are where it
     // lands. The grace only decides WHETHER the drain is already over (`deadline`).
     if (isStopping()) {
+      // #2322: record the RECEIPT of the stop BEFORE terminating. Without this, a broker that
+      // was asked to stop is indistinguishable in `<db>.broker.log` from one that crashed —
+      // and a bare `START` with neither a `STOP-REQUESTED` line nor an `EXIT` is a process
+      // that died without ever running this exit path (a `taskkill`/kill).
+      logBrokerLine(dbPath, `STOP-REQUESTED source=signal pid=${process.pid}`);
       stoppedBy = graceExpired() ? "deadline" : "signal";
       break;
     }
@@ -1583,7 +1682,11 @@ export async function runWakeLoop({
       if (idleStop) {
         // Read the deadline BEFORE clearing the file: the request time lives in its content.
         const expired = graceExpired();
-        if (idleStop === "stop") clearStopRequest(dbPath);
+        if (idleStop === "stop") {
+          // #2322: record the receipt so the log names the REQUEST, not just the graceful EXIT.
+          logBrokerLine(dbPath, `STOP-REQUESTED source=file pid=${process.pid}`);
+          clearStopRequest(dbPath);
+        }
         stoppedBy = expired ? "deadline" : idleStop;
         break;
       }
@@ -1747,6 +1850,7 @@ export async function runWakeLoop({
       // resident broker (the 17:29Z death). Log it WITH its nested cause and keep driving;
       // the loop's idle pacing keeps a persistent failure from becoming a hot spin.
       passThrew = true;
+      lastFailure = error;
       const described = describeError(error);
       onDiagnostic({ kind: "pass-failed", ...described });
       // ROADMAP 78 / #2237: a throwing pass must be VISIBLE in `<db>.broker.log`, not only as a
@@ -1819,12 +1923,35 @@ export async function runWakeLoop({
     // reproducing the pre-fix shape a demo uses to prove the contrast.
     const unactionedFailure = failedThisPass.size > 0 || passThrew;
     consecutiveWakeFailures = unactionedFailure ? consecutiveWakeFailures + 1 : 0;
-    if (unactionedFailure && wakeRetryMs > 0) {
-      const backoff = Math.min(wakeRetryMs * 2 ** (consecutiveWakeFailures - 1), wakeRetryMaxMs);
+    if (!unactionedFailure) budgetExhaustedReported = false;
+    // #2483: name the failure CLASS, and gate the retry on eligibility. The retried unit is a
+    // PASS, which is idempotent (wake + `requestId` dedup), so every class is eligible today;
+    // RETRYABLE_CLASSES is where a narrower rule would live.
+    const failureClass = unactionedFailure ? classifyError(lastFailure) : null;
+    const retryEligible = unactionedFailure && RETRYABLE_CLASSES.has(failureClass);
+    if (unactionedFailure && wakeRetryMs > 0 && retryEligible && consecutiveWakeFailures <= wakeRetryBudget) {
+      const base = Math.min(wakeRetryMs * 2 ** (consecutiveWakeFailures - 1), wakeRetryMaxMs);
+      // #2483: JITTER the backoff so two brokers cannot resynchronize, then re-clamp to the cap.
+      const jittered = Math.round(base * (1 + retryJitter * (random() * 2 - 1)));
+      const backoff = Math.max(1, Math.min(jittered, wakeRetryMaxMs));
       const retryAt = now() + backoff;
       cooldownRevisitAt = cooldownRevisitAt === null ? retryAt : Math.min(cooldownRevisitAt, retryAt);
       const names = failedThisPass.size > 0 ? [...failedThisPass].join(",") : "-";
-      logBrokerLine(dbPath, `WAKE-RETRY in=${backoff}ms seats=${names}${passThrew ? " pass-threw" : ""}`);
+      logBrokerLine(
+        dbPath,
+        // The `in=...ms seats=...` prefix is UNCHANGED (demo/broker-wake-retry.test.mjs matches it);
+        // the new class/budget fields are APPENDED so existing log readers keep working.
+        `WAKE-RETRY in=${backoff}ms seats=${names}${passThrew ? " pass-threw" : ""} class=${failureClass} n=${consecutiveWakeFailures}/${wakeRetryBudget}`,
+      );
+    } else if (unactionedFailure && wakeRetryMs > 0 && retryEligible && consecutiveWakeFailures > wakeRetryBudget) {
+      // #2483 (F6): the budget is SPENT — retrying forever is the unkillable-daemon bug. Stop
+      // scheduling retries and surface the terminal state ONCE (a diagnostic AND a log line),
+      // so "why did this seat stop being driven?" has an answer other than a frozen PASS.
+      if (!budgetExhaustedReported) {
+        budgetExhaustedReported = true;
+        onDiagnostic?.({ kind: "retry-budget-exhausted", class: failureClass, consecutive: consecutiveWakeFailures });
+        logBrokerLine(dbPath, `WAKE-RETRY-EXHAUSTED class=${failureClass} n=${consecutiveWakeFailures} budget=${wakeRetryBudget}`);
+      }
     }
     // F35: cooperative stop — a `serve --stop` command writes a .stop file
     // instead of process.kill (which does not deliver SIGTERM on Windows). The
@@ -1833,7 +1960,11 @@ export async function runWakeLoop({
     if (postStop) {
       // Read the deadline BEFORE clearing the file: the request time lives in its content.
       const expired = graceExpired();
-      if (postStop === "stop") clearStopRequest(dbPath);
+      if (postStop === "stop") {
+        // #2322: record the receipt so the log names the REQUEST, not just the graceful EXIT.
+        logBrokerLine(dbPath, `STOP-REQUESTED source=file pid=${process.pid}`);
+        clearStopRequest(dbPath);
+      }
       stoppedBy = expired ? "deadline" : postStop;
       break;
     }
@@ -1843,7 +1974,10 @@ export async function runWakeLoop({
   // still live. Never close the harness with a live run — drain the ordinary
   // scope here, exactly as the old global wait used to do at every pass. This
   // is the one place a global wait belongs.
-  if (heartbeat) clearInterval(heartbeat);
+  // #2574/F1: keep the heartbeat FRESH through the drain. A drain can outlast
+  // BROKER_HEARTBEAT_TIMEOUT_MS, and a broker whose heartbeat went stale read as DEAD while
+  // it was still the writer; `serve --stop` then cleared its state and admitted a second
+  // writer mid-drain. The clear happens AFTER the (bounded) wait, on every exit path.
 	// The handle is `h`, not `harness`: main's reopen swap (`let h = harness`, reassigned after a
 	// SessionFailed recovery) moves it, so the drain must wait on the live handle.
   // #2420: when the exit is on the DEADLINE (or the grace has already run out), do NOT park
@@ -1857,6 +1991,7 @@ export async function runWakeLoop({
   } else {
     await h.waitForIdle(context);
   }
+  if (heartbeat) clearInterval(heartbeat);
   // Close the audit opened by START: the reason the broker stopped (a `.stop` request, a
   // bound, or a signal) survives the process here instead of only on stdout.
   logBrokerLine(dbPath, `EXIT pid=${process.pid} reason=${stoppedBy ?? "unknown"} passes=${passes}`);
@@ -1970,8 +2105,13 @@ export function brokerAlive(state, { now = Date.now() } = {}) {
     process.kill(state.pid, 0);
     return true;
   } catch (err) {
-    // EPERM means the process exists but we cannot signal it — still alive.
-    return err?.code === "EPERM";
+    // FAIL-SAFE (#3398): dead ONLY when the OS says the process does not exist. Any other
+    // error — EPERM (exists, cannot signal), or a code we have never seen — means ALIVE.
+    // The bug this probe serves is a FALSE-DEAD report (`serve --stop` claiming
+    // `stopped:true` for a live broker), and a false-dead admits a SECOND WRITER: that is
+    // the corruption class. `=== "EPERM"` was fail-OPEN toward dead — it classified every
+    // unexpected code as gone, i.e. it failed exactly on the path nobody tests.
+    return err?.code !== "ESRCH";
   }
 }
 
@@ -2030,8 +2170,30 @@ export function pidAlive(pid) {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    // EPERM means the process exists but we cannot signal it — still alive.
-    return err?.code === "EPERM";
+    // FAIL-SAFE (#3398): dead ONLY on ESRCH. See `brokerAlive` above — unknown ⇒ ALIVE,
+    // because a false DEAD here reports `stopped:true` for a live broker and admits a
+    // second writer, while a false ALIVE only refuses to start one more.
+    return err?.code !== "ESRCH";
+  }
+}
+
+/**
+ * Liveness by SIGNAL 0 alone: does the process named by `pid` exist? EPERM means it
+ * exists but cannot be signalled (still alive); ESRCH means GONE.
+ *
+ * This is the ONLY proof a writer has exited. `brokerAlive`'s heartbeat is an IDENTITY
+ * proxy for a recycled pid, not proof of exit — a broker draining a long pass stops
+ * refreshing its heartbeat and would read as dead while it is still writing (F1, #2574).
+ * `serve --stop` must gate `stopped:true` (and clearing the state) on THIS, so a second
+ * writer is admitted only after the first provably exited.
+ */
+export function brokerProcessAlive(pid) {
+  if (typeof pid !== "number") return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err?.code !== "ESRCH";
   }
 }
 
