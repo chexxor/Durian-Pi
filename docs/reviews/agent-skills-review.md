@@ -12,7 +12,7 @@ item by itself; the work items it implies are delivered to `pm` separately.
   `skill-creator` (`vendor/eval/anthropic-skills/skills/skill-creator/SKILL.md`), and the
   `writing-skills`/`anthropic-best-practices` pair (`vendor/eval/superpowers/skills/writing-skills/`).
 - Read the operator's research synthesis (`docs/research/llm-agent-skills-and-frameworks.md`).
-- Inventoried our skills: `skills/durig/`, `skills/tui-design/`, `.agents/skills/durig/`, and the
+- Inventoried our skills: `.agents/skills/driving-durian-pi/`, `skills/tui-design/`, `.agents/skills/delegating-to-durian-pi/`, and the
   operator's global `~/.agents/skills/openrig-{cli,skills}`.
 
 ---
@@ -21,8 +21,8 @@ item by itself; the work items it implies are delivered to `pm` separately.
 
 | Skill | Location | Format | Body | References | Evidence it works |
 |---|---|---|---|---|---|
-| `durig` ("Driving durig") | `skills/durig/SKILL.md` | valid frontmatter | 93 lines | none | none |
-| `durig` ("Delegating to a durig team") | `.agents/skills/durig/SKILL.md` | valid frontmatter | 167 lines | none | none |
+| `driving-durian-pi` ("Driving durig") | `.agents/skills/driving-durian-pi/SKILL.md` | valid frontmatter | 93 lines | none | none |
+| `delegating-to-durian-pi` ("Delegating to a durig team") | `.agents/skills/delegating-to-durian-pi/SKILL.md` | valid frontmatter | 167 lines | none | none |
 | `tui-design` | `skills/tui-design/SKILL.md` | valid frontmatter + `LICENSE`, `README.md` | 139 lines | 3 of 8 routed references exist | none |
 
 Both `durig` files are instruction-only (no `scripts/`), which the security literature rates as the
@@ -34,7 +34,7 @@ that states exactly what was kept and omitted — a good provenance pattern.
 
 | # | Finding | Evidence | Severity |
 |---|---|---|---|
-| S1 | **Two different skills both named `durig`.** One is the CLI skill ("Driving durig", added `e1c57d6`), the other the delegate skill ("Delegating to a durig team", moved in `762d95f`). The `name` field is the agent's only selection signal; two skills claiming `durig` make triggering ambiguous and guarantee drift. | `skills/durig/SKILL.md:1-8` vs `.agents/skills/durig/SKILL.md:1-8`; the descriptions differ; both `name: durig` | High |
+| S1 | **Two different skills both named `durig`.** One is the CLI skill ("Driving durig", added `e1c57d6`), the other the delegate skill ("Delegating to a durig team", moved in `762d95f`). The `name` field is the agent's only selection signal; two skills claiming `durig` make triggering ambiguous and guarantee drift. | `.agents/skills/driving-durian-pi/SKILL.md:1-8` vs `.agents/skills/delegating-to-durian-pi/SKILL.md:1-8`; the descriptions differ; both `name: durig` | High |
 | S2 | **`tui-design`'s routing table sends the agent to references that are deliberately not vendored**, and the `SKILL.md` never says so. On trigger only `SKILL.md` loads, so an agent follows the table to `references/ecosystem-{go,rust,python,typescript}.md` / `cli-basics.md` and finds nothing. The omission is documented only in `README.md`, which is not loaded on trigger. | `skills/tui-design/SKILL.md:13-24` routes to 5 absent files; `git ls-files skills/tui-design/references/` lists only 3; `skills/tui-design/README.md` "Deliberately omitted" | High |
 | S3 | **No skill has an eval, and nothing measures a skill against a no-skill baseline.** The evidence (SkillsBench; the 125-failure study) is that ~1 in 5 tasks *regresses* when a skill conflicts with what the model already does, and that the dominant failure is the agent mistaking an example for a mandatory requirement. We cannot tell which of our skills help. | no eval harness under `demo/` or `skills/`; research §1/§6 | High |
 | S4 | **No convention for which root is canonical.** Skills live in both `skills/` and `.agents/skills/`; `durig` exists in both. The pi runtime loads `.agents/skills/` (the cross-runtime alias per `superpowers/skills/writing-skills/SKILL.md`). | `git ls-files skills/ .agents/` | Medium |
@@ -46,8 +46,8 @@ that states exactly what was kept and omitted — a good provenance pattern.
 ## 3. Recommendations
 
 1. **One name, one skill (S1).** Either merge the two `durig` docs into one entry point, or rename by
-   audience and use the spec-preferred gerund form: `driving-durig` (CLI operator) and
-   `delegating-to-durig` (external delegate). Each `name` must be unique across every skill root.
+   audience and use the spec-preferred gerund form: `driving-durian-pi` (CLI operator) and
+   `delegating-to-durian-pi` (external delegate). Each `name` must be unique across every skill root.
 2. **Make the broken routes honest (S2).** In `tui-design/SKILL.md`, either vendor the omitted files
    or replace the five routes with one line: *"framework/ecosystem and CLI references are not
    vendored — durig is Node/pi-tui and its CLI is non-interactive (D21); see `README.md` for the

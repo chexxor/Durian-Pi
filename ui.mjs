@@ -31,6 +31,12 @@ import { writeIntent } from "./src/broker.mjs";
 import { readData } from "./src/readclient.mjs";
 import { composeFrame } from "./src/tui/paint.mjs";
 import { createSyncState, SYNC_QUERY } from "./src/tui/sync.mjs";
+import { makeEnterHandler } from "./src/tui/durable/enter.mjs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The repo root the child entrypoints (tui.mjs, cli.mjs) live in — this file is at that root.
+const REPO_ROOT = dirname(fileURLToPath(import.meta.url));
 
 const USAGE = `durig ui — the read-only TUI (polls the store ≤0.75s; renders seats, transcript, streaming, status)
 
@@ -137,15 +143,34 @@ try {
     paint: paintScreen,
     color: !process.env.NO_COLOR,
     pollMs: 700,
-    onEnter: () => {
-      // Enter opens the selected seat's conversation; Enter again in the conversation
-      // view is a no-op (Esc is the way back). Opening resets the loaded window, so
-      // the detail view always starts at the newest page for the seat just opened.
-      if (view.mode === "seats" && ui.seatCount > 0) {
-        view.openConversation();
-        ui.scroll = 0;
-        selectSeat(conv, ui.focusSeat);
-        void driver.tick();
+    onEnter: async () => {
+      // #4158: Enter runs the OPERATOR WINDOW on the selected seat — the seam, launch and return
+      // layers were on main and imported by demos only, so this is the caller that makes the ruled
+      // answer something the operator can press. The sequence (record -> stop -> acquire -> session
+      // -> RELEASE -> RESTART -> restore) lives in src/tui/durable/return.mjs; the real effects and
+      // the (seat, conversation) -> store resolution live in enter.mjs. Inside the conversation view
+      // Enter is still a no-op (Esc is the way back).
+      if (view.mode !== "seats" || ui.seatCount === 0) return;
+      const seat = ui.focusSeat;
+      // The landing screen's own repaint, so what comes back is THIS screen on THAT seat rather
+      // than whatever the child left in the terminal.
+      const enterHandler = makeEnterHandler({
+        // A one-seat rig built from what the landing screen already knows: the focused seat and the
+        // conversation id it is showing. resolveSeatStore then refuses when there is no conversation
+        // rather than defaulting to a fresh session.sqlite — the property is kept, not bypassed.
+        rig: { db: DB_PATH, seats: { [seat]: { conversationId: ui.convId } } },
+        repo: REPO_ROOT,
+        repaint: ({ seat: returned }) => {
+          if (returned) ui.focusSeat = returned;
+          ui.scroll = 0;
+          selectSeat(conv, ui.focusSeat);
+          void driver.tick();
+        },
+      });
+      const result = await enterHandler({ seat, mode: view.mode });
+      if (!result.ran) {
+        // A refused window must say so where the operator is looking, not fail silently.
+        fatal(new Error(result.reason ?? "Enter could not open the operator window"));
       }
     },
     onBack: () => {
