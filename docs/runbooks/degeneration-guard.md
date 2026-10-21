@@ -28,7 +28,7 @@ under `broker-safe-change.md` (stop the broker, land, restart).
 ## Diagnose (read-only)
 Read the run the guard fired on and look at the tail of the flagged turn:
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 8
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat> 8
 ```
 A **real** loop ends in a wall of near-identical micro-sentences and stops acting —
 `Emit. OK. Go. Now.` / `Completing:` / `Deferring:` repeated dozens of times. A **healthy** turn may
@@ -66,8 +66,17 @@ defects that are NOT patterns to tighten:
   1–2 turns and `repeats`/`toolTurns`/`degenerate-text`/`turnDurationMs` never accumulate, while
   `contextTokens` never reaches the fixed `maxContextTokens: 400_000`. `qa` reached **367,559** tokens,
   produced incoherent output, and got **0** escalations. The context bound must come from the model's
-  EFFECTIVE window (the `DURIG_CONTEXT_WINDOW` seam / `src/context.mjs` denominator), not a constant:
+  EFFECTIVE window (the `DURIAN_PI_CONTEXT_WINDOW` seam / `src/context.mjs` denominator), not a constant:
   GLM-5.3-Flash *advertises* ~1,048,576 tokens yet degraded at 367k ("advertised != usable").
+  **RESOLVED in the pure half (#1823, lead #1816):** context pressure is a SEAT-LEVEL signal read
+  from the newest assistant entry of the WHOLE page (it SURVIVES a wake), while every other cause
+  stays per-run. The trip is a raw-token FLOOR **AND** a FRACTION of the resolved window, with a
+  CEILING (`minContextTokens` / `contextFraction` / `contextCeilingTokens`): the trip is
+  `min(fraction*window, ceiling)` and only fires above the floor. The window is INJECTED
+  (`contextWindowTokens`, resolved measured > declared > advertised); when it is absent the cause
+  is SKIPPED with a `why` (`contextSkip`), never guessed. The fraction is TUNABLE and must be
+  CALIBRATED against the qa conv-15 fixtures (with provenance) BEFORE the wiring enables it — the
+  shipped default 0.35 is anchored on the 367,559 / 1,048,576 datapoint, not a calibrated value.
 - **FALSE POSITIVE — a tool duration read as a model stall.** `turnDurationMs` takes the max of
   `messageOf(entry)?.durationMs` over the whole run, INCLUDING `pi.tool-result` entries. A legitimate
   ~5-min tool sweep (`#72059`, `durationMs=301935`) trips the 5-min wall-clock bound; the guard then
@@ -105,3 +114,8 @@ fired; `impl` was over-reset from a tool-result duration. Fixes routed as `#1703
 ## Evidence
 Item #875 (named-pattern registry, real fixtures, zero-FP scan); D78 REVERTED in `docs/DECISIONS.md`;
 the reverted attempt `97a3c6d`, the revert `449e870`.
+2026-10-18 (recurrence, `docs/incidents/2026-10-17-qa-context-degeneration.md`): a THIRD occurrence —
+qa's repeat/garbled shape while holding 8–9 queued items; it did not claim `#1903` even after a priority
+nudge (`#1916`), blocking a landing (routed to `auditor` as `#1940`). COUPLED with the broker
+dormant-stall (`2026-10-18-broker-dormant-stalled.md`), so do not attribute every missed claim to the
+model alone. Guard fixes (#1703/#1704/#1705) still not landed.

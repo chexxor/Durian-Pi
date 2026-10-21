@@ -1,4 +1,6 @@
-﻿# durig — decision log
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
+# durig — decision log
 
 Each entry: decision, rationale, alternatives considered, status.
 Dates are 2026-10-07 unless noted.
@@ -1050,7 +1052,9 @@ provides. If it must be genuinely non-forgeable later, re-issue it as an operato
 commit.
 
 **Effect on the position:** `security.sec`'s dissent is preserved for the residual shell risk
-(`docs/reviews/security-sec-m3-seat-tools.md`); SC1–SC3 are **adopted**, not skipped.
+(inline in `docs/SEAT-TOOLS.md` — the review verdict and SC1–SC3; the planned
+`docs/reviews/security-sec-m3-seat-tools.md` was never written as a file); SC1–SC3 are **adopted**,
+not skipped.
 
 ## D39 — The driver probes seat documents through a raw handle, because a harness session fails closed (2026-10-12)
 
@@ -1457,7 +1461,6 @@ not flatten the two.
 `demo/autostart.test.mjs` (one broker per DB, second `serve`/`run` refused) and
 `demo/storewrite.test.mjs` (send-path store-write retry, #310/D42).
 
-
 ## D54 — HELD: a non-claimable queue state with one explicit release transition (2026-10-15)
 
 **Decision:** a held queue state — non-claimable (the claim/wake predicates are whitelist-by-status, so a held item is never claimed and never woken for), entered by hold_work, left by exactly ONE explicit sender transition (
@@ -1478,9 +1481,9 @@ elease_work tools and holderOf/status whitelists in src/rig.mjs; the held-not-cl
 **CODE FLAG (contradiction — recorded rather than asserted blindly):** the decision as supplied listed commit and merge/
 ebase among the blocked verbs. The CURRENT code does NOT block those: git commit is ALLOWED by design (D50 moved commit authority to the developer; demo/confine.test.mjs asserts "git commit is allowed"), and merge/
 ebase are not in the deny list. What IS actually blocked (verified in src/confine.mjs DENIED_COMMANDS, and by demo/confine.test.mjs/demo/seatguard.test.mjs, both exit 0): 
-eset, checkout, 
-estore, 
-evert, clean, stash, branch -D, unscoped add -A/add ., and push (push exempt only with the operator's DURIG_ALLOW_PUSH=1), plus the -C <path> forms. If merge/
+reset, checkout, switch, 
+restore, 
+revert, clean, stash, branch -D, unscoped add -A/add ., and push (push exempt only with the operator's DURIG_ALLOW_PUSH=1), plus the -C <path> forms (including `git switch` and `git -C <path> switch`). If merge/
 ebase (and reverting commit) are intended to be blocked, that is a NEW change to request — it is not current behaviour.
 **Status:** adopted for the code-true core (destructive git + push blocked, read-only allowed); the commit/merge/rebase clauses flagged as not code-true and NOT recorded as current behaviour.
 
@@ -1962,7 +1965,6 @@ against synthetic fixtures; and "a false positive costs one reset" is false when
 every seat. The F29 prose loop still needs a signal that does not parse prose — e.g. a per-turn
 wall-clock latency bound (impl's degenerate turns ran 56 s then 122 s while healthy turns ran seconds).
 
-
 ## D79 — Land the complete-but-uncommitted #624 `cli.mjs` artifact and clean the shared tree (2026-10-16)
 
 **Decision.** The operator rules that the complete-but-uncommitted work in the shared tree lands on
@@ -2256,7 +2258,7 @@ which keeps every file and branch. (c) Leave them — rejected: the operator ask
 ## D90 — Runbook discoverability is onboarding: the entry point and the constitution must say the runbooks exist and when to consult them (delegate, 2026-10-17)
 
 **Decision.** The delegate entry point (`AGENTS.md` clock-in + "Where to read further"), the durig skill
-(`.agents/skills/durig/SKILL.md` clock-in + references), and the seat **P3 Runbooks** rule in
+(`.agents/skills/driving-durian-pi/SKILL.md` clock-in + references), and the seat **P3 Runbooks** rule in
 `constitution.txt` now name `docs/runbooks/` and its symptom index, and require **reading the matching
 runbook before improvising** on an operating situation it covers — not only authoring one when a procedure
 changes. The research runbook (`research-request.md`) is called out explicitly for commissioning research.
@@ -2277,6 +2279,40 @@ the trigger is the part that fires when a situation arrives.
 **Status:** committed (`fa4b22f`). The `constitution.txt` change is pending live application to seats via
 a broker-safe `up --refresh` (dry-run confirms `constitution.changed=true`); recorded in `docs/NEXT.md`.
 
+## D91 — The `security` seat's standing surface is runbook-only, and the external `security.sec` consult is on-escalation (lead #1297, revised by lead #1316; recorded by scribe #1301/#1323, 2026-10-17)
+## D91 — The `security` seat's standing surface is a runbook (not a standing review set), and the external `security.sec` consult is on-escalation (lead #1297, recorded by scribe #1301, 2026-10-17)
+
+**Decision.** Q1 — STANDING SURFACE = RUNBOOK ONLY. The `security` seat owns ONE runbook under
+`docs/runbooks/` (security failure modes + review method); there is NO standing `docs/reviews/security-*.md`
+set — reviews remain per-item artifacts (`docs/reviews/<topic>.md`), exactly as `qa`/`advocate` produce
+per-item reviews and own no standing set. A standing `security-*` namespace would go stale and duplicate the
+per-item reviews. Q2 — `security.sec` CONSULT = ON-ESCALATION (not retired, not fully retained). The internal
+seat handles ROUTINE security review (fast, free, always available); the external consult is engaged ONLY
+WHEN THE SEAT ESCALATES (high-stakes, uncertain, or beyond the seat's depth). CAVEAT (operator-facing): if a
+compliance requirement mandates an independent external review regardless of the seat's judgment, that is a
+STANDING (non-discretionary) trigger, not an escalation — the operator must name it; absent that,
+on-escalation is the default. NOTE: capability `review`, not a verifier — so `security` does NOT take the
+verifier exemption (it works in worktrees when it has a claimed item), consistent with lead's #1222
+blast-radius ruling.
+
+**Why.** The smallest surface that makes the seat effective: a runbook for its failure modes (a
+leaked/committed secret — ties #828 read-side detection + #837 redaction; confinement escape) satisfies
+P3 Runbooks (a failure mode the work covers gets a runbook), while a standing review set would add a
+maintenance burden and duplicate the per-item reviews the seat already produces. The consult is a
+depth/compliance backstop, not a routine path: spending it on routine work duplicates the seat.
+
+**Alternatives.** Q1: (a) both a runbook AND a standing `security-*.md` set — rejected: the standing
+namespace goes stale and duplicates per-item reviews; (b) a standing review set only, no runbook — rejected:
+the team HAS security failure modes (leaked secret, confinement escape), and runbooks are symptom-indexed
+procedures, so the runbook is the repeatable surface. Q2: (a) retire the external consult — rejected: it
+preserves a depth the internal seat may lack on high-stakes/uncertain work; (b) keep it as a routine path —
+rejected: it would duplicate the seat and spend the consult's depth on routine work.
+
+**Status:** ruling #1297 (delivered as #1299) by `lead`, recorded by `scribe`. Routed: #1300 → `security`
+(author the one runbook under `docs/runbooks/`, starting with the leaked/committed-secret failure mode +
+review method; ties #828/#837; no standing `security-*.md` review set); #1301 → `scribe` (this entry). OPEN
+FOR OPERATOR: the compliance caveat — name a mandated independent external review and it becomes a standing
+(non-discretionary) `security.sec` trigger rather than an escalation.
 ## D91 — A standing `security` seat, not only an external consult (delegate, 2026-10-17)
 
 **Decision.** durig declares a 10th seat, `security` (GLM-5.3-Flash), owning threat models, trust
@@ -2345,7 +2381,6 @@ executable check applies (a narrative decision log). LANDING NOTE: main's D91 is
 seat-creation entry; scribe's standing-surface/consult ruling (lead #1297 as revised by #1316,
 branches scribe-item-1301/1323, currently numbered D91) must be renumbered (recommended D93) or
 folded into D91 at landing to avoid a collision.
-
 
 ## D93 — The `security` seat's standing surface is runbook-only, and the external `security.sec` consult is on-escalation (lead #1297, revised by lead #1316; recorded by scribe #1301/#1323, 2026-10-17)
 
@@ -2427,6 +2462,16 @@ crash opportunity), then removal.
 `opr-20261017-rulings-batch4`). Work items: ROADMAP 71 / #912 (spool, HELD -> prioritise), the
 read-only-open fix, `send` retirement / #252. **Flagged gap:** `cmdUp` (`cli.mjs:476-760`) has NO broker
 guard - `up --refresh` is not refused while a broker drives. No executable check applies yet.
+
+**Addendum (2026-10-18, #1931) — `resume`/`doctor` stays a DOCUMENTED REFUSAL, not a spool op.** Of the
+ROADMAP 71 residue, the `resume`/`doctor` settle path is deliberately NOT routed: with a broker alive,
+the broker ALREADY settles stranded submissions itself — at startup (`reconcileBrokerStartup`) and at the
+start of every pass (`reconcileStrandedSubmissions`, logged `STRANDED settled=N`) — so an external
+`resume` has nothing to do, and routing it would add a second writer for work already done. The operator
+accepted EITHER route-or-document; this records the choice. The refusal message now NAMES the reason
+(`cli.mjs` `refuseWhileBrokerDrives("resume/doctor", <detail>)`) and points at
+`docs/runbooks/resume-while-broker-runs.md`. (The sibling `up` residue, #1930, is a real second writer and
+is being routed separately.)
 
 ## D95 — The degeneration guard judges per-turn causes on ASSISTANT turns and its context bound against the seat MODEL's effective window; saturation is recovered by `compact`, not reset (delegate, 2026-10-17)
 
@@ -2565,3 +2610,1332 @@ by lead #1766/#1773: build the ordering ONCE, re-point the other trigger to it.
 `demo/guard.test.mjs` #1769); policy recorded in `docs/BROKER-ARCHITECTURE.md` § "The guard's
 reset/termination policy". The serve wiring (installing the trigger+core into the broker pass loop) is
 NOT in this change — the core and the end-to-end proof are. Wording to be aligned with `scribe`.
+## D99 — Cleanup and reclaim are bounded by the clean gate: never force past uncommitted content to free a branch (delegate, 2026-10-18)
+
+**Decision.** A branch is deleted only when its work is **merged** (or patch-equivalent) AND its worktree
+is **clean** — or its only content is approved, verifiable pure scratch (`verify-*`/`wt-*`) whose nested
+worktrees are also clean. A dirty worktree is kept, and its branch with it. `--force`, `git clean`,
+`git reset --hard`, and `git checkout --` are never used to make a worktree removable.
+
+**Why.** On 2026-10-18 a mass reclaim of 58 locked terminal-item worktrees freed **0** — every one held
+uncommitted content (11 tracked-only, 8 tracked+untracked, 39 untracked-only) — and an earlier pass KEPT
+18 candidates because their nested verify trees held real probe scripts (e.g. `qa-probes-verdict.mjs`).
+"Dirty" is the only available signal separating reclaimable scratch from real work, so forcing past it
+would have silently destroyed verification artifacts. The clean gate is load-bearing, not an obstacle to
+clear.
+
+**Alternatives.** (a) `--force`/`git clean` to clear the sprawl — rejected: irreversible loss of
+uncommitted work, and it is exactly the destructive class the operator forbade; (b) delete the branch and
+leave the worktree — impossible (git refuses to delete a checked-out branch) and would orphan content;
+(c) archive-then-remove every worktree — rejected as disproportionate for the ~12 that are actually in
+use. The durable path is the **leak fix**: ROADMAP 76 audit surface + `complete_work` teardown + qa
+verify-scratch cleanup, so fewer worktrees are dirty in the first place.
+
+**Status:** adopted; procedure in `docs/runbooks/leaked-worktrees.md` § "Reclaiming a merged item-branch
+pinned by a verify worktree" and `docs/runbooks/branch-cleanup.md` step 5.
+
+## D100 — Compaction is applied by the broker through the command spool, not by an external writer (devtools, operator priority, 2026-10-18)
+
+**Decision.** `compact` joins the command-spool vocabulary (`SPOOL_OPS`, ROADMAP 71 / #912): with a
+broker alive, `cli.mjs compact` ROUTES the request (`op:compact`) through `<db>.broker.inbox` and AWAITS
+the result at `<db>.broker.inbox.out/<requestId>.json`; the broker applies it with its OWN harness
+(`src/broker.mjs` `applyRequest`). The direct path (a fresh harness) remains ONLY for the no-broker case.
+The live-generation-lease guard does NOT block the broker's own compaction.
+
+**Why.** pi-durable's compaction is BUILT to run alongside a live conversation: `conversation.compact()`
+commits a `pi.compaction` task that summarizes an old prefix at a turn boundary and places a summary
+entry (the transcript is kept). durig's old `compact` was an EXTERNAL writer — `refuseWhileBrokerDrives`
+plus the live-lease guard meant a live rig could not compact at all. Routing through the spool gives one
+writer and one scheduler (the invariants of `docs/COMMANDS-AND-THE-BROKER.md`), so compaction is a normal
+write like any other, not a stop-the-world operation. The lease guard exists to stop an OUTSIDE writer
+from rewriting a context head a running generation owns; the broker IS the owner and commits at the turn
+boundary, so it must not be blocked by a guard aimed at outsiders.
+
+**Alternatives.** (a) Keep refusing while the broker drives — rejected: it makes live compaction
+impossible, which is the operator's complaint; (b) the in-broker cooperative halt (`src/halt.mjs`,
+#1768/#1769) — rejected: halting a generation is a heavier, separate mechanism and pi-durable's native
+background compaction needs no halt (cross-linked, not depended on); (c) QUEUE the compaction behind the
+current generation (settle-then-compact) — kept only as a fallback if the native path proves to need it;
+the broker applying its own op is already the single owner.
+
+**Status:** adopted; `demo/compact-spool.test.mjs` proves a REAL `pi.compaction` entry lands via the
+broker, a duplicate `requestId` applies once, and the seat is not aborted. Procedure:
+`docs/runbooks/compact-a-seat.md`.
+
+## D101 — The durable-TUI spike merges as a parallel, single-owner entrypoint before any attach (delegate, operator directive, 2026-10-18)
+
+**Decision.** The `durable-tui` spike (the real pi `InteractiveMode` TUI on a pi-durable conversation;
+`.spike/durable-tui/HANDOFF.md`) merges into durig in phases. **Phase 1 lands it as a NON-DEFAULT
+entrypoint on its OWN store** (`npm run tui`; `ui.mjs`/`npm run ui` untouched) with a fail-closed guard
+that refuses a store a broker owns. Attaching it to a real seat's conversation (ROADMAP 52 + 55) is
+Phase 2; converging with `ui.mjs` is Phase 3. The Phase 0 scope ruling — per-seat Pi view (a) vs
+multi-seat operator TUI (b) — precedes code, with (a) recommended first.
+
+**Why.** durig's store has ONE writer (D42 / F24): the broker while it runs. `durig ui` is a read-only
+viewer (D11) whose only write is the intent spool (D68). The spike is a *writer* — it opens storage and
+a harness. Pointing it at `selfdev.sqlite` with the broker alive is the exact second-writer collision.
+Landing it as a separate entrypoint on a separate store yields "both TUIs working during a slow
+migration" at near-zero risk and defers the attach protocol (the security-gated part, ROADMAP 55) until
+it is designed.
+
+**Alternatives.** (a) Implement the adapter as a mode of `ui.mjs` immediately — rejected: couples the
+new surface to the old before the ownership/write seam is solved. (b) Replace `ui.mjs` outright —
+rejected: destroys the working read-only viewer and D11's fallback evidence. (c) Run the spike against
+`selfdev.sqlite` while the broker drives — rejected: a second writer.
+
+**Status:** delivered to `pm` (intent `66d95f69-17bf-4707-8c23-40326e7b8d70`) with
+`docs/reviews/durable-tui-merge-plan.md` + `docs/reviews/durable-tui-gap-analysis.md`; Phase 0 scope
+ruling and registration pending. The `@earendil-works/pi-coding-agent` dependency pin is a `devtools`
+prerequisite.
+
+## D102 — The durable TUI replaces `durig ui` as the multi-seat surface (scope b); team-status UX is a design consultation (operator, 2026-10-18)
+
+**Decision.** The durable-TUI merge targets **scope (b)**: the real Pi `InteractiveMode` TUI becomes
+durian-pi's multi-seat operator surface and replaces `ui.mjs` as the primary view. `ui.mjs` remains the
+documented read-only fallback (D11). A **team-status viewport** is a required part of the surface. The
+operator delegates its UX to `designer` and `advocate`: PM registers the consultation and routes it to
+those two seats on unpause, and their written proposal (`docs/`, with a sketch) selects the layout.
+Phase 2 selects no layout until that proposal is accepted. This decision sets (b) as the destination and
+supersedes D101's "recommend (a) first" staging; the multi-conversation and attach work (ROADMAP 52 +
+55) is in scope.
+
+**Why.** (b) was the original intention for the durable TUI — one coherent place to run the team —
+rather than bolting a second single-seat console onto the existing viewer. The operator judged a
+whole-team status viewport essential to that surface but was explicit that its best UX is undecided,
+hence a design consultation rather than a delegate guess.
+
+**Alternatives.** (a) as the destination — rejected by the operator: it leaves the fleet view and the
+interactive console as two separate products and does not fulfill the original intention. A bespoke
+layout chosen by the delegate — rejected: UX is the design seats' ownership, and the operator asked for
+their opinions.
+
+**Status.** Ruled. The consultation intent is spooled (`92682546-ad8e-4406-9efb-c7b1208e38c3`) for PM to
+route on unpause. Phase 1 (own-store, fail-closed base) proceeds unchanged. Phase 2 starts after the
+designer/advocate UX proposal is accepted and the ROADMAP 55 security position is written.
+
+## D103 — Product rebrand `durig` → `durian-pi`, with deprecated aliases for env vars and config paths (operator, 2026-10-18)
+
+**Decision.** The product is renamed `durig` → `durian-pi` across all tracked text and identifiers:
+`package.json` `name`; the 24 `DURIG_*` env vars become `DURIAN_PI_*`; `durig.config.json` becomes
+`durian-pi.config.json`; `durig.config.default.json` / `durig.config.example.json` are renamed; the
+`.durig/` scratch dir becomes `.durian-pi/`; `skills/durig/` and `.agents/skills/durig/` become `.agents/skills/driving-durian-pi/` and `.agents/skills/delegating-to-durian-pi/`
+`durian-pi`; docs, demos and `.gitignore` follow. The config/env loader accepts the old `DURIG_*` names
+and the old `durig.config.json` as deprecated aliases; the new name wins when both are set. The new
+multi-seat TUI is named the **durian-pi TUI**.
+
+**Why.** The operator renamed the repository to `Durian-Pi` and directed the product follow. A hard
+identifier break strands the live selfdev rig and every documented command (`DURIG_DB`, `DURIG_SEAT_ROOT`,
+`DURIG_MAX_CONCURRENT_SEATS`, …). Tested aliases make the rename complete while the running system
+stays reachable; they are a supported feature with one documented deprecation, not a stub.
+
+**Alternatives.** (a) Prose-only rename leaving env vars/paths as `DURIG_*` — rejected: not a rebrand,
+and two names persist indefinitely. (b) Hard rename with no aliases — rejected: breaks the live rig,
+scripts and runbooks simultaneously. (c) Delegate hand-edits the shared tree — rejected: the broker is
+UP and seats run in worktrees, so the shared tree must not be mutated.
+
+**Status.** Delivered to `pm` for registration (intent `9fa09419-2160-4b3b-b2eb-04bbd32c54e2`); owners:
+devtools (env/config/paths/scripts), impl (code), scribe (docs), qa (verify). Acceptance: a demo proves
+the new names load and the old aliases resolve (new wins); after the rename `git grep -i durig` returns
+only the deliberate alias/deprecation sites; full `demo/*.test.mjs` + `npm run test:tui` green.
+
+## D104 — A per-seat local provider lets one seat use a locally-served model (delegate, operator directive, 2026-10-18)
+
+**Decision.** durig registers a second, OpenAI-compatible provider (`"local"`) alongside the default
+when `DURIG_LOCAL_BASE_URL` is set; a seat whose model is `local/<id>` resolves to it while every other
+seat keeps the default provider. New config keys: `DURIG_LOCAL_BASE_URL`, `DURIG_LOCAL_MODEL` (default
+`local`) and `DURIG_LOCAL_CONTEXT` (default 65536). Implemented in `src/providers/local.mjs`, wired in
+`cli.mjs` `buildModels`; the selfdev `qa` seat now uses `local/qwen36` (PolyStrata-served
+Qwen3.6-35B-A3B).
+
+**Why.** The operator's only funded inference was a local server (32 GB RAM / 24 GB VRAM); the DeepInfra
+402 had stopped the whole team. durig built exactly ONE provider per process, so no seat could use a
+second endpoint. The registry (`ModelsImpl`) already holds providers in a `Map`, and `resolveSeatModel`
+already reads a registered `provider/modelId` prefix — so the enabling change is small, additive, and
+off by default. Verified end-to-end: an isolated `send qa` returned the expected answer through
+PolyStrata, `up --refresh` resolved `qa` to `local/qwen36` (without the provider it would have stayed
+`deepinfra/local/qwen36`), and the full demo suite passed 142/142 with the broker stopped.
+
+**Alternatives.** (a) Point the whole rig at local by changing `DURIG_PROVIDER` — rejected: moves every
+seat, and still needs a provider registration. (b) Wait for the team — rejected: the team cannot run
+until the provider is funded, and the operator directed the delegate. (c) Proxy or impersonate DeepInfra
+— rejected: fragile and opaque.
+
+**Status.** Implemented as operator-directed side work (`demo/local-provider.test.mjs`); `node --check`
+clean. This is product code written by the delegate under an operator directive and still owes a seat's
+independent review when the rig can run.
+
+## D105 — A local-provider seat starts a NEW context for each new work item; the durable transcript is kept (operator policy, 2026-10-18)
+
+**Decision.** A seat whose resolved model provider is `local` (D104) MUST draw a fresh context boundary
+when it picks up a new work item, BEFORE working that item — so a prior item's turns never condition the
+model on the next one. The boundary is the existing `pi.reset` mechanism (`resetSeatContext`,
+`src/reset.mjs`): prior turns leave the model CONTEXT, the durable transcript is preserved, and the next
+wake re-anchors the seat from its durable instructions plus the new queue item's body. Non-local seats
+are unchanged. The invariant is: one boundary per NEW item, **never mid-item**, never across a `claimed`
+item (a claim must survive the transition or the task is lost), and never while the seat holds a live
+generation lease. What exactly counts as a "new" item, how a re-claim/deferred item is treated, and the
+wake-path seam are the implementing seat's to design.
+
+**Why.** A locally-served model runs with a small window (selfdev: 64k served via `DURIG_LOCAL_CONTEXT`)
+on a single serialized GPU, and context rot degrades it well before the window fills
+(`docs/Managing_Long_Context_Length.md`); carrying a finished item's transcript into the next item is
+prefill cost plus reasoning contamination, and the local seats are the ones that have degenerated
+(`qa-context-degeneration`). A fresh context re-anchored from the durable instructions + the new item's
+grounding is both cheaper and more correct at a task boundary — the same reasoning as ROADMAP 29/30b,
+made non-optional and scoped to the local fleet. It complements D95, which judges the guard's context
+bound against the seat MODEL's effective window.
+
+**Alternatives.** (a) Leave it a judgement call / operator-managed `reset` — rejected by the operator: a
+policy that depends on someone remembering to call it is not a policy. (b) Apply fresh-per-item to ALL
+seats — rejected: paid seats can keep a prompt-cache-warm context, and ROADMAP 29 leaves their cadence
+to the `pm`/advocate practice. (c) `compact` instead of reset — rejected: compaction summarizes the old
+turns *into* the next context, carrying forward whatever was wrong with them; a local seat needs a clean
+boundary, not a summary of the prior item.
+
+**Status.** Policy RULED and recorded. Enforcement is NOT implemented — today only the manual
+`reset`/`clean` verb and the D64 degeneration guard draw a boundary. Routed to `pm` for registration +
+routing; acceptance is a demo proving a local-provider seat gets a `pi.reset` boundary between two
+consecutive work items while a non-local seat does not, plus `node --check`, the full suite, and a
+non-author verify.
+
+## D111 — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127)
+
+**Decision.** TUI cost/spend pricing is supplied by a per-provider pricing EXTENSION. A price is
+UNAVAILABLE unless an extension supplies it; the former blocker — an operator-supplied vendor price
+table — is REMOVED. The mechanism is threefold: (1) a per-provider pricing-extension interface;
+(2) the cost measure is derived from tokens through that extension; (3) when NO extension supplies
+prices, cost/spend renders "unavailable" — NEVER a fabricated or stale `$`.
+
+**Staleness.** Handled by the unavailable path: a stale price table must never render a `$`; with no
+live extension data, show unavailable.
+
+**Scope.** ROADMAP 98 stays TOKENS-ONLY (v1). This pricing decision is INDEPENDENT and NOT v1 —
+unscheduled. Owner is lead (mechanism); implementation routes to impl once scheduled. Held item #1135
+(TUI cost/spend: pricing instrument + SOURCE + staleness) is the mechanism's home.
+
+**Why.** A `$` figure with no live, current price behind it is worse than no figure: it fabricates a
+cost the product did not measure. The unavailable path keeps the UI honest under any staleness or
+absence condition.
+
+**Status.** RULED and recorded (operator re-scope, 2026-10-18, relayed via lead #2197). Unscheduled;
+tracked at held item #1135. No pricing extension exists yet, so the surface currently renders
+unavailable by this rule.
+
+## D112 — durable-tui: `ui.mjs` / `npm run ui` is the FALLBACK surface and is to be RETIRED (operator, 2026-10-18)
+
+**Decision.** `ui.mjs` / `npm run ui` is the FALLBACK (not a co-existing surface); the poller stays as
+last resort. `ui.mjs` will eventually be RETIRED once the durable TUI proves the multi-seat surface.
+
+**Policy.** In the interim: MINIMAL / bugfix-only maintenance (no new features). Deprecation path =
+retire after Phases 1-2 land and the durable multi-seat surface is accepted.
+
+**Status.** Execution GATED on Phases 1-2 (#2096, #2097). Held item #2098 stays the retirement-trigger
+home (decide maintenance/retirement once the durable surface is accepted; keep the poller as last
+resort). RULED and recorded (operator, 2026-10-18, relayed via lead #2197).
+## D106 — D105 seam: local-provider per-item context reset (lead `#2158`, 2026-10-18)
+
+**Decision.** The D105 enforcement seam is COMPOSED — signal and act are one seam:
+- **SIGNAL = option (c):** `up` records the RESOLVED `provider` on the SEAT doc;
+- **ACT:** the `pi.reset` boundary fires on the WAKE path in the broker, gated on that recorded field, between runs.
+
+(c) and the broker act compose.
+
+**Rejected.** (a) `cli.mjs` `superviseOnce` — reopens the writer slot closed in `#2031`/`#1817` and
+puts the boundary outside the wake path; (b) broker `drivePass` reading each seat's `pi.agent` model
+live on the HOT wake pass — a new cross-conversation read with no precedent plus a per-wake cost.
+
+**cli.mjs writer slot.** NOT reopened as a general writer; the `up` provider field is a BOUNDED
+single-field write, sequenced behind `impl-item-1907` (`#2017`) and coordinated with the D103 rebrand
+(`#2110`/`#2144`). PREFER routing the `up` write through devtools' spool (`#1930`) so `cli.mjs` is
+untouched; if the spool is not ready, the `up` half WAITS. No second concurrent `cli.mjs` writer.
+
+**Safety override (wins over scope).** The live-lease refusal STANDS — never reset an in-flight /
+claimed / leased seat; no mid-item boundary. Acceptance `#2125` governs.
+
+**Relation.** Complements (does NOT supersede) the D105 rule recorded in `scribe-item-2124` @007f073
+(MANAGED / decided-not-shipped); this entry records the SEAM now that it is being implemented (`#2123`).
+
+**Status.** Ruled by `lead` (`#2158`); recorded for `impl` (`#2123`) with verification routed to
+`auditor` (`#2125`). Lead's P1 note: the ruling rests on queue evidence, not a source re-read — `impl`
+flags if the seats doc or the wake path contradicts it.
+---
+
+## D107 — A local-provider seat compacts its tool-call history WITHIN a long work item; the cross-item boundary stays a `pi.reset` (operator policy, 2026-10-18)
+
+**Decision.** When a local-provider seat (D104) must work ONE item across many turns and will exceed
+its small served window, it MUST compact the tool-call history so the information it learned SURVIVES
+well enough to keep progressing — and do so REPEATEDLY until the item finishes. This is the **intra-item
+complement to D105**: D105 draws a fresh `pi.reset` at the **cross-item** boundary (between two items),
+whereas this covers the case where no clean boundary is available because the item is mid-flight.
+D105's "`compact` instead of reset — rejected" is hereby SCOPED to the cross-item boundary; it does not
+forbid intra-item compaction.
+
+**How (the ordering is the invariant; D84 governs the mechanics):**
+- **Mask before you summarize.** Omit/replace bulky TOOL RESULTS first (pi-durable `ContextEdit
+  { action: "omit" | "replace" }`, ROADMAP 92) — keep the decision/path, drop the dump. Cheapest first.
+- **Summarize at a phase transition**, not mid-reasoning (the best point is "after localizing the issue,
+  before beginning the edit" — `docs/Managing_Long_Context_Length.md`); a fixed threshold can fire where
+  context is hardest to summarize.
+- **Preserve the pointers, not the bodies:** item id + claim state, artifact paths / branches / SHAs,
+  acceptance criteria, and the decisions taken. Thin tool returns (`thinResultText`, FEATURES 167) mean
+  there is less to carry. The summary is a structured schema with a token floor (ROADMAP 93) and the
+  summarizer treats in-context content as untrusted (95).
+- **Cap the repeats, then RE-ANCHOR.** Past the compaction cap, force a fresh session re-anchored from
+  the durable instructions + the item and its artifacts (ROADMAP 94) — "repeat until degradation" becomes
+  "repeat to a cap, then re-anchor".
+- **Trigger on the MEASURED effective window**, not the advertised one (quantization shrinks effective
+  long-context accuracy); this depends on `status` reporting the local seat's `window.denominator`, which
+  is currently `null` (delegate defect filed).
+- **Hard invariants carry over from D105:** never drop a `claimed` item across a compaction, never
+  compact over a live generation lease, and a VERIFIER must not inherit an author's summary (D84/96).
+
+**Why.** A 64k local seat on one serialized GPU cannot finish a turn-heavy item in one window; without
+compaction it either hard-stops or, worse, keeps stale exploration that impairs reasoning long before the
+window fills. Today the mechanism is the WRONG one and is not operator-controlled: durig passes no
+compaction settings to `Harness.open`, so pi-durable's default applies — `reserveTokens 16384`,
+`backgroundTokens 32768` — i.e. background compaction from **~25 %** and blocking at **~75 %** of the
+served 64k window. Live evidence: `qa` carries five `pi.compaction` summaries while consuming only
+~18.9k/64k. Recorded because relying on that accidental default is not a policy.
+
+**Alternatives.** (a) `pi.reset` MID-item — rejected: it discards the in-progress work and can drop the
+claim. (b) Let the seat exceed the window and hard-fail — rejected: no progress, and the failure lands
+as a lost run. (c) Re-compact without a cap — rejected: unbounded summarization compounds loss; D84/94
+caps and re-anchors.
+
+**Status.** Policy RULED and recorded (operator, 2026-10-18). Enforcement is NOT implemented; route to
+`pm` for registration + routing ALONGSIDE D105's `#2123` (the two are one reliability story: reset
+between items, smart compaction within one). Acceptance: a demo proving a local seat compacts (mask →
+summarize at a transition) and continues an item across a compacted boundary, a cap that forces a fresh
+re-anchored session, a non-local seat unchanged, plus `node --check`, the full suite, and a non-author
+verify. D106 is claimed by the unlanded `scribe-item-2169`; recorders must not reuse 106.
+
+**D107 parameters — local-seat compaction thresholds (lead `#2243`, superseding `#2230`/`#2235`, reconciled with this entry via `#2249`/`#2250`, 2026-10-18).** This ELABORATES D107's mechanism — it is NOT a separate/competing decision. LOCAL seats only; non-local seats are unchanged.
+
+- **Scope of replacement.** ONLY pi-durable's AUTOMATIC compaction policy is disabled/replaced. The triggers below are DURIG-LEVEL structured compaction (this entry); the repeats are durig-level.
+- **Trigger.** Denominator = the MEASURED effective window (`#2231`), NOT nominal `DURIG_LOCAL_CONTEXT` — provisional nominal until a measurement exists. BACKGROUND slot = the MASK trigger at **80 %** (D84 WARN); BLOCKING slot = the SUMMARIZE/re-anchor threshold at **90 %** (D84 ABORT), only at/after 90 % AND at a phase transition. So: 80 % mask / 90 % summarize.
+- **Repeat cap.** SUMMARIZE capped at **2 per item** (masks do not count — non-destructive); on the 3rd demand, FORCE a fresh re-anchored session (D107 item 4 / ROADMAP 94).
+- **D84 alignment.** D84's guard thresholds ARE the compaction triggers; when `#62` lands the guard EMITS them and this policy READS them — one source, no double-fire.
+- **Ordering (D107).** mask → summarize at a phase transition → preserve pointers → cap → re-anchor. This is what `#2233` (D107 implementation) builds.
+- **Relation.** Intra-item only; the cross-item boundary stays D105's per-item `pi.reset` (`#2123`).
+
+---
+
+## D108 — Seats record durable, topic-organized notes for future agents at item completion and at a reset/compaction boundary; a curator validates and purges (operator directive, 2026-10-18)
+
+**Decision.** Every seat MUST, before it completes a work item **or** crosses a reset/compaction
+boundary, record the durable knowledge it gained that a future agent or seat will plausibly need again
+— above all the answers it had to **discover with tool calls** — into **topic-organized note files**.
+The transcript is not the vehicle: it gets compacted (D107), reset between items (D105), and is unread
+by the next seat. The notes are the vehicle.
+
+**What earns a note (all three must hold).**
+- The fact was not already written down where a reader would find it in one step, and it took a tool
+  call (or a chain of them) to establish.
+- Another seat or item will plausibly need it again (durable, cross-item value).
+- It has a **verifiable anchor**: a path + symbol/line, a command, a URL, or a commit/issue id.
+
+Never record: a restatement of code one read returns; run-local or transient state (this run's pid, a
+one-off count); or anything already in the note file.
+
+**Shape of a note (machine-checkable by design).** One bullet per fact, carrying the question, the
+answer, the **provenance**, the day/commit it was established, a `confirmed` vs `reported` marking
+(only `confirmed` if the seat observed or re-ran it), and — where possible — a `staleIf` anchor check.
+That anchor is what makes decay *mechanical*: a checker re-resolves the path+symbol (or the commit)
+and flags or purges a note whose anchor no longer holds, instead of waiting for a human to re-read the
+whole base.
+
+**Topic files, and cross-seat access — YES.** Notes group into one file per topic
+(`docs/notes/<topic>.md` by default; the team sets the exact path), so a reader can load a whole topic
+at once and grep across topics. They are **shared across seats**, because the value is that an `impl`
+lookup saves `qa`/`devtools` the same tool calls. Two constraints are inherent and must be designed
+around, not assumed away:
+- **Worktree isolation (D49).** A seat works in its own per-item worktree, so a notes file in the main
+  tree is *invisible* in that worktree and a note written inside a worktree dies with it. The store must
+  therefore live somewhere every seat resolves regardless of worktree — a repo-committed `docs/notes/`
+  (visible once a worktree forks from a commit carrying it; a possibly-stale read) or an out-of-worktree
+  shared directory resolved by an absolute path/env var (always current, not versioned). The team picks
+  one and **states its staleness behavior**; a design that silently reads a stale or absent file is a
+  defect, not a nuance.
+- **One writer per file.** Concurrent seats must not interleave edits into one shared file; capture is
+  append-only, or the curator is the single writer.
+
+**Invalidation and a curator.** Information discovered yesterday is wrong today. The operator's
+strongest point is that purge cannot be left to chance: decay is partly mechanical (re-resolve the
+anchor / `staleIf`) and partly judgement (a source moved, an answer changed, two notes conflict). A
+**curator** duty — a periodic review-and-purge pass over the base, with authority to delete — is part
+of this tactic, not an optional extra. Whether that is a standing **seat** (the operator proposed one)
+or a periodic duty on an existing seat (e.g. `scribe`) is the **operator's call** — new seats are the
+operator's grant, so `pm` escalates it rather than creating one.
+
+**Capture prompt (the improvement the operator asked for).** The seat instruction should read:
+*before you finish — or before a reset/compaction boundary — record what you learned that is not
+already written down; one line per fact: the question, the answer, and where it came from; a note
+without provenance is not accepted; mark it `confirmed` only if you observed it; do not record what one
+read returns or what is true only for this run; if a note you relied on was wrong or stale, correct or
+delete it; keep the delta under a minute.* At a reset/compaction boundary, also write the short
+handoff (what you were doing, what is done, what is next, any blocker) — reuse the existing
+`resetSeatContext` handoff (`src/reset.mjs`); do not add a second boundary mechanism.
+
+**Why.** The team's scarcest, most expensive resource is a seat's context and the tool calls that fill
+it, and the same lookups recur across items and seats (the operator's framing: an agent will want to
+retrieve a whole topic's previously-queried information at once). Today that knowledge lives only in a
+transcript that is compacted, reset, and never read by the next seat — so it is found, then paid for
+again. Provenance + `staleIf` + a curator turn the base from a wiki that rots into something checkable.
+
+**Alternatives.** (a) Rely on the durable transcript — rejected: D105/D107 exist because the next
+context does not carry it. (b) A free-form handoff in the completion message — rejected at this scale:
+not topic-retrievable across seats, not checkable. (c) Curator-only capture (the notekeeper reads every
+conversation) — rejected as the *sole* mechanism: the author has the context in hand and pays almost
+nothing to record it, whereas a reader must re-derive it; the curator is for validation/purge, not
+primary capture. (d) No staleness mechanism — rejected: an un-audited base actively misleads.
+
+**Cross-refs.** D49 (per-item worktrees), D101–D103 (the durable-TUI/rebrand context this ships
+alongside), D105 (cross-item reset), D107 (intra-item compaction), `src/reset.mjs` (the handoff
+boundary).
+
+**Status.** Operator directive, RULED and recorded. **Not implemented.** Routed to `pm` for
+registration + decomposition + routing. Acceptance is FULL (no partial paths, no stubs): a seat that
+completes an item leaves a topic note with provenance and a `staleIf` anchor; the base is readable from
+a second seat while the first is in its own worktree; capture is wired to the reset/compaction
+boundary; a validating/purge path exists; demos prove each, plus `node --check`, the full suite, and a
+non-author verify.
+
+---
+
+## D109 — Agent-driven git runs are non-interactive; an interactive editor/pager/prompt must never block a seat or the delegate (operator directive, 2026-10-18)
+
+**Decision.** Every git invocation driven by an AGENT — a durig seat or the external delegate — MUST be
+non-interactive. Concretely:
+- The agent environment exports `GIT_EDITOR=:` and `GIT_SEQUENCE_EDITOR=:` (git runs the editor through
+the shell, so `:` is a no-op), `GIT_TERMINAL_PROMPT=0`, `GIT_MERGE_AUTOEDIT=no`, and a non-paging
+  `GIT_PAGER=cat`/`PAGER=cat`.
+- Agents commit with an explicit message (`-m` / `-F <file>`), amend with `--no-edit`, and merge with
+  `--no-edit`. A bare `git commit` is a defect, not a convenience.
+- The operator's OWN interactive `core.editor` is left untouched; the fix is scoped to agent runs.
+- A short `git` skill (K3, `docs/reviews/agent-skills-review.md`) carries these as exact commands.
+
+**Why.** The reported symptom is real and reproducible: `git var GIT_EDITOR` on this host returns
+`"…Microsoft VS Code\bin\code" --wait`. Any `git commit` without `-m` therefore launches VS Code and,
+because of `--wait`, BLOCKS the agent until a human closes the window. `GIT_TERMINAL_PROMPT=0` stops a
+credential prompt from hanging a headless run the same way, and a pager can swallow output. The
+non-interactive editor is the only fix that does not depend on every model remembering `-m` every
+time; the practice layer is the belt to that suspenders.
+
+**Where.** Three surfaces, all of which must carry the vars so a seat cannot lose them by tool choice:
+the seat environment built by `makeSeatEnv` (`src/seattools.mjs`, wrapping `NodeExecutionEnv`); the
+broker's own process env; and the launcher `scripts/serve-noroot.ps1` (convenience for the operator).
+
+**Status.** Ruled (delegate, operator directive). NOT implemented. Routed to `pm`; acceptance is a run
+whose bare `git commit` does not open an editor, plus `node --check`, the suite, and a non-author
+verify.
+
+---
+
+## D110 — Worktree naming and location standard: one taxonomy, one root, outside the working tree (operator directive, 2026-10-18)
+
+**Decision.** Worktrees follow ONE taxonomy and ONE resolved root.
+
+| Class | Path | Name / branch | Lifetime | Owner |
+|---|---|---|---|---|
+| Durable per-item workspace | `<WORKTREE_ROOT>/item-<id>` | `item-<id>` (branch `<seat>-item-<id>`) | until the item is terminal | the seat; retired by `complete_work` |
+| Verification scratch | `<WORKTREE_ROOT>/scratch/verify-<item>-<nonce>` | — | short | verifier |
+| Throwaway / broker scratch | `<WORKTREE_ROOT>/scratch/wt-<item>-<sha>` | — | swept by the broker | broker |
+| Archive (out of tree) | `<repo-parent>/<repo>.worktrees/` | preserved names | until reclaimed | operator |
+
+**The `item-<id>` basename is LOAD-BEARING and must not be renamed:** `src/worktree.mjs`
+`removeSeatWorkspace` recomputes `join(worktreeRoot, "item-<id>")`; `src/broker.mjs` parses
+`/^item-(\d+)$/` off the path basename and the branch ref; the `prepare_workspace` row in
+`docs/FEATURES.md` documents `<root>/item-<id>`. The drift is in the SCRATCH names and the ROOTS, not
+the durable name.
+
+**The root rule.** `WORKTREE_ROOT` is resolved ONCE (config/env `DURIG_WORKTREE_ROOT`) and defaults
+**outside the repository working tree**. It is never the repo root and never a subdirectory of another
+worktree. Creating a worktree inside the working tree is refused.
+
+**Why.** The observed state is 173 registered worktrees with no single root: 69 directly in the repo
+root, 67 in the `../pi-opendurig.worktrees/` archive, 9 under the OS temp dir, at least 4 NESTED inside
+another item worktree (`pi-opendurig/item-1669/…`, `item-1631`, `item-1266`, `item-1236`), and a long
+tail of one-offs. Today `prepare_workspace` defaults `worktreeRoot` to `process.cwd()`
+(`src/seattools.mjs` / `cli.mjs`), so worktrees land INSIDE the working tree: they show as untracked
+directories in `git status` (65 untracked `item-*` entries), they are swept by a careless `git add -A`,
+and `carryVisibleState` (`src/worktree.mjs`, #998) exists precisely because a sibling `item-<id>`
+appears in the source's status. A single out-of-tree root makes cleanup, sweeping, and status honest.
+
+**Constraint.** The root change is a behaviour change with live artifacts (the 65 root `item-*` dirs)
+and load-bearing cleanup regexes; the implementing item must ship a migration/compat path and prove the
+broker's item-status sweep still finds the durable worktrees. It must not silently orphan an existing
+worktree.
+
+**Status.** Ruled (delegate, operator directive). NOT implemented. Routed to `pm`; acceptance is the
+single resolved root, the refusal guard, cleanup/sweep parity, demos, `node --check`, the suite, and a
+non-author verify.
+
+---
+
+## D111 — Every CLI/UI read is served by the broker's pi-durable instance through the read spool; no second store opener (operator directive, 2026-10-18)
+
+**Decision.** When a broker is alive, the CLI's read verbs (`ps`, `queue`, `status`, `watch`, `log`,
+`events`, `metrics`, `check`, `worktree audit`) and `ui.mjs` MUST read through the broker, not by
+opening the store themselves. The broker serves a `read` spool op with its OWN `Storage`/
+`viewState`, and the result lands in the command spool's existing result channel
+(`<db>.broker.inbox.out/<requestId>.json`); `src/readclient.mjs` is the client half. Only when NO
+broker is alive does a read verb open the store directly — it is then the sole owner.
+
+**Why.** pi-durable is a library with **one owner per process**, and its own model is "one owner,
+many clients". `SqliteStorage.document()` wraps a READ in `this.db.transaction(...)`, which is
+`BEGIN IMMEDIATE` (`vendor/pi-main/packages/durable/src/storage/sqlite/storage.ts:552`, `.../sqlite/node.ts:146`)
+— a WRITE lock even for a read. So a second process that opens the store (a `log --follow` / `watch` /
+`ui.mjs` poll) takes the broker's write lock; the broker's `SqliteStorage` then waits out its 5 s busy
+timeout and throws `SessionFailed`, poisoning the whole broker session (the 2026-10-18 wedges). The
+library offers no cross-process socket, so the CLI cannot be an in-process client of the broker; the
+spool is the client surface. This SUPERSEDES D94's rejection of routing reads through the broker for
+the read path: a true read-only open is not a seam (`document()` still needs `BEGIN IMMEDIATE`, and
+`SqliteStorageOptions` is `{prefix}` only), so the broker must be the only opener. D94's writes-through-
+the-spool half stands.
+
+**How.** `src/brokerread.mjs` is the closed set of read views (`seats`, `queue`, `roots`, `health`,
+`live`, `entries`, `feed`, `document`, `exhausted`, `older`) applied by `dispatchRead` over the broker's
+`probeStorage`; `read` joins `SPOOL_OPS`. The client sends the non-secret config subset only (never the
+provider key). Coarse views, not a storage-method proxy: `readRigHealth` makes dozens of storage calls
+per poll, and a round-trip per call would make `status` take minutes. The resident broker passes
+`waitForWakes:false`, so its passes do not park on runs — a spooled read is answered at the next pass
+(bounded by the ~1 s idle re-check).
+
+**Trade-off (accepted).** A read now depends on a live broker answering: if the broker is truly hung, a
+read waits/times out instead of reading a stale-ish store. That is the correct shape — a hung broker is
+the incident, and a second opener is what wedged it.
+
+**Status.** Implemented. Evidence: `demo/broker-read.test.mjs` (views equal the direct readapi calls; an
+unknown view is dead-lettered; `readViaBroker` round-trips through the broker's instance);
+`demo/command-spool.test.mjs` (vocabulary) and `demo/cli-broker-refuse.test.mjs` (read verbs work while a
+broker drives) updated; live: `status`/`queue`/`ps`/`log` each drained an `INTENT delivered=1` from the
+running broker.
+## D113 — Control-plane spool ops are OPERATOR-ONLY; `up` seat-creation is a separate carve-out (lead #2215, 2026-10-18)
+
+**Decision.** Control-plane broker spool ops — `pause`, `configure`, and any FUTURE control-plane spool
+op — are OPERATOR-ONLY, gated by the `from`/operator gate lead ruled for `pause` (lead #1952 Finding A).
+ONE gate applies to ALL control-plane spool ops, not two ad-hoc gates; it sequences WITH the active-guard
+fixes (#1780), not in held backlog.
+
+**Why.** `configure` is OPEN today: any seat that can enqueue a spool request can change the
+model/provider of ANY conversation's pi.agent doc (only a seat-existence check + `{provider, modelId}`
+validation gate it) — a privilege escalation: a seat can silently re-point another seat's work to a
+different model/service.
+
+**Carve-out.** The gate targets MUTATING an EXISTING conversation's pi.agent doc (runtime cross-seat
+reconfiguration). Seat CREATION — `up` writing a NEW seat's initial doc, including the D105 (c) provider
+signal — is a DIFFERENT concern governed by `up`'s own authorization. If `up`'s write is routed through
+`configure`, the op must distinguish create from reconfigure. So the D105 `up` half is NOT blocked by
+this gate.
+
+**Status.** Ruled by lead #2215 (answering pm #2208; extends lead #1952 Finding A / item #1966);
+recorded 2026-10-18. Implementation tracked at #1966; the as-is gap is documented at #2186.
+
+## D112 — Broker failures are SCOPE-CLASSIFIED and the process has ONE storage connection; a stop is only "stopped" when the pid is gone (architect, item #2520, 2026-10-19)
+
+**Context.** The broker review (`docs/reviews/architecture-broker-review.md`, item #2520) found the
+live reliability cluster (repeated `PASS-FAILED SessionFailed … cause=Error: database is locked`) is not
+a missing SQLite pragma — it is a **failure-scope** defect plus a **liveness-signal** defect. pi-durable's
+failure model is terminal (`vendor/pi-main/packages/durable/src/errors.ts`: *"The Session failed … Reopen
+the Session"*), while `runWakeLoop` retries the same dead Session forever and `drivePass` aborts the whole
+pass on any single storage error. Separately, `serve --stop` can report `stopped:true` while the broker
+still owns the store, because the heartbeat interval is cleared before the unbounded F11 drain
+(`src/broker.mjs:1321-1322`) and `brokerAlive` treats a >60 s stale heartbeat as dead (`:1379`), so a
+second writer is admitted into the 2026-10-16 double-writer corruption class.
+
+**Decision.** Three durable rules, each with a recovery path:
+1. **Failure is scoped and classified.** A per-seat failure is a `wake-failed` and MUST NOT abort the
+   pass (invariant: a fault in seat X never stops seat Y). A terminal `SessionFailed` is NOT retried
+   against the same Session; the broker MUST tear down and reopen the harness in-process (recover from
+   committed state) — a bounded, jittered retry with a terminal diagnostic is reserved for genuinely
+   retryable errors (ROADMAP 158).
+2. **One owner ⇒ one connection.** The broker MUST NOT hold a second pi-durable connection
+   (`probeStorage`); every read the broker serves — the `read` spool op, `readStoppedConvIds`,
+   `readSeatRoots`, `superviseOnce` — is served from the harness's own `Storage`. This extends D111 from
+   "no second *process* opener" to "no second *connection*", the invariant D111's own rationale states.
+3. **Liveness, progress, and stopping are distinct signals.** `.broker.json` carries a `lastPassAt`
+   progress leg and a `stopping` state; `serve --stop` reports `stopped:true` only when the pid is
+   provably gone, and clears state with the pid guard (`clearBrokerState(dbPath, pid)`). "Alive" is never
+   reported as "healthy" without progress.
+
+**Alternatives considered.**
+- *Retry harder / tune `busy_timeout`* (the rejected "missing pragma" theory): rejected — the failure is
+  terminal in the Session, not a timeout, and the review's version probe shows the pinned semantics are
+  already `BEGIN IMMEDIATE` + `busy_timeout`; a longer timeout only widens the window.
+- *Treat `SessionFailed` as a crash and exit non-zero for a host to restart* (option B): correct once
+  `src/host.mjs` exists, but no host exists today, so a crash is just a permanent outage; the in-process
+  reopen (option A) is the reversible choice now and composes with B later.
+- *Keep `probeStorage` as a cheap raw reader*: rejected — `SqliteStorage.document()` takes `BEGIN
+  IMMEDIATE` even for a read, so the "raw reader" still takes the one write lock and can time out the
+  harness's 5 s busy window (`PASS ms=5051` → `SessionFailed`).
+
+**Consequences.** F2/F4/F6/F8/F1/F7/F9 in the review are retired by this decision's three rules; each has
+its own failing-first demo in the review's disposition. Cost: a reopen path must preserve an in-flight
+run's durability (pi-durable recovers from committed state, so the risk is bounded to a run that had not
+committed); `status` grows one field. `probeStorage` removal is mechanical but touches
+`readStoppedConvIds`/`readSeatRoots`/`superviseOnce` call sites and their demos.
+
+**Status.** Proposed (architect review, item #2520). Implementation items are handed to `pm`; `lead`
+rules scope if the failure-scope policy conflicts with scheduled work. Evidence so far: the review's
+grep/`node --check`/demo baseline and the version probe (see the review's Evidence section). No
+implementation is claimed here.
+
+
+## D### — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19)
+
+**Context.** The CARRY/teardown collision (incident
+`docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`): `createWorktree`'s CARRY (#506 /
+ASK F) copied the source tree's visible dirty state into EVERY fork, while teardown is clean-only
+(D60). So while the shared tree was dirty, a completed item's worktree was BORN dirty with foreign
+paths and could never be removed — every completion leaked a tree and pinned its branch.
+
+**Decision.** The seat path (`claimWorktree` → `prepareSeatWorkspace`) passes `carry: false`, so a
+seat's item worktree is a **clean HEAD checkout** and its teardown works even while the shared tree is
+dirty. CARRY remains an **explicit opt-in** (`carry: true`) for a direct caller that wants the
+anti-stale guarantee (#240). The clean-only refusal (D60) is UNCHANGED — no carried path is ever
+tolerated or force-removed. This **SUPERSEDES #506's seat-path carry** (the fork is no longer "a tree
+neither git nor the operator tracks": it is HEAD plus an enumerated, returned carry list).
+
+**Alternatives considered.** (1) Teardown tolerates carried-foreign paths — **rejected**: introduces a
+data-loss surface (a fingerprint bug could discard a seat's real uncommitted work) against D60's
+absolute rule. (3) An attention kind that surfaces the leak — **rejected**: it names the problem but
+does not fix it.
+
+**Status.** Accepted by `lead` (#2648, option 2 of #2360); implemented by `impl` (impl-item-2360
+@`4813a50`): `src/worktree.mjs` `createWorktree` gains `carry` (default true) and the seat path passes
+`carry: false`. Proof: `demo/worktree-carry-teardown.test.mjs` (new — seat fork born clean and
+`removeClaimedWorktree` succeeds; opt-in carry still carries), `demo/worktree-recursive-carry.test.mjs`
+and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path. Recorded by `scribe`
+(#2658).
+LANDING NOTE: D-number assigned at LAND TIME — D113 is taken (spool-op authorization, scribe-item-2219);
+re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge (do not hard-code).
+
+## D114 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
+## D113 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
+
+**Context.** The operator backlog asks that "waiting on the operator" be **visible and answerable**
+(operator-directives-2026-10-19-2 §3). The state already exists: `defer_work` (and the supervisor's
+escalation) park an item as `status:"deferred"` + `deferredTo:"human"` + `question` + an append-only
+`deferred` transition (`src/rig.mjs:115,692-700`), and `src/attention.mjs:359-366` already derives a
+`deferred_awaiting_answer` notice. What is missing is (a) an operator-facing **read view** that names
+this as "waiting on you", and (b) an **answer flow** — today only the **seat** can leave `deferred`
+(`resume_work`, `src/rig.mjs:721-745`), and a `deferred` item is **never** re-woken by `selectWakes`,
+so a dead seat strands it. Full design: `docs/reviews/architecture-operator-wait-visibility.md`.
+
+**Decision.**
+1. **Representation is reused, not extended.** `deferredTo === "human"` is the marker; an answer is
+   recorded as one more entry in the EXISTING append-only `transitions` array (`{event:"answered",
+   by:"operator"}`). No new field, no new document.
+2. **Visibility is a read-only derivation** over the persisted queue (the D24 shape): a `waiting` view
+   (operator vs seat, oldest-first, with `ageMs`), surfaced by `status` and `queue --waiting`, served
+   through the broker's read spool (D111).
+3. **The answer is one spool op** (`op:"answer"`, added to `SPOOL_OPS` at `src/broker.mjs:368`) that the
+   broker applies with its OWN harness — the sanctioned extension (ROADMAP 71), not a new write path:
+   append the `answered` transition + flip `deferred → claimed` (the `resume_work` flip) + deliver the
+   text as an operator input. A resumed item is re-woken by the stalled-claim branch
+   (`src/driver.mjs:56-64`), so the flow self-heals.
+
+**Alternatives considered.**
+- *Reuse `message` with zero new ops* (C1): no new vocabulary, but the resume depends on the seat acting,
+  so a dead seat leaves the item `deferred` forever (the seed-incident class). Kept as the fallback if
+  "no new write path" is read to bar a new op.
+- *Add `item.answer` / an answers document* (C3): rejected — a new schema, forbidden by the constraint
+  and contrary to D24's read-only ethos.
+- *Have the CLI open a harness and write the resume itself* (C4): rejected — a second writer (the
+  2026-10-16 corruption class); the write guard refuses it.
+
+**Consequences.** No schema migration; the answer is durable and legible in the audit trail; the operator
+can unblock a seat without the seat's cooperation. Cost: one op in the spool vocabulary and one read
+view; the CLI grows `answer`/`queue --waiting` and `status` grows a headline. Open policy questions
+(auto-resume vs seat-resume; seat-to-seat symmetry) are listed in the design doc §7 and are for `lead`.
+
+**Status.** Proposed (exploration, item #2700). Not sequenced; `pm` sequences design then decomposition.
+D-number uses the next free slot; scribe's pending D113 lands first and lead #2452 re-derives numbers at
+land time. Evidence: the code citations above; no implementation is claimed.
+## D115 — F12: ONE seat-relative `workable(item, seat)` predicate, OWNED by #2673; claimability is its seat-projection, NOT a stage; `deferred` is its own stage (lead, 2026-10-19; recorded by scribe, item #3031)
+
+**Context.** The queue-lifecycle redesign v2 (`docs/reviews/queue-lifecycle-redesign.md`, ACCEPTED as design of
+record) makes claimability a function, not an item property. Architect F12 (review @5c50f34; escalations
+`#3001` + `#3010`) flagged that `#2673`'s `workable(item, seat)` (oldest-WORKABLE claim selection) is the
+SAME seam as the redesign's "claimability", and that a stage-level "claimable" is unsound because
+claimability is seat-relative (per-seat `requires`, `src/rig.mjs:393`, is not persisted).
+
+**Decision.** There is ONE predicate, not two — name it `workable(item, seat)`; the redesign's
+"claimability" is NOT a second predicate, it is the seat-projection of the same one:
+1. **Single source of truth.** Exactly one definition of "can seat s claim item i right now", in one module,
+   consumed by BOTH (a) `claim_work`'s oldest-workable selection (`#2673`) and (b) the broker WAKE selection
+   (`#2712`). No second implementation of "claimable".
+2. **Claimability is a projection, not a stage.** "Item i is claimable" is DEFINED as: ∃ eligible seat s such
+   that `workable(i, s)`. It must NOT be a stage of the item state machine — F1 shows why: claimability is
+   seat-relative, so any stage-level "claimable" is unsound.
+3. **Inputs are persisted, never live-only.** The predicate reads `stage` + `held` + the structured gate
+   fields (`blockedBy` dependency, `requires` capability) + the seat's advertised capabilities. Persisting
+   `requires`/`blockedBy` via the EXISTING enqueue path is `#2951`'s job, so `#2951` is a PREREQUISITE:
+   until it lands, §1's partition is genuinely false (F1) and must not be claimed.
+4. **`deferred` is its own stage**, not `active`-with-block. §1(b) forbids active-with-block; encoding
+   deferred that way would make parked work look claimable — a seat could claim work whose blocking question
+   is unanswered. SAFETY WINS: `deferred` is non-claimable by construction.
+5. **Ownership.** The single `workable(item, seat)` is OWNED by `#2673` — `#2673` implements it (predicate +
+   failing-first demo). The redesign CONSUMES it: it must not define a second predicate and must not restate
+   the predicate body. Division: the REDESIGN owns the stage model (incl. the §2 fix, `deferred` as its own
+   stage); `#2673` owns the predicate that reads those stages plus the persisted gate fields.
+6. **Not independent.** The two must NOT land independently. Ordering: `#2951` (persist gate fields) →
+   `#2673` (predicate + demo) → `#2712` (wake consumes) → only THEN may the redesign assert its §1
+   partition. The redesign may land its read-only parts early (OQ5 phase 1), but its claimability / §1
+   invariant may not land before `#2673`.
+7. **Safety (explicit).** The `requires` / fault clauses are NOT implementable today because `requires` is
+   not persisted on any item (`src/rig.mjs:393`). Landing them anyway would ship a predicate that silently
+   MIS-SELECTS — starvation of a claimable item, or a claim on un-claimable work. Safety wins: no landing of
+   the `requires` / fault clauses until `#2951` persists the field.
+
+**Why.** `#2673` and the redesign answer the same question ("can this be claimed?"). Two predicates drift,
+and drift is exactly the starvation / never-woken bug class `#2673`/`#2712` exist to fix. One predicate with
+a seat parameter keeps the claim path and the wake path in agreement, and makes §1's partition true once the
+gate fields are persisted.
+
+**Alternatives rejected.** (a) Two predicates (redesign-owned + `#2673`) — rejected: the same seam with two
+definitions drifts into the starvation/never-woken class; (b) claimability as an item stage — rejected:
+claimability is seat-relative (per-seat `requires`), so a stage-level "claimable" is unsound (F1);
+(c) `deferred` folded into `active`-with-block — rejected: parked work would look claimable (safety).
+
+**Status.** RULED by `lead` (2026-10-19, item #3031, escalations #3001/#3010; supersedes cancelled #3003).
+Recorded by `scribe` in the R1b serialized pass (#3089). Consistency: the structured gate field is D53
+(#2952/#2918), one field, no prose parsing. Enforcement: `#2673`'s failing-first demo must include a
+CROSS-CONSUMER AGREEMENT case — for the same item and seat, claim-selection and wake-selection return the
+same verdict. No implementation is started by this entry. D-number minted at land time.
+## D116 — Redesign v2 build rulings: OQ5 sequencing chain, M1 SPLIT (field-early / axis-fenced), OQ2 `reviewBy` defaults with one fire per epoch (lead, 2026-10-19; recorded by scribe, item #3046)
+
+**Context.** The queue-lifecycle redesign v2 was ACCEPTED as design of record. Its open questions were ruled
+by `lead` (#3002 OQ5, #3044 M1 split, #3008 OQ2). The accepted model has two orthogonal axes
+(`stage`/`block`), typed `block`s with a mandatory `resolver` and a `reviewBy` (unless self-clearing or
+`backlog`), and queue-scoped attention kinds. The build must not land the axis change before the read-only
+half, and `reviewBy` defaults must bound the `parked-review-due` firehose.
+
+**Decision.** Three rulings, recorded as one decision family (they govern the same build):
+1. **OQ5 — sequencing chain (Phase 1 lands now).** Phase 1 (can land now): READ-ONLY check rules (on AUTHORED
+   blocks only) + queue-scope attention — additive, no write path, independently verifiable. Phase 2:
+   `#2951` — persist the gate fields via the EXISTING enqueue path (prerequisite for the predicate axis).
+   Phase 3: the reliability cluster `#2420`/`#2483`. Phase 4: the `rig.mjs`/`driver.mjs` AXIS change (stage
+   machine + the single `workable` predicate, `#2673` then `#2712`), reconciled per F12 (#3031). ONE writer
+   per seam at a time; the fence is safety-conservative — do not move the claim/wake axis while the
+   reliability cluster is in flight.
+2. **M1 SPLIT — field-early vs axis-fenced.** M1 is split: **M1a (field-early)** persists the structured
+   gate field (`block`/`blockedBy`/`requires`) via the EXISTING enqueue path — this is `#2951`'s slice,
+   landable at Phase 2, no new write path, no parallel store (D53), no mapping/predicate. **M1b
+   (axis-fenced)** is the `effectiveStage`/`effectiveBlock` mapping pair — lands at Phase 4, fenced behind
+   the reliability cluster (`#2420`/`#2483`), and the single `workable` is `#2673`'s ONE predicate (F12,
+   #3031), implemented once; `#2712`'s wake consumes the same one. No second definition. **Dependency
+   direction: M1b → M1a, never the reverse** — M1a (the field) is the prerequisite M1b (the mapping) reads.
+3. **OQ2 — `reviewBy` defaults with one fire per epoch.** Defaults: `operator` 3 d, `schedule` 14 d,
+   `resource` 3 d, `manual` 7 d, `dependency`/`roadmap-gate` 7 d, `backlog` none, `question` n/a (v1's
+   `manual` 1 d is withdrawn — it floors the median-16 h population into immediate nag). Monotone in
+   urgency/volatility: operator (3 d) and resource (3 d) shortest (they block a human decision / stall a
+   seat); manual + dependency/gate 7 d middle; schedule 14 d longest (inherently far-horizon); backlog none
+   (explicitly parked, must not nag); question n/a (already surfaced by the `waiting` derivation). **One
+   fire per (item, `reviewBy` epoch)** — a notice fires ONCE per epoch, re-armed only when `reviewBy` is
+   explicitly bumped; a re-scan does not re-fire (idempotent, replayable); the durable attention surface
+   carries the state, so the notices are a snapshot, not a stream.
+
+**Why.** The sequencing prevents a red `check` across the unmigrated store from stopping every landing
+(CR-1): enforcement judges AUTHORED blocks only, so the read-only half (Phase 1) ships before the axis
+migration without turning the store red. The M1 split lets the structured field land early (M1a) without
+prematurely committing to the axis model (M1b), and keeps one `workable` (F12/#3031) with a clear
+dependency direction. The `reviewBy` defaults bound the `parked-review-due` firehose over the ~160-row
+legacy population (F10/CR-2); one-fire-per-epoch keeps the surface a state snapshot, not a nag stream.
+
+**Alternatives rejected.** (a) Ship the axis change before the read-only half — rejected: a red `check`
+blocks every landing (`land.md --suite` runs `check`); (b) a single monolithic M1 — rejected: it couples the
+field persistence to the axis mapping and can't ship the gate field early; (c) tighter `reviewBy` defaults
+(manual 1 d) — rejected: it floors the measured median-16 h population into immediate nag.
+
+**Status.** RULED by `lead` (2026-10-19, item #3046, from #3002/#3044/#3008; supersedes cancelled #3012).
+Recorded by `scribe` in the R1b serialized pass (#3089). Implementation items M1a (#3062, impl-item-3062
+@eb3b337), M1b (#3063, impl-item-3056 @6ddf538 — `workable` removed), M3 (#3019), M4 (#3020), M5 (#3021),
+M6 (#3022), M7 (#3023) are registered; OQ2 defaults fold into M1/M4 (#3050). D-number minted at land time.
+## D117 — R4 acceptance shape: the `#2955` chain is the ACCEPTANCE SHAPE for the queue-lifecycle v2 work (operator, 2026-10-19; recorded by scribe, item #3089 / R4)
+
+**Context.** Operator ruling 2026-10-19 asked that the ACCEPTANCE SHAPE for the queue-lifecycle v2 work be
+citable and NOT reconstructed from memory. R4 records it: the shape is "accepted as recommended" + the
+`#2788`/`#2789`/`#2804`/ADR chain — i.e. the operator's ruling on the design, plus the build items and the
+`waiting`-derivation ADR that implement it.
+
+**Decision.** The ACCEPTANCE SHAPE for the queue-lifecycle v2 work is: the operator's "accepted as
+recommended" ruling (on `docs/reviews/queue-lifecycle-redesign.md` v2) + the `#2788`/`#2789`/`#2804` chain
+(the `waiting` view, the `answer` spool op, and the render rule) + the `waiting`-derivation ADR
+(`impl-item-2744` = the D113 entry). This is the acceptance shape; it is queue-citable at `#2955` and does NOT
+require the operator to re-state prose. `#2698` (advocate ETARGET review) stands with a one-line re-verify.
+
+**Status.** Recorded by `scribe` in the R1b serialized pass (#3089, R4). D-number minted at land time.
+
+## D118 — R1–R7 are ACCEPTED OPERATOR RULINGS for the queue-lifecycle v2 and land/hold work (operator, 2026-10-19; recorded by scribe, item #3089 annex)
+
+**Context.** Operator acceptance `operator-accepts-r1-r7-2026-10-19-1` (21:52:23Z) accepted R1–R7 in full,
+making them OPERATOR RULINGS (not delegate recommendations). R1 (landing window OPEN, delegate drives), R1b
+(DECISIONS.md writers serialize as ONE scribe pass, minting free numbers at land time), R2 (`#2797` KEEP +
+CONSOLIDATE, `#2806` CANCEL), R3 (`#2630` stays HELD until `#2797` lands), R4 (the `#2955` acceptance
+shape), R5 (`#2949` CLOSED by evidence), R6 (`#2598` RELEASE and RE-QUEUE), R7 (six stale escalations
+consumed and closed).
+
+**Decision.** R1–R7 are ACCEPTED OPERATOR RULINGS (operator, 2026-10-19) and bind the queue-lifecycle v2
+work and the land/hold rulings as the same decision family. In particular: the landing window is OPEN and the
+DELEGATE drives (`land.mjs` waits for generation slots, broker stays UP); the DECISIONS.md writers
+serialize as ONE scribe pass minting free numbers at land time in issue order; `#2797` is kept + consolidated
+(re-pointed to `e4fd338`), `#2806` cancelled; `#2630` stays HELD until `#2797` lands; the `#2955` acceptance
+shape is citable; `#2949` is closed by evidence (scripts/ restored, `node --check scripts/land.mjs` exit 0);
+`#2598` is released and re-queued behind M1a; the six stale escalations (`#2942`/`#2943`/`#2947`/`#2948`/
+`#2673`/`#2797`) are closed.
+
+**Status.** Recorded by `scribe` in the R1b serialized pass (#3089 annex). No fresh D-number for this entry
+per the R1b rule (it records the same decision family; the design-of-record and land/hold rulings share the
+family). D-number minted at land time.
+
+## D119 — D113 pre-check (R1b): the reservation is VOID — a dangling commit cannot hold a number; #2284 must be re-branched or re-authored (scribe, item #3089)
+
+**Context.** R1b required a pre-check on D113 before minting: its reservation (scribe-item-2219, #2284)
+rests on commit `fd4c233`. The pre-check result: `fd4c233` is a REAL commit but DANGLING — it is
+unreachable from any branch (`git branch -a --contains fd4c233` is empty) and does NOT merge cleanly onto
+`main` (merge-tree exit 1, conflict in docs/DECISIONS.md). The live branch `scribe-item-2219` exists at
+`a822bbf` holding the D113 entry, but IT ALSO conflicts against `main` (merge-tree exit 1).
+
+**Decision.** D113 is NOT reserved — the reservation is VOID (a dangling commit cannot hold a number).
+`#2284`'s recoverability decides whether the D113 entry lands, not the number: `fd4c233` still dangling →
+**re-branch** `scribe-item-2219` (at `a822bbf`) and land it (after a non-force rebase to clear the
+DECISIONS.md conflict); if the branch were gone → re-author the entry docs-only. D113 does NOT block the
+other DECISIONS entries (#3011/#3031/#3035/#3046) — they mint the next free numbers in issue order.
+
+**Status.** Pre-check run by `scribe` (item #3089, R1b). D113 remains void until #2284 is re-branched and
+re-landed. D-number minted at land time.
+
+## D120 — Queue lifecycle redesign v2 is ACCEPTED as the design of record; it LEADS capability work (operator, 2026-10-19; recorded by scribe, item #3035)
+
+**Context.** The queue can orphan work because a parked item is not required to name a machine-readable
+reason it is parked, nor who or what clears it, nor a date by which someone must look again. The incident
+`docs/incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md` is the live instance: held rows whose
+cited queue gates all cleared stayed parked forever (`#2630`, gated on the non-terminal `#2797`/`#2806`).
+The proposal `docs/reviews/queue-lifecycle-redesign.md` (v1) was reviewed independently by `architect`
+(`#2984`, `docs/reviews/architecture-queue-lifecycle-redesign-review.md`, 4 blockers + 13 CRs) and
+`advocate` (`#2985`, `docs/reviews/advocate-queue-lifecycle-redesign.md`, 8 CRs); the reviews found real
+defects in v1 (F1/F2/F3/F4/F7/F8/F9/F11, CR-1/CR-3/CR-6 — substantive design corrections, not polish).
+
+**Decision.** v2 of `docs/reviews/queue-lifecycle-redesign.md` (commit `defbc34`; acceptance recorded at
+`e788668`) is ACCEPTED as the **design of record** — it incorporates every review finding with a stated
+disposition in §13, and where v1 and v2 disagree, v2 wins. The operator ruled (2026-10-19) that this
+redesign **leads capability work** (defect fixes and the prerequisites it depends on are not capability
+work and land first). The accepted model in substance:
+
+1. **Two orthogonal axes** replace the status soup: `stage` (`open`/`active`/`closed`) and a nullable
+   `block`. `held`/`deferred` stop being statuses and become `block` shapes; a block cannot exist without
+   a `resolver`.
+2. **Blocks are typed, sourced, and multi-constraint.** `block.source: declared|legacy`; a block may
+   carry several `constraints`; the one automatic action (auto-open) fires only for a *declared*
+   `dependency` whose every constraint is a completed queue gate — legacy prose gates are never promoted
+   to a dependency by inference.
+3. **Every block has a trigger**, including a stuck gate: `gate-cleared-unreleased` and `gate-stalled`
+   (queue-scoped attention kinds), plus `parked-review-due` and `orphan-no-progress`.
+4. **`check` rules enforce well-formedness on authored blocks only** — never on the read-mapping of
+   legacy rows, so enforcement can never turn `check` red across the unmigrated store and stop landings.
+
+Gate-completion is an event (the closing commit, `complete_work`/`cancel_work`, with a broker-pass
+backstop) that atomically releases declared dependents whose every queue constraint is done. The
+migration is additive and lazy: the read-only half (check rules + queue-scope attention) ships first; the
+`rig.mjs`/`driver.mjs` axis change is sequenced behind the standing reliability cluster (`#2420`/`#2483`).
+
+**Scope questions still open for `lead` (the decision does not answer them).** (a) F12 — `#2673`'s
+lead-ratified `workable(item, seat)` is the same seam as this design's claimability, and its
+`requires`/fault clause is not implementable because `requires` is not persisted; one predicate or two —
+the redesign should own one `workable` or the two must not land independently. (b) F11 — there is no
+landed decision behind the `waiting` derivation; either land the architect's draft ADR with the `block`
+model as its source, or the proposal stops citing it (v1's D114 citation is withdrawn).
+
+**Alternatives rejected** (each with the review's reason): add a `parked-review-due` attention to today's
+`held` (treats the symptom, leaves reason/gate in prose); add more statuses (`blocked`,
+`waiting-operator`, `backlog` — the two-axis model carries the same information); a background unsticker
+that releases anything whose prose cites a done item (proven unsafe by the measured 59 candidates, mostly
+landing-list/backlog/do-not-start); a maintained reverse index of dependents (a second source of truth
+that drifts).
+
+**Status.** ACCEPTED — design of record (operator ruling, 2026-10-19). Recorded by `scribe` (item
+#3035). The design doc already marks the acceptance at `docs/reviews/queue-lifecycle-redesign.md`
+(commit `e788668`). Implementation items are handed to `pm` (register M1–M7 and route F12/F11 to `lead`);
+the prerequisites `#2983` → `#2992` → `#2420`/`#2483` are built but unlanded. This entry is a decision
+record, not an implementation claim — no code change accompanies it.
+
+## D114 — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19)
+
+**Context.** The CARRY/teardown collision (incident
+`docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`): `createWorktree`'s CARRY (#506 /
+ASK F) copied the source tree's visible dirty state into EVERY fork, while teardown is clean-only
+(D60). So while the shared tree was dirty, a completed item's worktree was BORN dirty with foreign
+paths and could never be removed — every completion leaked a tree and pinned its branch.
+
+**Decision.** The seat path (`claimWorktree` → `prepareSeatWorkspace`) passes `carry: false`, so a
+seat's item worktree is a **clean HEAD checkout** and its teardown works even while the shared tree is
+dirty. CARRY remains an **explicit opt-in** (`carry: true`) for a direct caller that wants the
+anti-stale guarantee (#240). The clean-only refusal (D60) is UNCHANGED — no carried path is ever
+tolerated or force-removed. This **SUPERSEDES #506's seat-path carry** (the fork is no longer "a tree
+neither git nor the operator tracks": it is HEAD plus an enumerated, returned carry list).
+
+**Alternatives considered.** (1) Teardown tolerates carried-foreign paths — **rejected**: introduces a
+data-loss surface (a fingerprint bug could discard a seat's real uncommitted work) against D60's
+absolute rule. (3) An attention kind that surfaces the leak — **rejected**: it names the problem but
+does not fix it.
+
+**Status.** Accepted by `lead` (#2648, option 2 of #2360); implemented by `impl` (impl-item-2360
+@`4813a50`): `src/worktree.mjs` `createWorktree` gains `carry` (default true) and the seat path passes
+`carry: false`. Proof: `demo/worktree-carry-teardown.test.mjs` (new — seat fork born clean and
+`removeClaimedWorktree` succeeds; opt-in carry still carries), `demo/worktree-recursive-carry.test.mjs`
+and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path. Recorded by `scribe`
+(#2658).
+LANDING NOTE: D-number assigned at LAND TIME — D113 is taken (spool-op authorization, scribe-item-2219);
+re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge (do not hard-code).
+## D### — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127)
+
+**Decision.** TUI cost/spend pricing is supplied by a per-provider pricing EXTENSION. A price is
+UNAVAILABLE unless an extension supplies it; the former blocker — an operator-supplied vendor price
+table — is REMOVED. The mechanism is threefold: (1) a per-provider pricing-extension interface;
+(2) the cost measure is derived from tokens through that extension; (3) when NO extension supplies
+prices, cost/spend renders "unavailable" — NEVER a fabricated or stale `$`.
+
+**Staleness.** Handled by the unavailable path: a stale price table must never render a `$`; with no
+live extension data, show unavailable.
+
+**Scope.** ROADMAP 98 stays TOKENS-ONLY (v1). This pricing decision is INDEPENDENT and NOT v1 —
+unscheduled. Owner is lead (mechanism); implementation routes to impl once scheduled. Held item #1135
+(TUI cost/spend: pricing instrument + SOURCE + staleness) is the mechanism's home.
+
+**Why.** A `$` figure with no live, current price behind it is worse than no figure: it fabricates a
+cost the product did not measure. The unavailable path keeps the UI honest under any staleness or
+absence condition.
+
+## D### — The `architect` seat: DESIGNS + RECORDS the system shape; lead RULES scope, qa/auditor VERIFY (operator grant, lead #2503; 2026-10-19)
+
+**Decision.** Add an `architect` seat to the selfdev rig — model `deepseek-ai/DeepSeek-V4.1-Flash`,
+`thinkingLevel: high`, capabilities `design` + `review` — owning the `architecture` ownership class
+(`"architecture": ["architect"]` in `rig.selfdev.json`). The seat owns durig's cross-cutting design:
+subsystem boundaries, the failure modes at those seams with a recovery path for each, and the
+decisions that outlive any one work item (recorded as ADRs in `docs/DECISIONS.md`). Proposal and
+paste-ready seat: `docs/reviews/architect-seat-proposal.md`.
+
+**Role boundary (who does what).** The architect DESIGNS and RECORDS. It does **not** rule scope or
+priority — that is `lead`'s job, and the seat is instructed to escalate a scope conflict to `lead`
+rather than decide it. It does **not** verify an implementation — that is `qa`/`auditor`'s job, and
+the seat is not the verifier of record for its own design. The split is: `lead` RULES, `architect`
+DESIGNS + RECORDS, `qa`/`auditor` VERIFY.
+
+**Distinction vs `security`.** The architect DESIGNS security-relevant controls (a trust boundary, a
+seam, a recovery path) as part of system design; `security` RATIFIES/VERIFIES the security position.
+The architect's design authority does not make it the security authority — a control the architect
+designs still needs `security`'s position (a `docs/reviews/security-*.md`) and ratification.
+
+**Distinction vs `designer`.** `designer` owns UX / user-facing polish (CLI surface, defaults, error
+wording). `architect` owns system architecture (subsystem topology, failure modes, durability of the
+design). UX is one seam the architect reasons about; it is not the designer's role.
+
+**Edges (explicit; the applied set, devtools apply item, landed `3112962`).** Least-privilege framing:
+the architect routes design work and reviews across the team, so its OUTGOING set is broad; the
+INCOMING set (who may send to the architect) is restricted to the six seats that legitimately request
+a design review or escalate.
+- `architect.maySendTo` = [`pm`, `lead`, `impl`, `qa`, `auditor`, `security`, `devtools`, `scribe`,
+  `advocate`, `designer`, `qa2`] — route work through `pm`, escalate scope to `lead`, request a design
+  review from an author/verifier, hand an applied change to `impl`/`devtools`.
+- Who may send TO `architect` (edge list includes `architect`): `pm`, `impl`, `qa`, `lead`, `auditor`,
+  `security`. NOT wired from `devtools`, `scribe`, `advocate`, `designer`, `qa2`.
+- **architect ↔ `scribe`:** architect→`scribe` IS wired — the architect authors ADRs that land in
+  `docs/DECISIONS.md`, a `docs/` surface `scribe` manages, so the architect can hand an ADR to the
+  docs owner. `scribe`→architect is NOT wired (`scribe` routes doc work through `pm`).
+
+**No constitution change.** No change was made to `constitution.txt` (`rig.selfdev.json` still points
+at it); the boundary lives in this ADR. Per-seat skills are INLINED in the seat's `instructions` (the
+architecture-method skill is inlined in the seat prompt); the constitution is not the home for them.
+
+**Why.** Architecture-level docs were previously a side duty of `qa`/`lead`. The broker-lifecycle /
+lock / spool / read-seam work of recent sessions kept needing a seat that owns the cross-cutting
+design and its failure modes — distinct from `lead` (scope/priority rulings) and from the verifiers
+(does the artifact prove it). The vendored agency-agents architect personas (MIT,
+`vendor/eval/agency-agents/engineering/engineering-multi-agent-systems-architect.md` and
+`engineering-software-architect.md`) are the skill source, consistent with how the `security` seat
+borrows its persona.
+
+**Status.** Operator grant; ratified by `lead` (#2503); applied (devtools #2514, landed `3112962` —
+`up --refresh`, broker restarted pid 17828); recorded by `scribe` (#2515). This entry is the
+narrative record of the grant and boundary; no executable check applies (a decision log).
+LANDING NOTE: D-number assigned at LAND TIME — D111 is taken (read-spool decision) and D113
+(spool-op authorization); re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge
+(do not hard-code).
+
+**Addendum (2026-10-18, #2073 — auditor #2061 boundary): a MID-FLIGHT compaction is REFUSED, legibly.**
+pi-durable's compaction does run alongside a live conversation, but its summary lands only at the seat's
+next TURN BOUNDARY, so the awaited window cannot see it: the task commits, the entry appears later, and
+the op wrongly dead-lettered as "no entry written" — a successful compaction reported as FAILED (the
+operator saw a refused compact whose entry landed a moment later). The broker now detects a RUNNING
+generation on the target seat and REFUSES the request, with a reason naming the boundary and the fix
+(`pause --wait`, or let the run settle). The required order is **QUIESCE → COMPACT → upgrade**. The op
+was NOT made to accept-and-report-pending: `ok:true` must keep meaning "a summary entry landed", which
+is the spool's whole value. `demo/compact-spool.test.mjs` now STAGES the in-flight case (a slow streaming
+faux reply) and asserts the legible refusal, that nothing is committed, and that the run is not aborted.
+**Status.** RULED and recorded (operator re-scope, 2026-10-18, relayed via lead #2197). Unscheduled;
+tracked at held item #1135. No pricing extension exists yet, so the surface currently renders
+unavailable by this rule.
+
+## D### — durable-tui: `ui.mjs` / `npm run ui` is the FALLBACK surface and is to be RETIRED (operator, 2026-10-18)
+
+**Decision.** `ui.mjs` / `npm run ui` is the FALLBACK (not a co-existing surface); the poller stays as
+last resort. `ui.mjs` will eventually be RETIRED once the durable TUI proves the multi-seat surface.
+
+**Policy.** In the interim: MINIMAL / bugfix-only maintenance (no new features). Deprecation path =
+retire after Phases 1-2 land and the durable multi-seat surface is accepted.
+
+**Status.** Execution GATED on Phases 1-2 (#2096, #2097). Held item #2098 stays the retirement-trigger
+home (decide maintenance/retirement once the durable surface is accepted; keep the poller as last
+resort). RULED and recorded (operator, 2026-10-18, relayed via lead #2197).
+
+LANDING NOTE: D-numbers assigned at LAND TIME — re-derive the next FREE D-numbers by scanning `docs/DECISIONS.md` at merge (do not hard-code; the source items are #2199 / #2239).
+
+## D-<mint> — One window resolver for every context bound: the degeneration guard's context threshold is RELATIVE to the seat's effective window (architect, item #2730, 2026-10-19)
+
+**Context.** The devtools small-local-model decay review (`docs/reviews/architecture-devtools-decay-review.md`,
+item #2730) found that the POST-SETTLEMENT degeneration guard uses an ABSOLUTE context bound —
+`DEGEN_DEFAULTS.maxContextTokens = 400_000`, compared as `contextTokens >= maxContextTokens` in
+`src/degeneration.mjs`, with `superviseOnce` calling `assessRun(...)` with no opts (`cli.mjs:1339`). For a
+local seat whose window is 64 k (`src/providers/local.mjs:25`, `DURIG_LOCAL_CONTEXT ?? 65536`) that bound
+can never be reached, so the context backstop is inert. The same seat's window is ALREADY resolved
+twice — `src/context.mjs` (`windowState`/`contextConsumption`, the three-state denominator) and
+`src/inflight.mjs` (`contextWindowFraction`, with the rule "No window => NO token bound"), plus
+`src/readapi.mjs` for display — yet the post-settlement guard consumes none of them. D84 already rules
+the trigger must be a FRACTION (~60-70%) of the measured effective window, with the ordered guard's
+abort above it (~90%); the post-settlement guard never implemented D84.
+
+**Decision.**
+1. **One resolver.** Every context bound in durig — the post-settlement `assessRun` context cause, the
+   in-flight `assessInflightTurn` volume bound, and the display fraction — MUST resolve the seat's window
+   through ONE function (`windowState` over `measured -> declared -> advertised`, with
+   `declaredContextWindow` supplying `declared`). No bound may carry its own absolute constant.
+2. **Relative, per-seat.** The context threshold is `window x fraction` (a per-seat/per-model parameter,
+   not a second hard-coded default), consistent with D84's ~60-70% trigger / ~90% abort.
+3. **No window => no token bound.** When no denominator resolves, the guard MUST NOT invent one
+   (ROADMAP 27); it falls back to the window-independent causes. (This is `inflight.mjs`'s existing rule,
+   generalized.)
+
+**Alternatives considered.**
+- *Keep the absolute 400 k and add a smaller absolute bound for local seats*: rejected — two constants
+  diverge and a third model re-opens the bug; the relative form has no constant to keep in sync.
+- *Only fix the display fraction, leave the guard absolute*: rejected — the guard is what ACTS; a correct
+  display with an inert guard is the current defect.
+- *Rely on the in-flight trigger alone*: insufficient today — `createInflightWatch` is built but UNWIRED
+  (grep: it appears only in `inflight.mjs`), and the post-settlement guard must still be correct for
+  runs the in-flight watch does not cover.
+
+**Consequences.** B and E of the review collapse into one change; a future guard cannot silently diverge
+on the denominator; the local seat's context backstop becomes live against the `declared` window today
+and upgrades to `measured` when #1087 lands, with no change of shape. Cost: `assessRun` gains a window
+input and `superviseOnce` must resolve it per seat (the resolver already exists).
+
+**Status.** Proposed (review, item #2730). `pm` sequences; the D-number is minted at land time per #3075
+(no number is reserved here; D113/D114 landed via scribe-item-3167). Evidence: the code citations above; no
+implementation is claimed.
+## D115 — F12: ONE seat-relative `workable(item, seat)` predicate, OWNED by #2673; claimability is its seat-projection, NOT a stage; `deferred` is its own stage (lead, 2026-10-19; recorded by scribe, item #3031)
+
+**Context.** The queue-lifecycle redesign v2 (`docs/reviews/queue-lifecycle-redesign.md`, ACCEPTED as design of
+record) makes claimability a function, not an item property. Architect F12 (review @5c50f34; escalations
+`#3001` + `#3010`) flagged that `#2673`'s `workable(item, seat)` (oldest-WORKABLE claim selection) is the
+SAME seam as the redesign's "claimability", and that a stage-level "claimable" is unsound because
+claimability is seat-relative (per-seat `requires`, `src/rig.mjs:393`, is not persisted).
+
+**Decision.** There is ONE predicate, not two — name it `workable(item, seat)`; the redesign's
+"claimability" is NOT a second predicate, it is the seat-projection of the same one:
+1. **Single source of truth.** Exactly one definition of "can seat s claim item i right now", in one module,
+   consumed by BOTH (a) `claim_work`'s oldest-workable selection (`#2673`) and (b) the broker WAKE selection
+   (`#2712`). No second implementation of "claimable".
+2. **Claimability is a projection, not a stage.** "Item i is claimable" is DEFINED as: ∃ eligible seat s such
+   that `workable(i, s)`. It must NOT be a stage of the item state machine — F1 shows why: claimability is
+   seat-relative, so any stage-level "claimable" is unsound.
+3. **Inputs are persisted, never live-only.** The predicate reads `stage` + `held` + the structured gate
+   fields (`blockedBy` dependency, `requires` capability) + the seat's advertised capabilities. Persisting
+   `requires`/`blockedBy` via the EXISTING enqueue path is `#2951`'s job, so `#2951` is a PREREQUISITE:
+   until it lands, §1's partition is genuinely false (F1) and must not be claimed.
+4. **`deferred` is its own stage**, not `active`-with-block. §1(b) forbids active-with-block; encoding
+   deferred that way would make parked work look claimable — a seat could claim work whose blocking question
+   is unanswered. SAFETY WINS: `deferred` is non-claimable by construction.
+5. **Ownership.** The single `workable(item, seat)` is OWNED by `#2673` — `#2673` implements it (predicate +
+   failing-first demo). The redesign CONSUMES it: it must not define a second predicate and must not restate
+   the predicate body. Division: the REDESIGN owns the stage model (incl. the §2 fix, `deferred` as its own
+   stage); `#2673` owns the predicate that reads those stages plus the persisted gate fields.
+6. **Not independent.** The two must NOT land independently. Ordering: `#2951` (persist gate fields) →
+   `#2673` (predicate + demo) → `#2712` (wake consumes) → only THEN may the redesign assert its §1
+   partition. The redesign may land its read-only parts early (OQ5 phase 1), but its claimability / §1
+   invariant may not land before `#2673`.
+7. **Safety (explicit).** The `requires` / fault clauses are NOT implementable today because `requires` is
+   not persisted on any item (`src/rig.mjs:393`). Landing them anyway would ship a predicate that silently
+   MIS-SELECTS — starvation of a claimable item, or a claim on un-claimable work. Safety wins: no landing of
+   the `requires` / fault clauses until `#2951` persists the field.
+
+**Why.** `#2673` and the redesign answer the same question ("can this be claimed?"). Two predicates drift,
+and drift is exactly the starvation / never-woken bug class `#2673`/`#2712` exist to fix. One predicate with
+a seat parameter keeps the claim path and the wake path in agreement, and makes §1's partition true once the
+gate fields are persisted.
+
+**Alternatives rejected.** (a) Two predicates (redesign-owned + `#2673`) — rejected: the same seam with two
+definitions drifts into the starvation/never-woken class; (b) claimability as an item stage — rejected:
+claimability is seat-relative (per-seat `requires`), so a stage-level "claimable" is unsound (F1);
+(c) `deferred` folded into `active`-with-block — rejected: parked work would look claimable (safety).
+
+**Status.** RULED by `lead` (2026-10-19, item #3031, escalations #3001/#3010; supersedes cancelled #3003).
+Recorded by `scribe` in the R1b serialized pass (#3089). Consistency: the structured gate field is D53
+(#2952/#2918), one field, no prose parsing. Enforcement: `#2673`'s failing-first demo must include a
+CROSS-CONSUMER AGREEMENT case — for the same item and seat, claim-selection and wake-selection return the
+same verdict. No implementation is started by this entry. D-number minted at land time.
+
+## D116 — Redesign v2 build rulings: OQ5 sequencing chain, M1 SPLIT (field-early / axis-fenced), OQ2 `reviewBy` defaults with one fire per epoch (lead, 2026-10-19; recorded by scribe, item #3046)
+
+**Context.** The queue-lifecycle redesign v2 was ACCEPTED as design of record. Its open questions were ruled
+by `lead` (#3002 OQ5, #3044 M1 split, #3008 OQ2). The accepted model has two orthogonal axes
+(`stage`/`block`), typed `block`s with a mandatory `resolver` and a `reviewBy` (unless self-clearing or
+`backlog`), and queue-scoped attention kinds. The build must not land the axis change before the read-only
+half, and `reviewBy` defaults must bound the `parked-review-due` firehose.
+
+**Decision.** Three rulings, recorded as one decision family (they govern the same build):
+1. **OQ5 — sequencing chain (Phase 1 lands now).** Phase 1 (can land now): READ-ONLY check rules (on AUTHORED
+   blocks only) + queue-scope attention — additive, no write path, independently verifiable. Phase 2:
+   `#2951` — persist the gate fields via the EXISTING enqueue path (prerequisite for the predicate axis).
+   Phase 3: the reliability cluster `#2420`/`#2483`. Phase 4: the `rig.mjs`/`driver.mjs` AXIS change (stage
+   machine + the single `workable` predicate, `#2673` then `#2712`), reconciled per F12 (#3031). ONE writer
+   per seam at a time; the fence is safety-conservative — do not move the claim/wake axis while the
+   reliability cluster is in flight.
+2. **M1 SPLIT — field-early vs axis-fenced.** M1 is split: **M1a (field-early)** persists the structured
+   gate field (`block`/`blockedBy`/`requires`) via the EXISTING enqueue path — this is `#2951`'s slice,
+   landable at Phase 2, no new write path, no parallel store (D53), no mapping/predicate. **M1b
+   (axis-fenced)** is the `effectiveStage`/`effectiveBlock` mapping pair — lands at Phase 4, fenced behind
+   the reliability cluster (`#2420`/`#2483`), and the single `workable` is `#2673`'s ONE predicate (F12,
+   #3031), implemented once; `#2712`'s wake consumes the same one. No second definition. **Dependency
+   direction: M1b → M1a, never the reverse** — M1a (the field) is the prerequisite M1b (the mapping) reads.
+3. **OQ2 — `reviewBy` defaults with one fire per epoch.** Defaults: `operator` 3 d, `schedule` 14 d,
+   `resource` 3 d, `manual` 7 d, `dependency`/`roadmap-gate` 7 d, `backlog` none, `question` n/a (v1's
+   `manual` 1 d is withdrawn — it floors the median-16 h population into immediate nag). Monotone in
+   urgency/volatility: operator (3 d) and resource (3 d) shortest (they block a human decision / stall a
+   seat); manual + dependency/gate 7 d middle; schedule 14 d longest (inherently far-horizon); backlog none
+   (explicitly parked, must not nag); question n/a (already surfaced by the `waiting` derivation). **One
+   fire per (item, `reviewBy` epoch)** — a notice fires ONCE per epoch, re-armed only when `reviewBy` is
+   explicitly bumped; a re-scan does not re-fire (idempotent, replayable); the durable attention surface
+   carries the state, so the notices are a snapshot, not a stream.
+
+**Why.** The sequencing prevents a red `check` across the unmigrated store from stopping every landing
+(CR-1): enforcement judges AUTHORED blocks only, so the read-only half (Phase 1) ships before the axis
+migration without turning the store red. The M1 split lets the structured field land early (M1a) without
+prematurely committing to the axis model (M1b), and keeps one `workable` (F12/#3031) with a clear
+dependency direction. The `reviewBy` defaults bound the `parked-review-due` firehose over the ~160-row
+legacy population (F10/CR-2); one-fire-per-epoch keeps the surface a state snapshot, not a nag stream.
+
+**Alternatives rejected.** (a) Ship the axis change before the read-only half — rejected: a red `check`
+blocks every landing (`land.md --suite` runs `check`); (b) a single monolithic M1 — rejected: it couples the
+field persistence to the axis mapping and can't ship the gate field early; (c) tighter `reviewBy` defaults
+(manual 1 d) — rejected: it floors the measured median-16 h population into immediate nag.
+
+**Status.** RULED by `lead` (2026-10-19, item #3046, from #3002/#3044/#3008; supersedes cancelled #3012).
+Recorded by `scribe` in the R1b serialized pass (#3089). Implementation items M1a (#3062, impl-item-3062
+@eb3b337), M1b (#3063, impl-item-3056 @6ddf538 — `workable` removed), M3 (#3019), M4 (#3020), M5 (#3021),
+M6 (#3022), M7 (#3023) are registered; OQ2 defaults fold into M1/M4 (#3050). D-number minted at land time.
+
+## D117 — R4 acceptance shape: the `#2955` chain is the ACCEPTANCE SHAPE for the queue-lifecycle v2 work (operator, 2026-10-19; recorded by scribe, item #3089 / R4)
+
+**Context.** Operator ruling 2026-10-19 asked that the ACCEPTANCE SHAPE for the queue-lifecycle v2 work be
+citable and NOT reconstructed from memory. R4 records it: the shape is "accepted as recommended" + the
+`#2788`/`#2789`/`#2804`/ADR chain — i.e. the operator's ruling on the design, plus the build items and the
+`waiting`-derivation ADR that implement it.
+
+**Decision.** The ACCEPTANCE SHAPE for the queue-lifecycle v2 work is: the operator's "accepted as
+recommended" ruling (on `docs/reviews/queue-lifecycle-redesign.md` v2) + the `#2788`/`#2789`/`#2804` chain
+(the `waiting` view, the `answer` spool op, and the render rule) + the `waiting`-derivation ADR
+(`impl-item-2744` = the D113 entry). This is the acceptance shape; it is queue-citable at `#2955` and does NOT
+require the operator to re-state prose. `#2698` (advocate ETARGET review) stands with a one-line re-verify.
+
+**Status.** Recorded by `scribe` in the R1b serialized pass (#3089, R4). D-number minted at land time.
+
+## D118 — R1–R7 are ACCEPTED OPERATOR RULINGS for the queue-lifecycle v2 and land/hold work (operator, 2026-10-19; recorded by scribe, item #3089 annex)
+
+**Context.** Operator acceptance `operator-accepts-r1-r7-2026-10-19-1` (21:52:23Z) accepted R1–R7 in full,
+making them OPERATOR RULINGS (not delegate recommendations). R1 (landing window OPEN, delegate drives), R1b
+(DECISIONS.md writers serialize as ONE scribe pass, minting free numbers at land time), R2 (`#2797` KEEP +
+CONSOLIDATE, `#2806` CANCEL), R3 (`#2630` stays HELD until `#2797` lands), R4 (the `#2955` acceptance
+shape), R5 (`#2949` CLOSED by evidence), R6 (`#2598` RELEASE and RE-QUEUE), R7 (six stale escalations
+consumed and closed).
+
+**Decision.** R1–R7 are ACCEPTED OPERATOR RULINGS (operator, 2026-10-19) and bind the queue-lifecycle v2
+work and the land/hold rulings as the same decision family. In particular: the landing window is OPEN and the
+DELEGATE drives (`land.mjs` waits for generation slots, broker stays UP); the DECISIONS.md writers
+serialize as ONE scribe pass minting free numbers at land time in issue order; `#2797` is kept + consolidated
+(re-pointed to `e4fd338`), `#2806` cancelled; `#2630` stays HELD until `#2797` lands; the `#2955` acceptance
+shape is citable; `#2949` is closed by evidence (scripts/ restored, `node --check scripts/land.mjs` exit 0);
+`#2598` is released and re-queued behind M1a; the six stale escalations (`#2942`/`#2943`/`#2947`/`#2948`/
+`#2673`/`#2797`) are closed.
+
+**Status.** Recorded by `scribe` in the R1b serialized pass (#3089 annex). No fresh D-number for this entry
+per the R1b rule (it records the same decision family; the design-of-record and land/hold rulings share the
+family). D-number minted at land time.
+
+## D119 — D113 pre-check (R1b): the reservation is VOID — a dangling commit cannot hold a number; #2284 must be re-branched or re-authored (scribe, item #3089)
+
+**Context.** R1b required a pre-check on D113 before minting: its reservation (scribe-item-2219, #2284)
+rests on commit `fd4c233`. The pre-check result: `fd4c233` is a REAL commit but DANGLING — it is
+unreachable from any branch (`git branch -a --contains fd4c233` is empty) and does NOT merge cleanly onto
+`main` (merge-tree exit 1, conflict in docs/DECISIONS.md). The live branch `scribe-item-2219` exists at
+`a822bbf` holding the D113 entry, but IT ALSO conflicts against `main` (merge-tree exit 1).
+
+**Decision.** D113 is NOT reserved — the reservation is VOID (a dangling commit cannot hold a number).
+`#2284`'s recoverability decides whether the D113 entry lands, not the number: `fd4c233` still dangling →
+**re-branch** `scribe-item-2219` (at `a822bbf`) and land it (after a non-force rebase to clear the
+DECISIONS.md conflict); if the branch were gone → re-author the entry docs-only. D113 does NOT block the
+other DECISIONS entries (#3011/#3031/#3035/#3046) — they mint the next free numbers in issue order.
+
+**Status.** Pre-check run by `scribe` (item #3089, R1b). D113 remains void until #2284 is re-branched and
+re-landed. D-number minted at land time.
+
+## D120 — Queue lifecycle redesign v2 is ACCEPTED as the design of record; it LEADS capability work (operator, 2026-10-19; recorded by scribe, item #3035)
+
+**Context.** The queue can orphan work because a parked item is not required to name a machine-readable
+reason it is parked, nor who or what clears it, nor a date by which someone must look again. The incident
+`docs/incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md` is the live instance: held rows whose
+cited queue gates all cleared stayed parked forever (`#2630`, gated on the non-terminal `#2797`/`#2806`).
+The proposal `docs/reviews/queue-lifecycle-redesign.md` (v1) was reviewed independently by `architect`
+(`#2984`, `docs/reviews/architecture-queue-lifecycle-redesign-review.md`, 4 blockers + 13 CRs) and
+`advocate` (`#2985`, `docs/reviews/advocate-queue-lifecycle-redesign.md`, 8 CRs); the reviews found real
+defects in v1 (F1/F2/F3/F4/F7/F8/F9/F11, CR-1/CR-3/CR-6 — substantive design corrections, not polish).
+
+**Decision.** v2 of `docs/reviews/queue-lifecycle-redesign.md` (commit `defbc34`; acceptance recorded at
+`e788668`) is ACCEPTED as the **design of record** — it incorporates every review finding with a stated
+disposition in §13, and where v1 and v2 disagree, v2 wins. The operator ruled (2026-10-19) that this
+redesign **leads capability work** (defect fixes and the prerequisites it depends on are not capability
+work and land first). The accepted model in substance:
+
+1. **Two orthogonal axes** replace the status soup: `stage` (`open`/`active`/`closed`) and a nullable
+   `block`. `held`/`deferred` stop being statuses and become `block` shapes; a block cannot exist without
+   a `resolver`.
+2. **Blocks are typed, sourced, and multi-constraint.** `block.source: declared|legacy`; a block may
+   carry several `constraints`; the one automatic action (auto-open) fires only for a *declared*
+   `dependency` whose every constraint is a completed queue gate — legacy prose gates are never promoted
+   to a dependency by inference.
+3. **Every block has a trigger**, including a stuck gate: `gate-cleared-unreleased` and `gate-stalled`
+   (queue-scoped attention kinds), plus `parked-review-due` and `orphan-no-progress`.
+4. **`check` rules enforce well-formedness on authored blocks only** — never on the read-mapping of
+   legacy rows, so enforcement can never turn `check` red across the unmigrated store and stop landings.
+
+Gate-completion is an event (the closing commit, `complete_work`/`cancel_work`, with a broker-pass
+backstop) that atomically releases declared dependents whose every queue constraint is done. The
+migration is additive and lazy: the read-only half (check rules + queue-scope attention) ships first; the
+`rig.mjs`/`driver.mjs` axis change is sequenced behind the standing reliability cluster (`#2420`/`#2483`).
+
+**Scope questions still open for `lead` (the decision does not answer them).** (a) F12 — `#2673`'s
+lead-ratified `workable(item, seat)` is the same seam as this design's claimability, and its
+`requires`/fault clause is not implementable because `requires` is not persisted; one predicate or two —
+the redesign should own one `workable` or the two must not land independently. (b) F11 — there is no
+landed decision behind the `waiting` derivation; either land the architect's draft ADR with the `block`
+model as its source, or the proposal stops citing it (v1's D114 citation is withdrawn).
+
+**Alternatives rejected** (each with the review's reason): add a `parked-review-due` attention to today's
+`held` (treats the symptom, leaves reason/gate in prose); add more statuses (`blocked`,
+`waiting-operator`, `backlog` — the two-axis model carries the same information); a background unsticker
+that releases anything whose prose cites a done item (proven unsafe by the measured 59 candidates, mostly
+landing-list/backlog/do-not-start); a maintained reverse index of dependents (a second source of truth
+that drifts).
+
+**Status.** ACCEPTED — design of record (operator ruling, 2026-10-19). Recorded by `scribe` (item
+#3035). The design doc already marks the acceptance at `docs/reviews/queue-lifecycle-redesign.md`
+(commit `e788668`). Implementation items are handed to `pm` (register M1–M7 and route F12/F11 to `lead`);
+the prerequisites `#2983` → `#2992` → `#2420`/`#2483` are built but unlanded. This entry is a decision
+record, not an implementation claim — no code change accompanies it.
+
+## D121 — Local provider switched to Swift 1.5 on a DIFFERENT engine (operator-DIRECTED, 2026-10-20; recorded by scribe, item #3268; amended per lead #3280)
+
+**Context.** The local provider previously served Qwen3.6-35B-A3B (UD-Q3_K_M) via PolyStrata on
+`engine-poly\strata-poly.exe`. The operator DIRECTED a switch to Swift 1.5 — model AND engine — this
+session (2026-10-20), and the revert (#3248) is cancelled. The change is committed as `cafee74`
+(`chore(rig): local provider moves to Swift 1.5`) and documented in `docs/SELFDEV.md`. Source:
+`docs/NEXT.md` "LOCAL MODEL SWITCHED TO SWIFT 1.5" (the authority over any summary).
+
+**Decision.** The local provider now serves **Swift 1.5** (`swift-1.5-iq2_xs`, context 65536) instead of
+Qwen3.6-35B-A3B, on a **DIFFERENT ENGINE**: `engine\strata.exe` (the Qwen engine), NOT
+`engine-poly\strata-poly.exe`. The engine change is as load-bearing as the model change — the entry is
+deliberately not model-only. In detail:
+- **Rationale:** shorter thinking before answering, at roughly equal quality.
+- **Models together:** both local models live under `C:\Users\Alex\dsh-Projects\PolyStrata-data` — the
+  operator required keeping local models together, so the new install was moved off `D:` with
+  `robocopy /MOVE` and nothing was re-downloaded.
+- **Fallback kept:** `qwen36` (`run-qwen36-ud-q3_k_m.bat`) remains installed as the fallback.
+- **Config:** `durig.config.json`: `DURIG_LOCAL_MODEL=swift-1.5-iq2_xs` (was `qwen36`),
+  `DURIG_LOCAL_CONTEXT=65536`; `rig.selfdev.json`: `qa` and `devtools` moved `local/qwen36` →
+  `local/swift-1.5-iq2_xs`. A seat's model is read from the rig at wake — but only AFTER the store is
+  refreshed (see DIRECTED vs NOT-YET-IN-EFFECT below); until then the effective runtime is unchanged.
+- **Measured cost / fragility (the part future readers will need):** IQ2_XS holds ~22 GB of experts in
+  RAM on this 32 GB box (load 95-96%); PolyStrata wants ~48 GB RAM+VRAM so it runs in low-RAM mode,
+  leaving ~1 GB free and making heavy tooling fragile — forks can fail (`cygheap read copy failed`,
+  `Resource temporarily unavailable`) and tool calls can look broken. Free the model before any broker
+  restart or heavy pass.
+- **Verified:** `localProviderSpec` returns `modelId: swift-1.5-iq2_xs`, `contextWindow: 65536`; a real
+  completion returned `SWIFT-OK` at ~102 tok/s; `cli.mjs check rig.selfdev.json` is `ok:true`.
+
+**Why.** The operator directed the model + engine switch for faster, equal-quality local inference, and
+required keeping both local models on one C: tree with nothing re-downloaded. The engine change matters:
+`8080` now serves the Qwen engine, so an old `strata-poly` log line is expected, not a regression.
+
+**DIRECTED vs NOT-YET-IN-EFFECT (the distinction that keeps this entry honest).** The switch is
+operator-DIRECTED (this session) but is **NOT YET IN EFFECT**: the live store has NOT been refreshed, so
+the effective runtime is still `local/qwen36` on the poly engine until an operator refresh.
+`up <rig> --refresh` is operator-only under D113. The outstanding refresh is an OPEN STEP tracked by the
+standing waiting marker `#3274` (held by lead, deferred to the operator) — NOT `#3242` (which closed on
+the decision). An entry that says "the local model is swift-1.5" while the store serves qwen36 would
+itself be the doc-vs-runtime drift this entry exists to prevent.
+
+**R2 reframing — the landing rule from now on.** The landing constraint on provider-dependent tips is NOT
+"do not depend on an unratified change"; it is **DO NOT DEPEND ON A RUNTIME STATE THAT IS NOT IN EFFECT**.
+- RELEASE CONDITION: the store refresh is OBSERVED — a pass reports the effective model as
+  `swift-1.5-iq2_xs` on `strata.exe`. NOT the existence of this DECISIONS entry (documentation does not
+  change the runtime; gating a landing on a doc entry would invert mint-at-land #3075).
+- DEPENDENCY CLASS INCLUDES THE ENGINE, not just the model: the directive changed the engine binary,
+  which moves behaviour more than a model swap does — "unverified for target" covers engine-sensitive
+  results too.
+
+**Alternatives rejected.** (a) Keep Qwen3.6-35B-A3B on `strata-poly` — rejected by the operator's
+direction; (b) switch the model only, keeping `engine-poly\strata-poly.exe` — rejected: the engine is
+part of what changed and must be recorded with it (R2 reframing: runtime-in-effect, engine included).
+
+**Status.** OPERATOR-DIRECTED (2026-10-20); recorded by `scribe` (item #3268) in the same serialized
+pass as the ledger-order fix, then amended per the lead addendum (#3280). Config commit `cafee74`;
+documented in `docs/SELFDEV.md`. The switch is DIRECTED but NOT YET IN EFFECT (see above) — the live
+store refresh is the open step tracked at `#3274`. A tip verified against qwen36/poly is still
+unverified for swift-1.5/strata until the refresh is observed, regardless of how ratified the config is.
+
+## D122 — The fused process is the HARNESS'S HOST, not "harness" or "broker"; post-split names `harnessd` (store+runtime owner) and `broker` (automation client) (lead #4294, 2026-10-21; recorded by scribe, item #4338)
+
+**Decision:** TODAY: NO RENAME. The fused process is a broker that hosts the harness, and NO SINGLE WORD IS
+HONEST because it is two things — describe it, do not rename it. Renaming now would be as wrong as "broker":
+it would name one half and hide the other. **POST-SPLIT:** `harnessd` / "harness server" = the store and
+runtime owner; `broker` = the automation client. Each name is accurate THEN, and the rename lands WHEN THE
+COMPONENTS ACTUALLY SEPARATE — not before. And the direct answer to the operator's "if it is not the harness,
+what else is?": **IT IS THE HARNESS'S HOST — the harness is the runtime object, the process serves it.**
+
+**Rationale.** The operator asked whether "broker" is a poor name and should be "harness". Lead ruled it
+(#4294); the distinction the question could not see is that BOTH single words are wrong today:
+- **"HARNESS" IS ALSO WRONG** — the harness is a LIBRARY OBJECT (`openHarness()`, `harness.resume()`,
+  `harness.conversation()`, `harness.inspect()` — all in `cli.mjs` on main), NOT A PROCESS. The process HOSTS
+the harness, so the honest name for that half is HARNESS SERVER (or `harnessd`) — the SERVER of the harness,
+not the harness.
+- **"BROKER" IS NOT WRONG EITHER** — it is right for the OTHER half: post-split it correctly names the
+AUTOMATION component (it brokers work, decides who runs, delivers intents, supervises). The word reads wrong
+TODAY only because ONE PROCESS IS DOING BOTH JOBS.
+- **Record it NOW:** a rename ruled after the code moves re-opens every file it touched — `broker` appears in
+the CLI surface (`serve`), the runbooks and the demos.
+
+**Ownership invariant (recorded beside the naming; the split's names are meaningless without it, lead verbatim).**
+THE AUTOMATION MUST REMAIN THE ONLY WRITER. HARNESS SERVER OWNS THE STORE; THE BROKER HOLDS THE WRITE LEASE
+AND SUBMITS THROUGH RPC/SPOOL; EVERY OTHER CLIENT IS A READ-ONLY SUBSCRIBER. And "owns" must NOT mean
+"may WRITE": the harness may HOLD the file, but it must NOT WRITE it — ONE WRITER MEANS ONE WRITER.
+`harnessd` names the store's OWNER, not its writer; the two names must not blur that.
+
+**Alternatives.** (a) Rename today to "harness" — rejected: names one half and hides the other, as wrong as
+"broker"; (b) rename today to "harnessd"/"harness server" — rejected: same problem, and the split has not
+happened; (c) no rename today, with the post-split names reserved — adopted.
+
+**Status.** Lead ruling #4294 (2026-10-21); recorded by scribe, item #4338, in the record BEFORE any code
+moves. No rename, no code, no split design — the naming entry only. D122 is the issue-ordered next number
+after D121 (main `ffa2ab3`). Per #3075 (no branch hardcodes a number), the number here is PROVISIONAL: the
+lander MUST re-confirm 122 is still free at land time and RENUMBER IF NOT — an entry that lands with a taken
+number would collide, and a silently-assumed number is exactly what #3075 forbids.

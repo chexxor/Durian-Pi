@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Review — the two pi-durable example projects (2026-10-11)
 
 The Pi Durable post points at two example projects as the place to learn the API:

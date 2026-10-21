@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # reconcile-538 — the #538 shape fold (item #642)
 
 The #538 work-item shape with lead's #610 ruling folded in, recorded so it is not lost between the

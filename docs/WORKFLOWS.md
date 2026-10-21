@@ -1,7 +1,7 @@
-﻿# Target workflows (ROADMAP item 21)
+# Target workflows (ROADMAP item 21)
 
 **Why this document exists.** The MVP bar, the feature inventory, the research gap table
-and `RESEARCH.md`'s topology notes each carried a piece of the answer to "what is durig
+and `RESEARCH.md`'s topology notes each carried a piece of the answer to "what is durian-pi
 for", and nothing carried all of it. The consequence was concrete: "recommended
 extensions" (item 18) and the build order were decided without a frame, and three
 decisions we *did* make deliberately (D21 non-interactive CLI, D22 seats are not
@@ -18,10 +18,10 @@ actually follows - rather than invented for this document. Where a workflow is n
 supported yet, it says so and names the item that would.
 
 **Owner:** the `workflows.advocate` seat (the previous rig's advocate agent). It
-owns this document and the workflow set, questions durig changes for workflow impact, and
+owns this document and the workflow set, questions durian-pi changes for workflow impact, and
 labels every workflow with the evidence class described under "Who owns this". It is
 deliberately not the product's user-facing UX seat - that one owns the
-product surface, this one owns durig's workflows - and it differs from the docs seat
+product surface, this one owns durian-pi's workflows - and it differs from the docs seat
 (`scribe`) by owning the *workflow set* rather than the feature inventory.
 
 ## How to read a workflow
@@ -29,7 +29,7 @@ product surface, this one owns durig's workflows - and it differs from the docs 
 - **must-not-break** is the honest centre. A workflow can be slow, awkward or verbose and
   still work; these are the failures that are not recoverable by a person noticing.
 - **done** is stated in terms of observable state, because "the seat said it finished" is
-  the thing durig exists to stop trusting.
+  the thing durian-pi exists to stop trusting.
 - **capability** is what has to exist for the loop to hold, which is the input to
   "recommended" at the end.
 
@@ -37,8 +37,8 @@ product surface, this one owns durig's workflows - and it differs from the docs 
 
 ## Driving model
 
-**Sanctioned concurrency model:** durig has **one** broker (the single writer) owning the
-store/harness and driving N seats up to the slot cap (`DURIG_MAX_CONCURRENT_SEATS`, D12:
+**Sanctioned concurrency model:** durian-pi has **one** broker (the single writer) owning the
+store/harness and driving N seats up to the slot cap (`DURIAN_PI_MAX_CONCURRENT_SEATS`, D12:
 it caps concurrent GENERATIONS, not seats-as-objects), each seat in its own worktree.
 The single-writer scope is the **store + harness** (not files): a seat's worktree provides
 file isolation; the store provides coordination isolation. Multiple `run`/`send`
@@ -242,6 +242,16 @@ routes a landing pass when several are outstanding. A user-facing change has des
 runs the covering demo on the merged result, removes the item's clean worktree, and deletes the branch
 with `git branch -d`. A branch that cannot merge cleanly goes back through W2 for a rebase - never force.
 
+**Worktree cleanup ownership (provenance):** whoever CREATES a worktree owns its cleanup. durian-pi
+reaps only the trees it creates - `item-<id>` (terminal + unlocked + clean) and qa's throwaway
+verify-scratch (`.verify-*` / `verify*` / `wt-*`, unlocked + clean). It NEVER reaps a tree a harness,
+a viewer, or the operator created: those classify as `non-item` and are always KEPT
+(`classifyWorktrees`, `src/broker.mjs`), and a tree that is a live seat's cwd is `seat-root` (also
+KEPT). The keep-reasons in `worktree audit` are the per-tree form of this rule, and the sweep acts
+on `reapable` alone. A removal is clean-only (D60): a dirty tree is refused and reported, never
+`--force`d. Source: the vendored `using-git-worktrees` / `finishing-a-development-branch` skills and
+the rototill design doc, "Provenance-based ownership".
+
 **The gate is a checklist the agent applies, not an auto-gate** (operator preference, 2026-10-17): a
 **universal** gate (item id + one concern + explicit paths; independent review of the artifact;
 `node --check`; the covering demo passes with failing-first evidence; clean merge; no push; never merge a
@@ -281,13 +291,42 @@ because an unattributable movement is not evidence.
 whether it moved - or say `unknown`, which is a legitimate outcome.
 
 **Capability:** `check` (eight rules), `metrics` (four measures), config provenance
-(`DURIG_STREAM_TIMEOUT_MS` and friends), and a drill - **which does not exist** (item 2's
+(`DURIAN_PI_STREAM_TIMEOUT_MS` and friends), and a drill - **which does not exist** (item 2's
 other half). Without the drill a passive window is *confounded*: it cannot separate "the
 rig got worse" from "the work changed". So today this loop is honest but only
 correlational, and that limitation belongs in the workflow rather than in a footnote.
 
 **Evidence:** `docs/METRICS.md`, `demo/check.test.mjs`, `demo/metrics.test.mjs`,
 `demo/provenance.test.mjs`, D24, D25, D28.
+
+---
+
+## Local-provider seats: a fresh context per new work item (D104/D105)
+
+**Who:** any seat whose **resolved model provider is `local`** (D104) — the local-fleet seats
+(e.g. `qa` on the local PolyStrata model, served through `DURIG_LOCAL_CONTEXT`).
+**Trigger:** the seat picks up a NEW work item it has not claimed before.
+
+**Rule (D105, operator policy 2026-10-18):** a local seat draws a **fresh context boundary**
+before working each new item — the existing `pi.reset` mechanism (`resetSeatContext`,
+`src/reset.mjs`). One boundary per NEW item; **never mid-item**; never across a `claimed` item
+(a claim must survive the transition or the task is lost); never while the seat holds a live
+generation lease. The durable transcript is preserved; the next wake re-anchors the seat from
+its durable instructions plus the new item's body. Non-local (paid) seats are unchanged.
+
+**Must not break:** the boundary is drawn BEFORE the item's work, so a prior item's turns never
+condition the model on the next (the D105 motivation: local seats run a small window on one
+serialized GPU and have been the ones that degenerated — `qa-context-degeneration`); and the
+claim/lease invariants hold (no mid-item reset, no live-lease reset).
+
+**Status: policy RULED and recorded (D105); enforcement NOT yet landed.** The wake-path boundary
+is routed to `impl` (#2123); today only the manual `reset`/`clean` verb and the D64 degeneration
+guard draw a boundary. Read this as the decided policy, not a shipped capability, until the D105
+acceptance demo (a local seat gets a `pi.reset` boundary between two consecutive items; a
+non-local seat does not) passes.
+
+**Evidence:** `docs/DECISIONS.md` D104/D105; `src/reset.mjs` `resetSeatContext` (the mechanism);
+`impl` #2123 (the enforcement, pending).
 
 ---
 
@@ -331,11 +370,11 @@ Today, honestly:
 | Workflow | Class | Why |
 |---|---|---|
 | W1 routed delegation | **observed** | dogfood finding F6 ran the full loop; QUICKSTART steps 4-6 |
-| W2 independent verification | **inferred** + advertised-elsewhere | the team norm and the pair-review contract, but **not yet observed under durig** - and its evidence half does not exist (item 4) |
+| W2 independent verification | **inferred** + advertised-elsewhere | the team norm and the pair-review contract, but **not yet observed under durian-pi** - and its evidence half does not exist (item 4) |
 | W3 blocked on a question | **observed (offline only)** | `demo/defer.test.mjs` drives the real tools; no live run has deferred an item yet |
 | W4 intake / decomposition / tracking | **observed** | the first dogfood session routed a real backlog item `pm` to `worker` through the queue |
 | W5 human oversight | **observed** | the operator reads `status`/`watch`/`log` against the live store routinely |
-| Operator loop (rig change) | **observed** | run on the live rig, e.g. the `DURIG_STREAM_TIMEOUT_MS` change |
+| Operator loop (rig change) | **observed** | run on the live rig, e.g. the `DURIAN_PI_STREAM_TIMEOUT_MS` change |
 
 That table is the honest scoreboard, and it is uncomfortable in the right way: **only one
 workflow is observed in a live multi-seat run**, because seats still cannot do real work
@@ -353,7 +392,7 @@ hypotheses, not of users.
 
 ## Deriving "recommended" (the point of this document)
 
-The first thing the matrix shows is that **"recommended" for durig is mostly rig shape,
+The first thing the matrix shows is that **"recommended" for durian-pi is mostly rig shape,
 not extensions.** Every workflow is served by the seed tools; what actually varies between
 a rig that works and one that does not is which seats exist, which model each runs, and
 which edges join them - and `check` already has rules for exactly those. So item 18's
@@ -428,7 +467,7 @@ delegation, `peek_queue` for tracking doc items to completion.
 A full RACI/DACI/RAPID/MOCHA grid is REJECTED as redundant (D74) - redundant against this
 document's role table, docs-ownership norm and capability matrix, and the queue's single
 claimer, whose single-Accountable-per-task assumption this team's artifact-keyed ownership
-contradicts. What durig keeps is the DECISION-AUTHORITY layer those frameworks exist to
+contradicts. What durian-pi keeps is the DECISION-AUTHORITY layer those frameworks exist to
 supply, recorded at decision-class granularity with the enforcement named so it cannot go
 stale unnoticed. Keyed to decision/artifact CLASS, never per task:
 

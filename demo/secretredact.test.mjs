@@ -110,6 +110,54 @@ const manyText = many?.content?.[0]?.text ?? "";
 check("both values are gone", !manyText.includes(SECRET) && !manyText.includes("ghp_QQQQ"));
 check("both families are named", manyText.includes("openai-key") && manyText.includes("github-pat"));
 
+/* ─── 3b. shape-agnostic: BOTH payload field names are redacted ──────────── */
+// The pinned vendor renamed the tool-result text field `content` → `output`
+// (pi-durable 1.1.0 → 1.3.0). A result carrying ONLY `output` (1.3.0) and one
+// carrying ONLY `content` (1.1.0) must BOTH be redacted, with the secret
+// replaced in the SAME field the result actually carried — the regression gate
+// for this rename class (#1610 fix; devtools #1745/#1752 root-cause).
+console.log("\nafterTool — shape-agnostic: both `output` and `content` are redacted");
+const outputOnly = afterTool(call, {
+	output: [{ type: "text", text: `DEEPINFRA_API_KEY=${SECRET}\nnote=ok\n` }],
+});
+check("an `output`-only result (1.3.0) is redacted", outputOnly !== undefined, JSON.stringify(outputOnly));
+check(
+	"the value is gone from `output`",
+	!JSON.stringify(outputOnly ?? null).includes(SECRET),
+	JSON.stringify(outputOnly ?? null),
+);
+check(
+	"the marker landed in `output`, not a fabricated `content`",
+	outputOnly?.output?.[0]?.text?.includes("redacted by durig") && outputOnly?.content === undefined,
+	JSON.stringify(outputOnly),
+);
+check("the rest of the part is kept", outputOnly?.output?.[0]?.text?.includes("note=ok"), JSON.stringify(outputOnly));
+
+const contentOnly = afterTool(call, {
+	content: [{ type: "text", text: `DEEPINFRA_API_KEY=${SECRET}\nnote=ok\n` }],
+});
+check("a `content`-only result (1.1.0) is redacted", contentOnly !== undefined, JSON.stringify(contentOnly));
+check(
+	"the value is gone from `content`",
+	!JSON.stringify(contentOnly ?? null).includes(SECRET),
+	JSON.stringify(contentOnly ?? null),
+);
+check(
+	"the marker landed in `content`, not a fabricated `output`",
+	contentOnly?.content?.[0]?.text?.includes("redacted by durig") && contentOnly?.output === undefined,
+	JSON.stringify(contentOnly),
+);
+
+console.log("\nafterTool — shape-agnostic: a plain-string payload is redacted too");
+const stringOutput = afterTool(call, { output: `token=${SECRET}\n` });
+check(
+	"a string `output` is redacted in place",
+	typeof stringOutput?.output === "string" &&
+		!stringOutput.output.includes(SECRET) &&
+		stringOutput.output.includes("redacted by durig"),
+	JSON.stringify(stringOutput),
+);
+
 console.log("\nthe marker never echoes a secret hidden in the call's own arguments");
 const shellCall = toolCall("bash", { command: `export KEY=${SECRET}` });
 const marker = redactionMarker(shellCall, "openai-key");

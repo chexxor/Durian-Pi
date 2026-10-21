@@ -16,7 +16,7 @@ import {
 } from "@earendil-works/pi-durable/tools";
 import { Type } from "@earendil-works/pi-ai";
 import { seatsAreVerifier } from "./verifierrole.mjs";
-import { authorEnv, verifierEnv } from "./confine.mjs";
+import { authorEnv, verifierEnv, NON_INTERACTIVE_GIT } from "./confine.mjs";
 import { RigQueue, Seats } from "./rig.mjs";
 import { describeSeatRoot, resolveSeatRoot } from "./seatroot.mjs";
 import { prepareSeatWorkspace } from "./worktree.mjs";
@@ -25,6 +25,67 @@ import { prepareSeatWorkspace } from "./worktree.mjs";
 function result(text) {
 	const content = [{ type: "text", text }];
 	return { content, output: content };
+}
+
+/**
+ * The options `prepare_workspace` hands `prepareSeatWorkspace`. Exported so a demo can assert the
+ * base ref is threaded through without a live broker (#1456): `base` is the tool's name for the
+ * core's `ref`, and `undefined` falls back to the core's `HEAD` default.
+ */
+export function prepareWorkspaceOptions({ source, itemId, seatName, base }) {
+	return { source, worktreeRoot: source, itemId, seatName, ref: base };
+}
+
+/**
+ * The `prepare_workspace` result text. Exported so a demo can assert the BASE contract headlessly
+ * (#3558).
+ *
+ * THE DEFECT THIS CLOSES: the base line was emitted whenever the caller ASKED for a base, including
+ * on the REUSE path — where `prepareSeatWorkspace` never re-forks and the worktree stays at whatever
+ * commit it was on. The response therefore claimed "Forked from base ref X" about a fork that did not
+ * happen, which is how a seat ends up certifying a tree it is not standing on. Reuse is deliberate
+ * (re-forking would discard the work in that tree), so the fix is to REPORT, not to re-fork: a reused
+ * worktree names the commit it is actually at and says plainly that it was not re-forked.
+ *
+ * Shas are shown SHORT (9 chars). A bare 40-hex token is redacted as secret-shaped by durig's own
+ * redactor (see #3128), so a full sha here would be swallowed out of the very message that has to
+ * tell the seat which tree it is on.
+ */
+export function workspaceReadyText(workspace, requestedBase) {
+	const short = (sha) => (typeof sha === "string" && sha.length > 9 ? sha.slice(0, 9) : sha || "unknown");
+	// A caller may name the base as a BRANCH (show it verbatim) or as a full 40/64-hex sha (show it
+	// SHORT — a bare hex token is redacted as secret-shaped, #3128, so the long form would be swallowed
+	// out of the message that has to say which base was asked for).
+	const showRef = (ref) => (/^[0-9a-f]{40}$/i.test(ref) || /^[0-9a-f]{64}$/i.test(ref) ? short(ref) : ref);
+	let baseLine = "";
+	if (requestedBase) {
+		const asked = showRef(requestedBase);
+		if (workspace.created) {
+			baseLine = `\nForked from base ref ${asked} (not HEAD).`;
+		} else if (workspace.baseHonoured === true) {
+			baseLine =
+				`\nReused an existing worktree already AT the requested base ${asked} ` +
+				`(${short(workspace.base)}); it was not re-forked.`;
+		} else {
+			const resolved =
+				workspace.baseHonoured === null
+					? `, which does not resolve in this worktree`
+					: "";
+			baseLine =
+				`\nNOT re-forked: you asked for base ${asked}${resolved}, but this REUSED worktree is at ` +
+				`${short(workspace.base)}${workspace.branch ? ` on branch ${workspace.branch}` : ""}. ` +
+				`Re-forking would discard the work in it, so reuse wins — branch from ${asked} yourself ` +
+				`if that base is required.`;
+		}
+	}
+	return (
+		`WORKSPACE READY (${workspace.created ? "created" : "reused"}): ${workspace.cwd}` +
+		baseLine +
+		`\nYour file and shell tools now resolve inside this item's worktree. ` +
+		`Work and commit there; do not touch the shared tree.` +
+		(workspace.branch ? ` The worktree is on branch ${workspace.branch}; commit your item's files there.` : "") +
+		(workspace.carried.length > 0 ? `\nCarried the shared tree's visible changes: ${workspace.carried.join(", ")}` : "")
+	);
 }
 
 /**
@@ -44,6 +105,12 @@ const prepareWorkspace = defineTool({
 			Type.Number({
 				description:
 					"the claimed item to prepare the worktree for; defaults to your most recently claimed item",
+			}),
+		),
+		base: Type.Optional(
+			Type.String({
+				description:
+					"the ref/branch/commit to fork the worktree FROM (default: HEAD). Use it to stack on an unlanded tip; it must be a ref you can read.",
 			}),
 		),
 	}),
@@ -89,12 +156,14 @@ const prepareWorkspace = defineTool({
 			// item-<id>; `prepareSeatWorkspace` reproduces the source's repo-relative
 			// path, so a durig subdirectory keeps its cwd.
 			const source = process.cwd();
+			const base = typeof args.base === "string" && args.base.trim() !== "" ? args.base.trim() : undefined;
 			let workspace;
 			try {
-				workspace = await prepareSeatWorkspace({ source, worktreeRoot: source, itemId, seatName: me });
+				workspace = await prepareSeatWorkspace(prepareWorkspaceOptions({ source, itemId, seatName: me, base }));
 			} catch (err) {
 				return result(
-					`PREPARE_WORKSPACE_ERROR: cannot create a worktree from ${source} (is it a git repository?): ${err?.message ?? err}`,
+					`PREPARE_WORKSPACE_ERROR: cannot create a worktree from ${source}${base ? ` at base ${base}` : ""} ` +
+						`(is it a git repository, and is ${base ? `\`${base}\`` : "HEAD"} a readable ref?): ${err?.message ?? err}`,
 				);
 			}
 			// Persisted on this conversation's own agent, so the switch is per-seat and
@@ -102,15 +171,10 @@ const prepareWorkspace = defineTool({
 			await api.commit(async (tx) => {
 				await configure(tx, api.conversationId, { cwd: workspace.cwd });
 			}, context);
-			return result(
-				`WORKSPACE READY (${workspace.created ? "created" : "reused"}): ${workspace.cwd}\n` +
-					`Your file and shell tools now resolve inside this item's worktree. ` +
-					`Work and commit there; do not touch the shared tree.` +
-					(workspace.branch ? ` The worktree is on branch ${workspace.branch}; commit your item's files there.` : "") +
-					(workspace.carried.length > 0
-						? `\nCarried the shared tree's visible changes: ${workspace.carried.join(", ")}`
-						: ""),
-			);
+			// #3821 + main: main extracted the sentence into `workspaceReadyText`; #3821 adds the
+			// dependency note. Both survive by APPENDING the note to the extracted text rather than
+			// re-inlining the whole sentence — the function keeps its concern, the note keeps its own.
+			return result(workspaceReadyText(workspace, base) + (workspace.dependencyNote ?? ""));
 		} catch (err) {
 			return result(`PREPARE_WORKSPACE_ERROR: ${err && err.stack ? err.stack : String(err)}`);
 		}
@@ -226,7 +290,7 @@ export function makeSeatEnv(roster, { fallbackRoot = process.cwd(), readOnlyRoot
 		// fallback for a seat that has not prepared one (a rig pointing every seat at
 		// one shared checkout), never a global override of a prepared root.
 		const root = resolveSeatRoot({ persistedCwd: target.cwd, fallbackRoot }).root;
-		const base = new NodeExecutionEnv({ cwd: root });
+		const base = new NodeExecutionEnv({ cwd: root, shellEnv: NON_INTERACTIVE_GIT });
 		const seat = roster.get(target.conversationId);
 		// Fail CLOSED: a conversation that is not a known seat - the roster not read yet, or a
 		// conversation that is no seat at all - gets the read-only environment, never an

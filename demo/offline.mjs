@@ -1,4 +1,4 @@
-// durig offline demo: full delegation loop on the durable queue.
+// durian-pi offline demo: full delegation loop on the durable queue.
 //
 // Scenario: a "pm" seat sends work to a "worker" seat via send_work; the
 // worker claims it, completes it; the DONE notice lands back in pm's queue.

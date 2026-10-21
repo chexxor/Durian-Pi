@@ -4,7 +4,7 @@
 // "Task-tier budgets" — the tier is task-scoped and "ratcheted": it survives the
 // next message; lowering is free, raising needs a stated reason.
 //
-// Durig shape (operator ruling, item #101): the tier is the PM's size for a
+// durian-pi shape (operator ruling, item #101): the tier is the PM's size for a
 // request — trivial/small/feature/project, mapping the existing S/M/L — assigned
 // AT INTAKE to the originating item and LATCHED onto that item's chain (its DONE
 // notice, its verification item and any follow-up about the same task inherit the

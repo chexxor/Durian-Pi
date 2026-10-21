@@ -32,7 +32,7 @@ function check(label, condition, detail = "") {
   }
 }
 
-// Create a test git repo inside the durig repo itself, so git resolution always works.
+// Create a test git repo inside the durian-pi repo itself, so git resolution always works.
 const testDir = join(process.cwd(), ".durig-test-wt-" + Date.now());
 try {
   spawnSync("git", ["init", testDir], { stdio: "pipe" });

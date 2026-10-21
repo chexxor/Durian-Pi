@@ -1,6 +1,6 @@
 ---
 runbook: tool-result-redacted
-symptom: "a tool result shows `[redacted by durig: secret-shaped value (…)]` where a value used to be"
+symptom: "a tool result shows `[redacted by durian-pi: secret-shaped value (…)]` where a value used to be"
 writes: false
 precondition: "read-only"
 last_verified: 2026-10-16
@@ -16,7 +16,7 @@ A tool result in a transcript, the chat view or `log` shows a marker instead of 
 produced:
 
 ```
-DEEPINFRA_API_KEY=[redacted by durig: secret-shaped value (openai-key) from tool read (path=.env)]
+DEEPINFRA_API_KEY=[redacted by durian-pi: secret-shaped value (openai-key) from tool read (path=.env)]
 ```
 
 The marker means the in-harness redaction extension (`src/secretredact.mjs`, registered as the
@@ -27,7 +27,7 @@ and the store all saw the redacted text.
 ## Impact
 The store is NOT carrying the value: this is a caught leak, not a live one. What still needs a human is
 the SOURCE — the file or command the tool read from still holds a live credential — and any OTHER
-channel the tool wrote to (its stderr, a second file, a terminal a person was watching) which durig
+channel the tool wrote to (its stderr, a second file, a terminal a person was watching) which durian-pi
 does not see. The redaction bounds the damage; it does not make the credential safe.
 
 ## Preconditions
@@ -38,7 +38,7 @@ Read-only. The Diagnose step only reads the store; it opens no writing harness.
    and the value's family (`openai-key`, `github-pat`, …). The value itself is deliberately absent.
 2. Find the call in the transcript to see which file/command it was:
    ```bash
-   DURIG_DB=./selfdev.sqlite node cli.mjs log <seat>
+   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat>
    ```
 3. Decide whether the value could have left the process by any channel the redaction does not cover
    (the tool's own stderr, a file it wrote, an operator's screen).

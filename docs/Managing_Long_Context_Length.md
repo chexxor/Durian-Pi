@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 I'll research this thoroughly across academic literature, vendor guidance, and open-weights model specifics.# Managing Long Agent Sessions: What the Research Says
 
 > **Update (2026-10-17).** A commissioned follow-up, `docs/reviews/context-compaction-followup.md`

@@ -1,4 +1,4 @@
-# durig — roadmap
+# durian-pi — roadmap
 
 Ordered by operator value; each item names its motivating finding.
 State as of **2026-10-11**: items 0, 1, 1a are done and item 2's measures and
@@ -31,7 +31,7 @@ queued work. **The auto‑wake has since landed** — see the next block.
 
 **Status 2026-10-14 (later — the resident broker landed):** the **auto‑wake is DONE**. `serve`
 (`src/broker.mjs` + `src/scheduler.mjs`, D45) reacts to the store's in-process commit stream with no
-external clock; `up` auto-starts it on a TTY (`--no-serve`/`DURIG_NO_SERVE=1` opt out) and at most
+external clock; `up` auto-starts it on a TTY (`--no-serve`/`DURIAN_PI_NO_SERVE=1` opt out) and at most
 one runs per database (D46). It was observed **auto-waking `devtools`** (its stalled #192) against
 `selfdev.sqlite` with no manual `run`/`send` — the #238 goal. No socket opened, so no `security`
 position was triggered. `#238` is closed. Demos `broker`/`scheduler`/`autostart` exit 0.
@@ -82,10 +82,10 @@ held it, and it was adapted onto current `main` as one-concern items: **#307** c
 ## Gap analysis vs the research (2026-10-10)
 
 Failure modes named by the MAST taxonomy, Anthropic's production and swarm
-research, and the practitioner consensus, against what durig implements today.
+research, and the practitioner consensus, against what durian-pi implements today.
 Sources and reasoning: D23.
 
-| Failure mode (source) | durig today | Handling |
+| Failure mode (source) | durian-pi today | Handling |
 |---|---|---|
 | Silent shared-state corruption (practitioners: most underrated) | impossible — one writer, atomic document revisions, no shared scratchpad | nothing to do |
 | Loss of conversation history (MAST FC1) | impossible — conversations are durable rows | nothing to do |
@@ -169,7 +169,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    the rig's own grounding rule while appearing correctly configured. Fixed in
    `cmdUp`, with `demo/constitution.test.mjs` covering inline, file, absent and
    both-set specs, shown to fail against the old behaviour before it passed.
-   *Applied 2026-10-11:* `DURIG_DB=<live store> node cli.mjs up
+   *Applied 2026-10-11:* `DURIAN_PI_DB=<live store> node cli.mjs up
    the generated rig spec, after backing the store up to
    `C:/tmp/<live store>.bak-2026-10-11`; the stored text is now byte-identical to
    the spec's `constitutionInline` (1094 bytes, the rig's team culture).
@@ -177,7 +177,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    default rather than augmenting it, so those seats no longer carry the generic
    P1/P2/P3 priority framing. The team culture restates all four rules, so nothing
    load-bearing was lost here — but a rig culture that did *not* restate them would
-   silently drop durig's own norms, and nothing today would say so. A candidate
+   silently drop durian-pi's own norms, and nothing today would say so. A candidate
    `check` rule.
 1. **`check` — audit a rig against the research gaps, and a hardened starter.**
    Non-interactive (D21): JSON when piped, human on a TTY. Reports per concern —
@@ -307,7 +307,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    root-confining `ExecutionEnv` covering bash AND the file tools, `inheritEnv` forced false with
    an allowlist, and a verifier's read-only file API. `src/seatguard.mjs` adds the `beforeTool`
    guard — the control D38's risk acceptance had assumed existed — including a `git push` refusal
-   whose only exemption is a grant the operator sets in durig's own environment, which a seat
+   whose only exemption is a grant the operator sets in durian-pi's own environment, which a seat
    cannot forge. `src/seattools.mjs` installs read/write/edit/PowerShell per seat (no bash:
    native-Windows bash is an undeclared Git Bash dependency) and removes write/edit from verifier
    seats; `openHarness` supplies the confining environment and the roster, and `up` scopes the
@@ -351,13 +351,13 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    15.7%, unaware of termination 12.4%) are both unaddressed. Subsumes the
    block/park/wake-after semantics raised against Core_Ideas layer 7.
    → *From the demos (24a, 24e), corrected:* the review first claimed this was platform
-   support durig "switches off". It is not: `resolveSettings` and the `openai` SDK
-   already supply retry, compaction and timeout defaults, and durig already calls
+   support durian-pi "switches off". It is not: `resolveSettings` and the `openai` SDK
+   already supply retry, compaction and timeout defaults, and durian-pi already calls
    `harness.resume()`. What was genuinely missing was the ability to *tune* the stream
-   timeout (now `DURIG_STREAM_TIMEOUT_MS`). The real platform contribution to this item
+   timeout (now `DURIAN_PI_STREAM_TIMEOUT_MS`). The real platform contribution to this item
    is `defineTask` **phases with checkpoints** (vacation.ts), which is what makes a
    multi-step task resumable at all — and `resume()` only becomes load-bearing once
-   durig has tasks for the scheduler to pick up.
+   durian-pi has tasks for the scheduler to pick up.
 7. **Extract the view model and peer navigation graph (D21).** Pure functions:
    turns, collapse state, and "which seat sent to / received from this seat",
    derivable from queue items' `from`/`to` and the Router tools. Unblocks both
@@ -376,7 +376,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
    documents, and `harness.taskGraph()` is a live graph of what waits on what and
    which conversations a task owns. Both are in-process, so neither replaces the
    cross-process read (D11); the question this item should answer is how much of the
-   view model durig can *take* from `viewState()` rather than derive by hand. Also:
+   view model durian-pi can *take* from `viewState()` rather than derive by hand. Also:
    `api.details({ conversationId })` is how a tool result points at the conversation
    that produced it, which is the peer-navigation half.
 8. **One shared read API.** `watch`, `log`, `status`, `check` and `metrics` each
@@ -420,8 +420,8 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     `demo/check.test.mjs`, including that they are SKIPPED (not passed) when the
     store cannot be read, and the whole test was falsified by disabling the rule
     and watching it fail.
-10b. **Dogfood durig for our own work.** Agreed by the operator 2026-10-11: run our
-    own coordination through durig so the obvious problems surface through ordinary
+10b. **Dogfood durian-pi for our own work.** Agreed by the operator 2026-10-11: run our
+    own coordination through durian-pi so the obvious problems surface through ordinary
     use rather than through a test written to look for them. The first session
     routed a real backlog item `pm` → `worker` and found six things, including a
     **wrong documented fact** (F4: entries do carry `usage`), and the running log is
@@ -441,7 +441,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     fixed when it was written), with only the `process.exit(0)` moved so the success
     output is unchanged and a thrown assertion still propagates; the rewrite refused
     to touch any file without exactly one matching site. Proof is the measurement,
-    not the edit: `$TMPDIR/durig-*` went from 545 to 547 across a full suite run,
+    not the edit: `$TMPDIR/durian-pi-*` went from 545 to 547 across a full suite run,
     and after the two remaining causes were fixed, a run left it at 548 → 548.
     **The fix uncovered a second, real defect.** Once the `finally` actually ran,
     `constitution`'s cleanup failed with `EPERM` — its `readConstitution()` helper
@@ -481,6 +481,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     `@earendil-works/pi-tui` (already a dependency of `pi-coding-agent@1.1.0`, so
     it is in-stack) over adopting a new framework; the browser/SSE client is the
     cheaper option if the interaction set stays small.
+89. **TUI: load a seat's full chat transcript when opening its detail view (operator request, 2026-10-16; DELIVERED `ed1ce0c`).**
 89. **TUI: load a seat's full chat transcript when opening its detail view (operator request, 2026-10-16) (DELIVERED `ed1ce0c`).**
     Today the conversation pane only carries the most recently **streaming** entries: the store read is a
     bounded 24-entry page (`SCAN_LIMIT`) and the scroll window cannot reach past that page
@@ -511,7 +512,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     *Acceptance:* `format` normalizes a given file; `format --check` fails on an unformatted file and
     passes on a formatted one (shown FAILING first); the tool choice and pin are recorded; no auto-hook.
 
-98. **TUI: show a seat's context consumption in its conversation view (operator request, 2026-10-17).**
+98. **TUI: show a seat's context consumption in its conversation view (operator request, 2026-10-17; part 1 DELIVERED `1b81368`, part 2 HELD).**
     When the operator opens a specific seat's conversation, show how much of the seat's context budget
     it is consuming. The operator's preferred shape is the pi harness's — e.g. `$6.016 31.4%/1.0M`
     (cost so far · percent of the window · window size) — offered as an opinion, to be confirmed with
@@ -530,7 +531,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     80×24; the denominator is the recommended window or is labelled advertised.
 
 99. **BUG (TUI): the conversation view has no `i` input affordance, and entering it drops the
-    conversation (operator report, 2026-10-17).** *Symptom:* in a seat's conversation view the footer
+    conversation (operator report, 2026-10-17; DELIVERED `02f0004`).** *Symptom:* in a seat's conversation view the footer
     does not offer `i`, and pressing `i` leaves the conversation while typing, so the operator cannot
     tell they can message the seat from there. *Root cause (verified in `src/tui/client.mjs`, `ui.mjs`):*
     `renderTui` dispatches on `view`; the conversation branch is `view === "conversation"`, but `i` sets
@@ -592,7 +593,7 @@ them forward, and the impl items are HELD until pm releases.
   colour/NO_COLOR, cost), advocate #1107 (user call), impl #1108 (implementation, GATED on those
   rulings and items 27/97). The designer/advocate items are ADVISORY and may run now.
 - **99** (bug: the `i` input affordance drops the conversation; fix = treat input as an OVERLAY on
-  the current view) — owners: impl #1109 (fix, GATED), designer #1110 (footer/hint wording, advisory).
+  the current view; **DELIVERED `02f0004`**) — owners: impl #1109 (fix, GATED), designer #1110 (footer/hint wording, advisory).
 
 100. **Measure landing health — unlanded verified branches and time-to-land (operator request,
     2026-10-17).** The branch backlog (2026-10-17: 15 verified-but-unlanded branches) is invisible today:
@@ -739,7 +740,7 @@ than two artifacts. Still open: which workflows define "recommended", and whethe
 the measure layer can make an extension's effect visible (19 — now answered as
 "possible, and git is the change log").
 
-**The cost model first, because it decides the whole question.** For durig the
+**The cost model first, because it decides the whole question.** For durian-pi the
 burden of an unused feature is *not* disk and *not* speed: the per-seat scan
 measures 0.9–1.4 ms, so runtime cost is negligible. The binding costs are (a)
 prompt tokens on every request, (b) **which tools the model sees**, which changes
@@ -769,7 +770,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
    user forces a redesign. Build the seam so a wrapper can be inserted between
    provider and harness the way `wrapProviderWithSlots` already is.
    → *Grounded 2026-10-11 (Pi Durable's own account of extensions):* the registry
-   durig installs `Router` into **is** the extension mechanism, so the model this
+   durian-pi installs `Router` into **is** the extension mechanism, so the model this
    item proposes already exists. Two things it gets for free: a conversation
    "selects which extensions and tools it uses, and stores only their names", so
    per-seat-role selection is `configure(tx, convId, { tools: { remove: [...] } })`
@@ -797,13 +798,13 @@ surface. A feature that is off must therefore cost nothing — not "little".
    **✅ done (2026-10-11).** `src/provenance.mjs` reads the revision, the dirty
    flag and the active set; `metrics` reports them in its JSON contract and as one
    line above the table. Conditions met: the committed active set is reported
-   (builtin `durig.router` first, then the declared `DURIG_EXTENSIONS` paths —
+   (builtin `durig.router` first, then the declared `DURIAN_PI_EXTENSIONS` paths —
    paths, not names, because loading a module executes it and a read-only query
    must not run code to describe what it would have run), and a dirty tree is
    flagged with why it matters rather than printed as a bare hash. Two things the
    implementation had to get right that the position did not anticipate: the status
-   must be scoped to `-- .`, because durig normally sits inside a larger repository
-   and an unscoped check reported 92 changed paths where durig's own subtree had 0
+   must be scoped to `-- .`, because durian-pi normally sits inside a larger repository
+   and an unscoped check reported 92 changed paths where durian-pi's own subtree had 0
    (a flag that is always true is worse than no flag); and "no repository" reads as
    `unknown` rather than `clean`, which is the difference between evidence and its
    absence. `demo/provenance.test.mjs` is the 24th demo and proves the dirty flag
@@ -814,7 +815,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
    **proxy** (compressing what the agent *reads*: logs, CSV, YAML, JSON, test
    output; vendor-reported 33.2% session input-token reduction). Three things to
    settle before any of it ships: (i) **the shape it has to arrive in** — caveman
-   ships as a pi coding-agent plugin, and durig hosts neither that plugin form nor
+   ships as a pi coding-agent plugin, and durian-pi hosts neither that plugin form nor
    the `pi` CLI (see 23), so its two halves must be re-expressed on native seams:
    the *skill* is a prompt `section` and the *proxy* is a `wrapTool` decorating tool
    results. Both are ordinary pi-durable concepts, so "does it even apply to us" is
@@ -871,7 +872,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
    evidence — item 4 (M3). Naming the loop is what makes that limit visible.
 
 23. **Load extensions from config — the "support pi extensions" item.** Small,
-    now that 18 is grounded. `durig.config.json` (and the rig spec) gains an
+    now that 18 is grounded. `durian-pi.config.json` (and the rig spec) gains an
     `extensions` list of module paths; `openHarness` imports each and installs it
     into the registry it already builds for `Router`. A pi-durable extension is a
     plain module exporting `defineExtension({name, sections, tools, hooks, tasks,
@@ -881,13 +882,13 @@ surface. A feature that is off must therefore cost nothing — not "little".
 
     **Deliberately not the same thing as a pi *coding-agent* extension.** Those
     target the interactive agent — slash commands, a TUI, project-trust prompts —
-    and durig neither depends on `pi-coding-agent` nor has such a surface (D21
+    and durian-pi neither depends on `pi-coding-agent` nor has such a surface (D21
     keeps the CLI non-interactive). So the loader loads *this* kind, and a
     coding-agent plugin is not portable to it. That distinction is the fact behind
     item 20's split verdict, and getting it wrong is how someone spends a week
     trying to load caveman's plugin as-is.
     **✅ done (2026-10-11).** `src/extensions.mjs` loads module paths from
-    `DURIG_EXTENSIONS`, `openHarness` installs them on top of Router, and `up`
+    `DURIAN_PI_EXTENSIONS`, `openHarness` installs them on top of Router, and `up`
     reports the names. `demo/extensions.test.mjs` is the 22nd demo, and it proves
     the part that matters: a configured extension's section reaches a seat's
     `pi.system` entry — with a control asserting the section is absent when it is
@@ -899,23 +900,23 @@ surface. A feature that is off must therefore cost nothing — not "little".
     an extension runs in-process with the harness API, so listing a path is trusting
     it.
 
-31. **Port pi-warden's action guard and done-check into durig seats.** Vendored to
-    `durig/vendor/pi-warden/` (v1.4.0, MIT) — **untracked**, per the root `.gitignore`'s
+31. **Port pi-warden's action guard and done-check into durian-pi seats.** Vendored to
+    `durian-pi/vendor/pi-warden/` (v1.4.0, MIT) — **untracked**, per the root `.gitignore`'s
     `vendor/` convention for reproducible upstreams; the tracked record is
-    `durig/docs/PROVENANCE-pi-warden.md`. **Port source, not a dependency: nothing imports it
+    `durian-pi/docs/PROVENANCE-pi-warden.md`. **Port source, not a dependency: nothing imports it
     yet, so it protects nothing yet.** It cannot be a
     dependency: it peer-depends on `@earendil-works/pi-coding-agent` and binds that host's
-    ExtensionAPI (`pi.on` across **17 events** + 3 `registerTool`s), while durig installs
+    ExtensionAPI (`pi.on` across **17 events** + 3 `registerTool`s), while durian-pi installs
     pi-durable extensions (`defineExtension`/`hook`/`ToolHooks`). Only `extension.js` and
     `load.js` touch the host; the other 60 modules are host-agnostic policy logic.
-    *Two halves fit durig directly:* **action-guard** (`evaluateAction`) — the control that
+    *Two halves fit durian-pi directly:* **action-guard** (`evaluateAction`) — the control that
     makes "full shell" defensible before codemode-with-permissions exists (D38) — and
     **done-check** (`needsDoneCheck`, `evaluateDone`, `projectCheckCommand`), which is
     precisely the W2 gap: `complete_work` carrying a claim with no evidence.
     *Measured cost, not estimated:* a reachability pass shows **no judge-free subset** —
     rooting at `redact`+`shell-writes`+`tools`+`holds` still reaches `guard` → `conscience` →
     `backend` → `pi-typesafe` (19 modules, 495 KB, one external dep), and the action-guard
-    path alone is 18 modules / 482 KB. The **adapter is the work**, and durig's hooks are
+    path alone is 18 modules / 482 KB. The **adapter is the work**, and durian-pi's hooks are
     stronger than what pi-warden binds to: `beforeTool` blocks *or rewrites*, first block
     wins, and `ToolCall.parent` exposes nested calls (so it would cover codemode scripts too).
     *Gates before it is trusted:* (a) the judge is **network egress with a third-party
@@ -963,21 +964,21 @@ surface. A feature that is off must therefore cost nothing — not "little".
     *Proof:* a demo where one escape is denied by the grant predicate and another independently by
     the environment, so neither layer is load-bearing alone.
 
-33. **Prompt-cache effectiveness — are durig's seats actually getting cache hits?** Raised by the
+33. **Prompt-cache effectiveness — are durian-pi's seats actually getting cache hits?** Raised by the
     operator with `docs/Prompt_Caching_Research.md` and DeepInfra's
     [prompt cache retention](https://docs.deepinfra.com/chat/prompt-cache-retention). Cost is a
     standing measure (item 20's neighbourhood) and cache is the largest single lever on it, so
     the question is not "can we cache" but "are we, and how much".
-    *The seam already exists and durig exposes none of it.* `ConversationStreamOptions.cacheRetention`
+    *The seam already exists and durian-pi exposes none of it.* `ConversationStreamOptions.cacheRetention`
     is a real field (`durable/src/harness/types.ts:461`), and pi-ai's OpenAI-compatible provider —
-    the path durig's DeepInfra traffic takes — already resolves it and can send prompt-cache
+    the path durian-pi's DeepInfra traffic takes — already resolves it and can send prompt-cache
     fields and session-affinity headers (`ai/src/api/openai-completions.ts:294-363, 763-781`).
-    durig deliberately exposes only one harness setting today (`stream`, per 24a), so this is the
-    same shape of work as `DURIG_STREAM_TIMEOUT_MS`: decide whether a second knob is justified,
+    durian-pi deliberately exposes only one harness setting today (`stream`, per 24a), so this is the
+    same shape of work as `DURIAN_PI_STREAM_TIMEOUT_MS`: decide whether a second knob is justified,
     and why.
     *What DeepInfra actually requires* (cited, from the retention doc): `prompt_cache_key` with
     every request — **a stable identifier for the context, "for example a session or agent id"**,
-    which is exactly what a durig seat is — plus `prompt_cache_options{mode:"explicit",
+    which is exactly what a durian-pi seat is — plus `prompt_cache_options{mode:"explicit",
     ttl:"5m"|"1h"}` to open the window, and an optional `prompt_cache_breakpoint` marking where
     the reusable prefix ends. Reads bill at **0.2×** input on Nemotron-3-Ultra, writes at **1.25×**
     (5m) or **2.0×** (1h); reuse without a `ttl` does **not** extend the deadline; after expiry it
@@ -989,13 +990,13 @@ surface. A feature that is off must therefore cost nothing — not "little".
     declarations, which may sit *under* one increment — in which case retention would retain
     nothing and only the write premium would be paid; (b) **model support is narrow** — only
     `nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B` and `moonshotai/Kimi-K2.7-Code` today, and neither
-    is durig's default model, so on `zai-org/GLM-5.3-Flash` the parameter is **ignored** and billed
+    is durian-pi's default model, so on `zai-org/GLM-5.3-Flash` the parameter is **ignored** and billed
     as standard input. Ordinary best-effort caching still applies there.
     *Measure from data already persisted, no new instrumentation.* Assistant entries already carry
     `usage` including `cacheRead`/`cacheWrite` (F4), which is precisely DeepInfra's
     `usage.prompt_tokens_details.{cached_tokens,cache_write_tokens}` — so a hit-rate measure is
     direct class, feeding `computeMetrics` like every other measure (D24).
-    *Prompt stability is a lever durig controls, and this is the non-obvious half.* The
+    *Prompt stability is a lever durian-pi controls, and this is the non-obvious half.* The
     constitution is read **per request** so one edit re-arms every seat — and, unnoticed until
     now, invalidates **every seat's cached prefix at once**. `up --refresh` and the optimizer
     rewrite prompts by design. The long-context research names this failure directly: a
@@ -1029,7 +1030,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
       A store carried to another machine resolves a root that does not exist; the failure is
       confined rather than escaped, but it is wrong and silent. The fix is the doc's: keep the
       absolute root as **configuration** and persist a **root token plus a relative path**.
-    - **`MAX_PATH` is a live risk for worktrees**, since `C:/tmp/durig-dev/<item>` plus a
+    - **`MAX_PATH` is a live risk for worktrees**, since `C:/tmp/durian-pi-dev/<item>` plus a
       `node_modules` tree is deep by construction, and the doc's `toNamespacedPath` is the known
       answer.
     *Shape, when it is done:* `toCanonical`/`toHost` as the only platform-aware pair in the tree,
@@ -1045,7 +1046,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
 35. **A skill loader — inject the skills a seat or a task actually needs.** Today skills are
     inlined into instruction text at `up`: `scripts/from-openrig.mjs` reads
     `agents/shared/skills/<name>/SKILL.md`, records `seat.skills` names, and appends a
-    `## Skill: …` block — and the converter says why in one line: *"durig has no separate skill
+    `## Skill: …` block — and the converter says why in one line: *"durian-pi has no separate skill
     loader yet"*. So every seat carries every skill its profile names, for the whole run, whether
     or not the work needs it.
     *The mechanism already exists.* pi-durable's `PromptSection` renders *"in order before each
@@ -1064,7 +1065,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
     *Proof:* a demo where two seats in one rig carry different skills, and a seat whose work does
     not match a skill does not carry it.
 36. **Tell the operator when a rig should have skills — as a `check` rule, not a measure.** The
-    question "should durig nudge the user to write a skill?" has a cheap and principled answer,
+    question "should durian-pi nudge the user to write a skill?" has a cheap and principled answer,
     and the precedent fixes its shape: `shared-reviewer-model` is a config-derived property that
     is deliberately a **`check` rule**, and it is **kept out of the metric notices precisely
     because it is already visible as a rule**. Skill coverage is the same kind of thing — a
@@ -1138,7 +1139,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
     send, so a seat cannot wake a seat it may not reach; (ii) it must not wake anyone for a notice
     once 39 lands; (iii) item 33 — the wake input mutates the conversation prefix, so it must be
     byte-stable per wake and not per request or it zeroes the cache; (iv) bound the recursion.
-    *(b) A resident `durig run` process — the platform-native model, not a fallback.* One long-lived
+    *(b) A resident `durian-pi run` process — the platform-native model, not a fallback.* One long-lived
     process holding a harness with `resume()`, scanning the queue and driving recipients (this is
     also the only place item 6's deadlines and retries can live). pi-durable's "Multiplayer" post
     reports this as its intended shape, not a workaround: *"everything a UI needs is committed
@@ -1179,7 +1180,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
     socket-friendly) or `watchEvents()` (friendlier, more bytes) for changes; a late/reconnecting
     client simply starts from the current view. It is the same resident process as item 38(b),
     which is why 38 and 40 are one architectural decision: build the server once and both the queue
-    driver and live streaming fall out. durig's `log --follow`/`watch` become clients instead of
+    driver and live streaming fall out. durian-pi's `log --follow`/`watch` become clients instead of
     storage pollers.
     *(b) Publish progress to a sidecar.* The driving process writes deltas to an ephemeral artifact
     beside the store (like `genlock`'s slot files) that `log --follow` tails. Cheap and local, but it
@@ -1197,7 +1198,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
     follower process simply never read the `pi.live` document it already has access to. Prefer this
     over (a)/(b); (a) becomes an optimisation (no poll latency) rather than the enabling step.
     *D11 tension — revisit its conclusion, not its evidence.* D11 established that sqlite has no
-    cross-process change notification and concluded that durig's viewers must read storage directly
+    cross-process change notification and concluded that durian-pi's viewers must read storage directly
     and never attach a harness. The **evidence** holds; the **conclusion** was too strong. The
     platform's answer is one resident writer/server whose clients subscribe — which keeps the
     single-writer discipline intact while making streaming and multiplayer possible. A viewer opening
@@ -1291,9 +1292,14 @@ surface. A feature that is off must therefore cost nothing — not "little".
     `frequency_penalty`/`presence_penalty` while clamping `top_p` up to 0.95; `repetition_penalty`
     is not in DeepInfra's documented set. (Recorded here so the next session does not re-propose
     it — see the 2026-10-11 review of that patch.)
+    *Recorded gap (2026-10-18, #1936):* durian-pi has NO per-seat sampling surface — `configure(...)` sets
+    only model/instructions/cwd/thinkingLevel, and the provider carries no `temperature`/`top_p`/`top_k`.
+    DeepInfra's `google/gemma-4-31B-it` page recommends temperature=1.0, top_p=0.95, top_k=64, and there
+    is nowhere to put them. This is a GAP, not a change: adding a sampling surface is a separate
+    decision (a new per-seat config knob), deliberately NOT bundled with the catalog entry in #1936.
     *Candidate levers, best first:*
     (a) **Expose reasoning effort.** DeepInfra's V4.1-Flash doc lists `reasoning_effort` as an
-    integer 1–100, but durig exposes no reasoning-effort control at all, so the model always runs
+    integer 1–100, but durian-pi exposes no reasoning-effort control at all, so the model always runs
     with thinking `disabled` (our compat sends `thinking: {type:"disabled"}`). If the "let me do
     it" monologue is thinking that has nowhere to go but content, routing it to
     `reasoning_content` is the fix. Wire a per-seat/per-rig reasoning effort into the model or
@@ -1321,7 +1327,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
     **context contamination** (the model self-conditioning on its own degenerate turn in history),
     not the model. `conversation.reset(handoff)` in pi-durable fixes it: it writes a `pi.reset`
     boundary so prior turns leave the context without deleting the durable transcript, and 37(b)
-    then completed in one clean run. durig has **no verb** for this — it had to be done with a
+    then completed in one clean run. durian-pi has **no verb** for this — it had to be done with a
     one-off script (the same one-off that recovered the stranded submission, which is 37(b)'s job).
     *Shape:* `node cli.mjs reset <seat> [handoff]` that calls `conversation.reset()`, reports the
     entry id it wrote, and refuses (or warns) when the seat holds a live generation lease. Related
@@ -1330,12 +1336,67 @@ surface. A feature that is off must therefore cost nothing — not "little".
     subsequent turn demonstrably excludes the prior turns (assert the reset boundary is the
     context head) — falsifiable by disabling the reset.
 
+152. **A simple core plus an opt-in extension layer (IDEA TO EXPLORE LATER — NOT SCHEDULED).**
+    Recorded 2026-10-17 at the operator's request, as an idea to explore later — explicitly *not*
+    scheduled, and *not* sequenced ahead of the critical path (`#1610` MAIN-RED, the crash-proofing
+    cluster). *Numbering:* the operator first proposed 132 (taken — the API-key-management item),
+    then 151; 151 is also taken (`competitor-review-covered`, below), so this entry takes the next
+    free number. When it is eventually picked up, route the interface/seam *design* to lead (an
+    architecture-level doc, plus a numbering decision).
+    *Why it is not a new mechanism.* The extension seam already exists: pi-durable's
+    `defineExtension({ name, sections, tools, hooks, tasks, wraps })` is installed by `src/rig.mjs`
+    (`Router`, ~line 271), `src/seatguard.mjs` (`SeatGuard`) and `src/seattools.mjs` (`SeatTools`),
+    and the loader exists (`src/extensions.mjs`; ROADMAP 23, done). The gap: the seam accepts only
+    *harness-level* contributions, from *external module paths*. durian-pi's own features cannot
+    register a CLI verb or be lazily loaded — `cli.mjs` (~2.7k lines, ~25 verbs) statically imports
+    its feature modules (37 top-level imports; only `checkup` is lazy), so every verb pays the load
+    cost for every feature and "off" is not a real state (violates D29's cost rule).
+    *Proposed shape (record only).*
+    (1) Freeze the core to the ASK E "NOT candidates" (`docs/reviews/ask-e-extension-seam.md` §2):
+    the store seam (`src/rig.mjs`), the single-writer wake family (broker/driver/scheduler/genlock),
+    the trust boundary (`confine.mjs`/`seatguard.mjs`), the CLI dispatcher + JSON contract (D21),
+    config, and the extension loader (~8 modules).
+    (2) Widen the seam by one axis: an extension declares CLI verbs (a `commands` field), loaded
+    lazily per verb; `cli.mjs` becomes a dispatcher over a registry; an un-enabled extension's verb
+    does not exist and says "not enabled (enable it with ...)", distinct from "unknown command".
+    Extraction candidates (ASK E §1): `src/worktree.mjs`; the TUI (`src/tui/client.mjs`,
+    `src/tui/driver.mjs`, the view kit); `src/checkup.mjs`; then a second wave:
+    metrics/provenance/attention, format, optimizer/judge, degeneration/secretdetect.
+    (3) Opt-in surface, in order of user contact: Profile (data, not an edition — D29; "recommended
+    is mostly rig shape", D35); an enable list (bundled extensions by *name*; third-party by
+    explicit *path* — no auto-discovery, `src/extensions.mjs`); per-seat/per-role scoping via the
+    existing `configure(tx, convId, { extensions })` seam surfaced in the rig spec (e.g. terse-voice
+    stays off for user-facing roles, ROADMAP 20); `DURIAN_PI_EXTENSIONS` stays as the ad-hoc escape
+    hatch; `config`/`up`/`metrics` keep reporting the resolved/active set (provenance, ROADMAP 19).
+    (4) Off costs nothing (D29): lazy import; tools/sections enter the registry only when enabled —
+    no prompt tokens, no tools the model sees, no test/doc load.
+    (5) Easier to test: a defined extension contract lets each component be exercised in isolation
+    against a stub core instead of only through the whole CLI (today a feature's test surface is
+    entangled with `cli.mjs`, D21) — the *same direction* as the open "test-suite partitioning by
+    functional area" work (`docs/NEXT.md`); link them rather than duplicating.
+    (6) A better-defined interface so a different implementation can plug in. State it honestly: a
+    user may swap only in the *extension* layer (view kit, worktree strategy, formatter, retrieval,
+    TUI, ambient measures). The core is deliberately *not* pluggable — ASK E's binding constraints
+    (i)–(iv) forbid a plugin writing the store, a second writer path, git state-mutation authority,
+    or splitting the single writer. Any change requiring a second writer or a different store is
+    out of scope by construction.
+    *Constraints recorded with the item:* ASK E (i)–(iv); D29 (one distribution, no
+    `durian-pi-core`/`durian-pi` editions; profiles are data; off costs nothing); D21 (CLI stays
+    non-interactive, one JSON document per command). *Prerequisite:* the command spool
+    (#912 / ROADMAP 71) is what makes extension writes safe.
+    *Grounding (verified present):* `docs/reviews/ask-e-extension-seam.md`; `docs/DECISIONS.md`
+    D29, D35; `docs/ROADMAP.md` items 18, 19, 20, 23, 71 and this section; `src/extensions.mjs`;
+    `src/rig.mjs` (`Router`); `src/seatguard.mjs`; `src/seattools.mjs`; #538 (the work-item *view*
+    as the first extension case, done — the general seam remains unregistered); `docs/WORKFLOWS.md`
+    "Deriving 'recommended'". *Action now:* docs-only — this ROADMAP entry plus the two
+    cross-links; no implementation, no design now.
+
 ## Sharing publicly
 
-22. **Publish durig as its own repository — no releases yet.** The operator wants
+22. **Publish durian-pi as its own repository — no releases yet.** The operator wants
     the work and the intentions visible, partly so the pi-durable team can see what
     people are building on it, and so improvements can arrive from others later.
-    Shape: `git subtree split --prefix=durig` keeps the history built here (the
+    Shape: `git subtree split --prefix=durian-pi` keeps the history built here (the
     decision log, the 21 demos) instead of starting fresh, and the code is already
     nearly self-contained — `@earendil-works/pi-durable` and `pi-ai` are **public on
     npm** (1.1.0, MIT). **The coupling is already cut:** the two imports of
@@ -1351,7 +1412,7 @@ surface. A feature that is off must therefore cost nothing — not "little".
 59. **A public documentation site — GitHub Pages, for newcomers, users, and maintainers.** The repo is
     becoming public (item 22) and its docs are substantive but organized for *us*: `STATUS`/`NEXT`/
     `DECISIONS`/`ROADMAP` are internal working surfaces. Three audiences need three shapes — a
-    **landing page** for someone first hearing about durig (what it is, why it exists, a 60-second
+    **landing page** for someone first hearing about durian-pi (what it is, why it exists, a 60-second
     example), **end-user pages** for operating a rig (install, quickstart, the CLI verbs, the TUI,
     configuring a rig, troubleshooting), and **maintainer pages** for changing it (the broker and
     architecture, `docs/PI-DURABLE-INTEGRATION.md`, how to build on pi-durable, the decisions record,
@@ -1374,39 +1435,39 @@ surface. A feature that is off must therefore cost nothing — not "little".
 
 24. **Adopt what the pi-durable demos show, and record what they don't.** The Pi
     Durable post points at two examples (`experimental/durable`, `experimental/vacation`
-    in the pi repo at durig's pin). Their sources had **never** been read; the review is
+    in the pi repo at durian-pi's pin). Their sources had **never** been read; the review is
     `docs/REVIEW-pi-durable-demos.md` and it found one shipped defect immediately (item
     25). The demos turn out to be *one* project — the vacation planner shares
     `main.ts` and `tui.ts` with the coding agent at identical blob shas — so the
     transferable surface is `runtime.ts` and `vacation.ts`. Six independently takeable
     pieces, each naming the file that shows it:
     24a. **The harness settings knob — mostly a correction, one real fix.**
-    **✅ done (2026-10-11), and it shrank on inspection.** The review claimed durig
+    **✅ done (2026-10-11), and it shrank on inspection.** The review claimed durian-pi
     "has no stream timeout, no retry policy, no compaction config and no steering or
     follow-up mode" and "never calls `harness.resume()`". Both were **wrong**, and
-    wrong the same way: the demo's side was read while durig's side was described from
+    wrong the same way: the demo's side was read while durian-pi's side was described from
     memory. Checked against the platform: `resolveSettings` merges retry (3 attempts,
     2 s base, 60 s agent delay), compaction, progress, `toolExecution`, both queue modes
-    and `contextRetentionMs` over built-in defaults, so durig already had all of them;
+    and `contextRetentionMs` over built-in defaults, so durian-pi already had all of them;
     the provider path is the `openai` SDK, whose defaults are `maxRetries: 2` and a
-    600000 ms total request timeout, so it could not hang forever either; and durig
+    600000 ms total request timeout, so it could not hang forever either; and durian-pi
     **already calls** `harness.resume()` in `openHarness`, with viewers excluded so a
     passive `watch` cannot kick the queue it observes.
     The one real gap was a **knob**: `stream` is the single field with no default
-    (`{ ...settings?.stream }` → `{}`), so durig could not raise the timeout for the
-    slow single-model rig that `DURIG_MAX_CONCURRENT_SEATS=1` exists to support, nor
+    (`{ ...settings?.stream }` → `{}`), so durian-pi could not raise the timeout for the
+    slow single-model rig that `DURIAN_PI_MAX_CONCURRENT_SEATS=1` exists to support, nor
     lower it to fail fast instead of waiting out ten minutes on a stalled endpoint.
-    `DURIG_STREAM_TIMEOUT_MS` now reaches `Harness.open`, rejects a bad value loudly
+    `DURIAN_PI_STREAM_TIMEOUT_MS` now reaches `Harness.open`, rejects a bad value loudly
     rather than silently taking the default, and is **unset by default** so the platform
-    timeout stands rather than a number durig invented. `resume()` needs nothing until
-    durig has durable tasks — it enables the scheduler, and durig has none to resume —
+    timeout stands rather than a number durian-pi invented. `resume()` needs nothing until
+    durian-pi has durable tasks — it enables the scheduler, and durian-pi has none to resume —
     so the remaining half belongs to 24e.
     *The lesson, recorded because it is the reusable part:* a review that reads one side
     carefully and the other from memory produces confident, wrong gap claims, and a
     wrong gap is worse than no gap. Corrections are marked in place in
     `docs/REVIEW-pi-durable-demos.md` rather than quietly edited away.
     24b. **Spike the HTTP dispatcher.** `configureHarnessHttp` exists because "without
-    it, some provider streams break off". durig configures none. This is listed as a
+    it, some provider streams break off". durian-pi configures none. This is listed as a
     **possible** live defect, not a confirmed one — it needs an hour to rule in or out,
     and it would present as an occasional truncated stream that looks like a provider
     fault.
@@ -1437,25 +1498,25 @@ surface. A feature that is off must therefore cost nothing — not "little".
     24e. **Durable task phases with checkpoints, and conversation ownership.**
     `defineTask` with `phases` returning `{ status: "running", checkpoint: { phase, … } }
     survives a crash between its steps, and `ownership` makes aborting a parent abort
-    what it owns (`vacation.ts`). durig's queue items carry a transition trail but no
+    what it owns (`vacation.ts`). durian-pi's queue items carry a transition trail but no
     phases and no ownership, so aborting a seat does not stop what it started. This is
     the substance of item 12 and the other half of item 6.
     24f. **Structured tool results and progress: `api.details()` and `api.output()`.**
     A tool can hand the view a `{ conversationId }` to link to, and can emit progress
-    so a slow call does not look hung (`subagent.ts`, `vacation.ts`). durig's tools
+    so a slow call does not look hung (`subagent.ts`, `vacation.ts`). durian-pi's tools
     return one final string; `context.abortSignal` support transfers outright and long
     operations should honour it.
     24g. **Coalesce renders per burst.** Commit listeners plus a `setImmediate` guard
     render once per burst of real change (`runtime.ts`). The subscription itself is
-    in-process only and cannot replace durig's cross-process poll (D11) — but the
-    coalescing can: durig redraws on a timer whether or not anything changed.
+    in-process only and cannot replace durian-pi's cross-process poll (D11) — but the
+    coalescing can: durian-pi redraws on a timer whether or not anything changed.
     *Deliberately not taken:* the TUI (no `pi-coding-agent` dependency, and D21/D22
-    keep durig non-interactive), a session picker (a rig already *is* a database), and
+    keep durian-pi non-interactive), a session picker (a rig already *is* a database), and
     the view subscription. Recorded in the review so a gap is never confused with a
     declined feature.
 25. **Derive the protocol primer from the registry.** `prompt.ts` builds pi's system
     prompt from `input.agent.tools`, so a tool cannot exist without being documented.
-    durig's `PROTOCOL` primer is hand-written text beside the registry, and the drift
+    durian-pi's `PROTOCOL` primer is hand-written text beside the registry, and the drift
     was realised: `defer_work`/`resume_work` shipped in item 5 while the primer kept
     describing four tools, so no seat in the real CLI was ever told it could defer.
     **Fixed immediately** (both lines added, and `demo/primer.test.mjs` holds the prose
@@ -1542,7 +1603,7 @@ cheapest first lever is masking stale tool output, not summarizing.
 
 **Follow-up research landed 2026-10-17** (`docs/reviews/context-compaction-followup.md`,
 commissioned via `docs/reviews/context-compaction-followup-research-prompt.md`). Its headline
-changes the trigger question: durig's curated catalog sets `contextWindow: 1_048_576` for
+changes the trigger question: durian-pi's curated catalog sets `contextWindow: 1_048_576` for
 DeepSeek-V4.1-Flash and GLM-5.3-Flash (`src/providers/deepinfra-models.ts:156,166`), so the
 inherited auto-compaction threshold (`contextWindow − reserveTokens`) is ~1.03M tokens — while
 the report finds Z.AI's own GLM-5.3-Flash evaluation caps at **300K** (`advertised-elsewhere`)
@@ -1559,7 +1620,7 @@ provider-side and unmeasured). Items 92–97 are **registered in this backlog, n
 
 What makes this ours rather than general: **a seat is a pi-durable conversation**
 (`src/rig.mjs`, the Seats doc) created once at `up` and reused for every `send`, so a seat's
-context accumulates across the whole project, and nothing in durig observes or controls that
+context accumulates across the whole project, and nothing in durian-pi observes or controls that
 growth. Compaction is the platform's automatic behaviour, inherited rather than chosen (24a
 found `stream` is the only `HarnessSettings` field with no default), and there is no way to
 start a seat a fresh conversation. Item 13 names the exhausted handover; 27–29 are its three
@@ -1603,12 +1664,12 @@ missing halves, and 30 is the honest advert.
     fresh conversation it does not.** The research's strongest and least intuitive finding is
     that compaction helps *even when the window never fills* — stale exploration impairs
     reasoning regardless of length — and that the best moment is a **phase transition**, not
-    mid-reasoning. A durig team working item after item needs that lever.
+    mid-reasoning. A durian-pi team working item after item needs that lever.
     *Two levers, and they are not the same operation:* **compaction** summarizes in place and
     leaves a summary that can be pointed at; a **fresh conversation** drops the history
     entirely and leaves nothing to point at. The platform already provides the first —
     `Conversation.compact(instructions?, context)` (`harness/types.ts`), recorded as a
-    `pi.compaction` entry with `reason: "manual"` — and durig exposes neither: `USAGE` lists
+    `pi.compaction` entry with `reason: "manual"` — and durian-pi exposes neither: `USAGE` lists
     eleven commands, none of which compacts or resets a conversation, and `up --refresh`
     re-applies the stored prompt *without* touching it.
     *28a, the cheap half — expose compaction.* The mechanism exists, so this is exposure and
@@ -1659,7 +1720,7 @@ missing halves, and 30 is the honest advert.
     starter rig's intake step encodes it so a new rig does not have to reinvent it.
 30. **Advertise the honest state of context management, then keep the advert true.** The
     operator asked that `docs/FEATURES.md` advertise responsible context management. Today
-    the honest version is short: compaction is the platform's automatic behaviour and durig
+    the honest version is short: compaction is the platform's automatic behaviour and durian-pi
     **deliberately does not override it** (24a: one `HarnessSettings` field exposed, and the
     reason), and a retry carrying `--request-id` reuses the existing submission so it does
     not add a duplicate turn to a seat's context (24d) — but there is **no pressure measure
@@ -1680,7 +1741,7 @@ missing halves, and 30 is the honest advert.
     of inactivity, not one hour. Anthropic's default is 5 min (1 h is an optional tier, ~2×
     write cost); OpenAI is automatic ~5–10 min, hard-capped near 1 h; **DeepInfra — our
     provider — is explicitly 5 min or 1 h** (`cache_retention` / `prompt_cache_options`), and
-    durig requests neither today (`docs/Prompt_Caching_Research.md`; item 33). So "1 hour" is
+    durian-pi requests neither today (`docs/Prompt_Caching_Research.md`; item 33). So "1 hour" is
     the *maximum/optional* window, not the default, and the threshold must be
     **provider-aware**, keyed to the retention we actually request — otherwise the heuristic
     fires on the wrong clock (5 min vs 1 h is a 12× difference in idle tolerance).
@@ -1726,7 +1787,7 @@ missing halves, and 30 is the honest advert.
     `edits: [{ target, action: "omit" | "replace", messages? }]`
     (`pi-durable/dist/types.d.ts:262`), which overrides an earlier visible entry's contribution
     to the model context without touching the store. So this is exposure, not invention — a
-    durig surface that omits completed tool-result entries (and, where the provider permits,
+    durian-pi surface that omits completed tool-result entries (and, where the provider permits,
     replaces thinking blocks) before any summary runs.
     *Invariants (hard):* never omit a tool result whose call is still open — OpenAI's API
     requires every tool call to have a result; clear only completed pairs and never the most
@@ -1740,7 +1801,7 @@ missing halves, and 30 is the honest advert.
 93. **Constraint pinning — keep the standing rules verbatim outside any summary.** The
     follow-up research's sharpest safety finding (Governance Decay) is that compaction's worst
     loss is *silent constraint loss*, not recall loss, and that re-injecting the standing policy
-    verbatim restored compliance. durig already has a byte-stable per-seat prefix (persona +
+    verbatim restored compliance. durian-pi already has a byte-stable per-seat prefix (persona +
     constitution); this item makes it **explicitly outside the compactable range** and
     re-asserted after every compaction and fresh session, then validates it with a
     constraint-survival probe. Pairs with item 27's measure and item 97's harness.
@@ -1749,7 +1810,7 @@ missing halves, and 30 is the honest advert.
 
 94. **Cap compaction count per session, then force a fresh session.** Repeated compaction
     compounds error (the research's chain finding: constraint violation rising across rounds). A
-    long-lived durig seat can compact many times in one session (the report plans for 10+ in
+    long-lived durian-pi seat can compact many times in one session (the report plans for 10+ in
     four hours). Cap the count and, past the cap, prefer the fresh-session lever (28b) with a
     pointer-carrying handoff. *Owner:* impl; *depends on:* 27 (observability), 28b.
     *Acceptance:* a session that hits the cap takes a fresh conversation at the next item
@@ -1767,7 +1828,7 @@ missing halves, and 30 is the honest advert.
 96. **Verifier and retry context isolation (fork vs isolate).** Fresh context is a correctness
     property: the follow-up research confirms the deepagents rule — worker = fork, verifier =
     isolated, researcher = isolated — and that a verifier must not inherit the author's
-    compaction summary, or the review is anchored. durig already runs `qa` as a separate
+    compaction summary, or the review is anchored. durian-pi already runs `qa` as a separate
     conversation on a different model family (and has a `no-verifier-seat` check); this item
     extends `check` to assert the verifier is **not forked from / primed with the author's
     summary**, and defines the retry rule: a re-wake of a failed attempt **isolates with a
@@ -1810,13 +1871,13 @@ ruling circle took many turns; `#55`/`#79`/`#100` sat `deferred` indefinitely wi
 deadline; and the `run` driver **exited/died while `claimed` and `deferred` work
 existed**, so the stall was invisible until a human looked. None of these was a seat
 failing its policy — the **substrate** did not notice or act, which is the class
-durig's own attention channel already detects but nothing consumes.
+durian-pi's own attention channel already detects but nothing consumes.
 
 **What the research says (this is D23's list, not a new one).** D23 reviewed
 `docs/Patterns_and_Pitfalls_of_LLM_Agents.md` and the two load-bearing citations,
 **MAST (arXiv 2503.13657)** and **Anthropic's "Patterns and problems in emerging
 multiagent systems"**: the convergent remedies (durable single-writer store,
-orchestrator-worker, explicit edges, audit trail) are already durig's foundation, and
+orchestrator-worker, explicit edges, audit trail) are already durian-pi's foundation, and
 what is missing is **protocol** — *verification with evidence, termination/attempt
 semantics, and a deferral verb*. Our deadlocks landed exactly on the named categories:
 **FC1 termination** (a park with no deadline), **FC2 inter-agent misalignment** (a
@@ -1832,7 +1893,7 @@ paragraph):
   it first.
 - **P2 — Make deferring exceptional and reasoned.** A defer needs a stated reason, and
   "I could decide this myself" is not one (mirrors the ratcheting tier, 30b/`#60`).
-- **P3 — A narrow supervisor that acts (item 42).** Consume the notices durig already
+- **P3 — A narrow supervisor that acts (item 42).** Consume the notices durian-pi already
   derives (`deferred_awaiting_answer`, `idle_with_queued_work`, `admitted_not_started`,
   `stalled-after-claim`) and re-wake, escalate, or reassign — push, not a new polling
   tool. This is the first piece to build, and it is what converts observability into
@@ -1865,7 +1926,7 @@ paragraph):
 **What raised it.** A delegate of the operator — an agent external to the team, not a seat — sat in
 the operator's chair for the first time and burned ~20 discovery calls before it could name the
 next item. Its post-mortem, and a second agent's read of it against the wider literature, are
-`docs/Agent_Onboarding_Research.md`. The finding turns inward: a durig **seat** that begins a new
+`docs/Agent_Onboarding_Research.md`. The finding turns inward: a durian-pi **seat** that begins a new
 session (created at `up`, resumed by 37(b), reset by 44, or moved to a fresh conversation by 28b)
 has no deterministic way to learn what it was doing, what the team is doing now, or what "done"
 meant. Every mechanism we have moves *state* across a boundary — 28b re-surfaces a claimed item,
@@ -1875,7 +1936,7 @@ other side, so a fresh conversation starts amnesiac and re-derives.
 **The pattern the research converged on.** The agent is amnesiac; the filesystem is not. The
 recurring answer is an always-on entry context, a clock-in/clock-out ritual, a bounded handoff
 artifact, and the done-condition written down before work starts — over a plain filesystem, not a
-memory engine, because durig is already SQLite + files and the gap is a read/index layer over what
+memory engine, because durian-pi is already SQLite + files and the gap is a read/index layer over what
 we have. The delegate half of this is `docs/SELFDEV.md` + `docs/NEXT.md`; the items below are the
 seat half.
 
@@ -1910,7 +1971,7 @@ O3. **Intake writes the done-condition, and the session that resumes re-reads it
     unmet criterion is refused.
 
 O4. **A seat's root and oracle are derived from configuration, never hand-copied into the persona.**
-    `rig.selfdev.json` inlines the same operating paragraph in all nine seats because "durig has no
+    `rig.selfdev.json` inlines the same operating paragraph in all nine seats because "durian-pi has no
     skill loader yet" (35). Changing the oracle or the root is a nine-place edit and a drift is
     invisible — the exact class 34 warns about for host paths.
     *Mechanism:* 35's loader supplies the operating section from one source; a `check` rule fires
@@ -1931,13 +1992,13 @@ verification **re-execute evidence** rather than accept a claim. Registered here
 
 45. **Record the "no RACI" decision, so it is not re-litigated.** The research found full RACI
     redundant against the existing role table + docs-ownership norm + capability matrix + the queue's
-    single claimer, and its single-accountable-per-task assumption contradicts durig's artifact-keyed
+    single claimer, and its single-accountable-per-task assumption contradicts durian-pi's artifact-keyed
     accountability. RACI's real gap is *decision authority*, which DACI/RAPID address and the queue
     already supplies.
     *Owner:* `advocate` (decision record) · *Output:* a `docs/DECISIONS.md` entry with the why.
     *Acceptance:* the entry names the alternatives rejected and the evidence class.
 
-46. **Make artifact ownership checkable — a `check` rule, not a prose grid (DELIVERED `ed2b5dc`).** The load-bearing
+46. **Make artifact ownership checkable — a `check` rule, not a prose grid (DELIVERED `ed2b5dc`, `03513c0`).** The load-bearing
     finding: a decision-rights row not enforced by `check` (or the queue) is prose and goes stale. Add
     a `check` rule that every artifact class in the docs-ownership norm maps to a live owning seat,
     and (D62) every capability has a FEATURES row.
@@ -1954,14 +2015,16 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     the one genuinely missing decision class. Routed 2026-10-16 to `advocate` (`WORKFLOWS.md` W4) and
     `scribe` (`FEATURES.md` `Surface` column).
 
-48. **Verification must re-execute evidence, not accept a claim.** The strongest evidence-backed
+48. **Verification must re-execute evidence, not accept a claim (DELIVERED `50240f9`, `b803a8d`).** The strongest evidence-backed
     finding: reviewer/peer agents measurably agree (sycophancy/conformity — measured wrong-peer
     adoption ~29.7%, disagreement collapse), so a verifier that only reads the author's summary is the
     collapse setup. This strengthens item 4 (real seat tools + verification evidence) and W2's
     evidence protocol.
     *Owner:* `impl` (author) · *Consulted:* `qa`/`auditor` · *Evidence:* `Agent_Ownership_Review.md` §2.4.
     *Acceptance:* a verifier item fails when it only acks a claim and passes when it re-runs the artifact.
-    **Evidence surface delivered by #715 (`50240f9`); re-execute enforcement still open (#851).**
+    **Evidence surface delivered by #715 (`50240f9`); re-execute enforcement DELIVERED — rule
+    `verification-without-evidence` + `hasEvidence` in `src/checkup.mjs`, proven by
+    `demo/check-evidence.test.mjs` (exit 0); #851 answered by the #1877 close-out.**
     **RULED (2026-10-17):** qa's consult `#854` fixed the contract (extend `complete_work` with an
     OPTIONAL structured `evidence` field + ONE `check` rule; keep free text as the narrative; no new
     verbs) and lead's `#1553` ruled the enforcement binding on EVERY verifier item: run the named
@@ -1971,6 +2034,13 @@ verification **re-execute evidence** rather than accept a claim. Registered here
     carries it verbatim onto the DONE notice (structured `evidence` + a readable line), so the next
     party receives a command to re-run instead of a summary to trust. Proof:
     `demo/evidence-handoff.test.mjs` (failing-first: the notice carried no evidence before).
+    **STATED LIMIT (lead `#2057`, part (B)):** for NON-VERIFY completions, the evidence field's
+    `artifact` stays ADVISORY. `hasEvidence()` (`src/checkup.mjs`) requires only a non-blank
+    `command` and a finite `exitCode` and does not check `artifact`, so the
+    `verification-without-evidence` rule guarantees a command was RUN, not that the re-run is
+    ADDRESSABLE — a non-VERIFY completion may carry an empty/absent `artifact`. The stricter half
+    (lead `#2057`, part (A): a non-blank `artifact` for VERIFY-marker items) is a CODE change routed
+    to `impl` and is NOT landed, so it is not described as done here.
 
 49. **Finish the research's unfinished passes.** The review explicitly did not verify the governance
     pass (NIST AI RMF, ISO/IEC 42001, EU AI Act Art. 14, multi-agent "accountability gap") or the
@@ -1989,14 +2059,14 @@ verification **re-execute evidence** rather than accept a claim. Registered here
 ## pi-durable alignment: what to adopt, keep, and replace (research landed 2026-10-16)
 
 Source: `docs/reviews/pi-durable-alignment.md` — the completed gap analysis (framework pinned at
-`earendil-works/pi@4954d760` / `pi-durable` 1.3.0; durig read from `main` on 2026-10-16). The stable,
+`earendil-works/pi@4954d760` / `pi-durable` 1.3.0; durian-pi read from `main` on 2026-10-16). The stable,
 maintainer- and upstream-facing summary is `docs/PI-DURABLE-INTEGRATION.md`. One-line
-verdict: durig reimplements **client state delivery** (the TUI poller) and **busy-conversation input**
+verdict: durian-pi reimplements **client state delivery** (the TUI poller) and **busy-conversation input**
 (await-and-hold), and correctly keeps the rest. Registered here, **not scheduled**; `pm` sequences them.
-**Read the review's §9 first** — it states its bounds (some files and the blog were not read; durig is
+**Read the review's §9 first** — it states its bounds (some files and the blog were not read; durian-pi is
 not pinned).
 
-51. **DONE — Research: is durig using pi-durable as intended?** Report:
+51. **DONE — Research: is durian-pi using pi-durable as intended?** Report:
     `docs/reviews/pi-durable-alignment.md` (gap table, decision table, failure catalogue, borrow/avoid,
     and an explicit "could not verify" list). Items 52–58 are its output.
 
@@ -2035,38 +2105,38 @@ not pinned).
     drained intent should submit with `whenBusy:"steer"` so it joins a busy run instead of queueing
     behind it; keep the spool as the **out-of-process** substrate (no broker ⇒ no owner ⇒ no harness).
     The review flags two unasked things: what the spool is *for* after attach, and that the operator's
-    text then has two records (`pi.inbox` and durig's queue) — a divergence risk. Evidence: review
+    text then has two records (`pi.inbox` and durian-pi's queue) — a divergence risk. Evidence: review
     §2.5, §7.5–7.6.
     *Owner:* `impl` + `lead` · *Acceptance:* an operator message reaches a busy seat within the run; a
     decision entry records the spool's remaining job.
 
 57. **Per-conversation agent for seat config.** **Adopt.** Write model/thinking/extensions/tools/`cwd`
-    on the conversation (it survives restart) and keep only role/goal/capabilities in durig's `Seats`
+    on the conversation (it survives restart) and keep only role/goal/capabilities in durian-pi's `Seats`
     doc. Evidence: `28-reviewer.ts`, spec; review §1 row 4, §5 F7.
     *Owner:* `impl` · *Acceptance:* reopen a store and assert the agent config survives; org metadata
     stays in `Seats`.
 
 58. **Investigate: task checkpoints + the reset/degeneration guard.** The harness has task
-    `phases`/checkpoints/`abort`/recovery (`running`→`pending`) and compaction policy; durig has a reset
-    guard, `stop` files, and a broker audit log. Map durig's guard cases onto the harness primitives
+    `phases`/checkpoints/`abort`/recovery (`running`→`pending`) and compaction policy; durian-pi has a reset
+    guard, `stop` files, and a broker audit log. Map durian-pi's guard cases onto the harness primitives
     **before** writing code. Evidence: review §1 rows 8–9, §4 rank 6.
     *Owner:* `lead` + `impl` · *Acceptance:* a written mapping; prototype one custom task and measure
     the `migrate` maintenance tax.
 
-**Kept — do not replace (recorded so it is not re-litigated):** durig's `RigQueue` (a shared,
+**Kept — do not replace (recorded so it is not re-litigated):** durian-pi's `RigQueue` (a shared,
 cross-conversation work log with `from`/`to`, a status machine, provenance and an audit trail — the
 harness `pi.inbox` is per-conversation ordered input, a different object); **org edges / capability
-gates** (the spec says ownership is not access control); **`genlock` / `DURIG_MAX_CONCURRENT_SEATS`** (a
+gates** (the spec says ownership is not access control); **`genlock` / `DURIAN_PI_MAX_CONCURRENT_SEATS`** (a
 cost/provider bound; the harness imposes none); the **per-item worktree lifecycle** (adopt the harness
-`cwd` *mechanism*, keep durig's create/remove policy); and the **operator surface, `cli.mjs` JSON
+`cwd` *mechanism*, keep durian-pi's create/remove policy); and the **operator surface, `cli.mjs` JSON
 contract, docs gates and rig files** (no harness equivalent).
 
 ## Zero trust to zero agent — narrow seat permissions (research requested 2026-10-16)
 
-**The question.** durig grants a seat its reach with coarse, role-level capabilities and
+**The question.** durian-pi grants a seat its reach with coarse, role-level capabilities and
 restrictive-by-default `edges`; a seat's tool surface and filesystem `cwd` are broader than any
 single work item needs. Research how teams assign **narrow, per-seat / per-item least privilege**
-to LLM agent members — a "zero trust to zero agent" posture — and which of those mechanisms durig
+to LLM agent members — a "zero trust to zero agent" posture — and which of those mechanisms durian-pi
 should adopt, keep, or reject. The operator's framing: today's permissions are assigned to the
 *member*; the research asks how to narrow them toward the *task*.
 
@@ -2078,10 +2148,10 @@ should adopt, keep, or reject. The operator's framing: today's permissions are a
     trust between agents": authenticated per-agent identity, no implicit trust from co-residency or
     role, and the failure modes trust-by-topology creates. (c) The harm class — prompt injection →
     tool abuse, and delegation broadening a grant — as described in the practitioner literature.
-    (d) The cost side: how narrow grants multiply configuration/maintenance, and where durig's
+    (d) The cost side: how narrow grants multiply configuration/maintenance, and where durian-pi's
     artifact-keyed ownership (`docs/reviews/Agent_Ownership_Review.md`) already supplies the
     accountability half.
-    **durig baseline the review must measure against.** restrictive-by-default org `edges` (`check`
+    **durian-pi baseline the review must measure against.** restrictive-by-default org `edges` (`check`
     reports `unreachable-seat`); the capability matrix; per-seat `cwd` (dogfood F12) and the per-item
     worktree lifecycle (D49); the seat-tool allowlist (`docs/SEAT-TOOLS.md`); and `security.sec`
     positions gating new execution surfaces (D24/D27, item 55). The gap: none of these is a **narrow
@@ -2089,16 +2159,38 @@ should adopt, keep, or reject. The operator's framing: today's permissions are a
     tool/network boundary for a single claim.
     *Owner:* operator's research agent · *Consulted:* `lead`, `advocate`, `qa`.
     *Output:* `docs/reviews/zero-trust-zero-agent.md` in the shape of the existing research reviews —
-    a gap table (mechanism → what durig has → what is missing → adopt/keep/reject), a decision table
+    a gap table (mechanism → what durian-pi has → what is missing → adopt/keep/reject), a decision table
     with the why, a failure catalogue, and an explicit "could not verify" list — plus proposed
     backlog items, **registered not scheduled**.
     *Depends:* item 55 (the `security.sec` position) before anything that opens a new trust boundary
     or execution surface.
     *Acceptance:* the report cites each external claim with a URL (the web-research rule), maps every
-    finding to a concrete durig mechanism or names the one it could not verify, and states its
+    finding to a concrete durian-pi mechanism or names the one it could not verify, and states its
     evidence class.
     **Evidence class:** externally-cited (`advertised-elsewhere`) for the permission models;
-    `observed` for the durig baseline.
+    `observed` for the durian-pi baseline.
+
+132. **A dedicated API-key-management component — secret storage, injection and rotation (NOT STARTED; the operator owns the design).**
+    Registered 2026-10-17 (operator ruling, delegate-relayed). Today a provider key reaches durian-pi either
+    as a plaintext value in `durian-pi.config.json` — **verified gitignored (`.gitignore:8`), and explicitly
+    NOT a concern: do not pursue the plaintext-key remediation registered as #690** — or as an environment
+    variable (`DEEPINFRA_API_KEY`; `src/config.mjs` reads it and the `config` verb discloses it only as
+    `set`/`unset`, while a secret-looking VALUE in a config FILE is refused by name, never echoed).
+    Nothing in durian-pi **owns** that secret: no component is responsible for storing it, injecting it into
+    a consumer's runtime, or rotating it. This registers a **separate application/component that owns
+    API-key management as a dedicated thing** — storage, injection and rotation — so a key is a managed
+    artifact with its own boundary, not a config string each consumer reads for itself.
+    **This is a REGISTRATION, not a GO.** The operator owns the design; do not start the work ahead of
+    this milestone (item 60's research, `docs/reviews/zero-trust-zero-agent.md`), and do not open a new
+    trust boundary or execution surface before the `security.sec` position (item 55).
+    *Owner:* `impl` (implementation) · *Design:* operator · *Consulted:* `security` (the secret-handling
+    design — storage / injection / rotation) and `lead` (sequencing).
+    *Where:* a separate component, deliberately NOT folded into `cli.mjs`.
+    *Depends:* item 55 (the `security.sec` position) before any new trust boundary; item 60's research for
+    the posture it must satisfy.
+    *Acceptance:* to be set with the operator's design — this entry registers the component, it does not
+    specify it.
+    **Status:** registered, not scheduled. `pm` sequences it.
 
 ## Broker supervision and a service host (design recorded 2026-10-16)
 
@@ -2132,7 +2224,7 @@ spooled intent is delivered ~200ms in while it generates). The item-54 gate for 
 
 62. **Liveness + progress heartbeats.** Write a heartbeat file the host can read without opening the
     store: a liveness tick (~20 s / 60 s timeout) proving the event loop turns, and the existing
-    `PASS <n>` as progress with the threshold from the provider stream timeout (`DURIG_STREAM_TIMEOUT_MS`;
+    `PASS <n>` as progress with the threshold from the provider stream timeout (`DURIAN_PI_STREAM_TIMEOUT_MS`;
     600000 ms for the openai provider when unset). Carry `version` + upstream pin so `status` can refuse
     to claim health when the running version differs from disk. **`performance.now()` counts sleep on
     Windows** (QPC includes standby; Node exposes no suspend-excluding clock), so a monotonic clock does
@@ -2155,8 +2247,8 @@ spooled intent is delivered ~200ms in while it generates). The item-54 gate for 
 64. **OS trigger adapters (portable host, per-platform install).** Keep `src/host.mjs` pure Node and
     generate the boot/login trigger per platform: a **per-user agent by default** (Windows Task, macOS
     LaunchAgent, `systemd --user`), a **system daemon opt-in** for an always-on host (Windows Service,
-    LaunchDaemon, systemd system unit). The end-user surface is `durig daemon install [--user|--system]`
-    (with `--print`), `durig daemon switch --user|--system` for a clean migration, and `durig daemon status`
+    LaunchDaemon, systemd system unit). The end-user surface is `durian-pi daemon install [--user|--system]`
+    (with `--print`), `durian-pi daemon switch --user|--system` for a clean migration, and `durian-pi daemon status`
     — see the CLI table in `docs/BROKER-SUPERVISION.md` §11. `install` emits the unit/plist/service config
     and the per-platform kill-tree primitive (Windows Job Object vs POSIX process group). Either way:
     delayed auto-start, log rotation, a stop/drain window **≥ 900 s** (> the 600 s stream timeout +
@@ -2189,7 +2281,7 @@ spooled intent is delivered ~200ms in while it generates). The item-54 gate for 
     The orphaned-worktree sweep is split to item **73** — `removeClaimedWorktree` force-removes a dirty
     worktree, so it is unsafe to automate before that is fixed.
 
-67. **Host chaos suite.** Crash injection (`taskkill /F`), hang injection (`DURIG_FAULT=wedge`),
+67. **Host chaos suite.** Crash injection (`taskkill /F`), hang injection (`DURIAN_PI_FAULT=wedge`),
     restart-storm injection, a single-instance race, and resume-after-crash — all offline against the
     faux provider — plus a property asserting the `START`/`EXIT` invariant after every test.
     *Owner:* `qa` (author) with `impl` · *Where:* `demo/`.
@@ -2202,9 +2294,12 @@ subscriber. **Portability is a first-class requirement** (Windows, macOS, Linux 
 trigger file, the kill-tree primitive, and the stop signal are OS-specific; `src/host.mjs` is identical
 everywhere (`docs/BROKER-SUPERVISION.md` §2 portability boundary).
 
-91. **Multiple durig instances on one machine (operator request, 2026-10-16).** Support more than one
+91. **Multiple durig instances on one machine (operator request, 2026-10-16; DELIVERED `e3a8e53`).** Support more than one
     durig installation / rig on a single computer, and make the OS-level host/daemon namespace-safe
     across them. Today the supervision design assumes "one host per store" (§8) and `durig daemon ...
+91. **Multiple durian-pi instances on one machine (operator request, 2026-10-16).** Support more than one
+    durian-pi installation / rig on a single computer, and make the OS-level host/daemon namespace-safe
+    across them. Today the supervision design assumes "one host per store" (§8) and `durian-pi daemon ...
     [--db <path>]`, but nothing defines an **instance identity** for the OS artifacts: two instances
     would collide on the trigger name (Windows Task, launchd label, systemd unit), the Job
     Object / process-group name, the log path, and the future control socket/pipe — and the host's
@@ -2212,8 +2307,8 @@ everywhere (`docs/BROKER-SUPERVISION.md` §2 portability boundary).
     instance key (resolve the store to an absolute path; a slug/hash of it, or an explicit
     `--instance <name>`); (b) keep every marker store-scoped (already true: `<db>.broker.json` /
     `.down` / `.stop` / `.inbox`) and key the host's single-instance lock and OS trigger the same way;
-    (c) the wrong-rig trap — a bare `durig` must not discover the wrong instance's
-    `durig.config.json`/store (#491, D18); (d) version coexistence — two installations on different
+    (c) the wrong-rig trap — a bare `durian-pi` must not discover the wrong instance's
+    `durian-pi.config.json`/store (#491, D18); (d) version coexistence — two installations on different
     pinned pi/versions must not fight over one trigger; (e) two instances must never drive one store
     (single-writer already forbids it — the second is *refused*, not silently second-written).
     **Sequence** with the daemon items 61–64 (this parameterizes them); socket naming waits on item 55.
@@ -2242,6 +2337,7 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     the seat is re-woken after start/`resume`.
 
 69. **Refuse or route writes while the broker drives (DELIVERED `c2fa6ee`).** `resume`/`doctor`, `reset`, `send`, and
+69. **Refuse or route writes while the broker drives (DELIVERED `c2fa6ee`, `b8efebd`).** `resume`/`doctor`, `reset`, `send`, and
     `ps`/`queue` (which open a full harness just to read) must not become a second owner while a broker
     is alive: refuse with a clear message naming the spool, or route through it; `ps`/`queue` read via
     `openStore` like `status`. *Owner:* impl · *Where:* `cli.mjs`.
@@ -2268,13 +2364,15 @@ Sequence **68 → 69 → 70 → 71**, then the daemon **61–64** (item **72** r
     (D44 retire / `scripts/repair-pi-live.mjs`); other errors rethrow. Acceptance demo:
     `demo/readboundary-corrupt-live.test.mjs`.
 
-71. **Command spool — writes as requests the broker applies (the mailbox).** Generalise the intent
+71. **Command spool — writes as requests the broker applies (the mailbox) (DELIVERED `646d08c`, `a3c0bef`).** Generalise the intent
     inbox from "deliver a message" to "apply an operation": `send`, `reset`, `stop`, and queue edits
     become request files with a `requestId` (idempotent re-drain) and a result channel, so the CLI/TUI/
     daemon stay *clients* of the owner (pi-durable's multiplayer model) instead of opening a second
     harness. *Owner:* devtools, delegate consulting · *Where:* `src/broker.mjs` + producers.
     *Acceptance:* a demo running a mutating request end-to-end while the broker drives; a duplicate
     `requestId` applies once.
+    **Addendum (#1904, not yet landed):** the `compact` op joins `SPOOL_OPS`, so a saturated seat is
+    compacted by a broker-applied request like the other ops.
 
 72. **Broker start provenance + lifecycle observability.** `START pid=<n> source=up|serve|daemon` (plus
     version/pin), so a reader can tell how the broker was launched; folds into items 61–62.
@@ -2344,12 +2442,12 @@ recurrences; `pm` sequences them against 61–71.
     2026-10-16, up to two days old), holding the store and muddying `ps`. The broker/`up` reaps viewers
     older than their originating session, or `status` names them. *Owner:* impl · *Where:* `cli.mjs`,
     `src/broker.mjs`. *Acceptance:* stale viewers are reaped or reported; no silent accumulation.
-78. **Broker crash forensics + survive a conversation storage error.** The broker died on `Session failed
+78. **Broker crash forensics + survive a conversation storage error (DELIVERED `d509e2f`; pacing/legibility half DELIVERED `3021fe2`).** The broker died on `Session failed
     after a storage error; close and reopen it` with no `EXIT` and no cause logged, stalling the queue
     (impl). Make the broker log the `cause` chain, skip the poisoned conversation for the pass instead
     of dying, and surface it as attention. *Owner:* impl · *Where:* `cli.mjs` `cmdServe`, `src/broker.mjs`.
     *Acceptance:* a corrupt conversation degrades to a notice; the broker keeps driving.
-79. **Wrong-rig guard for the configured store path.** `durig.config.json` set `DURIG_DB` to another
+79. **Wrong-rig guard for the configured store path.** `durian-pi.config.json` set `DURIAN_PI_DB` to another
     project's store, so a bare command reads the wrong rig. Warn
     (or refuse) when the configured store is outside the seat root / differs from a repo-local DB.
     *Owner:* designer/impl · *Where:* `cli.mjs` entrypoint, `src/config.mjs`, `src/checkup.mjs`.
@@ -2367,11 +2465,11 @@ that makes 74/80 broker-applied.
 
 ## Runbooks as maintained artifacts (from the research report, 2026-10-16)
 
-Source: `docs/reviews/runbooks-sop-best-practices.md`. Verdict: durig's runbook conventions already match
+Source: `docs/reviews/runbooks-sop-best-practices.md`. Verdict: durian-pi's runbook conventions already match
 published practice; what is missing is **machinery** — nothing enforces them or detects rot, and the
 single-writer precondition is prose, which failed twice on 2026-10-16. `pm` sequences these.
 
-81. **`runbook-stale` / `runbook-unverified` check rules.** `runbook-stale` is an `error` when
+81. **`runbook-stale` / `runbook-unverified` check rules (DELIVERED `ef7f0d6`).** `runbook-stale` is an `error` when
     `last_verified` is old AND a file the runbook names changed since; `runbook-unverified` is `fix-now`
     when `Verify` has never run. Turns rot into a failing test. *Owner:* impl · *Where:*
     `src/checkup.mjs`, `docs/runbooks/*`. *Acceptance:* a stale and an unverified runbook each produce
@@ -2430,7 +2528,7 @@ capability gate; item **81/82** reuse the `check` rule machinery (item 46's arti
 Source: `docs/reviews/reducing-llm-agent-tool-calls-followup.md` (follow-up to
 `docs/reviews/reducing-llm-agent-tool-calls.md`). Verdict: plan-then-execute / code-as-action
 collapses **model round-trips** with peer-reviewed support (LLMCompiler 1.80–3.74× latency, 3.37–6.73×
-cost, up to ~9% accuracy; ReWOO 64% tokens), but for durig it must (a) **preserve resumability** by
+cost, up to ~9% accuracy; ReWOO 64% tokens), but for durian-pi it must (a) **preserve resumability** by
 checkpointing plan nodes, and (b) expect the degeneration surface to **shift** to an opaque in-sandbox
 loop the current detectors cannot see mid-run. The primary metric is **cost with the cache split**, not
 call count. `pm` sequences these.
@@ -2481,13 +2579,13 @@ single-operator local rig. `pm` sequences these. Registered **not scheduled**. *
 133. **Fail closed at a single seat-action decision point.** Give every seat action that can write or
     execute one policy-decision seam whose *evaluation failure* is defined to **deny** (never silently
     allow), with no fail-open configuration flag — the AGT ADR-0013 invariant
-    (`docs/adr/0013-fail-closed-on-policy-evaluation-errors.md`). durig's guards (`src/seatguard.mjs`,
+    (`docs/adr/0013-fail-closed-on-policy-evaluation-errors.md`). durian-pi's guards (`src/seatguard.mjs`,
     `src/confine.mjs`) refuse individually but nothing names deny-on-error as the contract. *Owner:*
     impl/lead · *Where:* `src/seatguard.mjs`, `src/confine.mjs`, `docs/SEAT-TOOLS.md`. *Acceptance:* an
     error inside decision evaluation denies the action and records the error; a passing check proves the
     rules ran, not that evaluation was skipped. *Consulted:* `security`.
 134. **Structured refusal shape.** A refusal carries `rule_id`, `action`/tool, source, policy/config
-    version, and timestamp, per AGT's `GovernanceError` (`docs/ERROR_HANDLING.md`). Today a durig refusal
+    version, and timestamp, per AGT's `GovernanceError` (`docs/ERROR_HANDLING.md`). Today a durian-pi refusal
     is a string. *Owner:* impl · *Where:* `src/seatguard.mjs`, `src/confine.mjs`, event records.
     *Acceptance:* a refused command names the rule that refused it and the refusal is machine-readable.
 135. **Monotone risk/context ratchet for the guard.** The degeneration/context guard reads a
@@ -2501,9 +2599,9 @@ single-operator local rig. `pm` sequences these. Registered **not scheduled**. *
     drop the parent's flag.
 136. **Threat-model boundary taxonomy.** Adopt AGT's four named trust boundaries (human→agent,
     agent→agent, agent→tool, agent→platform) analysed STRIDE-style (`docs/security/threat-model.md`) as a
-    fixed checklist in durig's security review runbook, which today has the method but no taxonomy.
+    fixed checklist in durian-pi's security review runbook, which today has the method but no taxonomy.
     *Owner:* `security` · *Where:* `docs/runbooks/security-trust-boundary-review.md`. *Acceptance:* the
-    runbook lists the four boundaries with a durig-specific example each.
+    runbook lists the four boundaries with a durian-pi-specific example each.
 137. **Per-seat circuit breaker with an explicit manual close.** After N consecutive failed runs, put the
     seat in an observable **OPEN** state that refuses new wakes with work, until an explicit `reset`
     closes it — the AGT SRE circuit breaker (`docs/specs/AGENT-SRE-GOVERNANCE-1.0.md` §6,
@@ -2546,7 +2644,7 @@ single-operator local rig. `pm` sequences these. Registered **not scheduled**. *
 143. **Seat lifecycle: orphan detection + credential rotation.** Report a seat that is silent past a
     threshold and owns no live work (an *orphan*), and provide a rotation path for the provider API key —
     AGT's LifecycleManager / OrphanDetector (`docs/tutorials/30-agent-lifecycle.md`,
-    `.../lifecycle/orphan_detector.py`). durig has `docs/SEAT-LIFECYCLE.md` and a broker heartbeat but no
+    `.../lifecycle/orphan_detector.py`). durian-pi has `docs/SEAT-LIFECYCLE.md` and a broker heartbeat but no
     orphan report. *Owner:* `security`/impl · *Where:* `src/checkup.mjs`, `docs/SEAT-LIFECYCLE.md`.
     *Acceptance:* `check` reports an orphaned seat and a rotation command exists for the DeepInfra key
     (never printing the key).
@@ -2570,13 +2668,13 @@ Applications 2026 (ASI01–ASI10)** is a directly applicable external checklist,
 static-review rules are concrete. The enterprise certification mappings (SOC2 / EU AI Act / NIST /
 ISO) stay out of scope. `pm` sequences these. Registered **not scheduled**. *(145–150.)*
 
-145. **OWASP ASI Top 10 self-assessment for durig.** Map durig's controls onto ASI01–ASI10 with an
+145. **OWASP ASI Top 10 self-assessment for durian-pi.** Map durian-pi's controls onto ASI01–ASI10 with an
     honest coverage rating and a named gap per risk — the AGT table is the shape
     (`docs/compliance/owasp-agentic-top10-architecture.md`; its own intro must be carried: it is a
     "self-assessment mapping, NOT a validated certification"). The mapping above already flags ASI04
     (supply chain), ASI06 (memory/context poisoning vs saturation), ASI08 (no breaker/budget), and ASI09
     (approvals not action-bound). *Owner:* `security` · *Where:* `docs/security/`, re-run on trigger per
-    the runbook maintenance policy. *Acceptance:* a dated mapping with a per-risk durig control and gap,
+    the runbook maintenance policy. *Acceptance:* a dated mapping with a per-risk durian-pi control and gap,
     re-run when a new execution surface or the landing path changes.
 146. **Security-lint `check` rules mapped to OWASP ASI.** Adopt the shape of AGT's 14 static review rules
     over agent code — `unguarded-tool-execution`, `no-tool-allowlist`, `missing-audit-logging`,
@@ -2590,11 +2688,11 @@ ISO) stay out of scope. `pm` sequences these. Registered **not scheduled**. *(14
 147. **Per-item deny-by-default action budget.** Every work item carries an explicit `max_tool_calls`,
     `max_tokens`, and a confidence floor, with **deny-all as the default** — the AGT policy-pack posture
     (`docs/compliance/owasp-asi-policy-mapping.md` "Default Posture by Pack"; rules
-    `asi08-session-tool-call-limit`, `asi06-context-budget-limit`). durig has only the degeneration
+    `asi08-session-tool-call-limit`, `asi06-context-budget-limit`). durian-pi has only the degeneration
     guard's high-water marks. *Owner:* impl/lead · *Where:* `src/rig.mjs`/seat spec, `src/degeneration.mjs`.
     *Acceptance:* an item exceeding its tool/token budget is halted before the run settles, with the
     budget named as the cause (extends the #1766 halt core).
-148. **Output screening for credentials and PII.** durig redacts **tool results** only
+148. **Output screening for credentials and PII.** durian-pi redacts **tool results** only
     (`src/secretredact.mjs` is the `afterTool` hook, wired in `src/seatguard.mjs:20`); assistant output
     is not screened. Extend screening to model output and add a PII class — AGT calls output
     sanitization and sensitive-data protection its widest gap
@@ -2606,7 +2704,7 @@ ISO) stay out of scope. `pm` sequences these. Registered **not scheduled**. *(14
     `FULLY_REVERSIBLE`/`PARTIALLY`/`IRREVERSIBLE`/`UNKNOWN` and require extra operator approval plus a
     compensation plan for the irreversible — AGT `ReversibilityLevel` / `_REVERSIBILITY_MAP`
     (`agent-governance-python/agent-os/src/agent_os/reversibility.py`); approval bound to the action
-    digest, expiring, replay-rejected (`docs/adr/0030-action-bound-approval-protocol.md`). durig's
+    digest, expiring, replay-rejected (`docs/adr/0030-action-bound-approval-protocol.md`). durian-pi's
     branch deletion, force-landing, and broker stop are the candidates. *Owner:* impl/lead · *Where:*
     `src/seatguard.mjs`, `cli.mjs`, `docs/runbooks/`. *Acceptance:* an irreversible verb requires an
     approval naming its action digest, and the approval expires. *Extends:* item 138.
@@ -2636,10 +2734,89 @@ after the OWASP miss. `pm` sequences. Registered **not scheduled**.
     `src/checkup.mjs`. *Acceptance:* a missing `COMPETITORS.md` entry, or a stale pin, is a `check`
     finding. *Cross-links:* the runbook-machinery family ROADMAP 81/82.
 
+## Daemon-harness architecture — from the operator research (2026-10-19)
+
+Source: `docs/research/how-to-design-an-llm-harness-which-apps-use-a-daemon.md`, consumed and
+grounded in `docs/reviews/daemon-harness-architecture-review.md`. The report's "root cause" claims
+(WAL/`busy_timeout`, in-process FIFO lock, `BEGIN IMMEDIATE`, SQLite upgrade, inference-in-transaction)
+were **rejected as already present in the pinned pi-durable 1.3.0**; only the genuine refinements and
+one gated investigation are registered here. `pm` sequences. Registered **not scheduled**.
+
+153. **Resource-keyed lock manager over `genlock.mjs`.** Today the single `DURIAN_PI_MAX_CONCURRENT_SEATS`
+    lease serializes seats coarsely; model it on OpenHands' resource-lock manager so two seats run
+    concurrently unless they collide on the same file/terminal/browser. Our per-seat worktrees are the
+    isolation boundary. *Owner:* impl · *Where:* `src/genlock.mjs`. *Acceptance:* a demo shows two seats
+    touching disjoint resources both run, and two touching the same file serialize. *Cross-links:* the
+    survey's reference #2; `docs/reviews/daemon-harness-architecture-review.md` §3.
+
+154. **Broker event/SSE tap.** Expose the broker's event stream so the TUI, a script, or a web client
+    can subscribe to the same run (OpenCode's `/sse` fan-out) instead of the in-process `watchview.mjs`
+    poll. *Owner:* impl · *Where:* broker serve path + a client. *Acceptance:* an out-of-process client
+    observes turns/tool events for a live run without opening the store. *Cross-links:* the TUI Phase-2
+    attach work, `docs/reviews/tui-attach-vs-poll.md`, ROADMAP item 52 (`watchEvents`).
+
+155. **Uniform harness conformance probe set.** Replace the per-feature `demo/*.test.mjs` sprawl with a
+    uniform probe set over every seat path — basic turn, tool call, streaming, interrupt, model override,
+    policy denial (Omnigent's "test harnesses like hardware"). Adopt Omnigent's **three-object split**
+    (a self-declared profile / harness-agnostic probes over a generic event stream / per-transport
+    drivers), its **seven-verdict vocabulary** (`SUPPORTED`/`UNSUPPORTED`/`PARTIAL`/`NOT_APPLICABLE`/
+    `UNKNOWN`/`SKIPPED`/`DRIFT`) with **P0 gating CI and P1 report-only**, a `DRIFT` verdict when observed
+    disagrees with declared, and a **mock LLM for deterministic triggers**. Assert interrupt/policy-denial
+    on the *observable event* (a cancelled tool produces no `TurnComplete`; a denied call emits a denial
+    and never executes), not on timing. *Owner:* qa · auditor · *Where:* `demo/`. *Acceptance:* each probe
+    is a pass/fail legible without reading the implementation, and the suite labels which harness property
+    each probe covers. *Cross-links:* the suite-concurrency priority (`DURIG_SUITE_CONCURRENCY`) already
+    routed to `pm`; Omnigent's exact field schemas are unpublished (`tests/harness_bench/` is the public
+    source to read), and `docs/reviews/daemon-harness-architecture-followup-review.md` "Round 2" Q1.
+
+156. **Extension seam as a Pi-style `Operations` interface.** Give each tool an `Operations` interface as
+    the single remoting/scope seam (`BashOperations`, `EditOperations`, …), so execution can relocate and
+    per-seat tool scoping closes. *Owner:* devtools · impl · *Where:* the pi-durable extension install path
+    + `src/seattools.mjs`. *Acceptance:* a seat can be scoped to a tool subset without editing tool
+    definitions. *Cross-links:* ROADMAP item 18 (per-seat tool scoping); the survey's reference #4.
+
+157. **CONTINGENCY (not default) — move the audit/event trail off the SQLite write lock.** Investigate
+    OpenHands' per-record-file + `.lock` append-only model *only if* evidence still shows lock contention
+    *after* D111 (broker-served reads) and the `harness.storage` read fix (`8d48cb1`, `6140467`). The
+    follow-up research found **no throughput figure at our scale**, and round 2 confirmed throughput is
+    **not a deciding factor** (~50 records/s is 2–3 orders below the measured fsync/WAL ceilings) — so
+    this is a contingency justified only by *lock-contention relief*, never speed. If it opens, `filelock`'s
+    Windows primitive is `LockFileEx` (kernel-enforced, **auto-released on process death**, no stale
+    reclaim) and is **local-filesystem only**.
+    *Owner:* lead · impl. *Acceptance:* a written finding that first demonstrates residual contention on the
+    write lock (not corruption, not a second opener), then a scoped change with a rollback. *Cross-links:*
+    the survey's reference #2; incident `2026-10-18-broker-retry-hotloop.md`;
+    `docs/reviews/daemon-harness-architecture-followup-review.md` Q5.
+
+158. **Retry residual for a persistent pass-throw.** #2237 already added bounded exponential backoff,
+    `.stop` on the throwing path, and `PASS-FAILED … cause=`. What remains: jitter so independent brokers
+    do not resynchronize, retry only idempotent work (a non-idempotent "close and reopen" must not be
+    re-run blindly), and surface a controlled overload error when the budget is exhausted rather than
+    retrying forever. *Owner:* impl · *Where:* `src/broker.mjs` `runWakeLoop`. *Acceptance:* a demo shows a
+    persistent throw produces jittered, budget-bounded retries and then a terminal overload diagnostic.
+    *Cross-links:* `#2237`/`3021fe2`; `docs/reviews/daemon-harness-architecture-review.md` R6.
+
+159. **Classify the residual `database is locked` by `errcode`, and record the structural exclusion.** A
+    local probe confirms `node:sqlite` exposes `code=ERR_SQLITE_ERROR`, `errcode`, and `errstr` on a WAL
+    write conflict. Because pi-durable always opens writes with `BEGIN IMMEDIATE` (`node.ts:146`), the
+    deferred-`BEGIN` `SQLITE_BUSY_SNAPSHOT` (extended 517) case cannot apply to our writes; a residual
+    `errcode: 5` is the retryable busy or a `-shm` open/close race. *Owner:* impl · *Where:* the
+    `SessionFailed.cause` / `PASS-FAILED` diagnostic path (`src/broker.mjs`). *Acceptance:* a failed op's
+    log line carries `errcode` (and the primary/extended distinction where available), and a note in
+    `docs/BROKER-ARCHITECTURE.md` records why `BUSY_SNAPSHOT` is excluded. *Cross-links:* `#2420`, `#2406`,
+    `docs/reviews/daemon-harness-architecture-followup-review.md` Q3.
+
+160. **Verify the broker spool has no stale/poison-row gap.** The `requestId` result ledger already gives
+    idempotent re-drain (`src/broker.mjs:239-241,516-519`) and result files are consumed (`5c946a1`), but
+    the outbox best-practice report flags TTL/stale GC and a poison row that stalls the drain. *Owner:*
+    impl · *Where:* `<db>.broker.inbox/` + `.inbox.out/`. *Acceptance:* a written finding that a very old
+    intent and a permanently-failing intent each reach a terminal state without stalling the drain, or a
+    scoped fix if they do not. *Cross-links:* `docs/reviews/daemon-harness-architecture-followup-review.md` Q9.
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for
-  "verbose non-decisions", but durig's seats have no adversarial objective and no
+  "verbose non-decisions", but durian-pi's seats have no adversarial objective and no
   competing claims over scarce resources, so the mechanism would police a failure
   mode the rig cannot currently produce (D23). Revisit if seats are ever given
   conflicting objectives.

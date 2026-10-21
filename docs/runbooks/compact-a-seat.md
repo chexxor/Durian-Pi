@@ -2,10 +2,10 @@
 runbook: compact-a-seat
 symptom: "a seat's context is saturated and a full reset would lose durable context"
 writes: true
-precondition: "broker-stopped"
-last_verified: 2026-10-17
-verified_by: impl
-evidence: "#873 (demo/compact.test.mjs; Verify run 2026-10-17)"
+precondition: "none"
+last_verified: 2026-10-18
+verified_by: devtools
+evidence: "#1904 (demo/compact-spool.test.mjs — broker applies op:compact live) + #873 (demo/compact.test.mjs)"
 check_rule: null
 ---
 
@@ -22,44 +22,63 @@ If you do nothing: the seat keeps re-reading a bloated context (slower, costlier
 never deleted (a compaction writes a summary entry; it is not a deletion).
 
 ## Preconditions
-`compact` is a **write verb** (it writes a summary entry), so it needs the broker stopped and verified —
-the same single-writer rule as `reset` (docs/COMMANDS-AND-THE-BROKER.md §4). It also refuses while the
-seat holds a live generation lease.
+None with respect to the broker: with a broker alive, `compact` ROUTES through the command spool
+(#1904 / ROADMAP 71) — the broker applies it with its OWN harness (single writer + scheduler), so the
+rig keeps running and an in-flight generation on the target seat is not killed. With NO broker, the
+same command opens its own harness (the direct path) and refuses a seat holding a live generation lease
+(the external-writer guard).
+
+**Mid-flight is REFUSED, not silently applied.** pi-durable's compaction runs alongside a live
+conversation, but its summary lands only at the seat's NEXT TURN BOUNDARY — so a mid-flight compaction's
+outcome cannot be awaited reliably (auditor #2061 boundary / #2073). The broker therefore REFUSES a
+`compact` while the target seat has a running generation, with a legible reason. **QUIESCE FIRST, then
+compact.**
 
 ## Diagnose (read-only)
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs status
-DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 6
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat> 6
 ```
 A very long history with no recent `pi.compaction` entry, and a seat that is still progressing (so a
 reset would lose work), is the case this runbook is for.
 
 ## Do
-1. Stop the broker and confirm it exited (`stopped: true`); `compact` refuses while the broker drives.
+1. With a broker running, just run the verb — it is routed through the spool and applied LIVE by the
+   broker; the report carries `viaSpool: true`, the `requestId`, and the `summaryEntryId`. The optional
+   trailing text is folded into the summarization prompt; omit it for a plain compaction.
    ```bash
-   DURIG_DB=./selfdev.sqlite node cli.mjs serve --stop
+   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs compact <seat> "fold the early turns into a summary; keep the latest work"
    ```
-2. Compact the seat. The optional trailing text is folded into the summarization prompt; omit it for a
-   plain compaction.
+   The producer form is equivalent (and needs no CLI):
    ```bash
-   DURIG_DB=./selfdev.sqlite node cli.mjs compact <seat> "fold the early turns into a summary; keep the latest work"
+   DURIAN_PI_DB=./selfdev.sqlite node intent.mjs <seat> --op compact --instructions "fold the early turns"
    ```
-3. Restart the broker the way it was started.
-
-`compact` refuses a seat holding a live generation lease ("refusing to compact a running seat") — wait
-for the run to settle, or `stop <seat>` first.
+2. With NO broker running, the same command opens its own harness (the direct path) and refuses a seat
+   holding a live generation lease — wait for the run to settle, or `stop <seat>` first.
+3. If the seat is MID-GENERATION the op is REFUSED (the reason names it). Quiesce first, then retry —
+   this is the pause+compact choreography's required order: **QUIESCE → COMPACT → upgrade.**
+   ```bash
+   DURIG_DB=./selfdev.sqlite node cli.mjs pause --wait        # drain to quiescence (ROADMAP 131)
+   DURIG_DB=./selfdev.sqlite node cli.mjs compact <seat> "fold the early turns"
+   DURIG_DB=./selfdev.sqlite node cli.mjs unpause
+   ```
+   (`--wait` returns only once every seat has settled. Or simply let the run finish, or `stop <seat>`.)
 
 ## Verify
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 6
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat> 6
 ```
 Expect a `"kind": "pi.compaction"` entry among the newest entries, matching the `summaryEntryId` the
 `compact` report returned. The verb fails loud when no summary entry was written, so an `ok:true` report
 always means a real summary landed.
 
 ## If it fails
-- `compact` refuses ("holds a live generation lease") → wait for the run to settle, or `stop <seat>`,
-  then retry.
+- `compact via the spool (broker pid …): <reason>` → the broker DEAD-LETTERED the request with that
+  reason (`unknown seat`; `seat <s> is mid-generation … quiesce first`; or `the seat was quiescent but
+  no pi.compaction entry was written`). Read the reason, fix it, retry — a routed compaction is never a
+  silent no-op, and a MID-GENERATION refusal means "pause --wait, then compact".
+- No broker, and it refuses "holds a live generation lease" → wait for the run to settle, or
+  `stop <seat>`, then retry.
 - The seat still overflows: a second `compact` folds the newer turns into the existing summary; if the
   context can be dropped entirely, use `reset` (docs/runbooks/seat-reset.md).
 - The summarization model errored: the task retries per the retry policy, then fails terminal; the
@@ -69,8 +88,12 @@ always means a real summary landed.
 The operator — a compaction that keeps failing points at the model/provider, not at the rig.
 
 ## Evidence
-2026-10-17, item #873: `demo/compact.test.mjs` (exit 0) proves the live-lease refusal, that a REAL
-`pi.compaction` summary entry is placed and reported as `summaryEntryId` (not just a task id), and that
-the earliest turn stays in the durable transcript. The Verify above was run the same day against a
-scratch DB seeded to saturation: `compact` exited 0 with `"summaryEntryId": 131`, and
-`node cli.mjs log stuffed 6` showed the `"kind": "pi.compaction"` entry.
+#1904 (2026-10-18): `demo/compact-spool.test.mjs` (exit 0) proves the BROKER applies `op:compact` with
+its own harness through the spool — a REAL `pi.compaction` summary entry lands and is reported as
+`summaryEntryId`, a duplicate `requestId` applies once, and the seat is not aborted.
+#2073 (2026-10-18): the same demo now STAGES a REAL in-flight generation and proves a MID-FLIGHT compact
+is REFUSED legibly (`seat <s> is mid-generation … quiesce first`), commits nothing, and does not abort the
+run (auditor #2061 boundary).
+#873 (2026-10-17): `demo/compact.test.mjs` (exit 0) proves the live-lease refusal, that a REAL summary
+entry is placed and reported as `summaryEntryId` (not just a task id), and that the earliest turn stays
+in the durable transcript.

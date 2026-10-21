@@ -70,7 +70,7 @@ try {
   const locked = join(repo, "item-2");
   git(repo, ["worktree", "add", "--detach", locked, "HEAD"]);
   git(repo, ["worktree", "lock", locked]);
-  // item-3: on a BRANCH (how every durig item worktree is created, #859) — it carries that
+  // item-3: on a BRANCH (how every durian-pi item worktree is created, #859) — it carries that
   // branch's unlanded commits.
   const branched = join(repo, "item-3");
   git(repo, ["worktree", "add", "-b", "impl-item-3", branched, "HEAD"]);
@@ -122,7 +122,7 @@ try {
   console.log("\n4. after the sweep, the seat's tools still resolve to its worktree");
   // The point of keeping it. If the sweep had reaped it, the seat's cwd would dangle and its tools
   // would fall back to the SHARED checkout (the #1186/#1196 flip) — which is exactly the state
-  // #1151's `DURIG_EXPECT_WORKTREE` guard exists to catch, and which its own demo covers. What
+  // #1151's `DURIAN_PI_EXPECT_WORKTREE` guard exists to catch, and which its own demo covers. What
   // THIS demo proves is the cause-side half: the worktree is still there to work in.
   const seatEnv = authorEnv(new NodeExecutionEnv({ cwd: branched }), branched, { expectWorktree: true });
   const seatWrite = await seatEnv.writeFile(join(branched, "seat-work.txt"), "x\n", BACKGROUND_CONTEXT);

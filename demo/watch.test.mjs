@@ -1,4 +1,4 @@
-// Streaming watch test (MVP burn-down #3): `durig watch` must emit an
+// Streaming watch test (MVP burn-down #3): `durian-pi watch` must emit an
 // initial snapshot and then push live updates when another process commits
 // queue changes — without itself driving any work (viewer mode).
 // Run: node demo/watch.test.mjs  (exit 0 = pass)

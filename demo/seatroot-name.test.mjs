@@ -9,7 +9,7 @@
 //   (c) a seat whose root is an isolated worktree is TOLD so, loudly, through the real tool path —
 //       the result names the path, the source of the resolution and "linked-worktree ... NOT the
 //       live tree";
-//   (d) a `DURIG_SEAT_ROOT` that disagrees with the seat's resolved root is surfaced loudly.
+//   (d) a `DURIAN_PI_SEAT_ROOT` that disagrees with the seat's resolved root is surfaced loudly.
 // Run: node demo/seatroot-name.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

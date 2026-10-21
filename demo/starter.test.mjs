@@ -77,8 +77,8 @@ try {
 	);
 
 	// The constitution is inline so the file is self-contained (a `constitution`
-	// path resolves against the CWD, so it would only work from durig's own
-	// directory). That copy must not silently drift from the text durig ships.
+	// path resolves against the CWD, so it would only work from durian-pi's own
+	// directory). That copy must not silently drift from the text durian-pi ships.
 	// Compare EOL-insensitively (#977/D83): the inline carries LF, the disk file CRLF.
 	assert.equal(
 		lf(spec.constitutionInline),
@@ -133,6 +133,15 @@ try {
 		if (c.id === "ownership-seat-missing") {
 			assert.equal(c.status, "skipped", `the starter must skip ${c.id}, got "${c.status}"`);
 			assert.ok(c.why, `${c.id} must state why it was skipped`);
+			continue;
+		}
+		// The shared-tree rule judges the SHARED tree's branch. In a LINKED worktree (a landing
+		// scratch or a seat/item worktree - `scripts/land.mjs --suite` runs this very suite in a
+		// detached scratch, #2679) that branch cannot be observed from here, so the rule is
+		// legitimately SKIPPED with a reason, like the runbook/FEATURES/ownership rules above.
+		// Anywhere else it must genuinely run and pass.
+		if (c.id === "shared-tree-on-main" && c.status === "skipped") {
+			assert.match(c.why ?? "", /LINKED worktree/, `rule ${c.id} skipped for an unexpected reason`);
 			continue;
 		}
 		assert.equal(c.status, "pass", `rule ${c.id} is "${c.status}", not "pass": ${c.why ?? ""}`);
@@ -220,7 +229,12 @@ try {
 		"runbook-front-matter": "demo/runbook-frontmatter.test.mjs",
 		"ownership-seat-missing": "demo/ownership.test.mjs",
 		"verification-without-evidence": "demo/check-evidence.test.mjs",
+		"evidence-tree": "demo/check-evidence.test.mjs",
 		"feature-row-missing": "demo/feature-row.test.mjs",
+		"shared-tree-on-main": "demo/shared-tree-on-main.test.mjs",
+		"duplicate-item": "demo/duplicate-item.test.mjs",
+		"text-integrity": "demo/text-integrity-wiring.test.mjs",
+		"commit-message-encoding": "demo/commit-message-encoding.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(

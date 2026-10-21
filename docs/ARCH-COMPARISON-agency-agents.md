@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # agency-agents vs our seats — persona & skill borrowing guide
 
 **Date:** 2026-10-12 · **Read at:** `vendor/eval/agency-agents` HEAD `24485830`

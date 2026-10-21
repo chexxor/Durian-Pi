@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # SECURITY POSITION — codemode for durig seats (T0 first cut)
 
 **Status: ratified by the `security` seat, item #1295, 2026-10-17. This file realizes ROADMAP 32's

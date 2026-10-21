@@ -1,11 +1,11 @@
-﻿# Self-admin improvement register
+# Self-admin improvement register
 
-**What this is.** A durable, evidence-grounded list of *improvements a durig
+**What this is.** A durable, evidence-grounded list of *improvements a durian-pi
 installation could apply* — configuration changes, platform features, refactors,
-and **system-prompt edits** — that a durig **self-admin** consults when a user
+and **system-prompt edits** — that a durian-pi **self-admin** consults when a user
 hits a platform problem, or when a user asks for improvement ideas directly or
 indirectly. It is the answer to "a bare Linux versus a distro with the drivers,
-themes and packages a normal user wants pre-installed": durig should carry
+themes and packages a normal user wants pre-installed": durian-pi should carry
 sensible defaults and **pre-empt** bad outcomes, and where it cannot yet, it
 should *offer* the fix instead of requiring the user to know the architecture.
 
@@ -37,7 +37,7 @@ run where the stale instruction bit.
 ### SA-1 — Context management should have safe defaults (the biggest hands-off gap)
 - **Trigger:** a seat degenerates or its context fills; today this is handled by
   hand (`reset`, `resume`) rather than by default.
-- **Evidence:** ROADMAP 27/28 (context visibility/reduction, unbuilt); durig
+- **Evidence:** ROADMAP 27/28 (context visibility/reduction, unbuilt); durian-pi
   needed `reset` (ROADMAP 44) for exactly this; agent-fleet ships an ordered
   pressure guard + session recycle by default (`BORROW-FROM-agent-fleet.md`).
 - **Change:** enable a default pressure guard (warn → preserve-and-settle → one
@@ -50,7 +50,7 @@ run where the stale instruction bit.
 ### SA-2 — A completion should not be readable as a pass
 - **Trigger:** a seat's `DONE` is trusted more than the evidence behind it.
 - **Evidence:** agent-fleet's Verification Contract (`agent-fleet.runtime-result/v1`)
-  separates `execution / changes / verification / acceptance`; durig's pair review
+  separates `execution / changes / verification / acceptance`; durian-pi's pair review
   is behavioural only (`BORROW-FROM-agent-fleet.md`; registered `#61`).
 - **Change:** give `complete_work` a structured result (changed? verified? by
   what command/exit? evidence path).
@@ -72,7 +72,7 @@ run where the stale instruction bit.
 ### SA-4 — Proportionality should latch per task, not reset per message
 - **Trigger:** a small correction re-opens a large workspace / budget.
 - **Evidence:** agent-fleet's post-mortem (a 13-minute change open 47 hours);
-  their ratcheting tier (`#60`); durig's PM `S/M/L` is turn-scoped.
+  their ratcheting tier (`#60`); durian-pi's PM `S/M/L` is turn-scoped.
 - **Change:** the PM task tier survives the next message; raising it needs a reason.
 - **Why it helps:** spend tracks the task, not the last message.
 - **Risk/effort:** S (protocol).
@@ -81,7 +81,7 @@ run where the stale instruction bit.
 ### SA-5 — Upgrades must not silently change behaviour
 - **Trigger:** `up --refresh` or a platform bump changes defaults underneath a rig.
 - **Evidence:** agent-fleet records a feature snapshot and never auto-enables new
-  features on update; durig re-applies whatever the file says (`BORROW-FROM-agent-fleet.md`).
+  features on update; durian-pi re-applies whatever the file says (`BORROW-FROM-agent-fleet.md`).
 - **Change:** record and preserve the effective feature set; make enabling new
   defaults an explicit act.
 - **Why it helps:** protects operator intent across upgrades.
@@ -104,8 +104,8 @@ run where the stale instruction bit.
 
 ### SA-7 — Common defaults should be pre-set, not discovered
 - **Trigger:** the operator must know the architecture to set a sensible value.
-- **Evidence:** `DURIG_MAX_CONCURRENT_SEATS`, `DURIG_STREAM_TIMEOUT_MS`,
-  per-seat models, `DURIG_SEAT_ROOT` all require knowing *why* they exist;
+- **Evidence:** `DURIAN_PI_MAX_CONCURRENT_SEATS`, `DURIAN_PI_STREAM_TIMEOUT_MS`,
+  per-seat models, `DURIAN_PI_SEAT_ROOT` all require knowing *why* they exist;
   agent-fleet ships `--preset default` + a `doctor` (`BORROW-FROM-agent-fleet.md`).
 - **Change:** ship a validated starter preset and a repair path, so a new rig is
   correct before the operator learns any of it.
@@ -116,8 +116,8 @@ run where the stale instruction bit.
 ### SA-8 — Personas × skills × commands should compose predictably
 - **Trigger:** a seat's behaviour is defined ad hoc in one instruction blob.
 - **Evidence:** agent-fleet names the *how* (skill) / *who* (persona) / *when*
-  (command) layering; durig folds them into the seat's inline `instructions`.
-- **Change:** a small skill/reference layer for durig's own seats, plus the named
+  (command) layering; durian-pi folds them into the seat's inline `instructions`.
+- **Change:** a small skill/reference layer for durian-pi's own seats, plus the named
   layering, so a reference checklist (`definition-of-done`, `testing-patterns`)
   is available without bloating every prompt.
 - **Why it helps:** polished, reusable guidance without prompt bloat.
@@ -152,9 +152,9 @@ ode cli.mjs and gets {ok:false,usage:"usages:\n..."} with exit 2. There is no --
 - **Surfed by:** any new user who doesn't know the commands.
 
 ### SA-10 -- A bare install should ship sensible defaults
-- **Trigger:** `npm install durig` + `node cli.mjs ps` produces an empty rig with no seats, no config, and no guidance on next steps.
-- **Evidence:** The distribution has no `durig.config.json` template. `DURIG_MAX_CONCURRENT_SEATS` defaults to Infinity. The model requires an API key the user won't have. No `npm init durig` or equivalent scaffolding exists.
-- **Change:** ship a `durig.config.default.json` with sensible defaults (`DURIG_MAX_CONCURRENT_SEATS=1`, `DURIG_OPTIMIZE=off`) and a scaffold command (`node cli.mjs init`) that creates a minimal working rig file + config.
+- **Trigger:** `npm install durian-pi` + `node cli.mjs ps` produces an empty rig with no seats, no config, and no guidance on next steps.
+- **Evidence:** The distribution has no `durian-pi.config.json` template. `DURIAN_PI_MAX_CONCURRENT_SEATS` defaults to Infinity. The model requires an API key the user won't have. No `npm init durian-pi` or equivalent scaffolding exists.
+- **Change:** ship a `durian-pi.config.default.json` with sensible defaults (`DURIAN_PI_MAX_CONCURRENT_SEATS=1`, `DURIAN_PI_OPTIMIZE=off`) and a scaffold command (`node cli.mjs init`) that creates a minimal working rig file + config.
 - **Why it helps:** the 'distro with drivers' goal -- a normal user should get sensible defaults and be pre-empted from common bad outcomes.
 - **Risk/effort:** M. Changes distribution artifact and config loading.
 - **Surfed by:** first-run, npm install, any rig that 'looks broken' on day one.
@@ -177,8 +177,16 @@ ode cli.mjs and gets {ok:false,usage:"usages:\n..."} with exit 2. There is no --
 
 ### SA-13 - Per-item workspace isolation should be the default, and the gate should fail closed (satisfiably)
 - **Trigger:** a seat that never calls `prepare_workspace` silently works in the shared/live tree; the operator must know an env var and a tool call to get the isolation D48/D49/D53 adopted.
-- **Evidence (observed):** `src/seattools.mjs` makeSeatEnv resolves target.cwd ?? DURIG_SEAT_ROOT ?? fallbackRoot - an unprepared seat falls through to the live tree; `prepare_workspace` is advisory (installed, not gated); DOGFOOD F23 (seat worktree vs live tree, silent clobber), F8 (junction delete hazard), F9 (prompt-only constraints fail); D48's research (denylist misses 69-98.6% of bypasses; 12 s / ~111 MB per worktree); D49/D50/D53 (per-task worktree lifecycle, item-scoped commits, store-single-writer); NEXT.md #506 (dirty-tree guard bites live; carried worktrees nested).
+- **Evidence (observed):** `src/seattools.mjs` makeSeatEnv resolves target.cwd ?? DURIAN_PI_SEAT_ROOT ?? fallbackRoot - an unprepared seat falls through to the live tree; `prepare_workspace` is advisory (installed, not gated); DOGFOOD F23 (seat worktree vs live tree, silent clobber), F8 (junction delete hazard), F9 (prompt-only constraints fail); D48's research (denylist misses 69-98.6% of bypasses; 12 s / ~111 MB per worktree); D49/D50/D53 (per-task worktree lifecycle, item-scoped commits, store-single-writer); NEXT.md #506 (dirty-tree guard bites live; carried worktrees nested).
 - **Change (proposal for ruling, not yet adopted):** isolation ON by default when the workspace is a git repo: file/write/edit/shell tools fail closed with a model-readable "call prepare_workspace first (itemId)" until the conversation has a recorded workspace; outside a git repo `prepare_workspace` succeeds trivially (records the cwd, states isolation is off) so the gate never dead-ends a first-run rig; opt-out knob for operators who want direct-to-live editing; verification items must be able to base their prepared tree on the AUTHOR's item (same object database, fetch-free) or W2's artifact path degrades.
 - **Why it helps:** makes D48's structural-first isolation the out-of-the-box behavior instead of a convention; stops the silent shared-tree write; keeps review/merge (git diff main..<item-branch>) as the operator's W5 loop.
 - **Risk/effort:** M. 12 s / ~111 MB per claimed item (measured, D48) - transient, slot-capped (D12); verifier artifact path must be specified BEFORE the gate lands or verification starts passing against pre-change HEAD (inferred - reasoned from D50 commits + SC1 confinement + the destructive-checkout refusal).
 - **Surfaced by:** a find by qa/auditor of work in the shared tree; `PREPARE_WORKSPACE_ERROR` in transcripts; orphan item-* dirs in the repo root.
+
+### SA-14 -- The wake prompt must advertise CLAIMABLE work, not rows-in-view
+- **Trigger:** the driver wake pitch fired "You have queued work. Call claim_work..." to a seat with ZERO claimable rows; the seat re-reported the refusal for seven consecutive turns (each wake a turn spent only on re-reporting).
+- **Evidence (observed, review #4508 / disposition #4558):** `claim_work` returned NO_QUEUED_WORK on all seven wakes; the seat's only non-terminal rows were (a) a HELD row, unclaimable by protocol, and (b) its own SENT notifications, whose copies live in the receivers' queues. The pitch advertised a count of ROWS IN VIEW where a count of CLAIMABLE-TO-THIS-SEAT rows was meant — the prompt and the verb read different sets, so "a call to action and the verb that answers it disagree; the prompt is the liar rather than the verb." SEVEN IDENTICAL REFUSALS IS A MEASUREMENT, NOT A BAD DAY.
+- **Change (routed impl #4557, pending):** the pitch reads the SAME predicate the claim gate reads (`queued` AND `to == seat`, per persisted statuses); three-way wording: claimable rows -> pitch; parked rows only -> NAME them ("1 pm-held row awaiting release, no claimable item for you"); nothing -> say nothing (silence is a state the driver is allowed to express). Fixture: a seat whose only non-terminal rows are one held row + one sent notification must NOT see "You have queued work".
+- **Why it helps:** a user who does not know the architecture is told there is work, takes the offered action, and is refused; seven shots in a row teach "the prompt lies" and erode every future one. The prompt reading the same set as the verb cannot drift from it again.
+- **Risk/effort:** S. Watch for the same over-broad predicate on the OTHER surfaces (attention notice, `status` headline, broker wake) — "rows in view used where rows claimable was meant" substitutes in more than one place.
+- **Surfaced by:** driver pitch + claim refusal pairs in a seat transcript; repeated wake turns that only re-report NO_QUEUED_WORK.

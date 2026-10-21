@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # SECURITY POSITION — the commit-time secret gate (#700 scanner as pre-flight)
 
 **Status: position by the `security` seat, item #1368, 2026-10-17. Ratifies/corrects impl's #1317

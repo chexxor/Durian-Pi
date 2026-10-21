@@ -7,7 +7,7 @@
 way?"
 **Companions:** `docs/BROKER-ARCHITECTURE.md` (the in-process actor model — why seats aren't fully
 independent), `docs/BROKER-SUPERVISION.md` (the process lifecycle/daemon design of record),
-`docs/PI-DURABLE-INTEGRATION.md` (durig ↔ pi-durable mapping).
+`docs/PI-DURABLE-INTEGRATION.md` (durian-pi ↔ pi-durable mapping).
 
 ---
 
@@ -24,12 +24,12 @@ supplies the rule; a running process satisfies it. The rule, verbatim from the l
 > "One process owns a storage at a time; there is no cross-process locking." (`README.md:682`)
 
 So there is **no lock at the database level** — pi-durable simply assumes the embedding application
-keeps one owner. durig keeps its side by policy: **the broker is durig's chosen long-lived owner**, and
-`<db>.broker.json` plus the `run`/`serve` guards are how durig enforces it. The four nouns to keep
+keeps one owner. durian-pi keeps its side by policy: **the broker is durian-pi's chosen long-lived owner**, and
+`<db>.broker.json` plus the `run`/`serve` guards are how durian-pi enforces it. The four nouns to keep
 straight:
 
 - **pi-durable** — the library: durable conversations, submissions, tools, providers, `resume()`.
-- **durig** — the program: **seats** (personas/roles), the cross-seat **queue** (`RigQueue`) and router
+- **durian-pi** — the program: **seats** (personas/roles), the cross-seat **queue** (`RigQueue`) and router
   tools (`claim_work`, `complete_work`, `send_work`, `defer_work`), the **driver** that decides whom to
   wake, the **broker** that drives, and the **observers** (`status`/`watch`/`log`/`ui`).
 - **The store** — one SQLite file = one rig (`selfdev.sqlite`; `rig.sqlite` by
@@ -37,7 +37,7 @@ straight:
 - **The three actors** — the **operator/delegate** (intent, rulings), the **seats** (the team), and the
   **broker** (the scheduler/supervisor process).
 
-For the durig-versus-harness division of responsibilities, see the concept map in
+For the durian-pi-versus-harness division of responsibilities, see the concept map in
 `docs/PI-DURABLE-INTEGRATION.md` §2.
 
 ## 2. Multiplayer, precisely: one owner, many clients
@@ -50,11 +50,11 @@ one owner**, not many writers to one file. The library provides the client surfa
 - busy-conversation semantics — a client can steer a running conversation or queue a follow-up.
 
 There is no multi-writer mode and no cross-process lock; the embedding program must keep a single
-owner. durig currently **under-uses** the client surface — its observers read the store directly and
+owner. durian-pi currently **under-uses** the client surface — its observers read the store directly and
 poll (`D11`) instead of attaching to the owner's push stream, which is why the TUI feels single-player
 and why "adopt the owner's push stream" is a deferred item (`docs/BROKER-ARCHITECTURE.md`).
 
-The broker is **not** the only part of durig that touches the library, nor the only harness owner:
+The broker is **not** the only part of durian-pi that touches the library, nor the only harness owner:
 
 | Component | How it uses pi-durable |
 |---|---|
@@ -114,7 +114,7 @@ are spooled for the owner to apply (safe).**
 
 | Path | Effect | Opens the store? | Safe while the broker runs? | Why |
 |---|---|---|---|---|
-| `status`, `watch`, `log`, `events`, `metrics`, `check`, `config`, `ui.mjs` | read | storage read-only (`openStore`) | **Yes** | D11: viewers never wake seats; they read the storage layer directly |
+| `status`, `watch`, `log`, `events`, `metrics`, `check`, `config`, `ui.mjs` | read | **broker-served** via the `read` spool op when a broker is alive; direct `openStore` only when none is (D111) | **Yes** | D11: viewers never wake seats. The broker owns the pi-durable instance, and `SqliteStorage.document()` takes `BEGIN IMMEDIATE` even for a read, so a second opener steals its write lock — the read is served by the broker instead |
 | `ps`, `queue` | read the roster / queue via `openStore` (storage only) | **Yes** | **Yes** | reads only — no harness, no second owner (fixed, ROADMAP 69) |
 | `intent.mjs <seat> --body-file …` | spool an input for a seat | **No** (writes a file) | **Yes** | the broker drains `<db>.broker.inbox/` and submits it as operator input (`src/broker.mjs` `drainIntentInbox`) |
 | seat tools (`claim_work`, `complete_work`, `send_work`, `defer_work`, …) | queue/transcript writes | inside whatever session drives the run | **Yes** when the broker drives | the tools run inside the seat's run, so the session that started the run is the sole writer for that write |
@@ -123,9 +123,9 @@ are spooled for the owner to apply (safe).**
 | `resume` / `doctor` | settle stranded submissions | **Yes** | **Refused** | second owner doing a compound write (the 2026-10-16 incident); `cmdResume` now refuses while a broker is alive (ROADMAP 69) |
 | `stop <seat>` | cross-process halt + settle | **Yes** | **By design, yes** | kills the generation-lease holder pid, then settles; `openHarness({resume:false})` |
 | `run [--watch]` | drive to quiescence | **Yes** | **Refused** | explicit guard: refuses if a broker is alive (two schedulers double-wake) |
-| `up` | create/refresh seats; maybe start the broker | **Yes** | depends | interactive TTY auto-starts the broker; `--no-serve`/`DURIG_NO_SERVE=1` opt out |
+| `up` | create/refresh seats; maybe start the broker | **Yes** | **Refused** | second writer: a resident broker already drives the store, and `cmdUp` refuses while it is alive (#1589). Exception: `up --dry-run` previews only and writes nothing, so it is **not** refused |
 | `serve [--stop]` | the broker itself; `--stop` is the off switch | **Yes** | — | the sole writer/scheduler |
-| `durig daemon …` *(planned)* | install the OS trigger → `src/host.mjs` → broker | host never opens the store | yes | supervisor, not scheduler (`BROKER-SUPERVISION.md`) |
+| `durian-pi daemon …` *(planned)* | install the OS trigger → `src/host.mjs` → broker | host never opens the store | yes | supervisor, not scheduler (`BROKER-SUPERVISION.md`) |
 
 Rule of thumb for a maintainer: **if you are adding a verb that mutates state, decide whether it is a
 "read", an "inside-the-run" tool, or a "spool it for the broker" request. Do not add a fourth kind.**
@@ -208,13 +208,19 @@ the correct shape for a daemon anyway. This is the direction `BROKER-ARCHITECTUR
 carry an `op`, and the broker APPLIES it with its own harness. The closed vocabulary is
 `src/broker.mjs` `SPOOL_OPS` — today `message` (the original intent; an absent `op` defaults to it),
 `stop` (settle the seat's pending submission to `aborted: <reason>` and abort its run task,
-in-process, no pid kill), and `reset` (draw the shared reset boundary, `src/reset.mjs`, lifted out of
-`cli.mjs` so the CLI and the broker apply the SAME mechanism). An unknown `op` is dead-lettered, never
+in-process, no pid kill), `reset` (draw the shared reset boundary, `src/reset.mjs`, lifted out of
+`cli.mjs` so the CLI and the broker apply the SAME mechanism), and `compact` (summarize the seat's
+old context LIVE — pi-durable's `conversation.compact()` runs alongside the conversation, so the
+broker applies it with its own harness and the seat's run is not aborted; #1904), `pause`/`unpause`
+(ROADMAP 131), `configure` (set a seat's model), and `read` (D111: serve a viewer read from the
+broker's OWN `Storage` so no second process opens the database — the client half is
+`src/readclient.mjs`, the view set is `src/brokerread.mjs`). An unknown `op` is dead-lettered, never
 applied. Each applied request records its outcome at `<db>.broker.inbox.out/<requestId>.json` (the
 **result channel**), and that file is also the **idempotency ledger**: a duplicate `requestId` is
-recognised on re-drain and applies ONCE. `intent.mjs` is the producer (`--op`, `--reason`, `--handoff`);
-it mints and prints the `requestId`. Remaining for full delivery: queue edits as ops (they need the
-queue/Router writers lifted out of `cli.mjs`). Acceptance demo: `demo/command-spool.test.mjs`.
+recognised on re-drain and applies ONCE. `intent.mjs` is the producer (`--op`, `--reason`, `--handoff`,
+`--instructions`); it mints and prints the `requestId`. Remaining for full delivery: queue edits as ops
+(they need the queue/Router writers lifted out of `cli.mjs`). Acceptance demos:
+`demo/command-spool.test.mjs`, `demo/compact-spool.test.mjs`.
 
 ---
 
@@ -239,7 +245,7 @@ queue/Router writers lifted out of `cli.mjs`). Acceptance demo: `demo/command-sp
 | `src/broker.mjs` | `drivePass`, `runWakeLoop`, `logBrokerLine`, broker state/log, the intent inbox (`writeIntent`/`drainIntentInbox`) |
 | `src/driver.mjs` | `selectWakes` / `driveOnce` — *whom* to wake |
 | `src/scheduler.mjs` | *when* a pass may run (floor, cooldown, coalescing) |
-| `src/genlock.mjs` | cross-process generation-slot leases (`DURIG_MAX_CONCURRENT_SEATS`) |
+| `src/genlock.mjs` | cross-process generation-slot leases (`DURIAN_PI_MAX_CONCURRENT_SEATS`) |
 | `src/storewrite.mjs` | the entry-id-conflict retry (`withStoreWriteRetry`) |
 | `src/supervisor.mjs` | the in-process escalation pass (distinct from the host daemon) |
 | `src/rig.mjs` | `Seats`, `RigQueue`, `Router`, personas |

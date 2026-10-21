@@ -22,7 +22,7 @@ design.
 
 | Claim | Reality |
 |---|---|
-| "bounded heap (256 MB)" | **256 MB is a *pi-tool* setting, not a library default.** `CodemodeSandboxOptions.memoryLimitBytes` defaults to **no limit** beyond wasm32's 4 GiB (§ `types.d.ts:110-113`). A durig codemode tool that omits it gets **no memory bound** |
+| "bounded heap (256 MB)" | **256 MB is a *pi-tool* setting, not a library default.** `CodemodeSandboxOptions.memoryLimitBytes` defaults to **no limit** beyond wasm32's 4 GiB (§ `types.d.ts:110-113`). A durian-pi codemode tool that omits it gets **no memory bound** |
 | "optional hard deadline (`timeout_ms`), unset by default" | The **script's** `@options.timeout_ms` is unset; the **sandbox** is not — `DEFAULT_TIMEOUT_MS = 300_000` and `options.timeoutMs ?? DEFAULT_TIMEOUT_MS` (`runtime/host.js:5,302`) |
 | "a WASI-based QuickJS worker, isolated from the main process" | It is `new Worker(...)` from **`node:worker_threads`** (`runtime/host.js:1,147`) — a **thread in the same process**. Language isolation; a VM escape inherits main-process authority |
 | the `runScript` sketch | Built on `quickjs-emscripten` / `newQuickJSWASMModule`. pi's library is **`quickjs-wasi`** with `CodemodeSandbox` + `loadQuickJSWasm`. We must build on `CodemodeSandbox`, not a second sandbox |
@@ -60,7 +60,7 @@ budgets (`maxCalls`, `maxBytes`, `maxUsd`) and optional `once` for linear single
 ### 3. Executors delegate to the boundary, so codemode inherits SC1
 
 The broker's executors do **not** touch the filesystem directly. `fs.read`/`fs.write` go through
-durig's **confined `ExecutionEnv`** (SC1) and `proc.exec` through `api.executeTool()` on the
+durian-pi's **confined `ExecutionEnv`** (SC1) and `proc.exec` through `api.executeTool()` on the
 confined tool. Path confinement is therefore enforced **twice** — the grant predicate and the
 environment — and the SC1/SC2 work planned for the shell serves codemode with no second
 implementation.
@@ -86,7 +86,7 @@ on a single long-running sandbox call, which D64 cannot see until the run settle
 
 **Buys:** a narrower front door. If the model sees only `codemode` and the minted set is
 narrower than the shell, the model's own calls are structured, inspectable and budgeted — and
-because durig's hooks see **nested** calls via `ToolCall.parent`, a guard at `beforeTool`
+because durian-pi's hooks see **nested** calls via `ToolCall.parent`, a guard at `beforeTool`
 (`types.ts:745-752`) also covers everything a script does.
 
 **Does not buy:** confinement. Per `security.sec`'s answer to Q6, a QuickJS sandbox adds **no**

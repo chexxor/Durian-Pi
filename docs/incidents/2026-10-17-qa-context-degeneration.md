@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 ---
 incident: qa-context-degeneration
 date: 2026-10-17
@@ -93,3 +95,42 @@ denominator), not a fixed constant. Prevention stays `null`-equivalent until tho
 `docs/runbooks/degeneration-guard.md` · `docs/runbooks/seat-reset.md` ·
 `docs/context` (`src/context.mjs`, ROADMAP 27) · queue items `#1703`, `#1704`, `#1705`, `#1707`,
 `#1708` · `docs/incidents/2026-10-17-broker-crash.md`
+
+---
+
+## Recurrence — 2026-10-18 (third occurrence; `#1903` unclaimable)
+
+**Appended, not rewritten.** Same symptom, a **new impact**: qa could not pick up the one verification
+that gated a landing.
+
+### What happened
+- qa's recent turns showed the repeat/garbled shape again — e.g. `#81120` "Let me look at what's
+  surfaced…", `#81154` "Please keep working within topic; topic: pause…", `#81171` "Let me carefully
+  figure out the turn…" — while it held **8–9 queued items**.
+- It did **not claim `#1903`** (verify `devtools-item-1904` @ `d3d6be3`) even after pm created the
+  priority nudge **`#1916`** ("claim #1903 by id"). `#1903` sat `queued` and the landing was blocked.
+- The predecessor broker went dormant-stalled at the same time (see
+  `docs/incidents/2026-10-18-broker-dormant-stalled.md`); after the broker restart qa did generate
+  again (context still large). So the stall and the degradation are **coupled** — do not attribute
+  every missed claim to the model alone.
+
+### Mitigation taken (routing, not recovery)
+- pm **cancelled `#1903`** and created **`#1940 → auditor`** for the same verification, and moved 5 other
+  verifications to `auditor` (`#1923–#1927`, `#1932`, `#1934`) — relieving qa without a broker window.
+- qa's model is being switched to `mistralai/Mistral-Small-3.2-24B-Instruct-2506` in the next window
+  (a model-change reset, which also clears the saturated context) — an experiment, not a fix
+  (registered separately).
+
+### Prevention (unchanged; guard fixes still not landed)
+`#1703`/`#1704`/`#1705` remain **unlanded** (they are the prevention recorded above). Additionally:
+- **verifier capacity must not be a single seat** — the routing split to `auditor` should be the
+  standing shape, so a degraded qa does not become a single point of failure.
+- the model-change reset at `up --refresh` is an available *recovery* lever for a saturated verifier.
+
+### Evidence (recurrence)
+- store conv 15: assistant entries `#81120`, `#81154`, `#81171` (repeat/garbled); `status` attention
+  `idle_with_queued_work` (8–9 queued), `generation_in_flight` ×4 at `02:50Z`.
+- queue: `#1903` → `queued` (never claimed) despite `#1916`; then `#1903` `cancelled`, `#1940 → auditor`
+  and `#1923–#1927`/`#1932`/`#1934` → auditor.
+- `.spike/serve.err`: `wake-failed … "database is locked"` for devtools/auditor and
+  `SessionFailed …` for pm/qa at the same stall (coupling evidence).
