@@ -551,7 +551,19 @@ try {
 		if (!res.claimed) {
 			lock.queuedBehind = { pid: res.holder?.pid ?? null, seat: res.holder?.seat ?? null };
 		}
-		heldPaths = acquireAllSlotsSync(dbPath, lockSlots, me);
+		heldPaths = acquireAllSlotsSync(dbPath, lockSlots, me, {
+			// #4432 LEGIBILITY: print the WAIT while it happens. A lock wait and a hung demo BOTH read
+			// as "no output for minutes" from a seat's side (#3761), and a seat that reads a wait as a
+			// hang RETRIES — which adds contention, and a retried landing is the two-delegates-one-tree
+			// shape. stderr, so the JSON report on stdout stays machine-readable (the #4403 lesson).
+			onWait: ({ slot, slots, waitedMs, holderPid }) => {
+				console.error(
+					`landing lock: waiting for slot ${slot + 1}/${slots} — ${lock.liveHolders} live holder(s), ` +
+						`${Math.round(waitedMs / 1000)}s so far${holderPid ? `, slot held by pid ${holderPid}` : ""} ` +
+						`(this is a WAIT, not a hang — do not retry)`,
+				);
+			},
+		});
 		lock.held = heldPaths.length;
 	}
 	lock.waitedMs = Date.now() - lockStart;

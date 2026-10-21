@@ -192,7 +192,7 @@ try {
   const lockedRun = landAsync(["feat-b"]);
   const sawPriority = await waitFor(() => existsSync(join(repo, "rig.sqlite.genlock.priority")), 8000);
   check("the lander PUBLISHES a priority reservation and WAITS (it does not refuse)", sawPriority, lockedRun.out.slice(0, 200));
-  check("...and it has NOT reported yet (it is waiting on the live holder)", lockedRun.out.trim() === "", lockedRun.out.slice(0, 200));
+  check("...and it has NOT REPORTED yet (it is waiting on the live holder)", lockedRun.stdoutText.trim() === "", lockedRun.out.slice(0, 200));
   check("...and main did NOT advance", mainSha(repo) === beforeLock);
   rmSync(slot, { force: true }); // the holder's generation finishes and releases the slot
   const lockedCode = await lockedRun.done;
@@ -315,7 +315,16 @@ try {
   const resolvedRun = landAsync(["feat-g"], {}, null);
   const sawResolve = await waitFor(() => existsSync(resolvedPriority), 8000);
   check("with NO --db the helper RESOLVES the live store (its reservation lands beside selfdev.sqlite)", sawResolve, resolvedRun.out.slice(0, 200));
-  check("...and it WAITS on the resolved store rather than passing silently", resolvedRun.out.trim() === "", resolvedRun.out.slice(0, 200));
+  // #4432: the wait is now LEGIBLE. Before, the lander produced NO output while blocked, so a seat
+  // could not tell a lock wait from a hung demo (#3761) and RETRIED — which adds contention. The
+  // assertion is the opposite of the old one: the wait PRINTS, with its holder count. The line lands
+  // on stderr as the slot wait begins, so WAIT for it rather than sampling a moment too early.
+  const sawWait = await waitFor(() => /landing lock: waiting for slot/.test(resolvedRun.out), 8000);
+  check(
+    "...and it WAITS on the resolved store, and the WAIT is LEGIBLE with its holder count (#4432)",
+    sawWait,
+    resolvedRun.out.slice(0, 200),
+  );
   check("...and main did NOT advance", mainSha(repo) === beforeResolve);
   // (b) an explicit --db rig.sqlite is NOT a silent pass while ANOTHER store holds the live lock.
   const wrongDb = land(repo, ["feat-g"]);
