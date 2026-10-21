@@ -73,6 +73,7 @@ import { wrapProviderWithTrace } from "./src/providers/trace.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
 import { formatMetrics } from "./src/metrics.mjs";
 import { isLinkedWorktree, readSharedTreeBranch } from "./src/featuredocs.mjs";
+import { readCommitMessages } from "./src/commitmsg.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
@@ -2806,6 +2807,10 @@ async function cmdCheck(rigFile, human, rest = []) {
   // scratch worktree, where the branch reads as "" and the rule otherwise refused every landing
   // (#2679). The reader is null when git/the repo is unavailable -> the rule is skipped, not passed.
   const sharedTreeLinked = isLinkedWorktree({ root: process.cwd() });
+  // The recent commit messages (#4349): a BOM in a subject/body is invisible in every normal view,
+  // so it is read here and judged by the `commit-message-encoding` rule. null (no git / not a repo)
+  // leaves the rule SKIPPED with its reason rather than silently passing.
+  const commitMessages = readCommitMessages({ root: process.cwd(), limit: 50 });
   const result = auditRig({
     rig: rigFile,
     spec,
@@ -2814,6 +2819,7 @@ async function cmdCheck(rigFile, human, rest = []) {
     storedSeats,
     modelsBySeat,
     queueItems,
+    commitMessages,
     sharedTreeBranch,
     sharedTreeLinked,
   });

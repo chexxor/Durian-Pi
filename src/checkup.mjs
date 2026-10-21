@@ -29,6 +29,7 @@ import { ANSI } from "./ansi.mjs";
 // CLI's load (2026-10-17, lead #1164). Re-exported so every importer keeps ONE
 // definition.
 import { VERIFIER_TERMS, seatsAreVerifier } from "./verifierrole.mjs";
+import { messageDefects } from "./commitmsg.mjs";
 
 export { VERIFIER_TERMS, seatsAreVerifier };
 
@@ -113,6 +114,11 @@ export const RULES = [
     id: "shared-tree-on-main",
     severity: "error",
     what: "the shared working tree is not on its integration branch, so a seat may be writing to a feature branch",
+  },
+  {
+    id: "commit-message-encoding",
+    severity: "fix-now",
+    what: "a recent commit message carries a UTF-8 BOM (or a NUL / stray CR) — invisible in every normal view, so it surfaces only in a byte read; a body BOM corrupts a trailer (#4349)",
   },
 ];
 
@@ -298,7 +304,7 @@ export function runbookFrontMatterProblems(runbook) {
  *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -676,6 +682,33 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       `the shared working tree is on ${on}, not "${sharedTreeExpected}" - a seat whose cwd falls back to the shared tree writes to a feature branch and the landing basis breaks`,
       `switch the shared tree back: git switch ${sharedTreeExpected}; land item branches through the landing helper`,
     );
+  }
+
+  // 14. A commit message must not carry a UTF-8 BOM (or a NUL / stray CR) - #4349. Four commits in
+  //    one session carried a BOM because PowerShell's `Set-Content -Encoding utf8` writes one, and
+  //    each was caught by hand; four catches is not a catch rate, it is a mechanism that does not
+  //    exist. A BOM is INVISIBLE IN EVERY NORMAL VIEW (`git log --oneline` renders it, `git show`
+  //    renders it, the author sees a clean subject) and surfaces only in a byte read - which is
+  //    exactly what a check is for. The WHOLE message is checked, not just the subject: a BODY BOM
+  //    corrupts a `Co-authored-by` trailer or a `Fixes #N` line, where the parser is strict. The
+  //    caller reads the messages (src/commitmsg.mjs) and passes PLAIN DATA, so this stays a linter
+  //    over data; no data means SKIPPED with its reason, never a silent pass (D25).
+  if (!Array.isArray(commitMessages)) {
+    skipped.push({
+      id: "commit-message-encoding",
+      why: "the recent commit messages were not supplied, so their encoding cannot be inspected",
+    });
+  } else {
+    const bad = commitMessages.map((m) => ({ m, defects: messageDefects(m) })).filter((x) => x.defects.length > 0);
+    if (bad.length > 0) {
+      const ids = bad.map((x) => String(x.m.sha ?? "").slice(0, 8)).join(", ");
+      add(
+        "commit-message-encoding",
+        ids,
+        `${bad.length === 1 ? "commit" : `${bad.length} commits`} ${ids} carry a UTF-8 BOM (or a NUL / stray CR) in the message — invisible in every normal view, so it surfaces only in a byte read, and a body BOM corrupts a trailer`,
+        "rewrite the message through a writer that does NOT add a BOM (node's fs, or the write/edit tool) and amend the commit from that file. PowerShell's `Set-Content -Encoding utf8` writes one — do not use it for commit messages",
+      );
+    }
   }
 
   const summary = { error: 0, "fix-now": 0, total: findings.length };
