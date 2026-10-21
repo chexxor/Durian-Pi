@@ -188,6 +188,20 @@ export function sameIntent(a, b) {
   return subjectOverlap(a.subject, b.subject) >= OVERLAP_THRESHOLD;
 }
 
+/**
+ * #4099: a live item that NAMES its terminal twin is a SUPERSESSION — a deliberate correction
+ * ("replaces #4063", "supersedes #3560", "re-registration of cancelled #2055") — NOT a duplicate.
+ * A REISSUE satisfies sameIntent BY DESIGN: same sender, same recipient, same tier, near-identical
+ * subject, and a cancelled predecessor. Without this carve-out the rule fires on every legitimate
+ * correction — and a rule that fires on correct behaviour gets turned off, so it then catches
+ * nothing. The citation is checkable and cheap: the live item's subject OR body cites `#<id>`.
+ */
+export function namesPredecessor(live, terminal) {
+  if (!live || !terminal) return false;
+  const needle = `#${terminal.id}`;
+  return `${live.subject ?? ""}\n${live.body ?? ""}`.includes(needle);
+}
+
 /** First line of a possibly-multiline text, bounded for display. */
 function firstLine(text, limit = 96) {
   const line = String(text ?? "").split("\n")[0].trim();
@@ -733,7 +747,8 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
     const terminal = queueItems.filter((it) => isTerminalStatus(it));
     const live = queueItems.filter((it) => it && !isTerminalStatus(it));
     for (const it of live) {
-      const twin = terminal.find((t) => sameIntent(t, it));
+      // #4099: a live item that NAMES its terminal twin is a SUPERSESSION, not a duplicate.
+      const twin = terminal.find((t) => sameIntent(t, it) && !namesPredecessor(it, t));
       if (twin) {
         add(
           "duplicate-item",
