@@ -1,4 +1,4 @@
-﻿// src/compacteval.mjs - compaction evaluation harness (#1087, ROADMAP 97).
+// src/compacteval.mjs - compaction evaluation harness (#1087, ROADMAP 97).
 //
 // WHAT: replay an append-only store's entries into an EVAL-level model context
 // (a FULL view and a COMPACTED view), fire recall / artifact / continuation /
