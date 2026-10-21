@@ -73,6 +73,25 @@ between two measurements and were clean again later — the resolution was NOT c
 legitimate config edit COMPLETED. An `M` in `git status` can be a colleague's work in progress, in which
 case the correct action is to WAIT rather than to dispose.
 
+**The landing LOCK serialises landings — there is no operator-confirmation gate.** The protection against
+two delegates in one tree is the mechanical landing lock, not a human confirmation. Measured:
+`{ slots: 4, held: 4, waitedMs: 160062, liveHolders: 3 }` — a landing WAITED 160 seconds for a slot behind
+three live holders. Two delegates cannot merge into one tree simultaneously, because the tool will not let
+them. So: (1) DO NOT hold a landing for an operator to confirm no other delegate is landing — that is an
+ordering request, and lead's principle applies: DEPENDENCIES ARE ENFORCEABLE AND ORDERING REQUESTS ARE NOT.
+The lock is enforceable; a confirmation is not. When a gate duplicates a mechanism, the mechanism wins and
+the gate goes. (2) The precondition is the tree RE-MEASURED IMMEDIATELY BEFORE (see above). (3) REPORT THE
+LOCK'S WAIT AND HOLDERS IN THE LANDING REPORT — a 160-second wait behind three holders is a fact about the
+rig's throughput nobody had, and it explains "interrupted" tool calls: they were likely waiting for a slot,
+not crashing. A SEAT THAT THINKS ITS TOOL CRASHED RETRIES; A SEAT THAT KNOWS IT QUEUED WAITS. (4) IF THE
+LOCK IS UNAVAILABLE OR UNREADABLE, THAT IS WHEN TO STOP AND ASK — a missing serialiser is the actual hazard
+the confirmation gate was standing in for.
+
+**And the disclosure habit: report a judgement call WITH its reversal.** When a seat acts on the lock and
+without the un-obtainable confirmation, it says so: "IF THAT WAS THE WRONG CALL, THE CORRECTIVE IS ONE
+`git revert` OF `d8bc976` AND I WOULD RATHER SAY WHAT I DID THAN HAVE IT INFERRED." A seat that reports a
+judgement call with its reversal is not bypassing a gate — it is telling you the gate's cost.
+
 ## When to use
 A verified branch (`<seat>-item-<id>`, or any branch) must go onto `main`, and you want the landing to
 be **structurally incapable** of leaving the shared working tree mid-merge. This is the tool form of
