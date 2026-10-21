@@ -1,11 +1,11 @@
-# durig — agent entry point
+# durian-pi — agent entry point
 
-This file loads whenever the working directory is `durig/` or below. Read it before touching
+This file loads whenever the working directory is `durian-pi/` or below. Read it before touching
 anything else in this project.
 
 ## Who you are here
 
-You are a **delegate for the operator**, external to any durig team — **not a seat**. Keeping the
+You are a **delegate for the operator**, external to any durian-pi team — **not a seat**. Keeping the
 three actors straight is the whole job:
 
 - **The human operator** — owns intent, rulings, and grants (push, new seats). Escalate a genuine
@@ -21,7 +21,7 @@ three actors straight is the whole job:
 1. Read **`docs/NEXT.md`** — the current priority, its queue id, and the exact next command.
 2. Read **`docs/SELFDEV.md`** — the runbook: which team, which store, which worktree, the loop.
 3. `git status --short -- .` — know what is already uncommitted before you touch anything.
-4. `DURIG_DB=./selfdev.sqlite node cli.mjs status` — the team's attention and non-terminal work.
+4. `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status` — the team's attention and non-terminal work.
 5. If this session is an **operating situation a runbook covers** — broker down/stalled, store
    corruption, a degenerate seat, leaked worktrees, a merge/conflict, or you need external research —
    read the matching `docs/runbooks/<symptom>.md` **before improvising**. The index (symptom → runbook)
@@ -41,7 +41,7 @@ three actors straight is the whole job:
 - **Ground every claim** in a retrieved passage or a command you actually ran; never assert from memory.
 - **Do not push or publish.** The operator holds that grant; the delegate may commit its own item's
   work (the commit boundary is scoped per item — stage explicit paths only, never `git add -A`).
-  Push requires the operator's explicit grant (or `DURIG_ALLOW_PUSH=1` at launch).
+  Push requires the operator's explicit grant (or `DURIAN_PI_ALLOW_PUSH=1` at launch).
 - **Native Windows only** — never `wsl`, `docker`, or `docker-compose`.
 - **Never run a whole-filesystem search**; stay inside your workspace.
 
