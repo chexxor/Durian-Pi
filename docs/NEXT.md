@@ -27,8 +27,38 @@ ask delivered to `pm` (intent `operator-tui-status-2026-10-21-1`, `delivered:tru
 `.spike/delegate/tui-status/intent.md`). **Do not re-derive either measurement** — the script is
 `.spike/delegate/tui-status/measure-fill.mjs` (read-only).
 
+**BROKER ROOT CAUSE (operator asked "why", 02:50Z) — the broker did NOT fail; one seat was STARVED.**
+`designer` was last woken 2026-10-20T15:53:44Z; its 16:03:05Z turn ended `429 engine_overloaded` and
+left submission **181515 `queued`** (admitted, never started). `src/broker.mjs:1198` puts EVERY
+inspection submission in `pendingConvIds` (no status filter) and `selectWakes` (`src/driver.mjs:63`) then
+drops the seat as "already advancing" — so designer was suppressed from every pass for 10h, including
+the passes #3945/#3980 triggered. The reconciler that exists for this runs each pass but
+**`src/broker.mjs:829` settles only `status === "placed"`** — a `queued` submission is invisible to it.
+Passes then stopped at `PASS 1785` (00:29:54Z) because `shouldRun` needs a commit/intent/retry
+(`src/scheduler.mjs:105`), with a fresh heartbeat and no genlock: IDLE, not wedged. `resume` withdrew
+181515; the restart then woke designer. **Two user-facing statements are FALSE for this class:**
+`cli.mjs:1022` (the `resume` refusal claims the broker self-settles at every pass) and
+`broker-down-or-stalled.md` ("restart … so its startup pass re-settles" — the startup pass runs the same
+`placed`-only filter). Instrumentation EXISTS and was sufficient (`.broker.json` heartbeatAt vs
+lastPassAt, `.broker.log` PASS/WAKE/WAKE-RETRY/STRANDED/PASS-FAILED, `serve.err` wake-failed, `status`
+`admitted_not_started` + `idle_with_queued_work`, `metrics` pass-failed, `events`, genlock). MISSING:
+(1) a pass/suppression decision trace, (2) auto-recovery + a periodic sweep for the `queued` class
+(ROADMAP 37(c) "admission deadline", unbuilt), (3) ROADMAP 61-64 watchdog/host. Delivered to `pm`
+(`operator-broker-starvation-2026-10-21-1`, delivered 02:50:24Z; body
+`.spike/delegate/tui-status/intent-broker-starvation.md`).
+
+**ROADMAP 52 is NOT broken down (operator asked, 02:50Z).** 52 = attach the TUI as a state-backed
+client: in-process `viewState().subscribe()` FIRST, remote `watchEvents()` only after 55, poller kept as
+fallback, acceptance = a late-join test. The queue holds a ruling (#3942/#3982/#3985) and a half-built
+seam (#3954, #4006/#4016, #4089 done) plus SIX overlapping held rows (#3996 wiring, #4070 round trip,
+#2626 attach re-registration, #2479/154 SSE tap, #3969/#3975 (b) spool client, #2733 Phase-1 gate) and
+the Phase-3 rows (#2098, #2963). **There is NO item for 52's core (the in-process subscriber) and NO
+late-join item at all** (`late.?join` matches 0 queue rows); P1-3 of the held gate #2733 requires the
+subscriber but nothing implements it. So 52 is a ruling plus fragments, not a distributable breakdown.
+
 **Queue id:** #3945/#3980 (designer, claimed) → #3946 (qa verify, held) → land `impl-item-3941` ·
-#3996/#4070 (Enter→Pi wiring, both `held`) · #3948 (pointer correction, releasable).
+#3996/#4070 (Enter→Pi wiring, both `held`) · #3948 (pointer correction, releasable) · 52 breakdown +
+`queued`-class reconciler + decision trace (awaiting `pm` routing).
 
 **Blocker:** none on the tree. `main` `b4bb4c7`, tracked tree clean except the broker-generated
 untracked `selfdev.sqlite.broker.audit.log`. Single broker pid 16140 (verify before any restart).
