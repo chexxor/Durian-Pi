@@ -146,6 +146,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [stale-held-backlog.md](stale-held-backlog.md) | an effort has stalled with nothing broken; `held` rows are never released after their gates finish and no attention fires | no |
 | [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
 | [prepare-workspace-etarget.md](prepare-workspace-etarget.md) | `prepare_workspace` fails: `npm ci --prefer-offline ... ETARGET notarget` for an `@earendil-works/*` pin | no |
+| [worktree-unlinked-deps.md](worktree-unlinked-deps.md) | `prepare_workspace` reports `DEPENDENCY NOT LINKED`, or a fresh worktree's suite fails demos that pass in the seat root | no |
 | [prepare-workspace-refused.md](prepare-workspace-refused.md) | `prepare_workspace` returned `PREPARE_WORKSPACE_ERROR`, or refused: leftover dir, a branch another worktree holds, or a `base=` the item branch cannot honour | no |
 | [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land â€” run the review method before the code | no |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
@@ -169,7 +170,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Seats | seat-reset, compact-a-seat |
 | Write guard / source files | write-corruption-recovery |
 | Constitution / starter mirror | constitution-amendment |
-| Worktrees | leaked-worktrees, prepare-workspace-etarget, prepare-workspace-refused |
+| Worktrees | leaked-worktrees, prepare-workspace-etarget, worktree-unlinked-deps, prepare-workspace-refused |
 | Missing files on disk | tracked-files-missing-on-disk |
 | Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
 | Queue / parked work | stale-held-backlog |
