@@ -1602,6 +1602,11 @@ export async function runWakeLoop({
     // settles (demo/stoprequest.test.mjs), and the idle/post-pass checks below are where it
     // lands. The grace only decides WHETHER the drain is already over (`deadline`).
     if (isStopping()) {
+      // #2322: record the RECEIPT of the stop BEFORE terminating. Without this, a broker that
+      // was asked to stop is indistinguishable in `<db>.broker.log` from one that crashed —
+      // and a bare `START` with neither a `STOP-REQUESTED` line nor an `EXIT` is a process
+      // that died without ever running this exit path (a `taskkill`/kill).
+      logBrokerLine(dbPath, `STOP-REQUESTED source=signal pid=${process.pid}`);
       stoppedBy = graceExpired() ? "deadline" : "signal";
       break;
     }
@@ -1880,7 +1885,11 @@ export async function runWakeLoop({
     if (postStop) {
       // Read the deadline BEFORE clearing the file: the request time lives in its content.
       const expired = graceExpired();
-      if (postStop === "stop") clearStopRequest(dbPath);
+      if (postStop === "stop") {
+        // #2322: record the receipt so the log names the REQUEST, not just the graceful EXIT.
+        logBrokerLine(dbPath, `STOP-REQUESTED source=file pid=${process.pid}`);
+        clearStopRequest(dbPath);
+      }
       stoppedBy = expired ? "deadline" : postStop;
       break;
     }
