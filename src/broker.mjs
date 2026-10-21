@@ -13,7 +13,7 @@
 // trigger is an in-process commit subscription with none of the cross-process
 // gap D11 documented. Read-only viewers keep D11's poll/read-storage rule.
 
-import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync, statSync } from "node:fs";
 import { join, basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { CompactionEntry, configure } from "@earendil-works/pi-durable";
@@ -24,7 +24,7 @@ import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
 import { LOCAL_PROVIDER_ID } from "./providers/local.mjs";
 import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
-import { listWorktrees, removeClaimedWorktree, uncommittedCount } from "./worktree.mjs";
+import { listWorktrees, removeClaimedWorktree, uncommittedCount, pruneWorktrees } from "./worktree.mjs";
 
 /**
  * Seats whose latest settled submission is an operator stop (`aborted:<reason>`).
@@ -80,14 +80,22 @@ export function localContextHandoff(itemId) {
  * The local-provider seats that must draw a fresh context boundary this pass. Pure:
  * it decides, `applyLocalContextBoundaries` writes.
  *
- * A boundary is planned only BETWEEN runs: the seat holds no `claimed` item (never
- * mid-item), no submission is in flight, no live generation lease is held, and the
- * operator has not stopped it. It fires only for a seat whose recorded provider is
+ * A boundary is planned only BETWEEN runs: the seat holds no `claimed`, `deferred` or
+ * `held` item (never mid-item), no submission is in flight, no live generation lease is held,
+ * and the operator has not stopped it. It fires only for a seat whose recorded provider is
  * `local`, and only once per NEW item (the `contextItemId` marker).
  *
  * @param {{seats?: Record<string,{conversationId:number|string, provider?:string, contextItemId?:number}>, items?: Array<{id:number,to:string,status:string}>, pendingConvIds?: Set, busySeats?: Set, stoppedConvIds?: Set, paused?: boolean}} input
  * @returns {Array<{name:string, conversationId:number|string, itemId:number}>}
  */
+/**
+ * Item statuses that mean the seat is MID-ITEM. `deferred`/`held` are still HELD by the seat
+ * (it will resume them), so a boundary now would wipe the mid-item continuation context and
+ * the D105 handoff text would lie ("a NEW work item") while the seat still holds the item
+ * (#2337). Only `queued` is between-items work.
+ */
+const MID_ITEM_STATUSES = new Set(["claimed", "deferred", "held"]);
+
 export function planLocalContextBoundaries({
   seats,
   items,
@@ -106,8 +114,9 @@ export function planLocalContextBoundaries({
     if (pendingConvIds.has(convId)) continue; // a run is in flight
     if (busySeats.has(name)) continue; // a live generation lease is held
     if (stoppedConvIds.has(convId)) continue; // operator stop: never resurrect
-    // BETWEEN items only: a claimed item means the seat is mid-item — never reset it.
-    if ((items ?? []).some((it) => it.to === name && it.status === "claimed")) continue;
+    // BETWEEN items only: a claimed, deferred or held item means the seat is mid-item — never
+    // reset it (#2337: deferred/held are reachable through the live pass and are still mid-item).
+    if ((items ?? []).some((it) => it.to === name && MID_ITEM_STATUSES.has(it.status))) continue;
     // The item this wake will claim: the OLDEST queued item addressed to the seat
     // (claim_work's own rule), so the boundary is drawn before the seat works it.
     const next = (items ?? [])
@@ -223,13 +232,23 @@ function onlyReadIntents(dbPath) {
  * Move an undeliverable intent out of the spool into the error dir with its reason, so
  * a bad intent is surfaced once instead of being retried every pass forever.
  */
-function deadLetterIntent(dbPath, file, reason) {
+function deadLetterIntent(dbPath, file, reason, refusal = null) {
   try {
     const dir = intentErrorDir(dbPath);
     mkdirSync(dir, { recursive: true });
     const target = join(dir, `${basename(file).replace(/\.json$/, "")}.error.json`);
     renameSync(file, target);
     writeFileSync(`${target}.reason`, String(reason), "utf8");
+    // A structured refusal rides the dead-lettered record, so a producer can branch on
+    // the CODE (not parse prose) and an auditor can see WHY the gate said no.
+    if (refusal) {
+      try {
+        const parsed = JSON.parse(readFileSync(target, "utf8"));
+        writeFileSync(target, JSON.stringify({ ...parsed, refusal }), "utf8");
+      } catch (err) {
+        console.error(`BROKER: could not record refusal on ${target}: ${err?.message ?? err}`);
+      }
+    }
   } catch (err) {
     console.error(`BROKER: could not dead-letter intent ${file}: ${err?.message ?? err}`);
   }
@@ -314,12 +333,171 @@ function writeIntentResult(dbPath, requestId, result) {
 }
 
 /**
+ * How long a spooled RESULT file is kept. Long enough that any live poller has consumed it
+ * (`awaitIntentResult` polls at 200 ms up to a 120 s timeout), short enough that a client
+ * that died mid-poll cannot leak it forever (#2497 / architect A4).
+ */
+export const INTENT_RESULT_TTL_MS = 10 * 60_000;
+
+/**
+ * Garbage-collect spooled RESULT files (`<db>.broker.inbox.out/`) older than `ttlMs`.
+ *
+ * The result dir is the idempotency ledger AND the producer's reply channel: a client that
+ * dies mid-poll leaves `<requestId>.json` behind with nobody to read it, and the `health`
+ * view is multi-MB, so the dir would grow without bound. A read client consumes its own
+ * result, but every other op (and every crashed poller) does not.
+ *
+ * GUARDED BY IN-FLIGHT: a result whose `requestId` still has a PENDING intent file in the
+ * inbox is SKIPPED — that request has not been applied yet (or a re-drain is about to
+ * consume it), so its ledger row is still load-bearing. Only a result with no pending
+ * request AND older than the TTL is removed.
+ *
+ * Age comes from the result's own `at` timestamp; a result with no usable timestamp falls
+ * back to the file's mtime, so a malformed row cannot leak forever either.
+ *
+ * @returns {{removed:number, kept:number}}
+ */
+export function gcIntentResults(dbPath, { ttlMs = INTENT_RESULT_TTL_MS, now = Date.now } = {}) {
+  const dir = intentResultDir(dbPath);
+  if (!existsSync(dir)) return { removed: 0, kept: 0 };
+  // In-flight = a pending intent file still names the requestId.
+  const inFlight = new Set();
+  for (const file of readIntentFiles(dbPath)) {
+    try {
+      const request = JSON.parse(readFileSync(file, "utf8"));
+      if (request?.requestId) inFlight.add(request.requestId);
+    } catch {
+      // Unreadable: the drain will dead-letter it, so it is not a live waiter.
+    }
+  }
+  let removed = 0;
+  let kept = 0;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".json")) continue;
+    const requestId = name.slice(0, -5);
+    if (inFlight.has(requestId)) {
+      kept += 1;
+      continue;
+    }
+    const path = join(dir, name);
+    let age = null;
+    try {
+      const at = Date.parse(JSON.parse(readFileSync(path, "utf8"))?.at ?? "");
+      age = Number.isFinite(at) ? now() - at : null;
+    } catch {
+      age = null;
+    }
+    if (age === null) {
+      try {
+        age = now() - statSync(path).mtimeMs;
+      } catch {
+        age = null;
+      }
+    }
+    if (age !== null && age >= ttlMs) {
+      try {
+        unlinkSync(path);
+        removed += 1;
+      } catch {
+        kept += 1;
+      }
+    } else {
+      kept += 1;
+    }
+  }
+  return { removed, kept };
+}
+
+/**
  * The operation a spooled request asks the broker to apply. An absent `op` means the
  * original "deliver a message" intent, so producers written before the spool keep
  * working.
  */
 export function requestOp(request) {
   return request?.op ?? "message";
+}
+
+/** The operator identity a control-plane spool request must carry (`from`). */
+export const OPERATOR = "operator";
+
+/**
+ * Control-plane spool ops (ROADMAP 71 control plane): they change RIG/SEAT control
+ * state, not conversation content, so they are OPERATOR-ONLY (lead #1952/#2215/#2216,
+ * security #2223). ONE set — a future control-plane op is added HERE, not given its own
+ * ad-hoc gate, so every future control-plane op inherits the rule.
+ */
+export const CONTROL_PLANE_OPS = new Set(["pause", "unpause", "configure"]);
+
+/**
+ * Ops that can act on a seat OTHER than the requester: a `from=<seat>` request for one
+ * of these is a cross-seat act (privilege escalation), so it is operator-only too. A
+ * self-target (`to === from`) stays allowed, so a seat may still stop/reset itself.
+ * Reviewed at implementation (item #1966): `stop`/`reset` act on a named seat's
+ * conversation, `compact` rewrites another conversation's model context.
+ */
+export const CROSS_SEAT_OPS = new Set(["stop", "reset", "compact"]);
+
+/**
+ * The authorization decision for one spool request. PURE, so the rule is testable with
+ * no broker and no store.
+ *
+ * DETECT-AND-LAYER, not a boundary (security #2223): `from` is PRODUCER-STAMPED inside
+ * the spool file and all seats share one OS user, so this refuses the non-operator case
+ * and LAYERS with the spool-dir write denial (seatguard path-deny + readOnlyRoots).
+ * Same-user forgeability of `from` is a KNOWN RESIDUAL (UNVERIFIED-FOR-PREVENTION) — the
+ * layers narrow it; they do not eliminate it. Never claim otherwise.
+ *
+ * @returns {{allowed:boolean, code:string, detail?:string}}
+ */
+export function authorizeSpoolRequest(request, { op = requestOp(request) } = {}) {
+  const from = request?.from ?? null;
+  if (CONTROL_PLANE_OPS.has(op)) {
+    if (from !== OPERATOR) {
+      return {
+        allowed: false,
+        code: "not-operator",
+        detail: `${op} is a control-plane op; only from="${OPERATOR}" may apply it (from=${JSON.stringify(from)})`,
+      };
+    }
+    // The CARVE-OUT is `up`'s: a spool request is always a RECONFIGURE. An explicit
+    // `isCreate` bit is refused here so a seat cannot mint a seat's initial doc by
+    // spooling one (the Q2 hole); creation is governed by `up`'s own in-tx check.
+    if (op === "configure" && request?.isCreate === true) {
+      return {
+        allowed: false,
+        code: "iscreate-not-permitted",
+        detail: "configure via the spool is a RECONFIGURE; seat creation is `up`'s and cannot be set through the spool",
+      };
+    }
+    return { allowed: true, code: "operator-control-plane" };
+  }
+  if (CROSS_SEAT_OPS.has(op)) {
+    const to = request?.to ?? request?.seat ?? null;
+    const crossSeat = to !== null && to !== undefined && to !== from;
+    if (crossSeat && from !== OPERATOR) {
+      return {
+        allowed: false,
+        code: "not-operator",
+        detail: `${op} targets another seat (${JSON.stringify(to)}); only from="${OPERATOR}" may act cross-seat (from=${JSON.stringify(from)})`,
+      };
+    }
+    return { allowed: true, code: crossSeat ? "operator-cross-seat" : "self-target" };
+  }
+  return { allowed: true, code: "content-op" };
+}
+
+/**
+ * Append ONE gate-decision audit row as JSONL beside the db (item #1966 shape (iii)):
+ * `{requestId, op, from, to, sourceFile, decision, code, at}`. Best-effort — a failed
+ * audit write must never block the broker — but it is REPORTED, never swallowed.
+ */
+export function appendGateAudit(dbPath, row) {
+  if (!dbPath) return;
+  try {
+    appendFileSync(`${dbPath}.broker.audit.log`, `${JSON.stringify({ at: new Date().toISOString(), ...row })}\n`, "utf8");
+  } catch (err) {
+    console.error(`BROKER: gate-audit append failed: ${err?.message ?? err}`);
+  }
 }
 
 /**
@@ -339,12 +517,19 @@ export async function applyPauseOp(harness, { paused, by = "operator", reason = 
   }, context);
   if (paused !== true || !wait) return { paused: paused === true };
   const startedAt = Date.now();
+  const deadline = startedAt + pauseWaitMs();
   for (;;) {
     const live = await harness.inspect(context);
-    const tasks = (live.tasks ?? []).filter((t) => t.record?.state?.status === "running");
+    const tasks = (live.tasks ?? []).filter(isAdvancingTask);
     const subs = (live.submissions ?? []).filter((s) => s.status === "queued" || s.status === "placed");
     if (tasks.length === 0 && subs.length === 0) {
       return { paused: true, quiesced: true, waitedMs: Date.now() - startedAt };
+    }
+    // #2583/F10: BOUND the wait. A run that never settles must not hang `pause --wait` (and the
+    // broker-upgrade step that calls it) forever. Give up after the bound and report
+    // `quiesced:false` with the elapsed time, so the caller decides; both fields already exist.
+    if (Date.now() >= deadline) {
+      return { paused: true, quiesced: false, waitedMs: Date.now() - startedAt };
     }
     await new Promise((r) => setTimeout(r, QUIESCE_POLL_MS));
   }
@@ -362,24 +547,39 @@ export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpau
 const QUIESCE_POLL_MS = 100;
 
 /**
+ * How long `pause --wait` waits for quiescence before giving up. BOUNDED on purpose (#2583/F10):
+ * a run that never settles must not hang the caller (the broker-upgrade step) forever. Env
+ * override `DURIG_PAUSE_WAIT_MS` so a demo can prove the bound without waiting a minute.
+ */
+function pauseWaitMs() {
+  const v = parseInt(process.env.DURIG_PAUSE_WAIT_MS, 10);
+  return Number.isFinite(v) && v > 0 ? v : 60_000;
+}
+
+/**
  * Apply one typed request with the broker's OWN harness — the single writer. Throws on
  * an unknown op or seat; the drain dead-letters the throw with its reason.
  */
-async function applyRequest(harness, request, { seats, context, dbPath, probeStorage }) {
+async function applyRequest(harness, request, { seats, context, dbPath, probeStorage, readStorage }) {
   const op = requestOp(request);
   // `read` is the one non-mutating spool op: the broker serves a view from its OWN
-  // storage so a second process never opens the database (see src/brokerread.mjs). It is
-  // applied with `harness.storage`, NOT the separate `probeStorage`: pi-durable's
-  // `document()` takes BEGIN IMMEDIATE even for a read, so a read on a SECOND connection
-  // contends with the harness's own commits in-process and times out the 5 s busy window
-  // (`PASS ms=5051` -> SessionFailed -> wedge). One pi-durable instance, one connection.
+  // pi-durable instance so a second process never opens the database (see
+  // src/brokerread.mjs). It is applied with `readStorage` - the SAME `Storage` object the
+  // harness was opened over - not the separate `probeStorage`: pi-durable keeps the
+  // harness's storage private (`#storage`), and its `document()` takes BEGIN IMMEDIATE
+  // even for a read, so a read on the second probe connection contends with the harness's
+  // own commits in-process and times out the 5 s busy window (`PASS ms=5051` ->
+  // SessionFailed -> wedge). One pi-durable instance, one connection. A caller holding a
+  // single handle (a demo's `drainIntentInbox(harness, storage, ...)`) omits `readStorage`,
+  // so the fallback keeps that shape working.
   if (op === "read") {
-    return await dispatchRead(harness.storage, request, { dbPath, context });
+    return await dispatchRead(readStorage ?? probeStorage, request, { dbPath, context });
   }
   if (op === "configure") {
     // Bounded single-field write: `up` records the resolved provider on the seat's
     // conversation (D105/D106). The broker applies it with its own harness — no
-    // external writer, no cli.mjs change. The request carries { model: { provider, modelId? } }.
+    // external writer, no cli.mjs change. The request carries { model: { provider, modelId? },
+    // by: <operator identity> }. `by` defaults to "operator" when absent.
     const seatName = request.to ?? request.seat;
     const seat = seats[seatName];
     if (!seat) throw new Error(`unknown seat: ${seatName}`);
@@ -388,11 +588,12 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
     if (!model || typeof model.provider !== "string") {
       throw new Error(`configure: missing model.provider for seat ${seatName}`);
     }
+    const by = request.from ?? "operator";
     await harness.commit(
       (tx) => configure(tx, convId, { model }),
       context,
     );
-    return { op, seat: seatName, provider: model.provider, modelId: model.modelId ?? null };
+    return { op, seat: seatName, provider: model.provider, modelId: model.modelId ?? null, by };
   }
   if (op === "message") {
     const seat = seats[request.to];
@@ -449,16 +650,26 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
     return { op, seat: seatName, resetEntryId: result.resetEntryId, handoff: result.handoff ?? null };
   }
   if (op === "compact") {
-    // pi-durable's compaction is designed to run ALONGSIDE a live conversation: `compact()`
-    // commits a `pi.compaction` task that summarizes an old prefix and places a summary entry
-    // at a turn boundary (the transcript is kept). The broker applies it with its OWN harness —
-    // no external writer, no abort of the run. The live-generation-lease guard does NOT apply:
-    // it stops an OUTSIDE writer; the broker IS the owner, and pi-durable commits at the turn
-    // boundary. Report the summary entry id, not merely the task id (an enqueue-and-exit stub
-    // would claim success while nothing was summarized).
+    // pi-durable's compaction runs ALONGSIDE a live conversation, but its summary lands only at the
+    // seat's next TURN BOUNDARY — so a MID-FLIGHT compaction's outcome cannot be awaited reliably
+    // (auditor #2061 boundary / #2073: the task commits, the `pi.compaction` entry appears only
+    // later, and the awaited window wrongly reports "no entry written"). Rather than commit a task
+    // whose result we cannot report, REFUSE legibly and name the fix: QUIESCE the seat first.
+    // When the seat IS quiescent the entry must land in the awaited window, or it is a real error.
     const seatName = request.to ?? request.seat;
     const seat = seats[seatName];
     if (!seat) throw new Error(`unknown seat: ${seatName}`);
+    const live = await harness.inspect(context);
+    const running = (live.tasks ?? []).find(
+      (t) => t.record?.conversationId === seat.conversationId && t.record?.state?.status === "running",
+    );
+    if (running) {
+      throw new Error(
+        `compact: seat ${seatName} is mid-generation (task ${running.record.id} running); a mid-flight ` +
+          `compaction's summary lands only at the turn boundary and cannot be awaited — quiesce first ` +
+          `(pause --wait, or let the run settle), then compact`,
+      );
+    }
     const conv = await harness.conversation(seat.conversationId, context);
     if (!conv) throw new Error(`no conversation for seat ${seatName}`);
     const instructions =
@@ -470,7 +681,9 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
     const after = await conv.entries({ order: "descending" }, 50, undefined, context);
     const summary = after.items.find((e) => e.kind === CompactionEntry.kind);
     if (!summary) {
-      throw new Error(`compact: no pi.compaction entry was written for seat ${seatName} (task ${taskId})`);
+      throw new Error(
+        `compact: the seat was quiescent but no pi.compaction entry was written for seat ${seatName} (task ${taskId})`,
+      );
     }
     return { op, seat: seatName, taskId, instructions: instructions ?? null, summaryEntryId: summary.id };
   }
@@ -492,7 +705,7 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
  * forever. Returns `{ delivered, deadLettered, duplicates }` — `duplicates` counts
  * requests whose `requestId` already had a recorded result (applied ONCE, not again).
  */
-export async function drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic } = {}) {
+export async function drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage } = {}) {
   if (!dbPath) return { delivered: 0, deadLettered: 0, duplicates: 0 };
   const files = readIntentFiles(dbPath);
   if (files.length === 0) return { delivered: 0, deadLettered: 0, duplicates: 0 };
@@ -527,8 +740,35 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
       deadLettered += 1;
       continue;
     }
+    // Operator-only gate for control-plane (and cross-seat) ops (#1966). The decision is
+    // AUDITED for every gated op (allowed and refused), then a refusal is dead-lettered
+    // with a STRUCTURED code so the producer reports "refused" rather than "pending".
+    const decision = authorizeSpoolRequest(request, { op });
+    if (CONTROL_PLANE_OPS.has(op) || CROSS_SEAT_OPS.has(op)) {
+      appendGateAudit(dbPath, {
+        requestId,
+        op,
+        from: request.from ?? null,
+        to: request.to ?? request.seat ?? null,
+        sourceFile: basename(file),
+        decision: decision.allowed ? "allowed" : "refused",
+        code: decision.code,
+      });
+    }
+    if (!decision.allowed) {
+      deadLetterIntent(dbPath, file, `refused: ${decision.code}: ${decision.detail}`, {
+        code: decision.code,
+        op,
+        from: request.from ?? null,
+        decision: "refused",
+        detail: decision.detail,
+      });
+      onDiagnostic?.({ kind: "intent-refused", op, code: decision.code, reason: decision.detail });
+      deadLettered += 1;
+      continue;
+    }
     try {
-      const result = await applyRequest(harness, request, { seats, context, dbPath, probeStorage });
+      const result = await applyRequest(harness, request, { seats, context, dbPath, probeStorage, readStorage });
       if (requestId) {
         writeIntentResult(dbPath, requestId, { requestId, op, ok: true, result, at: new Date().toISOString() });
       }
@@ -555,10 +795,107 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
 // longer receive an answer. `conv.commit` is the public way to reach
 // `tx.settleSubmission`; a live run always has its task committed with the
 // placement in one commit, so a settled orphan cannot race a starting run.
+//
+// "Live" means ADVANCING (see isAdvancingTask): a task that is merely ready, waiting,
+// sleeping or blocked is itself stalled and owns nothing. Counting it as an owner is
+// the defect (#2576): the submission never settles, `pendingConvIds` keeps suppressing
+// the wake, and the seat stalls as `admitted_not_started`.
 // Returns the ids it settled so the caller can stop counting them as pending.
+
+/**
+ * Whether a live task can still ADVANCE its conversation, so the conversation is
+ * genuinely owned and a `placed` submission must NOT be settled out from under it.
+ *
+ * The test is the DERIVED `state.kind` from pi-durable's TaskInspection
+ * (`#inspectTask`: running | completing | waiting | sleeping | blocked | ready),
+ * NOT the raw `record.state.status` — the two are different fields. A task that is
+ * `ready`/`waiting`/`sleeping`/`blocked` advances nothing (#2576).
+ *
+ * ONE definition, shared by the stranded-submission reconciler and the pause
+ * quiescence wait, so broker/notice/resume agree on what "advancing" means.
+ */
+export function isAdvancingTask(task) {
+  const kind = task?.state?.kind;
+  return kind === "running" || kind === "completing";
+}
+
+/**
+ * WHICH CONVERSATIONS ARE ADVANCING (#4170). `pendingConvIds` used to be "every conversation with a
+ * submission ROW", which is a different and much broader claim: an admitted-but-never-started
+ * (`queued`) submission is NOT advancing, so it must not hold its seat out of every wake.
+ *
+ * That difference starved a seat for ten hours after one 429 left a `queued` row behind: every pass saw
+ * the row, suppressed the seat as "already advancing", and the only thing that would have re-evaluated
+ * it was new traffic — which a starved seat does not get.
+ *
+ * `placed` is the started state: it is what `reconcileStrandedSubmissions` treats as having been handed
+ * to a conversation, so it is the status that means "advancing". Exported so the derivation is testable
+ * as a pure decision over store state, with no broker and no provider.
+ */
+export function advancingConvIds(submissions, { settled = new Set() } = {}) {
+	return new Set(
+		(submissions ?? [])
+			.filter((s) => !settled.has(s.id))
+			.filter((s) => s.status === "placed")
+			.map((s) => s.conversationId),
+	);
+}
+
+/**
+ * THE ADMISSION DEADLINE — ROADMAP 37(c), and the primitive that makes two owed recoveries SAFE (#4176).
+ *
+ * A reconciler extended to settle `queued` submissions on the next pass WOULD CANCEL A SUBMISSION THAT
+ * IS LEGITIMATELY STILL BEING ADMITTED — worse than the bug it fixes. What distinguishes "still being
+ * admitted" from "stuck" is TIME, and nothing in the tree defined how much. This is that definition.
+ *
+ * THE THRESHOLD IS NAMED AND JUSTIFIED RATHER THAN SILENT: five minutes. The admission path places a
+ * submission within SECONDS in normal operation, so five minutes is two orders of magnitude longer than
+ * any legitimate admission — while being far shorter than the ten-hour stall that motivated this, so a
+ * stuck seat is recovered long before an operator notices. A rig that wants a different number should
+ * pass `deadlineMs`; there is deliberately no config surface yet, because inventing one before anything
+ * consumes the value would be a knob nobody has measured.
+ *
+ * THE ACTION IS `withdraw`, NOT `settle`, because a submission that is withdrawn leaves the record of
+ * having existed while a settled one disappears into a terminal status — and a submission that vanishes
+ * without a line is the same invisibility that caused the outage. Callers must LOG the verdict.
+ */
+export const ADMISSION_DEADLINE_MS = 5 * 60_000;
+
+/**
+ * Is this submission too old to still be admitting? A PURE decision over store state, so it is testable
+ * without a provider: the 429 is how the outage HAPPENED, not how it is tested.
+ *
+ * @param {object} input
+ * @param {object} input.submission — a submission row; `admittedAt` is a ms epoch (or Date/ISO string)
+ * @param {boolean} [input.advancing] — a task holds this conversation, so it is NOT stuck regardless of age
+ * @param {number} [input.now]
+ * @param {number} [input.deadlineMs]
+ * @returns {{expired:boolean, ageMs:number|null, action:"withdraw"|"leave"|"none", reason:string}}
+ */
+export function admissionVerdict({ submission, advancing = false, now = Date.now(), deadlineMs = ADMISSION_DEADLINE_MS } = {}) {
+	if (!submission) return { expired: false, ageMs: null, action: "none", reason: "no submission" };
+	// An ADVANCING conversation is never stuck, however old the row looks: the age of the record is not the
+	// age of the work. This is the control that keeps the deadline from racing the admission path.
+	if (advancing) return { expired: false, ageMs: null, action: "leave", reason: "a task is advancing this conversation" };
+	const raw = submission.admittedAt ?? submission.createdAt ?? submission.at ?? null;
+	const at = raw === null ? NaN : raw instanceof Date ? raw.getTime() : typeof raw === "number" ? raw : Date.parse(String(raw));
+	if (!Number.isFinite(at)) return { expired: false, ageMs: null, action: "none", reason: "no admission timestamp — cannot judge age, so do not act" };
+	const ageMs = now - at;
+	// A seconds-old admission is NORMAL and must not be touched. This is the assertion that makes the
+	// deadline a fix rather than a sweep: without it, every pass would cancel work still being admitted.
+	if (ageMs < deadlineMs) return { expired: false, ageMs, action: "leave", reason: `admitted ${Math.round(ageMs / 1000)}s ago (< ${Math.round(deadlineMs / 1000)}s)` };
+	return {
+		expired: true,
+		ageMs,
+		action: "withdraw",
+		reason: `admitted ${Math.round(ageMs / 1000)}s ago and no task is advancing it — too old to still be admitting`,
+	};
+}
+
 export async function reconcileStrandedSubmissions(harness, inspection, { context, onDiagnostic } = {}) {
   const liveConvIds = new Set();
   for (const task of inspection?.tasks ?? []) {
+    if (!isAdvancingTask(task)) continue; // a stalled task owns nothing (#2576)
     const convId = task?.record?.conversationId;
     if (convId !== undefined) liveConvIds.add(convId);
   }
@@ -614,6 +951,16 @@ export const WORKTREE_KEEP_REASONS = [
  * verifier creates under (or beside) an item worktree, e.g. `.verify-8770005`, `verify1194-full`,
  * `wt-658-41d0ec9`. They are throwaway by convention, so an UNLOCKED + CLEAN one is reapable just
  * like a terminal item's tree — the verifier-must-lock protocol is what protects an in-use one.
+ */
+/**
+ * PROVENANCE / OWNERSHIP (WORKTREE-ROT 3/3, #2330): whoever CREATES a worktree owns its cleanup.
+ * durian-pi reaps only the trees it creates — `item-<id>` (terminal + unlocked + clean) and the
+ * verify-scratch below (unlocked + clean). Anything else is a harness/viewer/operator tree: it
+ * classifies as `non-item` and is ALWAYS kept, and a tree that is a live seat's cwd is `seat-root`
+ * (also kept). The keep-reasons in `classifyWorktrees` are the per-tree encoding of this rule, and
+ * `reconcileOrphanedWorktrees` acts on `reapable` alone — every other reason is a KEEP. Source: the
+ * vendored using-git-worktrees / finishing-a-development-branch skills and the rototill design doc,
+ * "Provenance-based ownership".
  */
 export const VERIFY_SCRATCH_RE = /^\.?(verify|wt)/i;
 
@@ -743,9 +1090,18 @@ export async function cleanVerifyScratch({ repoPath, force = false } = {}) {
   const removed = [];
   const kept = [];
   for (const wt of worktrees) {
-    const result = await removeClaimedWorktree({ worktree: wt.worktree, force });
-    if (result?.removed) removed.push(wt.worktree);
-    else kept.push({ worktree: wt.worktree, reason: result?.refused ?? (result?.skipped ? "missing" : "not-removed") });
+    // #2602 (instance 3 of #1967): ONE bad tree must not abort the whole cleanup. A teardown can
+    // THROW — `removeClaimedWorktree` refuses a junction/symlink by throwing (Git 2.42 would delete
+    // THROUGH the junction) — so catch PER TREE and record it in `kept`. Without this catch the
+    // first un-removable scratch aborted the loop: every LATER scratch stayed un-cleaned (the leak)
+    // and the verify-completion call itself failed.
+    try {
+      const result = await removeClaimedWorktree({ worktree: wt.worktree, force });
+      if (result?.removed) removed.push(wt.worktree);
+      else kept.push({ worktree: wt.worktree, reason: result?.refused ?? (result?.skipped ? "missing" : "not-removed") });
+    } catch (err) {
+      kept.push({ worktree: wt.worktree, reason: "error", error: String(err?.message ?? err) });
+    }
   }
   return { removed, kept };
 }
@@ -801,6 +1157,10 @@ export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, termin
     if (result?.removed) removed.push(entry.itemId);
     else keep(entry.itemId, entry.worktree, result?.refused ?? (result?.skipped ? "missing" : "not-removed"));
   }
+  // PRUNE AFTER REMOVE (#2329): a directory deleted out-of-band leaves a STALE registration that
+  // keeps listing and confuses the audit (25 were cleared on 2026-10-19). Prune once at the end
+  // so the sweep self-heals those, whether or not it removed anything this pass.
+  await pruneWorktrees(repoPath);
   return removed;
 }
 
@@ -874,14 +1234,25 @@ export async function drivePass(
   harness,
   probeStorage,
   { context, seatFilter, readBusySeats, onError, onWoke, onSuppressed, currentSeat: initialSeat,
-    dbPath, onDiagnostic, waitForWakes = true } = {},
+    dbPath, onDiagnostic, waitForWakes = true, readStorage, shouldStop } = {},
 ) {
   // Deliver any spooled operator intent FIRST, so the submission it creates is visible
   // to this pass's `inspect` and the seat is not also submitted a fixed wake.
   if (dbPath) {
-    const drained = await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic });
+    const drained = await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage });
     if (drained.delivered > 0 || drained.deadLettered > 0 || drained.duplicates > 0) {
       logBrokerLine(dbPath, `INTENT delivered=${drained.delivered} dead=${drained.deadLettered} dup=${drained.duplicates}`);
+    }
+    // #2497 (architect A4): bound the result ledger. A client that died mid-poll leaves its
+    // `<requestId>.json` behind with nobody to read it, and the `health` view is multi-MB, so
+    // the dir would grow without bound. Run the TTL/GC once per PASS (not on the read-poll
+    // path, which does not come through here), never touching a result whose request is still
+    // in flight. A GC failure is reported, never allowed to stop the pass.
+    try {
+      const gc = gcIntentResults(dbPath);
+      if (gc.removed > 0) logBrokerLine(dbPath, `INTENT-GC removed=${gc.removed} kept=${gc.kept}`);
+    } catch (err) {
+      onDiagnostic?.({ kind: "intent-gc-failed", error: String(err?.message ?? err) });
     }
   }
   const seatsDoc = await harness.documentState(Seats, undefined, context);
@@ -899,11 +1270,8 @@ export async function drivePass(
     logBrokerLine(dbPath, `STRANDED settled=${settledStranded.length}`);
   }
   const settledStrandedIds = new Set(settledStranded);
-  const pendingConvIds = new Set(
-    (inspection.submissions ?? [])
-      .filter((s) => !settledStrandedIds.has(s.id))
-      .map((s) => s.conversationId),
-  );
+  // #4170: `pendingConvIds` MUST MEAN "ADVANCING", NOT "HAS A SUBMISSION ROW" — see advancingConvIds.
+  const pendingConvIds = advancingConvIds(inspection.submissions, { settled: settledStrandedIds });
   const seats = seatsDoc?.value?.seats;
   const stoppedConvIds = await readStoppedConvIds(probeStorage, seats, context);
   const busySeats = readBusySeats ? await readBusySeats() : new Set();
@@ -960,6 +1328,24 @@ export async function drivePass(
     onError,
     onWoke: wrapOnWoke,
     onSuppressed,
+    // #4180: THE SUPPRESSION TRACE, made visible. One line per skipped candidate per pass — not per
+    // pass-second — carrying the seat, the reason, and for `pending` the conversation id and the
+    // MEASURED age from that submission's `admittedAt`. The age is looked up, never invented: a trace
+    // that prints a plausible number is the defect class it exists to expose. `admittedAt` is the field
+    // the attention surface already reads (src/attention.mjs), so this is the same measurement, joined.
+    pendingAgeMs: (convId) => {
+      const sub = (inspection.submissions ?? []).find((s) => s.conversationId === convId);
+      return sub && Number.isFinite(sub.admittedAt) ? Date.now() - sub.admittedAt : null;
+    },
+    onSkipped: (skip) => {
+      if (!dbPath) return;
+      const age = typeof skip.ageMs === "number" ? ` age=${Math.round(skip.ageMs / 1000)}s` : "";
+      const conv = skip.conversationId !== undefined ? ` conv=${skip.conversationId}` : "";
+      logBrokerLine(dbPath, `SKIP ${skip.seat} reason=${skip.reason}${conv}${age}`);
+    },
+    // #2420: an in-pass stop predicate. Checked before each wake so a pass stops
+    // submitting NEW work the moment a stop is requested, not only at the loop boundary.
+    shouldStop,
     // AC3: a wake refused because the rig is paused is LEGIBLE, never silent.
     onPaused: (name) => onDiagnostic?.({ kind: "wake-refused-paused", seat: name, reason: "rig paused" }),
   });
@@ -993,6 +1379,74 @@ export async function drivePass(
 }
 
 /**
+ * Await `promise` but never longer than `ms`; a `ms <= 0` skips the wait entirely.
+ *
+ * #2420: used to bound the FINAL drain when the broker is exiting on the stop deadline.
+ * The whole point of the bound is that a wedged pass or a live seat run must not hold the
+ * process open past its grace — so the timer is cleared the moment the wait settles, and
+ * a rejection from the guarded wait is swallowed (the process is leaving anyway).
+ */
+async function settleWithin(promise, ms) {
+  if (!(ms > 0)) return;
+  let timer;
+  try {
+    await Promise.race([
+      Promise.resolve(promise).catch(() => {}),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+/**
+ * Like `settleWithin`, but REPORTS whether the promise settled inside the bound (#4355).
+ *
+ * WHY TWO HELPERS EXIST AND WHY THIS IS NOT A REPLACEMENT. `settleWithin` returns NOTHING and swallows
+ * the outcome, which is correct for the DEADLINE path: there a bound that fires means "close now" and
+ * nobody needs to know. It is WRONG for the cooperative stop's abort escalation, which must act PRECISELY
+ * on the bound firing - abort only the conversations this run woke, and only when the wait ran out.
+ * Inferring that from elapsed time would be a race that is wrong under load, the same class as a success
+ * flag standing in for a fact. So this is added ALONGSIDE and `settleWithin` is left alone.
+ *
+ * THE SHAPE, decided and written down because the drain branches on it:
+ *   { settled: true,  error: null }    fulfilled inside the window
+ *   { settled: true,  error: <err> }   REJECTED inside the window - it SETTLED, and the caller is told how
+ *   { settled: false, noGrace: false } the bound FIRED; it is still running
+ *   { settled: false, noGrace: true }  `ms <= 0`: NO WAIT WAS REQUESTED
+ * THE LAST TWO ARE DIFFERENT FACTS and the drain must not conflate them: a missing grace means the caller
+ * gave no window, an expired one means we waited and ran out. `settleWithin`'s `if (!(ms > 0)) return;`
+ * collapses both into silence, which is exactly what a boolean contract cannot afford.
+ *
+ * A rejection is NEVER swallowed into `settled: false` - that would report a completed-with-error run as
+ * still-running, and the escalation would abort a conversation that had already finished.
+ *
+ * @param {Promise<unknown>} promise
+ * @param {number} ms
+ * @returns {Promise<{settled: boolean, error: unknown, noGrace: boolean}>}
+ */
+export async function settledWithin(promise, ms) {
+	if (!(ms > 0)) return { settled: false, error: null, noGrace: true };
+	let timer;
+	try {
+		const outcome = await Promise.race([
+			Promise.resolve(promise).then(
+				() => ({ settled: true, error: null }),
+				(error) => ({ settled: true, error }),
+			),
+			new Promise((resolve) => {
+				timer = setTimeout(() => resolve({ settled: false, error: null }), ms);
+			}),
+		]);
+		return { settled: outcome.settled, error: outcome.error ?? null, noGrace: false };
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
+
+/**
  * The resident loop: run a pass whenever the scheduler says one is due, and
  * otherwise sleep until the next commit or the scheduler's floor — never poll.
  *
@@ -1006,6 +1460,7 @@ export async function drivePass(
 export async function runWakeLoop({
   harness,
   probeStorage,
+  readStorage,
   scheduler,
   signal,
   context,
@@ -1026,11 +1481,39 @@ export async function runWakeLoop({
   startedAt = now(),
   isStopping = () => false,
   dbPath = undefined,
+  // F2 (#2572): a `SessionFailed` is TERMINAL for pi-durable, so the broker must close+reopen
+  // its harness to recover. `reopen` is owned by the CALLER (cli.mjs, where the handles are
+  // CREATED) and must, ATOMICALLY, close+reopen BOTH handles AND re-subscribe before it
+  // returns; the loop stays dumb — it just calls it and swaps the handles it drives. Bounded by
+  // `reopenCap` (with backoff), so a persistent failure ends in a TERMINAL diagnostic instead
+  // of an endless reopen loop (the #2237 hot-loop class).
+  reopen = null,
+  reopenCap = 3,
+  reopenBackoffMs = 5_000,
+  // #2420 (operator ruling): a resident daemon must have a BOUNDED graceful stop with an
+  // unconditional force fallback. `stopGraceMs` bounds how long the loop may keep draining
+  // after a stop is REQUESTED — once it expires the loop exits with `stoppedBy="deadline"`
+  // rather than waiting on a wedged pass or a live seat run. 0 keeps the legacy unbounded
+  // cooperative drain (a one-shot `run` has no resident loop to protect).
+  stopGraceMs = 0,
+  // When the CALLER observed its own stop signal (ms since epoch), or null. Only the
+  // signal path needs it; a `.stop` file carries its own request time in its content.
+  stopRequestedAt = () => null,
 }) {
   const failedSeats = new Set();
   const escalations = [];
   let passes = 0;
   let stoppedBy = null;
+  // The handles the loop drives. `reopen` SWAPS them when a SessionFailed forces a recovery, so
+  // every use below reads the CURRENT handle, never the one captured at entry.
+  let h = harness;
+  let p = probeStorage;
+  let r = readStorage;
+  // Consecutive reopens since the last COMPLETED pass: a healthy broker may recover many times,
+  // but one that keeps failing to reopen hits the cap and stops with a terminal diagnostic.
+  let reopenAttempts = 0;
+  let sessionReopened = false;
+  let sessionFailedTerminal = false;
   // When a pass drops a real candidate because the seat is inside its cooldown,
   // no commit may follow to trigger another pass. Record when that candidate
   // becomes eligible so the idle loop re-runs a pass then (the revisit gap).
@@ -1038,6 +1521,29 @@ export async function runWakeLoop({
   // Consecutive passes that dropped a wake via `wake-failed`; drives the retry
   // backoff below. Any pass that failed no wake resets it to 0.
   let consecutiveWakeFailures = 0;
+  // #2420: the stop is bounded and interruptible. `stopKind()` names the pending stop;
+  // the grace deadline is measured from when it was REQUESTED (the signal's timestamp, or
+  // the timestamp the `.stop` file carries), not from when the loop happens to notice it —
+  // so a stop that arrived while a pass was running is not granted a fresh grace each turn.
+  const graceMs = Number.isFinite(stopGraceMs) && stopGraceMs > 0 ? stopGraceMs : 0;
+  const stopKind = () =>
+    isStopping() ? "signal" : dbPath && readStopRequest(dbPath) !== null ? "stop" : null;
+  const stopRequestedMs = () => {
+    const signalled = stopRequestedAt();
+    if (typeof signalled === "number") return signalled;
+    if (!dbPath) return null;
+    const raw = readStopRequest(dbPath);
+    const parsed = raw === null ? NaN : Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const graceExpired = () => {
+    if (graceMs <= 0) return false;
+    const at = stopRequestedMs();
+    return at !== null && now() - at >= graceMs;
+  };
+  // Handed to `driveOnce`: once a stop is pending, stop submitting NEW wakes so a long
+  // pass is interruptible (acceptance 3).
+  const shouldStopPass = () => stopKind() !== null;
   // Work may have been queued while nothing was running — the exact #238 finding
   // (three items queued with nothing driving) — so the first pass is forced
   // rather than waiting for a future commit.
@@ -1054,7 +1560,7 @@ export async function runWakeLoop({
   // failure is reported, never allowed to stop the broker from driving.
   if (dbPath) {
     try {
-      const reconciled = await reconcileBrokerStartup(harness, { dbPath, context, onDiagnostic, probeStorage });
+      const reconciled = await reconcileBrokerStartup(h, { dbPath, context, onDiagnostic, probeStorage: p });
       if (reconciled.leases.length > 0 || reconciled.worktrees.length > 0) {
         logBrokerLine(
           dbPath,
@@ -1067,13 +1573,22 @@ export async function runWakeLoop({
   }
   // Heartbeat: keep the state file fresh so a recycled pid cannot be mistaken for this
   // broker. The token carries across rewrites; only the broker owns this interval.
+  //
+  // The PROGRESS leg (#2581/F7): `lastPassAt` is the time of the last COMPLETED pass. A fresh
+  // heartbeat proves the event loop is turning (LIVENESS), not that passes are ADVANCING — a
+  // broker wedged in a stuck await keeps a fresh heartbeat with a frozen PASS. The heartbeat
+  // carries it so a status reader can tell "alive" from "healthy" (BROKER-SUPERVISION §4).
   let heartbeat = null;
+  let lastPassAt = null;
+  let stateSeed = null; // { pid, since, runToken } — the identity the heartbeat/progress rewrites keep
   if (dbPath) {
     const state = readBrokerState(dbPath);
     if (state && state.pid === process.pid) {
+      stateSeed = { pid: state.pid, since: state.since, runToken: state.runToken };
+      lastPassAt = typeof state.lastPassAt === "number" ? state.lastPassAt : now();
       heartbeat = setInterval(() => {
         try {
-          writeBrokerState(dbPath, { pid: state.pid, since: state.since, runToken: state.runToken });
+          writeBrokerState(dbPath, { ...stateSeed, lastPassAt });
         } catch (err) {
           console.error(`BROKER WARNING: heartbeat write failed: ${err?.message ?? err}`);
         }
@@ -1082,8 +1597,17 @@ export async function runWakeLoop({
     }
   }
   for (;;) {
+    // A raised SIGNAL (SIGINT/SIGTERM) stops at once. A `.stop` FILE is deliberately NOT
+    // checked here: F35's contract is that a request is honoured after the pass in flight
+    // settles (demo/stoprequest.test.mjs), and the idle/post-pass checks below are where it
+    // lands. The grace only decides WHETHER the drain is already over (`deadline`).
     if (isStopping()) {
-      stoppedBy = "signal";
+      // #2322: record the RECEIPT of the stop BEFORE terminating. Without this, a broker that
+      // was asked to stop is indistinguishable in `<db>.broker.log` from one that crashed —
+      // and a bare `START` with neither a `STOP-REQUESTED` line nor an `EXIT` is a process
+      // that died without ever running this exit path (a `taskkill`/kill).
+      logBrokerLine(dbPath, `STOP-REQUESTED source=signal pid=${process.pid}`);
+      stoppedBy = graceExpired() ? "deadline" : "signal";
       break;
     }
     if (maxDurationMs > 0 && now() - startedAt >= maxDurationMs) {
@@ -1102,6 +1626,19 @@ export async function runWakeLoop({
         scheduler.markDirty();
         continue;
       }
+      // F35/#2237: honor a `serve --stop` BEFORE anything that can force another pass. A
+      // persistently-throwing pass with a pending intent re-marked the scheduler dirty every
+      // turn, so the stop was only seen at the END of a pass — an operator saw `serve --stop`
+      // return stopped:true (and clear broker.json) while the orphan kept looping. Checking
+      // here makes the stop authoritative regardless of the inbox or an active backoff.
+      const idleStop = stopKind();
+      if (idleStop) {
+        // Read the deadline BEFORE clearing the file: the request time lives in its content.
+        const expired = graceExpired();
+        if (idleStop === "stop") clearStopRequest(dbPath);
+        stoppedBy = expired ? "deadline" : idleStop;
+        break;
+      }
       // A spooled operator intent must not wait for an unrelated commit: the
       // producer writes a file to `<db>.broker.inbox`, and only a PASS drains it
       // (drainIntentInbox runs at the start of a pass). Treat a non-empty inbox
@@ -1119,7 +1656,7 @@ export async function runWakeLoop({
       if (dbPath && readIntentFiles(dbPath).length > 0) {
         if (onlyReadIntents(dbPath)) {
           try {
-            await drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic });
+            await drainIntentInbox(h, p, { dbPath, context, onDiagnostic, readStorage: r });
           } catch (err) {
             // A failed read drain must neither kill the idle loop nor spin it: fall back to a
             // real pass, which is where a storage failure is reported and retried with backoff.
@@ -1128,15 +1665,20 @@ export async function runWakeLoop({
           }
           continue;
         }
+        // #2237: a NON-read intent must not bypass the retry backoff. `shouldRun` only checks
+        // the floor + the dirty bit, so marking dirty here ran a pass NOW even while a retry
+        // was already scheduled — a persistently-throwing pass plus a pending intent hot-looped
+        // at the floor cadence (the observed 0.5 s `WAKE-RETRY ... in=60000ms` lines, and 120
+        // throwing passes in 1.2 s in the demo). While a failure backoff is active, WAIT for it:
+        // the pass at the deadline drains the intent and the retry schedule is honoured — and
+        // the wait yields the event loop, so a `.stop` written meanwhile is seen. With no failure
+        // pending, mark dirty at once (prompt delivery).
+        if (consecutiveWakeFailures > 0 && cooldownRevisitAt !== null && now() < cooldownRevisitAt) {
+          await signal.wait(Math.max(1, cooldownRevisitAt - now()));
+          continue;
+        }
         scheduler.markDirty();
         continue;
-      }
-      // Check for stop request before sleeping: on Windows there is no SIGTERM,
-      // so `serve --stop` relies on a .stop file to interrupt an idle broker.
-      if (dbPath && readStopRequest(dbPath) !== null) {
-        clearStopRequest(dbPath);
-        stoppedBy = "stop";
-        break;
       }
       // Never sleep past the deadline: with no further commits a resident broker
       // rests in `signal.wait`, and a signal only interrupts it on SIGINT/SIGTERM.
@@ -1176,13 +1718,15 @@ export async function runWakeLoop({
     // pass that throws goes dormant again (recurrence 8, 2026-10-18).
     let passThrew = false;
     try {
-      await drivePass(harness, probeStorage, {
+      await drivePass(h, p, {
         context,
         seatFilter: scheduler.seatFilter(now()),
         readBusySeats,
+        readStorage,
         waitForWakes: false,
         dbPath,
         onDiagnostic,
+        shouldStop: shouldStopPass,
         onError: (failure) => {
           failedSeats.add(failure.name);
           failedThisPass.add(failure.name);
@@ -1201,12 +1745,25 @@ export async function runWakeLoop({
         onSuppressed: (name) => suppressedThisPass.add(name),
       });
       passes++;
+      // A pass that COMPLETED clears the reopen budget: recovery succeeded, so a LATER failure
+      // starts a fresh bounded sequence rather than counting toward an old one.
+      reopenAttempts = 0;
       // Duration + the seats woken make a pass's liveness legible: a long
       // `ms=` with `woke=-` is a pass that waited, not one that worked.
       logBrokerLine(
         dbPath,
         `PASS ${passes} ms=${now() - passStartedAt} woke=${wokeThisPass.length > 0 ? wokeThisPass.join(",") : "-"}`,
       );
+      // The PROGRESS leg (#2581/F7): record that a pass COMPLETED, on the pass's own write (not
+      // the 20 s heartbeat), so `status` can tell a busy broker from a wedged one.
+      lastPassAt = now();
+      if (dbPath && stateSeed) {
+        try {
+          writeBrokerState(dbPath, { ...stateSeed, lastPassAt });
+        } catch (err) {
+          console.error(`BROKER WARNING: progress write failed: ${err?.message ?? err}`);
+        }
+      }
       if (supervise) {
         const plans = await supervise();
         for (const plan of plans) onDiagnostic({ kind: "escalated", ...plan });
@@ -1242,9 +1799,55 @@ export async function runWakeLoop({
       // resident broker (the 17:29Z death). Log it WITH its nested cause and keep driving;
       // the loop's idle pacing keeps a persistent failure from becoming a hot spin.
       passThrew = true;
-      onDiagnostic({ kind: "pass-failed", ...describeError(error) });
+      const described = describeError(error);
+      onDiagnostic({ kind: "pass-failed", ...described });
+      // ROADMAP 78 / #2237: a throwing pass must be VISIBLE in `<db>.broker.log`, not only as a
+      // later `WAKE-RETRY ... pass-threw` line — the log is the only post-mortem surface (D46),
+      // and it could not answer "which pass threw, and why". Messages only, never a payload.
+      logBrokerLine(
+        dbPath,
+        `PASS-FAILED ${described.error ?? "unknown"}${described.cause ? ` cause=${described.cause}` : ""}${described.errcode !== undefined ? ` errcode=${described.errcode}` : ""}${described.errstr !== undefined ? ` errstr=${described.errstr}` : ""}`,
+      );
+      // F2 (#2572): a `SessionFailed` is TERMINAL — retrying the same dead harness never
+      // recovers (every later call throws it again). Close+reopen via the caller's callback,
+      // bounded by `reopenCap`; past the cap the broker STOPS with a terminal diagnostic rather
+      // than looping forever on a dead Session.
+      if (reopen && isSessionFailed(error)) {
+        reopenAttempts++;
+        if (reopenAttempts > reopenCap) {
+          logBrokerLine(dbPath, `HARNESS-REOPEN-CAP-EXCEEDED attempts=${reopenAttempts}`);
+          onDiagnostic({ kind: "harness-reopen-cap-exceeded", attempts: reopenAttempts, ...described });
+          stoppedBy = "session-failed";
+          sessionFailedTerminal = true;
+        } else {
+          const delay = Math.min(reopenBackoffMs * 2 ** (reopenAttempts - 1), wakeRetryMaxMs);
+          logBrokerLine(dbPath, `HARNESS-REOPEN attempt=${reopenAttempts} in=${delay}ms`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          try {
+            const next = await reopen();
+            if (next) {
+              h = next.harness ?? h;
+              p = next.probeStorage ?? p;
+              r = next.readStorage ?? r;
+            }
+            sessionReopened = true;
+          } catch (reopenError) {
+            const rd = describeError(reopenError);
+            logBrokerLine(dbPath, `HARNESS-REOPEN-FAILED ${rd.error ?? "unknown"}${rd.cause ? ` cause=${rd.cause}` : ""}`);
+            onDiagnostic({ kind: "harness-reopen-failed", ...rd });
+          }
+        }
+      }
     } finally {
       scheduler.endPass();
+    }
+    // A successful reopen re-arms the loop so recovery is IMMEDIATE, not at the next scheduled
+    // pass; a session that could not be recovered (cap exceeded) stops the broker terminally.
+    if (sessionFailedTerminal) break;
+    if (sessionReopened) {
+      sessionReopened = false;
+      scheduler.markDirty();
+      signal.raise();
     }
     // Post-pass scheduling runs even when THIS pass threw. A wake failure emitted before
     // an unrelated later throw (e.g. `superviseOnce` hitting the SAME storage error) must
@@ -1278,9 +1881,16 @@ export async function runWakeLoop({
     // F35: cooperative stop — a `serve --stop` command writes a .stop file
     // instead of process.kill (which does not deliver SIGTERM on Windows). The
     // broker honours it here, after the pass in flight has settled.
-    if (dbPath && readStopRequest(dbPath) !== null) {
-      clearStopRequest(dbPath);
-      stoppedBy = "stop";
+    const postStop = stopKind();
+    if (postStop) {
+      // Read the deadline BEFORE clearing the file: the request time lives in its content.
+      const expired = graceExpired();
+      if (postStop === "stop") {
+        // #2322: record the receipt so the log names the REQUEST, not just the graceful EXIT.
+        logBrokerLine(dbPath, `STOP-REQUESTED source=file pid=${process.pid}`);
+        clearStopRequest(dbPath);
+      }
+      stoppedBy = expired ? "deadline" : postStop;
       break;
     }
   }
@@ -1290,7 +1900,19 @@ export async function runWakeLoop({
   // scope here, exactly as the old global wait used to do at every pass. This
   // is the one place a global wait belongs.
   if (heartbeat) clearInterval(heartbeat);
-  await harness.waitForIdle(context);
+	// The handle is `h`, not `harness`: main's reopen swap (`let h = harness`, reassigned after a
+	// SessionFailed recovery) moves it, so the drain must wait on the live handle.
+  // #2420: when the exit is on the DEADLINE (or the grace has already run out), do NOT park
+  // it on a wedged pass or a live seat run — bound the drain by whatever grace remains. The
+  // ordinary cooperative stop keeps F11's unbounded drain, so the harness is never closed
+  // over a live run.
+  if (stoppedBy === "deadline" || graceExpired()) {
+    const at = stopRequestedMs();
+    const remaining = graceMs > 0 && at !== null ? Math.max(0, graceMs - (now() - at)) : 0;
+    await settleWithin(h.waitForIdle(context), remaining);
+  } else {
+    await h.waitForIdle(context);
+  }
   // Close the audit opened by START: the reason the broker stopped (a `.stop` request, a
   // bound, or a signal) survives the process here instead of only on stdout.
   logBrokerLine(dbPath, `EXIT pid=${process.pid} reason=${stoppedBy ?? "unknown"} passes=${passes}`);
@@ -1314,13 +1936,52 @@ export function brokerLogPath(dbPath) {
  * The CAUSE is the only place a storage error names its real reason — `SessionFailed`
  * wraps the underlying failure, so logging only the outer message left the 17:29Z broker
  * death unexplained. Error MESSAGES only, never a payload (same discipline as #828/#700).
+ *
+ * #2496 (ROADMAP 159): the residual `database is locked` cause is UNVERIFIED, so the view
+ * also surfaces the SQLite `errcode`/`errstr` (and any string `code`) found anywhere in the
+ * cause chain. A message alone cannot tell ordinary writer contention from a mis-resolved
+ * store; the errcode can. The PROBE is the point — do not assert a cause before one is
+ * OBSERVED in a log.
+ *
+ * RECORDED FACT (#2496): pi-durable opens every transaction with `BEGIN IMMEDIATE`
+ * (vendor/pi-main/packages/durable/src/storage/sqlite/storage.ts), which takes the write
+ * lock UP FRONT and therefore STRUCTURALLY EXCLUDES the deferred-`BEGIN`
+ * `SQLITE_BUSY_SNAPSHOT` case. So a residual `database is locked` here cannot be a
+ * snapshot-busy; it is ordinary writer contention or a second/mis-resolved opener.
  */
-function describeError(error) {
+export function describeError(error) {
   const chain = [];
+  let errcode;
+  let errstr;
+  let code;
   for (let e = error, depth = 0; e && depth < 6; e = e.cause, depth++) {
     chain.push(`${e.name ?? "Error"}: ${e.message ?? String(e)}`);
+    if (errcode === undefined && e.errcode !== undefined) errcode = e.errcode;
+    if (errstr === undefined && e.errstr !== undefined) errstr = e.errstr;
+    if (code === undefined && typeof e.code === "string") code = e.code;
   }
-  return { error: chain[0] ?? null, cause: chain.length > 1 ? chain.slice(1).join(" <- ") : null };
+  const described = { error: chain[0] ?? null, cause: chain.length > 1 ? chain.slice(1).join(" <- ") : null };
+  if (errcode !== undefined) described.errcode = errcode;
+  if (errstr !== undefined) described.errstr = errstr;
+  if (code !== undefined) described.code = code;
+  return described;
+}
+
+/**
+ * Whether `error` (or any error in its `cause` chain) is pi-durable's terminal `SessionFailed`.
+ *
+ * pi-durable's failure model is TERMINAL: the first storage error fails the Session, and every
+ * later call on that harness throws `SessionFailed` (`dist/errors.js`: name "SessionFailed",
+ * message "Session failed after a storage error; close and reopen it", `cause` = the first
+ * error). Retrying the SAME harness therefore never recovers — only a close+reopen does (F2,
+ * #2572). Matched by NAME (not `instanceof`) so it survives two copies of the package being
+ * loaded, and walked through the cause chain because callers often wrap it.
+ */
+export function isSessionFailed(error) {
+  for (let e = error, depth = 0; e && depth < 8; e = e?.cause, depth++) {
+    if (e?.name === "SessionFailed") return true;
+  }
+  return false;
 }
 
 /** Append one line to `<db>.broker.log`. */
@@ -1365,8 +2026,75 @@ export function brokerAlive(state, { now = Date.now() } = {}) {
     process.kill(state.pid, 0);
     return true;
   } catch (err) {
-    // EPERM means the process exists but we cannot signal it — still alive.
-    return err?.code === "EPERM";
+    // FAIL-SAFE (#3398): dead ONLY when the OS says the process does not exist. Any other
+    // error — EPERM (exists, cannot signal), or a code we have never seen — means ALIVE.
+    // The bug this probe serves is a FALSE-DEAD report (`serve --stop` claiming
+    // `stopped:true` for a live broker), and a false-dead admits a SECOND WRITER: that is
+    // the corruption class. `=== "EPERM"` was fail-OPEN toward dead — it classified every
+    // unexpected code as gone, i.e. it failed exactly on the path nobody tests.
+    return err?.code !== "ESRCH";
+  }
+}
+
+/** A pass may legitimately run as long as the model stream timeout; this much beyond it is
+ * still normal (pass startup, the drain), so PROGRESS is judged stale only past the sum. */
+export const BROKER_PROGRESS_MARGIN_MS = 60_000;
+/** The pass bound assumed when no `DURIG_STREAM_TIMEOUT_MS` is configured (a long call is
+ * minutes, not hours), so a rig with no explicit timeout still gets a progress check. */
+export const DEFAULT_PASS_TIMEOUT_MS = 300_000;
+
+/**
+ * The broker's HEALTH — "alive" is NOT "healthy" (#2581 / BROKER-SUPERVISION §4). Two legs:
+ * LIVENESS (the heartbeat; the event loop is turning) and PROGRESS (`lastPassAt`; passes are
+ * ADVANCING). A broker wedged in a stuck await keeps a fresh heartbeat with a frozen PASS, so
+ * a liveness-only check calls it up; this returns `degraded` instead.
+ *
+ * Pure: the caller supplies the stream timeout (cli.mjs reads it from config). Returns
+ * `{ state: "up"|"degraded"|"down", pid?, reason?, hbAgeMs?, passAgeMs?, progressTimeoutMs? }`.
+ */
+export function brokerHealth(state, { now = Date.now(), streamTimeoutMs = null } = {}) {
+  if (!state || typeof state.pid !== "number") return { state: "down", reason: "no broker state" };
+  const hbAgeMs = typeof state.heartbeatAt === "number" ? now - state.heartbeatAt : null;
+  // LIVENESS: the pid exists AND the heartbeat is fresh (brokerAlive is exactly this leg).
+  if (!brokerAlive(state, { now })) {
+    return { state: "down", reason: "not alive (the pid is gone or liveness is stale)", pid: state.pid, hbAgeMs };
+  }
+  // PROGRESS: a completed pass within the pass bound (stream timeout + margin).
+  const progressTimeoutMs =
+    (typeof streamTimeoutMs === "number" ? streamTimeoutMs : DEFAULT_PASS_TIMEOUT_MS) + BROKER_PROGRESS_MARGIN_MS;
+  const passAgeMs = typeof state.lastPassAt === "number" ? now - state.lastPassAt : null;
+  if (passAgeMs === null || passAgeMs > progressTimeoutMs) {
+    return {
+      state: "degraded",
+      reason: passAgeMs === null ? "no pass has completed yet" : "no pass within the progress timeout",
+      pid: state.pid,
+      hbAgeMs,
+      passAgeMs,
+      progressTimeoutMs,
+    };
+  }
+  return { state: "up", pid: state.pid, hbAgeMs, passAgeMs };
+}
+
+/**
+ * Raw pid liveness: does this pid exist right now? No heartbeat gate.
+ *
+ * `brokerAlive` ALSO requires a fresh heartbeat, so a broker wedged inside a pass — one
+ * that stopped heartbeating but is still running — reads as DEAD through it. That is the
+ * wrong question for "has the process actually exited", and `serve --stop` reported
+ * `stopped:true` for a live pid because of it (#2420). Use THIS for pid-death checks; use
+ * `brokerAlive` for identity (is the pid still the broker that wrote the state).
+ */
+export function pidAlive(pid) {
+  if (typeof pid !== "number") return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // FAIL-SAFE (#3398): dead ONLY on ESRCH. See `brokerAlive` above — unknown ⇒ ALIVE,
+    // because a false DEAD here reports `stopped:true` for a live broker and admits a
+    // second writer, while a false ALIVE only refuses to start one more.
+    return err?.code !== "ESRCH";
   }
 }
 
@@ -1383,8 +2111,8 @@ export function readBrokerState(dbPath) {
   }
 }
 
-export function writeBrokerState(dbPath, { pid, since, runToken = randomUUID(), heartbeatAt = Date.now() }) {
-  writeFileSync(brokerStatePath(dbPath), JSON.stringify({ pid, since, runToken, heartbeatAt }));
+export function writeBrokerState(dbPath, { pid, since, runToken = randomUUID(), heartbeatAt = Date.now(), lastPassAt = null }) {
+  writeFileSync(brokerStatePath(dbPath), JSON.stringify({ pid, since, runToken, heartbeatAt, lastPassAt }));
 }
 
 /**

@@ -10,9 +10,12 @@
 // A sibling worktree is likewise copied wholesale into the new tree (a whole checkout,
 // node_modules and all), which is not "visible state" the seat ever meant to carry.
 //
-// Failing-first: before the fix, the SECOND prepareSeatWorkspace() rejects with
-// ERR_FS_CP_EINVAL and the run exits 1. After the fix it returns a provisioned worktree
-// with neither worktree copied in, while a real untracked file IS still carried.
+// #2360: CARRY is now OPT-IN (`carry: true`). The SEAT path (prepareSeatWorkspace /
+// claimWorktree) forks HEAD-clean, so the collision this demo guards is confined to explicit
+// carry callers — which is exactly what this demo exercises. (The seat path's clean fork is
+// covered by demo/worktree-carry-teardown.test.mjs.)
+//
+// Failing-first: before the #998 fix, the SECOND carry rejects with ERR_FS_CP_EINVAL.
 //
 // Run: node demo/worktree-recursive-carry.test.mjs  (exit 0 = pass)
 
@@ -24,7 +27,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { prepareSeatWorkspace } from "../src/worktree.mjs";
+import { createWorktree } from "../src/worktree.mjs";
 
 const run = promisify(execFile);
 const base = await mkdtemp(join(tmpdir(), "durig-recursive-carry-"));
@@ -53,10 +56,9 @@ try {
 	await git(["commit", "-q", "-m", "baseline"]);
 
 	// First worktree: source is clean, so nothing to carry.
-	const first = await prepareSeatWorkspace({ source: repo, worktreeRoot: repo, itemId: 1 });
+	const first = await createWorktree({ source: repo, target: join(repo, "item-1"), carry: true });
 	await check("first worktree created", async () => {
-		assert.equal(first.created, true);
-		assert.ok(existsSync(join(repo, "item-1", "README.md")), "item-1 is a real checkout");
+		assert.ok(existsSync(join(first.worktree, "README.md")), "item-1 is a real checkout");
 	});
 
 	// A real piece of visible state the carry MUST reproduce (this is what #506 is for).
@@ -67,7 +69,7 @@ try {
 	let second = null;
 	let secondError = null;
 	try {
-		second = await prepareSeatWorkspace({ source: repo, worktreeRoot: repo, itemId: 2 });
+		second = await createWorktree({ source: repo, target: join(repo, "item-2"), carry: true });
 	} catch (err) {
 		secondError = err;
 	}
@@ -76,9 +78,9 @@ try {
 		assert.equal(
 			secondError,
 			null,
-			`second prepareSeatWorkspace threw: ${secondError?.code ?? ""} ${secondError?.message ?? ""}`,
+			`second carry threw: ${secondError?.code ?? ""} ${secondError?.message ?? ""}`,
 		);
-		assert.equal(second.created, true);
+		assert.ok(existsSync(second.worktree), "item-2 exists");
 	});
 
 	await check("the target worktree is never copied into itself", async () => {
