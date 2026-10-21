@@ -1,4 +1,4 @@
-﻿# durian-pi runbooks (SOPs)
+# durian-pi runbooks (SOPs)
 
 **Status:** working set. Audience: the **delegate** (operator-facing) and **seats** (a seat reads a
 runbook when woken into a situation it does not own). A runbook is an operating procedure, not a design
@@ -133,6 +133,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [broker-safe-change.md](broker-safe-change.md) | a model/constitution/reset change must apply without corrupting the store | yes |
 | [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error`, or the broker repeats `wake-failed â€¦ unresolvable path` and one seat is never woken | yes |
 | [store-secret-detected.md](store-secret-detected.md) | a `secret_detected` notice: secret-shaped content is in the committed store | no |
+| [store-probe-identity.md](store-probe-identity.md) | you are querying the store directly for a QUEUE item id, or a probe returned a plausible row whose namespace you have not checked | no |
 | [tool-result-redacted.md](tool-result-redacted.md) | a tool result shows a `[redacted by durian-pi: â€¦]` marker instead of its text | no |
 | [constitution-amendment.md](constitution-amendment.md) | you edited (or will edit) `constitution.txt`, or the 3 constitution-mirror demos fail their starter === constitution.txt assertion | no |
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language / emitting a tool call as text | yes |
@@ -163,7 +164,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Mechanism | Runbook(s) |
 |---|---|
 | Broker / `serve` | broker-down-or-stalled, broker-safe-change |
-| Store / `pi.live` | store-corruption-recovery, store-secret-detected |
+| Store / `pi.live` | store-corruption-recovery, store-secret-detected, store-probe-identity |
 | Tool results | tool-result-redacted |
 | Seats | seat-reset, compact-a-seat |
 | Write guard / source files | write-corruption-recovery |
