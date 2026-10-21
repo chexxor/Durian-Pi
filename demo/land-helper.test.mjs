@@ -116,6 +116,17 @@ try {
   git(repo, ["config", "user.name", "Test"]);
   writeFileSync(join(repo, "a.txt"), "line one\n");
   writeFileSync(join(repo, "demo", "ok.test.mjs"), "console.log('ok');\nprocess.exit(0);\n");
+  // The runtime store/slot files the genlock sections write beside the store are GITIGNORED in a
+  // real checkout; mirror that here, or the (correct) untracked-counts preflight refuses them.
+  // #4638: `/item-*/` is in the REAL repo's .gitignore (.gitignore:44) and was MISSING here — without
+  // it a stray `item-9999/` reads as UNTRACKED, so the dirt check fires before the STRAY check and
+  // sections 2b/2c assert the wrong refusal. The fixture must be as PERMISSIVE as the repo for this
+  // class, or it tests a tree the repo would never produce.
+  // `durig.config.default.json` stays listed for a DIFFERENT reason, and it is NOT repo policy: the
+  // real repo TRACKS that file (so `check-ignore` saying NOT IGNORED is correct there), while this
+  // temp repo CREATES it as a fixture for the cap-resolution section. Ignoring it here keeps the
+  // fixture's own artefact out of its own preflight; it is a fixture detail, not a `.gitignore` rule.
+  writeFileSync(join(repo, ".gitignore"), "*.sqlite*\n*.sqlite.broker.*\n/.land-scratch-*/\n.durig/\n/item-*/\ndurig.config.default.json\n");
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "base"]);
   git(repo, ["branch", "-M", "main"]);
@@ -152,9 +163,76 @@ try {
   const beforeDirty = mainSha(repo);
   const dirty = land(repo, ["feat-b"]);
   check("the helper refuses (nonzero)", dirty.code !== 0, dirty.raw.slice(0, 200));
-  check("...naming the tracked modification", /tracked modification/.test(dirty.report?.error ?? ""), dirty.report?.error);
+  check("...and states the `.`-suite invalidity", /measures the SHARED TREE, not main/.test(dirty.report?.error ?? ""), dirty.report?.error);
+  check("...and names the dirty path", (dirty.report?.dirtyPaths ?? []).some((p) => p.includes("a.txt")), JSON.stringify(dirty.report?.dirtyPaths));
   check("...and main did NOT advance", mainSha(repo) === beforeDirty);
   git(repo, ["checkout", "--", "a.txt"]);
+  check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
+
+  console.log("\n2b. a STRAY worktree directory at the repo root refuses to land (#4139)");
+  // A write to a REAPED worktree path recreates `item-<id>/` inside the repo. `/item-*/` is IGNORED,
+  // so `git status --porcelain` never shows it - the tracked/untracked rule above structurally cannot
+  // see this class. A directory named for an item has no business being a repo-root child.
+  const stray = join(repo, "item-9999");
+  mkdirSync(stray, { recursive: true });
+  writeFileSync(join(stray, "probe.mjs"), "// left by a write to a reaped worktree\n");
+  const beforeStray = mainSha(repo);
+  const strayRun = land(repo, ["feat-b"]);
+  check("the helper refuses (nonzero)", strayRun.code !== 0, strayRun.raw.slice(0, 200));
+  check("...naming the stray directory", /item-9999/.test(strayRun.report?.error ?? ""), strayRun.report?.error);
+  check("...and main did NOT advance", mainSha(repo) === beforeStray);
+  rmSync(stray, { recursive: true, force: true });
+
+  console.log("\n2c. a LIVE (registered) worktree is NOT stray - only the unregistered leftover is named");
+  // A live worktree is legitimately `item-<id>/` at the root, so the test is REGISTRATION, not the
+  // name. With BOTH present, the refusal must name the stray and NOT the registered one.
+  const live = join(repo, "item-8888");
+  git(repo, ["worktree", "add", "-b", "wt-live", live]);
+  const stray2 = join(repo, "item-9999");
+  mkdirSync(stray2, { recursive: true });
+  const mixed = land(repo, ["feat-b"]);
+  check("the refusal names the STRAY one", /item-9999/.test(mixed.report?.error ?? ""), mixed.report?.error);
+  check("...and NOT the registered one", !/item-8888/.test(mixed.report?.error ?? ""), mixed.report?.error);
+  rmSync(stray2, { recursive: true, force: true });
+  git(repo, ["worktree", "remove", "--force", live]);
+  check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
+
+  console.log("\n2d. a LINKED worktree is not a landing target — refuse unless repo IS the shared root (#4247)");
+  // The measured failure: `node scripts/land.mjs <branch>` run from INSIDE an item worktree created a
+  // store there, merged there, and returned ok:true, merged:[...] with main untouched. A seat's cwd is
+  // its worktree by default, so this is the NATURAL mistake - and the cwd guard cannot see it, because
+  // an item worktree is not a DEGRADED cwd, it is the WRONG repository to land INTO.
+  const linked = join(repo, "item-7777");
+  git(repo, ["worktree", "add", "-b", "wt-land", linked]);
+  const beforeLinked = mainSha(repo);
+  const wrongRepo = land(linked, ["feat-b"]);
+  check("landing INTO a linked worktree is REFUSED", wrongRepo.code !== 0, wrongRepo.raw.slice(0, 200));
+  check("...naming the linked path", /item-7777/.test(wrongRepo.report?.error ?? ""), wrongRepo.report?.error);
+  const norm = (p) => String(p ?? "").replace(/[\\/]+$/, "").replace(/\\/g, "/").toLowerCase();
+  check(
+    "...and it identifies the SHARED ROOT as the landing target",
+    typeof wrongRepo.report?.sharedRoot === "string" && norm(wrongRepo.report.sharedRoot) === norm(repo),
+    wrongRepo.report?.sharedRoot,
+  );
+  check("...and names the REMEDY (run it from the shared tree)", /shared tree/.test(wrongRepo.report?.error ?? ""), wrongRepo.report?.error);
+  check(
+    "...and prints NO merged:[...] against the wrong repository",
+    !Array.isArray(wrongRepo.report?.merged) || wrongRepo.report.merged.length === 0,
+    JSON.stringify(wrongRepo.report?.merged),
+  );
+  check("...and main did NOT advance", mainSha(repo) === beforeLinked);
+  git(repo, ["worktree", "remove", "--force", linked]);
+
+  console.log("\n2e. an UNTRACKED-only shared tree refuses to land (the third instance of this hazard)");
+  // Untracked and alone: staged/tracked are clean, so a TRACKED-ONLY check would have passed it,
+  // yet a suite run in `.` would measure a tree that exists on no branch.
+  writeFileSync(join(repo, "attach.mjs"), "export const attach = 1;\n");
+  const beforeUntracked = mainSha(repo);
+  const untrackedOnly = land(repo, ["feat-b"]);
+  check("an untracked-only dirty tree REFUSES", untrackedOnly.code !== 0, untrackedOnly.raw.slice(0, 200));
+  check("...and names the untracked path", (untrackedOnly.report?.dirtyPaths ?? []).some((p) => p.includes("attach.mjs")), JSON.stringify(untrackedOnly.report?.dirtyPaths));
+  check("...and main did NOT advance", mainSha(repo) === beforeUntracked);
+  rmSync(join(repo, "attach.mjs"));
   check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
 
   console.log("\n3. a HELD genlock makes the lander WAIT with PRIORITY — it does NOT refuse (#1497/#1498)");
@@ -166,7 +244,7 @@ try {
   const lockedRun = landAsync(["feat-b"]);
   const sawPriority = await waitFor(() => existsSync(join(repo, "rig.sqlite.genlock.priority")), 8000);
   check("the lander PUBLISHES a priority reservation and WAITS (it does not refuse)", sawPriority, lockedRun.out.slice(0, 200));
-  check("...and it has NOT reported yet (it is waiting on the live holder)", lockedRun.out.trim() === "", lockedRun.out.slice(0, 200));
+  check("...and it has NOT REPORTED yet (it is waiting on the live holder)", lockedRun.stdoutText.trim() === "", lockedRun.out.slice(0, 200));
   check("...and main did NOT advance", mainSha(repo) === beforeLock);
   rmSync(slot, { force: true }); // the holder's generation finishes and releases the slot
   const lockedCode = await lockedRun.done;
@@ -195,12 +273,18 @@ try {
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "feat: feat-d"]);
   git(repo, ["switch", "main"]);
+  // feat-c and feat-d fork from the SAME pre-landing main and rewrite the same line. feat-c lands
+  // first (main advances); feat-d is then a STALE tip — it contains preC, not current main. The
+  // pre-flight does NOT refuse it (#3929): ancestry is a fast path and CONTENT proves landability,
+  // so feat-d reaches the merge and CONFLICTS there.
   const landedC = land(repo, ["feat-c"]);
   check("feat-c lands cleanly first", landedC.code === 0, landedC.raw.slice(0, 200));
   const beforeConflict = mainSha(repo);
   const conflicted = land(repo, ["feat-d"]);
-  check("the helper stops (nonzero)", conflicted.code !== 0, conflicted.raw.slice(0, 200));
-  check("...reports the conflicted path", (conflicted.report?.conflicted ?? []).includes("a.txt"), JSON.stringify(conflicted.report?.conflicted));
+  check("a STALE branch is NOT refused on ancestry — it reaches the merge", conflicted.code !== 0, conflicted.raw.slice(0, 200));
+  check("...and it STOPS on a CONFLICT, not a stale refusal",
+    (conflicted.report?.conflicted ?? []).includes("a.txt") && !/stale/.test(conflicted.report?.error ?? ""),
+    JSON.stringify(conflicted.report?.conflicted));
   check("...and main did NOT advance", mainSha(repo) === beforeConflict);
   check("THE POINT: the shared tree is NOT mid-merge", !existsSync(join(repo, ".git", "MERGE_HEAD")));
   const markers = spawnSync("git", ["grep", "-l", "<<<<<<<"], { cwd: repo, encoding: "utf8" });
@@ -215,6 +299,23 @@ try {
     git(repo, ["worktree", "prune"]);
   }
   check("the shared tree stayed clean through both conflict runs", git(repo, ["status", "--porcelain"]) === "");
+
+  console.log("\n4b. the pre-flight REFUSES a branch carrying COMMITTED CONFLICT MARKERS (#3916)");
+  // A branch that resolves AND has valid ancestry — it passes rev-parse and the ancestry check —
+  // but carries a committed conflict marker. Only the third check catches it, and this is the
+  // check that catches devtools-item-2187 (76 files of markers, both other checks pass).
+  const markerBranch = "feat-markers";
+  git(repo, ["switch", "-c", markerBranch, "main"]);
+  writeFileSync(join(repo, "m.txt"), "ok\n<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> other\n");
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-m", "feat: a branch with a committed conflict marker"]);
+  git(repo, ["switch", "main"]);
+  const beforeMarker = mainSha(repo);
+  const markerRefused = land(repo, [markerBranch]);
+  check("the helper REFUSES a branch with committed conflict markers", markerRefused.code !== 0, markerRefused.raw.slice(0, 200));
+  check("...and names the marker file", (markerRefused.report?.conflictMarkerFiles ?? []).includes("m.txt"), JSON.stringify(markerRefused.report?.conflictMarkerFiles));
+  check("...and main did NOT advance", mainSha(repo) === beforeMarker);
+  check("...and no scratch worktree is left", !git(repo, ["worktree", "list"]).includes(".land-scratch-"));
 
   console.log("\n5. --suite: a failing demo in the scratch refuses to advance main");
   const featE = feature("feat-e", "e.txt", "from feat-e\n");
@@ -233,6 +334,18 @@ try {
   check("--suite REFUSES to advance main on a failing demo", suiteBad.code !== 0, suiteBad.raw.slice(0, 200));
   check("...and names the failing test", /bad\.test\.mjs/.test(suiteBad.report?.error ?? ""), suiteBad.report?.error);
   check("...and main did NOT advance", mainSha(repo) === beforeSuite);
+  // #4436: WITHOUT --suite the landing still succeeds, but the ABSENCE of the gate is NAMED rather
+  // than reported as `null`. Three landings today read `"suite": null` and each seat correctly
+  // refused to claim a baseline it did not have, with no way to tell WHY.
+  const featE2 = feature("feat-e2", "e2.txt", "from feat-e2\n");
+  const noSuite = land(repo, ["feat-e2"]);
+  check("a landing WITHOUT --suite still succeeds (the gate is opt-in)", noSuite.code === 0, noSuite.raw.slice(0, 200));
+  check(
+    "...and the ABSENCE of the gate is NAMED, not `null` (#4436)",
+    typeof noSuite.report?.suite === "string" && /not run/.test(noSuite.report.suite),
+    JSON.stringify(noSuite.report?.suite),
+  );
+  check("...and the report says the landing was NOT regression-checked", /NOT regression-checked/.test(noSuite.report?.suite ?? ""), noSuite.report?.suite);
   rmSync(join(repo, "demo", "bad.test.mjs"));
   git(repo, ["add", "-A"]);
   git(repo, ["commit", "-m", "test: drop the failing demo"]);
@@ -254,7 +367,16 @@ try {
   const resolvedRun = landAsync(["feat-g"], {}, null);
   const sawResolve = await waitFor(() => existsSync(resolvedPriority), 8000);
   check("with NO --db the helper RESOLVES the live store (its reservation lands beside selfdev.sqlite)", sawResolve, resolvedRun.out.slice(0, 200));
-  check("...and it WAITS on the resolved store rather than passing silently", resolvedRun.out.trim() === "", resolvedRun.out.slice(0, 200));
+  // #4432: the wait is now LEGIBLE. Before, the lander produced NO output while blocked, so a seat
+  // could not tell a lock wait from a hung demo (#3761) and RETRIED — which adds contention. The
+  // assertion is the opposite of the old one: the wait PRINTS, with its holder count. The line lands
+  // on stderr as the slot wait begins, so WAIT for it rather than sampling a moment too early.
+  const sawWait = await waitFor(() => /landing lock: waiting for slot/.test(resolvedRun.out), 8000);
+  check(
+    "...and it WAITS on the resolved store, and the WAIT is LEGIBLE with its holder count (#4432)",
+    sawWait,
+    resolvedRun.out.slice(0, 200),
+  );
   check("...and main did NOT advance", mainSha(repo) === beforeResolve);
   // (b) an explicit --db rig.sqlite is NOT a silent pass while ANOTHER store holds the live lock.
   const wrongDb = land(repo, ["feat-g"]);

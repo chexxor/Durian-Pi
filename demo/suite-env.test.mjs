@@ -72,6 +72,14 @@ assert.equal(classifyDemoResult({ exitCode: failing.status, signal: failing.sign
 const passing = spawnSync(process.execPath, ["-e", "process.exit(0)"], { encoding: "utf8" });
 assert.equal(classifyDemoResult({ exitCode: passing.status, signal: passing.signal }).kind, "pass", "a real exit 0 child is a pass");
 
+// (f) the runner rejects a bad --jobs BEFORE running any demo, so a typo cannot
+// silently fall back to a serial (slow) pass. Exit 2 is the runner's own usage error.
+for (const bad of ["0", "33", "abc"]) {
+	const run = spawnSync(process.execPath, ["scripts/suite.mjs", `--jobs=${bad}`], { encoding: "utf8" });
+	assert.equal(run.status, 2, `--jobs=${bad} must exit 2 (got ${run.status})`);
+	assert.match(run.stderr, /--jobs must be an integer/, `--jobs=${bad} must name the bound`);
+}
+
 console.log(
   "SUITE-ENV TEST PASS (a resource abort is classified ENVIRONMENTAL, never a regression; a real failure is never swallowed; the verdict is GREEN only when every demo ran and passed; proven end-to-end against a real aborting child)",
 );

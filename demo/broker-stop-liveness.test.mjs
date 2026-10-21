@@ -113,7 +113,7 @@ try {
 	const fake1Pid = fake1.pid;
 	assert.ok(pidAlive(fake1Pid), "the stand-in broker is running");
 
-	const r1 = await stop(db1, { DURIG_STOP_WAIT_MS: "2500" });
+	const r1 = await stop(db1, { DURIG_STOP_GRACE_MS: "2500" });
 	assert.ok(r1.json, `serve --stop returned JSON; stdout=${r1.stdout.slice(0, 200)} stderr=${r1.stderr.slice(0, 200)}`);
 	assert.equal(
 		r1.json.stopped,
@@ -143,7 +143,7 @@ try {
 	const fake2Pid = fake2.pid;
 	const newerPid = fake2Pid + 1;
 
-	const r2 = await stop(db2, { DURIG_STOP_WAIT_MS: "4000" });
+	const r2 = await stop(db2, { DURIG_STOP_GRACE_MS: "4000" });
 	assert.ok(r2.json, `serve --stop returned JSON; stdout=${r2.stdout.slice(0, 200)} stderr=${r2.stderr.slice(0, 200)}`);
 	assert.equal(r2.json.stopped, true, "the stand-in broker exited, so stopped:true is correct");
 	assert.ok(!pidAlive(fake2Pid), "the pid it reported is actually gone");

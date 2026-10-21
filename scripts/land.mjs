@@ -47,10 +47,11 @@
 // with the reason in the report. It NEVER forces, and it NEVER leaves the shared tree
 // mid-merge.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { DEFAULTS_CONFIG_PATHS, DEFAULT_CONFIG_PATHS } from "../src/config.mjs";
+import { landingChangedPaths, readTextIntegrity } from "../src/textintegrity.mjs";
 // The PRIORITY reservation + the wait-with-priority claim (#1497/#1498, lead #2054 precondition
 // (c)). Imported from a deliberately DEPENDENCY-FREE module (node:fs/node:path only) so this
 // chokepoint still loads when the provider stack is broken — the #1164 Q3 rule this file's own
@@ -235,25 +236,97 @@ const dbPath = store.path;
 
 const base = { ok: false, command: "land", repo: repoRoot, db: dbPath, branches };
 
-/* ───────── pre-flight: the enforcement chokepoint ───────── */
-
-// Tracked modifications only. An UNTRACKED file cannot be clobbered by a fast-forward (git
-// refuses if an incoming path collides), and the shared tree normally carries other seats'
-// untracked notes — refusing on those would make the guard useless rather than safe.
-const status = git(repoRoot, ["status", "--porcelain"]);
-const trackedChanges = status.out
-	.split("\n")
-	.map((l) => l.trimEnd())
-	.filter((l) => l.length > 0 && !l.startsWith("??"));
-if (trackedChanges.length > 0) {
+// #4247: REFUSE unless the resolved repo IS the SHARED ROOT. A seat's cwd is its item worktree by
+// default, so running this from there is the NATURAL mistake, not a careless one - and it is the ONE
+// case the cwd guard cannot see: an item worktree is not a DEGRADED cwd, it is simply the WRONG
+// repository to land INTO. Measured 2026-10-20: `node scripts/land.mjs impl-item-4225` run from
+// inside item-4225 created a STORE in the worktree, merged there, and still returned
+// `ok:true, merged:[...]` while `main` was untouched (`git merge-base --is-ancestor 81ef0fb main`
+// exited 1). The report is the thing that lied, so the refusal comes BEFORE any merge is computed -
+// no `merged:[...]` is ever printed against the wrong repository.
+// The SOURCE is `git worktree list`: its FIRST entry is the MAIN worktree, which IS the shared root;
+// a linked worktree is never first. Absent/unparseable output leaves the check silent rather than
+// guessing (fail-open on an unreadable source, since a wrong refusal blocks every legitimate landing).
+const sharedRoot = (() => {
+	const m = /^worktree (.+)$/m.exec(git(repoRoot, ["worktree", "list", "--porcelain"]).out);
+	return m ? resolve(m[1].trim()) : null;
+})();
+if (sharedRoot && sharedRoot !== resolve(repoRoot)) {
 	report(
 		{
 			...base,
 			error:
-				`refusing to land: the shared tree at ${repoRoot} has ${trackedChanges.length} tracked ` +
-				`modification(s). A landing advances main by a clean fast-forward, which requires a clean ` +
-				`tree — commit or stash the work first, then re-run.`,
-			trackedChanges,
+				`refusing to land: --repo resolves to ${repoRoot}, which is NOT the shared root ` +
+				`(${sharedRoot}) - it is a LINKED worktree. A landing must advance main in the shared ` +
+				`checkout; landing here would merge into an item worktree and leave main UNTOUCHED. ` +
+				`Run this from the shared tree: node scripts/land.mjs <branch> --repo ${sharedRoot}`,
+			sharedRoot,
+		},
+		1,
+	);
+}
+
+/* ───────── pre-flight: the enforcement chokepoint ───────── */
+
+// The shared root must be CLEAN before a landing pass — UNTRACKED INCLUDED — because A SUITE RUN
+// IN `.` MEASURES THE SHARED TREE, NOT MAIN: a green there is not evidence about the merge and a
+// red there is not a regression. The earlier TRACKED-ONLY filter would have PASSED the third
+// instance of this hazard (an untracked `src/tui/durable/attach.mjs` written by a live seat), so
+// untracked now counts. The suite itself already runs in the detached SCRATCH (below), not `.`.
+const status = git(repoRoot, ["status", "--porcelain"]);
+const dirty = status.out
+	.split("\n")
+	.map((l) => l.trimEnd())
+	.filter((l) => l.length > 0);
+if (dirty.length > 0) {
+	// Attribution where a path reveals it (an `item-<id>/` path names its item); shared-tree dirt
+	// usually does not, so most paths are named without an owner — attribution for those is
+	// #3648's registered requirement, not this gate's.
+	const attributed = dirty.map((line) => {
+		const path = line.slice(2).trim();
+		const m = /(?:^|\/)item-(\d+)(?:\/|$)/.exec(path);
+		return m ? `${path} (item #${m[1]})` : path;
+	});
+	report(
+		{
+			...base,
+			error:
+				`refusing to land: the shared tree at ${repoRoot} is NOT clean (${dirty.length} path(s), ` +
+				`UNTRACKED INCLUDED). A suite run in \`.\` measures the SHARED TREE, not main — a green there ` +
+				`is not evidence about the merge and a red is not a regression. Commit, stash or remove the ` +
+				`listed paths, then re-run.`,
+			dirtyPaths: attributed,
+		},
+		1,
+	);
+}
+
+// #4139: a write to a REAPED worktree path recreates `item-<id>/` inside the repo. No other guard
+// sees it: the cwd guard refuses RELATIVE writes from a degraded cwd, but this write is ABSOLUTE
+// and the path LOOKS like a worktree; and `/item-*/` is IGNORED, so `git status --porcelain` never
+// shows it either. A directory named for an item has no business being a repo-root child - but a
+// LIVE worktree is legitimately `item-<id>/` at the root, so the test is REGISTRATION, not the name:
+// a root child that matches a worktree-name pattern and is NOT in `git worktree list` is stray.
+const WORKTREE_NAME = /^(item-\d+|verify.*|\.verify-.*|wt-.*|\.durig-test-wt-.*|\.land-scratch-.*)$/;
+const registered = new Set(
+	git(repoRoot, ["worktree", "list", "--porcelain"])
+		.out.split("\n")
+		.filter((l) => l.startsWith("worktree "))
+		.map((l) => resolve(l.slice("worktree ".length).trim())),
+);
+const strayWorktrees = readdirSync(repoRoot, { withFileTypes: true })
+	.filter((e) => e.isDirectory() && WORKTREE_NAME.test(e.name) && !registered.has(resolve(join(repoRoot, e.name))))
+	.map((e) => e.name);
+if (strayWorktrees.length > 0) {
+	report(
+		{
+			...base,
+			error:
+				`refusing to land: ${strayWorktrees.length} STRAY worktree directory(ies) at the repo root: ` +
+				`${strayWorktrees.join(", ")}. These are ignored by .gitignore, so \`git status\` does not show ` +
+				`them - a write to a REAPED worktree path recreates one inside the repo. They are disposable ` +
+				`checkouts (their work is on a branch), so remove them and re-run.`,
+			strayWorktrees,
 		},
 		1,
 	);
@@ -270,6 +343,32 @@ if (existsSync(join(repoRoot, ".git", "MERGE_HEAD"))) {
 		},
 		1,
 	);
+}
+
+// #4371 TEXT-INTEGRITY PRECONDITION: a branch that would land a COLLAPSED file (or a broken
+// encoding) is refused HERE, before the merge — THIS is the half that would have PREVENTED the
+// 04:21Z flattening rather than reported it afterwards. `node --check` cannot see the class (the
+// flattening turns the opening `//` into a comment that swallows the file, so it still parses and
+// exports nothing), and the landing is the last moment at which the shared tree is still intact.
+// The BRANCH's blobs are judged against the BASE, not the working tree.
+for (const b of branches) {
+	const paths = landingChangedPaths({ root: repoRoot, branch: b, base: "main" });
+	if (paths === null) continue; // the diff could not be read: not a reason to refuse (the merge will show it)
+	const bad = readTextIntegrity({ root: repoRoot, paths, rev: b, headRev: "main" });
+	if (bad.length > 0) {
+		report(
+			{
+				...base,
+				error:
+					`refusing to land ${b}: ${bad.length} file(s) fail TEXT INTEGRITY — ` +
+					`${bad.map((f) => f.path).join(", ")}. A collapsed newline structure (or a broken encoding) ` +
+					`would take the shared tree down at import time; restore from main and re-apply the intended ` +
+					`edit — do not patch bytes.`,
+				textIntegrity: bad,
+			},
+			1,
+		);
+	}
 }
 
 // #1383 VISIBILITY: a resolved store with NO live lock is NOT proof the rig is quiet — another
@@ -294,6 +393,70 @@ if (liveElsewhere.length > 0) {
 // that generates continuously (pm re-claims a slot every ~20-30 s) blocked every landing
 // indefinitely (#1509: seven refusals in three minutes). Instead the lander PUBLISHES a priority
 // reservation and WAITS for the slots at the FF, where new generations yield to it.
+/* ───────── pre-flight: each BRANCH must be a landable object ─────────
+ * Three checks. The first two are the "a rebase dropped a commit" family; the third is a
+ * strictly worse failure the first two cannot see — a branch that would POISON main on merge.
+ * Measured: devtools-item-2187 @5a99b14 resolves AND has valid ancestry, yet carries committed
+ * conflict markers in 76 files; the first two checks pass it and only the third refuses it.
+ *   1. rev-parse <branch>                        — the tip resolves to a real sha
+ *   2. merge-base --is-ancestor <base> <branch>  — its ancestry includes the intended base
+ *   3. git grep -l '^<<<<<<<' <branch>           — EMPTY output = no committed markers
+ * NOTE the INVERTED exit code on (3): `git grep` exits 1 when there is NO match, so exit 1 is the
+ * PASS case and exit 0 (with output) is the finding. Any OTHER exit (git grep exits 128 on a
+ * git-level failure) is an ERROR, never a pass — "could not check" must not read as "clean".
+ */
+const baseRef = "main";
+const baseSha = git(repoRoot, ["rev-parse", baseRef]);
+if (baseSha.code !== 0) {
+	report({ ...base, error: `cannot resolve the landing base '${baseRef}': ${baseSha.err}` }, 1);
+}
+for (const branch of branches) {
+	const tip = git(repoRoot, ["rev-parse", branch]);
+	if (tip.code !== 0) {
+		report({ ...base, error: `pre-flight: cannot resolve branch '${branch}': ${tip.err}` }, 1);
+	}
+	// (2) ancestry — a FAST PATH ONLY, never a refusal. If the branch CONTAINS the base it is
+	// definitely landable, so go straight to the merge; if the base CONTAINS the branch the work is
+	// already in main (a re-run). If NEITHER, ancestry can say only "not definitely landable", never
+	// "not landable" (#3272/#3337: content, not ancestry, proves landability), so we FALL THROUGH and
+	// let the merge-tree decide. A branch forked from an older main is a backlog's normal state, not
+	// a defect — refusing it would force a rebase where a clean merge would do.
+	const containsBase = git(repoRoot, ["merge-base", "--is-ancestor", baseSha.out, tip.out]).code === 0;
+	const alreadyLanded = !containsBase && git(repoRoot, ["merge-base", "--is-ancestor", tip.out, baseSha.out]).code === 0;
+	const ancestry = containsBase ? "contains-base" : alreadyLanded ? "already-landed" : "neither";
+	// (3) committed conflict markers — invisible to (1) and (2).
+	const markers = git(repoRoot, ["grep", "-l", "^<<<<<<<", tip.out]);
+	if (markers.code === 0) {
+		const files = markers.out
+			.split("\n")
+			.map((l) => l.trim().replace(new RegExp(`^${tip.out}:`), ""))
+			.filter(Boolean);
+		report(
+			{
+				...base,
+				error:
+					`refusing to land '${branch}' (${tip.out.slice(0, 8)}): it carries COMMITTED CONFLICT MARKERS in ` +
+					`${files.length} file(s) — a merge would import them into main, where every later verify would ` +
+					`measure a tree that contains them. Re-cut the branch; do NOT rebase it.`,
+				conflictMarkerFiles: files,
+				ancestry,
+			},
+			1,
+		);
+	}
+	if (markers.code !== 1) {
+		report(
+			{
+				...base,
+				error:
+					`refusing to land '${branch}': the committed-conflict-marker check could not run (git grep exited ` +
+					`${markers.code}: ${markers.err || "no stderr"}). "Could not check" is not "clean".`,
+			},
+			1,
+		);
+	}
+}
+
 const genlocks = heldGenlocks(dbPath);
 
 /* ───────── land in a SCRATCH DETACHED worktree ───────── */
@@ -357,14 +520,155 @@ for (const branch of branches) {
 /* ───────── optional: prove the result in the scratch before advancing main ───────── */
 
 const suiteResults = [];
-if (wantSuite) {
+await (async () => {
+	if (wantSuite) {
 	const demoDir = join(scratch, "demo");
 	const tests = existsSync(demoDir)
 		? readdirSync(demoDir)
 				.filter((n) => n.endsWith(".test.mjs"))
 				.sort()
 		: [];
-	for (const test of tests) {
+
+	/* ── concurrency knob ── */
+	const concurrency = Math.max(1, parseInt(process.env.DURIG_SUITE_CONCURRENCY, 10) || 4);
+
+	/* ── serialize worktree-touching tests ── */
+	// These tests create or manipulate git worktrees on the scratch repo.
+	// Under parallelism they collide on .git/worktrees/ and lock files.
+	// We serialize them by running them one at a time in a dedicated queue.
+	const worktreeTests = new Set([
+		"broker-strand.test.mjs",
+		"broker.test.mjs",
+		"commit-model.test.mjs",
+		"ctxline.test.mjs",
+		"curate.test.mjs",
+		"deepinfra-catalog.test.mjs",
+		"defer.test.mjs",
+		"degeneration-duration.test.mjs",
+		"degeneration-text.test.mjs",
+		"degeneration.test.mjs",
+		"driversurvive-pre.test.mjs",
+		"driversurvive.test.mjs",
+		"eval.test.mjs",
+		"evidence-handoff.test.mjs",
+		"genlock-hardening.test.mjs",
+		"halt.test.mjs",
+		"held-item.test.mjs",
+		"inflight.test.mjs",
+		"local-provider.test.mjs",
+		"local-reset.test.mjs",
+		"malformedcall.test.mjs",
+		"metrics.test.mjs",
+		"notices.test.mjs",
+		"optimizer.test.mjs",
+		"ownership.test.mjs",
+		"pitui.test.mjs",
+		"primer.test.mjs",
+		"race.test.mjs",
+		"ratchet.test.mjs",
+		"repeat-call.test.mjs",
+		"run.test.mjs",
+		"runbook-frontmatter.test.mjs",
+		"runbook-rules.test.mjs",
+		"sanitize.test.mjs",
+		"scheduler.test.mjs",
+		"seat-commit-instructions.test.mjs",
+		"secretdetect.test.mjs",
+		"secrets.test.mjs",
+		"skill-admission-gate.test.mjs",
+		"skill-mirror-check.test.mjs",
+		"storewrite.test.mjs",
+		"streamview.test.mjs",
+		"suite-env.test.mjs",
+		"supervisor.test.mjs",
+		"textwidth.test.mjs",
+		"tui-backfill.test.mjs",
+		"tui-client.test.mjs",
+		"tui-conversation.test.mjs",
+		"tui-golden.test.mjs",
+		"tui-input-overlay.test.mjs",
+		"tui-input.test.mjs",
+		"tui-multipane.test.mjs",
+		"tui-restore.test.mjs",
+		"tui-roles.test.mjs",
+		"tui-sync-output.test.mjs",
+		"tui-thinking.test.mjs",
+		"tui-toolblock.test.mjs",
+		"viewmodel.test.mjs",
+	]);
+
+	const isolatedTests = tests.filter((t) => !worktreeTests.has(t));
+	const serializedTests = tests.filter((t) => worktreeTests.has(t));
+
+	/* ── helper: run a single test, return { test, exit } ── */
+	function runTest(test) {
+		return new Promise((resolve) => {
+			const child = spawn(process.execPath, [join("demo", test)], { cwd: scratch, encoding: "utf8" });
+			let stdout = "";
+			let stderr = "";
+			child.stdout.on("data", (d) => { stdout += d; });
+			child.stderr.on("data", (d) => { stderr += d; });
+			child.on("close", (code) => {
+				resolve({ test, exit: code ?? 1, stdout, stderr });
+			});
+		});
+	}
+
+	function recordFailure(result) {
+		if (!keepScratch) removeScratch();
+		report(
+			{
+				...base,
+				error: `STOPPED: demo/${result.test} failed in the scratch worktree (exit ${result.exit}) — main was NOT advanced.`,
+				merged,
+				suite: suiteResults,
+				scratch: keepScratch ? scratch : null,
+			},
+			1,
+		);
+	}
+
+	/* ── run isolated tests in a bounded pool ── */
+	if (isolatedTests.length > 0) {
+		if (concurrency === 1) {
+			// Sequential escape hatch: drain the queue one at a time
+			for (const test of isolatedTests) {
+				const result = await runTest(test);
+				suiteResults.push(result);
+				if (result.exit !== 0) {
+					recordFailure(result);
+					return;
+				}
+			}
+		} else {
+			// Bounded pool: distribute tests across workers
+			const workerCount = Math.min(concurrency, isolatedTests.length);
+			const queues = Array.from({ length: workerCount }, () => []);
+			isolatedTests.forEach((t, i) => queues[i % workerCount].push(t));
+
+			const workers = queues.map(async (q) => {
+				for (const test of q) {
+					const result = await runTest(test);
+					suiteResults.push(result);
+					if (result.exit !== 0) {
+						recordFailure(result);
+						throw result; // signal failure to other workers
+					}
+				}
+			});
+
+			try {
+				await Promise.all(workers);
+			} catch {
+				// One worker failed; the others may still be running.
+				// We've already reported and removed the scratch, so we just return.
+				return;
+			}
+		}
+	}
+
+	/* ── run serialized tests one at a time ── */
+	for (const test of serializedTests) {
 		const run = spawnSync(process.execPath, [join("demo", test)], { cwd: scratch, encoding: "utf8" });
 		suiteResults.push({ test, exit: run.status ?? 1 });
 		if ((run.status ?? 1) !== 0) {
@@ -382,6 +686,7 @@ if (wantSuite) {
 		}
 	}
 }
+})();
 
 /* ───────── advance main by a CLEAN FAST-FORWARD ───────── */
 
@@ -430,7 +735,19 @@ try {
 		if (!res.claimed) {
 			lock.queuedBehind = { pid: res.holder?.pid ?? null, seat: res.holder?.seat ?? null };
 		}
-		heldPaths = acquireAllSlotsSync(dbPath, lockSlots, me);
+		heldPaths = acquireAllSlotsSync(dbPath, lockSlots, me, {
+			// #4432 LEGIBILITY: print the WAIT while it happens. A lock wait and a hung demo BOTH read
+			// as "no output for minutes" from a seat's side (#3761), and a seat that reads a wait as a
+			// hang RETRIES — which adds contention, and a retried landing is the two-delegates-one-tree
+			// shape. stderr, so the JSON report on stdout stays machine-readable (the #4403 lesson).
+			onWait: ({ slot, slots, waitedMs, holderPid }) => {
+				console.error(
+					`landing lock: waiting for slot ${slot + 1}/${slots} — ${lock.liveHolders} live holder(s), ` +
+						`${Math.round(waitedMs / 1000)}s so far${holderPid ? `, slot held by pid ${holderPid}` : ""} ` +
+						`(this is a WAIT, not a hang — do not retry)`,
+				);
+			},
+		});
 		lock.held = heldPaths.length;
 	}
 	lock.waitedMs = Date.now() - lockStart;
@@ -476,7 +793,13 @@ report(
 		main: { before: mainBefore.out, after: mainAfter },
 		merged,
 		lock,
-		suite: wantSuite ? suiteResults : null,
+		// #4436: `null` was the SILENT default — three landings reported `"suite": null` and each seat
+		// correctly refused to claim a baseline it did not have, with no way to tell WHY. The suite is
+		// OPTIONAL AND OFF BY DEFAULT (`wantSuite = args.includes("--suite")`), which is the `ok:true`
+		// shape one layer out: a landing tool whose regression gate is off reports success without
+		// checking. The default stays off (the suite runs INSIDE the lock hold, so its runtime lands in
+		// the wait), but its ABSENCE now SAYS SO, with the reason and the remedy.
+		suite: wantSuite ? suiteResults : "not run — --suite not passed; the gate is opt-in, so this landing was NOT regression-checked. Re-run with --suite, or run the suite on main separately",
 	},
 	0,
 );
