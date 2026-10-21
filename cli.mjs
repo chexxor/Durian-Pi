@@ -81,7 +81,7 @@ import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readRigHealth, readSeatList, readSeatRoots } from "./src/readapi.mjs";
 import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
-import { createWorktree } from "./src/worktree.mjs";
+import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
 import { mergeInProgress, mergeRefusal } from "./src/mergeguard.mjs";
 import { SeatGuard } from "./src/seatguard.mjs";
 import { SeatTools, fillRoster, makeSeatEnv, scopeSeatTools } from "./src/seattools.mjs";
@@ -2532,6 +2532,24 @@ async function cmdWorktreeAudit() {
   }
 }
 
+/**
+ * `worktree prune-branch <name>` (#3491): remove a ref ONLY when every commit is patch-equivalent
+ * to main AND no worktree holds it — the sanctioned route for the class `git branch -d` refuses
+ * (a rebase-landed duplicate) and the seat guard refuses to force-delete. The guard is NOT
+ * widened; this verb is the narrow door (see `prunePatchEquivalentBranch`).
+ */
+async function cmdWorktreePruneBranch(name) {
+  if (!name) fail("worktree prune-branch needs a branch name, e.g. node cli.mjs worktree prune-branch designer-item-2103");
+  const repoPath = dirname(resolve(DB_PATH));
+  try {
+    const result = await prunePatchEquivalentBranch({ repoPath, branch: name });
+    out({ ok: true, command: "worktree", subcommand: "prune-branch", repo: repoPath, ...result });
+  } catch (error) {
+    // Refuse LOUDLY (ok:false + exit 1): a refusal is a report, not a retry signal.
+    fail(error);
+  }
+}
+
 async function cmdStatus() {
   const health = await readData(DB_PATH, "health", healthParams(), (storage) =>
     readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG }),
@@ -2934,6 +2952,7 @@ try {
   else if (cmd === "worktree") {
     if (rest[0] === "audit") await cmdWorktreeAudit();
     else if (rest[0] === "scratch" && rest[1] === "clean") await cmdWorktreeScratchClean();
+    else if (rest[0] === "prune-branch") await cmdWorktreePruneBranch(rest[1]);
     else await cmdWorktree(rest);
   }
   else if (cmd === "init") await cmdInit();
