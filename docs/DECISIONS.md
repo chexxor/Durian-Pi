@@ -2279,6 +2279,39 @@ the trigger is the part that fires when a situation arrives.
 **Status:** committed (`fa4b22f`). The `constitution.txt` change is pending live application to seats via
 a broker-safe `up --refresh` (dry-run confirms `constitution.changed=true`); recorded in `docs/NEXT.md`.
 
+## D91 — The `security` seat's standing surface is a runbook (not a standing review set), and the external `security.sec` consult is on-escalation (lead #1297, recorded by scribe #1301, 2026-10-17)
+
+**Decision.** Q1 — STANDING SURFACE = RUNBOOK ONLY. The `security` seat owns ONE runbook under
+`docs/runbooks/` (security failure modes + review method); there is NO standing `docs/reviews/security-*.md`
+set — reviews remain per-item artifacts (`docs/reviews/<topic>.md`), exactly as `qa`/`advocate` produce
+per-item reviews and own no standing set. A standing `security-*` namespace would go stale and duplicate the
+per-item reviews. Q2 — `security.sec` CONSULT = ON-ESCALATION (not retired, not fully retained). The internal
+seat handles ROUTINE security review (fast, free, always available); the external consult is engaged ONLY
+WHEN THE SEAT ESCALATES (high-stakes, uncertain, or beyond the seat's depth). CAVEAT (operator-facing): if a
+compliance requirement mandates an independent external review regardless of the seat's judgment, that is a
+STANDING (non-discretionary) trigger, not an escalation — the operator must name it; absent that,
+on-escalation is the default. NOTE: capability `review`, not a verifier — so `security` does NOT take the
+verifier exemption (it works in worktrees when it has a claimed item), consistent with lead's #1222
+blast-radius ruling.
+
+**Why.** The smallest surface that makes the seat effective: a runbook for its failure modes (a
+leaked/committed secret — ties #828 read-side detection + #837 redaction; confinement escape) satisfies
+P3 Runbooks (a failure mode the work covers gets a runbook), while a standing review set would add a
+maintenance burden and duplicate the per-item reviews the seat already produces. The consult is a
+depth/compliance backstop, not a routine path: spending it on routine work duplicates the seat.
+
+**Alternatives.** Q1: (a) both a runbook AND a standing `security-*.md` set — rejected: the standing
+namespace goes stale and duplicates per-item reviews; (b) a standing review set only, no runbook — rejected:
+the team HAS security failure modes (leaked secret, confinement escape), and runbooks are symptom-indexed
+procedures, so the runbook is the repeatable surface. Q2: (a) retire the external consult — rejected: it
+preserves a depth the internal seat may lack on high-stakes/uncertain work; (b) keep it as a routine path —
+rejected: it would duplicate the seat and spend the consult's depth on routine work.
+
+**Status:** ruling #1297 (delivered as #1299) by `lead`, recorded by `scribe`. Routed: #1300 → `security`
+(author the one runbook under `docs/runbooks/`, starting with the leaked/committed-secret failure mode +
+review method; ties #828/#837; no standing `security-*.md` review set); #1301 → `scribe` (this entry). OPEN
+FOR OPERATOR: the compliance caveat — name a mandated independent external review and it becomes a standing
+(non-discretionary) `security.sec` trigger rather than an escalation.
 ## D91 — A standing `security` seat, not only an external consult (delegate, 2026-10-17)
 
 **Decision.** durig declares a 10th seat, `security` (GLM-5.3-Flash), owning threat models, trust
