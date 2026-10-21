@@ -1,3 +1,13 @@
+---
+runbook: broker-down-or-stalled
+symptom: "seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale PASS (dormant); log stops after a storage error or `database is locked`"
+writes: true
+precondition: "broker-stopped"
+last_verified: unverified
+verified_by: delegate
+evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md)"
+check_rule: null
+---
 # Broker down or stalled
 
 ## When to use
@@ -9,6 +19,12 @@ only on a store-commit signal, so after a seat's normal settle the per-seat cool
 re-wake and nothing marks the scheduler dirty again, leaving the seat unwoken until an unrelated commit
 or a restart.
 
+## Impact
+If you do nothing, queued/claimed work sits idle: seats stay unwoken (`idle_with_queued_work` /
+`admitted_not_started`) while the broker log stops advancing, so the queue looks healthy and is dead.
+A dormant broker (shape b) is worse because nothing is obviously wrong — a fresh heartbeat and no
+genlock hide that no pass will ever fire until an unrelated commit or restart. Blast radius is the
+whole queue, but recovery is cheap (resume/restart) once the shape is diagnosed.
 ## Preconditions
 None for diagnosis. The fix writes, so it needs no other writer.
 
@@ -30,8 +46,23 @@ tail -8 .spike/serve.err 2>/dev/null
   worktree must not open the shared selfdev store. Same recovery as case (b): terminate (no genlock),
   `resume`, restart.
 - **Alive but dormant** (case b): `START` present, `broker.json` heartbeat fresh, last `PASS` minutes
-  old, no `genlock.*`. The broker rests in `signal.wait` with `scheduler.shouldRun()` false. A restart
-  forces a startup pass (which also drains `.broker.inbox`) and re-wakes queued seats.
+  old, no `genlock.*`. The broker rests in `signal.wait` with `scheduler.shouldRun()` false.
+  **THE DISCRIMINATOR — idle, not wedged:** a FRESH `heartbeatAt` with a FROZEN `lastPassAt` means the
+  loop is IDLE, not stuck — and that is why a restart alone cannot help a suppressed seat: the startup
+  pass runs the same `placed`-only filter (`src/broker.mjs:829`) and the pending set still suppresses
+  it. Restart is NECESSARY-but-INSUFFICIENT for a suppressed seat (it is right for a wedged loop).
+  **The one-seat variant:** a SINGLE seat silent while others work is NOT "broker down" — it is a
+  per-seat suppression, and no broker-level remedy fixes it. **The remedy TODAY:** stop the broker,
+  `resume` (which WITHDRAWS the stranded submission — `resume` must run with the broker STOPPED), then
+  restart. **HOW AN OPERATOR NOTICES — an existing surface that works:** `cli.mjs status` already emits
+  `admitted_not_started` WITH the submission id and its age (`admittedAt` is read at src/attention.mjs;
+  e.g. "submission #N admitted 55s ago, no run started and no slot held"). Do not wait for a new alarm
+  — this is the alarm. **Automatic recovery IS coming, and is not here yet:** an admission deadline
+  exists (`admissionVerdict` / `ADMISSION_DEADLINE_MS`); once the reconciler consults it, a
+  never-started submission is withdrawn without an operator. Until that lands, `resume` is the remedy.
+  **Separate clause — the suppression-semantics fix:** a suppression-semantics fix is on a branch with
+  its own landing entry and is not on main yet. When it lands it changes how a suppression is READ, not
+  the recovery path — `resume` remains the remedy for a never-started submission.
 - **`WAKE-RETRY` logged but no `PASS` follows** (2026-10-18 recurrence 8): the dormant-revisit fix
   (`991567d`) re-arms the loop after a `wake-failed` and logs `WAKE-RETRY in=<ms>ms seats=<names>`. If
   that line appears and then **no `PASS`** for minutes (fresh heartbeat, no genlock, idle CPU), the retry
@@ -81,7 +112,7 @@ tail -8 .spike/serve.err 2>/dev/null
    `127.0.0.1:8080`) must also be running, or they fail `model_error: Connection error.`
    (`local-provider-down.md`). Export the local env on the launcher:
    ```powershell
-   $env:DURIG_LOCAL_BASE_URL='http://127.0.0.1:8080/v1'; $env:DURIG_LOCAL_MODEL='qwen36'; `
+   $env:DURIG_LOCAL_BASE_URL='http://127.0.0.1:8080/v1'; $env:DURIG_LOCAL_MODEL='swift-1.5-iq2_xs'; `
    $env:DURIG_LOCAL_CONTEXT='65536'; $env:DURIG_LOCAL_API_KEY='local'; `
    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
    ```
@@ -99,6 +130,9 @@ generating. (The broker also logs `STRANDED settled=N` / `RECONCILE …` when it
 - Starts but a seat still will not run → `seat-reset.md`.
 - A dead broker stays dead: this is the supervision gap, ROADMAP items 61–64 (host daemon).
 
+## Escalate to
+`pm` — when the dormant-revisit gap (shape b) recurs, it is the supervision gap ROADMAP 61–64 targets;
+`lead` — when a dead broker stays dead after resume (the host-daemon gap).
 ## Evidence
 2026-10-16 (items 54, 66, 68): a broker that died on a storage error stalled `impl`; `resume` cleared 5
 stranded submissions, and the restart woke pm/impl/scribe. Item 54 makes a *stoppable* broker honest.
@@ -164,3 +198,18 @@ a broker restarted healthy (pid `17828`) dead-lettered every spooled CLI `read`
 Cause: `dispatchRead(harness.storage)`, a field pi-durable does not expose. Fix `a70c30d` (thread the
 harness's real `Storage`); restart pid `5116`. The CLI had read the store directly (`readLocal`) while
 the broker was down — which is why the broken handler stayed hidden until the restart.
+
+2026-10-20 (delegate): **shape (b) recurred, and the obvious explanation was wrong.** pid 4528 was alive with
+a fresh heartbeat, **no pass for 51 minutes**, no genlock held, empty `serve.err` — the textbook wedge. The
+tempting conclusion was RAM starvation, because the local model (Swift 1.5 IQ2_XS) was holding ~22 GB of
+experts on a 32 GB box at 95% load. **The discriminator settled it:** stopping the model dropped the machine
+to 23% load / 24 GB free and the broker *still* did not pass, so it was the WEDGE, not starvation. It then
+cleared on its own and `passAgeMs` went to single seconds.
+**Reusable check, do it before naming a cause:**
+```bash
+ls -1 <db>.genlock*                       # none held => no pass in flight (not a slow pass)
+# stop the heavy local model, wait one pass window, re-read status:
+node cli.mjs status                       # passAgeMs resuming => starvation; unchanged => wedge
+```
+**Do not restart the broker while a 22 GB local model is loaded** — the restart needs ~1 GB of headroom to
+fork, and with 96% RAM it fails in ways that look like a store problem. Free the model first, then restart.
