@@ -1706,6 +1706,13 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   // broker DORMANT (no stream -> no pass), which is exactly the failure the recovery exists for.
   const openHandles = async () => {
     const { harness, storage: harnessStorage } = await openHarness({ enforceSeatRoot: true });
+    // A raw read-only handle for probing seat documents — the SAME P5 / #110 exception as cmdRun,
+    // and the reason F8 is scoped rather than deleted (lead ruling #2874, option B): the driving
+    // harness fails its WHOLE session on the first storage error, so an unreadable `pi.live` must
+    // be detected through this separate handle BEFORE the harness opens that conversation. The
+    // spooled `read` op is still served from the harness Storage (`readStorage ?? probeStorage`),
+    // so this is a second CONNECTION for probing only, not a second reader of the store. One handle
+    // for the run; closed with the harness.
     const probeStorage = await openStore();
     // Subscribe BEFORE the first pass so a commit that lands during startup is not missed. The
     // listener must not throw, block, or call Session APIs: it only classifies and signals.
