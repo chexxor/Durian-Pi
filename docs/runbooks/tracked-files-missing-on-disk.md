@@ -3,7 +3,7 @@ runbook: tracked-files-missing-on-disk
 symptom: "`git status` shows tracked DELETIONS nobody made — a whole directory (e.g. scripts/) is empty on disk while the index and HEAD still hold the files"
 writes: false                       # the Diagnose and the restore are git-only; the store is untouched
 precondition: "none"                # broker may stay UP: no Harness is opened
-last_verified: 2026-10-19
+last_verified: 2026-10-21
 verified_by: delegate
 evidence: "2026-10-19: 9 tracked files in scripts/ were present in index+HEAD but absent on disk; restored via `git ls-files scripts/ | xargs git checkout-index -f` and proved byte-identical to their blobs; land.mjs + suite.mjs both `node --check` clean"
 check_rule: null
