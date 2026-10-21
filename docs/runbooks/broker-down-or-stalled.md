@@ -46,8 +46,17 @@ tail -8 .spike/serve.err 2>/dev/null
   worktree must not open the shared selfdev store. Same recovery as case (b): terminate (no genlock),
   `resume`, restart.
 - **Alive but dormant** (case b): `START` present, `broker.json` heartbeat fresh, last `PASS` minutes
-  old, no `genlock.*`. The broker rests in `signal.wait` with `scheduler.shouldRun()` false. A restart
-  forces a startup pass (which also drains `.broker.inbox`) and re-wakes queued seats.
+  old, no `genlock.*`. The broker rests in `signal.wait` with `scheduler.shouldRun()` false.
+  **THE DISCRIMINATOR — idle, not wedged:** a FRESH `heartbeatAt` with a FROZEN `lastPassAt` means the
+  loop is IDLE, not stuck — and that is why a restart alone cannot help a suppressed seat: the startup
+  pass runs the same `placed`-only filter (`src/broker.mjs:829`) and the pending set still suppresses
+  it. Restart is NECESSARY-but-INSUFFICIENT for a suppressed seat (it is right for a wedged loop).
+  **The one-seat variant:** a SINGLE seat silent while others work is NOT "broker down" — it is a
+  per-seat suppression, and no broker-level remedy fixes it. **The remedy that DID work (2026-10-20,
+  submission 181515):** stop the broker, `resume` (which WITHDRAWS the stranded submission — `resume`
+  must run with the broker stopped), then restart. As of this writing, only `resume` clears a
+  `queued`-class suppression; the underlying suppression-semantics fix is routed separately and will
+  make `resume`'s own message true — it is not landed yet.
 - **`WAKE-RETRY` logged but no `PASS` follows** (2026-10-18 recurrence 8): the dormant-revisit fix
   (`991567d`) re-arms the loop after a `wake-failed` and logs `WAKE-RETRY in=<ms>ms seats=<names>`. If
   that line appears and then **no `PASS`** for minutes (fresh heartbeat, no genlock, idle CPU), the retry
