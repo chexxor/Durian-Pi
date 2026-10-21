@@ -1,4 +1,4 @@
-﻿# scan-dangling-cites.ps1 (v2) - one-pass scan v2: doc-relative resolution, ellipsis/artifact classes, tracked-prefix unjamming
+# scan-dangling-cites.ps1 (v2) - one-pass scan v2: doc-relative resolution, ellipsis/artifact classes, tracked-prefix unjamming
 $ErrorActionPreference = 'Stop'
 $tracked = @(git ls-files)
 $trackedSet = @{}

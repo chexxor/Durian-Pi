@@ -1,4 +1,4 @@
-﻿# Dangling citations one-pass scan (item #3425)
+# Dangling citations one-pass scan (item #3425)
 
 Scope: 183 tracked *.md files at HEAD 13e60bc ("merge: land impl-item-2578 onto main").
 Method: scan-dangling-cites.ps1 (this pass, v3) extracts path-like tokens (1+ separator + file
