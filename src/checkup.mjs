@@ -29,6 +29,8 @@ import { ANSI } from "./ansi.mjs";
 // CLI's load (2026-10-17, lead #1164). Re-exported so every importer keeps ONE
 // definition.
 import { VERIFIER_TERMS, seatsAreVerifier } from "./verifierrole.mjs";
+import { describeFaults } from "./textintegrity.mjs";
+import { messageDefects } from "./commitmsg.mjs";
 
 export { VERIFIER_TERMS, seatsAreVerifier };
 
@@ -105,18 +107,100 @@ export const RULES = [
     what: "a verification task was completed with only an acknowledgement, or with evidence that names no artifact — not re-runnable evidence (#2547)",
   },
   {
+    id: "evidence-tree",
+    severity: "fix-now",
+    what: "a terminal item's evidence names an artifact that names no tree and no store - a green depends on the tree it ran in, so an un-named artifact cannot be re-checked (#4153)",
+  },
+  {
     id: "feature-row-missing",
     severity: "fix-now",
     what: "a feat commit landed with no docs/FEATURES.md row and no stated \"no feature surface\" note",
+  },
+  {
+    id: "duplicate-item",
+    severity: "fix-now",
+    what: "a non-terminal queue item is SAME-INTENT with an already-terminal item (same from/to/tier plus high subject overlap)",
   },
   {
     id: "shared-tree-on-main",
     severity: "error",
     what: "the shared working tree is not on its integration branch, so a seat may be writing to a feature branch",
   },
+  {
+    id: "commit-message-encoding",
+    severity: "fix-now",
+    what: "a recent commit message carries a UTF-8 BOM (or a NUL / stray CR) — invisible in every normal view, so it surfaces only in a byte read; a body BOM corrupts a trailer (#4349)",
+  },
+  {
+    id: "text-integrity",
+    severity: "error",
+    what: "a tracked file's newline structure COLLAPSED versus HEAD, or its encoding is broken (BOM / NUL / invalid UTF-8) — node --check is structurally blind to this class (#4305)",
+  },
 ];
 
 const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
+
+/**
+ * #4075: SAME-INTENT duplicate detection. The duplicate's cause is a ~10s retry OUTSIDE durig's
+ * source, so a re-issue carries a NEW tool-call id and #3192's originCallId dedup cannot catch it;
+ * and two of five observed pairs are REWORDED rather than replayed, so BYTE EQUALITY WOULD MISS
+ * THEM. The recoverable signal is INTENT: same from, same to, same tier, PLUS high subject overlap.
+ * These are exported so the demo pins the boundary rather than re-implementing it.
+ */
+const STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "of", "to", "for", "in", "on", "at", "by", "with",
+  "is", "are", "be", "it", "its", "this", "that", "as", "from", "into", "per", "not",
+]);
+const OVERLAP_THRESHOLD = 0.6;
+
+/** Content words of a subject, with a leading protocol marker (`DONE #N:` / `VERIFY #N:`) stripped. */
+export function subjectTokens(subject) {
+  return String(subject ?? "")
+    .toLowerCase()
+    .replace(/^[^:]*#\d+:\s*/, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+}
+
+/** Overlap of two subjects' content-word sets, normalised by the SMALLER set (0..1). */
+export function subjectOverlap(a, b) {
+  const A = new Set(subjectTokens(a));
+  const B = new Set(subjectTokens(b));
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  for (const w of A) if (B.has(w)) inter += 1;
+  return inter / Math.min(A.size, B.size);
+}
+
+/** A terminal item is finished either way: `done` (the work happened) or `cancelled`. */
+const TERMINAL_STATUSES = new Set(["done", "cancelled"]);
+export function isTerminalStatus(item) {
+  return TERMINAL_STATUSES.has(item?.status);
+}
+
+/** Same from + same to + same tier + high subject overlap. Byte equality is the STRONGEST signal,
+ * not the only one — this is the weaker, intent-level test that catches a REWORDED re-issue. */
+export function sameIntent(a, b) {
+  if (!a || !b || a.id === b.id) return false;
+  if (a.from !== b.from || a.to !== b.to) return false;
+  if ((a.tier ?? null) !== (b.tier ?? null)) return false;
+  return subjectOverlap(a.subject, b.subject) >= OVERLAP_THRESHOLD;
+}
+
+/**
+ * #4099: a live item that NAMES its terminal twin is a SUPERSESSION — a deliberate correction
+ * ("replaces #4063", "supersedes #3560", "re-registration of cancelled #2055") — NOT a duplicate.
+ * A REISSUE satisfies sameIntent BY DESIGN: same sender, same recipient, same tier, near-identical
+ * subject, and a cancelled predecessor. Without this carve-out the rule fires on every legitimate
+ * correction — and a rule that fires on correct behaviour gets turned off, so it then catches
+ * nothing. The citation is checkable and cheap: the live item's subject OR body cites `#<id>`.
+ */
+export function namesPredecessor(live, terminal) {
+  if (!live || !terminal) return false;
+  const needle = `#${terminal.id}`;
+  return `${live.subject ?? ""}\n${live.body ?? ""}`.includes(needle);
+}
 
 /** First line of a possibly-multiline text, bounded for display. */
 function firstLine(text, limit = 96) {
@@ -161,6 +245,39 @@ export function hasEvidence(item) {
 export function hasArtifact(item) {
   const e = item?.evidence;
   return e != null && typeof e.artifact === "string" && e.artifact.trim() !== "";
+}
+
+/**
+ * #4153: whether an `artifact` NAMES WHAT THE CHECK RAN AGAINST. A green depends on the tree it ran
+ * in - "a suite run in `.` measures the shared tree", a derived file verified on its own branch is
+ * consistent with itself, two seats can disagree about `main` because both measured the wrong tree.
+ * So an artifact that names nothing is un-re-checkable by a human later, which is the gap in all four
+ * instances. A SUBJECT is either a GIT TREE (a sha 7-40 hex, a ref-like token, or `main`) or a
+ * NON-GIT subject the check legitimately ran against instead (the store, the queue, a scratch) -
+ * for those a git tree is genuinely N/A, so naming the store IS naming what was checked.
+ *
+ * MEASURED against the live queue before shipping (#4153): 774 terminal items carry evidence with a
+ * non-blank artifact; 15 name no GIT tree, and after the non-git-subject carve-out 2 remain - both a
+ * bare `"2148"`. A guard that fires on 2 of 774 is a guard; the duplicate rule's lesson is that a
+ * rule shipped without this count is a rule that gets disabled.
+ *
+ * STATED LIMIT: this rule cannot reach a seat BEFORE it writes a completion - it reads what was
+ * already written. The `complete_work` description carries the same convention so it shapes what
+ * gets written. TWO MECHANISMS FOR TWO MOMENTS, neither a substitute for the other.
+ * STATED LIMIT (the half NOT built): "a DERIVED artifact must be named as MERGED" needs ancestry
+ * (`git merge-base --is-ancestor`), which is a SUBPROCESS, and checkup never runs one; and ancestry
+ * gives FALSE NEGATIVES on squash-shaped landings (#3337), so a sha that is not an ancestor of main
+ * may still BE the merged content. A rule on ancestry would flag correct evidence as wrong.
+ */
+export function namesCheckSubject(artifact) {
+  const a = String(artifact ?? "");
+  if (a.trim() === "") return false;
+  // A git tree: a sha (7-40 hex, not part of a longer hex run), `main`, or a ref-like token.
+  if (/(?<![0-9a-f])[0-9a-f]{7,40}(?![0-9a-f])/i.test(a)) return true;
+  if (/(?:\bmain\b|\borigin\/|^refs\/|\b[\w.-]+-item-\d+\b|\bv?\d+\.\d+\.\d+\b)/i.test(a)) return true;
+  // A non-git subject: the store, the queue, a scratch - where a git tree is genuinely N/A.
+  if (/(\.sqlite|@read|\bqueue\b|\bstore\b|live state|live tree|scratch|\bno commit\b|no code changed)/i.test(a)) return true;
+  return false;
 }
 
 /**
@@ -298,7 +415,7 @@ export function runbookFrontMatterProblems(runbook) {
  *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -615,6 +732,60 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       );
     }
   }
+  // 13. #4075 (corrected #3460/#3459): SAME-INTENT duplicates, fired on a NON-TERMINAL item so a
+  //    seat is stopped before it spends the effort, not told afterwards. The cause is a ~10s retry
+  //    OUTSIDE durig, so #3192's originCallId dedup cannot catch a re-issue (a re-issue carries a
+  //    NEW tool-call id), and two of five observed pairs are REWORDED, so byte equality would miss
+  //    them. The test is same from/to/tier PLUS high subject overlap. When the queue could not be
+  //    read the rule is SKIPPED with its reason, never passed.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "duplicate-item",
+      why: "the queue could not be read, so duplicate items cannot be inspected",
+    });
+  } else {
+    const terminal = queueItems.filter((it) => isTerminalStatus(it));
+    const live = queueItems.filter((it) => it && !isTerminalStatus(it));
+    for (const it of live) {
+      // #4099: a live item that NAMES its terminal twin is a SUPERSESSION, not a duplicate.
+      const twin = terminal.find((t) => sameIntent(t, it) && !namesPredecessor(it, t));
+      if (twin) {
+        add(
+          "duplicate-item",
+          `#${it.id}`,
+          `#${it.id} is SAME-INTENT with the already-terminal #${twin.id} (same from/to/tier, subject overlap ${subjectOverlap(it.subject, twin.subject).toFixed(2)}) — the same request is in the queue twice, so working #${it.id} repeats work the terminal twin already settled`,
+          `cancel #${it.id} as a duplicate of #${twin.id} (point at the completed original), or state in the body why it is a deliberate second attempt`,
+        );
+      }
+    }
+  }
+
+  // 11b. #4153 EVIDENCE-TREE: a completion whose evidence names an artifact that names NO tree (and
+  //    no store) cannot be re-checked - the reader cannot tell WHICH revision was checked, and a
+  //    green depends on the tree it ran in. This is the SHARPENING of `hasArtifact` (a non-blank
+  //    artifact) to "a NAMED subject": hasArtifact accepts "2148"; this does not. Scoped to items
+  //    that HAVE evidence AND a non-blank artifact, so it never duplicates
+  //    verification-without-evidence (which owns the MISSING artifact). Plain data, no subprocess.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "evidence-tree",
+      why: "the queue could not be read, so completed items' artifacts cannot be inspected",
+    });
+  } else {
+    const unnamed = queueItems.filter(
+      (it) =>
+        it?.status === "done" && hasEvidence(it) && hasArtifact(it) && !namesCheckSubject(it.evidence.artifact),
+    );
+    if (unnamed.length > 0) {
+      const ids = unnamed.map((it) => `#${it.id}`).join(", ");
+      add(
+        "evidence-tree",
+        ids,
+        `${unnamed.length === 1 ? "completion" : `${unnamed.length} completions`} ${ids} name an artifact that names no tree (and no store) — a green depends on the tree it ran in, so an un-named artifact cannot be re-checked by a human later`,
+        "name WHAT the check ran against: complete_work(<id>, <summary>, { command, exitCode, artifact: '<sha|branch|main>' }) — or the store/queue for a non-git check (e.g. 'selfdev.sqlite@read')",
+      );
+    }
+  }
   // 12. ROADMAP 46 (FEATURES-row half) / D62: a shipped capability carries its own doc
   //    acceptance — the docs/FEATURES.md row — or its item records an explicit "no feature
   //    surface" note. The merge gate (docs/runbooks/merge.md) enforces this by hand with a
@@ -676,6 +847,58 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       `the shared working tree is on ${on}, not "${sharedTreeExpected}" - a seat whose cwd falls back to the shared tree writes to a feature branch and the landing basis breaks`,
       `switch the shared tree back: git switch ${sharedTreeExpected}; land item branches through the landing helper`,
     );
+  }
+
+  // 14. A commit message must not carry a UTF-8 BOM (or a NUL / stray CR) - #4349. Four commits in
+  //    one session carried a BOM because PowerShell's `Set-Content -Encoding utf8` writes one, and
+  //    each was caught by hand; four catches is not a catch rate, it is a mechanism that does not
+  //    exist. (A FIFTH — 30270c0 — was NOT amended and IS in history, recorded as a known-reds
+  //    baseline in docs/STATUS.md; this rule's job is both to stop the next one and to keep finding
+  //    this one until the operator deals with it.) A BOM is INVISIBLE IN EVERY NORMAL VIEW (`git log --oneline` renders it, `git show`
+  //    renders it, the author sees a clean subject) and surfaces only in a byte read - which is
+  //    exactly what a check is for. The WHOLE message is checked, not just the subject: a BODY BOM
+  //    corrupts a `Co-authored-by` trailer or a `Fixes #N` line, where the parser is strict. The
+  //    caller reads the messages (src/commitmsg.mjs) and passes PLAIN DATA, so this stays a linter
+  //    over data; no data means SKIPPED with its reason, never a silent pass (D25).
+  if (!Array.isArray(commitMessages)) {
+    skipped.push({
+      id: "commit-message-encoding",
+      why: "the recent commit messages were not supplied, so their encoding cannot be inspected",
+    });
+  } else {
+    const bad = commitMessages.map((m) => ({ m, defects: messageDefects(m) })).filter((x) => x.defects.length > 0);
+    if (bad.length > 0) {
+      const ids = bad.map((x) => String(x.m.sha ?? "").slice(0, 8)).join(", ");
+      add(
+        "commit-message-encoding",
+        ids,
+        `${bad.length === 1 ? "commit" : `${bad.length} commits`} ${ids} carry a UTF-8 BOM (or a NUL / stray CR) in the message — invisible in every normal view, so it surfaces only in a byte read, and a body BOM corrupts a trailer`,
+        "rewrite the message through a writer that does NOT add a BOM (node's fs, or the write/edit tool) and amend the commit from that file. PowerShell's `Set-Content -Encoding utf8` writes one — do not use it for commit messages",
+      );
+    }
+  }
+
+  // 15. TEXT INTEGRITY (#4371, detector #4305): a tracked file whose newline structure COLLAPSED versus
+  //    HEAD, or whose encoding is broken. `node --check` is STRUCTURALLY BLIND to this - the flattening
+  //    turns the opening `//` into a comment that swallows the whole file, so it still parses and
+  //    exports NOTHING, and the failure surfaces only at import time. ERROR severity because a broken
+  //    tree stops every seat; the false-positive surface is handled by the CALLER, which passes only
+  //    the files that DIFFER from HEAD, and by the detector, which exempts untracked files from the
+  //    collapse comparison (no HEAD to compare against). No data means SKIPPED with its reason (D25).
+  if (!Array.isArray(textIntegrity)) {
+    skipped.push({
+      id: "text-integrity",
+      why: "the working tree's changed files were not supplied, so their text integrity cannot be inspected",
+    });
+  } else {
+    for (const f of textIntegrity) {
+      add(
+        "text-integrity",
+        f.path,
+        describeFaults(f.path, f.faults),
+        `restore from HEAD (git show HEAD:${f.path}) and re-apply the intended edit — do not patch bytes`,
+      );
+    }
   }
 
   const summary = { error: 0, "fix-now": 0, total: findings.length };

@@ -119,6 +119,22 @@ next item does not inherit a removed directory (`src/rig.mjs`).
 > The machine-conformance aspect — *a doc-producing seat actually calls `prepare_workspace`* — is tracked
 > separately as ROADMAP item 80 and is **out of scope** here.
 
+**Stacked (unlanded) base.** A seat's worktree is normally based on the landed tip (`main`). A
+**stacked base** is a base that sits **on top of unlanded work** — a branch or commit that is verified
+but not yet merged into `main`. It arises because a **landing backlog** is inherent to a multi-branch
+flow: branches wait to land while new work legitimately builds on them (2026-10-17: impl's D1 fix
+`#1444` sits on the unlanded parent `85c5d95`).
+
+The **durable fix** is the **base-ref capability (#1456, PRIORITY per the operator)**: exposing
+`base`/`ref` on `prepare_workspace` (and the `worktree` verb) so a worktree can be created at an
+unlanded tip — the core already accepts it (`createWorktree({ source, target, ref = "HEAD", branch })`,
+`src/worktree.mjs:110`). **Until that lands, a seat CANNOT be provisioned at an unlanded tip** — impl's
+`#1444`/`#1454` blockers — because `prepare_workspace` (whose tool parameters take only `itemId`) and the
+`worktree` verb (`cli.mjs` `cmdWorktree` → `createWorktree({ source, target })`) never pass `ref`.
+`pause` (ROADMAP 131) and more frequent, smaller landings reduce how often stacking arises, but they do
+not make it *work* — only the base-ref capability does. Landing guidance for stacked entries:
+`docs/runbooks/land.md`.
+
 ---
 
 ## 4. Life — one item end to end
@@ -184,6 +200,7 @@ run, not just read:
 |---|---|---|
 | cwd resolution order `cwd ?? DURIAN_PI_SEAT_ROOT ?? process.cwd()` | `src/seattools.mjs:187-204` | `makeSeatEnv` `root = target.cwd ?? process.env.DURIAN_PI_SEAT_ROOT ?? fallbackRoot` |
 | `prepare_workspace` creates `item-<id>`, persists cwd, idempotent | `src/seattools.mjs` `prepareWorkspace`; `demo/prepare-workspace.test.mjs`, `demo/broker-dirty-fork.test.mjs` | demo exit 0; the tool returns `WORKSPACE READY (created|reused): <path>` |
+| stacked base: worktree base limited to `HEAD` until #1456; core already accepts `ref` | `src/worktree.mjs:110` (`createWorktree`); `src/seattools.mjs` `prepareWorkspace` params; `cli.mjs` `cmdWorktree`; registered gap `docs/NEXT.md` (base-ref #1456) | `createWorktree({ source, target, ref = "HEAD", branch })`; tool params take only `itemId`; `cmdWorktree` → `createWorktree({ source, target })` (no `ref`) |
 | `complete_work` retires worktree `force:false`, resets cwd | `src/rig.mjs` (complete_work) | the `removeSeatWorkspace({worktreeRoot, itemId})` + `configure(cwd: process.cwd())` block after `ok` |
 | removal uses `git worktree remove`, refuses dirty unless `force` (D60) | `src/worktree.mjs` `removeClaimedWorktree`/`removeSeatWorkspace` | the `if (!force)` dirty-refusal branch |
 | F12 seat-root guard fails closed on mismatch | `cli.mjs:349-372` | the `enforceSeatRoot && CFG.DURIAN_PI_SEAT_ROOT` block fails naming both paths |
