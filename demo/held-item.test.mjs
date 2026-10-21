@@ -7,8 +7,8 @@
 // priority work (the observed impl starvation).
 //
 // Failing-first: before the `held` flag exists, `send_work({held:true})` creates a QUEUED item, so
-// the "not returned by claim_work" assertion fails. After, a held item is unclaimable, does not
-// wake the seat, shows in peek_queue as parked, and becomes claimable after release_work.
+// the "not returned by claim_work" assertion fails. After, a held item is unclaimable, wakes the seat
+// as PARKED (a body that does not advertise work, #4607), shows in peek_queue as parked, and becomes claimable after release_work.
 //
 // Run: node demo/held-item.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
@@ -36,7 +36,9 @@ function check(label, condition, detail = "") {
 console.log("\nselectWakes — a held item does not wake the seat");
 const seats = { worker: { conversationId: 2 } };
 check("a queued item wakes its seat", selectWakes({ seats, items: [{ to: "worker", status: "queued" }] }).length === 1);
-check("a HELD item does NOT wake its seat", selectWakes({ seats, items: [{ to: "worker", status: "held" }] }).length === 0);
+const parked = selectWakes({ seats, items: [{ to: "worker", status: "held" }] });
+check("a HELD item wakes its seat", parked.length === 1, JSON.stringify(parked));
+check("...and the wake names it PARKED, so the body does not advertise queued work (#4607)", parked[0]?.reason === "parked", JSON.stringify(parked));
 
 /* ─── 2. on a real harness: held is unclaimable until released ───────────── */
 const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
@@ -150,5 +152,5 @@ async function toolReply(name, toolName) {
 	await harness.close(ctx);
 }
 
-console.log(failures === 0 ? "\nPASS — a held item is parked (unclaimable, no wake) and claimable after release" : `\nFAIL — ${failures} check(s) failed`);
+console.log(failures === 0 ? "\nPASS — a held item is parked (unclaimable, woken as PARKED) and claimable after release" : `\nFAIL — ${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);

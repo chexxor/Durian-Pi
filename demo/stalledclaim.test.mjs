@@ -26,7 +26,7 @@ import { configure, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { Router, RigQueue, enqueueItem, registerSeat } from "../src/rig.mjs";
 import { Seats } from "../src/rig.mjs";
-import { driveOnce, selectWakes, WAKE_CONTENT } from "../src/driver.mjs";
+import { driveOnce, selectWakes, WAKE_CONTENT, WAKE_CONTENT_STALLED, WAKE_CONTENT_PARKED } from "../src/driver.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
 const seatsStub = { worker: { conversationId: "w" } };
@@ -45,8 +45,8 @@ registry.install(Router);
 	// (a) stalled claim -> re-woken.
 	assert.deepEqual(
 		selectWakes({ seats: seatsStub, items: claimedItem, pendingConvIds: empty(), busySeats: empty(), stoppedConvIds: empty() }),
-		[{ name: "worker", conversationId: "w" }],
-		"a stalled claim is re-woken",
+		[{ name: "worker", conversationId: "w", reason: "stalled-claim" }],
+		"a stalled claim is re-woken (the wake names why, #4557)",
 	);
 	// (b) operator-stopped -> never re-woken.
 	assert.deepEqual(
@@ -69,7 +69,7 @@ registry.install(Router);
 	// (d) queued item still wakes (regression).
 	assert.deepEqual(
 		selectWakes({ seats: seatsStub, items: queuedItem, pendingConvIds: empty(), busySeats: empty(), stoppedConvIds: empty() }),
-		[{ name: "worker", conversationId: "w" }],
+		[{ name: "worker", conversationId: "w", reason: "queued" }],
 		"a queued item is still woken",
 	);
 	// (e) at most one wake per seat per pass.
@@ -150,7 +150,9 @@ async function countWakes(db, convId) {
 			if (sub.type !== "input") continue;
 			const ePage = await storage.scanEntries({ conversationId: convId, order: "descending" }, 200, undefined, ctx);
 			const e = ePage.items.find((x) => String(x.id) === String(sub.entry));
-			if (e && JSON.stringify(e.model?.[0]?.content).includes(WAKE_CONTENT)) wakes++;
+			// #4557/#4607: the body now names the state, so a stalled/parked wake is not the generic text.
+			const body = JSON.stringify(e?.model?.[0]?.content);
+			if (e && [WAKE_CONTENT, WAKE_CONTENT_STALLED, WAKE_CONTENT_PARKED].some((w) => body.includes(w))) wakes++;
 		}
 		return wakes;
 	} finally {

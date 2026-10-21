@@ -44,8 +44,13 @@ assert.deepEqual(
 			{ to: "c", status: "deferred" },
 		],
 	}),
-	[{ name: "b", conversationId: 2 }],
-	"only a seat with QUEUED work is woken; done and deferred items are not work",
+	[
+		{ name: "b", conversationId: 2, reason: "queued" },
+		// #4607: a parked (deferred/held) row still wakes its seat — with a body that names the state
+		// instead of advertising queued work, which is what the old expectation encoded.
+		{ name: "c", conversationId: 3, reason: "parked" },
+	],
+	"queued work wakes, and a deferred row wakes as PARKED (never as queued work)",
 );
 assert.deepEqual(
 	selectWakes({
