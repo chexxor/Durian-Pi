@@ -12,17 +12,27 @@ import { fileURLToPath } from "node:url";
 import { createDurableTuiRuntime } from "./src/tui/durable/adapter.mjs";
 import { createRealHost } from "./src/tui/durable/real-host.mjs";
 import { assessStoreOwnership } from "./src/storeownership.mjs";
+import { parseTuiArgs } from "./src/tui/durable/cliargs.mjs";
 
 // Keep the TUI's own startup checks quiet; the provider extension still loads and registers, and
 // requests still go to the configured provider.
 process.env.PI_SKIP_VERSION_CHECK = "1";
 
 const args = process.argv.slice(2);
+// #4164: parsing is a module so the rules are testable without a store or a TTY, and AN UNKNOWN FLAG
+// IS REJECTED RATHER THAN IGNORED — a flag that is silently discarded is a flag that lies. This
+// entrypoint used to ignore `--select`, which `enter.mjs` had been passing for a whole item.
+const parsed = parseTuiArgs(args);
+if (parsed.help) {
+	console.log("tui [--db <path>] [--select <seat>]\n  --db      the store to open (default: session.sqlite beside this file)\n  --select  the seat this session is opened FOR (carried, not resolved here)\n  --help    this text");
+	process.exit(0);
+}
+if (parsed.errors.length > 0) {
+	for (const e of parsed.errors) console.error(`tui: ${e}`);
+	process.exit(1);
+}
 function argValue(name) {
-	const at = args.findIndex((a) => a === name || a.startsWith(`${name}=`));
-	if (at < 0) return null;
-	const token = args[at];
-	return token.includes("=") ? token.slice(token.indexOf("=") + 1) : args[at + 1] ?? null;
+	return parsed[name === "--db" ? "db" : "select"] ?? null;
 }
 
 // D103 ships the new name; DURIG_TUI_DB is accepted as the deprecated alias with a warning. This is

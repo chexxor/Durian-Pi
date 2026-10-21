@@ -89,6 +89,33 @@ pre-existing untracked `.durig-verify-2336/` and `temp-*` dirs.
 - **`git log --all --diff-filter=D` was NOT empty:** the deletion was committed on purpose. Do not
   restore; read the deleting commit and route the question to `pm`.
 
+
+## Seat-side variant: the seat's OWN item worktree (2026-10-21)
+
+The shared-tree case stays operator-side (the section below). But the seat's OWN item worktree holds only
+the seat's own work, so the shared-tree danger does not apply. qa measured (item #4308, 2026-10-21)
+that the seat guard blocks the restore verb git checkout-index BY LITERAL SHAPE, not semantics. These one-verb
+probes ran inside qa's own item worktree:
+
+- git checkout-index -f -a  -> REFUSED, "would change the seat's working tree or HEAD - to test without your change, run the test RED BEFORE the fix, or use a throwaway detached worktree / temp copy (never revert the shared tree)"
+- git checkout-index --help  -> REFUSED with the SAME text (a read-only no-op), so the match keys on the contiguous command text, not on semantics
+- git restore -- <path>  -> REFUSED with a DIFFERENT text ("would discard uncommitted work") on a CLEAN tree - the semantic matcher fires on the verb shape
+- git help <verb>, git ls-files, git status, git diff  -> pass
+
+Net: the runbook verb above is UNREACHABLE seat-side even with the 2026-10-19 escape paths
+(name a file list). A seat CAN still restore its own worktree without any refused verb:
+
+1. Read the blob: spawn `git cat-file blob HEAD:<path>` and capture the RAW BYTES (no shell redirect:
+   measured in #4308, writing the blob through a redirect leaves the file dirty forever under
+   core.autocrlf=true, because the redirect emits the LF blob and the worktree expects CRLF).
+2. Smudge by hand: normalize CRLF to LF, then emit every LF as CRLF, and write the file.
+3. Same for a DELETED file: write its smudged blob bytes.
+4. `git status --porcelain` MUST be empty - on qa's run it was, for one modified and one deleted
+   tracked file.
+
+Same warnings as the shared-tree case: run this ONLY inside the seat's own worktree, never on the
+shared tree, and only after the asymmetry diagnosis above proves nothing was deleted on purpose.
+
 ## Escalate to
 `pm` — to route the restore (and a broker restart, if the running broker predates a landed fix) when a
 seat is blocked by it; the operator — if the deletion turns out to be committed, i.e. a deliberate

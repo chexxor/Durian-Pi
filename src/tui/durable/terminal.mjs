@@ -97,3 +97,26 @@ export class CapturingTerminal {
 		return taken;
 	}
 }
+
+/**
+ * Stop an `InteractiveMode` AT MOST ONCE (#4267).
+ *
+ * THE DEFECT THIS CLOSES, measured on Windows: calling `mode.stop()` twice passes every logical
+ * assertion and then CRASHES IN CLEANUP with `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)`
+ * (libuv src\win\async.c:94) ? the second call touches an async handle that is already closing.
+ *
+ * WHY A WRAPPER AND NOT ONLY THE DELETION: `try { ? stop() } finally { stop() }` is a NATURAL shape, not
+ * a careless one, so the next test will have it too. The guard is a WeakSet because `mode` is a library
+ * object we do not own ? nothing is written onto it, and a collected mode takes its entry with it.
+ *
+ * @returns {boolean} true when this call stopped it, false when it was already stopped.
+ */
+const stoppedModes = new WeakSet();
+
+export function stopModeOnce(mode) {
+	if (!mode || typeof mode.stop !== "function") return false;
+	if (stoppedModes.has(mode)) return false;
+	stoppedModes.add(mode);
+	mode.stop();
+	return true;
+}

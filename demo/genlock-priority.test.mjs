@@ -196,7 +196,7 @@ await check("the lander no longer REFUSES on a live holder — it publishes the 
 		"the refusing start-check must be gone",
 	);
 	assert.match(src, /reserveSlots\(dbPath, me\)/, "the lander publishes the priority reservation");
-	assert.match(src, /acquireAllSlotsSync\(dbPath, lockSlots, me\)/, "and claims the slots through the shared wait");
+	assert.match(src, /acquireAllSlotsSync\(dbPath, lockSlots, me[,)]/, "and claims the slots through the shared wait");
 	assert.match(src, /releaseReservation\(dbPath, me\)/, "and releases the claim on its exit paths");
 });
 

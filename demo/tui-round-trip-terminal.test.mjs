@@ -23,7 +23,7 @@
 
 import assert from "node:assert/strict";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
-import { CapturingTerminal } from "../src/tui/durable/terminal.mjs";
+import { CapturingTerminal, stopModeOnce } from "../src/tui/durable/terminal.mjs";
 import { bootDurableTui } from "../src/tui/durable/boot.mjs";
 import { loadCodingAgent } from "../src/tui/durable/imports.mjs";
 
@@ -73,10 +73,10 @@ try {
 		);
 
 		console.log("\n=== RESTORE: stopping the mode STOPS the terminal ===");
-		mode.stop?.();
+		stopModeOnce(mode);
 		check("the terminal was STOPPED by the exit path (the restore half, observed)", terminal.started === false, String(terminal.started));
 	} finally {
-		mode.stop?.();
+		stopModeOnce(mode);
 		await runtime.dispose();
 	}
 

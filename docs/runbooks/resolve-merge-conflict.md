@@ -52,8 +52,21 @@ branches first, schedule conflicts for a quiesced window.
    git worktree add --detach ../resolve-<item> main
    ```
 2. **Deterministic first — but never `git checkout`.** durian-pi's seat guard (`src/confine.mjs`
-   `DENIED_COMMANDS`) refuses `git checkout`, `reset`, `restore`, `clean`, `stash`, and `revert` in a
-   seat shell. Choose a side by reading the stage blobs and writing the chosen content:
+   `DENIED_COMMANDS`) refuses `git checkout`, `switch`, `reset`, `restore`, `clean`, `stash`, `revert`,
+   `branch -D`, `add -A`/`add .` and `push` in a seat shell. Each refusal NAMES the verb it fired on —
+   and the guard refuses the WHOLE command on the FIRST matching rule, so a refusal on a COMPOUND
+   command says nothing about its other verbs: **test a verb ALONE before concluding it is blocked.**
+   **`git rebase` is NOT refused** — there is no rebase rule in the deny list. Measured 2026-10-20: a
+   compound `checkout -b …; rebase main` was refused naming only `checkout`, which led a seat to condemn
+   the whole verb class and put "rebase is refused" into an operating note (#3379, retracted).
+   `git rebase main` alone exits 0 in a seat worktree.
+   **So an author rebase needs no throwaway worktree for PERMISSION.** Rebasing the branch your worktree
+   already has checked out is just `git rebase main`. The throwaway worktree is still needed for a
+   DIFFERENT reason: `git rebase <upstream> <branch>` is allowed but CHECKS THAT BRANCH OUT in your
+   worktree, moving your HEAD off your item branch. If you must do that, do it in a throwaway linked
+   worktree and publish with `git update-ref refs/heads/<branch>-rebased <sha>` — the artifact is the
+   published ref, not a commit from your item worktree.
+   Choose a side by reading the stage blobs and writing the chosen content:
    ```bash
    git show :2:<path>    # ours (current branch)
    git show :3:<path>    # theirs (incoming)
