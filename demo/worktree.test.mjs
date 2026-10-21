@@ -200,12 +200,33 @@ try {
 			);
 		}
 
-		// Control: with no --ref the same verb forks HEAD (main) — so the check above is about `ref`.
+		// Control: with no --ref the same verb forks HEAD (main) ? so the check above is about `ref`.
+		// #4412: EVERY COMMAND'S OUTCOME GOES INTO A CHECK. This block used to be
+		//     try { await run(...) } catch {}
+		//     const headNoRef = (await run("git", ["-C", headTarget, "rev-parse", "HEAD"])).stdout.trim();
+		// ? the control's failure was SWALLOWED by the empty catch, and the next line's throw was UNGUARDED,
+		// so the exception was printed under the LAST CHECK THAT RAN (line 193's "`worktree --ref` runs") and
+		// an entire diagnosis was built on `--ref` being broken when the CONTROL was what failed.
+		// A THROW IS ATTRIBUTED BY POSITION, NOT BY LABEL ? and the more specific the borrowed label, the
+		// more confidently wrong the reader is. Hence: no bare `await run(...)` anywhere in this file.
 		const headTarget = join(base, "wt-head");
+		let ctrlOk = true;
+		let ctrlErr = "";
 		try {
 			await run(process.execPath, [cliPath, "worktree", headTarget, "--source", src2]);
-		} catch {}
-		const headNoRef = (await run("git", ["-C", headTarget, "rev-parse", "HEAD"])).stdout.trim();
+		} catch (error) {
+			ctrlOk = false;
+			ctrlErr = String(error?.stderr ?? error?.message ?? error).slice(0, 300);
+		}
+		check("the CONTROL invocation (no --ref) succeeds", ctrlOk, ctrlErr);
+		let headNoRef = "";
+		let headErr = "";
+		try {
+			headNoRef = (await run("git", ["-C", headTarget, "rev-parse", "HEAD"])).stdout.trim();
+		} catch (error) {
+			headErr = String(error?.stderr ?? error?.message ?? error).slice(0, 300);
+		}
+		check("the control's worktree EXISTS and resolves HEAD", headNoRef !== "", headErr || `no HEAD in ${headTarget}`);
 		check("without --ref the worktree forks HEAD (main), the old behaviour", headNoRef === mainTip, `got ${headNoRef}`);
 	}
 
