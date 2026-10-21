@@ -109,9 +109,10 @@ exit 0 on main. HOW it got there (no landing entry): the content reached main th
 `595b714` (subject `docs(NEXT)`, code delta), was partly deleted by `9c3aa02`, and restored by revert
 `798836b`; #3314/#3315 verifies were cancelled. The landing entries #3436, #3466 and the stack #3740 are
 CANCELLED as stale — do not cite the branch names as pending work. What is NOT on main: the
-newline-preserving wrap fix is UNLANDED — `impl-item-3309` carries the only copy (`wrapLines`,
-src/textwidth.mjs; main's `wrapText` still flattens newlines) and needs a landing path; the other
-durable-TUI branches (3308/3313/2826/3359/3437) are SUPERSEDED — see docs/DISPOSITIONS.md.
+newline-preserving wrap fix is UNLANDED but EXTRACTED — `dbf4597` (impl-item-4017, landing entry #4040);
+`impl-item-3309` is superseded by that extraction rather than being the carrier (the 3309 branch is 57
+behind; landing it would delete newer content). The other durable-TUI branches
+(3308/3313/2826/3359/3437) are SUPERSEDED — see the DISPOSITIONS ledger (unlanded; landing entry #4151).
 **Still red on main (not caused by 595b714):** `broker-one-connection`, `pitui` (#2412),
 `seat-instruction-encoding` — all three also fail at `deff39c`, its parent.
 **Blocker:** `main` is red on **3** demos (was 7 — the revert fixed the TUI four), so `land.mjs --suite` is
