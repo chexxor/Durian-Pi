@@ -1899,7 +1899,10 @@ export async function runWakeLoop({
   // still live. Never close the harness with a live run — drain the ordinary
   // scope here, exactly as the old global wait used to do at every pass. This
   // is the one place a global wait belongs.
-  if (heartbeat) clearInterval(heartbeat);
+  // #2574/F1: keep the heartbeat FRESH through the drain. A drain can outlast
+  // BROKER_HEARTBEAT_TIMEOUT_MS, and a broker whose heartbeat went stale read as DEAD while
+  // it was still the writer; `serve --stop` then cleared its state and admitted a second
+  // writer mid-drain. The clear happens AFTER the (bounded) wait, on every exit path.
 	// The handle is `h`, not `harness`: main's reopen swap (`let h = harness`, reassigned after a
 	// SessionFailed recovery) moves it, so the drain must wait on the live handle.
   // #2420: when the exit is on the DEADLINE (or the grace has already run out), do NOT park
@@ -1913,6 +1916,7 @@ export async function runWakeLoop({
   } else {
     await h.waitForIdle(context);
   }
+  if (heartbeat) clearInterval(heartbeat);
   // Close the audit opened by START: the reason the broker stopped (a `.stop` request, a
   // bound, or a signal) survives the process here instead of only on stdout.
   logBrokerLine(dbPath, `EXIT pid=${process.pid} reason=${stoppedBy ?? "unknown"} passes=${passes}`);
@@ -2094,6 +2098,26 @@ export function pidAlive(pid) {
     // FAIL-SAFE (#3398): dead ONLY on ESRCH. See `brokerAlive` above — unknown ⇒ ALIVE,
     // because a false DEAD here reports `stopped:true` for a live broker and admits a
     // second writer, while a false ALIVE only refuses to start one more.
+    return err?.code !== "ESRCH";
+  }
+}
+
+/**
+ * Liveness by SIGNAL 0 alone: does the process named by `pid` exist? EPERM means it
+ * exists but cannot be signalled (still alive); ESRCH means GONE.
+ *
+ * This is the ONLY proof a writer has exited. `brokerAlive`'s heartbeat is an IDENTITY
+ * proxy for a recycled pid, not proof of exit — a broker draining a long pass stops
+ * refreshing its heartbeat and would read as dead while it is still writing (F1, #2574).
+ * `serve --stop` must gate `stopped:true` (and clearing the state) on THIS, so a second
+ * writer is admitted only after the first provably exited.
+ */
+export function brokerProcessAlive(pid) {
+  if (typeof pid !== "number") return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
     return err?.code !== "ESRCH";
   }
 }
