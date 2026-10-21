@@ -151,6 +151,40 @@ way follows the rule rather than overriding it.
 | 2026-10-20 | impl-item-3437 | 66a19af | SUPERSEDED | MEASURED (qa #3951): 1908 total deletions across 11 files, 0 additions to src/tui/; ADDITIONS ALSO MEASURED (#4018): 12 src lines elsewhere vs main, small relative to the deletions; strict-subset claim is behavioural — see the corrected revival test | #3951 + #3958 + #4018 |
 | 2026-10-20 | impl-item-3359 | 0c8a396 | SUPERSEDED | MEASURED (qa #3951): 2801 total deletions across 30 files incl 97 from client.mjs; ADDITIONS ALSO MEASURED (#4018): 24 src lines vs main, small relative to the deletions; strict-subset claim is behavioural — see the corrected revival test | #3951 + #3958 + #4018 |
 | 2026-10-21 | devtools-item-2187 | 5a99b14 | CANCEL | D103's GLOBAL rebrand was overtaken: main already accepts `DURIAN_PI_*` where it matters (`tui.mjs` DB/OWN overrides) and the branch would rewrite 327 files from a 2026-10-19 base, reintroducing a global rename D122 explicitly declined ("today no rename"). The env-var idea is not lost: new code uses `DURIAN_PI_TUI_DB`/`DURIAN_PI_TUI_OWN` on main. | D122 |
+| 2026-10-21 | impl-item-1151 | 85c5d95 | SUPERSEDED | 2026-10-17 expect-worktree series, 4 days old and predating the current write-target/degraded-cwd guard; deleted under the operator's age rule rather than reintroducing the old mechanism. | campaign |
+| 2026-10-21 | impl-item-1225 | 14c09d1 | SUPERSEDED | 2026-10-17 expect-worktree series, 4 days old and predating the current write-target/degraded-cwd guard; deleted under the operator's age rule rather than reintroducing the old mechanism. | campaign |
+| 2026-10-21 | impl-item-1249 | 083a935 | SUPERSEDED | 2026-10-17 expect-worktree series, 4 days old and predating the current write-target/degraded-cwd guard; deleted under the operator's age rule rather than reintroducing the old mechanism. | campaign |
+| 2026-10-21 | impl-item-1444-fix | fec14b7 | SUPERSEDED | 2026-10-17 expect-worktree series, 4 days old and predating the current write-target/degraded-cwd guard; deleted under the operator's age rule rather than reintroducing the old mechanism. | campaign |
+| 2026-10-21 | devtools-item-3342 | 371f6be | SUPERSEDED | `tracked-encoding` is explicitly SUBSUMED by main's `text-integrity` (#4371); main deliberately does not carry `src/trackencoding.mjs`. | campaign |
+| 2026-10-21 | devtools-item-2459 | a4714d9 | SUPERSEDED | main's `installWorktreeDeps` implements a newer order for the same #2412 defect (sync/--link around `npm ci`) and names that item in its own comment. | campaign |
+| 2026-10-21 | impl-item-1823 | f45f4b4 | SUPERSEDED | main already carries the equivalent commit `78cf39ca` (context pressure: floor AND fraction AND ceiling, #1823). | campaign |
+| 2026-10-21 | impl-item-1519 | 706248d | SUPERSEDED | 92% of its added lines are already in main (the security position doc landed); the rest is older wording. | campaign |
+| 2026-10-21 | designer-item-3483 | 4b1eb25 | SUPERSEDED | older draft of the landing-screen spec; main's version is newer (283 lines) and the draft competes with it. | campaign |
+| 2026-10-21 | scribe-item-1232 | d914362 | SUPERSEDED | 2026-10-17 docs-only branch, 78% of its added lines already in main. | campaign |
+| 2026-10-21 | impl-item-1609 | 53fd8c6 | SUPERSEDED | 2026-10-17 rule set that predates main's current checkup architecture (severity classes, auditRig input surface, text-integrity wiring). | campaign |
+| 2026-10-21 | impl-item-1727 | bcf1a19 | SUPERSEDED | 2026-10-17 rule set that predates main's current checkup architecture (severity classes, auditRig input surface, text-integrity wiring). | campaign |
+| 2026-10-21 | impl-item-2325 | 2e8415e | SUPERSEDED | main's `MID_ITEM_STATUSES = {claimed, deferred, held}` already implements it (#2337). | campaign |
+| 2026-10-21 | impl-item-3192 | 1d45af6 | SUPERSEDED | superseded by the landed replacement (#4075 duplicate rule / #3056 M1b mapping). | campaign |
+| 2026-10-21 | devtools-item-2182 | ee6e771 | SUPERSEDED | main's `c6a618f3` ('add by provenance to configure spool op (#2182 #2277)') carries the configure spool op. | campaign |
+| 2026-10-21 | impl-item-4514 | fa76b97 | SUPERSEDED | main already returns base/requestedBase/baseHonoured and already carries the #4514 test block; the branch would delete 310 lines of newer code. | campaign |
+| 2026-10-21 | devtools-item-2801-fix | d6eaaf9 | SUPERSEDED | lockfile reconcile already on main; the runbooks wiring is carried by the newer `devtools-item-4054` re-cut; its test commit replaces main's newer prepare-workspace suite with a smaller copy. | campaign |
+| 2026-10-21 | devtools-item-2801 | 280539e | SUPERSEDED | lockfile reconcile already on main; the runbooks wiring is carried by the newer `devtools-item-4054` re-cut; its test commit replaces main's newer prepare-workspace suite with a smaller copy. | campaign |
+| 2026-10-21 | designer-item-3945 | c09facb | SUPERSEDED | main's spec carries the newer #4300/#4352 width ladder; 4330's unique §1.1 ruling was landed onto main before deleting, 3945 was the older draft. | campaign |
+| 2026-10-21 | designer-item-4330 | 814e86b | SUPERSEDED | main's spec carries the newer #4300/#4352 width ladder; 4330's unique §1.1 ruling was landed onto main before deleting, 3945 was the older draft. | campaign |
+| 2026-10-21 | devtools-item-3619 | 4abd8ba | SUPERSEDED-BY-EVENTS | duplicate tip: an identical sha is retained by the canonical branch, so deleting this ref loses no commit. | campaign |
+| 2026-10-21 | impl-item-1261 | 85c5d95 | SUPERSEDED-BY-EVENTS | duplicate tip: an identical sha is retained by the canonical branch, so deleting this ref loses no commit. | campaign |
+| 2026-10-21 | qa-item-2792 | 67d885d | SUPERSEDED-BY-EVENTS | duplicate tip: an identical sha is retained by the canonical branch, so deleting this ref loses no commit. | campaign |
+| 2026-10-21 | qa-item-3222 | 1d45af6 | SUPERSEDED-BY-EVENTS | duplicate tip: an identical sha is retained by the canonical branch, so deleting this ref loses no commit. | campaign |
+| 2026-10-21 | qa-item-3871 | 1d45af6 | SUPERSEDED-BY-EVENTS | duplicate tip: an identical sha is retained by the canonical branch, so deleting this ref loses no commit. | campaign |
+| 2026-10-21 | item-9003 | c219ffb | SUPERSEDED-BY-EVENTS | duplicate tip: an identical sha is retained by the canonical branch, so deleting this ref loses no commit. | campaign |
+| 2026-10-21 | devtools-item-2412 | 7933858 | CANCEL | cancelled item (operator ruling); branch deleted so the cancelled work is not reintroduced. | campaign |
+| 2026-10-21 | impl-item-1587 | a4129e9 | CANCEL | cancelled item (operator ruling); branch deleted so the cancelled work is not reintroduced. | campaign |
+| 2026-10-21 | devtools-item-2188 | 742d3c6 | SUPERSEDED | every commit is already in main by patch-id (`git cherry` shows no `+`), so the ref held no unique work. | campaign |
+| 2026-10-21 | devtools-item-3238 | 7284834 | SUPERSEDED | every commit is already in main by patch-id (`git cherry` shows no `+`), so the ref held no unique work. | campaign |
+| 2026-10-21 | devtools-item-3652 | be40620 | SUPERSEDED | every commit is already in main by patch-id (`git cherry` shows no `+`), so the ref held no unique work. | campaign |
+| 2026-10-21 | devtools-item-4494 | 919315a | SUPERSEDED | every commit is already in main by patch-id (`git cherry` shows no `+`), so the ref held no unique work. | campaign |
+| 2026-10-21 | devtools-item-4519 | 8a85397 | SUPERSEDED | every commit is already in main by patch-id (`git cherry` shows no `+`), so the ref held no unique work. | campaign |
+| 2026-10-21 | devtools-item-4521 | b633818 | SUPERSEDED | every commit is already in main by patch-id (`git cherry` shows no `+`), so the ref held no unique work. | campaign |
 
 > **NOTE (the two worked examples of content-not-ancestry):** `security-item-1475`
 > because ancestry said "not on main" while content said "already there", and
