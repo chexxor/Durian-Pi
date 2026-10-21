@@ -1029,6 +1029,7 @@ const Router = defineExtension({
 					}
 					return `ok`;
 				}, context);
+				let cwdResetNote = "";
 				if (out === "ok") {
 					// The item is complete, so retire the workspace `prepare_workspace`
 					// created. `force: false` never discards uncommitted work: a dirty
@@ -1040,13 +1041,19 @@ const Router = defineExtension({
 						await api.commit(async (tx) => {
 							await configure(tx, api.conversationId, { cwd: process.cwd() });
 						}, context);
+						// #3961: the reset is NOT silent - tell the seat its cwd is now the shared checkout,
+						// so the next item's relative write would land there. (The guard also REFUSES such a
+						// write; this is the SIGNAL, not the enforcement.)
+						cwdResetNote =
+							`\nnote: your seat cwd was reset to the shared checkout (${process.cwd()}) after this ` +
+							`item - call prepare_workspace before writing for the next one.`;
 					} catch (err) {
 						console.error(
 							`complete_work: workspace cleanup for #${args.itemId} failed: ${err?.message ?? err}`,
 						);
 					}
 				}
-				return toolText(out);
+				return toolText(out + cwdResetNote);
 			},
 		}),
 		defineTool({

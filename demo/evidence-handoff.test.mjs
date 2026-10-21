@@ -79,7 +79,10 @@ try {
 		resultSummary: "re-ran the suite",
 		evidence: EVIDENCE,
 	});
-	assert.match(done1, /^ok$/, `completing with evidence succeeds; got: ${done1.slice(0, 120)}`);
+	// #4030: the result BEGINS WITH `ok` and MAY carry a trailing NOTE (the seat's cwd was reset to
+	// the shared checkout after the reap). A caller must NOT assume it is exactly `ok` — the note is
+	// the signal, and the whole point of it is that the seat MUST see it.
+	assert.match(done1, /^ok(\n|$)/, `completing with evidence succeeds; got: ${done1.slice(0, 120)}`);
 
 	const notice1 = await noticeFor(1);
 	assert.ok(notice1, "a DONE notice was enqueued");
@@ -100,7 +103,7 @@ try {
 	assert.ok(Number.isInteger(id2), `the second work item is queued; got: ${sent2.slice(0, 120)}`);
 	await driveTool("worker", "claim_work", { itemId: id2 });
 	const done2 = await driveTool("worker", "complete_work", { itemId: id2, resultSummary: "no evidence given" });
-	assert.match(done2, /^ok$/, `completing without evidence is still legal; got: ${done2.slice(0, 120)}`);
+	assert.match(done2, /^ok(\n|$)/, `completing without evidence is still legal; got: ${done2.slice(0, 120)}`);
 
 	const notice2 = await noticeFor(id2);
 	assert.ok(notice2, "a DONE notice was enqueued for the second item");

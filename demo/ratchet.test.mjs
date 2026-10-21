@@ -156,7 +156,11 @@ try {
 		itemId: target.id,
 		resultSummary: "done",
 	});
-	assert.match(done, /^ok$/, `completing the item succeeds; got: ${done.slice(0, 120)}`);
+	// #4030: the `complete_work` result BEGINS WITH `ok` and MAY BE FOLLOWED BY A NOTE — a reap resets
+	// the seat's cwd to the shared checkout, and a seat that is not told repeats the mistake (twice in
+	// two days: an untracked write into the shared tree, then a commit landing ON main). A caller must
+	// NOT assume it is exactly `ok`; this is the OLD contract, and the behaviour changed deliberately.
+	assert.match(done, /^ok(\n|$)/, `completing the item succeeds; got: ${done.slice(0, 120)}`);
 	const doneNotice = (await queueItems()).find(
 		(it) => it.notice === true && it.subject.startsWith("DONE #"),
 	);

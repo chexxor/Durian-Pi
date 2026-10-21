@@ -15,10 +15,9 @@ import { AgentDoc, ToolTask, defineExtension, hook } from "@earendil-works/pi-du
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve as resolveNodePath } from "node:path";
-import { refusalFor } from "./confine.mjs";
-import { isInside } from "./confine.mjs";
+import { isInside, refusalFor } from "./confine.mjs";
 import { writeTargets } from "./writetargets.mjs";
-import { resolveSeatRoot } from "./seatroot.mjs";
+import { resolveSeatRoot, sameRoot } from "./seatroot.mjs";
 import { SECRET_PREFIX_PATTERNS } from "./config.mjs";
 import { afterTool as redactToolResult } from "./secretredact.mjs";
 
@@ -52,6 +51,71 @@ async function seatGraphRoot(api, context) {
 		}
 	}
 	return resolveSeatRoot().root;
+}
+
+/**
+ * The seat's PERSISTED agent cwd (`prepare_workspace` writes it via `configure`), or null when there
+ * is none or it cannot be read. Distinct from `seatGraphRoot` (which FALLS BACK): #3961 refuses
+ * only when a persisted cwd is KNOWN and equals the shared tree, so an empty/unknown api is not
+ * treated as a degradation.
+ */
+async function persistedSeatCwd(api, context) {
+	if (api?.conversationId === undefined || typeof api?.snapshot !== "function") return null;
+	try {
+		const agent = await api.snapshot(AgentDoc, api.conversationId, context);
+		return agent?.cwd ?? null;
+	} catch (err) {
+		console.error(`SEATGUARD WARNING: seat cwd snapshot failed: ${err?.message ?? err}`);
+		return null;
+	}
+}
+
+/**
+ * #3961: refuse a RELATIVE-path write, or a commit, when the seat's cwd has DEGRADED to the SHARED
+ * checkout. `complete_work` (src/rig.mjs) retires the item worktree and SILENTLY resets the seat's
+ * persisted cwd to the broker's cwd — the shared tree — returning just "ok", so the NEXT item's
+ * relative write or commit lands in the shared tree: first #3122 (an untracked write), then a
+ * commit ON MAIN that bypassed the landing pass. The remedy is always `prepare_workspace`, and
+ * refusing is safe because writing into the shared tree is never what a seat intended.
+ *
+ * An ABSOLUTE path (or an @-prefixed one) is a deliberate target, so it is left to the existing
+ * guards (confine.mjs is the boundary). `process.cwd()` is the shared root because the guard runs
+ * inside the broker/CLI process, which is started from the shared checkout.
+ */
+async function sharedTreeRefusal(api, context, { path = null, command = null, shell = false } = {}) {
+	// Only a KNOWN persisted cwd can be "degraded": with no persisted cwd the root is a fallback
+	// (DURIG_SEAT_ROOT / process cwd) and a seat that never prepared a workspace is not our case.
+	const seatRoot = await persistedSeatCwd(api, context);
+	if (seatRoot === null || !sameRoot(seatRoot, process.cwd())) return null;
+	// #3992: from a degraded cwd a seat must not RUN anything. A shell command can destroy work in the
+	// tree that is not its own (`git checkout`, `git reset`, `git clean`, a raw write script), and that
+	// is the operation that has actually destroyed work here. Refuse the whole shell tool rather than
+	// classify commands: a classifier that must decide whether `git checkout -- .` is destructive will
+	// be wrong. From a degraded cwd there is exactly ONE useful action - prepare_workspace; a seat that
+	// wants to inspect can do it from a correct cwd one call later.
+	if (shell) {
+		return (
+			`refused by durig: your seat cwd IS the SHARED checkout (${seatRoot}), not an item worktree - a ` +
+			`shell command here can destroy the shared tree. The cwd degrades to the shared tree after ` +
+			`complete_work; call prepare_workspace first, then run your command.`
+		);
+	}
+	if (path !== null) {
+		const p = String(path).replace(UNICODE_SPACES, " ");
+		if (isAbsolute(p) || p.startsWith("@")) return null;
+		return (
+			`refused by durig: this write uses a RELATIVE path ("${p}") and your seat cwd IS the SHARED ` +
+			`checkout (${seatRoot}), not an item worktree — the write would land in the shared tree. The cwd ` +
+			`degrades to the shared tree after complete_work; call prepare_workspace first.`
+		);
+	}
+	if (command !== null && GIT_COMMIT_RE.test(command)) {
+		return (
+			`refused by durig: this commit runs in the SHARED checkout (${seatRoot}), not an item worktree — ` +
+			`it would land ON the shared branch and bypass the landing pass. Call prepare_workspace first.`
+		);
+	}
+	return null;
 }
 
 /** Tools whose whole argument is a command string, so that string is what to inspect. */
@@ -301,6 +365,11 @@ export async function beforeTool(call, api, context) {
 		// the arguments plus the target's PRIOR content on disk (the part an
 		// overwrite would silently erase), read where the write actually lands:
 		// the seat's own tree, not the broker process's cwd.
+		if (call?.name === "write" || call?.name === "edit") {
+			// #3961: a degraded cwd (the shared checkout) must not take a RELATIVE-path write.
+			const degraded = await sharedTreeRefusal(api, context, { path: call.arguments?.path });
+			if (degraded !== null) return { block: degraded };
+		}
 		if (call?.name === "write") {
 			const shape = { path: call.arguments?.path, content: call.arguments?.content };
 			const refusal =
@@ -310,6 +379,16 @@ export async function beforeTool(call, api, context) {
 		}
 		return undefined;
 	}
+	// #3961/#3992: a commit from the DEGRADED cwd (the shared checkout) lands ON main, bypassing the
+	// landing pass - refuse it with the precise diagnosis FIRST.
+	if (GIT_COMMIT_RE.test(command)) {
+		const degraded = await sharedTreeRefusal(api, context, { command });
+		if (degraded !== null) return { block: degraded };
+	}
+	// #3992: any OTHER shell command from a degraded cwd is refused outright, before any command
+	// classification - `run` is what has actually destroyed work in this repo.
+	const degradedShell = await sharedTreeRefusal(api, context, { shell: true });
+	if (degradedShell !== null) return { block: degradedShell };
 	// #1966 layer (ii): a shell command naming the spool directory is refused (best-effort).
 	// #4374: the refusal is given the seat root and cwd, so a PATH-AWARE entry (`checkout-index`)
 	// can resolve its TARGET instead of pattern-matching the verb.
