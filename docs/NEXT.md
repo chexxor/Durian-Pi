@@ -60,6 +60,15 @@ subscriber but nothing implements it. So 52 is a ruling plus fragments, not a di
 #3996/#4070 (Enter→Pi wiring, both `held`) · #3948 (pointer correction, releasable) · 52 breakdown +
 `queued`-class reconciler + decision trace (awaiting `pm` routing).
 
+**OPERATOR INPUT (asked 02:58Z) — exactly ONE real question: #4124** (impl `deferred` to human
+22:19:50Z: lead's five-line revise of #3272 vs impl's recommendation of a HELD delta registration +
+pointer; Part B/C already handled by #4127 `done`). The four other `deferredTo:"human"` rows
+(#2993/#3556/#3581/#3601) are **stale supervisor escalations** from the 07:23Z 402 outage — qa resumed
+and held them for their own gates; do NOT answer them. #1135 is already answered by #2956/#2962
+(pricing SOURCE = vendored price table). **Enter→Pi has moved:** pm routed it, impl built
+`impl-item-4158` @`2213801` (`ui.mjs` +43/−9, new `src/tui/durable/enter.mjs`, demo) and #4163 is its
+landing list (held); impl is also editing `src/broker.mjs` + `cli.mjs:1022` for the starvation fix.
+
 **Blocker:** none on the tree. `main` `b4bb4c7`, tracked tree clean except the broker-generated
 untracked `selfdev.sqlite.broker.audit.log`. Single broker pid 16140 (verify before any restart).
 
