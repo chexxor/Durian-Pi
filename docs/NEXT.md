@@ -142,6 +142,17 @@ keep 15768** — `Stop-Process -Id 23172 -Force`, prove it is dead, then resume 
 `impl-item-3869` @565cf2c is CLEAN against `d257f22`; #3891's hold is "by design so it does not occupy
 impl's claim slot; the delegate lands", i.e. it is landable once the writer is single again.
 
+**PASS RESUMED (2026-10-20 ~22:35Z, delegate).** Duplicate `23172` killed (no genlocks), owner `15768` kept;
+genlock slots cleared. Landed two clean, verified-by-entry branches with the helper (scratch + clean FF):
+`impl-item-3869` @565cf2c carrier → `main` `9f799e0` (`de994b9`→`9f799e0`), then `designer-item-3845`
+@37474a4 docs → `main` **`634e5f9`**. Prune after each: both refs `-d`'d, plus `designer-item-3922`
+(cancelled, clean, locked) `unlock→remove→-d`. **Proven on `main`: suite pass=192 fail=3 — the same three**
+(`broker-one-connection`, `pitui`, `seat-instruction-encoding`); 195 demos; tracked tree clean. Census:
+**197 refs, 50 worktrees, 11 locked**; merged+free is only the intentional keep `devtools-item-1558`;
+merged+held 7, all live/held. **STACK BLOCKED:** `impl-item-3744` @cccccd5, `impl-item-3766` @235e163,
+`impl-item-3775` @30f12aa all CONFLICT with `634e5f9` and no rebased branch exists → author non-force
+rebase + re-verify (runbook `land.md`), then land `3775` (contains the whole 3-commit stack).
+
 ## CLOCK-OUT (2026-10-20 ~07:50Z, delegate) — **TEAM WAS DOWN ~20 MIN ON AN EXTERNAL 402; BROKER RESTARTED, 47/49 PARKED ITEMS RESUMED**
 
 Operator ask: "kick start the team". Diagnosed before touching anything; the cause was NOT the rig.
