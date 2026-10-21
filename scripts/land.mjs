@@ -268,23 +268,34 @@ if (sharedRoot && sharedRoot !== resolve(repoRoot)) {
 
 /* ───────── pre-flight: the enforcement chokepoint ───────── */
 
-// Tracked modifications only. An UNTRACKED file cannot be clobbered by a fast-forward (git
-// refuses if an incoming path collides), and the shared tree normally carries other seats'
-// untracked notes — refusing on those would make the guard useless rather than safe.
+// The shared root must be CLEAN before a landing pass — UNTRACKED INCLUDED — because A SUITE RUN
+// IN `.` MEASURES THE SHARED TREE, NOT MAIN: a green there is not evidence about the merge and a
+// red there is not a regression. The earlier TRACKED-ONLY filter would have PASSED the third
+// instance of this hazard (an untracked `src/tui/durable/attach.mjs` written by a live seat), so
+// untracked now counts. The suite itself already runs in the detached SCRATCH (below), not `.`.
 const status = git(repoRoot, ["status", "--porcelain"]);
-const trackedChanges = status.out
+const dirty = status.out
 	.split("\n")
 	.map((l) => l.trimEnd())
-	.filter((l) => l.length > 0 && !l.startsWith("??"));
-if (trackedChanges.length > 0) {
+	.filter((l) => l.length > 0);
+if (dirty.length > 0) {
+	// Attribution where a path reveals it (an `item-<id>/` path names its item); shared-tree dirt
+	// usually does not, so most paths are named without an owner — attribution for those is
+	// #3648's registered requirement, not this gate's.
+	const attributed = dirty.map((line) => {
+		const path = line.slice(2).trim();
+		const m = /(?:^|\/)item-(\d+)(?:\/|$)/.exec(path);
+		return m ? `${path} (item #${m[1]})` : path;
+	});
 	report(
 		{
 			...base,
 			error:
-				`refusing to land: the shared tree at ${repoRoot} has ${trackedChanges.length} tracked ` +
-				`modification(s). A landing advances main by a clean fast-forward, which requires a clean ` +
-				`tree — commit or stash the work first, then re-run.`,
-			trackedChanges,
+				`refusing to land: the shared tree at ${repoRoot} is NOT clean (${dirty.length} path(s), ` +
+				`UNTRACKED INCLUDED). A suite run in \`.\` measures the SHARED TREE, not main — a green there ` +
+				`is not evidence about the merge and a red is not a regression. Commit, stash or remove the ` +
+				`listed paths, then re-run.`,
+			dirtyPaths: attributed,
 		},
 		1,
 	);
