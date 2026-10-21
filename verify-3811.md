@@ -1,4 +1,4 @@
-﻿# Verification for #3811 --suite-less fallback expiry
+# Verification for #3811 --suite-less fallback expiry
 
 1. Commit 30f12aa is stacked on 235e163 (on top of unreachable @cccccd5 on main 11e87a0).
    Diff from 235e163 to 30f12aa is +21/-0 (exactly as claimed). One file: docs/runbooks/land.md.
