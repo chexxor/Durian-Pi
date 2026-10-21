@@ -3391,3 +3391,38 @@ pass as the ledger-order fix, then amended per the lead addendum (#3280). Config
 documented in `docs/SELFDEV.md`. The switch is DIRECTED but NOT YET IN EFFECT (see above) — the live
 store refresh is the open step tracked at `#3274`. A tip verified against qwen36/poly is still
 unverified for swift-1.5/strata until the refresh is observed, regardless of how ratified the config is.
+
+## D122 — The fused process is the HARNESS'S HOST, not "harness" or "broker"; post-split names `harnessd` (store+runtime owner) and `broker` (automation client) (lead #4294, 2026-10-21; recorded by scribe, item #4338)
+
+**Decision:** TODAY: NO RENAME. The fused process is a broker that hosts the harness, and NO SINGLE WORD IS
+HONEST because it is two things — describe it, do not rename it. Renaming now would be as wrong as "broker":
+it would name one half and hide the other. **POST-SPLIT:** `harnessd` / "harness server" = the store and
+runtime owner; `broker` = the automation client. Each name is accurate THEN, and the rename lands WHEN THE
+COMPONENTS ACTUALLY SEPARATE — not before. And the direct answer to the operator's "if it is not the harness,
+what else is?": **IT IS THE HARNESS'S HOST — the harness is the runtime object, the process serves it.**
+
+**Rationale.** The operator asked whether "broker" is a poor name and should be "harness". Lead ruled it
+(#4294); the distinction the question could not see is that BOTH single words are wrong today:
+- **"HARNESS" IS ALSO WRONG** — the harness is a LIBRARY OBJECT (`openHarness()`, `harness.resume()`,
+  `harness.conversation()`, `harness.inspect()` — all in `cli.mjs` on main), NOT A PROCESS. The process HOSTS
+the harness, so the honest name for that half is HARNESS SERVER (or `harnessd`) — the SERVER of the harness,
+not the harness.
+- **"BROKER" IS NOT WRONG EITHER** — it is right for the OTHER half: post-split it correctly names the
+AUTOMATION component (it brokers work, decides who runs, delivers intents, supervises). The word reads wrong
+TODAY only because ONE PROCESS IS DOING BOTH JOBS.
+- **Record it NOW:** a rename ruled after the code moves re-opens every file it touched — `broker` appears in
+the CLI surface (`serve`), the runbooks and the demos.
+
+**Ownership invariant (recorded beside the naming; the split's names are meaningless without it, lead verbatim).**
+THE AUTOMATION MUST REMAIN THE ONLY WRITER. HARNESS SERVER OWNS THE STORE; THE BROKER HOLDS THE WRITE LEASE
+AND SUBMITS THROUGH RPC/SPOOL; EVERY OTHER CLIENT IS A READ-ONLY SUBSCRIBER. And what "owns" must NOT mean:
+the harness may HOLD the file but it must not WRITE it — ONE WRITER MEANS ONE WRITER. So `harnessd` names the
+store's OWNER, not its writer; the two names must not blur that.
+
+**Alternatives.** (a) Rename today to "harness" — rejected: names one half and hides the other, as wrong as
+"broker"; (b) rename today to "harnessd"/"harness server" — rejected: same problem, and the split has not
+happened; (c) no rename today, with the post-split names reserved — adopted.
+
+**Status.** Lead ruling #4294 (2026-10-21); recorded by scribe, item #4338, in the record BEFORE any code
+moves. No rename, no code, no split design — the naming entry only. D122 is the issue-ordered next number
+after D121 (main `ffa2ab3`); the lander confirms the mint at land.
