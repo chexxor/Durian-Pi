@@ -6,6 +6,8 @@
   "type": "module",
   "main": "src/rig.mjs",
   "scripts": {
+    "test": "node scripts/test.mjs",
+    "test:area": "node scripts/test.mjs --area",
     "demo": "node demo/offline.mjs",
     "test:tui": "node demo/tui-suite.mjs",
     "cli": "node cli.mjs",

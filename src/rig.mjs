@@ -11,6 +11,7 @@
 //   directions flow through one durable queue.
 import { configure, defineDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { seatHasReadTool } from "./seattools.mjs";
@@ -116,6 +117,16 @@ export const RigQueue = defineDoc({
 export const DEFERRED_TO_HUMAN = "human";
 
 /**
+ * The `deferredTo` value meaning **nobody was asked** (#4574).
+ *
+ * DISTINCT FROM `DEFERRED_TO_HUMAN` ON PURPOSE. The default used to be `args.to ?? DEFERRED_TO_HUMAN`, so a
+ * deferral that named no target recorded the OPERATOR as its audience — a status standing in for a fact,
+ * where the fact is "nobody was actually asked". Every surface that branches on the value must be able to
+ * tell the two apart, which is why attention.mjs renders this one as a sentence rather than a name.
+ */
+export const DEFERRED_TO_NOBODY = "nobody";
+
+/**
  * Snapshot a pi-durable doc item (or array of items) into plain JS objects.
  *
  * A doc proxy resolves primitive properties fine, but the overlay THROWS
@@ -167,8 +178,82 @@ export async function registerSeat(tx, name, conversationId, role) {
  * would otherwise keep looping. Matching exactly the shape complete_work
  * enqueues ("DONE #<id>: <subject>") keeps the fallback from catching real work.
  */
+/**
+ * The CANCELLATION, as data (#3470): mark the item terminal AND notify the other party, the
+ * same way `complete_work` notifies them with a DONE notice.
+ *
+ * WHY THE NOTICE IS THE POINT: a cancellation's reason is the ONE piece of information that
+ * distinguishes "superseded" from "duplicate" from "already ruled" from "stale pin", and
+ * those imply different next actions for whoever sent the item. Recording it on the item was
+ * not enough — from the sender's side the item simply vanished, so they guessed, and guessing
+ * cost a full re-registration cycle for eight branches.
+ *
+ * A NOTICE NEVER SPAWNS A NOTICE (`isNoticeItem`), so cancelling a DONE or CANCELLED notice
+ * cannot start a chain (ROADMAP 39). `tx` only needs `doc(RigQueue)`, which is what makes this
+ * drivable from a demo without a harness.
+ */
+export async function cancelItem(tx, { item, me, reason }) {
+	item.status = "cancelled";
+	item.cancelReason = reason;
+	item.transitions.push({ at: new Date().toISOString(), event: "cancelled", by: me, reason });
+	// The other party: the sender when the RECIPIENT cancels, the recipient when the SENDER does.
+	const other = item.from === me ? item.to : item.from;
+	// Three DIFFERENT situations send no notice, and the message is the whole interface the caller
+	// has (#3739): "there is no other party" is a correct outcome, "this item is itself a notice" is
+	// a classification, and conflating them hid a cancellation that reached nobody.
+	const selfOnly = typeof other !== "string" || other.length === 0 || other === me;
+	const noticeOfNotice = isNoticeItem(item);
+	let noticeId = null;
+	if (!noticeOfNotice && !selfOnly) {
+		noticeId = await enqueueItem(
+			tx,
+			me,
+			other,
+			`CANCELLED #${item.id}: ${item.subject}`,
+			`cancelled by ${me}: ${reason}`,
+			null,
+			true,
+			item.tier ?? null,
+		);
+	}
+	const why =
+		noticeId !== null
+			? `notified ${other} as notice #${noticeId}`
+			: selfOnly
+				? `no notice sent — there is no other party to notify`
+				: `no notice sent — this item is itself a notice`;
+	const message = `item #${item.id} cancelled: ${reason} (${why})`;
+	return { noticeId, other, message };
+}
+
 export function isDoneNotice(item) {
-	return item?.notice === true || /^DONE #\d+: /.test(String(item?.subject ?? ""));
+	if (typeof item?.notice === "boolean") return item.notice;
+	return /^DONE #\d+: /.test(String(item?.subject ?? ""));
+}
+
+/**
+ * A CANCELLATION notice (#3470): the message `cancel_work` now sends the OTHER PARTY, so a
+ * cancellation no longer looks like an item that silently vanished.
+ */
+export function isCancellationNotice(item) {
+	if (typeof item?.notice === "boolean") return item.notice;
+	return /^CANCELLED #\d+: /.test(String(item?.subject ?? ""));
+}
+
+/**
+ * Is this item a NOTICE of any kind (a DONE ack or a CANCELLATION)? A notice must never
+ * spawn another notice, or every terminal transition begets a hop and the chain grows
+ * without bound (ROADMAP 39). Both terminal tools consult this instead of their own shape,
+ * so a cancellation of a cancellation cannot loop.
+ */
+export function isNoticeItem(item) {
+	// THE STRUCTURAL FLAG WINS (#3739). The subject-prefix fallback exists only for flag-less
+	// items that predate the flag; letting it override a structural non-notice is how a WORK item
+	// whose free-text subject happens to start "DONE #123: " got cancelled without notifying
+	// anyone, while the tool told the caller the item "is itself a notice". Subjects are free
+	// text, so the prefix cannot be the authority - only a missing flag can defer to it.
+	if (typeof item?.notice === "boolean") return item.notice;
+	return /^(?:DONE|CANCELLED) #\d+: /.test(String(item?.subject ?? ""));
 }
 
 /**
@@ -359,6 +444,82 @@ export async function enqueueItem(
 		transitions: [{ at: new Date().toISOString(), event: held ? "held" : "queued", by: from }],
 	});
 	return id;
+}
+
+/**
+ * A short, stable digest of a body — the caller's check that a revise LANDED (#3435).
+ * Truncated to 16 hex chars: this is a comparison handle for a human or a seat, not a
+ * security primitive (the body is not secret; the queue is readable).
+ */
+export function bodyDigest(body) {
+	return createHash("sha256").update(String(body ?? ""), "utf8").digest("hex").slice(0, 16);
+}
+
+/**
+ * The revise COMPARISON, as data (#3435): apply the submitted fields to `item` and say
+ * which of three things happened, so a caller can never mistake "nothing to change" for
+ * "your change was dropped".
+ *
+ *  - `revised`   — at least one field differed and was written (verified by re-reading it
+ *                  in the same call); `fields` names what landed.
+ *  - `no-change` — every submitted field is byte-identical to the stored one. Nothing was
+ *                  written, and the caller is TOLD so, with the stored digest.
+ *  - `mismatch`  — a field was submitted, the write was attempted, and the stored value
+ *                  still does not equal it. This is the case that used to be reported as
+ *                  success; the tool turns it into REVISE_WORK_ERROR.
+ *
+ * Pure apart from the `item` mutation it is asked to perform; no I/O, so a demo can drive
+ * all three outcomes without a store.
+ */
+export function applyRevise(item, { subject, body } = {}) {
+	const submitted = [];
+	const changed = [];
+	if (subject !== undefined) {
+		submitted.push("subject");
+		if (subject !== item.subject) {
+			item.subject = subject;
+			changed.push("subject");
+		}
+	}
+	if (body !== undefined) {
+		submitted.push("body");
+		if (body !== item.body) {
+			item.body = body;
+			changed.push("body");
+		}
+	}
+	// Verify inside the same call: a submitted field that did not land is a MISMATCH.
+	const failed = [];
+	if (subject !== undefined && item.subject !== subject) failed.push("subject");
+	if (body !== undefined && item.body !== body) failed.push("body");
+	const status = failed.length > 0 ? "mismatch" : changed.length > 0 ? "revised" : "no-change";
+	return {
+		status,
+		fields: status === "mismatch" ? failed : changed,
+		submitted,
+		digest: bodyDigest(item.body),
+		bodyBytes: Buffer.byteLength(String(item.body ?? ""), "utf8"),
+	};
+}
+
+/**
+ * The MESSAGE a revise returns (#3435), one shape per outcome so no caller can read a
+ * dropped change as a success:
+ *  - `revised`   → names the fields that landed AND the stored body digest + byte count, so
+ *                  the caller can compare against what they sent without re-reading;
+ *  - `no-change` → says "no change" in those words and that NOTHING was written, with the
+ *                  digest — the caller can still tell whether the stored text is the text
+ *                  they meant;
+ *  - `mismatch`  → an ERROR-shaped line (`REVISE_WORK_ERROR:`), never a success.
+ */
+export function reviseMessage(item, outcome) {
+	if (outcome.status === "mismatch") {
+		return `REVISE_WORK_ERROR: item #${item.id} did not take the submitted ${outcome.fields.join(", ")} (stored body sha256=${outcome.digest}); nothing was changed`;
+	}
+	if (outcome.status === "no-change") {
+		return `item #${item.id} no change — the submitted ${outcome.submitted.join(" and ")} already matches the stored text (body sha256=${outcome.digest}); nothing was written`;
+	}
+	return `item #${item.id} revised (${outcome.fields.join(", ")}); it stays queued for ${item.to}. Stored body sha256=${outcome.digest} (${outcome.bodyBytes} bytes) — compare it with what you sent to verify the write landed.`;
 }
 
 // Ratcheting task tier (RANK 2 borrow; source vendor/eval/agent-fleet @ 7c34dde
@@ -701,7 +862,18 @@ const Router = defineExtension({
 					}
 					// Paused and nothing already held: a legible refusal, not a silent no-op.
 					if (paused) return { kind: "paused", by: control?.pausedBy ?? null, reason: control?.reason ?? null };
-					return null;
+					// #4713: THE DATA IS CAPTURED **INSIDE** THE CLOSURE, where `queue` is bound. The previous attempt put
+					// the lookup after `}, context);`, where `queue` does not exist: `node --check` passed and six demos passed,
+					// because none reaches this path with a live queue. `curate` and `rearmclaim` do, and they threw.
+					// #4737: SNAPSHOT INSIDE — return PLAIN data. `mine` was a filtered array OF DOC PROXIES and it ESCAPED
+					// the commit callback, so reading it afterwards threw `Cannot use a settled overlay`. The file states this
+					// rule in its own words at the `plainItem` helper: "never let a doc proxy escape the `api.commit`
+					// callback — snapshot inside, return plain." The whole array had to be spread into plain objects, not
+					// merely filtered, because the PROXIES are what do not survive settlement.
+					const mine = (queue.items ?? [])
+						.filter((it) => it.to === me && it.status !== "done" && it.status !== "cancelled")
+						.map((it) => ({ id: it.id, status: it.status, from: it.from, subject: it.subject }));
+					return mine.length > 0 ? { kind: "none", mine } : null;
 				}, context);
 				if (found?.kind === "paused") {
 					const why = found.reason ? ` (reason: ${found.reason})` : "";
@@ -710,6 +882,25 @@ const Router = defineExtension({
 							"`unpause`. Work you ALREADY hold still completes: use complete_work / defer_work.",
 					);
 				}
+					// #4732: THIS BLOCK MUST PRECEDE `if (!found)`. `{ kind: "none", mine }` is TRUTHY, so `!found` is
+					// FALSE and the HEADER rendering below (`ITEM #${found.id} | …`) would run against it — producing
+					// `ITEM #undefined | from=undefined | subject=undefined`, the string two passes attributed to a
+					// malformed fixture row. THE FIXTURE WAS FINE; THE FIX WAS DEAD CODE.
+					// #4713: A REFUSAL THAT NAMES NOTHING IS INDISTINGUISHABLE FROM AN EMPTY QUEUE. The 19-turn shape is a
+					// row `queued` at WAKE time and held / deferred / claimed-elsewhere by the time this runs — the stalled
+					// branch cannot reach it, because it needs a row STILL CLAIMED by this seat.
+					if (found?.kind === "none") {
+						const oldest = found.mine[0];
+						const others = found.mine.length > 1 ? ` (and ${found.mine.length - 1} more row(s) addressed to you)` : "";
+						return toolText(
+							`NO_QUEUED_WORK — but NOT an empty queue: #${oldest.id} is addressed to you and is now \`${oldest.status}\`${others}. ` +
+								(oldest.status === "held"
+									? `It is parked awaiting release; a row you hold is not a claim offer.`
+									: oldest.status === "claimed"
+										? `It is claimed by you — use complete_work or defer_work to advance it.`
+										: `It is not claimable in its current state; check \`status\` for who holds it.`)
+						);
+					}
 				if (!found) {
 					return toolText("NO_QUEUED_WORK");
 				}
@@ -800,7 +991,7 @@ const Router = defineExtension({
 					// a DONE notice back, or the chain never ends (ROADMAP 39).
 					// `isDoneNotice` also covers flag-less DONE items already in the
 					// store that predate the structural flag.
-					if (!isDoneNotice(item)) {
+					if (!isNoticeItem(item)) {
 						// The handoff must be RE-RUNNABLE (ROADMAP 48 / W2; lead #1553: verification
 						// MUST re-execute the evidence, accepting a claim is not verification). A
 						// completion's evidence is therefore carried ON THE DONE NOTICE - verbatim,
@@ -884,20 +1075,50 @@ const Router = defineExtension({
 							return `item #${args.itemId} is addressed to ${item.to}, not you`;
 						if (item.status !== "claimed")
 							return `item #${args.itemId} is not claimed by you (status=${item.status})`;
-						// Asking a seat IS a send, so the org-edge and capability gates apply
-						// to it exactly as they do to send_work. Checked BEFORE any state
-						// changes, so a forbidden question cannot leave the item half-parked.
-						if (args.to) await assertSendAllowed(tx, me, args.to);
+						// #4574: A DEFERRAL IS NOT A SEND. The comment here used to read "Asking a seat IS a send, so the
+						// org-edge and capability gates apply to it exactly as they do to send_work" — AND THAT PREMISE WAS
+						// WRONG AND LOAD-BEARING. It read as documentation, so nobody tested it.
+						// THE CONSEQUENCE: the gate fired BEFORE anything was recorded, so an off-edge `to:` could only reach
+						// the default below — a FORCED ESCALATION to the operator whether or not the operator was the right
+						// decider, and #4124 read as an open question for hours while the seat it named had never been asked.
+						// SO THE TWO ACTS ARE SPLIT: `assertSendAllowed` governs the `enqueueItem` below — that IS a send and
+						// must keep refusing loudly — and it does NOT govern RECORDING a target. Parked is not sent.
+						// #4655: TWO FACTS, ONE CATCH — THAT WAS THE DEFECT. `assertSendAllowed` calls `seatId(tx, to)` FIRST,
+						// and `seatId` throws `unknown seat: <name>`. So an UNKNOWN NAME and an ORG-EDGE REFUSAL both landed in
+						// the single try/catch below, and an unknown target was recorded and rendered as a seat — the original
+						// defect in a new spelling. The resolver already exists; nothing new is needed, only SEPARATION.
+						// THE RULING: record the name (so the operator sees what was typed), mark it UNASKABLE rather than
+						// falling back to nobody, and NAME THE NAME in the sentence.
+						let knownSeat = true;
+						if (args.to) {
+							try {
+								await seatId(tx, args.to);
+							} catch {
+								knownSeat = false;
+							}
+						}
+						let deliverable = false;
+						if (args.to) {
+							try {
+								await assertSendAllowed(tx, me, args.to);
+								deliverable = true;
+							} catch {
+								// The edge forbids SENDING to that seat. Record the target, deliver nothing: it can still ANSWER.
+								deliverable = false;
+							}
+						}
 						item.status = "deferred";
 						item.question = args.question;
-						item.deferredTo = args.to ?? DEFERRED_TO_HUMAN;
+						// #4574: and the default is HONEST. "nobody was asked" and "the operator was asked" are DIFFERENT
+						// FACTS; `args.to ?? DEFERRED_TO_HUMAN` made them indistinguishable and manufactured "human".
+						item.deferredTo = args.to ?? DEFERRED_TO_NOBODY;
 						item.transitions.push({
 							at: new Date().toISOString(),
 							event: "deferred",
 							by: me,
 							to: item.deferredTo,
 						});
-						if (args.to) {
+						if (args.to && deliverable) {
 							await enqueueItem(
 								tx,
 								me,
@@ -906,9 +1127,20 @@ const Router = defineExtension({
 								args.question,
 							);
 						}
-						return args.to
-							? `item #${item.id} deferred to ${args.to}; that seat has the question. Resume your own item with resume_work(${item.id}) once it answers.`
-							: `item #${item.id} deferred to the human operator, who sees it on the status line. Resume it with resume_work(${item.id}) once you have the answer.`;
+							// #4574: the message reports what ACTUALLY happened, which is THREE cases, not two. A no-target
+							// deferral says NOBODY was asked — not that the operator was, which is the fact the old default invented.
+							if (!args.to) {
+								return `item #${item.id} deferred with NO target — nobody was asked, and deferredTo records that rather than naming the operator. The operator sees it on the status line; resume it with resume_work(${item.id}) once you have an answer.`;
+							}
+							// #4655: AN UNKNOWN NAME IS ITS OWN CASE. Recording it and rendering it as a seat is the original defect;
+							// falling back to "nobody" would hide the typo. So it is recorded, marked unaskable, and NAMED.
+							if (!knownSeat) {
+								return `item #${item.id} parked on '${args.to}' — that target is NOT A KNOWN SEAT, so nobody has been asked. The name is recorded so you can see what was typed; correct it and defer again.`;
+							}
+							if (!deliverable) {
+								return `item #${item.id} parked on ${args.to} — NOT delivered, because the org edge forbids sending to that seat, but the seat is recorded as the one that should ANSWER and it is visible through attention/status. Resume your own item with resume_work(${item.id}) once it answers.`;
+							}
+							return `item #${item.id} deferred to ${args.to}; that seat has the question. Resume your own item with resume_work(${item.id}) once it answers.`;
 					}, context);
 					return toolText(out);
 				} catch (err) {
@@ -1030,23 +1262,25 @@ const Router = defineExtension({
 						return `item #${args.itemId} is not queued (status=${item.status}); only unclaimed work can be revised`;
 					if (args.subject === undefined && args.body === undefined)
 						return "revise_work needs a subject and/or a body";
-					const fields = [];
-					if (args.subject !== undefined && args.subject !== item.subject) {
-						item.subject = args.subject;
-						fields.push("subject");
+					// #3435: the OUTCOME must be legible and checkable. A revise that produces no
+					// change used to be indistinguishable from a revise that was DROPPED — both
+					// came back as a success-shaped sentence — so the only way to notice a lost
+					// amendment was to re-read the item, which nobody does on a success path.
+					// `applyRevise` returns a status, the fields it actually wrote, and a digest of
+					// the STORED body so the caller can verify the write without re-reading.
+					const outcome = applyRevise(item, { subject: args.subject, body: args.body });
+					if (outcome.status === "mismatch") {
+						// A change was submitted and did NOT land. Never report that as success.
+						return reviseMessage(item, outcome);
 					}
-					if (args.body !== undefined && args.body !== item.body) {
-						item.body = args.body;
-						fields.push("body");
-					}
-					if (fields.length === 0) return `item #${item.id} unchanged`;
+					if (outcome.status === "no-change") return reviseMessage(item, outcome);
 					item.transitions.push({
 						at: new Date().toISOString(),
 						event: "revised",
 						by: me,
-						fields,
+						fields: outcome.fields,
 					});
-					return `item #${item.id} revised (${fields.join(", ")}); it stays queued for ${item.to}.`;
+					return reviseMessage(item, outcome);
 				}, context);
 				return toolText(out);
 			},
@@ -1054,7 +1288,7 @@ const Router = defineExtension({
 		defineTool({
 			name: "cancel_work",
 			description:
-				"Cancel one of your items (sent by you or addressed to you) that is no longer worth doing. Terminal: it can never be claimed and the broker will never wake anyone for it. Use it for stale or superseded work instead of leaving it in the queue.",
+				"Cancel one of your items (sent by you or addressed to you) that is no longer worth doing. Terminal: it can never be claimed and the broker will never wake anyone for it. The reason is NOTIFIED to the other party as a CANCELLED notice, the same way a completion notifies them with a DONE notice.",
 			parameters: Type.Object({
 				itemId: Type.Number(),
 				reason: Type.String({
@@ -1072,15 +1306,8 @@ const Router = defineExtension({
 						return `item #${args.itemId} is not yours to cancel (from=${item.from} to=${item.to})`;
 					if (isTerminalItem(item))
 						return `item #${args.itemId} is already ${item.status}`;
-					item.status = "cancelled";
-					item.cancelReason = args.reason;
-					item.transitions.push({
-						at: new Date().toISOString(),
-						event: "cancelled",
-						by: me,
-						reason: args.reason,
-					});
-					return `item #${item.id} cancelled: ${args.reason}`;
+					const outcome = await cancelItem(tx, { item, me, reason: args.reason });
+					return outcome.message;
 				}, context);
 				return toolText(out);
 			},

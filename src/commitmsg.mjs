@@ -7,6 +7,9 @@
 // THAT DOES NOT EXIST. The reason it kept slipping is the reason a check is the right shape — A BOM
 // IS INVISIBLE IN EVERY NORMAL VIEW: `git log --oneline` renders it, `git show` renders it, the
 // author sees a clean subject, and it surfaces only in a byte-level read.
+// A FIFTH subject (30270c0) was NOT amended and IS in history — recorded as a known-reds baseline
+// (docs/STATUS.md); the rule's job is BOTH to stop the next one AND to keep finding this one until
+// the operator deals with it.
 //
 // Like src/featuredocs.mjs this module only READS git and returns PLAIN VALUES, so `check` stays a
 // linter over data (the rule never runs a subprocess or touches the filesystem).
@@ -22,7 +25,11 @@
 //
 // STATED LIMIT: a bounded RANGE (the most recent `limit` commits), because the whole history is not
 // the point — the point is that a BOM cannot enter unnoticed. A message already in history beyond
-// the range is out of scope; this is a gate on new work, not a historical sweep.
+// the range is out of scope; this is a gate on new work, not a historical sweep. CORRECTED
+// 2026-10-21 (#4692): the premise that "the four BOM subjects were amended and are gone from history"
+// is WRONG — there are FIVE subjects, FOUR amended, ONE (30270c0) still in history and recorded as a
+// baseline. The rule is CORRECT and its documented scope was the error: its job is both to stop the
+// next one AND to keep finding this one until it is dealt with.
 
 import { execFileSync } from "node:child_process";
 

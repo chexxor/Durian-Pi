@@ -38,12 +38,30 @@ cross-reference to this block when that item fires.
 `scripts/land.mjs` has returned `ok:true, merged:[…]` WHILE MERGING INTO AN ITEM WORKTREE, leaving `main`
 untouched and creating a store there. A landing entry's completion must carry:
 - `git merge-base --is-ancestor <sha> main` → **exit 0**, and
-- the landing report's `repo` field resolving to the **shared root**, and
 - ideally the CONTENT check — `main` carries what the branch was for — because ancestry passes even when
 a conflict dropped the block (for Fix A: `LANDING_MIN_WIDTH` read in the TERMINAL unit, not the old
 `width−4` unit; the old unit IS the defect and the ancestry check cannot see it).
+(The `repo`-field reading is RETIRED — `scripts/land.mjs` on main enforces `sharedRoot` itself (`f168339`),
+so the guard refuses a non-root repo: the report's `repo` field is MOOT rather than wrong. WHEN A MECHANISM
+REPLACES A DISCIPLINE, RETIRE THE DISCIPLINE EXPLICITLY — a precaution kept past its cause teaches the next
+reader the tool is still untrustworthy, and then they do not trust the NEXT tool either.)
 This is a rule for the seat that ACCEPTS the completion as much as the one that writes it — #3990 and
 #4163 both closed while their branches were unlanded.
+
+**A MERGE HAS TWO PARENTS; A DOCS COMMIT HAS ONE — the parent-count test settles whether a commit LANDED
+anything.** `git log -1 --format=%p <sha>`: TWO PARENTS → a merge, so something was landed; ONE PARENT → not
+a merge, so nothing was landed by it, whatever its subject says. A report said "the TUI landings landed as
+`9e8710e`" when `9e8710e` has a SINGLE parent (`e6b8f33`) and its subject "docs(NEXT): three TUI branches
+landed and proven" merely RECORDED the landings — the landings were three separate merges `a022635`,
+`aabcacd`, `e79dd2f` (two parents each). This is the same defect as `ok:true` with the flag swapped: a
+commit subject standing in for a fact. THE PAIR IS WHAT MAKES IT USEFUL: `--is-ancestor <branch-sha> main`
+says the WORK is on main; `%p` on the commit you THINK landed it says whether that commit is the thing that
+put it there. A SUBJECT IS A DESCRIPTION; A PARENT COUNT IS A STRUCTURE. GENERAL FORM: **WHEN A COMMIT
+MESSAGE AND THE COMMIT'S STRUCTURE DISAGREE, THE STRUCTURE IS THE FACT** — the message is written by whoever
+made the commit, at the moment they believed something; the parent list is what the object IS. It compounds
+the stale-list problem rather than being separate: a list of outstanding landings was FOUR OF SIX stale, and
+one of the four was marked landed by a commit that had landed nothing — both errors come from the same habit,
+trusting a report about a landing instead of asking git what happened.
 
 **When a landing reports success and `main` is unmoved: STOP AND REPORT. Never hand-restore the tree.**
 The tree being dirty is a REPORTABLE STATE, not a problem to solve with a text tool. The cost of the
@@ -53,6 +71,89 @@ failed to import → `watch`, `queue` and `status` DOWN ~11 minutes. THE TOOL LY
 PRESSURE TO HAND-FIX, and the hand-fix is what broke the tree. Never `>` / `Get-Content` / `Set-Content` a
 source file — use the `edit` tool or `cmd /c "git show <ref> > file"`; the encoding guard and detector
 are routed separately and give this rule teeth.
+
+**`git status --porcelain` IMMEDIATELY BEFORE the landing is BEST-EFFORT, not a guarantee — the LOCK is
+the serialisation.** The status check is a RACE, not a guard: measured `dirt=1`, then clean SECONDS later
+(the dirt was transient, written by another delegate mid-landing), with `main` moving twice underneath
+(`c7b6d30 → 9682817 → da01550`) under fresh landings from another seat. "CHECK STATUS, THEN LAND" HAS A
+WINDOW, and the window is however long it takes to type the landing command. **THE LOCK IS WHAT ACTUALLY
+MAKES IT SAFE; THE STATUS CHECK ONLY AVOIDS THE WORST CASE** — measured `waitedMs: 301749, liveHolders: 4`
+(five minutes waiting behind four live holders, another delegate landing concurrently): that IS the guard
+working, and it is why a concurrent lander is not a catastrophe. The status check CANNOT catch a write that
+lands between the check and the command; it catches the worst case — a tree left dirty for minutes by a
+seat that abandoned work. An earlier measurement is still evidence about the past, not a precondition
+(#4271 blocked by ten dirty files, #4163 the same, the 04:21Z flattening acted on a STALE picture; every
+measurement was TRUE WHEN TAKEN and false by the time it mattered), so take it AT THE MOMENT OF USE — but
+the lock, not the check, is what protects you. Same insight as the retired operator-confirmation gate
+(#4431): a human confirmation and a status snapshot are both SNAPSHOTS, and A SNAPSHOT CANNOT SUBSTITUTE FOR
+A SERIALISER — IT CAN ONLY AVOID THE OBVIOUS CASE.
+
+**AND IF IT IS DIRTY: STOP AND REPORT.** Do not clean it, do not stash it, do not restore it — the dirty tree
+may be a colleague's edit in flight, and this session has one incident that began with a seat deciding a
+dirty tree was its problem to solve.
+
+**WHY THE TEMPTATION IS STRONG HERE:** a landing takes minutes and the tree can change in seconds, so the
+window between "I checked" and "I landed" is exactly where the failures live.
+
+**DIRTY IS NOT THE SAME AS ABANDONED.** Two tracked files (`docs/SELFDEV.md`, `rig.selfdev.json`) went dirty
+between two measurements and were clean again later — the resolution was NOT cleanup, it was that a
+legitimate config edit COMPLETED. An `M` in `git status` can be a colleague's work in progress, in which
+case the correct action is to WAIT rather than to dispose.
+
+**The re-measure is the discipline that PAID — promote it; retire by CAUSE, not by age.** Every merge-tree
+figure in every entry was stale (main moved `fe52a41 → 9e8710e → 7ffc7b9 → d8bc976 → 671b50a` across one
+pass), and on one entry the central claim — "all three `--is-ancestor` exit 1 today" — was FALSE by the time
+it was claimed: three landings that did not need doing. THE MEASUREMENT IS WHAT CAUGHT IT: **A STALE PREMISE
+COSTS MORE THAN A MISREAD FLAG** — a misread flag produces a wrong report; a stale premise produces wrong
+WORK. The `repo` field guarded against a TOOL THAT LIED, and that tool is FIXED; the re-measure guards
+against a WORLD THAT MOVES, and it never stops moving. One cause could be removed; the other cannot.
+
+**The landing LOCK serialises landings — there is no operator-confirmation gate.** The protection against
+two delegates in one tree is the mechanical landing lock, not a human confirmation. Measured:
+`{ slots: 4, held: 4, waitedMs: 160062, liveHolders: 3 }` — a landing WAITED 160 seconds for a slot behind
+three live holders. Two delegates cannot merge into one tree simultaneously, because the tool will not let
+them. So: (1) DO NOT hold a landing for an operator to confirm no other delegate is landing — that is an
+ordering request, and lead's principle applies: DEPENDENCIES ARE ENFORCEABLE AND ORDERING REQUESTS ARE NOT.
+The lock is enforceable; a confirmation is not. When a gate duplicates a mechanism, the mechanism wins and
+the gate goes. (2) The precondition is the tree RE-MEASURED IMMEDIATELY BEFORE (see above). (3) REPORT THE
+LOCK'S WAIT AND HOLDERS IN THE LANDING REPORT — a 160-second wait behind three holders is a fact about the
+rig's throughput nobody had, and it explains "interrupted" tool calls: they were likely waiting for a slot,
+not crashing. A SEAT THAT THINKS ITS TOOL CRASHED RETRIES; A SEAT THAT KNOWS IT QUEUED WAITS. (4) IF THE
+LOCK IS UNAVAILABLE OR UNREADABLE, THAT IS WHEN TO STOP AND ASK — a missing serialiser is the actual hazard
+the confirmation gate was standing in for.
+
+**And the disclosure habit: report a judgement call WITH its reversal.** When a seat acts on the lock and
+without the un-obtainable confirmation, it says so: "IF THAT WAS THE WRONG CALL, THE CORRECTIVE IS ONE
+`git revert` OF `d8bc976` AND I WOULD RATHER SAY WHAT I DID THAN HAVE IT INFERRED." A seat that reports a
+judgement call with its reversal is not bypassing a gate — it is telling you the gate's cost.
+
+**CONDITIONAL, NOT A STEP: KEEP ALL SECTIONS in `demo/land-helper.test.mjs` WHEN #4011 AND #4142 BOTH
+LAND.** The "KEEP ALL SECTIONS" instruction was prepared and NOT needed — #4311 landed against a main where
+neither `5d9140f` nor `51a866b` had landed first, so `merge-tree` returned zero conflicts and the file had
+no markers in it. It fires only when #4011 AND #4142 both land: then that file WILL conflict and ALL SECTIONS
+MUST BE KEPT, because section 2d (the linked-worktree / shared-root refusal, #4247) sits beside 2b/2c and
+the fixture sections and they assert different things. A resolution recorded as a step gets applied where it
+is not needed; recorded as a condition, it fires when it should.
+
+**A STALE BRANCH CAN RE-INTRODUCE A CLEANUP.** When a landing is refused for a fault the author did not
+create, check whether the file is CLEAN on `main` and DIRTY on the branch — that is not a pre-existing wart
+being carried forward, it is a REGRESSION being applied backwards. Measured: `land.mjs impl-item-4286` was
+REFUSED — "1 file(s) fail TEXT INTEGRITY — docs/runbooks/README.md", fault `bom`. THE BOM WAS ON THE BRANCH
+AND NOT ON MAIN: main's README had already been cleaned by an earlier landing (`6b2c213` stripped it); the
+refused branch descended from the PRE-STRIP version. THE LANDING WOULD HAVE RE-INTRODUCED A BOM MAIN HAD
+ALREADY BEEN CLEANED OF — the gate caught a regression, not a pre-existing wart. A BRANCH IS MEASURED
+AGAINST CURRENT MAIN, NOT AGAINST THE MAIN IT WAS CUT FROM, and a cleanup since its fork is a change it can
+silently undo. THE REMEDY IS A FORK THAT STRIPS THE BYTES (as `impl-item-4561` did: content otherwise
+byte-identical, landed as `a1bb95d`), NEVER a resolution that takes the branch's version.
+
+**A REFUSAL IS A QUESTION ABOUT THE WHOLE BRANCH, NOT JUST THE NAMED FILE.** The fix pattern for any gate
+refusal is to FORK rather than resolve: a new branch from the old one with exactly the offending bytes
+removed and nothing else touched, then scan the OTHER changed files to confirm none carries the same fault
+(impl-item-4561 checked the other four). Checking the siblings is what makes the fork safe rather than
+lucky. AND the gate's case is now closed by evidence rather than argument: the text-integrity gate has
+caught (1) a first-offence BOM in a tracked file and (2) a REGRESSION re-introducing a cleaned BOM — both
+the author's own work, both would have reached main without it, neither visible in any demo. A CHECK THAT
+HAS REFUSED ITS OWN AUTHOR TWICE IS A CHECK NOBODY CAN CALL THEATRE.
 
 ## When to use
 A verified branch (`<seat>-item-<id>`, or any branch) must go onto `main`, and you want the landing to
@@ -229,14 +330,30 @@ rule as the generated-artifact check above.
 
 ## Diagnose (read-only)
 ```bash
-git -C <repo> status --porcelain                 # tracked changes block a landing; '??' untracked do NOT
+git -C <repo> status --porcelain                 # MUST be EMPTY — tracked AND untracked block (#3988)
 git -C <repo> merge-base --is-ancestor <branch> main && echo ALREADY-LANDED
 git -C <repo> rev-list --count main..<branch>    # 0 once landed
 ```
+**AND PORCELAIN IS NOT THE WHOLE PRE-FLIGHT — CHECK THE STRAY WORKTREES TOO.** The stray check reads the
+repo root's DIRECTORY LIST and compares it to `git worktree list`, so it fires on directories `git status`
+NEVER MENTIONS: `/item-*/` is in `.gitignore`, so a stray `item-<id>/` leaves porcelain EMPTY and still
+blocks. Measured 2026-10-20 at main 910fac7: porcelain **0 lines** and the landing **REFUSED for 10 stray
+`item-*/` directories**. A lander who checks porcelain alone will report a clean branch as landable and be
+wrong every time:
+```bash
+git -C <repo> worktree list --porcelain | grep '^worktree '   # the REGISTERED set
+ls -d <repo>/item-* 2>/dev/null                               # any name NOT in that set is STRAY
 The helper's pre-flight, in code (the enforcement chokepoint):
-- **Tracked modifications only** block. An untracked file cannot be clobbered by a fast-forward, and the
-  shared tree normally carries other seats' untracked notes — refusing on those would make the guard
-  useless rather than safe.
+- **Tracked AND untracked modifications block (#3988).** The rule was tracked-only until an UNTRACKED
+  `src/tui/durable/attach.mjs` written by a live seat would have passed it — a check that looks for the
+  dirt it expects misses the dirt that happens. A suite run in `.` measures the SHARED TREE, not main, so
+  a non-empty `git status --porcelain` refuses and the refusal NAMES every dirty path.
+- **STRAY WORKTREE DIRECTORIES at the repo root block (#4139).** A write to a REAPED worktree path
+  recreates `item-<id>/` inside the repo; `/item-*/` is ignored, so porcelain never shows it. The test is
+  REGISTRATION, not the name: a root child matching `item-<n>`/`verify*`/`.verify-*`/`wt-*`/
+  `.durig-test-wt-*`/`.land-scratch-*` that is NOT in `git worktree list --porcelain` is STRAY. A LIVE
+  worktree is legitimately `item-<id>/` at the root and must NOT be flagged. **REMEMBER: this one is NOT
+  porcelain, so an empty `git status` does not clear it.**
 - **`MERGE_HEAD`** present (the tree is already mid-merge) blocks — the landing must not add to it.
 - **genlock**: it probes `<db>.genlock.*` beside the store with `node:fs` only (no provider stack). A slot
   whose JSON names an **ALIVE** pid blocks (signal `0`; only `ESRCH` means gone — `EPERM` means alive but
@@ -272,7 +389,8 @@ The helper's pre-flight, in code (the enforcement chokepoint):
 1. Confirm the branch and sha, and that the shared tree has no tracked changes:
    ```bash
    git -C <repo> log --oneline -1 <branch>
-   git -C <repo> status --porcelain
+   git -C <repo> status --porcelain        # must be EMPTY (tracked AND untracked, #3988)
+   git -C <repo> worktree list --porcelain # and NO stray item-*/ dir outside this list (#4139)
    ```
 2. Land with the helper (its JSON report is always printed):
    ```bash

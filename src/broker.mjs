@@ -578,7 +578,8 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
   if (op === "configure") {
     // Bounded single-field write: `up` records the resolved provider on the seat's
     // conversation (D105/D106). The broker applies it with its own harness — no
-    // external writer, no cli.mjs change. The request carries { model: { provider, modelId? } }.
+    // external writer, no cli.mjs change. The request carries { model: { provider, modelId? },
+    // by: <operator identity> }. `by` defaults to "operator" when absent.
     const seatName = request.to ?? request.seat;
     const seat = seats[seatName];
     if (!seat) throw new Error(`unknown seat: ${seatName}`);
@@ -587,11 +588,12 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
     if (!model || typeof model.provider !== "string") {
       throw new Error(`configure: missing model.provider for seat ${seatName}`);
     }
+    const by = request.from ?? "operator";
     await harness.commit(
       (tx) => configure(tx, convId, { model }),
       context,
     );
-    return { op, seat: seatName, provider: model.provider, modelId: model.modelId ?? null };
+    return { op, seat: seatName, provider: model.provider, modelId: model.modelId ?? null, by };
   }
   if (op === "message") {
     const seat = seats[request.to];
@@ -2015,8 +2017,13 @@ export function brokerAlive(state, { now = Date.now() } = {}) {
     process.kill(state.pid, 0);
     return true;
   } catch (err) {
-    // EPERM means the process exists but we cannot signal it — still alive.
-    return err?.code === "EPERM";
+    // FAIL-SAFE (#3398): dead ONLY when the OS says the process does not exist. Any other
+    // error — EPERM (exists, cannot signal), or a code we have never seen — means ALIVE.
+    // The bug this probe serves is a FALSE-DEAD report (`serve --stop` claiming
+    // `stopped:true` for a live broker), and a false-dead admits a SECOND WRITER: that is
+    // the corruption class. `=== "EPERM"` was fail-OPEN toward dead — it classified every
+    // unexpected code as gone, i.e. it failed exactly on the path nobody tests.
+    return err?.code !== "ESRCH";
   }
 }
 
@@ -2075,8 +2082,10 @@ export function pidAlive(pid) {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    // EPERM means the process exists but we cannot signal it — still alive.
-    return err?.code === "EPERM";
+    // FAIL-SAFE (#3398): dead ONLY on ESRCH. See `brokerAlive` above — unknown ⇒ ALIVE,
+    // because a false DEAD here reports `stopped:true` for a live broker and admits a
+    // second writer, while a false ALIVE only refuses to start one more.
+    return err?.code !== "ESRCH";
   }
 }
 

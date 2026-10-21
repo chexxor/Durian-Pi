@@ -1,4 +1,4 @@
-﻿> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
 
 # durig — decision log
 
@@ -2258,7 +2258,7 @@ which keeps every file and branch. (c) Leave them — rejected: the operator ask
 ## D90 — Runbook discoverability is onboarding: the entry point and the constitution must say the runbooks exist and when to consult them (delegate, 2026-10-17)
 
 **Decision.** The delegate entry point (`AGENTS.md` clock-in + "Where to read further"), the durig skill
-(`.agents/skills/durig/SKILL.md` clock-in + references), and the seat **P3 Runbooks** rule in
+(`.agents/skills/driving-durian-pi/SKILL.md` clock-in + references), and the seat **P3 Runbooks** rule in
 `constitution.txt` now name `docs/runbooks/` and its symptom index, and require **reading the matching
 runbook before improvising** on an operating situation it covers — not only authoring one when a procedure
 changes. The research runbook (`research-request.md`) is called out explicitly for commissioning research.
@@ -2647,7 +2647,7 @@ designer/advocate UX proposal is accepted and the ROADMAP 55 security position i
 **Decision.** The product is renamed `durig` → `durian-pi` across all tracked text and identifiers:
 `package.json` `name`; the 24 `DURIG_*` env vars become `DURIAN_PI_*`; `durig.config.json` becomes
 `durian-pi.config.json`; `durig.config.default.json` / `durig.config.example.json` are renamed; the
-`.durig/` scratch dir becomes `.durian-pi/`; `skills/durig/` and `.agents/skills/durig/` become
+`.durig/` scratch dir becomes `.durian-pi/`; `skills/durig/` and `.agents/skills/durig/` become `.agents/skills/driving-durian-pi/` and `.agents/skills/delegating-to-durian-pi/`
 `durian-pi`; docs, demos and `.gitignore` follow. The config/env loader accepts the old `DURIG_*` names
 and the old `durig.config.json` as deprecated aliases; the new name wins when both are set. The new
 multi-seat TUI is named the **durian-pi TUI**.
@@ -3096,6 +3096,59 @@ view; the CLI grows `answer`/`queue --waiting` and `status` grows a headline. Op
 **Status.** Proposed (exploration, item #2700). Not sequenced; `pm` sequences design then decomposition.
 D-number uses the next free slot; scribe's pending D113 lands first and lead #2452 re-derives numbers at
 land time. Evidence: the code citations above; no implementation is claimed.
+## D120 — Queue lifecycle redesign v2 is ACCEPTED as the design of record; it LEADS capability work (operator, 2026-10-19; recorded by scribe, item #3035)
+
+**Context.** The queue can orphan work because a parked item is not required to name a machine-readable
+reason it is parked, nor who or what clears it, nor a date by which someone must look again. The incident
+`docs/incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md` is the live instance: held rows whose
+cited queue gates all cleared stayed parked forever (`#2630`, gated on the non-terminal `#2797`/`#2806`).
+The proposal `docs/reviews/queue-lifecycle-redesign.md` (v1) was reviewed independently by `architect`
+(`#2984`, `docs/reviews/architecture-queue-lifecycle-redesign-review.md`, 4 blockers + 13 CRs) and
+`advocate` (`#2985`, `docs/reviews/advocate-queue-lifecycle-redesign.md`, 8 CRs); the reviews found real
+defects in v1 (F1/F2/F3/F4/F7/F8/F9/F11, CR-1/CR-3/CR-6 — substantive design corrections, not polish).
+
+**Decision.** v2 of `docs/reviews/queue-lifecycle-redesign.md` (commit `defbc34`; acceptance recorded at
+`e788668`) is ACCEPTED as the **design of record** — it incorporates every review finding with a stated
+disposition in §13, and where v1 and v2 disagree, v2 wins. The operator ruled (2026-10-19) that this
+redesign **leads capability work** (defect fixes and the prerequisites it depends on are not capability
+work and land first). The accepted model in substance:
+
+1. **Two orthogonal axes** replace the status soup: `stage` (`open`/`active`/`closed`) and a nullable
+   `block`. `held`/`deferred` stop being statuses and become `block` shapes; a block cannot exist without
+   a `resolver`.
+2. **Blocks are typed, sourced, and multi-constraint.** `block.source: declared|legacy`; a block may
+   carry several `constraints`; the one automatic action (auto-open) fires only for a *declared*
+   `dependency` whose every constraint is a completed queue gate — legacy prose gates are never promoted
+   to a dependency by inference.
+3. **Every block has a trigger**, including a stuck gate: `gate-cleared-unreleased` and `gate-stalled`
+   (queue-scoped attention kinds), plus `parked-review-due` and `orphan-no-progress`.
+4. **`check` rules enforce well-formedness on authored blocks only** — never on the read-mapping of
+   legacy rows, so enforcement can never turn `check` red across the unmigrated store and stop landings.
+
+Gate-completion is an event (the closing commit, `complete_work`/`cancel_work`, with a broker-pass
+backstop) that atomically releases declared dependents whose every queue constraint is done. The
+migration is additive and lazy: the read-only half (check rules + queue-scope attention) ships first; the
+`rig.mjs`/`driver.mjs` axis change is sequenced behind the standing reliability cluster (`#2420`/`#2483`).
+
+**Scope questions still open for `lead` (the decision does not answer them).** (a) F12 — `#2673`'s
+lead-ratified `workable(item, seat)` is the same seam as this design's claimability, and its
+`requires`/fault clause is not implementable because `requires` is not persisted; one predicate or two —
+the redesign should own one `workable` or the two must not land independently. (b) F11 — there is no
+landed decision behind the `waiting` derivation; either land the architect's draft ADR with the `block`
+model as its source, or the proposal stops citing it (v1's D114 citation is withdrawn).
+
+**Alternatives rejected** (each with the review's reason): add a `parked-review-due` attention to today's
+`held` (treats the symptom, leaves reason/gate in prose); add more statuses (`blocked`,
+`waiting-operator`, `backlog` — the two-axis model carries the same information); a background unsticker
+that releases anything whose prose cites a done item (proven unsafe by the measured 59 candidates, mostly
+landing-list/backlog/do-not-start); a maintained reverse index of dependents (a second source of truth
+that drifts).
+
+**Status.** ACCEPTED — design of record (operator ruling, 2026-10-19). Recorded by `scribe` (item
+#3035). The design doc already marks the acceptance at `docs/reviews/queue-lifecycle-redesign.md`
+(commit `e788668`). Implementation items are handed to `pm` (register M1–M7 and route F12/F11 to `lead`);
+the prerequisites `#2983` → `#2992` → `#2420`/`#2483` are built but unlanded. This entry is a decision
+record, not an implementation claim — no code change accompanies it.
 
 ## D114 — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19)
 
@@ -3393,3 +3446,40 @@ pass as the ledger-order fix, then amended per the lead addendum (#3280). Config
 documented in `docs/SELFDEV.md`. The switch is DIRECTED but NOT YET IN EFFECT (see above) — the live
 store refresh is the open step tracked at `#3274`. A tip verified against qwen36/poly is still
 unverified for swift-1.5/strata until the refresh is observed, regardless of how ratified the config is.
+
+## D122 — The fused process is the HARNESS'S HOST, not "harness" or "broker"; post-split names `harnessd` (store+runtime owner) and `broker` (automation client) (lead #4294, 2026-10-21; recorded by scribe, item #4338)
+
+**Decision:** TODAY: NO RENAME. The fused process is a broker that hosts the harness, and NO SINGLE WORD IS
+HONEST because it is two things — describe it, do not rename it. Renaming now would be as wrong as "broker":
+it would name one half and hide the other. **POST-SPLIT:** `harnessd` / "harness server" = the store and
+runtime owner; `broker` = the automation client. Each name is accurate THEN, and the rename lands WHEN THE
+COMPONENTS ACTUALLY SEPARATE — not before. And the direct answer to the operator's "if it is not the harness,
+what else is?": **IT IS THE HARNESS'S HOST — the harness is the runtime object, the process serves it.**
+
+**Rationale.** The operator asked whether "broker" is a poor name and should be "harness". Lead ruled it
+(#4294); the distinction the question could not see is that BOTH single words are wrong today:
+- **"HARNESS" IS ALSO WRONG** — the harness is a LIBRARY OBJECT (`openHarness()`, `harness.resume()`,
+  `harness.conversation()`, `harness.inspect()` — all in `cli.mjs` on main), NOT A PROCESS. The process HOSTS
+the harness, so the honest name for that half is HARNESS SERVER (or `harnessd`) — the SERVER of the harness,
+not the harness.
+- **"BROKER" IS NOT WRONG EITHER** — it is right for the OTHER half: post-split it correctly names the
+AUTOMATION component (it brokers work, decides who runs, delivers intents, supervises). The word reads wrong
+TODAY only because ONE PROCESS IS DOING BOTH JOBS.
+- **Record it NOW:** a rename ruled after the code moves re-opens every file it touched — `broker` appears in
+the CLI surface (`serve`), the runbooks and the demos.
+
+**Ownership invariant (recorded beside the naming; the split's names are meaningless without it, lead verbatim).**
+THE AUTOMATION MUST REMAIN THE ONLY WRITER. HARNESS SERVER OWNS THE STORE; THE BROKER HOLDS THE WRITE LEASE
+AND SUBMITS THROUGH RPC/SPOOL; EVERY OTHER CLIENT IS A READ-ONLY SUBSCRIBER. And "owns" must NOT mean
+"may WRITE": the harness may HOLD the file, but it must NOT WRITE it — ONE WRITER MEANS ONE WRITER.
+`harnessd` names the store's OWNER, not its writer; the two names must not blur that.
+
+**Alternatives.** (a) Rename today to "harness" — rejected: names one half and hides the other, as wrong as
+"broker"; (b) rename today to "harnessd"/"harness server" — rejected: same problem, and the split has not
+happened; (c) no rename today, with the post-split names reserved — adopted.
+
+**Status.** Lead ruling #4294 (2026-10-21); recorded by scribe, item #4338, in the record BEFORE any code
+moves. No rename, no code, no split design — the naming entry only. D122 is the issue-ordered next number
+after D121 (main `ffa2ab3`). Per #3075 (no branch hardcodes a number), the number here is PROVISIONAL: the
+lander MUST re-confirm 122 is still free at land time and RENUMBER IF NOT — an entry that lands with a taken
+number would collide, and a silently-assumed number is exactly what #3075 forbids.
