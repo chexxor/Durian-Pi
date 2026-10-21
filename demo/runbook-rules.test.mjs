@@ -37,6 +37,21 @@ const base = {
 const audit = (runbooks) => auditRig({ ...base, runbooks });
 const ids = (r) => r.findings.map((f) => f.id);
 
+// A COMPLETE front-matter block (ROADMAP 82 enforces the mandatory keys), so these
+// fixtures exercise the stale/unverified rules rather than the conformity rule; each
+// fixture's `runbook:` mirrors its filename stem, which conformity also requires.
+const fm = (over = {}) => ({
+	runbook: "ok",
+	symptom: "something is wrong",
+	writes: false,
+	precondition: "read-only",
+	last_verified: "2026-10-16",
+	verified_by: "impl",
+	evidence: "demo/runbook-rules.test.mjs",
+	check_rule: null,
+	...over,
+});
+
 // The two rules exist with the ROADMAP-81 severities.
 const byId = new Map(RULES.map((r) => [r.id, r]));
 assert.equal(byId.get("runbook-stale")?.severity, "error", "runbook-stale is an error");
@@ -46,7 +61,7 @@ assert.equal(byId.get("runbook-unverified")?.severity, "fix-now", "runbook-unver
 const stale = audit([
 	{
 		file: "docs/runbooks/broker-safe-change.md",
-		frontMatter: { last_verified: "2026-01-01" },
+		frontMatter: fm({ runbook: "broker-safe-change", last_verified: "2026-01-01" }),
 		changedNamedFiles: ["src/broker.mjs"],
 	},
 ]);
@@ -60,7 +75,7 @@ assert.equal(stale.exitCode, 1);
 
 // 2. An UNVERIFIED runbook: Verify never ran -> fix-now, does NOT fail a run.
 const unverified = audit([
-	{ file: "docs/runbooks/new.md", frontMatter: { last_verified: "unverified" }, changedNamedFiles: [] },
+	{ file: "docs/runbooks/new.md", frontMatter: fm({ runbook: "new", last_verified: "unverified" }), changedNamedFiles: [] },
 ]);
 assert.ok(ids(unverified).includes("runbook-unverified"), `unverified runbook reported; got ${ids(unverified).join(", ")}`);
 assert.equal(unverified.findings.find((f) => f.id === "runbook-unverified").severity, "fix-now");
@@ -72,18 +87,26 @@ const missing = audit([{ file: "docs/runbooks/no-front-matter.md", frontMatter: 
 assert.ok(ids(missing).includes("runbook-unverified"), "an absent last_verified is treated as never-run");
 
 // 3. A HEALTHY runbook: verified, nothing it names changed -> no finding.
-const healthy = audit([{ file: "docs/runbooks/ok.md", frontMatter: { last_verified: "2026-10-16" }, changedNamedFiles: [] }]);
+const healthy = audit([{ file: "docs/runbooks/ok.md", frontMatter: fm(), changedNamedFiles: [] }]);
 assert.deepEqual(ids(healthy), [], `a healthy runbook has no findings; got ${ids(healthy).join(", ")}`);
 assert.ok(
 	healthy.checks.filter((c) => c.id.startsWith("runbook-")).every((c) => c.status === "pass"),
-	"both runbook rules pass on a healthy runbook",
+	"every runbook rule passes on a healthy runbook",
 );
 
 // 4. A MIXED set: the healthy one is silent, the other two are reported once each.
 const mixed = audit([
-	{ file: "docs/runbooks/ok.md", frontMatter: { last_verified: "2026-10-16" }, changedNamedFiles: [] },
-	{ file: "docs/runbooks/stale.md", frontMatter: { last_verified: "2026-01-01" }, changedNamedFiles: ["src/a.mjs", "src/b.mjs"] },
-	{ file: "docs/runbooks/unverified.md", frontMatter: { last_verified: "unverified" }, changedNamedFiles: [] },
+	{ file: "docs/runbooks/ok.md", frontMatter: fm(), changedNamedFiles: [] },
+	{
+		file: "docs/runbooks/stale.md",
+		frontMatter: fm({ runbook: "stale", last_verified: "2026-01-01" }),
+		changedNamedFiles: ["src/a.mjs", "src/b.mjs"],
+	},
+	{
+		file: "docs/runbooks/unverified.md",
+		frontMatter: fm({ runbook: "unverified", last_verified: "unverified" }),
+		changedNamedFiles: [],
+	},
 ]);
 assert.equal(mixed.summary.error, 1, "one stale error");
 assert.equal(mixed.summary["fix-now"], 1, "one unverified fix-now");

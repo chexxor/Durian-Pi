@@ -121,7 +121,7 @@ try {
 
 	// End-to-end: the status command must carry the notice through readRigHealth's
 	// enrichment (admittedAt recovered from the entry, seatsWithSlot, nowMs). A
-	// small DURIG_STRANDED_MS makes the already-aged submission fire without a 30s
+	// small DURIAN_PI_STRANDED_MS makes the already-aged submission fire without a 30s
 	// wait; the writer harness is closed, so nothing schedules it in between.
 	await new Promise((r) => setTimeout(r, 300));
 	const child = spawn(process.execPath, ["cli.mjs", "status"], {

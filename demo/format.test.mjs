@@ -17,7 +17,7 @@ import { join } from "node:path";
 
 const dir = mkdtempSync(join(tmpdir(), "durig-format-"));
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
-// format opens no store, but point DURIG_DB at a temp file so nothing is created
+// format opens no store, but point DURIAN_PI_DB at a temp file so nothing is created
 // in the checkout even if a future change reaches for storage.
 const env = { ...process.env, DURIG_PROVIDER: "faux", DURIG_DB: join(dir, "rig.sqlite") };
 const cli = (args) => {

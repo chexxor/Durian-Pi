@@ -11,7 +11,7 @@
 // the shipped rig.json/rig.starter.json use the canonical ARRAY form).
 //
 // Headless/temp-cwd contract (same class as demo/errorwording.test.mjs): every
-// case drives the REAL cli from a fresh temp dir chain with DURIG_DB pointed at
+// case drives the REAL cli from a fresh temp dir chain with DURIAN_PI_DB pointed at
 // an ABSENT store, so the store-dependent check rules skip with their why and
 // the audit of the copied starter exits 0.
 //
@@ -63,7 +63,7 @@ try {
 	const inner = join(outer, "inner");
 	mkdirSync(inner, { recursive: true });
 	copyFileSync(STARTER, join(outer, "rig.json"));
-	// The bare/empty store: DURIG_DB points at a path whose file does not exist,
+	// The bare/empty store: DURIAN_PI_DB points at a path whose file does not exist,
 	// so check reads the file-only audit and skips store rules with a reason.
 	const NOMATCH = join(dir, "nomatch");
 	mkdirSync(NOMATCH, { recursive: true });

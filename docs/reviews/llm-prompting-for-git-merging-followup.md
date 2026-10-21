@@ -1,8 +1,10 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 
 
 I'll start by checking the sandbox for the baseline docs the request references, then begin research.No durig baseline docs are present in the sandbox — only the request itself. I'll note internal claims as unverified. Continuing research.Good material. Now filling the remaining gaps.One more research pass to close the remaining gaps.Final gap-filling pass.## Note on the deliverable
 
-The sandbox contains only the request itself — none of the baseline documents it cites (`docs/reviews/llm-prompting-for-git-merging.md`, `docs/reviews/landing-safety-2026-10-17.md`, `docs/runbooks/merge.md`, `docs/runbooks/resolve-merge-conflict.md`, `docs/ROADMAP.md`, the vendored `pi-durable dist/tools/edit.js`). The workspace is also read-only, so I cannot create `docs/reviews/llm-prompting-for-git-merging-followup.md`. **The report is delivered below**; every question about durig's own code/behaviour is marked **internal — unverified** because I could not read those files.
+The sandbox contains only the request itself — none of the baseline documents it cites (`docs/reviews/llm-prompting-for-git-merging.md`, `docs/incidents/2026-10-17-landing-safety.md`, `docs/runbooks/merge.md`, `docs/runbooks/resolve-merge-conflict.md`, `docs/ROADMAP.md`, the vendored `pi-durable dist/tools/edit.js`). The workspace is also read-only, so I cannot create `docs/reviews/llm-prompting-for-git-merging-followup.md`. **The report is delivered below**; every question about durig's own code/behaviour is marked **internal — unverified** because I could not read those files.
 
 Evidence classes used: **observed** (controlled benchmark / peer-reviewed / primary docs) and **advertised-elsewhere** (vendor or community claim).
 
@@ -489,7 +491,7 @@ Sources read directly: repo tree + README [^1], `src/seattools.mjs` [^2], `src/c
 
 **C1 (decisive). The recommended deterministic-first step "per-path `git checkout --ours/--theirs`" is refused by durig's own guard.** `DENIED_COMMANDS` matches `/git\s+checkout\b/i` and refuses it with "would change the seat's working tree or HEAD" [^f8e6f0#47]. `git reset`, `git restore`, `git clean`, `git stash`, `git revert`, and `git branch -D` are refused too [^6], as are the `git -C <path> …` redirects [^6]. **`git merge`, `git rebase`, `git apply`, `git worktree`, and `git merge-tree` are *not* denied.** So any resolver that runs as a seat cannot use `checkout --ours/--theirs`; the ours/theirs primitive has to move to the operator/delegate path, or be replaced by a `read`+`write` of the chosen blob content.
 
-**C2. The named baseline artifacts do not exist on `main`.** The follow-up request says the safe conclusions were "folded into `docs/runbooks/resolve-merge-conflict.md`" and a pre-flight was "added to `merge.md`'s orbit", and names `docs/reviews/llm-prompting-for-git-merging.md`, `docs/reviews/landing-safety-2026-10-17.md`, and "ROADMAP items 100–101". **None of these appear in the tree I read.** `docs/runbooks/` holds only `README.md`, `_template.md`, `broker-down-or-stalled.md`, `broker-safe-change.md`, `daemon-not-running.md`, `format-before-commit.md`, `leaked-worktrees.md`, `research-request.md`, `seat-reset.md`, `store-corruption-recovery.md` [^1], and the runbook index lists five runbooks with no merge runbook [^9]. `docs/reviews/` holds no merge report [^1]. ROADMAP's highest numbered items are 91–99 (plus 92–97, O1–O4, 60–67, 73–88) [^8] [^8]. **Treat those five citations as unverified; if the files exist they are on another branch or were never committed.**
+**C2. The named baseline artifacts do not exist on `main`.** The follow-up request says the safe conclusions were "folded into `docs/runbooks/resolve-merge-conflict.md`" and a pre-flight was "added to `merge.md`'s orbit", and names `docs/reviews/llm-prompting-for-git-merging.md`, `docs/incidents/2026-10-17-landing-safety.md`, and "ROADMAP items 100–101". **None of these appear in the tree I read.** `docs/runbooks/` holds only `README.md`, `_template.md`, `broker-down-or-stalled.md`, `broker-safe-change.md`, `daemon-not-running.md`, `format-before-commit.md`, `leaked-worktrees.md`, `research-request.md`, `seat-reset.md`, `store-corruption-recovery.md` [^1], and the runbook index lists five runbooks with no merge runbook [^9]. `docs/reviews/` holds no merge report [^1]. ROADMAP's highest numbered items are 91–99 (plus 92–97, O1–O4, 60–67, 73–88) [^8] [^8]. **Treat those five citations as unverified; if the files exist they are on another branch or were never committed.**
 
 **C3. The incident mechanism is confirmed exactly, and is worse than "one verb".** `cli.mjs` statically imports `auditRig` from `./src/checkup.mjs` [^28e1af#71], and `src/seattools.mjs` imports `seatsAreVerifier` from `./checkup.mjs` [^21242c#17]. `checkup.mjs` imports only `./ansi.mjs` [^6b0a97#25]. A `<<<<<<<` marker left in `checkup.mjs` therefore breaks **both** `cli.mjs` *and the seat-tools extension module* — which is why "every `node cli.mjs` verb" was a `SyntaxError`. A merge conflict in `checkup.mjs` is a single point of failure for the whole CLI surface.
 
@@ -665,7 +667,7 @@ Replay durig's own conflicts as 20-line-context 3-way hunks; report the five cat
 
 ## 5. Explicitly unverified / still open
 
-1. **`docs/reviews/llm-prompting-for-git-merging.md`, `docs/reviews/landing-safety-2026-10-17.md`, `docs/runbooks/merge.md`, `docs/runbooks/resolve-merge-conflict.md`, and "ROADMAP items 100–101" are not present on `main` as I read it** — see C2. I read the default branch; they may exist elsewhere.
+1. **`docs/reviews/llm-prompting-for-git-merging.md`, `docs/incidents/2026-10-17-landing-safety.md`, `docs/runbooks/merge.md`, `docs/runbooks/resolve-merge-conflict.md`, and "ROADMAP items 100–101" are not present on `main` as I read it** — see C2. I read the default branch; they may exist elsewhere.
 2. **mergiraf Windows support and licence** — unverified (first pass).
 3. **Edit-format accuracy for DeepSeek-V4.1-Flash / GLM-5.3-Flash** — no benchmark exists.
 4. **Diff-XYZ per-model numbers** — two readouts disagree; re-derive before relying.
@@ -698,7 +700,7 @@ If you can tell me the branch where the merge runbooks and the `landing-safety-2
 ---------------
 
 Here is the merge doc: https://github.com/chexxor/Pi-OpenDurig/blob/main/docs/runbooks/merge.md.
-Here is the landing safety doc: https://github.com/chexxor/Pi-OpenDurig/blob/main/docs/reviews/landing-safety-2026-10-17.md
+Here is the landing safety doc: https://github.com/chexxor/Pi-OpenDurig/blob/main/docs/incidents/2026-10-17-landing-safety.md
 
 ---------------
 
@@ -882,7 +884,7 @@ Replay durig's own conflicts as 20-line-context 3-way hunks; report the five cat
 **References**
 
 [^1]: [docs/runbooks/merge.md](https://github.com/chexxor/Pi-OpenDurig/blob/main/docs/runbooks/merge.md) (50%)
-[^2]: [docs/reviews/landing-safety-2026-10-17.md](https://github.com/chexxor/Pi-OpenDurig/blob/main/docs/reviews/landing-safety-2026-10-17.md) (30%)
+[^2]: [docs/incidents/2026-10-17-landing-safety.md](https://github.com/chexxor/Pi-OpenDurig/blob/main/docs/incidents/2026-10-17-landing-safety.md) (30%)
 [^3]: [docs/ROADMAP.md](https://github.com/chexxor/Pi-OpenDurig/blob/main/docs/ROADMAP.md) (20%)
 
 

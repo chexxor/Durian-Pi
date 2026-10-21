@@ -3,12 +3,13 @@
 // Built on a throwaway git repository rather than this one, for the same reason
 // provenance.test.mjs is: a test that manipulates the real tree is a test that can damage it.
 
-import { execFile } from "node:child_process";
+import { execFileSync, execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { createWorktree, removeWorktree, repoRoot, uncommittedInSource } from "../src/worktree.mjs";
 
 const run = promisify(execFile);
@@ -155,6 +156,96 @@ try {
 		"a seat without a declared cwd keeps the harness default rather than guessing one",
 		cli.includes("seatCwd === undefined ? {} : { cwd: seatCwd }"),
 	);
+
+	console.log("\n#1456: a worktree can be forked from an UNLANDED base ref (worktree --ref)");
+	{
+		// The gap: no entry point could produce a worktree at an unlanded tip, so a fix that must edit
+		// a file at that tip (the #1444/entry-11 shape) had no sanctioned path. `createWorktree` already
+		// takes `ref`; the CLI verb never passed one.
+		const repo2 = join(base, "ref-repo");
+		const src2 = join(repo2, "durig");
+		await mkdir(src2, { recursive: true });
+		await writeFile(join(src2, "artifact.txt"), "on main\n");
+		await run("git", ["init", "-q", repo2]);
+		await run("git", ["-C", repo2, "add", "durig/artifact.txt"]);
+		await run("git", ["-C", repo2, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "main base"]);
+		await run("git", ["-C", repo2, "branch", "-M", "main"]);
+		// The unlanded tip: a commit on a branch `main` does not contain.
+		await run("git", ["-C", repo2, "checkout", "-q", "-b", "unlanded"]);
+		await writeFile(join(src2, "artifact.txt"), "on the unlanded tip\n");
+		await run("git", ["-C", repo2, "add", "durig/artifact.txt"]);
+		await run("git", ["-C", repo2, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "unlanded tip"]);
+		const tip = (await run("git", ["-C", repo2, "rev-parse", "HEAD"])).stdout.trim();
+		await run("git", ["-C", repo2, "checkout", "-q", "main"]);
+		const mainTip = (await run("git", ["-C", repo2, "rev-parse", "HEAD"])).stdout.trim();
+		check("the fixture has an unlanded tip distinct from main", tip !== mainTip, `tip ${tip} main ${mainTip}`);
+
+		const cliPath = fileURLToPath(new URL("../cli.mjs", import.meta.url));
+		const refTarget = join(base, "wt-ref");
+		let cliOk = true;
+		let cliErr = "";
+		try {
+			await run(process.execPath, [cliPath, "worktree", refTarget, "--source", src2, "--ref", "unlanded"]);
+		} catch (error) {
+			cliOk = false;
+			cliErr = String(error?.stderr ?? error?.message ?? error).slice(0, 200);
+		}
+		check("`worktree --ref` runs", cliOk, cliErr);
+		if (cliOk) {
+			const head = (await run("git", ["-C", refTarget, "rev-parse", "HEAD"])).stdout.trim();
+			check("the worktree sits at the UNLANDED tip, not main", head === tip, `got ${head}, tip ${tip}, main ${mainTip}`);
+			check(
+				"...so the unlanded content is present",
+				(await readFile(join(refTarget, "durig", "artifact.txt"), "utf8")).includes("unlanded"),
+			);
+		}
+
+		// Control: with no --ref the same verb forks HEAD (main) ? so the check above is about `ref`.
+		// #4412: EVERY COMMAND'S OUTCOME GOES INTO A CHECK. This block used to be
+		//     try { await run(...) } catch {}
+		//     const headNoRef = (await run("git", ["-C", headTarget, "rev-parse", "HEAD"])).stdout.trim();
+		// ? the control's failure was SWALLOWED by the empty catch, and the next line's throw was UNGUARDED,
+		// so the exception was printed under the LAST CHECK THAT RAN (line 193's "`worktree --ref` runs") and
+		// an entire diagnosis was built on `--ref` being broken when the CONTROL was what failed.
+		// A THROW IS ATTRIBUTED BY POSITION, NOT BY LABEL ? and the more specific the borrowed label, the
+		// more confidently wrong the reader is. Hence: no bare `await run(...)` anywhere in this file.
+		const headTarget = join(base, "wt-head");
+		let ctrlOk = true;
+		let ctrlErr = "";
+		try {
+			await run(process.execPath, [cliPath, "worktree", headTarget, "--source", src2]);
+		} catch (error) {
+			ctrlOk = false;
+			ctrlErr = String(error?.stderr ?? error?.message ?? error).slice(0, 300);
+		}
+		check("the CONTROL invocation (no --ref) succeeds", ctrlOk, ctrlErr);
+		let headNoRef = "";
+		let headErr = "";
+		try {
+			headNoRef = (await run("git", ["-C", headTarget, "rev-parse", "HEAD"])).stdout.trim();
+		} catch (error) {
+			headErr = String(error?.stderr ?? error?.message ?? error).slice(0, 300);
+		}
+		check("the control's worktree EXISTS and resolves HEAD", headNoRef !== "", headErr || `no HEAD in ${headTarget}`);
+		check("without --ref the worktree forks HEAD (main), the old behaviour", headNoRef === mainTip, `got ${headNoRef}`);
+
+		// #4514 (decision (a)): THE CLI VERB'S JSON IS A CONTRACT — assert on its OUTPUT, not on the object.
+		// A contract with a hole lies by omission: before this, a `--ref` worktree's JSON carried NONE of the
+		// fork-point fields and a consumer reading the unified set got `undefined` silently.
+		// THE TWO NEGATIVES ARE ASSERTED because a merge can drop either while the positive still passes:
+		// the NULL case (no `--ref` -> null, not invented) and the NO-LEAK case (the internal locals must not
+		// appear in the public JSON, or the record carries two spellings of one fact).
+		{
+			const out = JSON.parse(execFileSync(process.execPath, [cliPath, "worktree", join(base, "wt-json"), "--source", src2, "--ref", "unlanded"], { encoding: "utf8" }));
+			check("the CLI JSON carries `base`", typeof out.base === "string" && out.base.length > 0, JSON.stringify(out.base));
+			check("the CLI JSON carries `requestedBase`", out.requestedBase === tip, `got ${JSON.stringify(out.requestedBase)} tip ${tip}`);
+			check("the CLI JSON carries `baseHonoured` = true when the ref was honoured", out.baseHonoured === true, JSON.stringify(out.baseHonoured));
+			check("and it does NOT leak the internal locals", !("explicitRef" in out) && !("baseRef" in out), Object.keys(out).join(","));
+			const noRef = JSON.parse(execFileSync(process.execPath, [cliPath, "worktree", join(base, "wt-json2"), "--source", src2], { encoding: "utf8" }));
+			check("with NO --ref the base fields are NULL, not invented", noRef.requestedBase === null && noRef.baseHonoured === null, JSON.stringify({ requestedBase: noRef.requestedBase, baseHonoured: noRef.baseHonoured }));
+			check("...while `base` is still reported (the fork point is a fact either way)", typeof noRef.base === "string" && noRef.base.length > 0, JSON.stringify(noRef.base));
+		}
+	}
 
 	console.log(failures === 0 ? "\nPASS — the worktree isolates" : `\nFAIL — ${failures} assertion(s) failed`);
 } finally {

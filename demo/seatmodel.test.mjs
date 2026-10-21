@@ -66,7 +66,7 @@ try {
 		.get();
 	const seats = JSON.parse(seatsBase.content).seats;
 	// bare follows the rig default, which since the GLM switch is
-	// zai-org/GLM-5.3-Flash (cli.mjs MODEL_ID under DURIG_PROVIDER=faux).
+	// zai-org/GLM-5.3-Flash (cli.mjs MODEL_ID under DURIAN_PI_PROVIDER=faux).
 	const expectations = {
 		bare: { provider: "faux", modelId: "zai-org/GLM-5.3-Flash" },
 		prefixed: { provider: "faux", modelId: "faux-seat" },

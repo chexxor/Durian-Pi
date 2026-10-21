@@ -1,7 +1,7 @@
 # External task-source adapters (PM tools)
 
 Design note from the research report `docs/reviews/llm-agent-project-management-tools.md` (consumed
-2026-10-17 per `docs/runbooks/research-request.md`). It answers: should durig let a mature PM tool
+2026-10-17 per `docs/runbooks/research-request.md`). It answers: should durian-pi let a mature PM tool
 (Jira, GitHub Issues, Linear, a kanban board) manage our work items? This note records the accepted
 direction and the constraints the report could not see.
 
@@ -24,9 +24,9 @@ rather than N bespoke REST integrations.
 3. **MCP as the preferred protocol** — one client reaches GitHub/Jira/Linear/Agent Board instead of N
    REST integrations. **Local/stdio MCP is the target; remote HTTP is operator-gated** (see constraints).
 4. **Two concerns, two adapters:** *task source* (where items come from) vs *board/UI* (where humans
-   watch and steer). durig's TUI is already the board; a read-only external view is optional and must add
+   watch and steer). durian-pi's TUI is already the board; a read-only external view is optional and must add
    no write path.
-5. **An explicit state-mapping spec** is required for any adapter: external statuses and durig's columns
+5. **An explicit state-mapping spec** is required for any adapter: external statuses and durian-pi's columns
    are not 1:1, and the mapping must be idempotent and cycle-safe.
 
 ## Product direction (operator, 2026-10-17)
@@ -48,11 +48,11 @@ prioritizes, groups, and assigns work items in a tool they already use. That ref
   intake and visibility.
 - **Field ownership** keeps the split clean: human-owned fields (`title`, `body`, `priority`, `labels`,
   `collection`/grouping, `assignee`, external links) are taken from the PM on ingest; execution-owned fields
-  (`state`, `claimed by`, `attempts`, `deferred`/`held`, history) are durig's and are mirrored out.
+  (`state`, `claimed by`, `attempts`, `deferred`/`held`, history) are durian-pi's and are mirrored out.
 - **Organization must survive ingest:** the queue item has no priority/order field today and a bare
   `claim_work` claims the **oldest** queued item (`src/rig.mjs`), so a human's ordering would be lost on
   ingest. The schema adds an explicit `priority`/`rank`, and the claim selector must honor it — otherwise
-  "organize" means nothing internally. A PM `assignee` (a person) is distinct from durig's `to` (a seat).
+  "organize" means nothing internally. A PM `assignee` (a person) is distinct from durian-pi's `to` (a seat).
 - **Admission:** a human-authored item is not automatically runnable. Ingest needs a readiness gate (the
   item's acceptance/target is stated), so the queue does not receive vague items as agent work.
 - **Round-trip schema:** the internal `Task` must carry the human/organizational fields as optional data,
@@ -88,7 +88,7 @@ Invariants the interface MUST preserve:
 - dependencies stay advisory (no enforced DAG);
 - every exported function declares its return type (JSDoc `@returns`), per the project convention.
 
-## durig constraints the report could not see
+## durian-pi constraints the report could not see
 - **Seat network egress is NOT blocked by `src/confine.mjs`.** That file enforces path confinement, a
   stripped env allowlist, and a `SECRET_NAME` refusal, but it contains no network/socket rule — a seat
   shell could open a connection, and no other egress control was found (verified 2026-10-17). What a seat
@@ -102,7 +102,7 @@ Invariants the interface MUST preserve:
 - `pm`/`lead` have no file tools; any adapter status surface must reach them inline.
 
 ## Semantics we already satisfy (adopt = nothing to build)
-| Established semantic | durig mechanism |
+| Established semantic | durian-pi mechanism |
 |---|---|
 | Atomic claim / lease on pickup | `claim_work` (by-id, refuses wrong owner/state) + `genlock` generation leases |
 | One worktree per task | `prepare_workspace` / `src/worktree.mjs` |
@@ -113,7 +113,7 @@ Invariants the interface MUST preserve:
 
 ## Design choice vs established practice
 Agent Board **enforces** a dependency DAG (moving to `doing` is blocked until dependencies are `done`,
-with cycle detection). durig deliberately keeps dependencies **advisory** (the queue-view item); enforcing
+with cycle detection). durian-pi deliberately keeps dependencies **advisory** (the queue-view item); enforcing
 them would be a separate ruling. Task chaining (`nextTask`) likewise maps onto deps we already model.
 
 ## Rejected / deferred
@@ -148,7 +148,7 @@ The research answers **how** to integrate an external tracker and **what** the e
 None of the sources present outcome evidence, so "should we use one" is a decision for the operator,
 informed by measurement (ROADMAP 123), not settled by the reports. Separating the three:
 - **Correctness:** a tracker does not improve agent-execution correctness, and a tracker that becomes a
-  second writer *threatens* it. durig's correctness comes from the single-writer queue, the verification
+  second writer *threatens* it. durian-pi's correctness comes from the single-writer queue, the verification
   gate, and the worktree boundary. (Follow-up: exactly-once is impossible and the consumer must be
   idempotent; queue → tracker is authoritative, tracker → queue only create-once ingest.)
 - **Efficiency:** the gains are human/coordination, not agent throughput — the broker schedules seats and
@@ -156,7 +156,7 @@ informed by measurement (ROADMAP 123), not settled by the reports. Separating th
   complexity/hr; Jira tiered).
 - **Effectiveness:** the real value is alignment and oversight — intake governance, priority, blocked/human
   decisions, and cross-team interop — provided the human process uses it. Trackers have **no first-class
-  "awaiting a human decision" state**, so durig's `deferred_awaiting_answer` loses fidelity when mapped.
+  "awaiting a human decision" state**, so durian-pi's `deferred_awaiting_answer` loses fidelity when mapped.
 
 The honest verdict: an external tracker is primarily a **human/org interface**, not an agent-efficiency
 lever; adopt the seam and the read-only view, keep the queue the control plane.
@@ -178,7 +178,7 @@ The research surfaced these as the value beyond "the agents read tickets":
   the natural home for a deferral the store cannot express as a tracker state.
 - **Traceability** — issue ↔ commit/PR linkage for compliance and bisectability.
 - **Onboarding and discoverability** — a board explains what the swarm is doing without the harness.
-- **Bulk planning** — epics/sprints/dependencies for humans; note durig keeps dependencies **advisory**.
+- **Bulk planning** — epics/sprints/dependencies for humans; note durian-pi keeps dependencies **advisory**.
 
 And the costs to weigh against them: a possible second writer / sync drift, rate limits, token/OAuth
 handling, prompt injection from tracker content, vendor coupling (Vibe Kanban is sunsetting), and building

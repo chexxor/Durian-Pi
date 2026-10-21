@@ -1,5 +1,5 @@
 // Durable event feed (PIECE 2, docs/PUSH-ARCHITECTURE.md §3.1): a READ-ONLY,
-// ADDITIVE, machine-readable stream of durig events with a monotonic `seq`
+// ADDITIVE, machine-readable stream of durian-pi events with a monotonic `seq`
 // cursor, so a late/reconnecting subscriber resumes rather than replaying.
 //
 // This demo is failing-first: before src/eventfeed.mjs exists it dies with

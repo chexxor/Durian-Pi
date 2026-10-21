@@ -1,0 +1,12 @@
+  durig · impl · implementation engineer · …
+  no current item · idle
+  ────────────────────────────────────────
+  ▶ Please check the queue.
+  ◇ thinking › Read the queue, then…
+  ◀ I will check the queue now.
+  ⚙ peek_queue all=true
+
+  ────────────────────────────────────────
+  ── seats: 4  │  uptime: 60m
+  ────────────────────────────────────────
+└──Esc=back  ↑↓=scroll  G=tail  i=input  q…

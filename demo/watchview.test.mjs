@@ -3,6 +3,7 @@
 // shows a seat's name and what it last said, while `--json` keeps the contract.
 // Run: node demo/watchview.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
+import { textWidth } from "../src/textwidth.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +14,7 @@ import { fauxAssistantMessage, fauxProvider, fauxText } from "@earendil-works/pi
 import { configure, createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { extractEntryText, readSeatHighlights, summarizeEntries } from "../src/rigstory.mjs";
-import { createWatchScreen, formatSnapshot, pad, seatActivity, truncate } from "../src/watchview.mjs";
+import { createWatchScreen, formatSnapshot, pad, seatActivity, truncate , PRESENTATION } from "../src/watchview.mjs";
 
 console.log("--- entry extraction ---");
 
@@ -47,7 +48,7 @@ assert.equal(summary.says, "hello there", "the assistant utterance, not the user
 assert.equal(summary.toolName, "claim_work");
 
 // A turn that only calls a tool must not erase the last thing the seat said,
-// and the system prompt is durig's scaffolding, never the seat speaking.
+// and the system prompt is durian-pi's scaffolding, never the seat speaking.
 const emptyAssistant = {
 	kind: "pi.assistant",
 	model: [{ role: "assistant", content: [] }],
@@ -74,10 +75,33 @@ const healthWith = (queueItems, attention = []) => ({ seats: [seat], queueItems,
 
 assert.equal(seatActivity(seat, healthWith([]), {}).state, "idle");
 assert.equal(seatActivity(seat, healthWith([item({ to: "pm", status: "claimed" })]), {}).state, "working");
+// #4449: A QUEUED SEAT IS `queued`, NOT `waiting`. This assertion used to expect `waiting` because the
+// `idle_with_queued_work` notice was one of the seat-scoped kinds that produced it ? and that is exactly
+// the flicker the ruling removes: the notice is `!inFlight`-gated, so it switches off IN THE GAP BETWEEN
+// GENERATION ATTEMPTS and the row would flip `! waiting` <-> `queued` for the same seat. `waiting` now
+// sheds ONLY that kind; the state comes from the view model's own `queued` variable.
 assert.equal(
 	seatActivity(seat, healthWith([item({ to: "pm" })], [{ scope: "seat", seat: "pm", kind: "idle_with_queued_work" }])).state,
-	"waiting",
+	"queued",
 );
+// AND THE PAIR THE OPERATOR SAW IS PINNED IMPOSSIBLE, not merely 'non-idle': no row may be `idle` while
+// its queue cell shows q > 0. A golden asserting only 'queued seats have some non-idle glyph' would pass
+// while the row still lied in its FOCUS STRING.
+{
+	const row = seatActivity(seat, healthWith([item({ to: "pm" })]), {});
+	assert.notEqual(row.state, "idle", "a seat with queued work is NOT idle");
+	assert.equal(row.state, "queued", "it is `queued`");
+	assert.match(row.focus, /queued/, "and the focus string says so ? the word and the row agree");
+}
+// AND THE PRESENTATION MAP MUST CARRY IT: the `?? PRESENTATION.idle` fallback is how a MISSING entry
+// silently re-hollows the row, so completeness is asserted rather than assumed.
+{
+	const { seatActivity: sa } = await import("../src/watchview.mjs");
+	const view = sa(seat, healthWith([item({ to: "pm" })]), {});
+	assert.equal(view.state, "queued");
+	assert.equal(view.glyph, "\u25C9", "the queued glyph is U+25C9, not the idle hollow circle");
+	assert.equal(view.tone, "dim", "and dim: not green (working) and not yellow (calm fact)");
+}
 
 // A parked item is its own state, not generic waiting: the seat is held by a
 // question and the row has to name the blocker.
@@ -360,6 +384,39 @@ try {
 	rmSync(streamDir, { recursive: true, force: true });
 }
 
+
+// #4538: MEASURE THE GLYPH, DO NOT TRUST THE RULING. The `queued` state's glyph is U+25C9 and the design
+// ruling ASSERTS it is one cell — nobody had measured it. A two-cell glyph shifts the row by one, which is
+// the exact class of defect the earlier width work was about, so the width is now PINNED rather than assumed.
+// AND THE OTHER PRESENTATION GLYPHS ARE PINNED TOO, because a probe of `demo/textwidth.test.mjs` found NONE
+// of them asserted anywhere: the width table is well covered for CJK, emoji, ANSI and combining marks, and
+// the six glyphs this screen actually paints were covered by nothing.
+{
+	// #4591: DERIVED FROM THE MAP, NOT A LITERAL COPY OF IT. A literal is a copy that drifts: a new
+	// state added to PRESENTATION would not appear here, and the pin would decay back to "the painted
+	// glyphs are covered by nothing" one state at a time. THE MAP IS THE SET.
+	// PROVEN IN ISOLATION (#4617). The method matters because the first attempt proved NOTHING: mutating an
+	// EXISTING state's glyph is intercepted by an earlier assertion that pins its VALUE, so it shows the demo
+	// reads the map — not that THIS loop does. ADDING a new key cannot be intercepted, and that is the proof:
+	//   insert `mutation_probe: { glyph: "\u6F22", tone: "dim" }` into PRESENTATION, run this demo, and it fails
+	//   HERE with `actual: 2, expected: 1`. A wide glyph in a NEW state reaches this assertion, which is what
+	//   "derived from the map" means operationally.
+	// AND NOTE THE FILTER TRAP that hid it for one attempt: this loop uses `assert.equal`, which THROWS, so a
+	// proof script that greps for a `FAIL` line finds NOTHING and reports "not proven" while the demo is red
+	// for exactly the right reason. Match the ASSERTION MESSAGE, not the harness's word for a failure.
+	const glyphs = Object.fromEntries(
+		Object.entries(PRESENTATION).map(([name, p]) => [name, p.glyph]),
+	);
+	// AND THE COUNT IS ASSERTED, so a state REMOVED from the map is visible too — a loop over an empty
+	// or shrunken map passes silently, which is the same failure in the other direction.
+	assert.ok(Object.keys(glyphs).length >= 7, `the presentation map must carry at least the seven states this screen paints; got ${Object.keys(glyphs).length}`);
+	for (const [name, g] of Object.entries(glyphs)) {
+		assert.equal(textWidth(g), 1, `the ${name} glyph must be ONE cell, or every row it appears on shifts by one`);
+	}
+	// the CONTROLS, so a wrong answer is visible as wrong rather than uniformly green
+	assert.equal(textWidth("\u6F22"), 2, "CJK is two cells");
+	assert.equal(textWidth("a"), 1, "ASCII is one cell");
+}
 console.log(
 	"WATCHVIEW TEST PASS (extraction, activity, layout, screen, CLI wiring, freshness, streaming)",
 );

@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Branch audit — 2026-10-14 (operator's delegate)
 
 **Purpose.** Decide which of the seven pre-split snapshot branches are in use, what each

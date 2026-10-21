@@ -26,6 +26,87 @@ export const DEFAULTS_CONFIG_PATHS = [
 	"../durig.config.default.json",
 ];
 
+/**
+ * #700: secret-LOOKING values are refused in a config FILE (never in the
+ * environment). The disclosed finding: a live DEEPINFRA_API_KEY value sat in
+ * plain text in durig.config.json in a SHARED tree, and the durable transcript
+ * (which had echoed it) logged it too. A checked-in config file is exactly the
+ * wrong place for a secret — it is shared, diffed and copied — while the
+ * environment is the sanctioned channel (config.mjs already treats env as the
+ * highest-precedence source). So the guard's job is narrow and loud: refuse a
+ * config FILE whose VALUES look like credentials, name the KEY (never echo the
+ * value), and point at the environment.
+ *
+ * Deliberately NOT applied to env values: an operator setting DEEPINFRA_API_KEY
+ * in their shell is the intended use. Only file content is refused.
+ *
+ * Patterns are VALUE shapes, not key names — a secret is a secret under any key,
+ * and key-name matching would miss a secret pasted into DURIG_DB. Kept short and
+ * specific to avoid refusing ordinary paths (a Windows path with a colon is not a
+ * token): known provider prefixes, and long high-entropy runs.
+ */
+/**
+ * #1317: the provider-PREFIX shapes only. The commit-time gate (src/seatguard.mjs)
+ * tests tokens from a staged DIFF with these — deliberately NOT the blunt 40+
+ * entropy rule below, which fires on the hashes, ids and base64 that are ordinary
+ * in a diff (a full git sha in a JSON string is 40 hex chars). Security's posture:
+ * prefer a false negative to a false positive, because a gate that refuses an
+ * ordinary commit is an outage.
+ *
+ * #1379 (G-A, security's position @cf84825): extended with the leaked-secret
+ * runbook table's high-precision subset — AWS `AKIA`, Slack `xox`, the `gho_` and
+ * `github_pat_` families. JWT stays REVIEW-ONLY (sample JWTs are ordinary fixture
+ * content). PEM headers are NOT here: they cannot be tokens, so the gate matches
+ * them on the raw added LINE (see PEM_LINE_RE in src/seatguard.mjs).
+ */
+export const SECRET_PREFIX_PATTERNS = [
+	/^sk-[A-Za-z0-9_-]{16,}$/, // OpenAI-style
+	/^hf_[A-Za-z0-9]{16,}$/, // HuggingFace
+	/^ghp_[A-Za-z0-9]{20,}$/, // GitHub PAT
+	/^gho_[A-Za-z0-9]{20,}$/, // GitHub OAuth token (#1379, G-A)
+	/^github_pat_[A-Za-z0-9_]{22,}$/, // GitHub fine-grained PAT (#1379, G-A)
+	/^AIza[0-9A-Za-z_-]{20,}$/, // Google API key
+	/^AKIA[A-Z0-9]{16}$/, // AWS access key id (#1379, G-A; uppercase-only body — a lowercase 40-hex sha still does not match)
+	/^xox[abprs]-[A-Za-z0-9-]{10,}$/, // Slack (#1379, G-A)
+];
+
+export const SECRET_VALUE_PATTERNS = [
+	...SECRET_PREFIX_PATTERNS,
+	// Long high-entropy run: letters AND digits, no path separators (a path with
+	// `/` or `\` is not a token), no whitespace.
+	/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9+_=-]{40,}$/,
+];
+
+/** Does a single config VALUE look like a credential? A non-string, or a
+ * string that is not all one token, is never refused. */
+export function looksLikeSecret(value) {
+	if (typeof value !== "string") return false;
+	const v = value.trim();
+	if (v.length < 16) return false;
+	return SECRET_VALUE_PATTERNS.some((re) => re.test(v));
+}
+
+/**
+ * Refuse a config FILE that carries a secret-looking value. Throws an error
+ * naming the offending KEY(s) and the file, but NEVER the value. Called on the
+ * raw file values BEFORE merge, so an env override cannot mask a leaked file
+ * secret (the file is the thing that is shared; the leak is the file).
+ *
+ * @param {Record<string, unknown>} fileValues parsed config-file content
+ * @param {string|null} source the file path (for the message)
+ */
+export function assertNoSecretsInFile(fileValues, source) {
+	const offenders = Object.entries(fileValues ?? {})
+		.filter(([, v]) => looksLikeSecret(v))
+		.map(([k]) => k);
+	if (offenders.length === 0) return;
+	throw new Error(
+		`secret-looking value(s) in config file ${source ?? "(unknown)"} for key(s): ${offenders.join(", ")} — ` +
+			"a config file is shared and committed; set the value in the ENVIRONMENT instead " +
+			"(e.g. DEEPINFRA_API_KEY) and remove it from the file",
+	);
+}
+
 /** Keys a config file may set, mirroring the environment variables. */
 export const CONFIG_KEYS = [
 	"DURIG_DB",
@@ -34,8 +115,12 @@ export const CONFIG_KEYS = [
 	"DURIG_MAX_CONCURRENT_SEATS",
 	"DURIG_OPTIMIZE",
 	"DURIG_EXTENSIONS",
+	"DURIG_LOCAL_BASE_URL",
+	"DURIG_LOCAL_MODEL",
+	"DURIG_LOCAL_CONTEXT",
 	"DURIG_STREAM_TIMEOUT_MS",
 	"DURIG_STRANDED_MS",
+	"DURIG_CONTEXT_WINDOW",
 	"DURIG_SEAT_ROOT",
 	"DEEPINFRA_API_KEY",
 ];
@@ -63,8 +148,11 @@ export async function loadShippedDefaults({ readFile, anchors = [] } = {}) {
 			throw err;
 		}
 		try {
-			return { values: JSON.parse(text) ?? {}, source: path };
+			const values = JSON.parse(text) ?? {};
+			assertNoSecretsInFile(values, path);
+			return { values, source: path };
 		} catch (err) {
+			if (err?.message?.includes("secret-looking value(s)")) throw err;
 			throw new Error(`invalid JSON in config file ${path}: ${err.message}`);
 		}
 	}
@@ -114,6 +202,9 @@ export async function loadConfig({ env = {}, readFile, defaults = {}, defaultsSo
 		} catch (err) {
 			throw new Error(`invalid JSON in config file ${path}: ${err.message}`);
 		}
+		// #700: the FILE is checked before merge, so an env value cannot mask a
+		// secret that is sitting in a shared, committed file.
+		assertNoSecretsInFile(fileValues, path);
 		source = path;
 		break;
 	}
@@ -180,6 +271,46 @@ export function strandedMsSetting(config) {
 		);
 	}
 	return ms;
+}
+
+/**
+ * The operator's DECLARED usable context window (ROADMAP 27's three-state denominator).
+ * This is the middle state: more trustworthy than a vendor's advertised figure, less than
+ * item 97's measured effective window (#1087). It is deliberately NOT the advertised
+ * number, so an operator can state the window their model actually gives them.
+ *
+ * `DURIG_CONTEXT_WINDOW` is either a bare positive number (one window for every model) or
+ * a JSON object keyed by model (`"zai-org/GLM-5.3-Flash": 200000` or `"GLM-5.3-Flash":
+ * 200000`) for the per-model case. Unset/blank/malformed returns null — a declaration that
+ * cannot be read is not a declaration, and the resolver then falls through to `advertised`.
+ *
+ * @param {Record<string, unknown>} [config]
+ * @param {string|null} [modelKey] the seat's resolved `provider/modelId` (from `modelsBySeat`)
+ * @returns {number|null}
+ */
+export function declaredContextWindow(config, modelKey = null) {
+	const raw = config?.DURIG_CONTEXT_WINDOW;
+	if (raw === undefined || raw === null || raw === "") return null;
+	if (typeof raw === "number") return Number.isFinite(raw) && raw > 0 ? raw : null;
+	const text = String(raw).trim();
+	if (text === "") return null;
+	if (text.startsWith("{")) {
+		let map;
+		try {
+			map = JSON.parse(text);
+		} catch {
+			return null;
+		}
+		if (!map || typeof map !== "object") return null;
+		const bare = modelKey != null && String(modelKey).includes("/") ? String(modelKey).slice(String(modelKey).indexOf("/") + 1) : null;
+		for (const key of [modelKey, bare].filter((k) => k != null)) {
+			const value = Number(map[key]);
+			if (Number.isFinite(value) && value > 0) return value;
+		}
+		return null;
+	}
+	const n = Number(text);
+	return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**

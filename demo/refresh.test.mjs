@@ -1,6 +1,6 @@
 // `up` idempotency and `up --refresh` tests: re-running up reports existing
 // seats instead of duplicating them, and --refresh re-applies the stored
-// prompt (primer included) to seats created by an earlier durig version.
+// prompt (primer included) to seats created by an earlier durian-pi version.
 // Run: node demo/refresh.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -91,7 +91,7 @@ try {
 		assert.match(instructions, /durig work protocol/, `${name}: primer present on create`);
 	}
 
-	// Simulate a seat stored by an earlier durig version: strip its primer.
+	// Simulate a seat stored by an earlier durian-pi version: strip its primer.
 	await withHarness(async (harness) => {
 		const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
 		await harness.commit(async (tx) => {

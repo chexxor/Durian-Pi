@@ -154,6 +154,11 @@ export function fallbackModels(): Model<"openai-completions">[] {
 		// resolves to `no_model` before any request is made. Priced alongside its
 		// V4-Flash sibling until the live catalog is wired in.
 		["deepseek-ai/DeepSeek-V4.1-Flash", 1_048_576, 1_048_576, 0.14, 0.28, true, false],
+		// The operator-designated successor to the entry above: `-1017` is a DISTINCT id
+		// on DeepInfra, not an alias, and `buildModels` reads THIS list (the live fetch is
+		// not wired in), so a seat naming it dies `no_model` before any request is made.
+		// Values from the live catalogue (2026-10-20): 1M ctx, $0.20/$0.60, reasoning, vision.
+		["deepseek-ai/DeepSeek-V4.1-Flash-1017", 1_048_576, 1_048_576, 0.2, 0.6, true, true],
 		// Operator-designated verifier model (selfdev qa), chosen for DeepInfra uptime
 		// after `zai-org/GLM-5.3-Flash` returned persistent 429 engine_overloaded. Values
 		// fetched from the live catalogue (2026-10-11): 1M ctx, $0.14/$0.28, reasoning,
@@ -171,6 +176,14 @@ export function fallbackModels(): Model<"openai-completions">[] {
 		["meta-llama/Llama-3.3-70B-Instruct", 131_072, 131_072, 0.2, 0.32, false, false],
 		["meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", 1_048_576, 1_048_576, 0.2, 0.8, false, true],
 		["google/gemma-3-27b-it", 131_072, 131_072, 0.08, 0.16, false, true],
+		// Operator-designated qa2 model (#1936). Like `DeepSeek-V4.1-Flash` above, it is absent
+		// from the captured catalog and `fetchDeepInfraModels` is NOT wired into `buildModels`, so
+		// without this entry a seat naming it resolves to `no_model` before any request. Values
+		// from the live catalogue (2026-10-18): 256K ctx, $0.20/$0.40, vision+chat.
+		// `reasoning: false` is DELIBERATE: the vendor forbids replaying thoughts from previous
+		// turns, and pi-durable can persist/replay thinking blocks — false means none are
+		// produced or replayed (so no historical thinking can be sent back).
+		["google/gemma-4-31B-it", 262_144, 262_144, 0.2, 0.4, false, true],
 		["mistralai/Mistral-Small-3.2-24B-Instruct-2506", 131_072, 131_072, 0.075, 0.2, false, false],
 		["google/gemini-3.1-pro", 1_000_000, 1_000_000, 2.0, 12.0, true, true],
 	];

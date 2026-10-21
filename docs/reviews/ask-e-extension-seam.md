@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # ASK E — the extension/plugin seam (design capture, closed #505)
 
 _Status: capture of lead's ASK E report (closed #505); durable for the #538 implementer. Not a
