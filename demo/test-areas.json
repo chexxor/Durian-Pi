@@ -82,6 +82,7 @@
       "demo/broker-reconcile.test.mjs",
       "demo/broker-seat-attr.test.mjs",
       "demo/broker-session-reopen.test.mjs",
+      "demo/broker-stop-audit.test.mjs",
       "demo/broker-strand.test.mjs",
       "demo/broker-wake-retry.test.mjs",
       "demo/broker-wake-return.test.mjs",
