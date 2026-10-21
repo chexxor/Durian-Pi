@@ -32,6 +32,28 @@ branch checks it out and moves HEAD off your item branch — the hazard the chec
 (the same list the guard's rule reads; two sources agree). #3272's OPERATING NOTES should gain a
 cross-reference to this block when that item fires.
 
+**Operating notes — landing completion + the dirty tree (read before closing a landing entry)**
+
+**A landing entry may NOT close on `ok:true`.** The tool's success flag is not the assertion —
+`scripts/land.mjs` has returned `ok:true, merged:[…]` WHILE MERGING INTO AN ITEM WORKTREE, leaving `main`
+untouched and creating a store there. A landing entry's completion must carry:
+- `git merge-base --is-ancestor <sha> main` → **exit 0**, and
+- the landing report's `repo` field resolving to the **shared root**, and
+- ideally the CONTENT check — `main` carries what the branch was for — because ancestry passes even when
+a conflict dropped the block (for Fix A: `LANDING_MIN_WIDTH` read in the TERMINAL unit, not the old
+`width−4` unit; the old unit IS the defect and the ancestry check cannot see it).
+This is a rule for the seat that ACCEPTS the completion as much as the one that writes it — #3990 and
+#4163 both closed while their branches were unlanded.
+
+**When a landing reports success and `main` is unmoved: STOP AND REPORT. Never hand-restore the tree.**
+The tree being dirty is a REPORTABLE STATE, not a problem to solve with a text tool. The cost of the
+missing assertion was the chain that followed (04:21Z): `main` unmoved → a seat restored the shared tree
+BY HAND → a PowerShell text round-trip → eight tracked files flattened to single lines → `src/chatview.mjs`
+failed to import → `watch`, `queue` and `status` DOWN ~11 minutes. THE TOOL LYING IS WHAT CREATED THE
+PRESSURE TO HAND-FIX, and the hand-fix is what broke the tree. Never `>` / `Get-Content` / `Set-Content` a
+source file — use the `edit` tool or `cmd /c "git show <ref> > file"`; the encoding guard and detector
+are routed separately and give this rule teeth.
+
 ## When to use
 A verified branch (`<seat>-item-<id>`, or any branch) must go onto `main`, and you want the landing to
 be **structurally incapable** of leaving the shared working tree mid-merge. This is the tool form of
