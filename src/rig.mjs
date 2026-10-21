@@ -877,7 +877,10 @@ const Router = defineExtension({
 							"`unpause`. Work you ALREADY hold still completes: use complete_work / defer_work.",
 					);
 				}
-				if (!found) {
+					// #4732: THIS BLOCK MUST PRECEDE `if (!found)`. `{ kind: "none", mine }` is TRUTHY, so `!found` is
+					// FALSE and the HEADER rendering below (`ITEM #${found.id} | …`) would run against it — producing
+					// `ITEM #undefined | from=undefined | subject=undefined`, the string two passes attributed to a
+					// malformed fixture row. THE FIXTURE WAS FINE; THE FIX WAS DEAD CODE.
 					// #4713: A REFUSAL THAT NAMES NOTHING IS INDISTINGUISHABLE FROM AN EMPTY QUEUE. The 19-turn shape is a
 					// row `queued` at WAKE time and held / deferred / claimed-elsewhere by the time this runs — the stalled
 					// branch cannot reach it, because it needs a row STILL CLAIMED by this seat.
@@ -893,6 +896,7 @@ const Router = defineExtension({
 										: `It is not claimable in its current state; check \`status\` for who holds it.`)
 						);
 					}
+				if (!found) {
 					return toolText("NO_QUEUED_WORK");
 				}
 				// Build the INLINE STRUCTURED HEADER: item id + the decision-relevant
