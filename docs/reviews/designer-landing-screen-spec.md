@@ -1,4 +1,4 @@
-﻿# Designer surface spec — the landing screen (per-seat status / queue / current item brief / action type)
+# Designer surface spec — the landing screen (per-seat status / queue / current item brief / action type)
 
 **Status:** the surface spec requested in #3307 (operator-directed, extends ROADMAP 124).
 ADVISORY and self-contained: impl can build from this document without reading my two earlier
@@ -63,9 +63,8 @@ landing screen deliberately SHRINKS what the current roster shows.
 ## 2. The brief, numerically
 
 - cap by CELLS (never code units): 24 at 76–80, 16 at 51–75, 12 below (ladder in §4; every rung
-  measured: e.g. at 48 the full row renders 46 cells, brief showing `#74 merge r…`).
-- `#id` always shown, never truncated: `#74 `, `#1105 ` (id width = digits + 1; two-digit ids
-  leave 8+ cells of subject at the 44-col minimum).
+  measured: e.g. at 48 the full row renders 44 cells, brief `#74 merge …` - the clamp, not a demand, sizes the floor).
+- `#id` always shown, never truncated: `#74 `, `#1105 ` (id width = digits + 1; at the 40-content floor the clamp leaves 3 subject cells + the ellipsis - the id survives).
 - ellipsis: `…` appended when the field truncates; NO ellipsis for `—` (nothing to summarize).
 - the parked-seat brief reads the QUESTION, truncating to the same caps, with the source
   readable in its head text ("supervisor escalation: …" vs a seat question) — the #2804 rule,
@@ -90,22 +89,61 @@ facts, not per-seat streaming blocks — the per-seat streaming SECTION is remov
 layout (its duplicate signal moves into the ACTION column and the roster row that already names
 the seat).
 
-## 4. The width ladder (measured; all numbers are `textWidth` output on this snapshot)
+## 4. The width ladder, SHIPPED (rewritten 2026-10-28 per the #3810 oracle ruling, option (b) accepted)
 
-Fixed prefix: sel 2 + state 13 + name 9 + queue 9 = 33 cells.
+Rule (b): describe the ladder the code SHIPS, not one a composition demands - a spec demand a
+run does not honor is the exact defect this section has twice rewritten (#3483, ee495e7). All
+numbers below are `textWidth` output on this snapshot, measured on the builder that ships and
+pinned by the still-green demo (`node demo/tui-landing.test.mjs`, exit 0).
 
-| Width band | brief cap | action | Row verifies |
-|---|---|---|---|
-| 76–80 | 24 | <= 16 | 74/80 cells (7-seat selfdev rig round with worst-case strings) |
-| 51–75 | 16 | <= 16 (8 floor) | exactly 60/60 at the 60-col probe; `tool pow…` truncates |
-| 46–50 | 12 | hidden | 46/48 at 48 cols; `#74 merge r…` |
-| 44–45 | 12 (>=10 available) | hidden | 44/44 measured - the DECLARED LANDING MINIMUM |
-| < 44 | n/a | n/a | narrow roster fallback = the pre-landing row (same source), no broken columns ever |
+**First: why 44, in CONTENT cells, with the gutter named.** The ladder is a content-cell
+contract, not a terminal-column one. `renderSeatList` is handed `width - 4` (src/tui/client.mjs)
+- the roster body renders inside a 4-cell gutter - so every content number below maps to
+`terminal = content + 4`. The mode boundary is 40 CONTENT cells: the landing row exists from
+content 40, which is the 44-col terminal minimum. The retired "44 or 45?" argument dissolves
+under this mapping: "45" was the terminal reading of a content composition (33 + 11 + 1) and
+"44" the terminal reading of the shipped open - both were correct arithmetic over DIFFERENT
+denominators, and the shipped builder answers neither as a demand: it clamps.
 
-Under ~30 cols the H6 "terminal too small" truthful state takes over (existing behaviour, not
-redefined here). The declared minimum (44) is where the brief's contract break quoted above
-(end) holds: `#74 ` plus at least 5 readable cells of subject - a rung below that renders
-'#74 me…'-noise, which the floor discipline forbids.
+**The three rules the builder ships** (each one a named clause in `renderSeatList`):
+- caps are MAXIMA, never demands: `briefCap` returns 24 at content >= 72, 16 from content 47,
+  else 12, and the real brief cap is `min(cap, content - 33)`;
+- the CLAMP wins, in one direction only: fields shrink to the space actually left; the row
+  renders NARROWER than its frame whenever the caps cannot be met - it never overflows, and
+  in the growth region it closes at exactly its content width (measured row == content at the
+  44..76 probe line);
+- the invariant is `row <= frame` for every width, asserted on the BUILT screen, not only on
+  the design probe: `demo/tui-landing.test.mjs` sweeps it shape-exhaustively (40..100) and
+  holds the 44x24 and 80x24 goldens. PASS is the acceptance reference for the ladder, not
+  this table's wording.
+
+**The shipped ladder** (content cells; terminal in parentheses). Fixed prefix: sel 2 + state
+13 + name 9 + queue 9 = 33 cells, padded:
+
+| Content band (terminal) | What the row ships | Measured (demo fixture) |
+|---|---|---|
+| < 40 (< 44) | CLASSIC roster row - the honest fallback: no queue/brief/action cells, the focus line carries the fact, no broken columns ever | 40-col frame check, demo (d) |
+| 40..46 (44..50) | landing row; brief = `min(12, C - 33)` -> 7..12 cells; action hidden | 44x24 golden: row exactly 40, brief `#74 me…` - id + 3 readable subject cells + ONE ellipsis |
+| 47..50 (51..54) | landing row; brief `min(16, C - 33)` -> 14..16; action still hidden (no room for a separator + token) | row closes at 47..50 exactly |
+| 51..71 (55..75) | landing row; brief 16; action `min(16, C - 50)` -> 1..16 cells: the action cell opens at content 51 and grows one cell per content cell, reaching its 16-cell cap at content 66 | `tool …` at 51; `tool pow…` (9 cells) from content 59; `tool complete_w…` (16) at content 66 |
+| >= 72 (>= 76) | landing row; brief cap 24; action `min(16, C - 58)` | 80x24 golden: 76 content, brief `#74 merge the carry sta…`, action `tool complete_w…` |
+
+**Why the bottom rung is 40 content cells and not fewer:** the clamp alone would keep the
+landing row composing at any width, but below content 40 the brief's leftover after
+`#74 ` falls under id-only noise (`#74 m…`, then `#74 …`), so the landing mode hands the fact
+over to the fallback while the brief is still legible at floor: id + a readable subject head
++ the ellipsis. Under ~30 cols the H6 "terminal too small" truthful state takes over
+(existing behaviour, not redefined here).
+
+**Legibility prose, unchanged in substance:** the `#id` is NEVER truncated and survives at
+every landing width (it is the reference shared with the conversation view, the answer op and
+the queue dumps); ONE `…` appended when a field truncates, NO ellipsis on `—` (nothing to
+summarize); the parked seat's brief reads the QUESTION (the operator triage fact this screen
+exists for). The ACTION token comes from the same per-seat partial the state column describes:
+WHAT it runs vs THAT it runs - and the 59 figure the earlier ladder carried is retained as a
+LANDMARK, not a rung: content 59 is where a nine-cell token (`tool <name-that-…`)
+first fits whole (33 + 16 + 1 + 9); at content 58 the same token ships truncated to eight
+cells. No per-band demanded widths are stated here because the builder states none.
 
 ## 5. Selection affordance (unchanged; no redesign)
 
