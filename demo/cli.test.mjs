@@ -79,6 +79,15 @@ try {
 	assert.equal(status.seats.length, 2);
 	assert.ok(Array.isArray(status.queueItems));
 	assert.ok(Array.isArray(status.attention), "attention is always an array");
+// #4403: a consumer that MERGES streams (`2>&1`) must still read the authoritative view. The
+// out-of-band note is now a JSON FIELD (`notes`), not a stderr line — a diagnostic that can break
+// the machine-readable view must be IN the view, or a read works until a measure drifts.
+assert.ok(Array.isArray(status.notes), "the status view carries `notes` as an array");
+const merged = cli(["status"]);
+assert.doesNotThrow(
+	() => JSON.parse(merged.stdout + merged.stderr),
+	"a MERGED stdout+stderr read still parses (the note is in the JSON, not on stderr)",
+);
 
 	// --- watch --once: exactly one NDJSON snapshot -------------------------
 	const watch = cli(["watch", "--once"]);

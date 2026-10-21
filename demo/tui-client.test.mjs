@@ -172,11 +172,15 @@ try {
 	check("selected row uses reverse video", colorSel.lines.some((l) => l.includes("\x1b[7m") && l.includes("impl")));
 
 	// Regression: no storage/harness/driver imports
+	// (#2826: these were substring checks on the WHOLE source, so any prose that merely NAMED
+	// a harness — an attention phrase like "harness reopen failed" — failed them. The intent
+	// is "no such IMPORT", so the test now looks at import statements.)
 	console.log("\n9. Regression: no storage/harness/drive imports");
 	const source = await readFile(join(process.cwd(), "src/tui/client.mjs"), "utf8");
-	check("no storage import", !source.includes("storage"));
-	check("no harness import", !source.includes("harness"));
-	check("no driver import", !source.includes("import.*driver") && !source.includes("from.*driver"));
+	const importsOf = (word) => new RegExp(`^\\s*import[^;]*${word}|from\\s+\"[^\"]*${word}`, "m").test(source);
+	check("no storage import", !importsOf("storage"));
+	check("no harness import", !importsOf("harness"));
+	check("no driver import", !importsOf("driver"));
 
 	console.log(failures === 0
 		? "\nPASS - TUI C3 client module verified"

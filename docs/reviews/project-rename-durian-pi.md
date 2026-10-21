@@ -95,3 +95,90 @@ The rename is **not executed** because the preconditions in §3 cannot hold whil
 (and `durig ui`) own the tree. A spooled intent asks `pm` to register the housekeeping item and route
 it to `devtools`; the delegate will verify the post-rename invariants once the operator declares the
 window.
+
+## 7. Operator-run procedure (refreshed 2026-10-21; script: `scripts/rename-workspace.ps1`)
+
+> §1–§6 are kept as the 2026-10-18 record. Since then: the GitHub repo is already `Durian-Pi.git`
+> (so §3 step 5 is done), the product was renamed `durig` → `durian-pi` (D103), and the worktree count
+> dropped from 140 to 53. This section supersedes the numbers and steps.
+
+### 7.1 What still carries the absolute path (measured 2026-10-21)
+
+| Carrier | Now | After the move |
+|---|---|---|
+| `git worktree list` | 53 entries / 52 admin dirs in `.git/worktrees` (32 in `../pi-opendurig.worktrees`, 14 under the root, 6 in `%TEMP%`), 11 `locked` | needs `git worktree repair` |
+| `../pi-opendurig.worktrees` (3.3 GB), `../pi-opendurig.land` | exist | move with the rename |
+| `rig.selfdev.json` | 1 live pointer (`.../pi-opendurig/item-2801`) | rewrite |
+| `selfdev.sqlite` | ~22k `entries` + 1.4k `document_revisions` rows, 1 **running** `pi.tool` task (#196379, `item-4326`) | historical rows stay; the stale task/locks must be cleared first |
+| `~/.pi/agent/trust.json` | key `C:\Users\Alex\dsh-Projects\pi-opendurig` | re-key (else re-trust prompt) |
+| `~/.pi/agent/sessions/--C--…-pi-opendurig--/` | `pi --continue` history | rename the dir |
+| `~/.pi/agent/pi-warden/prefs/f84fcca40514.json` | key = `sha256(full cwd)`; this project's standing lessons/holds | rename to `sha256(new cwd)` |
+| tracked text | 17 files (`git grep -l pi-opendurig`) | live pointers rewritten by scribe; historical records annotated, not erased |
+
+### 7.2 Preconditions (all must hold; the script checks each)
+
+1. **Nothing holds the tree**: no pi session, no `node ui.mjs`/`npm run ui`, no broker, no seat, no
+   `cli.mjs` `serve|run|send|log --follow|watch`. This is what blocks a rename *from inside* an agent
+   session — Windows refuses to rename a directory that is any process's cwd.
+2. Broker stopped and its bookkeeping settled: `.broker.json` pid dead, no `.genlock.*`.
+3. Main worktree committed (or the operator accepts the dirty list). Never discard work.
+4. Operator window declared; script run from a plain terminal whose cwd is `C:\Users\Alex\dsh-Projects`
+   (the parent), **not** inside the repo.
+
+### 7.3 Run
+
+```powershell
+# inspect: prints preflight, blockers, and the full plan; changes nothing
+powershell -NoProfile -File C:\Users\Alex\dsh-Projects\pi-opendurig\scripts\rename-workspace.ps1
+
+# execute (operator window only)
+powershell -NoProfile -File C:\Users\Alex\dsh-Projects\pi-opendurig\scripts\rename-workspace.ps1 -Execute
+```
+
+Flags: `-ParentDir` / `-OldName` / `-NewName` (defaults are this workspace), `-AllowDirty`,
+`-IgnoreLocks`, `-IgnoreProcesses` (false-positive override — do not use to paper over a live holder),
+`-SkipBackup`, `-PiAgentDir` (non-standard pi installs).
+
+What it does, in order: preflight → backup (`durian-pi.pre-rename-<ts>/`: store + wal/shm, broker json,
+`rig.selfdev.json`, worktree inventory, HEAD, status) → archive stale broker marker/genlocks/inbox dirs →
+move the three directories → `git worktree repair <all worktree paths>` (mapped to new locations) →
+verify `git worktree list` is clean → rewrite `rig.selfdev.json` → rename session dir + warden prefs,
+re-key `trust.json` → run `node cli.mjs status` → list tracked files that still say the old name.
+
+Deliberately **not** done by the script: no doc rewriting, no `git worktree prune`, no ref deletion, no
+`git push`, no commit, no merge into a seat worktree. Doc edits are the scribe/operator call
+(live pointers vs historical records).
+
+### 7.4 Rollback
+
+Move the three directories back (`durian-pi*` → `pi-opendurig*`), then re-run the script with the names
+swapped (`-OldName durian-pi -NewName pi-opendurig`): it repairs links, re-keys pi state back, and does
+not re-copy the backup. The backup dir is the store snapshot from before the move.
+
+### 7.5 Verification gates after the rename
+
+```
+git worktree list                 # no "(error)", no stale path, count unchanged (53)
+git status --short -- .           # same dirt as before the move, nothing lost
+DURIG_DB=./selfdev.sqlite node cli.mjs status
+node scripts/suite.mjs            # 205 demos; measured 2026-10-21: pass=201 fail=4
+npm run test:tui                  # 36/36 files
+```
+
+`npm run demo` (`demo/offline.mjs`) is a two-seat smoke demo, not the suite. The four suite
+failures measured on 2026-10-21 (`broker-one-connection`, `cli-broker-refuse`, `pitui`,
+`seat-instruction-encoding`) are the pre-existing set named in `docs/NEXT.md`, unrelated to a rename;
+re-run the gates after the move and compare against that set, not against zero.
+
+### 7.6 Test evidence for the script (2026-10-21, throwaway repos in `%TEMP%`)
+
+Reproducible harness: `node .spike/rename-workspace-e2e.mjs` (gitignored) builds a throwaway repo whose
+worktrees sit in all three positions, seeds fake pi state, runs the script with `-Execute`, then asserts
+24 invariants and cleans up. Measured 2026-10-21: **24/24 assertions pass**.
+It also validated: directory + sibling move; 3 worktrees
+(inside root, inside sibling, external in `%TEMP%`) re-linked — admin `gitdir` files and the external
+worktree's `.git` file both repointed, `git worktree list` clean; `rig.selfdev.json` rewritten for both
+`C:/` and `C:\` spellings with **no BOM and no line-ending change**; session dir renamed; warden prefs
+renamed (`sha256` keys confirmed); `trust.json` re-keyed; resume path (old dir already gone) repairs
+instead of blocking; a dirty tree is refused without `-AllowDirty`. Not sandbox-tested: the real
+broker/inbox archiving (paths and guards reviewed, no broker state in a throwaway repo).

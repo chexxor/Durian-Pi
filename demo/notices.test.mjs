@@ -72,6 +72,13 @@ await harness.commit(async (tx) => {
 	// sit in a store that predates the structural flag.
 	await enqueueItem(tx, "pm", "worker", "Build the widget", "details");
 	await enqueueItem(tx, "pm", "worker", "DONE #999: an old acknowledgement", "from before the flag");
+	// #3739: `enqueueItem` ALWAYS writes the structural flag (default false), so a store that predates
+	// it has to be MODELLED by removing the field. Leaving it as notice:false would make this a
+	// structural non-notice, and letting the subject prefix rescue it is precisely the defect: a WORK
+	// item whose free-text subject starts "DONE #123: " would then never notify anyone.
+	const legacyQueue = await tx.doc(RigQueue);
+	const legacyItem = legacyQueue.items.find((it) => it.subject === "DONE #999: an old acknowledgement");
+	if (legacyItem) delete legacyItem.notice;
 }, ctx);
 
 const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
@@ -147,7 +154,7 @@ assert.ok(
 /* ------------------ 4. the structural flag and the legacy predicate */
 
 assert.equal(ack.notice, true, "the structural flag is set at enqueue time");
-assert.equal((await item(2)).notice, false, "the legacy item carries no flag");
+assert.equal((await item(2)).notice, undefined, "the legacy item carries NO flag field at all (#3739: an explicit false is a structural non-notice)");
 assert.equal(typeof isDoneNotice, "function", "isDoneNotice is exported");
 assert.equal(isDoneNotice({ subject: "Build the widget" }), false, "real work is not a notice");
 assert.equal(isDoneNotice({}), false, "a flag-less, subject-less item is not a notice");
