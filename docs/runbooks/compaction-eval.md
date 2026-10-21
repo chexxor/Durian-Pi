@@ -2,7 +2,7 @@
 runbook: compaction-eval
 symptom: "you need to know what a compaction actually DESTROYS (or preserves) before trusting a threshold - or you need a model's real effective window rather than the advertised one"
 writes: false
-precondition: "read-only; live modes cost provider tokens (operator key)"
+precondition: "read-only"
 last_verified: 2026-10-17
 verified_by: qa
 evidence: "item #1087 (engine + demo + script); demo/compacteval.test.mjs GREEN; scripts compact-eval window/item DRY runs exit 0"
@@ -32,7 +32,10 @@ Offline engine tests need nothing (`demo/compacteval.test.mjs`, MemoryStorage + 
 spend the operator's DeepInfra key: DURIG_PROVIDER must be deepinfra and DEEPINFRA_API_KEY set;
 every firing chain prints the cost estimate and needs `--yes`.
 
-## Operation
+## Diagnose (read-only)
+The engine is offline-proven: re-run `node demo/compacteval.test.mjs` to confirm it without spending tokens, and read the effective window from the last `window-*.json` report rather than guessing from the advertised number. Nothing live is needed to diagnose a formatting concern.
+
+## Do
 The ENGINE (src/compacteval.mjs) is offline-proven by the demo; do not re-prove it live.
 ```bash
 node demo/compacteval.test.mjs

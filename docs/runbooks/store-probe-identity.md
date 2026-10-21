@@ -1,11 +1,22 @@
+---
+runbook: store-probe-identity
+symptom: "you are about to answer a QUEUE question with a direct SQL probe, and a bare id matched the wrong namespace (or a field 'did not exist')"
+writes: false
+precondition: "read-only"
+last_verified: unverified
+verified_by: qa
+evidence: "item #4334 / #4347 — the four-row probe that returned two HARNESS tasks; the equality-vs-LIKE probe measured on this store"
+check_rule: null
+---
+
 # Store probe identity — an id is not a key across namespaces
 
+## When to use
 **Symptom index:** you are querying `selfdev.sqlite` directly to answer a question about a QUEUE item
 (`#1234`), and you are about to write `WHERE id = 1234` — or you already did, and the answer looked
 plausible but was about something else.
 
-## What goes wrong
-
+## Impact
 The store holds SEVERAL id spaces in one file, and a bare integer matches more than one of them:
 
 | table | what its `id` means | carries queue fields? |
@@ -21,28 +32,32 @@ records with full confidence. That is worse than an empty result: an empty resul
 row says "here it is".
 
 There is **no `items` table**, and `deferredTo` is **not a column** anywhere. But the queue is NOT a plain
-JSON record in `documents` either ? a prober who looks for `items` in `documents` finds nothing and wrongly
+JSON record in `documents` either — a prober who looks for `items` in `documents` finds nothing and wrongly
 concludes "not in this store" (that happened: #4334 and #4347).
 
-## Where the queue's items ACTUALLY are
+## Preconditions
+None: this is a read-only diagnosis. If you do open the store, open it `readOnly: true`.
+
+## Diagnose (read-only)
+### Where the queue's items ACTUALLY are
 
 | what | where | carries `items`? |
 |---|---|---|
-| the queue DOCUMENT row | `documents` id=**29**, `kind`=`"durig.queue"`, `scope_kind`=`session` | **NO** ? metadata only: `id, kind, scope, createdAt` |
+| the queue DOCUMENT row | `documents` id=**29**, `kind`=`"durig.queue"`, `scope_kind`=`session` | **NO** — metadata only: `id, kind, scope, createdAt` |
 | the queue's CONTENT | `document_revisions` where `document_id`=**29** | **YES, but DELTA-ENCODED** |
 
 `document_revisions` columns are `(document_id, seq, kind, version, content)`. The queue's revisions are
-`kind`=`delta` and `content` is a PATCH, not a snapshot ? its top-level keys are array indices, so
+`kind`=`delta` and `content` is a PATCH, not a snapshot — its top-level keys are array indices, so
 `JSON.parse(content).items` is `undefined` even on a revision whose TEXT contains `"items"`. A prober who
 parses one revision and looks for `.items` finds nothing and concludes the field does not exist.
 
-So: `deferredTo` is written into the queue's durable document by `defer_work` (`src/rig.mjs` ?
-`item.deferredTo = args.to ?? DEFERRED_TO_NOBODY` since #4405), stored as delta-encoded revisions under
-`document_id` 29, and readable through the RIG rather than through SQL. **Prefer `node cli.mjs status`;**
-treat a direct SQL probe as a last resort that cannot see a delta.
-by `defer_work` (`src/rig.mjs` — `item.deferredTo = args.to ?? DEFERRED_TO_HUMAN`), NOT into a column.
+So: `deferredTo` is written into the queue's durable document by `defer_work` (`src/rig.mjs` —
+`item.deferredTo = args.to ?? DEFERRED_TO_NOBODY` since #4574; `DEFERRED_TO_HUMAN` is the distinct value for
+a deferral that named the operator), stored as delta-encoded revisions under `document_id` 29, and readable
+through the RIG rather than through SQL. **Prefer `node cli.mjs status`;** treat a direct SQL probe as a last
+resort that cannot see a delta.
 
-## Two more traps in the same file
+### Two more traps in the same file
 
 - **`kind` values carry EMBEDDED QUOTES.** The stored value is `"durig.queue"`, quotes included, so
   `WHERE kind = 'durig.queue'` returns NOTHING while `WHERE kind LIKE '%durig.queue%'` finds it. An
@@ -50,8 +65,7 @@ by `defer_work` (`src/rig.mjs` — `item.deferredTo = args.to ?? DEFERRED_TO_HUM
 - **`LIKE '%"id":2993%'` matches `"id":29930`.** Substring matching on JSON ids silently returns the wrong
   rows. Anchor the match (`"id":2993,` / `"id":2993}`) or parse the JSON and compare the parsed number.
 
-## Procedure
-
+## Do
 1. **Decide which namespace you mean before you query.** A queue item id is NOT a task id, even when both
    are small integers and both exist.
 2. **Read `PRAGMA table_info(<table>)` first** and check the column set matches the namespace you think you
@@ -65,8 +79,15 @@ by `defer_work` (`src/rig.mjs` — `item.deferredTo = args.to ?? DEFERRED_TO_HUM
 5. **State the namespace in the finding.** "no `deferredTo` column in `tasks`" and "no deferral recorded
    for queue item #3556" are different claims, and only the second answers a queue question.
 
-## Verify
+## If it fails
+If the column set no longer matches the table above, the storage format changed: stop and update this
+runbook's tables rather than trusting an older probe.
 
+## Escalate to
+`store-corruption-recovery.md` if the store cannot be opened at all; otherwise `pm` with the namespace
+finding, since a misread probe is a reporting defect, not a store defect.
+
+## Verify
 Run this from the SHARED ROOT (a worktree has no `selfdev.sqlite`):
 
 ```
@@ -94,6 +115,9 @@ node --experimental-sqlite ./probe.cjs
 
 Expect `equality: 0 | LIKE: 1` — measured on this store. A non-zero equality count means the storage format
 changed and this runbook's table needs updating.
+
+## Evidence
+Expect `equality: 0 | LIKE: 1` on this store, and the four-id `tasks` probe returning two HARNESS tasks (#4334/#4347). A non-zero equality count means the storage format changed and this runbook is stale.
 
 ## Related
 
