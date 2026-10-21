@@ -178,8 +178,66 @@ export async function registerSeat(tx, name, conversationId, role) {
  * would otherwise keep looping. Matching exactly the shape complete_work
  * enqueues ("DONE #<id>: <subject>") keeps the fallback from catching real work.
  */
+/**
+ * The CANCELLATION, as data (#3470): mark the item terminal AND notify the other party, the
+ * same way `complete_work` notifies them with a DONE notice.
+ *
+ * WHY THE NOTICE IS THE POINT: a cancellation's reason is the ONE piece of information that
+ * distinguishes "superseded" from "duplicate" from "already ruled" from "stale pin", and
+ * those imply different next actions for whoever sent the item. Recording it on the item was
+ * not enough — from the sender's side the item simply vanished, so they guessed, and guessing
+ * cost a full re-registration cycle for eight branches.
+ *
+ * A NOTICE NEVER SPAWNS A NOTICE (`isNoticeItem`), so cancelling a DONE or CANCELLED notice
+ * cannot start a chain (ROADMAP 39). `tx` only needs `doc(RigQueue)`, which is what makes this
+ * drivable from a demo without a harness.
+ */
+export async function cancelItem(tx, { item, me, reason }) {
+	item.status = "cancelled";
+	item.cancelReason = reason;
+	item.transitions.push({ at: new Date().toISOString(), event: "cancelled", by: me, reason });
+	// The other party: the sender when the RECIPIENT cancels, the recipient when the SENDER does.
+	const other = item.from === me ? item.to : item.from;
+	let noticeId = null;
+	if (!isNoticeItem(item) && typeof other === "string" && other.length > 0 && other !== me) {
+		noticeId = await enqueueItem(
+			tx,
+			me,
+			other,
+			`CANCELLED #${item.id}: ${item.subject}`,
+			`cancelled by ${me}: ${reason}`,
+			null,
+			true,
+			item.tier ?? null,
+		);
+	}
+	const message =
+		noticeId === null
+			? `item #${item.id} cancelled: ${reason} (no notice sent — this item is itself a notice)`
+			: `item #${item.id} cancelled: ${reason} (notified ${other} as notice #${noticeId})`;
+	return { noticeId, other, message };
+}
+
 export function isDoneNotice(item) {
 	return item?.notice === true || /^DONE #\d+: /.test(String(item?.subject ?? ""));
+}
+
+/**
+ * A CANCELLATION notice (#3470): the message `cancel_work` now sends the OTHER PARTY, so a
+ * cancellation no longer looks like an item that silently vanished.
+ */
+export function isCancellationNotice(item) {
+	return item?.notice === true || /^CANCELLED #\d+: /.test(String(item?.subject ?? ""));
+}
+
+/**
+ * Is this item a NOTICE of any kind (a DONE ack or a CANCELLATION)? A notice must never
+ * spawn another notice, or every terminal transition begets a hop and the chain grows
+ * without bound (ROADMAP 39). Both terminal tools consult this instead of their own shape,
+ * so a cancellation of a cancellation cannot loop.
+ */
+export function isNoticeItem(item) {
+	return item?.notice === true || /^(?:DONE|CANCELLED) #\d+: /.test(String(item?.subject ?? ""));
 }
 
 /**
@@ -887,7 +945,7 @@ const Router = defineExtension({
 					// a DONE notice back, or the chain never ends (ROADMAP 39).
 					// `isDoneNotice` also covers flag-less DONE items already in the
 					// store that predate the structural flag.
-					if (!isDoneNotice(item)) {
+					if (!isNoticeItem(item)) {
 						// The handoff must be RE-RUNNABLE (ROADMAP 48 / W2; lead #1553: verification
 						// MUST re-execute the evidence, accepting a claim is not verification). A
 						// completion's evidence is therefore carried ON THE DONE NOTICE - verbatim,
@@ -1165,7 +1223,7 @@ const Router = defineExtension({
 		defineTool({
 			name: "cancel_work",
 			description:
-				"Cancel one of your items (sent by you or addressed to you) that is no longer worth doing. Terminal: it can never be claimed and the broker will never wake anyone for it. Use it for stale or superseded work instead of leaving it in the queue.",
+				"Cancel one of your items (sent by you or addressed to you) that is no longer worth doing. Terminal: it can never be claimed and the broker will never wake anyone for it. The reason is NOTIFIED to the other party as a CANCELLED notice, the same way a completion notifies them with a DONE notice.",
 			parameters: Type.Object({
 				itemId: Type.Number(),
 				reason: Type.String({
@@ -1183,15 +1241,8 @@ const Router = defineExtension({
 						return `item #${args.itemId} is not yours to cancel (from=${item.from} to=${item.to})`;
 					if (isTerminalItem(item))
 						return `item #${args.itemId} is already ${item.status}`;
-					item.status = "cancelled";
-					item.cancelReason = args.reason;
-					item.transitions.push({
-						at: new Date().toISOString(),
-						event: "cancelled",
-						by: me,
-						reason: args.reason,
-					});
-					return `item #${item.id} cancelled: ${args.reason}`;
+					const outcome = await cancelItem(tx, { item, me, reason: args.reason });
+					return outcome.message;
 				}, context);
 				return toolText(out);
 			},
