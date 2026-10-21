@@ -3,9 +3,9 @@ runbook: prepare-workspace-etarget
 symptom: "prepare_workspace fails: npm ci --prefer-offline ... ETARGET notarget No matching version found for @earendil-works/<pkg>@<pin>"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-19
-verified_by: designer
-evidence: "#2752, #2756 (diagnose steps ran 2026-10-19 twice) - the root-write FIX awaits the operator, so its Check step is pending"
+last_verified: 2026-10-21
+verified_by: delegate
+evidence: "#2752/#2756 diagnosis 2026-10-19; POST-FIX CHECK re-run 2026-10-21 at main 87b90f2e after the #2969 exact pin + regenerated lock: a throwaway worktree (`git worktree add --detach`) ran `npm ci --prefer-offline` -> exit 0. The root-write fix is landed, so the Check step is no longer pending."
 check_rule: null
 ---
 
