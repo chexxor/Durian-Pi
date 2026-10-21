@@ -120,6 +120,24 @@ into an **ITEM WORKTREE**, main untouched (`git merge-base --is-ancestor 81ef0fb
 `git merge-base --is-ancestor <sha> main` AND by reading the report's `repo` field (it must resolve to the
 shared root). Do not land from a seat worktree cwd; do not trust `ok:true` alone.
 
+**P1 GATE CLEARED (04:11:37Z) — #3946 `done`:** qa released the stale hold after the delegate's steer,
+re-claimed at 04:07:35Z and **verified Fix A**, so `impl-item-3941` @`e0efe71` is now landable (still
+verify `git merge-base --is-ancestor` after landing, per #4247). qa also filed **#4251** (queued to pm):
+`tui-round-trip-terminal.libuv` assertion — a double-stop crashes the Windows async handle; relevant to
+the P2 round-trip acceptance. The stop drain finished at ~04:12Z; the helper ran `resume` and restarted
+the broker (**pid 21904**, passes advancing).
+
+**OPERATOR ARCHITECTURE REQUEST (04:20Z) — SEPARATE THE HARNESS FROM THE BROKER.** Operator: "the harness
+could be a process of its own, and the broker could be a separate process that performs automation on the
+harness process." Delivered to `pm` (`operator-architecture-split-2026-10-21-1`) for **lead to rule**: the
+direction is already the design of record (`docs/BROKER-SUPERVISION.md` §2, ROADMAP 38b/40a/52/55/61-64),
+but the ORDER matters — the delegate recommends (1) bounded drain + abort escalation, (2) watchdog +
+durable down marker (ROADMAP 61/62), (3) reconciler extension + sweep, (4) `land.mjs` root-repo refusal,
+(5) 52's in-process subscriber + late-join, and only THEN the harness-server split, gated on 55 + 61-64.
+The split's hard constraint: the harness server owns the store, the broker holds the WRITE lease and
+submits through RPC/spool, and every other client is a read-only subscriber — otherwise two writers.
+Body: `.spike/delegate/tui-status/intent-architecture-split-2026-10-21.md`.
+
 **Blocker:** none on the tree. `main` `b4bb4c7`, tracked tree clean except the broker-generated
 untracked `selfdev.sqlite.broker.audit.log`. Single broker pid 16140 (verify before any restart).
 
