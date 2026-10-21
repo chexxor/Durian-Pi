@@ -11,6 +11,7 @@
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { ExecutionError, FileError, err, ok } from "@earendil-works/pi-durable/env";
 
 /**
@@ -226,7 +227,37 @@ const DENIED_COMMANDS = [
 	{ check: gitVerbCheck("reset"), why: "would restage or discard work a seat did not integrate (`reset` — test a compound command's verbs separately)" },
 	{ re: /git\s+checkout(?![\w-])/i, why: "would change the seat's working tree or HEAD (`checkout` — test a compound command's verbs separately)" },
 	{ check: gitVerbCheck("switch"), why: "would change the seat's working tree or HEAD (`switch` is the modern `checkout`)" },
-	{ check: gitVerbCheck("restore"), why: "would discard uncommitted work (`restore`)" },
+	// #4641: `restore` is TREE-AWARE. Its refusal text — "would discard uncommitted work" — is a CLAIM
+	// ABOUT THE TREE, so it is CHECKED against the tree rather than assumed from the verb: a restore
+	// that would discard NOTHING is a no-op, and refusing it is the same error one verb over (measured:
+	// `git restore -- <path>` was refused on a CLEAN tree). Allowed only when EVERY named path is clean
+	// both unstaged and staged; a bare `git restore` (no paths) still refuses, because it acts on the
+	// whole tree and we cannot cheaply prove that clean.
+	{
+		check: (text, ctx) => {
+			if (!gitVerbCheck("restore")(text)) return false; // not this verb
+			const m = /git\s+(?:-C\s+(\S+)\s+)?restore\b(.*)$/i.exec(text);
+			if (!m) return true;
+			const cwd = m[1] ?? ctx?.cwd ?? process.cwd();
+			const rest = m[2] ?? "";
+			// Paths are the tokens after `--`, or the non-flag tokens when there is no `--`.
+			const after = rest.includes("--") ? rest.slice(rest.indexOf("--") + 2) : rest;
+			const paths = after.split(/\s+/).map((t) => t.trim()).filter((t) => t !== "" && !t.startsWith("-"));
+			if (paths.length === 0) return true; // no explicit path: keep refusing
+			for (const p of paths) {
+				// CLEAN means no unstaged diff AND no staged diff for that path.
+				for (const args of [["diff", "--quiet", "--", p], ["diff", "--cached", "--quiet", "--", p]]) {
+					try {
+						execFileSync("git", ["-C", cwd, ...args], { stdio: "ignore", timeout: 10000 });
+					} catch {
+						return true; // a change exists (or git failed): refuse
+					}
+				}
+			}
+			return false; // every path is clean: nothing to discard, so this is a no-op -> ALLOW
+		},
+		why: "would discard uncommitted work (`restore`)",
+	},
 	{ check: gitVerbCheck("revert"), why: "would rewrite committed work (`revert`)" },
 	{ check: gitVerbCheck("clean"), why: "would discard untracked work (`clean`)" },
 	{ check: gitVerbCheck("stash"), why: "would move uncommitted work out of the tree (`stash`)" },
@@ -342,8 +373,40 @@ function pickEnv(requested, allowlist) {
 // `ctx` carries what a PATH-AWARE decision needs: the seat's root and the command's cwd. Most entries
 // are pure pattern matches; an entry whose `check` takes the context can resolve a TARGET rather than
 // pattern-match a verb (#4374, the same principle as the write-target resolver #4366/#4367).
+/**
+ * #4641: whether this is a GIT HELP/VERSION invocation — a READ-ONLY NO-OP with no act in it.
+ *
+ * A GUARD SHOULD REFUSE AN ACT, AND `--help` IS NOT AN ACT: it prints usage and exits. Refusing it is
+ * the same class of error as treating `2>&1` as a target or `-Value` as one — a pattern matching
+ * something that is not the thing. Measured at main 910fac7: `git checkout --help` and
+ * `git restore --help` were BOTH refused on a seat's own worktree.
+ *
+ * Scoped to GIT deliberately: `wsl --help` and `docker --help` stay refused, because those refusals
+ * are about the HOST (the tool is unsupported), not about an act — the exemption is for the
+ * state-mutating verb class only.
+ *
+ * Requires at least ONE argument after the verb, so a bare `git checkout` (which DOES act) is not
+ * swept in.
+ */
+const HELP_FLAGS = new Set(["--help", "-h", "--version", "-V"]);
+function isGitHelpInvocation(text) {
+	const tokens = String(text).trim().split(/\s+/);
+	if (tokens[0] !== "git") return false;
+	// Skip git's global options (and the value an option like `-C <path>` consumes).
+	let i = 1;
+	while (i < tokens.length && tokens[i].startsWith("-")) {
+		const takesValue = tokens[i] === "-C" || tokens[i] === "-c" || tokens[i] === "--git-dir" || tokens[i] === "--work-tree";
+		i += takesValue ? 2 : 1;
+	}
+	if (i >= tokens.length) return false; // no verb at all
+	i += 1; // skip the verb
+	if (i >= tokens.length) return false; // nothing after the verb: `git checkout` DOES act
+	return tokens.slice(i).every((t) => HELP_FLAGS.has(t));
+}
+
 function refusalFor(command, ctx = {}) {
 	const text = Array.isArray(command) ? command.join(" ") : String(command);
+	if (isGitHelpInvocation(text)) return null;
 	for (const { re, why, unless, check } of DENIED_COMMANDS) {
 		if (!(check ? check(text, ctx) : re.test(text))) continue;
 		if (unless?.() === true) continue;
