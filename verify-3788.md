@@ -1,4 +1,4 @@
-﻿# Verification for #3788 — land.md fresh-worktree suite note
+# Verification for #3788 — land.md fresh-worktree suite note
 
 ## Claim 1: NOT nested sets (3 red seat root, 7 red fresh worktree; pitui flips)
 - Seat root pitui: RED (exit 1) — confirmed in seat root
