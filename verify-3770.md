@@ -1,4 +1,4 @@
-﻿# Verification for #3770 — structural notice flag fix
+# Verification for #3770 — structural notice flag fix
 
 ## Fix summary
 1. isNoticeItem, isDoneNotice, isCancellationNotice now check 	ypeof item?.notice === "boolean" FIRST.
