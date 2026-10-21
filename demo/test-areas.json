@@ -68,6 +68,7 @@
       "demo/broker-hotloop-bound.test.mjs",
       "demo/broker-inbox.test.mjs",
       "demo/broker-intent-wake.test.mjs",
+      "demo/broker-liveness-failsafe.test.mjs",
       "demo/broker-liveness.test.mjs",
       "demo/broker-log.test.mjs",
       "demo/broker-max-duration.test.mjs",
