@@ -235,13 +235,16 @@ does not load — see below). Result: all 12 seats `refreshed`; `modelMismatch` 
 (`Qwen/Qwen3.6-35B-A3B` → `zai-org/GLM-5.3-Flash`, `resetEntryId 194990`). A follow-up `--dry-run` reports
 no mismatch. Seat roots unchanged. Scratch removed.
 
-**TEAM IS DOWN — shared tree still BROKEN:** `src/chatview.mjs` imports `sliceToWidth` from
-`./textwidth.mjs`, but a seat's DIRTY `src/textwidth.mjs` (mid-flight TUI edit, unchanged since ~23:21)
-no longer exports it. No `cli.mjs serve` can start from the shared tree, so the broker was NOT restarted.
-**Repair then restart:** either restore `export function sliceToWidth` in `src/textwidth.mjs` or drop the
-import/uses in `src/chatview.mjs` (the seat's own edit decides which) — then
-`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1`. `qa`'s context was reset;
-re-surface any claimed item in the handoff.
+**TEAM IS BACK UP (2026-10-21 ~04:34Z).** The shared tree was broken by **newline-flattening**, not a real
+edit: 8 tracked files (`src/textwidth.mjs`, `src/tui/client.mjs`, `src/tui/paint.mjs`, `demo/tui-harness.mjs`,
+`demo/tui-landing.test.mjs`, 3 goldens) had every newline stripped, so the first `//` comment swallowed the
+rest of each file and `sliceToWidth` vanished. Proven lossless: each file's whitespace-stripped content was
+IDENTICAL to `HEAD`. Backed up to `.spike/delegate/flattened-backup-20261021/`, restored from `HEAD`, then
+`git add` refreshed the EOL/stat noise. `textwidth`, `tui-client`, `tui-landing` demos exit 0; `node --check`
+clean. Broker restarted via `scripts/serve-noroot.ps1`: **pid 19216**, `state: up`, 12 seats, passes
+flowing. `up --dry-run` reports no model mismatch, so **`qa` is live on `zai-org/GLM-5.3-Flash`**.
+**Follow-up owed:** the newline-stripping writer is a tooling defect (it hit 8 files at once) — register it
+so it does not recur; and `qa`'s context was reset, so re-surface any claimed item.
 
 Then:
 `git worktree add --detach .verify-main main && (cd .verify-main && node scripts/suite.mjs); git worktree remove --force .verify-main`
