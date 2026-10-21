@@ -711,7 +711,13 @@ const Router = defineExtension({
 					}
 					// Paused and nothing already held: a legible refusal, not a silent no-op.
 					if (paused) return { kind: "paused", by: control?.pausedBy ?? null, reason: control?.reason ?? null };
-					return null;
+					// #4713: THE DATA IS CAPTURED **INSIDE** THE CLOSURE, where `queue` is bound. The previous attempt put
+					// the lookup after `}, context);`, where `queue` does not exist: `node --check` passed and six demos passed,
+					// because none reaches this path with a live queue. `curate` and `rearmclaim` do, and they threw.
+					const mine = (queue.items ?? []).filter(
+						(it) => it.to === me && it.status !== "done" && it.status !== "cancelled",
+					);
+					return mine.length > 0 ? { kind: "none", mine } : null;
 				}, context);
 				if (found?.kind === "paused") {
 					const why = found.reason ? ` (reason: ${found.reason})` : "";
@@ -721,19 +727,12 @@ const Router = defineExtension({
 					);
 				}
 				if (!found) {
-					// #4690: A REFUSAL THAT NAMES NOTHING IS INDISTINGUISHABLE FROM AN EMPTY QUEUE. The bare
-					// `NO_QUEUED_WORK` was returned whenever `found` was null — including the case that cost 19 turns: a row
-					// that was `queued` at WAKE time and is held, deferred or claimed-elsewhere by the time this runs. The
-					// stalled branch above cannot help, because it requires a row STILL claimed by this seat.
-					// SO DESCRIBE WHAT WAS FOUND. Only say "nothing" when that is TRUE.
-					const mine = (queue.items ?? []).filter(
-						(it) => it.to === me && it.status !== "done" && it.status !== "cancelled",
-					);
-					if (mine.length > 0) {
-						// Name the OLDEST — the one a wake would have been about — and its CURRENT status, which is the fact
-						// the bare refusal was hiding.
-						const oldest = mine[0];
-						const others = mine.length > 1 ? ` (and ${mine.length - 1} more row(s) addressed to you)` : "";
+					// #4713: A REFUSAL THAT NAMES NOTHING IS INDISTINGUISHABLE FROM AN EMPTY QUEUE. The 19-turn shape is a
+					// row `queued` at WAKE time and held / deferred / claimed-elsewhere by the time this runs — the stalled
+					// branch cannot reach it, because it needs a row STILL CLAIMED by this seat.
+					if (found?.kind === "none") {
+						const oldest = found.mine[0];
+						const others = found.mine.length > 1 ? ` (and ${found.mine.length - 1} more row(s) addressed to you)` : "";
 						return toolText(
 							`NO_QUEUED_WORK — but NOT an empty queue: #${oldest.id} is addressed to you and is now \`${oldest.status}\`${others}. ` +
 								(oldest.status === "held"
@@ -743,7 +742,7 @@ const Router = defineExtension({
 										: `It is not claimable in its current state; check \`status\` for who holds it.`)
 						);
 					}
-					return toolText("NO_QUEUED_WORK — and nothing is addressed to you, so this is a true empty queue.");
+					return toolText("NO_QUEUED_WORK");
 				}
 				// Build the INLINE STRUCTURED HEADER: item id + the decision-relevant
 				// fields (from / subject / status) that a no-read-tool coordinator seat
