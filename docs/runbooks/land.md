@@ -263,6 +263,19 @@ ask "stop or not?" or "why did --suite fail?".
    *(`--suite` was skipped for the 2026-10-19 passes while the rule was broken; the helper itself never
    required it, and the post-landing `node scripts/suite.mjs` run is what proved those landings.)*
 
+   **THIS FALLBACK HAS AN EXPIRY, AND IT IS NOT "WHEN `main` IS GREEN".** "Green" is unreachable (the
+   real content defects had no owner) and ambiguous (`pitui` is arguably CORRECT to fail against the
+   vendored junction). Delete this fallback when `main`'s red set is **EMPTY IN THE SEAT-ROOT DEPENDENCY
+   ENVIRONMENT** — i.e. the real content defects are fixed, and `pitui` is either fixed or the vendored
+   link is DECLARED INTENDED by whoever owns that call. An unreachable expiry is a workaround that never
+   expires: the next lander reads "remove when green", sees red forever, and concludes the fallback IS the
+   permanent procedure — which is the habit the condition exists to prevent.
+   **Every `--suite`-less proof must STATE THE DEPENDENCY SET IT RAN IN.** A proof from a worktree-local
+   `npm ci` and a proof from the seat root are not comparable, and the output does not distinguish them
+   (see the fresh-worktree note below). **And do NOT read "red on N" as environmental:** at the time of
+   writing the same commit reported 3 red in the seat root and 7 after a worktree-local `npm ci` — two of
+   those were REAL content defects, one was an environment guard and five were dependency-version
+   artefacts. A landing pass that treats the delta as noise will treat the real ones as noise too.
 #### ⚠ WHEN `main` IS ALREADY RED: land WITHOUT `--suite`, then prove on `main` — AND DELETE THIS SECTION WHEN IT CLEARS
 
 **The workaround, while `main` carries known-red demos:** land with `node scripts/land.mjs <b1> … --db
@@ -278,6 +291,8 @@ already-red tree is not a weaker check, it is a misleading one.
 git worktree add --detach "$PWD/.main-check" main
 ( cd .main-check && node scripts/suite.mjs --jobs 8 ); echo "exit=$?"
 git worktree remove --force "$PWD/.main-check"; git worktree prune
+#   delete this section when that reports exit=0 (pass=all, fail=0)
+#   — except for a known, separately-registered red such as pitui (#2412), which is exempt by name
 #   The verdict depends on TWO things, so name BOTH (see "NAME THE TREE" below):
 #     the TREE — main's content. The shared tree carries seats' in-flight work and is not main.
 #     the DEPENDENCY SET — a worktree-local `npm ci` resolves the LOCKFILE, and the five
@@ -683,6 +698,13 @@ around `npm ci` (`src/worktree.mjs` lines 155-188), but in a fresh worktree that
 present there, and the caller only `console.warn`s and continues — so the worktree stays on the lock's
 `pi-durable@1.1.0`. The suite was re-run in this worktree with that state and returned exactly the 7 red
 named in the new note; `node demo/land-helper.test.mjs` → exit 0.
+
+2026-10-20 — **THE `--suite`-LESS FALLBACK NOW HAS A REACHABLE EXPIRY** (item #3775, same #3272
+series): "remove when `main` is green" was unreachable (the real defects had no owner) and ambiguous
+(`pitui` is arguably correct to fail against the vendored junction), so it is restated as "red set EMPTY
+in the SEAT-ROOT dependency environment", with the requirement that every `--suite`-less proof STATE the
+dependency set it ran in. The runbook's own Verify step was re-run: `node demo/land-helper.test.mjs` →
+exit 0.
 2026-10-20 (pass #6, delegate, broker UP): **5 landed, 1 landed-then-reverted, `main` `351b03a`→`13e60bc`
 (+ revert `cc96c0c`).** Kept: `designer-item-3307` @`24b7fc9` (the landing-screen spec #3313/#3359 build
 against), `advocate-item-2985` @`7387716` (closes the proposal v2's dangling §12 reference),
