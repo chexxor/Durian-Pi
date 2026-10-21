@@ -530,7 +530,7 @@ gotten wrong — surfacing tiers, scope, notice lifecycle — is `docs/METRICS.m
     80×24; the denominator is the recommended window or is labelled advertised.
 
 99. **BUG (TUI): the conversation view has no `i` input affordance, and entering it drops the
-    conversation (operator report, 2026-10-17).** *Symptom:* in a seat's conversation view the footer
+    conversation (operator report, 2026-10-17; DELIVERED `02f0004`).** *Symptom:* in a seat's conversation view the footer
     does not offer `i`, and pressing `i` leaves the conversation while typing, so the operator cannot
     tell they can message the seat from there. *Root cause (verified in `src/tui/client.mjs`, `ui.mjs`):*
     `renderTui` dispatches on `view`; the conversation branch is `view === "conversation"`, but `i` sets
@@ -592,7 +592,7 @@ them forward, and the impl items are HELD until pm releases.
   colour/NO_COLOR, cost), advocate #1107 (user call), impl #1108 (implementation, GATED on those
   rulings and items 27/97). The designer/advocate items are ADVISORY and may run now.
 - **99** (bug: the `i` input affordance drops the conversation; fix = treat input as an OVERLAY on
-  the current view) — owners: impl #1109 (fix, GATED), designer #1110 (footer/hint wording, advisory).
+  the current view; **DELIVERED `02f0004`**) — owners: impl #1109 (fix, GATED), designer #1110 (footer/hint wording, advisory).
 
 100. **Measure landing health — unlanded verified branches and time-to-land (operator request,
     2026-10-17).** The branch backlog (2026-10-17: 15 verified-but-unlanded branches) is invisible today:
@@ -2437,7 +2437,7 @@ recurrences; `pm` sequences them against 61–71.
     2026-10-16, up to two days old), holding the store and muddying `ps`. The broker/`up` reaps viewers
     older than their originating session, or `status` names them. *Owner:* impl · *Where:* `cli.mjs`,
     `src/broker.mjs`. *Acceptance:* stale viewers are reaped or reported; no silent accumulation.
-78. **Broker crash forensics + survive a conversation storage error (DELIVERED `d509e2f`).** The broker died on `Session failed
+78. **Broker crash forensics + survive a conversation storage error (DELIVERED `d509e2f`; pacing/legibility half DELIVERED `3021fe2`).** The broker died on `Session failed
     after a storage error; close and reopen it` with no `EXIT` and no cause logged, stalling the queue
     (impl). Make the broker log the `cause` chain, skip the poisoned conversation for the pass instead
     of dying, and surface it as attention. *Owner:* impl · *Where:* `cli.mjs` `cmdServe`, `src/broker.mjs`.
@@ -2728,6 +2728,85 @@ after the OWASP miss. `pm` sequences. Registered **not scheduled**.
     `vendor/eval/` clone (that directory also holds dependency/TUI evals). *Owner:* impl · *Where:*
     `src/checkup.mjs`. *Acceptance:* a missing `COMPETITORS.md` entry, or a stale pin, is a `check`
     finding. *Cross-links:* the runbook-machinery family ROADMAP 81/82.
+
+## Daemon-harness architecture — from the operator research (2026-10-19)
+
+Source: `docs/research/how-to-design-an-llm-harness-which-apps-use-a-daemon.md`, consumed and
+grounded in `docs/reviews/daemon-harness-architecture-review.md`. The report's "root cause" claims
+(WAL/`busy_timeout`, in-process FIFO lock, `BEGIN IMMEDIATE`, SQLite upgrade, inference-in-transaction)
+were **rejected as already present in the pinned pi-durable 1.3.0**; only the genuine refinements and
+one gated investigation are registered here. `pm` sequences. Registered **not scheduled**.
+
+153. **Resource-keyed lock manager over `genlock.mjs`.** Today the single `DURIAN_PI_MAX_CONCURRENT_SEATS`
+    lease serializes seats coarsely; model it on OpenHands' resource-lock manager so two seats run
+    concurrently unless they collide on the same file/terminal/browser. Our per-seat worktrees are the
+    isolation boundary. *Owner:* impl · *Where:* `src/genlock.mjs`. *Acceptance:* a demo shows two seats
+    touching disjoint resources both run, and two touching the same file serialize. *Cross-links:* the
+    survey's reference #2; `docs/reviews/daemon-harness-architecture-review.md` §3.
+
+154. **Broker event/SSE tap.** Expose the broker's event stream so the TUI, a script, or a web client
+    can subscribe to the same run (OpenCode's `/sse` fan-out) instead of the in-process `watchview.mjs`
+    poll. *Owner:* impl · *Where:* broker serve path + a client. *Acceptance:* an out-of-process client
+    observes turns/tool events for a live run without opening the store. *Cross-links:* the TUI Phase-2
+    attach work, `docs/reviews/tui-attach-vs-poll.md`, ROADMAP item 52 (`watchEvents`).
+
+155. **Uniform harness conformance probe set.** Replace the per-feature `demo/*.test.mjs` sprawl with a
+    uniform probe set over every seat path — basic turn, tool call, streaming, interrupt, model override,
+    policy denial (Omnigent's "test harnesses like hardware"). Adopt Omnigent's **three-object split**
+    (a self-declared profile / harness-agnostic probes over a generic event stream / per-transport
+    drivers), its **seven-verdict vocabulary** (`SUPPORTED`/`UNSUPPORTED`/`PARTIAL`/`NOT_APPLICABLE`/
+    `UNKNOWN`/`SKIPPED`/`DRIFT`) with **P0 gating CI and P1 report-only**, a `DRIFT` verdict when observed
+    disagrees with declared, and a **mock LLM for deterministic triggers**. Assert interrupt/policy-denial
+    on the *observable event* (a cancelled tool produces no `TurnComplete`; a denied call emits a denial
+    and never executes), not on timing. *Owner:* qa · auditor · *Where:* `demo/`. *Acceptance:* each probe
+    is a pass/fail legible without reading the implementation, and the suite labels which harness property
+    each probe covers. *Cross-links:* the suite-concurrency priority (`DURIG_SUITE_CONCURRENCY`) already
+    routed to `pm`; Omnigent's exact field schemas are unpublished (`tests/harness_bench/` is the public
+    source to read), and `docs/reviews/daemon-harness-architecture-followup-review.md` "Round 2" Q1.
+
+156. **Extension seam as a Pi-style `Operations` interface.** Give each tool an `Operations` interface as
+    the single remoting/scope seam (`BashOperations`, `EditOperations`, …), so execution can relocate and
+    per-seat tool scoping closes. *Owner:* devtools · impl · *Where:* the pi-durable extension install path
+    + `src/seattools.mjs`. *Acceptance:* a seat can be scoped to a tool subset without editing tool
+    definitions. *Cross-links:* ROADMAP item 18 (per-seat tool scoping); the survey's reference #4.
+
+157. **CONTINGENCY (not default) — move the audit/event trail off the SQLite write lock.** Investigate
+    OpenHands' per-record-file + `.lock` append-only model *only if* evidence still shows lock contention
+    *after* D111 (broker-served reads) and the `harness.storage` read fix (`8d48cb1`, `6140467`). The
+    follow-up research found **no throughput figure at our scale**, and round 2 confirmed throughput is
+    **not a deciding factor** (~50 records/s is 2–3 orders below the measured fsync/WAL ceilings) — so
+    this is a contingency justified only by *lock-contention relief*, never speed. If it opens, `filelock`'s
+    Windows primitive is `LockFileEx` (kernel-enforced, **auto-released on process death**, no stale
+    reclaim) and is **local-filesystem only**.
+    *Owner:* lead · impl. *Acceptance:* a written finding that first demonstrates residual contention on the
+    write lock (not corruption, not a second opener), then a scoped change with a rollback. *Cross-links:*
+    the survey's reference #2; incident `2026-10-18-broker-retry-hotloop.md`;
+    `docs/reviews/daemon-harness-architecture-followup-review.md` Q5.
+
+158. **Retry residual for a persistent pass-throw.** #2237 already added bounded exponential backoff,
+    `.stop` on the throwing path, and `PASS-FAILED … cause=`. What remains: jitter so independent brokers
+    do not resynchronize, retry only idempotent work (a non-idempotent "close and reopen" must not be
+    re-run blindly), and surface a controlled overload error when the budget is exhausted rather than
+    retrying forever. *Owner:* impl · *Where:* `src/broker.mjs` `runWakeLoop`. *Acceptance:* a demo shows a
+    persistent throw produces jittered, budget-bounded retries and then a terminal overload diagnostic.
+    *Cross-links:* `#2237`/`3021fe2`; `docs/reviews/daemon-harness-architecture-review.md` R6.
+
+159. **Classify the residual `database is locked` by `errcode`, and record the structural exclusion.** A
+    local probe confirms `node:sqlite` exposes `code=ERR_SQLITE_ERROR`, `errcode`, and `errstr` on a WAL
+    write conflict. Because pi-durable always opens writes with `BEGIN IMMEDIATE` (`node.ts:146`), the
+    deferred-`BEGIN` `SQLITE_BUSY_SNAPSHOT` (extended 517) case cannot apply to our writes; a residual
+    `errcode: 5` is the retryable busy or a `-shm` open/close race. *Owner:* impl · *Where:* the
+    `SessionFailed.cause` / `PASS-FAILED` diagnostic path (`src/broker.mjs`). *Acceptance:* a failed op's
+    log line carries `errcode` (and the primary/extended distinction where available), and a note in
+    `docs/BROKER-ARCHITECTURE.md` records why `BUSY_SNAPSHOT` is excluded. *Cross-links:* `#2420`, `#2406`,
+    `docs/reviews/daemon-harness-architecture-followup-review.md` Q3.
+
+160. **Verify the broker spool has no stale/poison-row gap.** The `requestId` result ledger already gives
+    idempotent re-drain (`src/broker.mjs:239-241,516-519`) and result files are consumed (`5c946a1`), but
+    the outbox best-practice report flags TTL/stale GC and a poison row that stalls the drain. *Owner:*
+    impl · *Where:* `<db>.broker.inbox/` + `.inbox.out/`. *Acceptance:* a written finding that a very old
+    intent and a permanently-failing intent each reach a terminal state without stalling the drain, or a
+    scoped fix if they do not. *Cross-links:* `docs/reviews/daemon-harness-architecture-followup-review.md` Q9.
 
 ## Explicitly deferred (with reasons)
 

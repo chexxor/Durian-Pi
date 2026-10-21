@@ -127,3 +127,21 @@ trees carry foreign WIP whose originals live in the shared tree. The delegate di
 `docs/runbooks/leaked-worktrees.md` · incident `2026-10-17-live-worktree-reap.md` (same root, the
 `locked` guard) · intent `worktree-rot-prevention-2026-10-19-1` · queue items `#2224`, `#2231`,
 `#2305`, `#2315`, `#2340` · the #2095 pin (`@earendil-works/pi-agent-core@1.3.0`) · ROADMAP 76.
+
+## 2026-10-19 (second pass) — the CARRY residue is now the STANDING cost of every prune
+Re-measured at the land+prune pass, after `impl-item-2360` (`carry: false` on the seat path) had already
+landed: the leak it prevents is still fully present in the EXISTING worktrees, because the fix only
+changes worktrees created afterwards. Concretely, of 22 merged refs at Diagnose:
+- **9 merged terminal worktrees were dirty and unlocked** (`designer-item-2629`, `scribe-item-2683`,
+  `qa-item-2701/2720/2728/2737/2766/2772`, `scribe-item-2910`) — every one refused by the clean-only
+  removal guard, so all 9 had to be **relocated** out-of-tree rather than removed.
+- 4 more landed during the same pass and were likewise relocated (`impl-item-1705`, `impl-item-2600`,
+  `impl-item-2602`, `impl-item-2643` — 2, 9, 9 and 9 dirty paths respectively).
+- The two genuinely `reapable` trees (`auditor-item-2632`, clean; `auditor-item-2757`, clean) were the
+  exception, not the rule.
+
+**Consequence for a maintainer:** `worktree audit` reporting `reapable: 0` is the NORMAL post-CARRY
+state, not a sign that nothing can be pruned. The relocation path in
+`docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §4.3 is the standard path; 13 refs were freed in that pass with
+**nothing forced** and every file preserved. The fix for the class remains the `carry: false` seat path
+(landed) plus a teardown that tolerates already-carried trees (still `fix: null` above — unchanged).

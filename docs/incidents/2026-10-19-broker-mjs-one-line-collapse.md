@@ -94,6 +94,20 @@ exit 0. The connected wedge is a separate incident (`docs/incidents/2026-10-18-b
 - Untracked bypass artifacts: `fix-broker.mjs` (`fs.writeFileSync('src/broker.mjs', …)`),
   `src/borker.mjs.head` (UTF-16, typo).
 
+## Recurrence — 2026-10-19T05:4xZ (UTF-16 re-encode, same file, same bypass artifacts)
+Found during the operator's clock-out workspace check: `src/broker.mjs` was again unreadable — not a
+one-line collapse this time but a **UTF-16LE re-encode** (`git diff --stat` = `Bin 68464 -> 128014
+bytes`; `node --check` `SyntaxError: Invalid or unexpected token` with null-separated characters). Every
+demo imports `src/broker.mjs`, so the whole suite went red (**18** failures, incl. `worktree`, `watch`,
+`stop`, `starter`, `ui-readstate`); all pass again after recovery. The untracked `src/borker.mjs.head`
+(UTF-16LE, CRLF, 129,468 bytes) and `fix-broker.mjs` were still present — the same bypass artifacts the
+Prevention names, and the likely vector (a Windows `>`/`Set-Content` redirect emits UTF-16). Recovered
+non-destructively per `write-corruption-recovery.md`: backed up to
+`.spike/delegate/broker.mjs.utf16-backup-20261019`, wrote `HEAD`'s content back, converted to CRLF
+(`node --check` clean, `git status --porcelain -- src/broker.mjs` empty, `demo/broker-read.test.mjs`
+exit 0). Suite returned to the 3 WIP-caused failures (`land-helper`, `prepare-workspace`,
+`worktree-reuse-deps`).
+
 ## Links
 `docs/runbooks/write-corruption-recovery.md` (the #623 recovery; `git checkout --` is operator-only) ·
 `docs/incidents/2026-10-18-broker-retry-hotloop.md` (the concurrent wedge) ·

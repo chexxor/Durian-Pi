@@ -11,6 +11,7 @@
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { ExecutionError, FileError, err, ok } from "@earendil-works/pi-durable/env";
 
 /**
@@ -162,6 +163,43 @@ function branchForceDelete(text) {
 	return false;
 }
 
+/**
+ * TOKEN-AWARE TREE-MUTATING VERB MATCH (#4572), built on #1211's mechanism rather than a second tokenizer.
+ *
+ * THE DEFECT THIS REPLACES: this family was matched with WHOLE-STRING regexes, so a REFUSED VERB INSIDE A
+ * QUOTED SEARCH PATTERN was refused - a seat documenting or investigating the guard could not write the verb
+ * in a search pattern, while `git branch -D` was already token-aware. TWO MATCHING PHILOSOPHIES FOR ONE
+ * CLASS OF GUARD, and the older one fired on prose.
+ *
+ * It reuses `shellSegments` + `gitSubcommand`, the SAME pair `branchForceDelete` uses, so a quoted argument
+ * is DATA and an actual invocation is an INVOCATION. `gitSubcommand` skips `-C <path>`, so ONE check per
+ * verb covers the plain AND the redirected forms - which is why the six `-C` regexes this replaces were
+ * REDUNDANT rather than needing their own rewrite.
+ *
+ * `checkout` IS NOT HERE ON PURPOSE: #4374 made it PATH-AWARE (allowed in the seat's own worktree, refused
+ * against the shared root) because `checkout-index` shares its prefix. That is a decision about WHERE, not
+ * about whether, so it is a different predicate and folding it in would DISCARD THE DISTINCTION.
+ *
+ * CONSERVATIVE DIRECTION: if a segment cannot be tokenised as a git invocation this returns FALSE and the
+ * command is allowed - the opposite of the write guard's `unresolved` handling. The trade is deliberate and
+ * not symmetric: a wrong REFUSAL here costs a retry, and the whole-string regexes proved that cost is paid
+ * constantly by anyone discussing the guard. A verb that is genuinely invoked always tokenises.
+ *
+ * @param {string} verb
+ * @returns {(text: string) => boolean}
+ */
+function gitVerbCheck(verb) {
+	return (text) => {
+		for (const tokens of shellSegments(text)) {
+			const head = tokens[0]?.toLowerCase();
+			if (head !== "git" && head !== "git.exe") continue;
+			const { sub } = gitSubcommand(tokens.slice(1));
+			if (sub && sub.toLowerCase() === verb) return true;
+		}
+		return false;
+	};
+}
+
 const DENIED_COMMANDS = [
 	{ re: /(^|[\s;&|"'()])wsl(\.exe)?([\s"'()]|$)/i, why: "WSL is unsupported on this host" },
 	{ re: /(^|[\s;&|"'()])docker(-compose)?(\.exe)?([\s"'()]|$)/i, why: "Docker is unsupported on this host" },
@@ -178,13 +216,51 @@ const DENIED_COMMANDS = [
 	// match — the whole class of bug that caused a seat to wipe the shared tree (RD #257).
 	// The -C <path> forms cover the case where a seat tries to redirect git into another
 	// checkout; refuse them the same way (RD #257).
-	{ re: /git\s+reset\b/i, why: "would restage or discard work a seat did not integrate" },
-	{ re: /git\s+checkout\b/i, why: "would change the seat's working tree or HEAD" },
-	{ re: /git\s+switch\b/i, why: "would change the seat's working tree or HEAD (`switch` is the modern `checkout`)" },
-	{ re: /git\s+restore\b/i, why: "would discard uncommitted work" },
-	{ re: /git\s+revert\b/i, why: "would rewrite committed work" },
-	{ re: /git\s+clean\b/i, why: "would discard untracked work" },
-	{ re: /git\s+stash\b/i, why: "would move uncommitted work out of the tree" },
+	// #3635: EVERY REFUSAL NAMES ITS OWN VERB. A refusal that does not name its rule forces the
+	// reader to GUESS, and a guess about a guard generalises to a CLASS of verbs. The measured case:
+	// `checkout`'s message said only "would change the seat's working tree or HEAD" while `switch`'s
+	// named itself, so when a COMPOUND command (`git checkout -b …; git rebase main`) was refused on
+	// its checkout segment, the generic wording made "both verbs are refused" feel confirmed and the
+	// seat never re-ran `git rebase` alone — a false claim that reached an operating note (#3379).
+	// The guard refuses the WHOLE command on the first matching rule, so one refusal says nothing
+	// about the other verbs in it: test them separately.
+	{ check: gitVerbCheck("reset"), why: "would restage or discard work a seat did not integrate (`reset` — test a compound command's verbs separately)" },
+	{ re: /git\s+checkout(?![\w-])/i, why: "would change the seat's working tree or HEAD (`checkout` — test a compound command's verbs separately)" },
+	{ check: gitVerbCheck("switch"), why: "would change the seat's working tree or HEAD (`switch` is the modern `checkout`)" },
+	// #4641: `restore` is TREE-AWARE. Its refusal text — "would discard uncommitted work" — is a CLAIM
+	// ABOUT THE TREE, so it is CHECKED against the tree rather than assumed from the verb: a restore
+	// that would discard NOTHING is a no-op, and refusing it is the same error one verb over (measured:
+	// `git restore -- <path>` was refused on a CLEAN tree). Allowed only when EVERY named path is clean
+	// both unstaged and staged; a bare `git restore` (no paths) still refuses, because it acts on the
+	// whole tree and we cannot cheaply prove that clean.
+	{
+		check: (text, ctx) => {
+			if (!gitVerbCheck("restore")(text)) return false; // not this verb
+			const m = /git\s+(?:-C\s+(\S+)\s+)?restore\b(.*)$/i.exec(text);
+			if (!m) return true;
+			const cwd = m[1] ?? ctx?.cwd ?? process.cwd();
+			const rest = m[2] ?? "";
+			// Paths are the tokens after `--`, or the non-flag tokens when there is no `--`.
+			const after = rest.includes("--") ? rest.slice(rest.indexOf("--") + 2) : rest;
+			const paths = after.split(/\s+/).map((t) => t.trim()).filter((t) => t !== "" && !t.startsWith("-"));
+			if (paths.length === 0) return true; // no explicit path: keep refusing
+			for (const p of paths) {
+				// CLEAN means no unstaged diff AND no staged diff for that path.
+				for (const args of [["diff", "--quiet", "--", p], ["diff", "--cached", "--quiet", "--", p]]) {
+					try {
+						execFileSync("git", ["-C", cwd, ...args], { stdio: "ignore", timeout: 10000 });
+					} catch {
+						return true; // a change exists (or git failed): refuse
+					}
+				}
+			}
+			return false; // every path is clean: nothing to discard, so this is a no-op -> ALLOW
+		},
+		why: "would discard uncommitted work (`restore`)",
+	},
+	{ check: gitVerbCheck("revert"), why: "would rewrite committed work (`revert`)" },
+	{ check: gitVerbCheck("clean"), why: "would discard untracked work (`clean`)" },
+	{ check: gitVerbCheck("stash"), why: "would move uncommitted work out of the tree (`stash`)" },
 	{
 		check: branchForceDelete,
 		why: "would force-delete a branch (`-D`/`--force`) — the safe `git branch -d` and branch create/rename are allowed",
@@ -195,22 +271,38 @@ const DENIED_COMMANDS = [
 	// the explicit paths you changed.
 	{ re: /git\s+add\s+-A\b/i, why: "unscoped staging: stage only the explicit paths you changed, never git add -A or git add ." },
 	{ re: /git\s+add\s+\.(?:$|[\s;&|"'()])/i, why: "unscoped staging: stage only the explicit paths you changed, never git add -A or git add ." },
+	// #4374: `git checkout-index` is NOT a branch switch — it re-materialises files from the INDEX into
+	// the working tree, and it cannot move HEAD. It was swept into the branch-switch class by a `\b`
+	// boundary (`\b` sits between the final "t" and the hyphen of "checkout-index"), with a reason that
+	// was FACTUALLY WRONG about the verb, and NO CANARY pinned it either way. The decision is
+	// PATH-AWARE, like the write guard: the verb takes no path, so its TARGET is the CWD's worktree —
+	// restoring YOUR OWN dirt is what the runbooks prescribe (`tracked-files-missing-on-disk.md`), while
+	// re-materialising the SHARED tree is the 04:21Z hazard. The verb is identical; the two acts are
+	// opposite, so the TARGET decides.
+	{
+		re: /git\s+(?:-C\s+\S+\s+)?checkout-index\b/i,
+		// NOTE: a `check` predicate REPLACES the `re` test in refusalFor, so it must do the verb test
+		// itself; the `re` above is kept as documentation of the same pattern.
+		check: (text, ctx) => {
+			if (!/git\s+(?:-C\s+\S+\s+)?checkout-index\b/i.test(text)) return false;
+			const root = ctx?.root;
+			const cwd = ctx?.cwd ?? process.cwd();
+			// The seat's OWN worktree: legitimate, and the only recovery verb a dirty orphan has.
+			return !(typeof root === "string" && isInside(root, cwd));
+		},
+		why: () =>
+			"`checkout-index` re-materialises files from the INDEX into the SHARED tree, discarding uncommitted changes there — run it in your own item worktree; the shared tree is the delegate's/operator's to restore",
+	},
 	{
 		re: /git\s+push\b/i,
-		why: "publishing needs the operator's authorization; ask with defer_work, or have the operator relaunch durig with DURIG_ALLOW_PUSH=1",
+		why: "`push` needs the operator's authorization; ask with defer_work, or have the operator relaunch durig with DURIG_ALLOW_PUSH=1",
 		unless: () => operatorGranted("DURIG_ALLOW_PUSH"),
 	},
 	// git -C <path> <verb> redirects the git operation to another directory. Even when
 	// the target looks "safe," the seat cannot verify that it is the right directory
 	// (a redirecting seat cannot validate git identity; that is the operator's job).
 
-	{ re: /git\s+-C\s+\S+\s+reset\b/i, why: "same as `git reset` — discards or restages work" },
-	{ re: /git\s+-C\s+\S+\s+checkout\b/i, why: "same as `git checkout` — changes the working tree" },
-	{ re: /git\s+-C\s+\S+\s+switch\b/i, why: "same as `git switch` — changes the working tree" },
-	{ re: /git\s+-C\s+\S+\s+restore\b/i, why: "same as `git restore` — discards uncommitted work" },
-	{ re: /git\s+-C\s+\S+\s+revert\b/i, why: "same as `git revert` — rewrites committed work" },
-	{ re: /git\s+-C\s+\S+\s+clean\b/i, why: "same as `git clean` — discards untracked work" },
-	{ re: /git\s+-C\s+\S+\s+stash\b/i, why: "same as `git stash` — moves uncommitted work out of the tree" },
+	{ re: /git\s+-C\s+\S+\s+checkout(?![\w-])/i, why: "same as `git checkout` — changes the working tree" },
 
 	// Unscoped staging redirected to another directory.
 	{ re: /git\s+-C\s+\S+\s+add\s+-A\b/i, why: "unscoped staging redirected" },
@@ -246,6 +338,16 @@ const ENV_ALLOWLIST = [
 	"TERM",
 ];
 
+/** Non-interactive git vars: pin them so `git commit` (no -m) never opens VS Code and blocks the seat. */
+export const NON_INTERACTIVE_GIT = {
+	GIT_EDITOR: ":",
+	GIT_SEQUENCE_EDITOR: ":",
+	GIT_TERMINAL_PROMPT: "0",
+	GIT_MERGE_AUTOEDIT: "no",
+	GIT_PAGER: "cat",
+	PAGER: "cat",
+};
+
 /** A name that looks like a credential never crosses, whatever allowlist was configured. */
 const SECRET_NAME = /(key|token|secret|password|passwd|credential|cookie|authorization)/i;
 
@@ -266,13 +368,50 @@ function pickEnv(requested, allowlist) {
 	return kept;
 }
 
-/** The refusal a seat sees, phrased so it can act on it rather than retry blindly. */
-function refusalFor(command) {
+// The refusal a seat sees, phrased so it can act on it rather than retry blindly.
+//
+// `ctx` carries what a PATH-AWARE decision needs: the seat's root and the command's cwd. Most entries
+// are pure pattern matches; an entry whose `check` takes the context can resolve a TARGET rather than
+// pattern-match a verb (#4374, the same principle as the write-target resolver #4366/#4367).
+/**
+ * #4641: whether this is a GIT HELP/VERSION invocation — a READ-ONLY NO-OP with no act in it.
+ *
+ * A GUARD SHOULD REFUSE AN ACT, AND `--help` IS NOT AN ACT: it prints usage and exits. Refusing it is
+ * the same class of error as treating `2>&1` as a target or `-Value` as one — a pattern matching
+ * something that is not the thing. Measured at main 910fac7: `git checkout --help` and
+ * `git restore --help` were BOTH refused on a seat's own worktree.
+ *
+ * Scoped to GIT deliberately: `wsl --help` and `docker --help` stay refused, because those refusals
+ * are about the HOST (the tool is unsupported), not about an act — the exemption is for the
+ * state-mutating verb class only.
+ *
+ * Requires at least ONE argument after the verb, so a bare `git checkout` (which DOES act) is not
+ * swept in.
+ */
+const HELP_FLAGS = new Set(["--help", "-h", "--version", "-V"]);
+function isGitHelpInvocation(text) {
+	const tokens = String(text).trim().split(/\s+/);
+	if (tokens[0] !== "git") return false;
+	// Skip git's global options (and the value an option like `-C <path>` consumes).
+	let i = 1;
+	while (i < tokens.length && tokens[i].startsWith("-")) {
+		const takesValue = tokens[i] === "-C" || tokens[i] === "-c" || tokens[i] === "--git-dir" || tokens[i] === "--work-tree";
+		i += takesValue ? 2 : 1;
+	}
+	if (i >= tokens.length) return false; // no verb at all
+	i += 1; // skip the verb
+	if (i >= tokens.length) return false; // nothing after the verb: `git checkout` DOES act
+	return tokens.slice(i).every((t) => HELP_FLAGS.has(t));
+}
+
+function refusalFor(command, ctx = {}) {
 	const text = Array.isArray(command) ? command.join(" ") : String(command);
+	if (isGitHelpInvocation(text)) return null;
 	for (const { re, why, unless, check } of DENIED_COMMANDS) {
-		if (!(check ? check(text) : re.test(text))) continue;
+		if (!(check ? check(text, ctx) : re.test(text))) continue;
 		if (unless?.() === true) continue;
-		return `refused by durig: ${why} — to test without your change, run the test RED BEFORE the fix, or use a throwaway detached worktree / temp copy (never revert the shared tree)`;
+		const detail = typeof why === "function" ? why(ctx) : why;
+		return `refused by durig: ${detail} — to test without your change, run the test RED BEFORE the fix, or use a throwaway detached worktree / temp copy (never revert the shared tree)`;
 	}
 	return null;
 }
@@ -408,6 +547,33 @@ export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_A
 			base.cwd = value;
 		},
 
+		// Expose env properties so a demo can read the pinned vars (D109).
+		get env() {
+			return base.shellEnv;
+		},
+
+		// Direct property access for each pinned var, so `env[key]` works (D109).
+		// HARD pin: return the constant from NON_INTERACTIVE_GIT directly,
+		// not via base.shellEnv, so the value cannot drift.
+		get GIT_EDITOR() {
+			return NON_INTERACTIVE_GIT.GIT_EDITOR;
+		},
+		get GIT_SEQUENCE_EDITOR() {
+			return NON_INTERACTIVE_GIT.GIT_SEQUENCE_EDITOR;
+		},
+		get GIT_TERMINAL_PROMPT() {
+			return NON_INTERACTIVE_GIT.GIT_TERMINAL_PROMPT;
+		},
+		get GIT_MERGE_AUTOEDIT() {
+			return NON_INTERACTIVE_GIT.GIT_MERGE_AUTOEDIT;
+		},
+		get GIT_PAGER() {
+			return NON_INTERACTIVE_GIT.GIT_PAGER;
+		},
+		get PAGER() {
+			return NON_INTERACTIVE_GIT.PAGER;
+		},
+
 		// `joinPath` touches nothing; confining is the resolve step, not the join.
 		joinPath: (...args) => base.joinPath(...args),
 
@@ -455,7 +621,10 @@ export function confinedEnv(base, { root, readOnly = false, envAllowlist = ENV_A
 		 * seat can `defer_work` on it instead of retrying variants.
 		 */
 		exec: async (command, options, context) => {
-			const refusal = refusalFor(command);
+			// #4374: the seat's `exec` runs with cwd = its own worktree, so the PATH-AWARE entries
+			// (checkout-index) resolve their TARGET correctly here too. Without this ctx a path-aware
+			// entry fails closed and refuses the seat its own restore.
+			const refusal = refusalFor(command, { root: confinedRoot, cwd: confinedRoot });
 			if (refusal) return err(new ExecutionError("spawn_error", refusal));
 			// A read-only seat may still RUN things - that is how a verifier reproduces a claim -
 			// but it must not write, so its cwd is pinned to the root and its environment is
