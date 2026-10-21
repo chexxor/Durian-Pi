@@ -24,6 +24,11 @@ unresolvable path: [...]"}` while the broker's `PASS` keeps advancing and other 
 stderr names it once and the seat shows `last_run_failed: aborted`. The broker does **not** die — do not
 go to `broker-down-or-stalled.md` for this shape.
 
+## Impact
+A single unreadable `pi.live` document poisons the whole pi-durable session — `serve`/`run`/`send` all
+die with `Session failed after a storage error`, and (second shape) the broker keeps advancing while one
+seat is never woken. Doing nothing leaves the queue permanently dead or silently missing one seat's
+work; the fix is retiring the corrupt document and restarting, which is cheap once the shape is identified.
 ## Preconditions
 The broker is **stopped and verified** (see `broker-safe-change.md` step 1–2). No live generation.
 
@@ -69,6 +74,9 @@ writer that emits it is **not proven**. A 2026-10-18 recurrence on impl conv 9 (
 candidate, still UNVERIFIED. ROADMAP item 78 makes the broker survive this per-conversation instead of
 logging `wake-failed`.
 
+## Escalate to
+`lead` — when the corrupt document's writer cannot be identified and the repair needs a ruling; the
+operator — when the store is unrecoverable and must be restored from a backup.
 ## Evidence
 2026-10-16: docs 16 (qa) and 22 (lead) from a second-writer crash, and doc 12105 (impl) from an
 `up --refresh` run on a broker that had not stopped. Backups: `store-backup-20261016-121820`,

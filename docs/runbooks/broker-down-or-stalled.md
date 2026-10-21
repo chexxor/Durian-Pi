@@ -1,3 +1,13 @@
+---
+runbook: broker-down-or-stalled
+symptom: "seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale PASS (dormant); log stops after a storage error or `database is locked`"
+writes: true
+precondition: "broker-stopped"
+last_verified: unverified
+verified_by: delegate
+evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md)"
+check_rule: null
+---
 # Broker down or stalled
 
 ## When to use
@@ -9,6 +19,12 @@ only on a store-commit signal, so after a seat's normal settle the per-seat cool
 re-wake and nothing marks the scheduler dirty again, leaving the seat unwoken until an unrelated commit
 or a restart.
 
+## Impact
+If you do nothing, queued/claimed work sits idle: seats stay unwoken (`idle_with_queued_work` /
+`admitted_not_started`) while the broker log stops advancing, so the queue looks healthy and is dead.
+A dormant broker (shape b) is worse because nothing is obviously wrong — a fresh heartbeat and no
+genlock hide that no pass will ever fire until an unrelated commit or restart. Blast radius is the
+whole queue, but recovery is cheap (resume/restart) once the shape is diagnosed.
 ## Preconditions
 None for diagnosis. The fix writes, so it needs no other writer.
 
@@ -30,8 +46,17 @@ tail -8 .spike/serve.err 2>/dev/null
   worktree must not open the shared selfdev store. Same recovery as case (b): terminate (no genlock),
   `resume`, restart.
 - **Alive but dormant** (case b): `START` present, `broker.json` heartbeat fresh, last `PASS` minutes
-  old, no `genlock.*`. The broker rests in `signal.wait` with `scheduler.shouldRun()` false. A restart
-  forces a startup pass (which also drains `.broker.inbox`) and re-wakes queued seats.
+  old, no `genlock.*`. The broker rests in `signal.wait` with `scheduler.shouldRun()` false.
+  **THE DISCRIMINATOR — idle, not wedged:** a FRESH `heartbeatAt` with a FROZEN `lastPassAt` means the
+  loop is IDLE, not stuck — and that is why a restart alone cannot help a suppressed seat: the startup
+  pass runs the same `placed`-only filter (`src/broker.mjs:829`) and the pending set still suppresses
+  it. Restart is NECESSARY-but-INSUFFICIENT for a suppressed seat (it is right for a wedged loop).
+  **The one-seat variant:** a SINGLE seat silent while others work is NOT "broker down" — it is a
+  per-seat suppression, and no broker-level remedy fixes it. **The remedy that DID work (2026-10-20,
+  submission 181515):** stop the broker, `resume` (which WITHDRAWS the stranded submission — `resume`
+  must run with the broker stopped), then restart. As of this writing, only `resume` clears a
+  `queued`-class suppression; the underlying suppression-semantics fix is routed separately and will
+  make `resume`'s own message true — it is not landed yet.
 - **`WAKE-RETRY` logged but no `PASS` follows** (2026-10-18 recurrence 8): the dormant-revisit fix
   (`991567d`) re-arms the loop after a `wake-failed` and logs `WAKE-RETRY in=<ms>ms seats=<names>`. If
   that line appears and then **no `PASS`** for minutes (fresh heartbeat, no genlock, idle CPU), the retry
@@ -99,6 +124,9 @@ generating. (The broker also logs `STRANDED settled=N` / `RECONCILE …` when it
 - Starts but a seat still will not run → `seat-reset.md`.
 - A dead broker stays dead: this is the supervision gap, ROADMAP items 61–64 (host daemon).
 
+## Escalate to
+`pm` — when the dormant-revisit gap (shape b) recurs, it is the supervision gap ROADMAP 61–64 targets;
+`lead` — when a dead broker stays dead after resume (the host-daemon gap).
 ## Evidence
 2026-10-16 (items 54, 66, 68): a broker that died on a storage error stalled `impl`; `resume` cleared 5
 stranded submissions, and the restart woke pm/impl/scribe. Item 54 makes a *stoppable* broker honest.
