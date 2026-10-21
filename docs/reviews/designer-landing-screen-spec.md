@@ -1,4 +1,4 @@
-﻿# Designer surface spec — the landing screen (per-seat status / queue / current item brief / action type)
+# Designer surface spec — the landing screen (per-seat status / queue / current item brief / action type)
 
 **Status:** the surface spec requested in #3307 (operator-directed, extends ROADMAP 124).
 ADVISORY and self-contained: impl can build from this document without reading my two earlier
