@@ -3470,9 +3470,9 @@ the CLI surface (`serve`), the runbooks and the demos.
 
 **Ownership invariant (recorded beside the naming; the split's names are meaningless without it, lead verbatim).**
 THE AUTOMATION MUST REMAIN THE ONLY WRITER. HARNESS SERVER OWNS THE STORE; THE BROKER HOLDS THE WRITE LEASE
-AND SUBMITS THROUGH RPC/SPOOL; EVERY OTHER CLIENT IS A READ-ONLY SUBSCRIBER. And what "owns" must NOT mean:
-the harness may HOLD the file but it must not WRITE it — ONE WRITER MEANS ONE WRITER. So `harnessd` names the
-store's OWNER, not its writer; the two names must not blur that.
+AND SUBMITS THROUGH RPC/SPOOL; EVERY OTHER CLIENT IS A READ-ONLY SUBSCRIBER. And "owns" must NOT mean
+"may WRITE": the harness may HOLD the file, but it must NOT WRITE it — ONE WRITER MEANS ONE WRITER.
+`harnessd` names the store's OWNER, not its writer; the two names must not blur that.
 
 **Alternatives.** (a) Rename today to "harness" — rejected: names one half and hides the other, as wrong as
 "broker"; (b) rename today to "harnessd"/"harness server" — rejected: same problem, and the split has not
@@ -3480,4 +3480,6 @@ happened; (c) no rename today, with the post-split names reserved — adopted.
 
 **Status.** Lead ruling #4294 (2026-10-21); recorded by scribe, item #4338, in the record BEFORE any code
 moves. No rename, no code, no split design — the naming entry only. D122 is the issue-ordered next number
-after D121 (main `ffa2ab3`); the lander confirms the mint at land.
+after D121 (main `ffa2ab3`). Per #3075 (no branch hardcodes a number), the number here is PROVISIONAL: the
+lander MUST re-confirm 122 is still free at land time and RENUMBER IF NOT — an entry that lands with a taken
+number would collide, and a silently-assumed number is exactly what #3075 forbids.
