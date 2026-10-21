@@ -291,6 +291,8 @@ already-red tree is not a weaker check, it is a misleading one.
 git worktree add --detach "$PWD/.main-check" main
 ( cd .main-check && node scripts/suite.mjs --jobs 8 ); echo "exit=$?"
 git worktree remove --force "$PWD/.main-check"; git worktree prune
+#   delete this section when that reports exit=0 (pass=all, fail=0)
+#   — except for a known, separately-registered red such as pitui (#2412), which is exempt by name
 #   The verdict depends on TWO things, so name BOTH (see "NAME THE TREE" below):
 #     the TREE — main's content. The shared tree carries seats' in-flight work and is not main.
 #     the DEPENDENCY SET — a worktree-local `npm ci` resolves the LOCKFILE, and the five
