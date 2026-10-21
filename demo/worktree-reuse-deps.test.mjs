@@ -8,7 +8,7 @@
 // reports that dep-less dir as provisioned. The seat is handed a half-provisioned tree.
 //
 // This demo reproduces the poisoned dir exactly: a repo whose `package.json` has no
-// lockfile, so `npm ci` throws AFTER `claimWorktree` has already created the dir. The
+// lockfile, so `npm ci --prefer-offline` throws AFTER `claimWorktree` has already created the dir. The
 // retry must NOT return it as a healthy worktree — it must fail loud.
 //
 // Failing-first: before the fix, the second call returns `{ created: false }` (a lie), so
@@ -45,10 +45,11 @@ async function check(label, fn) {
 try {
 	// The repo IS the source (durian-pi's own tree), so `installWorktreeDeps(worktreeRoot)`
 	// finds the package.json at the worktree root. A package.json with NO lockfile makes
-	// `npm ci` throw — the same trigger the existing prepare-workspace demo uses, offline.
+	// `npm ci --prefer-offline` throw — the same trigger the existing prepare-workspace demo uses, offline.
 	await writeFile(join(base, "placeholder"), "");
 	await run("git", ["init", "-q", repo]);
 	await writeFile(join(repo, "artifact.txt"), "shared content\n");
+	// A package.json with NO lockfile is enough: `npm ci` refuses without one.
 	await writeFile(
 		join(repo, "package.json"),
 		JSON.stringify({ name: "poison-fixture", version: "1.0.0", private: true }),

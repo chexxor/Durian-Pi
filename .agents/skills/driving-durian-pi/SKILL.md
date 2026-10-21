@@ -1,9 +1,9 @@
 ---
-name: durig
-description: Drive the durig multi-agent rig from the command line — create seats, route work, read state, and verify a change. Use when operating, dogfooding, or automating durig (not when writing durig's own source).
+name: driving-durian-pi
+description: Drive the durian-pi multi-agent rig from the command line — create seats, route work, read state, and verify a change. Use when operating, dogfooding, or automating durian-pi (not when writing durian-pi's own source).
 ---
 
-# Driving durig
+# Driving durian-pi
 
 durig is a CLI that runs a team of LLM **seats** over a durable queue. Every command is
 non-interactive, so this is safe to call from an agent or a script.

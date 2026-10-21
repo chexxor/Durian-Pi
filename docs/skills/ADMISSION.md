@@ -59,17 +59,18 @@ and carries no volatile version (versions live in `metadata.version`).
 
 ## One name, one skill (S1)
 
-**One name may name only one skill.** The review found two `durig` skills — `skills/durig/` (driving
-the rig) and `.agents/skills/durig/` (delegating to the rig) — both claiming the name `durig`. A
+**One name may name only one skill.** The review found two `durig` skills — `.agents/skills/driving-durian-pi/` (driving
+the rig) and `.agents/skills/delegating-to-durian-pi/` (delegating to the rig) — both claiming the name `durig`. A
 skill is loaded by name; two entries with the same name collide and make the loaded skill
 ambiguous.
 
-Per the lead ruling (2026-10-18), the post-rebrand names are `driving-durian-pi` (in
-`.agents/skills/`) and `delegating-to-durian-pi` (in `.agents/skills/`), coordinated with the D103
-rebrand rename (#2109/#2111) that covers the skill NAMES. Until that rename lands, the mirror check
-(`demo/skill-mirror-check.test.mjs`) treats the `durig` overlap as an S1-pending duplicate and
-enforces real mirrors only; once the rename lands, `durig` leaves the overlap set and the check
-starts applying to it.
+Per the lead ruling (2026-10-18), the post-rebrand names are `driving-durian-pi` and
+`delegating-to-durian-pi`, both canonical in `.agents/skills/` (coordinated with the D103 rebrand
+rename, #2109/#2111). That rename has LANDED (#2356): the two `durig` skills are now
+`.agents/skills/driving-durian-pi` (CLI) and `.agents/skills/delegating-to-durian-pi` (delegate),
+and `skills/durig/` is removed — the canonical root is the single source of truth. The result is
+enforced by `demo/skill-names.test.mjs` (S1: one name per skill, `name` matches the directory) and
+`demo/skill-mirror-check.test.mjs` (any kept mirror is byte-identical).
 
 ## Volatile versions (S5)
 

@@ -2,10 +2,10 @@
 incident: pi-build-version-visibility
 date: 2026-10-19
 severity: sev2
-status: open
+status: resolved
 symptom: "a verifier in a fresh worktree sees released pi-durable 1.1.0 while the shared tree runs the pinned vendored 1.3.0; the same commit is GREEN in one and RED in the other"
 runbook: null
-fix: null
+fix: "#2412"
 prevention: "worktree/verifier dep setup must reproduce the pinned pi build (`node scripts/sync-pi.mjs --link`); or the broker must pass the storage it opened the harness with instead of the 1.3.0-only `harness.storage`"
 last_reviewed: 2026-10-19
 ---
@@ -63,6 +63,16 @@ opposite result.
 2. Thread the storage the broker already opened the harness with into `dispatchRead`
    (single connection, works on 1.1.0 and 1.3.0) instead of the 1.3.0-only `harness.storage`.
 Then re-run `#2396`/`#2408` in an environment that matches production.
+
+## Resolution — 2026-10-19 (resolved by #2412)
+**Resolved.** #2412 (`16aa6bf`) makes `installWorktreeDeps` run `node scripts/sync-pi.mjs --link`
+after `npm ci` in every worktree (`src/worktree.mjs`), so a fresh worktree points `node_modules` at
+the built `vendor/pi-main` tree — the PINNED pi build — instead of the released registry set
+(`@earendil-works/pi-durable@1.1.0`). The verifier/seat worktree now reproduces the production
+dependency set, closing the two-build divergence that made `#2406` RED in a detached worktree while
+GREEN in the shared tree. The `--link` step is best-effort (warns if `vendor/pi-main` is not built,
+per the commit's own comment). Option 2 (threading the broker's opened storage into `dispatchRead`)
+was **not** taken — the read seam is unchanged; only the dependency-set parity was addressed.
 
 ## Prevention
 - Worktree dependency setup states/ensures the pinned pi build; a released `npm ci` alone is NOT the

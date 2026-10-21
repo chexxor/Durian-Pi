@@ -68,6 +68,15 @@ defects that are NOT patterns to tighten:
   produced incoherent output, and got **0** escalations. The context bound must come from the model's
   EFFECTIVE window (the `DURIAN_PI_CONTEXT_WINDOW` seam / `src/context.mjs` denominator), not a constant:
   GLM-5.3-Flash *advertises* ~1,048,576 tokens yet degraded at 367k ("advertised != usable").
+  **RESOLVED in the pure half (#1823, lead #1816):** context pressure is a SEAT-LEVEL signal read
+  from the newest assistant entry of the WHOLE page (it SURVIVES a wake), while every other cause
+  stays per-run. The trip is a raw-token FLOOR **AND** a FRACTION of the resolved window, with a
+  CEILING (`minContextTokens` / `contextFraction` / `contextCeilingTokens`): the trip is
+  `min(fraction*window, ceiling)` and only fires above the floor. The window is INJECTED
+  (`contextWindowTokens`, resolved measured > declared > advertised); when it is absent the cause
+  is SKIPPED with a `why` (`contextSkip`), never guessed. The fraction is TUNABLE and must be
+  CALIBRATED against the qa conv-15 fixtures (with provenance) BEFORE the wiring enables it — the
+  shipped default 0.35 is anchored on the 367,559 / 1,048,576 datapoint, not a calibrated value.
 - **FALSE POSITIVE — a tool duration read as a model stall.** `turnDurationMs` takes the max of
   `messageOf(entry)?.durationMs` over the whole run, INCLUDING `pi.tool-result` entries. A legitimate
   ~5-min tool sweep (`#72059`, `durationMs=301935`) trips the 5-min wall-clock bound; the guard then

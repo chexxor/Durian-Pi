@@ -28,6 +28,12 @@ rig keeps running and an in-flight generation on the target seat is not killed. 
 same command opens its own harness (the direct path) and refuses a seat holding a live generation lease
 (the external-writer guard).
 
+**Mid-flight is REFUSED, not silently applied.** pi-durable's compaction runs alongside a live
+conversation, but its summary lands only at the seat's NEXT TURN BOUNDARY — so a mid-flight compaction's
+outcome cannot be awaited reliably (auditor #2061 boundary / #2073). The broker therefore REFUSES a
+`compact` while the target seat has a running generation, with a legible reason. **QUIESCE FIRST, then
+compact.**
+
 ## Diagnose (read-only)
 ```bash
 DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
@@ -49,6 +55,14 @@ reset would lose work), is the case this runbook is for.
    ```
 2. With NO broker running, the same command opens its own harness (the direct path) and refuses a seat
    holding a live generation lease — wait for the run to settle, or `stop <seat>` first.
+3. If the seat is MID-GENERATION the op is REFUSED (the reason names it). Quiesce first, then retry —
+   this is the pause+compact choreography's required order: **QUIESCE → COMPACT → upgrade.**
+   ```bash
+   DURIG_DB=./selfdev.sqlite node cli.mjs pause --wait        # drain to quiescence (ROADMAP 131)
+   DURIG_DB=./selfdev.sqlite node cli.mjs compact <seat> "fold the early turns"
+   DURIG_DB=./selfdev.sqlite node cli.mjs unpause
+   ```
+   (`--wait` returns only once every seat has settled. Or simply let the run finish, or `stop <seat>`.)
 
 ## Verify
 ```bash
@@ -60,8 +74,9 @@ always means a real summary landed.
 
 ## If it fails
 - `compact via the spool (broker pid …): <reason>` → the broker DEAD-LETTERED the request with that
-  reason (e.g. `unknown seat`, or `compact: no pi.compaction entry was written`). Read the reason, fix
-  it, retry — a routed compaction is never a silent no-op.
+  reason (`unknown seat`; `seat <s> is mid-generation … quiesce first`; or `the seat was quiescent but
+  no pi.compaction entry was written`). Read the reason, fix it, retry — a routed compaction is never a
+  silent no-op, and a MID-GENERATION refusal means "pause --wait, then compact".
 - No broker, and it refuses "holds a live generation lease" → wait for the run to settle, or
   `stop <seat>`, then retry.
 - The seat still overflows: a second `compact` folds the newer turns into the existing summary; if the
@@ -76,6 +91,9 @@ The operator — a compaction that keeps failing points at the model/provider, n
 #1904 (2026-10-18): `demo/compact-spool.test.mjs` (exit 0) proves the BROKER applies `op:compact` with
 its own harness through the spool — a REAL `pi.compaction` summary entry lands and is reported as
 `summaryEntryId`, a duplicate `requestId` applies once, and the seat is not aborted.
+#2073 (2026-10-18): the same demo now STAGES a REAL in-flight generation and proves a MID-FLIGHT compact
+is REFUSED legibly (`seat <s> is mid-generation … quiesce first`), commits nothing, and does not abort the
+run (auditor #2061 boundary).
 #873 (2026-10-17): `demo/compact.test.mjs` (exit 0) proves the live-lease refusal, that a REAL summary
 entry is placed and reported as `summaryEntryId` (not just a task id), and that the earliest turn stays
 in the durable transcript.
