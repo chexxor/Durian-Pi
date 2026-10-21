@@ -1,4 +1,4 @@
-﻿# Complete check for #3729 — active-partial golden verification
+# Complete check for #3729 — active-partial golden verification
 
 ## Reading: demo/__golden__/streaming-80.txt
 
