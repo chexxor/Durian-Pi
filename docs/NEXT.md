@@ -78,6 +78,27 @@ plus a one-line pointer into #3272's OPERATING NOTES at land time; do NOT re-cut
 **Next check:** pm has NOT applied them yet — verify the new held delta item exists, the four flags are
 cleared, and #994 carries the re-surface date; the delegate made no queue transition.
 
+**APPLIED — VERIFIED 03:52Z (loop closed).** R1: #4215 `cancelled` (no 21k rewrite), #4216/#4218 `done`
+(lead relayed + **lead objected NARROWLY**: the pointer must go into #3272 FIRST, not at land time —
+"Option A unless lead objects" was exercised), and **#4222 `held` = TWO ACTIONS whose body IS the
+delta** (1: recipient-revise #3272 to add the pointer; 2: read #3272's body). R3: **#4217 `held`**
+re-surface tracker (no earlier than 2026-11-21, target 2026-12-21). **R2 NOT APPLIED** — #2993/#3556/
+#3581/#3601 still carry `deferredTo:"human"`; #4124 is still `deferred` though lead ruled it. Also
+`cancelled` at 02:37Z as superseded: **#3996, #4070** (the old wiring/round-trip rows); #3948 is `done`.
+**Broker fix LANDED on main:** `c82be69` (#4180 suppression trace + status attention row) and `66c6e1a`
+(#4176 ADMISSION_DEADLINE_MS + pure `admissionVerdict`, ROADMAP 37(c)).
+
+**RECOMMENDED NEXT QUEUE (operator asked 03:55Z; pm owns decomposition).** The CLI's small count is
+`queued`+`claimed` only (2+4 now) — 281 rows are `held` by design, so "3 in the queue" is not "3 things
+left". In order: (1) close designer's **#3945** review, then release **#3946** and land `impl-item-3941`
+(Fix A); (2) **mint a verify + a real-seat ROUND-TRIP acceptance for `impl-item-4158` @2213801** and
+release **#4163** — no verify exists and #4070 was cancelled, so the operator-facing acceptance (Enter →
+Pi → exit → landing live on the same seat) is UNOWNED; (3) mint the **reconciler extension for `queued` +
+the periodic sweep** (the primitive #4176 is landed, the consumers are not); (4) mint/release the
+**liveness+progress watchdog (ROADMAP 62)**; (5) release **#4222** so the pointer gets written; (6) mint
+**52's in-process `viewState().subscribe()`** + **late-join demo**, then release **#2733**; (7) hygiene:
+clear the four stale flags, close #4124.
+
 **Blocker:** none on the tree. `main` `b4bb4c7`, tracked tree clean except the broker-generated
 untracked `selfdev.sqlite.broker.audit.log`. Single broker pid 16140 (verify before any restart).
 
