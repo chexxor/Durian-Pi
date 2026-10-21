@@ -51,6 +51,7 @@ import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { DEFAULTS_CONFIG_PATHS, DEFAULT_CONFIG_PATHS } from "../src/config.mjs";
+import { landingChangedPaths, readTextIntegrity } from "../src/textintegrity.mjs";
 // The PRIORITY reservation + the wait-with-priority claim (#1497/#1498, lead #2054 precondition
 // (c)). Imported from a deliberately DEPENDENCY-FREE module (node:fs/node:path only) so this
 // chokepoint still loads when the provider stack is broken — the #1164 Q3 rule this file's own
@@ -300,6 +301,32 @@ if (existsSync(join(repoRoot, ".git", "MERGE_HEAD"))) {
 		},
 		1,
 	);
+}
+
+// #4371 TEXT-INTEGRITY PRECONDITION: a branch that would land a COLLAPSED file (or a broken
+// encoding) is refused HERE, before the merge — THIS is the half that would have PREVENTED the
+// 04:21Z flattening rather than reported it afterwards. `node --check` cannot see the class (the
+// flattening turns the opening `//` into a comment that swallows the file, so it still parses and
+// exports nothing), and the landing is the last moment at which the shared tree is still intact.
+// The BRANCH's blobs are judged against the BASE, not the working tree.
+for (const b of branches) {
+	const paths = landingChangedPaths({ root: repoRoot, branch: b, base: "main" });
+	if (paths === null) continue; // the diff could not be read: not a reason to refuse (the merge will show it)
+	const bad = readTextIntegrity({ root: repoRoot, paths, rev: b, headRev: "main" });
+	if (bad.length > 0) {
+		report(
+			{
+				...base,
+				error:
+					`refusing to land ${b}: ${bad.length} file(s) fail TEXT INTEGRITY — ` +
+					`${bad.map((f) => f.path).join(", ")}. A collapsed newline structure (or a broken encoding) ` +
+					`would take the shared tree down at import time; restore from main and re-apply the intended ` +
+					`edit — do not patch bytes.`,
+				textIntegrity: bad,
+			},
+			1,
+		);
+	}
 }
 
 // #1383 VISIBILITY: a resolved store with NO live lock is NOT proof the rig is quiet — another

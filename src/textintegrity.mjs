@@ -12,6 +12,16 @@
 // stops the write. The incident was caused by a seat acting on a LEGITIMATE goal (restore the shared
 // tree to main) with a tool that was not the right one, which is why the message names WHAT TO RESTORE
 // FROM rather than only that something is wrong.
+//
+// #4371 WIRING: a detector that only runs on demand reports the breakage AFTER the tree is broken, so
+// the readers below feed TWO callers - the `check` rule `text-integrity` (error severity) and the
+// landing precondition in scripts/land.mjs, which is the half that would have PREVENTED 04:21Z.
+// #3342 (`src/trackencoding.mjs`, absent from main) is SUBSUMED by `encodingFaults`; if it ever lands,
+// IT SHOULD CALL THESE FUNCTIONS rather than reimplement them.
+
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Count `\n` in a string.
@@ -105,4 +115,101 @@ export function textIntegrityFaults({ path, now, head, bytes, minLines = 8 }) {
 export function describeFaults(path, faults) {
 	if (!faults || faults.length === 0) return `${path}: OK`;
 	return `${path}: ${faults.map((f) => `[${f.kind}] ${f.detail}`).join("; ")}`;
+}
+
+/**
+ * The WORKING TREE's tracked paths that DIFFER from HEAD — the files a seat just wrote. The reader's
+ * default scope for `check`, and the one the 04:21Z incident would have been caught by (eight tracked
+ * files rewritten as single lines, uncommitted).
+ *
+ * @param {{root?:string}} [opts]
+ * @returns {string[]|null} paths, or null when git/the repository is unavailable (UNKNOWN, not clean)
+ */
+export function trackedChangedPaths({ root = process.cwd() } = {}) {
+	try {
+		const out = execFileSync("git", ["-C", root, "diff", "--name-only", "HEAD"], {
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+			timeout: 10000,
+			maxBuffer: 32 * 1024 * 1024,
+		});
+		return out.split("\n").map((s) => s.trim()).filter(Boolean);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * The paths a BRANCH would bring to `base` — the files a LANDING touches. The landing precondition's
+ * scope (#4371 task two, the half that would have prevented 04:21Z).
+ *
+ * @param {{root?:string, branch?:string, base?:string}} [opts]
+ * @returns {string[]|null} paths, or null when git/the repository is unavailable
+ */
+export function landingChangedPaths({ root = process.cwd(), branch, base = "main" } = {}) {
+	if (!branch) return null;
+	try {
+		const out = execFileSync("git", ["-C", root, "diff", "--name-only", `${base}...${branch}`], {
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+			timeout: 10000,
+			maxBuffer: 32 * 1024 * 1024,
+		});
+		return out.split("\n").map((s) => s.trim()).filter(Boolean);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Read the text-integrity signal for a set of paths.
+ *
+ * `rev` selects WHERE the file is read from: null (default) is the WORKING TREE (the `check` caller,
+ * where the 04:21Z flattening appeared uncommitted); a ref reads the file AT THAT REF (the landing
+ * caller, which must judge the BRANCH's blobs, not the working tree). `headRev` is the comparison base
+ * for the collapse rule — HEAD for the working tree, and the BASE branch for a landing (a collapse is
+ * judged against what the file looked like before, which for a landing is main).
+ *
+ * @param {object} opts
+ * @param {string} [opts.root]
+ * @param {string[]} opts.paths   the paths to inspect (see trackedChangedPaths / landingChangedPaths)
+ * @param {number} [opts.minLines]
+ * @param {string|null} [opts.rev]      read the file at this ref; null = the working tree
+ * @param {string} [opts.headRev]       the comparison base (default HEAD)
+ * @returns {Array<{path:string, faults:Array<{kind:string,detail:string}>}>} only the NON-ok files
+ */
+export function readTextIntegrity({ root = process.cwd(), paths = [], minLines = 8, rev = null, headRev = "HEAD" } = {}) {
+	const found = [];
+	const show = (spec, enc) =>
+		execFileSync("git", ["-C", root, "show", spec], {
+			...(enc ? { encoding: "utf8" } : {}),
+			stdio: ["ignore", "pipe", "ignore"],
+			timeout: 10000,
+			maxBuffer: 32 * 1024 * 1024,
+		});
+	for (const p of paths) {
+		let bytes;
+		if (rev === null) {
+			try {
+				bytes = readFileSync(join(root, p));
+			} catch {
+				continue; // deleted in the working tree: nothing to inspect
+			}
+		} else {
+			try {
+				bytes = show(`${rev}:${p}`);
+			} catch {
+				continue; // not present at that ref (e.g. the branch DELETES it): nothing to inspect
+			}
+		}
+		let head = null;
+		try {
+			head = show(`${headRev}:${p}`, true);
+		} catch {
+			head = null; // untracked (or absent at the base): no collapse comparison, by design
+		}
+		const r = textIntegrityFaults({ path: p, now: bytes.toString("utf8"), head, bytes, minLines });
+		if (!r.ok) found.push({ path: p, faults: r.faults });
+	}
+	return found;
 }

@@ -98,6 +98,9 @@ try {
     // An empty commit-message set is a real "nothing to check", so the encoding rule (#4349)
     // RUNS and passes here rather than skipping.
     commitMessages: [],
+    // An empty text-integrity set is a real "nothing to check", so the rule (#4371) RUNS and passes
+    // here rather than skipping.
+    textIntegrity: [],
     // The shared tree is on its integration branch, so this rule RUNS and passes rather than
     // being skipped: the assertion below is "every rule ran and passed".
     sharedTreeBranch: "main",
