@@ -2279,6 +2279,7 @@ the trigger is the part that fires when a situation arrives.
 **Status:** committed (`fa4b22f`). The `constitution.txt` change is pending live application to seats via
 a broker-safe `up --refresh` (dry-run confirms `constitution.changed=true`); recorded in `docs/NEXT.md`.
 
+## D91 — The `security` seat's standing surface is runbook-only, and the external `security.sec` consult is on-escalation (lead #1297, revised by lead #1316; recorded by scribe #1301/#1323, 2026-10-17)
 ## D91 — The `security` seat's standing surface is a runbook (not a standing review set), and the external `security.sec` consult is on-escalation (lead #1297, recorded by scribe #1301, 2026-10-17)
 
 **Decision.** Q1 — STANDING SURFACE = RUNBOOK ONLY. The `security` seat owns ONE runbook under
@@ -3142,6 +3143,36 @@ rules scope if the failure-scope policy conflicts with scheduled work. Evidence 
 grep/`node --check`/demo baseline and the version probe (see the review's Evidence section). No
 implementation is claimed here.
 
+
+## D### — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19)
+
+**Context.** The CARRY/teardown collision (incident
+`docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`): `createWorktree`'s CARRY (#506 /
+ASK F) copied the source tree's visible dirty state into EVERY fork, while teardown is clean-only
+(D60). So while the shared tree was dirty, a completed item's worktree was BORN dirty with foreign
+paths and could never be removed — every completion leaked a tree and pinned its branch.
+
+**Decision.** The seat path (`claimWorktree` → `prepareSeatWorkspace`) passes `carry: false`, so a
+seat's item worktree is a **clean HEAD checkout** and its teardown works even while the shared tree is
+dirty. CARRY remains an **explicit opt-in** (`carry: true`) for a direct caller that wants the
+anti-stale guarantee (#240). The clean-only refusal (D60) is UNCHANGED — no carried path is ever
+tolerated or force-removed. This **SUPERSEDES #506's seat-path carry** (the fork is no longer "a tree
+neither git nor the operator tracks": it is HEAD plus an enumerated, returned carry list).
+
+**Alternatives considered.** (1) Teardown tolerates carried-foreign paths — **rejected**: introduces a
+data-loss surface (a fingerprint bug could discard a seat's real uncommitted work) against D60's
+absolute rule. (3) An attention kind that surfaces the leak — **rejected**: it names the problem but
+does not fix it.
+
+**Status.** Accepted by `lead` (#2648, option 2 of #2360); implemented by `impl` (impl-item-2360
+@`4813a50`): `src/worktree.mjs` `createWorktree` gains `carry` (default true) and the seat path passes
+`carry: false`. Proof: `demo/worktree-carry-teardown.test.mjs` (new — seat fork born clean and
+`removeClaimedWorktree` succeeds; opt-in carry still carries), `demo/worktree-recursive-carry.test.mjs`
+and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path. Recorded by `scribe`
+(#2658).
+LANDING NOTE: D-number assigned at LAND TIME — D113 is taken (spool-op authorization, scribe-item-2219);
+re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge (do not hard-code).
+
 ## D114 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
 ## D113 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
 
@@ -3494,6 +3525,17 @@ narrative record of the grant and boundary; no executable check applies (a decis
 LANDING NOTE: D-number assigned at LAND TIME — D111 is taken (read-spool decision) and D113
 (spool-op authorization); re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge
 (do not hard-code).
+
+**Addendum (2026-10-18, #2073 — auditor #2061 boundary): a MID-FLIGHT compaction is REFUSED, legibly.**
+pi-durable's compaction does run alongside a live conversation, but its summary lands only at the seat's
+next TURN BOUNDARY, so the awaited window cannot see it: the task commits, the entry appears later, and
+the op wrongly dead-lettered as "no entry written" — a successful compaction reported as FAILED (the
+operator saw a refused compact whose entry landed a moment later). The broker now detects a RUNNING
+generation on the target seat and REFUSES the request, with a reason naming the boundary and the fix
+(`pause --wait`, or let the run settle). The required order is **QUIESCE → COMPACT → upgrade**. The op
+was NOT made to accept-and-report-pending: `ok:true` must keep meaning "a summary entry landed", which
+is the spool's whole value. `demo/compact-spool.test.mjs` now STAGES the in-flight case (a slow streaming
+faux reply) and asserts the legible refusal, that nothing is committed, and that the run is not aborted.
 **Status.** RULED and recorded (operator re-scope, 2026-10-18, relayed via lead #2197). Unscheduled;
 tracked at held item #1135. No pricing extension exists yet, so the surface currently renders
 unavailable by this rule.
