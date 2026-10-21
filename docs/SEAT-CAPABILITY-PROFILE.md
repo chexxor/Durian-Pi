@@ -89,6 +89,21 @@ question — `role text contains "review"` being a PROXY for "verifier" that
 mis-classifies seats whose job is to PRODUCE reviews — is a lead ruling, recorded
 in #3588, NOT asserted here as current behaviour.
 
+**Verifier read-only, stated as the three facts (SC2's row, matching
+`docs/SEAT-TOOLS.md` and the security position — never "read-only" unqualified):**
+
+| fact | status | mechanism |
+|---|---|---|
+| **(1) FILE-API REFUSAL** | **ENFORCED** | `readOnlyGuard` refuses `write`/`edit` tool calls (demo half 1 proves it) |
+| **(2) ENV DISCIPLINE** | **ENFORCED** | cwd pinned + `inheritEnv:false` (SC3) |
+| **(3) SHELL-WRITE ISOLATION** | **CONVENTION** | a verifier's shell can still write; its writes are isolated only by disposable-scratch policy (reaped, audited), NOT a confinement guarantee, because `makeSeatEnv` passes the seat's real root |
+
+**Interim form, verbatim, for any doc that describes verifier capability:**
+
+> Verifier read-only is enforced at the file API and env layers. Shell-write
+> isolation rests on disposable-scratch policy (reaped, audited), NOT a confinement
+> guarantee. NO VERIFICATION ARGUMENT MAY CITE THE CURRENT STATE AS A GUARANTEE.
+
 **How to re-verify this document** — the derivation command, run from the repo
 root against the current `rig.selfdev.json`:
 
