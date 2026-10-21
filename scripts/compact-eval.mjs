@@ -1,4 +1,4 @@
-﻿// scripts/compact-eval.mjs - operator-costed measurement runs for the
+// scripts/compact-eval.mjs - operator-costed measurement runs for the
 // compaction evaluation harness (#1087, ROADMAP 97). The ENGINE is
 // src/compacteval.mjs (offline-proven by demo/compacteval.test.mjs); this
 // script is its LIVE seam, and every mode that can spend provider tokens

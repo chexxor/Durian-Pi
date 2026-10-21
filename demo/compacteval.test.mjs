@@ -1,4 +1,4 @@
-﻿// demo/compacteval.test.mjs - the compaction evaluation harness (#1087, ROADMAP 97).
+// demo/compacteval.test.mjs - the compaction evaluation harness (#1087, ROADMAP 97).
 //
 // OFFLINE and deterministic: MemoryStorage + the faux provider stand in for the
 // live endpoint, and the judge seam gets a canned models stub. What is proven

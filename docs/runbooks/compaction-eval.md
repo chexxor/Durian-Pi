@@ -1,4 +1,4 @@
-﻿---
+---
 runbook: compaction-eval
 symptom: "you need to know what a compaction actually DESTROYS (or preserves) before trusting a threshold - or you need a model's real effective window rather than the advertised one"
 writes: false
