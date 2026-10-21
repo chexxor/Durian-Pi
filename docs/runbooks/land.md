@@ -38,10 +38,13 @@ cross-reference to this block when that item fires.
 `scripts/land.mjs` has returned `ok:true, merged:[…]` WHILE MERGING INTO AN ITEM WORKTREE, leaving `main`
 untouched and creating a store there. A landing entry's completion must carry:
 - `git merge-base --is-ancestor <sha> main` → **exit 0**, and
-- the landing report's `repo` field resolving to the **shared root**, and
 - ideally the CONTENT check — `main` carries what the branch was for — because ancestry passes even when
 a conflict dropped the block (for Fix A: `LANDING_MIN_WIDTH` read in the TERMINAL unit, not the old
 `width−4` unit; the old unit IS the defect and the ancestry check cannot see it).
+(The `repo`-field reading is RETIRED — `scripts/land.mjs` on main enforces `sharedRoot` itself (`f168339`),
+so the guard refuses a non-root repo: the report's `repo` field is MOOT rather than wrong. WHEN A MECHANISM
+REPLACES A DISCIPLINE, RETIRE THE DISCIPLINE EXPLICITLY — a precaution kept past its cause teaches the next
+reader the tool is still untrustworthy, and then they do not trust the NEXT tool either.)
 This is a rule for the seat that ACCEPTS the completion as much as the one that writes it — #3990 and
 #4163 both closed while their branches were unlanded.
 
@@ -73,6 +76,14 @@ between two measurements and were clean again later — the resolution was NOT c
 legitimate config edit COMPLETED. An `M` in `git status` can be a colleague's work in progress, in which
 case the correct action is to WAIT rather than to dispose.
 
+**The re-measure is the discipline that PAID — promote it; retire by CAUSE, not by age.** Every merge-tree
+figure in every entry was stale (main moved `fe52a41 → 9e8710e → 7ffc7b9 → d8bc976 → 671b50a` across one
+pass), and on one entry the central claim — "all three `--is-ancestor` exit 1 today" — was FALSE by the time
+it was claimed: three landings that did not need doing. THE MEASUREMENT IS WHAT CAUGHT IT: **A STALE PREMISE
+COSTS MORE THAN A MISREAD FLAG** — a misread flag produces a wrong report; a stale premise produces wrong
+WORK. The `repo` field guarded against a TOOL THAT LIED, and that tool is FIXED; the re-measure guards
+against a WORLD THAT MOVES, and it never stops moving. One cause could be removed; the other cannot.
+
 **The landing LOCK serialises landings — there is no operator-confirmation gate.** The protection against
 two delegates in one tree is the mechanical landing lock, not a human confirmation. Measured:
 `{ slots: 4, held: 4, waitedMs: 160062, liveHolders: 3 }` — a landing WAITED 160 seconds for a slot behind
@@ -91,6 +102,14 @@ the confirmation gate was standing in for.
 without the un-obtainable confirmation, it says so: "IF THAT WAS THE WRONG CALL, THE CORRECTIVE IS ONE
 `git revert` OF `d8bc976` AND I WOULD RATHER SAY WHAT I DID THAN HAVE IT INFERRED." A seat that reports a
 judgement call with its reversal is not bypassing a gate — it is telling you the gate's cost.
+
+**CONDITIONAL, NOT A STEP: KEEP ALL SECTIONS in `demo/land-helper.test.mjs` WHEN #4011 AND #4142 BOTH
+LAND.** The "KEEP ALL SECTIONS" instruction was prepared and NOT needed — #4311 landed against a main where
+neither `5d9140f` nor `51a866b` had landed first, so `merge-tree` returned zero conflicts and the file had
+no markers in it. It fires only when #4011 AND #4142 both land: then that file WILL conflict and ALL SECTIONS
+MUST BE KEPT, because section 2d (the linked-worktree / shared-root refusal, #4247) sits beside 2b/2c and
+the fixture sections and they assert different things. A resolution recorded as a step gets applied where it
+is not needed; recorded as a condition, it fires when it should.
 
 ## When to use
 A verified branch (`<seat>-item-<id>`, or any branch) must go onto `main`, and you want the landing to
