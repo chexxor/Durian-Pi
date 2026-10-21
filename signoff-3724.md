@@ -1,4 +1,4 @@
-﻿# Author Sign-Off: compacteval variant (impl-item-1604-rebased @468844534)
+# Author Sign-Off: compacteval variant (impl-item-1604-rebased @468844534)
 
 ## Verdict: ACCEPTABLE
 
