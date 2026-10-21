@@ -2279,6 +2279,39 @@ the trigger is the part that fires when a situation arrives.
 **Status:** committed (`fa4b22f`). The `constitution.txt` change is pending live application to seats via
 a broker-safe `up --refresh` (dry-run confirms `constitution.changed=true`); recorded in `docs/NEXT.md`.
 
+## D91 — The `security` seat's standing surface is a runbook (not a standing review set), and the external `security.sec` consult is on-escalation (lead #1297, recorded by scribe #1301, 2026-10-17)
+
+**Decision.** Q1 — STANDING SURFACE = RUNBOOK ONLY. The `security` seat owns ONE runbook under
+`docs/runbooks/` (security failure modes + review method); there is NO standing `docs/reviews/security-*.md`
+set — reviews remain per-item artifacts (`docs/reviews/<topic>.md`), exactly as `qa`/`advocate` produce
+per-item reviews and own no standing set. A standing `security-*` namespace would go stale and duplicate the
+per-item reviews. Q2 — `security.sec` CONSULT = ON-ESCALATION (not retired, not fully retained). The internal
+seat handles ROUTINE security review (fast, free, always available); the external consult is engaged ONLY
+WHEN THE SEAT ESCALATES (high-stakes, uncertain, or beyond the seat's depth). CAVEAT (operator-facing): if a
+compliance requirement mandates an independent external review regardless of the seat's judgment, that is a
+STANDING (non-discretionary) trigger, not an escalation — the operator must name it; absent that,
+on-escalation is the default. NOTE: capability `review`, not a verifier — so `security` does NOT take the
+verifier exemption (it works in worktrees when it has a claimed item), consistent with lead's #1222
+blast-radius ruling.
+
+**Why.** The smallest surface that makes the seat effective: a runbook for its failure modes (a
+leaked/committed secret — ties #828 read-side detection + #837 redaction; confinement escape) satisfies
+P3 Runbooks (a failure mode the work covers gets a runbook), while a standing review set would add a
+maintenance burden and duplicate the per-item reviews the seat already produces. The consult is a
+depth/compliance backstop, not a routine path: spending it on routine work duplicates the seat.
+
+**Alternatives.** Q1: (a) both a runbook AND a standing `security-*.md` set — rejected: the standing
+namespace goes stale and duplicates per-item reviews; (b) a standing review set only, no runbook — rejected:
+the team HAS security failure modes (leaked secret, confinement escape), and runbooks are symptom-indexed
+procedures, so the runbook is the repeatable surface. Q2: (a) retire the external consult — rejected: it
+preserves a depth the internal seat may lack on high-stakes/uncertain work; (b) keep it as a routine path —
+rejected: it would duplicate the seat and spend the consult's depth on routine work.
+
+**Status:** ruling #1297 (delivered as #1299) by `lead`, recorded by `scribe`. Routed: #1300 → `security`
+(author the one runbook under `docs/runbooks/`, starting with the leaked/committed-secret failure mode +
+review method; ties #828/#837; no standing `security-*.md` review set); #1301 → `scribe` (this entry). OPEN
+FOR OPERATOR: the compliance caveat — name a mandated independent external review and it becomes a standing
+(non-discretionary) `security.sec` trigger rather than an escalation.
 ## D91 — A standing `security` seat, not only an external consult (delegate, 2026-10-17)
 
 **Decision.** durig declares a 10th seat, `security` (GLM-5.3-Flash), owning threat models, trust
@@ -2727,6 +2760,40 @@ routing; acceptance is a demo proving a local-provider seat gets a `pi.reset` bo
 consecutive work items while a non-local seat does not, plus `node --check`, the full suite, and a
 non-author verify.
 
+## D111 — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127)
+
+**Decision.** TUI cost/spend pricing is supplied by a per-provider pricing EXTENSION. A price is
+UNAVAILABLE unless an extension supplies it; the former blocker — an operator-supplied vendor price
+table — is REMOVED. The mechanism is threefold: (1) a per-provider pricing-extension interface;
+(2) the cost measure is derived from tokens through that extension; (3) when NO extension supplies
+prices, cost/spend renders "unavailable" — NEVER a fabricated or stale `$`.
+
+**Staleness.** Handled by the unavailable path: a stale price table must never render a `$`; with no
+live extension data, show unavailable.
+
+**Scope.** ROADMAP 98 stays TOKENS-ONLY (v1). This pricing decision is INDEPENDENT and NOT v1 —
+unscheduled. Owner is lead (mechanism); implementation routes to impl once scheduled. Held item #1135
+(TUI cost/spend: pricing instrument + SOURCE + staleness) is the mechanism's home.
+
+**Why.** A `$` figure with no live, current price behind it is worse than no figure: it fabricates a
+cost the product did not measure. The unavailable path keeps the UI honest under any staleness or
+absence condition.
+
+**Status.** RULED and recorded (operator re-scope, 2026-10-18, relayed via lead #2197). Unscheduled;
+tracked at held item #1135. No pricing extension exists yet, so the surface currently renders
+unavailable by this rule.
+
+## D112 — durable-tui: `ui.mjs` / `npm run ui` is the FALLBACK surface and is to be RETIRED (operator, 2026-10-18)
+
+**Decision.** `ui.mjs` / `npm run ui` is the FALLBACK (not a co-existing surface); the poller stays as
+last resort. `ui.mjs` will eventually be RETIRED once the durable TUI proves the multi-seat surface.
+
+**Policy.** In the interim: MINIMAL / bugfix-only maintenance (no new features). Deprecation path =
+retire after Phases 1-2 land and the durable multi-seat surface is accepted.
+
+**Status.** Execution GATED on Phases 1-2 (#2096, #2097). Held item #2098 stays the retirement-trigger
+home (decide maintenance/retirement once the durable surface is accepted; keep the poller as last
+resort). RULED and recorded (operator, 2026-10-18, relayed via lead #2197).
 ## D106 — D105 seam: local-provider per-item context reset (lead `#2158`, 2026-10-18)
 
 **Decision.** The D105 enforcement seam is COMPOSED — signal and act are one seam:
@@ -3005,6 +3072,26 @@ unknown view is dead-lettered; `readViaBroker` round-trips through the broker's 
 `demo/command-spool.test.mjs` (vocabulary) and `demo/cli-broker-refuse.test.mjs` (read verbs work while a
 broker drives) updated; live: `status`/`queue`/`ps`/`log` each drained an `INTENT delivered=1` from the
 running broker.
+## D113 — Control-plane spool ops are OPERATOR-ONLY; `up` seat-creation is a separate carve-out (lead #2215, 2026-10-18)
+
+**Decision.** Control-plane broker spool ops — `pause`, `configure`, and any FUTURE control-plane spool
+op — are OPERATOR-ONLY, gated by the `from`/operator gate lead ruled for `pause` (lead #1952 Finding A).
+ONE gate applies to ALL control-plane spool ops, not two ad-hoc gates; it sequences WITH the active-guard
+fixes (#1780), not in held backlog.
+
+**Why.** `configure` is OPEN today: any seat that can enqueue a spool request can change the
+model/provider of ANY conversation's pi.agent doc (only a seat-existence check + `{provider, modelId}`
+validation gate it) — a privilege escalation: a seat can silently re-point another seat's work to a
+different model/service.
+
+**Carve-out.** The gate targets MUTATING an EXISTING conversation's pi.agent doc (runtime cross-seat
+reconfiguration). Seat CREATION — `up` writing a NEW seat's initial doc, including the D105 (c) provider
+signal — is a DIFFERENT concern governed by `up`'s own authorization. If `up`'s write is routed through
+`configure`, the op must distinguish create from reconfigure. So the D105 `up` half is NOT blocked by
+this gate.
+
+**Status.** Ruled by lead #2215 (answering pm #2208; extends lead #1952 Finding A / item #1966);
+recorded 2026-10-18. Implementation tracked at #1966; the as-is gap is documented at #2186.
 
 ## D112 — Broker failures are SCOPE-CLASSIFIED and the process has ONE storage connection; a stop is only "stopped" when the pid is gone (architect, item #2520, 2026-10-19)
 
@@ -3085,6 +3172,7 @@ and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path
 LANDING NOTE: D-number assigned at LAND TIME — D113 is taken (spool-op authorization, scribe-item-2219);
 re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge (do not hard-code).
 
+## D114 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
 ## D113 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
 
 **Context.** The operator backlog asks that "waiting on the operator" be **visible and answerable**
@@ -3126,6 +3214,160 @@ view; the CLI grows `answer`/`queue --waiting` and `status` grows a headline. Op
 **Status.** Proposed (exploration, item #2700). Not sequenced; `pm` sequences design then decomposition.
 D-number uses the next free slot; scribe's pending D113 lands first and lead #2452 re-derives numbers at
 land time. Evidence: the code citations above; no implementation is claimed.
+## D115 — F12: ONE seat-relative `workable(item, seat)` predicate, OWNED by #2673; claimability is its seat-projection, NOT a stage; `deferred` is its own stage (lead, 2026-10-19; recorded by scribe, item #3031)
+
+**Context.** The queue-lifecycle redesign v2 (`docs/reviews/queue-lifecycle-redesign.md`, ACCEPTED as design of
+record) makes claimability a function, not an item property. Architect F12 (review @5c50f34; escalations
+`#3001` + `#3010`) flagged that `#2673`'s `workable(item, seat)` (oldest-WORKABLE claim selection) is the
+SAME seam as the redesign's "claimability", and that a stage-level "claimable" is unsound because
+claimability is seat-relative (per-seat `requires`, `src/rig.mjs:393`, is not persisted).
+
+**Decision.** There is ONE predicate, not two — name it `workable(item, seat)`; the redesign's
+"claimability" is NOT a second predicate, it is the seat-projection of the same one:
+1. **Single source of truth.** Exactly one definition of "can seat s claim item i right now", in one module,
+   consumed by BOTH (a) `claim_work`'s oldest-workable selection (`#2673`) and (b) the broker WAKE selection
+   (`#2712`). No second implementation of "claimable".
+2. **Claimability is a projection, not a stage.** "Item i is claimable" is DEFINED as: ∃ eligible seat s such
+   that `workable(i, s)`. It must NOT be a stage of the item state machine — F1 shows why: claimability is
+   seat-relative, so any stage-level "claimable" is unsound.
+3. **Inputs are persisted, never live-only.** The predicate reads `stage` + `held` + the structured gate
+   fields (`blockedBy` dependency, `requires` capability) + the seat's advertised capabilities. Persisting
+   `requires`/`blockedBy` via the EXISTING enqueue path is `#2951`'s job, so `#2951` is a PREREQUISITE:
+   until it lands, §1's partition is genuinely false (F1) and must not be claimed.
+4. **`deferred` is its own stage**, not `active`-with-block. §1(b) forbids active-with-block; encoding
+   deferred that way would make parked work look claimable — a seat could claim work whose blocking question
+   is unanswered. SAFETY WINS: `deferred` is non-claimable by construction.
+5. **Ownership.** The single `workable(item, seat)` is OWNED by `#2673` — `#2673` implements it (predicate +
+   failing-first demo). The redesign CONSUMES it: it must not define a second predicate and must not restate
+   the predicate body. Division: the REDESIGN owns the stage model (incl. the §2 fix, `deferred` as its own
+   stage); `#2673` owns the predicate that reads those stages plus the persisted gate fields.
+6. **Not independent.** The two must NOT land independently. Ordering: `#2951` (persist gate fields) →
+   `#2673` (predicate + demo) → `#2712` (wake consumes) → only THEN may the redesign assert its §1
+   partition. The redesign may land its read-only parts early (OQ5 phase 1), but its claimability / §1
+   invariant may not land before `#2673`.
+7. **Safety (explicit).** The `requires` / fault clauses are NOT implementable today because `requires` is
+   not persisted on any item (`src/rig.mjs:393`). Landing them anyway would ship a predicate that silently
+   MIS-SELECTS — starvation of a claimable item, or a claim on un-claimable work. Safety wins: no landing of
+   the `requires` / fault clauses until `#2951` persists the field.
+
+**Why.** `#2673` and the redesign answer the same question ("can this be claimed?"). Two predicates drift,
+and drift is exactly the starvation / never-woken bug class `#2673`/`#2712` exist to fix. One predicate with
+a seat parameter keeps the claim path and the wake path in agreement, and makes §1's partition true once the
+gate fields are persisted.
+
+**Alternatives rejected.** (a) Two predicates (redesign-owned + `#2673`) — rejected: the same seam with two
+definitions drifts into the starvation/never-woken class; (b) claimability as an item stage — rejected:
+claimability is seat-relative (per-seat `requires`), so a stage-level "claimable" is unsound (F1);
+(c) `deferred` folded into `active`-with-block — rejected: parked work would look claimable (safety).
+
+**Status.** RULED by `lead` (2026-10-19, item #3031, escalations #3001/#3010; supersedes cancelled #3003).
+Recorded by `scribe` in the R1b serialized pass (#3089). Consistency: the structured gate field is D53
+(#2952/#2918), one field, no prose parsing. Enforcement: `#2673`'s failing-first demo must include a
+CROSS-CONSUMER AGREEMENT case — for the same item and seat, claim-selection and wake-selection return the
+same verdict. No implementation is started by this entry. D-number minted at land time.
+## D116 — Redesign v2 build rulings: OQ5 sequencing chain, M1 SPLIT (field-early / axis-fenced), OQ2 `reviewBy` defaults with one fire per epoch (lead, 2026-10-19; recorded by scribe, item #3046)
+
+**Context.** The queue-lifecycle redesign v2 was ACCEPTED as design of record. Its open questions were ruled
+by `lead` (#3002 OQ5, #3044 M1 split, #3008 OQ2). The accepted model has two orthogonal axes
+(`stage`/`block`), typed `block`s with a mandatory `resolver` and a `reviewBy` (unless self-clearing or
+`backlog`), and queue-scoped attention kinds. The build must not land the axis change before the read-only
+half, and `reviewBy` defaults must bound the `parked-review-due` firehose.
+
+**Decision.** Three rulings, recorded as one decision family (they govern the same build):
+1. **OQ5 — sequencing chain (Phase 1 lands now).** Phase 1 (can land now): READ-ONLY check rules (on AUTHORED
+   blocks only) + queue-scope attention — additive, no write path, independently verifiable. Phase 2:
+   `#2951` — persist the gate fields via the EXISTING enqueue path (prerequisite for the predicate axis).
+   Phase 3: the reliability cluster `#2420`/`#2483`. Phase 4: the `rig.mjs`/`driver.mjs` AXIS change (stage
+   machine + the single `workable` predicate, `#2673` then `#2712`), reconciled per F12 (#3031). ONE writer
+   per seam at a time; the fence is safety-conservative — do not move the claim/wake axis while the
+   reliability cluster is in flight.
+2. **M1 SPLIT — field-early vs axis-fenced.** M1 is split: **M1a (field-early)** persists the structured
+   gate field (`block`/`blockedBy`/`requires`) via the EXISTING enqueue path — this is `#2951`'s slice,
+   landable at Phase 2, no new write path, no parallel store (D53), no mapping/predicate. **M1b
+   (axis-fenced)** is the `effectiveStage`/`effectiveBlock` mapping pair — lands at Phase 4, fenced behind
+   the reliability cluster (`#2420`/`#2483`), and the single `workable` is `#2673`'s ONE predicate (F12,
+   #3031), implemented once; `#2712`'s wake consumes the same one. No second definition. **Dependency
+   direction: M1b → M1a, never the reverse** — M1a (the field) is the prerequisite M1b (the mapping) reads.
+3. **OQ2 — `reviewBy` defaults with one fire per epoch.** Defaults: `operator` 3 d, `schedule` 14 d,
+   `resource` 3 d, `manual` 7 d, `dependency`/`roadmap-gate` 7 d, `backlog` none, `question` n/a (v1's
+   `manual` 1 d is withdrawn — it floors the median-16 h population into immediate nag). Monotone in
+   urgency/volatility: operator (3 d) and resource (3 d) shortest (they block a human decision / stall a
+   seat); manual + dependency/gate 7 d middle; schedule 14 d longest (inherently far-horizon); backlog none
+   (explicitly parked, must not nag); question n/a (already surfaced by the `waiting` derivation). **One
+   fire per (item, `reviewBy` epoch)** — a notice fires ONCE per epoch, re-armed only when `reviewBy` is
+   explicitly bumped; a re-scan does not re-fire (idempotent, replayable); the durable attention surface
+   carries the state, so the notices are a snapshot, not a stream.
+
+**Why.** The sequencing prevents a red `check` across the unmigrated store from stopping every landing
+(CR-1): enforcement judges AUTHORED blocks only, so the read-only half (Phase 1) ships before the axis
+migration without turning the store red. The M1 split lets the structured field land early (M1a) without
+prematurely committing to the axis model (M1b), and keeps one `workable` (F12/#3031) with a clear
+dependency direction. The `reviewBy` defaults bound the `parked-review-due` firehose over the ~160-row
+legacy population (F10/CR-2); one-fire-per-epoch keeps the surface a state snapshot, not a nag stream.
+
+**Alternatives rejected.** (a) Ship the axis change before the read-only half — rejected: a red `check`
+blocks every landing (`land.md --suite` runs `check`); (b) a single monolithic M1 — rejected: it couples the
+field persistence to the axis mapping and can't ship the gate field early; (c) tighter `reviewBy` defaults
+(manual 1 d) — rejected: it floors the measured median-16 h population into immediate nag.
+
+**Status.** RULED by `lead` (2026-10-19, item #3046, from #3002/#3044/#3008; supersedes cancelled #3012).
+Recorded by `scribe` in the R1b serialized pass (#3089). Implementation items M1a (#3062, impl-item-3062
+@eb3b337), M1b (#3063, impl-item-3056 @6ddf538 — `workable` removed), M3 (#3019), M4 (#3020), M5 (#3021),
+M6 (#3022), M7 (#3023) are registered; OQ2 defaults fold into M1/M4 (#3050). D-number minted at land time.
+## D117 — R4 acceptance shape: the `#2955` chain is the ACCEPTANCE SHAPE for the queue-lifecycle v2 work (operator, 2026-10-19; recorded by scribe, item #3089 / R4)
+
+**Context.** Operator ruling 2026-10-19 asked that the ACCEPTANCE SHAPE for the queue-lifecycle v2 work be
+citable and NOT reconstructed from memory. R4 records it: the shape is "accepted as recommended" + the
+`#2788`/`#2789`/`#2804`/ADR chain — i.e. the operator's ruling on the design, plus the build items and the
+`waiting`-derivation ADR that implement it.
+
+**Decision.** The ACCEPTANCE SHAPE for the queue-lifecycle v2 work is: the operator's "accepted as
+recommended" ruling (on `docs/reviews/queue-lifecycle-redesign.md` v2) + the `#2788`/`#2789`/`#2804` chain
+(the `waiting` view, the `answer` spool op, and the render rule) + the `waiting`-derivation ADR
+(`impl-item-2744` = the D113 entry). This is the acceptance shape; it is queue-citable at `#2955` and does NOT
+require the operator to re-state prose. `#2698` (advocate ETARGET review) stands with a one-line re-verify.
+
+**Status.** Recorded by `scribe` in the R1b serialized pass (#3089, R4). D-number minted at land time.
+
+## D118 — R1–R7 are ACCEPTED OPERATOR RULINGS for the queue-lifecycle v2 and land/hold work (operator, 2026-10-19; recorded by scribe, item #3089 annex)
+
+**Context.** Operator acceptance `operator-accepts-r1-r7-2026-10-19-1` (21:52:23Z) accepted R1–R7 in full,
+making them OPERATOR RULINGS (not delegate recommendations). R1 (landing window OPEN, delegate drives), R1b
+(DECISIONS.md writers serialize as ONE scribe pass, minting free numbers at land time), R2 (`#2797` KEEP +
+CONSOLIDATE, `#2806` CANCEL), R3 (`#2630` stays HELD until `#2797` lands), R4 (the `#2955` acceptance
+shape), R5 (`#2949` CLOSED by evidence), R6 (`#2598` RELEASE and RE-QUEUE), R7 (six stale escalations
+consumed and closed).
+
+**Decision.** R1–R7 are ACCEPTED OPERATOR RULINGS (operator, 2026-10-19) and bind the queue-lifecycle v2
+work and the land/hold rulings as the same decision family. In particular: the landing window is OPEN and the
+DELEGATE drives (`land.mjs` waits for generation slots, broker stays UP); the DECISIONS.md writers
+serialize as ONE scribe pass minting free numbers at land time in issue order; `#2797` is kept + consolidated
+(re-pointed to `e4fd338`), `#2806` cancelled; `#2630` stays HELD until `#2797` lands; the `#2955` acceptance
+shape is citable; `#2949` is closed by evidence (scripts/ restored, `node --check scripts/land.mjs` exit 0);
+`#2598` is released and re-queued behind M1a; the six stale escalations (`#2942`/`#2943`/`#2947`/`#2948`/
+`#2673`/`#2797`) are closed.
+
+**Status.** Recorded by `scribe` in the R1b serialized pass (#3089 annex). No fresh D-number for this entry
+per the R1b rule (it records the same decision family; the design-of-record and land/hold rulings share the
+family). D-number minted at land time.
+
+## D119 — D113 pre-check (R1b): the reservation is VOID — a dangling commit cannot hold a number; #2284 must be re-branched or re-authored (scribe, item #3089)
+
+**Context.** R1b required a pre-check on D113 before minting: its reservation (scribe-item-2219, #2284)
+rests on commit `fd4c233`. The pre-check result: `fd4c233` is a REAL commit but DANGLING — it is
+unreachable from any branch (`git branch -a --contains fd4c233` is empty) and does NOT merge cleanly onto
+`main` (merge-tree exit 1, conflict in docs/DECISIONS.md). The live branch `scribe-item-2219` exists at
+`a822bbf` holding the D113 entry, but IT ALSO conflicts against `main` (merge-tree exit 1).
+
+**Decision.** D113 is NOT reserved — the reservation is VOID (a dangling commit cannot hold a number).
+`#2284`'s recoverability decides whether the D113 entry lands, not the number: `fd4c233` still dangling →
+**re-branch** `scribe-item-2219` (at `a822bbf`) and land it (after a non-force rebase to clear the
+DECISIONS.md conflict); if the branch were gone → re-author the entry docs-only. D113 does NOT block the
+other DECISIONS entries (#3011/#3031/#3035/#3046) — they mint the next free numbers in issue order.
+
+**Status.** Pre-check run by `scribe` (item #3089, R1b). D113 remains void until #2284 is re-branched and
+re-landed. D-number minted at land time.
+
 ## D120 — Queue lifecycle redesign v2 is ACCEPTED as the design of record; it LEADS capability work (operator, 2026-10-19; recorded by scribe, item #3035)
 
 **Context.** The queue can orphan work because a parked item is not required to name a machine-readable
@@ -3206,7 +3448,87 @@ does not fix it.
 `removeClaimedWorktree` succeeds; opt-in carry still carries), `demo/worktree-recursive-carry.test.mjs`
 and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path. Recorded by `scribe`
 (#2658).
+LANDING NOTE: D-number assigned at LAND TIME — D113 is taken (spool-op authorization, scribe-item-2219);
+re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge (do not hard-code).
+## D### — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127)
 
+**Decision.** TUI cost/spend pricing is supplied by a per-provider pricing EXTENSION. A price is
+UNAVAILABLE unless an extension supplies it; the former blocker — an operator-supplied vendor price
+table — is REMOVED. The mechanism is threefold: (1) a per-provider pricing-extension interface;
+(2) the cost measure is derived from tokens through that extension; (3) when NO extension supplies
+prices, cost/spend renders "unavailable" — NEVER a fabricated or stale `$`.
+
+**Staleness.** Handled by the unavailable path: a stale price table must never render a `$`; with no
+live extension data, show unavailable.
+
+**Scope.** ROADMAP 98 stays TOKENS-ONLY (v1). This pricing decision is INDEPENDENT and NOT v1 —
+unscheduled. Owner is lead (mechanism); implementation routes to impl once scheduled. Held item #1135
+(TUI cost/spend: pricing instrument + SOURCE + staleness) is the mechanism's home.
+
+**Why.** A `$` figure with no live, current price behind it is worse than no figure: it fabricates a
+cost the product did not measure. The unavailable path keeps the UI honest under any staleness or
+absence condition.
+
+**Status.** RULED and recorded (operator re-scope, 2026-10-18, relayed via lead #2197). Unscheduled;
+tracked at held item #1135. No pricing extension exists yet, so the surface currently renders
+unavailable by this rule.
+
+## D### — durable-tui: `ui.mjs` / `npm run ui` is the FALLBACK surface and is to be RETIRED (operator, 2026-10-18)
+
+**Decision.** `ui.mjs` / `npm run ui` is the FALLBACK (not a co-existing surface); the poller stays as
+last resort. `ui.mjs` will eventually be RETIRED once the durable TUI proves the multi-seat surface.
+
+**Policy.** In the interim: MINIMAL / bugfix-only maintenance (no new features). Deprecation path =
+retire after Phases 1-2 land and the durable multi-seat surface is accepted.
+
+**Status.** Execution GATED on Phases 1-2 (#2096, #2097). Held item #2098 stays the retirement-trigger
+home (decide maintenance/retirement once the durable surface is accepted; keep the poller as last
+resort). RULED and recorded (operator, 2026-10-18, relayed via lead #2197).
+
+LANDING NOTE: D-numbers assigned at LAND TIME — re-derive the next FREE D-numbers by scanning `docs/DECISIONS.md` at merge (do not hard-code; the source items are #2199 / #2239).
+
+## D-<mint> — One window resolver for every context bound: the degeneration guard's context threshold is RELATIVE to the seat's effective window (architect, item #2730, 2026-10-19)
+
+**Context.** The devtools small-local-model decay review (`docs/reviews/architecture-devtools-decay-review.md`,
+item #2730) found that the POST-SETTLEMENT degeneration guard uses an ABSOLUTE context bound —
+`DEGEN_DEFAULTS.maxContextTokens = 400_000`, compared as `contextTokens >= maxContextTokens` in
+`src/degeneration.mjs`, with `superviseOnce` calling `assessRun(...)` with no opts (`cli.mjs:1339`). For a
+local seat whose window is 64 k (`src/providers/local.mjs:25`, `DURIG_LOCAL_CONTEXT ?? 65536`) that bound
+can never be reached, so the context backstop is inert. The same seat's window is ALREADY resolved
+twice — `src/context.mjs` (`windowState`/`contextConsumption`, the three-state denominator) and
+`src/inflight.mjs` (`contextWindowFraction`, with the rule "No window => NO token bound"), plus
+`src/readapi.mjs` for display — yet the post-settlement guard consumes none of them. D84 already rules
+the trigger must be a FRACTION (~60-70%) of the measured effective window, with the ordered guard's
+abort above it (~90%); the post-settlement guard never implemented D84.
+
+**Decision.**
+1. **One resolver.** Every context bound in durig — the post-settlement `assessRun` context cause, the
+   in-flight `assessInflightTurn` volume bound, and the display fraction — MUST resolve the seat's window
+   through ONE function (`windowState` over `measured -> declared -> advertised`, with
+   `declaredContextWindow` supplying `declared`). No bound may carry its own absolute constant.
+2. **Relative, per-seat.** The context threshold is `window x fraction` (a per-seat/per-model parameter,
+   not a second hard-coded default), consistent with D84's ~60-70% trigger / ~90% abort.
+3. **No window => no token bound.** When no denominator resolves, the guard MUST NOT invent one
+   (ROADMAP 27); it falls back to the window-independent causes. (This is `inflight.mjs`'s existing rule,
+   generalized.)
+
+**Alternatives considered.**
+- *Keep the absolute 400 k and add a smaller absolute bound for local seats*: rejected — two constants
+  diverge and a third model re-opens the bug; the relative form has no constant to keep in sync.
+- *Only fix the display fraction, leave the guard absolute*: rejected — the guard is what ACTS; a correct
+  display with an inert guard is the current defect.
+- *Rely on the in-flight trigger alone*: insufficient today — `createInflightWatch` is built but UNWIRED
+  (grep: it appears only in `inflight.mjs`), and the post-settlement guard must still be correct for
+  runs the in-flight watch does not cover.
+
+**Consequences.** B and E of the review collapse into one change; a future guard cannot silently diverge
+on the denominator; the local seat's context backstop becomes live against the `declared` window today
+and upgrades to `measured` when #1087 lands, with no change of shape. Cost: `assessRun` gains a window
+input and `superviseOnce` must resolve it per seat (the resolver already exists).
+
+**Status.** Proposed (review, item #2730). `pm` sequences; the D-number is minted at land time per #3075
+(no number is reserved here; D113/D114 landed via scribe-item-3167). Evidence: the code citations above; no
+implementation is claimed.
 ## D115 — F12: ONE seat-relative `workable(item, seat)` predicate, OWNED by #2673; claimability is its seat-projection, NOT a stage; `deferred` is its own stage (lead, 2026-10-19; recorded by scribe, item #3031)
 
 **Context.** The queue-lifecycle redesign v2 (`docs/reviews/queue-lifecycle-redesign.md`, ACCEPTED as design of
