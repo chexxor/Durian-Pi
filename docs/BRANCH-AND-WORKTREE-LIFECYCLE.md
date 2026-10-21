@@ -183,6 +183,32 @@ tooling asserts. Record the exact numbers (`pass=N fail=M`) in every report rath
 and confirm a *new* failure is new by comparing against the pre-change baseline.
 
 
+### 6.4 The environmental bucket is audited BY NAME, and "environmental 0->1" is a box-state change (#4535)
+
+pm reported `environmental` 0 -> 0 -> 1 across three same-day suite runs and no seat could say which
+demo moved. qa reproduced the bucket today at 0e29ce7 and named it:
+
+- Deterministic-clean run (8 jobs): `pass=207 environmental=0 fail=1` (only `seat-instruction-encoding`),
+  208 demos.
+- Same rev, load reproduction (2 suites concurrently, one at --jobs 24): `pass=206 environmental=1 fail=1`
+  whose stderr row NAMES the demo and quotes the classifier reason verbatim:
+  `ENV demo/tui-round-trip-terminal.test.mjs - STATUS_STACK_BUFFER_OVERRUN/fail-fast (0xC0000409)`.
+
+ARRANT facts the audit needs before believing that row (all quoted from src/suite.mjs):
+- `environmental` means ONLY: SIGABRT/SIGKILL as the child's signal ("aborted by <signal>"); exit code in
+  {0xC000012D on both signed and unsigned forms, 0xC0000409 both, 134=SIGABRT}; or stderr matching
+  `/STATUS_COMMITMENT_LIMIT|C000012D|commitment limit|C0000409|page file is too small/i`
+  ("stderr names a commit/memory starvation abort"). Everything else is `nonzero exit <code>` -> REAL fail.
+- EPERM is NOT an environmental reason: the #3796 case (tui-durable-persistence, Windows temp dir) is an
+  uncaught error, exits 1, and lands in FAIL. The bucket is NOT where that known-red hides.
+- The bucket is a BOX-STATE change, not a tree-state change: identical rev, load changed the verdict of a
+  2-second demo (tui-round-trip-terminal alone: 10/10 green). It is not rerunning that changes the tree.
+
+THE RULE: `fail=2` was true three times and meant three non-identical things; `environmental=1` is the
+same shape one column over, except that a non-failing bucket reads all-clear without an audit. Any suite
+report MUST carry the runner's per-row lines (stderr), because that is where the name and reason live:
+`ENV demo/<name> - <reason>`. A count without its rows cannot see the tree-dependent flips recorded by the sibling trap 6.3 (qa-item-4530) the same
+way it cannot detect a member that died of a resource abort.
 ### 6.3 Tree-dependent reds are deterministic: two named tests, two measured rates (2026-10-21)
 
 pm filed these as "two flaky demos" (#4530): `pitui` green->red and `broker-one-connection`
