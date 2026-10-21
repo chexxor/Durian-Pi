@@ -108,6 +108,28 @@ try {
 	assert.doesNotMatch(notice2.body, /evidence:/, "and no evidence line is appended");
 	assert.match(notice2.body, /no evidence given/, "the narrative summary is the body, unchanged");
 
+	// #4147: the CONVENTION reaches the seat at the moment it acts - the tool description names the
+	// TREE the check ran against. `checkup` CAN reach `item.evidence.artifact` (hasArtifact reads it),
+	// so a rule is also possible; this asserts the sentence the seat reads either way, because a rule
+	// cannot reach a seat BEFORE it writes a completion. A green depends on the tree it ran in.
+	const cw = Router.tools.find((t) => t.name === "complete_work");
+	assert.ok(cw, "complete_work is a Router tool");
+	assert.match(
+		cw.description,
+		/THE TREE THE CHECK RAN AGAINST/,
+		"the description names the tree the check ran against",
+	);
+	assert.match(
+		cw.description,
+		/DERIVED artifact[\s\S]*MERGED/,
+		"and says a DERIVED artifact must be named as MERGED (a tip-only run tests the branch against itself)",
+	);
+	assert.match(
+		cw.parameters?.properties?.evidence?.properties?.artifact?.description ?? "",
+		/THE TREE/,
+		"the artifact PARAMETER names the tree too, where the seat actually types it",
+	);
+
 	console.log(
 		"EVIDENCE-HANDOFF TEST PASS (a DONE notice carries the completion's command+exitCode+artifact verbatim; no evidence, no field)",
 	);

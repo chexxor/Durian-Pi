@@ -742,7 +742,10 @@ const Router = defineExtension({
 				"Mark one of your claimed items done with a result. Sends a DONE notice back to the sender. " +
 				"Pass `evidence` ({command, exitCode, artifact?}) when you VERIFIED someone's work: it is what " +
 				"makes the completion re-checkable, and `check` reports a verifier item completed without it " +
-				"(ROADMAP 48 / W2). `resultSummary` stays the narrative; evidence is additive.",
+				"(ROADMAP 48 / W2). `resultSummary` stays the narrative; evidence is additive. An `artifact` " +
+				"names THE TREE THE CHECK RAN AGAINST - a sha, a branch, or `main` - because a green depends " +
+				"on the tree it ran in, and a DERIVED artifact (a generated file, a manifest) must be named " +
+				"as MERGED: verifying it on its own branch tip only tests the branch against itself.",
 			parameters: Type.Object({
 				itemId: Type.Number(),
 				resultSummary: Type.String(),
@@ -754,7 +757,7 @@ const Router = defineExtension({
 						exitCode: Type.Number({ description: "its exit code (0 = pass)" }),
 						artifact: Type.Optional(
 							Type.String({
-								description: "the commit/rev the command ran against, when it names one",
+								description: "THE TREE the command ran against: a sha, a branch, or `main` (a DERIVED artifact as MERGED)",
 							}),
 						),
 					}),
