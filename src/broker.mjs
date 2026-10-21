@@ -817,6 +817,57 @@ export function isAdvancingTask(task) {
   return kind === "running" || kind === "completing";
 }
 
+/**
+ * THE ADMISSION DEADLINE — ROADMAP 37(c), and the primitive that makes two owed recoveries SAFE (#4176).
+ *
+ * A reconciler extended to settle `queued` submissions on the next pass WOULD CANCEL A SUBMISSION THAT
+ * IS LEGITIMATELY STILL BEING ADMITTED — worse than the bug it fixes. What distinguishes "still being
+ * admitted" from "stuck" is TIME, and nothing in the tree defined how much. This is that definition.
+ *
+ * THE THRESHOLD IS NAMED AND JUSTIFIED RATHER THAN SILENT: five minutes. The admission path places a
+ * submission within SECONDS in normal operation, so five minutes is two orders of magnitude longer than
+ * any legitimate admission — while being far shorter than the ten-hour stall that motivated this, so a
+ * stuck seat is recovered long before an operator notices. A rig that wants a different number should
+ * pass `deadlineMs`; there is deliberately no config surface yet, because inventing one before anything
+ * consumes the value would be a knob nobody has measured.
+ *
+ * THE ACTION IS `withdraw`, NOT `settle`, because a submission that is withdrawn leaves the record of
+ * having existed while a settled one disappears into a terminal status — and a submission that vanishes
+ * without a line is the same invisibility that caused the outage. Callers must LOG the verdict.
+ */
+export const ADMISSION_DEADLINE_MS = 5 * 60_000;
+
+/**
+ * Is this submission too old to still be admitting? A PURE decision over store state, so it is testable
+ * without a provider: the 429 is how the outage HAPPENED, not how it is tested.
+ *
+ * @param {object} input
+ * @param {object} input.submission — a submission row; `admittedAt` is a ms epoch (or Date/ISO string)
+ * @param {boolean} [input.advancing] — a task holds this conversation, so it is NOT stuck regardless of age
+ * @param {number} [input.now]
+ * @param {number} [input.deadlineMs]
+ * @returns {{expired:boolean, ageMs:number|null, action:"withdraw"|"leave"|"none", reason:string}}
+ */
+export function admissionVerdict({ submission, advancing = false, now = Date.now(), deadlineMs = ADMISSION_DEADLINE_MS } = {}) {
+	if (!submission) return { expired: false, ageMs: null, action: "none", reason: "no submission" };
+	// An ADVANCING conversation is never stuck, however old the row looks: the age of the record is not the
+	// age of the work. This is the control that keeps the deadline from racing the admission path.
+	if (advancing) return { expired: false, ageMs: null, action: "leave", reason: "a task is advancing this conversation" };
+	const raw = submission.admittedAt ?? submission.createdAt ?? submission.at ?? null;
+	const at = raw === null ? NaN : raw instanceof Date ? raw.getTime() : typeof raw === "number" ? raw : Date.parse(String(raw));
+	if (!Number.isFinite(at)) return { expired: false, ageMs: null, action: "none", reason: "no admission timestamp — cannot judge age, so do not act" };
+	const ageMs = now - at;
+	// A seconds-old admission is NORMAL and must not be touched. This is the assertion that makes the
+	// deadline a fix rather than a sweep: without it, every pass would cancel work still being admitted.
+	if (ageMs < deadlineMs) return { expired: false, ageMs, action: "leave", reason: `admitted ${Math.round(ageMs / 1000)}s ago (< ${Math.round(deadlineMs / 1000)}s)` };
+	return {
+		expired: true,
+		ageMs,
+		action: "withdraw",
+		reason: `admitted ${Math.round(ageMs / 1000)}s ago and no task is advancing it — too old to still be admitting`,
+	};
+}
+
 export async function reconcileStrandedSubmissions(harness, inspection, { context, onDiagnostic } = {}) {
   const liveConvIds = new Set();
   for (const task of inspection?.tasks ?? []) {
