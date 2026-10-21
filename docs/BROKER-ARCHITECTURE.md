@@ -1,13 +1,17 @@
-# durig broker architecture — actors, mailboxes, and one event loop
+# durian-pi broker architecture — actors, mailboxes, and one event loop
 
 **Status:** explanatory reference (not a decision). Grounded in `src/broker.mjs`, `src/scheduler.mjs`,
 `src/driver.mjs`, `src/genlock.mjs`, `src/rig.mjs`, and `cli.mjs` `cmdServe`.
 **Audience:** anyone asking "why can't the seats just run independently, like async tasks?"
-**Companion:** `docs/PI-DURABLE-INTEGRATION.md` — the concrete mapping of durig onto pi-durable's
-own mechanisms (what the harness owns, what durig adds, the pin), written for durig maintainers and for
+**Companion:** `docs/PI-DURABLE-INTEGRATION.md` — the concrete mapping of durian-pi onto pi-durable's
+own mechanisms (what the harness owns, what durian-pi adds, the pin), written for durian-pi maintainers and for
 pi-durable's.
 **Companion:** `docs/BROKER-SUPERVISION.md` — the process-lifecycle layer this document leaves out: how
 the broker is kept alive and healthy by a host daemon (stop/liveness contract, exit codes, heartbeats).
+**Prior art:** `docs/reviews/daemon-harness-architecture-review.md` — how this design compares to other
+daemon-based harnesses. It records that the storage discipline this broker relies on (`journal_mode=WAL`,
+`busy_timeout`, `BEGIN IMMEDIATE`, an in-process serial queue) is **already provided by pi-durable 1.3.0**,
+so the broker's own obligations are the single-writer rule and the wake-loop lifecycle.
 
 ## The model in one paragraph
 
@@ -15,13 +19,13 @@ The broker **is** the event loop, and a seat run **is** the async task. The brok
 that owns the harness (the LLM runtime) and the store; it wakes seats when there is work, reacts to the
 store's in-process commit stream, and supervises. Each seat is an actor with a **durable mailbox** (its
 conversation transcript) and a **durable claim** (the queue item it holds). Seats communicate only by
-messages submitted to conversations; they share no in-memory state, only the durable store. So durig is
+messages submitted to conversations; they share no in-memory state, only the durable store. So durian-pi is
 not "an event loop that can't handle concurrency" — it is an actor system whose concurrency is bounded
 by resources and whose actors are expensive and stateful.
 
-## Mapping durig onto actor-model vocabulary
+## Mapping durian-pi onto actor-model vocabulary
 
-| durig concept | Actor-model term | Where |
+| durian-pi concept | Actor-model term | Where |
 |---|---|---|
 | Seat | actor (a process/object with identity and state) | `src/rig.mjs` `Seats` |
 | Conversation transcript | durable mailbox | conversation `submit()` |
@@ -35,7 +39,7 @@ by resources and whose actors are expensive and stateful.
 
 ## The comparison table
 
-| Aspect | Node event loop | Erlang process | Smalltalk object | durig seat (in the broker) |
+| Aspect | Node event loop | Erlang process | Smalltalk object | durian-pi seat (in the broker) |
 |---|---|---|---|---|
 | **Unit of concurrency** | async task / continuation | process (lightweight, preemptively scheduled) | object invocation | a seat **run** (generation + tool turns) |
 | **Communication** | callbacks/promises (in-process) | **asynchronous messages to a mailbox** (copied, isolated heaps) | **synchronous** message send (method call) | input entries submitted to a conversation |
@@ -47,7 +51,7 @@ by resources and whose actors are expensive and stateful.
 | **Shared state** | in-process variables | none (isolation is the rule) | object graph (shared by reference) | one **storage-owning harness**; other clients attach; the queue is a shared log |
 | **Isolation** | not applicable | memory isolation per process | objects share the heap | separate conversations + per-item worktrees; one OS process |
 | **Cost per unit** | microseconds | microseconds | nanoseconds | **seconds–minutes and real money** |
-| **Concurrency bound** | thousands | millions | one thread | `DURIG_MAX_CONCURRENT_SEATS` (generation slots) |
+| **Concurrency bound** | thousands | millions | one thread | `DURIAN_PI_MAX_CONCURRENT_SEATS` (generation slots) |
 | **Failure model** | task throws, loop continues | "let it crash" + supervisor trees | exception unwinds the caller | supervisor pass; degeneration reset **between** runs |
 | **When a unit misbehaves** | bounded; never blocks the loop | preempted or killed by its supervisor | throws | can run unbounded (degeneration) and, today, park a pass |
 
@@ -58,19 +62,25 @@ by resources and whose actors are expensive and stateful.
   (scheduler.dirty) signal.raise(); })`. A commit is the "I/O completion"; the loop rests on
   `signal.wait` and runs a pass when work is due.
 - **Runs are concurrent.** A pass can wake several seats (`PASS ... woke=pm,impl`), and the generation
-  slots (`genlock`) let up to `DURIG_MAX_CONCURRENT_SEATS` generate at once.
+  slots (`genlock`) let up to `DURIAN_PI_MAX_CONCURRENT_SEATS` generate at once.
 - **Runs are serialized only at the commit boundary** — a short, ordered write to the store — not for
   their whole duration.
 
 ## The three real constraints (why "fully independent" is not free)
 
-1. **One storage-owning harness — pi-durable's rule, not durig's.** The README says "One process owns a
+1. **One storage-owning harness — pi-durable's rule, not durian-pi's.** The README says "One process owns a
    storage at a time; there is no cross-process locking", and the spec says old and new harnesses must
-   never own the same Session concurrently. durig's `<db>.broker.json` holder implements that rule; the
+   never own the same Session concurrently. durian-pi's `<db>.broker.json` holder implements that rule; the
    F24 collision (`ID n already belongs to entry`) is what happens when two harness owners share one
    store. This bounds **owners**, not seats: many conversations run concurrently *inside* the one owner.
+   **Reads are the same rule.** The research is explicit that there is no safe "just read the file"
+   second connection: SQLite URI `immutable=1` skips all locking and change detection and, if a live
+   writer changes the file, may return incorrect results or `SQLITE_CORRUPT`; and even a plain
+   `readOnly` reader can pin the WAL and stall the owner's checkpoint if it is long-lived. So a reader
+   must be short-lived, and the durable design is to **serve reads through the owner's own harness**
+   (D111) rather than open a second connection — see `docs/reviews/daemon-harness-architecture-followup-review.md`.
 2. **Expensive, resource-bounded actors.** A run holds a generation slot and a paid provider stream;
-   `DURIG_MAX_CONCURRENT_SEATS` is *durig's* cost/GPU/provider bound. pi-durable's "Many conversations
+   `DURIAN_PI_MAX_CONCURRENT_SEATS` is *durian-pi's* cost/GPU/provider bound. pi-durable's "Many conversations
    at once" imposes no such limit — you could run far more seats if they were free.
 3. **Non-deterministic, unbounded runs.** A seat can degenerate (the observed `qa` loop) and keep
    generating. Nothing preempts it, so a supervisor cannot act mid-run; the guard resets *between* runs.
@@ -89,12 +99,12 @@ The pi-durable post's "Multiplayer" is **not** many writers to one file — it i
 - pi-durable's client surface is `viewState().subscribe()` (push, updated after every commit),
   `watch()`/`watchEvents()` (remote, over a socket), and busy-conversation semantics
   (`whenBusy: "steer" | "follow-up" | "reject"`).
-- durig's viewers (`ui.mjs`, `watch`, `log --follow`) **do not attach** to the owner; they read storage
+- durian-pi's viewers (`ui.mjs`, `watch`, `log --follow`) **do not attach** to the owner; they read storage
   directly and poll (D11). That is why the TUI feels non-multiplayer and why a spooled intent can wait
   behind a run. Adopting the owner's push stream for the TUI is the deferred "Level 2 resident server",
-  and it is the same pub-sub you asked about — it already exists upstream; durig just is not a client.
+  and it is the same pub-sub you asked about — it already exists upstream; durian-pi just is not a client.
 
-The command-path view of this — which durig processes open a harness, which only read storage, and what
+The command-path view of this — which durian-pi processes open a harness, which only read storage, and what
 that means for writing while the broker runs — is `docs/COMMANDS-AND-THE-BROKER.md` §1–§2.
 
 ## One known scheduler bug, and the fix
@@ -115,20 +125,20 @@ See `docs/TUI-IMPLEMENTATION-PLAN.md` for the surface work; the broker fix is tr
 
 ## What is genuinely unlike Erlang
 
-- **No preemption.** Erlang can time-slice a process at any reduction; durig cannot cut a generation
+- **No preemption.** Erlang can time-slice a process at any reduction; durian-pi cannot cut a generation
   mid-stream (provider-level) — that is the recorded "mid-run cut" gap.
 - **No heap isolation.** Seats run in one OS process; isolation is organizational (conversations,
   worktrees), not enforced by the runtime.
-- **Durable mailboxes.** An Erlang mailbox dies with the process; a durig conversation *is* the durable
+- **Durable mailboxes.** An Erlang mailbox dies with the process; a durian-pi conversation *is* the durable
   record, which is why a seat can be reset and re-anchored without losing history.
-- **No crash-only design.** Erlang's "let it crash" restarts a fresh process; durig must preserve the
+- **No crash-only design.** Erlang's "let it crash" restarts a fresh process; durian-pi must preserve the
   conversation and the claimed item across a reset.
 
 ## Process lifecycle: who supervises the broker
 
 This document describes the broker's *in-process* model. The **process** model — who keeps the broker
 running across a crash, a hang, a reboot, or a sleep — is `docs/BROKER-SUPERVISION.md`. The short
-version: durig's broker is a detached child that nothing restarts, which is why one abnormal death
+version: durian-pi's broker is a detached child that nothing restarts, which is why one abnormal death
 (`START` with no `EXIT`) left the queue idle indefinitely. The design of record adds a host daemon that
 never opens the store, a liveness/progress heartbeat, a durable stop marker distinct from the existing
 `.broker.stop` request file, and an exit-code taxonomy so an intended stop is not restarted. The

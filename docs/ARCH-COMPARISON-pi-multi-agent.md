@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # pi-multi-agent vs durig — competitor comparison
 
 **Date:** 2026-10-12 · **Read at:** `vendor/eval/pi-multi-agent` HEAD `d2fef0f`

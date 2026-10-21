@@ -32,11 +32,16 @@ async function checkAsync(label, fn) {
 }
 
 // Entries are newest-first (storage order), the way readSeatPages returns them.
-function assistant(toolCalls = [], { usage = null, text = "" } = {}) {
+function assistant(toolCalls = [], { usage = null, text = "", durationMs = null } = {}) {
   const content = [];
   if (text) content.push({ type: "text", text });
   for (const [name, args] of toolCalls) content.push({ type: "toolCall", name, arguments: args });
-  return { kind: "pi.assistant", model: [{ role: "assistant", content, ...(usage ? { usage } : {}) }] };
+  return {
+    kind: "pi.assistant",
+    model: [
+      { role: "assistant", content, ...(usage ? { usage } : {}), ...(durationMs !== null ? { durationMs } : {}) },
+    ],
+  };
 }
 const user = (text = "You have queued work.") => ({
   kind: "pi.user",
@@ -45,6 +50,11 @@ const user = (text = "You have queued work.") => ({
 const malformed = () => ({
   kind: "pi.tool-result",
   model: [{ isError: true, content: [{ type: "text", text: '<harness> [error] Validation failed for tool "edit": path required' }] }],
+});
+// A tool RESULT carries the TOOL's runtime in `durationMs` — NOT a model turn (#1703).
+const toolResult = (durationMs) => ({
+  kind: "pi.tool-result",
+  model: [{ role: "tool", content: [{ type: "text", text: "ok" }], durationMs }],
 });
 const reset = () => ({ kind: "pi.reset", model: [{ role: "user", content: [{ type: "text", text: "reset" }] }] });
 // The model's recurrent fault: a tool call written into the message TEXT. Observed in two shapes —
@@ -74,8 +84,7 @@ console.log("\n=== degeneration guard: assessRun ===\n");
 
 check("a short healthy run is not degenerate", () => {
   const a = assessRun([assistant([["read", { path: "a" }]]), assistant([["read", { path: "b" }]]), user()]);
-  assert.equal(a.degenerate, false);
-  assert.deepEqual(a.reasons, []);
+  assert.equal(a.degenerate, false);  assert.deepEqual(a.reasons, []);
 });
 
 check("a run past the tool-turn bound is degenerate", () => {
@@ -175,11 +184,73 @@ check("CJK inside a code span is not drift", () => {
   assert.equal(isLanguageDriftTurn(fenced), false, "fenced code must be excluded from the language test");
 });
 
-check("a context past the token bound is degenerate", () => {
-  const entries = [assistant([["read", { path: "a" }]], { usage: { totalTokens: 999_999 } }), user()];
-  const a = assessRun(entries);
-  assert.equal(a.degenerate, true);
+check("context pressure is a SEAT-LEVEL signal that SURVIVES a wake (#1823)", () => {
+  // The defect (#1705 Defect B): the per-turn wake kept the run window at 1-2 turns, so a seat
+  // that degraded at 367,559 tokens was never seen. Context is a seat-level state, so it is read
+  // from the newest assistant entry of the WHOLE page, wake or not.
+  const entries = [
+    user(), // a wake: the run window resets here...
+    assistant([["read", { path: "a" }]], { usage: { totalTokens: 367_559 } }), // ...but the seat's context survives
+  ];
+  const a = assessRun(entries, { contextWindowTokens: 1_048_576 });
+  assert.equal(a.contextTokens, 367_559, "the seat's current context is read across the wake");
+  assert.equal(a.degenerate, true, "the seat-level context trips");
   assert.ok(a.reasons.some((r) => r.startsWith("context-tokens=")), a.reasons.join(","));
+});
+
+check("the context trip is FLOOR and FRACTION and CEILING (#1823)", () => {
+  const withCtx = (tokens, window) => assessRun([assistant([["read", { path: "a" }]], { usage: { totalTokens: tokens } }), user()], { contextWindowTokens: window });
+  // FLOOR: below it, context alone never trips even past the fraction of a small window.
+  assert.equal(withCtx(60_000, 100_000).degenerate, false, "below the floor: no trip");
+  assert.equal(withCtx(60_000, 100_000).contextSkip, "below-floor");
+  // The qa datapoint: 367,559 vs an ADVERTISED 1,048,576 (~35%) must trip at fraction 0.35...
+  assert.equal(withCtx(367_559, 1_048_576).degenerate, true, "the qa degradation point trips");
+  // ...but a long HEALTHY session at 300k must NOT (zero false positives).
+  assert.equal(withCtx(300_000, 1_048_576).degenerate, false, "a healthy long session does not trip");
+  assert.equal(withCtx(300_000, 1_048_576).contextSkip, "below-trip");
+  // CEILING: a huge advertised window must not push the trip above the ceiling.
+  assert.equal(withCtx(700_000, 10_000_000).contextTrip, 600_000, "the trip is capped by the ceiling");
+});
+
+check("qa's REAL conv-15 turns trip the context guard, and the fraction is calibrated on them (#1705)", () => {
+  // Real bytes and real usage from selfdev.sqlite conversation 15 (seat `qa`, model
+  // `zai-org/GLM-5.3-Flash`, advertised window 1,048,576 — vendor/pi-main/packages/ai/dist/providers/
+  // data/baseten.json). Every one of these turns arrived after a per-turn `pi.user` wake, which is
+  // exactly why the old per-run window never saw them (the defect). The token figures are the
+  // entries' own `usage.totalTokens`; the collapse (71502) is also stored verbatim as the prose
+  // fixture demo/fixtures/degenerate-text/positive/qa-context-degeneration-71502.txt.
+  const realQaTurns = [
+    [70742, 351_353], // "...Taskkill was listed only for the审理." — first visibly degenerate turn
+    [70973, 351_597], // "the ask carries the next: the ask carries the next..."
+    [71053, 352_581], // "seek the ask, seek at the queue, carry; routed."
+    [71502, 367_559], // self-diagnosis, then a ~21k-char repetition wall
+  ];
+  for (const [entry, tokens] of realQaTurns) {
+    // The wake is first: the run window resets there, but the seat's context does not.
+    const a = assessRun([assistant([["read", { path: "a" }]], { usage: { totalTokens: tokens } }), user()], {
+      contextWindowTokens: 1_048_576,
+    });
+    assert.equal(a.degenerate, true, `qa's entry ${entry} (${tokens} tokens) must trip; reasons=${a.reasons.join(",")}`);
+    assert.ok(a.reasons.some((r) => r.startsWith("context-tokens=")), a.reasons.join(","));
+    // The calibration itself: the trip must be BELOW the first degenerate turn, or the guard is
+    // blind for the whole 351k-367k band in which qa was already producing incoherent output.
+    assert.ok(
+      a.contextTrip < 351_353,
+      `the trip (${a.contextTrip}) must sit below qa's first degenerate turn (351,353)`,
+    );
+  }
+  // ...and calibrating for the real turns must not cost the healthy case its safety.
+  const healthy = assessRun([assistant([["read", { path: "a" }]], { usage: { totalTokens: 300_000 } }), user()], {
+    contextWindowTokens: 1_048_576,
+  });
+  assert.equal(healthy.degenerate, false, "a healthy 300k session still does not trip");
+});
+
+check("no resolved window => the context cause is SKIPPED with a why, never guessed (#1823)", () => {
+  const a = assessRun([assistant([["read", { path: "a" }]], { usage: { totalTokens: 999_999 } }), user()]);
+  assert.equal(a.degenerate, false, "no window: no context trip");
+  assert.equal(a.contextWindow, null);
+  assert.equal(a.contextSkip, "no-context-window");
 });
 
 check("idempotent: an entry page already ending in pi.reset is skipped", () => {
@@ -199,7 +270,7 @@ check("only the CURRENT run is judged; an old degenerate run behind a wake is ig
 });
 
 check("defaults are conservative and complete", () => {
-  for (const key of ["maxToolTurns", "maxRepeats", "maxMalformed", "maxPseudoToolCalls", "maxLanguageDrift", "minLanguageDriftChars", "minLanguageDriftRatio", "maxContextTokens", "repeatHorizon"]) {
+  for (const key of ["maxToolTurns", "maxRepeats", "maxMalformed", "maxPseudoToolCalls", "maxLanguageDrift", "minLanguageDriftChars", "minLanguageDriftRatio", "minContextTokens", "contextFraction", "contextCeilingTokens", "repeatHorizon"]) {
     assert.ok(Number.isFinite(DEGEN_DEFAULTS[key]), `missing default ${key}`);
   }
 });
@@ -278,6 +349,49 @@ await checkAsync("applyResets reports a failing seat and still resets the others
   assert.equal(applied.length, 1);
   assert.equal(applied[0].seat, "b");
   assert.deepEqual(resetCalls, [2]);
+});
+
+check("a slow TOOL result is not a slow ASSISTANT turn (#1703)", () => {
+  // The defect: a legitimate ~5-minute demo sweep ran as a TOOL, and the guard read the tool
+  // result's durationMs as the MODEL's turn duration, resetting the seat in a hot loop.
+  const a = assessRun([
+    toolResult(301_935), // newest first: the tool result...
+    assistant([["powershell", { command: "npm test" }]], { durationMs: 2_075 }), // ...from a fast turn
+    user(),
+  ]);
+  assert.equal(a.turnDurationMs, 2_075, "the tool's runtime is not a turn duration");
+  assert.equal(a.degenerate, false, "a slow tool run does not reset the seat");
+  assert.deepEqual(a.reasons, []);
+});
+
+check("a genuinely slow ASSISTANT turn still trips the bound (#1703)", () => {
+  const a = assessRun([assistant([], { durationMs: 301_935 }), user()]);
+  assert.equal(a.turnDurationMs, 301_935, "the assistant turn's duration is counted");
+  assert.equal(a.degenerate, true, "the real stall is still caught");
+  assert.ok(
+    a.reasons.some((r) => r.startsWith("turn-duration-ms=")),
+    `the reason names the duration cause; got ${a.reasons.join(", ")}`,
+  );
+});
+
+check("a run that continues after a reset does not re-trigger the guard (#1704)", () => {
+  // The observed loop: the reset was applied, the seat ran once more, and the OLD degenerate
+  // run was still counted (a reset is not a `pi.user`), so the guard re-fired every pass.
+  const a = assessRun([
+    assistant([["read", { path: "a" }]]), // the turn the seat ran AFTER the reset
+    reset(), // the reset already applied
+    pseudoCall(), // the OLD degenerate run, before the reset
+    user(),
+  ]);
+  assert.equal(a.justReset, true, "the reset is seen as the run boundary");
+  assert.equal(a.pseudoToolCalls, 0, "the pre-reset run is not re-counted");
+  assert.equal(a.degenerate, false, "the guard does not re-fire");
+});
+
+check("a reset at the top of the page is justReset, never degenerate (#1704)", () => {
+  const a = assessRun([reset(), assistant([["read", { path: "a" }]]), user()]);
+  assert.equal(a.justReset, true);
+  assert.equal(a.degenerate, false);
 });
 
 console.log(failures === 0 ? "\nPASS — degeneration detector verified" : `\nFAIL — ${failures} check(s) failed`);

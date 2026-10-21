@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 
 I'm interested in discovering how different project embed Pi behind a service/daemon for building a system around it. My project is to use it as a base for building a team of agents which have supervisor monitoring them for issues and a broker managing their tasks.
 

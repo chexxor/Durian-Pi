@@ -164,7 +164,11 @@ export class ScreenBuffer {
 export function readGolden(name) {
 	const file = join(GOLDEN_DIR, `${name}.txt`);
 	if (!existsSync(file)) return null;
-	return readFileSync(file, "utf8").replace(/\r\n/g, "\n").replace(/\n+$/, "");
+	// #3941: strip exactly ONE terminating newline (the writer appends exactly one), not every
+	// trailing newline. The old `\n+$` made a frame ending in BLANK ROWS unrepresentable: the
+	// expected side lost its trailing blanks while the actual kept them, so a golden could never
+	// pin a screen that fills its viewport. A blank row is content here, not a file terminator.
+	return readFileSync(file, "utf8").replace(/\r\n/g, "\n").replace(/\n$/, "");
 }
 
 /**

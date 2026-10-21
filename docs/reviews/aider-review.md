@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Competitor review — Aider (`Aider-AI/aider`)
 
 *Read 2026-10-17 by the delegate. Clone pinned at HEAD `5dc9490bb35f9729ef2c95d00a19ccd30c26339c`

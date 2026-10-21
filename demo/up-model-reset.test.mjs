@@ -29,7 +29,7 @@ const rigPath = join(base, "rig.demo.json");
 const cliPath = join(process.cwd(), "cli.mjs");
 const cwdRoot = process.cwd();
 
-// Rig spec: one impl seat; the model is set separately via DURIG_MODEL per phase
+// Rig spec: one impl seat; the model is set separately via DURIAN_PI_MODEL per phase
 // (default MODEL_ID streams the provider's canned reply; the RIG later pins seat.model).
 const starter = JSON.parse(readFileSync(join(cwdRoot, "rig.starter.json"), "utf8"));
 // Keep only impl to shrink the surface: the seam is per-seat.

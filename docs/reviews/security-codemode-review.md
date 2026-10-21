@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Security round — codemode for durig seats
 
 **Status: delegate security round, 2026-10-17. This is the input to the `security.sec` position that

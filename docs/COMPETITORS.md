@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Comparators we can learn from
 
 Other multi-agent / durable-agent systems whose **design and architecture**
@@ -142,3 +144,47 @@ with one-commit-per-concern + explicit paths), and the raw fuzzy **similarity** 
 
 **What it does not give us:** a runtime, durability, queue, seats, or verifier split. Edit/verify
 mechanics only.
+
+---
+
+## agent-governance-toolkit — `microsoft/agent-governance-toolkit`
+
+- **Repo:** https://github.com/microsoft/agent-governance-toolkit · MIT.
+- **Read at:** clone `../vendor/eval/agent-governance-toolkit`, HEAD `cfb44576` (shallow, 2026-10-17).
+- **What it is:** an application-layer **governance + agent-SRE** toolkit — deterministic, fail-closed
+  policy interception for tool calls, Ed25519/DID identity, execution rings, kill switch/saga, SLOs,
+  circuit breakers, chaos testing, incident detection, and structured incident runbooks. Six subsystems,
+  each with an RFC-2119 spec + 25 ADRs. Not a durable queue/store/fleet substrate, and a **public
+  preview** (spec runs ahead of code: quarantine is a removed stub, `HALF_OPEN` is never entered).
+- **Review:** `docs/reviews/agent-governance-toolkit-review.md`.
+- **Adopt-or-build:** do not adopt (different layer); read it for four **security** mechanisms and five
+  **healing** mechanisms. Registered as ROADMAP 133–144.
+
+| What it does | Why it is worth learning from | durig counterpart |
+|---|---|---|
+| **Fail closed on every policy-evaluation error** — any exception → deny; no fail-open flag (`docs/adr/0013-...`) | A passing check must mean the rules *ran*, not that evaluation was skipped | durig refusals are per-guard, not one decision point with a deny-on-error invariant (ROADMAP 133) |
+| **Structured denial** (`rule_id`, `action`, `policy_version`, `agent_id`) (`docs/ERROR_HANDLING.md`) | A refusal that names its rule is auditable and teachable | string refusal messages in `src/confine.mjs` (ROADMAP 134) |
+| **Monotone context ratchet** — max-lattice sensitivity + grow-only restrictions, inherited on delegation (`docs/security/context-accumulation-governance.md`, `.../policies/context_envelope.py`) | A signal raised once must not be silently lowered by a later quiet turn | pass-end degeneration assessment can forget a signal once the window moves (ROADMAP 135) |
+| **Threat model per trust boundary** (human→agent→agent→tool→platform, STRIDE) (`docs/security/threat-model.md`) | A fixed boundary checklist beats a prose method | `security-trust-boundary-review.md` has the method, no fixed taxonomy (ROADMAP 136) |
+| **Per-seat circuit breaker** — trip after N failures, `is_available` only when CLOSED, manual close (`docs/specs/AGENT-SRE-GOVERNANCE-1.0.md` §6, `.../cascade/circuit_breaker.py`) | Isolate a broken seat instead of re-waking it forever | `src/supervisor.mjs` escalates but never isolates (ROADMAP 137) |
+| **Structured incident lifecycle + typed signals + dedup/correlation windows** (`docs/specs/AGENT-SRE-GOVERNANCE-1.0.md` §14, `.../incidents/detector.py`) | Turns a notice stream into durable, non-duplicating incidents | `docs/incidents/` exists but detection is manual; `attention` has no dedup (ROADMAP 139) |
+| **Executable runbooks with per-step rollback + approval gates + trigger conditions** (`.../incidents/runbooks/*.yaml`, `runbook_executor.py`) | Rollback and approval as first-class step fields | prose runbooks + ROADMAP 81–88/87 executor (ROADMAP 140) |
+| **Chaos faults incl. behavioural** (`DEADLOCK_INJECTION`, `TRUST_PERTURBATION`) + abort conditions + resilience score (`AGENT-SRE-GOVERNANCE-1.0.md` §7) | Test the agent failure modes a process-crash test cannot reach | ROADMAP 67 host chaos suite is process-level (ROADMAP 141) |
+| **Rogue detection** — frequency z-score + action entropy (repetitive *and* chaotic) + capability violations (`.../anomaly/rogue_detector.py`) | Catches the chaotic pole the repeat-counter is blind to | `src/degeneration.mjs` counts repeats/turns only (ROADMAP 142) |
+| **Advisory→blocking graduation checklist** (`docs/operations/advisory-to-blocking-graduation.md`) | Turns "no false positives before enabling" into a dated gate + rollback | the degeneration guard's zero-false-positive rule is currently prose (ROADMAP 144) |
+
+**Not to borrow:** Ed25519/DID mesh, execution rings, trust scoring 0–1000, the multi-language SDK
+sprawl, the enterprise certification (SOC2 / EU AI Act / NIST / ISO) mappings, and the `<0.1 ms` policy-engine figure quoted as end-to-end overhead
+(`docs/LIMITATIONS.md` §3). Wrong layer for a single-operator local rig; the least-privilege principle
+is already ROADMAP 60.
+
+**What it does not give us:** any durable queue, single-writer store, crash recovery, seats, or
+landing/merge model — every durig-internal durability and recovery mechanism stays ours.
+
+**Policy surface (OWASP).** AGT also maps to the **OWASP Agentic Top 10 (ASI01-ASI10)**, the OWASP
+LLM Top 10, and the OWASP MCP Top 10, and ships four policy packs (`examples/policy-templates/`)
+plus 14 static review rules mapped to ASI risks (`.../copilot-governance/src/reviewer.ts`). The
+**ASI Top 10 is a directly applicable external checklist** for durig and is adopted (self-assessment,
+deny-by-default budgets, security lint, output screening, reversibility-aware approval, vendored-code
+supply chain) - see the review Addendum and ROADMAP **145-150**. The enterprise certification
+mappings stay out of scope.

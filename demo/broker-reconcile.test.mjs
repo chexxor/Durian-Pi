@@ -85,7 +85,8 @@ try {
 		// intent is spooled again and re-drained.
 		writeIntent(dbPath, { to: "worker", from: "operator", content: "hello", requestId: "req-fixed" });
 		const second = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
-		assert.equal(second.delivered, 1, "the re-drain is delivered (not dead-lettered)");
+		assert.equal(second.delivered, 0, "the re-drain is NOT re-applied");
+		assert.equal(second.duplicates, 1, "the recorded result marks it a duplicate (applied once)");
 
 		const page = await storage.scanSubmissions(
 			{ conversationId: workerConvId, order: "ascending" },

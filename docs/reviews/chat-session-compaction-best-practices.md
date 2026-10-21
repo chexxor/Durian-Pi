@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 I am making a harness that manages a team of llm agents, named opendurig: https://github.com/chexxor/Pi-OpenDurig
 
 What does academic research and industry best practices say is best practices for chat session compaction vs starting a new session?

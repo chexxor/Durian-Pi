@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # Vendored: pi-warden (port source, not a dependency)
 
 `dist/`, `LICENSE` and `package.json` are copies of files from **pi-warden v1.4.0**,

@@ -1,7 +1,7 @@
 // demo/broker-seat-attr.test.mjs — B2: concurrent generations attribute to correct seat.
 //
 // With N>1 slots, each concurrent generation should read ITS OWN seat name
-// from the ALS context, not the global DURIG_ACTIVE_SEAT env var.
+// from the ALS context, not the global DURIAN_PI_ACTIVE_SEAT env var.
 //
 // Run: node demo/broker-seat-attr.test.mjs  (exit 0 = pass)
 

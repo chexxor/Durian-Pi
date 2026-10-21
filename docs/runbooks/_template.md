@@ -22,7 +22,7 @@ check_rule: null                 # optional: the check rule that re-tests this
 
 ## Diagnose (read-only)
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs status
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
 ```
 
 ## Do

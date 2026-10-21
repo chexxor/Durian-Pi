@@ -19,7 +19,7 @@
 
 import { ANSI } from "./ansi.mjs";
 import { countMalformedToolCalls } from "./attention.mjs";
-import { seatsAreVerifier } from "./checkup.mjs";
+import { seatsAreVerifier } from "./verifierrole.mjs";
 
 /**
  * A tool call whose canonical key duplicates one the same seat made within its
@@ -55,6 +55,10 @@ export const RETRIEVAL_TOOLS = [
  * fails "actionable"; shared-reviewer-model fails "not already visible" (it is
  * a `check` rule), so both stay in the deliberate table.
  */
+
+/** The `pass-failed` count is windowed to this many hours of the log's own timestamps. */
+export const PASS_FAILED_WINDOW_HOURS = 24;
+
 export const MEASURES = {
 	"step-repetition": {
 		scope: "rig",
@@ -77,6 +81,18 @@ export const MEASURES = {
 		what: "a seat emitting tool-call arguments the harness rejects (a cause, not a domain error)",
 		blind:
 			"reads the harness's validation text on the entry because the structured diagnostic code is not persisted; a differently-worded rejection is missed",
+	},
+	"pass-failed": {
+		scope: "rig",
+		klass: "direct",
+		direction: "up-worse",
+		unit: `broker passes that THREW in the last ${PASS_FAILED_WINDOW_HOURS}h, logged as PASS-FAILED`,
+		band: { kind: "absolute", enter: 1, exit: 0 },
+		ambient: true,
+		what: "a broker pass that threw and was caught — the hot-loop class (ROADMAP 78 / #2237)",
+		blind:
+			"counts lines in <db>.broker.log, which is unbounded and NOT rotated; the count is windowed to the log's own ISO timestamps over the last " +
+			`${PASS_FAILED_WINDOW_HOURS}h (a partial tail line is skipped), and a broker that never wrote a log reads as no data, never as healthy`,
 	},
 	"unverified-completions": {
 		scope: "rig",
@@ -134,6 +150,28 @@ function canonical(value) {
 export function measureMalformedToolCalls(pages) {
 	let value = 0;
 	for (const items of Object.values(pages ?? {})) value += countMalformedToolCalls(items);
+	return { value };
+}
+
+/**
+ * Broker passes that THREW, counted from `<db>.broker.log` (ROADMAP 78 / #2237, #2643). The broker
+ * EMITS the `pass-failed` diagnostic and writes a `PASS-FAILED <error> cause=<chain>` line; this
+ * makes those existing emissions VISIBLE to the metric surface. PURE: the caller reads the log and
+ * passes its text (a partial tail line without a leading ISO timestamp is skipped). `null`/absent
+ * log => `null` (no data), never a false zero; a log with no PASS-FAILED in the window => 0.
+ */
+export function measurePassFailed(brokerLog, { nowMs = Date.now(), windowHours = PASS_FAILED_WINDOW_HOURS } = {}) {
+	if (typeof brokerLog !== "string" || brokerLog.length === 0) return { value: null };
+	const cutoff = nowMs - windowHours * 60 * 60 * 1000;
+	let value = 0;
+	for (const line of brokerLog.split("\n")) {
+		// `logBrokerLine` prefixes every line with an ISO timestamp; a line without one (a partial
+		// tail) is not a complete record, so it is skipped rather than counted.
+		const at = /^(\d{4}-\d{2}-\d{2}T[0-9:.]+Z) /.exec(line);
+		if (!at || !/(^|\s)PASS-FAILED(\s|$)/.test(line)) continue;
+		const ts = Date.parse(at[1]);
+		if (Number.isFinite(ts) && ts >= cutoff) value += 1;
+	}
 	return { value };
 }
 
@@ -364,6 +402,7 @@ export function computeMetrics({
 	modelsBySeat = {},
 	nowMs = Date.now(),
 	bounded = false,
+	brokerLog = null,
 } = {}) {
 	const { current, previous } = splitWindows(pages);
 
@@ -375,10 +414,19 @@ export function computeMetrics({
 	const malformedPrev = measureMalformedToolCalls(previous);
 	const ageing = measureQueueAgeing(queueItems, nowMs);
 	const shared = measureSharedReviewerModel({ seats, modelsBySeat });
+	// #2643: the broker's own thrown-pass lines, from `<db>.broker.log` (the only DURABLE artifact
+	// of the `pass-failed` diagnostic). No new emission — this only COUNTS what is already emitted.
+	const passFailed = measurePassFailed(brokerLog, { nowMs });
 
 	const measures = [
 		row("step-repetition", reps, repsPrev.value ?? null),
 		row("malformed-tool-call", malformed, malformedPrev.value ?? null),
+		row("pass-failed", passFailed, undefined, {
+			detail:
+				passFailed.value === null
+					? "no broker log to read"
+					: `${passFailed.value} in the last ${PASS_FAILED_WINDOW_HOURS}h`,
+		}),
 		row("unverified-completions", unver, unverPrev.value ?? null),
 		row("queue-ageing", ageing, undefined, {
 			detail:

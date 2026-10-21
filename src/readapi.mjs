@@ -11,14 +11,50 @@
 // store without becoming a driver.
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { RigQueue, Seats } from "./rig.mjs";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
+import { RigControl, RigQueue, Seats } from "./rig.mjs";
 import { SCAN_LIMIT, readSeatPages } from "./rigstory.mjs";
 import { computeMetrics } from "./metrics.mjs";
 import { computeAttention, countMalformedToolCalls } from "./attention.mjs";
 import { failureStreak } from "./supervisor.mjs";
-import { strandedMsSetting } from "./config.mjs";
+import { strandedMsSetting, declaredContextWindow } from "./config.mjs";
+import { contextConsumption } from "./context.mjs";
+import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
-import { partialView, peerGraph } from "./viewmodel.mjs";
+import { deriveSeatAction, partialView, peerGraph } from "./viewmodel.mjs";
+import { LOCAL_PROVIDER_ID, localProviderSpec } from "./providers/local.mjs";
+
+/**
+ * The TAIL of `<db>.broker.log`, capped at `maxBytes` (the log is unbounded and NOT rotated, see
+ * the `pass-failed` measure's blind spot). Read-only; an absent/unreadable log reads as null, never
+ * as an empty pass. A partial first line (no leading ISO timestamp) is skipped by the counter.
+ * The path mirrors `brokerLogPath` in src/broker.mjs — inlined here so the read API does not pull
+ * the provider stack (broker.mjs imports pi-ai) into every read-only client.
+ */
+function readBrokerLogTail(dbPath, maxBytes = 256 * 1024) {
+	if (!dbPath) return null;
+	let fd = null;
+	try {
+		const path = `${dbPath}.broker.log`;
+		const size = statSync(path).size;
+		if (size === 0) return "";
+		const start = Math.max(0, size - maxBytes);
+		fd = openSync(path, "r");
+		const buf = Buffer.alloc(size - start);
+		readSync(fd, buf, 0, buf.length, start);
+		return buf.toString("utf8");
+	} catch {
+		return null;
+	} finally {
+		if (fd !== null) {
+			try {
+				closeSync(fd);
+			} catch {
+				// best-effort close; the read already succeeded or failed
+			}
+		}
+	}
+}
 
 /** The seats a store holds, as the plain {name, conversationId, role} shape a
  * renderer or client consumes. An absent session document is an empty rig, not
@@ -37,6 +73,76 @@ export async function readSeatList(storage, context = BACKGROUND_CONTEXT) {
 	}));
 }
 
+/**
+ * Each seat's PERSISTED root (`pi.agent`.cwd) — the strongest liveness signal the worktree
+ * audit (ROADMAP 76) has: a worktree that is some seat's current cwd is IN USE regardless of
+ * its item's queue status. Read-only; an unreadable `pi.agent` reads as null, never fatal.
+ */
+export async function readSeatRoots(storage, context = BACKGROUND_CONTEXT) {
+	const seats = await readSeatList(storage, context);
+	const roots = [];
+	for (const seat of seats) {
+		try {
+			const rec = await storage.findDocument(
+				{ kind: "pi.agent", scope: { kind: "conversation", conversationId: seat.conversationId } },
+				"current",
+				context,
+			);
+			const cwd = rec ? (await storage.document(rec.id, "current", context))?.value?.cwd ?? null : null;
+			if (cwd) roots.push({ name: seat.name, cwd });
+		} catch {
+			// A viewer must survive an unreadable pi.agent: skip this seat's root.
+		}
+	}
+	return roots;
+}
+
+/**
+ * Each seat's PERSISTED model (`pi.agent`.model) as `provider/modelId`, keyed by seat name.
+ *
+ * #2231: the store DOES record which model a seat runs — in the conversation's `pi.agent`
+ * document (`configure` writes it at `up`) — even though the roster (`durig.seats`) does not.
+ * The context denominator needs it: with no rig spec the read surface had no model key, so
+ * `declaredContextWindow` could not see a LOCAL seat's declared window and
+ * `window.denominator` stayed null. Read-only; an unreadable `pi.agent` reads as absent,
+ * never fatal (the same survival rule as `readSeatRoots`).
+ */
+export async function readSeatModels(storage, seats, context = BACKGROUND_CONTEXT) {
+	const models = {};
+	for (const seat of seats) {
+		try {
+			const rec = await storage.findDocument(
+				{ kind: "pi.agent", scope: { kind: "conversation", conversationId: seat.conversationId } },
+				"current",
+				context,
+			);
+			const model = rec ? (await storage.document(rec.id, "current", context))?.value?.model : null;
+			if (model && typeof model.provider === "string" && typeof model.modelId === "string") {
+				models[seat.name] = `${model.provider}/${model.modelId}`;
+			}
+		} catch {
+			// A viewer must survive an unreadable pi.agent: skip this seat's model.
+		}
+	}
+	return models;
+}
+
+/**
+ * The LOCAL provider's own declared context window, when this seat runs it (#2231).
+ *
+ * A local seat's window is declared in config (`DURIG_LOCAL_CONTEXT`, surfaced by
+ * `localProviderSpec`) rather than in `DURIG_CONTEXT_WINDOW`, so the generic
+ * `declaredContextWindow` misses it. It is a genuine DECLARATION, so it belongs in the
+ * `declared` state (never `advertised`), and only a seat whose model names the local
+ * provider gets it — a remote seat must not inherit the local window.
+ */
+function localSeatWindow(localSpec, modelKey) {
+	if (!localSpec) return null;
+	if (typeof modelKey !== "string" || !modelKey.startsWith(`${LOCAL_PROVIDER_ID}/`)) return null;
+	const n = Number(localSpec.contextWindow);
+	return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /** The queue's items, newest-current document. Returns [] for an absent store so
  * a first-run read is empty rather than exceptional. */
 export async function readQueueItems(storage, context = BACKGROUND_CONTEXT) {
@@ -47,6 +153,33 @@ export async function readQueueItems(storage, context = BACKGROUND_CONTEXT) {
 	);
 	const value = rec ? (await storage.document(rec.id, "current", context))?.value ?? {} : {};
 	return value.items ?? [];
+}
+
+/**
+ * The rig-level control document (ROADMAP 131): `paused` and its provenance. Absent
+ * store reads as NOT paused, so a first-run/legacy store is unpaused rather than
+ * exceptional. Read-only: `status` renders it, it never writes it.
+ */
+export async function readRigControl(storage, context = BACKGROUND_CONTEXT) {
+	try {
+		const rec = await storage.findDocument(
+			{ kind: RigControl.definition.kind, scope: { kind: "session" } },
+			"current",
+			context,
+		);
+		if (!rec) return { paused: false, pausedAt: null, pausedBy: null, reason: null };
+		const value = (await storage.document(rec.id, "current", context))?.value ?? {};
+		return {
+			paused: value.paused === true,
+			pausedAt: value.pausedAt ?? null,
+			pausedBy: value.pausedBy ?? null,
+			reason: value.reason ?? null,
+		};
+	} catch {
+		// A viewer must survive a corrupt control document: read it as unpaused rather
+		// than killing `status`/`watch` (the same discipline as an unreadable pi.live).
+		return { paused: false, pausedAt: null, pausedBy: null, reason: null, unreadable: true };
+	}
 }
 
 /** The `pi.live` document for one conversation: run control, the in-flight
@@ -98,10 +231,20 @@ export async function readRigHealth(
 	storage,
 	dbPath,
 	slots,
-	{ modelsBySeat = {}, entryLimit = SCAN_LIMIT, cfg = undefined } = {},
+	{ modelsBySeat = {}, entryLimit = SCAN_LIMIT, cfg = undefined, windowsBySeat = {} } = {},
 ) {
 	const seats = await readSeatList(storage);
 	const queueItems = await readQueueItems(storage);
+	// #2231: the roster carries no model, but each conversation's `pi.agent` does. Resolve the
+	// seats the caller did NOT already supply a model for, so a LOCAL seat's declared window is
+	// visible to the context denominator even when no rig spec was passed (the `status` path).
+	const agentModels = await readSeatModels(
+		storage,
+		seats.filter((seat) => !modelsBySeat[seat.name]),
+	);
+	const localSpec = localProviderSpec(cfg);
+	// ROADMAP 131: the rig-level paused state (read-only).
+	const control = await readRigControl(storage);
 
 	const latestByConv = new Map();
 	const failureStreakByConv = new Map();
@@ -140,15 +283,28 @@ export async function readRigHealth(
 	const pages = await readSeatPages(storage, BACKGROUND_CONTEXT, seats, entryLimit);
 	// The submission record carries no admission timestamp (scanSubmissions
 	// returns id/status/entry only), so recover it from the admitted input ENTRY's
-	// timestamp for the admitted_not_started notice; left undefined when that entry
-	// has fallen off the bounded page (ROADMAP 37a).
+	// timestamp for the admitted_not_started notice. When that entry has fallen off
+	// the BOUNDED page (ROADMAP 37a), fall back to the newest entry the page DOES
+	// carry, so `lastActivity` keeps meaning ACTIVITY (#2229).
 	for (const seat of seats) {
 		const latest = latestByConv.get(seat.conversationId);
 		const entryId = latest?.entry;
 		if (!latest || entryId == null) continue;
 		const admitted = (pages[seat.name] ?? []).find((e) => e.id === entryId);
 		const ts = admitted?.model?.[0]?.timestamp;
-		if (Number.isFinite(ts)) latest.admittedAt = ts;
+		if (Number.isFinite(ts)) {
+			latest.admittedAt = ts;
+			continue;
+		}
+		// #2229 (operator hit): the admission entry is off-page — a long conversation, or a
+		// compaction between admission and read — so `admittedAt` stayed undefined and the
+		// field was OMITTED, rendering an ACTIVE, mid-run seat as IDLE on `status`/`ui` (the
+		// operator concluded "the local seats are not taking work"). `lastActivity` means
+		// ACTIVITY, not "the last admitted submission": fall back to the NEWEST entry the
+		// seat's page actually carries (newest-first, so the first finite timestamp wins).
+		// Still no field when the page holds no timestamp at all — the honest empty state.
+		const newestTs = (pages[seat.name] ?? []).map((e) => e?.model?.[0]?.timestamp).find((t) => Number.isFinite(t));
+		if (Number.isFinite(newestTs)) latest.admittedAt = newestTs;
 	}
 	// ASK B (#502): project each seat's last activity onto its row. ISO-8601
 	// (Date.toISOString) keeps the JSON contract comparable across surfaces, and
@@ -168,6 +324,9 @@ export async function readRigHealth(
 		// Say the window was cut only when a page actually hit the limit, so
 		// "bounded" is a fact about this reading rather than a standing claim.
 		bounded: Object.values(pages).some((items) => items.length >= entryLimit),
+		// #2643 (ROADMAP 78): the broker's own PASS-FAILED lines, so a thrown pass is MONITORED and
+		// not only logged. The only durable artifact of the `pass-failed` diagnostic is the log.
+		brokerLog: readBrokerLogTail(dbPath),
 	});
 	// The failure CAUSE is in the entry, not in the submission record: the record
 	// carries a category ("model_error"), the entry carries the provider's
@@ -187,6 +346,13 @@ export async function readRigHealth(
 	for (const seat of seats) {
 		malformedCountByConv.set(seat.conversationId, countMalformedToolCalls(pages[seat.name] ?? []));
 	}
+	// READ-SIDE secret detection (item #828): scan the same committed entry pages
+	// the metrics/highlights passes already read, so this adds no scan and no write
+	// path — only a signal. The findings carry WHERE, never the value.
+	const secretFindings = [];
+	for (const seat of seats) {
+		secretFindings.push(...scanEntriesForSecrets(seat, pages[seat.name] ?? []));
+	}
 	// Admission age beyond which an unstarted submission is surfaced as stranded
 	// (ROADMAP 37a); null means the module default in src/attention.mjs stands.
 	const strandedMs = strandedMsSetting(cfg);
@@ -198,9 +364,35 @@ export async function readRigHealth(
 		const partial = partialView(await readLiveState(storage, seat.conversationId));
 		if (partial?.hasContent) streaming[seat.name] = partial;
 	}
+	// ROADMAP 27 / #1192: the per-seat context-consumption measure, exposed on the health
+	// snapshot so `status`/`watch` and the TUI render it VERBATIM (the TUI owns no
+	// denominator logic). The three-state denominator travels with the value: `measured` is
+	// item 97's effective window (#1087) — reserved here and absent today; `declared` is the
+	// operator's config; `advertised` is the caller's catalog figure. The caller may supply
+	// any of the three per seat via `windowsBySeat`; `declared` otherwise falls back to
+	// `DURIG_CONTEXT_WINDOW`. See src/context.mjs for why the state is not optional.
+	const context = {};
+	for (const seat of seats) {
+		const supplied = windowsBySeat[seat.name] ?? {};
+		// An explicit, spec-supplied model wins over the persisted one (they agree today; the
+		// spec is the caller's deliberate answer).
+		const modelKey = modelsBySeat[seat.name] ?? agentModels[seat.name] ?? null;
+		context[seat.name] = contextConsumption(pages[seat.name] ?? [], {
+			measured: supplied.measured ?? null,
+			declared:
+				supplied.declared ??
+				declaredContextWindow(cfg, modelKey) ??
+				localSeatWindow(localSpec, modelKey),
+			advertised: supplied.advertised ?? null,
+		});
+	}
 	return {
 		seats,
 		queueItems,
+		// ROADMAP 131: the rig-level paused state, so `status`/`watch` report it and the
+		// operator KNOWS whether new work is being taken.
+		control,
+		paused: control.paused,
 		// The peer navigation graph over the same queue items, so a client can ask
 		// "who talks to whom" without re-deriving it from from/to (ROADMAP item 7,
 		// D21). Additive to the JSON contract: existing readers ignore it.
@@ -211,6 +403,8 @@ export async function readRigHealth(
 		// Per-seat in-flight partials, so any client can show "streaming now"
 		// distinctly from committed turns.
 		streaming,
+		// Per-seat context consumption with its three-state denominator (ROADMAP 27, #1192).
+		context,
 		attention: [
 			...computeAttention(seats, queueItems, latestByConv, errorByConv, {
 				nowMs: Date.now(),
@@ -224,8 +418,84 @@ export async function readRigHealth(
 			// of their own: same slot, same rendering, and signal only when a measure
 			// has actually moved (METRICS.md, "the move").
 			...metrics.notices,
+			// A secret-shaped value in committed content rides the same attention
+			// channel as every other operator-visible fact: same slot, same rendering,
+			// names WHERE and never the value.
+			...secretNotices(secretFindings),
 		],
+		// The detection artifact, exposed so a caller (`check`, a future TUI pane)
+		// can act on WHERE without re-scanning; carries no value by construction.
+		secretFindings,
 		// Internal: watch derives highlights from these instead of re-scanning.
 		_pages: pages,
 	};
+}
+
+/**
+ * The queue statuses a LANDING row counts, in the order the renderer may show them.
+ * Deliberately the four LIVE statuses and nothing else: `done` and `cancelled` are
+ * terminal history, and counting them would make a seat's "queue size" grow forever as
+ * it finishes work — a number nobody could explain (ROADMAP 124's warning).
+ */
+export const LANDING_QUEUE_STATUSES = ["queued", "claimed", "held", "deferred"];
+
+/**
+ * The LANDING projection (ROADMAP 124): per seat, what it is working on and how much is
+ * waiting behind it, in the shape a landing screen renders.
+ *
+ * PURE over a `readRigHealth()` snapshot — it takes no storage handle and performs no I/O,
+ * so one batched read feeds every seat on the screen. That is the point of the seam
+ * (#3103: one spool round trip, never 1+N). A renderer that needs this data must call
+ * `readRigHealth` once and pass the result here; it must not loop `readQueueItems` per seat.
+ *
+ * Per seat:
+ *  - `action`  — the seat's current action, using the ONE vocabulary the status bar uses
+ *                (`SEAT_ACTIONS` in src/viewmodel.mjs, #2826). Not a parallel enum.
+ *  - `queue`   — `{ total, queued, claimed, held, deferred }`; `total` is the sum of those
+ *                four live statuses, so the composition is always explainable.
+ *  - `claimed` — `{ id, subject }` for the item the seat is working on, or `null`.
+ *                `null` is an explicit answer ("nothing claimed"), never a blank field.
+ *  - `deferred`— `{ id, subject, deferredTo }` when the seat is parked on a question.
+ *  - `notices` — the seat-scoped attention KINDS, unchanged from the health snapshot.
+ *  - `lastActivity` — passed through from the seat row, unchanged.
+ *
+ * The subject is returned as stored; the renderer owns truncation (it knows the width, this
+ * module does not), so a brief is never baked into the data path.
+ */
+export function projectLanding(health) {
+	const items = health?.queueItems ?? [];
+	const seats = (health?.seats ?? []).map((seat) => {
+		const mine = items.filter((it) => it.to === seat.name);
+		const counts = { queued: 0, claimed: 0, held: 0, deferred: 0 };
+		for (const item of mine) {
+			if (Object.hasOwn(counts, item.status)) counts[item.status] += 1;
+		}
+		const total = LANDING_QUEUE_STATUSES.reduce((n, status) => n + counts[status], 0);
+		const action = deriveSeatAction(seat, health);
+		const brief = (item) =>
+			item ? { id: item.id, subject: item.subject } : null;
+		return {
+			name: seat.name,
+			role: seat.role ?? null,
+			// Unchanged passthrough: the landing screen shows the same freshness the seat
+			// row already carries, so the two surfaces cannot disagree about "recently active".
+			lastActivity: seat.lastActivity ?? null,
+			action: action.state,
+			focus: action.focus,
+			queue: { total, ...counts },
+			claimed: brief(action.claimed),
+			deferred: action.deferred
+				? {
+						...brief(action.deferred),
+						deferredTo: action.deferred.deferredTo ?? null,
+						// The QUESTION is the operator-triage fact a landing row shows for a parked
+						// seat (designer spec #3307 §2), so it belongs in the data path rather than
+						// being re-read from the store by the renderer.
+						question: action.deferred.question ?? null,
+					}
+				: null,
+			notices: action.notices.map((n) => n.kind),
+		};
+	});
+	return { seats };
 }

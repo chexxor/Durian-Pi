@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 What are the most efficient techniques for prompting an LLM Agent to resolve a git merge and/or edit code files? I feel like providing a diff-application tool would be effective and asking the agents to produce file diffs. And for merging git branches, we might be able to find an existing tool that allows an LLM agent to send a single command that states how to resolve each conflict chunk in a file, like "resolve file.html Left, Left, Right, Left"
 What does academic research and industry practices say about this?
 
