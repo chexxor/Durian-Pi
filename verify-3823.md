@@ -1,4 +1,4 @@
-﻿# Verification for #3823 (#3807) — explicit base= on CREATE path
+# Verification for #3823 (#3807) — explicit base= on CREATE path
 
 All 5 behavioral scenarios verified:
 1. Explicit base, leftover at DIFFERENT commit -> REFUSED, no dir created, no worktree registered
