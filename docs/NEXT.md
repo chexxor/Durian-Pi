@@ -266,9 +266,19 @@ documented `pass=180 fail=1` baseline and have no item: ask `pm` to mint them.
 **The seat's parked work is intact** at `stash@{0}` ("delegate: park a seat's 21-file shared-tree WIP for the
 9c3aa02 revert") plus a patch at `.spike/delegate/revert-9c3aa02-2026-10-20/` — its author must redo it on
 a BRANCH; do not pop the stash blind.
-**Queue id:** `#3313` (landing render) · `#3309` · `#3308` · `#3315`/`#3314` (verifies CANCELLED — re-register
-before accepting) · `#2412` (`pitui`) · `broker-one-connection` + `seat-instruction-encoding` regressions have
-NO item yet.
+**TUI slice status (corrected):** the slice IS on main — the landing screen, conversation
+header, status bar and the `projectLanding` data path are live, proven by `demo/tui-landing.test.mjs`,
+`demo/tui-status-bar.test.mjs`, `demo/tui-conversation-header.test.mjs` and `demo/landing-data.test.mjs`
+exit 0 on main. HOW it got there (no landing entry): the content reached main through the bare commit
+`595b714` (subject `docs(NEXT)`, code delta), was partly deleted by `9c3aa02`, and restored by revert
+`798836b`; #3314/#3315 verifies were cancelled. The landing entries #3436, #3466 and the stack #3740 are
+CANCELLED as stale — do not cite the branch names as pending work. What is NOT on main: the
+newline-preserving wrap fix is UNLANDED but EXTRACTED — `dbf4597` (impl-item-4017, landing entry #4040);
+`impl-item-3309` is superseded by that extraction rather than being the carrier (the 3309 branch is 57
+behind; landing it would delete newer content). The other durable-TUI branches
+(3308/3313/2826/3359/3437) are SUPERSEDED — see the DISPOSITIONS ledger (unlanded; landing entry #4151).
+**Still red on main (not caused by 595b714):** `broker-one-connection`, `pitui` (#2412),
+`seat-instruction-encoding` — all three also fail at `deff39c`, its parent.
 **Blocker:** `main` is red on **3** demos (was 7 — the revert fixed the TUI four), so `land.mjs --suite` is
 unusable; land without it and prove on `main`. Also standing: the local PolyStrata model is UP and SERVING
 `qwen3.8-flash-next-iq3_s` on `127.0.0.1:8080` (IQ3_S installed to `D:\PolyStrata-models`, smoke test 4.9 tok/s
