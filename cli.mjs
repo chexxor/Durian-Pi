@@ -2543,14 +2543,16 @@ async function cmdStatus() {
   const broker = brokerHealth(readBrokerState(DB_PATH), {
     streamTimeoutMs: streamSettings(CFG).stream?.timeoutMs ?? null,
   });
-  out({ ok: true, command: "status", db: DB_PATH, ...health, broker });
-  // `status` is the one-shot surface, so this is where the metrics command is
-  // discovered - and only when a measure has actually moved, because a
-  // pointer that prints every time stops being read.
+  // #4403: the note is CARRIED IN THE JSON, not written to stderr. `status` IS the machine-readable
+  // queue view (stdout is JSON by default, and `--json` is accepted), but a consumer that merges
+  // streams (`2>&1`) parses the note as a JSON value and fails with "Invalid JSON primitive: note" —
+  // and it fails only when a measure drifts, so a read works until it does not. A diagnostic that
+  // can break the authoritative view must be IN the view: the human renderer shows it, a JSON
+  // consumer reads it structurally, and NEITHER has to parse the other's format.
   const outOfBand = health.metrics.measures.filter((m) => m.state === "warn").length;
-  if (outOfBand > 0) {
-    console.error(`note: ${outOfBand} measure(s) out of band - see: node cli.mjs metrics`);
-  }
+  const notes =
+    outOfBand > 0 ? [`${outOfBand} measure(s) out of band - see: node cli.mjs metrics`] : [];
+  out({ ok: true, command: "status", db: DB_PATH, ...health, broker, notes });
 }
 
 /** Every seat's resolved model, from the spec. One definition so `check`'s
