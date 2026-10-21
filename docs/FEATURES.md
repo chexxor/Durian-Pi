@@ -416,44 +416,19 @@ it to the live store).
 ## 10. Proof surface
 
 The entire check surface is the demos plus `node --check`; there is no build or
-lint step.
+lint step. The suite is **every `demo/*.test.mjs`** — the offline test demos, one
+runnable proof per guarantee, each exit 0 on success. It is enumerated from the
+directory, so the count is derived, not maintained by hand:
 
-**123 offline test demos** — one runnable proof per guarantee, each exit 0 on success. (Measured on
-this checkout: 123 `demo/*.test.mjs` files — the suite is every `demo/*.test.mjs`, the exact set
-`scripts/land.mjs --suite` runs; at the broker upgrade `234e06e` it was 115, validated 115/0 with the
-TUI suite 15/15 on pin `8efd314f`.) The full enumeration:
 
-```
-autostart · blocked · broker · broker-cooldown-revisit ·
-broker-cooperative-stop · broker-dirty-fork · broker-inbox ·
-broker-intent-wake · broker-liveness · broker-log ·
-broker-max-duration · broker-reconcile · broker-seat-attr ·
-broker-strand · broker-wakepath · broker-wake-return ·
-broker-worktree-sweep · chatlog · check · check-autodiscover ·
-check-evidence · cli · cli-broker-refuse · cli-help · commit-model ·
-commit-secrets · compact · config · confine · constitution ·
-context-measure · converter · coordinator-queue · curate · defer ·
-degeneration · degeneration-duration · degeneration-text ·
-driversurvive · driversurvive-pre · dry-run · errorwording · eval ·
-events · extensions · f34 · format · genlock-hardening · init ·
-instance-key · job-object · land-helper · livestream · malformedcall ·
-mergeguard · metrics · notices · optimizer · ownership · peekqueue ·
-persistence · pitui · prepare-workspace · primer · provenance · race ·
-readapi · readboundary-corrupt-live · rearmclaim · refresh ·
-repeat-call · reset · resume · run · runbook-rules · sanitize ·
-scheduler · seat-commit-instructions · seatguard · seatmodel ·
-seatroot · seattools · secretdetect · secretredact · secrets ·
-singleflight · stalledclaim · starter · stop · stoprequest ·
-storewrite · stranded · streamcli · streamview · structuredhead ·
-supervisor · syncpi · textwidth · thincontext · thinkinglevel ·
-tui-backfill · tui-buffer · tui-client · tui-conversation ·
-tui-golden · tui-input · tui-input-overlay · tui-multipane ·
-tui-restore · tui-roles · tui-sync-output · tui-thinking ·
-tui-toolblock · ui-driver · up-model-reset · viewmodel · watch ·
-watchview · worktree · worktree-lifecycle · worktree-recursive-carry ·
-worktree-reuse-deps · worktree-sweep ·
+```bash
+node -e "const fs=require('node:fs');const n=fs.readdirSync('demo').filter(f=>f.endsWith('.test.mjs'));console.log(n.length)"
 ```
 
+`scripts/land.mjs --suite` runs exactly this set. (At the broker upgrade `234e06e`
+it was 115, validated 115/0 with the TUI suite 15/15 on pin `8efd314f`; a
+hand-pinned count has since drifted and is not kept here — a per-functional-area
+enumeration of the suite is item `#1558`.)
 **4 runnable demo programs:**
 
 | Demo | Shows |
