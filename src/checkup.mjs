@@ -29,6 +29,7 @@ import { ANSI } from "./ansi.mjs";
 // CLI's load (2026-10-17, lead #1164). Re-exported so every importer keeps ONE
 // definition.
 import { VERIFIER_TERMS, seatsAreVerifier } from "./verifierrole.mjs";
+import { describeFaults } from "./textintegrity.mjs";
 import { messageDefects } from "./commitmsg.mjs";
 
 export { VERIFIER_TERMS, seatsAreVerifier };
@@ -119,6 +120,11 @@ export const RULES = [
     id: "commit-message-encoding",
     severity: "fix-now",
     what: "a recent commit message carries a UTF-8 BOM (or a NUL / stray CR) — invisible in every normal view, so it surfaces only in a byte read; a body BOM corrupts a trailer (#4349)",
+  },
+  {
+    id: "text-integrity",
+    severity: "error",
+    what: "a tracked file's newline structure COLLAPSED versus HEAD, or its encoding is broken (BOM / NUL / invalid UTF-8) — node --check is structurally blind to this class (#4305)",
   },
 ];
 
@@ -304,7 +310,7 @@ export function runbookFrontMatterProblems(runbook) {
  *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -707,6 +713,29 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
         ids,
         `${bad.length === 1 ? "commit" : `${bad.length} commits`} ${ids} carry a UTF-8 BOM (or a NUL / stray CR) in the message — invisible in every normal view, so it surfaces only in a byte read, and a body BOM corrupts a trailer`,
         "rewrite the message through a writer that does NOT add a BOM (node's fs, or the write/edit tool) and amend the commit from that file. PowerShell's `Set-Content -Encoding utf8` writes one — do not use it for commit messages",
+      );
+    }
+  }
+
+  // 15. TEXT INTEGRITY (#4371, detector #4305): a tracked file whose newline structure COLLAPSED versus
+  //    HEAD, or whose encoding is broken. `node --check` is STRUCTURALLY BLIND to this - the flattening
+  //    turns the opening `//` into a comment that swallows the whole file, so it still parses and
+  //    exports NOTHING, and the failure surfaces only at import time. ERROR severity because a broken
+  //    tree stops every seat; the false-positive surface is handled by the CALLER, which passes only
+  //    the files that DIFFER from HEAD, and by the detector, which exempts untracked files from the
+  //    collapse comparison (no HEAD to compare against). No data means SKIPPED with its reason (D25).
+  if (!Array.isArray(textIntegrity)) {
+    skipped.push({
+      id: "text-integrity",
+      why: "the working tree's changed files were not supplied, so their text integrity cannot be inspected",
+    });
+  } else {
+    for (const f of textIntegrity) {
+      add(
+        "text-integrity",
+        f.path,
+        describeFaults(f.path, f.faults),
+        `restore from HEAD (git show HEAD:${f.path}) and re-apply the intended edit — do not patch bytes`,
       );
     }
   }

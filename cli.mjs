@@ -73,6 +73,7 @@ import { wrapProviderWithTrace } from "./src/providers/trace.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
 import { formatMetrics } from "./src/metrics.mjs";
 import { isLinkedWorktree, readSharedTreeBranch } from "./src/featuredocs.mjs";
+import { readTextIntegrity, trackedChangedPaths } from "./src/textintegrity.mjs";
 import { readCommitMessages } from "./src/commitmsg.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
@@ -2818,6 +2819,11 @@ async function cmdCheck(rigFile, human, rest = []) {
   // so it is read here and judged by the `commit-message-encoding` rule. null (no git / not a repo)
   // leaves the rule SKIPPED with its reason rather than silently passing.
   const commitMessages = readCommitMessages({ root: process.cwd(), limit: 50 });
+  // #4371: the text-integrity signal over the files that DIFFER from HEAD — the ones a seat just
+  // wrote, which is where the 04:21Z flattening appeared. null (no git / not a repo) leaves the rule
+  // SKIPPED with its reason rather than silently passing.
+  const changedPaths = trackedChangedPaths({ root: process.cwd() });
+  const textIntegrity = changedPaths === null ? null : readTextIntegrity({ root: process.cwd(), paths: changedPaths });
   const result = auditRig({
     rig: rigFile,
     spec,
@@ -2827,6 +2833,7 @@ async function cmdCheck(rigFile, human, rest = []) {
     modelsBySeat,
     queueItems,
     commitMessages,
+    textIntegrity,
     sharedTreeBranch,
     sharedTreeLinked,
   });
