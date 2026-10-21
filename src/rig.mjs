@@ -721,7 +721,29 @@ const Router = defineExtension({
 					);
 				}
 				if (!found) {
-					return toolText("NO_QUEUED_WORK");
+					// #4690: A REFUSAL THAT NAMES NOTHING IS INDISTINGUISHABLE FROM AN EMPTY QUEUE. The bare
+					// `NO_QUEUED_WORK` was returned whenever `found` was null — including the case that cost 19 turns: a row
+					// that was `queued` at WAKE time and is held, deferred or claimed-elsewhere by the time this runs. The
+					// stalled branch above cannot help, because it requires a row STILL claimed by this seat.
+					// SO DESCRIBE WHAT WAS FOUND. Only say "nothing" when that is TRUE.
+					const mine = (queue.items ?? []).filter(
+						(it) => it.to === me && it.status !== "done" && it.status !== "cancelled",
+					);
+					if (mine.length > 0) {
+						// Name the OLDEST — the one a wake would have been about — and its CURRENT status, which is the fact
+						// the bare refusal was hiding.
+						const oldest = mine[0];
+						const others = mine.length > 1 ? ` (and ${mine.length - 1} more row(s) addressed to you)` : "";
+						return toolText(
+							`NO_QUEUED_WORK — but NOT an empty queue: #${oldest.id} is addressed to you and is now \`${oldest.status}\`${others}. ` +
+								(oldest.status === "held"
+									? `It is parked awaiting release; a row you hold is not a claim offer.`
+									: oldest.status === "claimed"
+										? `It is claimed by you — use complete_work or defer_work to advance it.`
+										: `It is not claimable in its current state; check \`status\` for who holds it.`)
+						);
+					}
+					return toolText("NO_QUEUED_WORK — and nothing is addressed to you, so this is a true empty queue.");
 				}
 				// Build the INLINE STRUCTURED HEADER: item id + the decision-relevant
 				// fields (from / subject / status) that a no-read-tool coordinator seat
