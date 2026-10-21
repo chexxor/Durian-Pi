@@ -135,6 +135,26 @@ MUST BE KEPT, because section 2d (the linked-worktree / shared-root refusal, #42
 the fixture sections and they assert different things. A resolution recorded as a step gets applied where it
 is not needed; recorded as a condition, it fires when it should.
 
+**A STALE BRANCH CAN RE-INTRODUCE A CLEANUP.** When a landing is refused for a fault the author did not
+create, check whether the file is CLEAN on `main` and DIRTY on the branch — that is not a pre-existing wart
+being carried forward, it is a REGRESSION being applied backwards. Measured: `land.mjs impl-item-4286` was
+REFUSED — "1 file(s) fail TEXT INTEGRITY — docs/runbooks/README.md", fault `bom`. THE BOM WAS ON THE BRANCH
+AND NOT ON MAIN: main's README had already been cleaned by an earlier landing (`6b2c213` stripped it); the
+refused branch descended from the PRE-STRIP version. THE LANDING WOULD HAVE RE-INTRODUCED A BOM MAIN HAD
+ALREADY BEEN CLEANED OF — the gate caught a regression, not a pre-existing wart. A BRANCH IS MEASURED
+AGAINST CURRENT MAIN, NOT AGAINST THE MAIN IT WAS CUT FROM, and a cleanup since its fork is a change it can
+silently undo. THE REMEDY IS A FORK THAT STRIPS THE BYTES (as `impl-item-4561` did: content otherwise
+byte-identical, landed as `a1bb95d`), NEVER a resolution that takes the branch's version.
+
+**A REFUSAL IS A QUESTION ABOUT THE WHOLE BRANCH, NOT JUST THE NAMED FILE.** The fix pattern for any gate
+refusal is to FORK rather than resolve: a new branch from the old one with exactly the offending bytes
+removed and nothing else touched, then scan the OTHER changed files to confirm none carries the same fault
+(impl-item-4561 checked the other four). Checking the siblings is what makes the fork safe rather than
+lucky. AND the gate's case is now closed by evidence rather than argument: the text-integrity gate has
+caught (1) a first-offence BOM in a tracked file and (2) a REGRESSION re-introducing a cleaned BOM — both
+the author's own work, both would have reached main without it, neither visible in any demo. A CHECK THAT
+HAS REFUSED ITS OWN AUTHOR TWICE IS A CHECK NOBODY CAN CALL THEATRE.
+
 ## When to use
 A verified branch (`<seat>-item-<id>`, or any branch) must go onto `main`, and you want the landing to
 be **structurally incapable** of leaving the shared working tree mid-merge. This is the tool form of
