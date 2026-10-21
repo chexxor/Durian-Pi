@@ -87,6 +87,23 @@ ask "stop or not?" or "why did --suite fail?".
    `demo/test-areas.test.mjs` failed on `main` because 57 newer demos were not in its committed manifest
    (incident `2026-10-20-stale-derived-manifest-landing.md`). A derived artifact must be regenerated at
    land time, not trusted from the branch's fork point.
+   **AND THE CHECK ITSELF MUST RUN ON THE MERGED TREE, not on the branch tip** — the other half of the same
+   rule, and the one that makes a careful verify look wrong. 2026-10-20, `devtools-item-3341` @`92f8a7a`:
+   verified **PASS** on the branch (its own `demo/` set is fully mapped, and the verifier proved the rule can
+   FIRE by planting an unmapped demo and getting exit 1), and it **FAILED** the same sha merged into a
+   scratch at current `main`. **Both verdicts were correct — they measured different trees.** Measured
+   directly: the branch carries 183 demos and a manifest generated against exactly those 183; `main` carries
+   188 (the branch also ADDS `demo/test-areas.json`, so `main` has no manifest to check against); the merge
+   yields 189 files against a 183-row manifest, leaving **six unmapped** — `landing-data`, `next-pointer`,
+   `tui-conversation-header`, `tui-landing`, `tui-status-bar`, `workable-claim`. So a green generated-artifact
+   check on the branch is **not evidence about the merge**, however carefully it was run: the branch is
+   internally consistent AND stale relative to `main` at the same moment, because the merge CHANGES the
+   source set the artifact was derived from.
+   Practical form for a landing entry: merge into a scratch worktree at current `main`, then run the
+   generator's check THERE. And do not blame the verify — a verifier who ran it on the branch followed the
+   rule as written; the rule was under-specified about WHICH TREE, which is why this line exists.
+   To count it yourself on any candidate: `git ls-tree -r --name-only <ref> -- demo | grep '\.test\.mjs$'`
+   for both refs, and compare against the manifest rows the branch would land.
 3. Land the clean set in ONE call: `node scripts/land.mjs <b1> <b2> ... --db ./selfdev.sqlite`.
    Read the JSON report; `lock.reserved:true` / `lock.waitedMs` show it waited for the slots.
 4. **The `--suite` gate works again (FIXED 2026-10-19, `impl-item-2679` on `main`).** The defect was:
