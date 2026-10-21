@@ -1,4 +1,4 @@
-﻿# Verification Report: ITEM #3147
+# Verification Report: ITEM #3147
 
 ## Scope
 Verify ITEM #3147 (bounded graceful broker stop + force fallback, rebased impl-item-2420 @8770e4b).
