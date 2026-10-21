@@ -1,4 +1,4 @@
-﻿# Verification for #3755 — local-provider-down runbook model-ID decision
+# Verification for #3755 — local-provider-down runbook model-ID decision
 
 ## Claim 1: /v1/models returns qwen3.8-flash-next-iq3_s (not swift-1.5-iq2_xs)
 Command: curl.exe -s -m 5 http://127.0.0.1:8080/v1/models
