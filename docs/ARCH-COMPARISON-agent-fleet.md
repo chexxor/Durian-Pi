@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # agent-fleet vs durig — architecture comparison and the adopt-or-build question
 
 **Date:** 2026-10-12 · **Read at:** `vendor/eval/agent-fleet` HEAD `7c34dde`

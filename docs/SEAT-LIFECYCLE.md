@@ -34,10 +34,10 @@ Interruptions along the way: stop · reset · resume · generation-slot lease ·
   per `src/seatmodel.mjs`) and the compiled persona. See `FEATURES.md` §"Per-seat model" and §"Persona
   compilation".
 - On creation the seat's working directory is resolved **once** and persisted onto the conversation as
-  `seat.cwd ?? spec.cwd ?? DURIG_SEAT_ROOT` (`cli.mjs`).
+  `seat.cwd ?? spec.cwd ?? DURIAN_PI_SEAT_ROOT` (`cli.mjs`).
 
 **Where the roster lives:** the `Seats` document in the store, named `<db>.sqlite` (default
-`./rig.sqlite`), read through durig's one shared storage opener.
+`./rig.sqlite`), read through durian-pi's one shared storage opener.
 
 ---
 
@@ -48,7 +48,7 @@ A seat's file/shell tools are confined to a **root**; which root is decided per-
 
 1. **the seat's own persisted `cwd`** — wins. `prepare_workspace` sets this to the item's worktree, so a
    seat that prepared a workspace is confined to **its own tree**, regardless of any other seat;
-2. else **`DURIG_SEAT_ROOT`** — a *fallback* for a seat that has not prepared a workspace (e.g. a rig
+2. else **`DURIAN_PI_SEAT_ROOT`** — a *fallback* for a seat that has not prepared a workspace (e.g. a rig
    pointed at one shared checkout), **never** a global override of a prepared root;
 3. else the **launching `cwd`** (`process.cwd()`).
 
@@ -62,20 +62,30 @@ Two layers hold the boundary (see `SEAT-TOOLS.md`, the M3 design):
 - **Tool sets** narrow on top of it: an author seats keeps `read`/`write`/`edit`/shell (+
   `prepare_workspace`); a **verifier** loses `write`/`edit` and reads a disposable snapshot; a
   **coordinator** (pm/lead, no working capability) keeps none of the **working** file/shell tools (it keeps only the protocol tools: `send_work`/`claim_work`/etc.). The author/verifier asymmetry is decided
-  by the seat's declared capabilities, not its name (`toolRemovalsFor`).
+  by the seat's declared capabilities, not its name (`toolRemovalsFor`). A working seat that is **not**
+  a verifier keeps the full working set — the `security` seat (capabilities `security` + `review`) is not
+  classified as a verifier (`seatsAreVerifier` keys on name/role, and "security engineer" matches no
+  `VERIFIER_TERMS`), so it keeps `write`/`edit`/`shell` and can write its positions.
 
-**The F12 seat-root guard (`cli.mjs:349-372`):** a **write-side** `send`/`run` whose `DURIG_SEAT_ROOT`
+**The F12 seat-root guard (`cli.mjs:349-372`):** a **write-side** `send`/`run` whose `DURIAN_PI_SEAT_ROOT`
 differs from a seat's persisted `cwd` **fails closed**, naming both paths and the fix (`up --refresh`
-under the new root, or unset `DURIG_SEAT_ROOT`). View-only commands and `up --refresh` are unaffected.
+under the new root, or unset `DURIAN_PI_SEAT_ROOT`). View-only commands and `up --refresh` are unaffected.
 This lives once per command where the write-side harness opens — not per tool call, which must stay
 cheap.
 
 **Inherited environment hazard (do not restate):** `SEAT-TOOLS.md` records that a naive install hands
 the ambient credential (`DEEPINFRA_API_KEY`) to every command a seat runs unless the env layer refuses it
-(SC3, `inheritEnv` forced false); a worktree contains **no** `durig.config.json` (untracked, gitignored),
+(SC3, `inheritEnv` forced false); a worktree contains **no** `durian-pi.config.json` (untracked, gitignored),
 so no seat reads a key off disk. These are enforced in `src/confine.mjs`, proven by
 `demo/confine.test.mjs` and `demo/seatguard.test.mjs`. Read `SEAT-TOOLS.md` for the full hazard list
 (H1–H4) rather than repeating them here.
+
+**The scratch-path rule — where notes/scratch go.** A seat's item notes and scratch files (working notes
+that are not part of the deliverable) must live **inside the item's worktree** (`item-<id>`), where the
+seat is confined and can write. The shared repo-root **`.durian-pi/`** is a **gitignored notes directory**
+(`.gitignore:9`) and is **outside every seat's root**; a confined seat cannot write there, and that
+refusal is **by design** (SC1 + the seat-root guard), **not a bug**. A landing pass's per-branch report
+belongs in the **completion** (the pass row), not in a file.
 
 ---
 
@@ -91,7 +101,7 @@ artifact. It replaces the older broker-assigned global root.
   **persists THAT conversation's `cwd` to it** through `configure`. `makeSeatEnv` then resolves that seat
   to its own tree, so each seat in a pass is confined to its own checkout.
 - **Idempotent:** an existing worktree is reused, so a resume never nests one worktree inside another.
-- **The broker no longer sets a process-global `DURIG_SEAT_ROOT`** — the switch is per-seat and survives a
+- **The broker no longer sets a process-global `DURIAN_PI_SEAT_ROOT`** — the switch is per-seat and survives a
   restart.
 - **Dirty-source carry:** when the shared tree is dirty, `prepare_workspace` **forks the visible state**
   (uncommitted tracked edits + untracked files) into the worktree and reports what it carried, so one
@@ -172,12 +182,13 @@ run, not just read:
 
 | Claim | Where (source / demo) | What proves it |
 |---|---|---|
-| cwd resolution order `cwd ?? DURIG_SEAT_ROOT ?? process.cwd()` | `src/seattools.mjs:187-204` | `makeSeatEnv` `root = target.cwd ?? process.env.DURIG_SEAT_ROOT ?? fallbackRoot` |
+| cwd resolution order `cwd ?? DURIAN_PI_SEAT_ROOT ?? process.cwd()` | `src/seattools.mjs:187-204` | `makeSeatEnv` `root = target.cwd ?? process.env.DURIAN_PI_SEAT_ROOT ?? fallbackRoot` |
 | `prepare_workspace` creates `item-<id>`, persists cwd, idempotent | `src/seattools.mjs` `prepareWorkspace`; `demo/prepare-workspace.test.mjs`, `demo/broker-dirty-fork.test.mjs` | demo exit 0; the tool returns `WORKSPACE READY (created|reused): <path>` |
 | `complete_work` retires worktree `force:false`, resets cwd | `src/rig.mjs` (complete_work) | the `removeSeatWorkspace({worktreeRoot, itemId})` + `configure(cwd: process.cwd())` block after `ok` |
 | removal uses `git worktree remove`, refuses dirty unless `force` (D60) | `src/worktree.mjs` `removeClaimedWorktree`/`removeSeatWorkspace` | the `if (!force)` dirty-refusal branch |
-| F12 seat-root guard fails closed on mismatch | `cli.mjs:349-372` | the `enforceSeatRoot && CFG.DURIG_SEAT_ROOT` block fails naming both paths |
+| F12 seat-root guard fails closed on mismatch | `cli.mjs:349-372` | the `enforceSeatRoot && CFG.DURIAN_PI_SEAT_ROOT` block fails naming both paths |
 | SC1/SC3 confinement + env refusal | `src/confine.mjs`, `demo/confine.test.mjs`, `demo/seatguard.test.mjs` | env-absence and path-escape canaries exit 0 |
+| scratch-path rule: `.durian-pi/` (`.gitignore:9`) is outside every seat's root; notes/scratch live in the worktree | `.gitignore:9`; `src/confine.mjs` + `demo/confine.test.mjs` | the `.durian-pi/` gitignore entry; SC1 path-escape refusals exit 0 |
 | genlock lease / stalled-claim re-wake | `src/genlock.mjs`, `src/driver.mjs`; `demo/singleflight.test.mjs`, `demo/stalledclaim.test.mjs` | demo exit 0 |
 | reset writes a `pi.reset` boundary, keeps transcript | `cli.mjs` `cmdReset`; `demo/reset.test.mjs` | demo exit 0 |
 | leaked/dirty worktree handling | `docs/runbooks/leaked-worktrees.md` | its `Verify` step (`git worktree list`) |

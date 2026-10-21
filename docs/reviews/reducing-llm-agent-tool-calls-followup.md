@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 I'll work through this research brief properly — first checking what repo access I have, then researching the open questions against primary sources.I have the repo README. Now let me pull the baseline docs the brief names — constitution (P1/P2), METRICS, ROADMAP, DECISIONS (D77/D78), and CODEMODE.I now have the repo grounding (note: the published `DECISIONS.md` ends at **D70** — D77/D78 are not in the public tree, which I'll flag). Now the external literature. Let me verify the load-bearing claims the brief asks me to correct.Now let me verify the specific numbers the brief asks me to correct, and probe the debuggability/semantic-error and multi-agent round-trip questions.One final research pass on the two claims I still need to adjudicate: the "longer plans hurt" evidence and code-as-action debuggability.I've hit the research budget, so here is the completed report. Two access notes first, because they change what I can claim.
 
 ---

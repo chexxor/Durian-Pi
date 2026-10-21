@@ -1,4 +1,4 @@
-# durig TUI — testing framework
+# durian-pi TUI — testing framework
 
 **Status:** design + first increment. Companion to `docs/TUI-IMPLEMENTATION-PLAN.md` §H7.
 **Why this exists:** the current `demo/tui-*.test.mjs` scripts assert substrings and regexes on
@@ -38,7 +38,7 @@ a small, dependency-free harness with a screen buffer and golden frames, then la
 - **No new runtime dependency for tiers 1–3.** They use `node:assert`-style checks and `node:fs` only.
 - **Golden files are committed** under `demo/__golden__/` and reviewed like code; a diff is the review.
 - **Deterministic**: fixed fixtures, fixed term sizes, fixed `uptime`, no `Date.now()` in goldens.
-- **Hermetic**: the TUI tests never open the store or a harness (D11), so they need no `DURIG_DB` and do
+- **Hermetic**: the TUI tests never open the store or a harness (D11), so they need no `DURIAN_PI_DB` and do
   not contend with a live broker.
 - **One entry point**: `npm run test:tui` runs every `demo/tui-*.test.mjs` plus
   `demo/sanitize.test.mjs` and reports a pass/fail count, so regression runs are one command.
@@ -49,9 +49,11 @@ a small, dependency-free harness with a screen buffer and golden frames, then la
 |---|---|---|
 | Seat list + selection | 1/2 | `demo/tui-golden.test.mjs`, `demo/tui-client.test.mjs` |
 | Conversation view (D69) | 1/2 | `demo/tui-golden.test.mjs`, `demo/tui-conversation.test.mjs` |
+| Input overlay (`i`) on the current view | 1/2 | `demo/tui-input-overlay.test.mjs`, `demo/tui-golden.test.mjs` |
 | Streaming row / team-wide partials | 1/2 | `demo/tui-golden.test.mjs`, `demo/tui-multipane.test.mjs` |
 | Tool blocks / thinking parity | 1/2 | `demo/tui-golden.test.mjs`, `demo/tui-toolblock.test.mjs`, `demo/tui-thinking.test.mjs` |
 | 48-column floor | 2 | `demo/tui-golden.test.mjs` (`conversation-48`) |
+| Narrow footer (hint cut from the right) | 2 | `demo/tui-golden.test.mjs` (`conversation-44`), `demo/tui-input-overlay.test.mjs` |
 | Frame never overflows the viewport | 2 | `demo/tui-buffer.test.mjs` |
 | Cell-width wrapping | 1/2 | `demo/tui-buffer.test.mjs`, H4 |
 | Escape sanitisation | 1 | `demo/sanitize.test.mjs` |

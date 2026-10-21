@@ -33,7 +33,8 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { closeSync, existsSync, openSync, unlinkSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { closeSync, existsSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 // Single source of truth for DeepInfra provider options, vendored into this tree
 // so durig is self-contained and publishable on its own
@@ -45,6 +46,7 @@ import {
   PROVIDER_ID,
   fallbackModels,
 } from "./src/providers/deepinfra-models.ts";
+import { createLocalProvider, localProviderSpec } from "./src/providers/local.mjs";
 import {
   Constitution,
   Edges,
@@ -58,27 +60,45 @@ import { describeConfig, loadConfig, loadShippedDefaults, streamSettings } from 
 import { applyEscalations, applyResets, failureStreak, planEscalations, planResets } from "./src/supervisor.mjs";
 import { assessRun } from "./src/degeneration.mjs";
 import {
+	leaseKillTarget,
 	readGenerationSlots,
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
-import { brokerAlive, clearBrokerState, clearStopRequest, drivePass, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest } from "./src/broker.mjs";
+import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, logBrokerLine, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
+import { wrapProviderWithTrace } from "./src/providers/trace.mjs";
 import { SCAN_LIMIT, extractEntryText, readSeatPages, summarizeEntries } from "./src/rigstory.mjs";
 import { formatMetrics } from "./src/metrics.mjs";
+import { isLinkedWorktree, readSharedTreeBranch } from "./src/featuredocs.mjs";
+import { readTextIntegrity, trackedChangedPaths } from "./src/textintegrity.mjs";
+import { readCommitMessages } from "./src/commitmsg.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readRigHealth, readSeatList } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readRigHealth, readSeatList, readSeatRoots } from "./src/readapi.mjs";
+import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
-import { createWorktree } from "./src/worktree.mjs";
-import { auditRig, formatCheck } from "./src/checkup.mjs";
+import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
+import { mergeInProgress, mergeRefusal } from "./src/mergeguard.mjs";
 import { SeatGuard } from "./src/seatguard.mjs";
 import { SeatTools, fillRoster, makeSeatEnv, scopeSeatTools } from "./src/seattools.mjs";
 import { createWatchScreen, formatSnapshot } from "./src/watchview.mjs";
 import { readFeed } from "./src/eventfeed.mjs";
+
+// src/checkup.mjs is loaded LAZILY (dynamic import). It is a large audit module that
+// nothing on the hot path needs — `init` and `check` are its only callers — and loading it
+// at startup is how the 2026-10-17 incident became total: a `<<<<<<<` marker left in a
+// mid-merge checkup.mjs made cli.mjs fail to LOAD, so status/queue/run/serve all died with
+// a SyntaxError. NOTHING loaded on the hot path may import checkup statically again;
+// src/verifierrole.mjs exists for the one predicate metrics/seattools need at runtime.
+let checkupModule = null;
+async function loadCheckup() {
+  checkupModule ??= await import("./src/checkup.mjs");
+  return checkupModule;
+}
 
 // Effective configuration for this process: environment over
 // durig.config.json over built-in defaults (see src/config.mjs). Resolved
@@ -163,13 +183,14 @@ function noteEmptyRig(seatCount) {
  * unaffected; a write either waits for `serve --stop` or goes through the spool
  * (`intent.mjs`), which the broker drains as operator input.
  */
-function refuseWhileBrokerDrives(verb) {
+function refuseWhileBrokerDrives(verb, detail) {
   const broker = readBrokerState(DB_PATH);
   if (!brokerAlive(broker)) return;
   fail(
     `${verb} refuses to run while a resident broker is driving ${DB_PATH} (pid ${broker.pid}): ` +
-      `a second owner crashes the broker and corrupts run-control docs. Stop it with "serve --stop", ` +
-      `or route the request through the spool: node intent.mjs <seat> --body-file <file>`,
+      `a second owner crashes the broker and corrupts run-control docs. ` +
+      (detail ??
+        `Stop it with "serve --stop", or route the request through the spool: node intent.mjs <seat> --body-file <file>`),
   );
 }
 
@@ -226,6 +247,7 @@ function maxSeats() {
 }
 
 import { resolveSeatModel } from "./src/seatmodel.mjs";
+import { resetSeatContext } from "./src/reset.mjs";
 
 // live: when set, the provider is wrapped so a running generation streams to
 // the terminal. Off for commands that only read state, so `watch`/`status`
@@ -233,6 +255,25 @@ import { resolveSeatModel } from "./src/seatmodel.mjs";
 function buildModels(live = null) {
   if ((CFG.DURIG_PROVIDER ?? "deepinfra") === "faux") {
     FAUX = fauxProvider({ models: [{ id: MODEL_ID }] });
+    // #4658 (decision (a)): A TEST-ONLY DELAY KNOB, AND IT IS THE ONLY WAY A SPAWNED BROKER CAN HOLD A RUN.
+    // The construction above passes model IDS ONLY — no response factory — so a spawned broker answers
+    // INSTANTLY and `demo/broker-cooperative-stop` can never have a live generation when `--stop` arrives.
+    // That is why its "under load" banner was unasserted AND UNAVAILABLE: the fixture was not lazy, the seam
+    // had no slow model. An IN-PROCESS test would prove nothing about the exit path, and the exit path is
+    // where the seven-minute damage was.
+    //
+    // BEHAVIOUR-PRESERVING WHEN UNSET: with no `DURIG_FAUX_DELAY_MS` this block does not run and the provider
+    // is exactly what it was. Nothing about a normal run changes.
+    //
+    // SCOPED TO THE FAUX PROVIDER ON PURPOSE: it is a test seam for an offline provider, not a general
+    // latency control, and it is read only here — where the provider is already known to be faux.
+    const fauxDelayMs = Number(process.env.DURIG_FAUX_DELAY_MS ?? 0);
+    if (Number.isFinite(fauxDelayMs) && fauxDelayMs > 0) {
+    	// A step is consumed per provider call, so the list is long enough for any fixture's run count.
+    	const slowStep = () =>
+    		new Promise((resolve) => setTimeout(() => resolve(fauxAssistantMessage("faux delayed reply")), fauxDelayMs));
+    	FAUX.setResponses(Array.from({ length: 128 }, () => slowStep));
+    }
     const models = createModels();
     // Gate what MODELS see; keep FAUX pointing at the raw provider so
     // scripted responses keep flowing to the real implementation.
@@ -245,12 +286,18 @@ function buildModels(live = null) {
         })
       : FAUX.provider;
     models.setProvider(
-      live
-        ? wrapProviderWithLiveView(gated, {
-            renderer: live,
-            getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
-          })
-        : gated,
+      wrapProviderWithTrace(
+        live
+          ? wrapProviderWithLiveView(gated, {
+              renderer: live,
+              getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+            })
+          : gated,
+        // ROADMAP 43c / #920 (#2545): the request TRACE attaches HERE, at the one provider seam every
+        // run path builds (send/up/run/serve and the optimizer), so one line covers all of them and
+        // cannot drift. Off unless DURIG_TRACE_REQUESTS=1; returns the provider unchanged when off.
+        { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
+      ),
     );
     return { models, providerId: "faux" };
   }
@@ -308,13 +355,27 @@ function buildModels(live = null) {
   // Live view sits OUTSIDE the slot gate: it labels the stream even while a
   // generation waits for a free slot, and never alters what consumers see.
   models.setProvider(
-    live
-      ? wrapProviderWithLiveView(gated, {
-          renderer: live,
-          getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
-        })
-      : gated,
+    wrapProviderWithTrace(
+      live
+        ? wrapProviderWithLiveView(gated, {
+            renderer: live,
+            getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+          })
+        : gated,
+      // The same one trace seam as the faux branch above (ROADMAP 43c / #920, #2545).
+      { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
+    ),
   );
+  // Register the local provider AFTER the default: resolveSeatModel reads the
+  // provider prefix only when it is registered, so a seat model "local/<id>"
+  // uses the local server while every other seat keeps the default provider.
+  const localSpec = localProviderSpec(CFG);
+  if (localSpec)
+    models.setProvider(
+      wrapProviderWithTrace(createLocalProvider(localSpec, { createProvider, api: ocApi }), {
+        getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+      }),
+    );
   return { models, providerId: "deepinfra" };
 }
 
@@ -342,8 +403,13 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
   // list is read through that harness, and `env` is an argument to opening it. Until the fill
   // runs, `makeSeatEnv` fails closed (read-only), so the gap is safe rather than open.
   const seatRoster = new Map();
+  // Keep the exact `Storage` object the harness is opened over: it is the broker's ONE
+  // pi-durable connection, and the spooled `read` op must be served from it (pi-durable
+  // exposes no `harness.storage`, and a second `openStore()` connection contends with the
+  // harness's own commits). The harness owns its lifecycle; callers must not close it.
+  const storage = await openStore();
   const harness = await Harness.open(
-    await openStore(),
+    storage,
     {
       models,
       registry,
@@ -398,7 +464,7 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
       );
     }
   }
-  return { harness, models, providerId, extensions: extensionNames(extensions) };
+  return { harness, models, providerId, extensions: extensionNames(extensions), storage };
 }
 
 // Normalize a path for equality comparison: absolute, separator-normalised, and
@@ -423,6 +489,7 @@ async function buildSeatPrompt(models, seat, providerId) {
     "- claim_work: claim the oldest queued item addressed to you; it returns subject and body.",
     "- complete_work(itemId, resultSummary): mark your claimed item done; it notifies the sender automatically.",
     "- send_work(to, subject, body[, requires]): delegate to another seat by putting an item in its queue. Route work, do not narrate it.",
+    "- send_work(..., tier, reason): a task tier is the size of a request - trivial/small/feature/project (map S/M/L). Assign a tier AT INTAKE and to every follow-up about the same task (the tier latches on the chain); a NEW intake (a new subject from the operator) starts a NEW tier. LOWERING a tier is free; RAISING it requires a stated `reason` or the tool refuses.",
     "- defer_work(itemId, question[, to]): stop and ask instead of guessing, or instead of going quiet. Parks the item you hold on the question; omit `to` to defer to the human operator, pass `to` to ask another seat as well.",
     "- resume_work(itemId): take back a deferred item once the answer has arrived, then finish it with complete_work.",
     "- hold_work(itemId, reason?): park one of your claimed items so it becomes unclaimable until released; reason is optional.",
@@ -462,6 +529,36 @@ async function buildSeatPrompt(models, seat, providerId) {
 // per-seat model reaches a database created by an earlier durig version.
 // Edges and the constitution are always re-applied from the spec.
 async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false } = {}) {
+  // #1589: `up` opens a full harness — a second OWNER — and `--refresh` writes
+  // (re-applies prompts/models, resets conversations). While a resident broker
+  // drives the store that is the hazard `send`/`reset`/`compact`/`resume`/`run`
+  // already refuse: two owners crash the broker and corrupt run-control docs.
+  // `--dry-run` writes nothing and previews only, so it keeps working (the
+  // `reset` precedent) — but note it still OPENS a harness, which is the
+  // lock-contention half of #1587, not this item's concern.
+  // #1589 + lead #1700 (B): the guard is CONDITIONAL on the WRITE path. `up --serve` doubles
+  // as "ensure the broker is up": when a broker already drives the store the reuse is a
+  // READ-ONLY check — report {started:false, reason:"already running"} and exit WITHOUT
+  // opening a harness (a second harness is the named hazard, not the reuse itself). `--refresh`
+  // and a plain `up` (which creates seats) still refuse while a broker drives.
+  const reuseBroker = serve && !refresh && !dryRun;
+  if (!dryRun && !reuseBroker) refuseWhileBrokerDrives("up");
+  if (reuseBroker) {
+    const driving = readBrokerState(DB_PATH);
+    if (brokerAlive(driving)) {
+      out({
+        ok: true,
+        command: "up",
+        db: DB_PATH,
+        created: [],
+        existing: [],
+        refreshed: [],
+        extensions: [],
+        broker: { started: false, reason: "already running", pid: driving.pid },
+      });
+      return;
+    }
+  }
   const spec = JSON.parse(await readFile(rigFile, "utf8"));
   // A spec carries its constitution either inline (what the OpenRig converter
   // emits, since the text it read has no file on disk beside the spec) or as a
@@ -787,6 +884,7 @@ async function cmdInit() {
   } catch (err) {
     fail(`init: invalid JSON in the starter rig ${starterSource}: ${err?.message ?? err}`);
   }
+  const { auditRig } = await loadCheckup();
   const audit = auditRig({
     rig: starterSource,
     spec: starterSpec,
@@ -861,13 +959,19 @@ async function cmdInit() {
 // tree - where an author seat can overwrite the operator's uncommitted work. This is how the
 // operator gets a tree to point them at instead, with node_modules bridged so the suite runs.
 async function cmdWorktree(args) {
-  const target = args.find((a) => !a.startsWith("--"));
+  const valueFlags = new Set(["--source", "--ref"]);
+  const target = args.find((a, i) => !a.startsWith("--") && !valueFlags.has(args[i - 1]));
   if (!target) fail("worktree needs a path, e.g. node cli.mjs worktree C:/tmp/durig-dev/item-1");
   const sourceAt = args.indexOf("--source");
   const source = sourceAt >= 0 ? args[sourceAt + 1] : process.cwd();
   if (sourceAt >= 0 && !source) fail("worktree --source needs a directory");
+  // --ref forks from an arbitrary ref (an UNLANDED branch tip, a tag, a commit) instead of HEAD, so
+  // a fix that must edit a file at that tip can be built without touching the shared tree (#1456).
+  const refAt = args.indexOf("--ref");
+  const ref = refAt >= 0 ? args[refAt + 1] : undefined;
+  if (refAt >= 0 && (!ref || ref.startsWith("--"))) fail("worktree --ref needs a ref (branch, tag or commit)");
   try {
-    out({ ok: true, command: "worktree", ...(await createWorktree({ source, target })) });
+    out({ ok: true, command: "worktree", ...(await createWorktree({ source, target, ref })) });
   } catch (error) {
     fail(`cannot create worktree: ${error?.message ?? error}`);
   }
@@ -877,32 +981,40 @@ async function cmdWorktree(args) {
 // storage layer read-only (like `status`) rather than a full harness — a
 // short-lived harness is a second OWNER, and opening one while the broker drives
 // is the hazard ROADMAP 69 removes (docs/COMMANDS-AND-THE-BROKER.md §4).
-async function cmdPs() {
-  const storage = await openStore();
-  try {
-    const seats = await readSeatList(storage);
-    noteEmptyRig(seats.length);
-    out({
-      ok: true,
-      command: "ps",
-      db: DB_PATH,
-      seats,
-    });
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
-  }
+/**
+ * The non-secret config subset the broker's `health` view needs. The provider key lives in
+ * CFG and must never cross the spool, so only these keys are sent; the broker reconstructs
+ * the two values `readRigHealth` reads from config.
+ */
+function healthParams({ modelsBySeat = {}, windowsBySeat = {}, entryLimit = SCAN_LIMIT } = {}) {
+  return {
+    slots: maxSeats(),
+    entryLimit,
+    modelsBySeat,
+    windowsBySeat,
+    strandedMs: CFG.DURIG_STRANDED_MS ?? null,
+    contextWindow: CFG.DURIG_CONTEXT_WINDOW ?? null,
+  };
 }
 
-// queue: every work item with status and transitions. A READ via `openStore`, for
-// the same reason as `ps`.
+// ps: roster with per-seat conversation id and role. A READ, so it goes through the
+// broker when one drives (see src/readclient.mjs); with no broker it opens the storage
+// directly and is the sole owner.
+async function cmdPs() {
+  const seats = await readData(DB_PATH, "seats", {}, (storage) => readSeatList(storage));
+  noteEmptyRig(seats.length);
+  out({
+    ok: true,
+    command: "ps",
+    db: DB_PATH,
+    seats,
+  });
+}
+
+// queue: every work item with status and transitions. A READ, routed the same way.
 async function cmdQueue() {
-  const storage = await openStore();
-  try {
-    const items = await readQueueItems(storage);
-    out({ ok: true, command: "queue", items });
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
-  }
+  const items = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
+  out({ ok: true, command: "queue", items });
 }
 
 // resume (alias: doctor): the deliberate way to advance admitted-but-not-progressing
@@ -921,7 +1033,28 @@ async function cmdQueue() {
 async function cmdResume() {
   // ROADMAP 69: `resume` is a compound WRITE (it settles stranded submissions),
   // so a second owner while the broker drives is the 2026-10-16 crash. Refuse.
-  refuseWhileBrokerDrives("resume");
+  // ROADMAP 71 / #912 residue 3/3 (#1931): the refusal is the CHOICE, and it names WHY. With a broker
+  // alive the broker ALREADY settles stranded submissions — at startup (`reconcileBrokerStartup`) and at
+  // the start of every pass (`reconcileStrandedSubmissions`, logged `STRANDED settled=N`) — so an
+  // external `resume` has nothing to do, and running it would be the SECOND WRITER that crashed the
+  // broker on 2026-10-16. Do NOT stop a live broker to run this; restart a dormant one instead.
+  refuseWhileBrokerDrives(
+    "resume/doctor",
+    // #4170: the message must be TRUE for every class it implies. The broker settles STRANDED
+    // (`placed` with no advancing task) at startup and at the start of every pass — but it does NOT
+    // settle a NEVER-STARTED (`queued`) submission, which is a different class, and saying otherwise
+    // is why the operator's first instinct was to restart rather than to resume. The suppression half
+    // is now fixed (a `queued` row no longer holds its seat out of every wake); the settlement half
+    // for `queued` awaits the ADMISSION DEADLINE (ROADMAP 37(c)) — settling it without one would
+    // cancel submissions that are legitimately still being admitted.
+    `the broker settles STRANDED submissions ITSELF — those it PLACED but whose turn never finished — ` +
+      `at startup and at the start of every pass (logged "STRANDED settled=N"), so there is nothing for ` +
+      `an external resume to do while it drives, and running one would be a second writer. ` +
+      `NOTE: a NEVER-STARTED (\`queued\`) submission is NOT that class and is not settled this way; it ` +
+      `no longer suppresses its seat, and its settlement awaits an admission deadline (ROADMAP 37(c)). ` +
+      `Do NOT stop a live broker for this; if it is dormant, restart it so its startup pass re-settles. ` +
+      `See docs/runbooks/resume-while-broker-runs.md.`,
+  );
   const { harness } = await openHarness();
   try {
     const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
@@ -990,52 +1123,7 @@ async function cmdResume() {
 // deleting the transcript), then the newest-past-watermark reset entry id.
 // Returns the reset entry id, or null when the seat was refused (live lease) — the caller
 // reports refusals; this function never writes while a lease is held.
-async function resetSeatContext(harness, seatName, handoff, dbPath, { dryRun = false } = {}) {
-  const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-  const seatsVal = seatsDoc?.value?.seats ?? {};
-  const seat = seatsVal[seatName];
-  if (!seat) {
-    noteEmptyRig(Object.keys(seatsVal).length);
-    fail(`unknown seat: ${seatName}`);
-  }
-  const convId = seat.conversationId;
 
-  // Refuse when the seat holds a LIVE generation lease: resetting a running
-  // seat out from under its own generation corrupts the very boundary we are
-  // trying to draw. Same seatsWithLiveSlot guard the stranded notice and the
-  // resume verb compute (readGenerationSlots -> generatingSeat; ROADMAP 37a).
-  // Consulted only when genlock is actually configured (a finite cap).
-  const slots = maxSeats();
-  const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
-  const seatsWithLiveSlot = new Set(
-    genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat),
-  );
-  if (seatsWithLiveSlot.has(seatName)) {
-    return { refused: true, reason: "live-generation-lease" };
-  }
-
-  // An omitted or blank handoff means a plain reset (no new user message on
-  // the boundary); only a non-blank handoff becomes the `pi.reset` user message.
-  const resetHandoff = handoff !== undefined && handoff.trim() !== "" ? handoff : undefined;
-  // #84 dry run: the unknown-seat fail and the live-lease guard above are the
-  // SAME checks the apply path runs; only the boundary write is skipped.
-  if (dryRun) {
-    return { refused: false, dryRun: true, resetEntryId: null, handoff: resetHandoff ?? null };
-  }
-  const conv = await harness.conversation(convId, BACKGROUND_CONTEXT);
-  // Identify the reset entry THIS invocation wrote: a watermark before, then
-  // the newest pi.reset entry past it (the durable transcript keeps earlier
-  // resets too, so the newest-past-watermark is precisely ours, not a prior one).
-  const prior = await conv.entries({}, 20, undefined, BACKGROUND_CONTEXT);
-  const priorMaxId = prior.items.reduce((max, e) => Math.max(max, Number(e.id) || 0), 0);
-  await conv.reset(resetHandoff, BACKGROUND_CONTEXT);
-
-  const after = await conv.entries({ order: "descending" }, 50, undefined, BACKGROUND_CONTEXT);
-  const resetEntry = after.items.find(
-    (e) => e.kind === "pi.reset" && Number(e.id) > priorMaxId,
-  );
-  return { refused: false, resetEntryId: resetEntry?.id ?? null, handoff: resetHandoff ?? null };
-}
 
 // Model-change DETECTION for the cmdUp reset seam (#402; #148 half-2; lead #241):
 // the conversation's CONFIGURED model is what `configure` last wrote (AgentDoc.model —
@@ -1111,7 +1199,7 @@ async function cmdReset(seatName, handoff, { dryRun = false } = {}) {
   try {
     // Delegate to the SHARED boundary mechanism (#402): same unknown-seat fail,
     // same live-lease guard, same watermark + conversation.reset write path.
-    const result = await resetSeatContext(harness, seatName, handoff, DB_PATH, { dryRun });
+    const result = await resetSeatContext(harness, seatName, handoff, DB_PATH, { dryRun, maxSeats: maxSeats() });
     if (dryRun) {
       // A preview: name the seat and whether the write would happen; write NOTHING.
       out({
@@ -1127,6 +1215,10 @@ async function cmdReset(seatName, handoff, { dryRun = false } = {}) {
       return;
     }
     if (result.refused) {
+      if (result.reason === "unknown-seat") {
+        noteEmptyRig(result.seatCount ?? 0);
+        fail(`unknown seat: ${seatName}`);
+      }
       fail(`seat ${seatName} holds a live generation lease; refusing to reset a running seat`);
     }
     out({
@@ -1155,10 +1247,52 @@ async function cmdReset(seatName, handoff, { dryRun = false } = {}) {
 // CLI must resume and WAIT for the task (harness.waitForTask) and then prove a compaction entry
 // landed. An enqueue-and-exit stub would report success while nothing was ever summarized. A
 // manual compaction is foreground (`background = reason !== "manual"`), so waiting here is safe.
+/**
+ * Route a `compact` through the command spool (#1904): write the request, then AWAIT the
+ * broker's result. The broker applies it with its OWN harness; this process never opens a
+ * second one. The broker's actual outcome (or the dead-letter reason) is reported, never
+ * guessed.
+ */
+async function compactViaSpool(seatName, instructions, broker) {
+  const requestId = randomUUID();
+  const text = instructions !== undefined && instructions.trim() !== "" ? instructions : undefined;
+  writeIntent(DB_PATH, {
+    op: "compact",
+    to: seatName,
+    ...(text !== undefined ? { instructions: text } : {}),
+    requestId,
+    from: "operator",
+    createdAt: new Date().toISOString(),
+  });
+  const awaited = await awaitIntentResult(DB_PATH, requestId);
+  if (!awaited.ok) {
+    fail(`compact via the spool (broker pid ${broker.pid}): ${awaited.reason}`);
+  }
+  const r = awaited.result.result ?? {};
+  out({
+    ok: true,
+    command: "compact",
+    seat: seatName,
+    viaSpool: true,
+    requestId,
+    brokerPid: broker.pid,
+    taskId: r.taskId ?? null,
+    instructions: r.instructions ?? null,
+    summaryEntryId: r.summaryEntryId ?? null,
+    db: DB_PATH,
+  });
+}
+
 async function cmdCompact(seatName, instructions) {
-  // Same class as `reset`: compact writes a context boundary, so it must not race the broker's
-  // own writer (ROADMAP 69 / COMMANDS-AND-THE-BROKER §4).
-  refuseWhileBrokerDrives("compact");
+  // ROADMAP 71 addendum (#1904): while a broker drives, ROUTE through the command spool — the
+  // broker applies `compact` with its OWN harness (single writer/scheduler), so a live rig can
+  // compact WITHOUT stopping the broker. We must NOT open a second harness here.
+  const broker = readBrokerState(DB_PATH);
+  if (brokerAlive(broker)) {
+    return await compactViaSpool(seatName, instructions, broker);
+  }
+  // No broker: the DIRECT path (a fresh harness), guarded against a live generation lease —
+  // compact writes a context boundary, so it must not race a running generation's writer.
   const { harness } = await openHarness();
   try {
     const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
@@ -1284,7 +1418,7 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
   if (brokerAlive(broker)) {
     fail(`a resident broker is already driving ${DB_PATH} (pid ${broker.pid}); stop it with "serve --stop", or start the rig with "up --no-serve"`);
   }
-  const { harness } = await openHarness({ enforceSeatRoot: true });
+  const { harness, storage: harnessStorage } = await openHarness({ enforceSeatRoot: true });
   // A raw read-only handle for probing seat documents. The driving harness fails
   // its whole session on the first storage error, so an unreadable `pi.live` must
   // be detected through this handle BEFORE the harness opens that conversation
@@ -1324,6 +1458,7 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
       // long `run --watch` is resident is honoured. `serve` uses the same function.
       const { actioned } = await drivePass(harness, probeStorage, {
         context: BACKGROUND_CONTEXT,
+        readStorage: harnessStorage,
         readBusySeats: () => {
           // A live generation lease means the seat is already advancing; a dead one
           // does not, so only LIVE holders are treated as busy (same rule as the
@@ -1432,13 +1567,75 @@ async function ensureBroker() {
 // Node does not deliver SIGTERM, so the fallback is to write a .stop request file that
 // the broker polls between passes (F35). If the broker is still alive after 5s,
 // process.kill is the last resort.
+/**
+ * `pause` / `unpause` (ROADMAP 131): drain the rig to quiescence before a broker upgrade.
+ *
+ * Producer discipline (AC4): with a resident broker, this NEVER opens the store — it spools
+ * one request (`<db>.broker.inbox/`) that the broker applies with its OWN writer, so it is
+ * not a second writer (the reason ROADMAP 71 exists). With NO resident broker, this process
+ * is the sole writer, so it applies the flag directly with its own harness. `--wait` returns
+ * only once every seat has settled (AC5).
+ */
+async function cmdPause(paused, { wait = false, reason = undefined } = {}) {
+  const broker = readBrokerState(DB_PATH);
+  if (brokerAlive(broker)) {
+    const requestId = randomUUID();
+    writeIntent(DB_PATH, {
+      op: paused ? "pause" : "unpause",
+      to: null,
+      from: "operator",
+      wait,
+      ...(reason !== undefined ? { reason } : {}),
+      requestId,
+      createdAt: new Date().toISOString(),
+    });
+    const result = wait ? await awaitIntentResult(DB_PATH, requestId) : null;
+    out({
+      ok: true,
+      command: paused ? "pause" : "unpause",
+      db: DB_PATH,
+      appliedBy: "broker",
+      requestId,
+      paused,
+      ...(result ? { quiesced: result.result?.quiesced === true, waitedMs: result.result?.waitedMs ?? null } : {}),
+    });
+    return;
+  }
+  // No resident broker: this process is the only writer, so apply it directly.
+  const { harness } = await openHarness({ enforceSeatRoot: true });
+  try {
+    const result = await applyPauseOp(harness, { paused, by: "operator", reason, wait }, BACKGROUND_CONTEXT);
+    out({ ok: true, command: paused ? "pause" : "unpause", db: DB_PATH, appliedBy: "cli", paused: result.paused, ...(result.quiesced ? { quiesced: true, waitedMs: result.waitedMs } : {}) });
+  } finally {
+    await harness.close(BACKGROUND_CONTEXT);
+  }
+}
+
+/** Poll the broker's intent result file until it appears (the applied/refused outcome). */
+async function awaitIntentResult(dbPath, requestId, { timeoutMs = 15 * 60_000, pollMs = 100 } = {}) {
+  const path = join(intentResultDir(dbPath), `${requestId}.json`);
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      return JSON.parse(readFileSync(path, "utf8"));
+    } catch {
+      // Not yet written (or mid-write); keep polling until the deadline.
+    }
+    if (Date.now() >= deadline) fail(`${requestId}: timed out waiting for the broker to apply the request`);
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+}
+
 async function cmdStopBroker() {
   const state = readBrokerState(DB_PATH);
   if (!state) {
     out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "no broker is running" });
     return;
   }
-  if (!brokerAlive(state)) {
+  // #2420: liveness is RAW pid existence. A stale heartbeat does NOT mean the process is
+  // gone — a broker wedged in a pass stops heartbeating while still running, and reading
+  // that as "dead" cleared a live broker's state and reported `stopped:true` for it.
+  if (!pidAlive(state.pid)) {
     clearBrokerState(DB_PATH);
     out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "state was stale; cleared" });
     return;
@@ -1449,11 +1646,15 @@ async function cmdStopBroker() {
   // previous 5s window, so we give up to 60s for cooperative settlement. No forced
   // kill: the broker WILL exit once its pass settles — waiting longer honours that.
   writeStopRequest(DB_PATH);
-  const deadline = Date.now() + 60_000;
-  while (Date.now() < deadline && brokerAlive(state)) {
+  // #2420: liveness here is RAW pid existence, not `brokerAlive`. `brokerAlive` also
+  // demands a fresh heartbeat, so a broker wedged in a pass reads as dead and this command
+  // reported `stopped:true` for a pid that was still running. The wait is a ceiling: the
+  // broker exits at its own stop grace, so this only has to outlast that.
+  const deadline = Date.now() + resolveStopGraceMs() + 5_000;
+  while (Date.now() < deadline && pidAlive(state.pid)) {
     await new Promise((r) => setTimeout(r, 100));
   }
-  const stillAlive = brokerAlive(state);
+  const stillAlive = pidAlive(state.pid);
   if (!stillAlive) {
     clearBrokerState(DB_PATH);
     clearStopRequest(DB_PATH);
@@ -1470,7 +1671,7 @@ async function cmdStopBroker() {
   // Bounded grace period expired: the broker could not settle in time. Do not
   // force-kill — the operator should investigate with `status`.
   console.warn(
-    `serve --stop: broker pid ${state.pid} did not exit within 60s; ` +
+    `serve --stop: broker pid ${state.pid} did not exit within the grace; ` +
       `pass may still be in-flight — check with \`serve --stop\` again`,
   );
   out({
@@ -1480,7 +1681,7 @@ async function cmdStopBroker() {
     db: DB_PATH,
     stopped: false,
     pid: state.pid,
-    reason: "pass did not settle within 60s; no forced kill — check status again",
+    reason: "did not exit within the stop grace; no forced kill — check status again",
   });
 }
 
@@ -1496,6 +1697,17 @@ async function cmdStopBroker() {
 // starts, and cools off a per-seat retry so a re-woken stalled claim cannot hot-loop.
 // The supervisor runs each pass, exactly as `run --watch`. Bounded with
 // --max-duration; SIGINT/SIGTERM stop after the pass in flight settles.
+// #2420: the bounded-stop grace, in ms. Default a few seconds; a non-positive value is
+// honoured (0 disables the bound), but an unparseable one falls back to the default so a
+// bad env cannot silently remove the bound.
+const STOP_GRACE_DEFAULT_MS = 5_000;
+function resolveStopGraceMs() {
+  const raw = process.env.DURIG_STOP_GRACE_MS;
+  if (raw === undefined || raw === "") return STOP_GRACE_DEFAULT_MS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : STOP_GRACE_DEFAULT_MS;
+}
+
 async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   if (stop) return cmdStopBroker();
   // One broker per database: a second would be a second driver, and its wakes would
@@ -1504,13 +1716,56 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   if (brokerAlive(existing)) {
     fail(`a broker is already running for ${DB_PATH} (pid ${existing.pid}); stop it with "serve --stop" first`);
   }
-  const { harness } = await openHarness({ enforceSeatRoot: true });
-  const probeStorage = await openStore();
   const scheduler = new WakeScheduler({
     minIntervalMs: 500,
     seatCooldownMs: SERVE_SEAT_COOLDOWN_MS,
   });
   const signal = createWakeSignal();
+  // #2572: the serve handles are CREATED here, so their LIFECYCLE lives here too. `openHandles`
+  // opens the harness + the probe storage AND subscribes, so a reopen restores the SAME
+  // invariant in ONE place: a reopen without a re-established commit subscription leaves the
+  // broker DORMANT (no stream -> no pass), which is exactly the failure the recovery exists for.
+  const openHandles = async () => {
+    const { harness, storage: harnessStorage } = await openHarness({ enforceSeatRoot: true });
+    // A raw read-only handle for probing seat documents — the SAME P5 / #110 exception as cmdRun,
+    // and the reason F8 is scoped rather than deleted (lead ruling #2874, option B): the driving
+    // harness fails its WHOLE session on the first storage error, so an unreadable `pi.live` must
+    // be detected through this separate handle BEFORE the harness opens that conversation. The
+    // spooled `read` op is still served from the harness Storage (`readStorage ?? probeStorage`),
+    // so this is a second CONNECTION for probing only, not a second reader of the store. One handle
+    // for the run; closed with the harness.
+    const probeStorage = await openStore();
+    // Subscribe BEFORE the first pass so a commit that lands during startup is not missed. The
+    // listener must not throw, block, or call Session APIs: it only classifies and signals.
+    const unsubscribe = harness.subscribeCommits((publication) => {
+      scheduler.notify(publication);
+      if (scheduler.dirty) signal.raise();
+    });
+    return { harness, harnessStorage, probeStorage, unsubscribe };
+  };
+  let handles = await openHandles();
+  // F2 (#2572): a terminal `SessionFailed` needs a close+reopen of BOTH handles AND a fresh
+  // subscription, atomically. A failed close (a dead Session may refuse) must not block the
+  // reopen, so each teardown step is guarded; the loop swaps to the returned handles.
+  const reopen = async () => {
+    try {
+      handles.unsubscribe();
+    } catch {
+      /* removing a listener must not mask the reopen */
+    }
+    try {
+      await handles.harness.close(BACKGROUND_CONTEXT);
+    } catch {
+      /* a failed Session may refuse to close; the reopen below still recovers */
+    }
+    try {
+      await handles.probeStorage.close(BACKGROUND_CONTEXT);
+    } catch {
+      /* idem */
+    }
+    handles = await openHandles();
+    return { harness: handles.harness, probeStorage: handles.probeStorage, readStorage: handles.harnessStorage };
+  };
   // #473: determine worktree source (git repo root) from the current directory.
   // If not a git repo, worktree lifecycle is disabled.
   const { repoRoot } = await import("./src/worktree.mjs");
@@ -1524,26 +1779,50 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
       return null;
     }
   })();
-  // Subscribe BEFORE the first pass so a commit that lands during startup is not
-  // missed. The listener must not throw, block, or call Session APIs: it only
-  // classifies the commit and raises the signal.
-  const unsubscribe = harness.subscribeCommits((publication) => {
-    scheduler.notify(publication);
-    if (scheduler.dirty) signal.raise();
-  });
   const startedAt = Date.now();
   let stopping = false;
+  let stopRequestedAt = null;
+  // #2420 (operator ruling): a resident daemon must have a BOUNDED graceful stop with an
+  // unconditional force fallback. `DURIG_STOP_GRACE_MS` is how long the broker may keep
+  // draining after a stop is requested: the loop exits with `stoppedBy=deadline` at the
+  // bound, and this timer is the LAST resort for a pass wedged inside a single hung call,
+  // where no loop or in-pass check is ever reached. 0 disables the force timer.
+  const stopGraceMs = resolveStopGraceMs();
+  let forceTimer = null;
   const onSignal = () => {
+    if (stopping) return;
     stopping = true;
+    stopRequestedAt = Date.now();
     signal.raise(); // interrupt a resting wait, so a signal is not stuck behind the floor
+    if (stopGraceMs > 0) {
+      forceTimer = setTimeout(() => {
+        // systemd TimeoutStopSec -> SIGKILL: the pass did not settle within the grace, so
+        // exit anyway rather than become an unkillable daemon.
+        try {
+          logBrokerLine(DB_PATH, `EXIT pid=${process.pid} reason=deadline passes=-`);
+        } catch {
+          // the log is best-effort on the force path
+        }
+        try {
+          clearBrokerState(DB_PATH, process.pid);
+          clearStopRequest(DB_PATH);
+        } catch {
+          // ignore: the process is leaving
+        }
+        console.error(JSON.stringify({ ok: true, command: "serve", forced: true, stoppedBy: "deadline" }));
+        process.exit(0);
+      }, stopGraceMs);
+    }
   };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
   try {
     writeBrokerState(DB_PATH, { pid: process.pid, since: new Date().toISOString() });
     const result = await runWakeLoop({
-      harness,
-      probeStorage,
+      harness: handles.harness,
+      probeStorage: handles.probeStorage,
+      readStorage: handles.harnessStorage,
+      reopen,
       scheduler,
       signal,
       context: BACKGROUND_CONTEXT,
@@ -1552,7 +1831,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
         const genSlots = Number.isFinite(slots) ? readGenerationSlots(DB_PATH, slots) : [];
         return new Set(genSlots.filter((g) => g.generatingSeat).map((g) => g.generatingSeat));
       },
-      supervise: () => superviseOnce(harness, probeStorage, BACKGROUND_CONTEXT),
+      supervise: () => superviseOnce(handles.harness, handles.probeStorage, BACKGROUND_CONTEXT),
       onDiagnostic: (d) => {
         if (d.kind === "wake-failed") {
           console.error(
@@ -1581,6 +1860,8 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
       maxDurationMs,
       startedAt,
       isStopping: () => stopping,
+      stopGraceMs,
+      stopRequestedAt: () => stopRequestedAt,
       dbPath: DB_PATH,
       source: worktreeSource,
       worktreeRoot: process.cwd(),
@@ -1595,14 +1876,15 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
       stoppedBy: result.stoppedBy,
     });
   } finally {
+    if (forceTimer) clearTimeout(forceTimer);
     // Clear only OUR state: a newer broker that already took over must keep its file.
     clearBrokerState(DB_PATH, process.pid);
     clearStopRequest(DB_PATH);
-    unsubscribe();
+    handles.unsubscribe();
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
-    await harness.close(BACKGROUND_CONTEXT);
-    await probeStorage.close(BACKGROUND_CONTEXT);
+    await handles.harness.close(BACKGROUND_CONTEXT);
+    await handles.probeStorage.close(BACKGROUND_CONTEXT);
   }
 }
 
@@ -1665,19 +1947,29 @@ async function cmdStop(seatName, reason) {
       return;
     }
 
-    // (ii) guarantee the halt: kill the cross-process driver that holds the lease.
+    // (ii) guarantee the halt: kill the cross-process driver that holds the lease — but ONLY
+    // after VERIFYING the lease still names the same live, renewing holder (A3, #2586): a
+    // recycled pid would otherwise kill an unrelated process. When the lease cannot be verified
+    // we PREFER SETTLING (step iii) over killing.
     let killed = null;
     let killError = null;
+    let killSkipped = null;
     let slotPath = null;
     if (holder && Number.isFinite(holder.pid)) {
-      killed = holder.pid;
       slotPath = `${DB_PATH}.genlock.${holder.slotIndex}`;
-      try {
-        process.kill(killed, "SIGKILL");
-      } catch (err) {
-        // The holder may already have died, which only helps the stop; the reason is
-        // captured and reported so a failed kill against a LIVE pid is not swallowed.
-        killError = String(err?.message ?? err);
+      const fresh = readGenerationSlots(DB_PATH, maxSeats()).find((g) => g.slotIndex === holder.slotIndex);
+      const target = leaseKillTarget(holder, fresh, seatName);
+      if (target.kill === null) {
+        killSkipped = target.skip;
+      } else {
+        killed = target.kill;
+        try {
+          process.kill(killed, "SIGKILL");
+        } catch (err) {
+          // The holder may already have died, which only helps the stop; the reason is
+          // captured and reported so a failed kill against a LIVE pid is not swallowed.
+          killError = String(err?.message ?? err);
+        }
       }
     }
 
@@ -1726,6 +2018,7 @@ async function cmdStop(seatName, reason) {
       reason: stopReason,
       killed,
       killError,
+      killSkipped,
       aborted: settled,
       db: DB_PATH,
     });
@@ -1740,6 +2033,18 @@ async function cmdStop(seatName, reason) {
 // loop needed). With a live view (default when stderr is a terminal) the
 // generation streams to stderr, labelled per seat; stdout stays one JSON doc.
 async function cmdSend(seatName, text, { stream = false, requestId = null } = {}) {
+  // ROADMAP 92 / operator batch 4 (#1585): `send` is being RETIRED in stages —
+  // deprecate (this notice) -> thin alias over the spool -> remove. It opens a FULL
+  // writing harness, so it is a second owner whenever a broker drives (the crash
+  // class this rig has already paid for twice), and `refuseWhileBrokerDrives` below
+  // makes it unusable in resident mode anyway. The replacement already exists: the
+  // spool (`node intent.mjs <seat> --body-file <file>`), which the broker drains as
+  // operator input, plus `log`/`status` for the reply. The notice goes to STDERR: it
+  // is a diagnostic, and stdout stays the one-JSON-doc contract.
+  console.error(
+    "send is DEPRECATED (opens a full writing harness = a second owner): prefer " +
+      "`node intent.mjs <seat> --body-file <file>` (the broker delivers) and `log`/`status` for the reply",
+  );
   // ROADMAP 69: `send` submits an input and drives the run — a second owner and
   // scheduler while the broker drives. Refuse once, before the write retry, so a
   // live broker never races it (withStoreWriteRetry only covers the entry-id race).
@@ -1892,7 +2197,6 @@ async function cmdSend(seatName, text, { stream = false, requestId = null } = {}
 async function cmdLog(seatName, limitStr, { follow = false, human = false, full = false, toolBg = false, theme = "dark" } = {}) {
   const parsed = Number(limitStr);
   const limit = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 20;
-  const storage = await openStore();
   const interactive = Boolean(process.stdout.isTTY);
   const color = human && interactive && !process.env.NO_COLOR;
   let stopping = false;
@@ -1958,7 +2262,8 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
     process.stdout.write(`${lines.join("\n")}\n`);
   };
   const pollPartial = async (conversationId) => {
-    const partial = partialView(await readLiveState(storage, conversationId));
+    const live = await readData(DB_PATH, "live", { conversationId }, (s) => readLiveState(s, conversationId));
+    const partial = partialView(live);
     if (human) {
       renderStreaming(partial);
       return;
@@ -1998,8 +2303,8 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
       entries: entries.map(asJson),
     });
   };
-  try {
-    const seats = await readSeatList(storage);
+  {
+    const seats = await readData(DB_PATH, "seats", {}, (s) => readSeatList(s));
     const seat = seats.find((s) => s.name === seatName);
     if (!seat) {
       noteEmptyRig(seats.length);
@@ -2008,11 +2313,11 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
 
     // Newest `limit`, then reversed: a reader wants the recent end of a long
     // transcript, but once it is chosen the order shown must be chronological.
-    const page = await storage.scanEntries(
-      { conversationId: seat.conversationId, order: "descending" },
-      limit,
-      undefined,
-      BACKGROUND_CONTEXT,
+    const page = await readData(
+      DB_PATH,
+      "entries",
+      { conversationId: seat.conversationId, limit, order: "descending" },
+      (s) => s.scanEntries({ conversationId: seat.conversationId, order: "descending" }, limit, undefined, BACKGROUND_CONTEXT),
     );
     const history = [...page.items].reverse();
     print(history);
@@ -2030,11 +2335,11 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
       }
       let next;
       try {
-        next = await storage.scanEntries(
-          { conversationId: seat.conversationId, order: "ascending", minEntryId: lastId + 1 },
-          200,
-          undefined,
-          BACKGROUND_CONTEXT,
+        next = await readData(
+          DB_PATH,
+          "entries",
+          { conversationId: seat.conversationId, order: "ascending", minEntryId: lastId + 1, limit: 200 },
+          (s) => s.scanEntries({ conversationId: seat.conversationId, order: "ascending", minEntryId: lastId + 1 }, 200, undefined, BACKGROUND_CONTEXT),
         );
       } catch (err) {
         // A failed poll must not kill the view silently; report and keep going
@@ -2049,8 +2354,6 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
       }
       await pollPartial(seat.conversationId);
     }
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
   }
 }
 
@@ -2087,15 +2390,16 @@ const SERVE_SEAT_COOLDOWN_MS = 30_000;
 // committed state, so a late/reconnecting subscriber resumes from `--since`
 // rather than replaying. One JSON event per line; diagnostics on stderr.
 async function cmdEvents({ sinceSeq = 0, follow = false } = {}) {
-  const storage = await openStore();
   let stopping = false;
   process.on("SIGINT", () => {
     stopping = true;
   });
   let cursor = Number.isFinite(sinceSeq) ? sinceSeq : 0;
-  try {
+  {
     do {
-      const { events, nextSeq } = await readFeed(storage, BACKGROUND_CONTEXT, { sinceSeq: cursor });
+      const { events, nextSeq } = await readData(DB_PATH, "feed", { sinceSeq: cursor }, (s) =>
+        readFeed(s, BACKGROUND_CONTEXT, { sinceSeq: cursor }),
+      );
       for (const event of events) console.log(JSON.stringify(event));
       // Advance the cursor past what we emitted, so a --follow poll never
       // replays the previous line and a reconnect resumes from `nextSeq`.
@@ -2103,13 +2407,10 @@ async function cmdEvents({ sinceSeq = 0, follow = false } = {}) {
       if (!follow || stopping) break;
       await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
     } while (!stopping);
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
   }
 }
 
 async function cmdWatch(once, human) {
-  const storage = await openStore();
   let seq = 0;
   let stopping = false;
   process.on("SIGINT", () => {
@@ -2148,21 +2449,22 @@ async function cmdWatch(once, human) {
     );
   };
   const slots = maxSeats();
-  const initial = await readRigHealth(storage, DB_PATH, slots, { cfg: CFG });
+  const initial = await readData(DB_PATH, "health", healthParams(), (s) =>
+    readRigHealth(s, DB_PATH, slots, { cfg: CFG }),
+  );
   // Watching the wrong database is silent by nature: no commits ever arrive.
   // Tell the operator up front which database is being watched.
   if (!human) noteEmptyRig(initial.seats.length);
   let last = JSON.stringify(initial);
   await render(initial);
-  if (once) {
-    await storage.close(BACKGROUND_CONTEXT);
-    return;
-  }
+  if (once) return;
   while (!stopping) {
     await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
     let health;
     try {
-      health = await readRigHealth(storage, DB_PATH, slots, { cfg: CFG });
+      health = await readData(DB_PATH, "health", healthParams(), (s) =>
+        readRigHealth(s, DB_PATH, slots, { cfg: CFG }),
+      );
     } catch (err) {
       // A failed poll must not kill the stream silently; report on stderr
       // and keep polling so transient storage races self-heal.
@@ -2175,7 +2477,6 @@ async function cmdWatch(once, human) {
       await render(health);
     }
   }
-  await storage.close(BACKGROUND_CONTEXT);
 }
 
 // optimize <text>: run a draft instruction/work request through the
@@ -2197,22 +2498,98 @@ async function cmdOptimize(textParts) {
 // status: one-shot per-seat health report - queue depth, latest submission,
 // and attention notices for blocked seats. Same computation the watch
 // stream carries, for callers that want a single document and an exit code.
-async function cmdStatus() {
-  const storage = await openStore();
-  try {
-    const health = await readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG });
-    noteEmptyRig(health.seats.length);
-    out({ ok: true, command: "status", db: DB_PATH, ...health });
-    // `status` is the one-shot surface, so this is where the metrics command is
-    // discovered - and only when a measure has actually moved, because a
-    // pointer that prints every time stops being read.
-    const outOfBand = health.metrics.measures.filter((m) => m.state === "warn").length;
-    if (outOfBand > 0) {
-      console.error(`note: ${outOfBand} measure(s) out of band - see: node cli.mjs metrics`);
-    }
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
+/**
+ * `worktree audit` (ROADMAP 76 / #1881): a READ-ONLY surface listing every registered worktree
+ * with the queue status of its item, its UNCOMMITTED COUNT, its lock state, and the sweep's
+ * KEEP-REASON (`live`/`locked`/`not-terminal`/`branch-unresolved`/`dirty`/`reapable`/`seat-root`),
+ * so a leaked or dirty tree is visible and resolvable without guessing. Writes nothing.
+ */
+/**
+ * `worktree scratch clean` (ROADMAP 76 leak source B prevention, #1907): unlock + remove every
+ * registered verify-scratch worktree — the explicit teardown a verifier runs when its VERIFY
+ * completes. A DIRTY scratch is REFUSED (never --force / git clean) and reported. Writes nothing to
+ * the store; git only.
+ */
+async function cmdWorktreeScratchClean() {
+  const repoPath = dirname(resolve(DB_PATH));
+  const { removed, kept } = await cleanVerifyScratch({ repoPath });
+  out({ ok: true, command: "worktree", subcommand: "scratch clean", repo: repoPath, removed, kept });
+}
+
+async function cmdWorktreeAudit() {
+  const queueItems = await readData(DB_PATH, "queue", {}, (s) => readQueueItems(s));
+  const seatRoots = await readData(DB_PATH, "roots", {}, (s) => readSeatRoots(s));
+  {
+    const LIVE = ["queued", "claimed", "deferred", "held"];
+    const liveItemIds = new Set(queueItems.filter((it) => LIVE.includes(it.status)).map((it) => it.id));
+    const terminalItemIds = new Set(queueItems.filter((it) => !LIVE.includes(it.status)).map((it) => it.id));
+    const statusById = new Map(queueItems.map((it) => [it.id, it.status]));
+    const repoPath = dirname(resolve(DB_PATH));
+    const entries = await auditWorktrees({
+      repoPath,
+      liveItemIds,
+      terminalItemIds,
+      statusById,
+      seatRoots: seatRoots.map((r) => r.cwd),
+    });
+    const counts = {};
+    for (const e of entries) counts[e.keepReason] = (counts[e.keepReason] ?? 0) + 1;
+    out({
+      ok: true,
+      command: "worktree",
+      subcommand: "audit",
+      db: DB_PATH,
+      repo: repoPath,
+      total: entries.length,
+      counts,
+      reapable: entries.filter((e) => e.keepReason === "reapable").length,
+      dirty: entries.filter((e) => e.keepReason === "dirty").length,
+      locked: entries.filter((e) => e.keepReason === "locked").length,
+      seatRoots,
+      worktrees: entries,
+    });
   }
+}
+
+/**
+ * `worktree prune-branch <name>` (#3491): remove a ref ONLY when every commit is patch-equivalent
+ * to main AND no worktree holds it — the sanctioned route for the class `git branch -d` refuses
+ * (a rebase-landed duplicate) and the seat guard refuses to force-delete. The guard is NOT
+ * widened; this verb is the narrow door (see `prunePatchEquivalentBranch`).
+ */
+async function cmdWorktreePruneBranch(name) {
+  if (!name) fail("worktree prune-branch needs a branch name, e.g. node cli.mjs worktree prune-branch designer-item-2103");
+  const repoPath = dirname(resolve(DB_PATH));
+  try {
+    const result = await prunePatchEquivalentBranch({ repoPath, branch: name });
+    out({ ok: true, command: "worktree", subcommand: "prune-branch", repo: repoPath, ...result });
+  } catch (error) {
+    // Refuse LOUDLY (ok:false + exit 1): a refusal is a report, not a retry signal.
+    fail(error);
+  }
+}
+
+async function cmdStatus() {
+  const health = await readData(DB_PATH, "health", healthParams(), (storage) =>
+    readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG }),
+  );
+  noteEmptyRig(health.seats.length);
+  // The broker's health (#2581 / BROKER-SUPERVISION §4): a fresh heartbeat alone is only
+  // LIVENESS; `lastPassAt` carries PROGRESS, so a wedged-but-alive broker reads `degraded`,
+  // not `up`. Read-only and cheap (one small file); the pass bound is the stream timeout + margin.
+  const broker = brokerHealth(readBrokerState(DB_PATH), {
+    streamTimeoutMs: streamSettings(CFG).stream?.timeoutMs ?? null,
+  });
+  // #4403: the note is CARRIED IN THE JSON, not written to stderr. `status` IS the machine-readable
+  // queue view (stdout is JSON by default, and `--json` is accepted), but a consumer that merges
+  // streams (`2>&1`) parses the note as a JSON value and fails with "Invalid JSON primitive: note" —
+  // and it fails only when a measure drifts, so a read works until it does not. A diagnostic that
+  // can break the authoritative view must be IN the view: the human renderer shows it, a JSON
+  // consumer reads it structurally, and NEITHER has to parse the other's format.
+  const outOfBand = health.metrics.measures.filter((m) => m.state === "warn").length;
+  const notes =
+    outOfBand > 0 ? [`${outOfBand} measure(s) out of band - see: node cli.mjs metrics`] : [];
+  out({ ok: true, command: "status", db: DB_PATH, ...health, broker, notes });
 }
 
 /** Every seat's resolved model, from the spec. One definition so `check`'s
@@ -2225,6 +2602,21 @@ function resolveModelsBySeat(spec) {
     modelsBySeat[seat.name] = `${r.provider}/${r.modelId}`;
   }
   return modelsBySeat;
+}
+
+/** Every seat's ADVERTISED context window (the vendor catalog figure), keyed by seat.
+ * ROADMAP 27's three-state denominator calls this the least-trustworthy state, so the
+ * resolver in src/context.mjs prefers a `declared`/`measured` window whenever one exists;
+ * this is only the fallback. Absent for a seat whose model the catalog does not carry. */
+function resolveWindowsBySeat(spec) {
+  const { models, providerId } = buildModels();
+  const windowsBySeat = {};
+  for (const seat of spec?.seats ?? []) {
+    const r = resolveSeatModel(models, seat.model, providerId, MODEL_ID);
+    const advertised = models.getModel(r.provider, r.modelId)?.contextWindow;
+    if (Number.isFinite(advertised) && advertised > 0) windowsBySeat[seat.name] = { advertised };
+  }
+  return windowsBySeat;
 }
 
 /** --window N turns, or `all`. The default is the ambient scan bound, because a
@@ -2265,13 +2657,23 @@ async function cmdMetrics(rigFile, human, windowArg) {
     ...gitProvenance(process.cwd()),
     active: activeSet(parseExtensionList(CFG.DURIG_EXTENSIONS ?? "")),
   };
-  const storage = await openStore();
-  try {
-    const health = await readRigHealth(storage, DB_PATH, maxSeats(), {
+  const health = await readData(
+    DB_PATH,
+    "health",
+    healthParams({
       modelsBySeat: spec ? resolveModelsBySeat(spec) : {},
+      windowsBySeat: spec ? resolveWindowsBySeat(spec) : {},
       entryLimit: parseWindow(windowArg),
-      cfg: CFG,
-    });
+    }),
+    (storage) =>
+      readRigHealth(storage, DB_PATH, maxSeats(), {
+        modelsBySeat: spec ? resolveModelsBySeat(spec) : {},
+        windowsBySeat: spec ? resolveWindowsBySeat(spec) : {},
+        entryLimit: parseWindow(windowArg),
+        cfg: CFG,
+      }),
+  );
+  {
     noteEmptyRig(health.seats.length);
     if (human) {
       process.stdout.write(
@@ -2295,8 +2697,6 @@ async function cmdMetrics(rigFile, human, windowArg) {
       provenance,
       ...health.metrics,
     });
-  } finally {
-    await storage.close(BACKGROUND_CONTEXT);
   }
 }
 
@@ -2423,28 +2823,59 @@ async function cmdCheck(rigFile, human, rest = []) {
     stored = { reason: "absent" };
   } else {
     try {
-      const storage = await openStore();
-      try {
-        const rec = await storage.findDocument(
-          { kind: Constitution.definition.kind, scope: { kind: "session" } },
-          "current",
-          BACKGROUND_CONTEXT,
-        );
-        const text = rec
-          ? ((await storage.document(rec.id, "current", BACKGROUND_CONTEXT))?.value?.text ?? "")
-          : "";
-        stored = { reason: "read", text };
-
-        storedSeats = (await readSeatList(storage)).map((s) => s.name);
-        queueItems = await readQueueItems(storage);
-      } finally {
-        await storage.close(BACKGROUND_CONTEXT);
-      }
+      const constitution = await readData(
+        DB_PATH,
+        "document",
+        { kind: Constitution.definition.kind, scope: { kind: "session" } },
+        async (storage) => {
+          const rec = await storage.findDocument(
+            { kind: Constitution.definition.kind, scope: { kind: "session" } },
+            "current",
+            BACKGROUND_CONTEXT,
+          );
+          const value = rec ? (await storage.document(rec.id, "current", BACKGROUND_CONTEXT))?.value : null;
+          return { found: Boolean(rec), value };
+        },
+      );
+      stored = { reason: "read", text: constitution.value?.text ?? "" };
+      storedSeats = (await readData(DB_PATH, "seats", {}, (s) => readSeatList(s))).map((s) => s.name);
+      queueItems = await readData(DB_PATH, "queue", {}, (s) => readQueueItems(s));
     } catch (err) {
       stored = { reason: "unreadable", error: String(err?.message ?? err) };
     }
   }
-  const result = auditRig({ rig: rigFile, spec, specConstitution, stored, storedSeats, modelsBySeat, queueItems });
+  const { auditRig, formatCheck } = await loadCheckup();
+  // The shared tree's branch (2026-10-19, devtools #2412): a seat whose cwd fell back to the shared
+  // tree can switch it onto an item branch, which breaks the landing basis. null (no git / not a
+  // repo) leaves the rule SKIPPED with its reason rather than silently passing.
+  const sharedTreeBranch = readSharedTreeBranch({ root: process.cwd() });
+  // A linked worktree (a landing scratch or a seat/item worktree) is NOT the shared tree, so the
+  // `shared-tree-on-main` rule is skipped there: scripts/land.mjs runs the suite in a DETACHED
+  // scratch worktree, where the branch reads as "" and the rule otherwise refused every landing
+  // (#2679). The reader is null when git/the repo is unavailable -> the rule is skipped, not passed.
+  const sharedTreeLinked = isLinkedWorktree({ root: process.cwd() });
+  // The recent commit messages (#4349): a BOM in a subject/body is invisible in every normal view,
+  // so it is read here and judged by the `commit-message-encoding` rule. null (no git / not a repo)
+  // leaves the rule SKIPPED with its reason rather than silently passing.
+  const commitMessages = readCommitMessages({ root: process.cwd(), limit: 50 });
+  // #4371: the text-integrity signal over the files that DIFFER from HEAD — the ones a seat just
+  // wrote, which is where the 04:21Z flattening appeared. null (no git / not a repo) leaves the rule
+  // SKIPPED with its reason rather than silently passing.
+  const changedPaths = trackedChangedPaths({ root: process.cwd() });
+  const textIntegrity = changedPaths === null ? null : readTextIntegrity({ root: process.cwd(), paths: changedPaths });
+  const result = auditRig({
+    rig: rigFile,
+    spec,
+    specConstitution,
+    stored,
+    storedSeats,
+    modelsBySeat,
+    queueItems,
+    commitMessages,
+    textIntegrity,
+    sharedTreeBranch,
+    sharedTreeLinked,
+  });
   const seatCount = (spec.seats ?? []).length;
   if (human) {
     console.log(
@@ -2508,7 +2939,26 @@ usages:
 `;
 
 const [, , cmd, ...rest] = process.argv;
+
+// Verbs that MUTATE the store or the working tree. Read verbs are deliberately absent: a
+// seat must be able to DIAGNOSE a stuck merge, not be locked out of its own rig.
+const WRITE_VERBS = new Set([
+  "up", "init", "send", "run", "serve", "stop", "reset", "clean", "compact",
+  "resume", "doctor", "format", "worktree",
+]);
+
 try {
+  // Landing safety (lead #1164 Q2), checked FIRST — before any storage or provider work: a
+  // write verb must not act on a working tree that is mid-merge. The guard comes from a
+  // dependency-free module so it cannot be disabled by the very fault it exists to catch.
+  // Only MUTATIONS are refused: a `--dry-run` writes nothing, and `serve --stop` is a
+  // control action the operator must keep even mid-merge (a stuck merge is exactly when
+  // the broker most needs stopping).
+  const stoppingBroker = cmd === "serve" && rest.includes("--stop");
+  if (WRITE_VERBS.has(cmd) && !rest.includes("--dry-run") && !stoppingBroker) {
+    const merge = mergeInProgress(process.cwd());
+    if (merge) fail(mergeRefusal(cmd, merge));
+  }
   if (cmd === "up") {
     // Auto-start the resident broker for an INTERACTIVE `up` (stdout is a TTY, like the
     // human views in D19), so a terminal `up` leaves the queue self-driving; piped or
@@ -2518,7 +2968,12 @@ try {
     const serve = forced ?? (process.stdout.isTTY === true && process.env.DURIG_NO_SERVE !== "1");
     await cmdUp(rest[0], rest.includes("--refresh"), { serve, dryRun: rest.includes("--dry-run") });
   }
-  else if (cmd === "worktree") await cmdWorktree(rest);
+  else if (cmd === "worktree") {
+    if (rest[0] === "audit") await cmdWorktreeAudit();
+    else if (rest[0] === "scratch" && rest[1] === "clean") await cmdWorktreeScratchClean();
+    else if (rest[0] === "prune-branch") await cmdWorktreePruneBranch(rest[1]);
+    else await cmdWorktree(rest);
+  }
   else if (cmd === "init") await cmdInit();
   else if (cmd === "ps") await cmdPs();
   else if (cmd === "send") {
@@ -2597,6 +3052,12 @@ try {
     const human = rest.includes("--human") || (Boolean(process.stdout.isTTY) && !rest.includes("--json"));
     await cmdWatch(rest.includes("--once"), human);
   } else if (cmd === "status") await cmdStatus();
+  else if (cmd === "pause" || cmd === "unpause") {
+    // ROADMAP 131. `pause [--wait] [reason]`; `unpause` takes no reason.
+    const paused = cmd === "pause";
+    const reason = rest.filter((a) => !a.startsWith("--")).join(" ") || undefined;
+    await cmdPause(paused, { wait: rest.includes("--wait"), reason: paused ? reason : undefined });
+  }
   else if (cmd === "metrics") {
     // Same precedence as watch/check: an explicit flag wins, otherwise a
     // terminal gets the readable table and a pipe keeps the JSON contract (D19).

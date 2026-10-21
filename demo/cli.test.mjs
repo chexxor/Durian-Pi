@@ -79,6 +79,15 @@ try {
 	assert.equal(status.seats.length, 2);
 	assert.ok(Array.isArray(status.queueItems));
 	assert.ok(Array.isArray(status.attention), "attention is always an array");
+// #4403: a consumer that MERGES streams (`2>&1`) must still read the authoritative view. The
+// out-of-band note is now a JSON FIELD (`notes`), not a stderr line — a diagnostic that can break
+// the machine-readable view must be IN the view, or a read works until a measure drifts.
+assert.ok(Array.isArray(status.notes), "the status view carries `notes` as an array");
+const merged = cli(["status"]);
+assert.doesNotThrow(
+	() => JSON.parse(merged.stdout + merged.stderr),
+	"a MERGED stdout+stderr read still parses (the note is in the JSON, not on stderr)",
+);
 
 	// --- watch --once: exactly one NDJSON snapshot -------------------------
 	const watch = cli(["watch", "--once"]);
@@ -116,6 +125,18 @@ try {
 		"a completed send reports the reply it produced",
 	);
 	assert.match(send.stderr, /waiting for its run to settle/, "the wait is explained");
+	// #1585 (operator batch 4): `send` is deprecated in favour of the spool. The notice
+	// rides STDERR (a diagnostic), so stdout stays the one-JSON-doc contract above.
+	assert.match(
+		send.stderr,
+		/send is DEPRECATED/,
+		"the deprecation notice is shown on the send it deprecates",
+	);
+	assert.match(
+		send.stderr,
+		/intent\.mjs/,
+		"the notice names the replacement (the spool)",
+	);
 
 	// --- log: transcript shape, and the limit argument ---------------------
 	const log = json(cli(["log", "alpha", "10"]));
@@ -221,7 +242,7 @@ try {
 
 	console.log("--- wrong-database guardrail ---");
 
-	// A second terminal that forgot DURIG_DB is the classic new-user trap: the
+	// A second terminal that forgot DURIAN_PI_DB is the classic new-user trap: the
 	// default ./rig.sqlite is created on demand, so every read command answers
 	// ok with zero seats and looks healthy. The note must name the database.
 	const strayDb = join(dir, "stray", "rig.sqlite");

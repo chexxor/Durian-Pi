@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 # The 80/3 vs 85/0 discrepancy — what happened, and what qa should trust
 
 ## Observation

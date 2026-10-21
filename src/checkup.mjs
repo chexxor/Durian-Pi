@@ -23,14 +23,16 @@
 // drives every rule without a database, a provider, or a model.
 
 import { ANSI } from "./ansi.mjs";
+// The verifier vocabulary and predicate live in their own low-layer module
+// (src/verifierrole.mjs) because `metrics` and `seattools` need them at RUNTIME:
+// importing them from this audit made a conflicted checkup.mjs fatal to the whole
+// CLI's load (2026-10-17, lead #1164). Re-exported so every importer keeps ONE
+// definition.
+import { VERIFIER_TERMS, seatsAreVerifier } from "./verifierrole.mjs";
+import { describeFaults } from "./textintegrity.mjs";
+import { messageDefects } from "./commitmsg.mjs";
 
-// Terms that mark a seat as an independent verifier, matched as substrings of
-// the seat's NAME and ROLE text. Deliberately excludes this rig's shared
-// `peer-review` capability: `impl`/`impl2` advertise it too, so matching on
-// capabilities would call the authors verifiers and report an all-clear on the
-// exact gap the rule exists to catch. `audit` is excluded for the same reason —
-// a security seat audits its own surface, not other seats' work.
-export const VERIFIER_TERMS = ["verif", "qa", "review", "editor"];
+export { VERIFIER_TERMS, seatsAreVerifier };
 
 /** Rule ids are the stable API: scripts match on them, prose may change. */
 export const RULES = [
@@ -90,6 +92,11 @@ export const RULES = [
     what: "a runbook's Verify step has never run",
   },
   {
+    id: "runbook-front-matter",
+    severity: "fix-now",
+    what: "a runbook's front-matter block is missing, or its keys/values and skeleton sections do not conform to _template.md",
+  },
+  {
     id: "ownership-seat-missing",
     severity: "error",
     what: "an ownership class names an owner seat the rig does not declare",
@@ -97,7 +104,32 @@ export const RULES = [
   {
     id: "verification-without-evidence",
     severity: "fix-now",
-    what: "a verification task was completed with only an acknowledgement, not re-runnable evidence",
+    what: "a verification task was completed with only an acknowledgement, or with evidence that names no artifact — not re-runnable evidence (#2547)",
+  },
+  {
+    id: "evidence-tree",
+    severity: "fix-now",
+    what: "a terminal item's evidence names an artifact that names no tree and no store - a green depends on the tree it ran in, so an un-named artifact cannot be re-checked (#4153)",
+  },
+  {
+    id: "feature-row-missing",
+    severity: "fix-now",
+    what: "a feat commit landed with no docs/FEATURES.md row and no stated \"no feature surface\" note",
+  },
+  {
+    id: "shared-tree-on-main",
+    severity: "error",
+    what: "the shared working tree is not on its integration branch, so a seat may be writing to a feature branch",
+  },
+  {
+    id: "commit-message-encoding",
+    severity: "fix-now",
+    what: "a recent commit message carries a UTF-8 BOM (or a NUL / stray CR) — invisible in every normal view, so it surfaces only in a byte read; a body BOM corrupts a trailer (#4349)",
+  },
+  {
+    id: "text-integrity",
+    severity: "error",
+    what: "a tracked file's newline structure COLLAPSED versus HEAD, or its encoding is broken (BOM / NUL / invalid UTF-8) — node --check is structurally blind to this class (#4305)",
   },
 ];
 
@@ -107,14 +139,6 @@ const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
 function firstLine(text, limit = 96) {
   const line = String(text ?? "").split("\n")[0].trim();
   return line.length > limit ? `${line.slice(0, limit - 1)}…` : line;
-}
-
-/** A seat counts as a verifier when its name or role says so. Exported because
- * the config-derived metrics measure needs the same judgement `check`'s
- * no-verifier-seat rule makes, and two definitions would drift. */
-export function seatsAreVerifier(seat) {
-  const haystack = `${seat.name ?? ""} ${seat.role ?? ""}`.toLowerCase();
-  return VERIFIER_TERMS.some((term) => haystack.includes(term));
 }
 
 /**
@@ -143,6 +167,168 @@ export function hasEvidence(item) {
 }
 
 /**
+ * #2547 (lead ruling A): whether a completion NAMES the artifact its evidence is about.
+ *
+ * The evidence contract is `{ command, exitCode, artifact }` (ROADMAP 48 / W2). A command and
+ * an exit code are re-runnable, but with no artifact the reader cannot tell WHICH revision was
+ * checked — the same command against a different rev is a different check — so the completion
+ * is not ADDRESSABLE. A blank or absent artifact is that gap; `hasEvidence` alone does not see
+ * it (kept separate so "is there evidence at all" and "is it addressable" stay distinct).
+ */
+export function hasArtifact(item) {
+  const e = item?.evidence;
+  return e != null && typeof e.artifact === "string" && e.artifact.trim() !== "";
+}
+
+/**
+ * #4153: whether an `artifact` NAMES WHAT THE CHECK RAN AGAINST. A green depends on the tree it ran
+ * in - "a suite run in `.` measures the shared tree", a derived file verified on its own branch is
+ * consistent with itself, two seats can disagree about `main` because both measured the wrong tree.
+ * So an artifact that names nothing is un-re-checkable by a human later, which is the gap in all four
+ * instances. A SUBJECT is either a GIT TREE (a sha 7-40 hex, a ref-like token, or `main`) or a
+ * NON-GIT subject the check legitimately ran against instead (the store, the queue, a scratch) -
+ * for those a git tree is genuinely N/A, so naming the store IS naming what was checked.
+ *
+ * MEASURED against the live queue before shipping (#4153): 774 terminal items carry evidence with a
+ * non-blank artifact; 15 name no GIT tree, and after the non-git-subject carve-out 2 remain - both a
+ * bare `"2148"`. A guard that fires on 2 of 774 is a guard; the duplicate rule's lesson is that a
+ * rule shipped without this count is a rule that gets disabled.
+ *
+ * STATED LIMIT: this rule cannot reach a seat BEFORE it writes a completion - it reads what was
+ * already written. The `complete_work` description carries the same convention so it shapes what
+ * gets written. TWO MECHANISMS FOR TWO MOMENTS, neither a substitute for the other.
+ * STATED LIMIT (the half NOT built): "a DERIVED artifact must be named as MERGED" needs ancestry
+ * (`git merge-base --is-ancestor`), which is a SUBPROCESS, and checkup never runs one; and ancestry
+ * gives FALSE NEGATIVES on squash-shaped landings (#3337), so a sha that is not an ancestor of main
+ * may still BE the merged content. A rule on ancestry would flag correct evidence as wrong.
+ */
+export function namesCheckSubject(artifact) {
+  const a = String(artifact ?? "");
+  if (a.trim() === "") return false;
+  // A git tree: a sha (7-40 hex, not part of a longer hex run), `main`, or a ref-like token.
+  if (/(?<![0-9a-f])[0-9a-f]{7,40}(?![0-9a-f])/i.test(a)) return true;
+  if (/(?:\bmain\b|\borigin\/|^refs\/|\b[\w.-]+-item-\d+\b|\bv?\d+\.\d+\.\d+\b)/i.test(a)) return true;
+  // A non-git subject: the store, the queue, a scratch - where a git tree is genuinely N/A.
+  if (/(\.sqlite|@read|\bqueue\b|\bstore\b|live state|live tree|scratch|\bno commit\b|no code changed)/i.test(a)) return true;
+  return false;
+}
+
+/**
+ * The MANDATORY runbook front-matter keys, in the order `docs/runbooks/README.md`
+ * ("Front-matter (mandatory)") and `docs/runbooks/_template.md` list them. `check_rule`
+ * is a REQUIRED key whose VALUE may legitimately be `null` — the key is what makes the
+ * block retrievable as a schema, which is the whole point of the block.
+ */
+export const RUNBOOK_FRONT_MATTER_KEYS = [
+  "runbook",
+  "symptom",
+  "writes",
+  "precondition",
+  "last_verified",
+  "verified_by",
+  "evidence",
+  "check_rule",
+];
+
+/** The only legal `precondition` values (the header is enforced in code, not prose — ROADMAP 69). */
+export const RUNBOOK_PRECONDITIONS = ["broker-stopped", "read-only", "none"];
+
+/**
+ * The fixed skeleton `_template.md` defines, in order. `Diagnose` is matched by
+ * prefix so "Diagnose (read-only)" and a bare "Diagnose" both conform; the other
+ * headings are exact, because the index and the readers rely on the same words.
+ */
+export const RUNBOOK_TEMPLATE_SECTIONS = [
+  "When to use",
+  "Impact",
+  "Preconditions",
+  "Diagnose (read-only)",
+  "Do",
+  "Verify",
+  "If it fails",
+  "Escalate to",
+  "Evidence",
+];
+
+const isNonEmptyString = (v) => typeof v === "string" && v.trim() !== "";
+const hasKey = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+/**
+ * The reasons a runbook's header/body fails `_template.md` conformity — a PURE
+ * function over plain data, so `auditRig` never touches the filesystem (ROADMAP 81a's
+ * input surface). Returns [] when the entry conforms.
+ *
+ * Judged: the mandatory keys are present; `runbook` mirrors the filename stem (the
+ * index key); `writes` is a boolean; `precondition` is one of the three legal values;
+ * `last_verified` is a date or `unverified`; `verified_by`/`evidence` are non-empty;
+ * `check_rule` is a string or null. When the caller also supplies the runbook's `body`,
+ * the `_template.md` skeleton sections are judged too; without a body the section half
+ * is simply not judged (the front-matter half still is).
+ *
+ * `_template.md` itself is EXEMPT: it carries placeholders (`<filename-stem>`) by design,
+ * and it is the thing conformity is measured against.
+ *
+ * @param {{file?:string, frontMatter?:object|null, body?:string}} [runbook]
+ * @returns {string[]} human-readable problems, [] when conformant
+ */
+export function runbookFrontMatterProblems(runbook) {
+  const file = String(runbook?.file ?? "");
+  const stem = file.split(/[\\/]/).pop().replace(/\.md$/i, "");
+  if (stem === "_template") return [];
+  const problems = [];
+  const fm = runbook?.frontMatter;
+  if (fm === null || typeof fm !== "object" || Array.isArray(fm)) {
+    problems.push("no front-matter block");
+  } else {
+    for (const key of RUNBOOK_FRONT_MATTER_KEYS) {
+      if (!hasKey(fm, key) || fm[key] === undefined) problems.push(`missing key \`${key}\``);
+    }
+    if (hasKey(fm, "runbook") && isNonEmptyString(fm.runbook) && fm.runbook.trim() !== stem) {
+      problems.push(`runbook: "${fm.runbook}" does not mirror the filename stem "${stem}"`);
+    }
+    if (hasKey(fm, "symptom") && !isNonEmptyString(fm.symptom)) {
+      problems.push("symptom: must be a non-empty string");
+    }
+    if (hasKey(fm, "writes") && typeof fm.writes !== "boolean") {
+      problems.push(`writes: must be true or false (got ${JSON.stringify(fm.writes)})`);
+    }
+    if (hasKey(fm, "precondition") && !RUNBOOK_PRECONDITIONS.includes(fm.precondition)) {
+      problems.push(
+        `precondition: must be one of ${RUNBOOK_PRECONDITIONS.join(" | ")} (got ${JSON.stringify(fm.precondition)})`,
+      );
+    }
+    if (
+      hasKey(fm, "last_verified") &&
+      fm.last_verified !== "unverified" &&
+      !(isNonEmptyString(fm.last_verified) && /^\d{4}-\d{2}-\d{2}$/.test(fm.last_verified.trim()))
+    ) {
+      problems.push(`last_verified: must be a YYYY-MM-DD date or "unverified" (got ${JSON.stringify(fm.last_verified)})`);
+    }
+    if (hasKey(fm, "verified_by") && !isNonEmptyString(fm.verified_by)) {
+      problems.push("verified_by: must name who verified it");
+    }
+    if (hasKey(fm, "evidence") && !isNonEmptyString(fm.evidence)) {
+      problems.push("evidence: must name the item(s)/commit(s) that proved it");
+    }
+    if (hasKey(fm, "check_rule") && fm.check_rule !== null && !isNonEmptyString(fm.check_rule)) {
+      problems.push("check_rule: must be a rule id or null");
+    }
+  }
+  const body = runbook?.body;
+  if (typeof body === "string") {
+    const headings = [...body.matchAll(/^##\s+(.+?)\s*$/gm)].map((m) => m[1]);
+    for (const want of RUNBOOK_TEMPLATE_SECTIONS) {
+      const found =
+        want === "Diagnose (read-only)"
+          ? headings.some((h) => /^Diagnose\b/.test(h))
+          : headings.includes(want);
+      if (!found) problems.push(`missing \`## ${want}\` section`);
+    }
+  }
+  return problems;
+}
+
+/**
  * @param {object} input
  * @param {string} input.rig            rig file path, for display
  * @param {object} input.spec           parsed rig file
@@ -150,15 +336,19 @@ export function hasEvidence(item) {
  * @param {{reason:"read",text:string}|{reason:"absent"}|{reason:"unreadable",error:string}} input.stored
  * @param {string[]|null} [input.storedSeats]  seat names the store holds, or null when it was not read
  * @param {Record<string,string>} [input.modelsBySeat]  seat name -> "provider/modelId"
- * @param {Array<{file:string, frontMatter:object|null, changedNamedFiles?:string[]}>} [input.runbooks]
+ * @param {Array<{file:string, frontMatter:object|null, body?:string, changedNamedFiles?:string[]}>} [input.runbooks]
  *   runbook data the CALLER read from docs/runbooks/* and passed as plain values (this module never
  *   touches the filesystem). Each entry carries the parsed front-matter and the files the runbook
  *   NAMES that changed since `last_verified`. Omit it entirely to leave the runbook rules unrun
  *   (they are then reported skipped, never as a false pass).
  * @param {Array<object>|null} [input.queueItems]  the store's queue items, or null when the queue was not read
+ * @param {Array<{sha:string, subject:string, touchedFeatures:boolean, noSurfaceNote:boolean}>|null} [input.featureDocs]
+ *   the `feat` commits the CALLER read from git history (src/featuredocs.mjs) and whether each
+ *   touched docs/FEATURES.md; null when the history was not read. Omit it to leave the
+ *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -357,19 +547,33 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
     );
   }
 
-  // 9. Runbook health (docs/runbooks/README.md maintenance policy; ROADMAP 81). auditRig stays
+  // 9. Runbook health (docs/runbooks/README.md maintenance policy; ROADMAP 81/82). auditRig stays
   //    PURE: the caller reads docs/runbooks/* and passes plain data - each runbook's parsed
-  //    front-matter plus the files it NAMES that changed since `last_verified`. A runbook whose
-  //    Verify step never ran is fix-now (unproven but harmless to a run); one verified before a file
-  //    it names changed is an ERROR, because its literal steps may no longer match the code.
-  //    Omitting `runbooks` leaves both rules SKIPPED with a reason - never a false pass.
+  //    front-matter (plus, when it has one, the body) and the files it NAMES that changed since
+  //    `last_verified`. A runbook whose Verify step never ran is fix-now (unproven but harmless to a
+  //    run); one verified before a file it names changed is an ERROR, because its literal steps may
+  //    no longer match the code; one whose header/skeleton does not conform to _template.md is
+  //    fix-now, because the block is how a seat or a rule retrieves the procedure's assumptions.
+  //    Omitting `runbooks` leaves all three rules SKIPPED with a reason - never a false pass.
   if (!Array.isArray(runbooks)) {
     const why = "no runbook data was supplied, so no runbook can be judged";
     skipped.push({ id: "runbook-stale", why });
     skipped.push({ id: "runbook-unverified", why });
+    skipped.push({ id: "runbook-front-matter", why });
   } else {
     for (const runbook of runbooks) {
       const file = runbook?.file ?? "(unnamed runbook)";
+      // Conformity to _template.md (ROADMAP 82): judged on every entry, independent of
+      // verification state — an unreadable header is a defect even when the Verify step ran.
+      const problems = runbookFrontMatterProblems(runbook);
+      if (problems.length > 0) {
+        add(
+          "runbook-front-matter",
+          file,
+          `${file} does not conform to _template.md: ${problems.join("; ")}`,
+          "fix the runbook's front-matter block / skeleton to match docs/runbooks/_template.md (see the README's schema)",
+        );
+      }
       const lastVerified = runbook?.frontMatter?.last_verified;
       if (lastVerified === undefined || lastVerified === null || lastVerified === "" || lastVerified === "unverified") {
         add(
@@ -444,16 +648,160 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       why: "the queue could not be read, so completed verification tasks cannot be inspected",
     });
   } else {
+    // #2547 (lead ruling A): a completion is only re-checkable if it names the ARTIFACT the
+    // command ran against. A command + exit code with no artifact can be re-run against the
+    // WRONG revision, so a VERIFY item that records evidence without a non-blank `artifact`
+    // is as unaddressable as one with no evidence at all.
     const acked = queueItems.filter(
-      (it) => it?.status === "done" && isVerificationItem(it) && !hasEvidence(it),
+      (it) => it?.status === "done" && isVerificationItem(it) && (!hasEvidence(it) || !hasArtifact(it)),
     );
     if (acked.length > 0) {
       const ids = acked.map((it) => `#${it.id}`).join(", ");
       add(
         "verification-without-evidence",
         ids,
-        `${acked.length === 1 ? "verification item" : `${acked.length} verification items`} ${ids} completed without evidence — the completion is an ack, not a re-run, so nothing can be re-checked`,
-        "re-run the artifact and record it when completing a verification item: complete_work(<id>, <summary>, { command, exitCode, artifact }) — an ack alone is not a sign-off (W2)",
+        `${acked.length === 1 ? "verification item" : `${acked.length} verification items`} ${ids} completed without re-runnable evidence — the completion is an ack (or names no artifact), not a re-run, so nothing can be re-checked`,
+        "re-run the artifact and record it when completing a verification item: complete_work(<id>, <summary>, { command, exitCode, artifact }) — an ack alone is not a sign-off, and a command/exit code with no ARTIFACT cannot be re-checked (W2/#2547)",
+      );
+    }
+  }
+  // 11b. #4153 EVIDENCE-TREE: a completion whose evidence names an artifact that names NO tree (and
+  //    no store) cannot be re-checked - the reader cannot tell WHICH revision was checked, and a
+  //    green depends on the tree it ran in. This is the SHARPENING of `hasArtifact` (a non-blank
+  //    artifact) to "a NAMED subject": hasArtifact accepts "2148"; this does not. Scoped to items
+  //    that HAVE evidence AND a non-blank artifact, so it never duplicates
+  //    verification-without-evidence (which owns the MISSING artifact). Plain data, no subprocess.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "evidence-tree",
+      why: "the queue could not be read, so completed items' artifacts cannot be inspected",
+    });
+  } else {
+    const unnamed = queueItems.filter(
+      (it) =>
+        it?.status === "done" && hasEvidence(it) && hasArtifact(it) && !namesCheckSubject(it.evidence.artifact),
+    );
+    if (unnamed.length > 0) {
+      const ids = unnamed.map((it) => `#${it.id}`).join(", ");
+      add(
+        "evidence-tree",
+        ids,
+        `${unnamed.length === 1 ? "completion" : `${unnamed.length} completions`} ${ids} name an artifact that names no tree (and no store) — a green depends on the tree it ran in, so an un-named artifact cannot be re-checked by a human later`,
+        "name WHAT the check ran against: complete_work(<id>, <summary>, { command, exitCode, artifact: '<sha|branch|main>' }) — or the store/queue for a non-git check (e.g. 'selfdev.sqlite@read')",
+      );
+    }
+  }
+  // 12. ROADMAP 46 (FEATURES-row half) / D62: a shipped capability carries its own doc
+  //    acceptance — the docs/FEATURES.md row — or its item records an explicit "no feature
+  //    surface" note. The merge gate (docs/runbooks/merge.md) enforces this by hand with a
+  //    `git log --grep '^feat'` sweep; a prose gate goes stale, so it is checked here. The
+  //    input is plain data the CALLER read from git (src/featuredocs.mjs) for the same reason
+  //    the runbook rules take plain data: checkup never runs a subprocess. Absent input means
+  //    the history was not read => SKIPPED with its reason, never a silent pass (D25).
+  //    Severity is fix-now, not error: a missing doc row does not stop the rig working, so it
+  //    must not fail a script — the merge gate is where it blocks. Stated limit (mirrors the
+  //    block this replaces): only `feat` commits, and only a SAME-commit touch of the doc.
+  if (!Array.isArray(featureDocs)) {
+    skipped.push({
+      id: "feature-row-missing",
+      why: "no git-history data was supplied, so shipped capabilities cannot be checked against docs/FEATURES.md",
+    });
+  } else {
+    const drifted = featureDocs.filter((c) => c && c.touchedFeatures !== true && c.noSurfaceNote !== true);
+    if (drifted.length > 0) {
+      const named = drifted
+        .map((c) => `${String(c?.sha ?? "?").slice(0, 8)} ${firstLine(c?.subject ?? "(no subject)", 64)}`)
+        .join("; ");
+      add(
+        "feature-row-missing",
+        drifted.map((c) => String(c?.sha ?? "?").slice(0, 8)).join(", "),
+        `${named} — a feat commit with no docs/FEATURES.md row and no "no feature surface" note, so a shipped capability has no doc entry (D62)`,
+        "add the docs/FEATURES.md row for each, or record an explicit \"no feature surface\" note in its item",
+      );
+    }
+  }
+
+  // 13. The shared working tree must sit on its integration branch. A seat whose cwd fell back to
+  //    the shared tree once switched it onto an item branch (2026-10-19, devtools #2412 -
+  //    docs/incidents/2026-10-17-seat-root-fallback-commit.md): the landing basis breaks and
+  //    "live" writes land on a feature branch. `auditRig` is a pure function, so the CALLER reads
+  //    the branch (src/featuredocs.mjs) and passes it; no data means SKIPPED with a reason, never a
+  //    silent pass (D25). A detached HEAD reads as "" and is a finding like any other branch.
+  //
+  //    LINKED worktrees are exempt: `scripts/land.mjs` runs the suite in a DETACHED scratch
+  //    worktree, and every seat/item worktree is linked too. There the branch reads as "" (scratch)
+  //    or names the item branch (seat), neither of which is the shared tree's branch - so the rule
+  //    fired on EVERY landing and refused them all (#2679). The caller reports linked-ness
+  //    (src/featuredocs.mjs `isLinkedWorktree`); a linked worktree is not the shared tree, so the
+  //    rule is SKIPPED with its reason rather than passed (passing would claim a check never run).
+  if (sharedTreeLinked === true) {
+    skipped.push({
+      id: "shared-tree-on-main",
+      why: "this is a LINKED worktree (a landing scratch or a seat/item worktree), not the shared tree, so the shared tree's branch cannot be observed from here",
+    });
+  } else if (sharedTreeBranch === null || sharedTreeBranch === undefined) {
+    skipped.push({
+      id: "shared-tree-on-main",
+      why: "the current git branch was not supplied, so the shared working tree's branch cannot be checked",
+    });
+  } else if (sharedTreeBranch !== sharedTreeExpected) {
+    const on = sharedTreeBranch === "" ? "a detached HEAD" : `branch "${sharedTreeBranch}"`;
+    add(
+      "shared-tree-on-main",
+      sharedTreeBranch || "detached",
+      `the shared working tree is on ${on}, not "${sharedTreeExpected}" - a seat whose cwd falls back to the shared tree writes to a feature branch and the landing basis breaks`,
+      `switch the shared tree back: git switch ${sharedTreeExpected}; land item branches through the landing helper`,
+    );
+  }
+
+  // 14. A commit message must not carry a UTF-8 BOM (or a NUL / stray CR) - #4349. Four commits in
+  //    one session carried a BOM because PowerShell's `Set-Content -Encoding utf8` writes one, and
+  //    each was caught by hand; four catches is not a catch rate, it is a mechanism that does not
+  //    exist. (A FIFTH — 30270c0 — was NOT amended and IS in history, recorded as a known-reds
+  //    baseline in docs/STATUS.md; this rule's job is both to stop the next one and to keep finding
+  //    this one until the operator deals with it.) A BOM is INVISIBLE IN EVERY NORMAL VIEW (`git log --oneline` renders it, `git show`
+  //    renders it, the author sees a clean subject) and surfaces only in a byte read - which is
+  //    exactly what a check is for. The WHOLE message is checked, not just the subject: a BODY BOM
+  //    corrupts a `Co-authored-by` trailer or a `Fixes #N` line, where the parser is strict. The
+  //    caller reads the messages (src/commitmsg.mjs) and passes PLAIN DATA, so this stays a linter
+  //    over data; no data means SKIPPED with its reason, never a silent pass (D25).
+  if (!Array.isArray(commitMessages)) {
+    skipped.push({
+      id: "commit-message-encoding",
+      why: "the recent commit messages were not supplied, so their encoding cannot be inspected",
+    });
+  } else {
+    const bad = commitMessages.map((m) => ({ m, defects: messageDefects(m) })).filter((x) => x.defects.length > 0);
+    if (bad.length > 0) {
+      const ids = bad.map((x) => String(x.m.sha ?? "").slice(0, 8)).join(", ");
+      add(
+        "commit-message-encoding",
+        ids,
+        `${bad.length === 1 ? "commit" : `${bad.length} commits`} ${ids} carry a UTF-8 BOM (or a NUL / stray CR) in the message — invisible in every normal view, so it surfaces only in a byte read, and a body BOM corrupts a trailer`,
+        "rewrite the message through a writer that does NOT add a BOM (node's fs, or the write/edit tool) and amend the commit from that file. PowerShell's `Set-Content -Encoding utf8` writes one — do not use it for commit messages",
+      );
+    }
+  }
+
+  // 15. TEXT INTEGRITY (#4371, detector #4305): a tracked file whose newline structure COLLAPSED versus
+  //    HEAD, or whose encoding is broken. `node --check` is STRUCTURALLY BLIND to this - the flattening
+  //    turns the opening `//` into a comment that swallows the whole file, so it still parses and
+  //    exports NOTHING, and the failure surfaces only at import time. ERROR severity because a broken
+  //    tree stops every seat; the false-positive surface is handled by the CALLER, which passes only
+  //    the files that DIFFER from HEAD, and by the detector, which exempts untracked files from the
+  //    collapse comparison (no HEAD to compare against). No data means SKIPPED with its reason (D25).
+  if (!Array.isArray(textIntegrity)) {
+    skipped.push({
+      id: "text-integrity",
+      why: "the working tree's changed files were not supplied, so their text integrity cannot be inspected",
+    });
+  } else {
+    for (const f of textIntegrity) {
+      add(
+        "text-integrity",
+        f.path,
+        describeFaults(f.path, f.faults),
+        `restore from HEAD (git show HEAD:${f.path}) and re-apply the intended edit — do not patch bytes`,
       );
     }
   }

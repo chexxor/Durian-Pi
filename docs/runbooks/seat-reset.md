@@ -27,10 +27,10 @@ through the broker inbox while the broker runs.
 
 ## Diagnose (read-only)
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs status
-DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 6
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat> 6
 # Preview the reset — READ-ONLY, needs no broker stop (ROADMAP 84):
-DURIG_DB=./selfdev.sqlite node cli.mjs reset <seat> --dry-run
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs reset <seat> --dry-run
 ```
 A repeating assistant entry with no tool calls, or CJK in the live stream, confirms a loop / wrong
 language. For the text-form tool call, **read the stored entry, not a screen capture**: the terminal
@@ -43,7 +43,7 @@ STRIPS the DSML delimiter, so a screen read shows a clean `<parameter>` block an
 the inbox; the broker submits it to the seat on its next pass.
 ```bash
 # write the directive to a file first (never inline — a backtick would be command-substituted)
-DURIG_DB=./selfdev.sqlite node intent.mjs <seat> --body-file .spike/delegate/intent-<seat>-english.txt
+DURIAN_PI_DB=./selfdev.sqlite node intent.mjs <seat> --body-file .spike/delegate/intent-<seat>-english.txt
 ```
 
 **Detected degeneration is reset for you (no manual step).** The degeneration guard (`src/degeneration.mjs`
@@ -56,8 +56,8 @@ generic stall after a reset is fixed; you do not need to spool a nudge to re-wak
 **Full context reset (breaks a degenerative loop that did not trip the guard):** stop the broker, reset,
 restart.
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs serve --stop          # proceed only on "stopped": true
-DURIG_DB=./selfdev.sqlite node cli.mjs reset <seat> "Re-anchor: work and think in English; continue your claimed item."
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs serve --stop          # proceed only on "stopped": true
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs reset <seat> "Re-anchor: work and think in English; continue your claimed item."
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
 ```
 `reset` refuses while the seat holds a live generation lease; wait for the run to settle first.
@@ -84,6 +84,22 @@ No `adjudicate` or repeated identical turns.
 > healthy long document repeats ordinary words while its sentences stay varied. If the detector is the
 > cause, fix the detector — see `degeneration-guard.md` — do not just reset again.
 
+## Context saturation (a third trigger — no loop to watch)
+
+A seat can degrade because its **context is full**, not because it repeats a shape: observed `qa` at
+**367,559** tokens emitting incoherent, self-reported-degraded output while the guard stayed silent
+(`docs/incidents/2026-10-17-qa-context-degeneration.md`). The fix is a **`compact`**, not a reset:
+`compact` summarizes the old prefix and keeps the transcript (better for a verifier). It is a
+broker-stopped write verb, so it needs the same window as a reset; if the seat's submission landed
+`admitted_not_started`, run `resume` first. A delegate/operator runs it (a seat cannot stop the broker
+it lives in):
+```bash
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs serve --stop      # confirm the PROCESS exited, not just the flag
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs resume            # re-arm any admitted_not_started submission
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs compact <seat> "Re-anchor: keep turns short and in English."
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
+```
+
 ## If it fails
 - `reset` refuses ("holds a live generation lease") → wait, or `stop <seat>`, then retry.
 - The seat keeps drifting: the durable fix is the `P3 Language` constitution rule plus a model that
@@ -97,6 +113,9 @@ No `adjudicate` or repeated identical turns.
 `demo/degeneration.test.mjs` / `demo/scheduler.test.mjs`.
 
 ## Evidence
+2026-10-17: `qa` recovered by `compact` in an operator-sanctioned window (context 367k → ~48k); the
+F11 drain hung on qa's runaway outputting turn, so the drain pid was force-killed after a store backup.
+See `docs/incidents/2026-10-17-qa-context-degeneration.md`.
 2026-10-16: `P3 Language` added to `constitution.txt` (`a0ab993`). D77 — a tool call emitted as TEXT is
 degenerate on first sight: detect (`f086382` + `c38815f`) and reset, never translate; auto re-drive of a
 reset seat (`7d62929`). Verified against the real stored entry `35382` (`pseudo-tool-call=1>=1`) and by

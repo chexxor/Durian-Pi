@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 I'll ground this in your actual repo first, then research the open questions.The file tree capture didn't include the specific files. Let me pull them directly.Now I have the repo constraints. Let me gather the external evidence for the open questions.I have enough to deliver the report. One note before it: your workspace here is read-only, so I can't write `docs/reviews/llm-agent-project-management-tools-followup.md` — the full content is below for you to drop in.
 
 Also two honesty flags up front, because they change the architecture answer:

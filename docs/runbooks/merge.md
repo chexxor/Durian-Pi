@@ -31,12 +31,36 @@ radius: a bad merge touches every seat's base tree.
   (`SyntaxError`). So a landing pass runs in an **exclusive window**: stop the broker
   (`broker-safe-change.md`) and confirm **no `genlock.*` is held** before the first merge; restart it
   after the pass verifies. This is the 2026-10-17 landing-safety incident (see
-  `docs/reviews/landing-safety-2026-10-17.md`).
+  `docs/incidents/2026-10-17-landing-safety.md`). **A broker-hosted seat cannot drive that pass:** stopping
+  the broker ends that seat's own run, so the pass must run OUTSIDE the broker (`land.md` Do step 0).
 - **Serialized:** one landing at a time; never merge while another commit/merge to `main` is in flight or
   another seat is generating.
 - The branch's worktree is **not mid-edit**: a linked worktree (`item-<id>`) must be clean, or removed,
   never merged while a seat holds uncommitted edits on it.
 - The branch is **verified** (qa/auditor ack) and **mergeable** (clean merge into current `main`).
+
+## The mid-merge WRITE refusal (ROADMAP 111)
+Since `935b2c4` (the 2026-10-17 landing-safety incident) durig **refuses every WRITE verb while the
+working tree is mid-merge** (`.git/MERGE_HEAD` present). The guard is `src/mergeguard.mjs`, run FIRST
+in `cli.mjs` — before any storage or provider work — from a module that imports nothing but
+`node:fs`/`node:path`, so it cannot be disabled by the very fault it exists to catch (a conflicted
+`src/checkup.mjs` that kills the CLI's load).
+
+- **Refused** (exit non-zero): `up`, `init`, `send`, `run`, `serve`, `stop`, `reset`, `clean`,
+  `compact`, `resume`, `doctor`, `format`, `worktree`.
+- **Still usable — reads, so a stuck merge stays diagnosable:** `status`, `queue`, `ps`, `log`,
+  `watch`, `events`, `metrics`, `check`, `config`.
+- **Exempt (not mutations):** any `--dry-run`, and `serve --stop` — a stuck merge is exactly when the
+  broker most needs stopping.
+
+The refusal names the state, the `MERGE_HEAD` path, the merge commit, and the remedy ("Finish the
+merge … or abort it, then re-run `<verb>`"); it does not fall through to the verb's own arg/store
+error. The guard lives in CODE, not in prose, because prose is exactly what failed.
+
+Verify the guard:
+```bash
+node demo/mergeguard.test.mjs   # exit 0
+```
 
 ## Diagnose (read-only)
 ```bash
@@ -48,6 +72,12 @@ git worktree list --porcelain | grep -A1 '^worktree'
 `ahead=0` means the branch is already in `main` (safe to delete with `git branch -d`). `ahead>0` means
 unique work — confirm with `git cherry -v main <branch>`: a `+` line is a commit **not** in `main` (keep the
 branch); a `-` line is a patch-equivalent commit already in `main` (rebased duplicate).
+
+> **Point-in-time reports go stale.** A report that "file X is uncommitted in the shared tree" is a
+> point-in-time observation: it is true the moment it was read, and false the moment a landing happens.
+> Before acting on one (routing work, landing, or attributing ownership), **re-verify with
+> `git status` / `git ls-files`** at that moment — do not land or route off a stale report (2026-10-17:
+> two items routed from a stale "uncommitted merge.md / shared-tree docs" report were already landed).
 
 **Pre-flight each branch WITHOUT touching the working tree** (git 2.55; verified 2026-10-17). This merges
 into a tree object only, so it is safe to run while the broker drives, and it is how a landing pass knows
@@ -85,7 +115,10 @@ branch that fails a row is not ready: send it back through W2; do not merge it "
 ### Feature
 - [ ] Spec/design closed (designer + advocate when user-facing).
 - [ ] Tests at the right layer (unit; golden/floor for a TUI, with the floor case explicit).
-- [ ] Docs updated (`FEATURES`/README/runbook) or explicitly not needed.
+- [ ] **`FEATURES.md` row updated, OR the item states an explicit "no feature surface" note.** A
+      `README`/runbook mention alone does **not** satisfy this row (D62 doc-acceptance). A feature
+      that lands with neither is exactly the drift this gate exists to catch (2026-10-17 docs-drift
+      finding: `format`, `--dry-run`, instance key, TUI backfill, ROADMAP 69, the `check` rules).
 - [ ] Blast radius + rollback stated.
 - [ ] Serialization respected (e.g. one `cli.mjs` writer).
 
@@ -132,7 +165,7 @@ Then delete the branch: `git branch -d <branch>` (safe — `-d` refuses anything
   shared tree breaks `cli.mjs` for the whole rig (`.git/MERGE_HEAD` in a statically-imported module makes
   every verb a `SyntaxError`). Then **stop and report**; send the branch back for a rebase (W2) and name
   the conflict. Never force.
-- `git branch -d <branch>` is refused by the seatguard (`refused by durig: would delete a branch`): the
+- `git branch -d <branch>` is refused by the seatguard (`refused by durian-pi: would delete a branch`): the
   landing is still complete (the sha is an ancestor of `main`); leave the merged branch in place and
   report it — branch deletion is guard-blocked for author seats, so the operator (or a non-author seat)
   must prune the merged branch.
@@ -144,6 +177,39 @@ Then delete the branch: `git branch -d <branch>` (safe — `-d` refuses anything
 Landing is an agent responsibility, not an auto-gate. Verify later by running the Diagnose block
 periodically (delegate clock-out, or a `check` pass) and reporting the `ahead>0` set. The measurement
 that makes this worth doing — **unlanded-verified count and time-to-land** — is ROADMAP item 100.
+
+**Prune what this audit lands.** The `ahead=0` set is already on `main`, so delete it with `git branch -d`;
+`-d` refuses any ref that is unmerged or still checked out, so it cannot discard unique work. Classify
+first, because `git branch --merged` prints a leading `+` for a ref held by a linked worktree:
+```bash
+git branch --merged main | sed -E 's/^[*+ ]+//' | grep -v '^main$' | sort -u > merged.txt
+git worktree list --porcelain | awk '/^branch /{sub("refs/heads/","",$2); print $2}' | sort -u > held.txt
+comm -23 merged.txt held.txt            # free merged refs -> git branch -d
+comm -12 merged.txt held.txt            # worktree-held -> release via leaked-worktrees.md first
+```
+A ref whose `git cherry main <ref>` prints only `-` lines is a rebased duplicate already on `main`;
+delete it with `-D`. Never delete an `ahead>0` ref or a snapshot (`item-<N>`, `selfdev-*`): land the
+former, leave the latter. `branch-cleanup.md` carries the full procedure and its rollback.
+
+### Docs-drift audit (read-only)
+
+The same clock-out sweep catches a feature that landed without its doc (D62). For each `feat` commit
+since the last audit, print whether the same commit touched `FEATURES.md`/`ROADMAP.md`:
+
+```bash
+for c in $(git log --since="<last audit>" --pretty=%H --grep='^feat'); do
+  printf '%s  ->  %s\n' "$(git log -1 --pretty='%h %s' $c)" \
+    "$(git show --name-only --pretty=format: $c | grep -E 'docs/(FEATURES|ROADMAP)\.md' | tr '\n' ' ')"
+done
+```
+
+A `feat` commit with no `docs/FEATURES.md` touch (and no explicit "no feature surface" note in its item)
+is drift: **report it and route it to `pm`; do not patch the docs by hand.** This is a read-only net —
+the durable fix is the `check` rule `feature-row-missing` (ROADMAP item 46's FEATURES-row half / D62,
+`src/checkup.mjs`; proof `demo/feature-row.test.mjs`), which reads exactly this sweep through
+`src/featuredocs.mjs`. **That rule exists, but the `check` CLI caller does not supply it the git-history
+data yet, so `check` reports it SKIPPED** — keep this block until that wiring lands (tracked
+separately), then drop it (2026-10-17 docs-drift finding).
 
 ## Escalate to
 `pm` — to route a landing pass or open a landing item when the `ahead>0` set grows; `lead` — when a

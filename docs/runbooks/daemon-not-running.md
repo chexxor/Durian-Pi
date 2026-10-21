@@ -28,7 +28,7 @@ Once the daemon exists: none. A restart is the daemon's job and is idempotent.
 
 ## Diagnose (read-only)
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs status
+DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq 'node.exe' -and \$_.CommandLine -match 'cli.mjs serve' } | Select-Object ProcessId"
 cat selfdev.sqlite.broker.down 2>/dev/null   # durable down marker (item 61) — present means an intended stop
 ```
@@ -36,15 +36,15 @@ cat selfdev.sqlite.broker.down 2>/dev/null   # durable down marker (item 61) —
 ## Do
 The intended surface (items 61–64; `--user` is the default mode, `--system` opt-in):
 ```bash
-durig daemon status
-durig daemon restart
-durig daemon logs
+durian-pi daemon status
+durian-pi daemon restart
+durian-pi daemon logs
 ```
-A durable `<db>.broker.down` marker means an **intended** stop — clear it via `durig up` / the daemon,
+A durable `<db>.broker.down` marker means an **intended** stop — clear it via `durian-pi up` / the daemon,
 do not fight it.
 
 ## Verify
-`durig daemon status` reports `up pid=<n> pass=<n> hb_age=<ms>`; `status` shows seats waking.
+`durian-pi daemon status` reports `up pid=<n> pass=<n> hb_age=<ms>`; `status` shows seats waking.
 
 ## If it fails
 Fall back to `broker-down-or-stalled.md` (manual start), and record why the daemon did not restart.

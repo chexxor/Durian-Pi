@@ -55,7 +55,7 @@ Check whether it has already been asked/answered: search `docs/reviews/` for the
 
 ## Verify
 The report exists under `docs/reviews/`, every external claim carries a URL + evidence class, and each
-finding is mapped to a durig mechanism or explicitly listed as unverified. Every proposed item is either
+finding is mapped to a durian-pi mechanism or explicitly listed as unverified. Every proposed item is either
 registered in `docs/ROADMAP.md` or explicitly rejected with a reason. The informing doc links to the
 report, and a competitor review has a `docs/COMPETITORS.md` entry. Unresolved questions have a follow-up
 prompt (`<topic>-followup-research-prompt.md`) or the topic is explicitly declared closed.

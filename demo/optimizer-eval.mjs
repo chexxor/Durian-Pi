@@ -10,8 +10,8 @@
 // Run OFFLINE (proves harness mechanics; scores are meaningless):
 //   node demo/optimizer-eval.mjs
 // Run FOR REAL (this is the actual effectiveness measurement):
-//   DURIG_PROVIDER=deepinfra DEEPINFRA_API_KEY=... node demo/optimizer-eval.mjs
-//   [opt] DURIG_JUDGE_MODEL=<id>  judge with a different model than DURIG_MODEL
+//   DURIAN_PI_PROVIDER=deepinfra DEEPINFRA_API_KEY=... node demo/optimizer-eval.mjs
+//   [opt] DURIAN_PI_JUDGE_MODEL=<id>  judge with a different model than DURIAN_PI_MODEL
 //
 // Exit 0 always when the harness itself runs; the VERDICT line is the read.
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -38,7 +38,7 @@ let fauxProviderRef = null;
 const MODEL_ID = process.env.DURIG_MODEL ?? "zai-org/GLM-5.3-Flash";
 const JUDGE_MODEL_ID = process.env.DURIG_JUDGE_MODEL ?? MODEL_ID;
 
-// Benchmark cases: realistic durig-domain drafts with deliberate flaws
+// Benchmark cases: realistic durian-pi-domain drafts with deliberate flaws
 // (vague goals, buried constraints, filler). Kind selects the optimizer's
 // framing (persona fragment vs work request).
 const CASES = [

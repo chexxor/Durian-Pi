@@ -5,11 +5,13 @@
 // here is paired with its unguarded control - the same discipline demo/starter.test.mjs uses
 // for `check`, where "0 findings" is meaningless unless the rules can be shown to fire.
 
+import { existsSync, rmdirSync } from "node:fs";
 import { mkdtemp, mkdir, rm, symlink, writeFile as write } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
-import { authorEnv, verifierEnv } from "../src/confine.mjs";
+import { authorEnv, refusalFor, verifierEnv } from "../src/confine.mjs";
+import { makeSeatEnv } from "../src/seattools.mjs";
 
 let failures = 0;
 const context = {};
@@ -80,7 +82,7 @@ try {
 	console.log("\nSC3 — environment, and commands that leave the boundary");
 
 	// The canary the security position asked for: a command prints its environment, and a key
-	// that IS present in durig's own process must not reach it. A caller's explicit request for
+	// that IS present in durian-pi's own process must not reach it. A caller's explicit request for
 	// the key is included deliberately, because "the seat asked" is not a reason to hand it over.
 	if (typeof process.env.DEEPINFRA_API_KEY !== "string") {
 		console.log("  note — DEEPINFRA_API_KEY is unset here; the canary still asserts nothing key-shaped crosses");
@@ -127,6 +129,8 @@ try {
 	// cannot diverge its worktree from the reviewed source; read-only git still runs.
 	for (const command of [
 		"git checkout main",
+		"git switch main",
+		"git switch -c feature",
 		"git restore src/rig.mjs",
 		"git revert HEAD",
 		"git clean -fd",
@@ -147,6 +151,68 @@ try {
 		JSON.stringify(readOnlyGit.ok ? "ran" : readOnlyGit.error?.message),
 	);
 
+	// #4374: `checkout-index` is NOT a branch switch — it re-materialises files from the INDEX into the
+	// working tree and cannot move HEAD. It was swept into the class by a `\b` boundary (`\b` sits
+	// between the final "t" of "checkout" and the hyphen of "checkout-index") with a reason that was
+	// FACTUALLY WRONG about the verb, and NO CANARY pinned it either way. The decision is now
+	// PATH-AWARE, like the write guard: the verb takes no path, so its TARGET is the CWD's worktree.
+	// Restoring YOUR OWN dirt is what the runbooks prescribe (tracked-files-missing-on-disk.md);
+	// re-materialising the SHARED tree is the 04:21Z hazard. The verb is identical; the acts are opposite.
+	const COI = `git ${["checkout", "index"].join("-")}`; // split so this file is not itself refused
+	const coiInSeat = await author.exec(`${COI} -f -a`, {}, context);
+	check(
+		"checkout-index in the SEAT's own worktree is ALLOWED (the runbook's restore)",
+		!/refused by durig/.test(coiInSeat.error?.message ?? ""),
+		JSON.stringify(coiInSeat.ok ? "ran" : coiInSeat.error?.message),
+	);
+	const sharedRefusal = refusalFor(`${COI} -f -a`, { root, cwd: join(homedir(), "elsewhere") });
+	check("checkout-index against the SHARED root is REFUSED", sharedRefusal !== null, String(sharedRefusal));
+	check(
+		"...with an ACCURATE reason, not 'same as git checkout'",
+		/checkout-index/.test(sharedRefusal ?? "") && !/same as .git checkout./.test(sharedRefusal ?? ""),
+		String(sharedRefusal),
+	);
+	check("...and it names the remedy (your item worktree)", /item worktree/.test(sharedRefusal ?? ""), String(sharedRefusal));
+	check(
+		"...and NO context (fail-closed) is REFUSED",
+		refusalFor(`${COI} -f -a`, {}) !== null,
+		"a path-aware entry with no root must not fail open",
+	);
+
+	// #3635: EVERY REFUSAL MUST NAME ITS OWN VERB. The loop above proves a command is REFUSED; it does
+	// not prove the message says WHICH rule fired. Without that pin the wording can regress to
+	// something generic, and a generic refusal is what made a seat condemn a whole verb CLASS: a
+	// compound command (`git checkout -b …; git rebase main`) is refused on its checkout segment, so
+	// "would change the seat's working tree or HEAD" read as a verdict on BOTH verbs, `git rebase`
+	// was never re-run alone, and the false claim reached an operating note (#3379). The guard stops
+	// at the first matching rule, so one refusal says nothing about the other verbs in the command —
+	// the message has to say which one it was.
+	const NAMES_ITS_VERB = {
+		"git reset --hard HEAD~1": /`reset`/,
+		"git checkout main": /`checkout`/,
+		"git checkout -b some-branch": /`checkout`/,
+		"git switch main": /`switch`/,
+		"git switch -c feature": /`switch`/,
+		"git restore src/rig.mjs": /`restore`/,
+		"git revert HEAD": /`revert`/,
+		"git clean -fd": /`clean`/,
+		"git stash": /`stash`/,
+		"git branch -D foo": /`-D`|force-delete a branch/,
+		"git add -A": /git add -A/,
+	};
+	for (const [command, namesVerb] of Object.entries(NAMES_ITS_VERB)) {
+		const refused = await author.exec(command, {}, context);
+		const message = refused.error?.message ?? "";
+		check(
+			`${command}: the refusal NAMES its verb`,
+			refused.ok === false && namesVerb.test(message),
+			JSON.stringify(refused.ok ? "it was not refused at all" : message),
+		);
+	}
+	// `git push` is deliberately NOT in the map above: its refusal is conditional on the operator
+	// grant (DURIG_ALLOW_PUSH), so asserting it here would make this demo depend on how the rig was
+	// launched. Its message names `push` for the same reason as the rest.
+
 	// Failing-first canaries — these commands bypassed the old guard (\s|$) because the
 	// match ended in whitespace or end-of-string, so trailing punctuation and separators
 	// defeated it. The fixed guard uses \b (word boundary) and -C <path> forms. These
@@ -157,11 +223,13 @@ try {
 		"git stash;",
 		"git reset;",
 		"git checkout;",
+		"git switch;",
 		"git restore;",
 		"git clean;",
 		"git revert;",
 		"git branch -D foo;",
 		"git -C . stash",
+		"git -C . switch main",
 		"git -C /a/path reset --hard HEAD~1",
 		"git add -A;",
 		"git add .;",
@@ -214,6 +282,50 @@ try {
 		);
 	}
 
+	// #1211 part 1: branch REF ops are exempt. Create (how a commit gets anchored), rename and
+	// SAFE delete do not touch the working tree, and `-d` is safe by git's own semantics (git
+	// refuses to delete an unmerged branch). Only the FORCE delete stays blocked.
+	for (const command of [
+		"git branch impl-item-1217 main",
+		"git branch -m old-name new-name",
+		"git branch -d merged-topic",
+		"git branch --delete merged-topic",
+		"git -C . branch -d merged-topic",
+	]) {
+		const allowed = await author.exec(command, {}, context);
+		check(
+			`${command} is allowed (branch ref-op)`,
+			!/refused by durig/.test(allowed.error?.message ?? ""),
+			JSON.stringify(allowed.ok ? "ran" : allowed.error?.message),
+		);
+	}
+	for (const command of [
+		"git branch -D unmerged-topic",
+		"git branch --delete --force unmerged-topic",
+		"git -C . branch -D unmerged-topic",
+	]) {
+		const refused = await author.exec(command, {}, context);
+		check(
+			`${command} is refused (force delete)`,
+			refused.ok === false && /refused by durig/.test(refused.error?.message ?? ""),
+			JSON.stringify(refused.ok ? refused.value : refused.error?.message),
+		);
+	}
+
+	// #1211 part 2: the guard matches the ACTUAL invocation, not text inside a quoted argument.
+	// A commit message that merely documents the refused form must not itself be refused.
+	for (const command of [
+		'git commit -m "docs: explain that git branch -d is safe"',
+		'git commit -m "the guard blocks git branch -D"',
+	]) {
+		const allowed = await author.exec(command, {}, context);
+		check(
+			`${command} is allowed (quoted text is not an invocation)`,
+			!/refused by durig/.test(allowed.error?.message ?? ""),
+			JSON.stringify(allowed.ok ? "ran" : allowed.error?.message),
+		);
+	}
+
 	console.log("\nSC2 — the verifier cannot mutate what it verifies");
 	const authorWrite = await author.writeFile(join(root, "author.txt"), "ok", context);
 	check("an author can write inside the worktree", authorWrite.ok === true);
@@ -241,6 +353,54 @@ try {
 		tempDir.ok === true && tempDir.value.startsWith(root),
 		tempDir.ok ? tempDir.value : tempDir.error?.message,
 	);
+	console.log("\n#1465: a READ-ONLY root outside the worktree (the shared .durig) — readable, never writable");
+	{
+		// `claim_work` writes an over-threshold item body to <shared>/.durian-pi/<id>.md, but
+		// `prepare_workspace` narrows the seat's root to its worktree, so the body it was just handed
+		// became unreadable. The fix is an explicit READ-ONLY root: reads cross, writes never do.
+		const shared = join(outside, ".durig");
+		await mkdir(shared, { recursive: true });
+		await write(join(shared, "42.md"), "ITEM #42 body\n");
+		const roEnv = authorEnv(base, root, { readOnlyRoots: [shared] });
+
+		const read = await roEnv.readTextFile(join(shared, "42.md"), context);
+		check("the seat can READ the shared queue dir from a narrowed root", read.ok === true && read.value.includes("ITEM #42"), JSON.stringify(read));
+		denied(await roEnv.writeFile(join(shared, "43.md"), "x", context), "a WRITE to the shared queue dir is REFUSED");
+		denied(await roEnv.remove(join(shared, "42.md"), context), "a DELETE there is REFUSED");
+		// The exemption is exactly this directory — the rest of `outside` stays closed.
+		denied(await roEnv.readTextFile(join(outside, "secret.txt"), context), "a read outside the worktree AND the read-only root is still REFUSED");
+		// And the default wiring: `makeSeatEnv` derives <fallbackRoot>/.durian-pi, so a seat gets it free.
+		const seatEnv = makeSeatEnv(
+			new Map([[1, { name: "impl", role: "implementation engineer", verifier: false }]]),
+			{ fallbackRoot: outside },
+		)({ conversationId: 1, cwd: root });
+		const viaSeat = await seatEnv.readTextFile(join(shared, "42.md"), context);
+		check("makeSeatEnv wires the shared .durig read-only by default", viaSeat.ok === true && viaSeat.value.includes("ITEM #42"), JSON.stringify(viaSeat));
+		denied(await seatEnv.writeFile(join(shared, "44.md"), "x", context), "...and that default is still read-only");
+
+		// qa #1489 (HIGH): a JUNCTION inside the worktree must not let a CREATE write THROUGH it.
+		// The plain-path check passes (the link path IS inside the root) and `canonicalPath` FAILS for a
+		// not-yet-existing destination, so the deny has to fall back to the deepest EXISTING ancestor.
+		const linkPath = join(root, "durig-link");
+		let junctionMade = false;
+		try {
+			await symlink(shared, linkPath, "junction");
+			junctionMade = true;
+		} catch (err) {
+			check("junction probe: the junction could not be created on this host", false, String(err?.message ?? err));
+		}
+		if (junctionMade) {
+			denied(await roEnv.writeFile(join(linkPath, "BOOM.txt"), "x", context), "a CREATE through a junction into the read-only root is REFUSED");
+			check("...and nothing landed in the read-only root", !existsSync(join(shared, "BOOM.txt")));
+			denied(await roEnv.writeFile(join(linkPath, "sub", "BOOM.txt"), "x", context), "a CREATE through a junction into a NON-EXISTENT subdir is REFUSED");
+			// Remove the junction BEFORE the generic cleanup, so rmSync cannot walk the link.
+			try {
+				rmdirSync(linkPath);
+			} catch {}
+			check("the junction was removed", !existsSync(linkPath));
+		}
+	}
+
 	console.log(failures === 0 ? "\nPASS — all confine canaries held" : `\nFAIL — ${failures} canary(ies) failed`);
 } finally {
 	await rm(root, { recursive: true, force: true });

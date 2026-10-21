@@ -1,7 +1,7 @@
 // Blocked-seat surfacing test (MVP burn-down #4): a seat that is idle with
 // queued work, and a seat whose last run failed, must produce visible
 // attention notices; a healthy seat must produce none. Exercises the same
-// storage-level computation `durig status` and `durig watch` carry.
+// storage-level computation `durian-pi status` and `durian-pi watch` carry.
 // Run: node demo/blocked.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";

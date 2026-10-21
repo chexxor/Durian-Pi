@@ -1,7 +1,7 @@
 // init tests (#624, pm route of #491 C9/C10 "INIT META-DEFAULTS"): a bare
 // install has nothing runnable, so `node cli.mjs init` scaffolds the two
 // files a rig needs beside the operator — a minimal working rig file with
-// seeded seats, copied from the hardened starter, and a durig.config.json
+// seeded seats, copied from the hardened starter, and a durian-pi.config.json
 // materialized from the shipped defaults. npm-init-like: it refuses to
 // overwrite either file when one exists.
 //
@@ -21,7 +21,7 @@ const durigDir = join(here, "..");
 const STARTER = join(durigDir, "rig.starter.json");
 const SHIPPED_DEFAULTS = join(durigDir, "durig.config.default.json");
 
-// Child env stripped of every DURIG_* key so a scaffolded config file is the
+// Child env stripped of every DURIAN_PI_* key so a scaffolded config file is the
 // observable source, not the parent shell (same hygiene as config.test.mjs).
 const cleanEnv = { ...process.env };
 for (const k of Object.keys(cleanEnv)) {
@@ -77,7 +77,7 @@ try {
 		"the scaffolded rig names its provenance in its own metadata",
 	);
 
-	// 2b. durig.config.json: the shipped defaults, materialized for editing.
+	// 2b. durian-pi.config.json: the shipped defaults, materialized for editing.
 	const scaffoldedConfig = JSON.parse(readFileSync(join(fresh, "durig.config.json"), "utf8"));
 	assert.deepEqual(scaffoldedConfig, shipped, "the runtime config is the shipped defaults, unmodified");
 
@@ -113,7 +113,7 @@ try {
 	assert.match(refused1.json?.error ?? refused1.stderr, /rig\.json.*already exists/, "and names the file");
 	assert.ok(!rmRfProbe(refuseRig, "durig.config.json"), "no half scaffold: the config was NOT written when the rig was refused");
 
-	// durig.config.json exists (and rig.json too) → same refusal, names the
+	// durian-pi.config.json exists (and rig.json too) → same refusal, names the
 	// second file; the operator's files were clobbered by neither attempt. The
 	// rig refusal wins because checks are ordered rig-then-config.
 	writeFileSync(join(refuseRig, "durig.config.json"), "{}");
