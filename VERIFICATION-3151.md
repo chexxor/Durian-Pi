@@ -1,4 +1,4 @@
-﻿# Verification Report: ITEM #3151
+# Verification Report: ITEM #3151
 
 ## Scope
 Non-author verification of devtools-item-2638 @e991830 (D109 HARD pin). Check: the six GIT_*/PAGER getters in confinedEnv (src/confine.mjs) return the pinned constants directly regardless of base.shellEnv; demo/seat-git-env.test.mjs passes; no other seat-env behaviour regressed.
