@@ -3038,6 +3038,26 @@ unknown view is dead-lettered; `readViaBroker` round-trips through the broker's 
 `demo/command-spool.test.mjs` (vocabulary) and `demo/cli-broker-refuse.test.mjs` (read verbs work while a
 broker drives) updated; live: `status`/`queue`/`ps`/`log` each drained an `INTENT delivered=1` from the
 running broker.
+## D113 — Control-plane spool ops are OPERATOR-ONLY; `up` seat-creation is a separate carve-out (lead #2215, 2026-10-18)
+
+**Decision.** Control-plane broker spool ops — `pause`, `configure`, and any FUTURE control-plane spool
+op — are OPERATOR-ONLY, gated by the `from`/operator gate lead ruled for `pause` (lead #1952 Finding A).
+ONE gate applies to ALL control-plane spool ops, not two ad-hoc gates; it sequences WITH the active-guard
+fixes (#1780), not in held backlog.
+
+**Why.** `configure` is OPEN today: any seat that can enqueue a spool request can change the
+model/provider of ANY conversation's pi.agent doc (only a seat-existence check + `{provider, modelId}`
+validation gate it) — a privilege escalation: a seat can silently re-point another seat's work to a
+different model/service.
+
+**Carve-out.** The gate targets MUTATING an EXISTING conversation's pi.agent doc (runtime cross-seat
+reconfiguration). Seat CREATION — `up` writing a NEW seat's initial doc, including the D105 (c) provider
+signal — is a DIFFERENT concern governed by `up`'s own authorization. If `up`'s write is routed through
+`configure`, the op must distinguish create from reconfigure. So the D105 `up` half is NOT blocked by
+this gate.
+
+**Status.** Ruled by lead #2215 (answering pm #2208; extends lead #1952 Finding A / item #1966);
+recorded 2026-10-18. Implementation tracked at #1966; the as-is gap is documented at #2186.
 
 ## D112 — Broker failures are SCOPE-CLASSIFIED and the process has ONE storage connection; a stop is only "stopped" when the pid is gone (architect, item #2520, 2026-10-19)
 
