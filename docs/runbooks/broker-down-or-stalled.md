@@ -1,3 +1,13 @@
+---
+runbook: broker-down-or-stalled
+symptom: "seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale PASS (dormant); log stops after a storage error or `database is locked`"
+writes: true
+precondition: "broker-stopped"
+last_verified: unverified
+verified_by: delegate
+evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md)"
+check_rule: null
+---
 # Broker down or stalled
 
 ## When to use
@@ -9,6 +19,12 @@ only on a store-commit signal, so after a seat's normal settle the per-seat cool
 re-wake and nothing marks the scheduler dirty again, leaving the seat unwoken until an unrelated commit
 or a restart.
 
+## Impact
+If you do nothing, queued/claimed work sits idle: seats stay unwoken (`idle_with_queued_work` /
+`admitted_not_started`) while the broker log stops advancing, so the queue looks healthy and is dead.
+A dormant broker (shape b) is worse because nothing is obviously wrong — a fresh heartbeat and no
+genlock hide that no pass will ever fire until an unrelated commit or restart. Blast radius is the
+whole queue, but recovery is cheap (resume/restart) once the shape is diagnosed.
 ## Preconditions
 None for diagnosis. The fix writes, so it needs no other writer.
 
@@ -99,6 +115,9 @@ generating. (The broker also logs `STRANDED settled=N` / `RECONCILE …` when it
 - Starts but a seat still will not run → `seat-reset.md`.
 - A dead broker stays dead: this is the supervision gap, ROADMAP items 61–64 (host daemon).
 
+## Escalate to
+`pm` — when the dormant-revisit gap (shape b) recurs, it is the supervision gap ROADMAP 61–64 targets;
+`lead` — when a dead broker stays dead after resume (the host-daemon gap).
 ## Evidence
 2026-10-16 (items 54, 66, 68): a broker that died on a storage error stalled `impl`; `resume` cleared 5
 stranded submissions, and the restart woke pm/impl/scribe. Item 54 makes a *stoppable* broker honest.
