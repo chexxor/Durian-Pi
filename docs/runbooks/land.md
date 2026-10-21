@@ -38,10 +38,13 @@ cross-reference to this block when that item fires.
 `scripts/land.mjs` has returned `ok:true, merged:[…]` WHILE MERGING INTO AN ITEM WORKTREE, leaving `main`
 untouched and creating a store there. A landing entry's completion must carry:
 - `git merge-base --is-ancestor <sha> main` → **exit 0**, and
-- the landing report's `repo` field resolving to the **shared root**, and
 - ideally the CONTENT check — `main` carries what the branch was for — because ancestry passes even when
 a conflict dropped the block (for Fix A: `LANDING_MIN_WIDTH` read in the TERMINAL unit, not the old
 `width−4` unit; the old unit IS the defect and the ancestry check cannot see it).
+(The `repo`-field reading is RETIRED — `scripts/land.mjs` on main enforces `sharedRoot` itself (`f168339`),
+so the guard refuses a non-root repo: the report's `repo` field is MOOT rather than wrong. WHEN A MECHANISM
+REPLACES A DISCIPLINE, RETIRE THE DISCIPLINE EXPLICITLY — a precaution kept past its cause teaches the next
+reader the tool is still untrustworthy, and then they do not trust the NEXT tool either.)
 This is a rule for the seat that ACCEPTS the completion as much as the one that writes it — #3990 and
 #4163 both closed while their branches were unlanded.
 
@@ -53,6 +56,69 @@ failed to import → `watch`, `queue` and `status` DOWN ~11 minutes. THE TOOL LY
 PRESSURE TO HAND-FIX, and the hand-fix is what broke the tree. Never `>` / `Get-Content` / `Set-Content` a
 source file — use the `edit` tool or `cmd /c "git show <ref> > file"`; the encoding guard and detector
 are routed separately and give this rule teeth.
+
+**`git status --porcelain` IMMEDIATELY BEFORE the landing is BEST-EFFORT, not a guarantee — the LOCK is
+the serialisation.** The status check is a RACE, not a guard: measured `dirt=1`, then clean SECONDS later
+(the dirt was transient, written by another delegate mid-landing), with `main` moving twice underneath
+(`c7b6d30 → 9682817 → da01550`) under fresh landings from another seat. "CHECK STATUS, THEN LAND" HAS A
+WINDOW, and the window is however long it takes to type the landing command. **THE LOCK IS WHAT ACTUALLY
+MAKES IT SAFE; THE STATUS CHECK ONLY AVOIDS THE WORST CASE** — measured `waitedMs: 301749, liveHolders: 4`
+(five minutes waiting behind four live holders, another delegate landing concurrently): that IS the guard
+working, and it is why a concurrent lander is not a catastrophe. The status check CANNOT catch a write that
+lands between the check and the command; it catches the worst case — a tree left dirty for minutes by a
+seat that abandoned work. An earlier measurement is still evidence about the past, not a precondition
+(#4271 blocked by ten dirty files, #4163 the same, the 04:21Z flattening acted on a STALE picture; every
+measurement was TRUE WHEN TAKEN and false by the time it mattered), so take it AT THE MOMENT OF USE — but
+the lock, not the check, is what protects you. Same insight as the retired operator-confirmation gate
+(#4431): a human confirmation and a status snapshot are both SNAPSHOTS, and A SNAPSHOT CANNOT SUBSTITUTE FOR
+A SERIALISER — IT CAN ONLY AVOID THE OBVIOUS CASE.
+
+**AND IF IT IS DIRTY: STOP AND REPORT.** Do not clean it, do not stash it, do not restore it — the dirty tree
+may be a colleague's edit in flight, and this session has one incident that began with a seat deciding a
+dirty tree was its problem to solve.
+
+**WHY THE TEMPTATION IS STRONG HERE:** a landing takes minutes and the tree can change in seconds, so the
+window between "I checked" and "I landed" is exactly where the failures live.
+
+**DIRTY IS NOT THE SAME AS ABANDONED.** Two tracked files (`docs/SELFDEV.md`, `rig.selfdev.json`) went dirty
+between two measurements and were clean again later — the resolution was NOT cleanup, it was that a
+legitimate config edit COMPLETED. An `M` in `git status` can be a colleague's work in progress, in which
+case the correct action is to WAIT rather than to dispose.
+
+**The re-measure is the discipline that PAID — promote it; retire by CAUSE, not by age.** Every merge-tree
+figure in every entry was stale (main moved `fe52a41 → 9e8710e → 7ffc7b9 → d8bc976 → 671b50a` across one
+pass), and on one entry the central claim — "all three `--is-ancestor` exit 1 today" — was FALSE by the time
+it was claimed: three landings that did not need doing. THE MEASUREMENT IS WHAT CAUGHT IT: **A STALE PREMISE
+COSTS MORE THAN A MISREAD FLAG** — a misread flag produces a wrong report; a stale premise produces wrong
+WORK. The `repo` field guarded against a TOOL THAT LIED, and that tool is FIXED; the re-measure guards
+against a WORLD THAT MOVES, and it never stops moving. One cause could be removed; the other cannot.
+
+**The landing LOCK serialises landings — there is no operator-confirmation gate.** The protection against
+two delegates in one tree is the mechanical landing lock, not a human confirmation. Measured:
+`{ slots: 4, held: 4, waitedMs: 160062, liveHolders: 3 }` — a landing WAITED 160 seconds for a slot behind
+three live holders. Two delegates cannot merge into one tree simultaneously, because the tool will not let
+them. So: (1) DO NOT hold a landing for an operator to confirm no other delegate is landing — that is an
+ordering request, and lead's principle applies: DEPENDENCIES ARE ENFORCEABLE AND ORDERING REQUESTS ARE NOT.
+The lock is enforceable; a confirmation is not. When a gate duplicates a mechanism, the mechanism wins and
+the gate goes. (2) The precondition is the tree RE-MEASURED IMMEDIATELY BEFORE (see above). (3) REPORT THE
+LOCK'S WAIT AND HOLDERS IN THE LANDING REPORT — a 160-second wait behind three holders is a fact about the
+rig's throughput nobody had, and it explains "interrupted" tool calls: they were likely waiting for a slot,
+not crashing. A SEAT THAT THINKS ITS TOOL CRASHED RETRIES; A SEAT THAT KNOWS IT QUEUED WAITS. (4) IF THE
+LOCK IS UNAVAILABLE OR UNREADABLE, THAT IS WHEN TO STOP AND ASK — a missing serialiser is the actual hazard
+the confirmation gate was standing in for.
+
+**And the disclosure habit: report a judgement call WITH its reversal.** When a seat acts on the lock and
+without the un-obtainable confirmation, it says so: "IF THAT WAS THE WRONG CALL, THE CORRECTIVE IS ONE
+`git revert` OF `d8bc976` AND I WOULD RATHER SAY WHAT I DID THAN HAVE IT INFERRED." A seat that reports a
+judgement call with its reversal is not bypassing a gate — it is telling you the gate's cost.
+
+**CONDITIONAL, NOT A STEP: KEEP ALL SECTIONS in `demo/land-helper.test.mjs` WHEN #4011 AND #4142 BOTH
+LAND.** The "KEEP ALL SECTIONS" instruction was prepared and NOT needed — #4311 landed against a main where
+neither `5d9140f` nor `51a866b` had landed first, so `merge-tree` returned zero conflicts and the file had
+no markers in it. It fires only when #4011 AND #4142 both land: then that file WILL conflict and ALL SECTIONS
+MUST BE KEPT, because section 2d (the linked-worktree / shared-root refusal, #4247) sits beside 2b/2c and
+the fixture sections and they assert different things. A resolution recorded as a step gets applied where it
+is not needed; recorded as a condition, it fires when it should.
 
 ## When to use
 A verified branch (`<seat>-item-<id>`, or any branch) must go onto `main`, and you want the landing to
