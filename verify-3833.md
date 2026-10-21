@@ -1,4 +1,4 @@
-﻿# Verification for #3833 (#3821): failed sync-pi --link is now a recorded UNLINKED state
+# Verification for #3833 (#3821): failed sync-pi --link is now a recorded UNLINKED state
 
 1. linkWorktreeDeps returns {attempted, ok, reason, detail} - failure names the cause, not "Command failed". CONFIRMED.
 2. installWorktreeDeps returns a dependency record on every path: state = linked | unlinked | no-sync-script. No console.warn on the provisioning path. CONFIRMED.
