@@ -1,4 +1,4 @@
-﻿---
+---
 runbook: prepare-workspace-etarget
 symptom: "prepare_workspace fails: npm ci --prefer-offline ... ETARGET notarget No matching version found for @earendil-works/<pkg>@<pin>"
 writes: false
