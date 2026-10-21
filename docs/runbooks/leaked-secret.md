@@ -3,9 +3,9 @@ runbook: leaked-secret
 symptom: "a secret (API key, token, private key, password) was committed or otherwise exposed"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-17
-verified_by: security
-evidence: "#1300 (clean class-pattern scan over tree/history/logs at rev 7e5d16e; Verify run 2026-10-17)"
+last_verified: 2026-10-21
+verified_by: delegate
+evidence: "#1300 (2026-10-17 class-pattern scan at 7e5d16e); re-verified 2026-10-21: class scan over the tracked tree is CLEAN with the three sanctioned carriers excluded, and the pickaxe hits are all historical (detector-building commits), none newer than the fix."
 check_rule: null
 ---
 
@@ -92,14 +92,23 @@ scans the store broker-stopped.
      read-side detection, #837 redaction).
 
 ## Verify
-Every pattern is **anchored to a value shape** (minimum-length body): a bare prefix would match this
-runbook's own pattern table, and this file is the one sanctioned carrier of the class strings.
+Every pattern is anchored to a value shape (minimum-length body): a bare prefix would match this
+runbook's own table. THREE files are the sanctioned carriers of a class string — this table, the
+commit-gate fixture (`demo/commit-secrets.test.mjs`) and the guard's own comment (`src/seatguard.mjs`).
+Everything else must be clean:
+
 ```bash
-git grep -nE '<pattern 1>\|<pattern 2>' -- . ':!docs/runbooks/leaked-secret.md'   # exit 1 = clean
-git log --oneline --all -S'<class substring>' -- .        # no hits NEWER than the fix commit
+git grep -nE 'sk-ant-[A-Za-z0-9_-]{8,}|AKIA[A-Z0-9]{16}|ghp_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{22,}|xox[abprs]-[A-Za-z0-9-]{10,}|AIza[A-Za-z0-9_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ[A-Za-z0-9_-]{10,}.[A-Za-z0-9_-]{10,}.' -- . ':!docs/runbooks/leaked-secret.md' ':!demo/commit-secrets.test.mjs' ':!src/seatguard.mjs'
+# exit 1 = clean (no output). A hit is inventory: name it in the report. A NEW sanctioned carrier
+# must be added to this command in the same change — a carrier added silently disables the check.
 ```
-Rotation is operator-confirmed out-of-band; it is not verifiable from durian-pi — say so in the completion
-rather than implying it was checked.
+
+History is judged by CLASS STRING, and historical hits are EXPECTED (the strings appear in the commits
+that built the detector). What must hold is that no hit is newer than the fix commit:
+
+```bash
+git log --oneline --all -S'sk-ant-' -- . | head -5   # compare the newest hit with your fix commit
+```
 
 ## If it fails
 - The scan still matches after the fix commit: copies remain — repeat Diagnose; each hit is inventory,

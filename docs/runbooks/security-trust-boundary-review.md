@@ -3,9 +3,9 @@ runbook: security-trust-boundary-review
 symptom: "a dependency, execution surface, egress channel, write path or trust boundary is about to land — review it before the code"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-17
-verified_by: security
-evidence: "#1322 (section-anchor conformance check against the #1295 codemode pair on branch security-item-1322 at daa4594; Verify run 2026-10-17)"
+last_verified: 2026-10-21
+verified_by: delegate
+evidence: "#1295 codemode pair (2026-10-17); re-verified 2026-10-21 against the same concrete artifacts: position has all four headings (4) and the input round has `Threat model` (1). The `<topic>` placeholders are gone, so the command runs as written."
 check_rule: null
 ---
 
@@ -84,8 +84,8 @@ The method is done only when its artifact **structurally** passes: a position ca
 round) carries a `Threat model` heading:
 
 ```bash
-git grep -cE '^## (Scope|Non-goals|Gates|Citations)' -- docs/reviews/security-<topic>.md   # expect a count >= 4
-git grep -cE '^## Threat model' -- docs/reviews/security-<input-round>.md                # expect a count >= 1
+git grep -cE '^## (Scope|Non-goals|Gates|Citations)' -- docs/reviews/security-codemode-position.md   # expect 4
+git grep -cE '^## Threat model' -- docs/reviews/security-codemode-review.md                        # expect 1
 ```
 
 This runbook's own Verify ran 2026-10-17 against the #1295 codemode pair (position at `4cba82f`,

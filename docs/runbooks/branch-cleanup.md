@@ -3,9 +3,9 @@ runbook: branch-cleanup
 symptom: "so many local git branches; merged branches were never pruned"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-19
+last_verified: 2026-10-21
 verified_by: delegate
-evidence: "2026-10-17: 52 merged/patch-equivalent branches pruned (128->76 refs, main unmoved, 33 unlanded kept). 2026-10-18: 20 merged refs pruned through the worktree-release/reclaim paths alone (1 free-merged; 2 terminal clean+locked releases; 17 verify-tree reclaims in leaked-worktrees.md), main unmoved, nothing forced. 2026-10-18 (delegate, operator-directed): 51 merged refs pruned in one pass (17 free + 34 worktree-held whose only content was generated scratch moved to .spike/delegate/quarantine), then 5 verified branches landed + pruned; refs 137->84, worktrees 167->130, main 95e7c0c->b3710f3, suite 138/0, nothing forced. 2026-10-19: 9 verified branches landed (main 4f9e7d6->7b6548e, suite 156 pass/1 env fail) + refs 108->73 pruned (27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/, 4 clean+locked+terminal removed), main unmoved by the prune, nothing forced. 2026-10-19 (second pass): 17 verified branches landed (main 67228b9->3b79159, suite 175 pass/1 env fail) then pruned (12 free -d + 4 relocated + 1 unmerged-then-merged bonus); refs 111->83, worktrees 206->204, 11 locked merged refs KEPT, nothing forced"
+evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean."
 check_rule: null
 ---
 
