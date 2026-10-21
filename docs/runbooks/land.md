@@ -229,14 +229,30 @@ rule as the generated-artifact check above.
 
 ## Diagnose (read-only)
 ```bash
-git -C <repo> status --porcelain                 # tracked changes block a landing; '??' untracked do NOT
+git -C <repo> status --porcelain                 # MUST be EMPTY — tracked AND untracked block (#3988)
 git -C <repo> merge-base --is-ancestor <branch> main && echo ALREADY-LANDED
 git -C <repo> rev-list --count main..<branch>    # 0 once landed
 ```
+**AND PORCELAIN IS NOT THE WHOLE PRE-FLIGHT — CHECK THE STRAY WORKTREES TOO.** The stray check reads the
+repo root's DIRECTORY LIST and compares it to `git worktree list`, so it fires on directories `git status`
+NEVER MENTIONS: `/item-*/` is in `.gitignore`, so a stray `item-<id>/` leaves porcelain EMPTY and still
+blocks. Measured 2026-10-20 at main 910fac7: porcelain **0 lines** and the landing **REFUSED for 10 stray
+`item-*/` directories**. A lander who checks porcelain alone will report a clean branch as landable and be
+wrong every time:
+```bash
+git -C <repo> worktree list --porcelain | grep '^worktree '   # the REGISTERED set
+ls -d <repo>/item-* 2>/dev/null                               # any name NOT in that set is STRAY
 The helper's pre-flight, in code (the enforcement chokepoint):
-- **Tracked modifications only** block. An untracked file cannot be clobbered by a fast-forward, and the
-  shared tree normally carries other seats' untracked notes — refusing on those would make the guard
-  useless rather than safe.
+- **Tracked AND untracked modifications block (#3988).** The rule was tracked-only until an UNTRACKED
+  `src/tui/durable/attach.mjs` written by a live seat would have passed it — a check that looks for the
+  dirt it expects misses the dirt that happens. A suite run in `.` measures the SHARED TREE, not main, so
+  a non-empty `git status --porcelain` refuses and the refusal NAMES every dirty path.
+- **STRAY WORKTREE DIRECTORIES at the repo root block (#4139).** A write to a REAPED worktree path
+  recreates `item-<id>/` inside the repo; `/item-*/` is ignored, so porcelain never shows it. The test is
+  REGISTRATION, not the name: a root child matching `item-<n>`/`verify*`/`.verify-*`/`wt-*`/
+  `.durig-test-wt-*`/`.land-scratch-*` that is NOT in `git worktree list --porcelain` is STRAY. A LIVE
+  worktree is legitimately `item-<id>/` at the root and must NOT be flagged. **REMEMBER: this one is NOT
+  porcelain, so an empty `git status` does not clear it.**
 - **`MERGE_HEAD`** present (the tree is already mid-merge) blocks — the landing must not add to it.
 - **genlock**: it probes `<db>.genlock.*` beside the store with `node:fs` only (no provider stack). A slot
   whose JSON names an **ALIVE** pid blocks (signal `0`; only `ESRCH` means gone — `EPERM` means alive but
@@ -272,7 +288,8 @@ The helper's pre-flight, in code (the enforcement chokepoint):
 1. Confirm the branch and sha, and that the shared tree has no tracked changes:
    ```bash
    git -C <repo> log --oneline -1 <branch>
-   git -C <repo> status --porcelain
+   git -C <repo> status --porcelain        # must be EMPTY (tracked AND untracked, #3988)
+   git -C <repo> worktree list --porcelain # and NO stray item-*/ dir outside this list (#4139)
    ```
 2. Land with the helper (its JSON report is always printed):
    ```bash
