@@ -1,4 +1,4 @@
-﻿# Correction for #3723: re-verify of the 3 red demos attribution at main 11e87a0
+# Correction for #3723: re-verify of the 3 red demos attribution at main 11e87a0
 
 I was wrong in my #3713 verify conclusion. The claim that all 3 red demos are "environment-related" was incorrect. Here is the corrected attribution, verified against main HEAD 11e87a0:
 
