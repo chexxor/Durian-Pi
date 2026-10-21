@@ -865,9 +865,14 @@ const Router = defineExtension({
 					// #4713: THE DATA IS CAPTURED **INSIDE** THE CLOSURE, where `queue` is bound. The previous attempt put
 					// the lookup after `}, context);`, where `queue` does not exist: `node --check` passed and six demos passed,
 					// because none reaches this path with a live queue. `curate` and `rearmclaim` do, and they threw.
-					const mine = (queue.items ?? []).filter(
-						(it) => it.to === me && it.status !== "done" && it.status !== "cancelled",
-					);
+					// #4737: SNAPSHOT INSIDE — return PLAIN data. `mine` was a filtered array OF DOC PROXIES and it ESCAPED
+					// the commit callback, so reading it afterwards threw `Cannot use a settled overlay`. The file states this
+					// rule in its own words at the `plainItem` helper: "never let a doc proxy escape the `api.commit`
+					// callback — snapshot inside, return plain." The whole array had to be spread into plain objects, not
+					// merely filtered, because the PROXIES are what do not survive settlement.
+					const mine = (queue.items ?? [])
+						.filter((it) => it.to === me && it.status !== "done" && it.status !== "cancelled")
+						.map((it) => ({ id: it.id, status: it.status, from: it.from, subject: it.subject }));
 					return mine.length > 0 ? { kind: "none", mine } : null;
 				}, context);
 				if (found?.kind === "paused") {
