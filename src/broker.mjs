@@ -1398,6 +1398,51 @@ async function settleWithin(promise, ms) {
     if (timer) clearTimeout(timer);
   }
 }
+/**
+ * Like `settleWithin`, but REPORTS whether the promise settled inside the bound (#4355).
+ *
+ * WHY TWO HELPERS EXIST AND WHY THIS IS NOT A REPLACEMENT. `settleWithin` returns NOTHING and swallows
+ * the outcome, which is correct for the DEADLINE path: there a bound that fires means "close now" and
+ * nobody needs to know. It is WRONG for the cooperative stop's abort escalation, which must act PRECISELY
+ * on the bound firing - abort only the conversations this run woke, and only when the wait ran out.
+ * Inferring that from elapsed time would be a race that is wrong under load, the same class as a success
+ * flag standing in for a fact. So this is added ALONGSIDE and `settleWithin` is left alone.
+ *
+ * THE SHAPE, decided and written down because the drain branches on it:
+ *   { settled: true,  error: null }    fulfilled inside the window
+ *   { settled: true,  error: <err> }   REJECTED inside the window - it SETTLED, and the caller is told how
+ *   { settled: false, noGrace: false } the bound FIRED; it is still running
+ *   { settled: false, noGrace: true }  `ms <= 0`: NO WAIT WAS REQUESTED
+ * THE LAST TWO ARE DIFFERENT FACTS and the drain must not conflate them: a missing grace means the caller
+ * gave no window, an expired one means we waited and ran out. `settleWithin`'s `if (!(ms > 0)) return;`
+ * collapses both into silence, which is exactly what a boolean contract cannot afford.
+ *
+ * A rejection is NEVER swallowed into `settled: false` - that would report a completed-with-error run as
+ * still-running, and the escalation would abort a conversation that had already finished.
+ *
+ * @param {Promise<unknown>} promise
+ * @param {number} ms
+ * @returns {Promise<{settled: boolean, error: unknown, noGrace: boolean}>}
+ */
+export async function settledWithin(promise, ms) {
+	if (!(ms > 0)) return { settled: false, error: null, noGrace: true };
+	let timer;
+	try {
+		const outcome = await Promise.race([
+			Promise.resolve(promise).then(
+				() => ({ settled: true, error: null }),
+				(error) => ({ settled: true, error }),
+			),
+			new Promise((resolve) => {
+				timer = setTimeout(() => resolve({ settled: false, error: null }), ms);
+			}),
+		]);
+		return { settled: outcome.settled, error: outcome.error ?? null, noGrace: false };
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
 
 /**
  * The resident loop: run a pass whenever the scheduler says one is due, and
