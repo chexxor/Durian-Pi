@@ -3,6 +3,7 @@
 // shows a seat's name and what it last said, while `--json` keeps the contract.
 // Run: node demo/watchview.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
+import { textWidth } from "../src/textwidth.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -383,6 +384,30 @@ try {
 	rmSync(streamDir, { recursive: true, force: true });
 }
 
+
+// #4538: MEASURE THE GLYPH, DO NOT TRUST THE RULING. The `queued` state's glyph is U+25C9 and the design
+// ruling ASSERTS it is one cell — nobody had measured it. A two-cell glyph shifts the row by one, which is
+// the exact class of defect the earlier width work was about, so the width is now PINNED rather than assumed.
+// AND THE OTHER PRESENTATION GLYPHS ARE PINNED TOO, because a probe of `demo/textwidth.test.mjs` found NONE
+// of them asserted anywhere: the width table is well covered for CJK, emoji, ANSI and combining marks, and
+// the six glyphs this screen actually paints were covered by nothing.
+{
+	const glyphs = {
+		queued: "\u25C9",
+		idle: "\u25CB",
+		working: "\u25CF",
+		generating: "\u25CF",
+		parked: "\u25CC",
+		failed: "\u2716",
+		waiting: "!",
+	};
+	for (const [name, g] of Object.entries(glyphs)) {
+		assert.equal(textWidth(g), 1, `the ${name} glyph must be ONE cell, or every row it appears on shifts by one`);
+	}
+	// the CONTROLS, so a wrong answer is visible as wrong rather than uniformly green
+	assert.equal(textWidth("\u6F22"), 2, "CJK is two cells");
+	assert.equal(textWidth("a"), 1, "ASCII is one cell");
+}
 console.log(
 	"WATCHVIEW TEST PASS (extraction, activity, layout, screen, CLI wiring, freshness, streaming)",
 );
