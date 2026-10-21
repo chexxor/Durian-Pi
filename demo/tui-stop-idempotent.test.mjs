@@ -1,0 +1,20 @@
+// A PORTABLE idempotence demo (#4267): the bug is platform-specific, the INVARIANT is not.
+const { stopModeOnce } = await import("../src/tui/durable/terminal.mjs");
+let failures = 0;
+const check = (label, ok, detail = "") => { if (ok) console.log(`  ok   ${label}`); else { failures++; console.log(`  FAIL ${label} -- ${detail}`); } };
+let calls = 0;
+const fakeMode = { stop() { calls++; } };
+console.log("\n=== stop() IS SAFE TO CALL TWICE (the invariant, on every host) ===");
+check("the first stop happens", stopModeOnce(fakeMode) === true, String(calls));
+check("the second stop is a NO-OP, not a second call", stopModeOnce(fakeMode) === false, `calls=${calls}`);
+check("the mode was stopped exactly ONCE", calls === 1, `calls=${calls}`);
+check("a third call is still a no-op", stopModeOnce(fakeMode) === false && calls === 1, `calls=${calls}`);
+console.log("\n=== and the guard does not mask a DIFFERENT mode ===");
+const other = { stop() {} };
+check("a second mode stops independently", stopModeOnce(other) === true);
+check("...and is itself guarded afterwards", stopModeOnce(other) === false);
+console.log("\n=== degenerate inputs are refused, not thrown ===");
+check("null is a no-op", stopModeOnce(null) === false);
+check("an object with no stop is a no-op", stopModeOnce({}) === false);
+console.log(failures === 0 ? "\nPASS ? a repeated stop is a no-op, so a `finally` that always fires cannot crash the cleanup" : `\nFAIL ? ${failures}`);
+process.exit(failures === 0 ? 0 : 1);
