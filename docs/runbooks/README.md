@@ -8,16 +8,16 @@ doc: the design lives in `BROKER-ARCHITECTURE.md` / `BROKER-SUPERVISION.md` /
 **Reviewed against research:** `docs/reviews/runbooks-sop-best-practices.md`. The merge/conflict procedure
 (`merge.md`, `resolve-merge-conflict.md`) additionally incorporates `docs/reviews/llm-prompting-for-git-merging.md`
 (deterministic-first, per-hunk resolution with abstention, 3-way context). durian-pi's skeleton already
-matched published practice; the research's real finding is that the missing part is **machinery** â€”
+matched published practice; the research's real finding is that the missing part is **machinery** —
 nothing enforces the conventions or detects rot, and the one guardrail that matters (never proceed on a
 false `stopped` signal) is prose, which failed twice on 2026-10-16. The conventions below incorporate
-that report; the machinery is ROADMAP items **81â€“88**.
+that report; the machinery is ROADMAP items **81–88**.
 
 ## The one rule that shapes every runbook: single writer
 
 The broker owns the store; a second `Harness`-opening verb while it runs is what corrupted the store
 twice. Every writing procedure starts by **stopping the broker and confirming it exited**, and every
-read-only procedure says so. See `COMMANDS-AND-THE-BROKER.md` Â§4.
+read-only procedure says so. See `COMMANDS-AND-THE-BROKER.md` §4.
 
 ## Front-matter (mandatory)
 
@@ -94,8 +94,8 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 
 - **Re-verify on trigger, not calendar:** re-run `Verify` when (a) an incident touched the procedure,
   (b) a file the runbook names changes, or (c) a `check` rule it references changes. (Calendar cadence is
-  the published norm; trigger-based is our design choice â€” see the report Â§2.2.)
-- **A failed runbook files a ticket immediately** â€” "inaccurate runbooks are treated like failed tests".
+  the published norm; trigger-based is our design choice — see the report §2.2.)
+- **A failed runbook files a ticket immediately** — "inaccurate runbooks are treated like failed tests".
 - **Enforcement (ROADMAP 81/82):** `check` rule `runbook-stale` (`error`) if `last_verified` is old
   *and* a named file changed since; `runbook-unverified` (`fix-now`) if `Verify` never ran.
 - **Verification recording:** the `check` provenance line reports "runbooks verified against rev X"
@@ -122,7 +122,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Prose pseudo-commands | Cannot be copy-pasted or executed |
 | Hidden state | The reader cannot tell what the procedure assumes |
 | No rollback | Leaves a half-applied write |
-| **Precondition as prose only** | **The exact 2026-10-16 failure** â€” enforced in code instead |
+| **Precondition as prose only** | **The exact 2026-10-16 failure** — enforced in code instead |
 | Too long / duplicates the design doc | Move background to the design doc |
 | Untested steps | Treat inaccuracy as a failing test |
 | More scaffolding than the executor can hold | Weak models lose under active-frame guidance |
@@ -133,8 +133,9 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 |---|---|---|
 | [broker-down-or-stalled.md](broker-down-or-stalled.md) | seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale `PASS` (dormant); log stops after a storage error or `database is locked` | yes |
 | [broker-safe-change.md](broker-safe-change.md) | a model/constitution/reset change must apply without corrupting the store | yes |
-| [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error`, or the broker repeats `wake-failed â€¦ unresolvable path` and one seat is never woken | yes |
+| [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error`, or the broker repeats `wake-failed … unresolvable path` and one seat is never woken | yes |
 | [store-secret-detected.md](store-secret-detected.md) | a `secret_detected` notice: secret-shaped content is in the committed store | no |
+| [tool-result-redacted.md](tool-result-redacted.md) | a tool result shows a `[redacted by durian-pi: …]` marker instead of its text | no |
 | [store-probe-identity.md](store-probe-identity.md) | you are querying the store directly for a QUEUE item id, or a probe returned a plausible row whose namespace you have not checked | no |
 | [tool-result-redacted.md](tool-result-redacted.md) | a tool result shows a `[redacted by durian-pi: â€¦]` marker instead of its text | no |
 | [constitution-amendment.md](constitution-amendment.md) | you edited (or will edit) `constitution.txt`, or the 3 constitution-mirror demos fail their starter === constitution.txt assertion | no |
@@ -149,6 +150,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [stale-held-backlog.md](stale-held-backlog.md) | an effort has stalled with nothing broken; `held` rows are never released after their gates finish and no attention fires | no |
 | [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
 | [prepare-workspace-etarget.md](prepare-workspace-etarget.md) | `prepare_workspace` fails: `npm ci --prefer-offline ... ETARGET notarget` for an `@earendil-works/*` pin | no |
+| [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land — run the review method before the code | no |
 | [worktree-unlinked-deps.md](worktree-unlinked-deps.md) | `prepare_workspace` reports `DEPENDENCY NOT LINKED`, or a fresh worktree's suite fails demos that pass in the seat root | no |
 | [prepare-workspace-refused.md](prepare-workspace-refused.md) | `prepare_workspace` returned `PREPARE_WORKSPACE_ERROR`, or refused: leftover dir, a branch another worktree holds, or a `base=` the item branch cannot honour | no |
 | [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land â€” run the review method before the code | no |
@@ -156,12 +158,13 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [branch-cleanup.md](branch-cleanup.md) | so many local git branches; merged branches were never pruned | no |
 | [land.md](land.md) | a verified branch must go onto `main`; land it with the helper (never mid-merge) | no |
 | [resolve-merge-conflict.md](resolve-merge-conflict.md) | a merge/landing pass stopped with conflict markers; the tree is mid-merge | no |
-| [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61â€“64; pre-written) | yes |
+| [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
 | [local-provider-down.md](local-provider-down.md) | a `local/<id>` seat (`qa`/`devtools`) fails with `Connection error.` or `No API key for provider: local`; nothing listens on `127.0.0.1:8080` | no |
 | [research-request.md](research-request.md) | you need external research | no |
 | [competitor-review.md](competitor-review.md) | you want to learn from another project's tools/practices | no |
 | [resume-while-broker-runs.md](resume-while-broker-runs.md) | you want to run `resume`/`doctor` but the broker is up | no |
 | [request-trace.md](request-trace.md) | you need the ACTUAL request body durig sends (thinking / reasoning_effort / max_tokens / store), not the programmed config | no |
+| [per-row-marker.md](per-row-marker.md) | you must decide whether a held landing row's work actually landed on main, and choose a marker to probe for it — bare identifiers give false positives, whole added lines give false negatives | no |
 | [verifier-independence.md](verifier-independence.md) | a verifier wants to edit the artefact it is verifying, or is about to report an `artifact`/SHA it did not run — a verifier's only write is a report | no |
 
 ## Index (mechanism)
@@ -183,6 +186,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Review method | security-trust-boundary-review |
 | Verification / verifier independence | verifier-independence |
 | Merge / conflicts | merge, land, resolve-merge-conflict, branch-cleanup |
+| Landing-row audit / per-row markers | per-row-marker |
 | Daemon / host | daemon-not-running |
 | Local provider (PolyStrata) | local-provider-down, broker-down-or-stalled |
 | Provider request body | request-trace |
@@ -190,7 +194,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 
 ## Template
 
-New runbooks start from [`_template.md`](_template.md). Proposed machinery: ROADMAP items **81â€“88**
+New runbooks start from [`_template.md`](_template.md). Proposed machinery: ROADMAP items **81–88**
 (`runbook-stale`/`runbook-unverified` check rules, mandatory front-matter, the hard write guard, a
 `--dry-run`, executable `Diagnose` blocks, verification provenance, a gated agent runtime, the daemon
 runbook).
