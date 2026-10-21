@@ -21,7 +21,7 @@ import { spawnSync } from "node:child_process";
 const here = dirname(fileURLToPath(import.meta.url));
 const durigDir = join(here, "..");
 
-// Child env stripped of every DURIG_* key so the temp cwd's own ./rig.sqlite is
+// Child env stripped of every DURIAN_PI_* key so the temp cwd's own ./rig.sqlite is
 // the store, never the operator's.
 const cleanEnv = { ...process.env };
 for (const k of Object.keys(cleanEnv)) if (k.startsWith("DURIG_")) delete cleanEnv[k];

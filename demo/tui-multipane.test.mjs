@@ -1,4 +1,4 @@
-// demo/tui-multipane.test.mjs — U2: TEAM-WIDE multi-pane over the durig ui.
+// demo/tui-multipane.test.mjs — U2: TEAM-WIDE multi-pane over the durian-pi ui.
 //
 // DEFINITION OF ACTIVE (operator, EXACT): a seat is active iff it is CURRENTLY
 // PRODUCING CONTENT — mid-generation / streaming output (the in-flight partial:

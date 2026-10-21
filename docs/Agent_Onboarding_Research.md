@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 Can you analyze my recent chat with my assistant/agent to help figure out how other systems that run local LLM agents for ongoing workloads get up to speed faster and more efficiently when re-entering a project?
 
 

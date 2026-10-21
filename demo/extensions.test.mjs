@@ -159,7 +159,7 @@ try {
 
 	/* --------------------------------------- the CLI actually wires it in */
 
-	// The loader working is not the same as durig using it. This drives the real
+	// The loader working is not the same as durian-pi using it. This drives the real
 	// cli.mjs, which is where a config key that nothing reads would hide.
 	const cli = (args, env) =>
 		spawnSync(process.execPath, ["cli.mjs", ...args], {

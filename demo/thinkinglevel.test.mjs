@@ -1,9 +1,9 @@
 // ROADMAP 43a: a per-seat `thinkingLevel` declared in the rig must reach the
 // harness's agent state — the layer generation.ts consults to decide whether
-// to send `reasoning`. Assert on what durig passes through (the stored
+// to send `reasoning`. Assert on what durian-pi passes through (the stored
 // AgentState.thinkingLevel), NOT on a live model.
 //
-// before the fix: durig's configure calls (cli.mjs) never set `thinkingLevel`,
+// before the fix: durian-pi's configure calls (cli.mjs) never set `thinkingLevel`,
 // so every seat's agent state defaults to "off" and reasoning is never sent.
 // after the fix: a seat declared with `thinkingLevel` carries it into the
 // agent state; a seat with none stays "off".

@@ -1,7 +1,7 @@
-# durig quickstart — boot a 2-seat rig in 5 minutes
+# durian-pi quickstart — boot a 2-seat rig in 5 minutes
 
 Follow this top to bottom, verbatim. Every command should behave exactly as
-described; if anything trips, that is a durig bug — report the step number.
+described; if anything trips, that is a durian-pi bug — report the step number.
 
 Prerequisites: Node.js ≥ 24 (type-stripping imports `.ts` directly), npm,
 and EITHER a DeepInfra API key OR nothing at all (offline mode works fully).
@@ -9,7 +9,7 @@ and EITHER a DeepInfra API key OR nothing at all (offline mode works fully).
 ## Step 0 — install (once)
 
 ```powershell
-cd durig
+cd durian-pi
 npm install --ignore-scripts
 ```
 
@@ -18,43 +18,46 @@ npm install --ignore-scripts
 Offline (no key, no network; seats answer from a canned script):
 
 ```powershell
-$env:DURIG_PROVIDER = "faux"
+$env:DURIAN_PI_PROVIDER = "faux"
 ```
 
 Live (real model; needs the key in your environment):
 
 ```powershell
-$env:DURIG_PROVIDER = "deepinfra"      # the default; omit if you prefer
+$env:DURIAN_PI_PROVIDER = "deepinfra"      # the default; omit if you prefer
 $env:DEEPINFRA_API_KEY = "<your key>"  # or set it permanently in your profile
 ```
 
-Model override (optional): `$env:DURIG_MODEL = "zai-org/GLM-5.3-Flash"`.
+Model override (optional): `$env:DURIAN_PI_MODEL = "zai-org/GLM-5.3-Flash"`.
 
 ### Settings can live in a config file instead
 
 Environment variables still win, but you can put any of these values in
-`durig.config.json` (gitignored; copy `durig.config.example.json`):
+`durian-pi.config.json` (gitignored; copy `durian-pi.config.example.json`):
 
 ```json
 {
-  "DURIG_DB": "./selfdev.sqlite",
-  "DURIG_PROVIDER": "deepinfra",
-  "DURIG_MODEL": "zai-org/GLM-5.3-Flash",
+  "DURIAN_PI_DB": "./selfdev.sqlite",
+  "DURIAN_PI_PROVIDER": "deepinfra",
+  "DURIAN_PI_MODEL": "zai-org/GLM-5.3-Flash",
   "DEEPINFRA_API_KEY": "put-your-key-here"
 }
 ```
 
-Discovery order: `$DURIG_CONFIG`, then `./durig.config.json`, then
-`./.durig/config.json`. Always confirm what is actually in effect:
+Discovery order: `$DURIAN_PI_CONFIG`, then `./durian-pi.config.json`, then
+`./.durian-pi/config.json`. Always confirm what is actually in effect:
+
+> **Deprecated aliases (D103):** the old `DURIG_*` env vars and `durig.config.json` still load as
+> deprecated aliases; the new `DURIAN_PI_*` name wins when both are set.
 
 ```powershell
 node cli.mjs config     # source file + resolved DB/provider/model + key set/unset
 ```
 
-This matters because a command run without `DURIG_DB` silently uses
+This matters because a command run without `DURIAN_PI_DB` silently uses
 `./rig.sqlite` — a different database than the rig you meant to steer.
 
-durig now defends against that: `ps`, `status`, `watch` and a failed `send`
+durian-pi now defends against that: `ps`, `status`, `watch` and a failed write verb
 print a note on stderr when the database holds no seats, naming the file they
 actually used. Every one of those commands also reports the resolved `db` path
 in its JSON. If you see "no seats in ..." you are pointed at the wrong rig —
@@ -63,7 +66,7 @@ nothing is broken.
 Everything below uses a scratch database so you cannot touch a real rig:
 
 ```powershell
-$env:DURIG_DB = "$PWD\scratch-quickstart.sqlite"
+$env:DURIAN_PI_DB = "$PWD\scratch-quickstart.sqlite"
 ```
 
 ## Step 2 — bootstrap the rig
@@ -98,11 +101,23 @@ node cli.mjs status      # per-seat health; "attention": [] means nobody is bloc
 
 ## Step 4 — delegate some work
 
+The resident broker must be running to deliver input (it is started by `up` on an
+interactive terminal; if it is not, start it in a terminal with `node cli.mjs serve`
+and leave it running). Operator input goes through the **intent spool**, which the
+broker delivers without stopping:
+
 ```powershell
-node cli.mjs send pm "Please route a task to build the login widget to worker."
+"Please route a task to build the login widget to worker." | node intent.mjs pm --body-file -
 ```
 
-`send` steers the seat, WAITS for its run to settle, and prints the reply.
+`intent` writes one message to the broker's inbox and returns **immediately** — it
+spools; the broker delivers it to pm on its next pass. The reply shows up in the
+read verbs, not on the `intent` command:
+
+```powershell
+node cli.mjs log pm      # pm's conversation (newest turns below)
+node cli.mjs status      # per-seat health; pm shows the new work it is handling
+```
 
 The next two commands depend on your mode:
 
@@ -120,12 +135,12 @@ The next two commands depend on your mode:
   ```
 
 That attention notice (live mode) is the product working: work exists that
-nobody has picked up, and durig says so instead of hiding it.
+nobody has picked up, and durian-pi says so instead of hiding it.
 
 ## Step 5 — watch it live (second terminal)
 
 Open a second terminal in the same directory with the SAME environment
-variables (`$env:DURIG_PROVIDER`, `$env:DURIG_DB`), then:
+variables (`$env:DURIAN_PI_PROVIDER`, `$env:DURIAN_PI_DB`), then:
 
 ```powershell
 node cli.mjs watch
@@ -136,7 +151,7 @@ row per seat with its role, what it is currently working on, and the last thing
 it said.
 
 ```
-durig · 2 seats · db ./scratch-quickstart.sqlite · watch #3 · 12:03:10
+durian-pi · 2 seats · db ./scratch-quickstart.sqlite · watch #3 · 12:03:10
 ──────────────────────────────────────────────────────────────────────
 ● pm      program manager       sent #1: Build login widget
       ↳ The send_work succeeded, queued item #1 for worker.
@@ -155,13 +170,13 @@ form with `--json` or `--human`:
 
 **Tip:** environment variables do not follow you into a new terminal, and that
 is the single easiest way to end up watching (or steering) the wrong rig. If you
-will use more than one terminal, put the values in `durig.config.json` once
+will use more than one terminal, put the values in `durian-pi.config.json` once
 instead — every terminal then agrees without any setup.
 
 ## Step 6 — let the worker pick it up
 
 ```powershell
-node cli.mjs send worker "Check your queue."
+"Check your queue." | node intent.mjs worker --body-file -
 ```
 
 (Live mode:) The worker claims the item (`claim_work`) and reports completion
@@ -191,7 +206,7 @@ terminal, with no multiplexer and no extra setup. `--json` gives the machine
 form (each entry with its `text`, `kind` and raw provider message).
 
 Attention does not simply clear here: the DONE notice is real work addressed to
-pm, and durig reports it as `idle_with_queued_work` on pm. That is the product
+pm, and durian-pi reports it as `idle_with_queued_work` on pm. That is the product
 working, not a leftover.
 
 (Faux mode:) this step returns a canned acknowledgement; run
@@ -200,7 +215,7 @@ working, not a leftover.
 ## Step 7 — tear down
 
 ```powershell
-Remove-Item Env:DURIG_DB          # forget the scratch db for future sessions
+Remove-Item Env:DURIAN_PI_DB          # forget the scratch db for future sessions
 Remove-Item .\scratch-quickstart.sqlite   # or keep it; it is just a file
 ```
 
@@ -216,7 +231,7 @@ proves restart survival mechanically).
 
 ## Optional — run against pi's main branch
 
-durig defaults to the released `@earendil-works/*` packages. To run the same
+durian-pi defaults to the released `@earendil-works/*` packages. To run the same
 code against upstream `main` (pinned, built locally):
 
 ```powershell

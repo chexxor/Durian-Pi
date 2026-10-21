@@ -16,8 +16,8 @@
 //
 // This loads pi-DURABLE extensions. A pi *coding-agent* extension is a different
 // thing (slash commands, a TUI, project-trust prompts) and cannot load here:
-// durig does not depend on `pi-coding-agent` and has no interactive surface
-// (D21). See ROADMAP item 23.
+// durig depends on `pi-coding-agent` for the durable-TUI merge but has no
+// interactive surface of its own (D21). See ROADMAP item 23.
 
 import { existsSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";

@@ -1,16 +1,16 @@
 // DOGFOOD F12 seat-root guard test: a seat's working directory is resolved ONCE
-// at `up` time (seat.cwd ?? spec.cwd ?? DURIG_SEAT_ROOT) and persisted onto the
-// conversation, so a later launch with a different DURIG_SEAT_ROOT would silently
+// at `up` time (seat.cwd ?? spec.cwd ?? DURIAN_PI_SEAT_ROOT) and persisted onto the
+// conversation, so a later launch with a different DURIAN_PI_SEAT_ROOT would silently
 // run against the persisted (stale/wrong) tree while looking like success. The
-// guard fixes that: when DURIG_SEAT_ROOT is set and differs from a seat's persisted
+// guard fixes that: when DURIAN_PI_SEAT_ROOT is set and differs from a seat's persisted
 // cwd, the write-side command (`send`/`run`) fails CLOSED naming both paths and the
 // fix; the equal/unset case stays quiet and succeeds. View-only commands are not
 // affected.
 // This proves:
 //   (a) the mismatch case: a write-side command exits NON-ZERO with BOTH paths in
-//       the message (persisted cwd and DURIG_SEAT_ROOT);
-//   (b) the equal case (DURIG_SEAT_ROOT == persisted cwd) exits 0;
-//   (c) the unset case (no DURIG_SEAT_ROOT) exits 0;
+//       the message (persisted cwd and DURIAN_PI_SEAT_ROOT);
+//   (b) the equal case (DURIAN_PI_SEAT_ROOT == persisted cwd) exits 0;
+//   (c) the unset case (no DURIAN_PI_SEAT_ROOT) exits 0;
 //   (d) a view-only command (status) does NOT fire the guard.
 // Run: node demo/seatroot.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
@@ -61,7 +61,7 @@ try {
 	const up = await runCli(["up", rigFile]);
 	assert.equal(up.code, 0, `up exited ${up.code}; stderr=${up.stderr.slice(0, 300)}`);
 
-	// (a) MISMATCH: DURIG_SEAT_ROOT differs from the persisted cwd -> fail closed,
+	// (a) MISMATCH: DURIAN_PI_SEAT_ROOT differs from the persisted cwd -> fail closed,
 	// exit non-zero, and the message names BOTH paths.
 	const mismatch = await runCli(["send", "worker", "do the thing"], {
 		DURIG_SEAT_ROOT: runRoot,
@@ -74,11 +74,11 @@ try {
 	assert.ok(err.includes(runRoot), `message names the DURIG_SEAT_ROOT value; got: ${err}`);
 	assert.ok(/up --refresh|unset DURIG_SEAT_ROOT/.test(err), "message names the fix (up --refresh or unset)");
 
-	// (b) EQUAL: DURIG_SEAT_ROOT == persisted cwd -> quiet, exit 0.
+	// (b) EQUAL: DURIAN_PI_SEAT_ROOT == persisted cwd -> quiet, exit 0.
 	const equal = await runCli(["run"], { DURIG_SEAT_ROOT: persistedDir });
 	assert.equal(equal.code, 0, `run with matching DURIG_SEAT_ROOT must succeed (got exit ${equal.code}; stderr=${equal.stderr.slice(0, 200)})`);
 
-	// (c) UNSET: no DURIG_SEAT_ROOT at all -> quiet, exit 0.
+	// (c) UNSET: no DURIAN_PI_SEAT_ROOT at all -> quiet, exit 0.
 	const unset = await runCli(["run"]);
 	assert.equal(unset.code, 0, `run with DURIG_SEAT_ROOT unset must succeed (got exit ${unset.code}; stderr=${unset.stderr.slice(0, 200)})`);
 

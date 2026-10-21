@@ -20,7 +20,7 @@ import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-wor
 
 import { Router, Seats, compilePersona, enqueueItem, registerSeat } from "../src/rig.mjs";
 import { WAKE_CONTENT } from "../src/driver.mjs";
-import { drivePass, reconcileStrandedSubmissions } from "../src/broker.mjs";
+import { drivePass, isAdvancingTask, reconcileStrandedSubmissions } from "../src/broker.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
 const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
@@ -106,6 +106,74 @@ assert.ok(
 	page.items.some((e) => JSON.stringify(e).includes(WAKE_CONTENT)),
 	"the seat received the wake text",
 );
+
+/* Unit 2 (#2576): the ONE advancing predicate. The DERIVED `state.kind` decides, not the
+ * raw `record.state.status` (a different field): only running/completing can still advance
+ * a conversation. Failing-first: this import dies before the fix. */
+assert.equal(isAdvancingTask({ state: { kind: "running" } }), true, "a running task advances");
+assert.equal(isAdvancingTask({ state: { kind: "completing" } }), true, "a completing task still advances");
+for (const kind of ["ready", "waiting", "sleeping", "blocked"]) {
+	assert.equal(isAdvancingTask({ state: { kind } }), false, `a ${kind} task does NOT advance`);
+}
+assert.equal(isAdvancingTask(undefined), false, "no task does not advance");
+assert.equal(isAdvancingTask({}), false, "a task with no derived state does not advance");
+assert.equal(
+	isAdvancingTask({ record: { state: { status: "running" } } }),
+	false,
+	"the RAW record.state.status is a different field and is NOT the predicate (the derived kind is)",
+);
+console.log("  ok   isAdvancingTask keys off the derived state.kind (running/completing only)");
+
+/* Unit 3 (#2576): the reconciler's owner scan honours the predicate. A `placed`
+ * submission whose only task is NON-advancing must settle; one whose task is
+ * running/completing must NOT. Before the fix the scan had NO state filter, so a
+ * ready/waiting/sleeping/blocked task marked the conversation owned and the submission
+ * never settled - the seat stalls as `admitted_not_started`. */
+const place = async (label) => {
+	let id;
+	await harness.commit(async (tx) => {
+		const entry = await tx.appendEntry(convId, {
+			kind: "pi.user",
+			model: [{ role: "user", content: label, timestamp: Date.now() }],
+		});
+		const sub = await tx.createSubmission({
+			conversationId: convId,
+			type: "input",
+			status: "placed",
+			entry: entry.id,
+		});
+		id = sub.id;
+	}, ctx);
+	return id;
+};
+const taskOfKind = (kind) => ({ record: { conversationId: convId }, state: { kind } });
+const placed = (id) => ({ id, status: "placed", conversationId: convId });
+
+for (const kind of ["ready", "waiting", "sleeping", "blocked"]) {
+	const id = await place(`orphan-${kind}`);
+	const settled = await reconcileStrandedSubmissions(
+		harness,
+		{ tasks: [taskOfKind(kind)], submissions: [placed(id)] },
+		{ context: ctx },
+	);
+	assert.deepEqual(settled, [id], `a ${kind} task must not own the conversation, so the placed submission settles`);
+}
+console.log("  ok   a ready/waiting/sleeping/blocked task does NOT own the conversation -> it settles");
+
+for (const kind of ["running", "completing"]) {
+	const id = await place(`owned-${kind}`);
+	const settled = await reconcileStrandedSubmissions(
+		harness,
+		{ tasks: [taskOfKind(kind)], submissions: [placed(id)] },
+		{ context: ctx },
+	);
+	assert.deepEqual(settled, [], `a ${kind} task owns the conversation, so the submission must NOT settle`);
+	const record = await (await harness.submission(id, ctx))?.status(ctx);
+	assert.equal(record.status, "placed", `the ${kind}-owned submission is still placed`);
+	// Clean up so the submission does not linger as a real orphan for later passes.
+	await reconcileStrandedSubmissions(harness, { tasks: [], submissions: [placed(id)] }, { context: ctx });
+}
+console.log("  ok   a running/completing task OWNS the conversation -> the submission does NOT settle");
 
 await harness.close(ctx);
 console.log(

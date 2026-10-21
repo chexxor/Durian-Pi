@@ -39,6 +39,14 @@ const cases = [
 		"conversation-48",
 		renderTui({ ...base, turns: fixture, width: 48, height: 24, view: "conversation", selectedSeat: "impl", scroll: 0 }),
 	],
+	// The narrow footer: the conversation hint is cut from the RIGHT, so `q=quit` goes
+	// first and the navigation keys survive (designer #1115). 44 is the narrowest clean
+	// full-frame width — the status bar is 43 cells wide and is not width-bounded, so a
+	// <40-col FRAME would overflow on the status bar, not on the hint under test.
+	[
+		"conversation-44",
+		renderTui({ ...base, turns: fixture, width: 44, height: 24, view: "conversation", selectedSeat: "impl", scroll: 0 }),
+	],
 	[
 		"conversation-streaming-80",
 		renderTui({
@@ -81,7 +89,7 @@ const cases = [
 ];
 
 for (const [name, frame] of cases) {
-	const width = name.endsWith("-48") ? 48 : 80;
+	const width = Number(name.split("-").pop());
 	const buffer = new ScreenBuffer(width, 24).paint(frame.lines);
 	const result = compareGolden(buffer.toLines(), name);
 	check(

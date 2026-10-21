@@ -7,7 +7,10 @@
 //   - `--serve` starts one that STAYS resident (the unbounded `signal.wait` holds a
 //     live handle — without it Node drains the event loop and the broker exits);
 //   - `run` and a second `serve` fail closed while it drives;
-//   - `up --serve` is idempotent, and `serve --stop` reaps it and clears the state.
+//   - a second `up` fails closed too (#1589): `up` opens a full harness and writes, so it
+//     is a second OWNER while the broker drives — it no longer doubles as "ensure the
+//     broker is up" (`status` reads that); `serve --stop` reaps the broker and clears
+//     the state.
 //
 // Failing-first: before the auto-start wiring this dies (no `broker` field / no state
 // file). Run: node demo/autostart.test.mjs  (exit 0 = pass)
@@ -93,10 +96,24 @@ try {
 	assert.notEqual(dup.code, 0, "a second serve exits non-zero");
 	assert.match(dup.stdout, /already running/, "naming the live broker");
 
-	// 6. Auto-start is idempotent.
-	const again = json(cli(["up", rigFile, "--serve"]));
-	assert.equal(again.broker.started, false, "up --serve reuses a live broker");
-	assert.equal(again.broker.reason, "already running");
+	// 6. A second `up --serve` must be the IDEMPOTENT REUSE (lead #1700 ruling (B)), NOT a
+	// refusal: `up --serve` doubles as "ensure the broker is up". The reuse checks the broker
+	// state READ-ONLY and opens NO harness — a second harness (a second OWNER) is the named
+	// hazard, not the reuse. `--refresh` and a plain `up` (which writes seats) still refuse.
+	const again = cli(["up", rigFile, "--serve"]);
+	assert.equal(again.status, 0, "a second up --serve is the idempotent reuse, not a refusal");
+	const againJson = json(again);
+	assert.equal(againJson.broker.started, false, "the reuse starts no broker");
+	assert.equal(againJson.broker.reason, "already running", "and names the live broker");
+	assert.equal(againJson.broker.pid, on.broker.pid, "the reuse leaves the broker untouched");
+	assert.deepEqual(againJson.existing, [], "the reuse opened NO harness (no seats enumerated)");
+	assert.deepEqual(againJson.extensions, [], "the reuse opened NO harness (no extensions installed)");
+
+	// 6b. The WRITE path still refuses: `up --refresh` while the broker drives.
+	const refresh = cli(["up", rigFile, "--refresh"]);
+	assert.notEqual(refresh.status, 0, "up --refresh exits non-zero while a broker drives");
+	assert.match(refresh.stdout, /refuses to run while a resident broker/, "and says why");
+	assert.equal(liveBrokerPid(), on.broker.pid, "the refusal leaves the broker untouched");
 
 	// 7. `serve --stop` reaps it and clears the state.
 	const stopped = json(cli(["serve", "--stop"]));

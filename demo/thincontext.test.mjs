@@ -1,16 +1,16 @@
 // Thin-context return contract test (ROADMAP agent-fleet borrow, RANK 1). Source
 // of truth: vendor/eval/agent-fleet @ 7c34dde docs/ARCHITECTURE.md (research
-// findings "written to disk — hub gets paths, not dumps"); durig shape per
-// docs/COMPETITORS.md ("durig seats already write to disk, but our tool results
+// findings "written to disk — hub gets paths, not dumps"); durian-pi shape per
+// docs/COMPETITORS.md ("durian-pi seats already write to disk, but our tool results
 // still return bodies; the lesson is the return contract"). Lead ruling (item
 // #75): additive opt-in path-return at src/rig.mjs toolText() — the LARGEST
 // inliner (claim_work's full subject+body) defers to disk over a threshold;
 // small results stay byte-identical/inline; deterministic file
-// cwd/.durig/<itemId>.md; the coordinator reads the body back via its EXISTING
+// cwd/.durian-pi/<itemId>.md; the coordinator reads the body back via its EXISTING
 // read tools (the returned value IS the path).
 // This proves:
 //   (a) an over-threshold claim_work returns A PATH (not the inlined body), and
-//       the file at cwd/.durig/<itemId>.md CONTAINS that body;
+//       the file at cwd/.durian-pi/<itemId>.md CONTAINS that body;
 //   (b) a small claim_work still returns the body INLINE (regression / byte-identical);
 //   (c) idempotent: re-claiming the small item returns NO_QUEUED_WORK (the file is
 //       not duplicated); the large body is written once to a deterministic path.
@@ -87,7 +87,7 @@ try {
 	};
 
 	// --- (a) OVER threshold: claim the large item -> the result is a PATH,
-	// the body is NOT inline, and the file at cwd/.durig/<id>.md contains it.
+	// the body is NOT inline, and the file at cwd/.durian-pi/<id>.md contains it.
 	const largeId = await harness.commit(async (tx) =>
 		enqueueItem(tx, "boss", "worker", "Big task", LARGE),
 	ctx);

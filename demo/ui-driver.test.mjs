@@ -1,4 +1,4 @@
-// demo/ui-driver.test.mjs — U1: the `durig ui` DRIVER (raw mode + keys + poll loop).
+// demo/ui-driver.test.mjs — U1: the `durian-pi ui` DRIVER (raw mode + keys + poll loop).
 //
 // ONE concern: a driver that OWNS raw mode + key handling + the poll loop and PAINTS
 // renderTui frames. Boundaries: read-only over readapi/viewmodel (D11: poll, no

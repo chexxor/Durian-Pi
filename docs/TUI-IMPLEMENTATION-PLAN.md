@@ -1,4 +1,4 @@
-# durig TUI app — implementation plan
+# durian-pi TUI app — implementation plan
 
 **Status:** plan of record. The hardening items in §C are **operator-approved** (2026-10-16) and
 recorded as the D70 recommendation; the remaining gaps in §D carry open rulings.

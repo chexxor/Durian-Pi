@@ -29,7 +29,7 @@ Deliberately omitted, with the reason:
   these document frameworks durig does not use.
 - `references/ecosystem-typescript.md` — this documents **Ink**, not pi-tui. Vendoring it would
   invite a seat to write Ink idioms into a pi-tui codebase. durig's framework reference is
-  `@earendil-works/pi-tui` itself (see `skills/durig/SKILL.md` and the pi-tui `docs/tui.md`).
+  `@earendil-works/pi-tui` itself (see `.agents/skills/driving-durian-pi/SKILL.md` and the pi-tui `docs/tui.md`).
 - `references/cli-basics.md` — durig's CLI is non-interactive, one JSON document per command
   (D21); the skill's CLI section assumes interactive command-line tools. The `ui` verb's
   non-interactive fallback is the existing `log`/`watch`/JSON surface, which already satisfies the

@@ -11,17 +11,16 @@ Design terminal software that is calm, predictable, fast, and honest about the m
 
 | Need | Authoritative reference |
 |---|---|
-| Go, Bubble Tea, Lipgloss, Bubbles, tview, gocui | `references/ecosystem-go.md` |
-| Rust, Ratatui, crossterm, Cursive | `references/ecosystem-rust.md` |
-| Python, Textual, Rich, prompt_toolkit, urwid | `references/ecosystem-python.md` |
-| TypeScript/JavaScript, Ink, OpenTUI, Clack, Inquirer | `references/ecosystem-typescript.md` |
-| One-shot commands, arguments, streams, exit codes, automation | `references/cli-basics.md` |
 | Layouts, buffers, borders, hierarchy, color, density, responsive behavior, tables, themes, accessibility (screen readers, plain mode, motion) | `references/visual-patterns.md` |
 | Keys, focus, navigation, modes, forms, mouse, confirmation, undo, OSC features | `references/interaction-patterns.md` |
 | Case studies: lazygit, k9s, fzf, btop, helix, yazi, atuin | `references/exemplar-apps.md` |
-| Screenshots or demo recordings | The `vhs-cli-demos` skill when installed; otherwise `references/cli-basics.md` → *Demo recordings* |
+| Screenshots or demo recordings | The `vhs-cli-demos` skill when installed; otherwise see `README.md` → *Demo recordings* |
+| Framework/ecosystem (Go, Rust, Python, TypeScript/Ink, …) and one-shot CLI references | **Not vendored** — durig is Node/pi-tui and its CLI is non-interactive (D21); see `README.md` for the omission rationale |
 
-Load only the references the task needs. When the prompt names a framework or ecosystem, always load its ecosystem reference before making API, lifecycle, implementation, or testing claims. Ecosystem references own those specifics. The visual and interaction references own their domains for every ecosystem. Exemplar apps are evidence and inspiration, not substitutes for the pattern references.
+Load only the references the task needs. The visual and interaction references own their domains for every
+ecosystem. Exemplar apps are evidence and inspiration, not substitutes for the pattern references. A routing
+table must never point at a file that cannot be loaded — every row above resolves to a vendored file or to
+`README.md`, never to an absent path.
 
 If no language is named, ask only when ecosystem choice would materially change the answer or implementation. Otherwise state a reasonable recommendation and proceed: Go for polished single binaries, Rust for control and reliability, Python for rapid product work, and TypeScript when React or npm distribution is already an advantage.
 

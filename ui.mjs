@@ -15,22 +15,28 @@
 // Usage: node ui.mjs [--help]   (reads DURIG_DB / durig.config.json like every other verb)
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { readFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadConfig } from "./src/config.mjs";
-import { readSeatList, readQueueItems, readLiveState, readRigHealth } from "./src/readapi.mjs";
-import { partialView } from "./src/viewmodel.mjs";
-import { SCAN_LIMIT, readOlderEntries, conversationExhausted } from "./src/rigstory.mjs";
-import { createConversationWindow, selectSeat, mergeNewest, oldestLoadedId, turnsOf, loadOlder } from "./src/tui/conversation.mjs";
+import { SCAN_LIMIT, readOlderEntries } from "./src/rigstory.mjs";
+import { createConversationWindow, selectSeat, turnsOf, loadOlder } from "./src/tui/conversation.mjs";
+import { makeReadState } from "./src/tui/readstate.mjs";
 import { createUiDriver, decodeKeys } from "./src/tui/driver.mjs";
+import { createViewMode } from "./src/tui/viewmode.mjs";
 import { createTerminalScreen, PASTE_OFF } from "./src/tui/restore.mjs";
 import { createInputLine } from "./src/tui/input.mjs";
 import { writeIntent } from "./src/broker.mjs";
+import { readData } from "./src/readclient.mjs";
 import { composeFrame } from "./src/tui/paint.mjs";
 import { createSyncState, SYNC_QUERY } from "./src/tui/sync.mjs";
+import { makeEnterHandler } from "./src/tui/durable/enter.mjs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The repo root the child entrypoints (tui.mjs, cli.mjs) live in — this file is at that root.
+const REPO_ROOT = dirname(fileURLToPath(import.meta.url));
 
 const USAGE = `durig ui — the read-only TUI (polls the store ≤0.75s; renders seats, transcript, streaming, status)
 
@@ -43,6 +49,8 @@ keys:
   ↑ / ↓ or k / j     seat list: select a seat; conversation: scroll the transcript
                      (at the loaded top, ↑ loads one older page of the seat's log)
   Enter              open the selected seat's conversation stream
+  i                  type an intent to the focused seat (Enter=send, Esc=cancel);
+                     an overlay on the current view — it never replaces it
   G / End            jump to the live tail (re-enable auto-follow)
   Esc                back to the seat list (press again to quit)
 
@@ -57,83 +65,6 @@ notes:
 
 const { config: CFG } = await loadConfig({ env: process.env, readFile });
 const DB_PATH = CFG.DURIG_DB ?? "./rig.sqlite";
-
-/* ───────── readState (read-only store reads; D11 poll) ───────── */
-
-async function makeReadState(storage, ui, conv) {
-  const slots = Number(CFG.DURIG_MAX_CONCURRENT_SEATS ?? "");
-  const bounded = Number.isFinite(slots) && slots > 0 ? slots : 999;
-  return async () => {
-    const health = await readRigHealth(storage, DB_PATH, bounded, { cfg: CFG });
-    const queueItems = health.queueItems ?? (await readQueueItems(storage));
-    // Streaming partials, U2: EVERY actively-generating seat at once (team-wide),
-    // keyed off live generation (`partialView(live).hasContent`) — NEVER queue depth.
-    const liveBySeat = {};
-    let partial = null;
-    let streamingSeat = null;
-    const partials = [];
-    for (const seat of health.seats) {
-      liveBySeat[seat.name] = await readLiveState(storage, seat.conversationId);
-      const pv = partialView(liveBySeat[seat.name]);
-      if (pv?.hasContent) {
-        partials.push({ ...pv, seat: seat.name });
-        if (streamingSeat === null) {
-          streamingSeat = seat.name;
-          partial = { ...pv, seat: seat.name };
-        }
-      }
-    }
-    // The selected seat drives the transcript. Until the operator navigates,
-    // auto-follow the first streaming seat; once they press a nav key — or open a
-    // seat's conversation — their choice sticks (r does not steal focus back).
-    ui.seatCount = health.seats.length;
-    if (!ui.navigated && ui.mode === "seats" && streamingSeat !== null) {
-      const idx = health.seats.findIndex((s) => s.name === streamingSeat);
-      if (idx >= 0) ui.selectedIndex = idx;
-    }
-    ui.selectedIndex = Math.max(0, Math.min(ui.seatCount - 1, ui.selectedIndex));
-    const focusSeat = health.seats[ui.selectedIndex]?.name ?? health.seats[0]?.name;
-    ui.focusSeat = ui.seatCount > 0 ? focusSeat : null;
-    const focusConvId = health.seats.find((s) => s.name === focusSeat)?.conversationId;
-    ui.convId = focusConvId;
-    // The detail view's loaded window (ROADMAP 89): the newest page, plus any older
-    // pages the operator paged in. A seat switch resets it (a different transcript);
-    // the newest page is merged id-keyed each poll, so live turns append at the tail
-    // while backfilled history stays put. Exhaustion is UNKNOWN until a short page or
-    // an on-demand probe answers — never fabricated, and never part of the shared
-    // per-poll scan (a probe runs only while this view is open).
-    let turns = [];
-    let exhausted = null;
-    if (ui.mode === "conversation" && ui.focusSeat !== null) {
-      if (conv.seat !== ui.focusSeat) selectSeat(conv, ui.focusSeat);
-      mergeNewest(conv, health._pages?.[ui.focusSeat] ?? [], SCAN_LIMIT);
-      if (conv.exhausted === null && focusConvId !== undefined) {
-        const oldest = oldestLoadedId(conv);
-        if (oldest !== null) {
-          conv.exhausted = await conversationExhausted(storage, focusConvId, oldest, BACKGROUND_CONTEXT);
-        }
-      }
-      turns = turnsOf(conv);
-      exhausted = conv.exhausted;
-    }
-    // Clamp the conversation scroll to the turns actually held, so holding ↑ cannot
-    // scroll into empty space forever.
-    ui.scroll = Math.max(0, Math.min(ui.scroll, Math.max(0, turns.length - 1)));
-    return {
-      seats: health.seats,
-      turns,
-      partial,
-      partials,
-      health,
-      queueItems,
-      selectedSeat: ui.seatCount > 0 ? focusSeat : null,
-      view: ui.mode,
-      scroll: ui.scroll,
-      exhausted,
-      inputText: ui.mode === "input" ? input.value : null,
-    };
-  };
-}
 
 /* ───────── terminal ownership ───────── */
 
@@ -179,27 +110,26 @@ if (!process.stdout.isTTY) {
   process.exit(2);
 }
 
-let storage;
 try {
   if (!existsSync(DB_PATH)) {
     process.stderr.write(`no store at ${DB_PATH} — run "node cli.mjs up rig.starter.json" first (or set DURIG_DB)\n`);
     process.exit(2);
   }
-  storage = await openNodeSqliteStorage(DB_PATH).catch((err) => {
-    throw new Error(`cannot open ${DB_PATH}: ${err?.message ?? err}`);
-  });
 
   // Selection is owned here, not in the driver: the driver is a pure key/tick
   // machine, and this entrypoint already owns readState (the seat whose turns
   // are shown). `navigated` latches on the first nav key so auto-follow of a
-  // streaming seat never fights the operator's choice; `mode` is the seat list or
-  // the selected seat's focused conversation; `scroll` counts older turns when in
-  // the conversation view.
-  const ui = { selectedIndex: 0, navigated: false, seatCount: 0, mode: "seats", scroll: 0, focusSeat: null, convId: undefined };
+  // streaming seat never fights the operator's choice; `scroll` counts older turns
+  // when in the conversation view.
+  const ui = { selectedIndex: 0, navigated: false, seatCount: 0, scroll: 0, focusSeat: null, convId: undefined };
+  // The view (seat list | conversation) plus the INPUT OVERLAY state (ROADMAP 99): `i`
+  // is an overlay, never a third view, so closing it returns to the view it was opened
+  // over. Pure state, in src/tui/viewmode.mjs, so the transitions are testable headlessly.
+  const view = createViewMode();
   // The detail view's loaded window (ROADMAP 89): newest page + paged-in older
   // pages, owned by the entrypoint and driven by the keys below.
   const conv = createConversationWindow();
-  const readState = await makeReadState(storage, ui, conv);
+  const readState = await makeReadState(ui, conv, view, { input, cfg: CFG, dbPath: DB_PATH });
   process.stdin.setRawMode(true);
   process.stdin.resume();
   screen.enter();
@@ -213,22 +143,41 @@ try {
     paint: paintScreen,
     color: !process.env.NO_COLOR,
     pollMs: 700,
-    onEnter: () => {
-      // Enter opens the selected seat's conversation; Enter again in the conversation
-      // view is a no-op (Esc is the way back). Opening resets the loaded window, so
-      // the detail view always starts at the newest page for the seat just opened.
-      if (ui.mode === "seats" && ui.seatCount > 0) {
-        ui.mode = "conversation";
-        ui.scroll = 0;
-        selectSeat(conv, ui.focusSeat);
-        void driver.tick();
+    onEnter: async () => {
+      // #4158: Enter runs the OPERATOR WINDOW on the selected seat — the seam, launch and return
+      // layers were on main and imported by demos only, so this is the caller that makes the ruled
+      // answer something the operator can press. The sequence (record -> stop -> acquire -> session
+      // -> RELEASE -> RESTART -> restore) lives in src/tui/durable/return.mjs; the real effects and
+      // the (seat, conversation) -> store resolution live in enter.mjs. Inside the conversation view
+      // Enter is still a no-op (Esc is the way back).
+      if (view.mode !== "seats" || ui.seatCount === 0) return;
+      const seat = ui.focusSeat;
+      // The landing screen's own repaint, so what comes back is THIS screen on THAT seat rather
+      // than whatever the child left in the terminal.
+      const enterHandler = makeEnterHandler({
+        // A one-seat rig built from what the landing screen already knows: the focused seat and the
+        // conversation id it is showing. resolveSeatStore then refuses when there is no conversation
+        // rather than defaulting to a fresh session.sqlite — the property is kept, not bypassed.
+        rig: { db: DB_PATH, seats: { [seat]: { conversationId: ui.convId } } },
+        repo: REPO_ROOT,
+        repaint: ({ seat: returned }) => {
+          if (returned) ui.focusSeat = returned;
+          ui.scroll = 0;
+          selectSeat(conv, ui.focusSeat);
+          void driver.tick();
+        },
+      });
+      const result = await enterHandler({ seat, mode: view.mode });
+      if (!result.ran) {
+        // A refused window must say so where the operator is looking, not fail silently.
+        fatal(new Error(result.reason ?? "Enter could not open the operator window"));
       }
     },
     onBack: () => {
       // Esc leaves the conversation view; at the seat list it quits (the pre-modes
       // behavior), so Esc is never a dead key.
-      if (ui.mode === "conversation") {
-        ui.mode = "seats";
+      if (view.view === "conversation") {
+        view.closeConversation();
         ui.scroll = 0;
         void driver.tick();
       } else {
@@ -245,7 +194,7 @@ try {
       enterInput();
     },
     onNavigate: (delta) => {
-      if (ui.mode === "conversation") {
+      if (view.view === "conversation") {
         // ↑ (−1) reveals older turns; ↓ (+1) returns toward the live tail. At the
         // LOADED top, ↑ loads ONE older page instead of a no-op — it does NOT
         // re-anchor to the tail (designer contract §1/§3). loadOlder keeps the
@@ -254,7 +203,12 @@ try {
         const maxScroll = Math.max(0, loaded.length - 1);
         if (delta < 0 && ui.scroll >= maxScroll && ui.convId !== undefined && conv.exhausted !== true) {
           void loadOlder(conv, (oldest) =>
-            readOlderEntries(storage, ui.convId, oldest, SCAN_LIMIT, BACKGROUND_CONTEXT),
+            readData(
+              DB_PATH,
+              "older",
+              { conversationId: ui.convId, oldestLoadedId: oldest, limit: SCAN_LIMIT },
+              (s) => readOlderEntries(s, ui.convId, oldest, SCAN_LIMIT, BACKGROUND_CONTEXT),
+            ),
           ).then(() => driver.tick());
           return;
         }
@@ -272,14 +226,16 @@ try {
 
   function enterInput() {
     if (ui.seatCount === 0) return; // no seat to address
-    ui.mode = "input";
+    if (!view.enterInput()) return; // already open: never clobber the remembered view
     input.clear();
     if (process.stdout.isTTY) process.stdout.write(PASTE_ON);
     void driver.tick();
   }
 
   function exitInput() {
-    ui.mode = "seats";
+    // Restore the view the overlay was opened over: a submit/cancel while typing over a
+    // conversation lands BACK in that conversation, not on the seat list (ROADMAP 99).
+    view.exitInput();
     input.clear();
     if (process.stdout.isTTY) process.stdout.write(PASTE_OFF);
     void driver.tick();
@@ -309,11 +265,6 @@ try {
       try {
         await driver.cleanup();
       } finally {
-        try {
-          await storage.close(BACKGROUND_CONTEXT);
-        } catch (err) {
-          process.stderr.write(`storage close: ${err?.message ?? err}\n`);
-        }
         process.exit(0);
       }
     };
@@ -344,7 +295,7 @@ try {
     const clean = sync.consume(chunk);
     // In input mode every byte is text for the line, not a key: this is what keeps a
     // typed `q` from quitting and a pasted newline from submitting.
-    if (ui.mode === "input") {
+    if (view.inputting) {
       const events = input.feed(clean);
       if (events.submitted) submitInput();
       else if (events.cancelled) exitInput();

@@ -1,3 +1,5 @@
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+
 What tools, processes, or practices are open source projects that implement LLM agent teams using to manage the work the teams are working on? I'm thinking tools like Jira, GitHub issues, or a kanban board that the team might pull work items from.
 
 For context, I am making an LLM agent harness of my own and in my project, https://github.com/chexxor/Pi-OpenDurig, I am developing a custom task management system that currently has no UI, but I'm considering making a plugin/adapter/extension that allows a user of my team harness to use a more mature, dedicated piece of software for project management and task management.

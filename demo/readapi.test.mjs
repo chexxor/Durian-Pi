@@ -52,10 +52,10 @@ const storage = new MemoryStorage();
 const harness = await Harness.open(storage, { models, registry }, ctx);
 
 await harness.commit(async (tx) => {
-	const mk = async (name, role) => {
+	const mk = async (name, role, model = { provider: "faux", modelId: "faux-seat" }) => {
 		const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
 		await configure(tx, conv.id, {
-			model: { provider: "faux", modelId: "faux-seat" },
+			model,
 			cwd,
 		});
 		await registerSeat(tx, name, conv.id, role);
@@ -63,6 +63,9 @@ await harness.commit(async (tx) => {
 	};
 	await mk("alpha", "alpha role");
 	await mk("beta", "beta role");
+	// #2231: a seat on the LOCAL provider — its window is declared by DURIG_LOCAL_CONTEXT,
+	// not DURIG_CONTEXT_WINDOW, so the read surface must know its model to see it.
+	await mk("gamma", "gamma role", { provider: "local", modelId: "qwen36" });
 }, ctx);
 
 await harness.commit(async (tx) => {
@@ -79,7 +82,7 @@ try {
 	console.log("\nreadSeatList — seats shape");
 	const seatList = await readSeatList(storage, ctx);
 	check("returns an array", Array.isArray(seatList), `type=${typeof seatList}`);
-	check("has 2 seats", seatList.length === 2, `length=${seatList.length}`);
+	check("has 3 seats", seatList.length === 3, `length=${seatList.length}`);
 	for (const s of seatList) {
 		check(
 			`${s.name} has name/conversationId/role`,
@@ -111,7 +114,7 @@ try {
 		entryLimit: 10,
 	});
 	check("seats is array", Array.isArray(health.seats), `type=${typeof health.seats}`);
-	check("seats has 2 entries", health.seats.length === 2);
+	check("seats has 3 entries", health.seats.length === 3);
 	check("queueItems is array", Array.isArray(health.queueItems), `type=${typeof health.queueItems}`);
 	check("queueItems has 3 entries", health.queueItems.length === 3);
 	check("peerGraph is present", typeof health.peerGraph === "object");
@@ -148,6 +151,34 @@ try {
 	check("lastActivity matches the queue record's admittedAt input-entry timestamp",
 		alpha?.lastActivity === new Date(health2.latestByConv?.[String(alpha?.conversationId) ?? -1]?.admittedAt).toISOString(),
 		JSON.stringify({ row: alpha?.lastActivity, latest: health2.latestByConv }));
+
+	/* ---- readRigHealth — a LOCAL seat's declared window (#2231) ---- */
+	// The reported defect: `status` showed context.<seat>.window.denominator = null for a local
+	// seat, so no context fraction was computable. The window EXISTS (the local provider declares
+	// it from DURIG_LOCAL_CONTEXT) but the read surface could not resolve it, because it had no
+	// model key for the seat. gamma's model is persisted in its pi.agent doc; the read must use it.
+	console.log("\nreadRigHealth — a LOCAL seat's declared window (#2231)");
+	const cfgLocal = { DURIG_LOCAL_BASE_URL: "http://127.0.0.1:8080", DURIG_LOCAL_CONTEXT: "32768" };
+	const healthLocal = await readRigHealth(storage, dir, 4, { entryLimit: 10, cfg: cfgLocal });
+	const gammaWindow = healthLocal.context.gamma?.window;
+	check("a local seat's denominator is NON-NULL and declared",
+		gammaWindow?.denominator === "declared", JSON.stringify(gammaWindow));
+	check("...and its value is the local provider's DURIG_LOCAL_CONTEXT (32768)",
+		gammaWindow?.value === 32768, JSON.stringify(gammaWindow));
+	check("...so a context fraction is computable once usage exists",
+		healthLocal.context.gamma?.fraction === null || Number.isFinite(healthLocal.context.gamma?.fraction),
+		JSON.stringify(healthLocal.context.gamma));
+	check("a REMOTE seat does NOT inherit the local window",
+		healthLocal.context.alpha?.window?.denominator === null, JSON.stringify(healthLocal.context.alpha?.window));
+	const healthOverride = await readRigHealth(storage, dir, 4, {
+		entryLimit: 10,
+		cfg: { ...cfgLocal, DURIG_CONTEXT_WINDOW: "64000" },
+	});
+	check("an explicit DURIG_CONTEXT_WINDOW still WINS over the local window",
+		healthOverride.context.gamma?.window?.value === 64000, JSON.stringify(healthOverride.context.gamma?.window));
+	const healthNoCfg = await readRigHealth(storage, dir, 4, { entryLimit: 10 });
+	check("with no local config the local seat's denominator stays null (no invented window)",
+		healthNoCfg.context.gamma?.window?.denominator === null, JSON.stringify(healthNoCfg.context.gamma?.window));
 
 	console.log(failures === 0 ? "\nPASS — readapi exports verified" : `\nFAIL — ${failures} check(s) failed`);
 } finally {

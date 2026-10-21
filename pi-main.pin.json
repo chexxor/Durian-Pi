@@ -1,8 +1,8 @@
 {
   "repo": "https://github.com/earendil-works/pi.git",
   "branch": "main",
-  "sha": "4954d760504c11df9b2cbdc040346107b6a8153d",
-  "pinnedAt": "2026-10-15T20:22:29.402Z",
+  "sha": "2ec55d808d455b1a64a2bf7888198207a096120a",
+  "pinnedAt": "2026-10-19T07:20:20.541Z",
   "note": "pi-durable/pi-ai/chord move fast and rename APIs between releases; this pin is the commit durig is validated against. Move it deliberately with: node scripts/sync-pi.mjs --update",
   "packages": [
     {
@@ -18,12 +18,28 @@
       "dir": "packages/codemode"
     },
     {
+      "name": "@earendil-works/pi-mcp",
+      "dir": "packages/mcp"
+    },
+    {
       "name": "@earendil-works/pi-ai",
       "dir": "packages/ai"
     },
     {
       "name": "@earendil-works/pi-durable",
       "dir": "packages/durable"
+    },
+    {
+      "name": "@earendil-works/pi-tui",
+      "dir": "packages/tui"
+    },
+    {
+      "name": "@earendil-works/pi-agent-core",
+      "dir": "packages/agent"
+    },
+    {
+      "name": "@earendil-works/pi-coding-agent",
+      "dir": "packages/coding-agent"
     }
   ]
 }
