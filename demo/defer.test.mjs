@@ -25,6 +25,7 @@ import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-wor
 import { computeAttention } from "../src/attention.mjs";
 import {
 	DEFERRED_TO_HUMAN,
+	DEFERRED_TO_NOBODY,
 	Edges,
 	RigQueue,
 	Router,
@@ -109,11 +110,13 @@ await call("worker", "defer_work", { itemId: 1, question: "Which widget did you 
 const parked = await item(1);
 assert.equal(parked.status, "deferred", "deferring parks the item rather than leaving it claimed");
 assert.equal(parked.question, "Which widget did you mean?", "the question is recorded with the item");
-assert.equal(
-	parked.deferredTo,
-	DEFERRED_TO_HUMAN,
-	"with no `to`, the question is deferred to the human operator, not bounced to a seat",
-);
+	// #4574: THE VALUE IS THE BUG. A no-target deferral records NOBODY, not the operator — site 121's
+	// COMPARISON stays exactly as it is (nothing is enqueued either way); only this value and the messages move.
+	assert.equal(
+		parked.deferredTo,
+		DEFERRED_TO_NOBODY,
+		"with no `to`, NOBODY was asked — the value records that rather than naming the operator",
+	);
 assert.ok(
 	parked.transitions.some((t) => t.event === "deferred"),
 	"the deferral is appended to the audit trail",
@@ -123,11 +126,13 @@ assert.equal(
 	itemsBefore,
 	"deferring to the human enqueues nothing: the operator's channel is attention, not the queue",
 );
-assert.match(
-	await transcript("worker"),
-	/deferred to the human operator/,
-	"the seat is told what happened, so it can stop rather than keep guessing",
-);
+	// #4574: SITE 126 IS A BEHAVIOUR ASSERTION IN DISGUISE — it reads as message content and pins the
+	// no-target message to the OLD contract. The regex follows the new message.
+	assert.match(
+		await transcript("worker"),
+		/deferred with NO target/,
+		"the seat is told what happened — and now what happened is that NOBODY was asked",
+	);
 
 /* ------------------------------------------------ 2. the wait is visible */
 
@@ -139,7 +144,8 @@ const notices = computeAttention(
 const awaiting = notices.find((n) => n.kind === "deferred_awaiting_answer");
 assert.ok(awaiting, `a parked item must raise a notice; got ${JSON.stringify(notices)}`);
 assert.equal(awaiting.seat, "worker", "the notice belongs to the seat holding the item");
-assert.match(awaiting.detail, /waiting on human/, "and it says a person is the blocker, not another seat");
+	assert.match(awaiting.detail, /nobody has been asked/i, "it says NOBODY was asked rather than naming a person who was never asked");
+	assert.doesNotMatch(awaiting.detail, /waiting on human/, "it does NOT fall back to the old waiting-on-human reading");
 assert.equal(awaiting.scope, "seat", "notices carry a scope alongside the seat");
 
 /* ------------------------------- 3. resume is possible: not a dead end */
@@ -175,14 +181,21 @@ assert.equal(question.body, "Which widget?", "the question body is the question 
 
 await call("intruder", "claim_work", {});
 await call("intruder", "defer_work", { itemId: 3, question: "Can I ask?", to: "pm" });
-assert.match(
-	await transcript("intruder"),
-	/DEFER_WORK_ERROR/,
-	"a seat with no edge cannot use a deferral to reach a seat it may not send to",
-);
+	// #4574: THIS ASSERTION USED TO ENCODE THE BUG — it required an off-edge deferral to be REFUSED, which IS
+	// the forced escalation. PARKED IS NOT SENT, so it is now recorded and not delivered.
+	assert.doesNotMatch(
+		await transcript("intruder"),
+		/DEFER_WORK_ERROR/,
+		"an off-edge deferral is NOT refused — the org edge governs SENDING, not parking",
+	);
+	const parkedOffEdge = await item(3);
 const refused = await item(3);
-assert.equal(refused.status, "claimed", "the refused deferral left the item claimed, not half-parked");
-assert.equal(refused.deferredTo, undefined, "and recorded no recipient");
+	// #4574: the deferral is now ACCEPTED and RECORDED. This is a STRENGTHENING, not a softening: the old
+	// pair checked one thing (a refusal); these check that the refusal is gone, the seat is recorded, it is
+	// not relabelled as the operator, and nothing was sent.
+	assert.equal(parkedOffEdge.status, "deferred", "the off-edge deferral took effect");
+	assert.equal(parkedOffEdge.deferredTo, "pm", "and RECORDS the seat that should answer");
+	assert.notEqual(parkedOffEdge.deferredTo, DEFERRED_TO_HUMAN, "and does NOT become an operator question — the assertion that would have saved #4124 hours");
 assert.ok(
 	!(await queueState()).items.some((it) => it.subject?.startsWith("QUESTION #3")),
 	"and enqueued no question",
