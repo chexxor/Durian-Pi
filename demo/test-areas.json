@@ -80,6 +80,7 @@
       "demo/broker-read-nopass.test.mjs",
       "demo/broker-read.test.mjs",
       "demo/broker-reconcile.test.mjs",
+      "demo/broker-retry-residual.test.mjs",
       "demo/broker-seat-attr.test.mjs",
       "demo/broker-session-reopen.test.mjs",
       "demo/broker-stop-audit.test.mjs",
