@@ -80,9 +80,21 @@ const LANDING_MIN_WIDTH = 44;
 const LANDING_FIXED_WIDTH = 33;
 
 /** The brief cap at `width` CONTENT cells: the spec's MEASURED ladder (§4), not a guess. */
+// #4233: THE ACTION RUNT BAND — the minimum room (in cells) below which the action token is HIDDEN
+// rather than rendered as a fragment. Named and justified rather than left as a bare comparison, the
+// same way `ADMISSION_DEADLINE_MS` is.
+//
+// NINE, NOT FIVE, and the measurement is why: with 5..8 cells of room the longest token
+// (`tool complete_w…`, 16 cells) renders as `tool c…` or `tool …` — still a fragment of a word that
+// names nothing, which is the exact defect the item reports ("the token renders as `t` / `t…` / `to…` at
+// 1..8 cells of room"). At 9 cells it reads `tool comp…`, a recognisable prefix of a known vocabulary.
+// So the honest boundary is where the fragment becomes RECOGNISABLE, and 5 was one rung too generous:
+// hiding below 5 would have left 5..8 fragmenting, which is the finding half-fixed.
+const ACTION_MIN_ROOM = 9;
+
 function briefCap(width) {
-	if (width >= 72) return 24; // spec 76-80 terminal
-	if (width >= 47) return 16; // spec 51-75 terminal
+	if (width >= 72) return 24; // >= 72 TERMINAL columns (the spec's 76-80 content-cell band)
+	if (width >= 47) return 16; // 47-71 TERMINAL columns (the spec's 51-75 content-cell band)
 	return 12; // spec 44-50 terminal — the declared minimum rung
 }
 
@@ -230,7 +242,12 @@ function renderSeatList(seats, activityMap, width, selectedSeat = null, color = 
 			// and clamped to whatever the row has left so it can never overflow the frame
 			// (the spec's 16-cell cap does not close at the bottom of that band either).
 			const actionRoom = width - LANDING_FIXED_WIDTH - cap - 1;
-			const token = actionWanted && actionRoom > 0 ? actionToken(partialsBySeat[seat.name]) : "";
+			// #4233: the token is HIDDEN below ACTION_MIN_ROOM rather than truncated into a fragment. This is
+			// a §3 rule (what the surface shows), NOT a §4 rung: the brief's `cap` is computed from
+			// `actionBudget`, not from whether the token came back non-empty, so hiding the token moves NO
+			// fixed cell — the row simply ends in padding.
+			const token =
+				actionWanted && actionRoom >= ACTION_MIN_ROOM ? actionToken(partialsBySeat[seat.name]) : "";
 			const action = token === "" ? "" : truncate(token, Math.min(16, actionRoom));
 			// #3941: pad the row to the section width so the row reaches the frame edge; a short
 			// row is the blank stripe the operator reported.
