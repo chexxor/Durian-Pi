@@ -1,6 +1,202 @@
 # durian-pi — NEXT (current pointer)
 
-## NEXT SESSION (2026-10-20 — the ONLY live pointer; every later "NEXT SESSION" is history)
+## NEXT SESSION (2026-10-21T02:40Z — operator re-reported both TUI asks; broker was DORMANT, restarted; Fix A gates now claimed; Enter→Pi has NO live wiring item)
+
+**Current item:** the operator reports BOTH TUI asks still absent, and both are still true on `main`
+`b4bb4c7` — measured, not remembered.
+
+1. **Fill the terminal (#3941).** Headless `renderTui`, 12 seats: the first seat row is **57 cells at
+   80, 120 AND 160 cols (byte-identical)**, and painted rows vs viewport are **17/40 at 120x40** and
+   **17/50 at 160x50**. The fix is built on `impl-item-3941` @`e0efe71` (+5 demos) and its
+   `demo/tui-landing-fill.test.mjs` passes in a detached worktree (exit 0), but it is **NOT landed**.
+   Its gates #3945 + #3980 sat unclaimed ~5.5h, then were **claimed by `designer` at 02:34:02Z** after
+   the recovery below; #3946 (qa) stays `held` behind #3945. #3948's gate #3943 is `done`.
+2. **Enter → Pi (Phase 2).** `ui.mjs:140` still opens the read-only conversation view
+   (`grep -c durable ui.mjs` = 0). The seam + launch/return glue ARE on `main` (`6bb0fc7`:
+   `attach.mjs`/`launch.mjs`/`return.mjs` + 5 demos) but are imported by **demos only**; impl said it
+   in #4016 — "THE LIVE ROUND TRIP IS NOT WIRED". The item that owns REPLACE-in-same-terminal is
+   **#3996 `held`**; #3983 is cancelled as superseded; #4070 is `held` behind **#4068, which is `done`**.
+   **No live item owns the wiring** — that is the gap, not a missing ruling (Q2 ruled at #3982/#3985).
+
+**What the delegate did:** the rig was **dormant**, which is why nothing moved — broker pid 15768 had a
+fresh heartbeat but `lastPassAt` frozen at `00:29:54Z` for ~2h and **no genlock** (runbook
+`broker-down-or-stalled.md` case b). `serve --stop` (pid verified gone) → store backed up
+(`.spike/store-backup-20261020-213039`) → `resume` (withdrew designer's stranded submission 181515) →
+restart → **pid 16140, passes advancing**, designer claimed both gates. Operator status + the wiring
+ask delivered to `pm` (intent `operator-tui-status-2026-10-21-1`, `delivered:true` 02:36:40Z; body
+`.spike/delegate/tui-status/intent.md`). **Do not re-derive either measurement** — the script is
+`.spike/delegate/tui-status/measure-fill.mjs` (read-only).
+
+**BROKER ROOT CAUSE (operator asked "why", 02:50Z) — the broker did NOT fail; one seat was STARVED.**
+`designer` was last woken 2026-10-20T15:53:44Z; its 16:03:05Z turn ended `429 engine_overloaded` and
+left submission **181515 `queued`** (admitted, never started). `src/broker.mjs:1198` puts EVERY
+inspection submission in `pendingConvIds` (no status filter) and `selectWakes` (`src/driver.mjs:63`) then
+drops the seat as "already advancing" — so designer was suppressed from every pass for 10h, including
+the passes #3945/#3980 triggered. The reconciler that exists for this runs each pass but
+**`src/broker.mjs:829` settles only `status === "placed"`** — a `queued` submission is invisible to it.
+Passes then stopped at `PASS 1785` (00:29:54Z) because `shouldRun` needs a commit/intent/retry
+(`src/scheduler.mjs:105`), with a fresh heartbeat and no genlock: IDLE, not wedged. `resume` withdrew
+181515; the restart then woke designer. **Two user-facing statements are FALSE for this class:**
+`cli.mjs:1022` (the `resume` refusal claims the broker self-settles at every pass) and
+`broker-down-or-stalled.md` ("restart … so its startup pass re-settles" — the startup pass runs the same
+`placed`-only filter). Instrumentation EXISTS and was sufficient (`.broker.json` heartbeatAt vs
+lastPassAt, `.broker.log` PASS/WAKE/WAKE-RETRY/STRANDED/PASS-FAILED, `serve.err` wake-failed, `status`
+`admitted_not_started` + `idle_with_queued_work`, `metrics` pass-failed, `events`, genlock). MISSING:
+(1) a pass/suppression decision trace, (2) auto-recovery + a periodic sweep for the `queued` class
+(ROADMAP 37(c) "admission deadline", unbuilt), (3) ROADMAP 61-64 watchdog/host. Delivered to `pm`
+(`operator-broker-starvation-2026-10-21-1`, delivered 02:50:24Z; body
+`.spike/delegate/tui-status/intent-broker-starvation.md`).
+
+**ROADMAP 52 is NOT broken down (operator asked, 02:50Z).** 52 = attach the TUI as a state-backed
+client: in-process `viewState().subscribe()` FIRST, remote `watchEvents()` only after 55, poller kept as
+fallback, acceptance = a late-join test. The queue holds a ruling (#3942/#3982/#3985) and a half-built
+seam (#3954, #4006/#4016, #4089 done) plus SIX overlapping held rows (#3996 wiring, #4070 round trip,
+#2626 attach re-registration, #2479/154 SSE tap, #3969/#3975 (b) spool client, #2733 Phase-1 gate) and
+the Phase-3 rows (#2098, #2963). **There is NO item for 52's core (the in-process subscriber) and NO
+late-join item at all** (`late.?join` matches 0 queue rows); P1-3 of the held gate #2733 requires the
+subscriber but nothing implements it. So 52 is a ruling plus fragments, not a distributable breakdown.
+
+**Queue id:** #3945/#3980 (designer, claimed) → #3946 (qa verify, held) → land `impl-item-3941` ·
+#3996/#4070 (Enter→Pi wiring, both `held`) · #3948 (pointer correction, releasable) · 52 breakdown +
+`queued`-class reconciler + decision trace (awaiting `pm` routing).
+
+**OPERATOR INPUT (asked 02:58Z) — exactly ONE real question: #4124** (impl `deferred` to human
+22:19:50Z: lead's five-line revise of #3272 vs impl's recommendation of a HELD delta registration +
+pointer; Part B/C already handled by #4127 `done`). The four other `deferredTo:"human"` rows
+(#2993/#3556/#3581/#3601) are **stale supervisor escalations** from the 07:23Z 402 outage — qa resumed
+and held them for their own gates; do NOT answer them. #1135 is already answered by #2956/#2962
+(pricing SOURCE = vendored price table). **Enter→Pi has moved:** pm routed it, impl built
+`impl-item-4158` @`2213801` (`ui.mjs` +43/−9, new `src/tui/durable/enter.mjs`, demo) and #4163 is its
+landing list (held); impl is also editing `src/broker.mjs` + `cli.mjs:1022` for the starvation fix.
+
+**OPERATOR RULED (03:45Z, delivered to `pm` as `operator-rulings-4124-994-2026-10-21-1`):** R1 **#4124 =
+OPTION A** (held delta registration whose body IS the three missing lines + the one-verb-per-call rule,
+plus a one-line pointer into #3272's OPERATING NOTES at land time; do NOT re-cut the 20,749-char body;
+"unless lead objects" since it is lead's convention, relayed by pm) · R2 clear the stale `deferredTo` on
+#2993/#3556/#3581/#3601, do not answer them · R3 **#994 stays `held`, re-surface no earlier than
+2026-11-21, target 2026-12-21, nice-to-have** (and #2958 still says do NOT declare the quiet window).
+**Next check:** pm has NOT applied them yet — verify the new held delta item exists, the four flags are
+cleared, and #994 carries the re-surface date; the delegate made no queue transition.
+
+**APPLIED — VERIFIED 03:52Z (loop closed).** R1: #4215 `cancelled` (no 21k rewrite), #4216/#4218 `done`
+(lead relayed + **lead objected NARROWLY**: the pointer must go into #3272 FIRST, not at land time —
+"Option A unless lead objects" was exercised), and **#4222 `held` = TWO ACTIONS whose body IS the
+delta** (1: recipient-revise #3272 to add the pointer; 2: read #3272's body). R3: **#4217 `held`**
+re-surface tracker (no earlier than 2026-11-21, target 2026-12-21). **R2 NOT APPLIED** — #2993/#3556/
+#3581/#3601 still carry `deferredTo:"human"`; #4124 is still `deferred` though lead ruled it. Also
+`cancelled` at 02:37Z as superseded: **#3996, #4070** (the old wiring/round-trip rows); #3948 is `done`.
+**Broker fix LANDED on main:** `c82be69` (#4180 suppression trace + status attention row) and `66c6e1a`
+(#4176 ADMISSION_DEADLINE_MS + pure `admissionVerdict`, ROADMAP 37(c)).
+
+**RECOMMENDED NEXT QUEUE — OPERATOR APPROVED AND IT WAS DELIVERED 03:58:11Z** (`operator-next-queue-2026-10-21-1`,
+`delivered:true`; body `.spike/delegate/tui-status/intent-next-queue-2026-10-21.md`). The CLI's small
+count is `queued`+`claimed` only (2+4 now) — 281 rows are `held` by design, so "3 in the queue" is not "3
+things left". The approved order, which `pm` now decomposes: **P1** close designer's **#3945**, then
+release **#3946** and land `impl-item-3941` (Fix A) · **P2** mint a non-author verify **and a real-seat
+ROUND-TRIP acceptance** for `impl-item-4158` @2213801, then release **#4163** (no verify exists and #4070
+was cancelled, so the operator-facing acceptance was UNOWNED) · **P3** mint the **reconciler extension for
+`queued` + the periodic sweep** (primitive #4176 at `66c6e1a` and trace #4180 at `c82be69` are landed; the
+consumers are not) · **P4** mint/release the **liveness+progress watchdog (ROADMAP 62)** · **P5** release
+**#4222** (the pointer into #3272) · **P6** mint **52's in-process `viewState().subscribe()`** + **late-join
+demo**, then release **#2733** · **P7** hygiene: clear the four stale flags, close #4124, keep #994 held
+until 2026-11-21. P1/P2 are the operator's asks and must not be preempted. **Next check:** pm's minted
+ids (expect ~6 new rows) and whether P1/P2 were sequenced ahead of P3–P6.
+
+**PROGRESS AT 04:05Z — P1's GATE FIRED, AND QA HELD ON A STALE SNAPSHOT.** `#3945`/`#3980`/`#4159` are
+`done` (03:54Z), so the P1 gate cleared; pm released #3946 at 03:56:25Z and qa claimed it at 03:56:27Z,
+then **re-held it 13 s later** claiming "#3941 status=claimed, #3945 has no .durig file". Both are FALSE
+against the live store (#3941 done 20:57Z, #3945 done 03:54Z): qa read **`item-3946/.durig/queue-all.md`**,
+a stale snapshot (its header: 283 non-terminal, #3945 still `queued`) — and `item-3946` holds no
+`selfdev.sqlite`, so `DURIG_DB=./selfdev.sqlite` there points at nothing. **Steered qa**
+(`operator-steer-qa-3946-2026-10-21-1`, delivered 04:03:16Z) with the live gate state and the absolute
+path command. **P5 is already DONE by impl** (#4243). The review also produced two real findings:
+**#4233** (action token renders as `t`/`t…` at w≈51..58 — a §3 hide below ~5 cells, queued to impl, NOT a
+gate for #3946) and **#4232/#4235** (9-cell name merges into the queue count — lead ruled two-digit counts
+make it worse).
+
+**LANDING-TOOL HAZARD (04:05Z) — #4247/#4248:** `land.mjs` returned `ok:true, merged:[…]` while merging
+into an **ITEM WORKTREE**, main untouched (`git merge-base --is-ancestor 81ef0fb main` exit 1), and it
+**created a store inside the worktree**. So every landing claim must be checked with
+`git merge-base --is-ancestor <sha> main` AND by reading the report's `repo` field (it must resolve to the
+shared root). Do not land from a seat worktree cwd; do not trust `ok:true` alone.
+
+**P1 GATE CLEARED (04:11:37Z) — #3946 `done`:** qa released the stale hold after the delegate's steer,
+re-claimed at 04:07:35Z and **verified Fix A**, so `impl-item-3941` @`e0efe71` is now landable (still
+verify `git merge-base --is-ancestor` after landing, per #4247). qa also filed **#4251** (queued to pm):
+`tui-round-trip-terminal.libuv` assertion — a double-stop crashes the Windows async handle; relevant to
+the P2 round-trip acceptance. The stop drain finished at ~04:12Z; the helper ran `resume` and restarted
+the broker (**pid 21904**, passes advancing).
+
+**OPERATOR ARCHITECTURE REQUEST (04:20Z) — SEPARATE THE HARNESS FROM THE BROKER.** Operator: "the harness
+could be a process of its own, and the broker could be a separate process that performs automation on the
+harness process." Delivered to `pm` (`operator-architecture-split-2026-10-21-1`) for **lead to rule**: the
+direction is already the design of record (`docs/BROKER-SUPERVISION.md` §2, ROADMAP 38b/40a/52/55/61-64),
+but the ORDER matters — the delegate recommends (1) bounded drain + abort escalation, (2) watchdog +
+durable down marker (ROADMAP 61/62), (3) reconciler extension + sweep, (4) `land.mjs` root-repo refusal,
+(5) 52's in-process subscriber + late-join, and only THEN the harness-server split, gated on 55 + 61-64.
+The split's hard constraint: the harness server owns the store, the broker holds the WRITE lease and
+submits through RPC/spool, and every other client is a read-only subscriber — otherwise two writers.
+Body: `.spike/delegate/tui-status/intent-architecture-split-2026-10-21.md`.
+
+**Blocker:** none on the tree. `main` `b4bb4c7`, tracked tree clean except the broker-generated
+untracked `selfdev.sqlite.broker.audit.log`. Single broker pid 16140 (verify before any restart).
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue` then read #3945/#3980 — if both
+are `done`, release #3946 and land `impl-item-3941` @`e0efe71` (preflight: its demo in a detached
+worktree at current `main`); if they are `held`/stale, the designer wake failed again (check
+`.spike/serve.err` for `wake-failed` and the 429 class).
+
+**Do not:** treat a fresh heartbeat as broker health (read the last `PASS` line); restart the broker
+while a `genlock.*` is held; run `up --refresh` (the rig FILE still names `local/*` while the store
+serves DeepInfra); split the return path out of the Enter→Pi work; push (operator holds the grant).
+
+## NEXT SESSION (2026-10-20T21:05Z — TUI merge delegated; Q2 ruled REPLACE + RETURN; Fix A built, awaiting verify)
+
+**Current item:** **Fix A (#3941) is DONE on `impl`'s branch but NOT landed** — designer surface review
+(#3980) and qa verify (#3946) are the gates. The landing screen was too narrow in both axes: flexible
+cells capped (~74 cols) and height derived from WIDTH (`Math.floor(width*0.3)`, `Math.min(8,…)`, and
+`composeFrame` clips but never pads), measured as a byte-identical row at 80/120/160 cols and a 17-row
+frame at 120x40 and 160x50.
+
+**Phase 2 (Enter → Pi):** lead ruled (#3949/#3957): operator-window NOW under three conditions
+(operator-initiated pause, fail-closed ownership, 60s stale-ownership reaper), broker-owned spool client
+as the DESTINATION gated on ROADMAP 55, read-only renderer ruled OUT as a seam. **The operator answered
+Q2: REPLACE the `npm run ui` screen in the SAME terminal, and the RETURN PATH IS PART OF THE FEATURE** —
+exiting the Pi session must restore the landing screen **on the SAME seat, live** (broker resumed,
+poller polling), the crash/kill path must recover via the reaper, and a broker that does not resume must
+show an explicit NOT-LIVE state. Recorded: #3942 done, #3982/#3985; implementation is **#3983 LAUNCH +
+RETURN GLUE, held `blockedBy #3942 + #3954`**. The seam layer is **#3954** (impl, claimed). Phase 3 is
+explicitly downstream of a verified Phase 2. **Since then impl's stack LANDED** as merge
+`6bb0fc7`: `17f11f1` (seam layer), `4ffc17f`, `b65d9e5` (launch/return glue), `16d8ed9`/`bd168d1`
+(exit key from the real bindings), `ca7aa93` (test), `088e4ee` (return path). #3954/#4089 are `done`,
+#3983 `cancelled` as superseded — re-check their verify gates before closing.
+
+**Queue id:** #3954 (seam layer) · #3983 (launch+return glue, held) · #3941/#3946/#3980 (Fix A +
+verifies) · #3943 (qa narrow verify of the already-landed slice) · #3948 (scribe pointer correction).
+
+**Devtools health (reviewed 2026-10-20T22:25Z):** output and process are sound — #4099 @5f157f8 and
+#4083 @5129866 are scoped and green in a detached worktree, #4109 was cancelled only after proving it
+duplicated #4083, and #4080's "LANDED" claim for 3277 is true (`5e4dd4d` is an ancestor of `main`).
+**But its thinking was degenerate**: 10,787 "Hmm" fragments across 82 thinking turns, worst 686 in one
+turn, at **324,627** prompt tokens — one turn below the ~330k context trip. Compacted while idle
+(`intent.mjs devtools --op compact`, summaryEntryId **188025**, `pi.compaction` verified). Note the rig
+FILE still names `devtools local/swift-1.5-iq2_xs` while the STORE runs `deepinfra` — do NOT run
+`up --refresh`. Stale held landing rows also exist for devtools (#4035's `be663f2` is already on `main`;
+#4041/#4042 are a duplicate pair) — pm hygiene, not the seat.
+
+**Blocker:** **none on the shared tree** — `impl`'s Phase 2 seam work is COMMITTED AND LANDED
+(`6bb0fc7`), and the tree is clean except the broker-generated untracked
+`selfdev.sqlite.broker.audit.log`. **TWO BROKERS were running on this store** (15768 + 23172); the
+duplicate 23172 was force-killed at ~22:23Z after a store backup, and single writer 15768 is passing.
+A **concurrent delegate session** is also committing here (its `f23113f` is in this history) — coordinate
+before landing, and never start a second `serve`/`up` without checking for a live broker first.
+
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+**Do not:** land the stale #3308/#3309/#3313 (or 2826/3437/3359) branches — superseded, see #3943; split
+the return path out of #3983; start Phase 3; push (operator holds the grant).
+
+## NEXT SESSION (2026-10-20 morning — STALE, kept as history: the main regression was fixed; the earlier pointer text follows)
 
 **Current item:** the `main` regression is **FIXED** — the delegate landed `revert-9c3aa02` as merge
 `798836b` (`main` `db96a05` -> `798836b`). Cause: a bare `git commit` by the delegate swept a seat's
@@ -18,11 +214,35 @@ a BRANCH; do not pop the stash blind.
 before accepting) · `#2412` (`pitui`) · `broker-one-connection` + `seat-instruction-encoding` regressions have
 NO item yet.
 **Blocker:** `main` is red on **3** demos (was 7 — the revert fixed the TUI four), so `land.mjs --suite` is
-unusable; land without it and prove on `main`. Also standing: the local PolyStrata model is DOWN (Swift/Qwen3.6
-deleted, IQ3_S installing to `D:\PolyStrata-models`). **The shared tree is CLEAN as of this clock-out**
+unusable; land without it and prove on `main`. Also standing: the local PolyStrata model is UP and SERVING
+`qwen3.8-flash-next-iq3_s` on `127.0.0.1:8080` (IQ3_S installed to `D:\PolyStrata-models`, smoke test 4.9 tok/s
+low-RAM) but **no seat points at it**, and the seat models 595b714 silently reverted are restored (`qa` ->
+`Qwen/Qwen3.6-35B-A3B`, `devtools` -> `deepseek-ai/DeepSeek-V4.1-Flash`); `demo/local-model-pointer.test.mjs`
+now pins `local/<id>` seats to the provider's single id so the rig file and the machine config cannot drift apart. **The shared tree is CLEAN as of this clock-out**
 (tracked dirty: 0) — but a suite run in `.` still measures the working tree, so prove `main` in a detached
 worktree.
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
+
+### MODEL CHANGE COMMITTED, NOT YET APPLIED (2026-10-21, delegate)
+
+`rig.selfdev.json` `qa.model` = `zai-org/GLM-5.3-Flash` (was `Qwen/Qwen3.6-35B-A3B`), and
+`docs/SELFDEV.md`'s seat table + author/verifier paragraph updated — commit `dcb8dec`. `qa` and `auditor`
+now share a model; `qa2` (gemma) is the distinct third family; the author/verifier split still holds
+(DeepSeek authors vs GLM verifiers).
+
+**BLOCKED on apply:** the shared tree does not load — `src/chatview.mjs` imports `sliceToWidth` from
+`./textwidth.mjs`, but a seat's DIRTY `src/textwidth.mjs` no longer exports it (mid-flight TUI edit; the
+file is unchanged for ~10 min). Any `cli.mjs` verb dies at module load, so `serve --stop` and
+`up --refresh` cannot run, and restarting the broker from the broken tree would fail. Did NOT stop the
+broker (it would strand the seat's edit and take the team down).
+
+**Finish when the tree loads** (`node -e "import('./src/chatview.mjs')"` prints OK):
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs serve --stop      # proceed only on stopped:true, then confirm no serve pid
+DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh   # expect modelMismatch/modelReset for qa
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
+```
+The model change RESETS `qa`'s context (by design); re-surface any claimed item in the handoff.
 
 Then:
 `git worktree add --detach .verify-main main && (cd .verify-main && node scripts/suite.mjs); git worktree remove --force .verify-main`
@@ -31,6 +251,81 @@ Then:
 `impl-item-3313` before 3308/3309 (stacked); use `land.mjs --suite` while `main` is red; delete
 `pi-opendurig.worktrees/` by hand (179 REGISTERED trees, all dirty, 34 unlanded, 13 with commits on no ref);
 push (operator holds the grant).
+
+### TROUBLESHOOT (2026-10-20 ~08:00Z, delegate) — "someone working in main again" = STAGED-ONLY INDEX
+
+**Queue id:** `#3654` (designer, resumed; the landing work is `#3313`).
+**Exact next command (read-only):** `DURIG_DB=./selfdev.sqlite node cli.mjs status`.
+**Blocker:** a live seat is running `git add` in the shared main checkout; do not commit there.
+
+**Finding.** `git diff HEAD` over tracked files is **empty** (the main worktree equals `HEAD`). What is
+wrong is the **index**: it holds an uncommitted staged changeset (8 files, ~471+/494-), and it **changed
+during observation** (`demo/broker-liveness-failsafe.test.mjs` + `demo/revise-work-contract.test.mjs`
+appeared, `src/broker.mjs` dropped; `.git/index` rewritten at `07:58:22Z`). So a live seat/session is
+running `git add` against the **shared checkout**. The seat active then was **`designer`** (item `#3654`
+resumed `07:44:40Z`; generation leases showed `designer` at `08:00Z`), re-deriving the landing-row work
+that `NEXT.md` already says is parked at `stash@{0}` and must be redone **on a branch, not popped blind**.
+`item-3654`'s worktree itself is clean and committed (`ee495e7`); the main-index copy is the duplicate.
+
+**Also true:** the staged set mixes #3398's broker-liveness test (already committed on
+`impl-item-3398` as `0c6fd76`) with a WIP that _removes_ the ROADMAP-124 landing row from
+`client/viewmodel/readapi/rig`. A bare `git commit` here would land a stale duplicate and a silent
+revert. This is the same class as the documented `9c3aa02` incident (a bare delegate commit swept a
+seat's staged 21-file work).
+
+**Preserved:** `.spike/delegate/staged-WIP-20261020T075641Z.patch` (the staged set; it has since grown).
+**Do not** commit/stash/reset/checkout in main. Steer the seat to its item worktree; only after it stops,
+and with an owner ruling, clear the index with `git reset` (mixed; leaves the worktree intact).
+
+**RESOLVED (2026-10-20 ~18:50Z).** Broker pid 15760 was degraded (no pass for ~100 min) and was stopped
+cleanly (`EXIT reason=stop passes=4757`; no `cli.mjs serve` remains). The index set (15 files, 9 index-only)
+was archived to branch **`wip/shared-index-20261020`** (commit `5c8b34e`, parent `HEAD`) plus the patch
+above, then the index was cleared with mixed `git reset`. The four clean leaked worktrees in the repo root
+(`66a19af`, `temp-1558-original`, `temp-1558-rebase2`, `temp-2801-fix`) were removed with
+`git worktree remove`. **Main is clean except this pointer file.** Next: `pm` to register/review the
+archive branch (routed via `intent.mjs`).
+
+**LAND+PRUNE PASS (2026-10-20 ~19:10Z, delegate).** `main` `b063f10`, content-clean. Pruned **63 refs**
+(242→179) and released **9 worktrees** (52→47, locked 15→9), `main` unmoved, nothing forced: 54 merged+free
+`-d`'d; 5 clean terminal trees `unlock→remove→-d`; 4 dirty merged terminal trees RELOCATED to
+`../pi-opendurig.worktrees/` (status entries 1:1 verified) then `switch --detach` + `-d`. KEPT:
+`devtools-item-1558` (landed-then-reverted; author's input to #3238) and 5 live merged+held
+(`advocate-item-2630`, `designer-item-3922`, `impl-item-1274`, `impl-item-2788`, `qa-item-2993`).
+Landing preflight over the 172 unlanded (snapshots excluded): **101 clean / 59 conflict**. **Nothing landed:**
+the only current landing entries are HELD (#3891 carrier `impl-item-3869` @565cf2c; #3906
+`designer-item-3845` @37474a4). Prescribed order when released (#3879/#3885): `scribe-item-3785` @21fb14c
+first, then the re-cut carrier (DON'T also land superseded `impl-item-3656` @7cd542a), then rebase+land the
+`cccccd5→235e163→30f12aa` stack.
+
+**LANDED (operator-authorised, 2026-10-20 ~19:30Z): `scribe-item-3785` @21fb14c → `main` `bcb6b4a`**
+(`44dbe42`→`bcb6b4a`, helper scratch, clean FF; `lock {slots:4,held:4,reserved:true}`). Preflight:
+tip matched the list, `merge-tree` clean. Proven on `main`: suite **pass=185 fail=3 before AND after** — same
+three (`broker-one-connection`, `pitui`, `seat-instruction-encoding`), no new failure. Ref pruned; tracked tree
+clean. Caveat: its landing entry **#3828 is still `held`** and no separate non-author VERIFY item for
+`21fb14c` was found in the queue — landed on the operator's explicit go. Next in order is the carrier
+`impl-item-3869` @565cf2c (re-preflight against the NEW `main`).
+
+**STOPPED — TWO BROKERS ON ONE STORE (2026-10-20 ~22:20Z, delegate).** The team is live again and another
+session is landing (`main` `bcb6b4a`→`d257f22`, 6 merges 22:00–22:08Z). Measured: **two `cli.mjs serve`
+processes — pid 15768 (started 20:35Z, owns `broker.json` and all 4 `genlock.*`) and pid 23172 (started
+22:00Z, owns no genlock)** — the single-writer violation, and the log already shows
+`database is locked` / `SessionFailed` at 22:19Z. I did the git-only prune (21 merged+free refs `-d`'d,
+kept `devtools-item-1558`; refs 214→193, `main` unmoved) and **did not land**: a second lander plus a
+second store writer makes a land pass unsafe. **Recommended: kill the duplicate 23172 (no genlocks),
+keep 15768** — `Stop-Process -Id 23172 -Force`, prove it is dead, then resume the pass. Carrier
+`impl-item-3869` @565cf2c is CLEAN against `d257f22`; #3891's hold is "by design so it does not occupy
+impl's claim slot; the delegate lands", i.e. it is landable once the writer is single again.
+
+**PASS RESUMED (2026-10-20 ~22:35Z, delegate).** Duplicate `23172` killed (no genlocks), owner `15768` kept;
+genlock slots cleared. Landed two clean, verified-by-entry branches with the helper (scratch + clean FF):
+`impl-item-3869` @565cf2c carrier → `main` `9f799e0` (`de994b9`→`9f799e0`), then `designer-item-3845`
+@37474a4 docs → `main` **`634e5f9`**. Prune after each: both refs `-d`'d, plus `designer-item-3922`
+(cancelled, clean, locked) `unlock→remove→-d`. **Proven on `main`: suite pass=192 fail=3 — the same three**
+(`broker-one-connection`, `pitui`, `seat-instruction-encoding`); 195 demos; tracked tree clean. Census:
+**197 refs, 50 worktrees, 11 locked**; merged+free is only the intentional keep `devtools-item-1558`;
+merged+held 7, all live/held. **STACK BLOCKED:** `impl-item-3744` @cccccd5, `impl-item-3766` @235e163,
+`impl-item-3775` @30f12aa all CONFLICT with `634e5f9` and no rebased branch exists → author non-force
+rebase + re-verify (runbook `land.md`), then land `3775` (contains the whole 3-commit stack).
 
 ## CLOCK-OUT (2026-10-20 ~07:50Z, delegate) — **TEAM WAS DOWN ~20 MIN ON AN EXTERNAL 402; BROKER RESTARTED, 47/49 PARKED ITEMS RESUMED**
 

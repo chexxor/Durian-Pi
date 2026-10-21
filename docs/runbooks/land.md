@@ -101,6 +101,48 @@ ask "stop or not?" or "why did --suite fail?".
    (owning item **#2412**; full account: `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §6.2).
    *(`--suite` was skipped for the 2026-10-19 passes while the rule was broken; the helper itself never
    required it, and the post-landing `node scripts/suite.mjs` run is what proved those landings.)*
+
+#### ⚠ WHEN `main` IS ALREADY RED: land WITHOUT `--suite`, then prove on `main` — AND DELETE THIS SECTION WHEN IT CLEARS
+
+**The workaround, while `main` carries known-red demos:** land with `node scripts/land.mjs <b1> … --db
+./selfdev.sqlite` and **no `--suite`**, then prove the result on `main` in a clean DETACHED worktree.
+
+**Why:** `--suite` exists to prove the MERGED result *before* `main` moves. When `main` is already
+failing, that proof cannot distinguish the landing's own breakage from the pre-existing redness — it
+stops on the first red demo and tells you nothing about your branch. A first-failure loop over an
+already-red tree is not a weaker check, it is a misleading one.
+
+**THE EXPIRY IS A CONDITION, NOT A DATE — delete this whole section when:**
+```bash
+git worktree add --detach "$PWD/.main-check" main
+( cd .main-check && node scripts/suite.mjs --jobs 8 ); echo "exit=$?"
+git worktree remove --force "$PWD/.main-check"; git worktree prune
+#   The verdict depends on TWO things, so name BOTH (see "NAME THE TREE" below):
+#     the TREE — main's content. The shared tree carries seats' in-flight work and is not main.
+#     the DEPENDENCY SET — a worktree-local `npm ci` resolves the LOCKFILE, and the five
+#       `tui-durable-*` demos then fail as an INSTALL ARTEFACT that is not part of main's red set (#3766).
+#   delete this section when main's red set is EMPTY in the SEAT-ROOT dependency environment:
+#     exit=0 (pass=all, fail=0), OR every remaining red is an artefact you have ATTRIBUTED above,
+#     OR it is `pitui` with the vendored-link failure DECLARED INTENDED by whoever owns that call.
+#     `pitui` is not exempt by name alone: an unrecorded exemption is how an expiry becomes permanent.
+```
+A date rots; this can be checked. **A workaround that outlives its cause becomes a habit**, and the next
+lander cannot tell whether the two-step is required or merely traditional — which is how a temporary
+measure becomes permanent.
+
+**DO NOT RECORD THE CURRENT FAILURE LIST AS IF IT WERE DURABLE.** On 2026-10-20 the delegate measured 7
+red at `main` @`557ceb3` (broker-one-connection, landing-data, pitui, seat-instruction-encoding,
+tui-conversation-header, tui-landing, tui-status-bar); a few hours later, in a fresh worktree, four of
+those PASSED because their `src` had landed and a different five (`tui-durable-*`) failed for an
+unrelated dependency reason. The list has a shelf life of hours. **Re-measure before you plan around
+it** — the workaround is durable, the list is not.
+
+**AND NAME THE TREE WHEN YOU ANSWER "is `main` green?"** A suite run in the SHARED tree measures
+something else entirely: the shared tree carries seats' in-flight work (100+ dirty paths is normal),
+so it is neither `main` nor a candidate. A clean detached worktree is the only tree that answers the
+question. State which tree a verdict came from, or the verdict is not usable by anyone else — the same
+rule as the generated-artifact check above.
+
 5. Prune each landed ref (`git branch -d` refuses anything unmerged, so this is lossless):   ```bash
    git merge-base --is-ancestor <branch> main && git branch -d <branch>
    ```
@@ -368,3 +410,28 @@ and proved with the full suite on `main` — the only way this pass could see th
 **Suite on `main` after the revert: `pass=179 fail=1`** (`pitui`, #2412). Prune: refs 97→93, worktrees
 203, `reapable: 0`, nothing forced (see `branch-cleanup.md`). The suite runner is now pooled — default 8
 demos at once, ~64s vs ~10min — so the post-landing proof is cheap enough to always run.
+
+2026-10-20 (pass #6, delegate, broker UP): **5 landed, 1 landed-then-reverted, `main` `351b03a`→`13e60bc`
+(+ revert `cc96c0c`).** Kept: `designer-item-3307` @`24b7fc9` (the landing-screen spec #3313/#3359 build
+against), `advocate-item-2985` @`7387716` (closes the proposal v2's dangling §12 reference),
+`impl-item-2616` @`e8ce2a0` (FEATURES rows), `impl-item-2578` @`2bb0427` (cli.mjs comment re-anchor + the
+new `demo/broker-one-connection.test.mjs`). Refs pruned 4 (126 remain).
+**REVERTED: `auditor-item-2154` @`fac647c` (merge `a65feee` → revert `cc96c0c`).** The branch renames
+`durig`→`durian-pi` and `DURIG_ALLOW_PUSH`→`DURIAN_PI_ALLOW_PUSH` in `constitution.txt` **without
+regenerating the `rig.starter.json` `constitutionInline` mirror** (#976). The drift guard fires in
+**three** demos — `starter`, `commit-model`, `seat-commit-instructions` — so a single red demo is not the
+whole finding. **Rule (now general): a branch touching `constitution.txt` MUST carry the regenerated
+`rig.starter.json` in the SAME commit, and its landing entry's preflight must run `demo/starter.test.mjs`,
+because `merge-tree` is structurally blind to a derived-mirror invariant.** This is the same trap recorded
+for the #2841 scribe rebase set; the ref is kept at `fac647c` (content reverted, not live), rework is with
+`auditor` at #3428.
+**Suite after the revert: `pass=180 environmental=0 fail=1`** (`pitui`, #2412) — verified with
+`node scripts/suite.mjs` unpiped so the exit code is real (baseline `pass=179 fail=1`; the +1 is the new
+`broker-one-connection` demo). Pin checked BEFORE the verdict:
+`node_modules/@earendil-works/pi-durable -> vendor/pi-main/packages/durable` (intact).
+**Not landed, with reasons:** `architect-item-2730-rebased` (entry #3377 gated on the #3343 mint order),
+`devtools-item-2969` (dep-file change needing an `npm ci` lockfile preflight; its verify #3205 is held ON
+the landing — inverted gate), `impl-item-3056` (M1b HELD by ruling #3112), `devtools-item-2188` (#3256
+cleared-to-land was superseded by #3260's rebase pass — ownership ambiguous), and the CONFLICT set
+(`impl-item-3017`, `impl-item-3192`, `impl-item-2483`, `architect-item-2730`, `devtools-item-2073`,
+`scribe-item-2143`).

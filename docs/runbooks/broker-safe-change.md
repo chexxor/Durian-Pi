@@ -3,9 +3,9 @@ runbook: broker-safe-change
 symptom: "a model/constitution/reset change must apply without corrupting the store"
 writes: true
 precondition: "broker-stopped"
-last_verified: 2026-10-17
+last_verified: 2026-10-20
 verified_by: delegate
-evidence: "constitution reload fa4b22f + starter-inline sync b52133f; Verify run 2026-10-17"
+evidence: "2026-10-20 force-stop recovery measured end to end: serve --stop returned stopped:false twice under a held genlock, broker pid 4528 killed, leases cleared after the pid was proved dead, restarted broker pid 13228 advanced passes 63+, stale stop request consumed on the first start (stoppedBy=deadline passes=1) and the second start stayed resident; suite pass=180 fail=1 (pitui). Earlier: constitution reload fa4b22f + starter-inline sync b52133f."
 check_rule: null
 ---
 
@@ -103,3 +103,47 @@ and the change had been committed without the suite being run. Confirmed against
 differing lines before, 1 after) that the edit caused it, then synced (`b52133f`), suite 115/0. **Syncing
 the starter inline and running `demo/starter.test.mjs` is part of any constitution edit, not a separate
 task.**
+
+## When `serve --stop` will not settle — the FORCE-STOP recovery order (verified 2026-10-20)
+
+`serve --stop` returns `"stopped": false` while a generation lease (`<db>.genlock.*`) is held. Retrying it
+is the correct first move; the second retry is often enough because the run settles between passes. If the
+operator directs speed over grace, killing is LEGAL — but do it in this order, or you inherit a store that
+*looks* fine and a queue that silently stops moving:
+
+```bash
+# 1. Kill the broker (and only the broker — never a seat's own worktree)
+powershell -NoProfile -Command "Stop-Process -Id <brokerPid> -Force"
+# 2. PROVE the pid is gone before touching its bookkeeping
+powershell -NoProfile -Command "if (Get-Process -Id <brokerPid> -ErrorAction SilentlyContinue) {'alive'} else {'dead'}"
+# 3. Now clear the leases the dead pid still "holds". Only after step 2.
+rm -f <db>.genlock.*
+# 4. Restart the broker exactly as the operator does
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
+# 5. Confirm it STAYS up (see the deadline trap below) and that the queue moves again
+tail -3 <db>.broker.log          # passes must advance
+```
+
+**What the kill leaves behind, measured 2026-10-20:**
+- **Stranded leases.** `status` reported it exactly: genlock `held by pid 4528 (impl), which is gone`. A
+  dead holder does not block `land.mjs` (it only blocks on an ALIVE pid), but it does confuse every later
+  reader, so clear it. Deleting a lease whose holder is gone is lossless; deleting one whose holder LIVES
+  is the second-writer corruption this runbook exists to prevent.
+- **Stranded submissions.** Two seats were left `admitted_not_started` (`impl` #153640, `auditor`
+  #153251). The restarted broker re-drove them; nothing had to be `resume`d by hand. **Check
+  `admitted_not_started` after a restart** — if one still reports "no run started and no slot held" once
+  passes are advancing, only then does it need attention.
+- **A stale STOP REQUEST survives the kill.** The restarted broker read it and exited after ONE pass with
+  `"stoppedBy": "deadline"` and `EXIT pid=… reason=deadline passes=1` in the log — this is NOT a crash
+  and NOT the wedge. The exit path clears the request, so **start it again**; the second start stays up.
+  Read `passes=1` as "it honoured a stale stop", not as "the broker is broken".
+- The store itself survived (a backup was taken first: `cp <db> .spike/store-backup-<stamp>.sqlite`).
+  **Back up before a force stop** — it is the only cheap insurance against the one outcome that is not
+  recoverable by restarting a process.
+
+### Evidence
+2026-10-20 (delegate, operator-directed model move): `serve --stop` returned `stopped:false` twice while
+`impl` held two leases; broker pid 4528 was killed. Recovery followed the five steps above: leases cleared
+after the pid was proved dead, broker restarted as pid 13228, passes advanced (63+), a first start exited
+`stoppedBy=deadline` from the stale stop request and the second start stayed resident. Suite afterwards
+`pass=180 fail=1` (`pitui`, #2412) — the store was intact.

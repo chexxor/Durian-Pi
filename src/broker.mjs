@@ -817,6 +817,79 @@ export function isAdvancingTask(task) {
   return kind === "running" || kind === "completing";
 }
 
+/**
+ * WHICH CONVERSATIONS ARE ADVANCING (#4170). `pendingConvIds` used to be "every conversation with a
+ * submission ROW", which is a different and much broader claim: an admitted-but-never-started
+ * (`queued`) submission is NOT advancing, so it must not hold its seat out of every wake.
+ *
+ * That difference starved a seat for ten hours after one 429 left a `queued` row behind: every pass saw
+ * the row, suppressed the seat as "already advancing", and the only thing that would have re-evaluated
+ * it was new traffic — which a starved seat does not get.
+ *
+ * `placed` is the started state: it is what `reconcileStrandedSubmissions` treats as having been handed
+ * to a conversation, so it is the status that means "advancing". Exported so the derivation is testable
+ * as a pure decision over store state, with no broker and no provider.
+ */
+export function advancingConvIds(submissions, { settled = new Set() } = {}) {
+	return new Set(
+		(submissions ?? [])
+			.filter((s) => !settled.has(s.id))
+			.filter((s) => s.status === "placed")
+			.map((s) => s.conversationId),
+	);
+}
+
+/**
+ * THE ADMISSION DEADLINE — ROADMAP 37(c), and the primitive that makes two owed recoveries SAFE (#4176).
+ *
+ * A reconciler extended to settle `queued` submissions on the next pass WOULD CANCEL A SUBMISSION THAT
+ * IS LEGITIMATELY STILL BEING ADMITTED — worse than the bug it fixes. What distinguishes "still being
+ * admitted" from "stuck" is TIME, and nothing in the tree defined how much. This is that definition.
+ *
+ * THE THRESHOLD IS NAMED AND JUSTIFIED RATHER THAN SILENT: five minutes. The admission path places a
+ * submission within SECONDS in normal operation, so five minutes is two orders of magnitude longer than
+ * any legitimate admission — while being far shorter than the ten-hour stall that motivated this, so a
+ * stuck seat is recovered long before an operator notices. A rig that wants a different number should
+ * pass `deadlineMs`; there is deliberately no config surface yet, because inventing one before anything
+ * consumes the value would be a knob nobody has measured.
+ *
+ * THE ACTION IS `withdraw`, NOT `settle`, because a submission that is withdrawn leaves the record of
+ * having existed while a settled one disappears into a terminal status — and a submission that vanishes
+ * without a line is the same invisibility that caused the outage. Callers must LOG the verdict.
+ */
+export const ADMISSION_DEADLINE_MS = 5 * 60_000;
+
+/**
+ * Is this submission too old to still be admitting? A PURE decision over store state, so it is testable
+ * without a provider: the 429 is how the outage HAPPENED, not how it is tested.
+ *
+ * @param {object} input
+ * @param {object} input.submission — a submission row; `admittedAt` is a ms epoch (or Date/ISO string)
+ * @param {boolean} [input.advancing] — a task holds this conversation, so it is NOT stuck regardless of age
+ * @param {number} [input.now]
+ * @param {number} [input.deadlineMs]
+ * @returns {{expired:boolean, ageMs:number|null, action:"withdraw"|"leave"|"none", reason:string}}
+ */
+export function admissionVerdict({ submission, advancing = false, now = Date.now(), deadlineMs = ADMISSION_DEADLINE_MS } = {}) {
+	if (!submission) return { expired: false, ageMs: null, action: "none", reason: "no submission" };
+	// An ADVANCING conversation is never stuck, however old the row looks: the age of the record is not the
+	// age of the work. This is the control that keeps the deadline from racing the admission path.
+	if (advancing) return { expired: false, ageMs: null, action: "leave", reason: "a task is advancing this conversation" };
+	const raw = submission.admittedAt ?? submission.createdAt ?? submission.at ?? null;
+	const at = raw === null ? NaN : raw instanceof Date ? raw.getTime() : typeof raw === "number" ? raw : Date.parse(String(raw));
+	if (!Number.isFinite(at)) return { expired: false, ageMs: null, action: "none", reason: "no admission timestamp — cannot judge age, so do not act" };
+	const ageMs = now - at;
+	// A seconds-old admission is NORMAL and must not be touched. This is the assertion that makes the
+	// deadline a fix rather than a sweep: without it, every pass would cancel work still being admitted.
+	if (ageMs < deadlineMs) return { expired: false, ageMs, action: "leave", reason: `admitted ${Math.round(ageMs / 1000)}s ago (< ${Math.round(deadlineMs / 1000)}s)` };
+	return {
+		expired: true,
+		ageMs,
+		action: "withdraw",
+		reason: `admitted ${Math.round(ageMs / 1000)}s ago and no task is advancing it — too old to still be admitting`,
+	};
+}
+
 export async function reconcileStrandedSubmissions(harness, inspection, { context, onDiagnostic } = {}) {
   const liveConvIds = new Set();
   for (const task of inspection?.tasks ?? []) {
@@ -1195,11 +1268,8 @@ export async function drivePass(
     logBrokerLine(dbPath, `STRANDED settled=${settledStranded.length}`);
   }
   const settledStrandedIds = new Set(settledStranded);
-  const pendingConvIds = new Set(
-    (inspection.submissions ?? [])
-      .filter((s) => !settledStrandedIds.has(s.id))
-      .map((s) => s.conversationId),
-  );
+  // #4170: `pendingConvIds` MUST MEAN "ADVANCING", NOT "HAS A SUBMISSION ROW" — see advancingConvIds.
+  const pendingConvIds = advancingConvIds(inspection.submissions, { settled: settledStrandedIds });
   const seats = seatsDoc?.value?.seats;
   const stoppedConvIds = await readStoppedConvIds(probeStorage, seats, context);
   const busySeats = readBusySeats ? await readBusySeats() : new Set();
@@ -1256,6 +1326,21 @@ export async function drivePass(
     onError,
     onWoke: wrapOnWoke,
     onSuppressed,
+    // #4180: THE SUPPRESSION TRACE, made visible. One line per skipped candidate per pass — not per
+    // pass-second — carrying the seat, the reason, and for `pending` the conversation id and the
+    // MEASURED age from that submission's `admittedAt`. The age is looked up, never invented: a trace
+    // that prints a plausible number is the defect class it exists to expose. `admittedAt` is the field
+    // the attention surface already reads (src/attention.mjs), so this is the same measurement, joined.
+    pendingAgeMs: (convId) => {
+      const sub = (inspection.submissions ?? []).find((s) => s.conversationId === convId);
+      return sub && Number.isFinite(sub.admittedAt) ? Date.now() - sub.admittedAt : null;
+    },
+    onSkipped: (skip) => {
+      if (!dbPath) return;
+      const age = typeof skip.ageMs === "number" ? ` age=${Math.round(skip.ageMs / 1000)}s` : "";
+      const conv = skip.conversationId !== undefined ? ` conv=${skip.conversationId}` : "";
+      logBrokerLine(dbPath, `SKIP ${skip.seat} reason=${skip.reason}${conv}${age}`);
+    },
     // #2420: an in-pass stop predicate. Checked before each wake so a pass stops
     // submitting NEW work the moment a stop is requested, not only at the loop boundary.
     shouldStop,
