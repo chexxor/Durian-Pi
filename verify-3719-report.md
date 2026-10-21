@@ -1,4 +1,4 @@
-﻿# Re-Verification Report for #3719
+# Re-Verification Report for #3719
 
 ## 1. #2543 + #2701 (DEEPINFRA_API_KEY absence) - VOID
 Claim: live-run-unreachable, DEEPINFRA_API_KEY absence, $-estimate assertions
