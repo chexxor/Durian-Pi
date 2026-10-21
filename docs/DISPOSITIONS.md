@@ -10,7 +10,14 @@ the new deciding item id — a row is never edited or deleted.
 - **Owner:** scribe owns this file and its structure.
 - **Writer:** the **deciding seat** appends its own row in its own item branch —
   do not route every row through scribe (that would serialize the table and
-  re-create the ledger-writer queue).
+  re-create the ledger-writer queue). **Fallback:** the deciding seat appends its
+  own row, **OR names a seat that can and supplies the exact row content**; the row
+  cites BOTH the deciding item and the appending item. This fallback exists because
+  a deciding seat cannot always write files (lead and pm have queue tools only) —
+  without it, a rule whose execution depends on a capability nobody checked fails
+  quietly and LOSES ROWS (the same failure shape as the carrier leak, #3412). The
+  first row appended under the fallback is impl-item-2777 (#3733): decided by lead,
+  written by scribe.
 - **Why it exists (the G1 attrition problem, one level up):** a disposition
   recorded only in a completion summary will be re-derived by the next inventory,
   and the re-derivation will eventually disagree with the original. This ledger is
@@ -116,6 +123,7 @@ way follows the rule rather than overriding it.
 | 2026-10-19 | auditor-item-2179 | fdfcd95 | NOTHING-TO-LAND | content already on main — its only commit (fdfcd95, the D106 record) conflicted, and the conflict was a CONTENT DUPLICATE: the identical D106 text is canonically on main via scribe-item-2169 @99b9860 (verified: `git merge-base --is-ancestor 99b9860 main` = yes). Rebase-skipped in a sandbox then executed; branch == main (ahead 0 / behind 0). NOT a stale pin — re-pointing it at a newer sha would claim a landing that already happened. Deciding seat: pm | #3426 |
 | 2026-10-19 | auditor-item-2186 | 6ccd26e | NOTHING-TO-LAND | superseded by a larger landed implementation — its only commit (6ccd26e, the configure spool op) conflicted with main, which already carries a LARGER implementation: SPOOL_OPS=[...,"read","configure"], CONTROL_PLANE_OPS includes configure, and the "configure via the spool is a RECONFIGURE" carve-out. Rebase-skipped as superseded; branch == main. The landed implementation descends from devtools-item-2182 @7933858. Deciding seat: pm | #3426 |
 | 2026-10-19 | scribe-item-3207 | c51813f | SUPERSEDED-BY-EVENTS | stale pre-#3234 mint-order snapshot: records "3089 mints D115-D119, 3035 mints D120", an allocation nobody is landing — #3167 landed D113/D114, #3089/#3035 were rebased, #3268 minted D121. PINS NO D-NUMBERS (probe #3411: 1 file, +1/-3, D-number strings descriptive only) — so NOT a #3075 cancellation. The live allocation is recorded in #3343's union entry, and the "scribe-item-3114 @3e7a297 is a DUPLICATE, do NOT land" warning is relocated there, where the mint work lives. Revival: verification only — has the world changed back, i.e. does a future clock-out want a written mint order? Deciding seat: pm | #3411 |
+| 2026-10-20 | impl-item-2777 | 2db5545 | SUPERSEDED | branch DIVERGED — NOT an ancestor of main; main carries the fractional context-trip mechanism via #1823 (floor 200k + a fraction of the resolved window + ceiling, src/degeneration.mjs), and the absolute 400k bound the branch proposed is gone. Independently confirmed by qa's post-drift re-verify. Decided by lead (#3394) + qa (#3730); FIRST row appended under the fallback rule — decided by lead, written by scribe (#3733) | #3394 + #3730 |
 
 > **NOTE (the two worked examples of content-not-ancestry):** `security-item-1475`
 > because ancestry said "not on main" while content said "already there", and
