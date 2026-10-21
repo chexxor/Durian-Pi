@@ -90,3 +90,8 @@ broker wedged on `wake-failed … pm conv 3 … Session failed after a storage e
 terminate+restart did NOT clear it (clean passes, then a re-spin). `node scripts/repair-pi-live.mjs
 ./selfdev.sqlite 3` is the prerequisite before the restart. This is the first `pm` recurrence; prior
 ones were `impl` conv 9 / `qa` conv 15 / `lead` conv 22.
+
+**Partial re-verify (2026-10-21, sandbox).** Overwriting the first ~1.4 KB of a COPY of a temp store makes
+`node cli.mjs status` fail loudly and legibly: `{"ok":false,"error":"cannot open …: file is not a database"}`
+— the detection half. The recovery half (restoring a real live store) was NOT run because there is no real
+corrupt store to recover; `last_verified` is unchanged.

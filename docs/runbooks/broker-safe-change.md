@@ -156,3 +156,11 @@ tail -3 <db>.broker.log          # passes must advance
 after the pid was proved dead, broker restarted as pid 13228, passes advanced (63+), a first start exited
 `stoppedBy=deadline` from the stale stop request and the second start stayed resident. Suite afterwards
 `pass=180 fail=1` (`pitui`, #2412) — the store was intact.
+
+**Partial re-verify (2026-10-21, sandbox).** On a temp store (`DURIG_DB=$TEMP/verify-rig-*.sqlite`,
+`up rig.starter.json --no-serve`, then `serve --max-duration 12`) the lifecycle half holds: the broker log
+shows `START pid=…`, `SKIP <seat> reason=no-work` for all four seats, `PASS 1 ms=… woke=-`, and
+`EXIT … reason=max-duration`; `serve` exits 0. `node scripts/read-constitution.mjs` on that store reports
+`hasPrepareWorkspace: true` and `hasP3Language: true`. **NOT verified here:** the `WAKE` half and the
+`up`-refresh/`modelReset` half — both need a provider-backed seat, and nothing was listening on the local
+endpoint (`127.0.0.1:8080`). `last_verified` is therefore unchanged.
