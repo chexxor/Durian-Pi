@@ -34,15 +34,12 @@ function listSkills(dir) {
 const canonical = listSkills(canonicalRoot);
 const mirror = listSkills(mirrorRoot);
 
-// S1-pending duplicate (pre-S1): the two `durig` entries are DIFFERENT skills that
-// both claim the name `durig` — a duplicate, not a mirror. The D103-coordinated S1
-// rename (canonical `.agents/skills/driving-durian-pi` and `delegating-to-durian-pi`)
-// removes the overlap. Exclude it here so the check enforces real mirrors only; once
-// S1 lands, `durig` leaves the overlap set and the check starts applying to it.
-const s1PendingDuplicate = new Set(["durig"]);
-
+// S1 (#2356) has LANDED: the two `durig` skills are now the distinct, uniquely-named
+// `.agents/skills/driving-durian-pi` and `.agents/skills/delegating-to-durian-pi`, and the
+// `skills/durig` duplicate is gone. The pre-S1 `durig` exclusion is therefore removed, so this
+// check now applies to EVERY overlapping name.
 // For every skill name that appears in BOTH roots, the bodies must be byte-identical.
-const overlapping = canonical.filter((n) => mirror.includes(n) && !s1PendingDuplicate.has(n));
+const overlapping = canonical.filter((n) => mirror.includes(n));
 const failures = [];
 
 for (const name of overlapping) {

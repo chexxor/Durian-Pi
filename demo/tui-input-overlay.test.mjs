@@ -117,7 +117,10 @@ console.log("\n3. over the seat list the chip names the selected seat");
 		inputText: "hi",
 	});
 	const text = frameToLines(frame).join("\n");
-	check("the seat list is still shown", text.includes("program manager"));
+	// #3313 / designer spec #3307 §1: the landing row REMOVES the role column (the role is
+	// static and moves to the conversation header), so "the seat list is still shown" is
+	// asserted on a seat NAME — the overlay must not replace the roster, not preserve a field.
+	check("the seat list is still shown", text.includes("pm") && text.includes("0q"), text);
 	check("the chip names the selected seat", text.includes("─ to pm ─"), text);
 	check("the typed text is shown", text.includes("hi"));
 	check("the send/cancel hint is shown", text.includes("Enter=send"));
