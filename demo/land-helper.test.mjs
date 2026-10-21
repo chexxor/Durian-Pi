@@ -259,6 +259,18 @@ try {
   check("--suite REFUSES to advance main on a failing demo", suiteBad.code !== 0, suiteBad.raw.slice(0, 200));
   check("...and names the failing test", /bad\.test\.mjs/.test(suiteBad.report?.error ?? ""), suiteBad.report?.error);
   check("...and main did NOT advance", mainSha(repo) === beforeSuite);
+  // #4436: WITHOUT --suite the landing still succeeds, but the ABSENCE of the gate is NAMED rather
+  // than reported as `null`. Three landings today read `"suite": null` and each seat correctly
+  // refused to claim a baseline it did not have, with no way to tell WHY.
+  const featE2 = feature("feat-e2", "e2.txt", "from feat-e2\n");
+  const noSuite = land(repo, ["feat-e2"]);
+  check("a landing WITHOUT --suite still succeeds (the gate is opt-in)", noSuite.code === 0, noSuite.raw.slice(0, 200));
+  check(
+    "...and the ABSENCE of the gate is NAMED, not `null` (#4436)",
+    typeof noSuite.report?.suite === "string" && /not run/.test(noSuite.report.suite),
+    JSON.stringify(noSuite.report?.suite),
+  );
+  check("...and the report says the landing was NOT regression-checked", /NOT regression-checked/.test(noSuite.report?.suite ?? ""), noSuite.report?.suite);
   rmSync(join(repo, "demo", "bad.test.mjs"));
   git(repo, ["add", "-A"]);
   git(repo, ["commit", "-m", "test: drop the failing demo"]);
