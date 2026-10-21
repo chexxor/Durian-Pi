@@ -1,4 +1,4 @@
-﻿# durian-pi runbooks (SOPs)
+# durian-pi runbooks (SOPs)
 
 **Status:** working set. Audience: the **delegate** (operator-facing) and **seats** (a seat reads a
 runbook when woken into a situation it does not own). A runbook is an operating procedure, not a design
