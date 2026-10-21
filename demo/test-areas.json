@@ -191,6 +191,7 @@
     ],
     "guard": [
       "demo/commit-secrets.test.mjs",
+      "demo/confine-rebase-property.test.mjs",
       "demo/confine-token-awareness.test.mjs",
       "demo/confine.test.mjs",
       "demo/sanitize-terminal-control.test.mjs",
