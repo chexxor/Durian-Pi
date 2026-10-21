@@ -162,6 +162,43 @@ function branchForceDelete(text) {
 	return false;
 }
 
+/**
+ * TOKEN-AWARE TREE-MUTATING VERB MATCH (#4572), built on #1211's mechanism rather than a second tokenizer.
+ *
+ * THE DEFECT THIS REPLACES: this family was matched with WHOLE-STRING regexes, so a REFUSED VERB INSIDE A
+ * QUOTED SEARCH PATTERN was refused - a seat documenting or investigating the guard could not write the verb
+ * in a search pattern, while `git branch -D` was already token-aware. TWO MATCHING PHILOSOPHIES FOR ONE
+ * CLASS OF GUARD, and the older one fired on prose.
+ *
+ * It reuses `shellSegments` + `gitSubcommand`, the SAME pair `branchForceDelete` uses, so a quoted argument
+ * is DATA and an actual invocation is an INVOCATION. `gitSubcommand` skips `-C <path>`, so ONE check per
+ * verb covers the plain AND the redirected forms - which is why the six `-C` regexes this replaces were
+ * REDUNDANT rather than needing their own rewrite.
+ *
+ * `checkout` IS NOT HERE ON PURPOSE: #4374 made it PATH-AWARE (allowed in the seat's own worktree, refused
+ * against the shared root) because `checkout-index` shares its prefix. That is a decision about WHERE, not
+ * about whether, so it is a different predicate and folding it in would DISCARD THE DISTINCTION.
+ *
+ * CONSERVATIVE DIRECTION: if a segment cannot be tokenised as a git invocation this returns FALSE and the
+ * command is allowed - the opposite of the write guard's `unresolved` handling. The trade is deliberate and
+ * not symmetric: a wrong REFUSAL here costs a retry, and the whole-string regexes proved that cost is paid
+ * constantly by anyone discussing the guard. A verb that is genuinely invoked always tokenises.
+ *
+ * @param {string} verb
+ * @returns {(text: string) => boolean}
+ */
+function gitVerbCheck(verb) {
+	return (text) => {
+		for (const tokens of shellSegments(text)) {
+			const head = tokens[0]?.toLowerCase();
+			if (head !== "git" && head !== "git.exe") continue;
+			const { sub } = gitSubcommand(tokens.slice(1));
+			if (sub && sub.toLowerCase() === verb) return true;
+		}
+		return false;
+	};
+}
+
 const DENIED_COMMANDS = [
 	{ re: /(^|[\s;&|"'()])wsl(\.exe)?([\s"'()]|$)/i, why: "WSL is unsupported on this host" },
 	{ re: /(^|[\s;&|"'()])docker(-compose)?(\.exe)?([\s"'()]|$)/i, why: "Docker is unsupported on this host" },
@@ -186,13 +223,13 @@ const DENIED_COMMANDS = [
 	// seat never re-ran `git rebase` alone — a false claim that reached an operating note (#3379).
 	// The guard refuses the WHOLE command on the first matching rule, so one refusal says nothing
 	// about the other verbs in it: test them separately.
-	{ re: /git\s+reset\b/i, why: "would restage or discard work a seat did not integrate (`reset` — test a compound command's verbs separately)" },
+	{ check: gitVerbCheck("reset"), why: "would restage or discard work a seat did not integrate (`reset` — test a compound command's verbs separately)" },
 	{ re: /git\s+checkout(?![\w-])/i, why: "would change the seat's working tree or HEAD (`checkout` — test a compound command's verbs separately)" },
-	{ re: /git\s+switch\b/i, why: "would change the seat's working tree or HEAD (`switch` is the modern `checkout`)" },
-	{ re: /git\s+restore\b/i, why: "would discard uncommitted work (`restore`)" },
-	{ re: /git\s+revert\b/i, why: "would rewrite committed work (`revert`)" },
-	{ re: /git\s+clean\b/i, why: "would discard untracked work (`clean`)" },
-	{ re: /git\s+stash\b/i, why: "would move uncommitted work out of the tree (`stash`)" },
+	{ check: gitVerbCheck("switch"), why: "would change the seat's working tree or HEAD (`switch` is the modern `checkout`)" },
+	{ check: gitVerbCheck("restore"), why: "would discard uncommitted work (`restore`)" },
+	{ check: gitVerbCheck("revert"), why: "would rewrite committed work (`revert`)" },
+	{ check: gitVerbCheck("clean"), why: "would discard untracked work (`clean`)" },
+	{ check: gitVerbCheck("stash"), why: "would move uncommitted work out of the tree (`stash`)" },
 	{
 		check: branchForceDelete,
 		why: "would force-delete a branch (`-D`/`--force`) — the safe `git branch -d` and branch create/rename are allowed",
@@ -234,13 +271,7 @@ const DENIED_COMMANDS = [
 	// the target looks "safe," the seat cannot verify that it is the right directory
 	// (a redirecting seat cannot validate git identity; that is the operator's job).
 
-	{ re: /git\s+-C\s+\S+\s+reset\b/i, why: "same as `git reset` — discards or restages work" },
 	{ re: /git\s+-C\s+\S+\s+checkout(?![\w-])/i, why: "same as `git checkout` — changes the working tree" },
-	{ re: /git\s+-C\s+\S+\s+switch\b/i, why: "same as `git switch` — changes the working tree" },
-	{ re: /git\s+-C\s+\S+\s+restore\b/i, why: "same as `git restore` — discards uncommitted work" },
-	{ re: /git\s+-C\s+\S+\s+revert\b/i, why: "same as `git revert` — rewrites committed work" },
-	{ re: /git\s+-C\s+\S+\s+clean\b/i, why: "same as `git clean` — discards untracked work" },
-	{ re: /git\s+-C\s+\S+\s+stash\b/i, why: "same as `git stash` — moves uncommitted work out of the tree" },
 
 	// Unscoped staging redirected to another directory.
 	{ re: /git\s+-C\s+\S+\s+add\s+-A\b/i, why: "unscoped staging redirected" },
