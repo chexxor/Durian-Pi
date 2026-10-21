@@ -48,6 +48,21 @@ reader the tool is still untrustworthy, and then they do not trust the NEXT tool
 This is a rule for the seat that ACCEPTS the completion as much as the one that writes it — #3990 and
 #4163 both closed while their branches were unlanded.
 
+**A MERGE HAS TWO PARENTS; A DOCS COMMIT HAS ONE — the parent-count test settles whether a commit LANDED
+anything.** `git log -1 --format=%p <sha>`: TWO PARENTS → a merge, so something was landed; ONE PARENT → not
+a merge, so nothing was landed by it, whatever its subject says. A report said "the TUI landings landed as
+`9e8710e`" when `9e8710e` has a SINGLE parent (`e6b8f33`) and its subject "docs(NEXT): three TUI branches
+landed and proven" merely RECORDED the landings — the landings were three separate merges `a022635`,
+`aabcacd`, `e79dd2f` (two parents each). This is the same defect as `ok:true` with the flag swapped: a
+commit subject standing in for a fact. THE PAIR IS WHAT MAKES IT USEFUL: `--is-ancestor <branch-sha> main`
+says the WORK is on main; `%p` on the commit you THINK landed it says whether that commit is the thing that
+put it there. A SUBJECT IS A DESCRIPTION; A PARENT COUNT IS A STRUCTURE. GENERAL FORM: **WHEN A COMMIT
+MESSAGE AND THE COMMIT'S STRUCTURE DISAGREE, THE STRUCTURE IS THE FACT** — the message is written by whoever
+made the commit, at the moment they believed something; the parent list is what the object IS. It compounds
+the stale-list problem rather than being separate: a list of outstanding landings was FOUR OF SIX stale, and
+one of the four was marked landed by a commit that had landed nothing — both errors come from the same habit,
+trusting a report about a landing instead of asking git what happened.
+
 **When a landing reports success and `main` is unmoved: STOP AND REPORT. Never hand-restore the tree.**
 The tree being dirty is a REPORTABLE STATE, not a problem to solve with a text tool. The cost of the
 missing assertion was the chain that followed (04:21Z): `main` unmoved → a seat restored the shared tree
