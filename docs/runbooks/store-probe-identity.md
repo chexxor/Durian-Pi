@@ -20,8 +20,26 @@ So `SELECT * FROM tasks WHERE id IN (2993,3556,3581,3601)` returns **two of four
 records with full confidence. That is worse than an empty result: an empty result says "not here", a wrong
 row says "here it is".
 
-There is **no `items` table**, and `deferredTo` is **not a column** anywhere. The queue lives in a durable
-DOCUMENT (the rig queue), whose record carries an `items` array. `deferredTo` is written into that record
+There is **no `items` table**, and `deferredTo` is **not a column** anywhere. But the queue is NOT a plain
+JSON record in `documents` either ? a prober who looks for `items` in `documents` finds nothing and wrongly
+concludes "not in this store" (that happened: #4334 and #4347).
+
+## Where the queue's items ACTUALLY are
+
+| what | where | carries `items`? |
+|---|---|---|
+| the queue DOCUMENT row | `documents` id=**29**, `kind`=`"durig.queue"`, `scope_kind`=`session` | **NO** ? metadata only: `id, kind, scope, createdAt` |
+| the queue's CONTENT | `document_revisions` where `document_id`=**29** | **YES, but DELTA-ENCODED** |
+
+`document_revisions` columns are `(document_id, seq, kind, version, content)`. The queue's revisions are
+`kind`=`delta` and `content` is a PATCH, not a snapshot ? its top-level keys are array indices, so
+`JSON.parse(content).items` is `undefined` even on a revision whose TEXT contains `"items"`. A prober who
+parses one revision and looks for `.items` finds nothing and concludes the field does not exist.
+
+So: `deferredTo` is written into the queue's durable document by `defer_work` (`src/rig.mjs` ?
+`item.deferredTo = args.to ?? DEFERRED_TO_NOBODY` since #4405), stored as delta-encoded revisions under
+`document_id` 29, and readable through the RIG rather than through SQL. **Prefer `node cli.mjs status`;**
+treat a direct SQL probe as a last resort that cannot see a delta.
 by `defer_work` (`src/rig.mjs` — `item.deferredTo = args.to ?? DEFERRED_TO_HUMAN`), NOT into a column.
 
 ## Two more traps in the same file
@@ -38,8 +56,9 @@ by `defer_work` (`src/rig.mjs` — `item.deferredTo = args.to ?? DEFERRED_TO_HUM
    are small integers and both exist.
 2. **Read `PRAGMA table_info(<table>)` first** and check the column set matches the namespace you think you
    are in. If `deferredTo`/`subject`/`to` are absent, it is not the queue.
-3. **For queue questions, go through the queue document**, not `tasks`. Find it with
-   `LIKE '%durig.queue%'`, then read its record's `items` array and match on the parsed `id`.
+3. **For queue questions, do NOT expect `items` in `documents`.** `documents` id=29 holds the queue's
+   METADATA; its `items` live in `document_revisions` as DELTA content. Use the rig's own reader
+   (`node cli.mjs status`) unless you specifically need the raw revisions.
 4. **Prefer the broker-served read** (`node cli.mjs status`, `queue`) over opening the store at all — it is
    the authoritative view and it already knows the namespaces. Use a direct store read only when the CLI
    cannot answer, and open it **read-only**.
