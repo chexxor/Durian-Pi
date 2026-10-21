@@ -11,6 +11,26 @@ import { deriveSeatAction } from "./viewmodel.mjs";
 
 // Collapse whitespace before truncating: model prose arrives with newlines and
 // indentation that would otherwise break the one-line-per-seat layout.
+// #4591: HOISTED TO MODULE SCOPE AND EXPORTED. THE MAP IS THE SET — a demo that iterates a LITERAL copy of
+// these names decays back to "the painted glyphs are covered by nothing" one state at a time, because a new
+// state added here would not appear in the copy. Anything that wants to enumerate the presentation reads THIS.
+
+export const PRESENTATION = {
+	failed: { glyph: "✖", tone: "red" },
+	generating: { glyph: "●", tone: "green" },
+	working: { glyph: "●", tone: "green" },
+	// After `working`: a seat that is also working on something else should
+	// read as working, not as parked. The order is enforced in the derivation.
+	parked: { glyph: "◌", tone: "yellow" },
+	waiting: { glyph: "!", tone: "yellow" },
+	// #4449: `queued` ? claimable work, nothing claimed/generating/failed. GLYPH U+25C9 ("\u25C9"),
+	// DIM. NOT a half-filled shape: a partial fill reads as PROGRESS THE SEAT HAS NOT MADE. Not
+	// green (working's tone) and not yellow (this fact is calm ? the count is already on the same
+	// row, so no alarm inflation). Sits BELOW `waiting` in the derivation's precedence.
+	queued: { glyph: "\u25C9", tone: "dim" },
+	idle: { glyph: "○", tone: "dim" },
+};
+
 export function truncate(text, width) {
 	const flat = String(text ?? "")
 		.replace(/\s+/g, " ")
@@ -35,21 +55,6 @@ export function pad(text, width) {
 export function seatActivity(seat, health, highlight) {
 	const { state, focus } = deriveSeatAction(seat, health, highlight);
 
-	const PRESENTATION = {
-		failed: { glyph: "✖", tone: "red" },
-		generating: { glyph: "●", tone: "green" },
-		working: { glyph: "●", tone: "green" },
-		// After `working`: a seat that is also working on something else should
-		// read as working, not as parked. The order is enforced in the derivation.
-		parked: { glyph: "◌", tone: "yellow" },
-		waiting: { glyph: "!", tone: "yellow" },
-		// #4449: `queued` ? claimable work, nothing claimed/generating/failed. GLYPH U+25C9 ("\u25C9"),
-		// DIM. NOT a half-filled shape: a partial fill reads as PROGRESS THE SEAT HAS NOT MADE. Not
-		// green (working's tone) and not yellow (this fact is calm ? the count is already on the same
-		// row, so no alarm inflation). Sits BELOW `waiting` in the derivation's precedence.
-		queued: { glyph: "\u25C9", tone: "dim" },
-		idle: { glyph: "○", tone: "dim" },
-	};
 	const { glyph, tone } = PRESENTATION[state] ?? PRESENTATION.idle;
 
 	return { glyph, tone, state, focus };
