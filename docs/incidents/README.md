@@ -60,6 +60,8 @@ last_reviewed: YYYY-MM-DD
 
 | Date | Sev | Incident | Symptom | Runbook | Status |
 |---|---|---|---|---|---|
+| 2026-10-20 | sev2 | [verifier-utf16-clobbered-scratch-tree](2026-10-20-verifier-utf16-clobbered-scratch-tree.md) | a verifier's suite reports ~120 failures in a scratch worktree and the file under test will not parse | null | mitigated |
+| 2026-10-20 | sev2 | [stale-derived-manifest-landing](2026-10-20-stale-derived-manifest-landing.md) | a branch lands green in the helper's scratch, then its OWN new guard fails on `main` because the set it enumerates grew after the branch was written | land | resolved |
 | 2026-10-19 | sev2 | [git-sha-redacted-as-secret](2026-10-19-git-sha-redacted-as-secret.md) | a tool result is replaced by `[redacted … secret-shaped value (high-entropy-token)]` and the 40-character git SHA / tree OID the command printed is gone | store-secret-detected | open |
 | 2026-10-19 | sev3 | [terminal-worktree-mistaken-for-lost-work](2026-10-19-terminal-worktree-mistaken-for-lost-work.md) | a seat asks about "its" worktree as though it still exists (`cannot change to item-<id>`) and treats a reaped terminal tree as lost work | leaked-worktrees | open |
 | 2026-10-19 | sev2 | [held-rows-orphaned-by-cleared-gates](2026-10-19-held-rows-orphaned-by-cleared-gates.md) | an effort sits dormant with nothing broken: `held` rows whose gates finished are never released and no attention fires | stale-held-backlog | open |
