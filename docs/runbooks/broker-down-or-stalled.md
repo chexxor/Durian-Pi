@@ -52,19 +52,17 @@ tail -8 .spike/serve.err 2>/dev/null
   pass runs the same `placed`-only filter (`src/broker.mjs:829`) and the pending set still suppresses
   it. Restart is NECESSARY-but-INSUFFICIENT for a suppressed seat (it is right for a wedged loop).
   **The one-seat variant:** a SINGLE seat silent while others work is NOT "broker down" — it is a
-  per-seat suppression, and no broker-level remedy fixes it. **`resume` IS THE INTENDED PATH for a
-  never-started submission — permanently, not a stopgap.** A `queued` submission has no entry and no
-  transcript record to date it from (that is what `queued` means), so it cannot be dated without new
-  persisted state — a rig-side submission ledger was REJECTED on durability grounds (its fail-closed
-  path is today's behaviour; a recovery mechanism whose failure mode is the bug it was built for is not
-  a mechanism). The remedy: stop the broker, `resume` (which WITHDRAWS the stranded submission —
-  `resume` must run with the broker stopped), then restart. **Nothing flags it automatically:**
-  `admitted_not_started` cannot compute an age because pi-durable writes no admission timestamp — the
-  surface that looks like it reports this is being corrected or removed (routed separately). Do not
-  look for an automatic path that does not exist.
+  per-seat suppression, and no broker-level remedy fixes it. **The remedy TODAY:** stop the broker,
+  `resume` (which WITHDRAWS the stranded submission — `resume` must run with the broker STOPPED), then
+  restart. **HOW AN OPERATOR NOTICES — an existing surface that works:** `cli.mjs status` already emits
+  `admitted_not_started` WITH the submission id and its age (`admittedAt` is read at src/attention.mjs;
+  e.g. "submission #N admitted 55s ago, no run started and no slot held"). Do not wait for a new alarm
+  — this is the alarm. **Automatic recovery IS coming, and is not here yet:** an admission deadline
+  exists (`admissionVerdict` / `ADMISSION_DEADLINE_MS`); once the reconciler consults it, a
+  never-started submission is withdrawn without an operator. Until that lands, `resume` is the remedy.
   **Separate clause — the suppression-semantics fix:** a suppression-semantics fix is on a branch with
   its own landing entry and is not on main yet. When it lands it changes how a suppression is READ, not
-  the recovery path — `resume` remains the intended manual recovery for a never-started submission.
+  the recovery path — `resume` remains the remedy for a never-started submission.
 - **`WAKE-RETRY` logged but no `PASS` follows** (2026-10-18 recurrence 8): the dormant-revisit fix
   (`991567d`) re-arms the loop after a `wake-failed` and logs `WAKE-RETRY in=<ms>ms seats=<names>`. If
   that line appears and then **no `PASS`** for minutes (fresh heartbeat, no genlock, idle CPU), the retry
