@@ -130,19 +130,26 @@ way follows the rule rather than overriding it.
 > but it reached main through 595b714, a bare commit whose message says `docs(NEXT)`
 > while touching code; was deleted by 9c3aa02 (also `docs(NEXT)`); and restored by
 > revert 798836b. NO LANDING ENTRY EVER PASSED. Content correct, path illegitimate —
-> the asymmetry #3700 exists for. REVIVAL TEST: re-open only if
-> `git diff --stat main <branch>` shows ADDITIONS to `src/tui/` or `src/readapi.mjs`
-> absent from main; deletions alone never revive (a branch that would remove landed
-> lines is superseded no matter what it also adds). NO BRANCH WAS DELETED — they are
+> the asymmetry #3700 exists for. REVIVAL TEST (CORRECTED #4018 — the prior scope
+> named only `src/tui/` and `src/readapi.mjs`, and 3309's unique content lives in
+> `src/textwidth.mjs`, a path the test would have missed): re-open if the branch
+> carries ANY content absent from main, ANYWHERE — checked per-file by BLOB
+> comparison, not by a path list and not by a diffstat summary. Deletions remain
+> irrelevant to revival (a branch that would remove landed lines is superseded no
+> matter what it also adds); that half was right. GENERAL LESSON (#4018): BEHIND
+> MAIN IS NOT SUPERSEDED — a branch 57 commits behind can carry the only copy of a
+> fix; the only way to tell is to ask what it DOES that main does not, never how far
+> behind it is, and never what its files are called (3309 was the counterexample; the
+> other four were re-probed the same way). NO BRANCH WAS DELETED — they are
 > evidence, preserving what the shared index once held, so the ledger's claims stay
 > checkable.
 
-| 2026-10-20 | impl-item-3308 | 670b28e | SUPERSEDED | durable-TUI landing-screen data path; 57 commits behind main, main strictly newer for these files; landing entry #3436 CANCELLED. Content correct, path illegitimate — reached main via the 595b714 bare commit, deleted by 9c3aa02, restored by revert 798836b, no landing entry | #3951 + #3958 |
+| 2026-10-20 | impl-item-3308 | 670b28e | SUPERSEDED | durable-TUI landing-screen data path; behavioural probe (#4018): main EXPORTS the landing data path — projectLanding + LANDING_QUEUE_STATUSES (src/readapi.mjs), SEAT_ACTIONS + deriveSeatAction (src/viewmodel.mjs) — and the landing demos pass on main; 3308's renderSeatList/brief-deferredTo are older forms superseded by main's evolved landing render (main's readapi is larger, 487 vs 480). 57 commits behind main; landing entry #3436 CANCELLED. Content correct, path illegitimate — reached main via the 595b714 bare commit, deleted by 9c3aa02, restored by revert 798836b, no landing entry | #3951 + #3958 + #4018 |
 | 2026-10-20 | impl-item-3309 | 5dd93bc | NOT-SUPERSEDED (UNLANDED) | carries the ONLY copy of the newline-preserving wrap fix — probe (#4001): `wrapLines` appears 0 times across main, main's `src/textwidth.mjs` has NO wrap function under any name (only width helpers), and main's `src/tui/client.mjs` `wrapText` still does `.replace(/\s+/g, " ").trim()` which FLATTENS explicit newlines. So the "already landed on main" premise was FALSE (operator's, not scribe's). The demos' greenness is NOT evidence the wrap landed — that inference produced the false premise. Entry #3466 CANCELLED (its gate #3390 satisfied — a satisfied gate says nothing about landed content, #3681). Needs a LANDING PATH, not a disposition | #4001 |
 | 2026-10-20 | impl-item-3313 | 2949b13 | SUPERSEDED | would DELETE 119 lines of the landed landing row in src/tui/client.mjs; carried by stack entry #3740, CANCELLED | #3951 + #3958 |
-| 2026-10-20 | impl-item-2826 | 5d8c623 | SUPERSEDED | MEASURED (qa #3951): 2957 total deletions across 31 files incl 135 from client.mjs; a strict subset of main | #3951 + #3958 |
-| 2026-10-20 | impl-item-3437 | 66a19af | SUPERSEDED | MEASURED (qa #3951): 1908 total deletions across 11 files, 0 additions to src/tui/; a strict subset of main | #3951 + #3958 |
-| 2026-10-20 | impl-item-3359 | 0c8a396 | SUPERSEDED | MEASURED (qa #3951): 2801 total deletions across 30 files incl 97 from client.mjs; a strict subset of main | #3951 + #3958 |
+| 2026-10-20 | impl-item-2826 | 5d8c623 | SUPERSEDED | MEASURED (qa #3951): 2957 total deletions across 31 files incl 135 from client.mjs; ADDITIONS ALSO MEASURED (#4018): 34 src lines vs main, small relative to the deletions; strict-subset claim is behavioural — see the corrected revival test | #3951 + #3958 + #4018 |
+| 2026-10-20 | impl-item-3437 | 66a19af | SUPERSEDED | MEASURED (qa #3951): 1908 total deletions across 11 files, 0 additions to src/tui/; ADDITIONS ALSO MEASURED (#4018): 12 src lines elsewhere vs main, small relative to the deletions; strict-subset claim is behavioural — see the corrected revival test | #3951 + #3958 + #4018 |
+| 2026-10-20 | impl-item-3359 | 0c8a396 | SUPERSEDED | MEASURED (qa #3951): 2801 total deletions across 30 files incl 97 from client.mjs; ADDITIONS ALSO MEASURED (#4018): 24 src lines vs main, small relative to the deletions; strict-subset claim is behavioural — see the corrected revival test | #3951 + #3958 + #4018 |
 
 > **NOTE (the two worked examples of content-not-ancestry):** `security-item-1475`
 > because ancestry said "not on main" while content said "already there", and
