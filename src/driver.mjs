@@ -42,6 +42,13 @@ export function selectWakes({
   busySeats = new Set(),
   stoppedConvIds = new Set(),
   paused = false,
+  // #4171: THE SUPPRESSION TRACE. Nothing recorded WHY a candidate seat was skipped, so a ten-hour
+  // outage and a two-second wait looked identical in the log. `onSkip` is called once per skipped
+  // candidate per pass with the REASON, and for `pending` the AGE of the submission that caused it —
+  // the age is the load-bearing field, because 2s is normal and 10h is the outage. `pendingAgeMs` is
+  // supplied by the caller (it has the submission rows); without it the trace still names the reason.
+  onSkip = () => {},
+  pendingAgeMs = null,
 }) {
   const wakes = [];
   for (const [name, seat] of Object.entries(seats ?? {})) {
@@ -61,11 +68,21 @@ export function selectWakes({
         !busySeats.has(name) &&
         !stoppedConvIds.has(convId),
     );
-    if (!hasQueued && !hasStalledClaim) continue;
+    if (!hasQueued && !hasStalledClaim) {
+      onSkip({ seat: name, reason: "no-work" });
+      continue;
+    }
     // Already advancing: a submission is in flight, or a generation lease is held.
     // (Applies equally to queued work and to a claim the run has actually resumed.)
-    if (pendingConvIds.has(convId)) continue;
-    if (busySeats.has(name)) continue;
+    if (pendingConvIds.has(convId)) {
+      const ageMs = typeof pendingAgeMs === "function" ? pendingAgeMs(convId) : null;
+      onSkip({ seat: name, reason: "pending", conversationId: convId, ageMs });
+      continue;
+    }
+    if (busySeats.has(name)) {
+      onSkip({ seat: name, reason: "busy" });
+      continue;
+    }
     wakes.push({ name, conversationId: convId });
   }
   return wakes;
