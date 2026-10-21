@@ -42,7 +42,7 @@ import {
 	enqueueItem,
 	registerSeat,
 } from "../src/rig.mjs";
-import { auditRig, hasArtifact, hasEvidence, isVerificationItem } from "../src/checkup.mjs";
+import { auditRig, hasArtifact, hasEvidence, isVerificationItem, namesCheckSubject } from "../src/checkup.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -120,6 +120,20 @@ assert.equal(hasArtifact({ evidence: { command: "c", exitCode: 0, artifact: "  "
 assert.equal(hasArtifact({ evidence: { command: "c", exitCode: 0 } }), false, "hasArtifact: absent");
 assert.equal(hasArtifact({}), false, "hasArtifact: no evidence field at all");
 
+// #4153: hasArtifact accepts any non-blank string; namesCheckSubject is the SHARPENING to "a named
+// subject" - a git tree (sha/ref/main) OR a non-git store/queue/scratch where a tree is genuinely N/A.
+assert.equal(namesCheckSubject("fb65ea9"), true, "a sha names the tree");
+assert.equal(namesCheckSubject("7b43566 (ancestor of HEAD 1b46411)"), true, "a sha inside prose still names a tree");
+assert.equal(namesCheckSubject("devtools-item-4147"), true, "a branch/ref-like token names the tree");
+assert.equal(namesCheckSubject("main"), true, "main names the tree");
+assert.equal(namesCheckSubject("origin/main"), true, "a remote ref names the tree");
+assert.equal(namesCheckSubject("selfdev.sqlite@read"), true, "a non-git check names the STORE");
+assert.equal(namesCheckSubject("queue store, read-only (no commit)"), true, "a queue check names the store");
+assert.equal(namesCheckSubject("2148"), false, "a bare token names NOTHING");
+assert.equal(namesCheckSubject(""), false, "blank names nothing");
+assert.equal(namesCheckSubject("the fix"), false, "prose names nothing checkable");
+console.log("  ok   namesCheckSubject: a tree or a store; a bare token is neither");
+
 const nonVerifier = auditRig({ ...BASE, queueItems: [{ id: 8, to: "author", subject: "implement the widget", status: "done", resultSummary: "done" }] });
 assert.equal(hasFinding(nonVerifier, "verification-without-evidence"), false, "an ordinary done item is not inspected");
 
@@ -127,6 +141,54 @@ const unread = auditRig({ ...BASE, queueItems: null });
 assert.equal(ruleStatus(unread, "verification-without-evidence"), "skipped", "an unread queue is SKIPPED, never passed");
 assert.equal(hasFinding(unread, "verification-without-evidence"), false, "and reports no finding it cannot ground");
 console.log("  ok   ack-only FAILS, evidenced PASSES, non-verifier ignored, unread queue skipped");
+
+/* ─── 2b. evidence-tree: the artifact must NAME what the check ran against ─── */
+console.log("\nauditRig — evidence-tree (#4153)");
+const ev = (artifact) => ({
+	id: 9,
+	to: "author",
+	subject: "implement the widget",
+	status: "done",
+	resultSummary: "done",
+	evidence: { command: "node demo/x.test.mjs", exitCode: 0, artifact },
+});
+// THE DECISIVE CASE: a non-blank artifact that names nothing. hasArtifact accepts it; this rule does not.
+const bare = auditRig({ ...BASE, queueItems: [ev("2148")] });
+assert.equal(hasFinding(bare, "evidence-tree"), true, "an artifact that names no tree and no store is a finding");
+assert.equal(ruleStatus(bare, "evidence-tree"), "fail", "the rule fails for it");
+
+for (const [label, artifact] of [
+	["a sha", "fb65ea9"],
+	["a branch/ref", "devtools-item-4147"],
+	["main", "main"],
+	["a store (non-git)", "selfdev.sqlite@read"],
+	["a queue check (non-git)", "queue store, read-only (no commit)"],
+]) {
+	const r = auditRig({ ...BASE, queueItems: [ev(artifact)] });
+	assert.equal(hasFinding(r, "evidence-tree"), false, `${label} names what was checked`);
+	assert.equal(ruleStatus(r, "evidence-tree"), "pass", `${label} passes the rule`);
+}
+
+// SCOPED so it never duplicates verification-without-evidence: a MISSING artifact is that rule's job.
+const missingArt = auditRig({
+	...BASE,
+	queueItems: [{ id: 9, to: "qa", subject: "VERIFY #1: fix", status: "done", evidence: { command: "node x.test.mjs", exitCode: 0 } }],
+});
+assert.equal(hasFinding(missingArt, "evidence-tree"), false, "a MISSING artifact is left to verification-without-evidence");
+assert.equal(hasFinding(missingArt, "verification-without-evidence"), true, "...which still fires for it");
+
+// A non-terminal item has no completion to inspect.
+const notDone = auditRig({ ...BASE, queueItems: [{ ...ev("2148"), status: "queued" }] });
+assert.equal(hasFinding(notDone, "evidence-tree"), false, "a non-terminal item is not inspected");
+
+// An item with NO evidence at all is not this rule's business either.
+const noEvidence = auditRig({ ...BASE, queueItems: [{ id: 9, to: "author", subject: "implement the widget", status: "done", resultSummary: "done" }] });
+assert.equal(hasFinding(noEvidence, "evidence-tree"), false, "no evidence field at all is not this rule's finding");
+
+const unreadEt = auditRig({ ...BASE, queueItems: null });
+assert.equal(ruleStatus(unreadEt, "evidence-tree"), "skipped", "an unread queue is SKIPPED, never passed");
+assert.equal(hasFinding(unreadEt, "evidence-tree"), false, "and reports no finding it cannot ground");
+console.log("  ok   a bare token FAILS; sha/branch/main/store PASS; scoped away from the other rule; unread skipped");
 
 /* ─── 3. complete_work records the evidence (real harness, real tool) ─────── */
 console.log("\ncomplete_work — evidence is recorded on the item");
