@@ -1256,6 +1256,21 @@ export async function drivePass(
     onError,
     onWoke: wrapOnWoke,
     onSuppressed,
+    // #4180: THE SUPPRESSION TRACE, made visible. One line per skipped candidate per pass — not per
+    // pass-second — carrying the seat, the reason, and for `pending` the conversation id and the
+    // MEASURED age from that submission's `admittedAt`. The age is looked up, never invented: a trace
+    // that prints a plausible number is the defect class it exists to expose. `admittedAt` is the field
+    // the attention surface already reads (src/attention.mjs), so this is the same measurement, joined.
+    pendingAgeMs: (convId) => {
+      const sub = (inspection.submissions ?? []).find((s) => s.conversationId === convId);
+      return sub && Number.isFinite(sub.admittedAt) ? Date.now() - sub.admittedAt : null;
+    },
+    onSkipped: (skip) => {
+      if (!dbPath) return;
+      const age = typeof skip.ageMs === "number" ? ` age=${Math.round(skip.ageMs / 1000)}s` : "";
+      const conv = skip.conversationId !== undefined ? ` conv=${skip.conversationId}` : "";
+      logBrokerLine(dbPath, `SKIP ${skip.seat} reason=${skip.reason}${conv}${age}`);
+    },
     // #2420: an in-pass stop predicate. Checked before each wake so a pass stops
     // submitting NEW work the moment a stop is requested, not only at the loop boundary.
     shouldStop,

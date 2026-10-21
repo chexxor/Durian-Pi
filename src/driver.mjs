@@ -140,9 +140,13 @@ export async function probeSeatReadability(storage, candidates, context) {
  */
 export async function driveOnce(
   harness,
-  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, onSuppressed, onPaused, seatFilter, paused = false, shouldStop },
+  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, onSuppressed, onSkipped, pendingAgeMs, onPaused, seatFilter, paused = false, shouldStop },
 ) {
-  const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds, paused });
+  // #4180: forward the trace. `onSkipped` receives one event per skipped candidate per pass with the
+  // reason; `pendingAgeMs` supplies the MEASURED age from the submission rows — the caller holds them,
+  // so the number is looked up rather than invented. Both optional: without them nothing is emitted and
+  // the decision is unchanged.
+  const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds, paused, onSkip: onSkipped, pendingAgeMs });
   // Legible refusal (ROADMAP 131 AC3): while paused, a seat that WOULD have been woken
   // for NEW queued work is reported, never silently skipped.
   if (paused && typeof onPaused === "function") {
