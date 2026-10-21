@@ -69,6 +69,15 @@ and held them for their own gates; do NOT answer them. #1135 is already answered
 `impl-item-4158` @`2213801` (`ui.mjs` +43/−9, new `src/tui/durable/enter.mjs`, demo) and #4163 is its
 landing list (held); impl is also editing `src/broker.mjs` + `cli.mjs:1022` for the starvation fix.
 
+**OPERATOR RULED (03:45Z, delivered to `pm` as `operator-rulings-4124-994-2026-10-21-1`):** R1 **#4124 =
+OPTION A** (held delta registration whose body IS the three missing lines + the one-verb-per-call rule,
+plus a one-line pointer into #3272's OPERATING NOTES at land time; do NOT re-cut the 20,749-char body;
+"unless lead objects" since it is lead's convention, relayed by pm) · R2 clear the stale `deferredTo` on
+#2993/#3556/#3581/#3601, do not answer them · R3 **#994 stays `held`, re-surface no earlier than
+2026-11-21, target 2026-12-21, nice-to-have** (and #2958 still says do NOT declare the quiet window).
+**Next check:** pm has NOT applied them yet — verify the new held delta item exists, the four flags are
+cleared, and #994 carries the re-surface date; the delegate made no queue transition.
+
 **Blocker:** none on the tree. `main` `b4bb4c7`, tracked tree clean except the broker-generated
 untracked `selfdev.sqlite.broker.audit.log`. Single broker pid 16140 (verify before any restart).
 
