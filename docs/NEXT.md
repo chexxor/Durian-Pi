@@ -102,6 +102,24 @@ demo**, then release **#2733** · **P7** hygiene: clear the four stale flags, cl
 until 2026-11-21. P1/P2 are the operator's asks and must not be preempted. **Next check:** pm's minted
 ids (expect ~6 new rows) and whether P1/P2 were sequenced ahead of P3–P6.
 
+**PROGRESS AT 04:05Z — P1's GATE FIRED, AND QA HELD ON A STALE SNAPSHOT.** `#3945`/`#3980`/`#4159` are
+`done` (03:54Z), so the P1 gate cleared; pm released #3946 at 03:56:25Z and qa claimed it at 03:56:27Z,
+then **re-held it 13 s later** claiming "#3941 status=claimed, #3945 has no .durig file". Both are FALSE
+against the live store (#3941 done 20:57Z, #3945 done 03:54Z): qa read **`item-3946/.durig/queue-all.md`**,
+a stale snapshot (its header: 283 non-terminal, #3945 still `queued`) — and `item-3946` holds no
+`selfdev.sqlite`, so `DURIG_DB=./selfdev.sqlite` there points at nothing. **Steered qa**
+(`operator-steer-qa-3946-2026-10-21-1`, delivered 04:03:16Z) with the live gate state and the absolute
+path command. **P5 is already DONE by impl** (#4243). The review also produced two real findings:
+**#4233** (action token renders as `t`/`t…` at w≈51..58 — a §3 hide below ~5 cells, queued to impl, NOT a
+gate for #3946) and **#4232/#4235** (9-cell name merges into the queue count — lead ruled two-digit counts
+make it worse).
+
+**LANDING-TOOL HAZARD (04:05Z) — #4247/#4248:** `land.mjs` returned `ok:true, merged:[…]` while merging
+into an **ITEM WORKTREE**, main untouched (`git merge-base --is-ancestor 81ef0fb main` exit 1), and it
+**created a store inside the worktree**. So every landing claim must be checked with
+`git merge-base --is-ancestor <sha> main` AND by reading the report's `repo` field (it must resolve to the
+shared root). Do not land from a seat worktree cwd; do not trust `ok:true` alone.
+
 **Blocker:** none on the tree. `main` `b4bb4c7`, tracked tree clean except the broker-generated
 untracked `selfdev.sqlite.broker.audit.log`. Single broker pid 16140 (verify before any restart).
 
