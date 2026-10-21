@@ -37,12 +37,13 @@ store is the generation-slot lease files (`src/genlock.mjs`, D12).
 `cli.mjs` is the operator interface and the contract that LLM operators drive.
 Every command prints **one JSON document**; human-readable output appears only on
 a terminal (D19). It is non-interactive by decision (D21) and never prompts.
+| `--dry-run` (on `up --refresh` / `reset`) | Preview what a refresh or reset would WRITE and write NOTHING: prints the DIFF of what would change (which constitution doc / seat model would change) before anything lands, so a re-apply is reviewed instead of assumed (ROADMAP 84, DELIVERED). Proof: `demo/dry-run.test.mjs` | `--dry-run` | `cli` |
+
 
 | Command | Does | Flags | Surface |
 |---|---|---|---|
 | `init` | Scaffold a bare install so `up` can follow: write `rig.json` (a verbatim copy of the hardened starter `rig.starter.json` — seats pm/impl/qa/lead, edges, inline constitution — with only a `_readme` provenance note changed) and `durian-pi.config.json` (the shipped defaults materialized from `durian-pi.config.default.json`). npm-init-like: **refuses** (exit 1, naming the file) when either file already exists, checked rig-then-config and refused BEFORE any write, so a refusal never leaves a torn half-scaffold and never clobbers an existing file; the seed is audited through the same `auditRig` `check` uses (absent-store basis), so a drifted starter fails `init` loudly instead of scaffolding garbage. The scaffold audits clean (`check rig.json` exit 0, store rules skipped). Proof: `demo/init.test.mjs` | | `cli` |
 | `up <rig.json>` | Create/refresh seats, edges and constitution from a spec; idempotent | `--refresh` re-applies stored prompts, models **and** each seat's working directory | `cli` |
-| `--dry-run` (on `up --refresh` / `reset`) | Preview what a refresh or reset would WRITE and write NOTHING: prints the DIFF of what would change (which constitution doc / seat model would change) before anything lands, so a re-apply is reviewed instead of assumed (ROADMAP 84, DELIVERED). Proof: `demo/dry-run.test.mjs` | `--dry-run` | `cli` |
 | `worktree <path>` | Create an isolated per-item checkout for seats to write in. Forks the **visible state**: a dirty source no longer refuses — the uncommitted content is carried into the fork and returned as `{carried}` (and logged by the broker), so isolation does not depend on a pristine tree (#506), while the anti-stale rule keeps the fork matching what the tree visibly holds (#240). Deleted-but-uncommitted paths stay deleted. Dependencies are installed per worktree (`npm ci --prefer-offline`), never bridged with a `node_modules` junction (Git 2.42 deletes *through* junctions) | `--source <dir>` | `cli` |
 | `ps` | Seat roster with conversation ids and roles, each seat's configured `model`, and its worktree `root` when a non-default cwd is persisted | | `cli` |
 | `send <seat> <text>` | Steer a seat, wait for its reply, return it inline — **DEPRECATED** (stderr notice, #1585): prefer the spool, `node intent.mjs <seat> --body-file <file>` (the broker delivers) + `log`/`status` for the reply; being retired | `--stream` / `--no-stream`, `--body-file <path>` (or `-`), `--request-id <id>` (retry-safe) | `cli` |
@@ -52,6 +53,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 | `reset <seat> [handoff]` | (alias `clean`) break a seat out of a degenerate context by writing a `pi.reset` boundary; the durable transcript is preserved | | `cli` |
 | `compact <seat> [instructions]` | Summarize a seat's OLDER context into a `pi.compaction` summary entry (the transcript is preserved; only the model context shrinks). With a broker alive it ROUTES through the command spool (`op:compact`, #1904) so the broker applies it live — the rig keeps running; with no broker it opens its own harness and refuses a live generation lease | | `cli` |
 | `stop <seat> [reason]` | Emergency-stop: halt a seat's in-flight run across processes, settle it terminal as `aborted: <reason>`, release the lease | | `cli` |
+| `pause` / `unpause` | Drain the rig to quiescence before a broker upgrade (ROADMAP 131): `pause` sets a persisted rig-level flag — the driver stops waking seats to CLAIM new work and `claim_work` refuses legibly until `unpause`; in-flight work keeps settling and `pause` never kills (AC2). `pause --wait` holds until every seat settles and reports `quiesced: true` (AC5). With a broker alive it ROUTES through the command spool (`op:pause`/`op:unpause`, #1841); with no broker it applies with its own harness. `unpause` takes no reason. **Known limits (lead #1952):** pause is a SNAPSHOT — the intent-drain barrier is a registered follow-up (#1965), so `pause --wait` does not yet guarantee nothing will START until unpause; and pause is provenance-only, not operator-authorized (#1966) | `--wait`, `[reason]` (pause only) | `cli` |
 | `queue` | Dump every work item with status and transitions; a `summary` gives counts by status plus the notices count, so notices are distinguishable from work | `--active`, `--status <s>`, `--all` | `cli` |
 | `events` | Durable read-only event feed with a monotonic `seq` cursor; a reconnect from the last `seq` resumes rather than replaying. No harness attach, nothing written | `--since <seq>`, `--follow` | `cli` |
 | `log <seat> [limit]` | A seat's conversation, turn-grouped. `--follow` also shows the in-flight **partial** as streaming — a `partial` object on JSON, a live region on a TTY — always distinct from committed turns | `--follow`, `--full`, `--tool-bg`, `--theme dark\|light`, `--human`/`--json` | `cli` |
@@ -181,6 +183,7 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Seat-prepared workspace (`prepare_workspace`)** | The workspace switch is a seat TOOL, not the broker: called after `claim_work` and before any filesystem work, it creates the item's isolated git worktree at `<root>/item-<id>` and persists THAT conversation's cwd to it via `configure`, so `makeSeatEnv` resolves each seat to its own tree. The broker no longer sets a process-global `DURIAN_PI_SEAT_ROOT` (which pointed every seat woken in one pass at one worktree) or creates worktrees itself. Idempotent on rerun (an existing worktree is reused, so a resume never nests one inside another, #506); `complete_work` retires it with `force:false`, so uncommitted work is never discarded. A dirty shared tree still forks + carries + reports (`carryVisibleState`), so isolation holds while seats are mid-edit | `src/seattools.mjs` `prepareWorkspace`, `src/worktree.mjs` `prepareSeatWorkspace`/`removeSeatWorkspace`, `src/rig.mjs` `complete_work`, `constitution.txt` | `demo/prepare-workspace.test.mjs`, `demo/broker-dirty-fork.test.mjs` | cli |
 | **Job-Object process reaping** | Windows has no SIGTERM; the seat's process tree is reaped by a Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) and the worktree is removed only after the tree is confirmed dead | `src/job-object.mjs` | `demo/job-object.test.mjs` | cli |
 | **Degeneration guard (D64, #874, #875)** | The broker's supervise pass resets a seat whose CURRENT run outgrows a conservative bound, writing the existing `pi.reset` boundary via `conversation.reset` so the next wake re-anchors the seat from its durable instructions. Two causes beyond tool-turn/context-token/step-repetition/malformed-call: a **per-turn wall-clock bound** as its own cause (#874) reading `AssistantMessage.durationMs` (a high 5-minute threshold, so a legitimately slow turn is never reset — a run that badly OUTGROWS a bound is), and a **named-pattern prose registry** (#875) where each pattern is a PURE predicate over one assistant turn's text, named in the reason as `degenerate-text=<name>=<count>>=<bound>` and proven against real turn fixtures (positive = real loop, negative = healthy turn). Diagnosis / adding a pattern: `docs/runbooks/degeneration-guard.md` | `src/degeneration.mjs`, `src/attention.mjs` `TEXT_PATTERNS`/`matchTextPatterns`, `src/supervisor.mjs`, `scripts/degen-scan.mjs` | `demo/degeneration-duration.test.mjs`, `demo/degeneration-text.test.mjs`, `docs/runbooks/degeneration-guard.md` | cli |
+| **Rig-level pause** (`pause`/`unpause`) | Drains the rig to quiescence before a broker upgrade (ROADMAP 131, #1841): `pause` sets a persisted rig-level flag — the driver stops waking seats to CLAIM new work (`src/driver.mjs` `selectWakes` paused gate) and `claim_work` refuses legibly (`PAUSED: …`, `src/rig.mjs`); in-flight work still settles and `pause` never kills (AC2). Applied by the broker through the command spool (`op:pause`/`op:unpause`) when one is alive, so it never becomes a second store writer; `pause --wait` holds until TRUE quiescence (AC5); `status`/`watch` report the flag read-only (`src/readapi.mjs`); an absent store reads as unpaused. **Known limits (lead #1952):** pause is a SNAPSHOT — the intent-drain barrier is a registered follow-up (#1965), so `pause --wait` does not yet guarantee nothing will START until unpause; and pause is provenance-only, not operator-authorized (#1966) | `cli.mjs` `cmdPause`, `src/broker.mjs` `applyPauseOp`/`SPOOL_OPS`, `src/driver.mjs` `selectWakes`, `src/rig.mjs` `claim_work`, `src/readapi.mjs` `paused` | `demo/pause.test.mjs` | cli |
 | **Scratch-worktree landing helper (`scripts/land.mjs`)** | A landing pass never leaves the shared tree mid-merge: the helper merges the named branches into a SCRATCH DETACHED worktree, runs the suite there (`--suite`), and advances `main` only by a clean fast-forward once the result is clean (2026-10-17 landing-safety incident: a conflicted `src/checkup.mjs` in the shared tree killed every `node cli.mjs` verb). It is also the pre-flight ENFORCEMENT chokepoint (#1164 Q3): refuses to land on a tree with tracked modifications, on a tree already mid-merge, and on a held genlock slot; a conflict STOPS and reports the conflicted paths. Not built on purpose: a hunk-picker / `apply_patch` (conflicts needing SYNTHESIS cannot be produced by selection); any conflict tool is gated on measured incidence (ROADMAP 100) | `scripts/land.mjs` | `demo/land-helper.test.mjs`, `docs/runbooks/merge.md` | cli |
 | **Concurrent demo-suite runner** | `scripts/suite.mjs` runs every `demo/*.test.mjs` in a bounded pool (`--jobs N` / `DURIG_SUITE_JOBS`, 1..32, **default 8**) instead of a sequential loop, and gives each demo its own `TMP`/`TEMP`/`TMPDIR` so two demos calling `os.tmpdir()` cannot collide. The classifier and exit codes are unchanged (0 green / 1 real failure / 2 environmental); failures print in test order. Measured 2026-10-20: sequential ~10 min → **64s at 8 jobs**, 51s at 16, both `pass=179 fail=1` (the `pitui` #2412 assertion) — identical to the sequential baseline | `scripts/suite.mjs`, `src/suite.mjs` | `demo/suite-env.test.mjs` (incl. `--jobs` usage errors), `docs/runbooks/land.md` | cli |
 | **Broker observability and bounds** | The broker writes `<db>.broker.log`; each `PASS` logs its DURATION and the seats woken (`PASS <n> ms=<dur> woke=<a,b>`) so a long pass that waited is legible, not guessed; `serve --max-duration` bounds wall-clock and exits; `serve --stop` settles cooperatively under load instead of a forced kill. A pass waits only on the conversations it woke and ends early on a wake-relevant commit (D65), so one slow run does not delay re-waking a seat that already settled | `src/broker.mjs`, `cli.mjs` | `demo/broker-liveness.test.mjs`, `demo/broker-log.test.mjs`, `demo/broker-max-duration.test.mjs`, `demo/broker-cooperative-stop.test.mjs` | cli |
@@ -415,44 +418,19 @@ it to the live store).
 ## 10. Proof surface
 
 The entire check surface is the demos plus `node --check`; there is no build or
-lint step.
+lint step. The suite is **every `demo/*.test.mjs`** — the offline test demos, one
+runnable proof per guarantee, each exit 0 on success. It is enumerated from the
+directory, so the count is derived, not maintained by hand:
 
-**123 offline test demos** — one runnable proof per guarantee, each exit 0 on success. (Measured on
-this checkout: 123 `demo/*.test.mjs` files — the suite is every `demo/*.test.mjs`, the exact set
-`scripts/land.mjs --suite` runs; at the broker upgrade `234e06e` it was 115, validated 115/0 with the
-TUI suite 15/15 on pin `8efd314f`.) The full enumeration:
 
-```
-autostart · blocked · broker · broker-cooldown-revisit ·
-broker-cooperative-stop · broker-dirty-fork · broker-inbox ·
-broker-intent-wake · broker-liveness · broker-log ·
-broker-max-duration · broker-reconcile · broker-seat-attr ·
-broker-strand · broker-wakepath · broker-wake-return ·
-broker-worktree-sweep · chatlog · check · check-autodiscover ·
-check-evidence · cli · cli-broker-refuse · cli-help · commit-model ·
-commit-secrets · compact · config · confine · constitution ·
-context-measure · converter · coordinator-queue · curate · defer ·
-degeneration · degeneration-duration · degeneration-text ·
-driversurvive · driversurvive-pre · dry-run · errorwording · eval ·
-events · extensions · f34 · format · genlock-hardening · init ·
-instance-key · job-object · land-helper · livestream · malformedcall ·
-mergeguard · metrics · notices · optimizer · ownership · peekqueue ·
-persistence · pitui · prepare-workspace · primer · provenance · race ·
-readapi · readboundary-corrupt-live · rearmclaim · refresh ·
-repeat-call · reset · resume · run · runbook-rules · sanitize ·
-scheduler · seat-commit-instructions · seatguard · seatmodel ·
-seatroot · seattools · secretdetect · secretredact · secrets ·
-singleflight · stalledclaim · starter · stop · stoprequest ·
-storewrite · stranded · streamcli · streamview · structuredhead ·
-supervisor · syncpi · textwidth · thincontext · thinkinglevel ·
-tui-backfill · tui-buffer · tui-client · tui-conversation ·
-tui-golden · tui-input · tui-input-overlay · tui-multipane ·
-tui-restore · tui-roles · tui-sync-output · tui-thinking ·
-tui-toolblock · ui-driver · up-model-reset · viewmodel · watch ·
-watchview · worktree · worktree-lifecycle · worktree-recursive-carry ·
-worktree-reuse-deps · worktree-sweep ·
+```bash
+node -e "const fs=require('node:fs');const n=fs.readdirSync('demo').filter(f=>f.endsWith('.test.mjs'));console.log(n.length)"
 ```
 
+`scripts/land.mjs --suite` runs exactly this set. (At the broker upgrade `234e06e`
+it was 115, validated 115/0 with the TUI suite 15/15 on pin `8efd314f`; a
+hand-pinned count has since drifted and is not kept here — a per-functional-area
+enumeration of the suite is item `#1558`.)
 **4 runnable demo programs:**
 
 | Demo | Shows |

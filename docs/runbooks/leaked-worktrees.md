@@ -13,7 +13,42 @@ check_rule: null
 
 ## When to use
 `git status` or `git worktree list` shows stray `item-<id>` worktrees, or `serve.err` logs
-`worktree: refusing to remove … N uncommitted path(s)`.
+`worktree: refusing to remove ... N uncommitted path(s)`.
+
+### FIRST: IS IT A WORKTREE, OR A LEFTOVER PLAIN DIRECTORY? (#4656/#4678)
+**ALL TEN DIRECTORIES THAT BLOCKED EVERY LANDING ON 2026-10-20 WERE PLAIN DIRECTORIES, NOT WORKTREES.**
+NONE had a `.git` file and NONE was registered in `git worktree list`, so **`git worktree move` DOES NOT
+APPLY TO THEM** -- the RELOCATE recipe below is for REGISTERED worktrees and is the WRONG TOOL for this
+case. Tell them apart in one line:
+```bash
+test -e <dir>/.git && echo WORKTREE || echo PLAIN-DIRECTORY
+git -C <repo> worktree list --porcelain | grep -F "$(cd <dir> && pwd)"   # any match means REGISTERED
+```
+`item-2801` is the case that proves the distinction: its **REGISTERED worktree lives at
+`../pi-opendurig.worktrees/item-2801`**, so the `item-2801/` at the repo root is a **LEFTOVER AFTER a
+relocate pass**. **"Registered ELSEWHERE" is a different thing from "registered HERE", and it has a
+different remedy** -- treating the leftover as a worktree makes the recipe fail, and treating it as junk
+loses residue.
+
+**THE REMEDY for a leftover plain directory is PRESERVE-THEN-REMOVE, not `worktree move`**: copy it to
+the archive, VERIFY the copy by file count and byte total, and only then remove the original.
+`scripts/reclaim-root-leftovers.ps1` does exactly that, per directory, idempotently and loudly:
+```bash
+powershell -NoProfile -File scripts/reclaim-root-leftovers.ps1 -Repo <shared root> -DryRun   # first
+powershell -NoProfile -File scripts/reclaim-root-leftovers.ps1 -Repo <shared root>
+```
+It runs the empty one first and the 473-entry one LAST, refuses if a directory is missing (idempotent),
+refuses if a preserved copy already exists with DIFFERENT content, captures `git worktree list` before and
+after and DIFFS it (it must be unchanged -- nothing here is registered, so **no `worktree prune`**), and
+prints one line per directory. **It writes at the SHARED ROOT, outside every seat root, so a SEAT must not
+run it; the operator (or a delegate holding that authority) must.** It touches no store, so the broker may
+keep driving.
+
+**AND THE GATE THAT REFUSES THE LANDING IS NOT PORCELAIN** (#4139): `scripts/land.mjs` reads the repo
+root's DIRECTORY LIST and compares it to `git worktree list`, so it fires on directories `git status`
+NEVER MENTIONS -- `/item-*/` is in `.gitignore`. Measured 2026-10-20: porcelain **0 lines** and the landing
+**REFUSED for 10 stray `item-*/` directories**, with nine clean branches stacked behind it. **An empty
+porcelain does NOT clear this gate.**
 
 ## Impact
 Leaked worktrees are not just clutter: a dirty orphan pins its **item branch**, so the merged ref can
@@ -101,6 +136,52 @@ sufficient.
    Then let the next broker start sweep it, or remove it by hand with `git worktree remove item-<id>`
    once clean.
 3. Do not force-remove a dirty worktree while a seat may own it: check the queue item's status first.
+### Retention for the relocated archive (`../pi-opendurig.worktrees/`)
+
+Relocating a dirty tree is **not a disposition** — it is a deferral, and nothing in this runbook ever
+reclaims the archive. Measured 2026-10-20: **179 registered worktrees, 179 carrying changes, 1,562 changed
+paths** (145 with their HEAD already MERGED into `main`, 34 UNMERGED), occupying ~20 GB. So the honest
+answer to "do these stay forever?" is: they do, unless someone applies the rule below.
+
+**The rule:** an archived tree is kept only while it holds something the repo cannot reproduce from a ref.
+That gives three tiers, and every removal goes through `git worktree remove` (never `Remove-Item` — these are
+REGISTERED worktrees and a hand-delete leaves 179 stale entries in `.git/worktrees/`).
+
+1. **Merged + clean** → remove outright (`git worktree remove <wt>`), then `git worktree prune`.
+2. **Merged + dirty** (the bulk: 145 trees today) → the branch content is already on `main`; the only value
+   is the uncommitted residue. Export it losslessly, then remove:
+   ```bash
+   git -C <wt> diff --binary > <archive>/<name>.patch
+   git -C <wt> status --porcelain | awk '$1=="??"{print $2}'   # copy these: they are NOT in the patch
+   git worktree remove --force <wt>
+   ```
+3. **Unmerged** (34 today) → the commits live on branch refs, so the refs preserve them; the tree itself is
+   only needed while someone may resume the work. Export the same two artifacts and remove, OR keep the tree
+   and record why in the item. Never keep one silently.
+
+**Resolve each tree's ITEM STATUS from the store before deciding** (operator's suggestion, 2026-10-20):
+the directory name carries the id (`item-<id>` or `<seat>-item-<id>`), so one `queue` read classifies the
+whole archive. Measured on the 179 trees: **179/179 map to a TERMINAL item** (done/cancelled), **0 live** --
+which is what makes a bulk pass defensible at all. A live (queued/claimed/deferred/held) item is the one
+case that keeps a tree unconditionally, and an id that is not in the store at all means someone must look
+before anything is deleted.
+
+**And check whether the tree's HEAD survives in a REF, because deleting a worktree deregisters its HEAD.**
+For the 34 unmerged trees here, **13 hold commits contained by NO ref** (`item-1704`, `item-2103`,
+`item-2154`, `item-2179`, `item-2182`, `item-2186`, `item-2515`, `item-2578`, `rel-item-673`, `700`, `705`,
+`746`, `860`) -- removing those trees would eventually let `gc` collect real work. Preserve them first:
+`git update-ref refs/heads/archived/<name> <sha>` (or `git bundle create`), THEN export the diff and remove.
+
+So the full decision is a three-question ladder, in this order:
+1. **Item live?** -> keep the tree (and say why in the item).
+2. **Item terminal?** -> export the uncommitted residue (`diff --binary` patch + copied untracked files).
+3. **HEAD not in any ref?** -> `git update-ref` an `archived/*` ref (or bundle) first. Then
+   `git worktree remove --force` and `git worktree prune`.
+
+**Never** hand-delete the whole directory: it is a registered-worktree set, and untracked files in it are
+invisible to a patch. **Do** sequence any bulk pass after heavy installs/builds — it is hundreds of `git`
+invocations and will fight a model pack build for the disk.
+
 4. **Tidy without discarding:** a terminal orphan can be relocated out of the project root instead of
    removed — `git worktree unlock <wt>` then `git worktree move <wt> <archive-dir>/<wt>` — which preserves
    every uncommitted file and every branch. The delegate used `../durian-pi.worktrees/` (2026-10-17:

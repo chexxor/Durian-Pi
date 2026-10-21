@@ -6,6 +6,8 @@
   "type": "module",
   "main": "src/rig.mjs",
   "scripts": {
+    "test": "node scripts/test.mjs",
+    "test:area": "node scripts/test.mjs --area",
     "demo": "node demo/offline.mjs",
     "test:tui": "node demo/tui-suite.mjs",
     "cli": "node cli.mjs",
@@ -14,10 +16,10 @@
     "intent": "node intent.mjs"
   },
   "dependencies": {
-    "@earendil-works/chord": "^1.0.0",
+    "@earendil-works/chord": "^1.3.0",
     "@earendil-works/pi-ai": "^1.0.0",
     "@earendil-works/pi-coding-agent": "^1.3.0",
-    "@earendil-works/pi-durable": "^1.0.4",
+    "@earendil-works/pi-durable": "^1.3.0",
     "@earendil-works/pi-tui": "^1.1.0",
     "get-east-asian-width": "^1.6.0",
     "js-yaml": "^5.4.3"

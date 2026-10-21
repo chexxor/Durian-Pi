@@ -25,7 +25,7 @@ python -c "import json;[print(s['name'], s.get('model')) for s in json.load(open
 |---|---|---|---|
 | `pm` | program manager | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | intake, decomposition, routing, tracking |
 | `impl` | implementation | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | author for build items |
-| `qa` | verifier | `Qwen/Qwen3.6-35B-A3B` | independent; a DIFFERENT FAMILY from the author seats (Qwen, not DeepSeek) |
+| `qa` | verifier | `zai-org/GLM-5.3-Flash` | independent; a DIFFERENT FAMILY from the author seats (GLM, not DeepSeek); shares a model with `auditor`, so `qa2` is the distinct third family |
 | `qa2` | verifier (2) | `google/gemma-4-31B-it` | second verifier, third family |
 | `lead` | technical lead | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | scope/priority rulings; escalation target |
 | `architect` | systems architect | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | cross-cutting design, failure modes, durable decisions |
@@ -43,18 +43,19 @@ verifies** — not that any particular two names hold a particular pair of model
 
 - **authors** are `impl` (DeepSeek-V4.1-Flash-1017) and, for docs/tooling, `scribe` (DeepSeek-V4-Flash-0731) and
   `devtools` (`deepseek-ai/DeepSeek-V4.1-Flash`);
-- **verifiers** are `qa` (`Qwen/Qwen3.6-35B-A3B`), `qa2` (gemma), and `auditor` (GLM-5.3-Flash).
+- **verifiers** are `qa` (GLM-5.3-Flash), `qa2` (gemma), and `auditor` (GLM-5.3-Flash).
 
-So the pairwise requirement holds for the main loop (`impl` vs `qa`: DeepSeek vs Qwen; `impl` vs
+So the pairwise requirement holds for the main loop (`impl` vs `qa`: DeepSeek vs GLM; `impl` vs
 `auditor`: DeepSeek vs GLM; `scribe` vs `auditor`: DeepSeek vs GLM) — **but it does NOT hold everywhere,
-and the exception is worth knowing: `qa2` (gemma) is the only verifier that differs from BOTH DeepSeek
-authors and Qwen `qa`, so a `qa`-authored check verified by `qa2` stays in-family only if the content is
-gemma's own.** Check the pair, do not trust a slogan: the old "GLM authors vs DeepSeek verifiers" reading
+and the exception is worth knowing: `qa2` (gemma) is the only verifier that differs from BOTH the DeepSeek
+authors and the GLM pair (`qa`, `auditor`), so a `qa`- or `auditor`-authored check verified by `qa2` stays
+cross-family.** Check the pair, do not trust a slogan: the old "GLM authors vs DeepSeek verifiers" reading
 is **FALSE** after the 2026-10-19 model moves and must not be quoted as policy. **Since 2026-10-20 the
-local provider is DOWN by operator direction** — `qa` and `devtools` are back on DeepInfra models they
-held before the local move, and a `devtools`-authored tooling change verified by `qa` is DeepSeek vs
-Qwen, i.e. cross-family again (the shared-family exception above was a property of the local era, not a
-standing rule).
+local provider is DOWN by operator direction** — `devtools` is back on the DeepInfra model it held before
+the local move, and a `devtools`-authored tooling change verified by `qa` is DeepSeek vs GLM, i.e.
+cross-family again (the shared-family exception above was a property of the local era, not a standing
+rule). *(2026-10-21: `qa` moved `Qwen/Qwen3.6-35B-A3B` → `zai-org/GLM-5.3-Flash` for cost; `qa` and
+`auditor` now share a model, so `qa2` is the only distinct verifier family.)*
 `security` stays outside the split by design (`VERIFIER_TERMS` does not match its name, so it keeps
 `write`/`edit`/`shell`).
 
@@ -99,6 +100,55 @@ DURIAN_PI_SEAT_ROOT=<that>/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs 
 
 `up --refresh` re-points each seat's persisted `cwd`; the F12 guard fails closed if `DURIAN_PI_SEAT_ROOT`
 disagrees with what a seat already has, so re-point rather than guessing.
+
+## Pinned-pi reproduction in worktrees
+
+pi is a fast-moving monorepo with no published dev channel. durig pins a specific commit in
+`pi-main.pin.json` (sha + package list) and builds from source via `scripts/sync-pi.mjs`.
+
+### How it works
+
+When a worktree is created, `installWorktreeDeps` runs `npm ci --prefer-offline` to install
+dependencies from the committed lockfile. This resolves to **released registry packages**
+(e.g. `@earendil-works/pi-durable@1.1.0`), which may differ from the production set built
+from the pin. A post-install step then runs `node scripts/sync-pi.mjs --link` to point
+`node_modules` at the locally built `vendor/pi-main` tree, restoring parity with the
+committed pin.
+
+### Manual reproduction
+
+If a worktree needs the pinned build but `--link` was not run (e.g. `vendor/pi-main` was
+not yet built), run it manually:
+
+```bash
+cd <worktree-path>/durian-pi
+node scripts/sync-pi.mjs --sync   # build the pinned commit in vendor/pi-main
+node scripts/sync-pi.mjs --link   # point node_modules at the built tree
+```
+
+`--sync` fetches the exact pinned commit (not the branch tip) and builds each package.
+`--link` installs `file:` specifiers so `node_modules` resolves to the built tree.
+
+### Drift detection
+
+Run `node scripts/sync-pi.mjs` (no flags) to check whether the pin is still at upstream
+tip. If it reports `drift: true`, the pin has moved and `--update` can advance it:
+
+```bash
+node scripts/sync-pi.mjs --update   # move pin to upstream tip, then build
+node scripts/sync-pi.mjs --link     # point node_modules at the new build
+```
+
+### Pin file format
+
+`pi-main.pin.json` contains:
+- `sha` — the exact commit to pin (string)
+- `packages` — array of `{ name, dir }` objects listing the workspaces to build
+- `repo` — upstream git URL (read by `sync-pi.mjs`)
+- `branch` — branch to track for drift detection
+- `pinnedAt` — ISO timestamp of the last update
+
+The `vendor/pi-main/` directory is gitignored; it is fully reproducible from the pin.
 
 ## How to find the next item (do not re-derive it)
 
@@ -500,6 +550,9 @@ consequences, both the opposite of intuition:
    fits both cards' 48 GB and gets the split's prefill gain; a 64–75 GB model does not, and its prefill
    stays single-card speed.
 
+**SUPERSEDED ON QUALITY — read the BenchLM section below before acting on this table.** The speeds
+stand; the model CHOICE here was made without benchmarks and is wrong for authoring seats.
+
 **Ranked configurations for 2–4 concurrent seats (highest aggregate tokens/s first).** Measured points:
 Qwen3.6-35B-A3B with every expert in VRAM writes **323 tok/s** alone and **83.9 → 173.5 → 252.0 → 325.4
 tok/s** at 1/2/4/8 slots (R9700, Q4_K_XL); slot cost **1.5 GB per 32K** (3.0 GB per 64K) of VRAM;
@@ -522,3 +575,174 @@ Qwen3.6-35B-A3B gives answers of DeepSeek-V4.1-Flash quality on this team's work
 The only honest test is an A/B on real queue items — e.g. move the high-volume, low-judgment seats
 (`scribe`, `pm`, `qa2`, `designer`) to local first and keep `impl`/`lead`/`architect` on DeepSeek until the
 local results are inspected.
+
+### Local model quality: benchmark figures + quantization (2026-10-20)
+
+The config table above ranked local models on SPEED only. Capability scores and the quantisation penalty
+change the recommendation. Scores below are BenchLM as of 2026-10-19 (`benchlm.ai/models/<slug>`); Agentic
+and Coding are the two categories that match durig's work (tool use + a code change in a real repo).
+
+| Model | Overall | Agentic | Coding | Rows that decide it |
+|---|---|---|---|---|
+| **DeepSeek V4.1 Flash 1017** (the seat to replace) | 65.7 (#35/226) | 61.7 (#24, 82nd pct) | **60.9 (#18, 89th pct)** | Terminal-Bench 2.1 **90.6%**, DeepSWE **77.0%**, NL2Repo **68.2%**, Codeforces 3471, ProgramBench 29.1% |
+| Qwen3.8-Flash-Next (= the Swift 1.5 base) | 62.9 (#44) | **65.5 (#17, 88th pct)** | 51.6 (#42, 73rd pct) | SWE-bench Pro 62.5%, DeepSWE 58.7%, NL2Repo 48.1%, LiveCodeBench v6 91.9% |
+| GLM-5.3-Flash | 58.5 (#59) | 56.9 (#37, 72nd pct) | 48.1 (#47, 69th pct) | Terminal-Bench 2.1 84.3%, SWE-bench (Vals) 92.0%, DeepSWE 63.4%, NL2Repo 56.3% |
+| Qwen3.6-27B | 48.6 (#108) | 29.1 (#97, 26th pct) | 34.8 (#80, 47th pct) | SWE-bench Verified 77.2%, SWE-bench Pro 53.5%, Terminal-Bench 2.0 59.3%, NL2Repo 36.2% |
+| Gemma 4 26B A4B | 45.6 (#121) | **not measured** | 30.9 (#94, 38th pct) | LiveCodeBench 77.1%, MRCRv2 44.1% — and see the trap below |
+| **Qwen3.6-35B-A3B** (the speed pick above) | 43.5 (#128) | **30.2 (#96, 26th pct)** | 31.5 (#93, 39th pct) | SWE-bench Verified 73.4%, SWE-bench Pro 49.5%, Terminal-Bench 2.0 51.5%, **NL2Repo 29.4%** |
+| LFM2.5-24B-A2B | 37.7 (#150) | 31.0 (#94, 28th pct) | 25.3 (not ranked) | SWE-bench Verified 51.0%, tau3 8.0%, IFEval 96.8% |
+
+**What this says, plainly:**
+1. **The fast local pick is NOT a DeepSeek replacement.** Qwen3.6-35B-A3B is 26th agentic percentile against
+   DeepSeek's 82nd, and on NL2Repo (build a working repo from a description — the closest published analogue
+   to a durig queue item) it scores **29.4% against DeepSeek's 68.2%**. It is a coding specialist relative to
+   its own predecessors, but an independent comparison puts the MoE 4-20 points BELOW a dense 27B on coding
+   benchmarks: **pick it for throughput, never for peak quality.**
+2. **Qwen3.8-Flash-Next is the quality leader among the models PolyStrata can run here** — overall 62.9 vs
+   65.7, agentic percentile HIGHER than DeepSeek (88 vs 82), coding lower (73 vs 89); SWE-bench Pro 62.5%
+   even tops Claude Opus 4.6 Max (53.4) and its DeepSWE 58.7 beats DeepSeek-V4-Flash-0731 (54.4). Its CODING
+   gap to V4.1-Flash-1017 is what a verifier and a human reviewer must absorb.
+3. **Gemma 4 26B-A4B is a trap for coding agents:** SWE-bench Verified **17.4** (roughly 4-5x worse than
+   Qwen3.6-35B-A3B) while its LiveCodeBench looks respectable at 77.1 — and Google omitted SWE-bench from its
+   own table, which is why BenchLM's profile has NO agentic rows at all. Do not pick it on LiveCodeBench.
+4. **GLM-5.3-Flash is closest on the coding rows** (Terminal-Bench 2.1 84.3 vs 90.6; NL2Repo 56.3 vs 68.2)
+   and has 1M context — but PolyStrata needs 79-114 GB for it and has not run it on Windows.
+
+**QUANTIZATION erodes all of the above, and it is the deciding variable here** (PolyStrata `docs/MODELS.md`,
+`docs/QUANTS.md` — "same top token as Q8_0" is the repo's quality proxy):
+
+| Size | RAM+VRAM requirement | Same top token as Q8_0 | Verdict |
+|---|---:|---:|---|
+| Q2_0 | 37.6 GB | - | fastest, "good" |
+| IQ2_XS (**the Swift 1.5 file on this PC**) | 39.2 GB | below IQ3_S | fast, "better" — but a 2-bit size |
+| IQ3_XXS | 47.0 GB | - | "great" |
+| **IQ3_S** | **54.8 GB** | **87.7%** | "**best: matches the full model on the published tests**" |
+| UD-Q4_K_XL (Unsloth family) | ~88 GB of RAM for all experts | 93.1% | more quality, doubles the memory and slows decode |
+
+So the numbers quoted in the benchmark table are FULL-PRECISION capabilities; **Swift IQ2_XS and Qwen3.6
+UD-Q3_K_M run BELOW them.** For Qwen3.8-Flash-Next the quality-per-byte pick is **IQ3_S**, not IQ2_XS — it
+is the size the repo says matches the full model, and 54.8 GB still fits 96 GB with room for the OS and the
+KV host copy. Swift's own benefit is token efficiency, not raw accuracy: at high thinking it holds ~89.6%
+accuracy while cutting thinking tokens by 63.4%, which matters in an agent loop where every reasoning token
+is latency.
+
+**Revised recommendation for "replace DeepSeek V4.1 Flash across 2-4 concurrent seats":**
+2x RTX 3090 + **96 GB RAM**, running **Qwen3.8-Flash-Next at IQ3_S** (54.8 GB requirement) with
+`"parallel": 2-3` and a generous conversation cache. That is the configuration that keeps the quality gap as
+small as locally possible while still holding 2-3 seat contexts. Expect 2-card decode in the 100-140 tok/s
+range (measured 137 tok/s on a 2x3090 x16+x4 pair at one slot) and prefill near 1.8 k tok/s — the number that
+decides whether 385 M cached-prefix tokens/day are affordable. If a cheaper rig is the goal, the **Coder variant** is the best quality-per-dollar local option —
+`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-Coder-GGUF` (https://huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-Coder-GGUF),
+PolyStrata's `docs/MODELS.md` "Coder" row. Verified from the model card (2026-10-20): half the routed
+experts removed (256 of 512 per layer, 48 layers, 10 active), remaining weights at 3.5 bpw, **58.4 GB
+total of which only 29.6 GB must be resident** (the 28.8 GB n-gram shard can be served from disk);
+**SWE-bench Verified 79.20 vs the BF16 base's 82.80 = 95.7% retained**, LiveCodeBench v6 87.43 = 100%
+retained, both at xhigh reasoning. The 2026-10-17 rebuild raised SWE-bench Verified from 75.60 (an
+earlier 91% figure quoted in older notes is that superseded build). Its own card warns the reduction is
+DIRECTED at code/agentic/vision/spatial and degrades elsewhere — so it is a coding seat, not a
+generalist, and the unpruned GSQ-RCO release is the general-purpose choice.
+
+**It IS the row PolyStrata's own MODELS.md calls "Coder (IQ1_M)"**, so the measured speeds apply to the
+file we would install (RTX 5070 12 GB / Ryzen 5 7600 / 64 GB, `docs/MODELS.md`): **55 tok/s short chat,
+43 tok/s at 128K context, 2,180 tok/s prompt read** -- slower to write than IQ2_XS (79/63) but far more
+prefill-friendly per GB, with shard 1 at 29.6 GB and experts ~23 GB of RAM (runs on a 32 GB PC, 262K
+context on 64 GB). PolyStrata puts an RTX 3090 at roughly **100-140 tok/s** for the Qwen3.8 sizes.
+
+**Two doc defects found while checking this, so nobody repeats them as fact:** (a) PolyStrata's
+`MODELS.md`/`DETAILS.md` still quote **91%/91.3% of SWE-bench Verified and 98.7-99% of LiveCodeBench**
+for the Coder -- those are the pre-2026-10-17 build; the model card's current figures are **95.7% and
+100%**; (b) the same page says the Coder "reads long prompts the fastest of all", but its own table has
+Q2_0 at 2,650 tok/s against the Coder's 2,180 (that column is a 32K read; a 128K read is not in the
+table, so the claim is at best unverified).
+
+### Qwen3.8 variants per hardware configuration (2026-10-20)
+
+Requirements from PolyStrata `docs/MODELS.md` + `docs/DETAILS.md`. A size fits when **RAM holds the experts
+plus ~10 GB** (Windows + other programs); the dense part of shard 1 goes to the card.
+
+| Variant | Download | RAM for experts | RAM+VRAM total | Quality / note |
+|---|---:|---:|---:|---|
+| **Coder (IQ1_M)** | shard 1 = 29.6 GB | ~23 GB | fits a 32 GB PC | 95.7% of base SWE-bench Verified, 100% LCB; weak outside code and non-English |
+| Q2_0 | 66 GB | ~34 GB + 6 | 37.6 GB | fastest; "good" |
+| IQ2_XS | 68 GB | ~36 GB + 6 | 39.2 GB | "a bit better"; **the Swift 1.5 file on this PC** |
+| IQ3_XXS | 76 GB | ~43 GB + 6 | 47.0 GB | "best" of the small sizes |
+| **IQ3_S** | largest of the four | ~50 GB + 6 | **54.8 GB** | **matches the full model on the published tests** |
+| UD-IQ4_XS (Unsloth) | 94 GB | ~62 GB | ~72 GB | more quality, slower decode |
+| UD-Q4_K_XL | 111 GB | ~72 GB | ~88 GB | 93.1% same-top-token vs Q8_0 |
+| UD-Q5_K_XL / UD-Q6_K_XL / Q8_0 | 158 / 169 / 188 GB | ~98 / 108 / 126 GB | ~108 / 118 / 136 GB | needs 128-192 GB RAM |
+
+Swift 1.5 (a fine-tune) exists in the SAME sizes as the original, with about the same RAM and speed per token,
+and thinks much shorter before answering -- so wherever a size fits, "Swift <size>" is a drop-in.
+
+| Your configuration | Fits resident (recommended first) | Only via low-RAM/disk streaming | 2-4 seat verdict |
+|---|---|---|---|
+| **1x3090 24 GB + 32 GB** (today) | **Coder** (23 GB experts); **Q2_0 / IQ2_XS** via low-RAM mapping | IQ3_XXS, IQ3_S (experts 43-50 GB > 32 GB RAM) | Coder or IQ2_XS/Swift IQ2_XS. 24 GB is the slot budget: expect 1-2 concurrent seats, decode in the doc's 3090 range (~100-140 tok/s single stream) |
+| **1x3090 + 96 GB** | **IQ3_S** (54.8 GB, the quality pick), Q2_0/IQ2_XS/IQ3_XXS, Coder, Swift sizes; **UD-IQ4_XS (~72 GB)** too | UD-Q4_K_XL (~88 GB) only with nothing else running -- risky | IQ3_S, or Unsloth UD-IQ4_XS for more quality. ONE card, so 2-3 slots at 32K and decode bounded by that card |
+| **2x3090 48 GB + 32 GB** | **Coder** only (23 GB experts) | Q2_0/IQ2_XS in low-RAM mode; IQ3_XXS/IQ3_S much slower | Fastest per byte for code, but the RAM ceiling blocks the good general sizes -- this pairing wastes the second card |
+| **2x3090 48 GB + 96 GB** | **Everything through UD-IQ4_XS**; **IQ3_S is the sweet spot**; UD-Q4_K_XL with ~8 GB headroom | - | **Best for your goal**: IQ3_S (or Swift IQ3_S) with `"parallel": 2-3`; the split also raises prefill, which is what the token bill needs |
+
+**Slot budget (why concurrency stays small above the model size):** slots are paid out of VRAM. A Qwen3.6 slot
+costs 1.5 GB of VRAM per 32K of context (measured); Qwen3.8 keeps its KV in RAM above 64K (`--kv-resident
+32768` keeps the hot part on the card; ~13.7 KB/token of host RAM is ~0.9 GB per 64K conversation). On a 24 GB
+card the choice is always "model in VRAM" vs "slots in VRAM": a 54.8 GB requirement (IQ3_S) leaves room for
+roughly 2-3 slots at 32K, not the engine's 8.
+
+### Less-compressed Qwen3.8 variants: the disk + RAM arithmetic (2026-10-20)
+
+PolyStrata's `setup.py` MODELS table is authoritative for what an install costs. **Disk is
+`download + arena` (the pack duplicates the experts), not just the download**, and the arena cannot be
+avoided in low-RAM mode either -- low-RAM maps experts from the pack's `experts.bin` rather than copying
+them into RAM, so the file stays on disk.
+
+| Variant | Download | Arena (pack) | Disk needed | RAM for resident experts | Runs on 32 GB + 24 GB *well*? |
+|---|---:|---:|---:|---:|---|
+| IQ2_XS (**installed today**, Swift) | 68.0 GB | 35.5 GB | ~104 GB | 48 GB (we had 32 → low-RAM) | No -- it already ran in low-RAM mode |
+| IQ3_XXS | 75.8 GB | 42.9 GB | ~119 GB | 60 GB | No (low-RAM) |
+| **IQ3_S** | 83.6 GB | 50.3 GB | **~135 GB** | **62 GB** | No (low-RAM); **yes at 96 GB** |
+| UD-IQ4_XS | 93.7 GB | 59.5 GB | ~153 GB | ~72 GB | No |
+| UD-Q4_K_XL | 111.3 GB | 77.0 GB | ~188 GB | ~88 GB | No |
+| UD-Q5/Q6_K_XL, Q8_0 | 158-188 GB | 98-128 GB | 256-316 GB | 108-136 GB | No |
+
+This PC on 2026-10-20: **C: 54.1 GB free, D: 135.1 GB free**. So no less-compressed size fits as-is.
+Removing the Swift install (64 GB of GGUF + 35 GB pack) and the unused qwen36 pack/model (~16 GB) frees
+~115 GB on C:, taking it to ~169 GB -- enough for IQ3_S (~135 GB, ~34 GB headroom) or UD-IQ4_XS (~153 GB).
+`START-HERE.bat --data-dir D:\PolyStrata-data` can put the download on D: instead, but D:'s 135 GB fits
+IQ3_S only with ~0 headroom.
+
+**Consequence for the "which variant" question:** the compression ladder and the RAM ladder move together.
+Below ~60 GB of RAM every 3-bit-and-up Qwen3.8 runs in low-RAM mode, where experts stream from the pack on
+disk -- and that is exactly the state our Swift run was in (`resident RAM: 19.52 GiB` of a 35.5 GB arena,
+479 GB read from disk). **CORRECTION (operator, 2026-10-20): low-RAM mode does NOT reduce capability.** It changes WHERE the
+experts live (pack-mapped instead of copied into RAM) and therefore speed; the weights and the routing are
+the same model. PolyStrata's own notes support this: the KV-streaming variant "reads exactly the same
+values (only where the KV lives changes)", and the expert-placement switches that DO change bits are
+called out explicitly (e.g. `--pcie-frac 0` changes answers; `STRATA_EXCHANGE_ROTATE` gives "tokens
+identical"). The only genuine caveat is that GPU-vs-CPU compute paths can move the last bits, which is
+not a capability change. So a less-compressed variant can be tested on 32 GB; the price is throughput,
+not intelligence. The 96 GB upgrade is about speed and concurrency, not about making a size "work".
+
+### IQ3_S: RAM, SSD and pagefile plan (measured from setup.py + this PC, 2026-10-20)
+
+`setup.py` decides the disk need as
+`to_fetch + (2 if the MTP draft is reused else 8) + (1 if vision) + (arena_gb + 1 if low_ram and no pack yet)`.
+Measured inputs: `IQ3_S` = download **83.6 GB**, arena **50.3 GB**; `mtp/rt/experts.bin` already present
+(MTP regenerated by previous installs), so the draft term is **2 GB**; `LOW_RAM_HEADROOM_GB = 10` and
+`ram_gb` for IQ3_S is **62** (arena 50.3 + headroom).
+
+| Plan | SSD needed | Where it fits today (C: 54.1 / D: 135.1 free) | RAM behaviour |
+|---|---:|---|---|
+| **32 GB RAM -> low-RAM mode** (pack mandatory) | **~138 GB** | **not D:** (135.1 < 138); **C:** only after removing the Swift install (99 GB) + unused qwen36 (~16 GB) -> ~169 GB free | experts mapped from `packs/iq3_s/experts.bin`; engine memory guard caps at ~31.9 GiB; GPU holds ~19 GB of the 50.3 GB arena (24 - ~5 - KV) |
+| **96 GB RAM -> resident** | **~87 GB** | D: comfortably; C: after removing Swift only | all 50.3 GB of experts copied into RAM; no pack built -- **the RAM upgrade also saves ~51 GB of SSD** |
+
+**Pagefile:** this PC has a FIXED 32 GB pagefile on C: (`Win32_PageFileSetting` 32768/32768, automatic
+management OFF); measured usage at clock-out was 3.6 GB with an 11 GB peak. Two facts that answer "will it
+eat my pagefile":
+- **File-mapped expert pages are backed by the pack file, not the pagefile** -- mapping 31 GB of
+  `experts.bin` is a file mapping, so Windows can drop those pages without writing them anywhere.
+- **The engine guards its own commit** (`memory guard: limit 31.9 GiB (source: meminfo) ... floor 2560 MiB`
+  in `strata-swift-iq2_xs.log`), so it does not try to commit more than RAM allows.
+PolyStrata's own advice is a fixed **64 GB** pagefile (`PAGE_FILE_FIXED_MB`) because "the graphics card's
+memory needs room there too (issue #60)" -- but on this PC that would cost another 32 GB **on C:**, which
+is exactly the drive the low-RAM install needs. Cheapest correct order: put the pagefile on **D:** (or
+leave it at 32 GB) and keep C: for the model; or take the 96 GB RAM route, where the install drops to ~87 GB
+(fits D:), C: stays free, and pagefile pressure effectively disappears.

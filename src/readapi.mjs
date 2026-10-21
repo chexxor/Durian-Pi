@@ -21,7 +21,7 @@ import { strandedMsSetting, declaredContextWindow } from "./config.mjs";
 import { contextConsumption } from "./context.mjs";
 import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
-import { partialView, peerGraph } from "./viewmodel.mjs";
+import { deriveSeatAction, partialView, peerGraph } from "./viewmodel.mjs";
 import { LOCAL_PROVIDER_ID, localProviderSpec } from "./providers/local.mjs";
 
 /**
@@ -429,4 +429,73 @@ export async function readRigHealth(
 		// Internal: watch derives highlights from these instead of re-scanning.
 		_pages: pages,
 	};
+}
+
+/**
+ * The queue statuses a LANDING row counts, in the order the renderer may show them.
+ * Deliberately the four LIVE statuses and nothing else: `done` and `cancelled` are
+ * terminal history, and counting them would make a seat's "queue size" grow forever as
+ * it finishes work — a number nobody could explain (ROADMAP 124's warning).
+ */
+export const LANDING_QUEUE_STATUSES = ["queued", "claimed", "held", "deferred"];
+
+/**
+ * The LANDING projection (ROADMAP 124): per seat, what it is working on and how much is
+ * waiting behind it, in the shape a landing screen renders.
+ *
+ * PURE over a `readRigHealth()` snapshot — it takes no storage handle and performs no I/O,
+ * so one batched read feeds every seat on the screen. That is the point of the seam
+ * (#3103: one spool round trip, never 1+N). A renderer that needs this data must call
+ * `readRigHealth` once and pass the result here; it must not loop `readQueueItems` per seat.
+ *
+ * Per seat:
+ *  - `action`  — the seat's current action, using the ONE vocabulary the status bar uses
+ *                (`SEAT_ACTIONS` in src/viewmodel.mjs, #2826). Not a parallel enum.
+ *  - `queue`   — `{ total, queued, claimed, held, deferred }`; `total` is the sum of those
+ *                four live statuses, so the composition is always explainable.
+ *  - `claimed` — `{ id, subject }` for the item the seat is working on, or `null`.
+ *                `null` is an explicit answer ("nothing claimed"), never a blank field.
+ *  - `deferred`— `{ id, subject, deferredTo }` when the seat is parked on a question.
+ *  - `notices` — the seat-scoped attention KINDS, unchanged from the health snapshot.
+ *  - `lastActivity` — passed through from the seat row, unchanged.
+ *
+ * The subject is returned as stored; the renderer owns truncation (it knows the width, this
+ * module does not), so a brief is never baked into the data path.
+ */
+export function projectLanding(health) {
+	const items = health?.queueItems ?? [];
+	const seats = (health?.seats ?? []).map((seat) => {
+		const mine = items.filter((it) => it.to === seat.name);
+		const counts = { queued: 0, claimed: 0, held: 0, deferred: 0 };
+		for (const item of mine) {
+			if (Object.hasOwn(counts, item.status)) counts[item.status] += 1;
+		}
+		const total = LANDING_QUEUE_STATUSES.reduce((n, status) => n + counts[status], 0);
+		const action = deriveSeatAction(seat, health);
+		const brief = (item) =>
+			item ? { id: item.id, subject: item.subject } : null;
+		return {
+			name: seat.name,
+			role: seat.role ?? null,
+			// Unchanged passthrough: the landing screen shows the same freshness the seat
+			// row already carries, so the two surfaces cannot disagree about "recently active".
+			lastActivity: seat.lastActivity ?? null,
+			action: action.state,
+			focus: action.focus,
+			queue: { total, ...counts },
+			claimed: brief(action.claimed),
+			deferred: action.deferred
+				? {
+						...brief(action.deferred),
+						deferredTo: action.deferred.deferredTo ?? null,
+						// The QUESTION is the operator-triage fact a landing row shows for a parked
+						// seat (designer spec #3307 §2), so it belongs in the data path rather than
+						// being re-read from the store by the renderer.
+						question: action.deferred.question ?? null,
+					}
+				: null,
+			notices: action.notices.map((n) => n.kind),
+		};
+	});
+	return { seats };
 }
