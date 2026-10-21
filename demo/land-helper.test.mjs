@@ -157,6 +157,32 @@ try {
   git(repo, ["checkout", "--", "a.txt"]);
   check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
 
+  console.log("\n2d. a LINKED worktree is not a landing target — refuse unless repo IS the shared root (#4247)");
+  // The measured failure: `node scripts/land.mjs <branch>` run from INSIDE an item worktree created a
+  // store there, merged there, and returned ok:true, merged:[...] with main untouched. A seat's cwd is
+  // its worktree by default, so this is the NATURAL mistake - and the cwd guard cannot see it, because
+  // an item worktree is not a DEGRADED cwd, it is the WRONG repository to land INTO.
+  const linked = join(repo, "item-7777");
+  git(repo, ["worktree", "add", "-b", "wt-land", linked]);
+  const beforeLinked = mainSha(repo);
+  const wrongRepo = land(linked, ["feat-b"]);
+  check("landing INTO a linked worktree is REFUSED", wrongRepo.code !== 0, wrongRepo.raw.slice(0, 200));
+  check("...naming the linked path", /item-7777/.test(wrongRepo.report?.error ?? ""), wrongRepo.report?.error);
+  const norm = (p) => String(p ?? "").replace(/[\\/]+$/, "").replace(/\\/g, "/").toLowerCase();
+  check(
+    "...and it identifies the SHARED ROOT as the landing target",
+    typeof wrongRepo.report?.sharedRoot === "string" && norm(wrongRepo.report.sharedRoot) === norm(repo),
+    wrongRepo.report?.sharedRoot,
+  );
+  check("...and names the REMEDY (run it from the shared tree)", /shared tree/.test(wrongRepo.report?.error ?? ""), wrongRepo.report?.error);
+  check(
+    "...and prints NO merged:[...] against the wrong repository",
+    !Array.isArray(wrongRepo.report?.merged) || wrongRepo.report.merged.length === 0,
+    JSON.stringify(wrongRepo.report?.merged),
+  );
+  check("...and main did NOT advance", mainSha(repo) === beforeLinked);
+  git(repo, ["worktree", "remove", "--force", linked]);
+
   console.log("\n3. a HELD genlock makes the lander WAIT with PRIORITY — it does NOT refuse (#1497/#1498)");
   const slot = join(repo, "rig.sqlite.genlock.0");
   // A LIVE holder with a DIFFERENT pid, so "held by someone else" is genuinely exercised.

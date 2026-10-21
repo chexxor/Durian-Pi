@@ -235,6 +235,36 @@ const dbPath = store.path;
 
 const base = { ok: false, command: "land", repo: repoRoot, db: dbPath, branches };
 
+// #4247: REFUSE unless the resolved repo IS the SHARED ROOT. A seat's cwd is its item worktree by
+// default, so running this from there is the NATURAL mistake, not a careless one - and it is the ONE
+// case the cwd guard cannot see: an item worktree is not a DEGRADED cwd, it is simply the WRONG
+// repository to land INTO. Measured 2026-10-20: `node scripts/land.mjs impl-item-4225` run from
+// inside item-4225 created a STORE in the worktree, merged there, and still returned
+// `ok:true, merged:[...]` while `main` was untouched (`git merge-base --is-ancestor 81ef0fb main`
+// exited 1). The report is the thing that lied, so the refusal comes BEFORE any merge is computed -
+// no `merged:[...]` is ever printed against the wrong repository.
+// The SOURCE is `git worktree list`: its FIRST entry is the MAIN worktree, which IS the shared root;
+// a linked worktree is never first. Absent/unparseable output leaves the check silent rather than
+// guessing (fail-open on an unreadable source, since a wrong refusal blocks every legitimate landing).
+const sharedRoot = (() => {
+	const m = /^worktree (.+)$/m.exec(git(repoRoot, ["worktree", "list", "--porcelain"]).out);
+	return m ? resolve(m[1].trim()) : null;
+})();
+if (sharedRoot && sharedRoot !== resolve(repoRoot)) {
+	report(
+		{
+			...base,
+			error:
+				`refusing to land: --repo resolves to ${repoRoot}, which is NOT the shared root ` +
+				`(${sharedRoot}) - it is a LINKED worktree. A landing must advance main in the shared ` +
+				`checkout; landing here would merge into an item worktree and leave main UNTOUCHED. ` +
+				`Run this from the shared tree: node scripts/land.mjs <branch> --repo ${sharedRoot}`,
+			sharedRoot,
+		},
+		1,
+	);
+}
+
 /* ───────── pre-flight: the enforcement chokepoint ───────── */
 
 // Tracked modifications only. An UNTRACKED file cannot be clobbered by a fast-forward (git
