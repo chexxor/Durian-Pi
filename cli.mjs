@@ -255,6 +255,25 @@ import { resetSeatContext } from "./src/reset.mjs";
 function buildModels(live = null) {
   if ((CFG.DURIG_PROVIDER ?? "deepinfra") === "faux") {
     FAUX = fauxProvider({ models: [{ id: MODEL_ID }] });
+    // #4658 (decision (a)): A TEST-ONLY DELAY KNOB, AND IT IS THE ONLY WAY A SPAWNED BROKER CAN HOLD A RUN.
+    // The construction above passes model IDS ONLY — no response factory — so a spawned broker answers
+    // INSTANTLY and `demo/broker-cooperative-stop` can never have a live generation when `--stop` arrives.
+    // That is why its "under load" banner was unasserted AND UNAVAILABLE: the fixture was not lazy, the seam
+    // had no slow model. An IN-PROCESS test would prove nothing about the exit path, and the exit path is
+    // where the seven-minute damage was.
+    //
+    // BEHAVIOUR-PRESERVING WHEN UNSET: with no `DURIG_FAUX_DELAY_MS` this block does not run and the provider
+    // is exactly what it was. Nothing about a normal run changes.
+    //
+    // SCOPED TO THE FAUX PROVIDER ON PURPOSE: it is a test seam for an offline provider, not a general
+    // latency control, and it is read only here — where the provider is already known to be faux.
+    const fauxDelayMs = Number(process.env.DURIG_FAUX_DELAY_MS ?? 0);
+    if (Number.isFinite(fauxDelayMs) && fauxDelayMs > 0) {
+    	// A step is consumed per provider call, so the list is long enough for any fixture's run count.
+    	const slowStep = () =>
+    		new Promise((resolve) => setTimeout(() => resolve(fauxAssistantMessage("faux delayed reply")), fauxDelayMs));
+    	FAUX.setResponses(Array.from({ length: 128 }, () => slowStep));
+    }
     const models = createModels();
     // Gate what MODELS see; keep FAUX pointing at the raw provider so
     // scripted responses keep flowing to the real implementation.
