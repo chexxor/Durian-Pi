@@ -1,4 +1,4 @@
-﻿> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
+> **D103 rename (2026-10-18):** this record predates the product rebrand `durig` → `durian-pi`; it keeps the old name so the audit trail stays truthful.
 
 # durig — decision log
 
@@ -1052,7 +1052,9 @@ provides. If it must be genuinely non-forgeable later, re-issue it as an operato
 commit.
 
 **Effect on the position:** `security.sec`'s dissent is preserved for the residual shell risk
-(`docs/reviews/security-sec-m3-seat-tools.md`); SC1–SC3 are **adopted**, not skipped.
+(inline in `docs/SEAT-TOOLS.md` — the review verdict and SC1–SC3; the planned
+`docs/reviews/security-sec-m3-seat-tools.md` was never written as a file); SC1–SC3 are **adopted**,
+not skipped.
 
 ## D39 — The driver probes seat documents through a raw handle, because a harness session fails closed (2026-10-12)
 
@@ -1458,7 +1460,6 @@ not flatten the two.
 `demo/singleflight.test.mjs` (N generation slots, D12); `src/broker.mjs`/`src/storewrite.mjs` +
 `demo/autostart.test.mjs` (one broker per DB, second `serve`/`run` refused) and
 `demo/storewrite.test.mjs` (send-path store-write retry, #310/D42).
-
 
 ## D54 — HELD: a non-claimable queue state with one explicit release transition (2026-10-15)
 
@@ -1964,7 +1965,6 @@ against synthetic fixtures; and "a false positive costs one reset" is false when
 every seat. The F29 prose loop still needs a signal that does not parse prose — e.g. a per-turn
 wall-clock latency bound (impl's degenerate turns ran 56 s then 122 s while healthy turns ran seconds).
 
-
 ## D79 — Land the complete-but-uncommitted #624 `cli.mjs` artifact and clean the shared tree (2026-10-16)
 
 **Decision.** The operator rules that the complete-but-uncommitted work in the shared tree lands on
@@ -2258,7 +2258,7 @@ which keeps every file and branch. (c) Leave them — rejected: the operator ask
 ## D90 — Runbook discoverability is onboarding: the entry point and the constitution must say the runbooks exist and when to consult them (delegate, 2026-10-17)
 
 **Decision.** The delegate entry point (`AGENTS.md` clock-in + "Where to read further"), the durig skill
-(`.agents/skills/durig/SKILL.md` clock-in + references), and the seat **P3 Runbooks** rule in
+(`.agents/skills/driving-durian-pi/SKILL.md` clock-in + references), and the seat **P3 Runbooks** rule in
 `constitution.txt` now name `docs/runbooks/` and its symptom index, and require **reading the matching
 runbook before improvising** on an operating situation it covers — not only authoring one when a procedure
 changes. The research runbook (`research-request.md`) is called out explicitly for commissioning research.
@@ -2347,7 +2347,6 @@ executable check applies (a narrative decision log). LANDING NOTE: main's D91 is
 seat-creation entry; scribe's standing-surface/consult ruling (lead #1297 as revised by #1316,
 branches scribe-item-1301/1323, currently numbered D91) must be renumbered (recommended D93) or
 folded into D91 at landing to avoid a collision.
-
 
 ## D93 — The `security` seat's standing surface is runbook-only, and the external `security.sec` consult is on-escalation (lead #1297, revised by lead #1316; recorded by scribe #1301/#1323, 2026-10-17)
 
@@ -2648,7 +2647,7 @@ designer/advocate UX proposal is accepted and the ROADMAP 55 security position i
 **Decision.** The product is renamed `durig` → `durian-pi` across all tracked text and identifiers:
 `package.json` `name`; the 24 `DURIG_*` env vars become `DURIAN_PI_*`; `durig.config.json` becomes
 `durian-pi.config.json`; `durig.config.default.json` / `durig.config.example.json` are renamed; the
-`.durig/` scratch dir becomes `.durian-pi/`; `skills/durig/` and `.agents/skills/durig/` become
+`.durig/` scratch dir becomes `.durian-pi/`; `skills/durig/` and `.agents/skills/durig/` become `.agents/skills/driving-durian-pi/` and `.agents/skills/delegating-to-durian-pi/`
 `durian-pi`; docs, demos and `.gitignore` follow. The config/env loader accepts the old `DURIG_*` names
 and the old `durig.config.json` as deprecated aliases; the new name wins when both are set. The new
 multi-seat TUI is named the **durian-pi TUI**.
@@ -3056,34 +3055,6 @@ rules scope if the failure-scope policy conflicts with scheduled work. Evidence 
 grep/`node --check`/demo baseline and the version probe (see the review's Evidence section). No
 implementation is claimed here.
 
-
-## D114 — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19)
-
-**Context.** The CARRY/teardown collision (incident
-`docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`): `createWorktree`'s CARRY (#506 /
-ASK F) copied the source tree's visible dirty state into EVERY fork, while teardown is clean-only
-(D60). So while the shared tree was dirty, a completed item's worktree was BORN dirty with foreign
-paths and could never be removed — every completion leaked a tree and pinned its branch.
-
-**Decision.** The seat path (`claimWorktree` → `prepareSeatWorkspace`) passes `carry: false`, so a
-seat's item worktree is a **clean HEAD checkout** and its teardown works even while the shared tree is
-dirty. CARRY remains an **explicit opt-in** (`carry: true`) for a direct caller that wants the
-anti-stale guarantee (#240). The clean-only refusal (D60) is UNCHANGED — no carried path is ever
-tolerated or force-removed. This **SUPERSEDES #506's seat-path carry** (the fork is no longer "a tree
-neither git nor the operator tracks": it is HEAD plus an enumerated, returned carry list).
-
-**Alternatives considered.** (1) Teardown tolerates carried-foreign paths — **rejected**: introduces a
-data-loss surface (a fingerprint bug could discard a seat's real uncommitted work) against D60's
-absolute rule. (3) An attention kind that surfaces the leak — **rejected**: it names the problem but
-does not fix it.
-
-**Status.** Accepted by `lead` (#2648, option 2 of #2360); implemented by `impl` (impl-item-2360
-@`4813a50`): `src/worktree.mjs` `createWorktree` gains `carry` (default true) and the seat path passes
-`carry: false`. Proof: `demo/worktree-carry-teardown.test.mjs` (new — seat fork born clean and
-`removeClaimedWorktree` succeeds; opt-in carry still carries), `demo/worktree-recursive-carry.test.mjs`
-and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path. Recorded by `scribe`
-(#2658).
-
 ## D113 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
 
 **Context.** The operator backlog asks that "waiting on the operator" be **visible and answerable**
@@ -3125,4 +3096,390 @@ view; the CLI grows `answer`/`queue --waiting` and `status` grows a headline. Op
 **Status.** Proposed (exploration, item #2700). Not sequenced; `pm` sequences design then decomposition.
 D-number uses the next free slot; scribe's pending D113 lands first and lead #2452 re-derives numbers at
 land time. Evidence: the code citations above; no implementation is claimed.
+## D120 — Queue lifecycle redesign v2 is ACCEPTED as the design of record; it LEADS capability work (operator, 2026-10-19; recorded by scribe, item #3035)
 
+**Context.** The queue can orphan work because a parked item is not required to name a machine-readable
+reason it is parked, nor who or what clears it, nor a date by which someone must look again. The incident
+`docs/incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md` is the live instance: held rows whose
+cited queue gates all cleared stayed parked forever (`#2630`, gated on the non-terminal `#2797`/`#2806`).
+The proposal `docs/reviews/queue-lifecycle-redesign.md` (v1) was reviewed independently by `architect`
+(`#2984`, `docs/reviews/architecture-queue-lifecycle-redesign-review.md`, 4 blockers + 13 CRs) and
+`advocate` (`#2985`, `docs/reviews/advocate-queue-lifecycle-redesign.md`, 8 CRs); the reviews found real
+defects in v1 (F1/F2/F3/F4/F7/F8/F9/F11, CR-1/CR-3/CR-6 — substantive design corrections, not polish).
+
+**Decision.** v2 of `docs/reviews/queue-lifecycle-redesign.md` (commit `defbc34`; acceptance recorded at
+`e788668`) is ACCEPTED as the **design of record** — it incorporates every review finding with a stated
+disposition in §13, and where v1 and v2 disagree, v2 wins. The operator ruled (2026-10-19) that this
+redesign **leads capability work** (defect fixes and the prerequisites it depends on are not capability
+work and land first). The accepted model in substance:
+
+1. **Two orthogonal axes** replace the status soup: `stage` (`open`/`active`/`closed`) and a nullable
+   `block`. `held`/`deferred` stop being statuses and become `block` shapes; a block cannot exist without
+   a `resolver`.
+2. **Blocks are typed, sourced, and multi-constraint.** `block.source: declared|legacy`; a block may
+   carry several `constraints`; the one automatic action (auto-open) fires only for a *declared*
+   `dependency` whose every constraint is a completed queue gate — legacy prose gates are never promoted
+   to a dependency by inference.
+3. **Every block has a trigger**, including a stuck gate: `gate-cleared-unreleased` and `gate-stalled`
+   (queue-scoped attention kinds), plus `parked-review-due` and `orphan-no-progress`.
+4. **`check` rules enforce well-formedness on authored blocks only** — never on the read-mapping of
+   legacy rows, so enforcement can never turn `check` red across the unmigrated store and stop landings.
+
+Gate-completion is an event (the closing commit, `complete_work`/`cancel_work`, with a broker-pass
+backstop) that atomically releases declared dependents whose every queue constraint is done. The
+migration is additive and lazy: the read-only half (check rules + queue-scope attention) ships first; the
+`rig.mjs`/`driver.mjs` axis change is sequenced behind the standing reliability cluster (`#2420`/`#2483`).
+
+**Scope questions still open for `lead` (the decision does not answer them).** (a) F12 — `#2673`'s
+lead-ratified `workable(item, seat)` is the same seam as this design's claimability, and its
+`requires`/fault clause is not implementable because `requires` is not persisted; one predicate or two —
+the redesign should own one `workable` or the two must not land independently. (b) F11 — there is no
+landed decision behind the `waiting` derivation; either land the architect's draft ADR with the `block`
+model as its source, or the proposal stops citing it (v1's D114 citation is withdrawn).
+
+**Alternatives rejected** (each with the review's reason): add a `parked-review-due` attention to today's
+`held` (treats the symptom, leaves reason/gate in prose); add more statuses (`blocked`,
+`waiting-operator`, `backlog` — the two-axis model carries the same information); a background unsticker
+that releases anything whose prose cites a done item (proven unsafe by the measured 59 candidates, mostly
+landing-list/backlog/do-not-start); a maintained reverse index of dependents (a second source of truth
+that drifts).
+
+**Status.** ACCEPTED — design of record (operator ruling, 2026-10-19). Recorded by `scribe` (item
+#3035). The design doc already marks the acceptance at `docs/reviews/queue-lifecycle-redesign.md`
+(commit `e788668`). Implementation items are handed to `pm` (register M1–M7 and route F12/F11 to `lead`);
+the prerequisites `#2983` → `#2992` → `#2420`/`#2483` are built but unlanded. This entry is a decision
+record, not an implementation claim — no code change accompanies it.
+
+## D114 — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19)
+
+**Context.** The CARRY/teardown collision (incident
+`docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`): `createWorktree`'s CARRY (#506 /
+ASK F) copied the source tree's visible dirty state into EVERY fork, while teardown is clean-only
+(D60). So while the shared tree was dirty, a completed item's worktree was BORN dirty with foreign
+paths and could never be removed — every completion leaked a tree and pinned its branch.
+
+**Decision.** The seat path (`claimWorktree` → `prepareSeatWorkspace`) passes `carry: false`, so a
+seat's item worktree is a **clean HEAD checkout** and its teardown works even while the shared tree is
+dirty. CARRY remains an **explicit opt-in** (`carry: true`) for a direct caller that wants the
+anti-stale guarantee (#240). The clean-only refusal (D60) is UNCHANGED — no carried path is ever
+tolerated or force-removed. This **SUPERSEDES #506's seat-path carry** (the fork is no longer "a tree
+neither git nor the operator tracks": it is HEAD plus an enumerated, returned carry list).
+
+**Alternatives considered.** (1) Teardown tolerates carried-foreign paths — **rejected**: introduces a
+data-loss surface (a fingerprint bug could discard a seat's real uncommitted work) against D60's
+absolute rule. (3) An attention kind that surfaces the leak — **rejected**: it names the problem but
+does not fix it.
+
+**Status.** Accepted by `lead` (#2648, option 2 of #2360); implemented by `impl` (impl-item-2360
+@`4813a50`): `src/worktree.mjs` `createWorktree` gains `carry` (default true) and the seat path passes
+`carry: false`. Proof: `demo/worktree-carry-teardown.test.mjs` (new — seat fork born clean and
+`removeClaimedWorktree` succeeds; opt-in carry still carries), `demo/worktree-recursive-carry.test.mjs`
+and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path. Recorded by `scribe`
+(#2658).
+
+## D115 — F12: ONE seat-relative `workable(item, seat)` predicate, OWNED by #2673; claimability is its seat-projection, NOT a stage; `deferred` is its own stage (lead, 2026-10-19; recorded by scribe, item #3031)
+
+**Context.** The queue-lifecycle redesign v2 (`docs/reviews/queue-lifecycle-redesign.md`, ACCEPTED as design of
+record) makes claimability a function, not an item property. Architect F12 (review @5c50f34; escalations
+`#3001` + `#3010`) flagged that `#2673`'s `workable(item, seat)` (oldest-WORKABLE claim selection) is the
+SAME seam as the redesign's "claimability", and that a stage-level "claimable" is unsound because
+claimability is seat-relative (per-seat `requires`, `src/rig.mjs:393`, is not persisted).
+
+**Decision.** There is ONE predicate, not two — name it `workable(item, seat)`; the redesign's
+"claimability" is NOT a second predicate, it is the seat-projection of the same one:
+1. **Single source of truth.** Exactly one definition of "can seat s claim item i right now", in one module,
+   consumed by BOTH (a) `claim_work`'s oldest-workable selection (`#2673`) and (b) the broker WAKE selection
+   (`#2712`). No second implementation of "claimable".
+2. **Claimability is a projection, not a stage.** "Item i is claimable" is DEFINED as: ∃ eligible seat s such
+   that `workable(i, s)`. It must NOT be a stage of the item state machine — F1 shows why: claimability is
+   seat-relative, so any stage-level "claimable" is unsound.
+3. **Inputs are persisted, never live-only.** The predicate reads `stage` + `held` + the structured gate
+   fields (`blockedBy` dependency, `requires` capability) + the seat's advertised capabilities. Persisting
+   `requires`/`blockedBy` via the EXISTING enqueue path is `#2951`'s job, so `#2951` is a PREREQUISITE:
+   until it lands, §1's partition is genuinely false (F1) and must not be claimed.
+4. **`deferred` is its own stage**, not `active`-with-block. §1(b) forbids active-with-block; encoding
+   deferred that way would make parked work look claimable — a seat could claim work whose blocking question
+   is unanswered. SAFETY WINS: `deferred` is non-claimable by construction.
+5. **Ownership.** The single `workable(item, seat)` is OWNED by `#2673` — `#2673` implements it (predicate +
+   failing-first demo). The redesign CONSUMES it: it must not define a second predicate and must not restate
+   the predicate body. Division: the REDESIGN owns the stage model (incl. the §2 fix, `deferred` as its own
+   stage); `#2673` owns the predicate that reads those stages plus the persisted gate fields.
+6. **Not independent.** The two must NOT land independently. Ordering: `#2951` (persist gate fields) →
+   `#2673` (predicate + demo) → `#2712` (wake consumes) → only THEN may the redesign assert its §1
+   partition. The redesign may land its read-only parts early (OQ5 phase 1), but its claimability / §1
+   invariant may not land before `#2673`.
+7. **Safety (explicit).** The `requires` / fault clauses are NOT implementable today because `requires` is
+   not persisted on any item (`src/rig.mjs:393`). Landing them anyway would ship a predicate that silently
+   MIS-SELECTS — starvation of a claimable item, or a claim on un-claimable work. Safety wins: no landing of
+   the `requires` / fault clauses until `#2951` persists the field.
+
+**Why.** `#2673` and the redesign answer the same question ("can this be claimed?"). Two predicates drift,
+and drift is exactly the starvation / never-woken bug class `#2673`/`#2712` exist to fix. One predicate with
+a seat parameter keeps the claim path and the wake path in agreement, and makes §1's partition true once the
+gate fields are persisted.
+
+**Alternatives rejected.** (a) Two predicates (redesign-owned + `#2673`) — rejected: the same seam with two
+definitions drifts into the starvation/never-woken class; (b) claimability as an item stage — rejected:
+claimability is seat-relative (per-seat `requires`), so a stage-level "claimable" is unsound (F1);
+(c) `deferred` folded into `active`-with-block — rejected: parked work would look claimable (safety).
+
+**Status.** RULED by `lead` (2026-10-19, item #3031, escalations #3001/#3010; supersedes cancelled #3003).
+Recorded by `scribe` in the R1b serialized pass (#3089). Consistency: the structured gate field is D53
+(#2952/#2918), one field, no prose parsing. Enforcement: `#2673`'s failing-first demo must include a
+CROSS-CONSUMER AGREEMENT case — for the same item and seat, claim-selection and wake-selection return the
+same verdict. No implementation is started by this entry. D-number minted at land time.
+
+## D116 — Redesign v2 build rulings: OQ5 sequencing chain, M1 SPLIT (field-early / axis-fenced), OQ2 `reviewBy` defaults with one fire per epoch (lead, 2026-10-19; recorded by scribe, item #3046)
+
+**Context.** The queue-lifecycle redesign v2 was ACCEPTED as design of record. Its open questions were ruled
+by `lead` (#3002 OQ5, #3044 M1 split, #3008 OQ2). The accepted model has two orthogonal axes
+(`stage`/`block`), typed `block`s with a mandatory `resolver` and a `reviewBy` (unless self-clearing or
+`backlog`), and queue-scoped attention kinds. The build must not land the axis change before the read-only
+half, and `reviewBy` defaults must bound the `parked-review-due` firehose.
+
+**Decision.** Three rulings, recorded as one decision family (they govern the same build):
+1. **OQ5 — sequencing chain (Phase 1 lands now).** Phase 1 (can land now): READ-ONLY check rules (on AUTHORED
+   blocks only) + queue-scope attention — additive, no write path, independently verifiable. Phase 2:
+   `#2951` — persist the gate fields via the EXISTING enqueue path (prerequisite for the predicate axis).
+   Phase 3: the reliability cluster `#2420`/`#2483`. Phase 4: the `rig.mjs`/`driver.mjs` AXIS change (stage
+   machine + the single `workable` predicate, `#2673` then `#2712`), reconciled per F12 (#3031). ONE writer
+   per seam at a time; the fence is safety-conservative — do not move the claim/wake axis while the
+   reliability cluster is in flight.
+2. **M1 SPLIT — field-early vs axis-fenced.** M1 is split: **M1a (field-early)** persists the structured
+   gate field (`block`/`blockedBy`/`requires`) via the EXISTING enqueue path — this is `#2951`'s slice,
+   landable at Phase 2, no new write path, no parallel store (D53), no mapping/predicate. **M1b
+   (axis-fenced)** is the `effectiveStage`/`effectiveBlock` mapping pair — lands at Phase 4, fenced behind
+   the reliability cluster (`#2420`/`#2483`), and the single `workable` is `#2673`'s ONE predicate (F12,
+   #3031), implemented once; `#2712`'s wake consumes the same one. No second definition. **Dependency
+   direction: M1b → M1a, never the reverse** — M1a (the field) is the prerequisite M1b (the mapping) reads.
+3. **OQ2 — `reviewBy` defaults with one fire per epoch.** Defaults: `operator` 3 d, `schedule` 14 d,
+   `resource` 3 d, `manual` 7 d, `dependency`/`roadmap-gate` 7 d, `backlog` none, `question` n/a (v1's
+   `manual` 1 d is withdrawn — it floors the median-16 h population into immediate nag). Monotone in
+   urgency/volatility: operator (3 d) and resource (3 d) shortest (they block a human decision / stall a
+   seat); manual + dependency/gate 7 d middle; schedule 14 d longest (inherently far-horizon); backlog none
+   (explicitly parked, must not nag); question n/a (already surfaced by the `waiting` derivation). **One
+   fire per (item, `reviewBy` epoch)** — a notice fires ONCE per epoch, re-armed only when `reviewBy` is
+   explicitly bumped; a re-scan does not re-fire (idempotent, replayable); the durable attention surface
+   carries the state, so the notices are a snapshot, not a stream.
+
+**Why.** The sequencing prevents a red `check` across the unmigrated store from stopping every landing
+(CR-1): enforcement judges AUTHORED blocks only, so the read-only half (Phase 1) ships before the axis
+migration without turning the store red. The M1 split lets the structured field land early (M1a) without
+prematurely committing to the axis model (M1b), and keeps one `workable` (F12/#3031) with a clear
+dependency direction. The `reviewBy` defaults bound the `parked-review-due` firehose over the ~160-row
+legacy population (F10/CR-2); one-fire-per-epoch keeps the surface a state snapshot, not a nag stream.
+
+**Alternatives rejected.** (a) Ship the axis change before the read-only half — rejected: a red `check`
+blocks every landing (`land.md --suite` runs `check`); (b) a single monolithic M1 — rejected: it couples the
+field persistence to the axis mapping and can't ship the gate field early; (c) tighter `reviewBy` defaults
+(manual 1 d) — rejected: it floors the measured median-16 h population into immediate nag.
+
+**Status.** RULED by `lead` (2026-10-19, item #3046, from #3002/#3044/#3008; supersedes cancelled #3012).
+Recorded by `scribe` in the R1b serialized pass (#3089). Implementation items M1a (#3062, impl-item-3062
+@eb3b337), M1b (#3063, impl-item-3056 @6ddf538 — `workable` removed), M3 (#3019), M4 (#3020), M5 (#3021),
+M6 (#3022), M7 (#3023) are registered; OQ2 defaults fold into M1/M4 (#3050). D-number minted at land time.
+
+## D117 — R4 acceptance shape: the `#2955` chain is the ACCEPTANCE SHAPE for the queue-lifecycle v2 work (operator, 2026-10-19; recorded by scribe, item #3089 / R4)
+
+**Context.** Operator ruling 2026-10-19 asked that the ACCEPTANCE SHAPE for the queue-lifecycle v2 work be
+citable and NOT reconstructed from memory. R4 records it: the shape is "accepted as recommended" + the
+`#2788`/`#2789`/`#2804`/ADR chain — i.e. the operator's ruling on the design, plus the build items and the
+`waiting`-derivation ADR that implement it.
+
+**Decision.** The ACCEPTANCE SHAPE for the queue-lifecycle v2 work is: the operator's "accepted as
+recommended" ruling (on `docs/reviews/queue-lifecycle-redesign.md` v2) + the `#2788`/`#2789`/`#2804` chain
+(the `waiting` view, the `answer` spool op, and the render rule) + the `waiting`-derivation ADR
+(`impl-item-2744` = the D113 entry). This is the acceptance shape; it is queue-citable at `#2955` and does NOT
+require the operator to re-state prose. `#2698` (advocate ETARGET review) stands with a one-line re-verify.
+
+**Status.** Recorded by `scribe` in the R1b serialized pass (#3089, R4). D-number minted at land time.
+
+## D118 — R1–R7 are ACCEPTED OPERATOR RULINGS for the queue-lifecycle v2 and land/hold work (operator, 2026-10-19; recorded by scribe, item #3089 annex)
+
+**Context.** Operator acceptance `operator-accepts-r1-r7-2026-10-19-1` (21:52:23Z) accepted R1–R7 in full,
+making them OPERATOR RULINGS (not delegate recommendations). R1 (landing window OPEN, delegate drives), R1b
+(DECISIONS.md writers serialize as ONE scribe pass, minting free numbers at land time), R2 (`#2797` KEEP +
+CONSOLIDATE, `#2806` CANCEL), R3 (`#2630` stays HELD until `#2797` lands), R4 (the `#2955` acceptance
+shape), R5 (`#2949` CLOSED by evidence), R6 (`#2598` RELEASE and RE-QUEUE), R7 (six stale escalations
+consumed and closed).
+
+**Decision.** R1–R7 are ACCEPTED OPERATOR RULINGS (operator, 2026-10-19) and bind the queue-lifecycle v2
+work and the land/hold rulings as the same decision family. In particular: the landing window is OPEN and the
+DELEGATE drives (`land.mjs` waits for generation slots, broker stays UP); the DECISIONS.md writers
+serialize as ONE scribe pass minting free numbers at land time in issue order; `#2797` is kept + consolidated
+(re-pointed to `e4fd338`), `#2806` cancelled; `#2630` stays HELD until `#2797` lands; the `#2955` acceptance
+shape is citable; `#2949` is closed by evidence (scripts/ restored, `node --check scripts/land.mjs` exit 0);
+`#2598` is released and re-queued behind M1a; the six stale escalations (`#2942`/`#2943`/`#2947`/`#2948`/
+`#2673`/`#2797`) are closed.
+
+**Status.** Recorded by `scribe` in the R1b serialized pass (#3089 annex). No fresh D-number for this entry
+per the R1b rule (it records the same decision family; the design-of-record and land/hold rulings share the
+family). D-number minted at land time.
+
+## D119 — D113 pre-check (R1b): the reservation is VOID — a dangling commit cannot hold a number; #2284 must be re-branched or re-authored (scribe, item #3089)
+
+**Context.** R1b required a pre-check on D113 before minting: its reservation (scribe-item-2219, #2284)
+rests on commit `fd4c233`. The pre-check result: `fd4c233` is a REAL commit but DANGLING — it is
+unreachable from any branch (`git branch -a --contains fd4c233` is empty) and does NOT merge cleanly onto
+`main` (merge-tree exit 1, conflict in docs/DECISIONS.md). The live branch `scribe-item-2219` exists at
+`a822bbf` holding the D113 entry, but IT ALSO conflicts against `main` (merge-tree exit 1).
+
+**Decision.** D113 is NOT reserved — the reservation is VOID (a dangling commit cannot hold a number).
+`#2284`'s recoverability decides whether the D113 entry lands, not the number: `fd4c233` still dangling →
+**re-branch** `scribe-item-2219` (at `a822bbf`) and land it (after a non-force rebase to clear the
+DECISIONS.md conflict); if the branch were gone → re-author the entry docs-only. D113 does NOT block the
+other DECISIONS entries (#3011/#3031/#3035/#3046) — they mint the next free numbers in issue order.
+
+**Status.** Pre-check run by `scribe` (item #3089, R1b). D113 remains void until #2284 is re-branched and
+re-landed. D-number minted at land time.
+
+## D120 — Queue lifecycle redesign v2 is ACCEPTED as the design of record; it LEADS capability work (operator, 2026-10-19; recorded by scribe, item #3035)
+
+**Context.** The queue can orphan work because a parked item is not required to name a machine-readable
+reason it is parked, nor who or what clears it, nor a date by which someone must look again. The incident
+`docs/incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md` is the live instance: held rows whose
+cited queue gates all cleared stayed parked forever (`#2630`, gated on the non-terminal `#2797`/`#2806`).
+The proposal `docs/reviews/queue-lifecycle-redesign.md` (v1) was reviewed independently by `architect`
+(`#2984`, `docs/reviews/architecture-queue-lifecycle-redesign-review.md`, 4 blockers + 13 CRs) and
+`advocate` (`#2985`, `docs/reviews/advocate-queue-lifecycle-redesign.md`, 8 CRs); the reviews found real
+defects in v1 (F1/F2/F3/F4/F7/F8/F9/F11, CR-1/CR-3/CR-6 — substantive design corrections, not polish).
+
+**Decision.** v2 of `docs/reviews/queue-lifecycle-redesign.md` (commit `defbc34`; acceptance recorded at
+`e788668`) is ACCEPTED as the **design of record** — it incorporates every review finding with a stated
+disposition in §13, and where v1 and v2 disagree, v2 wins. The operator ruled (2026-10-19) that this
+redesign **leads capability work** (defect fixes and the prerequisites it depends on are not capability
+work and land first). The accepted model in substance:
+
+1. **Two orthogonal axes** replace the status soup: `stage` (`open`/`active`/`closed`) and a nullable
+   `block`. `held`/`deferred` stop being statuses and become `block` shapes; a block cannot exist without
+   a `resolver`.
+2. **Blocks are typed, sourced, and multi-constraint.** `block.source: declared|legacy`; a block may
+   carry several `constraints`; the one automatic action (auto-open) fires only for a *declared*
+   `dependency` whose every constraint is a completed queue gate — legacy prose gates are never promoted
+   to a dependency by inference.
+3. **Every block has a trigger**, including a stuck gate: `gate-cleared-unreleased` and `gate-stalled`
+   (queue-scoped attention kinds), plus `parked-review-due` and `orphan-no-progress`.
+4. **`check` rules enforce well-formedness on authored blocks only** — never on the read-mapping of
+   legacy rows, so enforcement can never turn `check` red across the unmigrated store and stop landings.
+
+Gate-completion is an event (the closing commit, `complete_work`/`cancel_work`, with a broker-pass
+backstop) that atomically releases declared dependents whose every queue constraint is done. The
+migration is additive and lazy: the read-only half (check rules + queue-scope attention) ships first; the
+`rig.mjs`/`driver.mjs` axis change is sequenced behind the standing reliability cluster (`#2420`/`#2483`).
+
+**Scope questions still open for `lead` (the decision does not answer them).** (a) F12 — `#2673`'s
+lead-ratified `workable(item, seat)` is the same seam as this design's claimability, and its
+`requires`/fault clause is not implementable because `requires` is not persisted; one predicate or two —
+the redesign should own one `workable` or the two must not land independently. (b) F11 — there is no
+landed decision behind the `waiting` derivation; either land the architect's draft ADR with the `block`
+model as its source, or the proposal stops citing it (v1's D114 citation is withdrawn).
+
+**Alternatives rejected** (each with the review's reason): add a `parked-review-due` attention to today's
+`held` (treats the symptom, leaves reason/gate in prose); add more statuses (`blocked`,
+`waiting-operator`, `backlog` — the two-axis model carries the same information); a background unsticker
+that releases anything whose prose cites a done item (proven unsafe by the measured 59 candidates, mostly
+landing-list/backlog/do-not-start); a maintained reverse index of dependents (a second source of truth
+that drifts).
+
+**Status.** ACCEPTED — design of record (operator ruling, 2026-10-19). Recorded by `scribe` (item
+#3035). The design doc already marks the acceptance at `docs/reviews/queue-lifecycle-redesign.md`
+(commit `e788668`). Implementation items are handed to `pm` (register M1–M7 and route F12/F11 to `lead`);
+the prerequisites `#2983` → `#2992` → `#2420`/`#2483` are built but unlanded. This entry is a decision
+record, not an implementation claim — no code change accompanies it.
+
+## D121 — Local provider switched to Swift 1.5 on a DIFFERENT engine (operator-DIRECTED, 2026-10-20; recorded by scribe, item #3268; amended per lead #3280)
+
+**Context.** The local provider previously served Qwen3.6-35B-A3B (UD-Q3_K_M) via PolyStrata on
+`engine-poly\strata-poly.exe`. The operator DIRECTED a switch to Swift 1.5 — model AND engine — this
+session (2026-10-20), and the revert (#3248) is cancelled. The change is committed as `cafee74`
+(`chore(rig): local provider moves to Swift 1.5`) and documented in `docs/SELFDEV.md`. Source:
+`docs/NEXT.md` "LOCAL MODEL SWITCHED TO SWIFT 1.5" (the authority over any summary).
+
+**Decision.** The local provider now serves **Swift 1.5** (`swift-1.5-iq2_xs`, context 65536) instead of
+Qwen3.6-35B-A3B, on a **DIFFERENT ENGINE**: `engine\strata.exe` (the Qwen engine), NOT
+`engine-poly\strata-poly.exe`. The engine change is as load-bearing as the model change — the entry is
+deliberately not model-only. In detail:
+- **Rationale:** shorter thinking before answering, at roughly equal quality.
+- **Models together:** both local models live under `C:\Users\Alex\dsh-Projects\PolyStrata-data` — the
+  operator required keeping local models together, so the new install was moved off `D:` with
+  `robocopy /MOVE` and nothing was re-downloaded.
+- **Fallback kept:** `qwen36` (`run-qwen36-ud-q3_k_m.bat`) remains installed as the fallback.
+- **Config:** `durig.config.json`: `DURIG_LOCAL_MODEL=swift-1.5-iq2_xs` (was `qwen36`),
+  `DURIG_LOCAL_CONTEXT=65536`; `rig.selfdev.json`: `qa` and `devtools` moved `local/qwen36` →
+  `local/swift-1.5-iq2_xs`. A seat's model is read from the rig at wake — but only AFTER the store is
+  refreshed (see DIRECTED vs NOT-YET-IN-EFFECT below); until then the effective runtime is unchanged.
+- **Measured cost / fragility (the part future readers will need):** IQ2_XS holds ~22 GB of experts in
+  RAM on this 32 GB box (load 95-96%); PolyStrata wants ~48 GB RAM+VRAM so it runs in low-RAM mode,
+  leaving ~1 GB free and making heavy tooling fragile — forks can fail (`cygheap read copy failed`,
+  `Resource temporarily unavailable`) and tool calls can look broken. Free the model before any broker
+  restart or heavy pass.
+- **Verified:** `localProviderSpec` returns `modelId: swift-1.5-iq2_xs`, `contextWindow: 65536`; a real
+  completion returned `SWIFT-OK` at ~102 tok/s; `cli.mjs check rig.selfdev.json` is `ok:true`.
+
+**Why.** The operator directed the model + engine switch for faster, equal-quality local inference, and
+required keeping both local models on one C: tree with nothing re-downloaded. The engine change matters:
+`8080` now serves the Qwen engine, so an old `strata-poly` log line is expected, not a regression.
+
+**DIRECTED vs NOT-YET-IN-EFFECT (the distinction that keeps this entry honest).** The switch is
+operator-DIRECTED (this session) but is **NOT YET IN EFFECT**: the live store has NOT been refreshed, so
+the effective runtime is still `local/qwen36` on the poly engine until an operator refresh.
+`up <rig> --refresh` is operator-only under D113. The outstanding refresh is an OPEN STEP tracked by the
+standing waiting marker `#3274` (held by lead, deferred to the operator) — NOT `#3242` (which closed on
+the decision). An entry that says "the local model is swift-1.5" while the store serves qwen36 would
+itself be the doc-vs-runtime drift this entry exists to prevent.
+
+**R2 reframing — the landing rule from now on.** The landing constraint on provider-dependent tips is NOT
+"do not depend on an unratified change"; it is **DO NOT DEPEND ON A RUNTIME STATE THAT IS NOT IN EFFECT**.
+- RELEASE CONDITION: the store refresh is OBSERVED — a pass reports the effective model as
+  `swift-1.5-iq2_xs` on `strata.exe`. NOT the existence of this DECISIONS entry (documentation does not
+  change the runtime; gating a landing on a doc entry would invert mint-at-land #3075).
+- DEPENDENCY CLASS INCLUDES THE ENGINE, not just the model: the directive changed the engine binary,
+  which moves behaviour more than a model swap does — "unverified for target" covers engine-sensitive
+  results too.
+
+**Alternatives rejected.** (a) Keep Qwen3.6-35B-A3B on `strata-poly` — rejected by the operator's
+direction; (b) switch the model only, keeping `engine-poly\strata-poly.exe` — rejected: the engine is
+part of what changed and must be recorded with it (R2 reframing: runtime-in-effect, engine included).
+
+**Status.** OPERATOR-DIRECTED (2026-10-20); recorded by `scribe` (item #3268) in the same serialized
+pass as the ledger-order fix, then amended per the lead addendum (#3280). Config commit `cafee74`;
+documented in `docs/SELFDEV.md`. The switch is DIRECTED but NOT YET IN EFFECT (see above) — the live
+store refresh is the open step tracked at `#3274`. A tip verified against qwen36/poly is still
+unverified for swift-1.5/strata until the refresh is observed, regardless of how ratified the config is.
+
+## D122 — The fused process is the HARNESS'S HOST, not "harness" or "broker"; post-split names `harnessd` (store+runtime owner) and `broker` (automation client) (lead #4294, 2026-10-21; recorded by scribe, item #4338)
+
+**Decision:** TODAY: NO RENAME. The fused process is a broker that hosts the harness, and NO SINGLE WORD IS
+HONEST because it is two things — describe it, do not rename it. Renaming now would be as wrong as "broker":
+it would name one half and hide the other. **POST-SPLIT:** `harnessd` / "harness server" = the store and
+runtime owner; `broker` = the automation client. Each name is accurate THEN, and the rename lands WHEN THE
+COMPONENTS ACTUALLY SEPARATE — not before. And the direct answer to the operator's "if it is not the harness,
+what else is?": **IT IS THE HARNESS'S HOST — the harness is the runtime object, the process serves it.**
+
+**Rationale.** The operator asked whether "broker" is a poor name and should be "harness". Lead ruled it
+(#4294); the distinction the question could not see is that BOTH single words are wrong today:
+- **"HARNESS" IS ALSO WRONG** — the harness is a LIBRARY OBJECT (`openHarness()`, `harness.resume()`,
+  `harness.conversation()`, `harness.inspect()` — all in `cli.mjs` on main), NOT A PROCESS. The process HOSTS
+the harness, so the honest name for that half is HARNESS SERVER (or `harnessd`) — the SERVER of the harness,
+not the harness.
+- **"BROKER" IS NOT WRONG EITHER** — it is right for the OTHER half: post-split it correctly names the
+AUTOMATION component (it brokers work, decides who runs, delivers intents, supervises). The word reads wrong
+TODAY only because ONE PROCESS IS DOING BOTH JOBS.
+- **Record it NOW:** a rename ruled after the code moves re-opens every file it touched — `broker` appears in
+the CLI surface (`serve`), the runbooks and the demos.
+
+**Ownership invariant (recorded beside the naming; the split's names are meaningless without it, lead verbatim).**
+THE AUTOMATION MUST REMAIN THE ONLY WRITER. HARNESS SERVER OWNS THE STORE; THE BROKER HOLDS THE WRITE LEASE
+AND SUBMITS THROUGH RPC/SPOOL; EVERY OTHER CLIENT IS A READ-ONLY SUBSCRIBER. And "owns" must NOT mean
+"may WRITE": the harness may HOLD the file, but it must NOT WRITE it — ONE WRITER MEANS ONE WRITER.
+`harnessd` names the store's OWNER, not its writer; the two names must not blur that.
+
+**Alternatives.** (a) Rename today to "harness" — rejected: names one half and hides the other, as wrong as
+"broker"; (b) rename today to "harnessd"/"harness server" — rejected: same problem, and the split has not
+happened; (c) no rename today, with the post-split names reserved — adopted.
+
+**Status.** Lead ruling #4294 (2026-10-21); recorded by scribe, item #4338, in the record BEFORE any code
+moves. No rename, no code, no split design — the naming entry only. D122 is the issue-ordered next number
+after D121 (main `ffa2ab3`). Per #3075 (no branch hardcodes a number), the number here is PROVISIONAL: the
+lander MUST re-confirm 122 is still free at land time and RENUMBER IF NOT — an entry that lands with a taken
+number would collide, and a silently-assumed number is exactly what #3075 forbids.

@@ -28,7 +28,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { installWorktreeDeps, prepareSeatWorkspace, removeSeatWorkspace } from "../src/worktree.mjs";
+import { installWorktreeDeps, listWorktrees, prepareSeatWorkspace, removeSeatWorkspace } from "../src/worktree.mjs";
 import { makeSeatEnv } from "../src/seattools.mjs";
 
 const run = promisify(execFile);
@@ -218,7 +218,92 @@ try {
   assert.equal(await branchOf(afterLeftover.worktree), "impl-item-13", "on its item branch");
   await removeSeatWorkspace({ worktreeRoot: source4, itemId: 13 });
 
-  console.log("PREPARE-WORKSPACE PASS (idempotent per-item worktree; the seat's own cwd wins; npm ci path exercised; a leftover non-worktree is refused)");
+  // --- 8. #3174: a reused path on ANOTHER seat's branch is NOT silently repurposed ---
+  // Acceptance 1: the holder's item is TERMINAL, so the branch is reclaimed by DETACHING the
+  // holder (lossless — every file stays) and the result NAMES the detached holder. Today the
+  // reuse path runs `checkout -B` without detaching and reports nothing: the silent steal.
+  const repoA = join(base, "holder-terminal");
+  const sourceA = join(repoA, "durig");
+  await mkdir(sourceA, { recursive: true });
+  await writeFile(join(sourceA, "artifact.txt"), "x\n");
+  await run("git", ["init", "-q", repoA]);
+  await run("git", ["-C", repoA, "add", "durig/artifact.txt"]);
+  await run("git", ["-C", repoA, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
+  await run("git", ["-C", repoA, "branch", "-M", "main"]);
+  const heldA = await prepareSeatWorkspace({ source: sourceA, worktreeRoot: sourceA, itemId: 9, seatName: "designer" });
+  assert.equal(await branchOf(heldA.worktree), "designer-item-9", "the holder is on designer-item-9");
+  await writeFile(join(heldA.worktree, "probe.txt"), "untracked holder scratch\n");
+  const reclaimedA = await prepareSeatWorkspace({ source: sourceA, worktreeRoot: sourceA, itemId: 9, seatName: "impl", itemStatus: "done" });
+  assert.equal(reclaimedA.holderDetached, heldA.worktree, "the result NAMES the detached holder");
+  assert.ok(existsSync(join(heldA.worktree, "probe.txt")), "detaching kept the holder's untracked file (lossless)");
+  const wtsA = await listWorktrees(repoA);
+  assert.ok(!wtsA.some((w) => w.branch === "refs/heads/designer-item-9"), "designer-item-9 is no longer held by any worktree");
+  assert.equal(await branchOf(reclaimedA.worktree), "impl-item-9", "the prepared worktree is on impl-item-9");
+  await removeSeatWorkspace({ worktreeRoot: sourceA, itemId: 9, force: true });
+
+  // --- 9. #3174: a LIVE holder is REFUSED, and the branch is left checked out (no steal) ---
+  // Acceptance 3: today `checkout -B` turns designer-item-9 into impl-item-9 — the steal.
+  const repoC = join(base, "holder-live");
+  const sourceC = join(repoC, "durig");
+  await mkdir(sourceC, { recursive: true });
+  await writeFile(join(sourceC, "artifact.txt"), "x\n");
+  await run("git", ["init", "-q", repoC]);
+  await run("git", ["-C", repoC, "add", "durig/artifact.txt"]);
+  await run("git", ["-C", repoC, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
+  await run("git", ["-C", repoC, "branch", "-M", "main"]);
+  const heldC = await prepareSeatWorkspace({ source: sourceC, worktreeRoot: sourceC, itemId: 9, seatName: "designer" });
+  let refusedC = null;
+  try {
+    await prepareSeatWorkspace({ source: sourceC, worktreeRoot: sourceC, itemId: 9, seatName: "impl", itemStatus: "claimed" });
+  } catch (err) {
+    refusedC = err;
+  }
+  assert.ok(refusedC, "a LIVE holder's branch is refused, not stolen");
+  assert.match(refusedC.message, /refusing to prepare item 9/, "the refusal names the item");
+  assert.match(refusedC.message, /designer-item-9/, "the refusal names the held branch");
+  assert.equal(await branchOf(heldC.worktree), "designer-item-9", "the holder is UNTOUCHED (still on its branch — no steal)");
+
+  // --- 9b. #3174: the branch held by a DIFFERENT worktree path is refused while the item is live ---
+  // Acceptance 2: the holder path AND the item id are named; the holder is untouched.
+  const repoB = join(base, "branch-held-elsewhere");
+  const sourceB = join(repoB, "durig");
+  await mkdir(sourceB, { recursive: true });
+  await writeFile(join(sourceB, "artifact.txt"), "x\n");
+  await run("git", ["init", "-q", repoB]);
+  await run("git", ["-C", repoB, "add", "durig/artifact.txt"]);
+  await run("git", ["-C", repoB, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
+  await run("git", ["-C", repoB, "branch", "-M", "main"]);
+  const elsewhere = join(repoB, "elsewhere-9");
+  await run("git", ["-C", repoB, "worktree", "add", "-b", "impl-item-9", elsewhere]);
+  let refusedB = null;
+  try {
+    await prepareSeatWorkspace({ source: sourceB, worktreeRoot: sourceB, itemId: 9, seatName: "impl", itemStatus: "claimed" });
+  } catch (err) {
+    refusedB = err;
+  }
+  assert.ok(refusedB, "a branch held by another worktree is refused when the item is live");
+  assert.match(refusedB.message, /refusing to prepare item 9/, "the refusal names the item id");
+  assert.ok(refusedB.message.includes(elsewhere.replace(/\\/g, "/")) || refusedB.message.includes("elsewhere-9"), `the refusal names the holder path (got ${refusedB.message})`);
+  assert.equal(await branchOf(elsewhere), "impl-item-9", "the holder is UNTOUCHED");
+
+  // --- 9c. #3174: the SAME branch-held-elsewhere conflict, but the item is TERMINAL → detach + proceed ---
+  const repoD = join(base, "branch-held-elsewhere-terminal");
+  const sourceD = join(repoD, "durig");
+  await mkdir(sourceD, { recursive: true });
+  await writeFile(join(sourceD, "artifact.txt"), "x\n");
+  await run("git", ["init", "-q", repoD]);
+  await run("git", ["-C", repoD, "add", "durig/artifact.txt"]);
+  await run("git", ["-C", repoD, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
+  await run("git", ["-C", repoD, "branch", "-M", "main"]);
+  const elsewhereD = join(repoD, "elsewhere-9");
+  await run("git", ["-C", repoD, "worktree", "add", "-b", "impl-item-9", elsewhereD]);
+  const reclaimedD = await prepareSeatWorkspace({ source: sourceD, worktreeRoot: sourceD, itemId: 9, seatName: "impl", itemStatus: "cancelled" });
+  assert.equal(reclaimedD.holderDetached, elsewhereD, "the result names the detached holder");
+  assert.equal(reclaimedD.created, true, "and the worktree is created on the now-free branch");
+  assert.equal(await branchOf(elsewhereD), "", "the former holder is detached (branch freed)");
+  assert.equal(await branchOf(reclaimedD.worktree), "impl-item-9", "the new worktree holds impl-item-9");
+
+  console.log("PREPARE-WORKSPACE PASS (idempotent per-item worktree; the seat's own cwd wins; npm ci path exercised; a leftover non-worktree is refused; a held branch is resolved, never stolen)");
 } finally {
   delete process.env.DURIG_SEAT_ROOT;
   if (worktree && existsSync(worktree)) {
