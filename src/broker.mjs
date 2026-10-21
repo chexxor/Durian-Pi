@@ -1447,6 +1447,42 @@ export async function settledWithin(promise, ms) {
 
 
 /**
+ * #2483 (ROADMAP 158 / architect F6): classify a failure for the retry residual, so the
+ * retry path can name WHY it is retrying and a caller can narrow eligibility. Scans the
+ * whole cause chain (a storage failure is WRAPPED) for the markers `node:sqlite` and the
+ * harness surface. Classes:
+ *   - `overload`  — the store is contended/rate-limited (`SQLITE_BUSY`/`SQLITE_LOCKED`,
+ *                   "database is locked", overloaded/429). The common transient case.
+ *   - `storage`   — an I/O/protocol/timeout failure (retryable, not contention).
+ *   - `unknown`   — anything else; still retry-eligible (see RETRYABLE_CLASSES) but named so
+ *                   a persistent unknown failure is legible in the log and the diagnostic.
+ */
+export function classifyError(error) {
+  const parts = [];
+  for (let e = error, depth = 0; e && depth < 6; e = e.cause, depth++) {
+    parts.push(String(e.name ?? ""), String(e.message ?? ""), String(e.code ?? ""), String(e.errcode ?? ""), String(e.errstr ?? ""));
+  }
+  const text = parts.join(" ");
+  if (/SQLITE_BUSY|SQLITE_LOCKED|database is locked|database table is locked|overloaded|rate.?limit|too many requests|\b429\b/i.test(text)) {
+    return "overload";
+  }
+  if (/SQLITE_IOERR|SQLITE_PROTOCOL|SQLITE_CANTOPEN|disk i\/o|EAGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED|timeout/i.test(text)) {
+    return "storage";
+  }
+  return "unknown";
+}
+
+/**
+ * #2483: which failure classes a retry is ELIGIBLE for. The retried unit is a PASS, which is
+ * idempotent — a re-run re-submits a wake (the driver re-selects the same seat) and re-drains
+ * an intent (deduped by `requestId`) — so re-running it is safe for every class, and this set
+ * is deliberately permissive. It is the ONE place a narrower rule would live (e.g. F2's
+ * harness-reopen could make a non-reopenable class terminal at once); it is exported so a
+ * caller can assert the eligibility rule rather than infer it.
+ */
+export const RETRYABLE_CLASSES = new Set(["overload", "storage", "unknown"]);
+
+/**
  * The resident loop: run a pass whenever the scheduler says one is due, and
  * otherwise sleep until the next commit or the scheduler's floor — never poll.
  *
@@ -1477,6 +1513,13 @@ export async function runWakeLoop({
   // error cannot hot-loop the loop.
   wakeRetryMs = 2_000,
   wakeRetryMaxMs = 60_000,
+  // #2483 (ROADMAP 158 / F6): a retry BUDGET. After this many CONSECUTIVE unactioned passes
+  // the retry chain ENDS with a terminal, surfaced diagnostic instead of retrying forever.
+  wakeRetryBudget = 12,
+  // #2483: ± this fraction of jitter on each backoff, so two brokers (or two retry chains)
+  // cannot resynchronize on the same schedule. `random` is injectable so a demo is exact.
+  retryJitter = 0.25,
+  random = Math.random,
   now = Date.now,
   startedAt = now(),
   isStopping = () => false,
@@ -1521,6 +1564,10 @@ export async function runWakeLoop({
   // Consecutive passes that dropped a wake via `wake-failed`; drives the retry
   // backoff below. Any pass that failed no wake resets it to 0.
   let consecutiveWakeFailures = 0;
+  // #2483: the raw failure most recently seen (classified for the retry log/diagnostic), and
+  // a one-shot latch so the terminal budget diagnostic is surfaced ONCE per exhaustion.
+  let lastFailure = null;
+  let budgetExhaustedReported = false;
   // #2420: the stop is bounded and interruptible. `stopKind()` names the pending stop;
   // the grace deadline is measured from when it was REQUESTED (the signal's timestamp, or
   // the timestamp the `.stop` file carries), not from when the loop happens to notice it —
@@ -1803,6 +1850,7 @@ export async function runWakeLoop({
       // resident broker (the 17:29Z death). Log it WITH its nested cause and keep driving;
       // the loop's idle pacing keeps a persistent failure from becoming a hot spin.
       passThrew = true;
+      lastFailure = error;
       const described = describeError(error);
       onDiagnostic({ kind: "pass-failed", ...described });
       // ROADMAP 78 / #2237: a throwing pass must be VISIBLE in `<db>.broker.log`, not only as a
@@ -1875,12 +1923,35 @@ export async function runWakeLoop({
     // reproducing the pre-fix shape a demo uses to prove the contrast.
     const unactionedFailure = failedThisPass.size > 0 || passThrew;
     consecutiveWakeFailures = unactionedFailure ? consecutiveWakeFailures + 1 : 0;
-    if (unactionedFailure && wakeRetryMs > 0) {
-      const backoff = Math.min(wakeRetryMs * 2 ** (consecutiveWakeFailures - 1), wakeRetryMaxMs);
+    if (!unactionedFailure) budgetExhaustedReported = false;
+    // #2483: name the failure CLASS, and gate the retry on eligibility. The retried unit is a
+    // PASS, which is idempotent (wake + `requestId` dedup), so every class is eligible today;
+    // RETRYABLE_CLASSES is where a narrower rule would live.
+    const failureClass = unactionedFailure ? classifyError(lastFailure) : null;
+    const retryEligible = unactionedFailure && RETRYABLE_CLASSES.has(failureClass);
+    if (unactionedFailure && wakeRetryMs > 0 && retryEligible && consecutiveWakeFailures <= wakeRetryBudget) {
+      const base = Math.min(wakeRetryMs * 2 ** (consecutiveWakeFailures - 1), wakeRetryMaxMs);
+      // #2483: JITTER the backoff so two brokers cannot resynchronize, then re-clamp to the cap.
+      const jittered = Math.round(base * (1 + retryJitter * (random() * 2 - 1)));
+      const backoff = Math.max(1, Math.min(jittered, wakeRetryMaxMs));
       const retryAt = now() + backoff;
       cooldownRevisitAt = cooldownRevisitAt === null ? retryAt : Math.min(cooldownRevisitAt, retryAt);
       const names = failedThisPass.size > 0 ? [...failedThisPass].join(",") : "-";
-      logBrokerLine(dbPath, `WAKE-RETRY in=${backoff}ms seats=${names}${passThrew ? " pass-threw" : ""}`);
+      logBrokerLine(
+        dbPath,
+        // The `in=...ms seats=...` prefix is UNCHANGED (demo/broker-wake-retry.test.mjs matches it);
+        // the new class/budget fields are APPENDED so existing log readers keep working.
+        `WAKE-RETRY in=${backoff}ms seats=${names}${passThrew ? " pass-threw" : ""} class=${failureClass} n=${consecutiveWakeFailures}/${wakeRetryBudget}`,
+      );
+    } else if (unactionedFailure && wakeRetryMs > 0 && retryEligible && consecutiveWakeFailures > wakeRetryBudget) {
+      // #2483 (F6): the budget is SPENT — retrying forever is the unkillable-daemon bug. Stop
+      // scheduling retries and surface the terminal state ONCE (a diagnostic AND a log line),
+      // so "why did this seat stop being driven?" has an answer other than a frozen PASS.
+      if (!budgetExhaustedReported) {
+        budgetExhaustedReported = true;
+        onDiagnostic?.({ kind: "retry-budget-exhausted", class: failureClass, consecutive: consecutiveWakeFailures });
+        logBrokerLine(dbPath, `WAKE-RETRY-EXHAUSTED class=${failureClass} n=${consecutiveWakeFailures} budget=${wakeRetryBudget}`);
+      }
     }
     // F35: cooperative stop — a `serve --stop` command writes a .stop file
     // instead of process.kill (which does not deliver SIGTERM on Windows). The
