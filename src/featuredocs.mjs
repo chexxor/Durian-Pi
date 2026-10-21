@@ -23,6 +23,7 @@
 // when the note lives in the item rather than the commit message.
 
 import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
 
 /** The doc a shipped capability must carry a row in (D62). */
 export const FEATURES_DOC = "docs/FEATURES.md";
@@ -61,6 +62,32 @@ function git(args, cwd) {
  */
 export function readSharedTreeBranch({ root = process.cwd() } = {}) {
 	return git(["branch", "--show-current"], root);
+}
+
+/**
+ * Whether `root` is a LINKED worktree — a landing scratch or a seat/item worktree —
+ * rather than the SHARED working tree the `shared-tree-on-main` rule guards.
+ *
+ * Git gives a linked worktree its own git dir (`<common>/.git/worktrees/<id>`) while
+ * the shared tree's git dir IS the common dir, so the two are told apart by comparing
+ * `--absolute-git-dir` with `--git-common-dir`. This matters because `scripts/land.mjs`
+ * runs the suite in a DETACHED scratch worktree: there the branch reads as "" and the
+ * rule fired on every landing, refusing them all (2026-10-19, #2679). A linked worktree
+ * is not the shared tree, so the rule must ignore it.
+ *
+ * Returns null when git or the repository is unavailable — UNKNOWN, never a silent
+ * "this is the shared tree" (the same honesty rule as readFeatureDocs).
+ */
+export function isLinkedWorktree({ root = process.cwd() } = {}) {
+	const gitDir = git(["rev-parse", "--absolute-git-dir"], root);
+	if (gitDir === null) return null;
+	const commonDir = git(["rev-parse", "--git-common-dir"], root);
+	if (commonDir === null) return null;
+	const norm = (p) => {
+		const abs = resolve(root, p);
+		return process.platform === "win32" ? abs.toLowerCase() : abs;
+	};
+	return norm(gitDir) !== norm(commonDir);
 }
 
 /**

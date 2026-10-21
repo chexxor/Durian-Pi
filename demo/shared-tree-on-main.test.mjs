@@ -10,6 +10,11 @@
 // FAILING-FIRST: before the rule existed, `shared-tree-on-main` was not in RULES and auditRig
 // ignored `sharedTreeBranch`, so the assertions below fail.
 //
+// FAILING-FIRST (the landing-gate regression, #2679): `scripts/land.mjs --suite` runs the suite in
+// a DETACHED scratch worktree. There the branch reads as "", the rule fired, and the helper refused
+// EVERY landing. The rule must IGNORE a linked worktree (a landing scratch or a seat/item worktree)
+// while still firing on the SHARED tree off main. Sections 6b/6c/7b below fail before that fix.
+//
 // Run: node demo/shared-tree-on-main.test.mjs  (exit 0 = pass)
 
 import assert from "node:assert/strict";
@@ -19,7 +24,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RULES, auditRig, formatCheck } from "../src/checkup.mjs";
-import { readSharedTreeBranch } from "../src/featuredocs.mjs";
+import { isLinkedWorktree, readSharedTreeBranch } from "../src/featuredocs.mjs";
 
 // A rig whose OTHER rules all pass, so any finding below is a shared-tree finding.
 const CONSTITUTION = "shared norms";
@@ -41,6 +46,7 @@ const base = {
 	modelsBySeat: { alpha: "faux/model-a", verifier: "faux/model-b" },
 };
 const audit = (sharedTreeBranch) => auditRig({ ...base, sharedTreeBranch });
+const auditLinked = (sharedTreeBranch, sharedTreeLinked) => auditRig({ ...base, sharedTreeBranch, sharedTreeLinked });
 const ids = (r) => r.findings.map((f) => f.id);
 const checkFor = (r, id) => (r.checks ?? []).find((c) => c.id === id);
 
@@ -86,6 +92,26 @@ assert.match(rendered, /shared-tree-on-main/, "the render names the rule");
 assert.match(rendered, /switch the shared tree back/, "the render carries the fix");
 console.log("  ok   the render names the rule and its fix");
 
+/* 6b. a LINKED worktree is IGNORED (#2679): a landing scratch is detached and a seat worktree is on
+ *     its item branch; neither is the SHARED tree, so the rule is SKIPPED with a reason, never
+ *     fired. Before the fix the scratch made the rule refuse EVERY landing. */
+const linkedDetached = auditLinked("", true);
+assert.deepEqual(ids(linkedDetached), [], `a linked detached scratch reports nothing; got ${ids(linkedDetached).join(", ")}`);
+assert.equal(checkFor(linkedDetached, "shared-tree-on-main").status, "skipped", "a linked worktree SKIPS the rule, never passes it");
+assert.ok(checkFor(linkedDetached, "shared-tree-on-main").why, "the skip says why");
+assert.equal(linkedDetached.exitCode, 0, "a linked worktree does not fail the run");
+const linkedSeat = auditLinked("impl-item-2679", true);
+assert.deepEqual(ids(linkedSeat), [], "a linked seat worktree on its item branch reports nothing");
+assert.equal(checkFor(linkedSeat, "shared-tree-on-main").status, "skipped", "and it is skipped there too");
+console.log("  ok   a LINKED worktree is ignored (detached scratch + item branch), so landings pass");
+
+/* 6c. the exemption cannot be widened by omission: with the flag off, the SAME off-main branch
+ *     still FIRES, so only an explicit linked worktree is exempt. */
+const sharedOffMain = auditLinked("devtools-item-2412", false);
+assert.ok(ids(sharedOffMain).includes("shared-tree-on-main"), "the shared tree off main still fires with linked=false");
+assert.equal(checkFor(sharedOffMain, "shared-tree-on-main").status, "fail");
+console.log("  ok   the shared tree off main still fires (linked=false)");
+
 /* 7. the REAL reader: a throwaway repo, read through git ------------------- */
 const repo = mkdtempSync(join(tmpdir(), "durig-sharedtree-"));
 const git = (args) => spawnSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -104,6 +130,21 @@ try {
 	assert.equal(readSharedTreeBranch({ root: repo }), "", "a detached HEAD reads as the empty branch");
 	assert.equal(readSharedTreeBranch({ root: join(repo, "nope") }), null, "an unreadable repo is null, never an empty pass");
 	console.log("  ok   readSharedTreeBranch reads a real repo (main / feature / detached / absent)");
+
+	/* 7b. the linked-worktree reader the CLI passes to auditRig (#2679): the shared tree is NOT
+	 *     linked; a `git worktree add` scratch (what scripts/land.mjs creates) IS. */
+	assert.equal(isLinkedWorktree({ root: repo }), false, "the shared tree is not a linked worktree");
+	const linkedPath = join(tmpdir(), `durig-sharedtree-linked-${process.pid}`);
+	const addLinked = git(["worktree", "add", "--detach", linkedPath, "HEAD"]);
+	assert.equal(addLinked.status, 0, `worktree add failed: ${addLinked.stderr}`);
+	try {
+		assert.equal(isLinkedWorktree({ root: linkedPath }), true, "a linked worktree is detected");
+		assert.equal(isLinkedWorktree({ root: join(linkedPath, "nope") }), null, "an unreadable repo is null, never false");
+		console.log("  ok   isLinkedWorktree tells a linked worktree from the shared tree");
+	} finally {
+		git(["worktree", "remove", "--force", linkedPath]);
+		rmSync(linkedPath, { recursive: true, force: true });
+	}
 } finally {
 	rmSync(repo, { recursive: true, force: true });
 }

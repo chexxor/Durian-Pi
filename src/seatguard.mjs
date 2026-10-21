@@ -16,6 +16,8 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve as resolveNodePath } from "node:path";
 import { refusalFor } from "./confine.mjs";
+import { isInside } from "./confine.mjs";
+import { writeTargets } from "./writetargets.mjs";
 import { resolveSeatRoot } from "./seatroot.mjs";
 import { SECRET_PREFIX_PATTERNS } from "./config.mjs";
 import { afterTool as redactToolResult } from "./secretredact.mjs";
@@ -256,6 +258,29 @@ function commitSecretRefusal(root, command) {
 }
 
 /**
+ * #1966 layer (ii): the broker SPOOL directory (`<db>.broker.inbox`) is a CONTROL-PLANE
+ * surface — a spool request carries a PRODUCER-STAMPED `from`, so a seat that can write
+ * here could forge `from: "operator"` and drive a control-plane op (pause/configure) or
+ * a cross-seat reset/stop/compact. This path-deny NARROWS that surface.
+ *
+ * BEST-EFFORT, not the boundary: a shell defeats any string check (the F4 reason
+ * `refusalFor` is not the boundary either), so this is a LAYER under the authoritative
+ * `from`-gate in src/broker.mjs (`authorizeSpoolRequest`). The bypass is DOCUMENTED in
+ * demo/control-plane-gate.test.mjs, not hidden.
+ */
+const SPOOL_PATH_RE = /(?:^|[\\/])[^\\/\s]*\.broker\.inbox(?:\.error)?(?:[\\/]|$)/;
+export function refusalForSpoolPath(target) {
+	if (typeof target !== "string" || target === "") return null;
+	if (!SPOOL_PATH_RE.test(target)) return null;
+	return (
+		"refused by durig: that path is the broker SPOOL directory (a control-plane surface) — " +
+		"a seat may not write it. A spool request carries a producer-stamped `from`, so a write " +
+		"here could forge an operator control-plane request (pause/configure/reset). Use the " +
+		"operator CLI verbs instead; this is a layer, not the boundary (the `from`-gate refuses it)"
+	);
+}
+
+/**
  * Refuse a call, or let it through.
  *
  * `ToolHookCall.parent` is set for a nested call - one a running tool made through
@@ -265,6 +290,11 @@ function commitSecretRefusal(root, command) {
 export async function beforeTool(call, api, context) {
 	const command = SHELL_TOOLS.has(call?.name) ? call.arguments?.command : undefined;
 	if (typeof command !== "string") {
+		// #1966 layer (ii): a write/edit into the broker spool is refused before it lands.
+		if (call?.name === "write" || call?.name === "edit") {
+			const spool = refusalForSpoolPath(call.arguments?.path);
+			if (spool !== null) return { block: spool };
+		}
 		// #673: writes get the same refusal channel (`block`). Two corruption
 		// shapes are checked at call time: class 2 (stray control bytes) from the
 		// payload alone, class 1 (a multi-line source collapsed to one line) from
@@ -280,14 +310,64 @@ export async function beforeTool(call, api, context) {
 		}
 		return undefined;
 	}
-	const refusal = refusalFor(command);
+	// #1966 layer (ii): a shell command naming the spool directory is refused (best-effort).
+	// #4374: the refusal is given the seat root and cwd, so a PATH-AWARE entry (`checkout-index`)
+	// can resolve its TARGET instead of pattern-matching the verb.
+	const guardRoot = await seatGraphRoot(api, context);
+	const refusal = refusalFor(command, { root: guardRoot, cwd: guardRoot }) ?? refusalForSpoolPath(command);
 	if (refusal !== null) return { block: refusal };
+	// #4367: a shell command string that WRITES outside the seat's worktree. The containment guard
+	// exists (confine.mjs `confinedEnv`), but only structured calls reach it; this is the resolver's
+	// wiring. `unresolved` is REPORTED rather than passed silently — a form nobody could read is a
+	// form nobody checked, and its silence must not look like "nothing was wrong".
+	const shellWrite = shellWriteRefusal({ command, root: await seatGraphRoot(api, context) });
+	if (shellWrite.block !== null) return { block: shellWrite.block };
+	if (shellWrite.unresolved.length > 0) {
+		console.error(
+			`durig guard: ${shellWrite.unresolved.length} write target(s) in this shell command could not be resolved (${shellWrite.unresolved
+				.map((u) => u.raw)
+				.join(", ")}) — they were NOT checked; prefer the edit tool or a literal path`,
+		);
+	}
 	// #1317: a commit lands durable, portable history — gate its staged content.
 	if (GIT_COMMIT_RE.test(command)) {
 		const block = commitSecretRefusal(await seatGraphRoot(api, context), command);
 		if (block !== null) return { block };
 	}
 	return undefined;
+}
+
+/**
+ * #4367: the ROOT-ESCAPE refusal for a SHELL command string.
+ *
+ * The containment guard ALREADY EXISTS - confine.mjs `confinedEnv` denies "path <x> is outside the
+ * seat's worktree" - but it is reached by STRUCTURED tool calls and NEVER by a shell string, because
+ * nothing turns `> X`, `Set-Content -Path X` or `cp A B` into a `path`. `writeTargets` is that
+ * missing step, and this is the wiring. (NOT `refusalForWrite`: that one refuses a multi-line source
+ * being COLLAPSED to one line, a different shape; containment is confine.mjs's job.)
+ *
+ * Returns the block (or null) plus `unresolved` so the CALLER can report it: an unreadable form is a
+ * form nobody checked, and "nothing was checked" must not look like "nothing was wrong".
+ *
+ * THE REMEDY IS NAMED, and not for politeness: the 04:21Z seat acted on a LEGITIMATE GOAL (restore
+ * the shared tree to main) with the WRONG TOOL. A refusal reading "you may not touch the shared
+ * tree" would be read as forbidding the GOAL, and the next seat routes AROUND the guard. So it says
+ * what to do instead: the edit tool, your own worktree, and a git operation for tracked paths.
+ */
+export function shellWriteRefusal({ command, root, cwd = root }) {
+	const { targets, unresolved } = writeTargets(command, { cwd });
+	const escapes = targets.filter((t) => !isInside(root, t.path));
+	if (escapes.length === 0) return { block: null, unresolved, targets };
+	const named = escapes.map((t) => t.path).join(", ");
+	return {
+		block:
+			`refused by durig: this shell command WRITES outside your worktree — ${named} is outside ${root}. ` +
+			`Your goal may be legitimate; the METHOD is not. Use the \`edit\` tool for source files, do the ` +
+			`work in your item worktree, and if the shared tree needs restoring that is a git operation on ` +
+			`TRACKED paths — never a text rewrite.`,
+		unresolved,
+		targets,
+	};
 }
 
 /**

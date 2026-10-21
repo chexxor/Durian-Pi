@@ -127,7 +127,12 @@ try {
 		// #1931: `resume`/`doctor` is a DOCUMENTED REFUSAL, not a spool route — the broker already
 		// settles stranded submissions at startup and every pass, so the message names WHY and the
 		// runbook, and must NOT advise stopping a live broker.
-		["resume", ["resume"], { why: /settles stranded submissions ITSELF/, runbook: /resume-while-broker-runs\.md/ }],
+		// #4318: the `why` pin is CASE-INSENSITIVE. #4170 changed the message to `settles STRANDED
+		// submissions ITSELF` (the emphasis shipped with a behaviour fix) and updated a different demo,
+		// leaving this one pinning the old typography. A case-sensitive pin couples the check to the
+		// MESSAGE'S CAPITALISATION rather than its MEANING: it goes red for an emphasis change and says
+		// nothing about whether the refusal is correct. The runbook pin below is unchanged.
+		["resume", ["resume"], { why: /settles stranded submissions itself/i, runbook: /resume-while-broker-runs\.md/ }],
 		["reset", ["reset", "worker"], null],
 		["send", ["send", "worker", "hello"], null],
 		// #1589: `up` opened a harness with NO guard, so `up --refresh` was a second owner.
