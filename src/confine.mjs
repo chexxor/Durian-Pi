@@ -308,6 +308,20 @@ const DENIED_COMMANDS = [
 	{ re: /git\s+-C\s+\S+\s+add\s+-A\b/i, why: "unscoped staging redirected" },
 	{ re: /git\s+-C\s+\S+\s+add\s+\.(?:$|[\s;&|"'()])/i, why: "unscoped staging redirected" },
 	{ re: /git\s+-C\s+\S+\s+push\b/i, why: "same as `git push` — needs operator authorization" },
+	// #4129 (spec from #4127): the VERB is not the property. `git rebase` is legitimate when it rebases
+	// the CURRENT branch and is the checkout hazard when it NAMES a branch to check out. This is a
+	// check, not a verb rule, and it runs PRE-SPAWN like every other entry here — so the property is
+	// encoded in the command text ("does this invocation check out a branch?"), not observed after the
+	// call. A post-call "HEAD is still on the item branch" assertion is the better shape and needs a
+	// hook this environment does not have; it is registered, not built.
+	{
+		check: rebaseChecksOutBranch,
+		why:
+			"would CHECK OUT another branch and move HEAD off your item branch — the state the checkout/switch " +
+			"denial exists to prevent. Rebase YOUR OWN branch instead (`git rebase <upstream>` with no second " +
+			"branch), or rebase the other branch in a throwaway worktree and publish a `-rebased` ref. If you " +
+			"are already off your item branch, `git switch <your-item-branch>` first",
+	},
 ];
 
 /** True only when the operator set this in durig's own environment, which a seat cannot reach. */
@@ -367,6 +381,45 @@ function pickEnv(requested, allowlist) {
 	}
 	return kept;
 }
+
+/**
+ * THE PROPERTY THE VERB LIST CANNOT ENFORCE (#4129, spec from #4127): `git rebase` is LEGITIMATE when it
+ * rebases the CURRENT branch — `git rebase main` rewrites the item branch and leaves HEAD on it — and is
+ * the checkout/switch hazard when it NAMES A BRANCH TO CHECK OUT: `git rebase <upstream> <branch>` and
+ * `git rebase --onto <new> <old> <branch>` both check <branch> out and leave the seat OFF its item
+ * branch.
+ *
+ * SO THE RULE IS ABOUT THE ARGUMENTS, NOT THE VERB: refuse only when a second positional (or an
+ * explicit branch after --onto) is present. Adding `rebase` to the deny list would block the sanctioned
+ * flow — the fail-closed trap #4126 warned about and then walked into.
+ */
+const REBASE_VALUE_FLAGS = new Set(["--onto", "-x", "--exec", "-s", "--strategy", "-X", "--strategy-option"]);
+
+function rebaseChecksOutBranch(text) {
+	for (const tokens of shellSegments(text)) {
+		const head = tokens[0]?.toLowerCase();
+		if (head !== "git" && head !== "git.exe") continue;
+		const { sub, rest } = gitSubcommand(tokens.slice(1));
+		if (sub !== "rebase") continue;
+		// Positional arguments, skipping the VALUES of flags that take one (--onto <new>, -x <cmd>, ...).
+		const positional = [];
+		for (let i = 0; i < rest.length; i++) {
+			const token = rest[i];
+			if (token.startsWith("-")) {
+				if (REBASE_VALUE_FLAGS.has(token)) i++;
+				continue;
+			}
+			positional.push(token);
+		}
+		// TWO positionals is `git rebase <upstream> <branch>`: it CHECKS <branch> OUT. ONE positional
+		// rebases the current branch and is ALLOWED — that is the sanctioned case the naive
+		// "HEAD unchanged" property would have blocked.
+		if (positional.length >= 2) return true;
+	}
+	return false;
+}
+
+/** The refusal a seat sees, phrased so it can act on it rather than retry blindly. */
 
 // The refusal a seat sees, phrased so it can act on it rather than retry blindly.
 //

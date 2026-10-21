@@ -1,7 +1,7 @@
 # Architecture review — devtools small-local-model instruction decay: lead's proposal A–F
 
 **Status:** review delivered (architect, item **#2730**, 2026-10-19). Reviews lead's proposal **#2708** on
-architecture/mechanism grounds. Durable invariant recorded as **D115** (Proposed) in `docs/DECISIONS.md`.
+architecture/mechanism grounds. Durable invariant recorded as **D123** (Proposed) in `docs/DECISIONS.md`.
 **Method:** read the proposal against the tree — `src/degeneration.mjs`, `src/inflight.mjs`,
 `src/context.mjs`, `src/config.mjs`, `src/providers/local.mjs`, `src/readapi.mjs`, `cli.mjs`
 (`superviseOnce`), and D84/D105/D107/D24.
@@ -138,7 +138,7 @@ again. This is the one mechanism change that retires B, E, and the "which guard 
    *Recovery:* the `inflight.mjs` rule — **no window ⇒ no token bound**, never invent a fraction
    (ROADMAP 27); fall back to the window-independent causes.
 6. **The two guards disagree** (different denominators/fractions). *Recovery:* the single resolver
-   (D115) + a demo asserting both read the same window for one seat.
+   (D123) + a demo asserting both read the same window for one seat.
 
 ---
 

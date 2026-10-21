@@ -1626,6 +1626,15 @@ async function awaitIntentResult(dbPath, requestId, { timeoutMs = 15 * 60_000, p
   }
 }
 
+/**
+ * How long `serve --stop` waits for the broker PROCESS to exit before giving up without a
+ * forced kill. Env-overridable (`DURIG_STOP_WAIT_MS`) so a demo can prove the decision fast.
+ */
+function stopWaitMs() {
+  const v = parseInt(process.env.DURIG_STOP_WAIT_MS, 10);
+  return Number.isFinite(v) && v > 0 ? v : 60_000;
+}
+
 async function cmdStopBroker() {
   const state = readBrokerState(DB_PATH);
   if (!state) {
@@ -1635,8 +1644,9 @@ async function cmdStopBroker() {
   // #2420: liveness is RAW pid existence. A stale heartbeat does NOT mean the process is
   // gone — a broker wedged in a pass stops heartbeating while still running, and reading
   // that as "dead" cleared a live broker's state and reported `stopped:true` for it.
+  // #2574: the pid guard keeps a NEWER broker's state file intact when we clear.
   if (!pidAlive(state.pid)) {
-    clearBrokerState(DB_PATH);
+    clearBrokerState(DB_PATH, state.pid);
     out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "state was stale; cleared" });
     return;
   }
@@ -1656,7 +1666,7 @@ async function cmdStopBroker() {
   }
   const stillAlive = pidAlive(state.pid);
   if (!stillAlive) {
-    clearBrokerState(DB_PATH);
+    clearBrokerState(DB_PATH, state.pid);
     clearStopRequest(DB_PATH);
     out({
       ok: true,

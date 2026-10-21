@@ -1,6 +1,6 @@
 ---
 runbook: land
-symptom: "a verified branch is not on main; land it without ever leaving the shared tree mid-merge"
+symptom: "a verified branch is not on main (possibly stacked on an unlanded base - name it); land it without ever leaving the shared tree mid-merge"
 writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
 last_verified: 2026-10-19
@@ -169,6 +169,26 @@ conflicted branch left `.git/MERGE_HEAD` and `<<<<<<<` markers in `src/checkup.m
 detached worktree**, and `main` advances only by a **clean fast-forward**. The shared tree is never
 mid-merge, whatever a branch does.
 
+## Stacked (unlanded) base — every entry NAMES its base
+
+A **stacked entry** is a branch whose **base is unlanded** — it builds on work that is verified but not
+yet on `main`, so it cannot be merged onto `main` on its own. Stacking is inherent to a landing
+backlog: branches queue while new work builds on them.
+
+**Rule:** EVERY stacked landing entry **names its base** and **states how that base becomes reachable**
+— the exact branch/commit (`git -C <repo> log --oneline -1 <base>`) and the mechanism that lands it
+first: an earlier entry in this same pass (list it), a named already-verified branch, or the
+**base-ref capability (#1456)** once it lands. A stacked entry is never offered to the helper as if it
+were based on `main`.
+
+Why it matters (2026-10-17): until #1456 lands, a seat CANNOT be provisioned at an unlanded tip —
+`prepare_workspace` and the `worktree` verb never pass `ref` — so an unlanded base is both an ordering
+constraint for the pass and a provisioning blocker for new work (impl's #1444/#1454). See
+`SEAT-LIFECYCLE.md` §3 "Stacked (unlanded) base".
+
+**Durable fix:** the base-ref capability (**#1456**, PRIORITY per the operator) makes stacking *work* by
+letting a worktree be created at an unlanded tip. `pause` (ROADMAP 131) and smaller, more frequent
+landings reduce how often it arises, but only #1456 removes the blocker.
 ## QUICK PATH (verified 2026-10-19) — land with the broker UP, prove on `main`
 
 `scripts/land.mjs` now **waits** for the generation slots instead of refusing while a seat generates
@@ -263,6 +283,19 @@ ask "stop or not?" or "why did --suite fail?".
    *(`--suite` was skipped for the 2026-10-19 passes while the rule was broken; the helper itself never
    required it, and the post-landing `node scripts/suite.mjs` run is what proved those landings.)*
 
+   **THIS FALLBACK HAS AN EXPIRY, AND IT IS NOT "WHEN `main` IS GREEN".** "Green" is unreachable (the
+   real content defects had no owner) and ambiguous (`pitui` is arguably CORRECT to fail against the
+   vendored junction). Delete this fallback when `main`'s red set is **EMPTY IN THE SEAT-ROOT DEPENDENCY
+   ENVIRONMENT** — i.e. the real content defects are fixed, and `pitui` is either fixed or the vendored
+   link is DECLARED INTENDED by whoever owns that call. An unreachable expiry is a workaround that never
+   expires: the next lander reads "remove when green", sees red forever, and concludes the fallback IS the
+   permanent procedure — which is the habit the condition exists to prevent.
+   **Every `--suite`-less proof must STATE THE DEPENDENCY SET IT RAN IN.** A proof from a worktree-local
+   `npm ci` and a proof from the seat root are not comparable, and the output does not distinguish them
+   (see the fresh-worktree note below). **And do NOT read "red on N" as environmental:** at the time of
+   writing the same commit reported 3 red in the seat root and 7 after a worktree-local `npm ci` — two of
+   those were REAL content defects, one was an environment guard and five were dependency-version
+   artefacts. A landing pass that treats the delta as noise will treat the real ones as noise too.
 #### ⚠ WHEN `main` IS ALREADY RED: land WITHOUT `--suite`, then prove on `main` — AND DELETE THIS SECTION WHEN IT CLEARS
 
 **The workaround, while `main` carries known-red demos:** land with `node scripts/land.mjs <b1> … --db
@@ -278,6 +311,8 @@ already-red tree is not a weaker check, it is a misleading one.
 git worktree add --detach "$PWD/.main-check" main
 ( cd .main-check && node scripts/suite.mjs --jobs 8 ); echo "exit=$?"
 git worktree remove --force "$PWD/.main-check"; git worktree prune
+#   delete this section when that reports exit=0 (pass=all, fail=0)
+#   — except for a known, separately-registered red such as pitui (#2412), which is exempt by name
 #   The verdict depends on TWO things, so name BOTH (see "NAME THE TREE" below):
 #     the TREE — main's content. The shared tree carries seats' in-flight work and is not main.
 #     the DEPENDENCY SET — a worktree-local `npm ci` resolves the LOCKFILE, and the five
@@ -309,6 +344,29 @@ rule as the generated-artifact check above.
    ```
    Release its worktree first (`leaked-worktrees.md`) — a DIRTY worktree must be relocated, never
    force-removed.
+
+## Stacked (unlanded) base — every entry NAMES its base
+
+A **stacked entry** is a branch whose **base is unlanded** — it builds on work that is verified but not
+yet on `main`, so it cannot be merged onto `main` on its own. Stacking is inherent to a landing
+backlog: branches queue while new work builds on them.
+
+**Rule:** EVERY stacked landing entry **names its base** and **states how that base becomes reachable**
+— the exact branch/commit (`git -C <repo> log --oneline -1 <base>`) and the mechanism that lands it
+first: an earlier entry in this same pass (list it), a named already-verified branch, or the
+**base-ref capability (#1456)**. A stacked entry is never offered to the helper as if it were based on
+`main`.
+
+**Base-ref landed (impl #1456, 7219efb):** `prepare_workspace` and the `worktree` verb now accept a
+`base`/`ref` (`src/seattools.mjs` `prepareWorkspaceOptions`, `src/worktree.mjs`
+`createWorktree({ source, target, ref, branch })`), so a worktree CAN be provisioned at an unlanded
+tip. Stacking is still an ordering constraint for a landing pass — the base must be reachable before
+the entry lands — but it is no longer a provisioning blocker. See `SEAT-LIFECYCLE.md` §3 "Stacked
+(unlanded) base".
+
+**Durable fix:** the base-ref capability (**#1456**) makes stacking *work* by letting a worktree be
+created at an unlanded tip. `pause` (ROADMAP 131) and smaller, more frequent landings reduce how often
+it arises.
 
 ## Preconditions
 - **This runbook is the STEPS; `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` is the MODEL.** The three landing
@@ -421,6 +479,30 @@ After a real landing, confirm the branch is an **ancestor** of `main` (the workt
 ```bash
 git -C <repo> merge-base --is-ancestor <branch> main && echo LANDED
 ```
+
+### What a check or a DEFAULT can and cannot tell you — the unknown-default principle
+
+Three primitives in this codebase answer "what if we do not know?" **differently, and all three are
+right.** The instinct to make them agree is the wrong one in every direction, so the rule is written
+here with the cost that decides each case:
+
+| Primitive | Unknown resolves to | Why — what a FALSE answer costs |
+|---|---|---|
+| liveness (`brokerAlive` / `pidAlive`, `impl-item-3398`) | **ALIVE** | a false DEAD admits a **SECOND WRITER**, which is the store-corruption class |
+| `workable` (#2673) | **WORKABLE** | a false unworkable **STARVES WORK INVISIBLY**; a false workable only hands a seat an item it can hold or defer |
+| `listWorktrees` (#3605) | **THROW**, for a deciding caller | a false EMPTY authorises an **IRREVERSIBLE DELETE** |
+
+**The rule: the default follows the COST of being wrong, not a house style.** "Be consistent with the
+other one" gives the wrong answer in two of these three cases, and it is the instinct a reviewer will
+have — three different answers to one question look like an inconsistency rather than three considered
+choices. State the cost per primitive and the direction becomes checkable instead of conventional.
+
+**Same shape for a probe: record WHAT IT PROVES, not only its result.** A hazard record that said "port
+8080 closed" silently became an all-clear when the port opened for an unrelated listener (`#3736` — the
+decisive question was whether the listener serves the model the rig names, and a port probe can never
+answer it). A `--suite` run on the branch tip proves nothing about the merge (`#3638`). A satisfied
+`blockedBy` proves nothing about whether the content landed (`#3681`). When a check's meaning is not
+written beside its result, a changed result reads as a cleared hazard.
 
 ## Landing a SET (a cluster): serial, re-preflighted, per-item gated
 
@@ -591,8 +673,46 @@ node -e "const p=require('./node_modules/@earendil-works/pi-durable/package.json
 **Why this matters for a landing:** a red suite here is NOT a regression in the merged result, and reporting
 it as one sends the team chasing a phantom. Equally, a GREEN run right after an install proves less than it
 looks — it may be measuring the registry set, not the pinned build. `devtools-item-2976` (now on `main`) makes
-`prepare_workspace` run `sync-pi --link` around `npm ci` in every WORKTREE, which is why a worktree is safe
-and the **shared tree** is the exposed one.
+`prepare_workspace` run `sync-pi --link` around `npm ci` in every WORKTREE — **but that does NOT make a fresh
+worktree safe** (measured 2026-10-20, see the next note): `vendor/pi-main` is not present in a fresh worktree,
+so the link fails with `nothing built yet; run --sync before --link` and `prepare_workspace` only
+`console.warn`s and continues. The worktree then sits on the lock's `pi-durable@1.1.0`, so BOTH the shared
+tree and a fresh worktree are exposed, for different reasons.
+
+### ⚠ A FRESH WORKTREE'S SUITE IS NOT MAIN'S SUITE — `npm ci` measures the LOCK, not `main`
+
+Measured 2026-10-20 on the same commit (`main` `11e87a0`), 188 demos:
+
+| Tree / dependency state | Red |
+|---|---|
+| seat root, `pi-durable@1.3.0` (the vendored link) | **3** — `broker-one-connection`, `pitui`, `seat-instruction-encoding` |
+| fresh item worktree after `prepare_workspace`'s `npm ci` | **7** — `broker-one-connection`, `seat-instruction-encoding`, and the five `tui-durable-*` (`boot`, `-compaction`, `-compaction-tui`, `-persistence`, `-tools`) |
+| detached worktree at `main` with the seat root's deps | **3** — identical to the seat root |
+
+**The two sets are NOT nested — read the names, not the counts.** `pitui` is red in the seat root and GREEN in
+a fresh worktree: it asserts that `pi-tui` does NOT resolve into `vendor/pi-main/packages/tui`, which is true
+there precisely because the link is missing. So 3 + 5 ≠ 7, and a verifier who assumes "main's set plus
+extras" will hunt for `pitui` in the wrong list.
+
+**So `main`'s real baseline is 3 red.** The five `tui-durable-*` are an INSTALL ARTEFACT: `package-lock.json`
+pins `@earendil-works/pi-durable` `1.1.0`, whose `exports` map has no `./codemode`, while
+`src/tui/durable/adapter.mjs` imports it — hence `ERR_PACKAGE_PATH_NOT_EXPORTED`. The pinned link that fixes
+this cannot be recreated in a fresh worktree, because `vendor/pi-main` is not there (see the note above).
+
+**What a verifier must do about it:**
+- Do NOT discount them silently. NAME them as the artefact, state that `main`'s baseline is 3 red, and say
+  which tree and dependency state your run measured — otherwise the next reader cannot tell "known artefact"
+  from "I decided this was fine".
+- The reverse direction is just as real: an AUTHOR in the shared tree sees GREEN where the verifier sees RED,
+  so "it passes for me" is not evidence about the verifier's tree.
+- Check the pin before believing either verdict (the one-line command is in the note above).
+
+The fix — bump the lock so `npm ci` reproduces the pinned set, plus a demo asserting the export map — is its
+own held item (`#3712`) and needs a landing slot. Until it lands, every verifier pays this.
+
+**The general form: a suite verdict must NAME THE TREE AND ITS DEPENDENCY STATE.** "The suite passes" is not
+a claim until it says where — the shared tree measures seats' in-flight work, a fresh worktree measures the
+lock rather than `main`, and a branch-tip run measures neither the merge nor `main` (`#3638`).
 
 2026-10-20 (pass #5, delegate, broker UP): **2 landed, 1 landed-then-reverted, 1 stopped by its own
 test, `main` `9882632`→`4d96ae9`.** `scribe-item-3167` @`b0e9d75` (D113/D114) → `35f8ae6`;
@@ -606,6 +726,28 @@ and proved with the full suite on `main` — the only way this pass could see th
 203, `reapable: 0`, nothing forced (see `branch-cleanup.md`). The suite runner is now pooled — default 8
 demos at once, ~64s vs ~10min — so the post-landing proof is cheap enough to always run.
 
+2026-10-20 — **THE UNKNOWN-DEFAULT PRINCIPLE ADDED** (item #3744, part of the #3272 landing-note
+series): the liveness / `workable` / `listWorktrees` defaults, the cost rule that decides each direction,
+and the probe-meaning line, in a subsection of `## Verify` so the #3638 (check the MERGED tree) and
+#3656 (the no-`--suite` workaround with a checkable expiry) additions can sit beside it. The runbook's
+own Verify step was re-run with this change: `node demo/land-helper.test.mjs` → exit 0.
+
+2026-10-20 — **THE FRESH-WORKTREE SUITE NOTE ADDED, and it CORRECTS the earlier claim above** (item #3766,
+same #3272 series). Measured on one commit, `main` `11e87a0`: seat root 3 red, fresh item worktree 7 red
+(the same 3 plus the five `tui-durable-*`), detached worktree at `main` with the seat root's deps 3 red.
+Root cause of the difference, checked rather than assumed: `prepare_workspace` DOES run `sync-pi --link`
+around `npm ci` (`src/worktree.mjs` lines 155-188), but in a fresh worktree that command fails with
+`{"ok": false, "error": "nothing built yet; run --sync before --link"}` because `vendor/pi-main` is not
+present there, and the caller only `console.warn`s and continues — so the worktree stays on the lock's
+`pi-durable@1.1.0`. The suite was re-run in this worktree with that state and returned exactly the 7 red
+named in the new note; `node demo/land-helper.test.mjs` → exit 0.
+
+2026-10-20 — **THE `--suite`-LESS FALLBACK NOW HAS A REACHABLE EXPIRY** (item #3775, same #3272
+series): "remove when `main` is green" was unreachable (the real defects had no owner) and ambiguous
+(`pitui` is arguably correct to fail against the vendored junction), so it is restated as "red set EMPTY
+in the SEAT-ROOT dependency environment", with the requirement that every `--suite`-less proof STATE the
+dependency set it ran in. The runbook's own Verify step was re-run: `node demo/land-helper.test.mjs` →
+exit 0.
 2026-10-20 (pass #6, delegate, broker UP): **5 landed, 1 landed-then-reverted, `main` `351b03a`→`13e60bc`
 (+ revert `cc96c0c`).** Kept: `designer-item-3307` @`24b7fc9` (the landing-screen spec #3313/#3359 build
 against), `advocate-item-2985` @`7387716` (closes the proposal v2's dangling §12 reference),
