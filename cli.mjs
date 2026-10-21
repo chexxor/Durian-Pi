@@ -1019,10 +1019,20 @@ async function cmdResume() {
   // broker on 2026-10-16. Do NOT stop a live broker to run this; restart a dormant one instead.
   refuseWhileBrokerDrives(
     "resume/doctor",
-    `the broker settles stranded submissions ITSELF — at startup and at the start of every pass ` +
-      `(logged "STRANDED settled=N") — so there is nothing for an external resume to do while it drives, ` +
-      `and running one would be a second writer. Do NOT stop a live broker for this; if it is dormant, ` +
-      `restart it so its startup pass re-settles. See docs/runbooks/resume-while-broker-runs.md.`,
+    // #4170: the message must be TRUE for every class it implies. The broker settles STRANDED
+    // (`placed` with no advancing task) at startup and at the start of every pass — but it does NOT
+    // settle a NEVER-STARTED (`queued`) submission, which is a different class, and saying otherwise
+    // is why the operator's first instinct was to restart rather than to resume. The suppression half
+    // is now fixed (a `queued` row no longer holds its seat out of every wake); the settlement half
+    // for `queued` awaits the ADMISSION DEADLINE (ROADMAP 37(c)) — settling it without one would
+    // cancel submissions that are legitimately still being admitted.
+    `the broker settles STRANDED submissions ITSELF — those it PLACED but whose turn never finished — ` +
+      `at startup and at the start of every pass (logged "STRANDED settled=N"), so there is nothing for ` +
+      `an external resume to do while it drives, and running one would be a second writer. ` +
+      `NOTE: a NEVER-STARTED (\`queued\`) submission is NOT that class and is not settled this way; it ` +
+      `no longer suppresses its seat, and its settlement awaits an admission deadline (ROADMAP 37(c)). ` +
+      `Do NOT stop a live broker for this; if it is dormant, restart it so its startup pass re-settles. ` +
+      `See docs/runbooks/resume-while-broker-runs.md.`,
   );
   const { harness } = await openHarness();
   try {

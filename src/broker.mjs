@@ -817,6 +817,28 @@ export function isAdvancingTask(task) {
   return kind === "running" || kind === "completing";
 }
 
+/**
+ * WHICH CONVERSATIONS ARE ADVANCING (#4170). `pendingConvIds` used to be "every conversation with a
+ * submission ROW", which is a different and much broader claim: an admitted-but-never-started
+ * (`queued`) submission is NOT advancing, so it must not hold its seat out of every wake.
+ *
+ * That difference starved a seat for ten hours after one 429 left a `queued` row behind: every pass saw
+ * the row, suppressed the seat as "already advancing", and the only thing that would have re-evaluated
+ * it was new traffic — which a starved seat does not get.
+ *
+ * `placed` is the started state: it is what `reconcileStrandedSubmissions` treats as having been handed
+ * to a conversation, so it is the status that means "advancing". Exported so the derivation is testable
+ * as a pure decision over store state, with no broker and no provider.
+ */
+export function advancingConvIds(submissions, { settled = new Set() } = {}) {
+	return new Set(
+		(submissions ?? [])
+			.filter((s) => !settled.has(s.id))
+			.filter((s) => s.status === "placed")
+			.map((s) => s.conversationId),
+	);
+}
+
 export async function reconcileStrandedSubmissions(harness, inspection, { context, onDiagnostic } = {}) {
   const liveConvIds = new Set();
   for (const task of inspection?.tasks ?? []) {
@@ -1195,11 +1217,8 @@ export async function drivePass(
     logBrokerLine(dbPath, `STRANDED settled=${settledStranded.length}`);
   }
   const settledStrandedIds = new Set(settledStranded);
-  const pendingConvIds = new Set(
-    (inspection.submissions ?? [])
-      .filter((s) => !settledStrandedIds.has(s.id))
-      .map((s) => s.conversationId),
-  );
+  // #4170: `pendingConvIds` MUST MEAN "ADVANCING", NOT "HAS A SUBMISSION ROW" — see advancingConvIds.
+  const pendingConvIds = advancingConvIds(inspection.submissions, { settled: settledStrandedIds });
   const seats = seatsDoc?.value?.seats;
   const stoppedConvIds = await readStoppedConvIds(probeStorage, seats, context);
   const busySeats = readBusySeats ? await readBusySeats() : new Set();
