@@ -50,6 +50,18 @@ as the squash-landing case, #3332). Worked examples below: `security-item-1475`
 (ancestry said "not on main" while content said "already there") and
 `architect-item-3005` (patch-id said "unique" while the blob was identical).
 
+## Two kinds of drop — a conditional drop is not a cancellation
+
+A **CONDITIONAL DROP** is parked on a question and revives automatically when the
+condition lapses — it is not a decision and gets NO row until it resolves. A
+**CANCELLED-ON-MERITS** item IS a decision (the work is not worth doing) and needs
+a new decision to revive. An inventory must record WHICH KIND a drop is, or the
+next pass re-litigates the conditional one as though it needed fresh merit.
+`impl-item-1604` is the first case where this distinction decided an outcome: it
+was dropped conditionally (the cancelled #2035 lapsed when #1087/ROADMAP 97 was
+restored) and is REINSTATED in scope by lead #3355 — it gets a row only when it
+lands or is cancelled on merit, never a row for the conditional drop itself.
+
 ## Columns
 
 | date | branch | sha | disposition | reason | deciding item id |
@@ -66,6 +78,7 @@ as the squash-landing case, #3332). Worked examples below: `security-item-1475`
 | date | branch | sha | disposition | reason | deciding item id |
 |------|--------|-----|-------------|--------|------------------|
 | 2026-10-19 | impl-item-3017 | 756100e | SUPERSEDED | superseded by impl-item-3056 @6ddf538 (recorded in #3112) | #3270 |
+| 2026-10-19 | impl-item-1704 | b15e896 | CANCEL | duplicate — ahead=0 against main after impl's #3258 rebase; its entire content was already on main. Conflict resolution kept main's #1703 tests ("a slow TOOL result is not a slow ASSISTANT turn"); the branch's side of that hunk was empty, so the commit came out empty and the rebase dropped it. Safe `git branch -d` succeeded; old tip survives detached in the relocated worktree ../pi-opendurig.worktrees/item-1704 @b15e896. Ref is a prunable duplicate, not a branch. Deciding seat: pm (no file tools; row supplied via #3404) | #3404 |
 | 2026-10-19 | impl-item-2224 | a2eaf7b | SUPERSEDED | superseded by impl-item-2298 @6683790 (recorded in #2399) | #3270 |
 | 2026-10-19 | scribe-item-3114 | 3e7a297 | SUPERSEDED | never-land; superseded by **LANDED** scribe-item-3167 @b0e9d75 (recorded in #3182) | #3270 |
 | 2026-10-19 | impl-item-2763 | e5b364f | SUPERSEDED | superseded by impl-item-2420 @8770e4b (recorded in #3146) | #3270 |
