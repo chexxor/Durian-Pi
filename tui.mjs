@@ -12,17 +12,27 @@ import { fileURLToPath } from "node:url";
 import { createDurableTuiRuntime } from "./src/tui/durable/adapter.mjs";
 import { createRealHost } from "./src/tui/durable/real-host.mjs";
 import { assessStoreOwnership } from "./src/storeownership.mjs";
+import { parseTuiArgs } from "./src/tui/durable/cliargs.mjs";
 
 // Keep the TUI's own startup checks quiet; the provider extension still loads and registers, and
 // requests still go to the configured provider.
 process.env.PI_SKIP_VERSION_CHECK = "1";
 
 const args = process.argv.slice(2);
+// #4164: parsing is a module so the rules are testable without a store or a TTY, and AN UNKNOWN FLAG
+// IS REJECTED RATHER THAN IGNORED — a flag that is silently discarded is a flag that lies. This
+// entrypoint used to ignore `--select`, which `enter.mjs` had been passing for a whole item.
+const parsed = parseTuiArgs(args);
+if (parsed.help) {
+	console.log("tui [--db <path>] [--select <seat>]\n  --db      the store to open (default: session.sqlite beside this file)\n  --select  the seat this session is opened FOR (carried, not resolved here)\n  --help    this text");
+	process.exit(0);
+}
+if (parsed.errors.length > 0) {
+	for (const e of parsed.errors) console.error(`tui: ${e}`);
+	process.exit(1);
+}
 function argValue(name) {
-	const at = args.findIndex((a) => a === name || a.startsWith(`${name}=`));
-	if (at < 0) return null;
-	const token = args[at];
-	return token.includes("=") ? token.slice(token.indexOf("=") + 1) : args[at + 1] ?? null;
+	return parsed[name === "--db" ? "db" : "select"] ?? null;
 }
 
 // D103 ships the new name; DURIG_TUI_DB is accepted as the deprecated alias with a warning. This is
@@ -37,24 +47,33 @@ dbPath ??=
 	process.env.DURIG_TUI_DB ??
 	join(dirname(fileURLToPath(import.meta.url)), "session.sqlite");
 
-// FAIL CLOSED. This entrypoint is a WRITER, so it must never open a store a broker owns, and never
-// open "to check". `--own` / DURIAN_PI_TUI_OWN=1 is the operator's explicit declaration of a window
-// (e.g. while the broker is paused); it does not make a second writer safe.
-const ownFlag =
-	args.includes("--own") ||
-	/^(1|true|yes)$/i.test(process.env.DURIAN_PI_TUI_OWN ?? process.env.DURIG_TUI_OWN ?? "");
-const ownership = assessStoreOwnership(dbPath);
-if (ownership.owned && !ownFlag) {
+// FAIL CLOSED, AND WITHOUT AN OVERRIDE (#4006). This entrypoint is a WRITER, so it must never open
+// a store a broker owns, and never open "to check".
+//
+// THE OLD `--own` FLAG IS GONE. It WARNED (`WARNING opening ... (operator override)`) and then opened
+// anyway — the F24/D42 two-writer collision WITH A LOG LINE, reachable in normal use, which is
+// exactly what this guard exists to make impossible. There is no override now: a second writer is
+// not made safe by a flag.
+//
+// A PAUSED BROKER HAS NOT RELEASED THE STORE — `applyPauseOp` sets a RIG-LEVEL flag while the broker
+// PROCESS stays alive and keeps its heartbeat fresh — so the operator window is STOP-AND-RESTART
+// (#4004, ruled; no relinquish state): record the contract (src/tui/durable/attach.mjs
+// `beginOperatorWindow`), STOP the broker, then open here.
+const legacyOwn =
+	args.includes("--own") || /^(1|true|yes)$/i.test(process.env.DURIAN_PI_TUI_OWN ?? process.env.DURIG_TUI_OWN ?? "");
+if (legacyOwn) {
 	console.error(
-		`tui: refusing to open ${dbPath} — ${ownership.reasons.join("; ")}. ` +
-			`Stop the broker, or pass --own (DURIAN_PI_TUI_OWN=1) to override.`,
+		"tui: `--own` / DURIAN_PI_TUI_OWN no longer exist. They opened a store a broker still owned, which is a " +
+			"second writer. Stop the broker (serve --stop) and retry.",
 	);
-	process.exit(1);
 }
+const ownership = assessStoreOwnership(dbPath);
 if (ownership.owned) {
 	console.error(
-		`tui: WARNING opening ${dbPath} while owned — ${ownership.reasons.join("; ")} (operator override)`,
+		`tui: refusing to open ${dbPath} — ${ownership.reasons.join("; ")}. ` +
+			`Stop the broker (serve --stop) and retry; a PAUSED broker is still the owner, so a pause alone is not a release.`,
 	);
+	process.exit(1);
 }
 
 const storage = await (await import("@earendil-works/pi-durable/storage/sqlite/node")).openNodeSqliteStorage(dbPath);

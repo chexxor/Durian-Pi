@@ -166,7 +166,16 @@ Everything below was verified against the real store, not asserted from intent.
 `seatguard`, `seattools`, `worktree`.
 
 They are the regression gate for the pi-main link as well as for feature work
-(D17). All 30 pass on the current tree.
+(D17). **KNOWN REDS BASELINE (2026-10-21): `check` and `starter` are RED for ONE cause.**
+`30270c0`'s commit message begins with a UTF-8 BOM (`ef bb bf` at byte 0, byte-level established) and the
+`commit-message-encoding` rule CORRECTLY finds it. The CLI reads REAL history (so `check` reports
+`commit-message-encoding` — the demo diff is exactly `+ 'commit-message-encoding'`), while the pure audit
+is fed `commitMessages: []` and the rule passes there. NEITHER SIDE IS WRONG — ONE IS FED REAL HISTORY AND
+THE OTHER IS FED NONE. THE FIX IS AN OPERATOR DECISION ABOUT MAIN'S HISTORY (amend or re-write `30270c0`),
+NOT a reconciliation: adding `commit-message-encoding` to the expected set would make `check` GREEN WHILE
+THE BOM REMAINS ON MAIN — a rule licensed in the ledger and unenforced in fact. A LEDGER EDITED TO MATCH A
+TRUE FINDING DOES NOT RECORD THE TRUTH; IT RETIRES IT. Until the operator decides, both demos fail for the
+right reason (recorded baseline, not a silent red).
 
 ## Research review (2026-10-10)
 
