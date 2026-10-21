@@ -154,3 +154,86 @@ branch to fix advisory prose is strictly worse: it rewrites a tip for no semanti
 - Queue: `#3035`, `#3047`, `#3089`, `#3075`
 - Related: `docs/incidents/2026-10-17-seat-root-fallback-commit.md` (the F12 root that makes the question
   ambiguous)
+
+## RECURRENCE — same day, the SUB-CASE the fix missed (`impl` on `designer-item-2103`)
+
+*Appended 2026-10-19 per convention 6 (append, never rewrite the original analysis).*
+
+Within the hour, `impl` reported the same question in a harder form:
+
+> "`designer-item-2103` is already checked out in the worktree `item-2103` — so I cannot check it out /
+> rebase it in place from my worktree."
+
+**This is the same class, but the §8a rule did not unblock it — and it should not have.** Measured state:
+`item-2103` was a worktree at `e4fd338 [designer-item-2103]`, **locked**, holding item `#2103` which is
+**`cancelled`** (terminal); the branch is **unmerged and CONFLICTs** with `main` (it needs the R2 rebase +
+the `runbooks/README.md` union). So:
+
+1. The seat was not confused about the lifecycle — it correctly identified that a worktree holds the
+   branch. **Git refuses to check out or rebase a branch that is checked out in another worktree**, and
+   that refusal is the truth, not a misunderstanding.
+2. **§8a's advice ("re-attach, never rebuild") is for reaching your OWN branch — it does not free a branch
+   someone else's tree holds.** Escalating, as §8a says, turned into a stall: `impl` → `pm` → a landing
+   list that no pass could satisfy.
+3. **The incident's `worktree audit` "report retirement" proposal (queue `#3123`) would NOT have fixed
+   this either** — it is a reporting improvement about a *retired* tree, while this obstruction is a
+   *live, locked* tree. The two were conflated in the first write-up; they are separate gaps.
+
+**The actual unblock (lossless, used here): DETACH the holding worktree instead of removing it.**
+
+```bash
+git worktree list | grep -E "\[<branch>\]"     # confirm which tree holds it
+git -C <path> switch --detach                  # frees the BRANCH; every file stays where it is
+git branch | grep <branch>                     # no leading '+' => no longer checked out anywhere
+```
+
+This is strictly better than `worktree remove` for this case: `remove` refuses on untracked files (this
+tree held `probe.txt` + `selfdev.sqlite.broker.inbox.out/`), and it also destroys scratch a seat may still
+want. `switch --detach` frees the branch and preserves the tree, the untracked files and the lock. Verified
+after the detach: worktree still at `e4fd338` as `(detached HEAD)`, `probe.txt` and the inbox dir intact,
+and `designer-item-2103` free for `impl`'s rebase.
+
+**Why the prune pass left it:** `item-2103` was in the `locked` bucket, so `branch-cleanup.md` step 5 says
+KEEP — correct for reclaiming disk, wrong for *unblocking a landing*, because a locked worktree over a
+terminal item's unlanded branch is a deadlock-shaped pair: the branch cannot be rebased (held), and the
+worktree will not be reaped (locked), and nothing in `attention` fires on it.
+
+**Prevention (this is the part that needs a queue item, not a doc):** a `check`/attention rule —
+**"locked worktree over a TERMINAL item whose branch is UNMERGED"** → surface it, because it is a landing
+blocker that presents as healthy. Until then: at the start of every landing pass, run
+`git worktree list` and cross-reference the LOCKED set against the queue's terminal items, then detach any
+terminal-item tree that holds an unmerged branch.
+
+## ROOT CAUSE IN CODE (found 2026-10-20, after both write-ups — this is the part that needs a fix)
+
+Neither the original analysis nor the RECURRENCE above named the mechanism. Reading `src/worktree.mjs`
+after the operator asked "could we update `prepare_workspace` to do that?" found it:
+
+```js
+// src/worktree.mjs:566-568 — the PATH is keyed by ITEM, the BRANCH by SEAT
+const worktreePath = join(worktreeRoot, `item-${itemId}`);
+const branch = seatName ? `${seatName}-${itemLabel}` : itemLabel;
+
+// :602 → :278 — on REUSE, whenever the branch differs, unconditionally:
+await run("git", ["-C", wtNorm, "checkout", "-B", branch]);
+```
+
+**Two consequences, both silent:**
+
+1. **A second seat preparing the same item STEALS the first seat's worktree.** `item-<id>` already exists
+   (designer's, on `designer-item-<id>`); the caller computes `impl-item-<id>`; `current !== branch`; so
+   `checkout -B` runs **inside designer's tree**, moving its working tree onto another branch. The `#2412`
+   guard (`validateWorktreeIdentity`) does not catch this: that guard rejects a leftover DIRECTORY that is
+   not a worktree, while this is a perfectly valid worktree belonging to someone else.
+2. **Nothing ever asks who holds the BRANCH that is needed.** So a seat asked to rebase an existing item
+   branch gets git's `already checked out in item-<id>` and has **no in-product move** — which is precisely
+   how `impl` was blocked on `designer-item-2103`, and why the workaround was to re-cut the content on a new
+   branch (`impl-item-2797 @2828ad4`) rather than rebase the original.
+
+**Registered as `#3174`** (holder resolution + three refusals + a failing-first demo) with **`#3175`** for
+`lead`, because the deeper fix — path keyed by item vs branch keyed by seat means **two seats can never work
+one item** — is a WORKTREE NAMING change (D110 territory) and must not be decided by the implementer.
+
+**Sequence note for whoever reads this:** the delegate unblocked the live case by hand
+(`git -C item-2103 switch --detach`). That hand step is the tell: when a human has to run git to make a
+seat's landing work, the seam belongs in the tool — which is exactly what `#3174` asks for.

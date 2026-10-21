@@ -182,6 +182,31 @@ counts as green depends on accepting the symlink as environmental, which is a ju
 tooling asserts. Record the exact numbers (`pass=N fail=M`) in every report rather than "suite green",
 and confirm a *new* failure is new by comparing against the pre-change baseline.
 
+
+### 6.3 Tree-dependent reds are deterministic: two named tests, two measured rates (2026-10-21)
+
+pm filed these as "two flaky demos" (#4530): `pitui` green->red and `broker-one-connection`
+red->green, on trees that "did not touch these files", where `fail=2` was true three times and meant
+three different things. qa measured the same day:
+
+- **`pitui` is deterministic per tree - the 6.2 trap, reproduced.** Green 20/20 alone, 24/24 in a
+  same-tree 24-copy burst, green in a full-suite run. On worktree `item-2608`, exit 1 **every** run:
+  `AssertionError [ERR_ASSERTION]: pi-tui resolved somewhere unexpected: file:///C:/Users/Alex/dsh-Projects/pi-opendurig/vendor/pi-main/packages/tui/dist/index.js`
+  (`demo/pitui.test.mjs:26:8`) - the exact 6.2 resolution failure through the `@earendil-works/pi-tui`
+  symlink (#2412). Version/pin drift by tree, not a race in time.
+- **`broker-one-connection` is a pure SHAPE test** - text assertions over `cli.mjs`/`src/broker.mjs`;
+  no processes, no temp state. Verdict = that tree's bytes. On the current tree: 20/20 alone, 24/24
+  burst, suite green. On worktree `item-4308` (NO local edits; an old base): exit 1 every run with
+  `AssertionError: the open at cli.mjs:1709 documents the P5/#110 exception above it`; `item-4202`
+  (editing `broker.mjs`): same text at cli.mjs:1699. Hash-compare across 24 sibling worktrees: 15
+  carry different `cli.mjs` bytes - 14 via base age alone, 1 via an in-flight edit.
+
+**The rule the "did not touch" claim missed:** a tree that does not touch a file still carries its
+BASE's bytes of that file, and an old base is a different verifier. Measured: 45/45 green per test on
+same bytes; 4/4 red on the divergent trees above. So `fail=2 x3` was never two flaky tests in time -
+it was tree-vs-tree alternation (plus `seat-instruction-encoding`, a steady red with an owner). A
+baseline is a NAME, a measured rate, and a TREE - never a count.
+
 ## 7. What is NOT authoritative
 
 - **`docs/NEXT.md`** — a pointer, refreshed by hand. It has been wrong about the pass state more than
@@ -237,3 +262,54 @@ surfaced the two limits that matter for any future investigation:
 
 Full query, coverage limits and conclusion: `docs/incidents/2026-10-19-scripts-directory-emptied-on-disk.md`
 § "Investigation".
+
+## 7. Pass log — measured, 2026-10-19 (pass #3)
+
+Appended rather than rewritten (conventions §6). One pass, `main` `f495091`→`66d0ce9`:
+
+| | before | after |
+|---|---|---|
+| refs | 94 | 89 |
+| registered worktrees | 210 | 208 |
+| `reapable` | 0 | 0 |
+| `counts` | — | `{seat-root:1, non-item:163, dirty:27, locked:11, live:8}` |
+| suite on `main` | `pass=172 fail=5` (`tui-durable-*` `./codemode`) | **`pass=178 fail=1`** (`pitui`, #2412) |
+
+Four things this pass proved about the MODEL, not the tooling:
+
+1. **A landing batch is atomic, and `merged[]` is not a landing report.** The helper merges into one
+   scratch tree, so a conflict on branch N aborts the whole call and `main` does not move — while the
+   report still lists branches 1..N-1 as `merged` (they merged *in the scratch*). §5's third gate must be
+   **re-evaluated against the new `main` after every landing**, in the same pass.
+2. **An `add/add` pair is order-independent and needs a superset test, not a rebase.** §4.1/§5 assume a
+   branch can be made landable by rebasing; two branches that both ADD the same path cannot be merged in
+   either order. `git diff --numstat A:path B:path` decides it: if the later branch deletes nothing and
+   contains the earlier one, the resolution is deterministic (take the superset) and belongs to the
+   **lander**, not the author.
+3. **"Gated on the landing" inverts the verified gate.** `#2993`/`#3104` are non-author verifies HELD
+   *on* the landing entry, so the normal order (verify → land) is impossible for those rows and a landing
+   pass cannot satisfy §5's first gate. A landing list that does this needs a ruling (land-then-verify on
+   `main`, with the release issued in the same breath), not a guess by the lander.
+4. **The seat root is the least stable fact in the model.** §2 says to expect the shared-tree fallback;
+   measured this pass, **11 of 11 seats** were back on the shared tree after earlier work had put `impl`
+   and `devtools` on their own item worktrees. Read `audit.seatRoots` fresh at the start of a pass.
+
+## 8. Known defect — the path is item-keyed, the branch is seat-keyed
+
+`prepareSeatWorkspace` builds the worktree path from the ITEM (`item-<id>`) and the branch from the SEAT
+(`<seat>-item-<id>`), then calls `ensureWorktreeBranch`, which runs `git checkout -B <branch>` **whenever the
+current branch differs** (`src/worktree.mjs:566-568`, `:602`, `:278`). Two consequences:
+
+1. **A second seat preparing the same item silently steals the first seat's worktree** (it moves that tree
+   onto the caller's branch). `validateWorktreeIdentity` does not cover this — it rejects a leftover
+   *directory*, not a valid worktree owned by another seat.
+2. **Nothing asks who holds the BRANCH you need**, so a seat told to rebase an existing item branch gets
+   git's refusal and has no in-product move. That is how `impl` was blocked on `designer-item-2103`; the
+   delegate's hand fix is `git -C <holder> switch --detach` (frees the branch, keeps every file).
+
+So: **two seats can never work one item**, and a locked worktree over a terminal item's unmerged branch is a
+DEADLOCK nobody is told about (branch held ⇒ cannot rebase; worktree locked ⇒ will not be reaped; no
+attention kind fires). `pm` registered the fix as **`#3174`** (holder resolution + refusals + failing-first
+demo) and the naming question as **`#3175`** for `lead` (item-keyed path vs seat-keyed branch is D110
+territory). Until it lands, free a held branch with `switch --detach` — never by deleting the worktree or
+rebuilding the branch. Full account: `incidents/2026-10-19-terminal-worktree-mistaken-for-lost-work.md`.

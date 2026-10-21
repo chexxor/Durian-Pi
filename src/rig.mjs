@@ -11,9 +11,11 @@
 //   directions flow through one durable queue.
 import { configure, defineDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { seatHasReadTool } from "./seattools.mjs";
+import { normalizeBlock } from "./queue-lifecycle.mjs";
 import { removeSeatWorkspace } from "./worktree.mjs";
 
 /** Seat roster: name -> conversation id + role text. Session singleton. */
@@ -115,6 +117,16 @@ export const RigQueue = defineDoc({
 export const DEFERRED_TO_HUMAN = "human";
 
 /**
+ * The `deferredTo` value meaning **nobody was asked** (#4574).
+ *
+ * DISTINCT FROM `DEFERRED_TO_HUMAN` ON PURPOSE. The default used to be `args.to ?? DEFERRED_TO_HUMAN`, so a
+ * deferral that named no target recorded the OPERATOR as its audience — a status standing in for a fact,
+ * where the fact is "nobody was actually asked". Every surface that branches on the value must be able to
+ * tell the two apart, which is why attention.mjs renders this one as a sentence rather than a name.
+ */
+export const DEFERRED_TO_NOBODY = "nobody";
+
+/**
  * Snapshot a pi-durable doc item (or array of items) into plain JS objects.
  *
  * A doc proxy resolves primitive properties fine, but the overlay THROWS
@@ -166,8 +178,82 @@ export async function registerSeat(tx, name, conversationId, role) {
  * would otherwise keep looping. Matching exactly the shape complete_work
  * enqueues ("DONE #<id>: <subject>") keeps the fallback from catching real work.
  */
+/**
+ * The CANCELLATION, as data (#3470): mark the item terminal AND notify the other party, the
+ * same way `complete_work` notifies them with a DONE notice.
+ *
+ * WHY THE NOTICE IS THE POINT: a cancellation's reason is the ONE piece of information that
+ * distinguishes "superseded" from "duplicate" from "already ruled" from "stale pin", and
+ * those imply different next actions for whoever sent the item. Recording it on the item was
+ * not enough — from the sender's side the item simply vanished, so they guessed, and guessing
+ * cost a full re-registration cycle for eight branches.
+ *
+ * A NOTICE NEVER SPAWNS A NOTICE (`isNoticeItem`), so cancelling a DONE or CANCELLED notice
+ * cannot start a chain (ROADMAP 39). `tx` only needs `doc(RigQueue)`, which is what makes this
+ * drivable from a demo without a harness.
+ */
+export async function cancelItem(tx, { item, me, reason }) {
+	item.status = "cancelled";
+	item.cancelReason = reason;
+	item.transitions.push({ at: new Date().toISOString(), event: "cancelled", by: me, reason });
+	// The other party: the sender when the RECIPIENT cancels, the recipient when the SENDER does.
+	const other = item.from === me ? item.to : item.from;
+	// Three DIFFERENT situations send no notice, and the message is the whole interface the caller
+	// has (#3739): "there is no other party" is a correct outcome, "this item is itself a notice" is
+	// a classification, and conflating them hid a cancellation that reached nobody.
+	const selfOnly = typeof other !== "string" || other.length === 0 || other === me;
+	const noticeOfNotice = isNoticeItem(item);
+	let noticeId = null;
+	if (!noticeOfNotice && !selfOnly) {
+		noticeId = await enqueueItem(
+			tx,
+			me,
+			other,
+			`CANCELLED #${item.id}: ${item.subject}`,
+			`cancelled by ${me}: ${reason}`,
+			null,
+			true,
+			item.tier ?? null,
+		);
+	}
+	const why =
+		noticeId !== null
+			? `notified ${other} as notice #${noticeId}`
+			: selfOnly
+				? `no notice sent — there is no other party to notify`
+				: `no notice sent — this item is itself a notice`;
+	const message = `item #${item.id} cancelled: ${reason} (${why})`;
+	return { noticeId, other, message };
+}
+
 export function isDoneNotice(item) {
-	return item?.notice === true || /^DONE #\d+: /.test(String(item?.subject ?? ""));
+	if (typeof item?.notice === "boolean") return item.notice;
+	return /^DONE #\d+: /.test(String(item?.subject ?? ""));
+}
+
+/**
+ * A CANCELLATION notice (#3470): the message `cancel_work` now sends the OTHER PARTY, so a
+ * cancellation no longer looks like an item that silently vanished.
+ */
+export function isCancellationNotice(item) {
+	if (typeof item?.notice === "boolean") return item.notice;
+	return /^CANCELLED #\d+: /.test(String(item?.subject ?? ""));
+}
+
+/**
+ * Is this item a NOTICE of any kind (a DONE ack or a CANCELLATION)? A notice must never
+ * spawn another notice, or every terminal transition begets a hop and the chain grows
+ * without bound (ROADMAP 39). Both terminal tools consult this instead of their own shape,
+ * so a cancellation of a cancellation cannot loop.
+ */
+export function isNoticeItem(item) {
+	// THE STRUCTURAL FLAG WINS (#3739). The subject-prefix fallback exists only for flag-less
+	// items that predate the flag; letting it override a structural non-notice is how a WORK item
+	// whose free-text subject happens to start "DONE #123: " got cancelled without notifying
+	// anyone, while the tool told the caller the item "is itself a notice". Subjects are free
+	// text, so the prefix cannot be the authority - only a missing flag can defer to it.
+	if (typeof item?.notice === "boolean") return item.notice;
+	return /^(?:DONE|CANCELLED) #\d+: /.test(String(item?.subject ?? ""));
 }
 
 /**
@@ -179,6 +265,69 @@ export function isDoneNotice(item) {
  */
 export function isTerminalItem(item) {
 	return item?.status === "done" || item?.status === "cancelled";
+}
+
+/**
+ * THE WORKABLE PREDICATE (#2673, lead-ratified definition in #2677). "Is this item claimable
+ * BY THIS SEAT, right now?" — the question `claim_work` used to answer with `status ===
+ * "queued"` alone, which is why a row blocked on an unclosed gate or an unadvertised
+ * capability still occupied the oldest-claim slot and starved the work behind it.
+ *
+ * Returns `{ workable, reason }`. `reason` is the LEGIBLE skip code (null when workable):
+ *   `not-queued:<status>`   — the caller passed something it should not have;
+ *   `requires:<cap>`        — the seat does not advertise the capability the item demands;
+ *   `gate-open:#<id>(<st>)` — a recorded prerequisite is not DONE yet;
+ *   `gate-cancelled:#<id>`  — a recorded prerequisite was CANCELLED: the prerequisite was
+ *                             DROPPED, so the item may be stale. "terminal" != "done", and
+ *                             this is a POSITIVE non-workability, not an ambiguity.
+ *
+ * THE CONSERVATIVE DEFAULT (refinement 3) is load-bearing: a MISSING or AMBIGUOUS signal
+ * means WORKABLE. A false negative starves a workable item (invisible, and it looks exactly
+ * like an empty queue); a false positive hands the seat a maybe-blocked item it can still
+ * hold or defer, and the refusal is legible. So a gate id that names nothing in the queue is
+ * passed over as unknown rather than treated as unmet.
+ *
+ * CLAUSE 4 (a persisted provider/seat FAULT) is NOT implemented: no such field exists, and
+ * D24 forbids inventing a schema or write path for it. That gap is registered as backlog
+ * rather than faked with model-level guessing.
+ */
+export function workable(item, seat, { items = [], capabilities = [] } = {}) {
+	if (!item) return { workable: false, reason: "missing-item" };
+	if (item.status !== "queued") return { workable: false, reason: `not-queued:${item.status}` };
+	const required = typeof item.requires === "string" ? item.requires.trim() : "";
+	if (required !== "" && !capabilities.includes(required)) {
+		return { workable: false, reason: `requires:${required}` };
+	}
+	for (const id of item.blockedBy ?? []) {
+		const target = items.find((it) => it.id === id);
+		// Ambiguous (no such item in the queue): the conservative default says workable.
+		if (!target) continue;
+		if (target.status === "done") continue;
+		if (target.status === "cancelled") return { workable: false, reason: `gate-cancelled:#${id}` };
+		return { workable: false, reason: `gate-open:#${id}(${target.status})` };
+	}
+	return { workable: true, reason: null };
+}
+
+/**
+ * The OLDEST-WORKABLE SELECTION (#2673), extracted so the choice is testable without a
+ * harness: `claim_work` with no itemId must return the oldest item that is WORKABLE for this
+ * seat, and must REPORT every item it passed over — a starved item is otherwise
+ * indistinguishable from an empty queue.
+ *
+ * Only items addressed to `seat` and still `queued` are candidates; the scan stops at the
+ * first workable one, so the order is oldest-first and a later workable item is never
+ * preferred over an earlier one.
+ */
+export function selectOldestWorkable(items, seat, { capabilities = [] } = {}) {
+	const skipped = [];
+	for (const candidate of items ?? []) {
+		if (candidate.to !== seat || candidate.status !== "queued") continue;
+		const verdict = workable(candidate, seat, { items, capabilities });
+		if (verdict.workable) return { item: candidate, skipped };
+		skipped.push({ id: candidate.id, reason: verdict.reason });
+	}
+	return { item: null, skipped };
 }
 
 /**
@@ -236,6 +385,12 @@ export function normalizeBlockedBy(list) {
  * `blockedBy` is the optional structured GATE (operator ruling on #2919; D53 supersedes D24): the
  * queue-item ids this work waits on. It rides THIS enqueue path — the one write path — rather than
  * a parallel store, and is omitted entirely when there is no gate (absence = unblocked).
+ *
+ * `requires` and `block` ride the same path (queue-lifecycle M1a, lead #3048): `requires` is the
+ * capability a claimant must advertise (persisted so claimability can read it — it was previously a
+ * send-time check only), and `block` is the structured park (`normalizeBlock` validates it, so the ONE
+ * write path is also the one place a malformed park cannot be stored). Both are omitted when absent:
+ * absence means "no capability requirement" / "unblocked", never "unknown, so hold".
  */
 export async function enqueueItem(
 	tx,
@@ -248,9 +403,14 @@ export async function enqueueItem(
 	tier = null,
 	held = false,
 	blockedBy = null,
+	requires = null,
+	block = null,
 ) {
 	const queue = await tx.doc(RigQueue);
 	const id = queue.nextId++;
+	const gateRequires =
+		typeof requires === "string" && requires.trim().length > 0 ? requires.trim() : null;
+	const gateBlock = block ? normalizeBlock(block) : null;
 	queue.items.push({
 		id,
 		from,
@@ -270,6 +430,12 @@ export async function enqueueItem(
 		// (docs/WORK-ITEM-SCHEMA.md §4/R5, §7). A plain array of ids so the `workable`
 		// predicate (#2673 / #2712) can read it without parsing prose.
 		...(blockedBy ? { blockedBy: [...blockedBy] } : {}),
+		// The capability a claimant must advertise, persisted so claimability can be decided per seat
+		// (F1: it was a send-time check only, so nothing could read it back). Absent = no requirement.
+		...(gateRequires ? { requires: gateRequires } : {}),
+		// The structured PARK (`block`), validated here so the ONE write path is also the one place a
+		// malformed park cannot be stored. Absent = unblocked (the legacy exemption, design §7).
+		...(gateBlock ? { block: gateBlock } : {}),
 		// A HELD/PARKED item (operator queue-hygiene directive, #1885) is created
 		// unclaimable and does NOT wake the recipient: a "registered, do not start"
 		// backlog row must not occupy a working seat's oldest-first claim slot.
@@ -278,6 +444,82 @@ export async function enqueueItem(
 		transitions: [{ at: new Date().toISOString(), event: held ? "held" : "queued", by: from }],
 	});
 	return id;
+}
+
+/**
+ * A short, stable digest of a body — the caller's check that a revise LANDED (#3435).
+ * Truncated to 16 hex chars: this is a comparison handle for a human or a seat, not a
+ * security primitive (the body is not secret; the queue is readable).
+ */
+export function bodyDigest(body) {
+	return createHash("sha256").update(String(body ?? ""), "utf8").digest("hex").slice(0, 16);
+}
+
+/**
+ * The revise COMPARISON, as data (#3435): apply the submitted fields to `item` and say
+ * which of three things happened, so a caller can never mistake "nothing to change" for
+ * "your change was dropped".
+ *
+ *  - `revised`   — at least one field differed and was written (verified by re-reading it
+ *                  in the same call); `fields` names what landed.
+ *  - `no-change` — every submitted field is byte-identical to the stored one. Nothing was
+ *                  written, and the caller is TOLD so, with the stored digest.
+ *  - `mismatch`  — a field was submitted, the write was attempted, and the stored value
+ *                  still does not equal it. This is the case that used to be reported as
+ *                  success; the tool turns it into REVISE_WORK_ERROR.
+ *
+ * Pure apart from the `item` mutation it is asked to perform; no I/O, so a demo can drive
+ * all three outcomes without a store.
+ */
+export function applyRevise(item, { subject, body } = {}) {
+	const submitted = [];
+	const changed = [];
+	if (subject !== undefined) {
+		submitted.push("subject");
+		if (subject !== item.subject) {
+			item.subject = subject;
+			changed.push("subject");
+		}
+	}
+	if (body !== undefined) {
+		submitted.push("body");
+		if (body !== item.body) {
+			item.body = body;
+			changed.push("body");
+		}
+	}
+	// Verify inside the same call: a submitted field that did not land is a MISMATCH.
+	const failed = [];
+	if (subject !== undefined && item.subject !== subject) failed.push("subject");
+	if (body !== undefined && item.body !== body) failed.push("body");
+	const status = failed.length > 0 ? "mismatch" : changed.length > 0 ? "revised" : "no-change";
+	return {
+		status,
+		fields: status === "mismatch" ? failed : changed,
+		submitted,
+		digest: bodyDigest(item.body),
+		bodyBytes: Buffer.byteLength(String(item.body ?? ""), "utf8"),
+	};
+}
+
+/**
+ * The MESSAGE a revise returns (#3435), one shape per outcome so no caller can read a
+ * dropped change as a success:
+ *  - `revised`   → names the fields that landed AND the stored body digest + byte count, so
+ *                  the caller can compare against what they sent without re-reading;
+ *  - `no-change` → says "no change" in those words and that NOTHING was written, with the
+ *                  digest — the caller can still tell whether the stored text is the text
+ *                  they meant;
+ *  - `mismatch`  → an ERROR-shaped line (`REVISE_WORK_ERROR:`), never a success.
+ */
+export function reviseMessage(item, outcome) {
+	if (outcome.status === "mismatch") {
+		return `REVISE_WORK_ERROR: item #${item.id} did not take the submitted ${outcome.fields.join(", ")} (stored body sha256=${outcome.digest}); nothing was changed`;
+	}
+	if (outcome.status === "no-change") {
+		return `item #${item.id} no change — the submitted ${outcome.submitted.join(" and ")} already matches the stored text (body sha256=${outcome.digest}); nothing was written`;
+	}
+	return `item #${item.id} revised (${outcome.fields.join(", ")}); it stays queued for ${item.to}. Stored body sha256=${outcome.digest} (${outcome.bodyBytes} bytes) — compare it with what you sent to verify the write landed.`;
 }
 
 // Ratcheting task tier (RANK 2 borrow; source vendor/eval/agent-fleet @ 7c34dde
@@ -392,18 +634,52 @@ const Router = defineExtension({
 				"Pass `held: true` to create it UNCLAIMABLE and un-waking (a parked backlog registration): " +
 				"it does not occupy the recipient's oldest-first claim slot and does not wake it until released. " +
 				"Pass `blockedBy: [ids]` to record a structured GATE (the queue-item ids this work waits on); " +
-				"omit it when there is no gate. Gates are ids, never prose.",
+				"omit it when there is no gate. Gates are ids, never prose. " +
+				"Pass `block` to record WHY a parked item is parked (reason + a mandatory resolver + reviewBy); " +
+				"omit it when the item is not parked. Pass `requires` for a capability the claimant must advertise.",
 			parameters: Type.Object({
 				to: Type.String({ description: "recipient seat name" }),
 				subject: Type.String(),
 				body: Type.String(),
 				requires: Type.Optional(Type.String({
-					description: "capability the recipient must advertise",
+					description:
+						"capability the recipient must advertise; it is checked now AND persisted on the item so claimability can read it",
 				})),
 				blockedBy: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), {
 					description:
 						"structured gate: the queue-item ids this work is blocked on (must resolve to terminal `done` before the item is workable). Omit when ungated.",
 				})),
+				block: Type.Optional(
+					Type.Object({
+						source: Type.Optional(
+							Type.Union([Type.Literal("declared"), Type.Literal("legacy")]),
+						),
+						reason: Type.String({
+							description:
+								"why the item is parked: dependency|question|operator|schedule|resource|manual|backlog|roadmap-gate",
+						}),
+						resolver: Type.String({
+							description:
+								"who or what clears the park (mandatory): a seat name, operator|human|automatic, #<id> or RM-<n>",
+						}),
+						constraints: Type.Optional(
+							Type.Array(
+								Type.Object({
+									kind: Type.String({ description: "queue|roadmap|window" }),
+									ref: Type.Optional(Type.Union([Type.String(), Type.Number()])),
+									note: Type.Optional(Type.String()),
+								}),
+							),
+						),
+						payload: Type.Optional(Type.Object({}, { additionalProperties: true })),
+						reviewBy: Type.Optional(
+							Type.Union([Type.String(), Type.Null()], {
+								description:
+									"when to look again (ISO date); omit for the per-reason default, null only for backlog/question",
+							}),
+						),
+					}),
+				),
 				held: Type.Optional(Type.Boolean({
 					description:
 						"Create the item PARKED (status held): unclaimable and no wake, so a 'registered, do not start' backlog row cannot starve a working seat. Release it later with release_work.",
@@ -450,6 +726,9 @@ const Router = defineExtension({
 						}
 					}
 					const gate = normalizeBlockedBy(args.blockedBy);
+					// The park is validated BEFORE the commit, so a malformed block is a legible refusal and
+					// never a half-written item (same discipline as the gate above).
+					const park = args.block ? normalizeBlock(args.block) : null;
 					const id = await api.commit(async (tx) => {
 						await assertSendAllowed(tx, me, args.to, args.requires);
 						// Ratcheting tier raise guard: raising an already-tiered task's chain
@@ -472,7 +751,7 @@ const Router = defineExtension({
 								);
 							}
 						}
-						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null, args.held === true, gate);
+						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null, args.held === true, gate, args.requires ?? null, park);
 					}, context);
 					const label =
 						args.held === true
@@ -529,10 +808,18 @@ const Router = defineExtension({
 							body: named.body,
 						};
 					}
-					// Normal claim: the oldest QUEUED item addressed to me. Suppressed while paused.
-					const queued = paused ? undefined : queue.items.find(
-						(it) => it.to === me && it.status === "queued",
-					);
+					// Normal claim: the OLDEST WORKABLE queued item addressed to me (#2673). The scan
+					// records every item it passes over and WHY, so a starved item is detectable
+					// instead of silently occupying the slot ahead of real work. Suppressed while paused.
+					const skipped = [];
+					let queued;
+					if (!paused) {
+						const seatsDoc = await tx.doc(Seats);
+						const capabilities = seatsDoc.seats[me]?.capabilities ?? [];
+						const picked = selectOldestWorkable(queue.items, me, { capabilities });
+						queued = picked.item ?? undefined;
+						skipped.push(...picked.skipped);
+					}
 					if (queued) {
 						queued.status = "claimed";
 						queued.transitions.push({
@@ -550,6 +837,7 @@ const Router = defineExtension({
 							from: queued.from,
 							subject: queued.subject,
 							body: queued.body,
+							skipped,
 						};
 					}
 					// Stalled-claim legal move (ROADMAP 42 / #118): no queued work, but
@@ -574,7 +862,18 @@ const Router = defineExtension({
 					}
 					// Paused and nothing already held: a legible refusal, not a silent no-op.
 					if (paused) return { kind: "paused", by: control?.pausedBy ?? null, reason: control?.reason ?? null };
-					return null;
+					// #4713: THE DATA IS CAPTURED **INSIDE** THE CLOSURE, where `queue` is bound. The previous attempt put
+					// the lookup after `}, context);`, where `queue` does not exist: `node --check` passed and six demos passed,
+					// because none reaches this path with a live queue. `curate` and `rearmclaim` do, and they threw.
+					// #4737: SNAPSHOT INSIDE — return PLAIN data. `mine` was a filtered array OF DOC PROXIES and it ESCAPED
+					// the commit callback, so reading it afterwards threw `Cannot use a settled overlay`. The file states this
+					// rule in its own words at the `plainItem` helper: "never let a doc proxy escape the `api.commit`
+					// callback — snapshot inside, return plain." The whole array had to be spread into plain objects, not
+					// merely filtered, because the PROXIES are what do not survive settlement.
+					const mine = (queue.items ?? [])
+						.filter((it) => it.to === me && it.status !== "done" && it.status !== "cancelled")
+						.map((it) => ({ id: it.id, status: it.status, from: it.from, subject: it.subject }));
+					return mine.length > 0 ? { kind: "none", mine } : null;
 				}, context);
 				if (found?.kind === "paused") {
 					const why = found.reason ? ` (reason: ${found.reason})` : "";
@@ -583,6 +882,25 @@ const Router = defineExtension({
 							"`unpause`. Work you ALREADY hold still completes: use complete_work / defer_work.",
 					);
 				}
+					// #4732: THIS BLOCK MUST PRECEDE `if (!found)`. `{ kind: "none", mine }` is TRUTHY, so `!found` is
+					// FALSE and the HEADER rendering below (`ITEM #${found.id} | …`) would run against it — producing
+					// `ITEM #undefined | from=undefined | subject=undefined`, the string two passes attributed to a
+					// malformed fixture row. THE FIXTURE WAS FINE; THE FIX WAS DEAD CODE.
+					// #4713: A REFUSAL THAT NAMES NOTHING IS INDISTINGUISHABLE FROM AN EMPTY QUEUE. The 19-turn shape is a
+					// row `queued` at WAKE time and held / deferred / claimed-elsewhere by the time this runs — the stalled
+					// branch cannot reach it, because it needs a row STILL CLAIMED by this seat.
+					if (found?.kind === "none") {
+						const oldest = found.mine[0];
+						const others = found.mine.length > 1 ? ` (and ${found.mine.length - 1} more row(s) addressed to you)` : "";
+						return toolText(
+							`NO_QUEUED_WORK — but NOT an empty queue: #${oldest.id} is addressed to you and is now \`${oldest.status}\`${others}. ` +
+								(oldest.status === "held"
+									? `It is parked awaiting release; a row you hold is not a claim offer.`
+									: oldest.status === "claimed"
+										? `It is claimed by you — use complete_work or defer_work to advance it.`
+										: `It is not claimable in its current state; check \`status\` for who holds it.`)
+						);
+					}
 				if (!found) {
 					return toolText("NO_QUEUED_WORK");
 				}
@@ -595,7 +913,14 @@ const Router = defineExtension({
 					found.kind === "stalled"
 						? `STALLED_CLAIM #${found.id} | from=${found.from} | subject=${found.subject} | status=claimed`
 						: `ITEM #${found.id} | from=${found.from} | subject=${found.subject} | status=claimed`;
-				const claimText = `${head}\n${found.body}`;
+				// LEGIBILITY (#2673 refinement 4): a skipped item must be SURFACED, not merely
+				// logged — an item starved behind an unclosed gate is otherwise indistinguishable
+				// from an empty queue, which is how these rows escalated to the operator.
+				const skipped = found.skipped ?? [];
+				const skippedLine = skipped.length
+					? `\n\nSKIPPED (addressed to you, not workable yet): ${skipped.map((s) => `#${s.id} (${s.reason})`).join(", ")}`
+					: "";
+				const claimText = `${head}\n${found.body}${skippedLine}`;
 				// Thin-context return contract: an over-threshold body goes to disk and
 				// the tool returns the structured head + a path, not the dump (see
 				// thinResultText / RANK-1 / #118 half 2).
@@ -608,7 +933,11 @@ const Router = defineExtension({
 				"Mark one of your claimed items done with a result. Sends a DONE notice back to the sender. " +
 				"Pass `evidence` ({command, exitCode, artifact?}) when you VERIFIED someone's work: it is what " +
 				"makes the completion re-checkable, and `check` reports a verifier item completed without it " +
-				"(ROADMAP 48 / W2). `resultSummary` stays the narrative; evidence is additive.",
+				"(ROADMAP 48 / W2). `resultSummary` stays the narrative; evidence is additive. " +
+				"When the item is a LANDING ENTRY, say WHICH of two things happened - `done` means \"this " +
+				"entry was PROCESSED\", not \"this artifact arrived\", and a reader holding a gate on it " +
+				"reads plain `done` as landed: write `LANDED at <sha>` or `ROUTED to <seat> as <id>, NOT YET " +
+				"LANDED` (#4073).",
 			parameters: Type.Object({
 				itemId: Type.Number(),
 				resultSummary: Type.String(),
@@ -662,7 +991,7 @@ const Router = defineExtension({
 					// a DONE notice back, or the chain never ends (ROADMAP 39).
 					// `isDoneNotice` also covers flag-less DONE items already in the
 					// store that predate the structural flag.
-					if (!isDoneNotice(item)) {
+					if (!isNoticeItem(item)) {
 						// The handoff must be RE-RUNNABLE (ROADMAP 48 / W2; lead #1553: verification
 						// MUST re-execute the evidence, accepting a claim is not verification). A
 						// completion's evidence is therefore carried ON THE DONE NOTICE - verbatim,
@@ -746,20 +1075,50 @@ const Router = defineExtension({
 							return `item #${args.itemId} is addressed to ${item.to}, not you`;
 						if (item.status !== "claimed")
 							return `item #${args.itemId} is not claimed by you (status=${item.status})`;
-						// Asking a seat IS a send, so the org-edge and capability gates apply
-						// to it exactly as they do to send_work. Checked BEFORE any state
-						// changes, so a forbidden question cannot leave the item half-parked.
-						if (args.to) await assertSendAllowed(tx, me, args.to);
+						// #4574: A DEFERRAL IS NOT A SEND. The comment here used to read "Asking a seat IS a send, so the
+						// org-edge and capability gates apply to it exactly as they do to send_work" — AND THAT PREMISE WAS
+						// WRONG AND LOAD-BEARING. It read as documentation, so nobody tested it.
+						// THE CONSEQUENCE: the gate fired BEFORE anything was recorded, so an off-edge `to:` could only reach
+						// the default below — a FORCED ESCALATION to the operator whether or not the operator was the right
+						// decider, and #4124 read as an open question for hours while the seat it named had never been asked.
+						// SO THE TWO ACTS ARE SPLIT: `assertSendAllowed` governs the `enqueueItem` below — that IS a send and
+						// must keep refusing loudly — and it does NOT govern RECORDING a target. Parked is not sent.
+						// #4655: TWO FACTS, ONE CATCH — THAT WAS THE DEFECT. `assertSendAllowed` calls `seatId(tx, to)` FIRST,
+						// and `seatId` throws `unknown seat: <name>`. So an UNKNOWN NAME and an ORG-EDGE REFUSAL both landed in
+						// the single try/catch below, and an unknown target was recorded and rendered as a seat — the original
+						// defect in a new spelling. The resolver already exists; nothing new is needed, only SEPARATION.
+						// THE RULING: record the name (so the operator sees what was typed), mark it UNASKABLE rather than
+						// falling back to nobody, and NAME THE NAME in the sentence.
+						let knownSeat = true;
+						if (args.to) {
+							try {
+								await seatId(tx, args.to);
+							} catch {
+								knownSeat = false;
+							}
+						}
+						let deliverable = false;
+						if (args.to) {
+							try {
+								await assertSendAllowed(tx, me, args.to);
+								deliverable = true;
+							} catch {
+								// The edge forbids SENDING to that seat. Record the target, deliver nothing: it can still ANSWER.
+								deliverable = false;
+							}
+						}
 						item.status = "deferred";
 						item.question = args.question;
-						item.deferredTo = args.to ?? DEFERRED_TO_HUMAN;
+						// #4574: and the default is HONEST. "nobody was asked" and "the operator was asked" are DIFFERENT
+						// FACTS; `args.to ?? DEFERRED_TO_HUMAN` made them indistinguishable and manufactured "human".
+						item.deferredTo = args.to ?? DEFERRED_TO_NOBODY;
 						item.transitions.push({
 							at: new Date().toISOString(),
 							event: "deferred",
 							by: me,
 							to: item.deferredTo,
 						});
-						if (args.to) {
+						if (args.to && deliverable) {
 							await enqueueItem(
 								tx,
 								me,
@@ -768,9 +1127,20 @@ const Router = defineExtension({
 								args.question,
 							);
 						}
-						return args.to
-							? `item #${item.id} deferred to ${args.to}; that seat has the question. Resume your own item with resume_work(${item.id}) once it answers.`
-							: `item #${item.id} deferred to the human operator, who sees it on the status line. Resume it with resume_work(${item.id}) once you have the answer.`;
+							// #4574: the message reports what ACTUALLY happened, which is THREE cases, not two. A no-target
+							// deferral says NOBODY was asked — not that the operator was, which is the fact the old default invented.
+							if (!args.to) {
+								return `item #${item.id} deferred with NO target — nobody was asked, and deferredTo records that rather than naming the operator. The operator sees it on the status line; resume it with resume_work(${item.id}) once you have an answer.`;
+							}
+							// #4655: AN UNKNOWN NAME IS ITS OWN CASE. Recording it and rendering it as a seat is the original defect;
+							// falling back to "nobody" would hide the typo. So it is recorded, marked unaskable, and NAMED.
+							if (!knownSeat) {
+								return `item #${item.id} parked on '${args.to}' — that target is NOT A KNOWN SEAT, so nobody has been asked. The name is recorded so you can see what was typed; correct it and defer again.`;
+							}
+							if (!deliverable) {
+								return `item #${item.id} parked on ${args.to} — NOT delivered, because the org edge forbids sending to that seat, but the seat is recorded as the one that should ANSWER and it is visible through attention/status. Resume your own item with resume_work(${item.id}) once it answers.`;
+							}
+							return `item #${item.id} deferred to ${args.to}; that seat has the question. Resume your own item with resume_work(${item.id}) once it answers.`;
 					}, context);
 					return toolText(out);
 				} catch (err) {
@@ -892,23 +1262,25 @@ const Router = defineExtension({
 						return `item #${args.itemId} is not queued (status=${item.status}); only unclaimed work can be revised`;
 					if (args.subject === undefined && args.body === undefined)
 						return "revise_work needs a subject and/or a body";
-					const fields = [];
-					if (args.subject !== undefined && args.subject !== item.subject) {
-						item.subject = args.subject;
-						fields.push("subject");
+					// #3435: the OUTCOME must be legible and checkable. A revise that produces no
+					// change used to be indistinguishable from a revise that was DROPPED — both
+					// came back as a success-shaped sentence — so the only way to notice a lost
+					// amendment was to re-read the item, which nobody does on a success path.
+					// `applyRevise` returns a status, the fields it actually wrote, and a digest of
+					// the STORED body so the caller can verify the write without re-reading.
+					const outcome = applyRevise(item, { subject: args.subject, body: args.body });
+					if (outcome.status === "mismatch") {
+						// A change was submitted and did NOT land. Never report that as success.
+						return reviseMessage(item, outcome);
 					}
-					if (args.body !== undefined && args.body !== item.body) {
-						item.body = args.body;
-						fields.push("body");
-					}
-					if (fields.length === 0) return `item #${item.id} unchanged`;
+					if (outcome.status === "no-change") return reviseMessage(item, outcome);
 					item.transitions.push({
 						at: new Date().toISOString(),
 						event: "revised",
 						by: me,
-						fields,
+						fields: outcome.fields,
 					});
-					return `item #${item.id} revised (${fields.join(", ")}); it stays queued for ${item.to}.`;
+					return reviseMessage(item, outcome);
 				}, context);
 				return toolText(out);
 			},
@@ -916,7 +1288,7 @@ const Router = defineExtension({
 		defineTool({
 			name: "cancel_work",
 			description:
-				"Cancel one of your items (sent by you or addressed to you) that is no longer worth doing. Terminal: it can never be claimed and the broker will never wake anyone for it. Use it for stale or superseded work instead of leaving it in the queue.",
+				"Cancel one of your items (sent by you or addressed to you) that is no longer worth doing. Terminal: it can never be claimed and the broker will never wake anyone for it. The reason is NOTIFIED to the other party as a CANCELLED notice, the same way a completion notifies them with a DONE notice.",
 			parameters: Type.Object({
 				itemId: Type.Number(),
 				reason: Type.String({
@@ -934,15 +1306,8 @@ const Router = defineExtension({
 						return `item #${args.itemId} is not yours to cancel (from=${item.from} to=${item.to})`;
 					if (isTerminalItem(item))
 						return `item #${args.itemId} is already ${item.status}`;
-					item.status = "cancelled";
-					item.cancelReason = args.reason;
-					item.transitions.push({
-						at: new Date().toISOString(),
-						event: "cancelled",
-						by: me,
-						reason: args.reason,
-					});
-					return `item #${item.id} cancelled: ${args.reason}`;
+					const outcome = await cancelItem(tx, { item, me, reason: args.reason });
+					return outcome.message;
 				}, context);
 				return toolText(out);
 			},
