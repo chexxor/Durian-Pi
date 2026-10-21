@@ -88,16 +88,19 @@ re-surface tracker (no earlier than 2026-11-21, target 2026-12-21). **R2 NOT APP
 **Broker fix LANDED on main:** `c82be69` (#4180 suppression trace + status attention row) and `66c6e1a`
 (#4176 ADMISSION_DEADLINE_MS + pure `admissionVerdict`, ROADMAP 37(c)).
 
-**RECOMMENDED NEXT QUEUE (operator asked 03:55Z; pm owns decomposition).** The CLI's small count is
-`queued`+`claimed` only (2+4 now) — 281 rows are `held` by design, so "3 in the queue" is not "3 things
-left". In order: (1) close designer's **#3945** review, then release **#3946** and land `impl-item-3941`
-(Fix A); (2) **mint a verify + a real-seat ROUND-TRIP acceptance for `impl-item-4158` @2213801** and
-release **#4163** — no verify exists and #4070 was cancelled, so the operator-facing acceptance (Enter →
-Pi → exit → landing live on the same seat) is UNOWNED; (3) mint the **reconciler extension for `queued` +
-the periodic sweep** (the primitive #4176 is landed, the consumers are not); (4) mint/release the
-**liveness+progress watchdog (ROADMAP 62)**; (5) release **#4222** so the pointer gets written; (6) mint
-**52's in-process `viewState().subscribe()`** + **late-join demo**, then release **#2733**; (7) hygiene:
-clear the four stale flags, close #4124.
+**RECOMMENDED NEXT QUEUE — OPERATOR APPROVED AND IT WAS DELIVERED 03:58:11Z** (`operator-next-queue-2026-10-21-1`,
+`delivered:true`; body `.spike/delegate/tui-status/intent-next-queue-2026-10-21.md`). The CLI's small
+count is `queued`+`claimed` only (2+4 now) — 281 rows are `held` by design, so "3 in the queue" is not "3
+things left". The approved order, which `pm` now decomposes: **P1** close designer's **#3945**, then
+release **#3946** and land `impl-item-3941` (Fix A) · **P2** mint a non-author verify **and a real-seat
+ROUND-TRIP acceptance** for `impl-item-4158` @2213801, then release **#4163** (no verify exists and #4070
+was cancelled, so the operator-facing acceptance was UNOWNED) · **P3** mint the **reconciler extension for
+`queued` + the periodic sweep** (primitive #4176 at `66c6e1a` and trace #4180 at `c82be69` are landed; the
+consumers are not) · **P4** mint/release the **liveness+progress watchdog (ROADMAP 62)** · **P5** release
+**#4222** (the pointer into #3272) · **P6** mint **52's in-process `viewState().subscribe()`** + **late-join
+demo**, then release **#2733** · **P7** hygiene: clear the four stale flags, close #4124, keep #994 held
+until 2026-11-21. P1/P2 are the operator's asks and must not be preempted. **Next check:** pm's minted
+ids (expect ~6 new rows) and whether P1/P2 were sequenced ahead of P3–P6.
 
 **Blocker:** none on the tree. `main` `b4bb4c7`, tracked tree clean except the broker-generated
 untracked `selfdev.sqlite.broker.audit.log`. Single broker pid 16140 (verify before any restart).
