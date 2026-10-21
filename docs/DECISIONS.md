@@ -3055,6 +3055,7 @@ rules scope if the failure-scope policy conflicts with scheduled work. Evidence 
 grep/`node --check`/demo baseline and the version probe (see the review's Evidence section). No
 implementation is claimed here.
 
+## D114 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
 ## D113 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
 
 **Context.** The operator backlog asks that "waiting on the operator" be **visible and answerable**
