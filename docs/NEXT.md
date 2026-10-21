@@ -1,5 +1,39 @@
 # durian-pi — NEXT (current pointer)
 
+## NEXT SESSION (2026-10-21T23:12Z — landing campaign closed out: suite GREEN, one runbook stack left)
+
+**Current item:** no queue id — this pass was operator-driven branch landing, not a claimed item. `main` is
+`742b0fdf`: **`npm run test` 234/234 (exit 0), `npm run test:tui` 38/38**, and
+`@earendil-works/pi-coding-agent` is pinned `1.3.0`. Refs: 165 total, **140 merged**, 25 unmerged (3 item
+branches + 22 archived/scratch/snapshot refs the runbooks say to keep). The 7 known-red demos were fixed on
+the way: mojibake in `docs/runbooks/README.md`; the #4557/#4607 wake `reason` and PARKED wake in
+stalledclaim/run/held-item; the cancellation NOTICE in curate; tree-aware `restore` measured on a temp tree in
+confine-token-awareness; the pinned vendor entry in pitui.
+
+**The only item branches left are one stack:** `devtools-item-4054` → `4064` → `4083` (runbook wiring:
+`check` reads `docs/runbooks/*` and passes them to `auditRig` as plain data; `runbook-unverified` becomes
+advisory). Its code is proven in a scratch — four loader bugs were fixed there (an `execFile` call with no
+callback, a DATE passed as a revision, a regex with no capture group read as `m[1]`, and `../link` paths
+handed to git) — but it is NOT landed because switching the rules on makes `check` report **7 real stale
+runbooks as errors**.
+
+**Exact next commands (the operator window):**
+1. `node .spike/stale-runbooks.mjs` — lists the 7 with the files that changed since `last_verified`:
+   `branch-cleanup`, `leaked-secret`, `compact-a-seat`, `security-trust-boundary-review`,
+   `broker-safe-change`, `resume-while-broker-runs`, `store-corruption-recovery`.
+2. Verify them: 4 need a live broker/incident; 2 have `<placeholder>` Verify commands; 1 needs a real
+   merged-ref prune pass.
+3. Then land the stack: merge `main` into `devtools-item-4083`, keep main's `RULES` + the advisory class +
+   `advisory` in the summary, update `demo/runbook-rules.test.mjs` (unverified is ADVISORY), land it, and run
+   `node scripts/test.mjs --area check` and `--area docs`.
+4. Fallback if no window: demote `runbook-stale` from `error` to `fix-now` (operator decision; trades a real
+   guard for a green check).
+
+**Record:** 34 deletions from this campaign are backfilled into `docs/DISPOSITIONS.md` (rows dated
+2026-10-21); the raw sha/date/subject lines stay in the gitignored `.spike/old-branch-deletions.log`.
+Landing entries that pinned pre-repair shas are stale — BOM repairs and re-cuts moved 30+ branch tips; the
+old→new maps are `.spike/bom-repair.json` and `.spike/resolve-catalogs.json`.
+
 ## NEXT SESSION (2026-10-21T04:55Z — THREE BRANCHES LANDED and proven on main; shared-tree incident closed to its resolution path)
 
 **Current item:** the three verified TUI branches are **on `main`** and proven in a detached worktree —
