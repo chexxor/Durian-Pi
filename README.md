@@ -249,6 +249,8 @@ docs/PI-DURABLE-INTEGRATION.md  how durian-pi builds on pi-durable: what the har
                         owns, what durian-pi adds, and the pin contract
 docs/WORKFLOWS.md     what durian-pi is for: the workflows, their must-not-break loops,
                         and the capability each one needs
+docs/SEAT-CAPABILITY-PROFILE.md  per-seat tool surface, org-edge send targets, and doc-edit
+                        reach — so an assignment names a mechanism the assignee has
 docs/Managing_Long_Context_Length.md  long-context research: context rot, effective
                         windows, when to compact — the basis of ROADMAP 27-30
 scripts/sync-pi.mjs   build + link pi's main branch at a pinned commit

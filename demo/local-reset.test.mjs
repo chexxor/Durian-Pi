@@ -62,6 +62,30 @@ assert.equal(
   0,
   "no boundary mid-item (a claimed item is held)",
 );
+// #2337: `deferred` and `held` are STILL mid-item — the seat will resume them, so a boundary now
+// wipes the continuation context. Reachable through the live pass (deferred/held rows live in the
+// RigQueue doc the broker feeds the planner). The auditor's exact input is the last row.
+assert.equal(
+  planLocalContextBoundaries({ seats: { local: localSeat }, items: [{ id: 10, to: "local", status: "deferred" }] }).length,
+  0,
+  "no boundary mid-item (a DEFERRED item is still held by the seat)",
+);
+assert.equal(
+  planLocalContextBoundaries({ seats: { local: localSeat }, items: [{ id: 10, to: "local", status: "held" }] }).length,
+  0,
+  "no boundary mid-item (a HELD item is still held by the seat)",
+);
+assert.deepEqual(
+  planLocalContextBoundaries({
+    seats: { l: { conversationId: 1, provider: "local" } },
+    items: [
+      { id: 10, to: "l", status: "deferred" },
+      { id: 12, to: "l", status: "queued" },
+    ],
+  }),
+  [],
+  "the auditor's exact input: a deferred #10 must not draw a mid-item boundary for #12",
+);
 assert.equal(
   planLocalContextBoundaries({ seats: { local: localSeat }, items, busySeats: new Set(["local"]) }).length,
   0,

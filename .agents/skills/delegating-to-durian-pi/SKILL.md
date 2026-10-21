@@ -1,9 +1,9 @@
 ---
-name: durig
-description: Drive a durig team on the operator's behalf — deliver the operator's intent to the team, read the rig's state, and verify the team's result. Use as an external delegate; you do not do the team's work, and the team's PM owns decomposition and routing.
+name: delegating-to-durian-pi
+description: Drive a durian-pi team on the operator's behalf — deliver the operator's intent to the team, read the rig's state, and verify the team's result. Use as an external delegate; you do not do the team's work, and the team's PM owns decomposition and routing.
 ---
 
-# Delegating to a durig team
+# Delegating to a durian-pi team
 
 **Read this if you are a delegate for the operator, not a member of the team.** First decide *which*
 team: the workspace routing map is in the root `AGENTS.md`, and the durig **selfdev** team has its

@@ -31,12 +31,29 @@ pm-*.err
 *.sqlite.bak-*
 *.sqlite-wal.bak-*
 *.sqlite-shm.bak-*
-*.sqlite.broker.log
-*.sqlite.broker.json
-*.sqlite.broker.inbox/
-*.sqlite.broker.inbox.error/
+# The broker's WHOLE exhaust family beside the store: its log, state json, AUDIT LOG, stop marker,
+# and the inbox spool dirs. A FAMILY pattern rather than a per-name list: the per-name list missed
+# `.audit.log`, so `git check-ignore` said NOT ignored and the shared root could never be durably
+# clean - the broker writes it continuously, so an "empty status" preflight was unpassable by
+# construction (the unreachable-green failure in a new place, #4139).
+*.sqlite.broker.*
 *.sqlite.genlock.*
 # Per-item seat worktrees (`prepare_workspace` puts them at <root>/item-<id>`).
 # They are disposable checkouts whose work is committed to a branch, so they must
 # never show up as untracked tree dirt (the item-1/item-2 leak, 2026-10-16).
 /item-*/
+# Worktree/scratch paths durig generates that are NOT created through
+# `createWorktree` (raw `git worktree add` for verify scratch, the broker's result
+# channel, the lifecycle-test fixture, the lander's scratch). Ignore them here so
+# they never leak into `git status` as `?? <dir>/` (WORKTREE-ROT 1/3, #2328).
+# Every pattern is DIRECTORY-anchored (`/name/`), so a FILE of a similar name —
+# a real qa probe like `verify-1923-pause-edge.mjs` — stays visible.
+/verify*/
+/.verify-*/
+/wt-*/
+/.durig-test-wt-*/
+/.land-scratch-*/
+# The broker's result channel beside the store (`<db>.broker.inbox.out/`); the
+# spool dirs above are already ignored, this is the `.out` sibling.
+*.sqlite.broker.inbox.out/
+nul
