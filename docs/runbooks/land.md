@@ -11,7 +11,7 @@ check_rule: null
 
 # Land a branch with the helper (`scripts/land.mjs`)
 
-#### Operating notes — the guard, measured (source: #4222; read before editing this runbook)
+**Operating notes — the guard, measured (source: #4222; read before editing this runbook)**
 
 **1. TEST VERBS SEPARATELY — a compound command's refusal names only the FIRST matching rule.** Measured: a
 command containing both `git rebase main` and `git switch main` was refused naming only `switch`, so it said
