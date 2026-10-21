@@ -281,6 +281,15 @@ flowing. `up --dry-run` reports no model mismatch, so **`qa` is live on `zai-org
 **Follow-up owed:** the newline-stripping writer is a tooling defect (it hit 8 files at once) — register it
 so it does not recur; and `qa`'s context was reset, so re-surface any claimed item.
 
+**RED DEMO REGISTERED WITH `pm` (2026-10-21, delegate).** `node scripts/suite.mjs` on current `main`:
+exit 1, **pass=198 fail=4 / 202**. Three are the known baseline (`broker-one-connection`, `pitui`,
+`seat-instruction-encoding`); the fourth, **`demo/cli-broker-refuse.test.mjs`, is new**. Exact defect:
+line 133 asserts `/settles stranded submissions ITSELF/` (case-sensitive) but the refusal now says
+`settles STRANDED submissions ITSELF`; the runbook assertion on the next line passes. Not caused by the
+qa model/docs change — that demo builds its own temp store and reads neither `rig.selfdev.json` nor
+`selfdev.sqlite`. Spooled to `pm` to register + route to impl with a non-author verify (requestId
+`31b925e2-2982-45e2-b134-dc6a73ffc96c`). `npm run test:tui` = **33/33 pass**.
+
 Then:
 `git worktree add --detach .verify-main main && (cd .verify-main && node scripts/suite.mjs); git worktree remove --force .verify-main`
 
