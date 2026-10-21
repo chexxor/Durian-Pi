@@ -48,6 +48,19 @@ function consumeStringSequence(s, start) {
 	return s.length; // unterminated: drop the tail
 }
 
+// Unicode FORMAT characters are a DIFFERENT class from control sequences, and the
+// allowlist above never sees them: a bidi override (U+202A-202E, U+2066-2069) carries
+// no glyph and no cells, so `code < 0x20 || (0x7f..0x9f)` does not match it. That
+// matters more than a display bug — a bidi override REORDERS what the operator reads,
+// so a rendered frame can say something the data does not, and an invisible character
+// (ZWSP, word joiner, BOM, soft hyphen, LRM) can hide content inside a command.
+//
+// Stripped, with ONE exception: ZWJ (U+200D) is structural for emoji clusters —
+// `src/textwidth.mjs` already counts a ZWJ sequence as one grapheme — so removing it
+// would visibly split them. Per class, not one blanket strip (#3962).
+const FORMAT_CHAR = /\p{Cf}/u;
+const ZWJ = "\u200d";
+
 export function sanitizeTerminalText(text) {
 	const s = String(text ?? "");
 	let out = "";
@@ -104,6 +117,10 @@ export function sanitizeTerminalText(text) {
 		// C1 range: dropped, because carriage return can overwrite the line and the
 		// rest are noise the renderer did not ask for.
 		if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) continue;
+
+		// Invisible FORMAT characters (bidi controls, zero-width spaces, BOM, soft
+		// hyphen): dropped, except ZWJ, which is structural for emoji.
+		if (FORMAT_CHAR.test(ch) && ch !== ZWJ) continue;
 
 		out += ch;
 	}

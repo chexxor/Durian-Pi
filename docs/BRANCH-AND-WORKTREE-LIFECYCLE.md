@@ -182,6 +182,31 @@ counts as green depends on accepting the symlink as environmental, which is a ju
 tooling asserts. Record the exact numbers (`pass=N fail=M`) in every report rather than "suite green",
 and confirm a *new* failure is new by comparing against the pre-change baseline.
 
+
+### 6.3 Tree-dependent reds are deterministic: two named tests, two measured rates (2026-10-21)
+
+pm filed these as "two flaky demos" (#4530): `pitui` green->red and `broker-one-connection`
+red->green, on trees that "did not touch these files", where `fail=2` was true three times and meant
+three different things. qa measured the same day:
+
+- **`pitui` is deterministic per tree - the 6.2 trap, reproduced.** Green 20/20 alone, 24/24 in a
+  same-tree 24-copy burst, green in a full-suite run. On worktree `item-2608`, exit 1 **every** run:
+  `AssertionError [ERR_ASSERTION]: pi-tui resolved somewhere unexpected: file:///C:/Users/Alex/dsh-Projects/pi-opendurig/vendor/pi-main/packages/tui/dist/index.js`
+  (`demo/pitui.test.mjs:26:8`) - the exact 6.2 resolution failure through the `@earendil-works/pi-tui`
+  symlink (#2412). Version/pin drift by tree, not a race in time.
+- **`broker-one-connection` is a pure SHAPE test** - text assertions over `cli.mjs`/`src/broker.mjs`;
+  no processes, no temp state. Verdict = that tree's bytes. On the current tree: 20/20 alone, 24/24
+  burst, suite green. On worktree `item-4308` (NO local edits; an old base): exit 1 every run with
+  `AssertionError: the open at cli.mjs:1709 documents the P5/#110 exception above it`; `item-4202`
+  (editing `broker.mjs`): same text at cli.mjs:1699. Hash-compare across 24 sibling worktrees: 15
+  carry different `cli.mjs` bytes - 14 via base age alone, 1 via an in-flight edit.
+
+**The rule the "did not touch" claim missed:** a tree that does not touch a file still carries its
+BASE's bytes of that file, and an old base is a different verifier. Measured: 45/45 green per test on
+same bytes; 4/4 red on the divergent trees above. So `fail=2 x3` was never two flaky tests in time -
+it was tree-vs-tree alternation (plus `seat-instruction-encoding`, a steady red with an owner). A
+baseline is a NAME, a measured rate, and a TREE - never a count.
+
 ## 7. What is NOT authoritative
 
 - **`docs/NEXT.md`** — a pointer, refreshed by hand. It has been wrong about the pass state more than

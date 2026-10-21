@@ -6,7 +6,7 @@ status: open
 symptom: "a tool result is replaced by `[redacted by durig: secret-shaped value (high-entropy-token) …]` and the 40-character git SHA / tree OID the command printed is gone"
 runbook: store-secret-detected
 fix: null
-prevention: "exclude bare hex-object runs from the `high-entropy-token` pattern (src/secretdetect.mjs + src/secretredact.mjs) + a demo case; use `--short` in playbook commands until it lands"
+prevention: "exclude bare hex-object runs from the `high-entropy-token` pattern (src/secretdetect.mjs + src/secretredact.mjs) + a demo case; use `--short` in playbook commands until it lands — **SUPERSEDED (position P-6, 2026-10-21): the blanket pure-hex skip is REFUTED**. The resolution-backed form exempts a bare 40/64-hex ONLY when `isGitObject` confirms (`git cat-file -e <hex>^{object}`) and otherwise redacts/fires as today — FAILS CLOSED. See docs/reviews/security-sha-exemption-position.md"
 last_reviewed: 2026-10-19
 ---
 
@@ -108,7 +108,11 @@ control and the store does carry transcripts. Until the pattern is fixed:
    `/^[0-9a-fA-F]{40}$/` (and `/^[0-9a-fA-F]{64}$/`) must **not** classify as `high-entropy-token` — a hex
    run of a git-object length carries no entropy beyond its alphabet, and a 40/64 hex string is an object
    id far more often than a credential. Keep the mixed-alphabet pattern for everything else (it must still
-   catch `sk-…`, base64 blobs, etc.).
+   catch `sk-…`, base64 blobs, etc.). **SUPERSEDED (position P-6, 2026-10-21): this blanket pure-hex skip
+   is REFUTED.** The resolution-backed form (docs/reviews/security-sha-exemption-position.md) exempts a
+   bare 40/64-hex ONLY when `isGitObject` confirms (`git cat-file -e <hex>^{object}`) and otherwise
+   redacts/fires as today — FAILS CLOSED. A seat that follows this §1 un-amended would implement exactly
+   the thing the position refutes; read the position before narrowing the pattern.
 2. **A failing-first demo** (`demo/secret-redact.test.mjs` or the existing `secretdetect` demo): a 40-hex
    sha and a 64-hex sha redact to themselves; a real base64 token still redacts; `sk-…` still redacts.
    Both module copies must be asserted, or the duplication re-introduces the drift.

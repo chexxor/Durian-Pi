@@ -85,4 +85,9 @@ read the id. Reproduced: `redactText('384913a82d191119ed7259bff9efa85967959279')
 `high-entropy-token` finding to the operator for ROTATION, check whether the value was a git object id** —
 rotating a credential that was never a credential is a real cost. Workaround until the pattern is
 narrowed: use `--short` ids in playbooks, or discard line 1 of a `--write-tree` result.
-Record: `docs/incidents/2026-10-19-git-sha-redacted-as-secret.md`.
+Record: `docs/incidents/2026-10-19-git-sha-redacted-as-secret.md`. **SUPERSEDED (position P-6,
+2026-10-21): the blanket pure-hex skip this note implies is REFUTED.** The resolution-backed form
+(docs/reviews/security-sha-exemption-position.md) exempts a bare 40/64-hex ONLY when `isGitObject`
+confirms (`git cat-file -e <hex>^{object}`) and otherwise redacts/fires as today — FAILS CLOSED. Read the
+position before treating a `high-entropy-token` finding over git output as a false positive; the check
+still fires unless the value IS a git object id.
