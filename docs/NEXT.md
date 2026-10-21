@@ -296,6 +296,14 @@ demo; the assertion at `demo/cli-broker-refuse.test.mjs:130` was last changed by
 2026-10-17), i.e. it predates the wording change. `impl-item-4176` (`fe07040`) is **not** involved — it
 touched only `src/broker.mjs`. A correction intent was spooled to `pm` (`14859859`).
 
+**WORKLOAD MEASURED, REBALANCE ROUTED TO `pm` (2026-10-21, delegate).** Non-terminal rows by target
+(active = queued+claimed; held is parked, not workload): **pm 15/0/2 (active 15)**, **impl 3/1/175
+(active 4)**, **qa 1/1/20 (active 2)**, **qa2 0/0/0**, scribe 0/0/32, devtools 0/0/36, security 0/0/6,
+lead 0/0/4, auditor 0/0/2, advocate/designer/architect 0/0/1 each. So the bottleneck is **pm (15 queued
+DONE reports, 0 claimed)**, not impl (175 held = LANDING 61 + REGISTERED 45 + BUILD 13 + ROADMAP 12 …),
+and **qa2 is fully idle**. Intent spooled to `pm` (`19135e5e`) asking it to drain its own queue, route
+claimable work to idle capacity, and TRIAGE the held mass — without bulk-moving gated/held rows.
+
 Then:
 `git worktree add --detach .verify-main main && (cd .verify-main && node scripts/suite.mjs); git worktree remove --force .verify-main`
 
