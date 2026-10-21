@@ -99,12 +99,9 @@ async function call(name, toolName, toolArgs) {
 		fauxAssistantMessage([fauxToolCall(toolName, toolArgs)], { stopReason: "toolUse" }),
 		fauxAssistantMessage(fauxText("ok")),
 	];
-	if (firstTurn) {
-		faux.setResponses(batch);
-		firstTurn = false;
-	} else {
-		faux.appendResponses(batch);
-	}
+	// SET (not append): a wake or a second turn can consume an extra scripted reply, and an
+	// appended queue then drifts so the NEXT call receives "ok" instead of its tool call.
+	faux.setResponses(batch);
 	const c = await harness.conversation(roster[name].conversationId, ctx);
 	await (await c.submit({ type: "input", content: "go" }, ctx)).wait(ctx);
 }
@@ -141,9 +138,11 @@ assert.ok(
 await call("pm", "cancel_work", { itemId: 3, reason: "stale registration" });
 assert.equal((await item(3)).status, "cancelled", "the sender cancels a stale routed item");
 
-// 5. A cancelled item is not claimable: the intruder's only item is gone.
+// 5. The CANCELLED row is never claimable. Cancelling also lands a NOTICE to the holder, and
+// that notice is queued work, so the intruder's claim must surface the notice — never #3.
 await call("intruder", "claim_work", {});
-assert.match(await transcript("intruder"), /NO_QUEUED_WORK/, "a cancelled item is never claimed");
+assert.equal((await item(3)).status, "cancelled", "a cancelled item is never claimed");
+assert.match(await transcript("intruder"), /CANCELLED #3/, "the claim surfaced the cancellation NOTICE, the only queued row left");
 
 // 6. A finished item cannot be cancelled.
 await call("worker", "complete_work", { itemId: 1, resultSummary: "built it" });
@@ -151,11 +150,11 @@ assert.equal((await item(1)).status, "done", "worker finished #1");
 await call("worker", "cancel_work", { itemId: 1, reason: "oops" });
 assert.match(await transcript("worker"), /already done/, "cancelling a done item is refused");
 
-// 7. Terminal items are not "non-terminal work": the intruder's only item is
-// cancelled, so its own queue view is empty (the worker still holds the DONE
-// notice it SENT, which is legitimately its own non-terminal item).
+// 7. peek_queue never lists the cancelled row as WORK: the intruder holds the cancellation
+// notice (claimed), but #3 must not appear as a queued row it could pick up.
 await call("intruder", "peek_queue", {});
-assert.match(await transcript("intruder"), /\(empty\)/, "peek_queue hides a cancelled item");
+const peeked = await transcript("intruder");
+assert.ok(!/#3 queued /.test(peeked), "peek_queue does not show the cancelled row as queued work");
 
 await harness.close(ctx);
 console.log("CURATE TEST PASS (revise_work edits unclaimed work; cancel_work terminates it and it never wakes)");

@@ -21,12 +21,13 @@ try {
 // 1. The dependency is real if it exports a usable surface.
 assert.ok(tui && typeof tui === "object", "pi-tui must export a module namespace");
 
-// 2. It resolved to the real built entry, not a stub.
+// 2. It resolved to the real built entry, not a stub. TWO spellings are legitimate: a plain npm
+// install resolves through node_modules/@earendil-works/pi-tui, while the PINNED tree is linked
+// (sync-pi --link) so the same package resolves through vendor/pi-main/packages/tui. Asserting
+// only the first spelling is what made this demo red on a correctly-pinned tree (#2412/#3821).
 const entry = import.meta.resolve("@earendil-works/pi-tui");
-assert.ok(
-	entry.includes("@earendil-works/pi-tui") && entry.endsWith("dist/index.js"),
-	`pi-tui resolved somewhere unexpected: ${entry}`,
-);
+const builtEntry = /(?:node_modules[\/]@earendil-works[\/]pi-tui|vendor[\/]pi-main[\/]packages[\/]tui)[\/]dist[\/]index.js$/.test(entry);
+assert.ok(builtEntry, `pi-tui resolved somewhere unexpected: ${entry}`);
 
 // 3. A real headless render call runs with no TTY. `Text` is a leaf renderable
 //    and `visibleWidth` measures a rendered cell string — together they exercise

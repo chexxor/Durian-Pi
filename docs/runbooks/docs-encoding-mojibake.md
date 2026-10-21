@@ -3,7 +3,7 @@ runbook: docs-encoding-mojibake
 symptom: "an em dash, section sign, ellipsis or arrow in a doc, a rig spec or a seat instruction reads as garbage; or a file shows a change you did not make"
 writes: true
 precondition: "read-only"
-last_verified: 2026-10-20
+last_verified: 2026-10-21
 verified_by: impl
 evidence: "#3241 — node demo/seat-instruction-encoding.test.mjs (exit 0); node scripts/fix-mojibake.mjs --write; corrected diagnosis per lead ruling #3316"
 check_rule: null
