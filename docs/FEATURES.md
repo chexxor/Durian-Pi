@@ -1,4 +1,4 @@
-﻿# durian-pi â€” feature inventory
+# durian-pi â€” feature inventory
 
 What durian-pi does **today**, where each piece lives, and what proves it. This is
 the "what exists" reference: `docs/ROADMAP.md` is what comes next,
