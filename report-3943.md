@@ -1,4 +1,4 @@
-﻿# NARROW VERIFY #3943 — TUI slice on main
+# NARROW VERIFY #3943 — TUI slice on main
 
 ## PART 1: Content is live on main
 
