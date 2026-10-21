@@ -120,12 +120,16 @@ try {
 
 	console.log("\n=== degrade: more seats than rows, zero queue, no current item ===");
 	const many = Array.from({ length: 14 }, (_, i) => ({ name: `seat${i}`, role: "worker" }));
-	const crowded = frameToLines(renderTui({ seats: many, health: { seats: many, queueItems: [], attention: [] }, queueItems: [], selectedSeat: "seat0", view: "seats", width: 80, height: 24 }));
-	check("a crowded roster stays inside the frame height", crowded.length <= 24, `lines=${crowded.length}`);
+	// #3941: the roster now uses the terminal's ROWS, so 14 seats genuinely FIT in a 24-row frame and
+	// the degrade window is no longer exercised at that size. The height is lowered to 16 so the
+	// roster really does overflow - the assertions are unchanged, the fixture is honest about when
+	// "more seats than rows" is true.
+	const crowded = frameToLines(renderTui({ seats: many, health: { seats: many, queueItems: [], attention: [] }, queueItems: [], selectedSeat: "seat0", view: "seats", width: 80, height: 16 }));
+	check("a crowded roster stays inside the frame height", crowded.length <= 16, `lines=${crowded.length}`);
 	check("it reports the seats it did not paint", crowded.some((l) => /↓ \d+ more seats?/.test(l)), crowded.slice(-8).join(" | "));
 	const seatRowLines = crowded.filter((l) => /^[▸ ] [●○◌!✖] /.test(l));
 	check("an empty queue renders 0q on every painted seat row", seatRowLines.length > 0 && seatRowLines.every((l) => l.includes("0q")), seatRowLines.join(" | "));
-	const scrolled = frameToLines(renderTui({ seats: many, health: { seats: many, queueItems: [], attention: [] }, queueItems: [], selectedSeat: "seat13", view: "seats", width: 80, height: 24 }));
+	const scrolled = frameToLines(renderTui({ seats: many, health: { seats: many, queueItems: [], attention: [] }, queueItems: [], selectedSeat: "seat13", view: "seats", width: 80, height: 16 }));
 	check("the window follows the selection cursor (both-end indicators)", scrolled.some((l) => /↑ \d+ more seats?/.test(l)), scrolled.slice(2, 5).join(" | "));
 	check("a seat with no item renders the em-dash brief", crowded.some((l) => l.includes("—")));
 	check("a rig-wide notice (seat:null) never lands in a seat row", !frame({ health: { ...HEALTH, attention: [{ scope: "rig", seat: null, kind: "metrics-drift" }] } }).slice(2, 5).some((l) => l.includes("metrics-drift")));
@@ -133,16 +137,24 @@ try {
 	console.log("\n=== goldens: 80x24 and 44x24 ===");
 	const golden80 = seatRows({ partials: PARTIALS, selectedSeat: "impl" });
 	check("80x24 golden pins the three seat rows", golden80.length === 3, JSON.stringify(golden80));
+	// #3941 GOLDEN UPDATES (intended, named): the roster now ABSORBS the terminal width and pads
+	// every row to it, so these three strings gained the extra brief cells and the trailing pad.
+	// Row 1's brief grows (the flexible cell takes the spare columns) and row 3's em-dash row is
+	// padded to 80. Nothing else about the rows changed - same glyphs, same state words, same
+	// queue counts, same #id.
 	check(
 		"80x24 golden row 1",
-		golden80[0] === "▸ ● working    impl     2q       #74 merge the carry sta… tool complete_w…",
+		golden80[0] === "▸ ● working    impl     2q       #74 merge the carry stack ont… tool complete_w…",
 		JSON.stringify(golden80[0]),
 	);
-	check("80x24 golden row 2 (parked: the QUESTION brief)", golden80[1] === "  ◌ parked     qa       0q · 1p  #92 supervisor escalati…", JSON.stringify(golden80[1]));
-	check("80x24 golden row 3 (idle, no item)", golden80[2] === "  ○ idle       advocate 0q       —                       ", JSON.stringify(golden80[2]));
+	check("80x24 golden row 2 (parked: the QUESTION brief)", golden80[1] === "  ◌ parked     qa       0q · 1p  #92 supervisor escalation: wh…                 ", JSON.stringify(golden80[1]));
+	check("80x24 golden row 3 (idle, no item)", golden80[2] === "  ○ idle       advocate 0q       —                                              ", JSON.stringify(golden80[2]));
 	const golden44 = seatRows({ width: 44, selectedSeat: "impl" });
 	check("44x24 golden renders three rows at the floor", golden44.length === 3, JSON.stringify(golden44));
-	check("44x24: every row fits the declared minimum", golden44.every((l) => textWidth(l) <= 40), golden44.map((l) => textWidth(l)).join(","));
+	// #3941: the rows now fill the declared 44 columns instead of stopping 4 cells short, so the
+	// bound moves from the old content width (40) to the frame width (44). The INVARIANT is
+	// unchanged: no row may exceed the declared minimum.
+	check("44x24: every row fits the declared minimum", golden44.every((l) => textWidth(l) <= 44), golden44.map((l) => textWidth(l)).join(","));
 
 	console.log("\n=== nothing overflows at ANY width 40..100 ===");
 	const overflows = [];

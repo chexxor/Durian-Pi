@@ -1,7 +1,7 @@
   durig · 4 seats · TUI
   ────────────────────────────────────────────────────────────────────────────
   ○ idle       pm       0q       —
-  ○ idle       impl     0q       —                        composing
+  ○ idle       impl     0q       —                              composing
   ○ idle       qa       0q       —
   ○ idle       lead     0q       —
 
@@ -18,3 +18,7 @@
   ── seats: 4  │  uptime: 60m
   ────────────────────────────────────────────────────────────────────────────
 └────────────────────────────────q=quit r=refresh ↑↓/jk=seat Enter=open i=input
+
+
+
+

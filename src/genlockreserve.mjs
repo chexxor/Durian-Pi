@@ -179,10 +179,12 @@ function sleepSync(ms) {
  * dead/wedged slot holders. Returns the claimed paths; releases a partial claim and throws on
  * timeout.
  */
-export function acquireAllSlotsSync(dbPath, slots, me, { waitMs = RESERVATION_STALE_MS, pollMs = 100 } = {}) {
+export function acquireAllSlotsSync(dbPath, slots, me, { waitMs = RESERVATION_STALE_MS, pollMs = 100, onWait = null } = {}) {
 	const claimed = [];
 	const deadline = Date.now() + waitMs;
+	const startedAt = Date.now();
 	let lastRenew = 0;
+	let lastReport = 0;
 	for (let i = 0; i < slots; i += 1) {
 		const path = `${dbPath}.genlock.${i}`;
 		for (;;) {
@@ -214,6 +216,14 @@ export function acquireAllSlotsSync(dbPath, slots, me, { waitMs = RESERVATION_ST
 						`timed out after ${waitMs} ms waiting for genlock slot ${path} ` +
 							`(held by pid ${readRecord(path)?.pid ?? "?"})`,
 					);
+				}
+				// #4432 LEGIBILITY: report the wait WHILE it happens, not only in the final JSON. A seat
+				// that blocks for minutes with no output concludes its tool HUNG and RETRIES — and a retry
+				// during a lock wait adds contention (a retried landing is the two-delegates-one-tree
+				// shape). `onWait` is throttled to ~5 s so a long wait reads as WAITING, not as a hang.
+				if (onWait && Date.now() - lastReport > 5000) {
+					lastReport = Date.now();
+					onWait({ slot: i, slots, waitedMs: Date.now() - startedAt, holderPid: readRecord(path)?.pid ?? null });
 				}
 				// Keep our priority claim alive across a long wait (renew at the lease interval).
 				if (Date.now() - lastRenew > 20_000) {
