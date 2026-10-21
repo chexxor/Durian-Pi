@@ -11,6 +11,27 @@ check_rule: null
 
 # Land a branch with the helper (`scripts/land.mjs`)
 
+**Operating notes — the guard, measured (source: #4222; read before editing this runbook)**
+
+**1. TEST VERBS SEPARATELY — a compound command's refusal names only the FIRST matching rule.** Measured: a
+command containing both `git rebase main` and `git switch main` was refused naming only `switch`, so it said
+nothing about rebase. CONSEQUENCE: any earlier measurement of this guard using compound commands is
+UNRELIABLE. Run ONE VERB PER CALL — a guard tested with compound commands is a guard tested by rule order.
+
+**2. The corrected throwaway justification — the hazard is the FORM, not the verb.** `src/confine.mjs:181-218`
+denies reset, checkout, switch, restore, revert, clean, stash, `branch -D`, `add -A/.`, push and the `-C`
+forms — THERE IS NO REBASE RULE. What moves HEAD is the TWO-POSITIONAL form (`git rebase <upstream> <branch>`)
+and `--onto <new> <old> <branch>`, both of which CHECK `<branch>` OUT; the ONE-ARGUMENT form rebases the
+current branch and leaves HEAD on it. So rebasing a DIFFERENT branch moves HEAD off your item branch — that is
+the hazard — and the plain rebase of your own branch needs no throwaway.
+
+**3. Do not write "rebase is allowed" flatly.** Write: "rebase YOUR OWN branch is allowed; rebasing ANOTHER
+branch checks it out and moves HEAD off your item branch — the hazard the checkout denial exists to prevent."
+
+`switch` needs no line — #3272's body already enumerates it inside the deny list quoted from `src/confine.mjs`
+(the same list the guard's rule reads; two sources agree). #3272's OPERATING NOTES should gain a
+cross-reference to this block when that item fires.
+
 ## When to use
 A verified branch (`<seat>-item-<id>`, or any branch) must go onto `main`, and you want the landing to
 be **structurally incapable** of leaving the shared working tree mid-merge. This is the tool form of
