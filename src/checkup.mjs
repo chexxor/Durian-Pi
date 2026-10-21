@@ -107,6 +107,11 @@ export const RULES = [
     what: "a verification task was completed with only an acknowledgement, or with evidence that names no artifact — not re-runnable evidence (#2547)",
   },
   {
+    id: "evidence-tree",
+    severity: "fix-now",
+    what: "a terminal item's evidence names an artifact that names no tree and no store - a green depends on the tree it ran in, so an un-named artifact cannot be re-checked (#4153)",
+  },
+  {
     id: "feature-row-missing",
     severity: "fix-now",
     what: "a feat commit landed with no docs/FEATURES.md row and no stated \"no feature surface\" note",
@@ -173,6 +178,39 @@ export function hasEvidence(item) {
 export function hasArtifact(item) {
   const e = item?.evidence;
   return e != null && typeof e.artifact === "string" && e.artifact.trim() !== "";
+}
+
+/**
+ * #4153: whether an `artifact` NAMES WHAT THE CHECK RAN AGAINST. A green depends on the tree it ran
+ * in - "a suite run in `.` measures the shared tree", a derived file verified on its own branch is
+ * consistent with itself, two seats can disagree about `main` because both measured the wrong tree.
+ * So an artifact that names nothing is un-re-checkable by a human later, which is the gap in all four
+ * instances. A SUBJECT is either a GIT TREE (a sha 7-40 hex, a ref-like token, or `main`) or a
+ * NON-GIT subject the check legitimately ran against instead (the store, the queue, a scratch) -
+ * for those a git tree is genuinely N/A, so naming the store IS naming what was checked.
+ *
+ * MEASURED against the live queue before shipping (#4153): 774 terminal items carry evidence with a
+ * non-blank artifact; 15 name no GIT tree, and after the non-git-subject carve-out 2 remain - both a
+ * bare `"2148"`. A guard that fires on 2 of 774 is a guard; the duplicate rule's lesson is that a
+ * rule shipped without this count is a rule that gets disabled.
+ *
+ * STATED LIMIT: this rule cannot reach a seat BEFORE it writes a completion - it reads what was
+ * already written. The `complete_work` description carries the same convention so it shapes what
+ * gets written. TWO MECHANISMS FOR TWO MOMENTS, neither a substitute for the other.
+ * STATED LIMIT (the half NOT built): "a DERIVED artifact must be named as MERGED" needs ancestry
+ * (`git merge-base --is-ancestor`), which is a SUBPROCESS, and checkup never runs one; and ancestry
+ * gives FALSE NEGATIVES on squash-shaped landings (#3337), so a sha that is not an ancestor of main
+ * may still BE the merged content. A rule on ancestry would flag correct evidence as wrong.
+ */
+export function namesCheckSubject(artifact) {
+  const a = String(artifact ?? "");
+  if (a.trim() === "") return false;
+  // A git tree: a sha (7-40 hex, not part of a longer hex run), `main`, or a ref-like token.
+  if (/(?<![0-9a-f])[0-9a-f]{7,40}(?![0-9a-f])/i.test(a)) return true;
+  if (/(?:\bmain\b|\borigin\/|^refs\/|\b[\w.-]+-item-\d+\b|\bv?\d+\.\d+\.\d+\b)/i.test(a)) return true;
+  // A non-git subject: the store, the queue, a scratch - where a git tree is genuinely N/A.
+  if (/(\.sqlite|@read|\bqueue\b|\bstore\b|live state|live tree|scratch|\bno commit\b|no code changed)/i.test(a)) return true;
+  return false;
 }
 
 /**
@@ -624,6 +662,32 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
         ids,
         `${acked.length === 1 ? "verification item" : `${acked.length} verification items`} ${ids} completed without re-runnable evidence — the completion is an ack (or names no artifact), not a re-run, so nothing can be re-checked`,
         "re-run the artifact and record it when completing a verification item: complete_work(<id>, <summary>, { command, exitCode, artifact }) — an ack alone is not a sign-off, and a command/exit code with no ARTIFACT cannot be re-checked (W2/#2547)",
+      );
+    }
+  }
+  // 11b. #4153 EVIDENCE-TREE: a completion whose evidence names an artifact that names NO tree (and
+  //    no store) cannot be re-checked - the reader cannot tell WHICH revision was checked, and a
+  //    green depends on the tree it ran in. This is the SHARPENING of `hasArtifact` (a non-blank
+  //    artifact) to "a NAMED subject": hasArtifact accepts "2148"; this does not. Scoped to items
+  //    that HAVE evidence AND a non-blank artifact, so it never duplicates
+  //    verification-without-evidence (which owns the MISSING artifact). Plain data, no subprocess.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "evidence-tree",
+      why: "the queue could not be read, so completed items' artifacts cannot be inspected",
+    });
+  } else {
+    const unnamed = queueItems.filter(
+      (it) =>
+        it?.status === "done" && hasEvidence(it) && hasArtifact(it) && !namesCheckSubject(it.evidence.artifact),
+    );
+    if (unnamed.length > 0) {
+      const ids = unnamed.map((it) => `#${it.id}`).join(", ");
+      add(
+        "evidence-tree",
+        ids,
+        `${unnamed.length === 1 ? "completion" : `${unnamed.length} completions`} ${ids} name an artifact that names no tree (and no store) — a green depends on the tree it ran in, so an un-named artifact cannot be re-checked by a human later`,
+        "name WHAT the check ran against: complete_work(<id>, <summary>, { command, exitCode, artifact: '<sha|branch|main>' }) — or the store/queue for a non-git check (e.g. 'selfdev.sqlite@read')",
       );
     }
   }
