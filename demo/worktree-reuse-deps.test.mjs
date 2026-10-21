@@ -8,7 +8,7 @@
 // reports that dep-less dir as provisioned. The seat is handed a half-provisioned tree.
 //
 // This demo reproduces the poisoned dir exactly: a repo whose `package.json` has no
-// lockfile, so `npm install --prefer-offline` throws AFTER `claimWorktree` has already created the dir. The
+// lockfile, so `npm ci --prefer-offline` throws AFTER `claimWorktree` has already created the dir. The
 // retry must NOT return it as a healthy worktree — it must fail loud.
 //
 // Failing-first: before the fix, the second call returns `{ created: false }` (a lie), so
@@ -45,15 +45,14 @@ async function check(label, fn) {
 try {
 	// The repo IS the source (durian-pi's own tree), so `installWorktreeDeps(worktreeRoot)`
 	// finds the package.json at the worktree root. A package.json with NO lockfile makes
-	// `npm install --prefer-offline` throw — the same trigger the existing prepare-workspace demo uses, offline.
+	// `npm ci --prefer-offline` throw — the same trigger the existing prepare-workspace demo uses, offline.
 	await writeFile(join(base, "placeholder"), "");
 	await run("git", ["init", "-q", repo]);
 	await writeFile(join(repo, "artifact.txt"), "shared content\n");
-	// Write an invalid package.json so `npm install` fails (leaving the dir
-	// poisoned — no node_modules), reproducing the scenario the test guards.
+	// A package.json with NO lockfile is enough: `npm ci` refuses without one.
 	await writeFile(
 		join(repo, "package.json"),
-		JSON.stringify({ name: "poison-fixture", version: "1.0.0", private: true, dependencies: { "nonexistent-pkg-xyz": "1.0.0" } }),
+		JSON.stringify({ name: "poison-fixture", version: "1.0.0", private: true }),
 	);
 	await run("git", ["-C", repo, "add", "artifact.txt", "package.json"]);
 	await run("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
@@ -62,10 +61,10 @@ try {
 
 	// First attempt: creates the dir, then fails in installWorktreeDeps — leaving the
 	// poisoned dir on disk (no cleanup), which is what makes the reuse branch dangerous.
-	await check("the first attempt fails (npm install without a lockfile) and leaves the dir", async () => {
+	await check("the first attempt fails (npm ci without a lockfile) and leaves the dir", async () => {
 		await assert.rejects(
 			prepareSeatWorkspace({ source: repo, worktreeRoot: repo, itemId }),
-			/npm install --prefer-offline failed in/,
+			/npm ci --prefer-offline failed in/,
 			"the first attempt must fail loudly",
 		);
 		assert.ok(existsSync(poisoned), `the failed attempt left ${poisoned} on disk (poisoned reuse candidate)`);
@@ -78,7 +77,7 @@ try {
 		try {
 			resolved = await prepareSeatWorkspace({ source: repo, worktreeRoot: repo, itemId });
 		} catch (err) {
-			assert.match(String(err.message), /npm install --prefer-offline failed in/, `the retry fails loud (${err.message})`);
+			assert.match(String(err.message), /npm ci --prefer-offline failed in/, `the retry fails loud (${err.message})`);
 			return;
 		}
 		// If it resolved, it must be genuinely provisioned — never a lie.
