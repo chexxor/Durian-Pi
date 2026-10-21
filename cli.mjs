@@ -81,7 +81,7 @@ import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readRigHealth, readSeatList, readSeatRoots } from "./src/readapi.mjs";
 import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
-import { createWorktree } from "./src/worktree.mjs";
+import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
 import { mergeInProgress, mergeRefusal } from "./src/mergeguard.mjs";
 import { SeatGuard } from "./src/seatguard.mjs";
 import { SeatTools, fillRoster, makeSeatEnv, scopeSeatTools } from "./src/seattools.mjs";
@@ -255,6 +255,25 @@ import { resetSeatContext } from "./src/reset.mjs";
 function buildModels(live = null) {
   if ((CFG.DURIG_PROVIDER ?? "deepinfra") === "faux") {
     FAUX = fauxProvider({ models: [{ id: MODEL_ID }] });
+    // #4658 (decision (a)): A TEST-ONLY DELAY KNOB, AND IT IS THE ONLY WAY A SPAWNED BROKER CAN HOLD A RUN.
+    // The construction above passes model IDS ONLY — no response factory — so a spawned broker answers
+    // INSTANTLY and `demo/broker-cooperative-stop` can never have a live generation when `--stop` arrives.
+    // That is why its "under load" banner was unasserted AND UNAVAILABLE: the fixture was not lazy, the seam
+    // had no slow model. An IN-PROCESS test would prove nothing about the exit path, and the exit path is
+    // where the seven-minute damage was.
+    //
+    // BEHAVIOUR-PRESERVING WHEN UNSET: with no `DURIG_FAUX_DELAY_MS` this block does not run and the provider
+    // is exactly what it was. Nothing about a normal run changes.
+    //
+    // SCOPED TO THE FAUX PROVIDER ON PURPOSE: it is a test seam for an offline provider, not a general
+    // latency control, and it is read only here — where the provider is already known to be faux.
+    const fauxDelayMs = Number(process.env.DURIG_FAUX_DELAY_MS ?? 0);
+    if (Number.isFinite(fauxDelayMs) && fauxDelayMs > 0) {
+    	// A step is consumed per provider call, so the list is long enough for any fixture's run count.
+    	const slowStep = () =>
+    		new Promise((resolve) => setTimeout(() => resolve(fauxAssistantMessage("faux delayed reply")), fauxDelayMs));
+    	FAUX.setResponses(Array.from({ length: 128 }, () => slowStep));
+    }
     const models = createModels();
     // Gate what MODELS see; keep FAUX pointing at the raw provider so
     // scripted responses keep flowing to the real implementation.
@@ -1607,6 +1626,15 @@ async function awaitIntentResult(dbPath, requestId, { timeoutMs = 15 * 60_000, p
   }
 }
 
+/**
+ * How long `serve --stop` waits for the broker PROCESS to exit before giving up without a
+ * forced kill. Env-overridable (`DURIG_STOP_WAIT_MS`) so a demo can prove the decision fast.
+ */
+function stopWaitMs() {
+  const v = parseInt(process.env.DURIG_STOP_WAIT_MS, 10);
+  return Number.isFinite(v) && v > 0 ? v : 60_000;
+}
+
 async function cmdStopBroker() {
   const state = readBrokerState(DB_PATH);
   if (!state) {
@@ -1616,8 +1644,9 @@ async function cmdStopBroker() {
   // #2420: liveness is RAW pid existence. A stale heartbeat does NOT mean the process is
   // gone — a broker wedged in a pass stops heartbeating while still running, and reading
   // that as "dead" cleared a live broker's state and reported `stopped:true` for it.
+  // #2574: the pid guard keeps a NEWER broker's state file intact when we clear.
   if (!pidAlive(state.pid)) {
-    clearBrokerState(DB_PATH);
+    clearBrokerState(DB_PATH, state.pid);
     out({ ok: true, command: "serve", action: "stop", db: DB_PATH, stopped: false, reason: "state was stale; cleared" });
     return;
   }
@@ -1637,7 +1666,7 @@ async function cmdStopBroker() {
   }
   const stillAlive = pidAlive(state.pid);
   if (!stillAlive) {
-    clearBrokerState(DB_PATH);
+    clearBrokerState(DB_PATH, state.pid);
     clearStopRequest(DB_PATH);
     out({
       ok: true,
@@ -2532,6 +2561,24 @@ async function cmdWorktreeAudit() {
   }
 }
 
+/**
+ * `worktree prune-branch <name>` (#3491): remove a ref ONLY when every commit is patch-equivalent
+ * to main AND no worktree holds it — the sanctioned route for the class `git branch -d` refuses
+ * (a rebase-landed duplicate) and the seat guard refuses to force-delete. The guard is NOT
+ * widened; this verb is the narrow door (see `prunePatchEquivalentBranch`).
+ */
+async function cmdWorktreePruneBranch(name) {
+  if (!name) fail("worktree prune-branch needs a branch name, e.g. node cli.mjs worktree prune-branch designer-item-2103");
+  const repoPath = dirname(resolve(DB_PATH));
+  try {
+    const result = await prunePatchEquivalentBranch({ repoPath, branch: name });
+    out({ ok: true, command: "worktree", subcommand: "prune-branch", repo: repoPath, ...result });
+  } catch (error) {
+    // Refuse LOUDLY (ok:false + exit 1): a refusal is a report, not a retry signal.
+    fail(error);
+  }
+}
+
 async function cmdStatus() {
   const health = await readData(DB_PATH, "health", healthParams(), (storage) =>
     readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG }),
@@ -2934,6 +2981,7 @@ try {
   else if (cmd === "worktree") {
     if (rest[0] === "audit") await cmdWorktreeAudit();
     else if (rest[0] === "scratch" && rest[1] === "clean") await cmdWorktreeScratchClean();
+    else if (rest[0] === "prune-branch") await cmdWorktreePruneBranch(rest[1]);
     else await cmdWorktree(rest);
   }
   else if (cmd === "init") await cmdInit();

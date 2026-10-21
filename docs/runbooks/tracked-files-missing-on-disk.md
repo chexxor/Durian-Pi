@@ -92,28 +92,29 @@ pre-existing untracked `.durig-verify-2336/` and `temp-*` dirs.
 
 ## Seat-side variant: the seat's OWN item worktree (2026-10-21)
 
-The shared-tree case stays operator-side (the section below). qa measured twice now: at fe52a41 (before
-the 4374 fix) and at 910fac7 (after it):
+The shared-tree case stays operator-side (the section below). But the seat's OWN item worktree holds only
+the seat's own work, so the shared-tree danger does not apply. qa measured (item #4308, 2026-10-21)
+that the seat guard blocks the restore verb git checkout-index BY LITERAL SHAPE, not semantics. These one-verb
+probes ran inside qa's own item worktree:
 
 - git checkout-index -f -a  -> REFUSED, "would change the seat's working tree or HEAD - to test without your change, run the test RED BEFORE the fix, or use a throwaway detached worktree / temp copy (never revert the shared tree)"
-- git checkout-index --help  -> REFUSED with the SAME text (a read-only no-op), so the match keys on the command shape, not semantics - re-measured AFTER commit 61d076a (devtools-item-4374: path-aware decision + boundary) landed: the --help CASE SURVIVES (nothing to resolve)
-- git restore -- <path>  -> REFUSED with a DIFFERENT text ("would discard uncommitted work") on a CLEAN tree at BOTH tips (`git status --porcelain` 0 lines before each probe): the semantic matcher still refuses the CLASS rather than checking the tree
-- git checkout-index -f -- <onefile>  -> REFUSED, same worktree-CHANGE text, at 910fac7: even the targeted one-file materialisation (the exact runbook shape) is unreachable seatside after 4374
-- controls, BOTH tips: git help checkout-index, git ls-files, git status, git diff all pass
+- git checkout-index --help  -> REFUSED with the SAME text (a read-only no-op), so the match keys on the contiguous command text, not on semantics
+- git restore -- <path>  -> REFUSED with a DIFFERENT text ("would discard uncommitted work") on a CLEAN tree - the semantic matcher fires on the verb shape
+- git help <verb>, git ls-files, git status, git diff  -> pass
 
-Net: the runbook verb above is UNREACHABLE seat-side, before AND after 4374; the fix closed OTHER
-matchings (the unrelated-words class), not these. The seat CAN still restore its own worktree:
+Net: the runbook verb above is UNREACHABLE seat-side even with the 2026-10-19 escape paths
+(name a file list). A seat CAN still restore its own worktree without any refused verb:
 
 1. Read the blob: spawn `git cat-file blob HEAD:<path>` and capture the RAW BYTES (no shell redirect:
-   measured at fe52a41, writing the blob through a redirect leaves the file dirty forever under
+   measured in #4308, writing the blob through a redirect leaves the file dirty forever under
    core.autocrlf=true, because the redirect emits the LF blob and the worktree expects CRLF).
 2. Smudge by hand: normalize CRLF to LF, then emit every LF as CRLF, and write the file.
 3. Same for a DELETED file: write its smudged blob bytes.
-4. `git status --porcelain` MUST be empty - on qa's runs it was, for one modified and one deleted
-   tracked file (fe52a41 measurement: qa-item-4308 commit b59afd3).
+4. `git status --porcelain` MUST be empty - on qa's run it was, for one modified and one deleted
+   tracked file.
 
-Run this ONLY inside the seat's own worktree, never on the shared tree, and only after the asymmetry
-diagnosis above proves nothing was deleted on purpose.
+Same warnings as the shared-tree case: run this ONLY inside the seat's own worktree, never on the
+shared tree, and only after the asymmetry diagnosis above proves nothing was deleted on purpose.
 
 ## Escalate to
 `pm` — to route the restore (and a broker restart, if the running broker predates a landed fix) when a

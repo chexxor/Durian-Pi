@@ -1192,9 +1192,7 @@ Tree is CLEAN as of clock-out.
 **5. ASKS ROUTED TO `pm` (`operator-pass4-report-2026-10-19-1`, delivered `23:30:56Z`), in priority order:**
 (1) **release the four verifies gated ON this pass's landings** (`#3147`, `#3151`, `#3158`, `#3104`, plus
 `#2993`) — the inverted-gate pattern is now systemic and a held verify is unclaimable; (2) settle the `#2969`
-WIP → branch → entry; (3) **mint the DECISIONS numbers** — `main` still has TWO unnumbered headings
-(`## D###` @3060, `## D-<mint>` @3092), highest real number is **D112**, and `scribe-item-3089`/`3035` are
-CLEAN but CONFLICT in that one file because they need the serialized pass; (4) rule the M1 order for
+WIP → branch → entry; (3) **mint the DECISIONS numbers** — RESOLVED by the #3089/#3167/#3207 serialized pass: the TWO on-main placeholder headings (`## D###` @3060, `## D-<mint>` @3092) are minted by scribe-item-3167 @b0e9d75 (D113 waiting ADR + D114 CARRY, landing #3182/#3194; scribe-item-3114 @3e7a297 is a DUPLICATE — do NOT land), then scribe-item-3089 @d8f253a mints its 5 entries D115–D119 (landing #3134), then scribe-item-3035 @f1f788f mints the design-of-record D120 (landing #3126); (4) rule the M1 order for
 `#3056`/`#3062` (CLEAN + verified, but `#3056` removes `workable` and `#3112` says STACKED);
 (5) cancel-or-repoint `designer-item-2103` (tip `81780e2`, now a **stranded duplicate** of the landed
 `impl-item-2797`).

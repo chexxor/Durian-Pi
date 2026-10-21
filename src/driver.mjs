@@ -22,6 +22,39 @@ export const WAKE_CONTENT =
   "You have queued work. Call claim_work to take the oldest item addressed to you, then act on it.";
 
 /**
+ * The wake a seat is sent when its CLAIM IS STALLED rather than when it has QUEUED work (#4557).
+ *
+ * THE DEFECT THIS CLOSES, measured over SEVEN CONSECUTIVE TURNS: `selectWakes` wakes a seat for EITHER a
+ * queued item (the ride continues) OR a stalled claim — but ONE fixed string described only the first. So a
+ * seat woken for a stalled claim was told "You have queued work. Call claim_work…" and `claim_work` returned
+ * NO_QUEUED_WORK every time, because its item was `claimed`, not `queued`. THE PROMPT WAS A CALL TO ACTION
+ * AND THE VERB WAS THE ANSWER, AND THEY DISAGREED — which teaches "the prompt lies" and erodes every later one.
+ *
+ * WHY TWO CONSTANTS AND NOT ONE VARIABLE STRING: ROADMAP 33 — the wake is committed as a user entry, so a
+ * body that varied per item would change the conversation prefix on every wake and ZERO THE PROMPT CACHE.
+ * Two FIXED strings, one per REASON, keeps every wake body constant for its own case.
+ */
+export const WAKE_CONTENT_STALLED =
+  "Your claimed item is stalled — nothing is advancing it. Call resume_work, or claim_work if you have a queued item too.";
+
+/**
+ * The wake a seat is sent when its queue holds PARKED rows and NOTHING CLAIMABLE (#4607).
+ *
+ * THE STATE THIS NAMES: a seat whose only non-terminal rows are held or otherwise unclaimable. Before this it
+ * was told "You have queued work", took the offered action, and `claim_work` refused — seven turns of that,
+ * which teaches "the prompt lies" and erodes every later one. Silence was the alternative and it is wrong in
+ * the other direction: a seat that KNOWS a row is parked can act or wait, and one told nothing can only poll.
+ *
+ * CONSTANT, AND DELIBERATELY WITHOUT AN ID OR AN OWNER. ROADMAP 33: the wake is committed as a user entry, so
+ * a body that varied per item would change the conversation prefix on every wake and ZERO THE PROMPT CACHE.
+ * The COUNT would also be per-pass, so it is not named either — the seat learns which rows from `status`.
+ * AND NOT AN ATTENTION NOTICE: that path is `!inFlight`-gated and switches off IN THE GAP, which is the trap
+ * designer already refuted for `idle_with_queued_work`.
+ */
+export const WAKE_CONTENT_PARKED =
+  "Your queue holds parked rows awaiting release — there is nothing claimable for you. Check `status` for which rows are parked; do not call claim_work expecting work.";
+
+/**
  * Which seats to wake. A seat is woken when it has work to advance:
  *   - at least one QUEUED item addressed to it (the ride continues), or
  *   - a STALLED CLAIM - a `claimed` item whose run died: no submission already in
@@ -68,7 +101,13 @@ export function selectWakes({
         !busySeats.has(name) &&
         !stoppedConvIds.has(convId),
     );
-    if (!hasQueued && !hasStalledClaim) {
+    // #4607: PARKED ROWS AND NOTHING CLAIMABLE. A row the seat holds or that is otherwise unclaimable
+    // is not a claim offer and not a stalled claim — but telling the seat NOTHING leaves it polling. It gets
+    // its own reason and its own fixed body, so the wake names the state instead of advertising work.
+    const hasParked = !hasQueued && (items ?? []).some(
+    	(it) => it.to === name && (it.status === "held" || it.status === "deferred"),
+    );
+    if (!hasQueued && !hasStalledClaim && !hasParked) {
       onSkip({ seat: name, reason: "no-work" });
       continue;
     }
@@ -83,7 +122,9 @@ export function selectWakes({
       onSkip({ seat: name, reason: "busy" });
       continue;
     }
-    wakes.push({ name, conversationId: convId });
+    // #4557: the wake carries WHY it was sent, so the caller can pick a body that MATCHES the verb the seat
+    // will actually reach for. Without it one string had to describe two different situations and lied about one.
+    wakes.push({ name, conversationId: convId, reason: hasQueued ? "queued" : hasStalledClaim ? "stalled-claim" : "parked" });
   }
   return wakes;
 }
@@ -198,7 +239,7 @@ export async function driveOnce(
     try {
       const conv = await harness.conversation(wake.conversationId, context);
       if (!conv) continue;
-      await conv.submit({ type: "input", content: WAKE_CONTENT }, context);
+      await conv.submit({ type: "input", content: wake.reason === "stalled-claim" ? WAKE_CONTENT_STALLED : wake.reason === "parked" ? WAKE_CONTENT_PARKED : WAKE_CONTENT }, context);
       actioned++;
       // The conversation id travels with the wake so a caller can scope its
       // settle-wait to the runs THIS pass started (#broker-liveness).

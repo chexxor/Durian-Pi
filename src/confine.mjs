@@ -11,6 +11,7 @@
 
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { ExecutionError, FileError, err, ok } from "@earendil-works/pi-durable/env";
 
 /**
@@ -226,7 +227,37 @@ const DENIED_COMMANDS = [
 	{ check: gitVerbCheck("reset"), why: "would restage or discard work a seat did not integrate (`reset` — test a compound command's verbs separately)" },
 	{ re: /git\s+checkout(?![\w-])/i, why: "would change the seat's working tree or HEAD (`checkout` — test a compound command's verbs separately)" },
 	{ check: gitVerbCheck("switch"), why: "would change the seat's working tree or HEAD (`switch` is the modern `checkout`)" },
-	{ check: gitVerbCheck("restore"), why: "would discard uncommitted work (`restore`)" },
+	// #4641: `restore` is TREE-AWARE. Its refusal text — "would discard uncommitted work" — is a CLAIM
+	// ABOUT THE TREE, so it is CHECKED against the tree rather than assumed from the verb: a restore
+	// that would discard NOTHING is a no-op, and refusing it is the same error one verb over (measured:
+	// `git restore -- <path>` was refused on a CLEAN tree). Allowed only when EVERY named path is clean
+	// both unstaged and staged; a bare `git restore` (no paths) still refuses, because it acts on the
+	// whole tree and we cannot cheaply prove that clean.
+	{
+		check: (text, ctx) => {
+			if (!gitVerbCheck("restore")(text)) return false; // not this verb
+			const m = /git\s+(?:-C\s+(\S+)\s+)?restore\b(.*)$/i.exec(text);
+			if (!m) return true;
+			const cwd = m[1] ?? ctx?.cwd ?? process.cwd();
+			const rest = m[2] ?? "";
+			// Paths are the tokens after `--`, or the non-flag tokens when there is no `--`.
+			const after = rest.includes("--") ? rest.slice(rest.indexOf("--") + 2) : rest;
+			const paths = after.split(/\s+/).map((t) => t.trim()).filter((t) => t !== "" && !t.startsWith("-"));
+			if (paths.length === 0) return true; // no explicit path: keep refusing
+			for (const p of paths) {
+				// CLEAN means no unstaged diff AND no staged diff for that path.
+				for (const args of [["diff", "--quiet", "--", p], ["diff", "--cached", "--quiet", "--", p]]) {
+					try {
+						execFileSync("git", ["-C", cwd, ...args], { stdio: "ignore", timeout: 10000 });
+					} catch {
+						return true; // a change exists (or git failed): refuse
+					}
+				}
+			}
+			return false; // every path is clean: nothing to discard, so this is a no-op -> ALLOW
+		},
+		why: "would discard uncommitted work (`restore`)",
+	},
 	{ check: gitVerbCheck("revert"), why: "would rewrite committed work (`revert`)" },
 	{ check: gitVerbCheck("clean"), why: "would discard untracked work (`clean`)" },
 	{ check: gitVerbCheck("stash"), why: "would move uncommitted work out of the tree (`stash`)" },
@@ -277,6 +308,20 @@ const DENIED_COMMANDS = [
 	{ re: /git\s+-C\s+\S+\s+add\s+-A\b/i, why: "unscoped staging redirected" },
 	{ re: /git\s+-C\s+\S+\s+add\s+\.(?:$|[\s;&|"'()])/i, why: "unscoped staging redirected" },
 	{ re: /git\s+-C\s+\S+\s+push\b/i, why: "same as `git push` — needs operator authorization" },
+	// #4129 (spec from #4127): the VERB is not the property. `git rebase` is legitimate when it rebases
+	// the CURRENT branch and is the checkout hazard when it NAMES a branch to check out. This is a
+	// check, not a verb rule, and it runs PRE-SPAWN like every other entry here — so the property is
+	// encoded in the command text ("does this invocation check out a branch?"), not observed after the
+	// call. A post-call "HEAD is still on the item branch" assertion is the better shape and needs a
+	// hook this environment does not have; it is registered, not built.
+	{
+		check: rebaseChecksOutBranch,
+		why:
+			"would CHECK OUT another branch and move HEAD off your item branch — the state the checkout/switch " +
+			"denial exists to prevent. Rebase YOUR OWN branch instead (`git rebase <upstream>` with no second " +
+			"branch), or rebase the other branch in a throwaway worktree and publish a `-rebased` ref. If you " +
+			"are already off your item branch, `git switch <your-item-branch>` first",
+	},
 ];
 
 /** True only when the operator set this in durig's own environment, which a seat cannot reach. */
@@ -337,13 +382,84 @@ function pickEnv(requested, allowlist) {
 	return kept;
 }
 
+/**
+ * THE PROPERTY THE VERB LIST CANNOT ENFORCE (#4129, spec from #4127): `git rebase` is LEGITIMATE when it
+ * rebases the CURRENT branch — `git rebase main` rewrites the item branch and leaves HEAD on it — and is
+ * the checkout/switch hazard when it NAMES A BRANCH TO CHECK OUT: `git rebase <upstream> <branch>` and
+ * `git rebase --onto <new> <old> <branch>` both check <branch> out and leave the seat OFF its item
+ * branch.
+ *
+ * SO THE RULE IS ABOUT THE ARGUMENTS, NOT THE VERB: refuse only when a second positional (or an
+ * explicit branch after --onto) is present. Adding `rebase` to the deny list would block the sanctioned
+ * flow — the fail-closed trap #4126 warned about and then walked into.
+ */
+const REBASE_VALUE_FLAGS = new Set(["--onto", "-x", "--exec", "-s", "--strategy", "-X", "--strategy-option"]);
+
+function rebaseChecksOutBranch(text) {
+	for (const tokens of shellSegments(text)) {
+		const head = tokens[0]?.toLowerCase();
+		if (head !== "git" && head !== "git.exe") continue;
+		const { sub, rest } = gitSubcommand(tokens.slice(1));
+		if (sub !== "rebase") continue;
+		// Positional arguments, skipping the VALUES of flags that take one (--onto <new>, -x <cmd>, ...).
+		const positional = [];
+		for (let i = 0; i < rest.length; i++) {
+			const token = rest[i];
+			if (token.startsWith("-")) {
+				if (REBASE_VALUE_FLAGS.has(token)) i++;
+				continue;
+			}
+			positional.push(token);
+		}
+		// TWO positionals is `git rebase <upstream> <branch>`: it CHECKS <branch> OUT. ONE positional
+		// rebases the current branch and is ALLOWED — that is the sanctioned case the naive
+		// "HEAD unchanged" property would have blocked.
+		if (positional.length >= 2) return true;
+	}
+	return false;
+}
+
+/** The refusal a seat sees, phrased so it can act on it rather than retry blindly. */
+
 // The refusal a seat sees, phrased so it can act on it rather than retry blindly.
 //
 // `ctx` carries what a PATH-AWARE decision needs: the seat's root and the command's cwd. Most entries
 // are pure pattern matches; an entry whose `check` takes the context can resolve a TARGET rather than
 // pattern-match a verb (#4374, the same principle as the write-target resolver #4366/#4367).
+/**
+ * #4641: whether this is a GIT HELP/VERSION invocation — a READ-ONLY NO-OP with no act in it.
+ *
+ * A GUARD SHOULD REFUSE AN ACT, AND `--help` IS NOT AN ACT: it prints usage and exits. Refusing it is
+ * the same class of error as treating `2>&1` as a target or `-Value` as one — a pattern matching
+ * something that is not the thing. Measured at main 910fac7: `git checkout --help` and
+ * `git restore --help` were BOTH refused on a seat's own worktree.
+ *
+ * Scoped to GIT deliberately: `wsl --help` and `docker --help` stay refused, because those refusals
+ * are about the HOST (the tool is unsupported), not about an act — the exemption is for the
+ * state-mutating verb class only.
+ *
+ * Requires at least ONE argument after the verb, so a bare `git checkout` (which DOES act) is not
+ * swept in.
+ */
+const HELP_FLAGS = new Set(["--help", "-h", "--version", "-V"]);
+function isGitHelpInvocation(text) {
+	const tokens = String(text).trim().split(/\s+/);
+	if (tokens[0] !== "git") return false;
+	// Skip git's global options (and the value an option like `-C <path>` consumes).
+	let i = 1;
+	while (i < tokens.length && tokens[i].startsWith("-")) {
+		const takesValue = tokens[i] === "-C" || tokens[i] === "-c" || tokens[i] === "--git-dir" || tokens[i] === "--work-tree";
+		i += takesValue ? 2 : 1;
+	}
+	if (i >= tokens.length) return false; // no verb at all
+	i += 1; // skip the verb
+	if (i >= tokens.length) return false; // nothing after the verb: `git checkout` DOES act
+	return tokens.slice(i).every((t) => HELP_FLAGS.has(t));
+}
+
 function refusalFor(command, ctx = {}) {
 	const text = Array.isArray(command) ? command.join(" ") : String(command);
+	if (isGitHelpInvocation(text)) return null;
 	for (const { re, why, unless, check } of DENIED_COMMANDS) {
 		if (!(check ? check(text, ctx) : re.test(text))) continue;
 		if (unless?.() === true) continue;

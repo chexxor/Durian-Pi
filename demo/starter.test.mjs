@@ -229,8 +229,10 @@ try {
 		"runbook-front-matter": "demo/runbook-frontmatter.test.mjs",
 		"ownership-seat-missing": "demo/ownership.test.mjs",
 		"verification-without-evidence": "demo/check-evidence.test.mjs",
+		"evidence-tree": "demo/check-evidence.test.mjs",
 		"feature-row-missing": "demo/feature-row.test.mjs",
 		"shared-tree-on-main": "demo/shared-tree-on-main.test.mjs",
+		"duplicate-item": "demo/duplicate-item.test.mjs",
 		"text-integrity": "demo/text-integrity-wiring.test.mjs",
 		"commit-message-encoding": "demo/commit-message-encoding.test.mjs",
 	};

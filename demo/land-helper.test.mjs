@@ -116,6 +116,17 @@ try {
   git(repo, ["config", "user.name", "Test"]);
   writeFileSync(join(repo, "a.txt"), "line one\n");
   writeFileSync(join(repo, "demo", "ok.test.mjs"), "console.log('ok');\nprocess.exit(0);\n");
+  // The runtime store/slot files the genlock sections write beside the store are GITIGNORED in a
+  // real checkout; mirror that here, or the (correct) untracked-counts preflight refuses them.
+  // #4638: `/item-*/` is in the REAL repo's .gitignore (.gitignore:44) and was MISSING here — without
+  // it a stray `item-9999/` reads as UNTRACKED, so the dirt check fires before the STRAY check and
+  // sections 2b/2c assert the wrong refusal. The fixture must be as PERMISSIVE as the repo for this
+  // class, or it tests a tree the repo would never produce.
+  // `durig.config.default.json` stays listed for a DIFFERENT reason, and it is NOT repo policy: the
+  // real repo TRACKS that file (so `check-ignore` saying NOT IGNORED is correct there), while this
+  // temp repo CREATES it as a fixture for the cap-resolution section. Ignoring it here keeps the
+  // fixture's own artefact out of its own preflight; it is a fixture detail, not a `.gitignore` rule.
+  writeFileSync(join(repo, ".gitignore"), "*.sqlite*\n*.sqlite.broker.*\n/.land-scratch-*/\n.durig/\n/item-*/\ndurig.config.default.json\n");
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "base"]);
   git(repo, ["branch", "-M", "main"]);
@@ -152,7 +163,8 @@ try {
   const beforeDirty = mainSha(repo);
   const dirty = land(repo, ["feat-b"]);
   check("the helper refuses (nonzero)", dirty.code !== 0, dirty.raw.slice(0, 200));
-  check("...naming the tracked modification", /tracked modification/.test(dirty.report?.error ?? ""), dirty.report?.error);
+  check("...and states the `.`-suite invalidity", /measures the SHARED TREE, not main/.test(dirty.report?.error ?? ""), dirty.report?.error);
+  check("...and names the dirty path", (dirty.report?.dirtyPaths ?? []).some((p) => p.includes("a.txt")), JSON.stringify(dirty.report?.dirtyPaths));
   check("...and main did NOT advance", mainSha(repo) === beforeDirty);
   git(repo, ["checkout", "--", "a.txt"]);
   check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
@@ -211,6 +223,17 @@ try {
   check("...and main did NOT advance", mainSha(repo) === beforeLinked);
   git(repo, ["worktree", "remove", "--force", linked]);
 
+  console.log("\n2e. an UNTRACKED-only shared tree refuses to land (the third instance of this hazard)");
+  // Untracked and alone: staged/tracked are clean, so a TRACKED-ONLY check would have passed it,
+  // yet a suite run in `.` would measure a tree that exists on no branch.
+  writeFileSync(join(repo, "attach.mjs"), "export const attach = 1;\n");
+  const beforeUntracked = mainSha(repo);
+  const untrackedOnly = land(repo, ["feat-b"]);
+  check("an untracked-only dirty tree REFUSES", untrackedOnly.code !== 0, untrackedOnly.raw.slice(0, 200));
+  check("...and names the untracked path", (untrackedOnly.report?.dirtyPaths ?? []).some((p) => p.includes("attach.mjs")), JSON.stringify(untrackedOnly.report?.dirtyPaths));
+  check("...and main did NOT advance", mainSha(repo) === beforeUntracked);
+  rmSync(join(repo, "attach.mjs"));
+  check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
 
   console.log("\n3. a HELD genlock makes the lander WAIT with PRIORITY — it does NOT refuse (#1497/#1498)");
   const slot = join(repo, "rig.sqlite.genlock.0");

@@ -395,6 +395,15 @@ try {
 	// #4591: DERIVED FROM THE MAP, NOT A LITERAL COPY OF IT. A literal is a copy that drifts: a new
 	// state added to PRESENTATION would not appear here, and the pin would decay back to "the painted
 	// glyphs are covered by nothing" one state at a time. THE MAP IS THE SET.
+	// PROVEN IN ISOLATION (#4617). The method matters because the first attempt proved NOTHING: mutating an
+	// EXISTING state's glyph is intercepted by an earlier assertion that pins its VALUE, so it shows the demo
+	// reads the map — not that THIS loop does. ADDING a new key cannot be intercepted, and that is the proof:
+	//   insert `mutation_probe: { glyph: "\u6F22", tone: "dim" }` into PRESENTATION, run this demo, and it fails
+	//   HERE with `actual: 2, expected: 1`. A wide glyph in a NEW state reaches this assertion, which is what
+	//   "derived from the map" means operationally.
+	// AND NOTE THE FILTER TRAP that hid it for one attempt: this loop uses `assert.equal`, which THROWS, so a
+	// proof script that greps for a `FAIL` line finds NOTHING and reports "not proven" while the demo is red
+	// for exactly the right reason. Match the ASSERTION MESSAGE, not the harness's word for a failure.
 	const glyphs = Object.fromEntries(
 		Object.entries(PRESENTATION).map(([name, p]) => [name, p.glyph]),
 	);

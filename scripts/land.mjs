@@ -47,7 +47,7 @@
 // with the reason in the report. It NEVER forces, and it NEVER leaves the shared tree
 // mid-merge.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { DEFAULTS_CONFIG_PATHS, DEFAULT_CONFIG_PATHS } from "../src/config.mjs";
@@ -268,23 +268,34 @@ if (sharedRoot && sharedRoot !== resolve(repoRoot)) {
 
 /* ───────── pre-flight: the enforcement chokepoint ───────── */
 
-// Tracked modifications only. An UNTRACKED file cannot be clobbered by a fast-forward (git
-// refuses if an incoming path collides), and the shared tree normally carries other seats'
-// untracked notes — refusing on those would make the guard useless rather than safe.
+// The shared root must be CLEAN before a landing pass — UNTRACKED INCLUDED — because A SUITE RUN
+// IN `.` MEASURES THE SHARED TREE, NOT MAIN: a green there is not evidence about the merge and a
+// red there is not a regression. The earlier TRACKED-ONLY filter would have PASSED the third
+// instance of this hazard (an untracked `src/tui/durable/attach.mjs` written by a live seat), so
+// untracked now counts. The suite itself already runs in the detached SCRATCH (below), not `.`.
 const status = git(repoRoot, ["status", "--porcelain"]);
-const trackedChanges = status.out
+const dirty = status.out
 	.split("\n")
 	.map((l) => l.trimEnd())
-	.filter((l) => l.length > 0 && !l.startsWith("??"));
-if (trackedChanges.length > 0) {
+	.filter((l) => l.length > 0);
+if (dirty.length > 0) {
+	// Attribution where a path reveals it (an `item-<id>/` path names its item); shared-tree dirt
+	// usually does not, so most paths are named without an owner — attribution for those is
+	// #3648's registered requirement, not this gate's.
+	const attributed = dirty.map((line) => {
+		const path = line.slice(2).trim();
+		const m = /(?:^|\/)item-(\d+)(?:\/|$)/.exec(path);
+		return m ? `${path} (item #${m[1]})` : path;
+	});
 	report(
 		{
 			...base,
 			error:
-				`refusing to land: the shared tree at ${repoRoot} has ${trackedChanges.length} tracked ` +
-				`modification(s). A landing advances main by a clean fast-forward, which requires a clean ` +
-				`tree — commit or stash the work first, then re-run.`,
-			trackedChanges,
+				`refusing to land: the shared tree at ${repoRoot} is NOT clean (${dirty.length} path(s), ` +
+				`UNTRACKED INCLUDED). A suite run in \`.\` measures the SHARED TREE, not main — a green there ` +
+				`is not evidence about the merge and a red is not a regression. Commit, stash or remove the ` +
+				`listed paths, then re-run.`,
+			dirtyPaths: attributed,
 		},
 		1,
 	);
@@ -509,14 +520,155 @@ for (const branch of branches) {
 /* ───────── optional: prove the result in the scratch before advancing main ───────── */
 
 const suiteResults = [];
-if (wantSuite) {
+await (async () => {
+	if (wantSuite) {
 	const demoDir = join(scratch, "demo");
 	const tests = existsSync(demoDir)
 		? readdirSync(demoDir)
 				.filter((n) => n.endsWith(".test.mjs"))
 				.sort()
 		: [];
-	for (const test of tests) {
+
+	/* ── concurrency knob ── */
+	const concurrency = Math.max(1, parseInt(process.env.DURIG_SUITE_CONCURRENCY, 10) || 4);
+
+	/* ── serialize worktree-touching tests ── */
+	// These tests create or manipulate git worktrees on the scratch repo.
+	// Under parallelism they collide on .git/worktrees/ and lock files.
+	// We serialize them by running them one at a time in a dedicated queue.
+	const worktreeTests = new Set([
+		"broker-strand.test.mjs",
+		"broker.test.mjs",
+		"commit-model.test.mjs",
+		"ctxline.test.mjs",
+		"curate.test.mjs",
+		"deepinfra-catalog.test.mjs",
+		"defer.test.mjs",
+		"degeneration-duration.test.mjs",
+		"degeneration-text.test.mjs",
+		"degeneration.test.mjs",
+		"driversurvive-pre.test.mjs",
+		"driversurvive.test.mjs",
+		"eval.test.mjs",
+		"evidence-handoff.test.mjs",
+		"genlock-hardening.test.mjs",
+		"halt.test.mjs",
+		"held-item.test.mjs",
+		"inflight.test.mjs",
+		"local-provider.test.mjs",
+		"local-reset.test.mjs",
+		"malformedcall.test.mjs",
+		"metrics.test.mjs",
+		"notices.test.mjs",
+		"optimizer.test.mjs",
+		"ownership.test.mjs",
+		"pitui.test.mjs",
+		"primer.test.mjs",
+		"race.test.mjs",
+		"ratchet.test.mjs",
+		"repeat-call.test.mjs",
+		"run.test.mjs",
+		"runbook-frontmatter.test.mjs",
+		"runbook-rules.test.mjs",
+		"sanitize.test.mjs",
+		"scheduler.test.mjs",
+		"seat-commit-instructions.test.mjs",
+		"secretdetect.test.mjs",
+		"secrets.test.mjs",
+		"skill-admission-gate.test.mjs",
+		"skill-mirror-check.test.mjs",
+		"storewrite.test.mjs",
+		"streamview.test.mjs",
+		"suite-env.test.mjs",
+		"supervisor.test.mjs",
+		"textwidth.test.mjs",
+		"tui-backfill.test.mjs",
+		"tui-client.test.mjs",
+		"tui-conversation.test.mjs",
+		"tui-golden.test.mjs",
+		"tui-input-overlay.test.mjs",
+		"tui-input.test.mjs",
+		"tui-multipane.test.mjs",
+		"tui-restore.test.mjs",
+		"tui-roles.test.mjs",
+		"tui-sync-output.test.mjs",
+		"tui-thinking.test.mjs",
+		"tui-toolblock.test.mjs",
+		"viewmodel.test.mjs",
+	]);
+
+	const isolatedTests = tests.filter((t) => !worktreeTests.has(t));
+	const serializedTests = tests.filter((t) => worktreeTests.has(t));
+
+	/* ── helper: run a single test, return { test, exit } ── */
+	function runTest(test) {
+		return new Promise((resolve) => {
+			const child = spawn(process.execPath, [join("demo", test)], { cwd: scratch, encoding: "utf8" });
+			let stdout = "";
+			let stderr = "";
+			child.stdout.on("data", (d) => { stdout += d; });
+			child.stderr.on("data", (d) => { stderr += d; });
+			child.on("close", (code) => {
+				resolve({ test, exit: code ?? 1, stdout, stderr });
+			});
+		});
+	}
+
+	function recordFailure(result) {
+		if (!keepScratch) removeScratch();
+		report(
+			{
+				...base,
+				error: `STOPPED: demo/${result.test} failed in the scratch worktree (exit ${result.exit}) — main was NOT advanced.`,
+				merged,
+				suite: suiteResults,
+				scratch: keepScratch ? scratch : null,
+			},
+			1,
+		);
+	}
+
+	/* ── run isolated tests in a bounded pool ── */
+	if (isolatedTests.length > 0) {
+		if (concurrency === 1) {
+			// Sequential escape hatch: drain the queue one at a time
+			for (const test of isolatedTests) {
+				const result = await runTest(test);
+				suiteResults.push(result);
+				if (result.exit !== 0) {
+					recordFailure(result);
+					return;
+				}
+			}
+		} else {
+			// Bounded pool: distribute tests across workers
+			const workerCount = Math.min(concurrency, isolatedTests.length);
+			const queues = Array.from({ length: workerCount }, () => []);
+			isolatedTests.forEach((t, i) => queues[i % workerCount].push(t));
+
+			const workers = queues.map(async (q) => {
+				for (const test of q) {
+					const result = await runTest(test);
+					suiteResults.push(result);
+					if (result.exit !== 0) {
+						recordFailure(result);
+						throw result; // signal failure to other workers
+					}
+				}
+			});
+
+			try {
+				await Promise.all(workers);
+			} catch {
+				// One worker failed; the others may still be running.
+				// We've already reported and removed the scratch, so we just return.
+				return;
+			}
+		}
+	}
+
+	/* ── run serialized tests one at a time ── */
+	for (const test of serializedTests) {
 		const run = spawnSync(process.execPath, [join("demo", test)], { cwd: scratch, encoding: "utf8" });
 		suiteResults.push({ test, exit: run.status ?? 1 });
 		if ((run.status ?? 1) !== 0) {
@@ -534,6 +686,7 @@ if (wantSuite) {
 		}
 	}
 }
+})();
 
 /* ───────── advance main by a CLEAN FAST-FORWARD ───────── */
 

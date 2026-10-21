@@ -661,6 +661,119 @@ export async function removeWorktree({ source, worktree, force = false }) {
 	await pruneWorktrees(root);
 }
 
+/**
+ * The worktree holding `branch`, or null. STRICT on purpose: `listWorktrees` swallows a git
+ * failure and returns `[]`, and a safety check that reads "nothing holds this ref" because git
+ * itself failed is a SILENT failure — it would authorise the delete it exists to prevent.
+ */
+async function worktreeHoldingBranch(repoPath, branch) {
+	let stdout;
+	try {
+		({ stdout } = await run("git", ["-C", repoPath, "worktree", "list", "--porcelain"]));
+	} catch (error) {
+		throw new Error(
+			`cannot read the worktree list (${String(error.stderr ?? error.message ?? error).trim()}); refusing to delete a ref while the check that protects it could not run`,
+		);
+	}
+	// Porcelain blocks are "worktree <path>" then "branch refs/heads/<name>"; `locked` and
+	// `detached` are their OWN lines (branch-cleanup.md step 1 — a naive parse attributes a
+	// `locked` line to the FOLLOWING tree).
+	let current = null;
+	for (const line of stdout.split("\n")) {
+		if (line.startsWith("worktree ")) current = line.slice("worktree ".length).trim();
+		else if (line.startsWith("branch ") && current) {
+			if (line.slice("branch ".length).trim() === `refs/heads/${branch}`) return current;
+		} else if (line.trim() === "") current = null;
+	}
+	return null;
+}
+
+/**
+ * `worktree prune-branch <name>` (#3491): the ONE sanctioned place a SEAT may remove a ref.
+ *
+ * WHY THIS EXISTS. `git branch -d` correctly refuses a ref whose tip is not an ancestor of main,
+ * and the seat guard refuses `git branch -D` (`src/confine.mjs` `branchForceDelete`, #1211). A
+ * branch landed by REBASE is exactly that shape — its content is on main by PATCH, not by
+ * ancestry — so before this verb no seat could clean one up and every cleanup pass escalated to
+ * the operator (`docs/runbooks/branch-cleanup.md` step 3, run by hand on `designer-item-2103`).
+ *
+ * WHAT IT IS NOT. Not a wider force-delete grant: the guard is untouched, and this door is the
+ * narrowest that admits the class. It removes a ref ONLY when BOTH hold, checked in this order:
+ *   1. `git cherry <main> <branch>` prints AT LEAST ONE line and EVERY line starts with `-`
+ *      (patch-equivalent). An ANCESTOR prints NOTHING — empty is NOT "all `-`", because vacuous
+ *      truth would hand this verb every ref in the repo. An ancestor needs no force delete.
+ *   2. no worktree holds the ref.
+ * Everything else is REFUSED with a reason the caller can act on, and nothing is removed.
+ *
+ * R-B still governs: this removes a REF whose content is provably on main; it cancels no CLAIM.
+ * The recovery command is printed on success because an unrecoverable delete is not recoverable
+ * evidence — the sha stays reachable by that command (and by reflog) after the ref is gone.
+ *
+ * Returns { branch, sha, mainRef, patchEquivalent, recovery }.
+ */
+export async function prunePatchEquivalentBranch({ repoPath, branch, mainRef = "main" }) {
+	const name = String(branch ?? "").trim().replace(/^refs\/heads\//, "");
+	if (!name) throw new Error("a branch name is required, e.g. `worktree prune-branch designer-item-2103`");
+	if (name === mainRef) throw new Error(`refusing to prune "${name}": it is the landing branch itself`);
+	const root = await repoRoot(repoPath);
+
+	// Condition 0 — it must be a LOCAL BRANCH. `--verify refs/heads/<name>` refuses a tag, a
+	// remote-tracking ref and a bare sha, so this verb can never delete something that is not one.
+	let sha;
+	try {
+		sha = (await run("git", ["-C", root, "rev-parse", "--verify", "--quiet", `refs/heads/${name}`])).stdout.trim();
+	} catch {
+		sha = "";
+	}
+	if (!sha) throw new Error(`refusing to prune "${name}": not a local branch (no refs/heads/${name} in ${root})`);
+
+	// Condition 1 — patch-equivalence, with the non-empty guard described above.
+	let cherryOut;
+	try {
+		({ stdout: cherryOut } = await run("git", ["-C", root, "cherry", mainRef, name]));
+	} catch (error) {
+		throw new Error(
+			`refusing to prune "${name}": cannot compare it with "${mainRef}" (${String(error.stderr ?? error.message ?? error).trim()})`,
+		);
+	}
+	const lines = cherryOut
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(Boolean);
+	if (lines.length === 0) {
+		throw new Error(
+			`refusing to prune "${name}": it is already an ANCESTOR of "${mainRef}" (git cherry prints nothing), so it is not a patch-equivalent duplicate. Use \`git branch -d ${name}\` — that route is allowed and cannot lose work.`,
+		);
+	}
+	const unlanded = lines.filter((l) => !l.startsWith("-"));
+	if (unlanded.length > 0) {
+		const shas = unlanded.map((l) => l.replace(/^\+\s*/, "")).join(", ");
+		throw new Error(
+			`refusing to prune "${name}": ${unlanded.length} of ${lines.length} commit(s) are NOT patch-equivalent to "${mainRef}" (unlanded: ${shas}). That work is not on main — land or rebase it first; this verb removes duplicates only.`,
+		);
+	}
+
+	// Condition 2 — no worktree may hold the ref.
+	const holder = await worktreeHoldingBranch(root, name);
+	if (holder) {
+		throw new Error(
+			`refusing to prune "${name}": it is checked out in the worktree at ${holder}. Release that worktree first (docs/runbooks/leaked-worktrees.md); never delete a ref out from under a tree.`,
+		);
+	}
+
+	// Both conditions hold. `-D` is required (git refuses `-d` for a non-ancestor) and is the
+	// narrowest possible use of it: every commit is provably on main by patch.
+	try {
+		await run("git", ["-C", root, "branch", "-D", name]);
+	} catch (error) {
+		throw new Error(
+			`git refused to delete "${name}" (${String(error.stderr ?? error.message ?? error).trim()}); the ref is unchanged`,
+		);
+	}
+	const recovery = `git branch ${name} ${sha}`;
+	return { branch: name, sha, mainRef, patchEquivalent: lines.length, recovery };
+}
+
 // unlinkModulesBridge removed in #330 — no more junctions to drop.
 
 /* ================================================================ */
@@ -824,7 +937,7 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 	const norm = (p) => resolve(p).replace(/\\/g, "/");
 	const targetPath = norm(worktreePath);
 	const refBranch = `refs/heads/${branch}`;
-	const branchHolder = (await listWorktrees(repo)).find(
+	const branchHolder = (await listWorktrees(repo, { strict: true })).find(
 		(w) => (w.branch === branch || w.branch === refBranch) && norm(w.worktree) !== targetPath,
 	);
 	if (branchHolder) {
@@ -1167,8 +1280,26 @@ export async function rebaseItemBranch({ worktreePath, targetBranch }) {
 /**
  * List existing worktrees for cleanup / audit. Returns an array of objects
  * with path, branch (null if detached), and locked status.
+ *
+ * #3605 — THE EMPTY LIST USED TO MEAN TWO THINGS: "no worktrees" and "could not determine
+ * worktrees". The second reading is the PERMISSIVE one, so a git failure answered "nothing holds
+ * this ref" — which is precisely the answer a safety check must not invent, because it AUTHORISES
+ * the action the check exists to prevent (`prepareSeatWorkspace`'s branch-holder guard reads it as
+ * "no other worktree holds this branch" and stops refusing).
+ *
+ * `strict` is how a caller STATES which reading it wants:
+ *   - `strict: true`  — a caller that DECIDES on the result. A failure THROWS, because "unknown"
+ *                       must never be mistakable for "empty".
+ *   - default (false) — a caller that REPORTS. The lenient `[]` is kept because a path that is not
+ *                       a git repository is a normal input for the audit surface (broker.mjs), but
+ *                       the failure is no longer SILENT: anything that is not the expected
+ *                       "not a git repository" case is written to stderr.
+ *
+ * Do not "fix" the default to fail-closed for every caller: the sweep and the audit legitimately
+ * read a non-repo path, and a throw there would take down a reporting surface over an expected
+ * input. The strict flag exists so the decision is made per call site, not globally.
  */
-export async function listWorktrees(repoPath) {
+export async function listWorktrees(repoPath, { strict = false } = {}) {
 	try {
 		const { stdout } = await run("git", ["-C", repoPath, "worktree", "list", "--porcelain"]);
 		const worktrees = [];
@@ -1190,7 +1321,19 @@ export async function listWorktrees(repoPath) {
 		}
 		if (current.worktree) worktrees.push({ branch: null, locked: false, ...current });
 		return worktrees;
-	} catch {
+	} catch (err) {
+		const detail = String(err?.stderr ?? err?.message ?? err).trim();
+		if (strict) {
+			throw new Error(
+				`could not list worktrees for ${repoPath} — refusing to answer "none" when the truth is ` +
+					`"unknown" (pass { strict: false } only for a caller that REPORTS rather than decides): ${detail}`,
+			);
+		}
+		// An unexpected failure is loud; the documented non-repo case stays quiet so the audit and the
+		// sweep do not fill the broker log with an expected input.
+		if (!/not a git repository/i.test(detail)) {
+			console.error(`worktree: could not list worktrees for ${repoPath}: ${detail}`);
+		}
 		return [];
 	}
 }
