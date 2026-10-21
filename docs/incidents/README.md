@@ -60,6 +60,11 @@ last_reviewed: YYYY-MM-DD
 
 | Date | Sev | Incident | Symptom | Runbook | Status |
 |---|---|---|---|---|---|
+| 2026-10-20 | sev2 | [verifier-utf16-clobbered-scratch-tree](2026-10-20-verifier-utf16-clobbered-scratch-tree.md) | a verifier's suite reports ~120 failures in a scratch worktree and the file under test will not parse | null | mitigated |
+| 2026-10-20 | sev2 | [stale-derived-manifest-landing](2026-10-20-stale-derived-manifest-landing.md) | a branch lands green in the helper's scratch, then its OWN new guard fails on `main` because the set it enumerates grew after the branch was written | land | resolved |
+| 2026-10-19 | sev2 | [git-sha-redacted-as-secret](2026-10-19-git-sha-redacted-as-secret.md) | a tool result is replaced by `[redacted … secret-shaped value (high-entropy-token)]` and the 40-character git SHA / tree OID the command printed is gone | store-secret-detected | open |
+| 2026-10-19 | sev3 | [terminal-worktree-mistaken-for-lost-work](2026-10-19-terminal-worktree-mistaken-for-lost-work.md) | a seat asks about "its" worktree as though it still exists (`cannot change to item-<id>`) and treats a reaped terminal tree as lost work | leaked-worktrees | open |
+| 2026-10-19 | sev2 | [held-rows-orphaned-by-cleared-gates](2026-10-19-held-rows-orphaned-by-cleared-gates.md) | an effort sits dormant with nothing broken: `held` rows whose gates finished are never released and no attention fires | stale-held-backlog | open |
 | 2026-10-17 | sev1 | [landing-safety](2026-10-17-landing-safety.md) | every `node cli.mjs` verb fails to load; the shared tree is left mid-merge | merge | resolved |
 | 2026-10-17 | sev1 | [broker-crash](2026-10-17-broker-crash.md) | seats idle with queued work; no `serve` process; the broker log stops | broker-down-or-stalled | open |
 | 2026-10-18 | sev1 | [broker-dormant-stalled](2026-10-18-broker-dormant-stalled.md) | the team has stopped working; the broker process is alive but its log stops | broker-down-or-stalled | mitigated |
@@ -69,7 +74,8 @@ last_reviewed: YYYY-MM-DD
 | 2026-10-19 | sev2 | [read-op-regression](2026-10-19-read-op-regression.md) | `node cli.mjs watch`/reads fail with `unknown op: read`; the suite is RED on `main` | broker-down-or-stalled | mitigated |
 | 2026-10-19 | sev2 | [read-storage-handle](2026-10-19-read-storage-handle.md) | `node cli.mjs` reads (`ps`/`queue`/`watch`) and `npm run ui` fail with `the broker has no storage handle (probeStorage)` | broker-down-or-stalled | mitigated |
 | 2026-10-19 | sev2 | [pi-build-version-visibility](2026-10-19-pi-build-version-visibility.md) | a fresh worktree sees released `pi-durable` 1.1.0 while the shared tree runs the pinned vendored 1.3.0, so the same commit is GREEN in one and RED in the other | null | open |
-| 2026-10-19 | sev1 | [stranded-submission-seat-stall](2026-10-19-stranded-submission-seat-stall.md) | a seat is never woken while other seats run; `status` shows `admitted_not_started` (submission placed, no slot held) | resume-while-broker-runs | open |
+| 2026-10-19 | sev2 | [stranded-submission-seat-stall](2026-10-19-stranded-submission-seat-stall.md) | a seat is never woken while other seats run; `status` shows `admitted_not_started` (submission placed, no slot held) | resume-while-broker-runs | open |
+| 2026-10-19 | sev2 | [scripts-directory-emptied-on-disk](2026-10-19-scripts-directory-emptied-on-disk.md) | tracked files show as DELETED while the index and HEAD still hold them; a whole directory (`scripts/`) is empty on disk and the tools built on it cannot parse | tracked-files-missing-on-disk | mitigated |
 | 2026-10-18 | sev2 | [seat-unwakeable-corrupt-doc](2026-10-18-seat-unwakeable-corrupt-doc.md) | a seat is never woken; `serve.err` repeats `wake-failed … unresolvable path` | store-corruption-recovery | resolved |
 | 2026-10-18 | sev2 | [host-resource-exhaustion](2026-10-18-host-resource-exhaustion.md) | `node cli.mjs status`/`queue` dies with `FATAL ERROR: Zone Allocation failed`; the demo suite is flaky | null | resolved |
 | 2026-10-18 | sev2 | [local-provider-empty-key](2026-10-18-local-provider-empty-key.md) | a seat on the local provider fails with `No API key for provider: local` after a broker restart | local-provider-down | mitigated |

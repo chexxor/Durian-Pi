@@ -1,23 +1,29 @@
 ---
 runbook: write-corruption-recovery
-symptom: "a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line"
+symptom: "a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line OR emptied to zero bytes"
 writes: true
 precondition: "read-only"        # the Diagnose is read-only; step 3 stages a recovery commit
-last_verified: 2026-10-16
-verified_by: impl
-evidence: "items 806/#673/#799; commits 0102f3c (guard), #623 (incident)"
+last_verified: 2026-10-19
+verified_by: delegate
+evidence: "items 806/#673/#799; commits 0102f3c (guard), #623 (incident); 2026-10-19: src/worktree.mjs emptied to 0 bytes (HEAD 40,762) -> restored from HEAD with CRLF, CLI recovered, prepare-workspace + worktree-carry-teardown demos exit 0"
 check_rule: null
 ---
 
 # Recover a file collapsed to one line (silent write corruption)
 
 ## When to use
-One of two observables:
+One of three observables:
 - A seat's `write` call returns the refusal **"refused by durian-pi: this write would collapse a
   multi-line source file (N lines) to a single line — that is the silent-corruption shape of the
   #623 incident…"**, or
 - a source file (`.mjs`/`.cjs`/`.js`/`.jsx`/`.ts`/`.mts`/`.cts`) is now **one long line** with no error
-  having been raised — the failure is invisible until somebody opens the file.
+  having been raised — the failure is invisible until somebody opens the file, or
+- a source file is **zero bytes** (`wc -c` = 0) while `HEAD` holds a large blob. This is the SAME class and
+  the same recovery: on 2026-10-19 `src/worktree.mjs` was 0 bytes against 40,762 in `HEAD`, which broke
+  every CLI verb at import time (`seattools.mjs` imports `prepareSeatWorkspace` from it) — the rig looked
+  like a code regression rather than a damaged file. **An empty file is corruption, not an edit:** nobody
+  intentionally deletes an entire module and leaves the tree unusable, and no seat was generating
+  (no `genlock` slot) when it was found.
 
 ## Impact
 The overwrite is **real and silent** (no error). The seat keeps working against a file that is now
@@ -32,6 +38,15 @@ Read-only to diagnose. Step 3 commits, so the seat must own the item/worktree wh
 ## Diagnose (read-only)
 Confirm the collapse and confirm the prior good content is still in git (an overwrite does **not**
 discard the committed revision):
+
+Before anything else, **size-scan the whole tree for the empty shape** — a 0-byte `src/*.mjs` is the
+loudest symptom and it hides among normal small files:
+```bash
+for f in src/*.mjs cli.mjs; do b=$(git cat-file -s "HEAD:$f"); d=$(wc -c < "$f"); \
+  [ "$d" -lt $((b/4)) ] && echo "SUSPECT $f: disk=$d head=$b"; done
+```
+That one-liner found the 2026-10-19 case in a single pass and proved no other file was hit.
+
 ```bash
 git -C item-<id> diff --stat -- <path>          # one file, huge +/-
 git -C item-<id> diff --numstat -- <path>       # added lines ~=0, "removed" lines ~= the original line count

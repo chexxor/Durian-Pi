@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 // Track pi's main branch instead of its release channel.
 //
 // Why: @earendil-works/pi-durable ships from a fast-moving monorepo (14 commits
@@ -41,8 +41,8 @@ export function parseArgs(argv) {
 }
 
 // A malformed pin must fail LOUDLY (naming the file and the parse error) rather
-// than surfacing downstream as a confusing suite count. A hand-edited pin — e.g.
-// a missing comma before "packages" — previously threw a bare SyntaxError with
+// than surfacing downstream as a confusing suite count. A hand-edited pin â€” e.g.
+// a missing comma before "packages" â€” previously threw a bare SyntaxError with
 // no file context, which read as a mystery failure.
 export function readPin(path = PIN_PATH) {
 	let raw;
@@ -220,7 +220,6 @@ function main(argv) {
 		buildTree: head,
 		built,
 		linked,
-		buildDir: BUILD_DIR,
 	});
 }
 
@@ -232,3 +231,4 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
 		process.exit(1);
 	}
 }
+

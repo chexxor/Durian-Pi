@@ -1,4 +1,4 @@
-// src/textwidth.mjs — measure text in terminal CELLS, not JavaScript code units.
+// src/textwidth.mjs â€” measure text in terminal CELLS, not JavaScript code units.
 // `String.length` is wrong for everything this UI actually renders: a CJK glyph or an
 // emoji is two cells, a combining mark is zero, and a ZWJ family is one grapheme.
 //
@@ -123,7 +123,7 @@ function clusterWidth(segment, ambiguousAsWide) {
 /**
  * The number of terminal cells `input` occupies.
  * @param {string} input
- * @param {{ambiguousIsNarrow?: boolean}} [options] — false makes East-Asian
+ * @param {{ambiguousIsNarrow?: boolean}} [options] â€” false makes East-Asian
  *   "ambiguous" characters two cells; the terminals we target treat them as narrow.
  */
 export function textWidth(input, { ambiguousIsNarrow = true } = {}) {
@@ -165,4 +165,77 @@ export function sliceToWidth(input, cells, { ambiguousIsNarrow = true } = {}) {
 		used += width;
 	}
 	return out;
+}
+
+/**
+ * Wrap prose to `width` CELLS, PRESERVING explicit newlines and BLANK LINES
+ * (ROADMAP 101). The ONE wrapper for both the committed transcript and the live
+ * partial: those two used to flatten with `\s+`, so the same text rendered
+ * differently before and after it committed, and a turn that was three paragraphs
+ * became one run-on row.
+ *
+ * The rules, and why each one:
+ *  - split on EXPLICIT newlines only (a CRLF counts as one); never on `\s+`;
+ *  - a blank line stays a blank line, and an empty string stays one empty line, so
+ *    `lines.length` is the caller's line budget and nothing silently vanishes;
+ *  - ONE trailing newline is a terminator, not an extra blank line;
+ *  - a line that already fits is returned VERBATIM (no trim, no whitespace
+ *    collapsing), so indented output and code are never reformatted just for being
+ *    rendered; only a line that must wrap is reflowed;
+ *  - a too-long line WRAPS, and a single token wider than the line is hard-split by
+ *    cells (never through a grapheme), so nothing is ever truncated with an ellipsis.
+ *
+ * ANSI styling is preserved for width measurement and slicing, but callers should
+ * wrap PLAIN text and re-apply their styling per line: a style that spans a wrap
+ * point would otherwise be cut in half here.
+ */
+export function wrapLines(text, width) {
+	const w = Math.max(1, Math.floor(width));
+	const source = String(text ?? "").replace(/\r\n?/g, "\n");
+	const body = source.endsWith("\n") ? source.slice(0, -1) : source;
+	const out = [];
+	for (const line of body.split("\n")) {
+		if (line === "") {
+			out.push("");
+			continue;
+		}
+		if (textWidth(line) <= w) {
+			out.push(line);
+			continue;
+		}
+		// Reflow: keep the line's own indentation on the first segment and on its
+		// continuations, so an indented block stays readable instead of collapsing
+		// to flush-left after the first wrap.
+		const indent = (line.match(/^[ \t]+/) ?? [""])[0];
+		const indentWidth = textWidth(indent);
+		const hanging = indentWidth < w ? indent : "";
+		const budget = Math.max(1, w - textWidth(hanging));
+		let current = "";
+		const flush = () => {
+			if (current !== "") out.push(hanging + current);
+			current = "";
+		};
+		for (const word of line.trim().split(/[ \t]+/)) {
+			if (word === "") continue;
+			if (textWidth(word) > budget) {
+				flush();
+				let rest = word;
+				while (textWidth(rest) > budget) {
+					const chunk = sliceToWidth(rest, budget) || firstCluster(rest);
+					out.push(hanging + chunk);
+					rest = rest.slice(chunk.length);
+				}
+				current = rest;
+				continue;
+			}
+			if (current === "") current = word;
+			else if (textWidth(`${current} ${word}`) <= budget) current += ` ${word}`;
+			else {
+				flush();
+				current = word;
+			}
+		}
+		flush();
+	}
+	return out.length > 0 ? out : [""];
 }

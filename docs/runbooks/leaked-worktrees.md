@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-10-19
 verified_by: delegate
-evidence: "2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced"
+evidence: "2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced. 2026-10-19 (second pass): 9 merged+dirty+unlocked terminal trees relocated (2629/2683/2701/2720/2728/2737/2766/2772/2910) + 2 reapable removed (2632 merged, 2757 unmerged-so-ref-kept) + 4 landed-but-dirty trees relocated (1705/2600/2602/2643); worktrees 206->204, refs 111->83, nothing forced"
 check_rule: null
 ---
 
@@ -13,7 +13,49 @@ check_rule: null
 
 ## When to use
 `git status` or `git worktree list` shows stray `item-<id>` worktrees, or `serve.err` logs
-`worktree: refusing to remove … N uncommitted path(s)`.
+`worktree: refusing to remove ... N uncommitted path(s)`.
+
+### FIRST: IS IT A WORKTREE, OR A LEFTOVER PLAIN DIRECTORY? (#4656/#4678)
+**ALL TEN DIRECTORIES THAT BLOCKED EVERY LANDING ON 2026-10-20 WERE PLAIN DIRECTORIES, NOT WORKTREES.**
+NONE had a `.git` file and NONE was registered in `git worktree list`, so **`git worktree move` DOES NOT
+APPLY TO THEM** -- the RELOCATE recipe below is for REGISTERED worktrees and is the WRONG TOOL for this
+case. Tell them apart in one line:
+```bash
+test -e <dir>/.git && echo WORKTREE || echo PLAIN-DIRECTORY
+git -C <repo> worktree list --porcelain | grep -F "$(cd <dir> && pwd)"   # any match means REGISTERED
+```
+`item-2801` is the case that proves the distinction: its **REGISTERED worktree lives at
+`../pi-opendurig.worktrees/item-2801`**, so the `item-2801/` at the repo root is a **LEFTOVER AFTER a
+relocate pass**. **"Registered ELSEWHERE" is a different thing from "registered HERE", and it has a
+different remedy** -- treating the leftover as a worktree makes the recipe fail, and treating it as junk
+loses residue.
+
+**THE REMEDY for a leftover plain directory is PRESERVE-THEN-REMOVE, not `worktree move`**: copy it to
+the archive, VERIFY the copy by file count and byte total, and only then remove the original.
+`scripts/reclaim-root-leftovers.ps1` does exactly that, per directory, idempotently and loudly:
+```bash
+powershell -NoProfile -File scripts/reclaim-root-leftovers.ps1 -Repo <shared root> -DryRun   # first
+powershell -NoProfile -File scripts/reclaim-root-leftovers.ps1 -Repo <shared root>
+```
+It runs the empty one first and the 473-entry one LAST, refuses if a directory is missing (idempotent),
+refuses if a preserved copy already exists with DIFFERENT content, captures `git worktree list` before and
+after and DIFFS it (it must be unchanged -- nothing here is registered, so **no `worktree prune`**), and
+prints one line per directory. **It writes at the SHARED ROOT, outside every seat root, so a SEAT must not
+run it; the operator (or a delegate holding that authority) must.** It touches no store, so the broker may
+keep driving.
+
+**AND THE GATE THAT REFUSES THE LANDING IS NOT PORCELAIN** (#4139): `scripts/land.mjs` reads the repo
+root's DIRECTORY LIST and compares it to `git worktree list`, so it fires on directories `git status`
+NEVER MENTIONS -- `/item-*/` is in `.gitignore`. Measured 2026-10-20: porcelain **0 lines** and the landing
+**REFUSED for 10 stray `item-*/` directories**, with nine clean branches stacked behind it. **An empty
+porcelain does NOT clear this gate.**
+
+## Impact
+Leaked worktrees are not just clutter: a dirty orphan pins its **item branch**, so the merged ref can
+never be pruned and `git branch`/worktree operations slow down while hiding the small set of genuinely
+unlanded work. The dirty files also exist **nowhere else** (the item's own commit is on the branch, but
+the residue is not), so a careless `--force` or `git clean` is real data loss. Blast radius of the
+git-only reclaim below is low — it touches no store — so the broker may keep driving.
 
 ## Preconditions
 Read-only to inspect. Removing a worktree is a git operation; never discard work you did not create.
@@ -94,6 +136,52 @@ sufficient.
    Then let the next broker start sweep it, or remove it by hand with `git worktree remove item-<id>`
    once clean.
 3. Do not force-remove a dirty worktree while a seat may own it: check the queue item's status first.
+### Retention for the relocated archive (`../pi-opendurig.worktrees/`)
+
+Relocating a dirty tree is **not a disposition** — it is a deferral, and nothing in this runbook ever
+reclaims the archive. Measured 2026-10-20: **179 registered worktrees, 179 carrying changes, 1,562 changed
+paths** (145 with their HEAD already MERGED into `main`, 34 UNMERGED), occupying ~20 GB. So the honest
+answer to "do these stay forever?" is: they do, unless someone applies the rule below.
+
+**The rule:** an archived tree is kept only while it holds something the repo cannot reproduce from a ref.
+That gives three tiers, and every removal goes through `git worktree remove` (never `Remove-Item` — these are
+REGISTERED worktrees and a hand-delete leaves 179 stale entries in `.git/worktrees/`).
+
+1. **Merged + clean** → remove outright (`git worktree remove <wt>`), then `git worktree prune`.
+2. **Merged + dirty** (the bulk: 145 trees today) → the branch content is already on `main`; the only value
+   is the uncommitted residue. Export it losslessly, then remove:
+   ```bash
+   git -C <wt> diff --binary > <archive>/<name>.patch
+   git -C <wt> status --porcelain | awk '$1=="??"{print $2}'   # copy these: they are NOT in the patch
+   git worktree remove --force <wt>
+   ```
+3. **Unmerged** (34 today) → the commits live on branch refs, so the refs preserve them; the tree itself is
+   only needed while someone may resume the work. Export the same two artifacts and remove, OR keep the tree
+   and record why in the item. Never keep one silently.
+
+**Resolve each tree's ITEM STATUS from the store before deciding** (operator's suggestion, 2026-10-20):
+the directory name carries the id (`item-<id>` or `<seat>-item-<id>`), so one `queue` read classifies the
+whole archive. Measured on the 179 trees: **179/179 map to a TERMINAL item** (done/cancelled), **0 live** --
+which is what makes a bulk pass defensible at all. A live (queued/claimed/deferred/held) item is the one
+case that keeps a tree unconditionally, and an id that is not in the store at all means someone must look
+before anything is deleted.
+
+**And check whether the tree's HEAD survives in a REF, because deleting a worktree deregisters its HEAD.**
+For the 34 unmerged trees here, **13 hold commits contained by NO ref** (`item-1704`, `item-2103`,
+`item-2154`, `item-2179`, `item-2182`, `item-2186`, `item-2515`, `item-2578`, `rel-item-673`, `700`, `705`,
+`746`, `860`) -- removing those trees would eventually let `gc` collect real work. Preserve them first:
+`git update-ref refs/heads/archived/<name> <sha>` (or `git bundle create`), THEN export the diff and remove.
+
+So the full decision is a three-question ladder, in this order:
+1. **Item live?** -> keep the tree (and say why in the item).
+2. **Item terminal?** -> export the uncommitted residue (`diff --binary` patch + copied untracked files).
+3. **HEAD not in any ref?** -> `git update-ref` an `archived/*` ref (or bundle) first. Then
+   `git worktree remove --force` and `git worktree prune`.
+
+**Never** hand-delete the whole directory: it is a registered-worktree set, and untracked files in it are
+invisible to a patch. **Do** sequence any bulk pass after heavy installs/builds — it is hundreds of `git`
+invocations and will fight a model pack build for the disk.
+
 4. **Tidy without discarding:** a terminal orphan can be relocated out of the project root instead of
    removed — `git worktree unlock <wt>` then `git worktree move <wt> <archive-dir>/<wt>` — which preserves
    every uncommitted file and every branch. The delegate used `../durian-pi.worktrees/` (2026-10-17:
@@ -191,6 +279,31 @@ rule `shared-tree-on-main` flags the state; `constitution.txt` P3 Safety tells t
 If a worktree will not remove (Windows file locks), close any process with it open and retry; the fallback
 is `git worktree remove --force` **only after** its work is committed or knowingly discarded.
 
+### The lock flag reads WRONG from `--porcelain`
+`git worktree list --porcelain` emits `locked` as its own line **after** the `branch` line, so a naive
+"next worktree's key" association attributes it to the FOLLOWING tree. Measured 2026-10-19: that parse
+reported **all 22** merged worktrees as LOCKED, including unlocked ones — wrong in the safe direction
+here, but the same mistake in the other direction would relocate a live seat root. Read the **terse**
+form, which annotates the flag on the same line (`<path> <sha> [<branch>] locked`):
+```bash
+git worktree list | grep ' locked$'                  # the locked set
+git worktree list | grep -E "\[$b\]( locked)?\$"     # one branch's line plus its lock flag
+```
+
+### A landing can make an UNRELATED ref prunable mid-pass
+Ref classification is point-in-time. Landing `impl-item-1705` (tip `349d5d3`) made
+`auditor-item-2757` — recorded `ahead=4` at Diagnose, same tip — an ancestor of `main`, so a ref that was
+unprunable at the start of the pass was safely `-d`'d at the end. Re-run the merged/held classification
+after each landing batch, and always gate on the live `git merge-base --is-ancestor <branch> main` rather
+than a remembered `ahead` count.
+
+## Escalate to
+`pm` — to open a landing pass for the `ahead>0` set, or an item for a leak source (CARRY, verify scratch,
+seat-root fallback) that keeps producing orphans; `lead` — when a branch cannot merge cleanly; the
+operator — for any worktree whose content must be **discarded** (never a delegate or seat decision),
+and for the lock-state ambiguity that would relocate a live seat root. Model of the whole lifecycle:
+`docs/BRANCH-AND-WORKTREE-LIFECYCLE.md`.
+
 ## Evidence
 2026-10-16 (item 73): `removeClaimedWorktree` used to fall through to `rm -rf` on a dirty tree — a latent
 data-loss path; it now refuses without `force` (D60). The leaked `item-635/636/638` hold uncommitted work
@@ -287,3 +400,26 @@ an intentional keep (a claimed item or a seat root). Result: 27 relocated in one
 `main` unmoved, nothing forced. The 4 refs that needed no relocation were clean+locked+terminal
 (`impl-item-1390`, `scribe-item-1531`, `impl-item-1585`, `impl-item-1108`): `git worktree unlock` ->
 `git worktree remove` -> `git branch -d`.
+
+**Two rules that must be applied per TREE, not per branch list (2026-10-19, second pass):**1. **Re-check the LOCK state from `git worktree list`'s TERSE output**, where it is annotated as a
+trailing ` locked`. A `--porcelain` parse is easy to get wrong: the `locked` line follows the `branch`
+line, so a naive "the next worktree's lock" association marks the wrong tree (it reported all 22 merged
+worktrees as LOCKED, including ones that were unlocked). Reading the terse line (`<path> <sha> [<branch>]
+locked`) is unambiguous. Getting this wrong in the SAFE direction wastes a pass; in the unsafe
+direction it would relocate a live seat root.
+2. **Relocating a tree does not always free only its own ref — check for followers.** Landing
+`impl-item-1705` (tip `349d5d3`) made `auditor-item-2757` (same tip, `ahead=4` at the start of the pass)
+an ANCESTOR of `main`, so its ref became prunable mid-pass. Re-run the `merged`/`held` classification
+AFTER each landing batch; a ref recorded as unmerged at Diagnose time can be safely `-d`'d later in the
+same pass (`git merge-base --is-ancestor` is the gate, never a remembered count).
+
+2026-10-19 (seat-side): `scribe` finished `#3035` (branch `scribe-item-3035 @ f450cdd`, tree retired on
+completion), then went looking for `item-3035` to amend an ADVISORY landing note, concluded "the worktree
+is gone … to amend I'd need to recreate it", and nearly rewrote a completed branch's tip for no semantic
+gain. Nothing was lost — the branch was intact and CLEAN against `main`. The gap was **audience**: this
+runbook (delegate-facing) already says the branch survives and gives the re-attach recipe, but seats read
+`WORK-ITEM-LIFECYCLE.md`, which did not. Fixed there (**§8a**: worktree ephemeral / branch durable, the
+three states, the re-attach recipe, and the never-amend-a-completed-branch rule). Record:
+`docs/incidents/2026-10-19-terminal-worktree-mistaken-for-lost-work.md`. **If a seat asks "where is my
+worktree?", point it at §8a rather than re-explaining** — and check whether the item was merely
+terminal (normal) or live (a keep, never a force).

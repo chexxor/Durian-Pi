@@ -10,7 +10,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile as write } from "node:fs/promise
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
-import { authorEnv, verifierEnv } from "../src/confine.mjs";
+import { authorEnv, refusalFor, verifierEnv } from "../src/confine.mjs";
 import { makeSeatEnv } from "../src/seattools.mjs";
 
 let failures = 0;
@@ -150,6 +150,68 @@ try {
 		!/refused by durig/.test(readOnlyGit.error?.message ?? ""),
 		JSON.stringify(readOnlyGit.ok ? "ran" : readOnlyGit.error?.message),
 	);
+
+	// #4374: `checkout-index` is NOT a branch switch — it re-materialises files from the INDEX into the
+	// working tree and cannot move HEAD. It was swept into the class by a `\b` boundary (`\b` sits
+	// between the final "t" of "checkout" and the hyphen of "checkout-index") with a reason that was
+	// FACTUALLY WRONG about the verb, and NO CANARY pinned it either way. The decision is now
+	// PATH-AWARE, like the write guard: the verb takes no path, so its TARGET is the CWD's worktree.
+	// Restoring YOUR OWN dirt is what the runbooks prescribe (tracked-files-missing-on-disk.md);
+	// re-materialising the SHARED tree is the 04:21Z hazard. The verb is identical; the acts are opposite.
+	const COI = `git ${["checkout", "index"].join("-")}`; // split so this file is not itself refused
+	const coiInSeat = await author.exec(`${COI} -f -a`, {}, context);
+	check(
+		"checkout-index in the SEAT's own worktree is ALLOWED (the runbook's restore)",
+		!/refused by durig/.test(coiInSeat.error?.message ?? ""),
+		JSON.stringify(coiInSeat.ok ? "ran" : coiInSeat.error?.message),
+	);
+	const sharedRefusal = refusalFor(`${COI} -f -a`, { root, cwd: join(homedir(), "elsewhere") });
+	check("checkout-index against the SHARED root is REFUSED", sharedRefusal !== null, String(sharedRefusal));
+	check(
+		"...with an ACCURATE reason, not 'same as git checkout'",
+		/checkout-index/.test(sharedRefusal ?? "") && !/same as .git checkout./.test(sharedRefusal ?? ""),
+		String(sharedRefusal),
+	);
+	check("...and it names the remedy (your item worktree)", /item worktree/.test(sharedRefusal ?? ""), String(sharedRefusal));
+	check(
+		"...and NO context (fail-closed) is REFUSED",
+		refusalFor(`${COI} -f -a`, {}) !== null,
+		"a path-aware entry with no root must not fail open",
+	);
+
+	// #3635: EVERY REFUSAL MUST NAME ITS OWN VERB. The loop above proves a command is REFUSED; it does
+	// not prove the message says WHICH rule fired. Without that pin the wording can regress to
+	// something generic, and a generic refusal is what made a seat condemn a whole verb CLASS: a
+	// compound command (`git checkout -b …; git rebase main`) is refused on its checkout segment, so
+	// "would change the seat's working tree or HEAD" read as a verdict on BOTH verbs, `git rebase`
+	// was never re-run alone, and the false claim reached an operating note (#3379). The guard stops
+	// at the first matching rule, so one refusal says nothing about the other verbs in the command —
+	// the message has to say which one it was.
+	const NAMES_ITS_VERB = {
+		"git reset --hard HEAD~1": /`reset`/,
+		"git checkout main": /`checkout`/,
+		"git checkout -b some-branch": /`checkout`/,
+		"git switch main": /`switch`/,
+		"git switch -c feature": /`switch`/,
+		"git restore src/rig.mjs": /`restore`/,
+		"git revert HEAD": /`revert`/,
+		"git clean -fd": /`clean`/,
+		"git stash": /`stash`/,
+		"git branch -D foo": /`-D`|force-delete a branch/,
+		"git add -A": /git add -A/,
+	};
+	for (const [command, namesVerb] of Object.entries(NAMES_ITS_VERB)) {
+		const refused = await author.exec(command, {}, context);
+		const message = refused.error?.message ?? "";
+		check(
+			`${command}: the refusal NAMES its verb`,
+			refused.ok === false && namesVerb.test(message),
+			JSON.stringify(refused.ok ? "it was not refused at all" : message),
+		);
+	}
+	// `git push` is deliberately NOT in the map above: its refusal is conditional on the operator
+	// grant (DURIG_ALLOW_PUSH), so asserting it here would make this demo depend on how the rig was
+	// launched. Its message names `push` for the same reason as the rest.
 
 	// Failing-first canaries — these commands bypassed the old guard (\s|$) because the
 	// match ended in whitespace or end-of-string, so trailing punctuation and separators
