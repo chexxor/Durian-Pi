@@ -1,4 +1,4 @@
-﻿# Verification for #3802 — P5/#110 comment restored
+# Verification for #3802 — P5/#110 comment restored
 
 1. byte-identical to 595b714~1: git diff --numstat 595b714~1 286a911 -- cli.mjs -> empty. Confirmed.
 2. broker-one-connection test -> exit 0. "BOTH probe-handle opens document P5/#110". Confirmed.
