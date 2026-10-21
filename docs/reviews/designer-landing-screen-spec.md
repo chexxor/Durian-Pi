@@ -115,12 +115,30 @@ a code change copies the formula below instead of converting a denominator. The 
 prose that echoed those bands in §2 (`min(12, C - 33)` -> 7..12) retires with the (b) table; §2's
 band line re-points at B(w)/R(w) when (a) lands.
 
-**THE DERIVED FIXED PART - 33 -> 34, shown not assumed:** sel 2 (the cursor replaces the leading
-space: selection adds no width) + state 13 (glyph + space + the state padded to 11) + NAME 10
-(the rung (a) spends) + queue 9 = 34. The queue rung is not the payer and cannot be: the parked pole
-`4q · 175p` fills its nine cells EXACTLY today (measured), and the busiest seat must keep reading it
-whole - that is the constraint this derivation starts from. THE CONSTRAINT WAS NEVER TOTAL WIDTH;
-the cell was inside the row all along, and (a) pays for it where the row has slack: AFTER the name.
+**THE DERIVED FIXED PART - 33 -> 34, shown not assumed, every term named (the decomposition impl
+#4459 asked for):** sel 2 (the cursor replaces the leading space: selection adds no width) + state
+13 (glyph + space + the state padded to 11) + NAME 10 (the rung (a) spends) + SEPARATOR 0 (no
+dedicated cell exists between name and queue - the 10th name cell IS the gap; the padding edge is
+the separator) + queue 9 = 34. A builder that ADDS an 11th cell for a "separator after the name" has
+misread the ruling: there is no second fixed cell to book. The queue rung is not the payer and
+cannot be: the parked pole `4q · 175p` fills its nine cells EXACTLY today (measured on `impl` with
+175 parked) and the busiest seat must keep reading it whole - the constraint this derivation starts
+from. THE CONSTRAINT WAS NEVER TOTAL WIDTH; the cell was inside the row all along, and (a) pays for
+it where the row has slack: AFTER the name.
+
+**THE BUILDER CHANGE IS MECHANICAL, TWO LINES:** `nameCol` pad/truncate 9 -> 10 and
+`LANDING_FIXED_WIDTH` 33 -> 34 (src/tui/client.mjs). The "+2" reading one might take from the
+routing text - "name 9 -> 10 AND a separator AFTER the name" as TWO fixed cells - is killed by the
+sum above: it would insert a phantom cell no (a) row has, and at the 44 floor a 35-fixed prefix
+would leave the brief 9 cells, one below the floor discipline the shipped ladder asserts. The
+"34 -> 35" that #4352's routing text carries is the ACTION-ROOM constant below, not this boundary.
+
+**THE RUNG'S GENERAL FORM (why 10 is exactly sufficient):** rung >= longest seat name + 1.
+The seat-name census today tops at `architect` = 9, so (a)'s 10 leaves every CURRENT seat a
+one-cell gap and NO seat a glued row; a 10+-cell seat name would re-run this derivation rather
+than inherit the number. impl's intersection fixture - a nine-cell name WITH the full parked pole -
+is therefore the worst row the census OFFERS: the glued `architect4q · 175p` shape dies under (a),
+and no real seat can reproduce it while the invariant holds.
 
 **WHY THE NAME RUNG IS WHERE THE CELL GOES (the #4300 rule, recorded here for future rungs):**
 - FIX THE CLASS, NOT THE INSTANCE: a boundary bought in the name field survives ANY column that
