@@ -1,5 +1,40 @@
 # durian-pi — NEXT (current pointer)
 
+## NEXT SESSION (2026-10-21T04:40Z — SHARED-TREE FLATTENING INCIDENT resolved to a path; two branches verified but NOT landed)
+
+**Incident (measured).** At `04:21:17Z` eight tracked files were rewritten as **single lines** (newlines
+→ spaces), all the **`main` version** of exactly the Fix A file set (`src/textwidth.mjs`,
+`src/tui/client.mjs`, `src/tui/paint.mjs`, `demo/tui-harness.mjs`, `demo/tui-landing.test.mjs`, 3
+goldens). The first `//` header comment then swallowed each file, so `textwidth.mjs` exported nothing and
+every chatview-importing verb (`watch`/`queue`/`status`) died for ~11 min. Writer: `impl` (WAKE 04:20:40Z);
+its own transcript records the class twice (a prior `Set-Content` mojibake, and the compaction constraint
+"never use PowerShell `>`/`Get-Content`/`Set-Content` for source files"). **Root-cause chain: `land.mjs`
+printed `ok:true` while merging into an ITEM WORKTREE (#4247) → the seat hand-restored the shared tree to
+`main` → the PowerShell text round-trip collapsed newlines.** Evidence: `.spike/delegate/incident-2026-10-21-newline-strip/`
+(mangled copies + `shared-tree.diff` + `FINDINGS.md`). Tree was repaired by another delegate; CLI is up.
+
+**RESOLUTION PATH (delivered to `pm` as `operator-shared-tree-incident-2026-10-21-1`, 04:36:19Z):**
+
+1. **Land, from the SHARED ROOT, in order:** `impl-item-3941` @`e0efe71` (entry #4285) → `impl-item-4233`
+   @`b5f463f` (STACKED, #4259) → `impl-item-4158` @`2213801` (#4287). All three are **NOT on main**
+   (`git merge-base --is-ancestor` exit 1) while their landing entries are `done` — the #3681 shape again.
+   `src/tui/durable/enter.mjs` is UNTRACKED in the shared tree and must arrive by the landing.
+2. **Fix `land.mjs` to refuse a non-root repo (#4247) — the fix is NOT on main** (`git log -- scripts/land.mjs`
+   stops at `6683790`). This is the item that removes the incentive to hand-copy.
+3. **Guard:** refuse FILE writes into the shared root from a seat (`Set-Content`/`Out-File`/`>`/`cp`/`mv`),
+   not just mutating git verbs — the F12/`9c3aa02` class one layer down.
+4. **Check:** refuse a collapsed newline structure (single-line rewrite vs `HEAD`) and non-UTF-8 — extend
+   the `tracked-encoding` rule (#3342, `src/trackencoding.mjs` is absent from main). `node --check` cannot
+   see this class.
+5. **Process:** a landing entry may not close on the tool's `ok:true`; the completion must carry the
+   ancestry assertion + the `repo` field.
+
+**Blocker:** none on the tree (clean except `selfdev.sqlite.broker.audit.log` and the untracked
+`enter.mjs`). Broker pid 19216 passing. **Coordinate before landing** — a second delegate session is
+committing in this tree (its `c12d077`/`dcb8dec` are in the history) and qa's model was just swapped.
+**Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs queue` then land `e0efe71` from the root
+with `scripts/land.mjs`, asserting `git merge-base --is-ancestor e0efe71 main` afterwards.
+
 ## NEXT SESSION (2026-10-21T02:40Z — operator re-reported both TUI asks; broker was DORMANT, restarted; Fix A gates now claimed; Enter→Pi has NO live wiring item)
 
 **Current item:** the operator reports BOTH TUI asks still absent, and both are still true on `main`
