@@ -60,6 +60,45 @@ subscriber but nothing implements it. So 52 is a ruling plus fragments, not a di
 #3996/#4070 (Enter→Pi wiring, both `held`) · #3948 (pointer correction, releasable) · 52 breakdown +
 `queued`-class reconciler + decision trace (awaiting `pm` routing).
 
+**OPERATOR INPUT (asked 02:58Z) — exactly ONE real question: #4124** (impl `deferred` to human
+22:19:50Z: lead's five-line revise of #3272 vs impl's recommendation of a HELD delta registration +
+pointer; Part B/C already handled by #4127 `done`). The four other `deferredTo:"human"` rows
+(#2993/#3556/#3581/#3601) are **stale supervisor escalations** from the 07:23Z 402 outage — qa resumed
+and held them for their own gates; do NOT answer them. #1135 is already answered by #2956/#2962
+(pricing SOURCE = vendored price table). **Enter→Pi has moved:** pm routed it, impl built
+`impl-item-4158` @`2213801` (`ui.mjs` +43/−9, new `src/tui/durable/enter.mjs`, demo) and #4163 is its
+landing list (held); impl is also editing `src/broker.mjs` + `cli.mjs:1022` for the starvation fix.
+
+**OPERATOR RULED (03:45Z, delivered to `pm` as `operator-rulings-4124-994-2026-10-21-1`):** R1 **#4124 =
+OPTION A** (held delta registration whose body IS the three missing lines + the one-verb-per-call rule,
+plus a one-line pointer into #3272's OPERATING NOTES at land time; do NOT re-cut the 20,749-char body;
+"unless lead objects" since it is lead's convention, relayed by pm) · R2 clear the stale `deferredTo` on
+#2993/#3556/#3581/#3601, do not answer them · R3 **#994 stays `held`, re-surface no earlier than
+2026-11-21, target 2026-12-21, nice-to-have** (and #2958 still says do NOT declare the quiet window).
+**Next check:** pm has NOT applied them yet — verify the new held delta item exists, the four flags are
+cleared, and #994 carries the re-surface date; the delegate made no queue transition.
+
+**APPLIED — VERIFIED 03:52Z (loop closed).** R1: #4215 `cancelled` (no 21k rewrite), #4216/#4218 `done`
+(lead relayed + **lead objected NARROWLY**: the pointer must go into #3272 FIRST, not at land time —
+"Option A unless lead objects" was exercised), and **#4222 `held` = TWO ACTIONS whose body IS the
+delta** (1: recipient-revise #3272 to add the pointer; 2: read #3272's body). R3: **#4217 `held`**
+re-surface tracker (no earlier than 2026-11-21, target 2026-12-21). **R2 NOT APPLIED** — #2993/#3556/
+#3581/#3601 still carry `deferredTo:"human"`; #4124 is still `deferred` though lead ruled it. Also
+`cancelled` at 02:37Z as superseded: **#3996, #4070** (the old wiring/round-trip rows); #3948 is `done`.
+**Broker fix LANDED on main:** `c82be69` (#4180 suppression trace + status attention row) and `66c6e1a`
+(#4176 ADMISSION_DEADLINE_MS + pure `admissionVerdict`, ROADMAP 37(c)).
+
+**RECOMMENDED NEXT QUEUE (operator asked 03:55Z; pm owns decomposition).** The CLI's small count is
+`queued`+`claimed` only (2+4 now) — 281 rows are `held` by design, so "3 in the queue" is not "3 things
+left". In order: (1) close designer's **#3945** review, then release **#3946** and land `impl-item-3941`
+(Fix A); (2) **mint a verify + a real-seat ROUND-TRIP acceptance for `impl-item-4158` @2213801** and
+release **#4163** — no verify exists and #4070 was cancelled, so the operator-facing acceptance (Enter →
+Pi → exit → landing live on the same seat) is UNOWNED; (3) mint the **reconciler extension for `queued` +
+the periodic sweep** (the primitive #4176 is landed, the consumers are not); (4) mint/release the
+**liveness+progress watchdog (ROADMAP 62)**; (5) release **#4222** so the pointer gets written; (6) mint
+**52's in-process `viewState().subscribe()`** + **late-join demo**, then release **#2733**; (7) hygiene:
+clear the four stale flags, close #4124.
+
 **Blocker:** none on the tree. `main` `b4bb4c7`, tracked tree clean except the broker-generated
 untracked `selfdev.sqlite.broker.audit.log`. Single broker pid 16140 (verify before any restart).
 
