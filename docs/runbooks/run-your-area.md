@@ -3,7 +3,7 @@ runbook: run-your-area
 symptom: "which tests do I run before landing? the demo suite is 120+ files"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-17
+last_verified: 2026-10-21
 verified_by: devtools
 evidence: "#1558 (test-area partition: demo/test-areas.json + src/testareas.mjs + scripts/test.mjs + demo/test-areas.test.mjs)"
 check_rule: null

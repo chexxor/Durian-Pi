@@ -3,7 +3,7 @@ runbook: degeneration-guard
 symptom: "a seat was auto-reset (a pi.reset naming degenerate-text=...) and you must tell a real loop from a false positive, or add a new degenerate shape"
 writes: false
 precondition: "read-only"        # diagnosis is read-only; adding a pattern is a code change (broker-safe-change.md)
-last_verified: 2026-10-16
+last_verified: 2026-10-21
 verified_by: impl
 evidence: "item #875 (registry + real fixtures); demo/degeneration-text.test.mjs; scripts/degen-scan.mjs"
 check_rule: null

@@ -3,7 +3,7 @@ runbook: request-trace
 symptom: "I need to see the ACTUAL request body durig sends to the provider (thinking / reasoning_effort / max_tokens / store), not the programmed config"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-19
+last_verified: 2026-10-21
 verified_by: impl
 evidence: "#2545 / #920 (ROADMAP 43c) — src/providers/trace.mjs + the buildModels seam in cli.mjs; demo/trace-requests.test.mjs"
 check_rule: null

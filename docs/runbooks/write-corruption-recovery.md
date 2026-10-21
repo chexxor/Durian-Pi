@@ -3,7 +3,7 @@ runbook: write-corruption-recovery
 symptom: "a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line OR emptied to zero bytes"
 writes: true
 precondition: "read-only"        # the Diagnose is read-only; step 3 stages a recovery commit
-last_verified: 2026-10-19
+last_verified: 2026-10-21
 verified_by: delegate
 evidence: "items 806/#673/#799; commits 0102f3c (guard), #623 (incident); 2026-10-19: src/worktree.mjs emptied to 0 bytes (HEAD 40,762) -> restored from HEAD with CRLF, CLI recovered, prepare-workspace + worktree-carry-teardown demos exit 0"
 check_rule: null

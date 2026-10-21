@@ -3,7 +3,7 @@ runbook: format-before-commit
 symptom: "my diff shows whitespace or line-ending churn I did not intend"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-16
+last_verified: 2026-10-21
 verified_by: impl
 evidence: "#934 (the `format` verb + demo/format.test.mjs), #933 (prettier 3.9.10 pin + .prettierrc.json)"
 check_rule: null

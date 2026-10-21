@@ -3,7 +3,7 @@ runbook: constitution-amendment
 symptom: "you edited (or are about to edit) constitution.txt; or the 3 constitution-mirror demos fail their 'starter constitutionInline === constitution.txt' assertion"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-17
+last_verified: 2026-10-21
 verified_by: scribe
 evidence: "#1257 (runbook authored); #1287 (Verify run 2026-10-17: all 3 constitution-mirror demos exit 0 on main); the #976/#977 class; recurrence fa4b22f (D90 P3 Runbooks) -> main RED, fixed by b52133f"
 check_rule: null

@@ -3,7 +3,7 @@ runbook: seat-reset
 symptom: "a seat loops, stalls, emits a tool call as text, or answers in the wrong language"
 writes: true
 precondition: "broker-stopped"   # a full reset is a write verb; a steer is not (see Do)
-last_verified: 2026-10-16
+last_verified: 2026-10-21
 verified_by: impl
 evidence: "items 806/#700; commits f086382+c38815f (D77 detect), 7d62929 (auto re-drive), a0ab993 (P3 Language)"
 check_rule: null

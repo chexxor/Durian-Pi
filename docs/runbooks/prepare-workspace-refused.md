@@ -3,7 +3,7 @@ runbook: prepare-workspace-refused
 symptom: "prepare_workspace returned PREPARE_WORKSPACE_ERROR, or refused with 'refusing to create a worktree on branch'"
 writes: false
 precondition: "read-only"        # the refusal is a read of the tree; the remedies below are the writing part
-last_verified: 2026-10-20
+last_verified: 2026-10-21
 verified_by: impl
 evidence: "impl-item-3807 (the base-not-honoured refusal); demo/prepare-workspace-create-base.test.mjs"
 check_rule: null

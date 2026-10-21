@@ -3,7 +3,7 @@ runbook: compaction-eval
 symptom: "you need to know what a compaction actually DESTROYS (or preserves) before trusting a threshold - or you need a model's real effective window rather than the advertised one"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-17
+last_verified: 2026-10-21
 verified_by: qa
 evidence: "item #1087 (engine + demo + script); demo/compacteval.test.mjs GREEN; scripts compact-eval window/item DRY runs exit 0"
 check_rule: null

@@ -3,7 +3,7 @@ runbook: store-secret-detected
 symptom: "`status`/`watch` shows a `secret_detected` attention notice — a secret-shaped value is in the committed store"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-16
+last_verified: 2026-10-21
 verified_by: impl
 evidence: "item #828; src/secretdetect.mjs; demo/secretdetect.test.mjs"
 check_rule: null

@@ -3,7 +3,7 @@ runbook: tool-result-redacted
 symptom: "a tool result shows `[redacted by durian-pi: secret-shaped value (…)]` where a value used to be"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-16
+last_verified: 2026-10-21
 verified_by: impl
 evidence: "item #837; src/secretredact.mjs; demo/secretredact.test.mjs"
 check_rule: null
