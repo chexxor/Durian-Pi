@@ -157,6 +157,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [competitor-review.md](competitor-review.md) | you want to learn from another project's tools/practices | no |
 | [resume-while-broker-runs.md](resume-while-broker-runs.md) | you want to run `resume`/`doctor` but the broker is up | no |
 | [request-trace.md](request-trace.md) | you need the ACTUAL request body durig sends (thinking / reasoning_effort / max_tokens / store), not the programmed config | no |
+| [verifier-independence.md](verifier-independence.md) | a verifier wants to edit the artefact it is verifying, or is about to report an `artifact`/SHA it did not run — a verifier's only write is a report | no |
 
 ## Index (mechanism)
 
@@ -174,6 +175,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Queue / parked work | stale-held-backlog |
 | Credentials / secrets | leaked-secret |
 | Review method | security-trust-boundary-review |
+| Verification / verifier independence | verifier-independence |
 | Merge / conflicts | merge, land, resolve-merge-conflict, branch-cleanup |
 | Daemon / host | daemon-not-running |
 | Local provider (PolyStrata) | local-provider-down, broker-down-or-stalled |
