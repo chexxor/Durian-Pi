@@ -37,6 +37,58 @@ export function prepareWorkspaceOptions({ source, itemId, seatName, base }) {
 }
 
 /**
+ * The `prepare_workspace` result text. Exported so a demo can assert the BASE contract headlessly
+ * (#3558).
+ *
+ * THE DEFECT THIS CLOSES: the base line was emitted whenever the caller ASKED for a base, including
+ * on the REUSE path — where `prepareSeatWorkspace` never re-forks and the worktree stays at whatever
+ * commit it was on. The response therefore claimed "Forked from base ref X" about a fork that did not
+ * happen, which is how a seat ends up certifying a tree it is not standing on. Reuse is deliberate
+ * (re-forking would discard the work in that tree), so the fix is to REPORT, not to re-fork: a reused
+ * worktree names the commit it is actually at and says plainly that it was not re-forked.
+ *
+ * Shas are shown SHORT (9 chars). A bare 40-hex token is redacted as secret-shaped by durig's own
+ * redactor (see #3128), so a full sha here would be swallowed out of the very message that has to
+ * tell the seat which tree it is on.
+ */
+export function workspaceReadyText(workspace, requestedBase) {
+	const short = (sha) => (typeof sha === "string" && sha.length > 9 ? sha.slice(0, 9) : sha || "unknown");
+	// A caller may name the base as a BRANCH (show it verbatim) or as a full 40/64-hex sha (show it
+	// SHORT — a bare hex token is redacted as secret-shaped, #3128, so the long form would be swallowed
+	// out of the message that has to say which base was asked for).
+	const showRef = (ref) => (/^[0-9a-f]{40}$/i.test(ref) || /^[0-9a-f]{64}$/i.test(ref) ? short(ref) : ref);
+	let baseLine = "";
+	if (requestedBase) {
+		const asked = showRef(requestedBase);
+		if (workspace.created) {
+			baseLine = `\nForked from base ref ${asked} (not HEAD).`;
+		} else if (workspace.baseHonoured === true) {
+			baseLine =
+				`\nReused an existing worktree already AT the requested base ${asked} ` +
+				`(${short(workspace.base)}); it was not re-forked.`;
+		} else {
+			const resolved =
+				workspace.baseHonoured === null
+					? `, which does not resolve in this worktree`
+					: "";
+			baseLine =
+				`\nNOT re-forked: you asked for base ${asked}${resolved}, but this REUSED worktree is at ` +
+				`${short(workspace.base)}${workspace.branch ? ` on branch ${workspace.branch}` : ""}. ` +
+				`Re-forking would discard the work in it, so reuse wins — branch from ${asked} yourself ` +
+				`if that base is required.`;
+		}
+	}
+	return (
+		`WORKSPACE READY (${workspace.created ? "created" : "reused"}): ${workspace.cwd}` +
+		baseLine +
+		`\nYour file and shell tools now resolve inside this item's worktree. ` +
+		`Work and commit there; do not touch the shared tree.` +
+		(workspace.branch ? ` The worktree is on branch ${workspace.branch}; commit your item's files there.` : "") +
+		(workspace.carried.length > 0 ? `\nCarried the shared tree's visible changes: ${workspace.carried.join(", ")}` : "")
+	);
+}
+
+/**
  * `prepare_workspace` — the seat's OWN workspace switch (replaces the broker's
  * process-global `DURIG_SEAT_ROOT`, which pointed every seat woken in a pass at
  * one worktree). Called after `claim_work`, it creates the item's isolated git
@@ -119,16 +171,7 @@ const prepareWorkspace = defineTool({
 			await api.commit(async (tx) => {
 				await configure(tx, api.conversationId, { cwd: workspace.cwd });
 			}, context);
-			return result(
-				`WORKSPACE READY (${workspace.created ? "created" : "reused"}): ${workspace.cwd}` +
-					(base ? `\nForked from base ref ${base} (not HEAD).` : "") +
-					`\nYour file and shell tools now resolve inside this item's worktree. ` +
-					`Work and commit there; do not touch the shared tree.` +
-					(workspace.branch ? ` The worktree is on branch ${workspace.branch}; commit your item's files there.` : "") +
-					(workspace.carried.length > 0
-						? `\nCarried the shared tree's visible changes: ${workspace.carried.join(", ")}`
-						: ""),
-			);
+			return result(workspaceReadyText(workspace, base));
 		} catch (err) {
 			return result(`PREPARE_WORKSPACE_ERROR: ${err && err.stack ? err.stack : String(err)}`);
 		}

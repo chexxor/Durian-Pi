@@ -283,6 +283,37 @@ async function currentBranch(worktreePath) {
 	}
 }
 
+/** The full sha a worktree's HEAD points at ("" when unreadable). */
+async function headSha(worktreePath) {
+	try {
+		return (await run("git", ["-C", worktreePath.replace(/\\/g, "/"), "rev-parse", "HEAD"])).stdout.trim();
+	} catch {
+		return "";
+	}
+}
+
+/**
+ * The sha `ref` resolves to inside `worktreePath` ("" when it does not resolve — a caller may name a
+ * branch that does not exist there, and that must not throw). Used to answer "is the tree at the base
+ * that was requested?" for a REUSED worktree (#3558).
+ */
+async function resolveCommit(worktreePath, ref) {
+	if (!ref) return "";
+	try {
+		const { stdout } = await run("git", [
+			"-C",
+			worktreePath.replace(/\\/g, "/"),
+			"rev-parse",
+			"--verify",
+			"--quiet",
+			`${ref}^{commit}`,
+		]);
+		return stdout.trim();
+	} catch {
+		return "";
+	}
+}
+
 /**
  * Free the BRANCH a worktree holds WITHOUT touching its files (#3174).
  *
@@ -683,6 +714,15 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 		// REUSE must still ensure the branch: a worktree from an older run (or one
 		// whose seat committed before the branch existed) may be on a detached HEAD.
 		const ensured = await ensureWorktreeBranch(worktreePath, branch);
+		// #3558: REUSE never re-forks, so `ref` is IGNORED on this path — the worktree stays at
+		// whatever commit it was on. Reporting only "reused" let a caller believe it was standing on
+		// the base it asked for (auditor hit this on #3441 and worked around it rather than trust the
+		// tree). So report the base the tree is ACTUALLY at, plus whether it matches the request:
+		//   base        — the sha HEAD points at now
+		//   requestedBase — what `ref` resolves to here (null when it does not resolve)
+		//   baseHonoured — true/false, or null when the request could not be resolved
+		const actualBase = await headSha(worktreePath);
+		const requestedBase = await resolveCommit(worktreePath, ref);
 		return {
 			worktree: worktreePath,
 			cwd: cwdFor(worktreePath),
@@ -694,9 +734,14 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 			locked: true,
 			holderDetached: detachedHolders[0] ?? null,
 			detachedHolders,
+			base: actualBase,
+			requestedBase: requestedBase === "" ? null : requestedBase,
+			baseHonoured: requestedBase === "" ? null : requestedBase === actualBase,
 		};
 	}
 	const wt = await claimWorktree({ source, worktreeRoot, itemLabel, ref, branch });
+	// A CREATED worktree did fork from `ref`, so its HEAD is the honoured base (#3558).
+	const createdBase = await headSha(wt.worktree);
 	return {
 		worktree: wt.worktree,
 		cwd: wt.cwd,
@@ -708,6 +753,9 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 		locked: true,
 		holderDetached: detachedHolders[0] ?? null,
 		detachedHolders,
+		base: createdBase,
+		requestedBase: createdBase === "" ? null : createdBase,
+		baseHonoured: createdBase === "" ? null : true,
 	};
 }
 
