@@ -223,6 +223,27 @@ now pins `local/<id>` seats to the provider's single id so the rig file and the 
 worktree.
 **Exact next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs status`
 
+### MODEL CHANGE COMMITTED, NOT YET APPLIED (2026-10-21, delegate)
+
+`rig.selfdev.json` `qa.model` = `zai-org/GLM-5.3-Flash` (was `Qwen/Qwen3.6-35B-A3B`), and
+`docs/SELFDEV.md`'s seat table + author/verifier paragraph updated — commit `dcb8dec`. `qa` and `auditor`
+now share a model; `qa2` (gemma) is the distinct third family; the author/verifier split still holds
+(DeepSeek authors vs GLM verifiers).
+
+**BLOCKED on apply:** the shared tree does not load — `src/chatview.mjs` imports `sliceToWidth` from
+`./textwidth.mjs`, but a seat's DIRTY `src/textwidth.mjs` no longer exports it (mid-flight TUI edit; the
+file is unchanged for ~10 min). Any `cli.mjs` verb dies at module load, so `serve --stop` and
+`up --refresh` cannot run, and restarting the broker from the broken tree would fail. Did NOT stop the
+broker (it would strand the seat's edit and take the team down).
+
+**Finish when the tree loads** (`node -e "import('./src/chatview.mjs')"` prints OK):
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs serve --stop      # proceed only on stopped:true, then confirm no serve pid
+DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh   # expect modelMismatch/modelReset for qa
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
+```
+The model change RESETS `qa`'s context (by design); re-surface any claimed item in the handoff.
+
 Then:
 `git worktree add --detach .verify-main main && (cd .verify-main && node scripts/suite.mjs); git worktree remove --force .verify-main`
 
