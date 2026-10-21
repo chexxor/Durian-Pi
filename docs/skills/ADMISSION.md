@@ -59,8 +59,8 @@ and carries no volatile version (versions live in `metadata.version`).
 
 ## One name, one skill (S1)
 
-**One name may name only one skill.** The review found two `durig` skills — `skills/durig/` (driving
-the rig) and `.agents/skills/durig/` (delegating to the rig) — both claiming the name `durig`. A
+**One name may name only one skill.** The review found two `durig` skills — `.agents/skills/driving-durian-pi/` (driving
+the rig) and `.agents/skills/delegating-to-durian-pi/` (delegating to the rig) — both claiming the name `durig`. A
 skill is loaded by name; two entries with the same name collide and make the loaded skill
 ambiguous.
 

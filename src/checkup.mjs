@@ -29,6 +29,8 @@ import { ANSI } from "./ansi.mjs";
 // CLI's load (2026-10-17, lead #1164). Re-exported so every importer keeps ONE
 // definition.
 import { VERIFIER_TERMS, seatsAreVerifier } from "./verifierrole.mjs";
+import { describeFaults } from "./textintegrity.mjs";
+import { messageDefects } from "./commitmsg.mjs";
 
 export { VERIFIER_TERMS, seatsAreVerifier };
 
@@ -102,7 +104,12 @@ export const RULES = [
   {
     id: "verification-without-evidence",
     severity: "fix-now",
-    what: "a verification task was completed with only an acknowledgement, not re-runnable evidence",
+    what: "a verification task was completed with only an acknowledgement, or with evidence that names no artifact — not re-runnable evidence (#2547)",
+  },
+  {
+    id: "evidence-tree",
+    severity: "fix-now",
+    what: "a terminal item's evidence names an artifact that names no tree and no store - a green depends on the tree it ran in, so an un-named artifact cannot be re-checked (#4153)",
   },
   {
     id: "feature-row-missing",
@@ -113,6 +120,16 @@ export const RULES = [
     id: "shared-tree-on-main",
     severity: "error",
     what: "the shared working tree is not on its integration branch, so a seat may be writing to a feature branch",
+  },
+  {
+    id: "commit-message-encoding",
+    severity: "fix-now",
+    what: "a recent commit message carries a UTF-8 BOM (or a NUL / stray CR) — invisible in every normal view, so it surfaces only in a byte read; a body BOM corrupts a trailer (#4349)",
+  },
+  {
+    id: "text-integrity",
+    severity: "error",
+    what: "a tracked file's newline structure COLLAPSED versus HEAD, or its encoding is broken (BOM / NUL / invalid UTF-8) — node --check is structurally blind to this class (#4305)",
   },
 ];
 
@@ -147,6 +164,53 @@ export function hasEvidence(item) {
     typeof e.exitCode === "number" &&
     Number.isFinite(e.exitCode)
   );
+}
+
+/**
+ * #2547 (lead ruling A): whether a completion NAMES the artifact its evidence is about.
+ *
+ * The evidence contract is `{ command, exitCode, artifact }` (ROADMAP 48 / W2). A command and
+ * an exit code are re-runnable, but with no artifact the reader cannot tell WHICH revision was
+ * checked — the same command against a different rev is a different check — so the completion
+ * is not ADDRESSABLE. A blank or absent artifact is that gap; `hasEvidence` alone does not see
+ * it (kept separate so "is there evidence at all" and "is it addressable" stay distinct).
+ */
+export function hasArtifact(item) {
+  const e = item?.evidence;
+  return e != null && typeof e.artifact === "string" && e.artifact.trim() !== "";
+}
+
+/**
+ * #4153: whether an `artifact` NAMES WHAT THE CHECK RAN AGAINST. A green depends on the tree it ran
+ * in - "a suite run in `.` measures the shared tree", a derived file verified on its own branch is
+ * consistent with itself, two seats can disagree about `main` because both measured the wrong tree.
+ * So an artifact that names nothing is un-re-checkable by a human later, which is the gap in all four
+ * instances. A SUBJECT is either a GIT TREE (a sha 7-40 hex, a ref-like token, or `main`) or a
+ * NON-GIT subject the check legitimately ran against instead (the store, the queue, a scratch) -
+ * for those a git tree is genuinely N/A, so naming the store IS naming what was checked.
+ *
+ * MEASURED against the live queue before shipping (#4153): 774 terminal items carry evidence with a
+ * non-blank artifact; 15 name no GIT tree, and after the non-git-subject carve-out 2 remain - both a
+ * bare `"2148"`. A guard that fires on 2 of 774 is a guard; the duplicate rule's lesson is that a
+ * rule shipped without this count is a rule that gets disabled.
+ *
+ * STATED LIMIT: this rule cannot reach a seat BEFORE it writes a completion - it reads what was
+ * already written. The `complete_work` description carries the same convention so it shapes what
+ * gets written. TWO MECHANISMS FOR TWO MOMENTS, neither a substitute for the other.
+ * STATED LIMIT (the half NOT built): "a DERIVED artifact must be named as MERGED" needs ancestry
+ * (`git merge-base --is-ancestor`), which is a SUBPROCESS, and checkup never runs one; and ancestry
+ * gives FALSE NEGATIVES on squash-shaped landings (#3337), so a sha that is not an ancestor of main
+ * may still BE the merged content. A rule on ancestry would flag correct evidence as wrong.
+ */
+export function namesCheckSubject(artifact) {
+  const a = String(artifact ?? "");
+  if (a.trim() === "") return false;
+  // A git tree: a sha (7-40 hex, not part of a longer hex run), `main`, or a ref-like token.
+  if (/(?<![0-9a-f])[0-9a-f]{7,40}(?![0-9a-f])/i.test(a)) return true;
+  if (/(?:\bmain\b|\borigin\/|^refs\/|\b[\w.-]+-item-\d+\b|\bv?\d+\.\d+\.\d+\b)/i.test(a)) return true;
+  // A non-git subject: the store, the queue, a scratch - where a git tree is genuinely N/A.
+  if (/(\.sqlite|@read|\bqueue\b|\bstore\b|live state|live tree|scratch|\bno commit\b|no code changed)/i.test(a)) return true;
+  return false;
 }
 
 /**
@@ -284,7 +348,7 @@ export function runbookFrontMatterProblems(runbook) {
  *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, sharedTreeBranch = null, sharedTreeExpected = "main" }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -584,16 +648,46 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       why: "the queue could not be read, so completed verification tasks cannot be inspected",
     });
   } else {
+    // #2547 (lead ruling A): a completion is only re-checkable if it names the ARTIFACT the
+    // command ran against. A command + exit code with no artifact can be re-run against the
+    // WRONG revision, so a VERIFY item that records evidence without a non-blank `artifact`
+    // is as unaddressable as one with no evidence at all.
     const acked = queueItems.filter(
-      (it) => it?.status === "done" && isVerificationItem(it) && !hasEvidence(it),
+      (it) => it?.status === "done" && isVerificationItem(it) && (!hasEvidence(it) || !hasArtifact(it)),
     );
     if (acked.length > 0) {
       const ids = acked.map((it) => `#${it.id}`).join(", ");
       add(
         "verification-without-evidence",
         ids,
-        `${acked.length === 1 ? "verification item" : `${acked.length} verification items`} ${ids} completed without evidence — the completion is an ack, not a re-run, so nothing can be re-checked`,
-        "re-run the artifact and record it when completing a verification item: complete_work(<id>, <summary>, { command, exitCode, artifact }) — an ack alone is not a sign-off (W2)",
+        `${acked.length === 1 ? "verification item" : `${acked.length} verification items`} ${ids} completed without re-runnable evidence — the completion is an ack (or names no artifact), not a re-run, so nothing can be re-checked`,
+        "re-run the artifact and record it when completing a verification item: complete_work(<id>, <summary>, { command, exitCode, artifact }) — an ack alone is not a sign-off, and a command/exit code with no ARTIFACT cannot be re-checked (W2/#2547)",
+      );
+    }
+  }
+  // 11b. #4153 EVIDENCE-TREE: a completion whose evidence names an artifact that names NO tree (and
+  //    no store) cannot be re-checked - the reader cannot tell WHICH revision was checked, and a
+  //    green depends on the tree it ran in. This is the SHARPENING of `hasArtifact` (a non-blank
+  //    artifact) to "a NAMED subject": hasArtifact accepts "2148"; this does not. Scoped to items
+  //    that HAVE evidence AND a non-blank artifact, so it never duplicates
+  //    verification-without-evidence (which owns the MISSING artifact). Plain data, no subprocess.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "evidence-tree",
+      why: "the queue could not be read, so completed items' artifacts cannot be inspected",
+    });
+  } else {
+    const unnamed = queueItems.filter(
+      (it) =>
+        it?.status === "done" && hasEvidence(it) && hasArtifact(it) && !namesCheckSubject(it.evidence.artifact),
+    );
+    if (unnamed.length > 0) {
+      const ids = unnamed.map((it) => `#${it.id}`).join(", ");
+      add(
+        "evidence-tree",
+        ids,
+        `${unnamed.length === 1 ? "completion" : `${unnamed.length} completions`} ${ids} name an artifact that names no tree (and no store) — a green depends on the tree it ran in, so an un-named artifact cannot be re-checked by a human later`,
+        "name WHAT the check ran against: complete_work(<id>, <summary>, { command, exitCode, artifact: '<sha|branch|main>' }) — or the store/queue for a non-git check (e.g. 'selfdev.sqlite@read')",
       );
     }
   }
@@ -633,7 +727,19 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
   //    "live" writes land on a feature branch. `auditRig` is a pure function, so the CALLER reads
   //    the branch (src/featuredocs.mjs) and passes it; no data means SKIPPED with a reason, never a
   //    silent pass (D25). A detached HEAD reads as "" and is a finding like any other branch.
-  if (sharedTreeBranch === null || sharedTreeBranch === undefined) {
+  //
+  //    LINKED worktrees are exempt: `scripts/land.mjs` runs the suite in a DETACHED scratch
+  //    worktree, and every seat/item worktree is linked too. There the branch reads as "" (scratch)
+  //    or names the item branch (seat), neither of which is the shared tree's branch - so the rule
+  //    fired on EVERY landing and refused them all (#2679). The caller reports linked-ness
+  //    (src/featuredocs.mjs `isLinkedWorktree`); a linked worktree is not the shared tree, so the
+  //    rule is SKIPPED with its reason rather than passed (passing would claim a check never run).
+  if (sharedTreeLinked === true) {
+    skipped.push({
+      id: "shared-tree-on-main",
+      why: "this is a LINKED worktree (a landing scratch or a seat/item worktree), not the shared tree, so the shared tree's branch cannot be observed from here",
+    });
+  } else if (sharedTreeBranch === null || sharedTreeBranch === undefined) {
     skipped.push({
       id: "shared-tree-on-main",
       why: "the current git branch was not supplied, so the shared working tree's branch cannot be checked",
@@ -646,6 +752,58 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       `the shared working tree is on ${on}, not "${sharedTreeExpected}" - a seat whose cwd falls back to the shared tree writes to a feature branch and the landing basis breaks`,
       `switch the shared tree back: git switch ${sharedTreeExpected}; land item branches through the landing helper`,
     );
+  }
+
+  // 14. A commit message must not carry a UTF-8 BOM (or a NUL / stray CR) - #4349. Four commits in
+  //    one session carried a BOM because PowerShell's `Set-Content -Encoding utf8` writes one, and
+  //    each was caught by hand; four catches is not a catch rate, it is a mechanism that does not
+  //    exist. (A FIFTH — 30270c0 — was NOT amended and IS in history, recorded as a known-reds
+  //    baseline in docs/STATUS.md; this rule's job is both to stop the next one and to keep finding
+  //    this one until the operator deals with it.) A BOM is INVISIBLE IN EVERY NORMAL VIEW (`git log --oneline` renders it, `git show`
+  //    renders it, the author sees a clean subject) and surfaces only in a byte read - which is
+  //    exactly what a check is for. The WHOLE message is checked, not just the subject: a BODY BOM
+  //    corrupts a `Co-authored-by` trailer or a `Fixes #N` line, where the parser is strict. The
+  //    caller reads the messages (src/commitmsg.mjs) and passes PLAIN DATA, so this stays a linter
+  //    over data; no data means SKIPPED with its reason, never a silent pass (D25).
+  if (!Array.isArray(commitMessages)) {
+    skipped.push({
+      id: "commit-message-encoding",
+      why: "the recent commit messages were not supplied, so their encoding cannot be inspected",
+    });
+  } else {
+    const bad = commitMessages.map((m) => ({ m, defects: messageDefects(m) })).filter((x) => x.defects.length > 0);
+    if (bad.length > 0) {
+      const ids = bad.map((x) => String(x.m.sha ?? "").slice(0, 8)).join(", ");
+      add(
+        "commit-message-encoding",
+        ids,
+        `${bad.length === 1 ? "commit" : `${bad.length} commits`} ${ids} carry a UTF-8 BOM (or a NUL / stray CR) in the message — invisible in every normal view, so it surfaces only in a byte read, and a body BOM corrupts a trailer`,
+        "rewrite the message through a writer that does NOT add a BOM (node's fs, or the write/edit tool) and amend the commit from that file. PowerShell's `Set-Content -Encoding utf8` writes one — do not use it for commit messages",
+      );
+    }
+  }
+
+  // 15. TEXT INTEGRITY (#4371, detector #4305): a tracked file whose newline structure COLLAPSED versus
+  //    HEAD, or whose encoding is broken. `node --check` is STRUCTURALLY BLIND to this - the flattening
+  //    turns the opening `//` into a comment that swallows the whole file, so it still parses and
+  //    exports NOTHING, and the failure surfaces only at import time. ERROR severity because a broken
+  //    tree stops every seat; the false-positive surface is handled by the CALLER, which passes only
+  //    the files that DIFFER from HEAD, and by the detector, which exempts untracked files from the
+  //    collapse comparison (no HEAD to compare against). No data means SKIPPED with its reason (D25).
+  if (!Array.isArray(textIntegrity)) {
+    skipped.push({
+      id: "text-integrity",
+      why: "the working tree's changed files were not supplied, so their text integrity cannot be inspected",
+    });
+  } else {
+    for (const f of textIntegrity) {
+      add(
+        "text-integrity",
+        f.path,
+        describeFaults(f.path, f.faults),
+        `restore from HEAD (git show HEAD:${f.path}) and re-apply the intended edit — do not patch bytes`,
+      );
+    }
   }
 
   const summary = { error: 0, "fix-now": 0, total: findings.length };
