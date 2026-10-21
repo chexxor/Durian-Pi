@@ -1,4 +1,4 @@
-﻿# Verification for #3797 — encoding damage repair
+# Verification for #3797 — encoding damage repair
 
 ## seat-instruction-encoding demo -> exit 0
 PASS — 44 seat-facing file(s) clean UTF-8, no mojibake, detector proven to fire
