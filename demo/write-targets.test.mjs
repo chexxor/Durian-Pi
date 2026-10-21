@@ -54,7 +54,9 @@ row("xcopy A B", "xcopy srcdir dstdir", { cwd: "C:/seat", want: "C:/seat/dstdir"
 row("Set-Location base", "Set-Location sub; Set-Content -Path rel.txt -Value x", { cwd: "C:/seat", want: "C:/seat/sub/rel.txt" });
 row("cd base", "cd sub && echo hi > rel.txt", { cwd: "C:/seat", want: "C:/seat/sub/rel.txt" });
 row("git -C base", "git -C ../shared commit -m x", { cwd: "C:/seat", wantNone: true });
-row("-C base then redirect", "pwsh -C ../shared -Command 'echo hi > rel.txt'", { cwd: "C:/seat", wantNone: true });
+// `-Command '...'` keeps the body as ONE token; the resolver RECURSES into it with the current base,
+// so a relative write after a `-C` is caught rather than left opaque (a seat runs a shell this way).
+row("-C base then nested redirect", "pwsh -C ../shared -Command 'echo hi > rel.txt'", { cwd: "C:/seat", want: "C:/shared/rel.txt" });
 
 /* ─── the NEGATIVE case: a target INSIDE the seat root RESOLVES ──────────── */
 // A resolver that reports every write as a target is fine; one that CANNOT TELL is not. This row

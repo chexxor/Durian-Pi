@@ -63,10 +63,11 @@ function segments(text) {
 			quote = ch;
 			continue;
 		}
-		if (ch === "\\" && i + 1 < s.length) {
-			cur += s[++i];
-			continue;
-		}
+		// A BACKSLASH IS NOT AN ESCAPE HERE: these tools run on native Windows, where `C:\seat\x`
+		// is an ordinary path. Treating `\` as an escape silently strips the separators (measured:
+		// `C:\shared/src/x.mjs` resolved to `C:shared/src/x.mjs`, INSIDE the seat root - a false
+		// ALLOW on exactly the escape this module exists to catch). Only `\"` inside a double-quoted
+		// string is consumed (above); PowerShell escapes with a backtick, not a backslash.
 		// 2>&1 / 1>&2: a stream MERGE, never a file target. Consume it whole.
 		if (/\d?>/.test(s.slice(Math.max(0, i - 1), i + 1)) && s.startsWith("&", i + 1) && /\d/.test(s[i + 2] ?? "")) {
 			i += 2;
@@ -151,33 +152,45 @@ function isComputed(token) {
 export function writeTargets(command, { cwd = null } = {}) {
 	const targets = [];
 	const unresolved = [];
-	let base = cwd; // `-C` / `Set-Location` / `Push-Location` move this for later RELATIVE targets
 
-	const push = (raw, why) => {
-		const token = String(raw ?? "");
-		if (token === "" || token === "-") return;
-		if (isComputed(token)) {
-			unresolved.push({ raw: token, form: why, why: "a computed path (variable/subexpression) cannot be resolved statically" });
-			return;
-		}
-		const path = base !== null && !isAbsolute(token) ? resolvePath(base, token) : token;
-		targets.push({ path, raw: token, why, base });
-	};
-
-	for (const tokens of segments(command)) {
+	/** Scan one token list. `base` is the current directory for RELATIVE targets. */
+	const scan = (tokens, base) => {
+		const push = (raw, why) => {
+			const token = String(raw ?? "");
+			if (token === "" || token === "-") return;
+			if (isComputed(token)) {
+				unresolved.push({ raw: token, form: why, why: "a computed path (variable/subexpression) cannot be resolved statically" });
+				return;
+			}
+			const path = base !== null && !isAbsolute(token) ? resolvePath(base, token) : token;
+			targets.push({ path, raw: token, why, base });
+		};
 		const verb = String(tokens[0] ?? "").toLowerCase();
 		// A chdir verb moves the base for the REST of the command.
-		if (CHDIR_VERBS.has(verb) || verb === "-c" || tokens[0] === "-C") {
+		if (CHDIR_VERBS.has(verb)) {
 			const arg = tokens[1];
 			if (arg && !isComputed(arg)) base = base !== null && !isAbsolute(arg) ? resolvePath(base, arg) : arg;
 			else if (arg) unresolved.push({ raw: arg, form: `base (${tokens[0]})`, why: "a computed directory cannot be resolved" });
-			continue;
+			return base;
 		}
-		// `git -C <dir> ...` / `pwsh -C <dir>`: the value is a base, not a target.
-		const cIdx = tokens.findIndex((t) => t === "-C");
-		if (cIdx !== -1 && tokens[cIdx + 1]) {
-			const arg = tokens[cIdx + 1];
-			if (!isComputed(arg)) base = base !== null && !isAbsolute(arg) ? resolvePath(base, arg) : arg;
+		// `-C <dir>` / `-Command <script>`: the value is a BASE for a nested command, or the nested
+		// command itself. Both matter: a seat reaches the shared root with a RELATIVE path after a
+		// `-C`, and it runs a shell body through `-Command '...'` - which the tokenizer keeps as ONE
+		// token, so the body is scanned again here rather than being left opaque.
+		for (let i = 0; i < tokens.length; i++) {
+			const t = String(tokens[i]);
+			const low = t.toLowerCase();
+			if (t === "-C" && tokens[i + 1]) {
+				const arg = tokens[i + 1];
+				if (!isComputed(arg)) base = base !== null && !isAbsolute(arg) ? resolvePath(base, arg) : arg;
+				i++;
+				continue;
+			}
+			if ((low === "-command" || low === "-c") && tokens[i + 1] !== undefined) {
+				// Recurse into the nested body with the CURRENT base (the nested shell inherits it).
+				for (const nested of segments(tokens[i + 1])) base = scan(nested, base) ?? base;
+				i++;
+			}
 		}
 
 		// Redirection: the token AFTER `>` / `>>` (or fused `2>`) is a target.
@@ -190,7 +203,6 @@ export function writeTargets(command, { cwd = null } = {}) {
 			}
 			const fused = FUSED_REDIRECT.exec(t);
 			if (fused) {
-				// `2>` alone -> next token; `2>out` -> the tail is the target.
 				const tail = t.slice(fused[0].length);
 				if (tail !== "") push(tail, "redirection");
 				else push(tokens[i + 1], "redirection");
@@ -215,6 +227,10 @@ export function writeTargets(command, { cwd = null } = {}) {
 			if (positional.length >= 2) push(positional[positional.length - 1], `${verb} destination`);
 			else if (positional.length === 1) unresolved.push({ raw: positional[0], form: `${verb} destination`, why: "a copy/move needs both a source and a destination" });
 		}
-	}
+		return base;
+	};
+
+	let base = cwd;
+	for (const tokens of segments(command)) base = scan(tokens, base) ?? base;
 	return { targets, unresolved };
 }
