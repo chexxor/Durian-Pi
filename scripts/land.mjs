@@ -597,7 +597,13 @@ report(
 		main: { before: mainBefore.out, after: mainAfter },
 		merged,
 		lock,
-		suite: wantSuite ? suiteResults : null,
+		// #4436: `null` was the SILENT default — three landings reported `"suite": null` and each seat
+		// correctly refused to claim a baseline it did not have, with no way to tell WHY. The suite is
+		// OPTIONAL AND OFF BY DEFAULT (`wantSuite = args.includes("--suite")`), which is the `ok:true`
+		// shape one layer out: a landing tool whose regression gate is off reports success without
+		// checking. The default stays off (the suite runs INSIDE the lock hold, so its runtime lands in
+		// the wait), but its ABSENCE now SAYS SO, with the reason and the remedy.
+		suite: wantSuite ? suiteResults : "not run — --suite not passed; the gate is opt-in, so this landing was NOT regression-checked. Re-run with --suite, or run the suite on main separately",
 	},
 	0,
 );
