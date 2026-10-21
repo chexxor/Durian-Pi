@@ -60,6 +60,74 @@ dynamic facts; the role is static (it moves to the conversation header, where it
 at the floor (`implementation eng…` is what 48 columns cut today). This is the one place the
 landing screen deliberately SHRINKS what the current roster shows.
 
+## 1.1 The state vocabulary, amended by the #4330 ruling (surfaces designer+impl)
+
+pm measured the contradiction: a seat with 15 queued items painted `○ idle` while its focus
+string said "has #N queued". Ground truth in code: `deriveSeatAction` (src/viewmodel.mjs) already
+finds the seat's queued item (`const queued = items.find(...status === "queued")`) and reads it
+ONLY into the focus string; there is no `queued` branch in the state chain, so a queued-only
+seat falls through to `else idle`. The row already contradicts itself today; this ruling makes
+that combination impossible instead of "non-idle".
+
+**1.1.1 Identity.** A NEW state `queued`: the seat has claimable queued work, nothing of it
+claimed, nothing generating, nothing failed. NOT a reuse of `waiting`: `waiting` means a
+seat-scoped attention notice ("the operator should look here"); a queue-only fact is not an
+operator event, and folding it into `waiting` misdirects the #2804 top line.
+
+**1.1.2 Glyph and tone.** `◉ queued` (tone `dim`). The glyph is Geometric Shapes
+U+25C9, measured by `textWidth` at ONE cell like its block-mates `○` `●` `◔`
+(the rule: stateCol = glyph + " " + pad(word, 11) is width-stable). It is not `○` (idle)
+and not the `●` working glyph; it is not a half-filled shape (`◔`) because a
+partial fill reads as progress the seat has not made. Tone `dim`, not `green`: green is the
+working tone and would claim progress; not `yellow`: this fact is calm (the scheduler will pick
+it up) and the row must not inflate it into an alarm. The WORD carries the fact in monochrome;
+the glyph is an auxiliary, never colour-only.
+
+**1.1.3 Source of truth—consume what the view model already computes, not the notice.** The
+state reads the SAME `queued` variable the focus string already reads, so the word and the focus
+cannot disagree, and no second scan is added. It deliberately does NOT read the attention notice
+`idle_with_queued_work` as a state source: that notice is `!inFlight`-gated (src/attention.mjs)
+so it switches OFF exactly in the gap between generation attempts—the gap pm measured the
+hollow row in—and a notice-driven state would flicker idle/waiting for one and the same seat
+state. The notice itself is untouched (attention level; demo/watch.test.mjs assertions stay
+green); the separate recorded "aged queued work" follow-up is unaffected.
+
+**1.1.4 Precedence (higher wins):**
+
+    failed > generating > working(claimed) > parked(deferred) > waiting(seat-scoped attention) > queued > idle
+
+`generating` and `claimed` stay above it (a working seat is never demoted to "queued"). It is
+the LAST non-idle state: any operator-actionable fact outranks it, and the queue cell shows both
+counts anyway (`2q · 1p`), so a parked or waiting seat's queued work is not hidden—and a
+queued seat's parked count is visible in the same cell.
+
+ONE incumbent touched, named: the `waiting` branch sheds the `idle_with_queued_work` kind from
+its contributor set (otherwise the same seat would flicker `! waiting` vs `◉ queued` as
+the notice's `!inFlight` gate opens and closes—the same coastline the hollow row sat on). The
+other seat-scoped kinds (deferred_awaiting_answer, repeated_failure, malformed_tool_call,
+last_run_failed, admitted_not_started) keep the `waiting` state as-is. Impl movement to expect:
+demo/watchview.test.mjs's current assertion that a queued item + `idle_with_queued_work` notice
+reads state "waiting" reads `queued` instead—that flip IS the ruling; the notice-level
+assertions in demo/watch.test.mjs and demo/blocked.test.mjs do not move.
+
+**1.1.5 The assertion shape (the owed test, stated as the pin):**
+
+* a QUEUED-ONLY seat renders state `queued`, glyph `◉`, focus `has #N queued: ...` (RED-first:
+  today it paints `○ idle`), in BOTH the landing row and the watch row—one derivation,
+  asserted at the `seatActivity` seam;
+* THE PIN, and not merely "a queued seat has some glyph": over a rendered frame/watch snapshot of
+a mixed fixture (failed, generating, working, parked, waiting, queued, empty), NO painted row
+has (state word "idle" AND queue cell q > 0). The pair pm saw—hollow circle plus "has #N
+queued"—is pinned IMPOSSIBLE; a future refactor that reintroduces it fails the frame assert;
+* presentation completeness: `PRESENTATION` must carry the `queued` entry in the same change—its
+current `?? PRESENTATION.idle` fallback is how a new state would silently degrade back into the
+hollow row;
+* home for the assertions: demo/watchview.test.mjs (seam/derivation) and demo/tui-landing.test.mjs
+  (frame-level contradiction scan).
+
+Scope: identity, glyph, precedence, assertion shape—NOT the derivation code (impl), NOT other
+row states.
+
 ## 2. The brief, numerically
 
 - cap by CELLS (never code units): 24 at 76–80, 16 at 51–75, 12 below (ladder in §4; every rung
