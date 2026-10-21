@@ -231,6 +231,7 @@ try {
 		"verification-without-evidence": "demo/check-evidence.test.mjs",
 		"feature-row-missing": "demo/feature-row.test.mjs",
 		"shared-tree-on-main": "demo/shared-tree-on-main.test.mjs",
+		"commit-message-encoding": "demo/commit-message-encoding.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(
