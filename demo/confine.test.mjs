@@ -151,6 +151,40 @@ try {
 		JSON.stringify(readOnlyGit.ok ? "ran" : readOnlyGit.error?.message),
 	);
 
+	// #3635: EVERY REFUSAL MUST NAME ITS OWN VERB. The loop above proves a command is REFUSED; it does
+	// not prove the message says WHICH rule fired. Without that pin the wording can regress to
+	// something generic, and a generic refusal is what made a seat condemn a whole verb CLASS: a
+	// compound command (`git checkout -b …; git rebase main`) is refused on its checkout segment, so
+	// "would change the seat's working tree or HEAD" read as a verdict on BOTH verbs, `git rebase`
+	// was never re-run alone, and the false claim reached an operating note (#3379). The guard stops
+	// at the first matching rule, so one refusal says nothing about the other verbs in the command —
+	// the message has to say which one it was.
+	const NAMES_ITS_VERB = {
+		"git reset --hard HEAD~1": /`reset`/,
+		"git checkout main": /`checkout`/,
+		"git checkout -b some-branch": /`checkout`/,
+		"git switch main": /`switch`/,
+		"git switch -c feature": /`switch`/,
+		"git restore src/rig.mjs": /`restore`/,
+		"git revert HEAD": /`revert`/,
+		"git clean -fd": /`clean`/,
+		"git stash": /`stash`/,
+		"git branch -D foo": /`-D`|force-delete a branch/,
+		"git add -A": /git add -A/,
+	};
+	for (const [command, namesVerb] of Object.entries(NAMES_ITS_VERB)) {
+		const refused = await author.exec(command, {}, context);
+		const message = refused.error?.message ?? "";
+		check(
+			`${command}: the refusal NAMES its verb`,
+			refused.ok === false && namesVerb.test(message),
+			JSON.stringify(refused.ok ? "it was not refused at all" : message),
+		);
+	}
+	// `git push` is deliberately NOT in the map above: its refusal is conditional on the operator
+	// grant (DURIG_ALLOW_PUSH), so asserting it here would make this demo depend on how the rig was
+	// launched. Its message names `push` for the same reason as the rest.
+
 	// Failing-first canaries — these commands bypassed the old guard (\s|$) because the
 	// match ended in whitespace or end-of-string, so trailing punctuation and separators
 	// defeated it. The fixed guard uses \b (word boundary) and -C <path> forms. These
