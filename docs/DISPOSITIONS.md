@@ -249,3 +249,25 @@ way follows the rule rather than overriding it.
 > never merge or delete), 5 branches held by **live `held` items** (team must resolve them; a delegate does
 > not complete seat work), 17 `archived/*` + 9 pre-split refs (bundle-backed, awaiting the R-B grant).
 > 6 worktrees = `main` + the 5 held ones. `.git` after the deletions: 62 MB → 57 MB (`git gc`).
+
+> **NOTE (2026-10-21, operator grant exercised: the 26 bundle-backed refs are gone; delegate,
+> operator-directed):** with every one of these verified as a `git bundle` beforehand, **26** refs were
+> deleted — the 17 `archived/*` HEAD-preservation refs (16 `item-*` + `qa-verify-419`, plus `rel-item-705`)
+> and the 9 pre-split `temp-*`/`wip/*`/`selfdev-borrow` refs that the NOTHING-TO-LAND rows above already
+> decided. `git bundle verify` was re-run per ref immediately before `git branch -D`; the deletion list with
+> full shas is `.spike/ref-delete-2026-10-21.tsv` (gitignored). **The deletion was proved reversible AFTER
+> the fact**: `git fetch archived__item-1261.bundle refs/heads/archived/item-1261:<tmp>` restored the
+> identical sha `85c5d95f`. Restore any of them with:
+> `git fetch ../pi-opendurig.worktrees/_exports/refs-2026-10-21/<ref>/<ref>.bundle refs/heads/<ref>:refs/heads/<name>`
+> (basis bundles: the clone must contain `main` at/after `4002b23c`). Refs **37 → 11**.
+
+> **NOTE (2026-10-21, the 5 remaining branches are a QUEUE fact, not a branch fact; delegate):** the 5
+> left are `impl-item-1274`, `advocate-item-2630`, `impl-item-2788`, `qa-item-2993`, `scribe-item-4148` —
+> every one is **`ahead=0` against `main`** (their commits landed during the campaign) yet their items are
+> still `held` in the store, each gated on other work (#1274 gated on #1; #2630 backlog-held; #2788 BUILD
+> 1/2; #2993 gated on #2992; #4148 constitution amendment). So `git branch -d` refuses them (checked out)
+> and `leaked-worktrees.md` forbids unlocking a non-terminal item's tree. **The campaign merged these
+> branches without updating the queue rows** — the item state, not the ref, is what pins them. Their
+> residue is exported in `_exports/held-2026-10-21/<name>/` (sha256-verified), so closing the items is a
+> queue verb away, and the trees can then be reaped and the refs `-d`'d at zero cost. A delegate must not
+> write queue status: marking these `done` would assert acceptance that the gate has not granted.
