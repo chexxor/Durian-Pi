@@ -156,7 +156,7 @@ the author's own work, both would have reached main without it, neither visible 
 HAS REFUSED ITS OWN AUTHOR TWICE IS A CHECK NOBODY CAN CALL THEATRE.
 
 ## When to use
-A verified branch (`<seat>-item-<id>`, or any branch) must go onto `main`, and you want the landing to
+A verified branch (`item-<id>`, or any branch) must go onto `main`, and you want the landing to
 be **structurally incapable** of leaving the shared working tree mid-merge. This is the tool form of
 the landing half of W2. `merge.md` holds the manual `git merge` steps and the review checklist; the
 helper is the safe default and the **enforcement chokepoint** — the runbook and `check` are advisory,

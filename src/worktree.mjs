@@ -871,12 +871,68 @@ export async function claimWorktree({ source, worktreeRoot, itemLabel, ref = nul
  * `worktreeRoot` is the directory the seat is working from (durig's own tree, the
  * broker's process cwd); the worktree is placed beside it under the same repo.
  *
- * The worktree is put ON AN ITEM BRANCH (#859): `<seat>-item-<id>` (or `item-<id>`
- * when no seat is given), so a seat's commits land on a branch instead of a
- * detached HEAD and do not need hand-rolled branch creation. A REUSED worktree is
- * re-attached to that branch if it was detached, preserving any commits already
- * made there.
+ * The worktree is put ON AN ITEM BRANCH (#859): `item-<id>` — ONE ref per item, NOT per seat.
+ * A seat's commits land on a branch instead of a detached HEAD, and a SECOND seat working the
+ * same item joins the same ref instead of forking a private one. The old `<seat>-item-<id>`
+ * shape made two seats on one item diverge silently (their branches never shared history, so a
+ * verify could pass a branch the implementation never had); `prepareSeatWorkspace` still ACCEPTS
+ * that shape and ADOPTS it (see `adoptLegacyItemBranch`) so existing work is not forked either.
+ * A REUSED worktree is re-attached to the branch if it was detached, preserving any commits
+ * already made there.
  */
+/**
+ * Every ref that names `item-<id>`, whether item-only (`item-7`) or legacy seat-prefixed
+ * (`impl-item-7`). The item is the stable identity; the seat is not part of the branch name.
+ */
+export function itemBranchFor(itemId) {
+	return `item-${itemId}`;
+}
+
+/** Does this branch name encode item `itemId`? Accepts both shapes (`item-7`, `impl-item-7`). */
+export function branchNamesItem(branch, itemId) {
+	const m = /(?:^|[-/])item-(\d+)$/.exec(String(branch ?? ""));
+	return m ? Number(m[1]) === Number(itemId) : false;
+}
+
+/**
+ * ADOPT the pre-N1 branch for an item instead of forking a second one.
+ *
+ * Returns the branch this item should use. When `item-<id>` does not exist yet:
+ *   - exactly ONE legacy `<seat>-item-<id>` ref exists  -> use it; RENAME it to `item-<id>` when no
+ *     worktree holds it (a rename is free of checkout, and a checked-out ref must not be renamed);
+ *   - MORE than one -> REFUSE. That is precisely the divergence this change ends: two seats on one
+ *     item, on two refs, with no shared history. Guessing which one is the item would silently pick a
+ *     side; the caller must choose.
+ */
+export async function adoptLegacyItemBranch(repo, itemId) {
+	const wanted = itemBranchFor(itemId);
+	const refs = (await run("git", ["-C", repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/"])).stdout
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
+	if (refs.includes(wanted)) return { branch: wanted, adopted: null, renamed: false };
+	const legacy = refs.filter((name) => name !== wanted && branchNamesItem(name, itemId));
+	if (legacy.length === 0) return { branch: wanted, adopted: null, renamed: false };
+	if (legacy.length > 1) {
+		throw new Error(
+			`refusing to prepare item ${itemId}: ${legacy.length} branches already name it (${legacy.join(", ")}). ` +
+				"One item has ONE branch; these diverged under the old <seat>-item-<id> naming and their history " +
+				"does not agree. Pick the branch to keep, delete or merge the others, then retry.",
+		);
+	}
+	const from = legacy[0];
+	const holder = (await listWorktrees(repo, { strict: true })).find(
+		(w) => w.branch === from || w.branch === `refs/heads/${from}`,
+	);
+	if (holder) {
+		// A checked-out ref cannot be renamed without disturbing the holder's worktree. Keep using the
+		// legacy name for now; the next prepare after the holder releases it will rename it.
+		return { branch: from, adopted: from, renamed: false, heldBy: holder.worktree };
+	}
+	await run("git", ["-C", repo, "branch", "-m", from, wanted]);
+	return { branch: wanted, adopted: from, renamed: true };
+}
+
 /** The queue statuses that mean an item is finished either way. */
 const TERMINAL_ITEM_STATUSES = new Set(["done", "cancelled"]);
 
@@ -905,17 +961,19 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 	const repo = await repoRoot(source);
 	const itemLabel = `item-${itemId}`;
 	const worktreePath = join(worktreeRoot, itemLabel);
-	// The item BRANCH the worktree commits to (#859): `<seat>-item-<id>` when the
-	// seat is known (the convention the queue and the constitution name), else
-	// `item-<id>`. The worktree no longer lands on a detached HEAD.
-	const branch = seatName ? `${seatName}-${itemLabel}` : itemLabel;
+	// The item BRANCH the worktree commits to (#859): `item-<id>`, ONE per item. The seat is
+	// NOT part of the name: two seats on the same item must share one ref, or their work diverges
+	// with no shared history (the bug the seat prefix caused). A pre-existing `<seat>-item-<id>`
+	// ref is ADOPTED rather than forked, so older work is not split.
+	const adopted = await adoptLegacyItemBranch(repo, itemId);
+	let branch = adopted.branch;
 	// The worktree reproduces the source's path inside the repo, so a rig that
 	// declares no cwd still lands in the same relative place after the switch.
 	const inside = relative(repo, resolve(worktreeRoot));
 	const cwdFor = (worktree) => (inside === "" ? worktree : join(worktree, inside));
 
 	// --- #3174: resolve WHO HOLDS the branch BEFORE any git mutation, and NEVER steal ---
-	// `prepare_workspace` keys the worktree PATH by item but the BRANCH by seat, and on reuse it
+	// `prepare_workspace` keys the worktree PATH by item; it USED to key the BRANCH by seat too, and on reuse it
 	// used to run `git checkout -B <branch>` unconditionally. Two real consequences followed:
 	// (1) a SECOND seat preparing the same item silently repurposed the first seat's worktree
 	// (its working state was switched and its branch left unheld) — the #2412 identity guard
@@ -951,6 +1009,15 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 		}
 		await detachWorktreeBranch(branchHolder.worktree);
 		detachedHolders.push(resolve(branchHolder.worktree));
+		// The ref is free now: ADOPT AGAIN so a legacy `<seat>-item-<id>` name is RENAMED to `item-<id>`
+		// and the session proceeds on the canonical ref. The holder keeps every file; it only lost the
+		// branch, which is exactly the lossless detach #3174 relies on.
+		const freed = await adoptLegacyItemBranch(repo, itemId);
+		if (freed.branch !== branch) {
+			branch = freed.branch;
+			adopted.adopted = freed.adopted ?? adopted.adopted;
+			adopted.renamed = freed.renamed;
+		}
 	}
 
 	if (existsSync(worktreePath)) {
@@ -1013,6 +1080,8 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 			itemLabel,
 			branch,
 			branchAction: ensured.action,
+			legacyBranch: adopted.adopted,
+			legacyRenamed: adopted.renamed,
 			created: false,
 			carried: [],
 			locked: true,
@@ -1040,6 +1109,8 @@ export async function prepareSeatWorkspace({ source, worktreeRoot, itemId, seatN
 		cwd: wt.cwd,
 		itemLabel,
 		branch,
+		legacyBranch: adopted.adopted,
+		legacyRenamed: adopted.renamed,
 		// #3807: "created" must mean the branch was CREATED from the base that was asked for. When an
 		// existing item branch was attached instead, say so — the caller decides from this whether the
 		// tree is the one it asked for.

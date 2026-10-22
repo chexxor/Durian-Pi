@@ -216,13 +216,14 @@ itself.
 ## 8a. Your WORKTREE is ephemeral — your BRANCH is the artifact
 
 **A seat works in a worktree that does not outlive its item.** `prepare_workspace` creates `item-<id>` on
-branch `<seat>-item-<id>`; `complete_work`'s teardown, the broker sweep, or a maintainer's prune retires
+branch `item-<id>` (one ref per ITEM — never per seat: two seats on one item share it); `complete_work`'s
+teardown, the broker sweep, or a maintainer's prune retires
 the **worktree**, and the **branch survives** — it is deleted only once it is merged into `main`. So after
 you finish an item, `item-<id>` being gone is **normal**, not lost work. Read the branch, never the tree:
 
 | What you see | What it means | What to do |
 |---|---|---|
-| `item-<id>` missing, item `done`, `<seat>-item-<id>` exists | retired on completion — **normal** | nothing; your commits are on the branch |
+| `item-<id>` missing, item `done`, `item-<id>` branch exists | retired on completion — **normal** | nothing; your commits are on the branch |
 | `item-<id>` missing, item **live** (`claimed`/`queued`) | reaped while live — a **keep** case, never a force | escalate (`runbooks/leaked-worktrees.md`); do not rebuild |
 | you never had an `item-<id>` worktree | the F12 seat-root fallback: your cwd is the **shared tree** | say so in your report; do not edit the shared tree |
 
@@ -230,12 +231,12 @@ you finish an item, `item-<id>` being gone is **normal**, not lost work. Read th
 which redacts bare 40-char oids out of tool output):
 ```bash
 node cli.mjs worktree audit            # per-seat roots + every worktree's state
-ls -d item-<id> 2>/dev/null; git rev-parse --short <seat>-item-<id>   # tree vs branch
+ls -d item-<id> 2>/dev/null; git rev-parse --short item-<id>   # tree vs branch
 ```
 
 **To touch a branch whose worktree was retired, RE-ATTACH — never rebuild:**
 ```bash
-git worktree add ../<seat>-item-<id> <seat>-item-<id>   # re-attaches the branch at its existing tip
+git worktree add ../item-<id> item-<id>   # re-attaches the branch at its existing tip
 ```
 No commits are lost. Do **not** hand-roll a new branch for an item that already has one — the tool owns
 the branch name (`BRANCH-AND-WORKTREE-LIFECYCLE.md` §2).

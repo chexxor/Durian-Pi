@@ -75,7 +75,9 @@ try {
 	}
 	check("the request is refused instead of returning a tree at the wrong base", refusal !== null);
 	const message = refusal?.message ?? "";
-	check("the refusal names the branch it would have attached", message.includes("impl-item-5"), message.slice(0, 160));
+	// N1: the leftover legacy ref is ADOPTED (renamed to item-<id>) before the base check, so the
+	// refusal names the canonical branch. The rename is lossless — same commits, canonical name.
+	check("the refusal names the branch it would have attached", /branch item-5:/.test(message), message.slice(0, 160));
 	check("it names the base that was asked for", message.includes(short(c2)), message.slice(0, 240));
 	check("it names the commit the branch is actually at", message.includes(short(c1)), message.slice(0, 240));
 	check("it says nothing was created", /Nothing was created/.test(message), message.slice(0, 240));

@@ -73,7 +73,8 @@ try {
   assert.equal(await branchOf(first.worktree), "item-7", "the commit stays on the branch");
   assert.match((await run("git", ["-C", repo, "log", "--oneline", "item-7"])).stdout, /item work/, "the repo sees the item branch");
 
-  // --- 2c. the branch is <seat>-item-<id> when the seat is known. Done in a
+  // --- 2c. the branch is item-<id>, NOT <seat>-item-<id>: ONE ref per item, so two seats on the
+  //     same item share history instead of forking a private branch. Done in a
   //     FRESH repo: a second worktree under the same source triggers the #506
   //     recursive-carry (a sibling worktree is untracked and gets carried), which
   //     is a separate concern from #859. ---
@@ -85,9 +86,36 @@ try {
   await run("git", ["-C", repo2, "add", "durig/artifact.txt"]);
   await run("git", ["-C", repo2, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
   const seated = await prepareSeatWorkspace({ source: source2, worktreeRoot: source2, itemId: 9, seatName: "impl" });
-  assert.equal(seated.branch, "impl-item-9", "the branch is <seat>-item-<id>");
-  assert.equal(await branchOf(seated.worktree), "impl-item-9");
+  assert.equal(seated.branch, "item-9", "the branch is item-<id> — the seat is not in the name");
+  assert.equal(await branchOf(seated.worktree), "item-9");
+  assert.equal(seated.legacyBranch, null, "nothing legacy was adopted for a fresh item");
+  // A SECOND seat on the same item joins the SAME ref rather than getting one of its own: that is
+  // the whole point of an item-only name (the seat prefix forked a private branch per seat).
+  const byQa = await prepareSeatWorkspace({ source: source2, worktreeRoot: source2, itemId: 9, seatName: "qa" });
+  assert.equal(byQa.branch, "item-9", "a second seat on one item shares ONE branch");
+  assert.equal(await branchOf(byQa.worktree), "item-9", "and its worktree is on that branch, not a seat twin");
   await removeSeatWorkspace({ worktreeRoot: source2, itemId: 9 });
+
+  // --- 2c2. a LEGACY <seat>-item-<id> ref is ADOPTED, not forked: the pre-N1 branch becomes
+  //     item-<id>, so older work is not split into a second ref. ---
+  await run("git", ["-C", repo2, "branch", "impl-item-11"]);
+  const adopted = await prepareSeatWorkspace({ source: source2, worktreeRoot: source2, itemId: 11, seatName: "qa" });
+  assert.equal(adopted.branch, "item-11", "the legacy ref is renamed to item-<id>");
+  assert.equal(adopted.legacyBranch, "impl-item-11", "and the adoption is reported");
+  assert.equal(adopted.legacyRenamed, true, "the rename happened (no worktree held it)");
+  const branchNames = (await run("git", ["-C", repo2, "branch", "--format=%(refname:short)"])).stdout;
+  assert.ok(!/impl-item-11/.test(branchNames), "no legacy twin is left behind");
+  await removeSeatWorkspace({ worktreeRoot: source2, itemId: 11 });
+
+  // --- 2c3. TWO refs for one item is exactly the divergence this ends: it is REFUSED, because
+  //     picking one would silently choose a side. ---
+  await run("git", ["-C", repo2, "branch", "impl-item-12"]);
+  await run("git", ["-C", repo2, "branch", "qa-item-12"]);
+  await assert.rejects(
+    () => prepareSeatWorkspace({ source: source2, worktreeRoot: source2, itemId: 12, seatName: "impl" }),
+    /already name it/,
+    "two refs for one item must be refused, not guessed",
+  );
 
   // --- 2d. reuse REPAIRS a detached worktree (an older run's worktree) ---
   await run("git", ["-C", first.worktree, "checkout", "--detach"]);
@@ -215,13 +243,13 @@ try {
   await rm(leftover, { recursive: true, force: true });
   const afterLeftover = await prepareSeatWorkspace({ source: source4, worktreeRoot: source4, itemId: 13, seatName: "impl" });
   assert.equal(afterLeftover.created, true, "once the leftover is gone, the worktree is created");
-  assert.equal(await branchOf(afterLeftover.worktree), "impl-item-13", "on its item branch");
+  assert.equal(await branchOf(afterLeftover.worktree), "item-13", "on its item branch");
   await removeSeatWorkspace({ worktreeRoot: source4, itemId: 13 });
 
-  // --- 8. #3174: a reused path on ANOTHER seat's branch is NOT silently repurposed ---
-  // Acceptance 1: the holder's item is TERMINAL, so the branch is reclaimed by DETACHING the
-  // holder (lossless — every file stays) and the result NAMES the detached holder. Today the
-  // reuse path runs `checkout -B` without detaching and reports nothing: the silent steal.
+  // --- 8. #3174: a branch held by ANOTHER worktree is reclaimed only when the item is TERMINAL ---
+  // The holder is detached (lossless — every file stays) and the result NAMES it. With item-only
+  // naming the branch is `item-9`, so this is the same item, not "another seat's branch": the
+  // divergence the seat prefix caused is gone.
   const repoA = join(base, "holder-terminal");
   const sourceA = join(repoA, "durig");
   await mkdir(sourceA, { recursive: true });
@@ -230,19 +258,17 @@ try {
   await run("git", ["-C", repoA, "add", "durig/artifact.txt"]);
   await run("git", ["-C", repoA, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
   await run("git", ["-C", repoA, "branch", "-M", "main"]);
-  const heldA = await prepareSeatWorkspace({ source: sourceA, worktreeRoot: sourceA, itemId: 9, seatName: "designer" });
-  assert.equal(await branchOf(heldA.worktree), "designer-item-9", "the holder is on designer-item-9");
-  await writeFile(join(heldA.worktree, "probe.txt"), "untracked holder scratch\n");
+  const elsewhereA = join(repoA, "elsewhere-9");
+  await run("git", ["-C", repoA, "worktree", "add", "-b", "item-9", elsewhereA]);
+  await writeFile(join(elsewhereA, "probe.txt"), "untracked holder scratch\n");
   const reclaimedA = await prepareSeatWorkspace({ source: sourceA, worktreeRoot: sourceA, itemId: 9, seatName: "impl", itemStatus: "done" });
-  assert.equal(reclaimedA.holderDetached, heldA.worktree, "the result NAMES the detached holder");
-  assert.ok(existsSync(join(heldA.worktree, "probe.txt")), "detaching kept the holder's untracked file (lossless)");
-  const wtsA = await listWorktrees(repoA);
-  assert.ok(!wtsA.some((w) => w.branch === "refs/heads/designer-item-9"), "designer-item-9 is no longer held by any worktree");
-  assert.equal(await branchOf(reclaimedA.worktree), "impl-item-9", "the prepared worktree is on impl-item-9");
+  assert.equal(reclaimedA.holderDetached, elsewhereA, "the result NAMES the detached holder");
+  assert.ok(existsSync(join(elsewhereA, "probe.txt")), "detaching kept the holder's untracked file (lossless)");
+  assert.equal(await branchOf(elsewhereA), "", "the former holder is detached (branch freed)");
+  assert.equal(await branchOf(reclaimedA.worktree), "item-9", "the prepared worktree is on item-9");
   await removeSeatWorkspace({ worktreeRoot: sourceA, itemId: 9, force: true });
 
   // --- 9. #3174: a LIVE holder is REFUSED, and the branch is left checked out (no steal) ---
-  // Acceptance 3: today `checkout -B` turns designer-item-9 into impl-item-9 — the steal.
   const repoC = join(base, "holder-live");
   const sourceC = join(repoC, "durig");
   await mkdir(sourceC, { recursive: true });
@@ -251,7 +277,8 @@ try {
   await run("git", ["-C", repoC, "add", "durig/artifact.txt"]);
   await run("git", ["-C", repoC, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
   await run("git", ["-C", repoC, "branch", "-M", "main"]);
-  const heldC = await prepareSeatWorkspace({ source: sourceC, worktreeRoot: sourceC, itemId: 9, seatName: "designer" });
+  const elsewhereC = join(repoC, "elsewhere-9");
+  await run("git", ["-C", repoC, "worktree", "add", "-b", "item-9", elsewhereC]);
   let refusedC = null;
   try {
     await prepareSeatWorkspace({ source: sourceC, worktreeRoot: sourceC, itemId: 9, seatName: "impl", itemStatus: "claimed" });
@@ -260,12 +287,12 @@ try {
   }
   assert.ok(refusedC, "a LIVE holder's branch is refused, not stolen");
   assert.match(refusedC.message, /refusing to prepare item 9/, "the refusal names the item");
-  assert.match(refusedC.message, /designer-item-9/, "the refusal names the held branch");
-  assert.equal(await branchOf(heldC.worktree), "designer-item-9", "the holder is UNTOUCHED (still on its branch — no steal)");
+  assert.match(refusedC.message, /item-9/, "the refusal names the held branch");
+  assert.equal(await branchOf(elsewhereC), "item-9", "the holder is UNTOUCHED (still on its branch — no steal)");
 
-  // --- 9b. #3174: the branch held by a DIFFERENT worktree path is refused while the item is live ---
-  // Acceptance 2: the holder path AND the item id are named; the holder is untouched.
-  const repoB = join(base, "branch-held-elsewhere");
+  // --- 9b. a LEGACY <seat>-item-<id> branch held by another worktree: ADOPTED (used as the item's
+  //     ref), and while the item is LIVE it is REFUSED exactly like any other live holder. ---
+  const repoB = join(base, "legacy-held-live");
   const sourceB = join(repoB, "durig");
   await mkdir(sourceB, { recursive: true });
   await writeFile(join(sourceB, "artifact.txt"), "x\n");
@@ -273,21 +300,23 @@ try {
   await run("git", ["-C", repoB, "add", "durig/artifact.txt"]);
   await run("git", ["-C", repoB, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]);
   await run("git", ["-C", repoB, "branch", "-M", "main"]);
-  const elsewhere = join(repoB, "elsewhere-9");
-  await run("git", ["-C", repoB, "worktree", "add", "-b", "impl-item-9", elsewhere]);
+  const elsewhereB = join(repoB, "elsewhere-9");
+  await run("git", ["-C", repoB, "worktree", "add", "-b", "impl-item-9", elsewhereB]);
   let refusedB = null;
   try {
     await prepareSeatWorkspace({ source: sourceB, worktreeRoot: sourceB, itemId: 9, seatName: "impl", itemStatus: "claimed" });
   } catch (err) {
     refusedB = err;
   }
-  assert.ok(refusedB, "a branch held by another worktree is refused when the item is live");
+  assert.ok(refusedB, "a legacy branch held by another worktree is refused when the item is live");
   assert.match(refusedB.message, /refusing to prepare item 9/, "the refusal names the item id");
-  assert.ok(refusedB.message.includes(elsewhere.replace(/\\/g, "/")) || refusedB.message.includes("elsewhere-9"), `the refusal names the holder path (got ${refusedB.message})`);
-  assert.equal(await branchOf(elsewhere), "impl-item-9", "the holder is UNTOUCHED");
+  assert.match(refusedB.message, /impl-item-9/, "the refusal names the LEGACY branch it adopted");
+  assert.ok(refusedB.message.includes(elsewhereB.replace(/\\/g, "/")) || refusedB.message.includes("elsewhere-9"), `the refusal names the holder path (got ${refusedB.message})`);
+  assert.equal(await branchOf(elsewhereB), "impl-item-9", "the holder is UNTOUCHED");
 
-  // --- 9c. #3174: the SAME branch-held-elsewhere conflict, but the item is TERMINAL → detach + proceed ---
-  const repoD = join(base, "branch-held-elsewhere-terminal");
+  // --- 9c. the same LEGACY holder, but the item is TERMINAL: detach the holder, then RENAME the
+  //     freed legacy ref to item-<id> and create the worktree on the canonical branch. ---
+  const repoD = join(base, "legacy-held-terminal");
   const sourceD = join(repoD, "durig");
   await mkdir(sourceD, { recursive: true });
   await writeFile(join(sourceD, "artifact.txt"), "x\n");
@@ -301,7 +330,9 @@ try {
   assert.equal(reclaimedD.holderDetached, elsewhereD, "the result names the detached holder");
   assert.equal(reclaimedD.created, true, "and the worktree is created on the now-free branch");
   assert.equal(await branchOf(elsewhereD), "", "the former holder is detached (branch freed)");
-  assert.equal(await branchOf(reclaimedD.worktree), "impl-item-9", "the new worktree holds impl-item-9");
+  assert.equal(reclaimedD.legacyBranch, "impl-item-9", "the legacy ref it adopted is reported");
+  assert.equal(reclaimedD.legacyRenamed, true, "...and the adoption renamed it once it was free");
+  assert.equal(await branchOf(reclaimedD.worktree), "item-9", "the new worktree holds item-9, not the seat twin");
 
   console.log("PREPARE-WORKSPACE PASS (idempotent per-item worktree; the seat's own cwd wins; npm ci path exercised; a leftover non-worktree is refused; a held branch is resolved, never stolen)");
 } finally {

@@ -236,7 +236,7 @@ the file" - specifically no per-task abort or veto from the operator surface.
 
 **Who:** the author seat lands its own branch after verification; `qa`/`auditor` verified it (W2); `pm`
 routes a landing pass when several are outstanding. A user-facing change has designer/advocate sign-off.
-**Trigger:** an item is `done` and its work is committed on an `<seat>-item-<id>` branch.
+**Trigger:** an item is `done` and its work is committed on the item's `item-<id>` branch.
 
 **Loop:** the author lands with `git merge --no-ff <sha>` so the sha becomes an **ancestor** of `main`,
 runs the covering demo on the merged result, removes the item's clean worktree, and deletes the branch

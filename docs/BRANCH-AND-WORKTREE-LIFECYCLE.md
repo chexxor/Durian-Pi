@@ -65,8 +65,8 @@ A `check` verdict without an explicit rig is not evidence about this rig.
 
 | Artifact | Created by | Retired by | Owner |
 |---|---|---|---|
-| item worktree `item-<id>` | `prepare_workspace` (on branch `<seat>-item-<id>`, #859) | `complete_work` teardown, the broker sweep, or a maintainer's prune | durian-pi |
-| item branch `<seat>-item-<id>` | same | `git branch -d` **only when merged** | durian-pi |
+| item worktree `item-<id>` | `prepare_workspace` (on branch `item-<id>`, #859/#N1) | `complete_work` teardown, the broker sweep, or a maintainer's prune | durian-pi |
+| item branch `item-<id>` | same | `git branch -d` **only when merged** | durian-pi |
 | verify scratch `.verify-*`/`verify*`/`wt-*` | a verifier | `worktree scratch clean` | durian-pi |
 | seat root (a seat's `cwd`) | `up --refresh` | never by a prune — it is IN USE | the rig |
 | shared tree | the repo | never | the operator |
@@ -322,9 +322,12 @@ Four things this pass proved about the MODEL, not the tooling:
 
 ## 8. Known defect — the path is item-keyed, the branch is seat-keyed
 
-`prepareSeatWorkspace` builds the worktree path from the ITEM (`item-<id>`) and the branch from the SEAT
-(`<seat>-item-<id>`), then calls `ensureWorktreeBranch`, which runs `git checkout -B <branch>` **whenever the
-current branch differs** (`src/worktree.mjs:566-568`, `:602`, `:278`). Two consequences:
+`prepareSeatWorkspace` builds BOTH the worktree path and the branch from the ITEM (`item-<id>`), then calls
+`ensureWorktreeBranch`, which runs `git checkout -B <branch>` **whenever the
+current branch differs** (`src/worktree.mjs:566-568`, `:602`, `:278`). The branch is NOT seat-keyed: two
+seats on one item must share one ref, or their work diverges with no shared history (the old
+`<seat>-item-<id>` shape did exactly that). A pre-N1 `<seat>-item-<id>` ref is ADOPTED and renamed to
+`item-<id>` when no worktree holds it (`adoptLegacyItemBranch`). Two consequences:
 
 1. **A second seat preparing the same item silently steals the first seat's worktree** (it moves that tree
    onto the caller's branch). `validateWorktreeIdentity` does not cover this — it rejects a leftover

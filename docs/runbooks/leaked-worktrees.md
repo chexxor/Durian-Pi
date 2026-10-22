@@ -160,7 +160,7 @@ REGISTERED worktrees and a hand-delete leaves 179 stale entries in `.git/worktre
    and record why in the item. Never keep one silently.
 
 **Resolve each tree's ITEM STATUS from the store before deciding** (operator's suggestion, 2026-10-20):
-the directory name carries the id (`item-<id>` or `<seat>-item-<id>`), so one `queue` read classifies the
+the directory name carries the id (`item-<id>`), so one `queue` read classifies the
 whole archive. Measured on the 179 trees: **179/179 map to a TERMINAL item** (done/cancelled), **0 live** --
 which is what makes a bulk pass defensible at all. A live (queued/claimed/deferred/held) item is the one
 case that keeps a tree unconditionally, and an id that is not in the store at all means someone must look
@@ -202,7 +202,7 @@ invocations and will fight a model pack build for the disk.
 > branch ref survives regardless.
 
 > **Item branches (#859).** `prepare_workspace` now creates each item worktree ON its
-> `<seat>-item-<id>` branch, so a seat's commits land on a branch, not a detached HEAD. A worktree
+> `item-<id>` branch, so a seat's commits land on a branch, not a detached HEAD. A worktree
 > made before this change may still be detached: re-run `prepare_workspace` for that item and it
 > re-attaches the branch at the current HEAD, preserving any commits already made there. Do not
 > hand-roll a branch — the tool owns it.
@@ -265,7 +265,7 @@ WITHOUT discarding the seat's work:
 2. Park the tracked WIP: `git stash push -u -m "delegate: park <seat> WIP for seat-root recovery" -- <paths>`.
 3. `git switch main` on the shared tree (same SHA as the branch, so this is a clean ref switch).
 4. Move the leftover plain dir aside (never delete blind), then create a REAL worktree at the SAME path
-   the seat's cwd already names: `git worktree add <path> <seat>-item-<id>`.
+   the seat's cwd already names: `git worktree add <path> item-<id>`.
 5. Re-apply the parked WIP inside the new worktree (`git -C <path> apply <patch>` plus the untracked
    files). The seat's persisted cwd is unchanged, so it now resolves to the real worktree.
 6. `node cli.mjs worktree audit` must show the seat root and that worktree as `seat-root`.
