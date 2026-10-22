@@ -36,8 +36,21 @@ import { runOperatorWindow } from "./return.mjs";
 
 /** How long the window waits for a stopped broker to actually release the store. Bounded on purpose:
  * the ruling requires "stop and CONFIRM it exited", and a wait that never ends is a hang, not a
- * confirmation. */
-export const STOP_SETTLE_MS = 5_000;
+ * confirmation.
+ *
+ * 30 s, not 5: `serve --stop` gives the broker a 5 s grace PER CALL, and a broker with a seat
+ * generation in flight needs several (a pass is a model call, not a tick). The attempts repeat, so
+ * this budget is what decides whether a BUSY rig gets stopped or the operator gets an honest refusal
+ * naming the seats that are still running. */
+export const STOP_SETTLE_MS = 30_000;
+
+/** The settle budget, overridable for an operator who would rather WAIT than retry:
+ * `DURIG_WINDOW_SETTLE_MS=180000 npm run ui`. A bad value falls back to the default rather than
+ * removing the bound. */
+export function settleBudgetMs() {
+	const n = Number(process.env.DURIG_WINDOW_SETTLE_MS);
+	return Number.isFinite(n) && n > 0 ? n : STOP_SETTLE_MS;
+}
 
 /**
  * STOP the broker and confirm the store is free (#4004). This is the step whose absence handed the
@@ -48,7 +61,7 @@ export const STOP_SETTLE_MS = 5_000;
  * the child will pass through — `assessStoreOwnership` — so "stopped" here means what failure-closed
  * there means, not a different opinion.
  */
-export function stopBrokerForStore({ repo, dbPath, timeoutMs = STOP_SETTLE_MS }) {
+export function stopBrokerForStore({ repo, dbPath, timeoutMs = settleBudgetMs() }) {
 	return new Promise((resolve) => {
 		const deadline = Date.now() + timeoutMs;
 		// ONE ATTEMPT = ask the broker to stop, then confirm with a WRITER OPEN.
