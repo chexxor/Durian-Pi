@@ -38,6 +38,10 @@ Measured end state of the campaign (evidence for every proposal):
 
 ## Immediate (recommended to land next)
 
+**STATUS 2026-10-22:** I2 (orphaned-HEAD guard) and I3 (`idle` verdict) were registered by `pm` as
+**#4745** and **#4746** (I1 as **#4747**, docs split); the branch-naming follow-up N2 is **#4751**
+(routed to lead). N1 (item-only branch names) is LANDED, see `docs/NEXT.md`.
+
 ### I1 — Split `docs/NEXT.md` into a pointer and an archive
 
 **Symptom (measured).** `docs/NEXT.md` is **4506 lines**. `docs/NEXT.md` is the file the agent entry

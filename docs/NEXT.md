@@ -55,6 +55,25 @@ or a wedged loop. It was deliberately left running.
 
 **Repo root is clean:** 5 registered `item-*` worktrees (all held) + `main`; no plain leftover directories.
 
+**Branch naming is now item-only (2026-10-22, operator-directed, LANDED).** `prepare_workspace` names the
+branch `item-<id>` — ONE ref per ITEM, not per seat (`5077baac`, follow-up `b823965b`). The seat prefix
+made two seats on one item diverge with no shared history; the worktree directory was already item-only.
+A pre-N1 `<seat>-item-<id>` ref is ADOPTED rather than forked (`adoptLegacyItemBranch`: rename when free,
+use while held, REFUSE when two refs name one item), and after a lossless holder detach the freed legacy
+ref is renamed. The 5 held items still on legacy names (`impl-item-1274`, `advocate-item-2630`,
+`impl-item-2788`, `qa-item-2993`, `scribe-item-4148`) were deliberately NOT renamed while their worktrees
+are live. **Open follow-up: queue row #4751** (N2, routed to lead) decides the HANDOFF policy for a LIVE
+item (pm recommends: detach an IDLE holder on demand, refuse only while a run is in flight) and carries
+the D-entry that supersedes the naming half of #3179/#3185 plus a re-scope of #3178. The delegate did not
+author that entry.
+
+**Operator-window fix (LANDED, `b3de2f5d`):** Enter on `npm run ui` used to hand the operator
+`refusing to open … a broker is driving it`, because `runOperatorWindow` spawned the WRITER while the
+broker still owned the store. `stopBroker` is now a required step (record → STOP → spawn → release →
+RESTART), proven end to end against a real broker on a temp store: ownership was `owned=true` before
+Enter, free at the moment the session opened, and re-owned by a NEW broker pid after the window. The
+attach contract (`<db>.attach.json`) is now gitignored (`975ef62a`).
+
 **Recommended next action:** grant a tiny provider-backed verification on a TEMP store (no live rig, no seats
 registered): one two-word `send`, one `compact`, one deliberately-stranded submission. That dates
 `compact-a-seat`, `broker-safe-change` and `resume-while-broker-runs`; `store-corruption-recovery` needs a real
