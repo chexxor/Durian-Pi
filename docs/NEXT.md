@@ -104,6 +104,29 @@ naming `auditor`, which is correct: a second writer must be impossible.
 (pid 20224) after the live proof, so the queue keeps moving. Refs 18 (11 unmerged: 3 stack + 5 held +
 `item-3033` + 2 new item branches), worktrees 6.
 
+**Enter, round 2 (`940ba073`, operator-reported).** After the store handoff was fixed the operator saw
+only the notice line and no session. Two causes, both closed:
+
+1. **stdin was not handed over.** The child inherits stdin (`stdio: "inherit"`), but `ui.mjs` kept its
+   own `data` listener attached, so `q`/`Esc` typed in the session drove the LANDING screen (quit/back)
+   and the parent could restore the terminal under a running child. The listener is detached and stdin
+   paused before the window, re-attached in a `finally` before the repaint.
+2. **A dead child was silent.** If `tui.mjs` exits (no TTY, bad store, missing conversation) nothing was
+   said; `runOperatorWindow` now reports `childCode` and `ui.mjs` prints
+   `the session exited with code N — see its output above`.
+
+**STILL UNPROVEN, and it needs the operator's terminal:** whether the Pi TUI renders inside the
+window. Everything around it is proved (stop → writer open → spawn → release → restart, and the poller
+holding no connection), but the child's own rendering has only been exercised on a live store with the
+spawn STUBBED (`.spike/opwin-live.mjs`). If Enter still shows no session, the new exit-code line is the
+evidence to collect — it distinguishes "child died" from "child ran but drew nothing".
+
+**Read-only alternative while the rig works:** `node cli.mjs log <seat> --follow` streams a seat's
+transcript (broker-served, no window, no writer).
+
+**Rig:** broker restarted (pid 22644) after the landing; 12 queued / 2 claimed / 274 held (held is down
+from 286 as the team closes rows).
+
 **Recommended next action:** grant a tiny provider-backed verification on a TEMP store (no live rig, no seats
 registered): one two-word `send`, one `compact`, one deliberately-stranded submission. That dates
 `compact-a-seat`, `broker-safe-change` and `resume-while-broker-runs`; `store-corruption-recovery` needs a real
