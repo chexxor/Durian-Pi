@@ -28,6 +28,10 @@
  *
  * @param {object} input
  * @param {string} input.seat — the seat the operator entered on; it MUST come back.
+ * @param {() => Promise<{ok:boolean, reason?:string}>} input.stopBroker — STOP the broker and settle it.
+ *   REQUIRED, and it runs BEFORE the spawn: `tui.mjs` is a WRITER and fails closed while a broker owns
+ *   the store, so a window that skipped this step could only ever hand the operator the guard's
+ *   refusal — the real symptom this step fixes. A pause is NOT a release (attach.mjs, #4004).
  * @param {(argv:string[]) => Promise<{code:number|null, signal:string|null, killed?:boolean}>} input.spawn
  *   Injected child runner. Resolves when the child exits — by exit code, by signal (a KILL), or not
  *   at all if the caller times it out.
@@ -35,7 +39,7 @@
  * @param {() => Promise<void>|void} input.restartBroker — restart the broker AFTER the release.
  * @param {(event:object) => void} [input.onStep] — observer, so a demo can assert the ORDER.
  */
-export async function runOperatorWindow({ seat, argv = [], spawn, release, restartBroker, onStep = () => {} }) {
+export async function runOperatorWindow({ seat, argv = [], stopBroker, spawn, release, restartBroker, onStep = () => {} }) {
 	const steps = [];
 	const step = (name, extra = {}) => {
 		steps.push(name);
@@ -45,6 +49,30 @@ export async function runOperatorWindow({ seat, argv = [], spawn, release, resta
 	if (typeof spawn !== "function") return { ok: false, reason: "refused: no child runner was supplied", steps };
 	if (typeof release !== "function" || typeof restartBroker !== "function") {
 		return { ok: false, reason: "refused: the release and restart must both be supplied, in that order", steps };
+	}
+	if (typeof stopBroker !== "function") {
+		return {
+			ok: false,
+			reason:
+				"refused: no STOP was supplied, and a session must not open a store the broker still owns " +
+				"(`tui.mjs` fails closed; a paused broker has NOT released — attach.mjs, #4004)",
+			steps,
+		};
+	}
+
+	// STOP FIRST (#4004: record → STOP → acquire). Without this the child meets the ownership guard
+	// and exits with its refusal, which is not a window. If the broker does not stop, the window
+	// REFUSES rather than spawning into a store that is still owned — and it must not restart a
+	// broker that never stopped.
+	step("stop", { seat });
+	const stopped = await stopBroker({ seat, argv });
+	if (stopped?.ok === false || stopped === false) {
+		return {
+			ok: false,
+			refused: "broker-still-owns",
+			reason: stopped?.reason ?? "refused: the broker did not stop, so the session would open a store it owns",
+			steps,
+		};
 	}
 
 	step("spawn", { seat });
@@ -74,8 +102,8 @@ export async function runOperatorWindow({ seat, argv = [], spawn, release, resta
  * KILLED may never run its own cleanup — so the PARENT owes the release, the restart and the screen.
  * This is the half that leaves an operator stranded when it is missing.
  */
-export async function recoverFromKilledChild({ seat, spawn, release, restartBroker, onStep = () => {} }) {
-	const result = await runOperatorWindow({ seat, argv: [], spawn, release, restartBroker, onStep });
+export async function recoverFromKilledChild({ seat, stopBroker, spawn, release, restartBroker, onStep = () => {} }) {
+	const result = await runOperatorWindow({ seat, argv: [], stopBroker, spawn, release, restartBroker, onStep });
 	if (!result.ok) return result;
 	return {
 		...result,

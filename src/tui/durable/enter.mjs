@@ -10,14 +10,62 @@
 // production wiring and `makeEnterHandler({spawn, release, restartBroker})` is the test one. That is
 // the difference between a stub that proves nothing and a seam that proves the wiring.
 //
+// THE STOP STEP (#4004) IS WIRED HERE, and its absence was the bug: `runOperatorWindow` spawned the
+// WRITER while the broker still drove the store, so `tui.mjs` met the ownership guard and refused —
+// the operator pressed Enter and got `refusing to open … a broker is driving it` instead of a session.
+// `stopBrokerForStore` runs `serve --stop` and then CONFIRMS with the same probe the child uses, so
+// "stopped" here means what fail-closed there means. Proven end to end against a real broker in
+// .spike/opwin-e2e.mjs (kept out of the suite: it spawns processes).
+//
 // WHAT THIS CANNOT CLAIM, and it is named rather than implied: (c) LIVE NOT FROZEN needs a real broker
 // AND a poller, and nothing here proves a poller polls. The DECISION is launch.mjs's `assessReturn`;
 // the live assertion needs the operator's terminal.
 
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { OPERATOR_SURFACE, releaseSeatStore, resolveSeatStore } from "./attach.mjs";
+import { OPERATOR_SURFACE, beginOperatorWindow, releaseSeatStore, resolveSeatStore } from "./attach.mjs";
+import { assessStoreOwnership } from "../../storeownership.mjs";
 import { runOperatorWindow } from "./return.mjs";
+
+/** How long the window waits for a stopped broker to actually release the store. Bounded on purpose:
+ * the ruling requires "stop and CONFIRM it exited", and a wait that never ends is a hang, not a
+ * confirmation. */
+export const STOP_SETTLE_MS = 5_000;
+
+/**
+ * STOP the broker and confirm the store is free (#4004). This is the step whose absence handed the
+ * operator the ownership guard's refusal instead of a session: `runOperatorWindow` spawned `tui.mjs`
+ * while the broker still drove the store, and `tui.mjs` correctly refused to be a second writer.
+ *
+ * `serve --stop` is the ruled way out (a pause is NOT a release). The confirmation is the SAME probe
+ * the child will pass through — `assessStoreOwnership` — so "stopped" here means what failure-closed
+ * there means, not a different opinion.
+ */
+export function stopBrokerForStore({ repo, dbPath, timeoutMs = STOP_SETTLE_MS }) {
+	return new Promise((resolve) => {
+		const child = spawn(process.execPath, [join(repo, "cli.mjs"), "serve", "--stop"], {
+			cwd: repo,
+			stdio: "ignore",
+			env: { ...process.env, DURIG_DB: dbPath },
+		});
+		child.on("error", (err) => resolve({ ok: false, reason: `could not run serve --stop: ${String(err?.message ?? err)}` }));
+		child.on("exit", () => {
+			const deadline = Date.now() + timeoutMs;
+			const settle = () => {
+				const ownership = assessStoreOwnership(dbPath);
+				if (!ownership.owned) return resolve({ ok: true, reason: null });
+				if (Date.now() > deadline) {
+					return resolve({
+						ok: false,
+						reason: `the broker still owns ${dbPath} after serve --stop: ${ownership.reasons.join("; ")}`,
+					});
+				}
+				setTimeout(settle, 100);
+			};
+			settle();
+		});
+	});
+}
 
 /** The real session runner: the durable Pi TUI in THIS terminal, on the seat's store. */
 export function spawnDurableSession({ repo, dbPath, seat, stdio = "inherit" }) {
@@ -68,6 +116,8 @@ export function makeEnterHandler(options = {}) {
 		repo = process.cwd(),
 		repaint = () => {},
 		spawnSession = (argv) => spawnDurableSession({ repo, dbPath: argv.dbPath, seat: argv.seat }),
+		stop = ({ dbPath }) => stopBrokerForStore({ repo, dbPath }),
+		begin = ({ dbPath }) => beginOperatorWindow({ dbPath, surface: OPERATOR_SURFACE }),
 		release = ({ dbPath }) => releaseSeatStore({ dbPath }),
 		restartBroker = ({ dbPath }) => restartBrokerDetached({ repo, dbPath }),
 	} = options;
@@ -81,13 +131,24 @@ export function makeEnterHandler(options = {}) {
 		// rather than defaulting to a fresh session.sqlite.
 		const resolved = resolveSeatStore({ rig, seat });
 		if (!resolved.ok) return { ran: false, reason: resolved.reason };
+		// RECORD BEFORE STOP (#4004): the contract is how a later reader learns the window was
+		// deliberate, and it is released on every exit path below — including a refused stop.
+		const began = begin({ dbPath: resolved.dbPath });
+		if (began?.ok === false) return { ran: false, reason: began.reason };
 		const result = await runOperatorWindow({
 			seat,
 			argv: { seat, dbPath: resolved.dbPath, conversationId: resolved.conversationId },
+			stopBroker: () => stop({ dbPath: resolved.dbPath }),
 			spawn: spawnSession,
 			release: () => release({ dbPath: resolved.dbPath }),
 			restartBroker: () => restartBroker({ dbPath: resolved.dbPath }),
 		});
+		// A refused window never opened the store, so the contract must not be left behind claiming a
+		// pending attach that will never come. Releasing is the same call the exit path uses.
+		if (result.ok === false) {
+			release({ dbPath: resolved.dbPath });
+			return { ran: false, reason: result.reason, refused: result.refused ?? null, steps: result.steps };
+		}
 		// (a) NO SHELL DROP: what comes back is the landing screen, and this repaint is what makes it
 		// the screen rather than whatever the child left behind.
 		repaint({ seat: result.screen?.selectedSeat ?? seat, live: false });

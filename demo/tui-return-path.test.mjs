@@ -47,6 +47,7 @@ try {
 		const result = await runOperatorWindow({
 			seat: "qa",
 			argv: ["--select", "qa"],
+			stopBroker: async () => ({ ok: true }),
 			spawn: child.spawn,
 			release: async () => order.push("release"),
 			restartBroker: async () => order.push("restart"),
@@ -61,10 +62,11 @@ try {
 
 		console.log("\n    ORDERING: release BEFORE restart, observed as a sequence");
 		check(
-			"the observed order is spawn -> child-exit -> release -> restart -> restore",
-			order.join(" > ") === "spawn > child-exit > release > release > restart > restart > restore",
+			"the observed order is stop -> spawn -> child-exit -> release -> restart -> restore",
+			order.join(" > ") === "stop > spawn > child-exit > release > release > restart > restart > restore",
 			order.join(" > "),
 		);
+		check("STOP comes BEFORE the child (the window owns the store before the session opens)", order.indexOf("stop") < order.indexOf("spawn"), order.join(" > "));
 		check(
 			"RELEASE comes BEFORE RESTART (two writers must be impossible at the last step)",
 			order.indexOf("release") < order.indexOf("restart"),
@@ -78,6 +80,7 @@ try {
 		const order = [];
 		const result = await recoverFromKilledChild({
 			seat: "impl",
+			stopBroker: async () => ({ ok: true }),
 			spawn: child.spawn,
 			release: async () => order.push("release"),
 			restartBroker: async () => order.push("restart"),
@@ -101,6 +104,18 @@ try {
 		check("...and says it would return the operator to seat #1", /seat #1/.test(noSeat.reason ?? ""), noSeat.reason);
 		const noOrder = await runOperatorWindow({ seat: "qa", spawn: child.spawn, release: () => {} });
 		check("a window with no RESTART is refused (the ordering needs both)", noOrder.ok === false, JSON.stringify(noOrder.reason));
+		const noStop = await runOperatorWindow({ seat: "qa", spawn: child.spawn, release: () => {}, restartBroker: () => {} });
+		check("a window with NO STOP is refused (it would hand the operator the guard's refusal)", noStop.ok === false, JSON.stringify(noStop.reason));
+		check("...and says why: a session must not open a store the broker owns", /STOP|owns/.test(noStop.reason ?? ""), noStop.reason);
+		const stoppedStillOwns = await runOperatorWindow({
+			seat: "qa",
+			spawn: child.spawn,
+			stopBroker: async () => ({ ok: false, reason: "the broker still owns it (pid 9)" }),
+			release: () => {},
+			restartBroker: () => {},
+		});
+		check("a STOP that did not settle REFUSES the window", stoppedStillOwns.ok === false, JSON.stringify(stoppedStillOwns.reason));
+		check("...and it did not spawn", child.calls.length === 0, JSON.stringify(child.calls));
 		check("no child was spawned by a refused window", child.calls.length === 0, JSON.stringify(child.calls));
 	}
 
