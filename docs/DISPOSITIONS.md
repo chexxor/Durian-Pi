@@ -222,3 +222,30 @@ way follows the rule rather than overriding it.
 > `nul` entry); their residue was already exported and the residue-only directories were then removed
 > through the extended-length path form. Worktrees went **52 → 10**: 5 held/live, `item-723` (locked),
 > and 4 `%TEMP%` scratch trees kept by rule (dirty or locked).
+
+> **NOTE (2026-10-21, third pass: redundancy-proved refs, last trees, and recovery bundles; delegate,
+> operator-directed):** 5 more refs went, each by the sanctioned route and each proved redundant first.
+> `worktree prune-branch` removed `archived/item-2154`, `archived/rel-item-673`, `archived/rel-item-700`,
+> `archived/rel-item-860` (every commit patch-equivalent to `main`); `git branch -d` removed
+> `archived/rel-item-746` (already an ancestor). 4 more trees were exported and removed (`item-723`,
+> `%TEMP%/642-restore`, `%TEMP%/rb-1469d`, `%TEMP%/wt-null-…`), all merged into `main`, residue exported
+> under `_exports/2026-10-21/`. Refs **42 → 37**, worktrees **10 → 6** (the floor: `main` + the 5 live
+> held worktrees).
+
+> **NOTE (2026-10-21, recovery bundles for every unmerged ref; delegate, operator-directed):** all **31**
+> refs that are not in `main` (17 `archived/*`, 9 pre-split `temp-*`/`wip/*`/`selfdev-borrow`, the 3 stack
+> branches, the 2 snapshots) were captured as `git bundle create <bundle> <ref> ^main` in
+> `../pi-opendurig.worktrees/_exports/refs-2026-10-21/<ref>/` plus `git format-patch main..<ref>` under
+> `patches/` (855 KB total, `index.json` lists sha/unique-commit count/verification status). Every bundle
+> passed `git bundle verify`, and a restore was actually performed — `git fetch <bundle>
+> refs/heads/<ref>:refs/heads/<tmp>` reproduced the identical sha in this repo and in a fresh
+> `git clone --no-checkout` of it. The bundles are BASIS bundles (`^main`): they restore into a clone whose
+> `main` contains `4002b23c`. So a ref may now be deleted without losing its commits — but deleting a ref
+> whose unique commits nobody has read is an **author/operator act** (rule R-B), not a delegate one; the 26
+> non-stack, non-snapshot refs therefore stay until that grant.
+
+> **NOTE (2026-10-21, what is left and why it is a floor rather than debt):** 37 refs = `main`, 3 stack
+> branches (unmerged work waiting on runbook dates), 2 snapshots (`item-148`, `item-9002` — `merge.md`:
+> never merge or delete), 5 branches held by **live `held` items** (team must resolve them; a delegate does
+> not complete seat work), 17 `archived/*` + 9 pre-split refs (bundle-backed, awaiting the R-B grant).
+> 6 worktrees = `main` + the 5 held ones. `.git` after the deletions: 62 MB → 57 MB (`git gc`).

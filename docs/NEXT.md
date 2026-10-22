@@ -6,9 +6,8 @@
 **#4054**/**#4064**/**#4083**) is the only item work left; this session was operator-driven branch landing, not a
 claimed item. `main` is this clock-out commit (the campaign's last code change was `742b0fdf`): **`npm run
 test` 234/234 (exit 0), `npm run test:tui` 38/38**, and
-`@earendil-works/pi-coding-agent` is pinned `1.3.0`. Refs: **42** (7 merged, 35 unmerged): `main`, the 3
-stack branches, 5 held worktree branches, 2 snapshots, 22 `archived/*`, 9 pre-split temp/wip refs.
-Worktrees: **10** (5 live, 1 locked, 4 `%TEMP%` scratch kept by rule). The 7 known-red demos were fixed on
+`@earendil-works/pi-coding-agent` is pinned `1.3.0`. Refs: **37**: `main`, the 3 stack branches, 5 held worktree branches, 2 snapshots, 17 `archived/*`, 9
+pre-split temp/wip refs — every unmerged one bundle-backed. Worktrees: **6** (`main` + the 5 held). The 7 known-red demos were fixed on
 the way: mojibake in `docs/runbooks/README.md`; the #4557/#4607 wake `reason` and PARKED wake in
 stalledclaim/run/held-item; the cancellation NOTICE in curate; tree-aware `restore` measured on a temp tree in
 confine-token-awareness; the pinned vendor entry in pitui.
@@ -24,19 +23,21 @@ runbooks as errors**.
 provider-backed seat (a `WAKE`/`modelReset` cycle, a seat `compact`, a stranded submission) or a real corrupt
 store; the two placeholder-Verify runbooks and the prune pass are now DONE (2026-10-21).
 
-**Branch management (2026-10-21, operator-directed):** refs **169 → 42** and worktrees **52 → 10**.
+**Branch management (2026-10-21, operator-directed) — current floor:** refs **37**, worktrees **6**.
 
-- **Branches:** 132 landed refs deleted with `git branch -d` (refuses unmerged/checked-out); **0 refusals**,
-  every tip proved an ancestor of `main` first. Refs now: `main`, the 3 stack branches, 5 held worktree
-  branches, snapshots `item-148`/`item-9002`, 22 `archived/*` (9 minted so ref-less worktree HEADs
-  survived), 9 pre-split `temp-*`/`wip/*`/`selfdev-borrow` (NOTHING-TO-LAND rows).
-- **Worktrees:** 42 reclaimed — 32 dirty terminal `item-*` trees, 5 `rel-item-*`, 4 clean `%TEMP%`
-  scratches, root `item-2209-run` — each with its residue **exported first** (`worktree.patch` +
-  sha256-verified untracked copies) to `../pi-opendurig.worktrees/_exports/2026-10-21/<name>/`.
-  The 10 kept are kept by rule: 5 live/held, `item-723` (locked), 4 `%TEMP%` scratch trees (dirty/locked).
-- **Nothing forced**: no `--force`, no `-D`, no `git clean`, no history rewrite.
-
-**Remaining item work is unchanged:** the stack needs the 4 runbooks dated, which needs the provider run.
+- **Done:** 132 merged refs (`-d`, ancestry-proved, 0 refusals) + 5 redundancy-proved refs
+  (`prune-branch` ×4 patch-equivalent, `-d` ×1 ancestor); 46 worktrees reclaimed, every dirty one's
+  residue exported and sha256-verified first to `../pi-opendurig.worktrees/_exports/2026-10-21/`.
+- **Every one of the 31 unmerged refs is now bundle-backed**: `git bundle create <f> <ref> ^main` +
+  `git format-patch`, at `../pi-opendurig.worktrees/_exports/refs-2026-10-21/` (855 KB, `git bundle
+  verify` passes for all, and a restore was performed in-repo and in a fresh clone).
+- **The remaining floor, by class:** `main` (1) · stack (3, waiting on runbook dates) · snapshots
+  `item-148`/`item-9002` (2, never delete) · live `held` item branches + worktrees (5, the team resolves
+  those) · 26 bundle-backed refs (17 `archived/*`, 9 pre-split) awaiting the R-B deletion grant.
+- **To go further:** (a) one grant lets a shell outside the seat guard `-D` the 26 bundle-backed refs
+  (lossless now; optionally keep the 2 snapshots pending a ruling); (b) the team resolves the 5 `held`
+  items, then the sweep reaps those trees and `-d` frees their refs; (c) the stack lands once the 4
+  runbooks are dated.
 
 **Recommended next action:** grant a tiny provider-backed verification on a TEMP store (no live rig, no seats
 registered): one two-word `send`, one `compact`, one deliberately-stranded submission. That dates
