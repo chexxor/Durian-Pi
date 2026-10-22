@@ -6,8 +6,8 @@
 **#4054**/**#4064**/**#4083**) is the only item work left; this session was operator-driven branch landing, not a
 claimed item. `main` is this clock-out commit (the campaign's last code change was `742b0fdf`): **`npm run
 test` 234/234 (exit 0), `npm run test:tui` 38/38**, and
-`@earendil-works/pi-coding-agent` is pinned `1.3.0`. Refs: 164 total, **139 merged**, 25 unmerged (3 item
-branches + 22 archived/scratch/snapshot refs the runbooks say to keep). The 7 known-red demos were fixed on
+`@earendil-works/pi-coding-agent` is pinned `1.3.0`. Refs: 165 total, **139 merged**, 26 unmerged (3 item
+branches + 23 archived/snapshot/superseded-snapshot refs). Worktrees: **47** (was 52). The 7 known-red demos were fixed on
 the way: mojibake in `docs/runbooks/README.md`; the #4557/#4607 wake `reason` and PARKED wake in
 stalledclaim/run/held-item; the cancellation NOTICE in curate; tree-aware `restore` measured on a temp tree in
 confine-token-awareness; the pinned vendor entry in pitui.
@@ -22,6 +22,17 @@ runbooks as errors**.
 **Blocker:** 4 runbooks are stale and the stack must not land until they are re-verified — all four need a
 provider-backed seat (a `WAKE`/`modelReset` cycle, a seat `compact`, a stranded submission) or a real corrupt
 store; the two placeholder-Verify runbooks and the prune pass are now DONE (2026-10-21).
+
+**Branch management (2026-10-21, second pass):** 5 leaked/scratch worktrees reaped — the four clean+merged
+`%TEMP%` scratches and the root `item-2209-run` (which `land.mjs` would refuse as a stray `item-*`);
+one dangling scratch HEAD was preserved as `archived/qa-verify-419` before its tree went; `git worktree
+prune` found **0** stale registrations; 9 pre-split `temp-*`/`wip/*` refs recorded **NOTHING-TO-LAND** in
+`docs/DISPOSITIONS.md` (main carries every subject; each ref *removes* ~41k lines of main, so patch-id
+differs, `worktree prune-branch` refuses, and the refs stay per rule R-B). Remaining debt: **33 dirty
+terminal trees + 5 non-item trees in `../pi-opendurig.worktrees/`** — the archive retention rule (export
+`diff --binary` + the untracked files, then remove) is the next pass; and **129 merged refs stay in place
+as the landing record** (bulk `-d` is lossless per `branch-cleanup` Do 2, but it erases the local record
+that a branch was landed — an operator call, not a delegate one).
 
 **Recommended next action:** grant a tiny provider-backed verification on a TEMP store (no live rig, no seats
 registered): one two-word `send`, one `compact`, one deliberately-stranded submission. That dates
