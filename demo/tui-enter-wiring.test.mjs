@@ -30,16 +30,34 @@ function check(label, ok, detail = "") {
 const RIG = { db: "/tmp/throwaway-rig.sqlite", seats: { impl: { conversationId: 7 }, qa: { conversationId: 15 } } };
 
 // Injected effects: record what the caller asked for, in order. Nothing is spawned, nothing is stored.
-function harness(childOutcome = { code: 0, signal: null }) {
-	const calls = { spawn: [], release: [], restart: [], repaint: [] };
+function harness(childOutcome = { code: 0, signal: null }, stopOutcome = { ok: true }) {
+	const calls = { begin: [], stop: [], spawn: [], release: [], restart: [], repaint: [], order: [] };
 	const handler = makeEnterHandler({
 		rig: RIG,
+		// The contract is recorded BEFORE the stop (#4004); a refused window must release it again.
+		begin: (a) => {
+			calls.begin.push(a);
+			calls.order.push("begin");
+			return { ok: true, contract: { dbPath: a.dbPath } };
+		},
+		stop: async (a) => {
+			calls.stop.push(a);
+			calls.order.push("stop");
+			return stopOutcome;
+		},
 		spawnSession: async (argv) => {
 			calls.spawn.push(argv);
+			calls.order.push("spawn");
 			return childOutcome;
 		},
-		release: (a) => calls.release.push(a),
-		restartBroker: (a) => calls.restart.push(a),
+		release: (a) => {
+			calls.release.push(a);
+			calls.order.push("release");
+		},
+		restartBroker: (a) => {
+			calls.restart.push(a);
+			calls.order.push("restart");
+		},
 		repaint: (a) => calls.repaint.push(a),
 	});
 	return { handler, calls };
@@ -57,6 +75,7 @@ try {
 		check("an unknown seat is REFUSED, not defaulted", unknown.ran === false, JSON.stringify(unknown.reason));
 		check("...and the refusal names the rig's seats", /impl/.test(unknown.reason ?? ""), unknown.reason);
 		check("NO child was spawned by any refusal", calls.spawn.length === 0, JSON.stringify(calls.spawn));
+		check("...and the broker was not stopped for a refusal", calls.stop.length === 0, JSON.stringify(calls.stop));
 	}
 
 	console.log("\n=== (b) THE SEAT RESOLVES TO ITS OWN STORE, AND THE ARGV CARRIES IT ===");
@@ -92,10 +111,24 @@ try {
 		const steps = result.steps;
 		check("release precedes restart", steps.indexOf("release") < steps.indexOf("restart"), steps.join(" > "));
 		check(
-			"the whole sequence is the ruled one",
-			steps.join(" > ") === "spawn > child-exit > release > restart > restore",
+			"the whole sequence is the ruled one (STOP before the session)",
+			steps.join(" > ") === "stop > spawn > child-exit > release > restart > restore",
 			steps.join(" > "),
 		);
+		check("STOP comes before SPAWN (the child must not meet the ownership guard)", steps.indexOf("stop") < steps.indexOf("spawn"), steps.join(" > "));
+	}
+
+	console.log("\n=== A STOP THAT DID NOT SETTLE REFUSES THE WINDOW (no session into an owned store) ===");
+	{
+		const { handler, calls } = harness({ code: 0, signal: null }, { ok: false, reason: "the broker still owns /tmp/throwaway-rig.sqlite after serve --stop: a broker is driving it (pid 5)" });
+		const result = await handler({ seat: "impl", mode: "seats" });
+		check("the window is REFUSED", result.ran === false, JSON.stringify(result.reason));
+		check("...naming the reason the stop failed", /broker still owns/.test(result.reason ?? ""), result.reason);
+		check("...tagged broker-still-owns", result.refused === "broker-still-owns", String(result.refused));
+		check("NO child was spawned into an owned store", calls.spawn.length === 0, JSON.stringify(calls.spawn));
+		check("NO broker was restarted (it never stopped)", calls.restart.length === 0, JSON.stringify(calls.restart));
+		check("...and the attach contract was RELEASED rather than left pending", calls.release.length === 1, JSON.stringify(calls.release));
+		check("the order shows the refusal happened at the stop", calls.order.join(" > ").startsWith("begin > stop"), calls.order.join(" > "));
 	}
 
 	console.log("\n=== (e) A KILLED CHILD still releases, restarts and restores ===");

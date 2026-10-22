@@ -48,7 +48,8 @@ keys:
   r                  repaint now
   ↑ / ↓ or k / j     seat list: select a seat; conversation: scroll the transcript
                      (at the loaded top, ↑ loads one older page of the seat's log)
-  Enter              open the selected seat's conversation stream
+  Enter              open the selected seat's LIVE session in this terminal (the ruled operator
+                     window: STOPs the broker, opens on the now-free store, then restarts it on exit)
   i                  type an intent to the focused seat (Enter=send, Esc=cancel);
                      an overlay on the current view — it never replaces it
   G / End            jump to the live tail (re-enable auto-follow)
