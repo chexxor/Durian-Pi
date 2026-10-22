@@ -76,7 +76,14 @@ if (ownership.owned) {
 	process.exit(1);
 }
 
-const storage = await (await import("@earendil-works/pi-durable/storage/sqlite/node")).openNodeSqliteStorage(dbPath);
+const storage = await (await import("@earendil-works/pi-durable/storage/sqlite/node")).openNodeSqliteStorage(dbPath, {
+	// The window STOPPED the broker before this open (enter.mjs), so nothing should contend — but a
+	// broker that was RESTARTED by a previous window may still be coming up, and its open and ours
+	// both take the WAL/PRAGMA write path. The default 5 s busy timeout is tuned for a poller; an
+	// operator-initiated open that fails here costs the whole session, so ride out a transient
+	// writer for longer rather than dying with `database is locked`.
+	busyTimeoutMs: 15_000,
+});
 
 const cwd = process.cwd();
 const { ca, hostSession, hostSessionManager, services, model } = await createRealHost({ cwd });
