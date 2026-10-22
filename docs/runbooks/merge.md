@@ -12,7 +12,7 @@ check_rule: null
 # Land a branch onto main (merge review)
 
 ## When to use
-A seat has completed an item whose work sits on an `<seat>-item-<id>` branch, or you are auditing why
+A seat has completed an item whose work sits on the item's `item-<id>` branch, or you are auditing why
 verified work is not on `main`. This is the **landing half** of W2: verification (W2) says the artifact is
 reproducible; landing puts it on `main`. The agent makes the landing call — there is no auto-gate
 (operator preference, 2026-10-17); the audit below verifies it later.

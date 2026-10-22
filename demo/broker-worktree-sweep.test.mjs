@@ -53,7 +53,8 @@ try {
 	await git(repo, "worktree", "add", "-q", "--detach", wt(3));
 	writeFileSync(join(wt(3), "shared.txt"), "uncommitted work\n");
 
-	// #1244: branch-held worktrees. The BRANCH encodes the item id (`impl-item-<N>`); the sweep
+	// #1244: branch-held worktrees. The BRANCH encodes the item id (`item-<N>`; legacy
+// `<seat>-item-<N>` is accepted by the same regex); the sweep
 	// reaps one ONLY when the branch's item is TERMINAL, the worktree is unlocked and clean.
 	await git(repo, "worktree", "add", "-q", "-b", "impl-item-4", wt(4)); // terminal + clean -> reaped
 	await git(repo, "worktree", "add", "-q", "-b", "impl-item-5", wt(5)); // LIVE -> kept

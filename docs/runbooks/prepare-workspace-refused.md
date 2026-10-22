@@ -52,7 +52,7 @@ their tips are, and which worktrees hold them.
 
 ```bash
 REPO=<path to the repo>
-BR=<seat>-item-<id>          # the branch prepare_workspace wanted
+BR=item-<id>                # the branch prepare_workspace wanted (one per item, not per seat)
 git -C "$REPO" rev-parse --verify "refs/heads/$BR"          # does the branch exist, and at what sha
 git -C "$REPO" rev-parse --verify "<base>^{commit}"          # does the requested base resolve
 git -C "$REPO" worktree list                                 # who holds the branch / is the path registered
@@ -61,7 +61,7 @@ git -C "$REPO" worktree list                                 # who holds the bra
 On Windows PowerShell the same three reads:
 
 ```powershell
-$REPO = "<path to the repo>"; $BR = "<seat>-item-<id>"
+$REPO = "<path to the repo>"; $BR = "item-<id>"
 git -C $REPO rev-parse --verify "refs/heads/$BR"
 git -C $REPO rev-parse --verify "<base>^{commit}"
 git -C $REPO worktree list

@@ -120,7 +120,9 @@ A notice sets `notice: true` **and** titles itself `DONE #<id>: <the original it
 may begin with a verb signalling another item. A notice must never be responded to with another notice.
 
 ### R7 — Names derived by a function, never by hand
-- Branch: **`<seat>-item-<id>`** — nothing else.
+- Branch: **`item-<id>`** — nothing else. ONE ref per item, never per seat: two seats working the same
+  item must share history, and a seat-keyed branch made them diverge silently (the pre-N1
+  `<seat>-item-<id>` shape; still ACCEPTED and adopted on sight, but never produced).
 - Worktree directory: **`item-<id>`**.
 - Verification scratch: `.verify-<id>` / `verify<id>-*` (reclaimed on completion).
 
@@ -183,7 +185,8 @@ The schema is only real when a check fails on violation:
    item's id (except R6), or exceeds 100 chars.
 2. `item-kind` (fix-now): a `kind` outside §4/R3's vocabulary.
 3. `blockedBy-resolves` (error): a gate that names a non-existent id, or a `cancelled` gate.
-4. `branch-name` (fix-now): a ref not matching `<seat>-item-<id>` (this would have caught all 19).
+4. `branch-name` (fix-now): a ref that does not encode exactly one item (`item-<id>`, or the legacy
+   `<seat>-item-<id>` which is adopted rather than reported) (this would have caught all 19).
 5. New items set `notice: true` rather than relying on `isDoneNotice`'s regex, so R6's fallback can
    eventually be deleted.
 
@@ -215,8 +218,8 @@ print('over 120 chars:',sum(1 for x in s if len(x)>120))
 grep -n "isDoneNotice" -A 3 src/rig.mjs | tail -4
 grep -n "isVerificationItem" -A 2 src/checkup.mjs | tail -3
 
-# branch-name conformance (expect only legacy offenders)
-git branch --format='%(refname:short)' | grep -vE '^(pm|impl|qa|qa2|lead|advocate|scribe|devtools|auditor|designer|security|architect)-item-[0-9]+$'
+# branch-name conformance (item-only; legacy <seat>-item-<id> refs are adopted, not offenders)
+git branch --format='%(refname:short)' | grep -vE '^(archived/)?(?:[a-z0-9]+-)?item-[0-9]+$'
 ```
 
 If a number above disagrees with the command, the **document** is wrong — correct it; never bend a

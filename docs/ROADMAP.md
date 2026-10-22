@@ -599,7 +599,7 @@ them forward, and the impl items are HELD until pm releases.
     2026-10-17).** The branch backlog (2026-10-17: 15 verified-but-unlanded branches) is invisible today:
     the store says an item is `done` while `main` does not contain it. We choose to **trust the agent to
     land** (no auto-gate) and **verify later** with a measurement the delegate can read — this item is that
-    measurement, not an automation. A read-only measure over git + the store: count `<seat>-item-*`
+    measurement, not an automation. A read-only measure over git + the store: count `item-*`
     branches whose tip is **not an ancestor of `main`** while their item is `done` (the "unlanded-verified"
     count) and the age of the oldest (time-to-land). Reuse the existing read-only git audit (the Diagnose
     block in `docs/runbooks/merge.md`, or a `scripts/branch-audit.mjs`) — **no new write path, no broker
