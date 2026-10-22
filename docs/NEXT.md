@@ -42,6 +42,19 @@ worktrees **52 → 6**.
 - **Never forced:** no `--force` on a dirty tree, no `-D` without a verified bundle, no `git clean`, no
   rewrite, no push.
 
+**Rig state observed at clock-out (2026-10-21, read-only):** a `node cli.mjs serve` (pid 18628, started
+2026-10-21T05:57Z) has been up with a **fresh heartbeat (4 s) and a frozen `lastPassAt` (~13 h)** — the
+`broker-down-or-stalled.md` "alive but dormant" shape — and `.spike/serve.err` ends with
+`SessionFailed: Session failed after a storage error` plus a refused `item-4740` worktree removal. **It is
+not wedged and it needs no restart:** the queue has **no `queued`/`claimed` work** (4744 rows: 3691 done,
+765 cancelled, **286 `held`** backlog, 2 `deferred`), and a pass runs only on a store-commit signal, so an
+idle store means no passes — `status`'s `degraded: no pass within the progress timeout` is therefore a
+FALSE POSITIVE on an idle rig, not an incident. Do not "fix" it by restarting: with no queued work a
+restart cannot help, and the runbook says the remedy (`stop → resume → restart`) is for a *suppressed seat*
+or a wedged loop. It was deliberately left running.
+
+**Repo root is clean:** 5 registered `item-*` worktrees (all held) + `main`; no plain leftover directories.
+
 **Recommended next action:** grant a tiny provider-backed verification on a TEMP store (no live rig, no seats
 registered): one two-word `send`, one `compact`, one deliberately-stranded submission. That dates
 `compact-a-seat`, `broker-safe-change` and `resume-while-broker-runs`; `store-corruption-recovery` needs a real

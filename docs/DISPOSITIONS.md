@@ -271,3 +271,12 @@ way follows the rule rather than overriding it.
 > residue is exported in `_exports/held-2026-10-21/<name>/` (sha256-verified), so closing the items is a
 > queue verb away, and the trees can then be reaped and the refs `-d`'d at zero cost. A delegate must not
 > write queue status: marking these `done` would assert acceptance that the gate has not granted.
+
+> **NOTE (2026-10-21, archive consolidation; delegate, operator-directed):** the archive
+> `../pi-opendurig.worktrees/` held **29 directories containing nothing but an undeletable Windows `nul`
+> entry** (0 bytes each — the residue of earlier relocate/removal passes, not registered worktrees, no
+> `.git`); they were removed through the extended-length path form. It now holds only the **record**:
+> `_exports/` (all exported residue + the 31 ref bundles + the 5 held-tree manifests) and
+> `stray-archive-20261021-104326/` (the 8 stray root directories preserved earlier by
+> `scripts/reclaim-root-leftovers.ps1`). Nothing in the archive is a worktree, so `git worktree list` shows
+> only `main` and the 5 held trees.
