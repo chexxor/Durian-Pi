@@ -3982,3 +3982,47 @@ input and `superviseOnce` must resolve it per seat (the resolver already exists)
 **Status.** Proposed (review, item #2730). `pm` sequences; D-number re-derived at land time per lead
 #2452 (D113/D114 are on other unlanded branches). Evidence: the code citations above; no implementation
 is claimed.
+
+## D124 — The 2026-10-21 branch-landing campaign: land every provable branch, delete only with recorded evidence, and never force (delegate, 2026-10-21; operator-directed)
+
+**Decision.**
+1. **Land every branch whose merge is provable NOW.** Re-measure each branch against the live `main`
+   immediately before landing (ancestry, `git merge-tree`, `git cherry`); land one at a time through
+   `scripts/land.mjs` so the shared tree is never mid-merge. 114 refs were merged this way.
+2. **Repair, then land, mechanical text-integrity refusals.** Every refusal in the batch was a UTF-8 BOM,
+   never collapsed content: strip the BOM on the branch in a throwaway worktree, add one commit, move the
+   ref FORWARD (the old tip stays an ancestor), then land. 33 branches repaired.
+3. **Delete a ref only with evidence, and record it.** A branch may be deleted when (i) `git cherry main`
+   shows no `+` commit (patch-equivalent to main), (ii) its tip is a duplicate retained by another ref, or
+   (iii) the operator's age rule applies (older than two days, its mechanism superseded by what main
+   carries) — and every deletion is written to `docs/DISPOSITIONS.md` with sha, date, subject and the
+   deciding evidence. Never `--force`, never a dirty or locked worktree, never a snapshot/archive ref.
+4. **Content conflicts keep main's newer structure and re-apply the branch's invariant.** Examples:
+   `confine.mjs` (argument-aware `rebase` + main's #4641 help exemption), `broker.mjs` (main's
+   `stopKind/graceExpired` + #2322 receipt logging), `seatguard.mjs` (main's path-aware guard + the
+   degraded-cwd refusals), `worktree.mjs` (base/requestedBase/baseHonoured on main; the branch was
+   superseded). Tests are updated ONLY when the product deliberately changed (`reason` on wakes, parked
+   wakes, the cancellation NOTICE, the pinned vendor entry) and a suite run proves it.
+5. **A guard that would go red for TRUE findings is not switched on to make progress.** The runbook-wiring
+   stack (`devtools-item-4054 → 4064 → 4083`) stays unlanded while it would make `check` report the
+   genuinely stale runbooks as errors. Its loader bugs were fixed and proven in a scratch; the remaining
+   blocker is re-verifying runbooks that need a provider-backed seat or a real incident.
+
+**Rationale.** Refs moved 351 → 164 (139 merged), with the suite going from 7 known-red demos to
+**234/234 green**, without a force-push, a history rewrite, or a discarded worktree. The two failures that
+mattered were process failures, not code: a merge resolution that silently deleted a control block (caught
+by re-reading the file, and the branch was superseded anyway), and a test that measured the suite's cwd
+instead of a known tree (caught when it passed standalone and failed in the suite). Both are recorded here
+because the fix is a habit, not a patch.
+
+**Alternatives considered.**
+- *Land the runbook stack and accept a red `check`*: rejected — an unreachable green disables the rule that
+  the stack exists to create.
+- *`git branch -D` everything unmerged/old*: rejected — the runbooks' rule is that an unmerged tip's
+  commits exist nowhere else; deletion is only safe with patch-id or duplicate proof.
+- *Bulk-batch landings in one `land.mjs` call*: rejected — one conflict would have stalled the batch, and a
+  concurrent landing could not be retried per branch.
+
+**Status.** Executed (operator-directed, no queue item); evidence in `docs/DISPOSITIONS.md` (deletion rows
+dated 2026-10-21) and in the commit history of this campaign.
+

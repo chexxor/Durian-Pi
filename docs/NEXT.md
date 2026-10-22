@@ -4,8 +4,8 @@
 
 **Current item:** the runbook-wiring stack `devtools-item-4054` → `4064` → `4083` (queue rows
 **#4054**/**#4064**/**#4083**) is the only item work left; this session was operator-driven branch landing, not a
-claimed item. `main` is
-`742b0fdf`: **`npm run test` 234/234 (exit 0), `npm run test:tui` 38/38**, and
+claimed item. `main` is this clock-out commit (the campaign's last code change was `742b0fdf`): **`npm run
+test` 234/234 (exit 0), `npm run test:tui` 38/38**, and
 `@earendil-works/pi-coding-agent` is pinned `1.3.0`. Refs: 164 total, **139 merged**, 25 unmerged (3 item
 branches + 22 archived/scratch/snapshot refs the runbooks say to keep). The 7 known-red demos were fixed on
 the way: mojibake in `docs/runbooks/README.md`; the #4557/#4607 wake `reason` and PARKED wake in
@@ -23,10 +23,15 @@ runbooks as errors**.
 provider-backed seat (a `WAKE`/`modelReset` cycle, a seat `compact`, a stranded submission) or a real corrupt
 store; the two placeholder-Verify runbooks and the prune pass are now DONE (2026-10-21).
 
+**Recommended next action:** grant a tiny provider-backed verification on a TEMP store (no live rig, no seats
+registered): one two-word `send`, one `compact`, one deliberately-stranded submission. That dates
+`compact-a-seat`, `broker-safe-change` and `resume-while-broker-runs`; `store-corruption-recovery` needs a real
+corrupt store (its detection half is already recorded). Then reland the stack per step 4.
+
 **Exact next commands (the operator window):**
 1. `DURIG_DB=./selfdev.sqlite node cli.mjs status` — confirm no seat holds live work before opening the
    window (read-only; expected: no claimed/queued rows).
-2. `node .spike/stale-runbooks.mjs` — lists the 7 with the files that changed since `last_verified`:
+2. `node .spike/stale-runbooks.mjs` — lists the 4 with the files that changed since `last_verified`:
    `compact-a-seat`, `broker-safe-change`, `resume-while-broker-runs`, `store-corruption-recovery`.
 3. Verify them: 4 need a live broker/incident; 2 have `<placeholder>` Verify commands; 1 needs a real
    merged-ref prune pass.
@@ -36,7 +41,7 @@ store; the two placeholder-Verify runbooks and the prune pass are now DONE (2026
 5. Fallback if no window: demote `runbook-stale` from `error` to `fix-now` (operator decision; trades a real
    guard for a green check).
 
-**Record:** 34 deletions from this campaign plus one reaped merged ref are backfilled into `docs/DISPOSITIONS.md` (rows dated
+**Decisions:** D124 records the campaign's rules (land provable, delete with evidence, never force, do not switch on a guard that goes red for true findings). **Record:** 34 deletions from this campaign plus one reaped merged ref are backfilled into `docs/DISPOSITIONS.md` (rows dated
 2026-10-21); the raw sha/date/subject lines stay in the gitignored `.spike/old-branch-deletions.log`.
 Landing entries that pinned pre-repair shas are stale — BOM repairs and re-cuts moved 30+ branch tips; the
 old→new maps are `.spike/bom-repair.json` and `.spike/resolve-catalogs.json`.
