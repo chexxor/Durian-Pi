@@ -38,6 +38,7 @@ pm-*.err
 # construction (the unreachable-green failure in a new place, #4139).
 *.sqlite.broker.*
 *.sqlite.genlock.*
+*.sqlite.attach.json
 # Per-item seat worktrees (`prepare_workspace` puts them at <root>/item-<id>`).
 # They are disposable checkouts whose work is committed to a branch, so they must
 # never show up as untracked tree dirt (the item-1/item-2 leak, 2026-10-16).
