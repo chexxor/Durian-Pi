@@ -173,13 +173,32 @@ try {
       // the same file, which is the `database is locked` the operator saw on Enter. pause() waits for
       // the in-flight read to finish, resume() repaints the landing screen immediately afterwards.
       await driver.pause();
+      // HAND THE TERMINAL OVER, ALL OF IT. The child inherits this stdin (stdio: "inherit"), so a
+      // parent handler still attached would receive the session's keystrokes too — `q`/`Esc` in the
+      // session would drive THIS screen (quit/back) instead of the session, and the parent would
+      // restore the terminal under a running child. Detach the listener and stop reading until the
+      // window returns; re-attach afterwards, before the repaint.
+      const hadStdin = typeof process.stdin.off === "function";
+      if (hadStdin) process.stdin.off("data", onStdinData);
+      process.stdin.pause();
       // Say what the freeze is: the window may spend up to its settle budget waiting for a pass in
       // flight to finish before the broker releases the store. Silence here reads as a hang.
       process.stderr.write(`
 durig ui: opening the operator window on ${seat} — stopping the broker (waits for a pass in flight to settle, up to 30s)…
 `);
-      const result = await enterHandler({ seat, mode: view.mode });
-      driver.resume();
+      let result;
+      try {
+        result = await enterHandler({ seat, mode: view.mode });
+      } finally {
+        process.stdin.resume();
+        if (hadStdin) process.stdin.on("data", onStdinData);
+        driver.resume();
+      }
+      // A child that died (bad store, missing conversation, no TTY) must say so: otherwise the
+      // operator sees the landing screen come back and never learns the session did not start.
+      if (result.ran && typeof result.childCode === "number" && result.childCode !== 0) {
+        process.stderr.write(`durig ui: the session exited with code ${result.childCode} — see its output above\n`);
+      }
       if (!result.ran) {
         // A refused window must say so where the operator is looking, not fail silently.
         fatal(new Error(result.reason ?? "Enter could not open the operator window"));
@@ -303,7 +322,7 @@ durig ui: opening the operator window on ${seat} — stopping the broker (waits 
   if (typeof process.stdout.on === "function") {
     process.stdout.on("resize", () => driver.tick());
   }
-  process.stdin.on("data", (chunk) => {
+  const onStdinData = (chunk) => {
     const clean = sync.consume(chunk);
     // In input mode every byte is text for the line, not a key: this is what keeps a
     // typed `q` from quitting and a pasted newline from submitting.
@@ -317,7 +336,8 @@ durig ui: opening the operator window on ${seat} — stopping the broker (waits 
     for (const key of decodeKeys(clean)) {
       if (driver.handleKey(key)) return; // quit requested
     }
-  });
+  };
+  process.stdin.on("data", onStdinData);
   driver.start();
 } catch (err) {
   screen.restore();

@@ -91,6 +91,9 @@ export async function runOperatorWindow({ seat, argv = [], stopBroker, spawn, re
 		ok: true,
 		steps,
 		killed,
+		// The child's exit code, so the CALLER can say "the session died" instead of silently
+		// repainting the landing screen as if nothing had happened.
+		childCode: typeof outcome?.code === "number" ? outcome.code : null,
 		// (a) WHAT CAME BACK IS A SCREEN, not a prompt: the caller renders this, it does not fall
 		// through to a shell. (b) the seat is carried back explicitly rather than defaulted.
 		screen: { kind: "landing", seat, selectedSeat: seat, restored: true },
