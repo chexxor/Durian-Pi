@@ -216,8 +216,8 @@ way follows the rule rather than overriding it.
 > 5 `rel-item-*` trees, the 4 clean `%TEMP%` scratches, and the root `item-2209-run`. Each tree's
 > residue was **exported before removal** — `worktree.patch` (`git diff --binary HEAD`) plus every
 > untracked file, each copy sha256-verified — to
-> `../pi-opendurig.worktrees/_exports/2026-10-21/<name>/` with a `manifest.json` (30 manifests; the 4
-> clean scratches and `item-2209-run` had no residue). Worktree HEADs not contained by any ref got
+> `../pi-opendurig.worktrees/_exports/2026-10-21/<name>/` with a `manifest.json` (37 manifests; the 4 clean
+> scratches and `item-2209-run` held no residue). Worktree HEADs not contained by any ref got
 > `archived/<name>` refs FIRST. Two removals were REFUSED by Windows ("Directory not empty": a reserved
 > `nul` entry); their residue was already exported and the residue-only directories were then removed
 > through the extended-length path form. Worktrees went **52 → 10**: 5 held/live, `item-723` (locked),
