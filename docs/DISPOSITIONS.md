@@ -200,3 +200,25 @@ way follows the rule rather than overriding it.
 > because ancestry said "not on main" while content said "already there", and
 > `architect-item-3005` because patch-id said "unique" while the blob was identical.
 > Both are recorded so the next reader sees the mechanism, not just the verdict.
+
+> **NOTE (2026-10-21, bulk `-d` of merged refs; delegate, operator-directed):** **132** landed item refs
+> were deleted with `git branch -d` — the verb that refuses anything unmerged or checked out — against
+> `main` = `4002b23c`; **0 refusals**. Every deleted tip was proved an ancestor of `main` with
+> `git merge-base --is-ancestor` before deletion (raw list: `.spike/merged-ref-prune-2026-10-21.tsv`,
+> gitignored), so nothing was lost; the commits are in `main`'s history. Refs went **169 → 42**:
+> `main`, the 3 stack branches, 5 branches held by live worktrees, 2 snapshots (`item-148`,
+> `item-9002`), 9 pre-split `temp-*`/`wip/*`/`selfdev-borrow` refs (the NOTHING-TO-LAND rows above),
+> and **22 `archived/*`** refs — 9 of them minted this pass so that worktree HEADs which were on **no
+> ref** survived their tree's removal.
+
+> **NOTE (2026-10-21, archive reclaim; delegate, operator-directed):** **42 registered worktrees** were
+> reclaimed — 32 dirty terminal `item-*` trees (27 in `../pi-opendurig.worktrees/`, 5 in the repo root),
+> 5 `rel-item-*` trees, the 4 clean `%TEMP%` scratches, and the root `item-2209-run`. Each tree's
+> residue was **exported before removal** — `worktree.patch` (`git diff --binary HEAD`) plus every
+> untracked file, each copy sha256-verified — to
+> `../pi-opendurig.worktrees/_exports/2026-10-21/<name>/` with a `manifest.json` (30 manifests; the 4
+> clean scratches and `item-2209-run` had no residue). Worktree HEADs not contained by any ref got
+> `archived/<name>` refs FIRST. Two removals were REFUSED by Windows ("Directory not empty": a reserved
+> `nul` entry); their residue was already exported and the residue-only directories were then removed
+> through the extended-length path form. Worktrees went **52 → 10**: 5 held/live, `item-723` (locked),
+> and 4 `%TEMP%` scratch trees kept by rule (dirty or locked).
