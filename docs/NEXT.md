@@ -74,6 +74,36 @@ RESTART), proven end to end against a real broker on a temp store: ownership was
 Enter, free at the moment the session opened, and re-owned by a NEW broker pid after the window. The
 attach contract (`<db>.attach.json`) is now gitignored (`975ef62a`).
 
+**`npm run ui` → Enter (2026-10-22, operator-reported, FIXED in two landings).** Two separate failures,
+both real, both proved on the live store:
+
+1. `b3de2f5d` — the ruled operator window is record → **STOP** → acquire → session → release → RESTART,
+   but `runOperatorWindow` only did spawn → release → restart, so `tui.mjs` (a WRITER) met the ownership
+   guard and the operator got `refusing to open … a broker is driving it`. `stopBroker` is now a required
+   step, wired in `src/tui/durable/enter.mjs`.
+2. `f1246892` — the operator then got **`database is locked`**, from two causes: (a) `serve --stop`
+   answering "no broker is running" is NOT proof the store is free — a previous window restarts the
+   broker DETACHED, and for a moment there is no state file while that process opens the store; the stop
+   now REPEATS and confirms with a real **writer open** (`probeWritable`). (b) the `ui.mjs` poller kept
+   polling across the window, and with the broker gone it switches to `readLocal`, which opens the store
+   and runs the WAL/pragma path — a second connection exactly when the child opens as a writer. The
+   driver gained `pause()`/`resume()` (pause waits for the in-flight read and blocks new ones; resume
+   repaints) and `ui.mjs` pauses around the window. `tui.mjs` opens with `busyTimeoutMs: 15_000`.
+3. `bb55f7ce` — a BUSY rig needs more than one grace: with a seat generation in flight, `serve --stop`
+   gives up after its 5 s grace, so the settle budget is now **30 s** (retries), overridable with
+   `DURIG_WINDOW_SETTLE_MS`; past that the refusal NAMES the seat still generating, which is the
+   actionable truth. `ui.mjs` prints one line before the freeze so a slow stop is not a mystery.
+
+**Live proof** (`.spike/opwin-live.mjs`, real store, session spawn stubbed): broker up → Enter → stop →
+`writerOpen=true` at spawn → release → broker restarted (new pid). And on a busy rig it refused in ~10 s
+naming `auditor`, which is correct: a second writer must be impossible.
+
+**Queue progress while this was being fixed (broker running):** #4745 (orphaned-HEAD guard), #4746
+(`idle` verdict), #4747 (NEXT split), #4748 (its verify) and #4751 (N2 handoff ruling) are **done**;
+#4749/#4750 and a second wave (#4752+) are queued. The team is driving; the broker was restarted
+(pid 20224) after the live proof, so the queue keeps moving. Refs 18 (11 unmerged: 3 stack + 5 held +
+`item-3033` + 2 new item branches), worktrees 6.
+
 **Recommended next action:** grant a tiny provider-backed verification on a TEMP store (no live rig, no seats
 registered): one two-word `send`, one `compact`, one deliberately-stranded submission. That dates
 `compact-a-seat`, `broker-safe-change` and `resume-while-broker-runs`; `store-corruption-recovery` needs a real
