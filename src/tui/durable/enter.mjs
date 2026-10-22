@@ -17,6 +17,13 @@
 // "stopped" here means what fail-closed there means. Proven end to end against a real broker in
 // .spike/opwin-e2e.mjs (kept out of the suite: it spawns processes).
 //
+// AND THE SECOND FAILURE, which only a real run could show: `serve --stop` answering "no broker is
+// running" is NOT proof the store is free — a previous window restarts the broker DETACHED, and for a
+// moment there is no state file while that process is opening the store. The child then died with
+// `database is locked`. So the stop step REPEATS and confirms with a real WRITER OPEN (probeWritable),
+// and the poller pauses for the window (src/tui/driver.mjs pause/resume) so no read is in flight while
+// a writer takes the file. Proven in .spike/opwin-e2e2.mjs (the restart race).
+//
 // WHAT THIS CANNOT CLAIM, and it is named rather than implied: (c) LIVE NOT FROZEN needs a real broker
 // AND a poller, and nothing here proves a poller polls. The DECISION is launch.mjs's `assessReturn`;
 // the live assertion needs the operator's terminal.
@@ -43,28 +50,54 @@ export const STOP_SETTLE_MS = 5_000;
  */
 export function stopBrokerForStore({ repo, dbPath, timeoutMs = STOP_SETTLE_MS }) {
 	return new Promise((resolve) => {
-		const child = spawn(process.execPath, [join(repo, "cli.mjs"), "serve", "--stop"], {
-			cwd: repo,
-			stdio: "ignore",
-			env: { ...process.env, DURIG_DB: dbPath },
-		});
-		child.on("error", (err) => resolve({ ok: false, reason: `could not run serve --stop: ${String(err?.message ?? err)}` }));
-		child.on("exit", () => {
-			const deadline = Date.now() + timeoutMs;
-			const settle = () => {
-				const ownership = assessStoreOwnership(dbPath);
-				if (!ownership.owned) return resolve({ ok: true, reason: null });
-				if (Date.now() > deadline) {
-					return resolve({
-						ok: false,
-						reason: `the broker still owns ${dbPath} after serve --stop: ${ownership.reasons.join("; ")}`,
-					});
-				}
-				setTimeout(settle, 100);
-			};
-			settle();
-		});
+		const deadline = Date.now() + timeoutMs;
+		// ONE ATTEMPT = ask the broker to stop, then confirm with a WRITER OPEN.
+		//
+		// The attempt REPEATS because a previous window restarts the broker DETACHED: for a moment
+		// after that restart there is no state file, so `serve --stop` answers "no broker is running"
+		// while the new process is already opening the store. A single stop + ownership check reads
+		// that moment as free and the child then dies with `database is locked`. Asking again is what
+		// closes the window, and the writer probe is what makes the answer mean "a session can open".
+		const attempt = () => {
+			const child = spawn(process.execPath, [join(repo, "cli.mjs"), "serve", "--stop"], {
+				cwd: repo,
+				stdio: "ignore",
+				env: { ...process.env, DURIG_DB: dbPath },
+			});
+			child.on("error", (err) => resolve({ ok: false, reason: `could not run serve --stop: ${String(err?.message ?? err)}` }));
+			child.on("exit", () => {
+				void confirm();
+			});
+		};
+		const confirm = async () => {
+			const ownership = assessStoreOwnership(dbPath);
+			const probe = ownership.owned
+				? { ok: false, reason: `a broker owns it: ${ownership.reasons.join("; ")}` }
+				: await probeWritable(dbPath);
+			if (probe.ok) return resolve({ ok: true, reason: null });
+			if (Date.now() > deadline) {
+				return resolve({ ok: false, reason: `the store is still held by a writer: ${probe.reason}` });
+			}
+			setTimeout(attempt, 150);
+		};
+		attempt();
 	});
+}
+
+/**
+ * Can a WRITER open this store right now? Open + close the same durable storage the child opens,
+ * with a short busy timeout so a transient lock is retried rather than misread. Read-only: it creates
+ * nothing a healthy store does not already have (the WAL/pragma path runs on every open).
+ */
+async function probeWritable(dbPath, { busyTimeoutMs = 1_000 } = {}) {
+	try {
+		const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
+		const storage = await openNodeSqliteStorage(dbPath, { busyTimeoutMs });
+		await storage.close();
+		return { ok: true, reason: null };
+	} catch (err) {
+		return { ok: false, reason: String(err?.message ?? err) };
+	}
 }
 
 /** The real session runner: the durable Pi TUI in THIS terminal, on the seat's store. */

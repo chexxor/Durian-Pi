@@ -168,7 +168,13 @@ try {
           void driver.tick();
         },
       });
+      // HOLD NO CONNECTION WHILE THE WINDOW OWNS THE STORE. The window stops the broker and lets a
+      // WRITER (tui.mjs) open the store; a poller mid-read at that instant is a second connection on
+      // the same file, which is the `database is locked` the operator saw on Enter. pause() waits for
+      // the in-flight read to finish, resume() repaints the landing screen immediately afterwards.
+      await driver.pause();
       const result = await enterHandler({ seat, mode: view.mode });
+      driver.resume();
       if (!result.ran) {
         // A refused window must say so where the operator is looking, not fail silently.
         fatal(new Error(result.reason ?? "Enter could not open the operator window"));

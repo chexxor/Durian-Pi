@@ -56,10 +56,11 @@ export function createUiDriver({ getSize, readState, paint, onExit = () => {}, o
 	let timer = null;
 	let running = false; // a tick is in flight
 	let stopped = false; // cleanup happened
+	let paused = false; // the OPERATOR WINDOW owns the store: no reads from here
 	let tickScheduled = false; // a follow-up tick is queued because one was in flight
 
 	async function tick(now = Date.now()) {
-		if (stopped) return;
+		if (stopped || paused) return;
 		if (running) {
 			// Coalesce: one follow-up tick after the in-flight one completes, never
 			// concurrent renders (never block/double-paint the render thread).
@@ -101,6 +102,30 @@ export function createUiDriver({ getSize, readState, paint, onExit = () => {}, o
 			void tick();
 			if (!stopped) schedulePoll();
 		}, pollMs);
+	}
+
+	/**
+	 * Hand the store to the OPERATOR WINDOW and take it back afterwards.
+	 *
+	 * `pause` clears the poll timer and RESOLVES ONLY WHEN NO READ IS IN FLIGHT — the window is about
+	 * to stop the broker and let a WRITER open the store, and a poller mid-read at that moment is a
+	 * second connection on the same file (the `database is locked` the operator saw). `resume`
+	 * re-arms the loop and repaints immediately, so the landing screen is never a stale frame.
+	 */
+	async function pause() {
+		paused = true;
+		if (timer) {
+			clearTimeout(timer);
+			timer = null;
+		}
+		while (running) await new Promise((r) => setTimeout(r, 10));
+	}
+
+	function resume() {
+		if (stopped || !paused) return;
+		paused = false;
+		void tick();
+		if (!stopped && !paused && !timer) schedulePoll();
 	}
 
 	/** Stop the poll loop and report the quit once. */
@@ -170,7 +195,7 @@ export function createUiDriver({ getSize, readState, paint, onExit = () => {}, o
 		}
 	}
 
-	return { start, tick, handleKey, cleanup };
+	return { start, tick, handleKey, cleanup, pause, resume };
 }
 
 /* ───────── decode stdin chunks ───────── */

@@ -46,6 +46,53 @@ try {
   const painted = [];
   let size = { width: 80, height: 24 };
   let stateVersion = 0;
+  // --- 1b. pause()/resume(): the operator window OWNS the store ------------------
+  // Enter stops the broker and lets a WRITER open the store. A poller mid-read at that moment is a
+  // second connection on the same file — the `database is locked` the operator saw. So pause() must
+  // wait for the in-flight read, block new reads, and resume() must repaint immediately.
+  {
+    let reads = 0;
+    let inFlight = null;
+    let release = null;
+    const paints = [];
+    const slow = driverModule.createUiDriver({
+      getSize: () => ({ width: 80, height: 24 }),
+      color: false,
+      pollMs: 10,
+      readState: async () => {
+        reads += 1;
+        // The FIRST read blocks until the test releases it, so pause() has something to wait for.
+        if (reads === 1) {
+          inFlight = new Promise((r) => { release = r; });
+          await inFlight;
+        }
+        return { seats: dummySeats, turns: dummyTurns, partial: null, health: dummyHealth, queueItems: [] };
+      },
+      paint: (p) => paints.push(p.kind),
+      onExit: () => {},
+    });
+    const firstTick = slow.tick();
+    await new Promise((r) => setTimeout(r, 10));
+    let paused = false;
+    const pausePromise = slow.pause().then(() => { paused = true; });
+    await new Promise((r) => setTimeout(r, 20));
+    check("pause() does NOT resolve while a read is in flight", paused === false);
+    release();
+    await pausePromise;
+    await firstTick;
+    check("pause() resolves once the in-flight read finished", paused === true);
+    const readsAtPause = reads;
+    await slow.tick();
+    await new Promise((r) => setTimeout(r, 30));
+    check("no read happens while paused (the store is the window's)", reads === readsAtPause, `reads ${readsAtPause} -> ${reads}`);
+    const paintsAtResume = paints.length;
+    slow.resume();
+    await new Promise((r) => setTimeout(r, 40));
+    check("resume() repaints immediately (the landing screen is not a stale frame)", paints.length > paintsAtResume, `paints ${paintsAtResume} -> ${paints.length}`);
+    check("...and reads again after resume", reads > readsAtPause);
+    slow.cleanup();
+  }
+
   const driver = driverModule.createUiDriver({
     getSize: () => size,
     color: false,
