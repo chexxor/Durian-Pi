@@ -111,11 +111,16 @@ try {
 			/listWorktrees\(repo, \{ strict: true \}\)/.test(src),
 			"the guard would read a failed listing as 'nothing holds this ref'",
 		);
-		// A coarse guard, deliberately: it fails if the strict flag disappears from the call site
-		// entirely. (The doc comment also spells `strict: true`, so count CALL SITES only.)
+		// A coarse guard, deliberately: it fails if the strict flag disappears from a DECIDING call
+		// site entirely. (The doc comments also spell `strict: true`, so count CALL SITES only.)
+		// There are exactly TWO deciding sites: the #3174 holder guard, and the legacy-branch
+		// adoption (#N1), which decides whether it may RENAME a ref — a permissive [] there would
+		// read "nothing holds this ref" and rename a checked-out branch.
+		const strictSites = (readFileSync(new URL("../src/worktree.mjs", import.meta.url), "utf8").match(/listWorktrees\([^)]*strict: true/g) ?? []).length;
+		check("every deciding call site is strict (holder guard + legacy adoption)", strictSites === 2, `saw ${strictSites}`);
 		check(
-			"exactly one production call site is strict",
-			(readFileSync(new URL("../src/worktree.mjs", import.meta.url), "utf8").match(/listWorktrees\([^)]*strict: true/g) ?? []).length === 1,
+			"the legacy-branch adoption is one of them",
+			/adoptLegacyItemBranch[\s\S]{0,2000}listWorktrees\(repo, \{ strict: true \}\)/.test(readFileSync(new URL("../src/worktree.mjs", import.meta.url), "utf8")),
 		);
 	}
 
