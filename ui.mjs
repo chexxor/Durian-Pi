@@ -173,6 +173,11 @@ try {
       // the same file, which is the `database is locked` the operator saw on Enter. pause() waits for
       // the in-flight read to finish, resume() repaints the landing screen immediately afterwards.
       await driver.pause();
+      // Say what the freeze is: the window may spend up to its settle budget waiting for a pass in
+      // flight to finish before the broker releases the store. Silence here reads as a hang.
+      process.stderr.write(`
+durig ui: opening the operator window on ${seat} — stopping the broker (waits for a pass in flight to settle, up to 30s)…
+`);
       const result = await enterHandler({ seat, mode: view.mode });
       driver.resume();
       if (!result.ran) {
