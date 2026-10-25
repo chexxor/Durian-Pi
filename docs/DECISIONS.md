@@ -4078,4 +4078,45 @@ network drive, and this model reads experts from disk. *Vision on* — rejected 
 caches holding 16,601 of 24,576 profiled pairs (~98.9% of routed mass). Measured ~35-75 tok/s answering
 and ~480 tok/s prompt at 4.8K. Note this repo was NOT touched beyond this entry and the NEXT.md note.
 
+## D126 — Cold start is a MEASURED cost, and the delegate clock-in goes through a digest, not through whole-file
+reads (delegate, 2026-10-25; operator-directed)
+
+**The measurement, taken on this repo on 2026-10-25.** The `AGENTS.md` clock-in ritual — read `docs/NEXT.md`,
+read `docs/SELFDEV.md`, `git status`, `cli.mjs status` — costs a new session **~113,000 tokens before it can do
+anything**: `docs/NEXT.md` is 396,843 B / 4,704 lines (~99k tok, and it exceeds the 50 KB / 2,000-line read cap so
+it arrives in 8 chunked reads) of which only the 92-line top pointer is live; `docs/SELFDEV.md` is 57,589 B / 749
+lines (~14k tok) of which ~400 lines are the local-model capacity and benchmark treatise; `cli.mjs status` prints
+**22,740,436 B** and `cli.mjs queue` prints **21,168,982 B** (4,818 rows including full bodies), so a session that
+lets either reach its own context pays ~100x the whole ritual.
+
+**The decision.** The delegate's clock-in runs through one read-only digest —
+`node .spike/delegate/clockin.mjs`, measured **6.1 s and 14,327 B printed** (~3,600 tok, ~30x cheaper) — which
+returns the live pointer verbatim, per-seat `last_run_failed`, broker liveness, queue counts, the deferred ids,
+every unmerged branch joined to its queue row's status, the stale-runbook list, the provider config plus a live
+probe of the local endpoint, a `SELFDEV.md` section map, and the last suite marker. Documented in
+`docs/DELEGATE-CLOCKIN.md`, which also lists the token traps a session must not walk into (whole-file reads of
+`NEXT.md`/`SELFDEV.md`; printing `status`/`queue`; re-deriving facts the digest already reports; calling a
+SIGTERM'd demo a failure).
+
+**Why the invariants are what they are.** (1) **Broker liveness is resolved, never assumed from the state file**:
+`selfdev.sqlite.broker.json` named pid `14784`, which `tasklist` showed was `svchost.exe` — a `broker.json` file is
+not evidence of a live broker, and a session that assumed one would have restarted nothing and reported a running
+rig. (2) **No row bodies, ever**: bodies are the entire reason those verbs are tens of megabytes. (3) **The digest
+prints the pointer verbatim**, which is both its value and its cost — so the pointer must be capped (~120 lines),
+because every pointer line is paid for by every later session.
+
+**What was deliberately NOT done.** The digest stays under gitignored `.spike/`: making it a first-class
+`cli.mjs` verb is `devtools` work, and re-cutting `docs/NEXT.md` is `scribe` work; the delegate built neither and
+claimed no queue row. The asks, with acceptance criteria a verifier can check, are written in
+`docs/DELEGATE-CLOCKIN.md` §6 and spooled at `.spike/delegate/intent-fast-clockin.md` for `pm` once a broker can
+deliver them.
+
+**Standing evidence for the re-cut ask.** `item-4747` @`9f624ff4` already splits `NEXT.md` into a 156-line
+pointer (12,979 B) plus `docs/NEXT-ARCHIVE.md` (364,956 B) — a ~30x cut in the read every session pays — and
+`#4747`/`#4750` are `done` with landing entry `#4815` `deferred` to the human. It does **not** merge clean today:
+`git merge-tree --write-tree main item-4747` reports a `docs/NEXT.md` conflict, because `main` moved 612 commits
+past the branch and the pointer has since grown. So it needs a re-cut against the moved pointer, not a landing —
+which is exactly what `#4814` and `#4817` ask for in a different form (re-measure against the tree being measured).
+
+
 

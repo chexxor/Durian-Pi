@@ -70,13 +70,14 @@ seat can run, so no seat can be woken to do anything until the provider question
 (verified, unlanded) · #4747/#4750 (NEXT split, verified, unlanded, needs re-measure)
 
 **Exact next commands:**
-1. `node .spike/delegate/clockin.mjs` — ONE call (measured 6.1 s, 12,438 B) that prints the live pointer,
+1. `node .spike/delegate/clockin.mjs` — ONE call (measured 6.1 s, 14,327 B) that prints the live pointer,
    `last_run_failed`, broker UP/DOWN + `lastPassAt` age, queue counts, the deferred ids, the unmerged-branch
    debt with each row's status, the stale-runbook list, the provider config plus a probe of the local endpoint,
-   a SELFDEV.md section map, and the last suite marker. **Do not read `docs/NEXT.md` whole (396,843 B ≈ 99k tok;
-   the useful pointer is 92 lines ≈ 2k tok) and do not read `docs/SELFDEV.md` whole (57,589 B ≈ 14k tok) —
-   read only the section the map names.** Never print `cli.mjs status` (22.7 MB) or `cli.mjs queue` (21.2 MB) to
-   the terminal: redirect to `.spike/` and aggregate with python.
+   a SELFDEV.md section map, and the last suite marker. It is documented in `docs/DELEGATE-CLOCKIN.md` (D126).
+   **Do not read `docs/NEXT.md` whole (396,843 B ≈ 99k tok; the useful pointer is 92 lines ≈ 2k tok) and do not
+   read `docs/SELFDEV.md` whole (57,589 B ≈ 14k tok) — read only the section the map names.** Never print
+   `cli.mjs status` (22.7 MB) or `cli.mjs queue` (21.2 MB) to the terminal: redirect to `.spike/` and aggregate
+   with python.
 2. `node demo/next-pointer.test.mjs` — if it fails, the pointer has drifted; fix the pointer before anything else.
 3. Read `attention`'s `last_run_failed` from the digest: while it still says `402 … positive balance`, do not
    restart the broker and do not expect any seat to move.
