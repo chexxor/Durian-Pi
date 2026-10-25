@@ -24,6 +24,7 @@ import {
 	pointerSection,
 	queueCounts,
 	renderDigest,
+	suiteMarker,
 } from "../scripts/clockin.mjs";
 
 const ROOT = join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
@@ -292,7 +293,38 @@ try {
 		"the trimmed digest is smaller than the full one — the flags remove work, they do not add a section",
 	);
 
-	// 5. THE LIVE POINTER FILE IS STILL A POINTER. The cap is the durable half of the split: the file
+	// 5. THE SUITE MARKER IS READ EITHER WAY IT WAS WRITTEN. The marker is scratch, written by whoever last
+	//    ran the suite, and the two shapes used so far differ ({pass,total,at,sha} from the prototype,
+	//    {suite,main,measured_at} from the later one). A reader that assumes one prints
+	//    "last suite: undefined/undefined at undefined" — which looks exactly like a result. This session hit
+	//    that for real: the digest printed `last suite: undefined/undefined at undefined` after the marker was
+	//    rewritten by hand.
+	assert.match(
+		suiteMarker(
+			JSON.stringify({ pass: 209, total: 234, at: "T1", sha: "4362bd54", note: "capped run" }),
+		),
+		/last suite: 209\/234 at T1 \(main 4362bd54\) — capped run/,
+		"the older {pass,total,at,sha} shape still reads",
+	);
+	assert.match(
+		suiteMarker(
+			JSON.stringify({ suite: "235/235 passed in 479.9s", main: "1aeb0c43", measured_at: "T2" }),
+		),
+		/last suite: 235\/235 passed in 479\.9s at T2 \(main 1aeb0c43\)/,
+		"the newer {suite,main,measured_at} shape reads too",
+	);
+	assert.match(
+		suiteMarker(JSON.stringify({ suite: "1/2", main: "deadbee" }), "cafe1234"),
+		/STALE: main is now cafe1234/,
+		"a marker for a different main is labelled stale instead of presented as current",
+	);
+	assert.ok(!suiteMarker("{not json").includes("undefined"), "an unreadable marker says so");
+	assert.ok(
+		!suiteMarker(JSON.stringify({})).includes("undefined"),
+		"an empty marker never prints undefined",
+	);
+
+	// 6. THE LIVE POINTER FILE IS STILL A POINTER. The cap is the durable half of the split: the file
 	//    every session reads whole must not grow back into the 4,724-line file it was.
 	const live = readFileSync(join(ROOT, "docs/NEXT.md"), "utf8").split(/\r?\n/);
 	assert.ok(

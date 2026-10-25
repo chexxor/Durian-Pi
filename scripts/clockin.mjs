@@ -151,6 +151,36 @@ export function staleRunbooks({ root = process.cwd() }) {
 }
 
 /** Render the digest from already-read state. Pure: nothing here touches git, the store, or the network. */
+/**
+ * The suite marker is written by whoever last ran the suite, and the shapes used so far disagree: the .spike
+ * prototype wrote `{pass,total,at,sha}`, the later marker writes `{suite,main,measured_at}`. A reader that assumes
+ * one shape prints "last suite: undefined/undefined at undefined", which is worse than printing nothing because it
+ * reads like a result. Accept either, and say out loud when the marker describes a different main.
+ */
+export function suiteMarker(jsonText, currentMain = null) {
+	let m;
+	try {
+		m = JSON.parse(jsonText);
+	} catch {
+		return "last suite: marker is not readable JSON — re-run node scripts/test.mjs";
+	}
+	const result =
+		m.result ??
+		(m.pass !== undefined && m.total !== undefined ? `${m.pass}/${m.total}` : undefined) ??
+		(typeof m.suite === "string" ? m.suite : undefined) ??
+		"no result field in the marker";
+	const at = m.at ?? m.measured_at ?? "time unknown";
+	const main = m.main ?? m.sha ?? "main unknown";
+	const same =
+		main === "main unknown" ||
+		currentMain === null ||
+		currentMain.startsWith(main) ||
+		main.startsWith(currentMain);
+	// The marker's `note` is scratch prose written by whoever ran the suite; the digest carries a line, not the file.
+	const note = typeof m.note === "string" ? m.note.slice(0, 200) : "no note";
+	return `last suite: ${result} at ${at} (main ${main}${same ? "" : ` — STALE: main is now ${currentMain}`}) — ${note}`;
+}
+
 export function renderDigest(s) {
 	const out = [];
 	const say = (...a) => out.push(a.join(" "));
@@ -241,14 +271,19 @@ function runCli(args, db) {
 	return JSON.parse(out.slice(0, out.lastIndexOf("}") + 1));
 }
 
+// Git calls here are read-only and bounded: a hung git call would turn a 6 s clock-in into a stall, so every one
+// carries a timeout and drops stderr (a "not a git repository" line is not digest material).
+function gitSafe(args) {
+	return execFileSync("git", args, {
+		encoding: "utf8",
+		stdio: ["ignore", "pipe", "ignore"],
+		timeout: 15000,
+		maxBuffer: 8 * 1024 * 1024,
+	}).trim();
+}
+
 function branchDebt(db, items) {
-	const git = (a) =>
-		execFileSync("git", a, {
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "ignore"],
-			timeout: 15000,
-			maxBuffer: 8 * 1024 * 1024,
-		}).trim();
+	const git = gitSafe;
 	const branches = git(["branch", "--format=%(refname:short)"])
 		.split("\n")
 		.filter((b) => b && b !== "main");
@@ -295,10 +330,12 @@ export async function main(argv = process.argv.slice(2)) {
 	const selfdevLines = selfdevText.split(/\r?\n/);
 	let marker = null;
 	try {
-		const m = JSON.parse(readFileSync(resolve(".spike/delegate/suite-marker.json"), "utf8"));
-		marker = `last suite: ${m.pass}/${m.total} at ${m.at} (main ${m.sha}) — ${m.note || "no note"}`;
+		marker = suiteMarker(
+			readFileSync(resolve(".spike/delegate/suite-marker.json"), "utf8"),
+			opts.git ? gitSafe(["rev-parse", "--short", "main"]) : null, // --no-git means "no git calls", so no staleness check either
+		);
 	} catch {
-		marker = "last suite: no marker (write .spike/delegate/suite-marker.json after a run)";
+		marker = null;
 	}
 	const state = {
 		pointer: pointerSection(nextText),
