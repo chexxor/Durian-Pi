@@ -35,11 +35,15 @@ balance to do inference…\"}"`, `timestamp 1792811531525` = **2026-10-24T03:12:
   `id "qwen3.8-flash-next-iq3_xxs"`, `status.loaded`, `n_ctx 131072`. But the rig does not point at it:
   `cli.mjs config` gives `DURIG_PROVIDER=deepinfra`, `DURIG_MODEL=zai-org/GLM-5.3-Flash`,
   `DURIG_MAX_CONCURRENT_SEATS=4`, and **no `DURIG_LOCAL_BASE_URL`** (the key exists, `src/config.mjs:118`).
-- **Tree:** `main` @`4362bd54`, tracked tree clean (0 dirty). 32 refs, 9 worktrees (4 locked item trees).
+- **Tree:** `main` @`1aeb0c43`; the tracked tree is clean apart from this session's docs commit. 32 refs,
+  9 worktrees (4 locked item trees). **Full suite proven on this tree: 235/235 passed in 479.9 s**
+  (`.scratch/test/all.out`), including the new `demo/clockin-digest.test.mjs`.
 - **Suite on the clean shared tree (which equals `main`):** `npm run test` reached 210 of 234 demos inside my
   420 s cap — **209 PASS**, the only FAIL line was `demo/up-model-reset.test.mjs` with **exit 143 (SIGTERM from
   my cap, not a defect)**: run alone it exits 0 with all 13 assertions ok (`.spike/delegate/up-model-reset.out`).
-  Full 234/234 is therefore **NOT proven this session**; log at `.spike/delegate/suite-main.out`.
+  That left 234/234 **unproven at that point**; it was proven later the same session, after the work below landed:
+  **235/235 in 479.9 s** on `main` @`1aeb0c43` (`.scratch/test/all.out`). Logs at `.spike/delegate/suite-main.out`
+  and `.scratch/test/all.out`.
 
 **THE POINTER BELOW WAS MEASURABLY STALE — three corrections, do not re-derive them:**
 
@@ -104,9 +108,9 @@ non-author re-verify)
 
 **Blocker:** **provider 402 — DeepInfra has no balance**, so no seat can run (this blocks the pointer below
 too: its "provider-backed verification on a temp store" needs a working provider, and 13 — not 4 — runbooks are
-now stale). Secondary: 19 `deferred` rows await the operator's rulings, and 15 verified branches sit unlanded
-612 commits behind `main`. Not a blocker: the tree is clean and `main` looks green (209/210 demos reached this
-session; full 234 unproven).
+now stale). Secondary: 19 `deferred` rows await the operator's rulings, and verified branches sit unlanded (the
+digest's `## GIT` section lists 17 unmerged refs with each row's status). Not a blocker: the tree is clean and
+`main` is green — **235/235 demos, 479.9 s**, proven after `1aeb0c43`.
 
 **Delegate also owes, if asked:** the still-unproven Enter question from the pointer below — whether the Pi TUI
 renders inside the operator window. Only the operator's terminal can answer it; the new
