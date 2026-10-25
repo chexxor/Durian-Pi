@@ -4026,3 +4026,56 @@ because the fix is a habit, not a patch.
 **Status.** Executed (operator-directed, no queue item); evidence in `docs/DISPOSITIONS.md` (deletion rows
 dated 2026-10-21) and in the commit history of this campaign.
 
+## D125 — Strata is installed on this PC as ONE model on a 3090 + A4000 LAYER SPLIT in low-RAM mode; RAM is the ceiling, not VRAM (operator-directed SIDE TASK, 2026-10-24; no queue item)
+
+**Decision.** Install Strata (https://github.com/Niko1221/Strata) per its `docs/AI_SETUP.md` and serve
+`Qwen3.8-Flash-Next IQ3_XXS` at 128K context on **both** cards, with **Main = RTX 3090** (index 1) and
+**Helper = RTX A4000** (index 0), pictures off, MTP drafting on, and all model data in one folder on `C:`.
+Engine flags the launcher produced: `--layer-split auto --expert-cache auto --resident-experts --mtp
+--spec 4 --kv int8 --batch 3 --max-context 131072`.
+
+**Why a layer split at all.** It is not cosmetic on this rig. Run through the project's own `gpu_fit`
+arithmetic (IQ3_S, 32 GB RAM), one card does not hold the experts and streams them from the SSD while
+answering: 3090 alone **13 GB spilled**, A4000 alone **21 GB**; the two cards together as a split spill
+**0**. The split is what turns "does not fit" into "fits".
+
+**Why IQ3_XXS and not IQ3_S.** The tool's tier rule counts RAM + the MAIN card's VRAM only (32 + 24 - 5 =
+56 GB -> the 48 GB tier -> IQ3_XXS). Counting both cards (67 GB) would name IQ3_S, so the choice was
+decided on the fit arithmetic, not the tier alone:
+
+| Size | Split verdict | RAM spare | 3090 alone spills |
+| --- | --- | ---: | ---: |
+| Q2_0 | fits | 18.3 GB | 0 |
+| IQ2_XS | fits | 16.7 GB | 0 |
+| **IQ3_XXS** | **fits** | **8.9 GB** | 5.1 GB |
+| IQ3_S | tight | 1.1 GB | 12.9 GB |
+
+IQ3_S is the better model but leaves ~1 GB of RAM on a 32 GB box, and setup itself says it "needs a 62 GB
+RAM, you have 32"; a tight fit on the one resource this PC is short of is not a default worth choosing.
+IQ3_XXS is the tool's own pick AND the comfortable fit. Q2_0/IQ2_XS stay one command away if speed comes
+to matter more than quality.
+
+**Two defects found in the installer (worth an upstream report, neither blocks this install):**
+
+1. **The disk pre-check charges the low-RAM arena to the wrong drive.** With `--model-path` on one drive
+   and `--data-dir` on another — the combination AI_SETUP itself documents — `setup.py` compares
+   `free_gb(models_dir)` (the `--model-path` folder) against `arena_gb + 1 + mtp + vision`, while the arena
+   is actually written to `<data-dir>/packs/<tag>`. A model folder without ~51 GB free is therefore refused
+   even when the data dir has plenty. It is why the first attempt failed on `D:` with 47 GB free.
+2. **The "does not fit this computer" warning evaluates ONE card.** `catalog.rows()` fits against
+   `comp.main_vram_gb`, so on a split rig it reports the main card's verdict. It said "does not fit"
+   before anything was even downloaded, while the split fits with 8.9 GB to spare.
+
+**Alternatives considered.** *IQ3_S* — rejected on RAM spare (above). *Q2_0 / IQ2_XS* — rejected: lower
+quality, and a fresh download either way. *Keep the model on `D:`* — rejected: 76 GB model + ~46 GB arena
+exceed its 121 GB free; the installer's own check wants them in one data dir. *`T:`* — rejected: it is a
+network drive, and this model reads experts from disk. *Vision on* — rejected by the operator (saves
+0.9 GB of download and ~1.5 GB of VRAM).
+
+**Status.** Executed and verified on 2026-10-24: `/health` reports `loaded: true`, `max_context: 131072`;
+`/v1/models` lists the model; a chat completion returns; both cards are loaded (3090 23.7/24 GB, A4000
+15.0/16 GB); engine log prints `card roles: Main GPU 1, Helper GPU 0`, `layer split auto: K=17`,
+caches holding 16,601 of 24,576 profiled pairs (~98.9% of routed mass). Measured ~35-75 tok/s answering
+and ~480 tok/s prompt at 4.8K. Note this repo was NOT touched beyond this entry and the NEXT.md note.
+
+

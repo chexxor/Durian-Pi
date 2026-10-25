@@ -150,6 +150,39 @@ corrupt store (its detection half is already recorded). Then reland the stack pe
 Landing entries that pinned pre-repair shas are stale — BOM repairs and re-cuts moved 30+ branch tips; the
 old→new maps are `.spike/bom-repair.json` and `.spike/resolve-catalogs.json`.
 
+## CLOCK-OUT (2026-10-24 — SIDE TASK, no queue item: Strata is installed and serving on this PC)
+
+**Not a durian-pi item.** This session did no rig, queue or branch work: the tree was clean at both ends
+(`main` `850c1cbf`, index empty, no seat work staged) and the only files it touched in this repo are this
+note and **D125**. Do not read it as the current pointer — the pointer above is unchanged and still names
+the runbook-wiring stack.
+
+**What now exists on this PC:** **Strata** (local model server, https://github.com/Niko1221/Strata) is
+installed and **serving at http://127.0.0.1:8080** — OpenAI-compatible at `/v1`, Anthropic-compatible at
+the root. Model `qwen3.8-flash-next-iq3_xxs`, 128K context, pictures off, MTP drafting on.
+
+- **Terminal:** `strata 0.2.4.2` (build `0.1.49.2`) at
+  `%LOCALAPPDATA%\Strata\terminal\current\bin\strata.cmd` (on the user PATH); engine `0.1.48` CUDA.
+- **Both GPUs, roles as the tool's own rule picks them:** **Main = RTX 3090** (24 GB; layers 17-47, the
+  head and the draft layer), **Helper = RTX A4000** (16 GB; layers 0-16). `--layer-split auto` chose K=17
+  and explicitly rejected K=2 because a stage under 3 layers clamps every card's prompt chunk (#2644).
+- **Data:** `C:\Users\Alex\Strata-data` (~124 GB: 76 GB model + 46 GB low-RAM expert arena + draft).
+  Model files do not go back to `D:`; the arena and the model must share one data dir.
+- **Measured:** ~35-75 tok/s answering (cache-warm), ~480 tok/s prompt at 4.8K tokens.
+
+**Do not** start a second copy on port 8080 — `strata launch --status` then `--stop`. The settings are
+saved, so a plain `strata launch` restarts this exact configuration.
+
+**Two facts a later session must not re-derive:** (1) the PolyStrata data dirs were deleted on 2026-10-24,
+which took the 78 GB IQ3_S model with them, so the installed model is **IQ3_XXS, downloaded fresh**;
+(2) this PC has **32 GB of RAM**, which is the ceiling — not the 40 GB of VRAM — so the model runs in
+low-RAM (resident-experts) mode and wants other heavy apps closed.
+
+**Exact next command (Strata, if it needs a look):** `strata launch --status`
+
+**Blocker:** none for this side task; it is finished and verified. The durian-pi blocker is unchanged and
+lives in the pointer above (the runbook-wiring stack waits on re-verified runbooks).
+
 ## NEXT SESSION (2026-10-21T04:55Z — THREE BRANCHES LANDED and proven on main; shared-tree incident closed to its resolution path)
 
 **Current item:** the three verified TUI branches are **on `main`** and proven in a detached worktree —
