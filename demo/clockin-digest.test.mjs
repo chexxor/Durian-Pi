@@ -272,8 +272,21 @@ try {
 		/broker: DOWN pid=999999/,
 		"the fixture's dead broker is still reported DOWN",
 	);
-	assert.ok(!trimmed.stdout.includes("## RUNBOOKS"), "--no-runbooks skips the staleness probe");
-	assert.ok(!trimmed.stdout.includes("## GIT"), "--no-git skips the branch walk");
+	// The digest quotes the pointer VERBATIM, so a section name mentioned in docs prose counts as "present"
+	// unless the check is anchored at line start. Hit for real on 2026-10-25: docs/NEXT.md line 112 says "the
+	// digest's `## GIT` section lists 17 unmerged refs", and an unanchored includes() read that as the GIT
+	// section appearing in a --no-git run. A digest that prints a document must be tested against its own
+	// heading lines, not against the words.
+	const ownHeading = (name) => new RegExp(`^## ${name}( |$)`, "m");
+	assert.ok(
+		!ownHeading("RUNBOOKS").test(trimmed.stdout),
+		"--no-runbooks skips the staleness probe",
+	);
+	assert.ok(!ownHeading("GIT").test(trimmed.stdout), "--no-git skips the branch walk");
+	assert.ok(
+		ownHeading("QUEUE").test(trimmed.stdout),
+		"the sections the flags kept are still there",
+	);
 	assert.ok(
 		Buffer.byteLength(trimmed.stdout, "utf8") < Buffer.byteLength(full.stdout, "utf8"),
 		"the trimmed digest is smaller than the full one — the flags remove work, they do not add a section",
