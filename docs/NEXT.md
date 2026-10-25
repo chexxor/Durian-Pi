@@ -70,8 +70,16 @@ seat can run, so no seat can be woken to do anything until the provider question
 (verified, unlanded) · #4747/#4750 (NEXT split, verified, unlanded, needs re-measure)
 
 **Exact next commands:**
-1. `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status` — read `attention`'s `last_run_failed`: while it still
-   says `402 … positive balance`, do not restart the broker and do not expect any seat to move.
+1. `node .spike/delegate/clockin.mjs` — ONE call (measured 6.1 s, 12,438 B) that prints the live pointer,
+   `last_run_failed`, broker UP/DOWN + `lastPassAt` age, queue counts, the deferred ids, the unmerged-branch
+   debt with each row's status, the stale-runbook list, the provider config plus a probe of the local endpoint,
+   a SELFDEV.md section map, and the last suite marker. **Do not read `docs/NEXT.md` whole (396,843 B ≈ 99k tok;
+   the useful pointer is 92 lines ≈ 2k tok) and do not read `docs/SELFDEV.md` whole (57,589 B ≈ 14k tok) —
+   read only the section the map names.** Never print `cli.mjs status` (22.7 MB) or `cli.mjs queue` (21.2 MB) to
+   the terminal: redirect to `.spike/` and aggregate with python.
+2. `node demo/next-pointer.test.mjs` — if it fails, the pointer has drifted; fix the pointer before anything else.
+3. Read `attention`'s `last_run_failed` from the digest: while it still says `402 … positive balance`, do not
+   restart the broker and do not expect any seat to move.
 2. `curl -s http://127.0.0.1:8080/v1/models` — proves the local option is actually up before the operator rules.
 3. After the operator grants A or B: back up the store (`cp selfdev.sqlite
    .spike/store-backup-$(date +%Y%m%d-%H%M%S).sqlite`), then for B run `node cli.mjs up rig.selfdev.json
@@ -91,6 +99,17 @@ session; full 234 unproven).
 **Delegate also owes, if asked:** the still-unproven Enter question from the pointer below — whether the Pi TUI
 renders inside the operator window. Only the operator's terminal can answer it; the new
 `the session exited with code N` line is what distinguishes "child died" from "child ran but drew nothing".
+
+**Startup cost, measured 2026-10-25 (this is why the commands above are ordered as they are):** reading the two
+required docs the way the runbook literally says costs ≈113k tokens before any work starts — `docs/NEXT.md`
+396,843 B (~99k tok, 4,704 lines, and it exceeds the 50 KB/2,000-line read cap so it arrives in 8 chunks) plus
+`docs/SELFDEV.md` 57,589 B (~14k tok, of which ≈400 lines are the local-model capacity/benchmark treatise). The
+digest above collapses that to ~3k tokens. **The structural fix is already built and verified but unlanded:**
+`item-4747` @`9f624ff4` splits this file into a 156-line `docs/NEXT.md` (12,979 B) plus `docs/NEXT-ARCHIVE.md`
+(364,956 B) — `#4747`/`#4750`/`#4815` are `done`/`deferred` and the branch does **not** merge clean today
+(`git merge-tree` reports a `docs/NEXT.md` conflict against current `main`), so it needs a re-cut against the
+moved pointer. That is a `scribe` re-cut, not delegate work — and it should CAP the pointer (~120 lines), because
+this digest prints it verbatim, so every pointer line is paid for by every later session.
 
 ## NEXT SESSION (2026-10-21T23:12Z — landing campaign closed out: suite GREEN, one runbook stack left)
 
