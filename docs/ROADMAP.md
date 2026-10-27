@@ -3215,3 +3215,22 @@ honored by the entry point the doc names** — the class of defect is docs teach
 which is undetectable by reading either side. Note for whoever takes it: the delegate's own `AGENTS.md` clock-in
 line carried the wrong spelling for multiple sessions, which is how an empty store gets mistaken for a quiet rig.
 
+**192. The rig's compaction policy is not configurable, and its default threshold sits ~8k below a hard 400**
+*(toolchain; affects every seat on the local endpoint)* — measured on the operator's endpoint
+(`http://127.0.0.1:47831/v1`, model `iq3_s`, advertised window 200,000): a **191,805-token prompt succeeds**
+(79.9 s), and **207,219 tokens returns HTTP 400** — "request exceeds the context window: prompt (207219 tokens)
+leaves no room to answer". Prefill is a steady **~2,400 tok/s** with prefix caching best-effort (a 65,536-token
+hit on one request, `cached: 0` on the others), so a cold request near the ceiling costs ~75 s before the first
+token. `cli.mjs:415` passes `settings: streamSettings(CFG)` and nothing else, so every seat runs pi-durable's
+`DEFAULT_COMPACTION_POLICY` (`vendor/pi-main/packages/durable/src/harness/agent.ts:26`: `reserveTokens: 16384`,
+`keepRecentTokens: 20000`, `backgroundTokens: 32768`) — an **absolute** reserve, so the trigger is
+`window - 16384` = **91.8 %** on a 200k window, i.e. **183,616 tokens, only 23,603 below the measured 400**.
+Two defects in one: the reserve is absolute (the same 16,384 is 8.2 % of 200k but 32.8 % of a 50k window, so
+small-window models compact almost immediately), and there is no durig knob to change it. Depends on: none.
+Measure: `DURIG_COMPACT_RESERVE_TOKENS` / `DURIG_COMPACT_KEEP_RECENT_TOKENS` (and optionally a percentage form
+resolved per model window) threaded into `Harness.open`'s `settings.compaction`, with a failing-first demo that a
+configured reserve moves the trigger; plus a `check` finding when `window - reserve` is within one max-output
+budget of the provider's real ceiling. Note the operator's own coding session on the same endpoint was fixed by
+the same arithmetic — pi exposes `compaction.reserveTokens` with per-model `modelOverrides`, set to 50,000 for
+`strata/iq3_s` (75 % of window) so that a seat cannot walk into the 400.
+
