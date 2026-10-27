@@ -4379,3 +4379,71 @@ verified absent); the new prompt keeps that item's output path so existing cross
 code. The baseline facts in the new ROADMAP section are `observed` against this tree; everything the research must
 establish is `unverified` until item 170 lands. The provider ruling is still outstanding, so item 161's A/B is
 un-runnable on this box — while 162/163/167 are buildable failing-first against the faux provider.
+
+
+---
+
+## D131 — Linux is the rig's operating system; the seats move to the operator's local model; and a sweep destroyed worktrees, branches and scratch mid-session (2026-10-26)
+
+**The operator ruled five things in one instruction:** Linux is the operating system they are on and the rig
+must support it now; the seats are to be pointed at the same local endpoint this session's agent uses;
+concurrency is 2 or 3; the pi pin is to be relinked; and the read-only stuck-backlog audit is to be fixed.
+
+**Why the OS ruling is a durable decision and not an environment detail.** Every load-bearing convention in
+this repo is path- and process-shaped. `src/seatguard.mjs:122` accepts both `bash` and `powershell`, but the
+shipped seat personas in `rig.selfdev.json` tell the seat "the shell tool is powershell, all lowercase" — so
+on Linux a seat's first tool call is a rejected call. `src/confine.mjs` reasons about junctions, which are not
+a Linux concept. The demo suite's write-target table wants `C:/seat/out.txt` and the resolver produces
+`/home/chexxor/Git/Durian-Pi/C:/seat/out.txt` — a Windows path consumed as a relative path. Registered as
+ROADMAP 185–189 with the re-measured failing set, and `AGENTS.md`'s "Native Windows only" non-negotiable is
+replaced by **native host OS only** (Linux and Windows both, `wsl`/`docker` still forbidden) because keeping
+the old wording would make the rig's own entry point instruct the next session to refuse the machine it is
+sitting on.
+
+**Why concurrency is 2 and not 3, measured.** Prefill is not the constraint on this box: 30,154 fresh prompt
+tokens in 16.9 s (~1,790 tok/s), and the server's prefix cache demonstrably works (`cached 893/898` on a
+repeat) — which is the property the whole cached-prefix economics argument in D129/D130 rests on. Decode is
+31–39 tok/s one at a time. Three identical requests concurrently: 20.4 s wall against 17.5 s sequential —
+aggregate throughput up ~21%, worst-request decode down to 14.7 tok/s. A seat turn is a latency-bound agent
+loop, so 3 buys aggregate at the cost of every seat's turn being up to 2.8× slower; 2 is the operating point,
+and the measurement is recorded so the number can be re-challenged rather than the choice.
+
+**Why the provider switch is not finished work.** Moving all 12 seats to `local/iq3_s` cleared the 402 that
+stopped the team (D129) and was proven end-to-end — `scribe` answered `local ok` (store entry 273995) — but it
+bought the run at the price of the invariant the rig verifies with. `node cli.mjs check rig.selfdev.json`
+immediately reports **`single-model-rig`, severity fix-now**: "all 12 seats resolve to local/iq3_s, so a shared
+blind spot is systemic; per-seat models are already supported". The server serves one model and
+`src/providers/local.mjs` builds one provider from one base URL, so the cross-family author/verifier rule
+(D48/D119) is unmeetable while the rig is single-model. That is a ruling to make, not a gap to paper over: an
+author seat and its verifier sharing a family is the blind spot the check names, and it is the same objection
+the memory follow-up report raises about testing a memory system with the model that wrote it.
+
+**What was destroyed, and why it is recorded as an incident rather than a cleanup.** `docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`
+carries the measurements: earlier in this session `git worktree list` returned 13 and `git branch` 12
+`item-*` refs; later in the same session both return 1, `worktrees/` is gone, the two stray root directories
+are gone, and `.spike` went from 436 entries to 16. `git fsck --unreachable` returns **0** unreachable
+commits, and the commits the pointer named as unmerged — `500969f42` (item-4785's seatguard fix), `8990303`
+(item-2801) — are not objects in this clone, so on this machine that work is unreachable; `#3454` is still
+`held` with no branch. The most probable mechanism is the harness's own documented rule ("clean up leftover
+scratch before `up`") meeting an imported workspace: worktrees copied from another machine have `.git` pointer
+files whose gitdir does not resolve here, so `git worktree list` does not list them and no keep-reason
+protects them. The mechanism is a hypothesis; the state change is measured. The defect is independent of who
+caused it: **a writing verb removed directories and refs, its own `--dry-run` preview did not name a single
+one of them, and nothing wrote a row.** That is gap #6 of `docs/reviews/zero-trust-zero-agent-research.md`
+reached from the destructive side, and it is the strongest existing argument for item 170 being first —
+the operator asked for kernel-style mediation and audit, and the rig just demonstrated what it is like not to
+have the audit half.
+
+**What the delegate also got wrong, in the same session.** While moving the pointer it overwrote the
+`2026-10-26T22:15Z` NEXT block instead of cutting it verbatim to `docs/NEXT-ARCHIVE.md`. Restored verbatim
+(77 lines, sha256 `1b9bf18572c8`). Nobody caught it because `demo/next-pointer.test.mjs` asserts the archive
+exists, is non-empty, begins with a block and carries old log headings — never that **every block header ever
+written to `NEXT.md` still appears in the archive**. The fix is a cheap continuity assertion (ROADMAP 188's
+neighbourhood), and the incident doc names it, because an oracle that misses the failure you actually
+committed is the kind of confidence this rig keeps paying for.
+
+**Honesty boundary.** The delegate changed configuration (`durig.config.json`, gitignored), the tracked rig
+file's model fields, and documentation. It claimed no queue item, transitioned nothing, decomposed nothing,
+and wrote no product code. The suite is **227 pass / 8 fail** on this box at the relinked pin — not 229/235,
+which is stale — and one of those eight (`broker-health` reading `up` with `passAgeMs: 420613`) is a logic
+defect rather than an OS-shaped one, so it must not be waved away as Linux drift.

@@ -3003,3 +3003,190 @@ component this substrate must not duplicate), item 53/57 (per-conversation tool 
 - Constitutional-evolution search, Big-Five trait injection, FIPA-ACL performatives,
   Contract-Net auctions, dynamic persona generation, blackboard architecture —
   evaluated against Core_Ideas.md; rationales in DECISIONS.md.
+
+## Consumed: the follow-up research reports (2026-10-26) — what they change in 161–174 (the two reports the research agent returned)
+
+`docs/reviews/memory-followup-research.md` (72 KB — note: it contains **two passes** of the same review
+concatenated, rev. 1 and rev. 2, so its section numbers repeat; the second pass is the operative one) and
+`docs/reviews/zero-trust-zero-agent-research.md` (35 KB) landed 2026-10-26. The delegate read the
+zero-trust report's verdict, gap table and decision table in full, and the memory report's verdict and
+§§3–9 of the second pass. Full cross-linking into 161–174 is **not yet done** and is item 180's first
+task. The changes that are already unambiguous:
+
+**175. Cache-economics gate — measure before any memory `section` is written** *(precedes 163/164; supersedes
+the assumption inside 161)* — one seat, one draft: a static section vs a section whose text changes every
+turn, logging prompt tokens and cost. The report's finding: pi-durable rebuilds the system prompt from
+sections **before every request** and sends a mid-conversation delta "on models that support" it, while the
+provider's caching is prefix-exact — so a changing `sections` function may be a **full-prefix cache miss per
+request**, and whether the delta path is taken on our endpoint is `unverified`. Static sections are free;
+dynamic ones may be the entire bill. Move changing content into the transcript (a tool result or a
+committed entry) instead.
+
+**176. `search_history` over the immutable transcript** *(highest value per unit effort; precedes 162/164)* —
+~20 lines against documented pi-durable primitives, marked `replay: "safe"` (reads only). It converts the
+rig's existing compaction from lossy to **pointer-preserving**, because nothing is deleted and a tool can
+search everything before a handoff. Do **not** add a second compaction/summarization mechanism — pi-durable's
+compaction is a task with hooks that write the summary themselves; a competing summarizer double-writes and
+fights boundary placement.
+
+**177. Rescope item 165's typed facts** — facts as a `defineDoc` family with `history: "rewindable"` +
+`fork: "asOf"`, not a SQLite table; fact + provenance written in **one** `commit` (`source_event` is a
+transcript entry id). Split out **extraction coverage** as its own item with its own metric: the validated
+supersession mechanism reaches 0.91–0.99 accuracy where RAG reaches 0.57–0.62, but only on the ~18 % of real
+fixes that reduce to a clean atomic value change — size 165 as "extractor + coverage measurement", not
+"supersession rule". Hard requirement: value comparison is whitespace-collapsed, case- and
+punctuation-sensitive.
+
+**178. Supersession before dedupe, and never content-hash dedupe on facts** — two stages, supersession first
+on structured triples. Measured failure mode to design against: in a live multi-agent memory service,
+**206 of 400 writes were rejected by a synchronous near-duplicate gate before the asynchronous contradiction
+detector ran**, so overall contradiction detection was 98/200 even though supersession was 90/90 when both
+writes were admitted. The rig's correct precedent is `request-id` dedupe, which must **not** be generalised
+to facts.
+
+**179. Origin-bound write gate — mechanism now specified** *(refines 167)* — a propose-write tool
+(`remember({subject, predicate, object, valid_from, source_entry})`) gated by a `beforeTool` hook keyed on
+`source_kind` (`seat_authored` | `tool_output` | `retrieved_doc` | `external_message`), forcing
+`tier = "quarantine"` non-negotiably for the last three; quarantine never renders in a `sections` block and is
+reachable only through an explicit labelled read; promotion to durable requires an out-of-band human action
+recorded as its own commit, never a model decision. The pi-durable trap: a hook re-runs after a crash, so a
+hook that makes a decision must store it in `api.memo` (first write wins), and `replay: "safe"` belongs on
+reads only — every memory write path needs the memo and must not carry the replay annotation.
+
+**180. Procedural-memory budget is small and already tested here** *(refines 168/175)* — the 5→100 figure is
+superseded by a fitted law, Acc(N) = a − b·ln N (R² > 0.97, ≈3 pp per doubling), giving **N\* ≈ 6–7 skills at
+80 % routing accuracy for GLM-class models**. The rig is at two skills, and has *already* hit the failure
+mode in production: commit `02f1a36` records two skills both named `durig`, with the cause named in the
+message ("a skill is loaded BY NAME, so the collision made the loaded skill ambiguous"), fixed by the rename
+to `driving-durian-pi` / `delegating-to-durian-pi` plus `demo/skill-names.test.mjs`. Two additions: extend
+that test from name-uniqueness to **description separation** for near-duplicate pairs, and carry skill count
+per seat as a `metrics` measure. Lexical retrieval wins at scale (BM25 78.0 % vs 60.7 % at N = 200), which is
+the case for pi-durable's BM25 over embedding search.
+
+**181. Item 165a becomes access-control forgetting plus a receipt, not erasure** — measured: memory deletion
+is a no-op (leakage identical to no-forget: any-leak 0.86 / 1.00 / 0.97 across three suites, p = 1.0), and one
+method still acted on a revoked preference in 80 % of episodes while emitting the forbidden string zero
+times, so string metrics certify failing methods as clean. Exact unlearning requires replay from before the
+injection at T−τ+1 cost, which collides head-on with "the older messages always stay in storage" and with
+`history: "rewindable"` documents. Honest scope: tombstones checked before insert **and** before render in
+**both** read paths (tool and section); exclusion from every derived store; summaries carry **pointers, not
+fact text** (the clockin digest's 20,000-byte, pointer-only cap is the right precedent); a tamper-evident
+receipt (Ed25519 over a Merkle root of the append-only log, `AUTOINCREMENT` so a purged id cannot be
+reused); and a written statement that exact erasure is out of scope. Do not quote the 1.5 % figure — the
+report could not re-verify it.
+
+**182. A/B methodology attaches to `metrics` and `check`, not a parallel harness** *(refines 161)* — four
+arms: (A) no memory, (B) full history in context, (C) memory, (D) memory with the write gate disabled; arm D
+is the one usually skipped and is cheap while concurrency is 1. Assets the rig already has: durable
+deterministic transcripts as the replay substrate; readings that already stamp revision, dirty-tree state
+and the active extension set; `metrics` carrying band + baseline + evidence class + blind spot and reporting
+`no baseline yet` instead of guessing; and the `shared-reviewer-model` / `single-model-rig` checks, extended
+to **author seat and verifier seat must not share the memory-writing model**. Still owed: a measured
+false-positive floor per probe against the clean arm, bit-for-bit reproducible paired cached scenarios,
+paired bootstrap/McNemar with CIs, and the forced-to-answer regime reported separately from abstention
+(0.262 → 0.361 stale error) because seats commit rather than abstain.
+
+**183. Cheaper-first levers confirmed, with one correction** *(precedes every memory tier)* — observation
+masking is ~50 % cheaper with ≥ solve rate in 4 of 5 configs; LLM-summary caused 15 % longer trajectories and
+summary calls are cache-hostile; the hybrid (mask, summarize only as a last resort) was best at +2.6 pp and
+7 % cheaper than masking alone; masking is **not** uniformly safe (one config lost 4.0 pp at p = 0.04).
+Correction to rev. 1 of the report: the 94.8 % pointer-preserving-vs-placeholder figure could not be
+re-verified and is demoted to `unverified` — the argument for pointers here is architectural (nothing is
+deleted, so re-fetch is nearly free), not measured. Also newly relevant on this box: the report's
+cache-retention lever was written for a hosted provider; the rig now runs on a local endpoint, where the
+analogous levers are concurrency and prefill (measured in D131).
+
+**184. The multi-agent shared-store failure modes are named and measured — design 163/165/167 against them** —
+a live governed multi-agent memory service formalised **unauthorized leakage, stale propagation,
+contradiction persistence, provenance collapse** and measured them: scope was enforced on the semantic-search
+path but the direct get-by-id handler ignored the resolved identity entirely (72/164 cross-fleet probes
+leaked; after the fix, 0/36 cross-fleet admitted). Two requirements fall out for this rig: **every read path
+must be checked, not just the search path** (the rig has two: the tool read and the section render), and
+provenance collapse is prevented by carrying the origin binding on the row rather than inferring it from the
+caller.
+
+### And what the security report changes in 170–174
+
+`docs/reviews/zero-trust-zero-agent-research.md` answers the commission with rulings the operator should
+ratify before `pm` sequences 170–174:
+
+- **Adopt the shape, not the machinery.** What transfers from Linux is (a) one mediation point every effect
+  passes, (b) decisions computed from **labels** rather than caller identity or good intentions, (c) a
+  default-deny `allow` relation that lives outside the subject, (d) a durable record binding subject, object,
+  class, permission and result. durian-pi has (a) at `ToolHooks.beforeTool` and none of (b)–(d). That makes
+  **170 (decision log) + 171 (labels) + the `allow` relation as data** the cheap high-value first move, and
+  none of them touches a trust boundary.
+- **Reject in-process mediation as a security boundary, in writing.** The policy engine shares the subject's
+  OS identity; Linux policy sits in kernel memory the subject cannot write, ours sits in the same heap. The
+  hooks are an integrity and mistake-containment control. This is exactly the honest limit 170a must record.
+- **The smallest real boundary is a spawn-time wrapper, not a daemon** — a restricted token + restricted SID
+  list on Windows, **Landlock/seccomp or `bwrap` on Linux**, applied at the existing Job Object spawn point
+  with a monotonic (unwidenable) ruleset. No always-on process, so no runbook is invalidated. This *refines
+  173*, and the move to Linux makes it **more** achievable than it was on Windows (Landlock is
+  unprivileged, self-imposed, inherited by children, and supports TCP port rules since ABI 4).
+- **Reject** SELinux's type-enforcement language, roles/MLS, and `audit2allow`-style synthesis of allow rules
+  from denials (the documented failure mode: allow rules generated by whoever can, because expertise is
+  scarce). Accept synthesis only as a proposed, diffed, narrowed, signed step — never auto-loaded.
+- **Reject** per-call human prompting (Android itself moved away from repeated asks), AppContainer, and
+  Mandatory Integrity Control relabelling of the workspace (it makes the checkout writable by *all*
+  low-integrity processes).
+- **Egress honesty (174):** on Linux a network namespace makes "exactly one destination" real; on native
+  Windows without an elevated setup step, network denial is advisory at best. Per-project isolation should be
+  a **label partition in one store**, not a second store or daemon — which keeps the single-writer rule
+  (F24, D42/D45) intact.
+
+---
+
+## Linux as an operating platform (185–189) — the operator ruled Linux is the OS (D131)
+
+Registered 2026-10-26. Every defect below is one this delegate **measured on Linux**, not inferred from the
+Windows-era docs. The suite was re-run whole on this box at the relinked pin (`for f in demo/*.test.mjs; do
+node "$f"; done`): **227 pass, 8 fail**, which is why 185 no longer matches D129's six.
+
+**185. The Linux-shaped demo failures (re-measured 2026-10-26: 227 pass / 8 fail)** — the six failures named
+in D129 are **stale**; on this box, with the pin relinked to `2ec55d80`, the failing set is now eight and
+mostly a different one: `write-targets` (23 table rows — the fixture wants `C:/seat/out.txt` and the resolver
+returns `/home/chexxor/Git/Durian-Pi/C:/seat/out.txt`, i.e. a Windows path treated as relative on POSIX),
+`confine` ("the junction was removed" — junctions are not a native Linux concept), `verify-scratch-per-tree`
+(the bad scratch reaches the junction check because `node_modules` is ignored), `job-object` (2 checks — the
+Windows Job Object path), `worktree-deps-link` (5 checks), `worktree-prune-branch` (throws), `clockin-digest`
+("the pointer still links its own archive" — a docs-state shape, not an OS shape, and needs a seat to
+confirm), and **`broker-health`** ("a wedged-but-alive broker reads degraded; got
+`{state:up, hbAgeMs:13, passAgeMs:420613}`") — that last one is **not** OS-shaped: an 11.7 h stale pass with a
+fresh heartbeat reads `up`, which is the `#4746`/`#4816` verdict question failing in the suite. Depends on:
+the OS ruling (done). Measure: these eight pass natively, or are OS-gated with an explicit skip that **names
+the platform and the reason** in the test output — never a silent skip; and `broker-health` is separated from
+the OS-shaped set because it is a logic defect that fails everywhere. Owner: seat work; the delegate
+registers, does not fix.
+
+**186. Seat personas hard-code the Windows shell** — the shipped `impl` persona in `rig.selfdev.json` says
+"The shell tool is powershell, all lowercase… Never retry a rejected name", and the tool-call section names
+`powershell({command, timeout?})` as the only shell. On Linux `src/seatguard.mjs:122`
+(`SHELL_TOOLS = new Set(["bash", "powershell"])`) accepts both, so a seat told to use `powershell` will fail
+its first tool call on a box where `bash` is the shell. Depends on: none. Measure: personas are rendered
+from the host OS (or name both shells with the host's named first), plus a demo that asserts the persona's
+named shell exists on the host.
+
+**187. Seat-root and worktree paths survive the machine change as dead pointers** — measured: after the
+workspace moved to Linux, `selfdev.sqlite` still recorded 13 worktrees and seat `cwd` values of the form
+`C:\Users\Alex\dsh-Projects\pi-opendurig`, and `up rig.selfdev.json --refresh --dry-run` proposed
+re-pointing `devtools` from `C:\Users\...\pi-opendurig` to `C:/Users/.../pi-opendurig/item-2801` — a
+Windows path on a Linux box. Depends on: 188. Measure: `up --refresh` re-points every seat to a path that
+`stat`s, and a check compares the **store's** worktree count against `git worktree list` and reports the
+disagreement instead of printing the store's number alone.
+
+**188. A copied workspace is not a working rig until its worktrees are inventoried** — see
+`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`. The pre-`up` scratch cleanup rule in `AGENTS.md`
+("clean up leftover scratch before `up`") is correct on a native workspace and destructive on an imported
+one, because imported worktrees have `.git` pointer files whose gitdir does not resolve here, so
+`git worktree list` does not see them and no keep-reason protects them. Depends on: 185. Measure: `up` (and
+`send`'s writing harness) refuses to remove any `item-*`/`verify*` directory unless it is in
+`git worktree list --porcelain`; a removal that happens anyway emits a row under item 170.
+
+**189. Single-model rig on the local endpoint** — moving all 12 seats to one local model to get off the
+402 made the cross-family author/verifier invariant unmeetable, and `check rig.selfdev.json` says so:
+finding `single-model-rig`, severity **fix-now**: "all 12 seats resolve to local/iq3_s, so a shared blind
+spot is systemic; per-seat models are already supported". `src/providers/local.mjs` registers **one** local
+provider from one base URL, so two families need either a second served model plus per-seat base URLs (the
+code change `docs/SELFDEV.md` already identifies) or one verifier seat kept on a remote provider. Depends
+on: the operator's provider ruling. Measure: `check` no longer reports `single-model-rig`.
