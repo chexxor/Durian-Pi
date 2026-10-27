@@ -4,6 +4,75 @@
 > This file is the live pointer plus the current session: everything from the `2026-10-21T23:12Z` session back
 > lives in the archive. The cut is proven by concatenation (see `docs/DECISIONS.md` D126).
 
+## NEXT SESSION (2026-10-26T21:30Z — THE WINDOWS STORE IS NOW IN THIS WORKSPACE; THE BLOCKER IS THE PI-DURABLE SCHEMA, NOT THE PROVIDER)
+
+**Current item:** give the restored store a reader. This workspace had **no rig at all** until this session; the
+4818-row store was copied off the Windows NVMe and is byte-verified here, but this build cannot open it: installed
+`@earendil-works/pi-durable` supports schema **v1**, the store is at **v2**. Bump the pi family (sanctioned way:
+`node scripts/sync-pi.mjs --update`, per `pi-main.pin.json`'s own note), re-prove the suite, then the 2026-10-25
+block below resumes verbatim — provider ruling, the 19 `deferred` answers, then the landing pass.
+
+**Measured this session (all read-only except the store copy; nothing below is remembered):**
+
+- **This checkout was a bare rig, not the rig the history block describes.** Before the copy: `selfdev.sqlite`
+  118,784 B with **0 rows** in `tasks`/`entries`/`conversations`/`documents`; `cli.mjs ps` → `seats: []`; 10 refs,
+  1 worktree; no `.spike/`, no `.broker.json`. `main` = `b4c86ea` — the same commit the history block's repo is on.
+- **The Windows rig's tree is on the NTFS volume**, mounted read-only (`udisksctl mount -b /dev/nvme0n1p3
+  --options=ro,uid=1000,gid=1000`) at `/run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig`.
+  It is at `b4c86ea7`, **42 refs** including the unlanded `item-4745…4790`, `item-3033`, `advocate-item-2630` and
+  the `devtools-item-4054/4064/4083` stack, and **9 worktrees (4 `locked`, 3 `prunable`)** — so the landing debt in
+  the history block is real and lives *there*, not in this clone.
+- **The store copied clean.** `rsync` from the read-only mount: **437,829,632 B**, sha256
+  `eca555d8fdc2ecd0e490b927596d49af6d621dcebcd00589dfee4e1180d5235c` **identical on both sides**, source had **no
+  `-wal`/`-shm`/`-journal`** so the single file is complete, and `PRAGMA integrity_check` = **ok**.
+  `durable_schema.version = 2`, `durable_metadata.next_id = 273959` — which matches the history block's "newest
+  store entry 273958". Layout: `.spike/restore/selfdev.sqlite` (verified copy) → installed as `./selfdev.sqlite`;
+  the empty local store is kept at `.spike/restore/selfdev.sqlite.linux-empty-20261026`.
+- **Blocker, measured:** `DURIG_DB=./selfdev.sqlite node cli.mjs ps` → `cannot open ./selfdev.sqlite: Durable
+  SQLite schema version 2 is newer than supported version 1`. `node_modules/@earendil-works/pi-durable` is 1.3.0
+  and its `dist/storage/sqlite/migrations.js` returns only `[{version: 1}]`. The **published 1.4.0** (registry
+  latest per `npm view`) carries `{version: 2, statements: sleepingStatus}`; the Windows tree's `pi-durable`, also
+  labelled 1.3.0, **already carries version 2** — so that install is not the published 1.3.0. This is a reader
+  problem, not a store defect. Do **not** "fix" it by editing `durable_schema.version` down.
+- **Two substrate defects found while measuring (seat-sized; the delegate does not claim them):**
+  (1) `cli.mjs check rig.selfdev.json` answers `ok:true, findings:[]` while reporting `"store":"unreadable"` — it
+  launders a hard open failure into a clean verdict (this delegate read that as a pass on first contact). (2)
+  `scripts/clockin.mjs:265` dies with a raw `execFileSync` stack when `cli.mjs status` returns `ok:false` — the
+  one-call clock-in is dead exactly when the store is sick; it should print the error and keep going.
+- **Doc drift that silently audits the wrong store:** `AGENTS.md` step 4 and `SELFDEV.md` §Running it say
+  `DURIAN_PI_DB=…`, but `src/config.mjs:112,323` reads **`DURIG_DB`**; a verbatim run of the documented command
+  created and audited an empty `./rig.sqlite` (deleted). `DURIG_SEAT_ROOT` is at `src/config.mjs:124`.
+- **Open question for the operator (not decided here):** `AGENTS.md` mandates *native Windows only* and every
+  runbook command is PowerShell-framed, but this workspace now runs on **Linux** (Fedora, btrfs, Node v24.22.1).
+
+**Queue id:** unchanged and **currently unmeasurable** — #4354 · #4813 · #4814 · #4816 · #4817/#4818 (the
+human-gated answers) and #4083/#4064/#4054 · #4747/#4750/#4815 (landing/supersession). The 2026-10-25 counts below
+(4818 rows, 19 `deferred`, 0 `queued`) are store facts inside the copied store and cannot be re-read until the
+schema blocker clears.
+
+**Exact next commands:**
+
+1. `node demo/next-pointer.test.mjs` — the pointer test; run it before anything else. This file is at the
+   **200-line cap**: cut the 2026-10-25 block (line 77 down) into `docs/NEXT-ARCHIVE.md` before adding a session.
+2. `grep -n "version:" node_modules/@earendil-works/pi-durable/dist/storage/sqlite/migrations.js` — if it still
+   prints only `version: 1`, the store is unreadable and nothing else in this list works.
+3. Ask the operator to grant the pin move, then `node scripts/sync-pi.mjs --update` (or, minimally,
+   `npm install @earendil-works/pi-durable@1.4.0`), and re-run `DURIG_DB=./selfdev.sqlite node cli.mjs ps` —
+   expect 12 seats instead of the schema error.
+4. Re-run the suite on this tree and write the marker (`npm run test`, ≥ 480 s; `.scratch/test/all.out`); the
+   digest reads it back as `last suite:`.
+5. `DURIG_DB=./selfdev.sqlite node scripts/clockin.mjs > .spike/clockin.txt` (never to the terminal) and compare
+   `## QUEUE` against the history block's 3748 done / 274 held / 19 deferred — if it disagrees, this copy is not
+   the store the 2026-10-25 session measured. Then resume that list: provider ruling (A fund / B local), the 19
+   deferred answers via `node intent.mjs pm --body-file <file>`, then `scripts/land.mjs` for the unlanded refs —
+   which live in the **Windows** tree, not this clone.
+
+**Blocker:** **pi-durable schema v2 vs v1** — this build cannot open the copied store, so there is no queue state,
+no seats, no broker, and `scripts/clockin.mjs` crashes. Secondary: the 402/no-balance provider ruling and the 19
+`deferred` rows carry forward from the block below, and the unlanded branches exist only on the Windows tree.
+Not a blocker: the tree is clean apart from this session's docs commit and a pre-existing uncommitted dependency
+relaxation (`pi-coding-agent` `1.3.0`→`^1.3.0`, `pnpm-lock.yaml`/`pnpm-workspace.yaml` untracked — not landed).
+
 ## NEXT SESSION (2026-10-25T01:52Z — THE TEAM IS STOPPED ON A PROVIDER BILL, NOT ON A RIG DEFECT)
 
 **Current item:** unblock the model provider, then answer the 19 `deferred` rows that the supervisor parked on

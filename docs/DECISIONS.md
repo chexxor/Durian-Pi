@@ -4216,3 +4216,48 @@ for the full 120 s spawn timeout (SIGTERM). So a fixture that fakes "broker UP" 
 `toolchain` in progress at authoring time, `next-pointer` green). No non-author (qa2/auditor) has verified either.
 #4814's re-measure ask stays open, and it should now be read as "re-verify the landed rewrite", not "re-measure the
 branch".
+
+## D128 — The selfdev store crossed from the Windows NVMe to the Linux workspace by read-only mount + hash-verified file copy; the schema mismatch is a READER problem, never a store edit (delegate, 2026-10-26; operator-requested copy)
+
+**The situation.** The Linux checkout of durian-pi (`/home/chexxor/Git/Durian-Pi`, `main` @`b4c86ea`) had never run
+a rig: its `selfdev.sqlite` was a 118,784 B file with 0 rows in `tasks`/`entries`/`conversations`/`documents`, and
+`cli.mjs ps` reported `seats: []`. The 4,818-row store every recent session measured lives on the same physical
+box, on the Windows NVMe (`nvme0n1p3`, NTFS) at `C:\Users\Alex\dsh-Projects\pi-opendurig`, whose repo is at the
+same commit `b4c86ea7`. The operator asked whether the store could be copied across the filesystem boundary.
+
+**What was done, and why each step is the shape it is.**
+
+- **Mounted read-only, not copied "off" the NTFS volume in place**:
+  `udisksctl mount -b /dev/nvme0n1p3 --options=ro,uid=1000,gid=1000` →
+  `/run/media/chexxor/0094126294125A8C`. `ro` because the delegate must not write to the volume that holds the
+  authoritative tree (9 worktrees, 4 `locked`) it was not asked to modify; `udisksctl` because it needs no
+  password (`sudo` here does) and unmounts cleanly. The volume was unmounted at clock-out.
+- **File-level copy, then prove the bytes.** `rsync` of the single `selfdev.sqlite` (437,829,632 B), then
+  `sha256sum` on both sides — both `eca555d8fdc2…80d5235c` — and `PRAGMA integrity_check` = `ok` on the copy.
+  A file copy is safe here **only because the source had no `-wal`, `-shm` or `-journal`** (broker down since
+  2026-10-24, so the DB was checkpointed); a hot store would have needed `VACUUM INTO`/`sqlite3 .backup` instead.
+  `durable_metadata.next_id = 273959` matches the 2026-10-25 session's "newest store entry 273958", which is the
+  cross-check that this is the same store, not an older one.
+- **The empty local store was renamed, not deleted** — `.spike/restore/selfdev.sqlite.linux-empty-20261026` — and
+  the verified copy is kept beside the installed one at `.spike/restore/selfdev.sqlite`. Nothing that was on disk
+  here is unrecoverable.
+- **The blocker is a reader problem.** `cli.mjs ps` now returns `cannot open ./selfdev.sqlite: Durable SQLite
+  schema version 2 is newer than supported version 1`. The installed `@earendil-works/pi-durable` 1.3.0 lists only
+  `{version: 1}` in `dist/storage/sqlite/migrations.js`; the published **1.4.0** carries `{version: 2, statements:
+  sleepingStatus}`, and the Windows tree's `node_modules` — also labelled 1.3.0 — carries version 2, i.e. that
+  install was not the published 1.3.0. **Ruling: fix this by moving the pin (`node scripts/sync-pi.mjs --update`,
+  per `pi-main.pin.json`'s own instruction) and re-proving the suite. Never "fix" it by lowering
+  `durable_schema.version`** — that would assert a schema the tables do not have and turn a clean store into a
+  corrupt one.
+
+**Why this is recorded as a decision, not a step.** The rig's history, queue, and 19 `deferred` answers now exist
+on two filesystems. Until the pin moves, the Linux copy is a **cold read-only artifact**: it is byte-identical but
+unreadable, and the Windows store remains the only one anyone has run against. If the operator later boots a broker
+on Linux, the two stores diverge silently — nothing reconciles them, and `*.sqlite` is gitignored so git will not
+notice either. That divergence, not the copy, is the risk this entry exists to keep visible.
+
+**Two substrate defects surfaced on the way (found, not fixed).** `cli.mjs check <rig>` answers `ok:true` with
+`findings: []` while its own output says `"store": "unreadable"` — it launders a hard open failure into a clean
+verdict, and it fooled this delegate on first contact. And `scripts/clockin.mjs:265` crashes with a raw
+`execFileSync` stack when `cli.mjs status` returns `ok:false`, so the one-call clock-in dies exactly when the store
+is sick. Both are seat-sized items; the delegate did not claim either.
