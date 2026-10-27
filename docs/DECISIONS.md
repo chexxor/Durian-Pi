@@ -4302,3 +4302,80 @@ call, not the delegate's; this entry exists so the choice is made knowingly.
 **Honesty boundary.** The delegate ran all three suite configurations and the store reads; no seat verified any of
 it, and the delegate claims no queue item. `scripts/test.mjs` writes no suite marker, so this session hand-wrote
 `.spike/delegate/suite-marker.json` — the digest's `last suite:` line is only as current as whoever last wrote it.
+
+## D130 — Memory is scoped PER PROJECT with markdown-canonical/human layers and store-written seat facts; it is PRIORITIZED; and the seat security substrate PRECEDES it (operator rulings R1–R4, 2026-10-27; recorded by delegate, no queue item claimed)
+
+**Decision.** Four rulings, taken together, on the memory feature (`docs/research/Adding_Memory_to_Pi_Agent_Harness.md`,
+consumed in `docs/reviews/memory-implementation-plan.md`, registered as ROADMAP 161–169):
+
+- **R1 — team memory, scoped per project.** One shared team memory for the team of a project: not per-seat silos,
+  not a machine-wide pool, not a cross-project pool.
+- **R2 — storage split:** **markdown canonical** for the human-authored layers (invariants, "never do X");
+  the **store** (`pi-durable` docs written through `api.commit`) for seat-written facts; the **index always
+  derived and disposable**.
+- **R3 — memory is prioritized** ahead of the rest of the registered backlog; other registered items are raised
+  as they become relevant.
+- **R4 — the seat security substrate precedes it**, and the substrate is to be modelled on the **Linux kernel's
+  process isolation (LSM/SELinux-style mandatory policy)** and **Android's per-app permission grants**, with an
+  LLM agent/seat as the subject. Research commissioned as a project of its own:
+  `docs/reviews/zero-trust-zero-agent-research-prompt.md`, registered as ROADMAP 170–174.
+
+**Why per project, and not the two obvious alternatives.** Per-seat memory silos were rejected because this rig's
+topology is orchestrator-worker with **one constitution and one store shared by all seats** — the unit that
+accumulates reusable belief is the team, not the seat. A machine-wide/cross-project pool was rejected on the
+research's finding that ambient global memory is a leak surface (`docs/research/…`, "global memory by default"):
+a fact learned while working one project must not become context while working another. Per-project is also the
+scope the rig already has — project ≈ rig ≈ repo (`selfdev.sqlite` + `rig.selfdev.json` + one checkout) — so the
+scope key exists and the rule is checkable ("a seat whose project is not explicitly mapped gets nothing") rather
+than a paragraph of advice.
+
+**Why the storage split is not a style choice.** The two halves have different writers with different guarantees.
+Seats work in **per-item worktrees** (D49) and must never mutate the shared working tree (`docs/SELFDEV.md`), so a
+markdown file is a poor target for many seats writing at once — that is a merge conflict, not an upsert. The store
+has exactly one writer and atomic document revisions, so a fact write is ordered and conflict-visible. Meanwhile
+the research's strongest portability finding is that **fixed schema and raw history survive a model upgrade while
+prose notes do not** (+0.0004 ± 0.0020 vs +9.91/−13.28 points; 0/48 in-store note repairs), and its strongest
+security finding is that a **human-editable store is the remediation path** when a record is stale or poisoned.
+Markdown for the human layer satisfies both; store docs for the seat layer satisfy the single-writer rule;
+a derived-and-disposable index makes a corrupt index a rerun instead of a data-loss event.
+
+**Why the security substrate precedes memory.** R4 is not sequencing hygiene, it is a dependency. Memory's two
+boundary-bearing layers — where a seat may **write** a fact, and which paths a seat may **read** as memory — both
+bottom out in confinement, and today confinement is **policy in code** (`src/seatguard.mjs`,
+`src/writetargets.mjs`), not policy as data. Three observed gaps make that decision load-bearing rather than
+cosmetic: enforcement decisions leave **no durable record** (`SeatGuard` returns `{block: …}` and writes nothing,
+so there is no `avc: denied` analogue and "which seat was refused under which rule, when" is unqueryable); reach is
+granted **per seat, never per claim**; and the mediation layer runs **in the same process, with the same OS
+permissions, as the subject it polices**, with no egress policy and the provider key in the parent environment.
+Memory would add a third — a model-writable, prompt-reinjected artifact — on top of a substrate that cannot yet
+attribute a write. The research round's own security numbers make the ordering concrete: origin binding **at write
+time** measured 0% attack success, prompt-level defences ≤3.2 pp, and end-to-end "forget" compliance topped out at
+1.5% across six systems. A gate that does not exist cannot be strengthened later by a prompt.
+
+**The kernel analogy, stated precisely enough to be falsifiable.** What is worth copying is the *shape*: a
+labelled subject, labelled objects, a default-deny `allow` relation consulted at a single mediation point,
+mandatory rather than discretionary, policy outside the application, an audit record per decision, and a
+`permissive`/complain mode for rollout. What does **not** transfer is the guarantee: Linux's MAC holds because it
+sits at a syscall boundary the subject cannot call into. durian-pi's `beforeTool` sits in the same process as the
+seat, so it is a policy analogue with no kernel backstop — which is why item 174 (native-OS containment:
+restricted tokens/AppContainer/ACLs on Windows, user namespaces/Landlock/seccomp for Linux parity) is part of the
+project and not an enhancement. Android is the better model for the **grant** half (declared permissions, runtime
+ask, revocation, per-app sandbox) and the worse model for the grantor question: here the grantor is usually a `pm`
+seat, not a user, so delegated grant authority and permission-fatigue rubber-stamping are open questions, flagged
+for research rather than assumed solved.
+
+**Alternatives rejected, with the reason.** (a) Install a published memory package (`pi-memory`, `pi-mem`, Basic
+Memory's Pi integration) — wrong layer: seats are `pi-durable` conversations and `src/extensions.mjs:19-21` states
+a coding-agent extension cannot load here, so a published package would change the operator's own `pi` session and
+no seat. (b) Knowledge-graph retrieval as the default — the report rates it contested; we take Graphiti's *schema*
+(bi-temporal, invalidate-don't-delete), not its traversal. (c) LLM consolidation on the write path — it is both the
+compression step that loses temporal markers and the stage where provenance laundering lands. (d) Building memory
+first and hardening after — rejected by R4 for the reasons above. (e) Treating this as new security work — item 60
+already registered the least-privilege question on 2026-10-16 and was **never commissioned** (`docs/reviews/zero-trust-zero-agent.md`
+verified absent); the new prompt keeps that item's output path so existing cross-references stay true.
+
+**Honesty boundary.** The delegate wrote the rulings' record, the consumption plan, the ROADMAP registrations
+(161–169, 170–174) and the research prompt. It claimed no queue item, decomposed nothing, ran no seat, and wrote no
+code. The baseline facts in the new ROADMAP section are `observed` against this tree; everything the research must
+establish is `unverified` until item 170 lands. The provider ruling is still outstanding, so item 161's A/B is
+un-runnable on this box — while 162/163/167 are buildable failing-first against the faux provider.

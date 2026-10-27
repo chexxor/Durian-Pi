@@ -1,13 +1,16 @@
-# Memory for seats and the rig — implementation plan (PROPOSAL)
+# Memory for seats and the rig — implementation plan
 
 **Author:** delegate (external to the team), 2026-10-27.
 **Source research:** `docs/research/Adding_Memory_to_Pi_Agent_Harness.md` (operator's research agent, landed
 2026-10-27; four rounds: package selection → effectiveness literature → open-source reference
 implementations → pitfalls/anti-patterns). Raw report stays in `docs/research/`; this file is the
 consumption document.
-**Status:** **proposal, not a ruling.** Items **161–169** are registered in `docs/ROADMAP.md` as
-*registered, not scheduled* — `pm` sequences them, and three operator rulings (§8) gate the sequencing.
-**Not started:** no code, no queue items created by this delegate.
+**Status:** **ruled, and prioritized.** The operator ruled R1–R4 on 2026-10-27 — recorded in §8 below and
+durably in `docs/DECISIONS.md` **D130**. Items **161–169** are in `docs/ROADMAP.md`, prioritized by **R3** but
+not yet decomposed: `pm` owns decomposition and routing, and R4 puts the seat security substrate
+(**items 170–174**) ahead of any seat-writable memory tier.
+**Not started:** no code, no queue items created by this delegate. R4 also raised a research project of its own:
+`docs/reviews/zero-trust-zero-agent-research-prompt.md`.
 
 ---
 
@@ -187,25 +190,50 @@ filesystem-level memory layer must be proven on both sides, or it inherits that 
 
 Pin a commit before copying any of these; paths move.
 
-## 8. Open rulings for the operator (delegate does not decide these)
+## 8. Operator rulings (R1–R4, 2026-10-27) and what they commit us to
 
-- **R1 — Whose memory, and what scope?** (a) team memory shared by seats per rig, (b) the delegate/operator
-  clock-in memory (`NEXT.md` today, informal), (c) both, with separate scopes. Per-project or crossing
-  projects? The report's privacy finding ("global memory by default is a leak") says: explicit mapping, no
-  ambient fallback — but which mapping is a scope call.
-- **R2 — Where does memory live?** store (`pi-durable` docs: transactional, single-writer, migration
-  machinery exists; but it grows the v2 store, currently 437 MB per `docs/NEXT.md`) vs repo markdown
-  (human-editable, git-audited, greppable — but seats cannot write outside their worktree without a
-  confinement change). My recommendation: **markdown canonical for human-authored layers (L2), store for
-  seat-written facts (L4), index always derived and disposable** — and R2 should be ruled before 165 is
-  sequenced.
-- **R3 — When, against the rest of the book?** The rig's outstanding debt is the six Linux defects, the
-  landing stack, and **the provider ruling** (all 8 running seats reported 402 on this box; no broker is up
-  here — `status` → `broker.state: "down"`, measured this session). **L0 (161) cannot run without a working
-  provider**, and L0 gates the credibility of everything after it. If memory work is bought now, it should
-  be bought after the provider ruling; 162–163 can proceed without a provider only as fixture-driven demos.
-- **R4 — Does `security` get the write-gate item as a precondition (167 before 165/166), or after?**
-  Precedent in this repo is a position doc before implementation.
+The operator ruled on all four. Recorded durably in `docs/DECISIONS.md` **D130**.
+
+- **R1 — team memory, per project.** One shared team memory per project: not per-seat silos, not a global
+  cross-project pool. Consequences, in the order they bite:
+  1. **No ambient fallback.** A seat whose project is not explicitly mapped gets *nothing*. That is the
+     report's privacy finding implemented as a default, and it belongs in a `check` rule, not a paragraph.
+  2. **Project ≈ rig ≈ repo** today (`selfdev.sqlite` + `rig.selfdev.json` + this checkout), so the scope key is
+     the project. A second project on the same machine gets its own memory directory and its own store rows —
+     never a shared parent, never a machine-wide index.
+  3. **Seats do not share a filesystem.** Each works in its own per-item worktree (D49), and the shared working
+     tree must never be mutated by a seat (`docs/SELFDEV.md`). So "shared team memory" cannot mean "a directory
+     every seat writes": it means **one store-mediated fact layer** (transactional, single-writer, conflicts
+     ordered) plus **one git-tracked human layer** whose edits land through the normal branch/landing gates.
+     Two seats writing the same markdown file is a merge conflict; two seats writing the same fact is an upsert
+     the store orders. That asymmetry is why R2 came out the way it did.
+  4. **Derived index is per-project and disposable**, rebuildable from a clean clone; a bad index is a rerun.
+- **R2 — accepted as proposed:** markdown canonical for the human-authored layers (L2 invariants); **store**
+  (`defineDocFamily`, written through `api.commit`) for seat-written facts (L4); **index always derived and
+  disposable**. Seat writes never touch the shared tree; human edits never go through a model.
+- **R3 — memory is prioritized ahead of the rest of the book;** other registered items are raised as they become
+  relevant. Two things the ruling does not remove:
+  - **A provider is still needed for 161's A/B** (measured: `broker.state: "down"`, no key, endpoint down). It
+     gates the *measurement*, not the building.
+  - **A provider is not needed to build 162/163/167.** The demo harness has a faux provider
+     (`@earendil-works/pi-ai/providers/faux`; `DURIG_PROVIDER: "faux"` at `demo/autostart.test.mjs:36`), so the
+     read path, the invariants section, and the write gate all go failing-first offline. Build offline against
+     fixtures; run the A/B the day the provider lands.
+- **R4 — security precedes.** 167 (origin-bound write gate) comes before any seat-writable tier (165, 166), and
+  inherits the standing rule that a `security.sec` **position precedes code** (item 55,
+  `docs/runbooks/security-trust-boundary-review.md`). The operator's framing is bigger than a memory gate: an
+  OS-grade security substrate for seats, modelled on the Linux kernel's process isolation and Android's per-app
+  permissions. Registered as **ROADMAP 170–174**; the research prompt is written at
+  `docs/reviews/zero-trust-zero-agent-research-prompt.md`, and it **realizes ROADMAP item 60** — registered
+  2026-10-16, never commissioned (`docs/reviews/zero-trust-zero-agent.md` verified absent this session).
+
+**The dependency worth seeing now.** R1 (per-project reach and memory) and R2 (where a seat may write) both bottom
+out in the **confinement boundary**: today a seat cannot write outside its worktree (`src/seatguard.mjs`,
+`src/writetargets.mjs`), and that boundary is policy-in-code rather than policy-as-data. Building L2 as repo
+markdown means deciding which paths a seat may read and who may write them — a decision that belongs to 170–172.
+So the security substrate is not merely first in priority; it is what makes 163 and 165 well-specified.
+**Sequence:** 161 (harness + cache measure, offline-buildable) → 162 (read path) → 167 (write gate, after the
+security position) → 163 (invariants) → 165/166 once the substrate names the boundary → 168/169 last.
 
 ## 9. Measured this session (so the next reader does not re-derive it)
 
