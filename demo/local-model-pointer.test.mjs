@@ -12,7 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadConfig, loadShippedDefaults } from "../src/config.mjs";
-import { LOCAL_PROVIDER_ID, localProviderSpec } from "../src/providers/local.mjs";
+import { LOCAL_PROVIDER_IDS, localProviderSpecs } from "../src/providers/local.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const rig = JSON.parse(readFileSync(join(root, "rig.selfdev.json"), "utf8"));
@@ -21,23 +21,41 @@ const rig = JSON.parse(readFileSync(join(root, "rig.selfdev.json"), "utf8"));
 const readRepoFile = (p, enc) => readFileSync(join(root, p), enc);
 const { values: defaults } = await loadShippedDefaults({ readFile: readRepoFile });
 const { config } = await loadConfig({ env: process.env, readFile: readRepoFile, defaults });
-const spec = localProviderSpec(config);
+const specs = localProviderSpecs(config);
+let pinned = 0;
 
-const prefix = `${LOCAL_PROVIDER_ID}/`;
-const localSeats = (rig.seats ?? []).filter((s) => typeof s.model === "string" && s.model.startsWith(prefix));
-
-for (const seat of localSeats) {
+// Pin EVERY seat that names a locally-served provider to the model that provider actually exposes, for BOTH
+// providers. The guard has to be two-sided: a seat written `verifier/<id>` while DURIG_VERIFIER_BASE_URL is
+// unset does not fail loudly — resolveSeatModel quietly treats the whole string as a model id under the
+// default provider, so the seat would run a DIFFERENT model than the rig file claims. That is how a rig
+// intended to be cross-family ends up single-family while still reading healthy.
+for (const seat of rig.seats ?? []) {
+	const model = typeof seat.model === "string" ? seat.model : "";
+	const slash = model.indexOf("/");
+	if (slash < 0) continue;
+	const provider = model.slice(0, slash);
+	if (!LOCAL_PROVIDER_IDS.includes(provider)) continue; // a remote seat: nothing local to pin it against
+	pinned++; // count it: a guard that pins nothing must not read as a pass (see the check after the loop)
+	const spec = specs.find((s) => s.id === provider);
 	assert.ok(
-		spec !== null,
-		`seat "${seat.name}" points at ${seat.model}, but no local provider is registered — set DURIG_LOCAL_BASE_URL (and DURIG_LOCAL_MODEL) in the machine's config`,
+		spec,
+		`seat "${seat.name}" points at ${model}, but no "${provider}" provider is configured — set ${provider === "local" ? "DURIG_LOCAL" : "DURIG_VERIFIER"}_BASE_URL (and _MODEL) in the machine's config. Left unset, the string silently becomes ONE model id under the default provider and the seat runs a different model than this file claims`,
 	);
 	assert.equal(
-		seat.model.slice(prefix.length),
+		model.slice(slash + 1),
 		spec.modelId,
-		`seat "${seat.name}" points at ${seat.model}, but the local provider exposes only "${spec.modelId}" — the rig file and the machine config disagree`,
+		`seat "${seat.name}" points at ${model}, but the "${provider}" provider exposes only "${spec.modelId}" — the rig file and the machine config disagree`,
 	);
 }
 
+// A guard that pinned nothing is not evidence. If the machine config registers local providers but no seat
+// names one, the rig file and the config disagree in the OPPOSITE direction from the case above, and a green
+// run here would mean only that the loop had nothing to do.
+assert.ok(
+	specs.length === 0 || pinned > 0,
+	`the machine config registers ${specs.length} local provider(s) — ${specs.map((s) => s.id).join(", ")} — but no seat in rig.selfdev.json names any of them, so this guard checked nothing. Say which way the rig went before trusting a green suite`,
+);
+
 console.log(
-	`LOCAL MODEL POINTER PASS (provider=${spec === null ? "off" : spec.modelId}, local seats=${localSeats.length === 0 ? "none" : localSeats.map((s) => s.name).join(",")})`,
+	`LOCAL MODEL POINTER PASS (providers=${specs.length === 0 ? "none" : specs.map((s) => `${s.id}=${s.modelId}`).join(", ")}, pinned seats=${pinned})`,
 );

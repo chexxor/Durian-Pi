@@ -22,7 +22,7 @@ import { RigControl, RigQueue, Seats } from "./rig.mjs";
 import { dispatchRead } from "./brokerread.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
-import { LOCAL_PROVIDER_ID } from "./providers/local.mjs";
+import { isLocalProviderId } from "./providers/local.mjs";
 import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
 import { listWorktrees, removeClaimedWorktree, uncommittedCount, pruneWorktrees } from "./worktree.mjs";
 
@@ -107,7 +107,11 @@ export function planLocalContextBoundaries({
   const plans = [];
   for (const [name, seat] of Object.entries(seats ?? {})) {
     // NON-LOCAL seats are UNCHANGED (D105: paid seats keep their durable context).
-    if (seat?.provider !== LOCAL_PROVIDER_ID) continue;
+    // NOT a comparison to the string "local": there are now TWO locally-served providers (authors on
+    // `local`, verifiers on `verifier`), and a seat on the second one that skipped this boundary would
+    // never reset its context — it would grow every item and drift into the compaction wall while the rig
+    // reported it healthy. The predicate is owned by the module that builds those providers.
+    if (!isLocalProviderId(seat?.provider)) continue;
     // While PAUSED the driver takes no NEW work, so no boundary is owed.
     if (paused) continue;
     const convId = seat.conversationId;

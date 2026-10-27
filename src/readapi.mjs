@@ -22,7 +22,7 @@ import { contextConsumption } from "./context.mjs";
 import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
 import { deriveSeatAction, partialView, peerGraph } from "./viewmodel.mjs";
-import { LOCAL_PROVIDER_ID, localProviderSpec } from "./providers/local.mjs";
+import { declaredLocalWindow, localProviderSpecs } from "./providers/local.mjs";
 
 /**
  * The TAIL of `<db>.broker.log`, capped at `maxBytes` (the log is unbounded and NOT rotated, see
@@ -127,22 +127,6 @@ export async function readSeatModels(storage, seats, context = BACKGROUND_CONTEX
 	return models;
 }
 
-/**
- * The LOCAL provider's own declared context window, when this seat runs it (#2231).
- *
- * A local seat's window is declared in config (`DURIG_LOCAL_CONTEXT`, surfaced by
- * `localProviderSpec`) rather than in `DURIG_CONTEXT_WINDOW`, so the generic
- * `declaredContextWindow` misses it. It is a genuine DECLARATION, so it belongs in the
- * `declared` state (never `advertised`), and only a seat whose model names the local
- * provider gets it — a remote seat must not inherit the local window.
- */
-function localSeatWindow(localSpec, modelKey) {
-	if (!localSpec) return null;
-	if (typeof modelKey !== "string" || !modelKey.startsWith(`${LOCAL_PROVIDER_ID}/`)) return null;
-	const n = Number(localSpec.contextWindow);
-	return Number.isFinite(n) && n > 0 ? n : null;
-}
-
 /** The queue's items, newest-current document. Returns [] for an absent store so
  * a first-run read is empty rather than exceptional. */
 export async function readQueueItems(storage, context = BACKGROUND_CONTEXT) {
@@ -242,7 +226,9 @@ export async function readRigHealth(
 		storage,
 		seats.filter((seat) => !modelsBySeat[seat.name]),
 	);
-	const localSpec = localProviderSpec(cfg);
+	// EVERY locally-served provider, not just the first: reading only `local/` left the verifier seat's
+	// declared window ABSENT, which a capacity reader sees as "unknown" rather than as wrong.
+	const localSpecs = localProviderSpecs(cfg);
 	// ROADMAP 131: the rig-level paused state (read-only).
 	const control = await readRigControl(storage);
 
@@ -382,7 +368,7 @@ export async function readRigHealth(
 			declared:
 				supplied.declared ??
 				declaredContextWindow(cfg, modelKey) ??
-				localSeatWindow(localSpec, modelKey),
+				declaredLocalWindow(localSpecs, modelKey),
 			advertised: supplied.advertised ?? null,
 		});
 	}

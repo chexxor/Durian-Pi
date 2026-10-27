@@ -13,7 +13,11 @@ import { resolveSeatModel } from "../src/seatmodel.mjs";
 assert.equal(localProviderSpec({}), null, "unset DURIG_LOCAL_BASE_URL must disable the provider");
 assert.equal(localProviderSpec(undefined), null, "a missing config must not throw");
 
-// 2. The spec reads the three keys; the model id defaults to the provider id.
+// 2. The spec reads its keys; the model id defaults to the provider id. THE SHAPE GREW (2026-10-27) when a
+//    second local provider arrived: `prefix` (which provider this is), `maxTokens` (a per-provider output
+//    budget - a thinking model needs one, see demo/second-local-provider.test.mjs) and `apiKeyEnv` (each
+//    server gets its own credential variable). Asserted in FULL, not with a subset match, so a future field
+//    has to be added on purpose rather than slipping through a permissive comparison.
 const spec = localProviderSpec({
 	DURIG_LOCAL_BASE_URL: "http://127.0.0.1:8080/v1",
 	DURIG_LOCAL_MODEL: "qwen36",
@@ -21,9 +25,12 @@ const spec = localProviderSpec({
 });
 assert.deepEqual(spec, {
 	id: "local",
+	prefix: "DURIG_LOCAL_",
 	baseUrl: "http://127.0.0.1:8080/v1",
 	modelId: "qwen36",
 	contextWindow: 65536,
+	maxTokens: 8192,
+	apiKeyEnv: "DURIG_LOCAL_API_KEY",
 });
 
 // 3. A malformed context must fall back, not travel as NaN and mis-report capacity.

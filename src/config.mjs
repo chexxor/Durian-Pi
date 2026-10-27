@@ -118,6 +118,14 @@ export const CONFIG_KEYS = [
 	"DURIG_LOCAL_BASE_URL",
 	"DURIG_LOCAL_MODEL",
 	"DURIG_LOCAL_CONTEXT",
+	"DURIG_LOCAL_MAX_TOKENS",
+	// The SECOND locally-served provider (cross-family verification, ROADMAP 189). Read from the config file
+	// as well as the environment, and note that the API-KEY variables are deliberately NOT config keys: a
+	// credential belongs in the environment, never in a file that could be committed.
+	"DURIG_VERIFIER_BASE_URL",
+	"DURIG_VERIFIER_MODEL",
+	"DURIG_VERIFIER_CONTEXT",
+	"DURIG_VERIFIER_MAX_TOKENS",
 	"DURIG_STREAM_TIMEOUT_MS",
 	"DURIG_STRANDED_MS",
 	"DURIG_CONTEXT_WINDOW",

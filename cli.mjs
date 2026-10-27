@@ -46,7 +46,7 @@ import {
   PROVIDER_ID,
   fallbackModels,
 } from "./src/providers/deepinfra-models.ts";
-import { createLocalProvider, localProviderSpec } from "./src/providers/local.mjs";
+import { createLocalProvider, localProviderSpecs } from "./src/providers/local.mjs";
 import {
   Constitution,
   Edges,
@@ -367,16 +367,18 @@ function buildModels(live = null) {
       { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
     ),
   );
-  // Register the local provider AFTER the default: resolveSeatModel reads the
-  // provider prefix only when it is registered, so a seat model "local/<id>"
-  // uses the local server while every other seat keeps the default provider.
-  const localSpec = localProviderSpec(CFG);
-  if (localSpec)
+  // Register the locally-served providers AFTER the default: resolveSeatModel reads a provider prefix only
+  // when it is registered, so a seat model "local/<id>" uses the author server and "verifier/<id>" uses the
+  // verifier server while every other seat keeps the default provider. TWO servers is the point, not an
+  // accident: an author and its verifier cannot share a blind spot only if they are different families
+  // (D48/D119, ROADMAP 189), and the family ruling lives in docs/DECISIONS.md rather than here.
+  for (const spec of localProviderSpecs(CFG)) {
     models.setProvider(
-      wrapProviderWithTrace(createLocalProvider(localSpec, { createProvider, api: ocApi }), {
+      wrapProviderWithTrace(createLocalProvider(spec, { createProvider, api: ocApi }), {
         getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
       }),
     );
+  }
   return { models, providerId: "deepinfra" };
 }
 
