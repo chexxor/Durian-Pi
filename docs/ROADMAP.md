@@ -3193,7 +3193,8 @@ on: the operator's provider ruling. Measure: `check` no longer reports `single-m
 
 **MEASURED 2026-10-27, after the operator proposed "primary on the 3090, a verifier on the A4000" — the split
 as stated cannot hold, and the reason is the primary's own footprint.** The served model is a large MoE: **78 GB
-of weights on disk** (`Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S`, 52 GB + 27 GB shards), and one server process
+of weights on disk** (`Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S`: 52 GB loaded as `--native`, 27 GB as `--ple-gguf`),
+and one server process
 (pid 130905) already occupies **14,758 MiB on the A4000 *and* 21,172 MiB on the 3090** — ~35.9 GB across both
 cards, via `--layer-split auto` with `--resident-experts --expert-cache auto` (so part of the expert set is
 *already* offloaded). The cards are 16,376 + 24,576 MiB and hold only **1,139 and 1,071 MiB free**. So the
