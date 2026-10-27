@@ -95,6 +95,50 @@ Do **not** infer "the work is gone" from a `git worktree list` count, and do not
 from a zero count either: on this box the stray-worktree landing gate (#4656) went from ten strays to zero
 because the artifacts were swept, not because anything landed.
 
+
+### Chasing a cited sha that resolves nowhere
+
+A sha is a **pointer to evidence, not the evidence**. Before hunting for an object, ask whether the *change*
+is on `main` — most unresolvable citations are stale pointers to a pre-landing commit, not lost work. The
+ladder, cheapest rung first (each rung measured on 2026-10-26):
+
+1. **Recompute the true missing set** against the store, never from memory: every sha-shaped token in every
+   queue row, tested with `git cat-file -t`. (178 cited; 90 missing before the Windows fetch; **3** missing
+   across live rows after it.)
+2. **Every object store on every mounted volume.** `git cat-file -t` against each `.git` you can find, then
+   `git remote add win <path> && git fetch win '+refs/heads/*:refs/remotes/win/*'`. This recovered **52 of 90**
+   with no other work. For objects that hang off *no* ref (deleted branch, dangling):
+   `git --git-dir=<win>/.git rev-list --objects <sha> --not --branches --tags > o.txt` →
+   `git --git-dir=<win>/.git pack-objects --stdout < o.txt > r.pack` →
+   `git index-pack --stdin < r.pack`. **`git index-pack <file>` only builds an index next to the file; it does
+   not install the pack** — use `--stdin` or nothing lands. That recovered 4 more (`53fd8c6f8`, `bcf1a191c`,
+   `dd2583b12`, `be40620c9`).
+3. **Patch-equivalence — the highest-yield rung, and it needs no objects.** `git log -S'<a distinctive line from
+   the described change>'`, `git log --grep='#<item-id>'`, or `git patch-id`. This resolved **all 3** remaining
+   live shas.
+4. **Re-run the evidence the sha stood for.** Rows usually name their oracle ("`node demo/x.test.mjs` exit 0").
+   If it passes on `main`, the claim is verified whatever the sha was.
+5. **Transcript archaeology.** pi-durable stores tool results verbatim, so `entries.record` holds the seat's own
+   completion text — branch, base commit, file count, and the change described — and often the `write`/`edit`
+   payloads themselves. That is how you reconstruct when 3–4 fail: replay the edits onto the recorded base
+   commit, mint a commit, and cite it **with provenance** ("recovered from transcript entry N onto base X").
+   You cannot reproduce the original sha without the original committer and timestamps, and should not try —
+   a forged-looking sha is worse than an honest recovery note.
+6. **Amend the row** to cite something resolvable, or state in writing that the evidence is unreproducible.
+   Never leave a citation a successor cannot check.
+
+**Worked example (the whole class, in one row).** `#3743`/`#4378` cite `0c6fd7665`; no object has that sha, and
+`git rev-parse --disambiguate=0c6fd76` returns exactly one commit — `0c6fd76e4659b1deeaa7c0765c2654469a57abfd`,
+"fix(broker): the liveness probe is FAIL-SAFE — unknown means ALIVE, ESRCH is the only dead (#3398)". So the seat
+cited its **branch** commit, which landing then rewrote. The change is on main (three call sites now read
+`err?.code !== "ESRCH"`) and `demo/broker-liveness.test.mjs` **passes**. Nothing was lost; the pointer was stale.
+Same for `eb7e69c1e` (#3506 → `ce79c354`, `selectOldestWorkable` exported, `demo/workable-claim.test.mjs`
+passes) and `5d8c6237a` (#3603, cited only as context in a row held on #2788).
+
+The root cause is not the sweep — it is that the queue cites **machine-local git objects as durable evidence**.
+That is ROADMAP **190**: bind durable records to store-native ids (`entries.id` / `record_ids`), and let a
+`check` rule count unresolvable citations so this is a failing test rather than an archaeology project.
+
 ## Step 5 — re-measure the OS-shaped baseline
 
 The suite is not the same suite after an OS move. Record the new number rather than reusing the old one:
