@@ -4,7 +4,47 @@
 > This file is the live pointer plus the current session: everything from the `2026-10-25T01:52Z` session back
 > lives in the archive. The cut is proven by concatenation (see `docs/DECISIONS.md` D126, D129).
 
-## NEXT SESSION (2026-10-26T22:15Z — THE STORE IS READABLE ON THE PINNED PI BUILD; WHAT REMAINS IS SIX LINUX DEFECTS AND THE OPERATOR'S PROVIDER RULING)
+## NEXT SESSION (2026-10-27T03:40Z — MEMORY RESEARCH IS CONSUMED AND REGISTERED AS ROADMAP 161–169; THE OPERATOR OWES R1–R4 AND THE PROVIDER RULING BEFORE pm SEQUENCES IT)
+
+**Current item:** the operator's memory research (`docs/research/Adding_Memory_to_Pi_Agent_Harness.md`) is
+consumed and **registered, not scheduled**: `docs/reviews/memory-implementation-plan.md` (plan of record
+proposal — layers L0–L7, what the report does NOT apply here, deferred list) + `docs/ROADMAP.md` **items
+161–169** + `docs/reviews/memory-followup-research-prompt.md` (open questions for the research agent). No
+queue items were created by the delegate — 161–169 sit in the roadmap for `pm` to decompose and route.
+**Gate:** item 161 (the before/after baseline + a rig cache-hit measure in `src/metrics.mjs`) cannot run
+without a provider, so memory sequencing belongs after the provider ruling; R1–R4 (whose memory / where it
+lives / when / does `security` precede) are operator rulings named in plan §8.
+
+**Queue ids carried forward** (unchanged, still the non-terminal priority rows): #4354 · #4813 · #4814 ·
+#4816 · #4817/#4818; the landing stack #4083/#4064/#4054 and `item-4745…4790` exist as **branches in the
+Windows tree only** — this clone has 10 refs, so `## GIT` reading `unmerged=0` is not "no landing debt".
+
+**Measured this session (Linux workspace, nothing remembered):** `node scripts/sync-pi.mjs` → `"linked":
+null`, `drift: true` (pin `2ec55d80…`, upstream `6c384aa3…`) — re-link with `node scripts/sync-pi.mjs --sync
+--link` before any pinned-build work. `status` → `broker.state: "down"`, `attention: []`, 4,818 queue rows
+(3,748 done / 777 cancelled / 274 held / 19 deferred), **no memory-feature item exists in any of the 293
+non-terminal rows**. **Docs defect:** `AGENTS.md` step 4 and `SELFDEV.md` print `DURIAN_PI_DB=…`, but
+`cli.mjs:142` reads `CFG.DURIG_DB ?? "./rig.sqlite"` — observed both ways this session: the documented
+spelling silently audited an EMPTY store ("queue is empty", "no verifier seat to judge"), `DURIG_DB` returned
+the 12 seats. One-line fix belongs to `scribe`/`devtools`, not to a delegate.
+
+**Exact next commands:**
+
+1. `node demo/next-pointer.test.mjs` — the pointer rule for this file.
+2. `DURIG_DB=./selfdev.sqlite node scripts/clockin.mjs > .spike/clockin.txt` — digest, not whole files.
+3. Operator: rule R1–R4 in `docs/reviews/memory-implementation-plan.md` §8, then spool the decomposition intent
+   to `pm`: `node intent.mjs pm --body-file <file>` naming **ROADMAP 161–169** and the gating (161 first, and
+   161 behind the provider ruling). Optionally route `docs/reviews/memory-followup-research-prompt.md`.
+4. Provider ruling, then `DURIG_DB=./selfdev.sqlite node cli.mjs serve` (none is up here) — the six Linux
+   defects below still make any "suite green" claim false on this box.
+
+**Blocker:** unchanged from the session below — **no working provider on this Linux box** (402 across running
+seats, no key, local endpoint down), so no seat can run and item 161's A/B is un-runnable; secondary, the six
+Linux defects (229/235). Not a blocker for memory *docs*: 161–169 are registered and unscheduled.
+
+---
+
+## SUPERSEDED 2026-10-26T22:15Z (THE STORE IS READABLE ON THE PINNED PI BUILD; SIX LINUX DEFECTS AND THE OPERATOR'S PROVIDER RULING)
 
 **Current item:** two things, both measured below. (1) The **six Linux-only demo failures** — they gate every
 "suite green" claim on this box, they reproduce with no rig and no provider, and they are seat-sized work the
