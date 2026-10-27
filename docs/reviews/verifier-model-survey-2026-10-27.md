@@ -4,7 +4,7 @@ Commissioned by the operator: *"get whichever model is high quality and small en
 sufficient as a verifier. Your search criteria and discovered options must include grounded evidence."*
 Every size below came from a HuggingFace tree API call made in this session; every benchmark line is quoted
 from the vendor's own model card; every hardware number is measured on this box. Scripts are in
-`.scratch/verifier-survey*.mjs` (read-only, disposable).
+`tools/model-probes/verifier-survey*.mjs` (read-only; see `tools/model-probes/README.md`).
 
 ## Why the rig needs this at all
 
@@ -134,7 +134,7 @@ them, cross-family verification is not being obtained, whatever `check` reports.
 ## CONTROL RESULT — the primary ran the calibration first, and it split
 
 Run 2026-10-27 against the live primary (`local/iq3_s`, Qwen3.8-Flash-Next IQ3_S) with
-`.scratch/calibrate-verifier.mjs`. Same two pre-fix snippets, extracted from git at `3bff94a^`, verbatim.
+`tools/model-probes/calibrate-verifier.mjs`. Same two pre-fix snippets, extracted from git at `3bff94a^`, verbatim.
 
 | Snippet | Did the primary name the real defect? |
 |---|---|
@@ -252,7 +252,7 @@ which is all the rig asks of an engine.
 ## THE VERIFIER IS LOADED — Ministral 3 14B Reasoning Q6_K, measured on this box (2026-10-27)
 
 The operator loaded `mistralai/ministral-3-14b-reasoning` in LM Studio at **Q6_K with 13,273 tokens of context**.
-Numbers below are from `.scratch/throughput.mjs` (unique prompt text, `max_tokens: 1` for prefill, streamed chunks
+Numbers below are from `tools/model-probes/throughput.mjs` (unique prompt text, `max_tokens: 1` for prefill, streamed chunks
 for decode — see D136 for why the earlier method was wrong).
 
 | Measured | Value |
@@ -284,3 +284,62 @@ asking for when they asked about expert offloading.
 which is the gate. Against Devstral Small 2 it has no published SWE-bench number, so the seeded-bug calibration in
 this file is still the deciding evidence, and against Flint it loses on published coding evidence but wins on
 fitting the card at all.
+
+## THE GATE RAN AGAINST THE VERIFIER — and it FAILS (0/2, against the control's 1/2)
+
+Run 2026-10-27T21:50–21:53Z with `tools/model-probes/calibrate-verifier.mjs`, **same harness, same two pre-fix
+snippets from `3bff94a^`, same prompt, temperature 0.2, `CAL_MAX_TOKENS` 3000 (the default)**, against the
+loaded verifier **twice**, and against the primary once as a same-session control.
+
+| Model | Snippet A (`linkWorktreeDeps` npm invocation) | Snippet B (`waitForProcessDeath` POSIX deadline) | Score |
+|---|---|---|---|
+| **control** — primary `local/iq3_s` (the author family) | **NAMED IT** — *"npm treats the script path as an npm command and fails, so the `--link` step never runs"* (4/7 keywords) | **NO** — answered `taskkill` doesn't exist on Linux (4/8 keywords) | **1/2** |
+| **Ministral 3 14B Reasoning Q6_K** run 1 | **NO** — 0/7 keywords, named no npm-related word at all | **NO** — 3/8 keywords but the mechanism it named is a phantom | **0/2** |
+| **Ministral 3 14B Reasoning Q6_K** run 2 | **NO** — 0/7 keywords, same phantom defect as run 1 | **NO** — 2/8 keywords, same phantom defect as run 1 | **0/2** |
+
+**What it invented, and why that is worse than a miss.** On A it reported that `linkErr.stdout`/`stderr` may be
+non-strings and that `.join("\n")` "will throw" — **that defect cannot occur**: measured in node on this box,
+`[null, undefined, "a"].join("\n") === "\n\na"` and `[Buffer.from("x"), "a"].join("\n") === "x\na"`
+(`Array.prototype.join` coerces; `null`/`undefined` become empty strings). Its recommended fix — wrap the values
+in `String(...)` after `.filter(Boolean)` — changes nothing. It also never mentioned the resolver, the argument
+order, or npm's command dispatch, which is the actual bug. On B it reported an *"uninitialized variable
+`resolved`… race condition in `pidPromise` resolution"* producing a `ReferenceError`; there is no such variable
+in that branch, and the real defect (the POSIX path checks liveness once and never polls `timeoutMs`) went
+unmentioned in both runs. Both runs finished `finish_reason: stop` in 6.5–9.4 s with 203–292 completion tokens —
+so this is not truncation and not an empty answer. It is a confident, specific, wrong verdict, produced twice.
+
+**The decision this forces** (recorded as **D137**): do **not** route `qa`/`qa2`/`auditor` at
+`verifier/mistralai/ministral-3-14b-reasoning`. It fits the card, it calls tools, and it would clear
+`single-model-rig` — and `check` would then be green on a **string comparison** (`src/checkup.mjs:594`) while the
+rig's verification got *worse*, because the model now supervising the DeepSeek-family author seats scores below
+that author family on the same ground truth. That is the same trap 189 already names for a same-family quant:
+a green check lying about the property the rule is supposed to protect.
+
+**Honest limits on this measurement.** n = 2 per defect; temperature 0.2; one quant of one family; snippets shown
+out of file context (lines 140–200, 255–300); one prompt style. `reasoning_content` is **not returned** by LM
+Studio's non-streaming response for this model (`reasoning=absent` in the harness output), so keyword coverage was
+computed over the answer text alone — the thinking, if any, was not inspectable. The truncation failure mode did
+**not** recur at 3,000 tokens. This says nothing about Ministral as a generalist and nothing about chat quality;
+it says that on the one available ground-truth task — naming a runtime mechanism in an unfamiliar file — it did
+not clear the author-family baseline, reproducibly.
+
+**What that does to the "Recommended order" above.** It inverts it. Option 1 (the free, already-installed
+Ministral) was recommended to "prove the plumbing end to end" — the plumbing is proven (`verifier` provider, tool
+calling, residency) and the **capability is now measured and absent**. Option 2 (`Devstral-Small-2-24B`
+UD-Q3_K_XL, 11.85 GB, needs a download) is unmeasured, so it is a download-and-gate decision for the operator,
+not a recommendation from this file. The gate is cheap (two prompts, ~15 s per model at ~33 tok/s decode) and it
+discriminates in both directions now: it separated a hit from a miss for the control and scored 0/2 for the
+candidate. **Gate before flipping, always.**
+
+**Two machine facts corrected while doing this, both measured at the same moment.**
+
+- The **split ROADMAP 189 said "cannot hold" is what is actually running now**: the Strata primary
+  (engine `0.1.50-linux-x86_64-cuda-cuda13`, pid 493568) occupies **20,856 MiB on the 3090 alone** (814 MiB free
+  there), and Ministral (`llama.cpp … cuda12-avx2-2.65.1/llama-server`, pid 649504) occupies **13,388 MiB on the
+  A4000** (2,577 MiB free). The primary no longer straddles both cards. So the footprint half of 189's obstacle is
+  resolved by the operator's own reconfiguration, and what is owed is a verifier that passes the gate — not more
+  VRAM.
+- `durig.config.json` (gitignored) already carries `DURIG_VERIFIER_MODEL=mistralai/ministral-3-14b-reasoning`
+  with `DURIG_VERIFIER_CONTEXT=13273`, **not** the `recursivesi/flint` / `65536` that `docs/NEXT.md`'s
+  "Config of record" paragraph was quoting. Flipping seats today would therefore point them at the model that
+  just failed, not at Flint.

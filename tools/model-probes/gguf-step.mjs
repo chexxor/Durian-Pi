@@ -1,0 +1,15 @@
+import { open } from "node:fs/promises";
+const fh = await open(process.argv[2], "r");
+const buf = Buffer.alloc(256); await fh.read(buf, 0, 256, 0);
+console.log("magic:", buf.toString("latin1",0,4), "version:", buf.readUInt32LE(4));
+console.log("n_tensors@8:", buf.readBigUInt64LE(8), " n_kv@16:", buf.readBigUInt64LE(16));
+console.log("hex 24..80 :", [...buf.subarray(24,80)].map(b=>b.toString(16).padStart(2,"0")).join(" "));
+console.log("len@24:", buf.readBigUInt64LE(24), "key@32:", JSON.stringify(buf.toString("utf8",32,52)));
+let p = 24;
+const step = (label, fn) => { const before = p; const v = fn(); console.log(`  p=${String(before).padStart(4)} -> ${String(p).padStart(4)}  ${label} = ${String(v).slice(0,50)}`); };
+step("key", () => { const n = Number(buf.readBigUInt64LE(p)); p += 8; const s = buf.toString("utf8", p, p + n); p += n; return s; });
+step("type", () => buf[p++]);
+step("vlen", () => { const n = Number(buf.readBigUInt64LE(p)); return n; });
+step("skip vlen field", () => { p += 8; return p; });
+step("value", () => { const n = Number(buf.readBigUInt64LE(p - 8)); const s = buf.toString("utf8", p, p + n); p += n; return s; });
+await fh.close();
