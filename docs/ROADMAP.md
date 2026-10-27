@@ -2169,6 +2169,12 @@ should adopt, keep, or reject. The operator's framing: today's permissions are a
     evidence class.
     **Evidence class:** externally-cited (`advertised-elsewhere`) for the permission models;
     `observed` for the durian-pi baseline.
+    *Amendment (2026-10-27, operator ruling R4).* Item 60 has never been commissioned — its output path is
+    still absent. The prompt is now written at `docs/reviews/zero-trust-zero-agent-research-prompt.md` and keeps
+    this item's output path. The operator's framing adds the **substrate** half to this item's
+    **least-privilege** half: an OS-grade isolation and permission model for seats modelled on the Linux kernel
+    (LSM/SELinux-style mandatory policy, per-process identity and audit) and Android (per-app permission grants,
+    revocation, per-app sandbox). See **items 170–174** and `docs/DECISIONS.md` D130.
 
 132. **A dedicated API-key-management component — secret storage, injection and rotation (NOT STARTED; the operator owns the design).**
     Registered 2026-10-17 (operator ruling, delegate-relayed). Today a provider key reaches durian-pi either
@@ -2837,9 +2843,16 @@ published memory package is a seat-side option. The durable surfaces we would us
 `wrapSection`, `GenerationHooks.beforeRequest`, `ToolHooks.beforeTool`/`afterTool`, and
 `CompactionHooks.beforeCompact` (`vendor/pi-main/packages/durable/src/harness/types.ts:844-895`), plus
 `defineDoc(Family)` and durable's in-process BM25 (`src/search.ts:rankDocuments`, today used only for tool
-search). **Registered in this backlog, not scheduled — `pm` sequences them; R1–R4 in
-`docs/reviews/memory-implementation-plan.md` §8 are operator rulings and 161 is gated on the provider
-ruling** (no working provider on the Linux box, `docs/NEXT.md`).
+search). **Registered 2026-10-27 and, by operator ruling the same day, PRIORITIZED ahead of the rest of the
+backlog** (R3: memory first; other registered items are raised as they become relevant). The rulings are
+recorded in `docs/reviews/memory-implementation-plan.md` §8 and `docs/DECISIONS.md` **D130**: R1 team memory
+scoped **per project** (no ambient fallback, no machine-wide index); R2 markdown canonical for human-authored
+layers, **store** for seat-written facts, **derived-and-disposable** for the index; R3 prioritized;
+**R4 security precedes** — so 167 gates 165/166, and 167 itself is gated by the OS-grade substrate work in
+items 170–174. `pm` sequences within that order. *Provider gate:* 161's A/B needs a working provider (none on
+the Linux box, `docs/NEXT.md`), but 162/163/167 are buildable failing-first against the faux provider
+(`@earendil-works/pi-ai/providers/faux`, `DURIG_PROVIDER: "faux"` at `demo/autostart.test.mjs:36`) — build
+offline, measure when the provider lands.
 
 161. **Baseline and A/B harness BEFORE any memory write path.** No-memory arm and full-history arm on ~12
     already-completed items replayed in a worktree, plus two adversarial probes: a planted instruction in a
@@ -2875,7 +2888,7 @@ ruling** (no working provider on the Linux box, `docs/NEXT.md`).
 166. **Capture at the loss point.** `CompactionHooks.beforeCompact` writes an **extractive** working-thread
     checkpoint plus a pointer into the evicted raw range; **never** returns `{decline:true}`; no LLM on the
     hot write path. *Fold with:* 28a/28b, 92–97, `docs/runbooks/compaction-eval.md`.
-167. **Write gate with origin binding (security precondition).** One capture tool; `beforeTool` refuses a
+167. **Write gate with origin binding (security precondition — RULING R4: this precedes 165 and 166).** One capture tool; `beforeTool` refuses a
     write carrying no structured provenance (the entry id it derives from) and routes anything sourced from
     retrieved content to a **quarantine tier** retrieved labelled and never promoted without a human.
     Precedent for the gate is `SeatGuard.beforeTool`; for the process, a `security` position doc first
@@ -2899,6 +2912,75 @@ traversal); LLM consolidation on the write path (the 35:1 compression step, and 
 agent-writable always-in-context core (Letta's own documented gap); embeddings before a named
 vocabulary-mismatch failure; cancelling compaction from a memory hook; a polling search tool as the primary
 surface.
+
+## OS-grade seat isolation and permissions — the kernel and Android model (operator-directed 2026-10-27)
+
+**What raised it.** Ruling R4 of the memory round, in the operator's words: *"Security precedes. I want to build
+a platform on pi-durable (durian-pi) that has a proper security story like the Linux kernel and its processes
+(llm agent/seat), maybe even with SELinux. Another good security model could be Android, which has finer-grained
+permissions per app (per llm agent/seat)."*
+
+**This realizes ROADMAP item 60** ("Zero trust to zero agent — narrow seat permissions", registered 2026-10-16).
+Item 60 has **never been commissioned**: its registered output path `docs/reviews/zero-trust-zero-agent.md` is
+verified absent (2026-10-27). The prompt is now written — **`docs/reviews/zero-trust-zero-agent-research-prompt.md`**
+— and keeps item 60's output path, so the report lands where six months of cross-references already point. Item 60
+stands as the least-privilege half of the question; 170–174 add the substrate half the operator just named.
+
+**The baseline the research must measure against (observed in this tree, so nobody re-invents it):** every
+model-issued tool call already passes one chokepoint — `ToolHooks.beforeTool` in `SeatGuard`
+(`src/seatguard.mjs:464-467`), which refuses shell writes outside the seat's worktree (`src/writetargets.mjs`,
+`src/confine.mjs`), refuses a staged commit carrying a secret, and refuses a degraded shell state; `afterTool`
+redacts secret-shaped values on the way back (`src/secretredact.mjs`). Grants are coarse and per-seat
+(`toolRemovalsFor`, `src/seattools.mjs:255-264`; a seat declaring no capability loses everything). Org `edges`
+are restrictive-by-default; worktrees are per-item (D49); the store has one writer; process-tree reaping is
+already OS-level (Windows Job Object, POSIX process group). **The three gaps that make the operator's analogy the
+right question:** (1) enforcement decisions write **no durable record** — `SeatGuard` returns `{block: …}` and
+nothing else, so "which seat was refused, under which rule, when" is unqueryable, i.e. there is no
+`avc: denied` analogue; (2) reach is granted **per seat, never per claim** — there is no deny-by-default
+per-item boundary; (3) the mediation layer is **in the same process, with the same OS permissions, as the subject
+it polices** — there is no OS-level backstop, and no egress policy (a seat's shell has the operator's network
+reach and, today, the parent environment's provider key).
+
+170. **Commission and consume the OS-grade isolation research** (owner: operator's research agent via
+    `docs/reviews/zero-trust-zero-agent-research-prompt.md`). Deliverable at item 60's path, in the house review
+    shape: gap table (mechanism → what we have with file path → what is missing → adopt/keep/reject/unverified),
+    a **substrate-vs-policy split** (mechanism in the harness, policy as data — the house rule, and it must fail
+    closed), a decision table liftable into `docs/DECISIONS.md`, a failure catalogue, an enforcement-point
+    inventory (tool call, store commit, egress, spawn), a Windows-vs-Linux platform matrix, and backlog proposals
+    registered not scheduled. *Acceptance:* every external claim carries a URL + evidence class; every reusable
+    implementation names its licence, file path and pinned commit; the could-not-verify list is explicit.
+    *Gate for:* 171–174 and 167.
+171. **A security position for the isolation substrate, before any code** (item 55's rule, method in
+    `docs/runbooks/security-trust-boundary-review.md`). Names the boundary (subject = seat/run, objects = path,
+    artifact, tool, egress, store row), the trust model, the enforcement points, and the fallback when the broker
+    dies. *Owner:* `security` with `lead` and the operator. *Acceptance:* the four position headings present and
+    each control falsifiable — a named test that would show the control failing.
+172. **Subject identity that survives the seat lifecycle, and audit of every enforcement decision.** A seat is
+    reused across wake, `reset` (44), fresh conversation (28b), fork and compaction; today a refusal leaves no
+    record. Model on `avc: denied`: subject label, object label, class, permission, result, enforce|complain,
+    policy version — written as a durable, queryable record. *Acceptance:* a demo where two runs of the same seat
+    are distinguishable in the audit, and a refused action is retrievable by subject and rule. *Depends:* 170,
+    171.
+173. **Policy as data, not code: per-seat and per-claim grants.** Labels and `allow` rules in declarative config
+    consulted by the existing hook substrate; deny-by-default; a **complain/permissive mode** for rollout
+    (SELinux's practice) with the `audit2allow` rubber-stamp failure explicitly guarded by human sign-off; and
+    item 60's narrowing of reach toward the **claim**, not the seat. *Acceptance:* a rig runs with a grant the
+    seat did not have before, revoked after, and the revocation is visible in 172's audit.
+174. **OS-level backstop where hooks are not enough — native Windows first.** Evaluate restricted tokens,
+    AppContainer, mandatory integrity levels, filesystem ACLs, job objects, WDAC (Windows) and user namespaces,
+    Landlock, seccomp (Linux parity) for containing a short-lived `git`/`npm`/shell child, **never** WSL or
+    Docker. *Acceptance:* a named escape (a shell one-liner, an npm lifecycle script, a git hook, a
+    symlink/junction or a POSIX-vs-`C:/` path defect — both already bite us as open Linux demo defects) that the
+    hook layer alone does not stop and the OS control does, with a failing-first test on both platforms.
+
+**Evidence class:** the baseline paragraph is `observed`; everything else is `unverified` until item 170 lands.
+Managed by the advocate's rule (D36). **Do not schedule 171–174 ahead of 170** — the same warning item 132 carries
+for the API-key component: no new trust boundary or execution surface ahead of the research and the position.
+
+**Cross-links:** item 60 (the least-privilege half), item 55 (`security.sec` before code), item 132 (the API-key
+component this substrate must not duplicate), item 53/57 (per-conversation tool scoping already exists),
+`docs/security/owasp-asi-self-assessment.md` (ASI06 poisoning/saturation, ASI08 no breaker),
+`docs/reviews/memory-implementation-plan.md` §8 (R4), `docs/DECISIONS.md` D130.
 
 ## Explicitly deferred (with reasons)
 
