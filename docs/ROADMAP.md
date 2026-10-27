@@ -2813,6 +2813,93 @@ one gated investigation are registered here. `pm` sequences. Registered **not sc
     intent and a permanently-failing intent each reach a terminal state without stalling the drain, or a
     scoped fix if they do not. *Cross-links:* `docs/reviews/daemon-harness-architecture-followup-review.md` Q9.
 
+## Memory for seats and the rig (research landed 2026-10-27)
+
+**What raised it.** The operator commissioned `docs/research/Adding_Memory_to_Pi_Agent_Harness.md`
+(packages → effectiveness literature → open-source reference implementations → pitfalls). The delegate's
+consumption plan is **`docs/reviews/memory-implementation-plan.md`**; read that first — it carries the
+evidence classes, the reference-implementation table, and what the report does **not** apply here.
+
+**The headline that changes our design:** the report's independent evidence says the memory *component* is
+the least valuable part of memory — retrieval choice moves accuracy ~20 pp where write strategy moves 3–8 —
+and that **agents do not initiate recall** (zero memory calls across 114 turns against a store pre-seeded
+with exactly what was needed, while deterministic cue-triggered injection fired every time). Both point at
+what durian-pi already is: an append-only durable transcript, a prompt-section delivery mechanism, and a
+no-polling rule (item 4). The gap is a **read path, delivery timing, and a write gate** — not an engine.
+That is the same verdict this roadmap reached in 2026-10-12 (`:1939`, "durian-pi is already SQLite + files
+and the gap is a read/index layer"), so 161–169 are deliberately **folded with O1–O4** (seat onboarding),
+27–30 and 92–97 (long-context), rather than run as a second silo.
+
+**Correction the report could not make:** its install guidance targets a pi **coding-agent** extension
+(`pi install npm:pi-memory`, `session_before_compact`, `ctx.sessionManager`). Seats are **pi-durable**
+conversations and `src/extensions.mjs:19-21` says a coding-agent extension "cannot load here" — so no
+published memory package is a seat-side option. The durable surfaces we would use are `section` /
+`wrapSection`, `GenerationHooks.beforeRequest`, `ToolHooks.beforeTool`/`afterTool`, and
+`CompactionHooks.beforeCompact` (`vendor/pi-main/packages/durable/src/harness/types.ts:844-895`), plus
+`defineDoc(Family)` and durable's in-process BM25 (`src/search.ts:rankDocuments`, today used only for tool
+search). **Registered in this backlog, not scheduled — `pm` sequences them; R1–R4 in
+`docs/reviews/memory-implementation-plan.md` §8 are operator rulings and 161 is gated on the provider
+ruling** (no working provider on the Linux box, `docs/NEXT.md`).
+
+161. **Baseline and A/B harness BEFORE any memory write path.** No-memory arm and full-history arm on ~12
+    already-completed items replayed in a worktree, plus two adversarial probes: a planted instruction in a
+    file the seat reads, and "what is the current value of X" after X changed. Add a rig-level **cache-hit
+    measure** (`cacheRead`/`cacheWrite` per seat) to `src/metrics.mjs` — nothing there reports cache today;
+    `src/context.mjs` has the per-seat half. *Why first:* the report shows public benchmarks are unsound
+    (6.4% corrupt answer key; judge accepted 62.8% of deliberately wrong answers), so our own rig is the only
+    valid benchmark — and this rig's cost model is cached prefix (~385 M cached-in vs 6.3 M fresh-in per day
+    for the highest-volume seat, recorded in `docs/SELFDEV.md`). *Acceptance:* three arms reported with
+    evidence class, and the planted-instruction probe reported whether it reached a durable artifact.
+    *Owner:* qa + impl. *Gates:* 162–169 credibility.
+162. **Read path over what we already store — no new table.** Budgeted recall over durable entries and item
+    bodies, reusing `pi-durable`'s BM25 `rankDocuments`; results returned **by token budget, not by count**,
+    each carrying a pointer to the entry id it came from. *Acceptance:* a demo retrieving a known fact and an
+    abandoned-branch fact from a fixture transcript, and refusing to exceed the budget. *Owner:* impl.
+163. **Invariants layer: human-authored, agent read-only, cache-stable.** A prompt section (the constitution
+    proves the mechanism, `src/rig.mjs:615-628`) carrying project invariants and "never do X", authored by
+    operator/lead, with agent edits going to a pending artifact rather than the live text. *Acceptance:*
+    changing it invalidates the cached prefix **exactly once** (measured via 161's cache measure); a seat
+    that tries to write it is refused.
+164. **Cue-triggered delivery at boundaries — never per turn.** Fire at seat wake/claim, pre-compaction, and
+    item completion; content fenced and labelled `[MEMORY — may be stale]`, deduped across injection points,
+    token-capped; delivered through the existing wake/primer push (item 4 forbids a polling tool as the
+    primary surface). *Acceptance:* a demo where a seat that never calls a memory tool still receives the
+    fact it needs, and a control where the same fact is not re-injected every request.
+165. **Typed facts with explicit supersession — only if 161/162 name the need.** Bi-temporal
+    (`valid_at`/`invalid_at` vs `recorded_at`/`expired_at`) + `supersedes` + `source_event`, keyed on
+    `(subject, predicate)` with a **content-hash id** so a fork/replay upsert is idempotent; stored as
+    `defineDocFamily` docs so writes go through `api.commit` (single-writer, existing migrations).
+    *Acceptance:* two queries — "true now" and "true as of T" — and a stale-value trap where similarity would
+    have returned the superseded value (the reported rate is 15–40%; the deterministic rule must be ~0).
+    *Owner:* architect designs, impl builds, verifier from a different model family checks it.
+166. **Capture at the loss point.** `CompactionHooks.beforeCompact` writes an **extractive** working-thread
+    checkpoint plus a pointer into the evicted raw range; **never** returns `{decline:true}`; no LLM on the
+    hot write path. *Fold with:* 28a/28b, 92–97, `docs/runbooks/compaction-eval.md`.
+167. **Write gate with origin binding (security precondition).** One capture tool; `beforeTool` refuses a
+    write carrying no structured provenance (the entry id it derives from) and routes anything sourced from
+    retrieved content to a **quarantine tier** retrieved labelled and never promoted without a human.
+    Precedent for the gate is `SeatGuard.beforeTool`; for the process, a `security` position doc first
+    (`docs/reviews/security-*-position.md`, `docs/runbooks/security-trust-boundary-review.md`).
+    **No memory record may ever satisfy a permission check.** *Acceptance:* the planted-instruction probe from
+    161 lands in quarantine and never in the promoted tier.
+168. **Forget that is verifiable, not silent.** Tombstone keyed on normalized content and checked **before
+    insert**; a `sweep` that *reports* remaining copies (index, `.durig/` bodies, session logs) instead of
+    asserting they are gone — the reported end-to-end forget compliance across six systems is **1.5%**.
+169. **Retention and decay — the store must stay retrievable.** Expiry for time-bound facts, a bounded review
+    queue surfaced through attention (D28), and a size budget on the skill layer (35): the reported shape is
+    actual-use precision falling 29.6% → 3.3% as a skill library grew 5 → 100.
+
+**Evidence class:** 161–169 are `advertised-elsewhere` for the measured magnitudes (2026 preprints; the
+3,283-paper synthesis is LLM-assembled from abstracts — the report says so) and `observed` for the local
+cache economics and the delivery/no-polling constraint. Managed by the advocate's rule (D36).
+
+**Explicitly rejected from the report, with reasons:** installing a pi coding-agent memory package (wrong
+layer, §2 of the plan); knowledge-graph retrieval as default (contested — copy Graphiti's *schema*, not its
+traversal); LLM consolidation on the write path (the 35:1 compression step, and where laundering lands);
+agent-writable always-in-context core (Letta's own documented gap); embeddings before a named
+vocabulary-mismatch failure; cancelling compaction from a memory hook; a polling search tool as the primary
+surface.
+
 ## Explicitly deferred (with reasons)
 
 - **Reputation, veto and quorum arbitration** — the practitioner fix for
