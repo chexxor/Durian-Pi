@@ -69,6 +69,21 @@ on one local model (`check` says `single-model-rig`, fix-now; ROADMAP 189); (2) 
 `docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`; and (3) whether the rig's evidence binding should
 move to store-native ids (ROADMAP 190), which decides how 165/167/170 are written.
 
+**Suite: 236/236 on Linux (2026-10-26) — the first green run on this OS.** Two of the eight standing
+failures were PRODUCT bugs, not OS drift: `linkWorktreeDeps` handed a script path to `npm` as a command (so
+deps-linking never worked on any platform) and `waitForProcessDeath` on POSIX answered on the first
+`kill(pid,0)` instead of polling to its deadline (a permanent false "still running"). The other six were
+Windows-shaped fixtures. Commit `3bff94a`; the config-leak half is ROADMAP **193**.
+
+**Config of record on this box:** `durig.config.json` (gitignored) now carries MACHINE IDENTITY ONLY —
+`DURIG_DB`, `DURIG_LOCAL_BASE_URL`, `DURIG_LOCAL_MODEL`, `DURIG_LOCAL_CONTEXT` — because it sits at a
+`DEFAULT_CONFIG_PATH` and therefore leaks into every demo. RIG TUNING travels in the launch environment
+instead, where it cannot move a demo's contract:
+
+```bash
+DURIG_MAX_CONCURRENT_SEATS=2 DURIG_STREAM_TIMEOUT_MS=1800000 node cli.mjs ...
+```
+
 **Exact next command** (verify the citation rule now guards the class, then read what it still reports):
 
 ```bash
