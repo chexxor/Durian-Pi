@@ -4261,3 +4261,44 @@ notice either. That divergence, not the copy, is the risk this entry exists to k
 verdict, and it fooled this delegate on first contact. And `scripts/clockin.mjs:265` crashes with a raw
 `execFileSync` stack when `cli.mjs status` returns `ok:false`, so the one-call clock-in dies exactly when the store
 is sick. Both are seat-sized items; the delegate did not claim either.
+
+## D129 — The v2 store was blocked by an UN-LINKED PIN, not a version gap; published pi 1.4.0 is measured NOT drop-in, so readability comes from `sync-pi --sync --link`, and Linux is now a real portability question (delegate, 2026-10-26; operator-directed)
+
+**What D128 left open.** The copied store answered `Durable SQLite schema version 2 is newer than supported
+version 1`, and the obvious move was to bump the pi family. Before spending that, the family was A/B measured on
+one tree (`main` @`d5c93cd`, 235 demos, Linux):
+
+| install | suite | store |
+|---|---|---|
+| published **1.3.0** | **229/235** (271.0 s) | unreadable (schema v1 only) |
+| published **1.4.0** | **198/235** (242.3 s) — `TypeError: change.definition.checkpointWhen is not a function` ×8 | readable |
+| **pinned `2ec55d8…` built + linked** (`sync-pi --sync --link`) | **229/235** (273.6 s) | **readable** |
+
+**The finding that decided it.** The pinned commit is labelled **1.3.0** and already carries
+`{version: 2, statements: sleepingStatus}` in `packages/durable/src/storage/sqlite/migrations.ts`. The Windows
+`node_modules` was the same shape (labelled 1.3.0, carries version 2). So the two machines were never on different
+pi versions — the Windows rig had run `sync-pi --link` and this box had the **published** 1.3.0, which has only
+`{version: 1}`. Nothing about the store is wrong; the reader was simply the wrong artifact. **Ruling: buy
+readability with `node scripts/sync-pi.mjs --sync --link`, which the script itself documents as reversible by a
+plain `npm install`. Do not buy it with published 1.4.0** — 31 extra demos go red, and `checkpointWhen` is not
+called from durian-pi's source at all (it is pi-durable's own change-definition contract), so closing that gap is
+a migration item for a seat, not a dependency edit.
+
+**Why the cross-check mattered first.** Before touching dependencies at all, the queue was re-read on the pinned
+build and reproduced the archived 2026-10-25 pointer exactly — 4818 rows, `done 3748 / cancelled 777 / held 274 /
+deferred 19`, `attention: 21`, `seats: 12`, same deferred ids. That is the evidence that the copied store is the
+same store, and it is what made a dependency experiment safe rather than speculative.
+
+**The 6 residuals are Linux's, not pi's.** The identical failure set under published 1.3.0 and the pinned build
+isolates the platform: `confine` and `verify-scratch-per-tree` assume a Windows **junction** (`symlinkSync(…,
+"junction")` yields a file symlink on Linux, and the ignore rule `node_modules/` is directory-only, so the scratch
+reads dirty); `write-targets` hard-codes `C:/seat/…`; `worktree-deps-link` shells `npm <script-path>` which Linux
+npm rejects; `job-object` names its own POSIX check; `worktree-prune-branch` fails a fixture `git cherry-pick` that
+ambient identity does not fix. None is seat-visible yet, because no provider runs here — but **every future "suite
+green" claim on this box is false until they are fixed**, and `AGENTS.md` still says native Windows only. Which of
+those is the truth — Linux as a supported operating seat, or Linux as a read-only analyst box — is the operator's
+call, not the delegate's; this entry exists so the choice is made knowingly.
+
+**Honesty boundary.** The delegate ran all three suite configurations and the store reads; no seat verified any of
+it, and the delegate claims no queue item. `scripts/test.mjs` writes no suite marker, so this session hand-wrote
+`.spike/delegate/suite-marker.json` — the digest's `last suite:` line is only as current as whoever last wrote it.
