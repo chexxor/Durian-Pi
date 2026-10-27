@@ -97,6 +97,7 @@ measured above.
 | `origin` | fetched cleanly; **does not contain them**. Only one `item-*` branch is remote (`origin/item-148`) |
 | Dangling objects / reflog | **none** — `git fsck --unreachable` reports 0 unreachable commits and `git cat-file -t` fails for every cited sha, so the objects were pruned, not merely unreferenced |
 | The vendored pi tree (`vendor/pi-main/.git`) | the cited shas are not pi commits either — so this is not a mislabelled-upstream artifact |
+| **The docs' own baselines** | `git cat-file -t 78991031` — the commit `docs/NEXT.md` and `docs/ROADMAP.md` repeatedly name as "main is `78991031`" — **fails**: not a valid object here. Same for `2861826`. The repository this checkout points at does not contain the history the docs describe |
 | The store's own transcript | **the only remaining copy.** 137,368 entries, and pi-durable stores tool results verbatim (entry 52 alone holds a 51 KB `read` result). File contents as they were when a seat read or wrote them are therefore recoverable in principle. That is seat work under an item, not something the delegate should reconstruct by hand. |
 
 And the sweep is smaller than the migration gap it exposed. Scanning every sha-shaped citation in the queue:
