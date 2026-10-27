@@ -177,6 +177,12 @@ THE BOM REMAINS ON MAIN — a rule licensed in the ledger and unenforced in fact
 TRUE FINDING DOES NOT RECORD THE TRUTH; IT RETIRES IT. Until the operator decides, both demos fail for the
 right reason (recorded baseline, not a silent red).
 
+**SUITE ON LINUX: 238/238 (2026-10-27), and it now runs CONCURRENT by default.** Measure it with
+`node scripts/test.mjs` — **41.2s** here. Do NOT hand-loop `for f in demo/*.test.mjs; do node "$f"; done`: that
+is serial and costs **276.8s** for the same tests (D135). The runner also prints per-test durations and the five
+slowest, reports a hung demo as `TIMEOUT` rather than hanging forever, and `demo/test-runner-concurrency.test.mjs`
+pins the default so nobody loses the concurrency again.
+
 **SUITE ON LINUX: 236/236 (2026-10-26).** The Windows-era baseline was 229/235 and this box measured
 **227 pass / 8 fail** at the relinked pin; D129's "six Linux-shaped defects" was stale in both count and
 membership. The eight are now zero, and two of them were **product bugs, not OS drift**: `linkWorktreeDeps`

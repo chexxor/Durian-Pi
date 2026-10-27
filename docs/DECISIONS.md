@@ -4549,3 +4549,67 @@ a **task** id as if it were an entry.
 **What this does NOT fix, and must not be allowed to pretend to.** Ids are stable within **one** store. There is
 no store merge or replay path today; if one is ever added, id reallocation across stores becomes a real hazard
 and this decision has to be revisited. Recorded so a future session sees the boundary rather than discovering it.
+
+## D134 — Cross-family verification gets a SECOND local provider, not a second quant (2026-10-27)
+
+**The ruling and what was built.** A second locally-served provider registers as `verifier` beside `local`, so
+author seats run `local/<id>` and verifier seats can run `verifier/<id>`. The served model is Flint
+(`FlintForCausalLM`, `model_type: flint`, **no declared baselines**, card states "trained from scratch through
+pretraining, mid-training, SFT, and reinforcement learning", its own 150,144-token vocab, apache-2.0) — a genuine
+different family, which is the entire point.
+
+**Why a same-family quant would have been worse than doing nothing.** `src/checkup.mjs` compares resolved model
+**strings**. The only other model installed was `IQ3_XXS`, a smaller quant of the same model: it would have
+cleared `single-model-rig` while leaving the invariant false. A green check lying about a security property is
+the failure mode this decision exists to avoid, so the family question is recorded here as a ruling rather than
+delegated to a test that cannot settle it.
+
+**Two couplings that a naive second provider would have silently broken** — found by reading every consumer of
+the provider id before writing code, and asserted in `demo/second-local-provider.test.mjs`:
+
+1. `src/broker.mjs` gated the **D105 between-items context reset** on `seat.provider === "local"`. A verifier
+   seat would have been excluded: no reset, context growing every item, drifting into the compaction wall while
+   the rig reported it healthy.
+2. `src/readapi.mjs` read the single local spec, so the second provider's declared window would have been
+   **absent** — which a capacity reader sees as "unknown", not "wrong".
+
+Both now ask `src/providers/local.mjs`, the only module that builds those providers and therefore the only one
+that can answer "which providers are locally served" definitively. The static id set is sound because
+`resolveSeatModel` assigns a prefix only when the provider is **registered**: an unconfigured `verifier/...` seat
+resolves to the default provider and never carries the id at all.
+
+**`maxTokens` became per-provider because it was measured, not styled.** The live endpoint returned 94 completion
+tokens for a one-line prompt and **61 of them were reasoning tokens**. A model that reasons before answering,
+capped at a budget meant for one that does not, is truncated mid-thought and returns a confident half-verdict —
+the worst possible failure for a seat whose job is to say "no".
+
+**Flint is NOT routed to any seat yet, and the measurement is why.** Loaded as **Q8_0 (42.35 GB) on a 16 GB card
+with a 262,144-token context**, it measures **2.8–14.5 tok/s decode** and ~126 tok/s prefill, and it pulled the
+**primary** down from its measured 31–39 tok/s to **11.0 tok/s** — the rig got slower on the model it already
+uses. The honest options are recorded in ROADMAP 189: reload at `UD-IQ2_XXS` (11.86 GB, VRAM-resident on the
+A4000) with a 65,536-token context, or `UD-Q3_K_XL` (18.49 GB) with experts in RAM. Q8_0 is kept as a capability
+**ceiling test**, not a runtime.
+
+## D135 — The suite runs concurrent by default, capped at 8 (2026-10-27)
+
+**What was decided.** `scripts/test.mjs` already had `--jobs <n>` and the default was **1**. Measured here: 237
+tests in **276.8s serially, 41.0s at 8, 25.8s at 16** — 6.7× for doing nothing differently except running them
+at once, because the demos mostly *wait* on broker heartbeats and wake paths. The fast path is now the default,
+and `demo/test-runner-concurrency.test.mjs` pins the default itself, so a future edit that quietly sets it back
+fails a test instead of costing every session four and a half minutes.
+
+**Parallel safety was verified, not assumed.** No demo binds a port (the 1234/8080/47831 strings in fixtures are
+inert URLs); the nine demos touching worktrees build their own git repo under `mkdtemp(tmpdir())`; instance
+identity derives from the store path (`instanceKey`), so temp stores cannot collide. Three runs at `--jobs 16`
+gave 237/237 at 26.0/26.1s, so the pass set is not load-dependent.
+
+**Why 8 and not 16 — the reasoning that is not in the code.** This box is not a CI machine: it serves two models
+and runs up to two live seats, and every demo spawns real broker/subprocess trees. At 16 the suite is ~15s faster
+and becomes a load generator against the rig under test, which is exactly how a timing-sensitive suite starts
+flaking under the conditions that matter. `--jobs 16` remains available when nothing else runs.
+
+**Concurrency changed the failure mode, so a bound came with it.** `runOne` had no timeout: serially a hang costs
+one slot and you watch it; with 8 slots it silently eats an eighth of capacity and the suite never exits — which
+reads as "the tests are slow", the very complaint under investigation. On POSIX the whole process tree is killed
+(a demo that spawns a broker otherwise leaks it into the next run); on Windows only the direct child can be,
+because reaping a tree needs a Job Object the runner does not own. That limitation is written in the source.

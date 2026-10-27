@@ -3214,6 +3214,33 @@ this session's own model — so the number is owed before the split is chosen, n
 itself also needs naming: comparing model *strings* cannot tell a different family from a different quant of the
 same one.
 
+**BUILT AND MEASURED 2026-10-27 — the provider is in, the seats are NOT flipped, and the reason is throughput.**
+The second provider (`verifier`) is implemented and pinned by `demo/second-local-provider.test.mjs`, including the
+two couplings that a naive version would have broken (the D105 between-items reset gated on the literal string
+`"local"`, and the declared context window read from a single spec). **Tool calling was proven on the live
+endpoint before anything was built**: `/v1/chat/completions` returned `finish_reason: tool_calls` with valid JSON
+arguments — the highest-risk unknown for a tool-driven seat, cleared first. The chosen model is Flint
+(`FlintForCausalLM`, trained from scratch, own 150,144-token vocab, apache-2.0), so unlike `IQ3_XXS` it is a real
+family change.
+
+What the measurement says: loaded as **Q8_0 (42.35 GB) with a 262,144-token context on a 16 GB card**, it decodes
+at **2.8–14.5 tok/s** and prefills at ~126 tok/s, and it dragged the **primary** from its own measured 31–39
+tok/s to **11.0 tok/s** — the rig got slower on the model it already uses, because both are now fighting for RAM
+and PCIe. A verifier seat is a multi-turn tool loop, so that is minutes per verdict. **Route nothing at it in this
+configuration.** The options, sized: `UD-IQ2_XXS` (11.86 GB) is VRAM-resident on the A4000 with a 65,536-token
+context (Flint's sliding-window KV is cheap: 14 full-attention layers at 4 KV heads = 28,672 B/token, so 64k
+costs 1.74 GiB and 200k would cost 5.34 GiB and NOT fit); `UD-Q3_K_XL` (18.49 GB) is the better quant and needs
+~3 GB of experts in RAM. The REAP50 "8GB/12GB" repos are 50% **pruned** — the wrong thing for a seat whose job is
+catching blind spots. Q8_0 stays useful as a capability **ceiling test** only.
+
+**Acceptance test owed before any seat is routed to it** (the model is five days old with no published evals, so
+capability is unverified): seed two real bugs this repo already fixed — `linkWorktreeDeps` handing a script path
+to `npm` as a command, and `waitForProcessDeath` answering on the first `kill(pid,0)` while ignoring its deadline.
+Both sat undetected by every seat and every check for months, and both have known fixes, so this is ground truth.
+If the candidate cannot name them, cross-family verification is not actually being obtained, whatever the check
+says. Measure: qa/qa2/auditor on a different family, `check` clean of `single-model-rig`, AND the seeded-bug test
+passing.
+
 **190. Evidence binding — a cited commit must resolve, or the row must not cite it** *(substrate; same shape
 as 170)* — measured on this box: **178 distinct commit shas are cited across the queue and 90 of them resolve
 nowhere** (not in this clone, not in `vendor/pi-main/.git`, not on `origin` after a clean fetch). They sit on

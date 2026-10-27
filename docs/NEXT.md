@@ -4,7 +4,7 @@
 > This file is the live pointer plus the current session: everything from the `2026-10-25T01:52Z` session back
 > lives in the archive. The cut is proven by concatenation (see `docs/DECISIONS.md` D126, D129).
 
-## NEXT SESSION (2026-10-27T12:05Z — CLOCK-OUT: THE SUITE IS GREEN ON LINUX 236/236, THE CITATION RULE IS BUILT, AND THREE OPERATOR RULINGS ARE OWED BEFORE SEAT WORK RESUMES)
+## NEXT SESSION (2026-10-27T20:55Z — CLOCK-OUT: THE SECOND PROVIDER IS IN, THE SUITE IS CONCURRENT (41s), AND THE VERIFIER SEAT FLIP WAITS ON ONE LM STUDIO SETTING)
 
 > Archive: older sessions live VERBATIM in `docs/NEXT-ARCHIVE.md` (the digest quotes this block, so the
 > link has to be inside it — `demo/clockin-digest.test.mjs` checks that it is).
@@ -20,14 +20,29 @@ count and membership. Two of the eight were **product bugs, not OS drift** — `
 path to `npm` as a command, so dependency linking had **never** worked on any platform, and
 `waitForProcessDeath` on POSIX answered on the first `kill(pid,0)` instead of polling to its deadline, so a
 cleanup could report a permanent false "still running". The other six were Windows-shaped fixtures, fixed at
-the cause. Commit `3bff94a`; the config-leak half is **193**. **Re-measure, never quote**: `for f in
-demo/*.test.mjs; do node "$f" || echo "FAIL $f"; done`.
+the cause. Commit `3bff94a`; the config-leak half is **193**.
+
+**Run the gate with `node scripts/test.mjs`, never a hand-loop.** It runs 8 at once by default (D135) and measures
+**238/238 in 41.2s** here; the serial loop costs **276.8s** for the identical tests. It prints per-test durations
+and the 5 slowest, turns a hung demo into `TIMEOUT` instead of never returning, and
+`demo/test-runner-concurrency.test.mjs` pins the default so the concurrency cannot be lost again. Use `--jobs 16`
+only when nothing else runs: this box also serves two models, and at 16 the suite competes with the rig it tests.
 
 **Blocker:** three operator rulings, none of them a build:
-1. **Cross-family verification on one local model** — `check` reports `single-model-rig`, fix-now: all 12 seats
-   resolve to `local/iq3_s` and `/v1/models` serves exactly one model, so an author and its verifier cannot
-   differ in family (D48/D119). Options: serve a second family and pay for per-seat base URLs, keep one
-   verifier on a remote provider, or waive the rule in writing. **189**.
+1. **Cross-family verification on one local model — the CAPABILITY is now landed; only the seat flip is owed.**
+   A second locally-served provider (`verifier`) registers beside `local` (`src/providers/local.mjs`, pinned by
+   `demo/second-local-provider.test.mjs`, which also pins two couplings a naive version would have broken
+   silently: the **D105 between-items context reset** was gated on the literal string `"local"`, so a second local
+   provider would never reset and would drift into the compaction wall while reading healthy; and the **declared
+   context window** was read from a single spec, so the second window would be absent, not wrong). Tool calling
+   was proven on the live endpoint BEFORE building anything (`finish_reason: tool_calls`, valid JSON args). **Why
+   no seat points at it yet:** Flint is loaded as **Q8_0 (42.35 GB) at 262,144 context on a 16 GB card**, decodes
+   at **2.8–14.5 tok/s**, and pulled the **primary from 31–39 tok/s down to 11.0** — the rig got slower on the
+   model it already uses. Finish by reloading LM Studio at **`UD-IQ2_XXS` (11.86 GB, VRAM-resident) with context
+   65,536**, re-measuring, then setting `qa`/`qa2`/`auditor` to `verifier/recursivesi/flint` in `rig.selfdev.json`
+   and confirming `check` clears `single-model-rig`. **Before routing real work**, run the seeded-bug calibration
+   in ROADMAP 189 — Flint is 5 days old with no published evals, so its capability is unverified. **LM Studio owns
+   that instance: never restart it unasked.** D134.
 2. **Evidence binding** — should durable records cite store-native ids (`entries.id`) rather than
    machine-local git objects? This decides how memory items 165/167 and the substrate item 170 are written, so
    ruling it now is cheaper than migrating later. **190**.
@@ -44,16 +59,21 @@ the broker is down.
 **Config of record on this box** — the split matters, because `durig.config.json` sits at a
 `DEFAULT_CONFIG_PATH` and therefore reaches every demo:
 - `durig.config.json` (gitignored) carries **machine identity only**: `DURIG_DB=./selfdev.sqlite`,
-  `DURIG_LOCAL_BASE_URL=http://127.0.0.1:47831/v1`, `DURIG_LOCAL_MODEL=iq3_s`, `DURIG_LOCAL_CONTEXT=200000`.
+  `DURIG_LOCAL_BASE_URL=http://127.0.0.1:47831/v1`, `DURIG_LOCAL_MODEL=iq3_s`, `DURIG_LOCAL_CONTEXT=200000`, and
+  now `DURIG_VERIFIER_BASE_URL=http://127.0.0.1:1234/v1`, `DURIG_VERIFIER_MODEL=recursivesi/flint`,
+  `DURIG_VERIFIER_CONTEXT=65536`, `DURIG_VERIFIER_MAX_TOKENS=32768`.
   `demo/local-model-pointer.test.mjs` legitimately reads it to check the tracked rig file against this machine.
+  `DURIG_VERIFIER_CONTEXT` is a **chosen cap**, not the server's ceiling — LM Studio currently reports
+  `loaded_context_length: 262144`.
 - **Rig tuning travels in the launch environment**, where it cannot move a demo's contract:
   `DURIG_MAX_CONCURRENT_SEATS=2 DURIG_STREAM_TIMEOUT_MS=1800000 node cli.mjs …`
 - `rig.selfdev.json` (tracked) carries `local/iq3_s` for all 12 seats. Concurrency **2** is measured: 3
   concurrent requests gave ~21 % aggregate for a 2.8× worse worst-request decode.
 
-**Exact next command** (read what the new rule reports, then decide the evidence-binding ruling):
+**Exact next command** (the gate, then what the second provider still reports):
 
 ```bash
+node scripts/test.mjs
 DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json
 ```
 
@@ -62,6 +82,8 @@ Expected: `pass: true`, 0 errors, ~62 fix-now, and `citation-unresolvable` repor
 
 **Do not:** run `up`/`send`/`run`/`complete` before re-taking the worktree/branch/`.spike` inventory into
 `.spike/` and diffing it after (`AGENTS.md` clock-in step 7, `docs/runbooks/workspace-move.md`); run
-`git add -A`; use `DURIAN_PI_DB` for the CLI (the variable is `DURIG_DB`); quote the suite number instead of
-measuring it; or start broker work on this workspace — the store is intact but its git history is only
-partially here (`git cat-file -t 78991031` fails; the docs' own baseline sha is not an object in this clone).
+`git add -A`; use `DURIAN_PI_DB` for the CLI (the variable is `DURIG_DB`); measure the suite with a serial
+hand-loop instead of `node scripts/test.mjs`; **route any seat at Flint while it is loaded as Q8_0** (2.8–14.5
+tok/s, and it halves the primary); restart the operator's LM Studio instance without asking; or start broker work
+on this workspace — the store is intact but its git history is only partially here
+(`git cat-file -t 78991031` fails; the docs' own baseline sha is not an object in this clone).
