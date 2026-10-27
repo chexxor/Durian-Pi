@@ -4663,3 +4663,52 @@ tokens and larger prompts are refused with HTTP 400, which is tight for a seat c
 runbook excerpt plus a diff; and the **truncation failure reproduced again** at 128–256-token budgets
 (`finish_reason: length`, empty answer, all 256 tokens spent on reasoning), which is why
 `DURIG_VERIFIER_MAX_TOKENS=32768` is set rather than defaulted.
+
+## D137 — A verifier that fails the seeded-bug gate is worse than no verifier; Ministral 14B is NOT routed (2026-10-27, operator ruling still owed on the replacement)
+
+**The ruling made here (and the one it unblocks).** `docs/NEXT.md` queued the flip of `qa`/`qa2`/`auditor` to
+`verifier/mistralai/ministral-3-14b-reasoning` as "one LM Studio setting away". **It is not made, and the reason is
+now a measurement rather than a preference:** that model scores **0/2** on the seeded-bug calibration (ROADMAP 189,
+the two real defects fixed in `3bff94a`), while the author family it would have supervised scores **1/2 on the same
+prompts in the same session**. Routing it would clear `single-model-rig`, which is a **string comparison**
+(`src/checkup.mjs:594`), and make the rig's verification worse than the status quo. So: leave all 12 seats on
+`local/iq3_s`, keep `single-model-rig` reporting **fix-now** as an honest red, and treat "which verifier model" as
+the operator's choice — the build half (the second provider) is done and needs nothing.
+
+**Why the score is the right measure and `check` is not.** The invariant exists to break *shared* blind spots. A
+candidate that invents a specific, confident, wrong mechanism does not merely fail to add coverage, it injects a
+false verdict that the verifying seat has no way to discount — and on this ground truth it did so twice, and
+reproducibly:
+
+- Snippet A (`linkWorktreeDeps` handing a script path to `npm` as a command): 0/7 keywords in both runs; it
+  reported that non-string `stdout`/`stderr` would make `.join("\n")` throw. **That defect cannot occur** —
+  measured on this box, `[null, undefined, "a"].join("\n") === "\n\na"` and
+  `[Buffer.from("x"), "a"].join("\n") === "x\na"` — and the fix it prescribed (`String(...)` after
+  `.filter(Boolean)`) changes nothing.
+- Snippet B (`waitForProcessDeath` answering on one `kill(pid,0)` and never polling `timeoutMs` on POSIX): 2–3/8
+  keywords, and the mechanism it named — an *"uninitialized variable `resolved`… race condition in `pidPromise`"*
+  — does not exist in that branch.
+
+Both runs ended `finish_reason: stop` with 203–292 completion tokens, so this is **not** the truncation failure
+mode of D134 (empty answer at a small `max_tokens`); at `CAL_MAX_TOKENS=3000` the model answered, and answered
+wrong. The control split the same way the earlier control did — A named exactly, B replaced with a plausible
+non-defect (`taskkill` is missing on Linux) — which is what makes the comparison meaningful: the harness separates
+a hit from a miss, and now separates two families too.
+
+**Why this is NOT a verdict that Ministral is a weak model.** n = 2 per defect, one quant, temperature 0.2, one
+prompt style, snippets taken out of file context. LM Studio returns no `reasoning_content` in the non-streaming
+response for this model, so its thinking was not inspectable and keyword coverage was computed over the answer
+alone. It fits the A4000 (13,388 MiB resident), it calls tools correctly, and it decodes at ~33 tok/s — every
+*operational* gate passed. The single thing that failed is the one the seat exists for.
+
+**The measure for 189 is now stated correctly.** ROADMAP 189's written measure is "`check` no longer reports
+`single-model-rig`". That measure is insufficient, and this session proved it can be satisfied by a change that
+lowers verification quality. The measure is: **a verifier family that scores above the author family it supervises
+on the seeded-bug gate**, and `check` clearing is a consequence, never the target.
+
+**Superseded by measurement, same day.** 189's obstacle paragraph ("the split as stated cannot hold — the primary
+occupies ~35.9 GB across both cards") no longer describes this box: the Strata primary (pid 493568, engine
+`0.1.50-linux-x86_64-cuda-cuda13`) now holds **20,856 MiB on the 3090 alone**, and the candidate verifier holds
+**13,388 MiB on the A4000** (2,577 MiB free). The operator already reconfigured the split; the missing piece is a
+capable verifier, not free VRAM. Full evidence: `docs/reviews/verifier-model-survey-2026-10-27.md`,
+section "THE GATE RAN AGAINST THE VERIFIER — and it FAILS (0/2, against the control's 1/2)".

@@ -1,9 +1,10 @@
 # durian-pi — NEXT archive (history, verbatim)
 
 > Cut VERBATIM out of `docs/NEXT.md` on 2026-10-25 when the pointer was re-cut for the landing of #4747/#4750
-> (landing entry #4815), and again on 2026-10-26 when the `2026-10-25T01:52Z` block was superseded by the
-> Linux-store session (D128/D129) and the live file hit its 200-line cap. Ordinary sessions do NOT append here —
-> only a CUT does, and a cut moves whole `## NEXT SESSION` blocks unedited.
+> (landing entry #4815), again on 2026-10-26 when the `2026-10-25T01:52Z` block was superseded by the
+> Linux-store session (D128/D129) and the live file hit its 200-line cap, and again on 2026-10-27 when the
+> `2026-10-27T22:05Z` block was superseded by the seeded-bug-gate session (D137). Ordinary sessions do NOT append
+> here — only a CUT does, and a cut moves whole `## NEXT SESSION` blocks unedited.
 > Proof of a cut: the moved block is byte-identical at the tail of this file, and `git log -p docs/NEXT.md`
 > still carries the whole live file as it was before the cut.
 
@@ -4954,3 +4955,117 @@ Secondary: **229/235, not 235/235** — the six Linux defects above make any gre
 blocker: the store is intact and readable, `main` @`d5c93cd`, tree clean apart from this session's docs commit and
 a pre-existing uncommitted dependency relaxation (`pi-coding-agent` `1.3.0`→`^1.3.0`, `pnpm-lock.yaml` /
 `pnpm-workspace.yaml` untracked — not this delegate's, not landed).
+
+## NEXT SESSION (2026-10-27T22:05Z — CLOCK-OUT: A CROSS-FAMILY VERIFIER IS LOADED AND MEASURED ON THE A4000, THE SEAT FLIP IS ONE LM STUDIO SETTING AWAY, AND ONE OF MY OWN THROUGHPUT CLAIMS WAS WRONG)
+
+> Archive: older sessions live VERBATIM in `docs/NEXT-ARCHIVE.md` (the digest quotes this block, so the
+> link has to be inside it — `demo/clockin-digest.test.mjs` checks that it is).
+
+**Current item:** ROADMAP **189** (cross-family verification), partially landed and **not finished** — the
+provider capability is built and the verifier model is loaded, but **no seat points at it yet**, so `check` still
+reports `single-model-rig` (fix-now). **No queue item is claimed by the delegate** (it never claims, completes,
+defers or routes). Built this session: **190** (the `citation-unresolvable` rule, detection half), **193** (ambient
+config vs demo verdicts), the **second local provider** (D134), and **concurrent test runs** (D135). Registered
+and not started: 191, 192, and the memory/security programme (161–184).
+
+**The fact that matters most for the next session: a cross-family verifier is now running on this box and it
+works.** The operator loaded `mistralai/ministral-3-14b-reasoning` **Q6_K, 13,273-token context** in LM Studio.
+Measured (`tools/model-probes/throughput.mjs`): resident in **13,444 MiB** of the A4000, prefill **885–1,216
+tok/s**, decode **flat at 33.2–33.9 tok/s** regardless of prompt size, and **tool calling works**
+(`finish_reason: tool_calls`, `{"command": "ls"}`). Full record in
+`docs/reviews/verifier-model-survey-2026-10-27.md`.
+
+**And a correction the next session must not re-inherit (D136):** every "decode tok/s" figure this session
+published earlier — including "the verifier drags the primary from 31–39 to 11.0" — was computed as
+`completion_tokens ÷ total_wall_time` on a **non-streaming** call, which is a prefill/decode blend, not a decode
+rate. Re-measured with `stream: true`: the primary prefills at **2,094 / 2,145 / 2,112 tok/s** at 14,867 /
+44,469 / 111,066 prompt tokens (flat out to 111k) and decodes at **57–87 tok/s** — its own baseline, with the
+verifier resident on the other card. **There is no measured collateral damage.** Two more artifacts the probes now
+handle: Strata **prefix-caches repeated prompts** (identical text collapsed TTFT to 0.15 s and printed a fictitious
+19,359 tok/s), and **LM Studio sends no `usage` on its stream**, so its rate is counted in chunks.
+
+**The single fact that changed today: the suite is 236 pass / 0 fail on Linux.** The Windows-era baseline was
+229/235; this box measured 227/8 at the relinked pin, and D129's "six Linux-shaped defects" was stale in both
+count and membership. Two of the eight were **product bugs, not OS drift** — `linkWorktreeDeps` handed a script
+path to `npm` as a command, so dependency linking had **never** worked on any platform, and
+`waitForProcessDeath` on POSIX answered on the first `kill(pid,0)` instead of polling to its deadline, so a
+cleanup could report a permanent false "still running". The other six were Windows-shaped fixtures, fixed at
+the cause. Commit `3bff94a`; the config-leak half is **193**.
+
+**Run the gate with `node scripts/test.mjs`, never a hand-loop.** It runs 8 at once by default (D135) and measures
+**238/238 in 41.2s** here; the serial loop costs **276.8s** for the identical tests. It prints per-test durations
+and the 5 slowest, turns a hung demo into `TIMEOUT` instead of never returning, and
+`demo/test-runner-concurrency.test.mjs` pins the default so the concurrency cannot be lost again. Use `--jobs 16`
+only when nothing else runs: this box also serves two models, and at 16 the suite competes with the rig it tests.
+
+**Blocker:** three operator rulings, none of them a build:
+1. **Cross-family verification — capability landed, verifier loaded, TWO steps still owed.** The provider half is
+   built: a second locally-served provider (`verifier`) registers beside `local` (`src/providers/local.mjs`, pinned
+   by `demo/second-local-provider.test.mjs`, which also pins two couplings a naive version would have broken
+   silently: the **D105 between-items context reset** was gated on the literal string `"local"`, so a second local
+   provider would never reset and would drift into the compaction wall while reading healthy; and the **declared
+   context window** was read from a single spec, so the second window would be absent, not wrong). D134.
+   **Step 1 — the operator's LM Studio setting.** At **13,273 tokens** the usable prompt budget is ~12k and larger
+   prompts are refused with **HTTP 400**; a verifier seat carrying a queue item + a runbook excerpt + a diff will
+   exceed that. KV costs 163,840 B/token, so **+8,192 tokens = 1.34 GiB** and only **2,585 MiB** is free on the
+   A4000: raise the context with **q8_0 KV cache** (~21k–24k becomes reachable) or drop to **Q4_K_M (8.24 GB)** and
+   buy ~5.3 GB of headroom for ~32k fp16. **LM Studio owns that instance — never touch it unasked.**
+   **Step 2 — the capability gate, then the flip.** Run
+   `node tools/model-probes/calibrate-verifier.mjs http://localhost:1234/v1 mistralai/ministral-3-14b-reasoning`,
+   which feeds the two real pre-fix defects fixed in `3bff94a`. The **control already ran against the primary and it
+   SPLIT**: it named defect A exactly and answered defect B with a confident, wrong mechanism. If the verifier does
+   not beat that, cross-family verification is not being obtained regardless of what `check` says. Only then set
+   `qa`/`qa2`/`auditor` to `verifier/mistralai/ministral-3-14b-reasoning` in `rig.selfdev.json` and confirm `check`
+   clears `single-model-rig`. Keep `DURIG_VERIFIER_MAX_TOKENS=32768`: at 128–256-token budgets this model returns an
+   **empty answer with `finish_reason: length`** after spending the whole budget on reasoning.
+   **Flint is a separate route:** it does not fit here (31.05 GB / 40.21 GB of routed-expert weights for Q6_K / Q8_0
+   against 34 GiB free RAM — GGUF census, arithmetic not benchmark) and LM Studio/llama.cpp are the wrong engines for
+   it anyway; **PolyStrata** (`VecSzn/PolyStrata`, MIT, its own engine whose contribution is expert residency) measures
+   Flint `UD-Q3_K_XL` at 61–63 tok/s on an 8 GB card and benchmarks llama.cpp's `--fit on` / `--n-cpu-moe` as slower.
+   See the survey addendum.
+2. **Evidence binding** — should durable records cite store-native ids (`entries.id`) rather than
+   machine-local git objects? This decides how memory items 165/167 and the substrate item 170 are written, so
+   ruling it now is cheaper than migrating later. **190**.
+3. **`#4785` was marked `done` with no artifact anywhere** — its commit `500969f42` never existed on the
+   Windows rig either, and `win/item-4785` points at plain main. That is a completion without an artifact, and
+   the honest detector for it is a design question, not a repair. Not yet registered as an item.
+
+**Queue work awaiting the operator, not the delegate:** the 4 stale citations (#3506 #3603 #3743 #4378) are
+one-line amendments to the landing commits (`eb7e69c1e`→`ce79c354`, `0c6fd7665`→`0c6fd76e465`; `5d8c6237a` is
+context in a row held on #2788), and the 15 gate-cleared orphans plus the five parked questions are answered in
+`docs/reviews/parked-questions-2026-10-26.md`. Both are `pm` transitions; the delegate has spooled nothing and
+the broker is down.
+
+**Config of record on this box** — the split matters, because `durig.config.json` sits at a
+`DEFAULT_CONFIG_PATH` and therefore reaches every demo:
+- `durig.config.json` (gitignored) carries **machine identity only**: `DURIG_DB=./selfdev.sqlite`,
+  `DURIG_LOCAL_BASE_URL=http://127.0.0.1:47831/v1`, `DURIG_LOCAL_MODEL=iq3_s`, `DURIG_LOCAL_CONTEXT=200000`, and
+  now `DURIG_VERIFIER_BASE_URL=http://127.0.0.1:1234/v1`, `DURIG_VERIFIER_MODEL=recursivesi/flint`,
+  `DURIG_VERIFIER_CONTEXT=65536`, `DURIG_VERIFIER_MAX_TOKENS=32768`.
+  `demo/local-model-pointer.test.mjs` legitimately reads it to check the tracked rig file against this machine.
+  `DURIG_VERIFIER_CONTEXT` is a **chosen cap**, not the server's ceiling — LM Studio currently reports
+  `loaded_context_length: 262144`.
+- **Rig tuning travels in the launch environment**, where it cannot move a demo's contract:
+  `DURIG_MAX_CONCURRENT_SEATS=2 DURIG_STREAM_TIMEOUT_MS=1800000 node cli.mjs …`
+- `rig.selfdev.json` (tracked) carries `local/iq3_s` for all 12 seats. Concurrency **2** is measured: 3
+  concurrent requests gave ~21 % aggregate for a 2.8× worse worst-request decode.
+
+**Exact next command** (the gate, then what the second provider still reports):
+
+```bash
+node scripts/test.mjs
+DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json
+```
+
+Expected: `pass: true`, 0 errors, ~62 fix-now, and `citation-unresolvable` reporting 4 live rows plus the
+308-row terminal baseline recorded in `docs/STATUS.md`.
+
+**Do not:** run `up`/`send`/`run`/`complete` before re-taking the worktree/branch/`.spike` inventory into
+`.spike/` and diffing it after (`AGENTS.md` clock-in step 7, `docs/runbooks/workspace-move.md`); run
+`git add -A`; use `DURIAN_PI_DB` for the CLI (the variable is `DURIG_DB`); measure the suite with a serial
+hand-loop instead of `node scripts/test.mjs`; **route any seat at Flint while it is loaded as Q6_K or Q8_0** (its
+expert weights are 31.05 GB / 40.21 GB and do not fit in 34 GiB of RAM — see the GGUF census); compute throughput
+from a non-streaming call (that is how D136's wrong numbers were made); restart the operator's LM Studio instance
+without asking; or start broker work
+on this workspace — the store is intact but its git history is only partially here
+(`git cat-file -t 78991031` fails; the docs' own baseline sha is not an object in this clone).
