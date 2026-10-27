@@ -3,8 +3,8 @@ runbook: run-your-area
 symptom: "which tests do I run before landing? the demo suite is 120+ files"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-21
-verified_by: devtools
+last_verified: 2026-10-27
+verified_by: delegate
 evidence: "#1558 (test-area partition: demo/test-areas.json + src/testareas.mjs + scripts/test.mjs + demo/test-areas.test.mjs)"
 check_rule: null
 ---
@@ -44,9 +44,15 @@ that no longer exists, or a file listed in two areas.
    ```bash
    node scripts/test.mjs --all
    ```
-   `--jobs <n>` runs up to n tests at once (default 1) to cut wall-time; the full suite is
-   ~5 min sequentially.
-3. If you ADD a test file, map it in `demo/test-areas.json` in the SAME commit — the
+   **It runs 8 at once by default and does not need a flag.** Measured on this box 2026-10-27 (238 tests):
+   **276.8s serially vs 41.6s at the default 8, and 25.8s at `--jobs 16`** — the demos mostly WAIT on broker
+   heartbeats and wake paths, so they overlap for free. The default is capped at 8 rather than every core
+   because this machine also serves models and runs live seats: at 16 the suite is ~15s faster and becomes a
+   load generator against the rig it is testing, which is how a timing-sensitive suite starts flaking exactly
+   when it matters. Raise it with `--jobs 16` only when nothing else is running.
+3. A hung test is bounded by `--timeout <ms>` (default 120000) and reported as `TIMEOUT`, never awaited. Slowest
+   demo here is ~17s, so the bound is ~7x headroom; if you hit it, that is a real hang, not a slow machine.
+4. If you ADD a test file, map it in `demo/test-areas.json` in the SAME commit — the
    coverage rule (`demo/test-areas.test.mjs`) fails the full gate otherwise.
 
 ## Verify
@@ -61,6 +67,9 @@ node scripts/test.mjs --area toolchain # exit 0 (the tooling's own area)
   area in `demo/test-areas.json`.
 - A test fails → read the tail the runner prints to stderr; the test file's own header
   says what it proves. Re-run it alone with `node demo/<name>.test.mjs`.
+- `TIMEOUT <file>` → the demo never exited; the runner killed its whole process tree (on POSIX; on Windows only
+  the direct child, so a broker it spawned may survive — check `ps` before re-running). A suite that never
+  returns is worse than one that fails, which is why the bound exists.
 
 ## Escalate to
 `devtools` for the partition, the runner or the manifest; `pm` to route a failing test to
@@ -68,4 +77,6 @@ its owner.
 
 ## Evidence
 #1558 (the partition: `demo/test-areas.json`, `src/testareas.mjs`, `scripts/test.mjs`,
-`demo/test-areas.test.mjs`; full suite 124/124). Verify last ran 2026-10-17.
+`demo/test-areas.test.mjs`; full suite 124/124). Concurrency made the default on 2026-10-27:
+238/238 in 41.6s at jobs=8, measured against 276.8s serially (`demo/test-runner-concurrency.test.mjs`
+pins the default, the serial fallback, and the timeout bound). Verify last ran 2026-10-27.

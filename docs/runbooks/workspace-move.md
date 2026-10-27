@@ -144,8 +144,12 @@ That is ROADMAP **190**: bind durable records to store-native ids (`entries.id` 
 The suite is not the same suite after an OS move. Record the new number rather than reusing the old one:
 
 ```bash
-for f in demo/*.test.mjs; do timeout 120 node "$f" >/dev/null 2>&1 || echo "FAIL $f"; done
+node scripts/test.mjs            # 8 at once by default; add --jobs 16 when nothing else runs
 ```
+
+(Recorded for the trail: the number below was measured 2026-10-26 with the serial per-file loop
+`for f in demo/*.test.mjs; do timeout 120 node "$f" >/dev/null 2>&1 || echo "FAIL $f"; done`, before the
+runner's default became concurrent. Same tests, different wall time.)
 
 Here: **227 pass / 8 fail**, and the eight are a *different* set from the six recorded in D129 — junction
 checks (`confine`, `verify-scratch-per-tree`), Windows path fixtures (`write-targets`), the Job Object path
