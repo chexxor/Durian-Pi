@@ -21,8 +21,8 @@ settle (D134).
 | Free VRAM on the card the verifier can use | **15,970 MiB** (A4000, 16,376 total) | `nvidia-smi` with both models unloaded |
 | The 3090 | **963 MiB free** — fully committed to the primary | `nvidia-smi` |
 | System RAM available | **34 GiB** of 94 | `free -g` |
-| Dense-model decode when it spills | **2.8–14.5 tok/s** (Flint Q8_0 and Q6_K) | live `/v1/chat/completions` probes |
-| Collateral damage when it spills | primary **31–39 → 11.0 tok/s** (Q8_0), 16.6 (Q6_K) | same probes |
+| Flint decode, short prompt | **~3.6 tok/s** (Q6_K and Q8_0; prefill negligible at 10 prompt tokens) | streamed probe |
+| Primary alongside a second model | **prefill ~2,100 tok/s flat to 111k tokens; decode 57–87 tok/s** — at baseline | streamed probe (D136) |
 
 **The sizing rule this implies:** weights + KV cache must fit in **one** card. Cross-card or RAM spilling was
 not predicted to be slow — it was measured slow, and it also slows the primary, because both then contend for
@@ -39,8 +39,9 @@ usable. That mechanism is real, and it is already how the primary runs (`--resid
    paid for on every token. There is nothing to park.
 2. **We already ran the experiment.** Flint *is* MoE (256 routed experts, 6 active, 2.5B active params — the
    most offload-friendly shape imaginable) and LM Studio did exactly this across A4000 + 3090 + RAM. Measured
-   result: 2.8–14.5 tok/s decode, primary degraded to 11.0 tok/s. The mechanism works; the outcome on this box
-   is still unusable for a tool-driven seat.
+   result: ~3.6 tok/s decode at a 10-token prompt. (A "primary degraded to 11.0 tok/s" figure in the first draft
+   of this document was a composite metric of mine and is withdrawn — D136.) The mechanism works; the outcome on
+   this box is still unusable for a tool-driven seat.
 3. **The RAM is already spent.** The primary holds ~40 GiB as shared/expert cache. `free -g` shows 34 GiB
    available with both models unloaded — less than a Q8 Flint needs.
 
@@ -101,7 +102,7 @@ own `config.json`. None of the shortlisted models use sliding attention, so ther
 - Cross-family is real (`FlintForCausalLM`, trained from scratch, own 150,144 vocab, no declared baselines) and
   **tool calling was verified live** (`finish_reason: tool_calls`, valid JSON arguments).
 - But: **no published evals anywhere**, and both quants that were tried spill. Q6_K 32.72 GB and Q8_0 42.35 GB
-  against a 16,376 MiB card → 2.8–14.5 tok/s and the primary at 11.0–16.6. Keep as a ceiling test, not a seat.
+  against a 16,376 MiB card → ~3.6 tok/s decode, ~126 tok/s prefill. Keep as a ceiling test, not a seat.
 
 ### Also checked and set aside
 
@@ -247,3 +248,39 @@ belongs in the launch environment, not in a default.
 
 Both routes end at the same place: `DURIG_VERIFIER_BASE_URL` pointing at an OpenAI-compatible localhost endpoint,
 which is all the rig asks of an engine.
+
+## THE VERIFIER IS LOADED — Ministral 3 14B Reasoning Q6_K, measured on this box (2026-10-27)
+
+The operator loaded `mistralai/ministral-3-14b-reasoning` in LM Studio at **Q6_K with 13,273 tokens of context**.
+Numbers below are from `.scratch/throughput.mjs` (unique prompt text, `max_tokens: 1` for prefill, streamed chunks
+for decode — see D136 for why the earlier method was wrong).
+
+| Measured | Value |
+|---|---|
+| Resident on the A4000 | 13,444 MiB used, **2,585 MiB free** |
+| Prefill | **885 / 1,216 / 1,205 tok/s** at 271 / 545 / 1,196 prompt tokens |
+| Decode | **33.2 / 33.6 / 33.9 tok/s** — flat with prompt size, as a dense VRAM-resident model should be |
+| Tool calling | **works** — `finish_reason: tool_calls`, `{"command": "ls"}` at both 512- and 2,048-token budgets |
+| Usable prompt budget | ~12k tokens; larger prompts return **HTTP 400** at the 13,273 cap |
+| Collateral on the primary | **none measured** — prefill 2,094/2,145/2,112 tok/s at 14,867/44,469/111,066 tokens, decode 57–87 tok/s |
+
+**It is VRAM-resident, which was the point.** 11.09 GB of weights + ~2.2 GB of KV at 13,312 tokens = 13.4 GB, and
+the card held it. A dense model that fits outright crosses the PCIe boundary only for the prompt, so decode does
+not depend on RAM bandwidth at all — the cleanest possible use of this A4000, and the thing the operator was
+asking for when they asked about expert offloading.
+
+**Two settings to fix before a seat uses it.**
+
+1. **Context is too small for seat prompts.** 13,273 is below what a verifier carries: a queue item, a runbook
+   excerpt and a diff will exceed ~12k tokens and LM Studio will refuse the request outright. The KV cost is
+   163,840 B/token, so **each extra 8,192 tokens costs 1.34 GiB** and only 2,585 MiB is free — 32k fp16 will not
+   fit. Quantising the KV cache to q8_0 halves it (≈0.67 GiB per 8k), which makes ~21k–24k reachable. Or drop to
+   **Q4_K_M (8.24 GB)** and buy 5.3 GB of headroom for ~32k fp16.
+2. **Keep `DURIG_VERIFIER_MAX_TOKENS` generous.** At 128- and 256-token budgets this model returned an **empty
+   answer with `finish_reason: length`**, having spent the whole budget on `reasoning_content`. The config already
+   carries 32,768 for exactly that reason.
+
+**How it compares.** ~33 tok/s decode is enough for a few-hundred-token verdict in ~10 s, and tool calling works —
+which is the gate. Against Devstral Small 2 it has no published SWE-bench number, so the seeded-bug calibration in
+this file is still the deciding evidence, and against Flint it loses on published coding evidence but wins on
+fitting the card at all.

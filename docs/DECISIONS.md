@@ -4584,9 +4584,9 @@ capped at a budget meant for one that does not, is truncated mid-thought and ret
 the worst possible failure for a seat whose job is to say "no".
 
 **Flint is NOT routed to any seat yet, and the measurement is why.** Loaded as **Q8_0 (42.35 GB) on a 16 GB card
-with a 262,144-token context**, it measures **2.8–14.5 tok/s decode** and ~126 tok/s prefill, and it pulled the
-**primary** down from its measured 31–39 tok/s to **11.0 tok/s** — the rig got slower on the model it already
-uses. The honest options are recorded in ROADMAP 189: reload at `UD-IQ2_XXS` (11.86 GB, VRAM-resident on the
+with a 262,144-token context**, decodes at **~3.6 tok/s** (10-token prompt, so prefill is negligible) and
+prefills at ~126 tok/s. ~~and it pulled the primary down from its measured 31–39 tok/s to 11.0 tok/s~~ — **that
+collateral claim was a measurement artifact of mine, corrected in D136: the primary is at its own baseline.** The honest options are recorded in ROADMAP 189: reload at `UD-IQ2_XXS` (11.86 GB, VRAM-resident on the
 A4000) with a 65,536-token context, or `UD-Q3_K_XL` (18.49 GB) with experts in RAM. Q8_0 is kept as a capability
 **ceiling test**, not a runtime.
 
@@ -4613,3 +4613,53 @@ one slot and you watch it; with 8 slots it silently eats an eighth of capacity a
 reads as "the tests are slow", the very complaint under investigation. On POSIX the whole process tree is killed
 (a demo that spawns a broker otherwise leaks it into the next run); on Windows only the direct child can be,
 because reaping a tree needs a Job Object the runner does not own. That limitation is written in the source.
+
+## D136 — A throughput figure of mine was computed wrong; corrected method and numbers (2026-10-27)
+
+**What was wrong.** Every "tok/s decode" in D134, ROADMAP 189, `docs/NEXT.md` and the verifier survey up to this
+entry was computed from a **non-streaming** request as `completion_tokens ÷ total_wall_time`. That is not a decode
+rate; it is a blend of prefill and decode. With a ~3,000-token prompt and a 64-token completion, almost all of the
+wall clock is prefill, so the "decode" number it prints is really *prompt size divided by prefill time*.
+
+**How it was caught.** Repeating the probe with `stream: true` to separate time-to-first-token from inter-token
+spacing made the primary report 57–87 "tok/s" under the same conditions where the old method had reported 11.0.
+Two further artifacts surfaced while re-measuring, and both are now handled in the script:
+
+- the Strata primary **prefix-caches repeated prompts** — re-sending identical text made TTFT collapse to 0.15 s
+  and printed a fictitious "19,359 tok/s prefill"; every probe now uses unique text,
+- LM Studio does **not** send `usage` on its stream even with `stream_options.include_usage`, so its decode rate
+  is counted in streamed **chunks** (one delta per token) rather than in reported tokens.
+
+**Corrected method, now the standard for this rig:** prefill from a `max_tokens: 1` call with fresh text; decode
+from streamed chunks over `t_last − t_first`; unique text per probe; chunk counting where a server omits usage.
+
+**Corrected numbers, measured 2026-10-27 with Ministral 3 14B Q6_K resident on the A4000.**
+
+| | prefill | decode |
+|---|---|---|
+| primary `iq3_s` @ 14,867 prompt tok | 2,094 tok/s | — |
+| primary `iq3_s` @ 44,469 prompt tok | 2,145 tok/s | — |
+| primary `iq3_s` @ 111,066 prompt tok | 2,112 tok/s | — |
+| primary `iq3_s`, short prompts | — | **57.4 / 72.9 / 87.4 tok/s** |
+| Ministral 3 14B Reasoning Q6_K (A4000) | 885–1,216 tok/s | **33.2–33.9 tok/s** |
+
+**The claim that dies: "the verifier slows the primary."** It does not, on this hardware, in this configuration.
+The primary prefills at ~2,100 tok/s flat from 15k to 111k prompt tokens and decodes at 57–87 tok/s *while
+Ministral occupies 13,444 MiB of the other card*. That is its own baseline. The collateral-damage argument in
+D134 was an artifact and must not be used to justify any decision.
+
+**What still stands, and why.** Flint's own slowness does **not** rest on that artifact: its ~3.6 tok/s decode was
+measured with a **10-token prompt**, where prefill is negligible so the blend ≈ the true rate, and its prefill was
+~126 tok/s. And the decisive argument against Q6_K/Q8_0 was never throughput at all — it is the GGUF byte census:
+**31.05 GB (Q6_K) and 40.21 GB (Q8_0) of routed-expert weights, only 1.67–2.13 GB of which can be pinned to the
+card, against 34 GiB of free RAM** with the primary resident. The bytes do not fit; that is arithmetic, not a
+benchmark.
+
+**Newly measured, and load-bearing for the verifier choice.** Ministral 3 14B Reasoning Q6_K on the A4000: **tool
+calling works** (`finish_reason: tool_calls`, arguments `{"command": "ls"}` at both 512- and 2,048-token budgets)
+— the gate that Flint cleared and that a seat cannot live without. Decode ~33 tok/s is workable for a
+few-hundred-token verdict. Two limits: at the loaded **13,273-token context** the usable prompt budget is ~12k
+tokens and larger prompts are refused with HTTP 400, which is tight for a seat carrying a queue item plus a
+runbook excerpt plus a diff; and the **truncation failure reproduced again** at 128–256-token budgets
+(`finish_reason: length`, empty answer, all 256 tokens spent on reasoning), which is why
+`DURIG_VERIFIER_MAX_TOKENS=32768` is set rather than defaulted.

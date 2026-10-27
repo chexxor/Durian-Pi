@@ -37,8 +37,9 @@ only when nothing else runs: this box also serves two models, and at 16 the suit
    context window** was read from a single spec, so the second window would be absent, not wrong). Tool calling
    was proven on the live endpoint BEFORE building anything (`finish_reason: tool_calls`, valid JSON args). **Why
    no seat points at it yet:** Flint is loaded as **Q8_0 (42.35 GB) at 262,144 context on a 16 GB card**, decodes
-   at **2.8–14.5 tok/s**, and pulled the **primary from 31–39 tok/s down to 11.0** — the rig got slower on the
-   model it already uses. Finish by reloading LM Studio at **`UD-IQ2_XXS` (11.86 GB, VRAM-resident) with context
+   at **~3.6 tok/s** with ~126 tok/s prefill. **(An earlier claim here — "the verifier drags the primary from
+   31–39 to 11.0 tok/s" — was mine and was wrong: composite metric. Re-measured, the primary is at baseline;
+   D136.)** Finish by reloading LM Studio at **`UD-IQ2_XXS` (11.86 GB, VRAM-resident) with context
    65,536**, re-measuring, then setting `qa`/`qa2`/`auditor` to `verifier/recursivesi/flint` in `rig.selfdev.json`
    and confirming `check` clears `single-model-rig`. **Before routing real work**, run the seeded-bug calibration
    in ROADMAP 189 — Flint is 5 days old with no published evals, so its capability is unverified. **LM Studio owns
@@ -83,7 +84,9 @@ Expected: `pass: true`, 0 errors, ~62 fix-now, and `citation-unresolvable` repor
 **Do not:** run `up`/`send`/`run`/`complete` before re-taking the worktree/branch/`.spike` inventory into
 `.spike/` and diffing it after (`AGENTS.md` clock-in step 7, `docs/runbooks/workspace-move.md`); run
 `git add -A`; use `DURIAN_PI_DB` for the CLI (the variable is `DURIG_DB`); measure the suite with a serial
-hand-loop instead of `node scripts/test.mjs`; **route any seat at Flint while it is loaded as Q8_0** (2.8–14.5
-tok/s, and it halves the primary); restart the operator's LM Studio instance without asking; or start broker work
+hand-loop instead of `node scripts/test.mjs`; **route any seat at Flint while it is loaded as Q6_K or Q8_0** (its
+expert weights are 31.05 GB / 40.21 GB and do not fit in 34 GiB of RAM — see the GGUF census); compute throughput
+from a non-streaming call (that is how D136's wrong numbers were made); restart the operator's LM Studio instance
+without asking; or start broker work
 on this workspace — the store is intact but its git history is only partially here
 (`git cat-file -t 78991031` fails; the docs' own baseline sha is not an object in this clone).

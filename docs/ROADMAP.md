@@ -3224,9 +3224,11 @@ arguments — the highest-risk unknown for a tool-driven seat, cleared first. Th
 family change.
 
 What the measurement says: loaded as **Q8_0 (42.35 GB) with a 262,144-token context on a 16 GB card**, it decodes
-at **2.8–14.5 tok/s** and prefills at ~126 tok/s, and it dragged the **primary** from its own measured 31–39
-tok/s to **11.0 tok/s** — the rig got slower on the model it already uses, because both are now fighting for RAM
-and PCIe. A verifier seat is a multi-turn tool loop, so that is minutes per verdict. **Route nothing at it in this
+at **~3.6 tok/s** (measured on a 10-token prompt, where the composite method is honest) and prefills at
+~126 tok/s. ~~it dragged the primary from 31–39 to 11.0 tok/s~~ — **superseded: that was a composite metric, and
+re-measured properly the primary is at its own baseline (prefill ~2,100 tok/s flat to 111k tokens, decode
+57–87 tok/s) with a second model resident. See D136.** The reason not to route a seat at Q6_K/Q8_0 was never
+collateral damage: it is that 31.05 GB / 40.21 GB of expert weights do not fit in 34 GiB of RAM. A verifier seat is a multi-turn tool loop, so that is minutes per verdict. **Route nothing at it in this
 configuration.** The options, sized: `UD-IQ2_XXS` (11.86 GB) is VRAM-resident on the A4000 with a 65,536-token
 context (Flint's sliding-window KV is cheap: 14 full-attention layers at 4 KV heads = 28,672 B/token, so 64k
 costs 1.74 GiB and 200k would cost 5.34 GiB and NOT fit); `UD-Q3_K_XL` (18.49 GB) is the better quant and needs
