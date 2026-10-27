@@ -230,6 +230,7 @@ try {
 		"ownership-seat-missing": "demo/ownership.test.mjs",
 		"verification-without-evidence": "demo/check-evidence.test.mjs",
 		"evidence-tree": "demo/check-evidence.test.mjs",
+		"citation-unresolvable": "demo/checkup-citation.test.mjs",
 		"feature-row-missing": "demo/feature-row.test.mjs",
 		"shared-tree-on-main": "demo/shared-tree-on-main.test.mjs",
 		"duplicate-item": "demo/duplicate-item.test.mjs",

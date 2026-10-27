@@ -75,6 +75,7 @@ import { formatMetrics } from "./src/metrics.mjs";
 import { isLinkedWorktree, readSharedTreeBranch } from "./src/featuredocs.mjs";
 import { readTextIntegrity, trackedChangedPaths } from "./src/textintegrity.mjs";
 import { readCommitMessages } from "./src/commitmsg.mjs";
+import { readCitations } from "./src/citation.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
@@ -2873,6 +2874,10 @@ async function cmdCheck(rigFile, human, rest = []) {
   // SKIPPED with its reason rather than silently passing.
   const changedPaths = trackedChangedPaths({ root: process.cwd() });
   const textIntegrity = changedPaths === null ? null : readTextIntegrity({ root: process.cwd(), paths: changedPaths });
+  // ROADMAP 190: does every commit the queue cites resolve HERE? One `git cat-file --batch-check`
+  // for all of them (a spawn per sha would stall `check`), and null when git/the repo is
+  // unavailable, so the rule is SKIPPED with its reason rather than silently passing.
+  const citations = readCitations({ root: process.cwd(), queueItems });
   const result = auditRig({
     rig: rigFile,
     spec,
@@ -2883,6 +2888,7 @@ async function cmdCheck(rigFile, human, rest = []) {
     queueItems,
     commitMessages,
     textIntegrity,
+    citations,
     sharedTreeBranch,
     sharedTreeLinked,
   });

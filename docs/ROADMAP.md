@@ -3196,9 +3196,12 @@ as 170)* — measured on this box: **178 distinct commit shas are cited across t
 nowhere** (not in this clone, not in `vendor/pi-main/.git`, not on `origin` after a clean fetch). They sit on
 240 terminal rows and on **14 non-terminal rows** whose verification evidence cannot be re-checked by whoever
 picks them up. After the sweep, `git fsck --unreachable` returned 0, so even dangling recovery was impossible.
-Depends on: 170. Measure: a `check` rule reporting the count of unresolvable citations with a band and a named
-blind spot, and the **non-terminal subset** separately because that is the actionable one; new durable records
-bind to **store-native ids** (`entries.id` / `record_ids`) rather than machine-local git objects. This is item
+**DETECTION HALF BUILT (2026-10-26):** `src/citation.mjs` (extractor + one `git cat-file --batch-check` for
+every citation) and the `citation-unresolvable` rule, proven by `demo/checkup-citation.test.mjs`, wired into
+`cli.mjs`'s `check`. Live result on this store: **4 non-terminal rows + a 308-row terminal baseline**, recorded
+in `docs/STATUS.md`. Still owed: new durable records bind to **store-native ids** (`entries.id` /
+`record_ids`) rather than machine-local git objects — that half is the write side and needs a decision on where
+the binding lives (which is why it belongs with 170, not before it). This is item
 177's rule — `source_event` must be a transcript entry id — discovered from the operations side instead of the
 literature, and it is now `observed`. It constrains 170 too: the enforcement-decision log must live in the
 store (single writer, survives a machine move), not in loose files next to the worktrees that just got swept.

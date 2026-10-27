@@ -177,6 +177,21 @@ THE BOM REMAINS ON MAIN — a rule licensed in the ledger and unenforced in fact
 TRUE FINDING DOES NOT RECORD THE TRUTH; IT RETIRES IT. Until the operator decides, both demos fail for the
 right reason (recorded baseline, not a silent red).
 
+**KNOWN REDS BASELINE (2026-10-26): the `citation-unresolvable` rule is fix-now RED, on purpose.**
+Measured on the Windows→Linux move: **178 distinct commit shas are cited across the queue and 90 resolved
+nowhere** — not this clone, not `vendor/pi-main/.git`, not `origin` after a clean fetch. The history repair
+(mount the Windows volume read-only, fetch its 32 branches, recover four objects that hung off no ref) brought
+that to **80**, and patch-equivalence resolved the four remaining LIVE citations: `0c6fd7665` is a stale
+pointer to the landing `0c6fd76e465` (#3398, three call sites on main now read `!== "ESRCH"`,
+`demo/broker-liveness.test.mjs` passes), `eb7e69c1e` to `ce79c354` (#2673, `demo/workable-claim.test.mjs`
+passes), and `5d8c6237a` is context in a row held on #2788. So the rule's five findings are: **4 live rows whose
+citation is a STALE POINTER (amend to the landing commit), and 1 baseline covering 308 terminal rows** whose
+`done` cannot be re-checked from a clean clone. The baseline is recorded rather than zeroed for the reason this
+file already states about `30270c0`: a ledger edited to match a true finding retires the truth. The rule CANNOT
+tell a stale pointer from lost work — only patch-equivalence can — so it reports what it measured and its fix
+names the ladder. Root cause is ROADMAP 190: the queue cites machine-local git objects as durable evidence;
+new work must cite store-native ids (`entries.id` / `record_ids`).
+
 ## Research review (2026-10-10)
 
 `docs/Patterns_and_Pitfalls_of_LLM_Agents.md` (MAST failure taxonomy, Anthropic's

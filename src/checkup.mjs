@@ -112,6 +112,11 @@ export const RULES = [
     what: "a terminal item's evidence names an artifact that names no tree and no store - a green depends on the tree it ran in, so an un-named artifact cannot be re-checked (#4153)",
   },
   {
+    id: "citation-unresolvable",
+    severity: "fix-now",
+    what: "a non-terminal queue item cites a commit this clone does not hold, so the evidence cannot be re-checked — the queue cites machine-local git objects as durable evidence (ROADMAP 190)",
+  },
+  {
     id: "feature-row-missing",
     severity: "fix-now",
     what: "a feat commit landed with no docs/FEATURES.md row and no stated \"no feature surface\" note",
@@ -415,7 +420,7 @@ export function runbookFrontMatterProblems(runbook) {
  *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -786,6 +791,44 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       );
     }
   }
+  // 12. ROADMAP 190: a cited commit must RESOLVE, or the row must not cite it. The queue cites
+  //     MACHINE-LOCAL GIT OBJECTS as durable evidence, and a pointer into an object store that did
+  //     not travel with the store is not evidence. Measured on the Windows->Linux move: 178 distinct
+  //     shas cited, 90 resolving nowhere, on 240 terminal rows and 14 NON-TERMINAL ones. The rule
+  //     deliberately does NOT claim to know whether a dead citation is a stale pointer (landing
+  //     rewrote the branch commit) or lost work — only patch-equivalence can tell those apart — so
+  //     it reports what it measured and its fix names the ladder. Non-terminal rows are one finding
+  //     each because each is actionable; terminal rows collapse to ONE baseline count, because 240
+  //     findings is a wall a reader skips, and amending history is not the point of a gate on new
+  //     work. No data means SKIPPED with its reason (D25) — never a silent pass.
+  if (!Array.isArray(citations)) {
+    skipped.push({
+      id: "citation-unresolvable",
+      why: "the queue's citations were not resolved against this repository, so a dead citation cannot be told from an unchecked one",
+    });
+  } else {
+    const dead = citations.filter((c) => c.resolves === false);
+    const live = dead.filter((c) => !isTerminalStatus({ status: c.status }));
+    const historical = dead.filter((c) => isTerminalStatus({ status: c.status }));
+    for (const c of live) {
+      add(
+        "citation-unresolvable",
+        `#${c.itemId}`,
+        `${c.status} item cites \`${c.sha}\`, which this clone does not hold — whoever picks this up cannot re-check the evidence it names`,
+        `resolve it before releasing the row: \`git log -S'<a distinctive line from the described change>'\` / \`git log --grep='#${c.itemId}'\` (patch-equivalence) — if the change is on main, amend the citation to the landing commit; if it is genuinely lost, say so in the row rather than leaving a pointer nobody can follow`,
+      );
+    }
+    if (historical.length > 0) {
+      const ids = historical.slice(0, 6).map((c) => `#${c.itemId}`).join(" ");
+      add(
+        "citation-unresolvable",
+        "queue (history)",
+        `${historical.length} terminal item(s) cite commits this clone does not hold (e.g. ${ids}) — their \`done\` cannot be re-checked from a clean clone`,
+        "no action needed unless one is re-opened, then amend it to the landing commit; record the count as a known-red baseline rather than re-deriving it, and cite store-native ids (entries.id) on new work so this stops growing (ROADMAP 190)",
+      );
+    }
+  }
+
   // 12. ROADMAP 46 (FEATURES-row half) / D62: a shipped capability carries its own doc
   //    acceptance — the docs/FEATURES.md row — or its item records an explicit "no feature
   //    surface" note. The merge gate (docs/runbooks/merge.md) enforces this by hand with a

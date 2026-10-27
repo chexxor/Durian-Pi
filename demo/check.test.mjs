@@ -101,6 +101,9 @@ try {
     // An empty text-integrity set is a real "nothing to check", so the rule (#4371) RUNS and passes
     // here rather than skipping.
     textIntegrity: [],
+    // An empty citation set is a real "nothing to check", so the rule (ROADMAP 190) RUNS and
+    // passes here rather than skipping.
+    citations: [],
     // The shared tree is on its integration branch, so this rule RUNS and passes rather than
     // being skipped: the assertion below is "every rule ran and passed".
     sharedTreeBranch: "main",

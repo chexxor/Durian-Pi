@@ -66,13 +66,18 @@ on one local model (`check` says `single-model-rig`, fix-now; ROADMAP 189); (2) 
 `docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`; and (3) whether the rig's evidence binding should
 move to store-native ids (ROADMAP 190), which decides how 165/167/170 are written.
 
-**Exact next command** (after ruling 2 — the history repair, because everything else cites it):
+**Exact next command** (verify the citation rule now guards the class, then read what it still reports):
 
 ```bash
-# on the Windows rig:  git push origin --all
-DURIG_DB=./selfdev.sqlite node intent.mjs pm --body-file .spike/delegate/intent-audit.md --request-id audit-15-orphans-and-5-parked
-DURIG_DB=./selfdev.sqlite node intent.mjs pm --body-file .spike/delegate/intent-memory.md --request-id memory-decompose
+node demo/checkup-citation.test.mjs
+DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json
 ```
+
+The history repair that made those numbers fall (mount the Windows volume read-only, `git remote add win`,
+`git fetch win '+refs/heads/*:refs/remotes/win/*'`, then dangling recovery — all measured, all in
+`docs/runbooks/workspace-move.md` step 4) is **done**: unresolvable citations went 90 → 80, and the four
+remaining live ones are **stale pointers, not lost work** (`0c6fd7665` → `0c6fd76e465` #3398;
+`eb7e69c1e` → `ce79c354` #2673; `5d8c6237a` is context in a row held on #2788). Both cited demos pass on main.
 
 **Config of record on this box** (`durig.config.json`, gitignored): `DURIG_DB=./selfdev.sqlite`,
 `DURIG_MAX_CONCURRENT_SEATS=2`, `DURIG_LOCAL_BASE_URL=http://127.0.0.1:47831/v1`,
