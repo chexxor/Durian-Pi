@@ -4516,3 +4516,36 @@ not build item 170's decision log, because that is a new write path on a securit
 `pass: true` with 0 errors and ~62 fix-now; the four failing rules are `single-model-rig` (ruling owed),
 `citation-unresolvable` (4 stale pointers + the 308-row baseline), `duplicate-item`, and the two evidence rules
 — all pre-existing, none introduced here.
+
+
+## D133 — Durable records cite `entries.id`, not git shas (2026-10-27, operator ruling)
+
+**The ruling.** Every durable record the rig writes — memory facts (165), the write gate's receipts (167), the
+security substrate's decision log (170), and evidence on queue rows — cites the **store-native id**
+(`entries.id`, resolved through `record_ids`) as its authoritative evidence pointer. Git shas become a
+human-readable annotation at most, never the evidence itself.
+
+**Why the ruling is cheap and correct — measured on the live store, not assumed.**
+
+- `entries.id INTEGER PRIMARY KEY` in a `STRICT` table. Ids are allocated from a counter **shared across all
+  record types**: 273,948 `record_ids` rows span 1..273,995 — only **47 unallocated gaps**. So the id space is
+  dense, monotonic, and an id is **globally unique across conversations, entries, tasks, submissions and
+  documents**, and `record_ids.record_type` tells you what kind of thing a bare number names.
+- `record_ids` and `entries` are exactly 1:1 — 0 ids registered without an entry row, 0 entry rows without a
+  registration. It is an **allocation ledger, not a tombstone registry**: it does not outlive the row.
+- Nothing deletes entry rows. `grep -rn "DELETE FROM entries" vendor/pi-main/packages/durable/src` is **empty**,
+  and no `rewind` path removes rows. The transcript is append-only, so an id that resolved once keeps resolving.
+- The store **is** the artifact that travels between machines. That is precisely what broke the sha model: the
+  store crossed from the Windows rig and the git history did not, which is how 90 cited shas came to resolve
+  nowhere. An `entries.id` cannot drift, because it lives inside the file that carries it.
+
+**The cost, stated plainly.** An `entries.id` proves *what a seat saw and wrote*, and it proves nothing about
+*whether a code change landed in a repository*. Those are different claims and the rig has been conflating
+them. So the sha-citation rule stays for code claims (with its "this clone cannot check it" answer), and the id
+rule covers observation/decision evidence. Item 190's remaining build is the check half: an `entries.id`
+citation must resolve in the store, and — because ids are type-tagged — the rule can also catch a record citing
+a **task** id as if it were an entry.
+
+**What this does NOT fix, and must not be allowed to pretend to.** Ids are stable within **one** store. There is
+no store merge or replay path today; if one is ever added, id reallocation across stores becomes a real hazard
+and this decision has to be revisited. Recorded so a future session sees the boundary rather than discovering it.

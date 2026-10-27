@@ -3191,6 +3191,28 @@ provider from one base URL, so two families need either a second served model pl
 code change `docs/SELFDEV.md` already identifies) or one verifier seat kept on a remote provider. Depends
 on: the operator's provider ruling. Measure: `check` no longer reports `single-model-rig`.
 
+**MEASURED 2026-10-27, after the operator proposed "primary on the 3090, a verifier on the A4000" — the split
+as stated cannot hold, and the reason is the primary's own footprint.** The served model is a large MoE: **78 GB
+of weights on disk** (`Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S`, 52 GB + 27 GB shards), and one server process
+(pid 130905) already occupies **14,758 MiB on the A4000 *and* 21,172 MiB on the 3090** — ~35.9 GB across both
+cards, via `--layer-split auto` with `--resident-experts --expert-cache auto` (so part of the expert set is
+*already* offloaded). The cards are 16,376 + 24,576 MiB and hold only **1,139 and 1,071 MiB free**. So the
+primary does not fit on the 3090 alone, and neither card can host a second model without shrinking it.
+**The trap to refuse:** the only other model installed is `IQ3_XXS`, a smaller quant of the SAME model. It would
+free the A4000 and would satisfy `single-model-rig` as written — the rule compares **resolved model strings**
+(`src/checkup.mjs:594`) — while leaving the invariant false, because a same-family quant shares the architecture
+and training lineage and re-tests with the same blind spot. That is a green check lying about a security property.
+**What would work, and its cost:** keep the primary split across both cards and carve ~10–14 GB off its residency
+(lower resident experts and/or `--max-context`), then serve a **different-family** dense verifier on the A4000 —
+disk is no constraint (654 GB free on `/home`). The code half is smaller than "per-seat base URLs":
+`localProviderSpec` reads one `DURIG_LOCAL_BASE_URL`/`DURIG_LOCAL_MODEL` and `cli.mjs:373` calls
+`createLocalProvider` once, so a **second provider id with its own env keys and a second call** (~80-line file,
+one call site) clears the rule structurally. **Unmeasured, deliberately:** decode throughput on the A4000 for a
+candidate verifier. It cannot be measured without restarting the Strata server, which takes down the primary and
+this session's own model — so the number is owed before the split is chosen, not asserted here. A gap in the rule
+itself also needs naming: comparing model *strings* cannot tell a different family from a different quant of the
+same one.
+
 **190. Evidence binding — a cited commit must resolve, or the row must not cite it** *(substrate; same shape
 as 170)* — measured on this box: **178 distinct commit shas are cited across the queue and 90 of them resolve
 nowhere** (not in this clone, not in `vendor/pi-main/.git`, not on `origin` after a clean fetch). They sit on
@@ -3199,9 +3221,18 @@ picks them up. After the sweep, `git fsck --unreachable` returned 0, so even dan
 **DETECTION HALF BUILT (2026-10-26):** `src/citation.mjs` (extractor + one `git cat-file --batch-check` for
 every citation) and the `citation-unresolvable` rule, proven by `demo/checkup-citation.test.mjs`, wired into
 `cli.mjs`'s `check`. Live result on this store: **4 non-terminal rows + a 308-row terminal baseline**, recorded
-in `docs/STATUS.md`. Still owed: new durable records bind to **store-native ids** (`entries.id` /
-`record_ids`) rather than machine-local git objects — that half is the write side and needs a decision on where
-the binding lives (which is why it belongs with 170, not before it). This is item
+in `docs/STATUS.md`. **THE BINDING IS NOW DECIDED (operator ruling, D133): durable records cite `entries.id`,
+resolved through `record_ids`; a git sha is a human-readable annotation, never the evidence.** Measured here
+and the reason the ruling is cheap: the id space is **shared across record types and dense** (273,948 ids over
+1..273,995 — 47 gaps), `record_ids.record_type` types a bare number, `record_ids`↔`entries` is exactly 1:1 (an
+allocation ledger, not a tombstone registry, so it does NOT outlive the row), and **nothing deletes entry rows**
+(`grep -rn "DELETE FROM entries" vendor/pi-main/packages/durable/src` is empty) — so the transcript is
+append-only and the store is the artifact that travels, which is exactly what the sha model lacked. **STILL
+OWED (build, not decision):** the check half — an `entries.id` citation must resolve in the store, and because
+ids are type-tagged the rule can also catch a record citing a `task` id as if it were an `entry`. Boundary the
+rule must not oversell: an id proves *what a seat saw and wrote*, never *that a change landed in a repo*, so the
+sha rule stays for code claims; and ids are stable within ONE store — no merge/replay path exists today, and if
+one is added this decision is revisited (D133). This is item
 177's rule — `source_event` must be a transcript entry id — discovered from the operations side instead of the
 literature, and it is now `observed`. It constrains 170 too: the enforcement-decision log must live in the
 store (single writer, survives a machine move), not in loose files next to the worktrees that just got swept.
