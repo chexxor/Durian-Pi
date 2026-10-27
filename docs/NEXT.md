@@ -4,105 +4,64 @@
 > This file is the live pointer plus the current session: everything from the `2026-10-25T01:52Z` session back
 > lives in the archive. The cut is proven by concatenation (see `docs/DECISIONS.md` D126, D129).
 
-## NEXT SESSION (2026-10-27T05:20Z — THE RIG IS ON THE OPERATOR'S LOCAL MODEL AND ON LINUX; WHAT IS OWED IS THE CROSS-FAMILY VERIFIER RULING AND A DECISION ABOUT THE SWEPT ITEM WORKTREES)
+## NEXT SESSION (2026-10-27T12:05Z — CLOCK-OUT: THE SUITE IS GREEN ON LINUX 236/236, THE CITATION RULE IS BUILT, AND THREE OPERATOR RULINGS ARE OWED BEFORE SEAT WORK RESUMES)
 
 > Archive: older sessions live VERBATIM in `docs/NEXT-ARCHIVE.md` (the digest quotes this block, so the
 > link has to be inside it — `demo/clockin-digest.test.mjs` checks that it is).
 
-**Current item:** the operator's rulings are implemented — seats on the local endpoint, concurrency 2, the
-pin relinked, and Linux registered as an operating platform. Two things now block useful seat work, and both
-are rulings rather than builds:
+**Current item:** nothing is in flight and **no queue item is claimed by the delegate** (it never claims,
+completes, defers or routes). The team is stopped on rulings, not on defects. Work registered and BUILT this
+session: ROADMAP **190** (the `citation-unresolvable` rule, detection half) and **193** (ambient config vs demo
+verdicts). Work registered and NOT started: 189, 191, 192, and the memory/security programme (161–184).
 
-1. **`check rig.selfdev.json` reports `single-model-rig`, severity fix-now** — "all 12 seats resolve to
-   `local/iq3_s`, so a shared blind spot is systemic; per-seat models are already supported". The local
-   server (`http://127.0.0.1:47831/v1`, Strata/PolyStrata) serves exactly **one** model, and
-   `src/providers/local.mjs` builds **one** provider from one base URL, so the cross-family author/verifier
-   rule (D48/D119) cannot hold while every seat is local. Ruling owed: load a second family and pay for the
-   per-seat-base-URL code change, keep one verifier remote (needs the DeepInfra balance), or waive the rule
-   in writing while the rig is single-model. Registered as **189**.
-2. **The item worktrees, `item-*` branches and `.spike` scratch were swept mid-session** — see
-   `docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`. Measured: `git worktree list` now returns 1
-   (main) and `git branch` returns `main` only, where earlier in the same session they returned 13 and 12;
-   `.spike` went 436 → 16. `git fsck --unreachable` finds **0** unreachable commits, and the shas the pointer
-   cited as unmerged (`500969f42` = item-4785's seatguard fix, `8990303` = item-2801) are not objects in this
-   clone, so on this machine that work is unreachable. `#3454` is still `held` with its branch gone. Decide
-   whether to recover from the Windows rig (`C:\Users\Alex\dsh-Projects\pi-opendurig`, still the `cwd` the
-   store holds) before anything else ages out.
+**The single fact that changed today: the suite is 236 pass / 0 fail on Linux.** The Windows-era baseline was
+229/235; this box measured 227/8 at the relinked pin, and D129's "six Linux-shaped defects" was stale in both
+count and membership. Two of the eight were **product bugs, not OS drift** — `linkWorktreeDeps` handed a script
+path to `npm` as a command, so dependency linking had **never** worked on any platform, and
+`waitForProcessDeath` on POSIX answered on the first `kill(pid,0)` instead of polling to its deadline, so a
+cleanup could report a permanent false "still running". The other six were Windows-shaped fixtures, fixed at
+the cause. Commit `3bff94a`; the config-leak half is **193**. **Re-measure, never quote**: `for f in
+demo/*.test.mjs; do node "$f" || echo "FAIL $f"; done`.
 
-**Provider economics measured on this box (they set the concurrency ruling):** 30,154 fresh prompt tokens
-prefill in 16.9 s (~1,790 tok/s) and the server's prefix cache works (`cached 893/898` on a repeat); decode
-31–39 tok/s one at a time. Three identical requests at once: 20.4 s wall vs 17.5 s sequential — aggregate
-throughput rose ~21% while the worst request's decode fell to 14.7 tok/s. **So 2, not 3**: a seat turn is a
-latency-bound agent loop, and 3 buys ~21% aggregate by making every seat's turn up to 2.8× slower. A real
-seat turn on the local model is proven end-to-end: `scribe` replied `local ok` (store entry 273995).
+**Blocker:** three operator rulings, none of them a build:
+1. **Cross-family verification on one local model** — `check` reports `single-model-rig`, fix-now: all 12 seats
+   resolve to `local/iq3_s` and `/v1/models` serves exactly one model, so an author and its verifier cannot
+   differ in family (D48/D119). Options: serve a second family and pay for per-seat base URLs, keep one
+   verifier on a remote provider, or waive the rule in writing. **189**.
+2. **Evidence binding** — should durable records cite store-native ids (`entries.id`) rather than
+   machine-local git objects? This decides how memory items 165/167 and the substrate item 170 are written, so
+   ruling it now is cheaper than migrating later. **190**.
+3. **`#4785` was marked `done` with no artifact anywhere** — its commit `500969f42` never existed on the
+   Windows rig either, and `win/item-4785` points at plain main. That is a completion without an artifact, and
+   the honest detector for it is a design question, not a repair. Not yet registered as an item.
 
-**Suite, re-measured here at the relinked pin: 227 pass / 8 fail** (`for f in demo/*.test.mjs; do node
-"$f"; done`). D129's six are stale; the current eight are listed in ROADMAP **185**, and one of them —
-`broker-health` reading `up` with `passAgeMs: 420613` — is **not** OS-shaped, it is the `#4746`/`#4816`
-verdict defect failing in the suite.
+**Queue work awaiting the operator, not the delegate:** the 4 stale citations (#3506 #3603 #3743 #4378) are
+one-line amendments to the landing commits (`eb7e69c1e`→`ce79c354`, `0c6fd7665`→`0c6fd76e465`; `5d8c6237a` is
+context in a row held on #2788), and the 15 gate-cleared orphans plus the five parked questions are answered in
+`docs/reviews/parked-questions-2026-10-26.md`. Both are `pm` transitions; the delegate has spooled nothing and
+the broker is down.
 
-**Both research prompts came back and are consumed in part:** `docs/reviews/zero-trust-zero-agent-research.md`
-(read in full for its verdict, gap table and decision table — it confirms 170 first, and its "smallest real
-boundary = a spawn-time wrapper: Landlock/seccomp/bwrap on Linux" is *better* supported now that the rig is
-on Linux) and `docs/reviews/memory-followup-research.md` (72 KB; **it contains two passes concatenated**, so
-section numbers repeat — the second pass is operative). Its changes are registered as **175–184**; the
-highest-value one is 176 (`search_history` over the immutable transcript, ~20 lines, `replay: "safe"`) and
-the one that must run before any memory `section` is written is 175 (a per-turn-changing section may be a
-full-prefix cache miss; whether the delta path is taken on our endpoint is `unverified`).
+**Config of record on this box** — the split matters, because `durig.config.json` sits at a
+`DEFAULT_CONFIG_PATH` and therefore reaches every demo:
+- `durig.config.json` (gitignored) carries **machine identity only**: `DURIG_DB=./selfdev.sqlite`,
+  `DURIG_LOCAL_BASE_URL=http://127.0.0.1:47831/v1`, `DURIG_LOCAL_MODEL=iq3_s`, `DURIG_LOCAL_CONTEXT=200000`.
+  `demo/local-model-pointer.test.mjs` legitimately reads it to check the tracked rig file against this machine.
+- **Rig tuning travels in the launch environment**, where it cannot move a demo's contract:
+  `DURIG_MAX_CONCURRENT_SEATS=2 DURIG_STREAM_TIMEOUT_MS=1800000 node cli.mjs …`
+- `rig.selfdev.json` (tracked) carries `local/iq3_s` for all 12 seats. Concurrency **2** is measured: 3
+  concurrent requests gave ~21 % aggregate for a 2.8× worse worst-request decode.
 
-**Answers to the five parked questions** are in `docs/reviews/parked-questions-2026-10-26.md`, with the
-read-only audit behind them (274 `held`, 22 carrying `blockedBy`, **15 whose gates are all terminal**). They
-await the operator's approval before anything is spooled to `pm`.
-
-3. **Half the queue's evidence does not exist on this machine.** Of **178 distinct commit shas cited in the
-   queue, 90 resolve nowhere** — not in this clone, not in `vendor/pi-main/.git`, not on `origin` after a clean
-   `git fetch`. They sit on 240 terminal rows and on **14 non-terminal rows** (#3452 #3506 #3603 #3726 #3743
-   #3832 #3842 #4378 #4791 #4794 #4799 #4801 …) whose verification evidence a seat cannot re-check. The swept
-   branches are a symptom of the same condition: **the store crossed machines, the git history did not.**
-   Repair from the old machine (`git push origin --all` there, `git fetch origin` here) or record the loss in
-   writing. Now a runbook: `docs/runbooks/workspace-move.md` (`last_verified: 2026-10-26`) and a check-rule
-   proposal as ROADMAP **190**.
-
-**Blocker:** three operator rulings, not builds — (1) how cross-family verification holds while every seat is
-on one local model (`check` says `single-model-rig`, fix-now; ROADMAP 189); (2) whether to recover the swept
-`item-*` branches and the 90 unresolvable commits from the Windows rig before they age out entirely; see
-`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`; and (3) whether the rig's evidence binding should
-move to store-native ids (ROADMAP 190), which decides how 165/167/170 are written.
-
-**Suite: 236/236 on Linux (2026-10-26) — the first green run on this OS.** Two of the eight standing
-failures were PRODUCT bugs, not OS drift: `linkWorktreeDeps` handed a script path to `npm` as a command (so
-deps-linking never worked on any platform) and `waitForProcessDeath` on POSIX answered on the first
-`kill(pid,0)` instead of polling to its deadline (a permanent false "still running"). The other six were
-Windows-shaped fixtures. Commit `3bff94a`; the config-leak half is ROADMAP **193**.
-
-**Config of record on this box:** `durig.config.json` (gitignored) now carries MACHINE IDENTITY ONLY —
-`DURIG_DB`, `DURIG_LOCAL_BASE_URL`, `DURIG_LOCAL_MODEL`, `DURIG_LOCAL_CONTEXT` — because it sits at a
-`DEFAULT_CONFIG_PATH` and therefore leaks into every demo. RIG TUNING travels in the launch environment
-instead, where it cannot move a demo's contract:
+**Exact next command** (read what the new rule reports, then decide the evidence-binding ruling):
 
 ```bash
-DURIG_MAX_CONCURRENT_SEATS=2 DURIG_STREAM_TIMEOUT_MS=1800000 node cli.mjs ...
-```
-
-**Exact next command** (verify the citation rule now guards the class, then read what it still reports):
-
-```bash
-node demo/checkup-citation.test.mjs
 DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json
 ```
 
-The history repair that made those numbers fall (mount the Windows volume read-only, `git remote add win`,
-`git fetch win '+refs/heads/*:refs/remotes/win/*'`, then dangling recovery — all measured, all in
-`docs/runbooks/workspace-move.md` step 4) is **done**: unresolvable citations went 90 → 80, and the four
-remaining live ones are **stale pointers, not lost work** (`0c6fd7665` → `0c6fd76e465` #3398;
-`eb7e69c1e` → `ce79c354` #2673; `5d8c6237a` is context in a row held on #2788). Both cited demos pass on main.
+Expected: `pass: true`, 0 errors, ~62 fix-now, and `citation-unresolvable` reporting 4 live rows plus the
+308-row terminal baseline recorded in `docs/STATUS.md`.
 
-**Config of record on this box** (`durig.config.json`, gitignored): `DURIG_DB=./selfdev.sqlite`,
-`DURIG_MAX_CONCURRENT_SEATS=2`, `DURIG_LOCAL_BASE_URL=http://127.0.0.1:47831/v1`,
-`DURIG_LOCAL_MODEL=iq3_s`, `DURIG_LOCAL_CONTEXT=200000`, `DURIG_STREAM_TIMEOUT_MS=1800000`. The rig file
-(`rig.selfdev.json`, tracked) now carries `local/iq3_s` for all 12 seats.
-
-**Do not:** run `up`/`send`/`run`/`complete` on this workspace before re-taking the worktree/branch/`.spike`
-inventory into `.spike/` and diffing it after (AGENTS.md clock-in step 7); run `git add -A`; use
-`DURIAN_PI_DB` (the variable is `DURIG_DB`); claim a suite-green state — it is 227/8 here.
-
+**Do not:** run `up`/`send`/`run`/`complete` before re-taking the worktree/branch/`.spike` inventory into
+`.spike/` and diffing it after (`AGENTS.md` clock-in step 7, `docs/runbooks/workspace-move.md`); run
+`git add -A`; use `DURIAN_PI_DB` for the CLI (the variable is `DURIG_DB`); quote the suite number instead of
+measuring it; or start broker work on this workspace — the store is intact but its git history is only
+partially here (`git cat-file -t 78991031` fails; the docs' own baseline sha is not an object in this clone).

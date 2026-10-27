@@ -4460,3 +4460,59 @@ so the citations resolve, or record in writing that the evidence for those items
 citing those shas as verification. Recorded as ROADMAP **190** and as a new runbook,
 `docs/runbooks/workspace-move.md` — the procedure this box needed and did not have, verified against the
 numbers above rather than written prospectively.
+
+
+---
+
+## D132 — A citation rule that refuses to fake a verdict, and a config file that must not decide a demo (2026-10-26/27)
+
+**What was decided, and the reasoning that is not in the code comments.**
+
+**1. The citation rule reports UNMEASURABLE, not "lost".** The queue cited 178 distinct commit shas and 90 of
+them resolved nowhere. `git cat-file` can answer one question — "does THIS CLONE hold the object" — and that
+answer is genuinely ambiguous between two very different states: a **stale pointer** (the seat cited its branch
+commit and landing rewrote it; measured: `#3743`/`#4378` cite `0c6fd7665`, which matches no object, while the
+landing is `0c6fd76e465` and the change is on main) and **lost work** (never arrived, unrecoverable). Only
+patch-equivalence distinguishes them. A rule that collapsed the two would have produced 240 confident false
+accusations of lost work. So the rule says what it measured — "this clone cannot check it" — and its fix names
+the ladder. The same discipline as D25 (no data means SKIPPED with a reason, never a silent pass).
+
+**2. Terminal rows collapse to ONE baseline finding; live rows are one finding each.** 240 findings is a wall a
+reader skips, and amending history is not the purpose of a gate on new work — but the historical rows are still
+a true finding, so they are counted rather than zeroed. Recorded in `docs/STATUS.md` for the reason that file
+already gives about `30270c0`: a ledger edited to match a true finding retires the truth.
+
+**3. The root cause is the citation model, not the sweep.** The store crossed machines and the git history did
+not, so a sha in a queue body is a pointer into an object store that may not exist where the store is read. New
+durable records must bind to **store-native ids** (`entries.id` / `record_ids`) — item 177's rule, arrived at
+from the operations side instead of the literature. This is why 190 is a ruling, not just a rule: it decides how
+165/167/170 get written.
+
+**4. `durig.config.json` must not decide a demo's verdict.** It sits at a `DEFAULT_CONFIG_PATH`, so every CLI a
+demo spawns loads it. Setting `DURIG_STREAM_TIMEOUT_MS=1800000` there widened `brokerHealth`'s pass bound from
+6 to 30 minutes and turned `demo/broker-health.test.mjs`'s 7-minute wedge from `degraded` into `up` — the suite's
+answer depended on the developer's machine. The split: the file carries **machine identity** (DB path, local
+provider base URL/model/context) because `demo/local-model-pointer.test.mjs` legitimately checks the tracked rig
+file against this machine; **rig tuning** (concurrency, stream timeout) travels in the launch environment. The
+blind spot is named rather than hidden: a tuning key in the ENVIRONMENT still reaches a spawned demo, so this
+fixes the file, not the process (ROADMAP 193).
+
+**5. "Linux drift" was hiding two product bugs, and the label is what let them live.** Two of the eight standing
+failures were not OS-shaped at all: `linkWorktreeDeps` passed a script path to `npm` as a command — so
+dependency linking had never worked on **any** platform, and its failure was dressed up by `linkFailureReason` as
+a missing prerequisite — and `waitForProcessDeath` on POSIX answered on the first `kill(pid,0)` and returned,
+ignoring `timeoutMs`, so a cleanup could report a permanent false "still running". Both are the shape this repo
+refuses elsewhere ("never proceed on a false stopped signal"); one was its mirror image. **The lesson recorded:
+a platform-labelled failure set is a place bugs hide, and the way to find them is to make the suite green rather
+than to keep a documented red.** The six genuine fixture defects were fixed at the cause, never skipped.
+
+**6. What the delegate did NOT do.** It claimed, completed, deferred and routed no queue item; it spooled
+nothing and did not start the broker; it did not amend the four stale citations (a `pm` transition); and it did
+not build item 170's decision log, because that is a new write path on a security surface and R4 requires a
+`security.sec` position before code — a team member the operator has told it to leave out of scope for now.
+
+**Honesty boundary.** Every number in this record was measured on this box in these sessions. The suite number
+(236/236) is a measurement, not a property: the pointer tells the next session to re-measure it. `check` is
+`pass: true` with 0 errors and ~62 fix-now; the four failing rules are `single-model-rig` (ruling owed),
+`citation-unresolvable` (4 stale pointers + the 308-row baseline), `duplicate-item`, and the two evidence rules
+— all pre-existing, none introduced here.
