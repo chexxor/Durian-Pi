@@ -156,3 +156,94 @@ returned an **empty answer with `finish_reason: length`** — all 900 completion
 `reasoning_content`. That is the concrete form of the truncation risk behind per-provider `maxTokens` (D134): a
 thinking verifier given too small a budget does not fail loudly, it says nothing. Any seat-facing budget must
 cover reasoning **plus** the answer. Re-run at 3000 produced `finish_reason: stop` with a real answer.
+
+---
+
+# Addendum after the operator asked about PolyStrata (same day)
+
+The operator asked whether [`VecSzn/PolyStrata`](https://github.com/VecSzn/PolyStrata) should be used instead of
+LM Studio or llama.cpp directly. It should — for the verifier engine — and reading it killed the plan to write a
+llama.cpp command line for Flint. Everything below is quoted or measured, with the file it came from.
+
+## What it is
+
+Repo API: MIT, C++, created 2026-10-06, **pushed 2026-10-27T21:04Z (today)**, 570 stars, latest release
+`v0.1.45-poly.5` (2026-10-27). Its own description: *"Qwen3.8-Flash-Next on Strata's engine, and GLM 5.3 Flash,
+DeepSeek V4 Flash, LFM2.5, Flint, Qwen3.6, Ornith 1.5, Gemma 4, Tiel Coder and MiniCPM-V on a second engine
+written for PolyStrata. One-click install for Windows and Linux, OpenAI/Anthropic API on localhost."*
+
+**This box already runs Strata.** `ps` shows `~/Downloads/Strata-0.2.6-linux-x86_64.appimage`, and
+`~/.local/share/strata/install/strata-iq3_s.json` holds `model_name = qwen3.8-flash-next-iq3_s`,
+`gpu = [0, 1]`, `layer_split = auto`, `vram_reserve_mib = 1536`. So PolyStrata is not a new dependency family:
+its README says it *"is built on Strata … keeps Strata's git history and merges its releases, and Strata's own
+engine is in it unchanged."*
+
+## It answers the operator's llama.cpp question with a measurement, not a claim
+
+FAQ, on what the second engine adds: *"What is new is the model code for the five architectures and **the part
+that decides which experts sit in VRAM and which run on the CPU**."* That is precisely the mechanism the operator
+described, and it is finer-grained than llama.cpp's: `docs/SECOND_GPU.md` describes ranking 8,000
+`(layer, expert)` pairs and giving each expert exactly one owner — CUDA0, a secondary card, or the CPU pool.
+
+`docs/FLINT.md` then benchmarks the exact llama.cpp flags this session was about to hand the operator, on a
+laptop with an **8 GB** card, Flint `UD-Q3_K_XL`, same file:
+
+| | PolyStrata | llama.cpp `--fit on` | llama.cpp `--n-cpu-moe 36` |
+|---|---:|---:|---:|
+| reads 3,566 tokens | 1,682–1,773 tok/s | 402–406 | 392–409 |
+| writes after | 63–69 | 42.3–43.2 | 39.6–43.9 |
+| reads 29,442 tokens | 1,946–2,012 | 390–391 | 379–394 |
+| writes after | 49–52 | 35.3–35.4 | 31.9–35.6 |
+
+*"`--fit on` was the fastest of the three settings tried for llama.cpp there; `--n-cpu-moe 40` was slower still."*
+On the 32 GB-card workstation the gap is smaller but real: PolyStrata reads 12,906–12,936 tok/s vs llama.cpp
+7,794 (batch 512) and 12,470 (batch 2,048), and writes 249–256 vs 222. **Honest limit:** both comparisons are on
+an RTX 4070 Laptop 8 GB and an RTX 5090, not on an Ampere pair like this box.
+
+## Why our Flint runs failed, in one line
+
+The Flint page lists RAM needed beside an 8 GB card: **~22 GB UD-Q3_K_XL, ~29 GB UD-Q4_K_XL, ~40 GB UD-Q6_K_XL,
+~46 GB Q8_0**. The GGUF census in this document measured the *movable expert bytes* of the two files we
+downloaded: **Q6_K 31.05 GB, Q8_0 40.21 GB**, with only **1.67 GB / 2.13 GB** immovable (attention, shared
+expert, embeddings, dense FFN). This box has **34 GiB** free RAM with the primary resident.
+
+So the quant was the bug, not just LM Studio's settings: the only part of Flint big enough to matter could not be
+made resident here. Their installer's rule is explicit — UD-Q4_K_XL where there is ~15 GB of RAM to spare past
+the estimate, else **UD-Q3_K_XL**. On an 8 GB card UD-Q3_K_XL gives **61–63 tok/s decode, ~2,000 tok/s prefill**,
+against the **2.8–3.6 tok/s** measured here with Q6_K. Their 5090 does Q8_0 at 158–160 tok/s — Q8 is not bad, it
+is just not a 16 GB-card / 34 GiB-RAM quant.
+
+## The two things it does not solve
+
+1. **Concurrency.** `docs/BACKENDS.md` §Changing the model: a switch *"stops the engine that is loaded, so the two
+   models are never in memory together"* (8–16 s between models with files in page cache; `GET /api/models`,
+   `POST /api/models/load|unload`). The rig runs two seats at once and, once cross-family is in force, an author
+   and a verifier are *different models*, so both must be resident. Documented behaviour is one model per server;
+   a second server instance on its own port is plausible (`run-iq3_s.sh` shows config-per-model + `--port`, and
+   the docs mention "a server already running on the port") but **is not documented as supported**. `SECOND_GPU.md`
+   is one model spread across cards, and it warns the expert tiers *"do not release the expert arena in system RAM
+   or significantly change VRAM use"*. **Test before adopting.**
+2. **RAM remains the ceiling.** 34 GiB available with the primary resident: UD-Q3_K_XL's ~22 GB fits with ~12 GB
+   of margin; UD-Q4_K_XL's ~29 GB leaves almost none, and nothing larger.
+
+## A flag that matters for a verifier specifically
+
+FAQ: setup starts some models with `--tail-skip 6`, *"which skips a few low-ranked experts that are not in VRAM
+and moves its answers a little"*, and `STRATA_ROUTE_TAIL_SKIP=0` turns it off. For a seat whose entire job is not
+to be wrong, a routing shortcut that moves answers is exactly the D48/D119 concern — it must be off, and that
+belongs in the launch environment, not in a default.
+
+## Engine/model trade the operator now has to pick
+
+- **PolyStrata + Flint UD-Q3_K_XL.** Fast (61–63 tok/s on an 8 GB card), MoE, "made for coding agents", Apache-2.0
+  model, text-only. Capability still **unpublished** — the seeded-bug calibration in this file is the only
+  evidence available, so it is mandatory, not optional.
+- **llama.cpp/LM Studio + a dense Mistral-family model that fits the card outright** (Devstral Small 2
+  UD-Q3_K_XL 11.85 GB, or Ministral 3 14B Reasoning Q6_K 11.09 GB, already installed). A dense model that fits
+  entirely in VRAM touches **no PCIe at all** — the most efficient possible use of the A4000, which is what the
+  operator asked for — and Devstral carries a published **SWE-bench Verified 68.0% / Terminal-Bench 2 22.5%**.
+  Decode is then weights-bandwidth-bound rather than expert-paging-bound; **unmeasured on this card**, and it is
+  the one number that would settle the comparison in about 30 seconds, because Ministral is already installed.
+
+Both routes end at the same place: `DURIG_VERIFIER_BASE_URL` pointing at an OpenAI-compatible localhost endpoint,
+which is all the rig asks of an engine.
