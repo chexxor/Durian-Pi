@@ -177,6 +177,16 @@ THE BOM REMAINS ON MAIN — a rule licensed in the ledger and unenforced in fact
 TRUE FINDING DOES NOT RECORD THE TRUTH; IT RETIRES IT. Until the operator decides, both demos fail for the
 right reason (recorded baseline, not a silent red).
 
+**SUITE ON LINUX: 236/236 (2026-10-26).** The Windows-era baseline was 229/235 and this box measured
+**227 pass / 8 fail** at the relinked pin; D129's "six Linux-shaped defects" was stale in both count and
+membership. The eight are now zero, and two of them were **product bugs, not OS drift**: `linkWorktreeDeps`
+handed a script path to `npm` as a command (so deps-linking never worked on any platform), and
+`waitForProcessDeath` on POSIX answered on the first `kill(pid,0)` instead of polling to its deadline (a false
+"still running"). The other six were Windows-shaped fixtures fixed at the cause. Full reasoning in commit
+`3bff94a`; the config-leak half is ROADMAP 193. **This is the first green suite on Linux — re-measure it rather
+than quoting it**, and note that a tuning key in the ENVIRONMENT can still move a spawned demo (193's blind
+spot).
+
 **KNOWN REDS BASELINE (2026-10-26): the `citation-unresolvable` rule is fix-now RED, on purpose.**
 Measured on the Windows→Linux move: **178 distinct commit shas are cited across the queue and 90 resolved
 nowhere** — not this clone, not `vendor/pi-main/.git`, not `origin` after a clean fetch. The history repair

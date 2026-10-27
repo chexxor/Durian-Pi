@@ -3237,3 +3237,17 @@ budget of the provider's real ceiling. Note the operator's own coding session on
 the same arithmetic — pi exposes `compaction.reserveTokens` with per-model `modelOverrides`, set to 50,000 for
 `strata/iq3_s` (75 % of window) so that a seat cannot walk into the 400.
 
+**193. Ambient config must not change a demo's verdict — partition machine identity from rig tuning**
+*(toolchain; found by making the suite green)* — measured: `durig.config.json` is a `DEFAULT_CONFIG_PATH`
+(`src/config.mjs:14`), so it is loaded by every `node cli.mjs …` a demo spawns, and setting
+`DURIG_STREAM_TIMEOUT_MS=1800000` there widened `brokerHealth`'s pass bound from the 6-minute default to 30
+minutes, turning `demo/broker-health.test.mjs`'s 7-minute wedge from `degraded` into `up`. The suite's answer
+therefore depended on the developer's local config — a "config-derived" blind spot with no band. Two shapes are
+wanted and only one file exists: **machine identity** (DB path, local provider base URL/model/context), which
+`demo/local-model-pointer.test.mjs` legitimately reads to check the tracked rig file against this machine, and
+**rig tuning** (concurrency, stream timeout, stranded thresholds), which must never move a demo's contract.
+Depends on: none. Measure: the config keys are partitioned and documented as such, and a demo asserts that no
+tuning key is honoured from a `DEFAULT_CONFIG_PATH` file (or that demos run with `DURIG_CONFIG` pinned to an
+absent path). Blind spot to name: a tuning key set in the ENVIRONMENT still reaches a spawned demo, so the
+partition fixes the file, not the process.
+
