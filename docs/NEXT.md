@@ -6,6 +6,9 @@
 
 ## NEXT SESSION (2026-10-27T05:20Z — THE RIG IS ON THE OPERATOR'S LOCAL MODEL AND ON LINUX; WHAT IS OWED IS THE CROSS-FAMILY VERIFIER RULING AND A DECISION ABOUT THE SWEPT ITEM WORKTREES)
 
+> Archive: older sessions live VERBATIM in `docs/NEXT-ARCHIVE.md` (the digest quotes this block, so the
+> link has to be inside it — `demo/clockin-digest.test.mjs` checks that it is).
+
 **Current item:** the operator's rulings are implemented — seats on the local endpoint, concurrency 2, the
 pin relinked, and Linux registered as an operating platform. Two things now block useful seat work, and both
 are rulings rather than builds:

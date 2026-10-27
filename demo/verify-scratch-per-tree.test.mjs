@@ -31,7 +31,12 @@ try {
 	// `node_modules/` is IGNORED, so the junction inside the scratch does NOT make it "dirty": the
 	// tree reaches the junction check (the THROW) instead of being refused as dirty first — the
 	// real-world `%TEMP%/verify*` node_modules-junction shape (docs/runbooks/leaked-worktrees.md).
-	writeFileSync(join(repo, ".gitignore"), "node_modules/\n");
+	// `node_modules` WITHOUT the trailing slash (2026-10-26): `node_modules/` matches a DIRECTORY
+	// only, and on POSIX the "junction" below is a SYMLINK — not a directory — so git reported the
+	// scratch dirty and it never reached the junction check. On Windows a junction IS a directory,
+	// which is why the fixture passed there and failed on Linux. The un-slashed pattern ignores both
+	// shapes, which is what "node_modules is ignored" was always meant to say.
+	writeFileSync(join(repo, ".gitignore"), "node_modules\n");
 	await git(repo, "init", "-q");
 	await git(repo, "add", ".gitignore");
 	await git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init");

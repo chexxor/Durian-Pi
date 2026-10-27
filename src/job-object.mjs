@@ -314,14 +314,24 @@ export async function spawnInJob(cmd, args = [], opts = {}) {
  */
 export async function waitForProcessDeath(pid, timeoutMs = 15000) {
 	if (!pid) return true;
+	// POSIX: POLL UNTIL THE DEADLINE, DO NOT ANSWER ON THE FIRST LOOK (2026-10-26). This branch used
+	// to `kill(pid, 0)` ONCE, sleep 100 ms and return false — so `timeoutMs` was ignored entirely and
+	// any process that died 200 ms later was reported ALIVE. A caller confirming a cleanup had
+	// finished therefore got a permanent false "still running", which is the exact shape this repo
+	// refuses elsewhere ("never proceed on a false stopped signal"): here it was a false RUNNING
+	// signal, and it made `demo/job-object.test.mjs`'s natural-death check red on Linux while the
+	// Windows branch polled correctly. Same deadline loop as below, cheaper probe.
 	if (!isWindows) {
-		try {
-			process.kill(pid, 0);
-			await new Promise((r) => setTimeout(r, 100));
-			return false;
-		} catch {
-			return true;
+		const start = Date.now();
+		while (Date.now() - start < timeoutMs) {
+			try {
+				process.kill(pid, 0);
+			} catch {
+				return true;
+			}
+			await new Promise((r) => setTimeout(r, 50));
 		}
+		return false;
 	}
 
 	const start = Date.now();

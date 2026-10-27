@@ -144,9 +144,15 @@ const PINNED_PACKAGE = "@earendil-works/pi-durable";
 export async function linkWorktreeDeps(worktreePath) {
 	const syncPi = join(worktreePath, "scripts", "sync-pi.mjs");
 	if (!existsSync(syncPi)) return { attempted: false, ok: null, reason: null, detail: null };
-	const { file } = resolveNpmInvocation();
+	// RUN THE SCRIPT WITH NODE, NOT THROUGH NPM (2026-10-26). `resolveNpmInvocation` returns the
+	// NODE binary plus `npm-cli.js` as prefix args, so passing the script path here invoked
+	// `npm <script.mjs> --link` — and npm answers "Unknown command: <path>" on every platform. The
+	// docstring above this function has always said "Run `node scripts/sync-pi.mjs --link`"; the
+	// implementation disagreed with it, so the deps-link step never linked anything and the failure
+	// arrived as an unexplained "Command failed" (masked further by `linkFailureReason`, which then
+	// reported a missing prerequisite instead). demo/worktree-deps-link.test.mjs caught it on Linux.
 	try {
-		await run(file, [syncPi, "--link"], { cwd: worktreePath });
+		await run(process.execPath, [syncPi, "--link"], { cwd: worktreePath });
 		return { attempted: true, ok: true, reason: null, detail: null };
 	} catch (linkErr) {
 		// The step reports its failure as JSON on STDOUT (`{ok:false, error:"..."}`) and exits 1, so

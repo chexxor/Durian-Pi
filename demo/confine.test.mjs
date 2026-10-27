@@ -5,7 +5,7 @@
 // here is paired with its unguarded control - the same discipline demo/starter.test.mjs uses
 // for `check`, where "0 findings" is meaningless unless the rules can be shown to fire.
 
-import { existsSync, rmdirSync } from "node:fs";
+import { existsSync, rmdirSync, unlinkSync } from "node:fs";
 import { mkdtemp, mkdir, rm, symlink, writeFile as write } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -394,9 +394,17 @@ try {
 			check("...and nothing landed in the read-only root", !existsSync(join(shared, "BOOM.txt")));
 			denied(await roEnv.writeFile(join(linkPath, "sub", "BOOM.txt"), "x", context), "a CREATE through a junction into a NON-EXISTENT subdir is REFUSED");
 			// Remove the junction BEFORE the generic cleanup, so rmSync cannot walk the link.
+			// A DIRECTORY SYMLINK IS NOT A DIRECTORY (D131): `rmdirSync` succeeds on a Windows
+			// junction but fails ENOTDIR on a POSIX symlink, which left the link behind and made
+			// this canary red on Linux while both security assertions above passed. `unlink`
+			// removes the link itself on POSIX; the rmdir fallback keeps Windows working.
 			try {
-				rmdirSync(linkPath);
-			} catch {}
+				unlinkSync(linkPath);
+			} catch {
+				try {
+					rmdirSync(linkPath);
+				} catch {}
+			}
 			check("the junction was removed", !existsSync(linkPath));
 		}
 	}

@@ -26,9 +26,25 @@ import { prunePatchEquivalentBranch } from "../src/worktree.mjs";
 const CLI = fileURLToPath(new URL("../cli.mjs", import.meta.url));
 
 const run = promisify(execFile);
-const git = (cwd, ...args) => run("git", ["-C", cwd, ...args]);
+// IDENTITY IS PART OF THE FIXTURE, NOT OF THE DEVELOPER'S MACHINE (2026-10-26). `commit` below set
+// `-c user.email` per call, but `cherry-pick` did not — so on a host with no GLOBAL git identity the
+// fixture died with "Committer identity unknown" and the test read as a product failure. A test that
+// depends on ambient git config is not hermetic; inject the identity on every command instead.
+const IDENTITY = ["-c", "user.email=t@t", "-c", "user.name=t"];
+const git = (cwd, ...args) => run("git", ["-C", cwd, ...IDENTITY, ...args]);
 const commit = (cwd, msg) =>
 	run("git", ["-C", cwd, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", msg]);
+// A commit with a FIXED date, for any commit that will later be CHERRY-PICKED.
+// WHY THIS EXISTS (2026-10-26): a cherry-pick of a commit whose parent, tree, author, committer and
+// message are all identical reproduces the IDENTICAL object — same sha — so the "duplicate" branch
+// became an ancestor of main and `git rev-list --count main..dup` was 0, not 1. That only fails when
+// the original commit and the pick land in the same second, so the fixture was racing a clock tick
+// and read as a product failure. Pinning the original's dates to the past makes the pick's "now"
+// differ deterministically, which is the condition the fixture actually means to create.
+const commitAt = (cwd, msg, iso) =>
+	run("git", ["-C", cwd, ...IDENTITY, "commit", "-q", "-m", msg], {
+		env: { ...process.env, GIT_AUTHOR_DATE: iso, GIT_COMMITTER_DATE: iso },
+	});
 // A git command expected to FAIL; returns its stderr so the refusal can be inspected.
 const gitFails = async (cwd, ...args) => {
 	try {
@@ -65,7 +81,7 @@ try {
 	await git(repo, "checkout", "-q", "dup");
 	writeFileSync(join(repo, "dup.txt"), "landed by rebase\n");
 	await git(repo, "add", "dup.txt");
-	await commit(repo, "dup work");
+	await commitAt(repo, "dup work", "2020-01-01T00:00:00Z");
 	const dupTip = (await git(repo, "rev-parse", "dup")).stdout.trim();
 	await git(repo, "checkout", "-q", "main");
 	await git(repo, "cherry-pick", (await git(repo, "rev-parse", "dup")).stdout.trim());
@@ -75,7 +91,7 @@ try {
 	await git(repo, "checkout", "-q", "held");
 	writeFileSync(join(repo, "held.txt"), "held work\n");
 	await git(repo, "add", "held.txt");
-	await commit(repo, "held work");
+	await commitAt(repo, "held work", "2020-01-02T00:00:00Z");
 	await git(repo, "checkout", "-q", "main");
 	await git(repo, "cherry-pick", (await git(repo, "rev-parse", "held")).stdout.trim());
 	await git(repo, "worktree", "add", "-q", at("wt-held"), "held");
@@ -203,7 +219,7 @@ try {
 	await git(repo, "checkout", "-q", "dup2");
 	writeFileSync(join(repo, "dup2.txt"), "landed by rebase too\n");
 	await git(repo, "add", "dup2.txt");
-	await commit(repo, "dup2 work");
+	await commitAt(repo, "dup2 work", "2020-01-03T00:00:00Z");
 	const dup2Tip = (await git(repo, "rev-parse", "dup2")).stdout.trim();
 	await git(repo, "checkout", "-q", "main");
 	await git(repo, "cherry-pick", dup2Tip);
