@@ -3312,3 +3312,56 @@ tuning key is honoured from a `DEFAULT_CONFIG_PATH` file (or that demos run with
 absent path). Blind spot to name: a tuning key set in the ENVIRONMENT still reaches a spawned demo, so the
 partition fixes the file, not the process.
 
+**194. The capability gate IS 189's measure, and a gate that cannot see a false alarm is not a gate**
+*(qa, with devtools; found while hardening 189's measurement, 2026-10-28)* — measured: the shipped gate
+(`tools/model-probes/calibrate-verifier.mjs`) had **two items from one commit**, flat keyword lists, and **no
+clean-code condition**, so `docs/DECISIONS.md` D137 acted on a 1/2-vs-0/2 gap that is one discordant pair
+(**McNemar exact p = 1.0**) while its own headline finding — a defect that cannot occur, asserted twice — is a
+**false alarm**, which that instrument has no condition able to count. Also measured in the rewrite: the old
+harness's hand-picked slice cut a function mid-statement, and the control's first "HIT" on that item was a
+report of `SyntaxError: Unexpected end of input` — scored correct by the rubric, wrong about the code. The
+delegate's replacement (`tools/model-probes/corpus.mjs`, `gate.mjs`) is measurement apparatus, not product
+surface; the team owns making it durable. Depends on: 189 (the provider half, done). Measure: `node
+tools/model-probes/gate.mjs <baseUrl> <model> [label]` runs ≥ 8 items × 3 conditions (defect / matched clean /
+clean-neutral), prints hits, **false-alarm rate on controls**, phantom count and a McNemar exact p against a
+saved transcript, and exits non-zero if any region fails `node --check` or any mutant proves equivalent.
+Blind spot to name: every item is drawn from **this** codebase, so the gate measures skill on the rig's own
+defect classes, not general capability; and its ground truth is what the fix commit's author said the defect
+was, which is a strong but not infallible record.
+
+**195. Excerpt-induced confabulation — a control that omits a module's imports manufactures its own false alarms**
+*(qa; found by auditing a gate transcript, 2026-10-28)* — measured: on a **clean** control (the H1 region with the
+defect fixed), the control model's "false alarm" was *"`run` is not imported/defined in this module → `ReferenceError:
+run is not defined`"*. That is true of **my excerpt**, not of the file: windowing strips the import block, so the
+model is invited to report a missing binding, and the scorer counts it as a judgement failure. Any clean-control
+false-alarm rate measured on fragments is therefore inflated by construction. Depends on: 194. Measure: the scorer
+classifies artifact claims (undefined-identifier/`ReferenceError`/parse-failure claims) separately from genuine
+false alarms, and a control is shown as the **whole module** whenever the context budget allows it (which for the
+A4000 verifier means ≤ ~12k tokens, so the module must fit — say so, and fail loudly when it does not).
+
+**196. An unconditional "artifact" drop throws away the answers that carry the signal**
+*(qa; found while scoring the 2026-10-28 gate run, 2026-10-28)* — measured: the control model answered the M1
+mutant item with *"`sliceToWidth` has an off-by-one (`cells + 1`)"* — the exact injected defect, named, with the
+mutated constant — and the turn was scored **`ARTIFACT`** and dropped, because the same answer also used the word
+"truncated". The rule matched an artifact phrase anywhere in the turn and discarded the whole thing, so all three
+mutant items vanished from the control's ranking and the clean-control denominators collapsed to `0/0` and `2/2`.
+An earlier draft of this item blamed the reasoning trace; that was wrong — the trigger phrases were in the answer.
+Depends on: 194, 195. Measure: a turn is excused as an artifact **only when the model made no code-level claim at
+all** (no rubric mechanism group, no assertion phrase); when it names a mechanism *and* complains about the
+excerpt, it is scored and flagged. A run prints, per condition, how many turns were dropped and which phrase
+dropped them, and reports the same run under both rules so a reader can see how much the verdict moves. Measured
+movement on 2026-10-28: control defect hits **5/5 → 4/8** and the paired verdict **"control clearly ahead" →
+"indistinguishable, McNemar p = 1.000"**.
+
+**197. Two models are not comparable if the endpoint gives one of them a reasoning trace and the other none**
+*(qa; found by rescoring, 2026-10-28)* — measured: `gate.mjs` scored `reasoning + answer`. The primary's endpoint
+returns `reasoning_content`; LM Studio returns **none** for `ministral-3-14b-reasoning` (recorded in D137). So the
+control was scored on twice the material the candidate had. Rescoring the control's transcript with only its
+answer available moved two historical HITs to MISS (H2 groups 3/3 → 0/3, H5 3/3 → 1/3): **it names mechanisms in
+its trace and paraphrases without them in its answer.** Any hit-rate comparison that does not pin the scoring
+material is comparing endpoints, not models. Same item also covers a second over-trigger found here: a literal
+rubric phrase (e.g. `+ 1`) matches text the model *quoted out of the excerpt*, inflating `namedMechanism` on clean
+controls. Depends on: 194. Measure: the scoring material is a **declared, printed, identical-for-both-models**
+setting (`answer`, or `answer+reasoning`, with the latter unavailable — and stated unavailable — for families whose
+endpoint returns no trace); rubric matching excludes code spans the model reproduced from the excerpt; and a run
+prints both a raw and a quote-excluded `namedMechanism` count.

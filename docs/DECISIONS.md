@@ -4712,3 +4712,47 @@ occupies ~35.9 GB across both cards") no longer describes this box: the Strata p
 **13,388 MiB on the A4000** (2,577 MiB free). The operator already reconfigured the split; the missing piece is a
 capable verifier, not free VRAM. Full evidence: `docs/reviews/verifier-model-survey-2026-10-27.md`,
 section "THE GATE RAN AGAINST THE VERIFIER — and it FAILS (0/2, against the control's 1/2)".
+
+---
+
+## D138 — The hardened gate dissolved D137's numeric basis; the routing ruling stands, the evidence claim does not (2026-10-28, delegate; operator confirmation owed)
+
+**What was decided.** ROADMAP 189's measure is restated a second time, and this time it is a *test* rather than a
+property: **a candidate verifier family must beat the author family on the paired gate — defect hits scored
+against matched clean controls, McNemar-significant at a bar written before the run — and must be no worse on those
+controls.** `check` clearing stays a consequence, never the target (`src/checkup.mjs:594` compares resolved model
+strings). Two riders, both learned by running it rather than by reasoning: **no false-alarm number is quotable until
+controls are whole modules** (ROADMAP 195), and **the scoring material must be identical for both models** (197).
+
+**Why the old number could not carry the ruling it was used for.** D137 halted a seat flip on `1/2 vs 0/2`. Rebuilt
+as a gate — 8 items (5 from `git show <fix>^:<file>`, 3 mutants whose non-equivalence is re-proved by differential
+execution at every corpus build), three conditions per item, rubric mechanism-groups, pre-registered phantom
+patterns, McNemar exact — that gap became **4/8 vs 3/8 with one discordant pair each way, exact p = 1.000**, against
+a pre-registered bar of ≥ 6 one-sided discordant pairs at n = 8. The instrument also caught three of its own bugs
+mid-flight and each one moved the answer: a rubric phrase `"+ 1"` compiled as a regex **crashed the candidate run**
+after 5 items; an unconditional artifact drop **discarded the control's correct naming of the injected off-by-one**
+("…`sliceToWidth` has an off-by-one (`cells + 1`)") and collapsed the clean denominators to `0/0`; and the control
+was being scored on `reasoning + answer` while LM Studio returns **no reasoning trace** for the candidate — take the
+trace away and two of the control's five HITs become MISS (H2 groups 3/3 → 0/3, H5 3/3 → 1/3). A 2-item, unpaired,
+single-material instrument was used to settle a routing question. It should not have been.
+
+**What still justifies the ruling.** The candidate fails the pre-registered G3 rule on its first clause (3/8 is not
+strictly greater than 4/8) and ties on its second. **No seat is flipped; `single-model-rig` stays red, honestly.**
+That is unchanged from D137 and the operator's ruling is not being reopened.
+
+**What must be corrected in the record.** The evidence no longer says *Ministral 3 14B Reasoning Q6_K is a worse
+verifier than the author family*. It says the two are **not separable at n = 8 in either direction**
+(`.spike/gate/run-candidate-ministral.json`, `.spike/gate/rescore-*.rescored.json`). The stronger, and worse,
+finding is about this rig: on **fragment** controls **both** families asserted a defect on every item — **8/8 under
+the leading prompt and 8/8 under a neutral prompt that does not presuppose a defect, for both models** — and at
+least two of the control's eight are provably artifacts of my own windowing (`scripts/clockin.mjs:27-30` holds the
+imports it called missing; `__durig_probe__` is my synthetic header). "A verifier that cries wolf" is therefore not
+a candidate property I can attribute to option (a) alone; it is a property of asking a reasoning model for a bug in a
+fragment. Operationally that points at how a verifier seat is *fed*, not only which model sits in it.
+
+**Not decided here.** Which family to run (operator, ruling 1) — the option set and the recommendation are unchanged,
+but option (b) (`Devstral-Small-2-24B UD-Q3_K_XL`, 11.85 GB) must be gated with the hardened gate, and the cheap
+next measurement is 195 + more items then a ~3-minute re-run against the already-resident candidate. Nothing was
+claimed, completed, deferred or routed by the delegate; the broker is still down
+(`status.broker = {"state":"down","reason":"no broker state"}`).
+Full record: `docs/reviews/verifier-gate-hardening-2026-10-28.md`.
