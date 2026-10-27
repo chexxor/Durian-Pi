@@ -88,6 +88,25 @@ measured above.
    old log headings — it never asserts that **every block header ever written to `NEXT.md` still appears
    in the archive**. That is a cheap missing oracle.
 
+
+## Recovery paths, measured later in the same session
+
+| Path | Result |
+|---|---|
+| The Windows workspace still on this machine | **absent** — `/mnt/c`, `/c`, `/media` contain nothing matching; `findmnt` lists no `9p`/`drvfs`/`cifs`/`ntfs3` mount; the only sibling of the checkout is `ladybird` |
+| `origin` | fetched cleanly; **does not contain them**. Only one `item-*` branch is remote (`origin/item-148`) |
+| Dangling objects / reflog | **none** — `git fsck --unreachable` reports 0 unreachable commits and `git cat-file -t` fails for every cited sha, so the objects were pruned, not merely unreferenced |
+| The vendored pi tree (`vendor/pi-main/.git`) | the cited shas are not pi commits either — so this is not a mislabelled-upstream artifact |
+| The store's own transcript | **the only remaining copy.** 137,368 entries, and pi-durable stores tool results verbatim (entry 52 alone holds a 51 KB `read` result). File contents as they were when a seat read or wrote them are therefore recoverable in principle. That is seat work under an item, not something the delegate should reconstruct by hand. |
+
+And the sweep is smaller than the migration gap it exposed. Scanning every sha-shaped citation in the queue:
+**178 distinct shas cited, 90 of them (50.6%) resolve nowhere** — not here, not in `vendor/pi-main/.git`, not
+on `origin`. They sit on **240 terminal rows** (`done` 196, `cancelled` 44) and on **14 non-terminal rows**
+(#3452 #3506 #3603 #3726 #3743 #3832 #3842 #4378 #4791 #4794 #4799 #4801 …) whose verification evidence a
+seat picking them up cannot re-check. The store crossed machines; **the git history did not.** That is now a
+runbook (`docs/runbooks/workspace-move.md`, `last_verified: 2026-10-26`) and a check-rule proposal (ROADMAP
+**190**), because a rig whose discipline is "re-run what you did" currently cannot re-run half of it.
+
 ## What the operator must decide
 
 - Whether to recover the lost branches from the Windows rig (`C:\Users\Alex\dsh-Projects\pi-opendurig`) —

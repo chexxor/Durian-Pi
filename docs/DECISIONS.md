@@ -4447,3 +4447,16 @@ file's model fields, and documentation. It claimed no queue item, transitioned n
 and wrote no product code. The suite is **227 pass / 8 fail** on this box at the relinked pin — not 229/235,
 which is stale — and one of those eight (`broker-health` reading `up` with `passAgeMs: 420613`) is a logic
 defect rather than an OS-shaped one, so it must not be waved away as Linux drift.
+
+**D131 addendum — the store moved without its git history (measured the same session).** Scanning every
+sha-shaped citation in the queue: **178 distinct shas cited, 90 unresolvable** — not in this clone, not in
+`vendor/pi-main/.git`, not on `origin` after a clean `git fetch`. 240 terminal rows and **14 non-terminal
+rows** carry evidence nobody can re-check. The swept `item-*` branches are a symptom of the same condition,
+not its cause: the Windows rig's objects were never fetched here, and once a `prune` ran there is nothing
+dangling to recover (`git fsck --unreachable` = 0). The only other copy is the store's own transcript (137,368
+entries; tool results stored verbatim), which makes reconstruction seat work under an item rather than a
+delegate repair. **The ruling owed:** push the history from the old machine (or add it as a remote and fetch)
+so the citations resolve, or record in writing that the evidence for those items is unreproducible and stop
+citing those shas as verification. Recorded as ROADMAP **190** and as a new runbook,
+`docs/runbooks/workspace-move.md` — the procedure this box needed and did not have, verified against the
+numbers above rather than written prospectively.

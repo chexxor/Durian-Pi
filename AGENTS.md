@@ -21,12 +21,21 @@ three actors straight is the whole job:
 1. Read **`docs/NEXT.md`** — the current priority, its queue id, and the exact next command.
 2. Read **`docs/SELFDEV.md`** — the runbook: which team, which store, which worktree, the loop.
 3. `git status --short -- .` — know what is already uncommitted before you touch anything.
-4. `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status` — the team's attention and non-terminal work.
+4. `DURIG_DB=./selfdev.sqlite node cli.mjs status` — the team's attention and non-terminal work. Use
+   `DURIG_DB` for the **CLI**: `src/config.mjs` (`CONFIG_KEYS`, `cli.mjs:142`) reads only `DURIG_*`, so
+   `DURIAN_PI_DB` there silently opens an empty `./rig.sqlite`. The rename is half-applied and points the
+   other way in other entry points — `scripts/clockin.mjs:236` accepts `DURIAN_PI_DB` first, and `tui.mjs:42`
+   treats `DURIG_TUI_DB` as the deprecated alias of `DURIAN_PI_TUI_DB` (D103). Registered as ROADMAP 191.
 5. If this session is an **operating situation a runbook covers** — broker down/stalled, store
    corruption, a degenerate seat, leaked worktrees, a merge/conflict, or you need external research —
    read the matching `docs/runbooks/<symptom>.md` **before improvising**. The index (symptom → runbook)
    is `docs/runbooks/README.md`; read `docs/runbooks/research-request.md` before commissioning research.
 6. Resume from `NEXT.md`. Do not re-derive the priority from the 1300-line roadmap.
+7. **Before the first writing verb on a workspace that arrived from another machine or operating system**
+   (`up`, `worktree`, `run`, `send`, `complete`), run `docs/runbooks/workspace-move.md`: inventory
+   `git worktree list --porcelain`, `git branch --list` and `ls .spike | wc -l` into `.spike/`, and diff that
+   inventory after each writing verb. A `--dry-run` that names no removals is **not** evidence there are none —
+   it previews model and cwd resets only. Evidence: `docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`.
 
 ## Clock out (before you stop)
 
@@ -42,7 +51,10 @@ three actors straight is the whole job:
 - **Do not push or publish.** The operator holds that grant; the delegate may commit its own item's
   work (the commit boundary is scoped per item — stage explicit paths only, never `git add -A`).
   Push requires the operator's explicit grant (or `DURIAN_PI_ALLOW_PUSH=1` at launch).
-- **Native Windows only** — never `wsl`, `docker`, or `docker-compose`.
+- **Native host OS only** — never `wsl`, `docker`, or `docker-compose`. Linux and Windows are both operating
+  platforms for this rig (D131); run natively wherever it lives, and **name the OS in every measurement you
+  report**: seat tool names, path fixtures and process-death semantics differ (`src/seatguard.mjs:122` registers
+  both `bash` and `powershell`; `docs/runbooks/workspace-move.md` Step 5).
 - **Never run a whole-filesystem search**; stay inside your workspace.
 
 ## Where to read further

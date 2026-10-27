@@ -3190,3 +3190,28 @@ spot is systemic; per-seat models are already supported". `src/providers/local.m
 provider from one base URL, so two families need either a second served model plus per-seat base URLs (the
 code change `docs/SELFDEV.md` already identifies) or one verifier seat kept on a remote provider. Depends
 on: the operator's provider ruling. Measure: `check` no longer reports `single-model-rig`.
+
+**190. Evidence binding — a cited commit must resolve, or the row must not cite it** *(substrate; same shape
+as 170)* — measured on this box: **178 distinct commit shas are cited across the queue and 90 of them resolve
+nowhere** (not in this clone, not in `vendor/pi-main/.git`, not on `origin` after a clean fetch). They sit on
+240 terminal rows and on **14 non-terminal rows** whose verification evidence cannot be re-checked by whoever
+picks them up. After the sweep, `git fsck --unreachable` returned 0, so even dangling recovery was impossible.
+Depends on: 170. Measure: a `check` rule reporting the count of unresolvable citations with a band and a named
+blind spot, and the **non-terminal subset** separately because that is the actionable one; new durable records
+bind to **store-native ids** (`entries.id` / `record_ids`) rather than machine-local git objects. This is item
+177's rule — `source_event` must be a transcript entry id — discovered from the operations side instead of the
+literature, and it is now `observed`. It constrains 170 too: the enforcement-decision log must live in the
+store (single writer, survives a machine move), not in loose files next to the worktrees that just got swept.
+
+**191. One config spelling, one mechanism, and a demo that proves the docs match the code** — measured on this
+box: the rename is **half-applied and points in opposite directions by entry point**. `src/config.mjs`
+(`CONFIG_KEYS`, used by `cli.mjs:142`) reads only `DURIG_DB` / `DURIG_SEAT_ROOT`, so `DURIAN_PI_DB=… node
+cli.mjs status` silently opens an empty `./rig.sqlite`; `scripts/clockin.mjs:236` accepts `DURIAN_PI_DB`
+**first**, then `DURIG_DB`; and `tui.mjs:42-43` treats `DURIG_TUI_DB` as the *deprecated alias* of
+`DURIAN_PI_TUI_DB` (D103) — the reverse precedence. `docs/FEATURES.md` documents 18 `DURIAN_PI_*` names,
+`docs/DELEGATE-CLOCKIN.md` says either works. Depends on: none. Measure: a single alias resolver with one
+documented precedence, plus a failing-first demo asserting that **every environment name printed in the docs is
+honored by the entry point the doc names** — the class of defect is docs teaching a variable the code ignores,
+which is undetectable by reading either side. Note for whoever takes it: the delegate's own `AGENTS.md` clock-in
+line carried the wrong spelling for multiple sessions, which is how an empty store gets mistaken for a quiet rig.
+

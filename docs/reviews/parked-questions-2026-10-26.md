@@ -146,3 +146,41 @@ Read-only, via the broker-served `queue` read and an offline dump — no second 
 > a row is genuinely still blocked, record `blockedBy` so it is queryable instead of prose. Deliver the
 > batch to `pm` as one intent with the per-row ids, gates and recommended transitions, which is what the
 > runbook prescribes.
+
+
+---
+
+## A. The fifteen held rows whose every gate is terminal (routing table, same audit)
+
+| row | to | gate | recommended |
+|---|---|---|---|
+| #3350 | qa | #3349 done | release — verify the docs-only landing |
+| #3377 | impl | #3343 done | release — landing list, mint order settled |
+| #3419 | impl | #3394 done | release — re-derive |
+| #3430 | qa | #3428 done | release — narrow verify |
+| #3452 | impl | #3274 done | **hold** — its cited evidence sha is unresolvable on this box (section C) |
+| #3456 | impl | #3455 done | release — landing list |
+| #3460 | impl | #3222 done | release — HEAD of the bug-fix cluster |
+| #3518 | impl | #3481 done | release — landing list |
+| #3535 | impl | #3448 done | release — landing list |
+| #3552 | impl | #3551 done | release — landing list |
+| #3607 | impl | #3606 done | release — the ref-deleter needs the non-author verify |
+| #3663 | impl | #3660 done | release — landing list |
+| #3726 | scribe | #3724 done | **hold** — also in section C |
+| #4339 | impl | #4293 done | release — watchdog + durable-down marker (ROADMAP 61/62) |
+| #4661 | qa | #4656 done | release, then re-measure the landing gate per the incident doc |
+
+Spooled to `pm` as operator-authorized intent `audit-15-orphans-and-5-parked` (file
+`selfdev.sqlite.broker.inbox/0001793077486541-253486-tcdytl.json`). **Spooled is not delivered**: the broker is
+down, so nothing has been read or transitioned. Delivery is confirmed by
+`selfdev.sqlite.broker.inbox.out/audit-15-orphans-and-5-parked.json` once the broker runs.
+
+## C. Fourteen non-terminal rows carry evidence nobody can re-check here
+
+90 of 178 distinct commit shas cited across the queue resolve nowhere — not this clone, not
+`vendor/pi-main/.git`, not `origin` after a clean `git fetch`. The non-terminal subset (the actionable one):
+**#3452 #3506 #3603 #3726 #3743 #3832 #3842 #4378 #4791 #4794 #4799 #4801** (plus two in the dump: 7 `held`,
+7 `deferred`). Before releasing any of them, either the history arrives from the machine the store came from, or
+the verifier must be told the cited commit is unavailable and must re-derive the evidence from `main`. The
+alternative is what already happened to **#4785**: marked `done`, its commit `500969f42` unmerged, and now not
+an object anywhere reachable.

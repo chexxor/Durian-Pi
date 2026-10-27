@@ -51,15 +51,26 @@ full-prefix cache miss; whether the delta path is taken on our endpoint is `unve
 read-only audit behind them (274 `held`, 22 carrying `blockedBy`, **15 whose gates are all terminal**). They
 await the operator's approval before anything is spooled to `pm`.
 
-**Blocker:** two operator rulings, not builds — (1) how cross-family verification holds while every seat is
-on one local model (`check` says `single-model-rig`, fix-now; ROADMAP 189), and (2) whether to recover the
-swept `item-*` branches/worktrees from the Windows rig before the unmerged work (`500969f42`, `8990303`,
-`#3454`) ages out entirely; see `docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`.
+3. **Half the queue's evidence does not exist on this machine.** Of **178 distinct commit shas cited in the
+   queue, 90 resolve nowhere** — not in this clone, not in `vendor/pi-main/.git`, not on `origin` after a clean
+   `git fetch`. They sit on 240 terminal rows and on **14 non-terminal rows** (#3452 #3506 #3603 #3726 #3743
+   #3832 #3842 #4378 #4791 #4794 #4799 #4801 …) whose verification evidence a seat cannot re-check. The swept
+   branches are a symptom of the same condition: **the store crossed machines, the git history did not.**
+   Repair from the old machine (`git push origin --all` there, `git fetch origin` here) or record the loss in
+   writing. Now a runbook: `docs/runbooks/workspace-move.md` (`last_verified: 2026-10-26`) and a check-rule
+   proposal as ROADMAP **190**.
 
-**Exact next command** (after the two rulings above):
+**Blocker:** three operator rulings, not builds — (1) how cross-family verification holds while every seat is
+on one local model (`check` says `single-model-rig`, fix-now; ROADMAP 189); (2) whether to recover the swept
+`item-*` branches and the 90 unresolvable commits from the Windows rig before they age out entirely; see
+`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`; and (3) whether the rig's evidence binding should
+move to store-native ids (ROADMAP 190), which decides how 165/167/170 are written.
+
+**Exact next command** (after ruling 2 — the history repair, because everything else cites it):
 
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json      # single-model-rig must stop being fix-now
+# on the Windows rig:  git push origin --all
+DURIG_DB=./selfdev.sqlite node intent.mjs pm --body-file .spike/delegate/intent-audit.md --request-id audit-15-orphans-and-5-parked
 DURIG_DB=./selfdev.sqlite node intent.mjs pm --body-file .spike/delegate/intent-memory.md --request-id memory-decompose
 ```
 
