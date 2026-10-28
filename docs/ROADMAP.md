@@ -3867,6 +3867,20 @@ and is now absent from disk *and* from `git ls-files` (see
 `docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`), so whoever lands 217 re-creates that file
 rather than extending it — and that is the first concrete cost of ROADMAP **233**.
 
+**Delegate progress (2026-10-28T21:5xZ, Linux, second session):** the refusal now reproduces **from a disposable
+checkout**: `node tools/broker-serve.mjs --dry-run` run in `/home/chexxor/Git/Durian-Pi-ops` (a `git clone` of the
+working checkout holding its own copy of `selfdev.sqlite`, `node_modules` symlinked, and `.env.rehearsal` carrying the
+three `DURIG_*` vars) prints `DRY RUN — no process started. A start would be refused: seat-shell-availability` in ~3 s
+while **both** checkouts' `git worktree list` stayed at 1 row — so rehearsing the channel costs nothing and risks the
+working checkout's ledger nothing. The **instruction text that must change together with the code** is operator-owned:
+`rig.selfdev.json`, seat `instructions`, the `## Tool calls: exact names` block, which today reads *"The shell tool is
+powershell, all lowercase"* and lists `- powershell({ command, timeout? }): command is required.` plus *"The seat root is
+already the working directory. Do not Set-Location into it; run the command directly."* On a POSIX host the matching pair
+is *"The shell tool is bash, all lowercase"* and `- bash({ command, timeout? }): command is required.` It is drafted here
+and **deliberately not applied**: a seat told to call `bash` while `powershell` is registered fails with `Tool bash is not
+available` — the same defect mirrored — so config and `src/seattools.mjs` must move in one change, and that file is the
+operator's (D155).
+
 **218. Move one deterministic gate inside the turn: after an edit, run the check the item already owes, and make the seat answer it.**
 *(devtools + qa; measured 2026-10-28)* Our gates fire after the fact — `cli.mjs check`,
 `src/textintegrity.mjs` (changed files only), the `demo/*.test.mjs` suite at review time. aider runs the gate
@@ -4246,6 +4260,17 @@ ledger on a moved workspace is data loss even when it is correct on a native one
 the fix is a scoping grant, not removal; and any fix that shells out to `git worktree list --porcelain` again must not
 re-introduce a second ledger reader (213's single-reader rule).
 
+**Delegate progress (2026-10-28T21:5xZ, Linux):** the erased ledger is no longer unrecoverable evidence. The pre-move
+drive is mounted here (`/dev/nvme0n1p3` at `/run/media/chexxor/0094126294125A8C`, the Windows system volume) and its
+checkout still holds the registrations this one lost; `git -C …/pi-opendurig worktree list --porcelain` plus that clone's
+`for-each-ref refs/heads` are now committed at `docs/incidents/evidence-2026-10-24-windows-ledger.txt` (84 lines). That
+file **is** the input 212's acceptance needs — the list of foreign registrations a prune must refuse — in git rather than
+in a directory the next sweep can clear. `tools/instrument-provenance.mjs` prints `git worktree registrations: N` on every
+run, so a collapse becomes a visible event: it prints `1` here, and would have printed `36` at the start of the previous
+session. Interim mitigation, operator-agreed and held for the rest of the session: **the working checkout is never the
+experiment** — rehearsals and any worktree-exercising run go in a disposable clone (`/home/chexxor/Git/Durian-Pi-ops`) —
+and no product demo was run from the main checkout, whose ledger stayed at 1 row throughout.
+
 **233. An instrument can be credited as landed in `docs/ROADMAP.md` and be absent from the repo: five files this
 session ran or read are gone, and nothing in the rig can see it.**
 *(pm + operator; measured 2026-10-28)* `tools/worktree-cleanup.mjs`, `src/worktree-cleanup.mjs`,
@@ -4274,3 +4299,21 @@ rows that cite them are amended to say the instrument is gone. *Blind spots:* re
 ("commit everything once and for all" is 214's discipline, not a blanket `git add -A`, which the work protocol already
 forbids); and the real defect behind the deletion may be 232 or something else entirely — 233 is about *visibility*, so
 it must not be closed by a restoration that leaves the sweep unexplained.
+
+**Delegate progress (2026-10-28T21:5xZ, Linux): the check exists, and the recovery question is answered "no".**
+`tools/instrument-provenance.mjs` (**46 ms**, read-only, runs from any checkout) prints `suite members: git=238
+disk=238` and diffs the two sets in **both** directions — `git`-only = tracked but deleted from disk, which the runner
+silently stops running and which `node demo/<name>.test.mjs` returns as `MODULE_NOT_FOUND`; `disk`-only = untracked, the
+only class the sweep destroyed — prints the cite census (`242 distinct backticked paths cited; 52 resolve to nothing;
+4 exist but are untracked`), prints `git worktree registrations: N`, and exits 1 on membership or ledger drift. Cite
+drift is **soft** unless `--strict-cites`, because a row legitimately cites *planned* paths (`src/host.mjs`, which #725
+would create) and other projects' trees (`docs/tutorials/30-agent-lifecycle.md` is pi's, not ours): the instrument
+therefore emits a **review queue, not a verdict**, and a seat closing 233 must make the predicate per-row ("cited as
+landed" vs "to be created"), which text parsing cannot decide. It filters `vendor/`, `./`-relative and `*.sqlite` cites
+after measuring them as noise. **Recovery, measured rather than assumed:** the eight files are absent from disk, from
+`git ls-files`, from `git log --all --diff-filter=A`, from all **137,427** store entries (**0** mention any of the eight
+paths — a delegate's own tool calls never enter the rig's store, so the store was never a recovery source for
+delegate-written work), from all **2,081** commit objects recovered out of the pre-move clone, from the Windows tree, and
+from NTFS `$Recycle.Bin`; and this host shows no snapshot tooling to a normal user (`/.snapshots`, `/home/.snapshots`
+absent, no `snapper` binary, `btrfs subvolume list /home` → `Operation not permitted`). So 233's "re-created, and labelled
+as re-created" branch is the only branch — see D156 for what the drive *does* recover.

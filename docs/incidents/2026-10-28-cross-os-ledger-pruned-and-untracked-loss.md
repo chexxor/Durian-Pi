@@ -85,3 +85,56 @@ list, is among the lost files, so the product's own regression for this is gone 
 3. Re-run the workspace-move inventory protocol (`docs/runbooks/workspace-move.md` Step 1) before any `up`/`worktree`
    verb, and treat `git worktree list` output as evidence, not litter.
 4. Do not start the channel from this checkout on this host until 212 + 214 + 217 + 232 land.
+
+## What the second session (2026-10-28T21:5xZ) could and could not recover, measured
+
+The other NVMe volume is the **Windows system volume** and is readable from Linux: `/dev/nvme0n1p3` mounted at
+`/run/media/chexxor/0094126294125A8C` (`nvme1n1p3` holds Linux `/` and `/home`). Under it:
+`Users/Alex/dsh-Projects/pi-opendurig` (the pre-move checkout, last Windows write **2026-10-24 22:08**),
+`pi-opendurig.land`, `pi-opendurig.worktrees` (the `stray-archive-20261021-104326` tree) and `tmp/durig-split-rehearsal/`.
+
+**1. The sweep destroyed nothing that was in git — the loss set is exactly the untracked files.** Comparing the Windows
+tree (Oct-24 era) against this checkout, **zero** files present there are absent here: `demo` 242 → 245, `tools` 1 → 12,
+`src` 56 → 57, `scripts` 17 → 17, `cli.mjs` 1 → 1. And after the event `git status --porcelain --untracked-files=all --
+demo tools src scripts` reports **0 untracked files**: every survivor of the sweep is tracked, every loss was not. That is
+the sharpest statement of the blast radius available, and it also says the sweep was never a `rm -rf demo/` — an
+Oct-24-era file would then be missing, and none is. (`.scratch/` surviving is still the one fact `git clean -fd` at the
+repo root does **not** explain, so the mechanism stays a named candidate, not a finding.)
+
+**2. The pre-move refs are restorable at effectively zero cost.** `git fetch <windows clone> '+refs/heads/*:refs/rescued/*'`
+created **32 refs in 0.022 s** and transferred essentially nothing: all 32 branch *tips* were already objects in this
+clone — they were **unreachable**, not missing (`git merge-base --is-ancestor 9f624ff4 HEAD` → false). Re-check:
+`git for-each-ref refs/rescued | wc -l`.
+
+**3. The unreachable pre-move history is in the Windows object store, and a fetch will not bring it.** Windows store:
+**21,756 objects** across **3 packs** + `multi-pack-index` (19 MB total) against this checkout's **9,285** — **13,057
+objects this clone lacks**. Copying only the three `*.pack` files into `objects/pack/` and running `git index-pack` on each
+raised the disposable clone to **22,335 objects**, `git fsck --connectivity-only` **clean** (dangling trees only), and
+surfaced **2,081 commit objects of which only 1,614 are reachable from refs — 467 commits exist only as unreachable
+objects**. Effect on the queue's evidence: of the 30 shas recorded unresolvable in
+`.spike/delegate/held-sha-unresolvable.json`, **23 resolve after the pack copy** and **6 resolve in neither clone**
+(`cfb4457`, `eb7e69c1e`, `5d8c6237a`, `e8fdab6`, `c04cfac`, `0c6fd7665`). A normal `git fetch` recovers **none** of them,
+because the protocol never sends unreachable objects.
+
+**4. Pitfall, learned the hard way in a throwaway clone:** copying the pack *auxiliary* files (`.idx`, `.rev`, `.mtimes`,
+`multi-pack-index`) corrupts reads — every object read then fails with `fatal: mmap failed: Permission denied` and
+`git cat-file` returns nothing. Copy `*.pack` only, then `git index-pack <pack>`. That mistake cost one rebuilt clone;
+the working checkout was unaffected (`git fsck --connectivity-only` clean there, 9,285 objects).
+
+**5. What the drive does not give back.** The eight instruments (§file-loss) are absent from the Windows tree
+(`ls "$W/demo" | grep -Ei "clock-skew|clock-step|verify-sweep|broker-serve|worktree-cleanup"` → nothing; that tree is
+Oct-24-era and they are Oct-25..28 Linux artifacts), from NTFS `$Recycle.Bin` (bounded `find -maxdepth 2 -iname
+'*test.mjs'` → nothing), from all **137,427** store entries (**0** mention any of the eight paths — delegate tool calls
+are not in the rig's store at all), and from all **2,081** recovered commit objects (`git log --stdin --diff-filter=A
+--name-only` over every commit object, reachable or not, matches only `tools/broker-serve.mjs`, `tools/channel-preflight.mjs`,
+`demo/next-pointer.test.mjs`, `demo/clockin-digest.test.mjs` — the last two are this project's own tracked history, and the
+first two appear only as adds in commits that are already in this checkout's lineage). No snapshot tooling is visible to a
+normal user: `/.snapshots`, `/home/.snapshots`, `/.snapshot` absent; no `snapper`; `btrfs subvolume list /home` →
+`Operation not permitted`.
+
+**6. The rehearsal path exists and is safe.** `/home/chexxor/Git/Durian-Pi-ops` = `git clone` of the working checkout +
+`cp selfdev.sqlite` + `node_modules` symlink + `.env.rehearsal` (`DURIG_DB`, `DURIG_CONFIG`, `DURIG_SEAT_ROOT`). From
+there `node tools/broker-serve.mjs --dry-run` evaluates the whole preflight and refuses on exactly one block,
+`seat-shell-availability` (ROADMAP 217), and **both** checkouts' `git worktree list` stayed at 1 row. Note the F12
+seat-root guard: a global `DURIG_SEAT_ROOT` with a *local* store/config is refused by `src/config.mjs`, so a rehearsal
+either copies the store to a global root or leaves `DURIG_SEAT_ROOT` unset (per-item worktrees) — the latter was used.

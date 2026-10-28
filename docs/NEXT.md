@@ -1,6 +1,7 @@
 # NEXT — current priority and exact next command
 
-**Last updated:** 2026-10-28T20:1xZ, delegate session (seat capability + a sweep that destroyed evidence). Linux box
+**Last updated:** 2026-10-28T21:5xZ, delegate session (operator ruled D156: pre-move Windows volume is the evidence
+authority, rehearsals go in a disposable clone; refs restored, provenance check landed). Linux box
 `Alex-Desktop-Win10` (Fedora `7.2.11-200.fc44.x86_64`), `node v24.22.1`, box zone `America/Chicago` (CDT = UTC−5; every
 timestamp here is **Z**, and note the host's own clock is suspect — see §INCIDENT). Read me first — do not re-derive the
 priority from the ~4,300-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200
@@ -36,24 +37,23 @@ DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json node cli.mjs queue --j
   | jq -r '.items[] | select(.status=="queued" or .status=="claimed") | [.id,.status,(.to//"-")] | @tsv' | wc -l   # the head of the queue: 0 today
 ```
 
-**Blocker:** five **operator** items, all in §OPERATOR OWES: (1) the ROADMAP 221 seat-root ruling, (2) permission to
-start the broker **on Linux** — which this session now recommends **withholding** until 212/214/217/232 land, (3) the
-definition of **"the queue drains"**, (4) a grant on what may prune/remove registrations in this checkout's ledger, and
-(5) the **commit-or-discard decision** on the untracked instruments (ROADMAP 233 — five files this session ran are gone
-and `git status` cannot show it). **History:** `docs/NEXT-ARCHIVE.md` — older sessions live there verbatim; this file
-stays a pointer.
+**Blocker:** the operator ruled (D156) that the start stays **withheld on ROADMAP 217** and rehearsals run in a disposable
+clone, never this checkout. Still owed by the operator: (1) the ROADMAP 221 seat-root ruling, (2) the definition of **"the
+queue drains"** (231), (3) a grant on what may prune/remove registrations here, (4) a grant to copy the Windows clone's **3
+packs** into this checkout — rehearsed: **+13,057 objects, `git fsck` clean, 23/30 cited shas resolve** — and (5) `sudo
+timedatectl set-local-rtc 0` (clock item **held** pending the explanation). **History:** `docs/NEXT-ARCHIVE.md`.
 
 ### Read-only baseline — run this before anything else (all verified working, Linux, 2026-10-28T20:1xZ)
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-git worktree list --porcelain | tee .spike/worktree-inventory-$(date +%Y-%m-%d)-after.txt   # 1 entry (main) — it was 36 at the start of the last session; see §INCIDENT
+git worktree list --porcelain | tee .spike/worktree-inventory-$(date +%Y-%m-%d)-after.txt   # 1 entry (main); the 36-row pre-move ledger is now COMMITTED: docs/incidents/evidence-2026-10-24-windows-ledger.txt
 node tools/channel-preflight.mjs --db ./selfdev.sqlite --rig ./rig.selfdev.json      # 3.3 s — §1–§7, incl. seat capability (217) and provider-era attribution (226)
 node tools/broker-serve.mjs --status      # 2.8 s; now also raises `seat-shell-availability` (217)
 node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 0.93 s: 91 non-terminal LANDING rows, 71 fully on main, ids printed
 node tools/latency-budget.mjs --db ./selfdev.sqlite      # 3.0 s: the two wall-clock currencies
 node scripts/clockin.mjs                                 # 2.6 s
-node tools/worktree-cleanup.mjs --dry-run                # FAILS: MODULE_NOT_FOUND — the instrument is gone and was never committed (ROADMAP 233)
+node tools/instrument-provenance.mjs                     # 46 ms: suite members git=238 disk=238, cite census, ledger size (ROADMAP 233); exits 1 on drift
 ```
 
 ## Rig state, re-measured 2026-10-28T20:1xZ (Linux) — re-read, do not trust

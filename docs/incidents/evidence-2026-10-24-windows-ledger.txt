@@ -1,0 +1,84 @@
+# Authoritative worktree/branch ledger as read from the PRE-MOVE Windows clone on 2026-10-28.
+# source: git -C /run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig worktree list --porcelain  (that clone's last Windows write: 2026-10-24 22:08)
+# why: this Linux checkout's own ledger went 36 -> 1 inside one delegate session (ROADMAP 232);
+#      .git/worktrees is a CACHE, not an archive — this file makes the evidence durable (tracked, committed).
+
+## git worktree list --porcelain
+worktree /run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig
+HEAD b4c86ea7689aeae5db7c7b8726cec464231009b6
+branch refs/heads/main
+
+worktree /run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig/.git/worktrees/item-1274/C:/Users/Alex/dsh-Projects/pi-opendurig/item-1274
+HEAD 421145d394b9bbc5e3339acf3c444a633bb49ffa
+branch refs/heads/impl-item-1274
+locked
+
+worktree /run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig/.git/worktrees/item-2788/C:/Users/Alex/dsh-Projects/pi-opendurig/item-2788
+HEAD a70fc279ffc21a2804fb157150aa71cc9f095a37
+branch refs/heads/impl-item-2788
+locked
+
+worktree /run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig/.git/worktrees/item-2993/C:/Users/Alex/dsh-Projects/pi-opendurig/item-2993
+HEAD ee651e084acd3032d5ed68e91a92b4ce76f2794b
+branch refs/heads/qa-item-2993
+locked
+
+worktree /run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig/.git/worktrees/item-4148/C:/Users/Alex/dsh-Projects/pi-opendurig/item-4148
+HEAD de994b9384046e12f4c8063a7f433bda7d66d666
+branch refs/heads/scribe-item-4148
+locked
+
+worktree /run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig/.git/worktrees/item-4748/C:/Users/Alex/dsh-Projects/pi-opendurig/item-4748
+HEAD 5f99849d814e99fbecf34f9a4ad72308283b8b89
+branch refs/heads/item-4748
+prunable gitdir file points to non-existent location
+
+worktree /run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig/.git/worktrees/item-4749/C:/Users/Alex/dsh-Projects/pi-opendurig/item-4749
+HEAD 6b1bcfe051d8878b2d572baf2bad864f96eab4c1
+branch refs/heads/item-4749
+prunable gitdir file points to non-existent location
+
+worktree /run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig/.git/worktrees/item-4750/C:/Users/Alex/dsh-Projects/pi-opendurig/item-4750
+HEAD eecfb4ad9d2503a5f2bdbf29a31f80de2dcdb51e
+branch refs/heads/item-4750
+prunable gitdir file points to non-existent location
+
+worktree /run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig/.git/worktrees/item-4789/C:/Users/Alex/dsh-Projects/pi-opendurig/item-4789
+HEAD 940ba073e5b781ff5eb08829f6480557bc77e0a0
+branch refs/heads/item-4789
+locked
+
+## for-each-ref refs/heads (name sha date)
+advocate-item-2630 f835a8d5b06a4f6d9ebff4e3db30977ffe504011 2026-10-22 11:58:57 -0500
+devtools-item-4054 4abd8ba23affc9c9905df9e6abce2af3ca09f949 2026-10-20 01:51:35 -0500
+devtools-item-4064 018dca78123812c8340ecc3d44ad70ebddbb5012 2026-10-20 16:49:09 -0500
+devtools-item-4083 51298666a4d1e2e95eed7b27c44cd482f978bb7d 2026-10-20 17:09:52 -0500
+impl-item-1274 421145d394b9bbc5e3339acf3c444a633bb49ffa 2026-10-17 02:26:31 -0500
+impl-item-2788 a70fc279ffc21a2804fb157150aa71cc9f095a37 2026-10-19 03:54:18 -0500
+item-148 05f1990097c40ddc485290385d181a1f723c1353 2026-10-14 02:07:48 -0500
+item-3033 ba5186c5a0a1ffe3625d67c5eefc0f30d11443af 2026-10-22 12:01:07 -0500
+item-4745 2ad2af7de099378359928b92f443a7ce26fb5a29 2026-10-22 11:56:28 -0500
+item-4746 81be8985990c20f3470252adbc074a9fd96c67f3 2026-10-22 12:03:07 -0500
+item-4747 9f624ff4641e65e38fc0bab745bacf5ffdc45a06 2026-10-22 12:03:29 -0500
+item-4748 5f99849d814e99fbecf34f9a4ad72308283b8b89 2026-10-22 11:30:02 -0500
+item-4749 6b1bcfe051d8878b2d572baf2bad864f96eab4c1 2026-10-22 12:14:29 -0500
+item-4750 eecfb4ad9d2503a5f2bdbf29a31f80de2dcdb51e 2026-10-24 21:25:57 -0500
+item-4752 91abf7cf051fcbd9931a475b5f4e6828a3a302de 2026-10-22 12:14:10 -0500
+item-4754 7aaf55e78321e754b756ff2d5deb85d59cb8c899 2026-10-22 12:12:12 -0500
+item-4755 1607ad13720a6f09c9640c1d5330b4b13f8c896a 2026-10-22 12:09:46 -0500
+item-4760 7aaf55e78321e754b756ff2d5deb85d59cb8c899 2026-10-22 12:12:12 -0500
+item-4761 f1246892b6af7c95cccc3bae912d0992485b2eeb 2026-10-22 12:02:40 -0500
+item-4767 7aaf55e78321e754b756ff2d5deb85d59cb8c899 2026-10-22 12:12:12 -0500
+item-4768 7aaf55e78321e754b756ff2d5deb85d59cb8c899 2026-10-22 12:12:12 -0500
+item-4772 7aaf55e78321e754b756ff2d5deb85d59cb8c899 2026-10-22 12:12:12 -0500
+item-4778 4a68f85265dab01fb6921eed18b282e18d387cd2 2026-10-22 12:26:08 -0500
+item-4785 7aaf55e78321e754b756ff2d5deb85d59cb8c899 2026-10-22 12:12:12 -0500
+item-4786 851c3e9cd1ebb698d6b69447a40ace3f72fc4e18 2026-10-22 12:18:13 -0500
+item-4787 7aaf55e78321e754b756ff2d5deb85d59cb8c899 2026-10-22 12:12:12 -0500
+item-4789 940ba073e5b781ff5eb08829f6480557bc77e0a0 2026-10-22 12:29:46 -0500
+item-4790 e979e08e6e3f4ab9edcb85a217b2733a5f7972f6 2026-10-22 12:18:31 -0500
+item-9002 c219ffb88379f40ccc0a2b883a820692ee3a927e 2026-10-17 17:57:57 -0500
+main b4c86ea7689aeae5db7c7b8726cec464231009b6 2026-10-24 22:08:33 -0500
+qa-item-2993 ee651e084acd3032d5ed68e91a92b4ce76f2794b 2026-10-19 18:05:34 -0500
+scribe-item-4148 de994b9384046e12f4c8063a7f433bda7d66d666 2026-10-20 17:24:27 -0500
+## worktree list --porcelain (the .land sibling, for completeness)
