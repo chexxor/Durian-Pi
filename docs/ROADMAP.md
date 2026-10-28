@@ -70,14 +70,36 @@ held it, and it was adapted onto current `main` as one-concern items: **#307** c
 - **M2 — Operator can see the rig. ✅ done.** `watch`/`log` human views, live
   stream on `send`, turn-grouped transcripts with timestamps, wrong-database
   guardrail (D18, D19, D20).
-- **M3 — Seats can do work, and the rig verifies it. ⏳ next.** Two things that
-  are one work item (D23): seats hold only the four queue tools, so they cannot
-  read a corpus or run a check; and `complete_work` is self-declared, with no
-  evidence attached and no verifier step. A verification the rig cannot run is a
-  promise, not a check.
-- **M4 — Interactive client over the same store.** Deferred by decision (D21),
-  not by accident. Blocked on choosing TUI vs browser, which needs an operator
-  ruling.
+- **M3 — Seats can do work, and the rig verifies it. ✅ delivered (re-derived from
+  code 2026-10-28, D141 — this list was stale since 2026-10-11).** Both halves named
+  above are in the tree: working tools are installed and **capability-narrowed**
+  (`src/seattools.mjs` — read/write/edit/shell/prepare_workspace for seats that produce
+  or check; `COORDINATOR_REMOVALS` at `:247` strips them from `pm`/`lead`), and a
+  completion carries evidence (`checkup.mjs:736,790` — `complete_work(<id>, <summary>,
+  {command, exitCode, artifact})`, with the `verification-without-evidence` and
+  `evidence-tree` rules live in `check`). **The undelivered half is independence, not
+  capability:** `check` still reports `single-model-rig` (fix-now) because all 12 seats
+  resolve to `local/iq3_s` — see ROADMAP 189 and D137/D140.
+- **M4 — Interactive client over the same store.** No longer "deferred by D21": the data
+  layer and a durable TUI exist; it is **parked on the operator's TUI Q2 and on dead local
+  sessions** (9 of the 19 `deferred` rows are TUI-adjacent), not on a missing prerequisite.
+- **M5 — The rig can say what a seat was allowed to do, and can remember what it saw.
+  ⏳ next — DELEGATE-PROPOSED, operator ratification owed (D141).** The enforcement
+  substrate first: a durable, queryable record of every mediation decision (172, the
+  `avc: denied` analogue — measured absent: `src/seatguard.mjs` returns `{block: …}` and
+  writes nothing), labels and `allow` rules **as data**, deny-by-default, reach attached to
+  the **claim** not the seat (173; `toolRemovalsFor`, `src/seattools.mjs:262` is per-seat
+  today), preceded by the `security` position (171, item 55's rule) — then the memory read
+  path over the transcript the rig already keeps (175 cache economics → 176
+  `search_history` → 161 A/B arms + the cache measure → 167/179 origin-bound write gate →
+  163 invariants → 165/166 → 168/169). Chosen because it is the only operator-prioritized
+  tranche (R3, R4 / D130) with **zero rows in the store** (measured: 161–169, 170–174,
+  175–184, 185–189 all 0 rows over 4,818), and because it needs no provider key, no second
+  model family and no GPU headroom — it builds failing-first against the faux provider.
+  The shape, not the machinery: SELinux's language, `audit2allow` synthesis, AppContainer/MIC
+  relabelling and per-call prompting are **rejected in writing** (ROADMAP §"what the security
+  report changes"); 174's OS-level backstop comes after 171 and never before a named escape
+  the hook layer does not stop. Case: `docs/reviews/milestone-choice-2026-10-28.md`.
 
 ## Gap analysis vs the research (2026-10-10)
 

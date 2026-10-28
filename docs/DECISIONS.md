@@ -4815,6 +4815,81 @@ for the operator's ruling 1 is unchanged in direction and cheaper than ever — 
 plus k ≥ 3 replication and symmetric pairs (198/199)**, not another single-pass prompt and not a download.
 Full record: `docs/reviews/verifier-gate-hardening-2026-10-28.md` §10.
 
+## D141 — The operator's "memory first / security precedes" rulings had ZERO commissioned rows; the proposed next milestone is the enforcement substrate, then memory (2026-10-28, delegate — OPERATOR RATIFICATION OWED)
+
+**What was decided.** The operator asked the delegate to choose the next major milestone. Chosen and
+recommended for ratification: **M5 — the rig can say what a seat was allowed to do, and can remember what
+it saw** (ROADMAP **171 → 172 → 173**, then **175 → 176 → 161 → 167/179 → 163 → 165/166 → 168/169**),
+with a week-one drain precondition. The case, every number in it measured in this session, is
+`docs/reviews/milestone-choice-2026-10-28.md`. **This entry records a recommendation and its reasoning; it
+is not an operator ruling** — R3/R4 (D130) are the rulings it rests on, and the operator ratifies or
+replaces the choice. The delegate **claimed, completed, deferred, routed and sent nothing**; a ready-to-spool
+`pm` intent sits unwritten-to-the-broker at `.spike/delegate/pm-intent-milestone-5.md` because the broker is
+down and the milestone is not yet ratified.
+
+**The measured defect that decides it — a ruling the store never received.** Searching all **4,818** queue
+subjects for the roadmap ids of the newest families: **161–169 → 0 rows, 170–174 → 0 rows, 175–184 → 0
+rows, 185–189 → 0 rows.** The operator ruled "memory first" (R3) and "security precedes" (R4) on
+2026-10-27; as of this session neither has a single row in the system of record. Meanwhile the queue is
+`done` 3,748 · `cancelled` 777 · `held` **274** · `deferred` **19** · **`queued` 0 · `claimed` 0**, the
+broker is `down`, and `attention` reports five seats `deferred_awaiting_answer` waiting on a human (#4813
+pm, #4354 impl, #4816 lead, #4817 devtools, #4814 qa2). **The team is not idle because the work is done; it
+is idle because nothing is releasable.** Of the 274 held rows: 105 are landing bookkeeping, 56 are
+registered backlog, 15 build, 9 verify; 98 cite shas, and of 103 distinct shas `git cat-file --batch-check`
+resolves **95** and returns `missing` for **8** — so **8 held rows cannot be released, only re-derived or
+cancelled** (with **1 worktree, 1 branch, 0 unmerged**: ROADMAP 190's finding on the live side of the queue).
+
+**Why M5 rather than the incumbent pointer (189).** 189/194–200 is blocked on an operator choice about cost,
+throughput, context headroom and availability (D140 proved the gate cannot rank the resident families at
+n = 8), and on GPU room the box does not have (A4000 **2,577 MiB** free, 3090 **305 MiB** free). M5 needs
+neither: `docs/reviews/memory-implementation-plan.md` §8 and ROADMAP 161 both record that the substrate and
+161/162/167 build **failing-first against the faux provider**, so no key, no second family, no server
+restart and no `up --refresh` is required. It is also the **cheapest half of the security question by the
+research's own verdict** — adopt the shape (one mediation point, labels not caller identity, default-deny
+`allow` as data, a durable record), reject SELinux's language, `audit2allow` synthesis, AppContainer/MIC
+relabelling and per-call prompting — and the report for it already landed and is consumed
+(`docs/reviews/zero-trust-zero-agent-research.md`, 35 KB).
+
+**The gaps are absences in this tree, re-verified here, not quoted from the roadmap.** `src/seatguard.mjs`
+answers with `{block: …}` at `:360,371,378,386,391,397,403,414` and persists nothing — there is no
+`avc: denied` analogue, so "which seat was refused, under which rule, when" is unqueryable (172). Reach is
+per-seat only (`toolRemovalsFor`, `src/seattools.mjs:262`; `COORDINATOR_REMOVALS`, `:247`), never attached
+to the claim (173). `search_history` matches nothing under `src/`, while pi-durable's BM25 `rankDocuments`
+(`vendor/pi-main/packages/durable/src/search.ts:52`) is imported only by `codemode` and `tool-search` — the
+append-only transcript (273,948 ids, no `DELETE FROM entries`) is the rig's rawest memory asset and no tool
+reads it (176). `defineDoc` is already in use (`src/rig.mjs:22,30,38,53,102`), so 177's facts-as-documents
+needs a new family, not a new substrate.
+
+**M3 is recorded DELIVERED, with the standing caveat.** Re-derived from code rather than from this file's
+2026-10-11 wording: working tools are installed and capability-narrowed (`src/seattools.mjs` —
+read/write/edit/shell/prepare_workspace for producing and checking seats, removed from coordinators by
+`COORDINATOR_REMOVALS`), and completion carries evidence (`checkup.mjs:736,790`,
+`{command, exitCode, artifact}`, with the `verification-without-evidence` and `evidence-tree` rules live).
+What is **not** delivered is independence: `check` still reports `single-model-rig` (fix-now) because all 12
+seats resolve to `local/iq3_s`. **M4 is not deferred-any-more-and-not-built**: it is parked on the
+operator's TUI Q2 and on dead local sessions, with 9 of the 19 `deferred` rows TUI-adjacent.
+
+**Baseline, re-measured on native Linux at the commit measured** (`Linux Alex-Desktop-Win10
+7.2.11-200.fc44.x86_64`): `check rig.selfdev.json` → `pass: true`, **0 errors, 62 findings**
+(`duplicate-item` 54, `citation-unresolvable` 5, `single-model-rig` 1, `verification-without-evidence` 1,
+`evidence-tree` 1); `node scripts/test.mjs` → **238/238 in 42.2 s**. Matches the previous pointer exactly,
+so nothing in this session's reading is a regression.
+
+**What this does NOT license.** It does not license the delegate to claim, complete, defer, route or release
+any row — the drain precondition is `pm`'s once the operator answers the five parked questions
+(`docs/reviews/parked-questions-2026-10-26.md` carries recommended replies). It does not settle the 189
+family question and must not be read as deprioritising it: 173's grants and 161's A/B arms are where the
+family ruling finally bites, and 182's "author seat and verifier seat must not share the memory-writing
+model" check is unmeetable while `single-model-rig` is red. It does not license 165/166 (any
+seat-writable memory tier) before 167's origin-bound gate, nor 174's OS-level backstop before the item 171
+position doc and a named escape the hook layer fails to stop. And it does not license treating the 274 held
+rows as capacity: 8 of them point at objects this clone does not have.
+
+**Standing rule.** A ruling that lands in `docs/DECISIONS.md` and `docs/ROADMAP.md` but never in a queue row
+is not a priority — it is a note. Every operator ruling must be checkable as **a row in the store within one
+session of the ruling**, and `status`/`attention` should say so when a ruled family has none (the same shape
+as 185–189 and 161–184 here: registered, prioritized, zero rows).
+
 ## D140 — Re-run with matched pairs and k = 3 replicates, the gate cannot rank the two resident families; the false-alarm finding is pooled to 78/78 and is a task-design question, not a model question (2026-10-28, delegate)
 
 **What was decided.** ROADMAP **198** (replicate the gate) and **199** (symmetric matched pairs) were built into
