@@ -58,3 +58,7 @@ pm-*.err
 # spool dirs above are already ignored, this is the `.out` sibling.
 *.sqlite.broker.inbox.out/
 nul
+
+# fetched vendor pages are re-fetchable evidence, too big to track (11 pages, 8.2 MB, largest 2.6 MB);
+# the tracked record is inputs/fetched/MANIFEST.md (url, date, HTTP, sha256, verified phrases)
+inputs/fetched/*.html
