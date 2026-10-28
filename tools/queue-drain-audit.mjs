@@ -206,7 +206,9 @@ const r = {
 	unresolvableShas: unresolvableShas.length,
 	unresolvableShaList: unresolvableShas,
 	orphanCandidates: orphan.length,
+	orphanIds: orphan.map((i) => i.id),
 	gateProseWithNoResolvableId: danglingRefs.length,
+	gateProseIds: danglingRefs.map((i) => i.id),
 	otherStore: other,
 	ms: ms(),
 };
@@ -218,10 +220,13 @@ process.stdout.write(
 		`HELD-DRAIN AUDIT  (${r.at})  ${items.length} rows in ${r.ms} ms`,
 		`  method: ${r.method.extractor}`,
 		`  histogram: ${Object.entries(hist).map(([k, v]) => `${k} ${v}`).join(" · ")}`,
-		`  held LANDING rows: ${landing.length} — ${landingDone.length} already fully on main (${pct}% of held = zero-build closable)`,
+		`  non-terminal (held+deferred) LANDING rows: ${landing.length} — ${landingDone.length} already fully on main (${pct}% of the 277 held = zero-build closable)`,
+		`    ids already on main: ${landingDone.map((i) => i.id).join(" ")}`,
 		`  non-terminal rows with an unresolvable citation: ${unresolvableRows.length} (${unresolvableShas.length} shas)`,
 		`  orphan candidates (all cited gates terminal — a LEAD, read the body): ${orphan.length}`,
+		`    ids: ${orphan.map((i) => i.id).join(" ")}`,
 		`  gate prose citing no resolvable id (route to pm as \`manual\`): ${danglingRefs.length}`,
+		`    ids: ${danglingRefs.map((i) => i.id).join(" ")}`,
 		other
 			? `  other store ${OTHER}: ${other.presentThere}/${other.citedUnresolvableHere} present, ${other.refReachableThere} ref-reachable, ${other.danglingThere.length} dangling, ${other.absentBoth.length} absent from both`
 			: `  other store: not probed (pass --other-store <path/.git> on a moved workspace)`,

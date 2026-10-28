@@ -5707,3 +5707,68 @@ demo/clockin-digest.test.mjs` (~1 s each) before committing it** — the same sh
 prose. Consequence for the pointer's substance, not just its shape: it now names real queue ids
 **#725/#726/#727** (ROADMAP 63/64/67 — the host supervisor, `durig daemon`, and the host chaos suite, all `held`) as
 the channel-resident work, and lists the **19 `deferred` rows waiting on the operator** that `clockin` reports.
+
+## D154 — The channel lever is not blocked on the channel: the head of the queue has been empty for 6.1 days, the top three rows are held by a clause nobody can evaluate, and the age field that would have shown all of it prints nothing (2026-10-28, delegate; measurement + operating decision, no operator ruling taken)
+
+**What I decided, and why.** NEXT.md named one blocker for the top-ranked wall-clock lever (#725/#726/#727): the operator's
+permission to start the broker on this box. I did not take that permission, and while preparing to ask for it precisely I
+measured the rest of the chain and found the framing incomplete, so I stopped and measured instead of pressing on. New
+instrument: **`tools/channel-preflight.mjs`** (2.0 s, read-only: one `queue` read, one `ps` read, store opened
+`readOnly:true`, no Harness) whose verdicts are **the product's own functions** — it imports `advancingConvIds`,
+`admissionVerdict`, `ADMISSION_DEADLINE_MS` (`src/broker.mjs`) and `selectWakes` (`src/driver.mjs`) and runs them over a
+store read, so "wake now / wake after pass 1" is not my re-derivation of the broker's rule. **Habit worth keeping: when an
+instrument must predict what the rig will do, import the rig's decision function rather than reimplementing it — the
+import costs 215 ms and removes the drift that makes a delegate's numbers untrustworthy.**
+
+**The four links, measured (Linux, `node v24.22.1`, 2026-10-28T19:20–19:23Z; box zone `America/Chicago`, CDT = UTC−5).**
+(1) broker pid 1771484 dead, heartbeat 2.2 h stale. (2) **`queued`=0 and `claimed`=0 of 4,821 rows**; all 296
+non-terminal rows are parked (277 `held`, 19 `deferred`), and **last `done` transition anywhere is
+2026-10-22T17:29:11.923Z — 6.1 days**. `selectWakes` therefore wakes 9 seats onto **parked rows only** (`hasParked`,
+`src/driver.mjs:108`): a broker started now would spend nine wakes and land nothing. (3) 9 `placed` + 2 `queued`
+unsettled submissions across 9 conversations make `advancingConvIds()` treat **9 of 12 seats as ADVANCING** right now
+(every one reads `skip:pending`); after pass 1's `reconcileStrandedSubmissions` all nine read `WAKE`. **The wedge does
+not survive a restart** — the reassuring answer the operator needed, and nothing printed it before. (4)
+`DURIG_SEAT_ROOT` unset → `resolveSeatRoot(persistedCwd:undefined)` resolves to the **main checkout**, classified
+`main-worktree`: the F12/F21 shape, and 221's persisted-cwd half still unruled.
+
+**The finding that outranks the measurement.** `#725`, `#726`, `#727` — the three rows NEXT.md ranks first — sit in the
+drain audit's **orphan-candidate** list because their cited gates **#662 and #710 are both `done`**. Their bodies say
+more: `SEQUENCING CONSTRAINT (operator): do NOT start the daemon-host work before #662/#710 are done **and the queue
+drains**; not ahead of TUI.` The ids cleared on 2026-10-17; **"the queue drains" has no definition anywhere in the tree**
+— no threshold, no predicate, no surface. So a prose operator constraint has been holding the top of the backlog since
+2026-10-16/17 and **cannot be shown satisfied by anyone**, which also means **`pm` alone cannot release those three rows**
+— had I trusted the audit's heuristic instead of reading the bodies, I would have asked `pm` to override an operator
+intent. Registered as **ROADMAP 231** (nameable, evaluable hold reasons; an *unresolvable* clause gets its own notice,
+distinct from a false one).
+
+**What prints nothing, and would have shown all of this.** `pendingAgeMs` (`src/broker.mjs:1341`, #4180) promises the
+admission age in the SKIP trace; measured in the retained `./selfdev.sqlite.broker.log` (80 lines, 6 passes): **45
+`SKIP … reason=pending` lines, 0 carry ` age=`**. No `submissions` row persists an admission timestamp; the only
+recovery is the entry join in `src/readapi.mjs:269-284`, which the broker's raw `inspection.submissions` never gets. And
+`admissionVerdict` — the ROADMAP 37(c) five-minute withdrawal — has **exactly one hit in `src/`: its own definition**, so
+it is inert, while `demo/admission-deadline.test.mjs` asserts it against hand-built rows that *carry* the field no real
+row has. Registered as **ROADMAP 229**; the channel-start surface gap is **230**.
+
+**A public correction against my own first draft of this session.** My first cut of the instrument aged the submission
+rows from `record.admittedAt ?? record.createdAt` and printed **`age n/a`**, and I nearly wrote it up as "the product has
+no admission timestamp". It does — **derived, not persisted**, at `src/readapi.mjs:269-284`. Re-checking before writing
+turned a wrong claim into the right one (the join exists in the read layer and *not* in the broker's own trace), and the
+instrument now does that join itself and says so in its own output. Two rules earn their keep again: **a `n/a` in your
+own output is a claim about your instrument until you have read the producer**, and **the two `queued` rows that still
+print `n/a` do so for a real reason** — a never-placed submission has no admitted entry to join, so nothing can age it
+out at all.
+
+**What I deliberately did not do.** No channel start and no writing verb on this workspace (`up`/`worktree`/`run`/`send`/
+`resume`/`doctor`): the operator grant is outstanding and 221 is unruled. **No intent spooled**, even though
+`stale-held-backlog.md` sanctions it as read-only: spooling is harmless while the broker is down but lands the instant it
+starts, and the brief I prepared tells `pm` to release rows whose first transitions create the first seat worktrees on
+this host — so the spool rides on the same operator decision as the start, and I left the command in NEXT.md instead of
+running it. No queue row claimed, released, cancelled, deferred or routed. Nothing pushed. A 40 h-old
+`cli.mjs watch` viewer (pid 154207) is reported rather than killed, because it is not mine and a viewer never wakes a
+seat (D11).
+
+**Instrument hygiene worth carrying.** `tools/queue-drain-audit.mjs` printed counts only, so the release brief would have
+sent `pm` off to re-derive ids; it now prints and JSON-emits **`orphanIds`/`gateProseIds`/`heldLandingIds`**, and its
+heading was corrected to the truth — the set spans **`held`+`deferred`**, not `held` alone (which is how `#4805` appears
+in both the on-main-landings set and the awaiting-human set). Same rule as D142's "print the pattern": **print the ids,
+not just the count**, or the next reader pays for the derivation twice.

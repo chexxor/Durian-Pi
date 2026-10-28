@@ -4106,3 +4106,79 @@ make a notice is a false green); truncating bodies tempts a seat to act on a sub
 the "read the body before releasing a row" instruction exists to prevent — so `--no-body` is a **delegate/viewer**
 convenience and must be loud in its own output header; and the 22.7 MB is also a symptom of a 4,821-row queue, which
 227's drain, not a formatter, is the answer to.
+
+## The channel-start pre-flight: what a broker start would actually do (2026-10-28, delegate; measured by `tools/channel-preflight.mjs`, evidence in `docs/reviews/channel-start-preflight-2026-10-28.md`)
+
+**229. The submission age the suppression trace and the admission deadline both depend on is never present on the row they read — measured `0 of 45` SKIP lines carry it, and `admissionVerdict` has no caller.**
+*(devtools; measured 2026-10-28, Linux)* `src/broker.mjs:1341` `pendingAgeMs` promises "the MEASURED age from that
+submission's `admittedAt`" (#4180) and `:1346` appends ` age=Ns` **when it is a number**. In the retained
+`./selfdev.sqlite.broker.log` (80 lines, span `2026-10-28T17:06:23.383Z → 17:09:58.308Z`, 6 passes) there are **45
+`SKIP … reason=pending` lines and 0 carry ` age=`**. The reason is a layering gap, not a formatting one: no
+`submissions` row persists an admission timestamp (columns are `id, conversation_id, request_id, status, record`, and
+the record for a `placed` row is `{conversationId,type,status,entry,id}`), and the only code that recovers the value is
+`src/readapi.mjs:269-284`, which joins the admitted input **entry**'s `model[0].timestamp` — a join the *broker's* raw
+`inspection.submissions` never gets. `grep -rn 'admissionVerdict(' src/` returns **exactly one hit: the definition
+(`broker.mjs:879`)**, so the ROADMAP 37(c) five-minute withdrawal is inert, and `demo/admission-deadline.test.mjs`
+asserts it against hand-built rows that **carry** `admittedAt` — a shape no real row has. Measured consequence on this
+store: 11 unsettled rows (9 `placed`, 2 `queued`); the 9 age cleanly to 2.3 h once the entry join is applied, while the
+2 `queued` rows (`requestId memory-decompose-v2`, `26d1d943-…`, at the head of **pm's** conversation) have **no admitted
+entry at all**, so they can never be aged out. Net effect for the operator: *a 2.3-hour stalled seat and a 2-second-old
+admission print identically on every surface.*
+*Owner:* devtools · *Where:* one shared "when was this submission admitted" derivation, used by the attention surface,
+the SKIP trace and the reconciler (`src/readapi.mjs`'s join hoisted into a place `src/broker.mjs` can call, or persisted
+on the submission at admission time — the honest fix, since a never-placed row has no entry to join); then **call**
+`admissionVerdict` from the pass that owns `queued` rows, and make `demo/admission-deadline.test.mjs` build its rows
+from a real store read so the wiring is asserted, not just the pure function · *Acceptance:* a `SKIP … reason=pending`
+line carries ` age=` for a stalled conversation; a `queued` row older than `ADMISSION_DEADLINE_MS` is withdrawn by a
+pass and logged; a never-placed row says *why* it cannot be aged rather than printing nothing; the demo fails if
+`admittedAt` stops being derived.
+*Blind spots:* do **not** close this by making the trace print a plausible number (that is the defect class #4180
+exists to expose); persisting `admittedAt` at admission is a schema touch and must keep old rows readable; and
+withdrawing a `queued` submission is a **write** — it must not fire while a live generation slot legitimately holds
+that seat (`src/attention.mjs`'s `admitted_not_started` suppression, ROADMAP 37a), which is why `advancing` is the first
+branch of the verdict.
+
+**230. Nothing on the rig answers "what happens if I start the delivery channel?" — and the head of the queue was
+empty for 6.1 days while the channel was the top-ranked lever.**
+*(devtools; measured 2026-10-28)* `tools/broker-serve.mjs --status` answers process liveness, spool depth, provider
+completion and tree dirt — and **not one of the two facts that decide the start**: the queue's **claimable** count and
+the **unsettled-submission** set. Measured: `queued=0 claimed=0` of 4,821 rows, all 296 non-terminal rows parked
+(277 `held` median 213.5 h, 19 `deferred`), last `done` transition **2026-10-22T17:29:11.923Z**; and 9 `placed`
+submissions make `advancingConvIds()` count **9 of 12 seats as ADVANCING**, so `selectWakes` returns `skip:pending` for
+every one of them *today* and `WAKE` for all nine *after pass 1's reconcile*. `cli.mjs status` spends **22.7 MB** and
+still does not print either fact (228). The delegate had to write `tools/channel-preflight.mjs` (**2.0 s**, read-only,
+imports `advancingConvIds`/`admissionVerdict`/`selectWakes` so the verdict is the product's own) to see it.
+*Owner:* devtools · *Where:* `src/attention.mjs` (two kinds: `no_claimable_work` when `queued` is 0 while parked rows
+exist, and `wake_suppressed_by_stale_submission` naming the conversation and its age — the 229 derivation feeds it) +
+`cli.mjs status`/`watch` (a `channel` block: claimable / parked / unsettled-submission counts, small by construction) +
+`docs/COMMANDS-AND-THE-BROKER.md` · *Acceptance:* with an empty claimable head, `status` says so in bounded bytes
+rather than 22.7 MB; a demo places a submission, kills its owner, and asserts the notice names the conversation and the
+age before any wake is attempted; the counts in that block equal what `tools/channel-preflight.mjs` prints, so the
+instrument and the product cannot drift apart.
+*Blind spots:* "no claimable work" is a **notice, not a fix** — releasing is `pm`'s verb and the delegate must not gain
+a CLI shortcut that mimics it (that would be a new write path around the queue, D24); the counts must come from the same
+single broker-served read as everything else (D11), not a second Harness; and a `WAKE` verdict predicted for pass 1 is a
+*prediction* about reconcile — say so in the surface, or operators will read it as a promise.
+
+**231. An operator sequencing constraint written in prose can be un-evaluable forever, and it is holding the three
+highest-priority rows on this rig: "…and the queue drains".**
+*(pm + lead; measured 2026-10-28)* `#725` (impl), `#726` (devtools), `#727` (qa) — the rows `docs/NEXT.md` ranks first,
+and which the drain audit lists as **orphan candidates** because their cited gates **#662 and #710 are both `done`** —
+carry in their bodies: `SEQUENCING CONSTRAINT (operator): do NOT start the daemon-host work before #662/#710 are done
+**and the queue drains**; not ahead of TUI.`. The id clauses clear; **"the queue drains" is defined nowhere** — no
+threshold, no predicate, no surface — so the constraint can never be shown satisfied and the three rows have been
+`held` since 2026-10-16/17 while the rig's largest measured lever stays unpulled. This is the same class as
+`docs/WORK-ITEM-SCHEMA.md` §4-R5 (`blockedBy` must be queryable, not prose) and the reason
+`tools/queue-drain-audit.mjs`'s orphan heuristic is a **LEAD** rather than proof: a row can have all gates terminal and
+still be correctly parked.
+*Owner:* pm (hold reasons must be nameable) + lead (the state model that carries them) · *Where:*
+`src/rig.mjs`/`src/queue-lifecycle.mjs` (a `holdReason`/`blockedBy` record with an evaluable clause — gate ids, a
+named predicate like `queue.drained`, or an explicit `operator:` token that only the operator can clear) +
+`src/attention.mjs` (a notice for a hold whose predicate is *unresolvable*, distinct from one whose predicate is false) +
+`docs/WORK-ITEM-SCHEMA.md` R5 and `docs/WORK-ITEM-LIFECYCLE.md` §8 · *Acceptance:* #725/#726/#727 can be read as "held
+because clause X, and X's current value is Y" instead of prose; an unresolvable clause raises its own notice; the drain
+audit's orphan list excludes rows whose hold reason is an uncleared operator clause.
+*Blind spots:* making the operator clause machine-clearable must not let a seat (or the delegate) clear it — the grant
+stays the operator's; do not "fix" this by force-releasing #725-727 to unblock the demo, that destroys the operator's
+intent record; and a named predicate list is a small vocabulary, not a query language (invent nothing before a second
+consumer exists — the ROADMAP 27 discipline).

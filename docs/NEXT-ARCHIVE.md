@@ -7,7 +7,9 @@
 > `2026-10-27T23:20Z` block was superseded by the whole-module-control session (D139), and again the same day when
 > that `2026-10-28T01:35Z` block was superseded by the replication-and-matched-pairs session (D140), and again
 > the same day when the `2026-10-28T07:50Z` block was superseded by the workflow-instruments session (D144).
-> Ordinary
+> that `2026-10-19` block was superseded, and on 2026-10-28 the wall-clock session's `## CLOCK-OUT (2026-10-28,
+> delegate — wall-clock measurement session)` block was cut here verbatim when the channel-start pre-flight session
+> (D154) superseded it. Ordinary
 > sessions do NOT append here — only a CUT does, and a cut moves whole `## NEXT SESSION` blocks unedited.
 > Proof of a cut: the moved block is byte-identical at the tail of this file, and `git log -p docs/NEXT.md`
 > still carries the whole live file as it was before the cut.
@@ -6841,3 +6843,32 @@ unprovisioned here; `start-all.mjs:37-39` calls a nonexistent `cli.mjs broker`; 
 without fixing it in the same change (D150 §3). `tools/` is not prettier-formatted — reformatting one instrument inside
 a functional change is churn.
 
+
+## CLOCK-OUT (2026-10-28, delegate — wall-clock measurement session)
+
+**Done and verified.** The whole-rig wall-clock budget in two currencies — `docs/reviews/wallclock-budget-2026-10-28.md`,
+instrument `tools/latency-budget.mjs` (**2.9–3.0 s, read-only**: store opened `readOnly:true`, `status` is a viewer,
+D11), ruling **D153**, new rows **ROADMAP 225–228**, `tools/README.md` row + three habits (index before probe;
+`node --check` before running a new tool — 0.02 s, saved ~6 min; project big reads, never dump). Suite at last full run:
+**238/238 in 41.1 s, exit 0**. Commits `48eb6a6` `8f8052c` `3dd0156` `41a846b` `b793a02`.
+**Two claims I corrected in public (DECISIONS D153 correction + this file):** (a) "`queue --to engineer` → 96 open rows
+/ 3,755 non-terminal" had been copied across sessions; the verb ignores all arguments and the true census is **296
+non-terminal** — and the instrument printed `nonterm: 296` from its first run while prose said otherwise, which is the
+argument for re-measuring instead of re-reading; (b) "13 registered worktrees, no `D:\`" was clock-in's store-derived
+*persisted* seat roots, not registered trees — this clone has **1 worktree, 0 seat worktrees**.
+**Pitfall for the next editor of this file:** the pointer has **two executable readers** — `demo/next-pointer.test.mjs`
+(requires the first `## NEXT SESSION` before any `## CLOCK-OUT`; `**Current item:**`; a `#NNN` id; a command containing
+`node cli.mjs`; its own `**Blocker:**` line; ≤200 lines) and `demo/clockin-digest.test.mjs` (digests only that section,
+so **the `NEXT-ARCHIVE.md` link must be inside the pointer body**). Restyling NEXT.md without them turns the suite red —
+it went red twice on my rewrite and is green after this cut. After editing this file run:
+`node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs` (~1 s each).
+**Unverified deliberately:** no seat woken beyond read-only identity probes; no write verb on this host (broker down by
+choice since 2026-10-28T05:35Z, 0 STRANDED); no queue row claimed/completed/deferred/released; no push. The review's
+ranking is falsifiable and the test is written into D153: re-measure after one resident-broker day and compare
+(`node tools/latency-budget.mjs --db ./selfdev.sqlite --json > .spike/latency-$(date +%F).json`, 11.9 KB).
+**Notes taken** (pitfalls + speed-ups): `tools/README.md` (index-before-probe, `--check`, project-big-reads, `jq`
+recipe); this file's §DO-NOT-FIX; `.scratch/` is untracked and **not** gitignored while `.gitignore:21` ignores
+`.spike/` — one line for devtools to pick one scratch-root rule. `clockin` also printed a NOTE worth keeping: **no CLI
+command prints a seat's persisted cwd** (`ps`/`status` omit it), so a cleared rig-file field is not evidence the seat
+root is right — read a seat's own `seat_root` tool result, or `cli.mjs send <seat> seat_root`; that is exactly what
+221 asks for.
