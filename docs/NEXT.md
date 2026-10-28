@@ -83,12 +83,21 @@ Both need the broker up to confirm `delivered`. Then let `pm` decompose: the del
 **Exact next command** (measure first, then the one question):
 
 ```bash
+node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 1.2 s; prints its own regex; see the number rule below
 DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json
+node demo/next-pointer.test.mjs   # when you only touched docs, THIS first — ~40 s cheaper than the whole suite
 node scripts/test.mjs
 node scripts/clockin.mjs          # the bounded digest, not whole files
 git fetch --dry-run=off --quiet origin && git rev-list --left-right --count refs/remotes/origin/main...main
 # ^ only if the operator grants a fetch; expected 0 33 until a push happens
+grep -c "check_rule: null" docs/runbooks/*.md | grep -c ':1'   # 39 today — 0/39 runbooks can re-test themselves
 ```
+
+**The number rule (D142):** the audit prints the regex that produced it. `heldLandingAlreadyOnMain` is **71 today**
+(floor 7, case-insensitive `LANDING (LIST|ENTRY)`; the same run at `--floor 8` returns **2**, which is the extractor
+being blind, not progress). If that number is still 71 at the next clock-in, the drain has not been worked — that is the
+falsifiable form of "soon enough", and it is one second to check rather than a four-minute audit. Counts in this file
+moved when the pattern moved (86 → 91 landing rows, 67 → 69 orphan candidates): publish the pattern with the count.
 
 Expected: **`pass: true`, 0 errors, 62 findings, `single-model-rig` present**; **238/238 in ~42 s**; digest under
 its 200 B/line budget (`docs/NEXT.md` ≤ 200 lines).
@@ -99,8 +108,8 @@ ref-reachable — they will not transfer); use `branch -a --contains` to prove r
 `refs/recovered/*` or `refs/archived/*` — use `rev-list` over every ref tip); read the `citation-unresolvable`
 rule's 4 findings as a clean bill (its `{8,40}` floor is blind to 7-char citations); write to the Windows repo
 (`update-ref refs/recovered/*`) without the operator's grant; quote a held-row count without the regex that
-produced it; treat `all-cited-landed` as proof outside the `LANDING LIST/ENTRY` family (47 of the 117 need their
-bodies read — #994, #2217 are legitimate); build a memory tier (165/166) before 167's gate, or an OS backstop (174)
+produced it; treat `all-cited-landed` as proof outside the `LANDING LIST/ENTRY` family (the instrument reports **91**
+such held rows, **71** already landed — the rest need their bodies read; #994, #2217 are legitimate); build a memory tier (165/166) before 167's gate, or an OS backstop (174)
 before 171's position doc; add a second summarizer next to pi-durable's compaction (176's rule); cite a git sha as
 durable evidence (D133 — `entries.id`); route `qa`/`qa2`/`auditor` at `ministral-3-14b-reasoning` (D137 stands) or
 edit `rig.selfdev.json` model fields (the family ruling is the operator's); run k = 3 gate arms without checking free

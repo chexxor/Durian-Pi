@@ -207,3 +207,32 @@ commit `6a8180b` or a runbook commit **about the defect**, not the original land
 clear them. For the `cfb4457` family (#1779–1782, 1786, 1788) `--grep` returns **0** commits. And #4804
 (deferred → impl) is the team's own row about this: "THE NINE SHAS ARE NOT REACHABLE — qa2 measured that
 `refs/heads/archived/` does not contain …". Route the six to that row rather than opening a seventh.
+
+## 10. Making these land (the operator asked how this gets *done*, not just written down)
+
+The honest starting fact: **prose is not a control here, and this rig already measured that.** All **39 runbooks carry
+`check_rule: null`** (`docs/runbooks/_template.md`: *"optional: the check rule that re-tests this"*) — the slot for a
+self-re-testing procedure exists and is filled **zero** times. `src/citation.mjs`'s own header says the same thing about
+the fix it shipped: *"a runbook sentence did not prevent that and would not catch the next one."* So the improvements
+below are split by **what kind of thing they are**, because only one kind can be enforced by a promise.
+
+| # | Improvement | Kind | Owner | Artifact that proves it | Re-test command | What a lapse looks like |
+|---|---|---|---|---|---|---|
+| 1 | One-process audit (1 queue read, 1 `cat-file --batch-check`, 2 `rev-list`s) instead of ~250 per-sha `git` spawns and a 21 MB snapshot re-parsed 5× | **delegate instrument — DONE this session** | delegate | `tools/queue-drain-audit.mjs` (precedent: `tools/model-probes/`, `measure(...)` commits) | `node tools/queue-drain-audit.mjs --db ./selfdev.sqlite` → **1.2 s**, prints its own regex | the number stops being re-measured, so the next session quotes a stale one |
+| 2 | *"publish the regex with the count"* (D142) | **now mechanical, not behavioural** | delegate | the instrument **prints its extractor line and takes `--floor`**, so a count cannot leave the tool without its pattern | `… --floor 8` vs `… --floor 7` | a count appears in a doc with no extractor line next to it |
+| 3 | Reachability proven over every namespace, never `branch -a --contains` | **now mechanical** | delegate | the instrument hard-codes `for-each-ref` → `rev-list`, and keeps `refs`-reachable ≠ `landed` as **two** separate sets | same run: `rev-list over 46 ref tips -> 1595; main -> 1563` | an "on no ref" claim in a doc that cites `branch -a` |
+| 4 | Lower `citation-unresolvable`'s floor 8 → 7 **plus an ambiguity check** (~84 % of the 7-char tokens resolve, and a 7-char prefix can name a *different* object) | **team work — needs a row** | `pm` decomposes → impl/devtools | a registered rule id in `src/checkup.mjs` | `node cli.mjs check rig.selfdev.json` | 190's owed half stays "done" at 4 findings while 39 rows sit non-terminal |
+| 5 | Fill `check_rule:` on `stale-held-backlog.md` (and the other 38) so re-running the procedure is a **finding**, not a memory | **team work — needs a row** | `pm` → devtools | non-null `check_rule:` + the rule it names | `grep -c "check_rule: null" docs/runbooks/*.md` → today **39**, target lower | the audit is "remembered" by whoever happens to read the runbook |
+| 6 | `completion-without-artifact` detector (the `#4785` hole) | **team work — already an owed row**, not new | `pm` | a rule id; `#4785` stays open until it exists | `check` output | `done` rows with no diff keep arriving |
+| 7 | Land the 71 zero-build rows | **team work — needs the operator's ruling first** | `pm` (every `release`/`cancel` is its transition) | rows leaving `held` | re-run #1: `heldLandingAlreadyOnMain` should fall from **71** toward 0 | it stays **71** next session — that is the falsifiable "not soon enough" |
+
+**The forcing function is the digest, not my good intentions.** `scripts/clockin.mjs` prints the pointer's next-command
+block verbatim into a bounded 20 KB digest, so anything in that block is read by the next session by construction. Re-run
+#1 is now in it (it costs 1.2 s, which is why it will actually be run). Anything *not* in that block, I will not claim
+assurance for.
+
+**What I deliberately did not do:** register rows, claim, complete, cancel, release, or route anything (§Do: those are
+`pm`'s ActiveRecord transitions); edit `src/checkup.mjs`, `src/citation.mjs`, or any runbook's `check_rule:` line (items
+4–6 are the team's, and the delegate writing them is exactly the drift AGENTS.md forbids). The instrument in `tools/` is
+a *measurement*, delegate-precedented, and reads the store only — graduating it into a check rule is the team's call,
+which is what the staged `pm` intent asks for.
