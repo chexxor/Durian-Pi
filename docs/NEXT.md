@@ -11,7 +11,7 @@ roadmap.
 **Rig:** `rig.selfdev.json` · **Store:** `./selfdev.sqlite` (274,068 records; 30,944 submissions) · **Queue census**
 (`node cli.mjs queue --json | jq -r '.items[].status' | sort | uniq -c`): **4,821 items = 3,748 `done` / 777
 `cancelled` / 277 `held` / 19 `deferred`** — so **296 non-terminal rows**, by seat: impl 177, scribe 44, devtools 35,
-qa 21, security 6, pm 5, lead 5, auditor 2, qa2 1 (the degenerate seat). **Branch:** `main` @ `8f8052c`.
+qa 21, security 6, pm 5, lead 5, auditor 2, qa2 1 (`qa2` is a registered seat, `rig.selfdev.json:53`). **Branch:** `main` @ `3dd0156`.
 **Worktree (Linux-native — corrected 2026-10-28 by direct measurement, an earlier note in this file was wrong):**
 `git worktree list --porcelain` on this clone returns **exactly 1 entry** (`/home/chexxor/Git/Durian-Pi` @ `16cbb60`,
 branch `main`); there are **no seat worktrees** (`/home/chexxor/Git/Durian-Pi-worktrees/` does not exist, there is no
@@ -100,7 +100,7 @@ it was a number from a different structure. The measured census is the one in th
 node cli.mjs queue --json | jq -r '.items[] | select(.status=="held" or .status=="deferred")
   | [.id,.status,(.to//"-"),(.subject//""|.[0:60])] | @tsv'      # 296 rows, 75 KB not 21 MB
 node tools/queue-drain-audit.mjs          # 1.0 s: of the 277 held, 91 LANDING rows, 71 already fully on main
-node tools/latency-budget.mjs --db ./selfdev.sqlite   # 3.0 s: held idle a median 213.5h; deferred a median 145.1h
+node tools/latency-budget.mjs --db ./selfdev.sqlite   # 3.0 s: held idle a median 213.5h (max 289.8h); deferred a median 145.2h
 ```
 
 Before starting seats, have `pm` decompose from that projected list rather than assuming the backlog is parked.
@@ -152,6 +152,10 @@ measures.
   the strength of the default file — read `src/config.mjs loadConfig` first (D153 §4).
 - **`tools/latency-budget.mjs` is untested like most of `tools/`** (`tools/README.md` rules). If its `--json` shape ever
   becomes a contract that `verify` consumes, **it needs a demo** — that is the moment to add one, not now.
+- **`.scratch/` is untracked and NOT gitignored** (`.gitignore:21` ignores `.spike/` only), and it already holds other
+  sessions' scratch (`audit-before.json`, `calibrate-verifier.mjs`, …). Consequence: `git status` noise at every clock-in
+  and a real chance a scratch file gets committed by a `git add -A`-minded seat. One line for `devtools`: either ignore
+  `.scratch/` or fold it into `.spike/` — do not leave two scratch roots with different rules.
 
 ## If a new capability is being considered
 

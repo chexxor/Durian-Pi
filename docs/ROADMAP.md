@@ -4062,8 +4062,8 @@ change model), so one class-blind halt is worse than none; and the store's error
 (this store came from Windows), so a class counter must name the provider it saw it on.
 
 **227. Whether a `held` row is now drainable is computable, and only a delegate instrument computes it.**
-*(qa + pm; measured 2026-10-28)* **277 `held` rows sit a median 213.5 h (max 289.7 h) since their last transition and
-19 `deferred` rows a median 145.1 h**; `node tools/queue-drain-audit.mjs` (1 s) measures **91 held LANDING rows, 71 of
+*(qa + pm; measured 2026-10-28)* **277 `held` rows sit a median 213.5 h (max 289.8 h) since their last transition and
+19 `deferred` rows a median 145.2 h (max 180.1 h)**; `node tools/queue-drain-audit.mjs` (1 s) measures **91 held LANDING rows, 71 of
 them already fully on main — 26% of the held backlog is zero-build closable**, and 69 rows are orphan candidates whose
 cited gates are all terminal. The same condition was measured on 2026-10-19 as **153 held rows / ~51 with terminal
 gates** (`docs/runbooks/stale-held-backlog.md`, INC-2026-10-19): the runbook, the delegate instrument and `pm`'s

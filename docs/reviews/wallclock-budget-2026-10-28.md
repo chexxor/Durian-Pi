@@ -32,6 +32,10 @@ WORK, `claimed → held` = HELD):
 | **WORK** — `claimed → done` | 868.6 h | 13.7% |
 | **HELD** — `claimed → held` | 472.0 h | 7.4% |
 
+Churn is small but expensive: **17 done rows (0.5%) were re-claimed** after a hold, and they hold **4.3%** of item
+latency at a median **5.1 h** against a single-claim median of **14.2 min** — a claimed→held→claimed→done loop costs
+~21× the median, which is why 227's drain is worth doing before adding new decomposition.
+
 But WAIT is not one disease. Per-day claim-wait p50 (the throughput/latency curve, done-count then p50/p95):
 
 ```
@@ -153,8 +157,9 @@ correctness problem (**215/216**), so do not trade hours for it.
 3. **Stop burning wakes on a dead provider: 14,377 generations on one 402, 59.2 h of error-ended busy time (14.7%).**
    New: **226**.
 4. **Drain the parked backlog instead of re-auditing it every session: 277 `held` rows idle a median of 213.5 h
-   (max 289.7 h), 19 `deferred` a median of 145.1 h — and `queue-drain-audit` measures 71 of the 277 as already fully
-   on main (zero-build closable, 26% of held).** The logic exists only as a delegate instrument plus human diligence.
+   (max 289.8 h), 19 `deferred` a median of 145.2 h (max 180.1 h) — and `queue-drain-audit` measures 71 of the 277 as
+   already fully on main (zero-build closable, 26% of held).** The logic exists only as a delegate instrument plus human
+   diligence.
    New: **227**.
 5. **Make the queue readable: `cli.mjs status` prints 22,748,093 bytes and `cli.mjs queue --json` prints 21,178,646
    bytes** because each serializes all 4,821 rows with full bodies, and `watch`/`tui`/every scripted delegate pays it each
@@ -198,3 +203,12 @@ two prior sessions re-derived reads that had shipped. The instrument in §0 is t
 the time go", and it now costs 3.0 s instead of the ~1 h of SQL spelunking it replaces (including the `store-probe-identity`
 traps: stored enum strings carry embedded quotes, so a SQL `kind='pi.generation'` predicate matches nothing — the
 instrument reads every task row and strips the quotes in JS with `unq()`).
+
+Third, and the one the falsification test needs: **save the machine-readable run and diff it, rather than re-reading
+prose.** `node tools/latency-budget.mjs --db ./selfdev.sqlite --json > .spike/latency-$(date +%F).json` is **11.9 KB**
+(keys: `span, items{rows,done,nonterm,waitMs,workMs,heldMs,totalMs}, generations, generationBusyMs, modelBusyMs,
+toolBusyMs, compactionBusyMs, longTail, maxConcurrent, errorGenerations, errorBusyMs, tokens`), and comparing two days
+is one `node -e` over the two files. Note the honest embarrassment that settles the point: the instrument printed
+`items.nonterm = 296` from its first run, while prose carried forward in `docs/NEXT.md` claimed "3,755 non-terminal /
+96 ready" for sessions — **the probe was right and the copied number was wrong**, which is the whole argument for
+re-measuring instead of re-reading (see D153's correction).
