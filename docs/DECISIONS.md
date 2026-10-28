@@ -5250,3 +5250,43 @@ those clones were re-cloned; if it exits 0, someone re-vendored and the five rev
 If ROADMAP **207** is scheduled with a *security control* framing rather than a review-authority framing, the caveat
 above was not read. If either research prompt is answered without the version/date on each citation, the evidence
 discipline in that prompt was decorative.
+
+## D147 — What a seat turn actually costs locally, and why the delegate did not open the delivery channel (2026-10-28, delegate; measurement + operating policy, no operator ruling sought)
+
+**Why this is a decision and not a measurement note.** Three sessions ended with "the delivery channel is the critical
+path". The channel turned out to be *reachable* — both providers answer, the broker is simply down — and the delegate
+still did not open it. That choice needs a recorded reason, or the next session reads "critical path" as permission.
+
+**1. A preflight is what makes an operator-owned hazard visible before a write, and a start is gated behind explicit
+acks.** `tools/broker-serve.mjs --dry-run` (new, delegate-side; the productized half is ROADMAP **209**) refuses a
+start on two facts the old runbook Diagnose block cannot see: a seat whose persisted cwd does not resolve on this OS,
+and tracked files modified in the live tree that a woken seat would edit (F12/F23). Neither is a bug to fix and neither
+is the delegate's to waive — row 1 is a rig-file edit, row 2 is the operator's own uncommitted work. **The policy:** a
+delegate may drive the loop, but a start that would (a) edit a tree it does not own or (b) wake a seat into an
+unresolvable root needs an ack flag, and the ack is the operator's. `--yes-pm-wakes` exists for exactly that reason:
+the two spooled intents are addressed to `pm`, and delivering them *causes* routing that wakes file-capable seats.
+
+**2. Prefill on a reasoning server must be read off the server's own `timings`, not inferred — D136's method is retired
+for the prefill half (decode is fine).** `throughput.mjs` measured 5 / 23 / 59 tok/s for 189 / 451 / 1,072-token
+prompts; the strata server's own `prompt_per_second` for the same sizes is **438 / 1,272 / 1,946 tok/s**. A rate that
+rises with prompt size is the tell that you are measuring startup cost, not throughput. New instrument:
+`tools/model-probes/cold-prefill.mjs`, which separates **COLD** (unique bytes) from **WARM** (a byte-identical
+re-send — 8,757 cached tokens in **96 ms**) and prints `MemAvailable`/`SwapUsed`/load next to every row.
+*Why it matters:* it changes a standing conclusion. On the 2026-10-20 reasoning (DeepInfra's 385 M cached-in
+tokens/day against a ~1.8k tok/s prefill) `docs/SELFDEV.md` concluded a local rig could not afford its own prompt
+workload. With ~2k tok/s cold and ~0.1 s warm, a fresh ~200k seat wake is **~85–95 s** — which reconciles with the
+191,805-tokens-in-79.9 s row in `docs/ROADMAP.md` and makes the *conversation cache*, not the GPU, the load-bearing
+setting. That is a reversal about the current engine, so it must be re-measured whenever the engine changes.
+
+**3. Two numbers the rig already computes and nobody reads.** `status.context` reports `advocate` at **244,751 /
+200,000 (1.224)** and `architect` at **1.093**, and no `attention` or `check` rule touches `fraction` — while the same
+provider is recorded 400-ing at 207,219 prompt tokens. The two cannot both be true of one server, so the recorded turn
+likely belongs to the other box (the store crossed machines). **The decision is to guard the number, not to explain
+the incident** — registered as ROADMAP **208**; 210 covers the sibling case where `check` never asks whether a seat's
+cwd resolves, which is how a Windows path survived in `rig.selfdev.json` on a Linux box and why
+`up --refresh --dry-run` reports `changes: {}` for all twelve seats instead of repairing it.
+
+**Falsifiable next session.** `ls selfdev.sqlite.broker.inbox/` still holding **2** files means the channel is still
+shut (expected until the operator answers rows 1–3 of the precondition table in `docs/NEXT.md`). If a later delegate
+runs `--start --allow-dirty --yes-pm-wakes` without an operator grant, this decision was not read. If anyone quotes a
+prefill figure from `throughput.mjs` without the header caveat, it was not read either.

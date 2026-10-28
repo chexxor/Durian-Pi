@@ -7,6 +7,13 @@
 //     0.15s and produced a laughable "19,359 tok/s prefill". Every probe here uses unique filler text.
 // prefill rate comes from a max_tokens=1 non-streaming call (total ~= prefill + one token);
 // decode rate comes from the streamed chunk count over (t_last - t_first).
+//
+// CAVEAT ADDED 2026-10-28 (Linux): **the prefill column of this script is not trustworthy for a reasoning
+// server.** Run as-is it reported 5 / 23 / 59 tok/s for prompts of 189 / 451 / 1,072 tokens — a rate that
+// RISES with prompt size, which is the tell. The strata server reports its own `timings`
+// (prompt_ms / prompt_per_second / predicted_per_second) in the final SSE chunk, and those say
+// 438 / 1,272 / 1,946 tok/s for the same sizes. The decode column is fine. Use
+// `cold-prefill.mjs` for prefill from here on; see docs/reviews/delivery-channel-linux-2026-10-28.md §2.
 import { performance } from "node:perf_hooks";
 import { randomUUID } from "node:crypto";
 

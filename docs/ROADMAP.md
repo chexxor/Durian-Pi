@@ -3594,3 +3594,59 @@ in `docs/FEATURES.md` with its test. **State the caveat when routing it:** a pat
 control — it does nothing about a prompt that claims a capability the harness did not grant (that is 203/206 territory), and
 any process that skips hooks bypasses it, so claiming it as protection would be exactly the kind of overclaim this rig's
 `check` rules exist to catch.
+
+## The delivery channel on Linux (measured 2026-10-28) — what the rig still cannot see
+
+Evidence for everything below: `docs/reviews/delivery-channel-linux-2026-10-28.md` (Linux, `node v24.22.1`, measured
+2026-10-28T15:05–15:20Z). Two of the three are **blind spots in existing surfaces** — the number is already computed
+and displayed, and nothing reads it.
+
+**208. A context-fraction guard: `status` already computes `consumed / window` and reports 1.22 for a seat, and no
+rule anywhere reads it.** *(qa; measured 2026-10-28)* `src/context.mjs:99` sums one turn's
+`input + output + cacheRead + cacheWrite` and `status.context` prints `fraction`; `grep -rn fraction
+src/attention.mjs src/checkup.mjs` returns **no hits**. Measured on the live store: `advocate` 244,751 / 200,000 =
+**1.224** (243,200 of it `cacheRead`), `architect` 218,645 / 200,000 = **1.093** — while the same provider is measured
+(`docs/ROADMAP.md` ≈line 3312) to answer 200 at 191,805 prompt tokens and **HTTP 400 at 207,219**. Those cannot all be
+true of one server, so the recorded turn probably belongs to the other box's provider (the store crossed machines) —
+which is exactly why the guard is needed rather than the guess. *Owner:* qa · *Where:* `src/attention.mjs` (a
+`context_over_window` notice, per seat, with the fraction and the denominator's state — `measured|declared|advertised`,
+`CONTEXT_DENOMINATORS`) plus a `check` rule; the remedy it points at already exists (`cli.mjs compact <seat>`).
+*Acceptance:* red for a seat whose last turn's usage exceeds its declared window, naming the fraction and the
+denominator source; silent when the window is `null` (a percentage with no window is not honest — `src/context.mjs`
+half-header); a compacted seat goes green. *Blind spots:* `consumed` is **one turn**, not the current head, so a seat
+compacted after a long turn still shows the old turn's number until its next turn; `cacheRead` is counted, so the
+fraction is "tokens the provider moved", not "tokens re-read" — the two differ by ~20× on this rig (WARM prompt time is
+~0.1 s for an 8,757-token cached prefix, see the review §2).
+
+**209. A cross-platform broker launcher — `scripts/serve-noroot.ps1` is the only one, and a store that cannot be
+served has no delivery channel at all.** *(devtools; registered 2026-10-28; the delegate's reference implementation is
+`tools/broker-serve.mjs`, run 2026-10-28 and green on its refusal path)* the two intents
+`audit-15-orphans-and-5-parked` and `memory-decompose-v2` have sat in `selfdev.sqlite.broker.inbox/` since
+`2026-10-27T05:04:46Z` (**2,037 min** at measurement) not because anything is broken but because the launcher that
+exists is PowerShell and this box is Linux. The launcher is 15 lines of *env + detach + log redirection*; what is worth
+productizing is the **preflight** around it, because two real hazards are invisible without one: a seat whose persisted
+cwd does not resolve, and a dirty live tree a woken seat will edit (F12/F23). *Owner:* devtools · *Where:*
+`scripts/serve.mjs` (pure Node, both OSes: set `DURIG_DB`, refuse if a broker state is alive, detach, redirect to
+`.spike/serve.out|err`, print pid and log paths) + `docs/runbooks/broker-down-or-stalled.md` step 3 made OS-specific +
+a demo that runs the preflight against a temp db. *Acceptance:* one command starts the broker on **Linux and Windows**;
+without the flag acknowledging a dirty live tree it refuses and names the changed paths; it never kills a process (the
+hard stop stays in the runbook, where the genlock precondition is written down). *Blind spots to name:* a launcher is
+not a supervisor — single-instance, backoff and OS triggers are items **63/64** and must not be claimed here; and
+`--dry-run` of anything is only evidence about what it previews (`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`).
+
+**210. `check` must ask whether a seat's cwd resolves on *this* machine — a cross-OS rig file re-asserts a dead path
+forever.** *(impl; measured 2026-10-28)* `rig.selfdev.json` carries `devtools.cwd =
+C:/Users/Alex/dsh-Projects/pi-opendurig/item-2801`, which cannot resolve on Linux, and `src/seatroot.mjs:28` lets a
+persisted cwd win unconditionally (`persisted seat cwd → DURIG_SEAT_ROOT → process cwd`), so that seat wakes into a
+directory that does not exist. The trap is the **remedy**: `node cli.mjs up rig.selfdev.json --refresh --dry-run`
+reports `writes: 0` and `changes: {}` for **all twelve** seats, because `previewUp` (cli.mjs:794) computes
+`seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT` from the rig file — so `--refresh` **re-asserts the dead path**.
+`docs/SELFDEV.md` currently says "`up --refresh` re-points each seat's persisted `cwd`", which is only true when the rig
+file names a good one. Depends on: 137 (cited-but-unverifiable artifacts), and it is the machinery half of
+`docs/runbooks/workspace-move.md`. *Owner:* impl · *Where:* `src/checkup.mjs` (a `seat-cwd-unresolvable` rule: every
+`seats[].cwd` that is non-null must `existsSync` on the host running `check`, with the OS named in the finding) + the
+one-line correction in `docs/SELFDEV.md`. *Acceptance:* red on a rig file naming a path that does not exist on this
+host, naming the seat, the path and the OS; green when `cwd` is absent (fallback to process cwd is a legitimate state);
+the demo must build the fixture with a path from the *other* OS rather than a made-up one, or it tests nothing. Note:
+`check`'s demo suite has an existing false-positive class to avoid — `runbookFrontMatterProblems` expects typed
+front-matter, see `docs/runbooks/README.md`.

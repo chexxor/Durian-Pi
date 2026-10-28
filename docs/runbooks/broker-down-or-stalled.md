@@ -37,6 +37,22 @@ cat selfdev.sqlite.broker.json 2>/dev/null  # a live pid, or gone?
 cat selfdev.sqlite.genlock.* 2>/dev/null    # a live generation means do NOT kill
 tail -8 .spike/serve.err 2>/dev/null
 ```
+
+**Native Linux (measured present 2026-10-28, procedure NOT yet run end-to-end here — see Evidence).** Name the OS in
+every measurement: the Windows half above cannot run on this box, and the process probe below answers a
+different question (`pgrep -af` matches a command line, where `broker.json`'s heartbeat is the identity proxy).
+```bash
+node tools/broker-serve.mjs --status      # one read: state + genlock + spool depth AND intent AGE + provider reachability
+DURIG_DB=./selfdev.sqlite node cli.mjs status   # DURIG_*, not DURIAN_PI_* — the CLI ignores the latter (D103)
+pgrep -af 'cli.mjs serve'                 # a serve process? (empty is a real answer, not an error)
+tail -12 selfdev.sqlite.broker.log
+cat selfdev.sqlite.broker.json 2>/dev/null
+ls -1 selfdev.sqlite.genlock* 2>/dev/null  # a live generation means do NOT kill
+tail -8 .spike/serve.err 2>/dev/null
+```
+The instrument is delegate-side (`tools/`, ROADMAP 209 asks for the productized `scripts/serve.mjs`). Without it, the
+same read is the six commands above — what the instrument adds is the two facts a human forgets to ask for: **how long
+each spooled intent has been waiting**, and **whether the provider each seat names actually advertises that model**.
 - `START` with **no** `EXIT` = the broker died abnormally.
 - A live `genlock` slot means a generation is in flight — do not kill the broker.
 - `serve.err` ending in `Session failed after a storage error` → go to `store-corruption-recovery.md`.
@@ -106,11 +122,24 @@ tail -8 .spike/serve.err 2>/dev/null
    ```bash
    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
    ```
-   **Also export the local-seat environment when a seat uses the local provider.** `scripts/serve-noroot.ps1`
-   sets only `DURIG_DB`, and `DURIG_LOCAL_API_KEY` is not a config key (until `#2114` lands), so a plain
-   restart makes `qa`/`devtools` fail `No API key for provider: local`; the local server (PolyStrata,
-   `127.0.0.1:8080`) must also be running, or they fail `model_error: Connection error.`
-   (`local-provider-down.md`). Export the local env on the launcher:
+   **Native Linux: there is no `*.sh` launcher in `scripts/`** (measured 2026-10-28 — `scripts/` holds
+   `serve-noroot.ps1` and nothing POSIX, which is why this store has never been served on this box and two operator
+   intents have sat in the spool since `2026-10-27T05:04:46Z`). The equivalent is two lines, or the delegate
+   instrument that refuses when a seat's persisted cwd does not resolve or the live tree is dirty (F12/F23):
+   ```bash
+   node tools/broker-serve.mjs --dry-run                          # preflight; exit 1 names the blockers
+   node tools/broker-serve.mjs --start --max-duration 600          # only past the preflight's acks
+   tail -8 selfdev.sqlite.broker.log                              # START / INTENT delivered= / PASS advancing
+   ```
+   **The local key no longer has to be exported.** The block below (written 2026-10-18) says a plain restart makes
+   local seats fail `No API key for provider: local`. `src/providers/local.mjs:145-147` now falls back to
+   `"local-placeholder"` and records `source: "none"`, so on 2026-10-28 (Linux) the preflight reported
+   `DURIG_LOCAL_API_KEY` unset as a NOTE, not a failure, and both providers answered `/v1/models`. Keep exporting it
+   only if a server actually demands a credential. What DOES still have to be right is the base URL / model / context,
+   and those live in `durig.config.json` (`DURIG_LOCAL_*`, `DURIG_VERIFIER_*`) — check them with
+   `node tools/broker-serve.mjs --status`, which fetches `/v1/models` and fails when the configured model is not
+   advertised. There are now TWO local provider prefixes (`local/`, `verifier/` — `src/providers/local.mjs:36-42`),
+   so a rig can hold two model families without a paid API.
    ```powershell
    $env:DURIG_LOCAL_BASE_URL='http://127.0.0.1:8080/v1'; $env:DURIG_LOCAL_MODEL='swift-1.5-iq2_xs'; `
    $env:DURIG_LOCAL_CONTEXT='65536'; $env:DURIG_LOCAL_API_KEY='local'; `
@@ -213,3 +242,14 @@ node cli.mjs status                       # passAgeMs resuming => starvation; un
 ```
 **Do not restart the broker while a 22 GB local model is loaded** — the restart needs ~1 GB of headroom to
 fork, and with 96% RAM it fails in ways that look like a store problem. Free the model first, then restart.
+
+2026-10-28T15:05-15:20Z (delegate, **Linux**, `node v24.22.1`): **read-only half of this runbook only — the `Do` steps
+were NOT run here, so `last_verified` stays `unverified` on both OSes.** `node tools/broker-serve.mjs --dry-run`
+reported `broker: down (no broker state)`, no genlock, and the spool holding 2 `pm` intents aged **2,037 min**; both
+local providers answered `/v1/models` (`local/iq3_s` at `127.0.0.1:47831`, `verifier/mistralai/ministral-3-14b-reasoning`
+at `127.0.0.1:1234`), so the 2026-10-18 "must export the local env" clause is now only about base URL/model/context.
+The start was **refused by the preflight on purpose**, on two facts the old Diagnose block cannot see: `devtools.cwd`
+in `rig.selfdev.json` names `C:/Users/Alex/dsh-Projects/pi-opendurig/item-2801` (unresolvable on Linux, and
+`up --refresh --dry-run` reports `changes:{}` for all 12 seats because the rig file itself carries it — ROADMAP 210),
+and 3 tracked files are modified in the live tree that a woken seat would edit (F12/F23). Full evidence:
+`docs/reviews/delivery-channel-linux-2026-10-28.md`.
