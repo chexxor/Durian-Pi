@@ -1,6 +1,6 @@
 # `inputs/fetched/MANIFEST.md` — vendor pages a report cites, fetched by the delegate
 
-**Generated 2026-10-29 by the delegate**, from the copies it fetched while verifying
+**Generated 2026-10-28 by the delegate**, from the copies it fetched while verifying
 `docs/reviews/harness-tools-skills-public-harnesses-research.md`. **The page copies are deliberately NOT tracked**: 11 pages,
 **8.2 MB** total, largest 2.6 MB — `inputs/fetched/*.html` is in `.gitignore`. They are re-fetchable from the URL, so this
 file is the tracked record of *what we saw*: the sha256 pins the bytes, the date says when, §2 lists the report's
@@ -38,7 +38,7 @@ re-fetch**, while a quoted sentence usually does.
 error page, excluded from verification) and any Goose path listed in §2. **A dead URL in an evidence table is worse than no
 URL, because it reads as evidence** (ROADMAP **243**).
 
-## 2. Load-bearing phrases the delegate found in our copies (2026-10-29)
+## 2. Load-bearing phrases the delegate found in our copies (2026-10-28)
 
 | phrase or token (verbatim from the page) | found in |
 |---|---|
@@ -50,14 +50,14 @@ URL, because it reads as evidence** (ROADMAP **243**).
 | `beforeShellExecution` · `failClosed` · `pluginPaths` | `cursor.com_docs_hooks.html` |
 | "hook failures (crash, timeout, non-zero exit code, no output) block the action instead of allowing it through" | same |
 | "Keep rules under 500 lines" | `cursor.com_docs_context_rules.html` |
-| "If frontmatter can’t be parsed, Cline **fails open**. The rule activates with raw content visible to help debugging." | `docs.cline.bot_features_cline-rules.html` — **found verbatim**, alongside `clinerules` (11 hits), `Cline/Rules` (6), `paths: []` "means the rule never activates", and `AGENTS.md` auto-detection (3 hits). This is a **fourth fail-open design** beside Codex/Copilot CLI/Cursor: a malformed rule *activates anyway* — see `docs/reviews/codex-enforcement-design-2026-10-29.md` §2 |
+| "If frontmatter can’t be parsed, Cline **fails open**. The rule activates with raw content visible to help debugging." | `docs.cline.bot_features_cline-rules.html` — **found verbatim**, alongside `clinerules` (11 hits), `Cline/Rules` (6), `paths: []` "means the rule never activates", and `AGENTS.md` auto-detection (3 hits). This is a **fourth fail-open design** beside Codex/Copilot CLI/Cursor: a malformed rule *activates anyway* — see `docs/reviews/codex-enforcement-design-2026-10-28.md` §2 |
 
 **Goose.** The report's three vendor-site paths (`…/getting-started/using-extensions`,
 `…/goose-architecture/extensions-design`, `…/guides/recipes/recipe-reference`) are **404**. Resolvable equivalents exist in
 the pinned clone: `vendor/eval/goose/documentation/docs/tutorials/recipes-tutorial.md` and
 `…/documentation/docs/` generally, at `775b3958` — cite repo paths at a pin, not dead site paths.
 
-## 3. GitHub issue pages fetched by the delegate (2026-10-29) — and a citation error **the delegate made**
+## 3. GitHub issue pages fetched by the delegate (2026-10-28) — and a citation error **the delegate made**
 
 The delegate fetched each cited issue **by number** and read its `<title>`. **The round-2 report's issue citations are
 sound**; the mis-attribution was introduced **during folding**, when this delegate attached the report's skills-issue
@@ -66,7 +66,7 @@ review files. All of those have now been corrected to the citations below.
 
 **What the report's own numbers actually are (both correct for the claims it attached them to):**
 
-| issue | title as fetched (2026-10-29) | the report's use of it | verdict |
+| issue | title as fetched (2026-10-28) | the report's use of it | verdict |
 |---|---|---|---|
 | [#978](https://github.com/github/copilot-cli/issues/978) | "Skills are not used unless explicitely stated" | skill advertisement unused unless named | **correct** |
 | [#4438](https://github.com/github/copilot-cli/issues/4438) | "`disable-model-invocation: true` makes a skill unreachable, not manual-only (Skill not found on explicit invocation)" | a visibility flag turns into a hard block | **correct** — and directly relevant to our own `exposure`/`"hidden"` question |
@@ -78,7 +78,7 @@ no way to reload a changed rules file" and "`sandbox:workspace-write` cannot rea
 `[^b736c3#L18-24]` / `[^b736c3#L26-40]`, an **undefined anchor to an unidentified page**. The URLs resolve, but the citation
 is not checkable as written.
 
-**The claim survives; the citation was the wrong one.** Searching that tracker (`api.github.com/search/issues`, 2026-10-29)
+**The claim survives; the citation was the wrong one.** Searching that tracker (`api.github.com/search/issues`, 2026-10-28)
 finds issues that support the fail-open conclusion **better** than anything round 2 cited:
 
 | real issue | title (verbatim from `<title>`) | what it establishes | our copy, sha256 (first 16) |

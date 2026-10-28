@@ -21,7 +21,7 @@ Without it, the team either guesses (ungrounded) or stalls on a question it cann
 
 ## Preconditions
 Read-only. The agent needs the question, the constraints, and the deliverable path. **The research agent is not on this
-machine and has no write access to this repo (operator, 2026-10-29)** — so it cannot land anything: every artifact it
+machine and has no write access to this repo (operator, 2026-10-28)** — so it cannot land anything: every artifact it
 produces reaches us through the operator, and the **delegate** is the landing path (`Do` 5). Write a prompt that asks the
 agent for *content to copy*, never for commits or repo writes.
 
@@ -98,7 +98,7 @@ operator — routing the prompt to the research agent.
 ## Evidence
 Worked example: `docs/reviews/runbooks-research-prompt.md` → `docs/reviews/runbooks-sop-best-practices.md`
 (2026-10-16), whose recommendations became ROADMAP items 81–88 and the conventions in this directory.
-**Failure worked example (2026-10-29):** `docs/reviews/harness-tools-skills-followup-research-prompt.md` →
+**Failure worked example (2026-10-28):** `docs/reviews/harness-tools-skills-followup-research-prompt.md` →
 `docs/reviews/harness-tools-skills-public-harnesses-research.md`, which arrived with 50 unresolvable citation anchors and
 3 dead URLs because the prompt asked for line ranges into pages the agent fetched into **its own** workspace — a channel
 that does not exist. Round 3 (`docs/reviews/harness-tools-skills-followup-2-research-prompt.md`) asks for quotes instead,

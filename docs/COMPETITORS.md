@@ -310,7 +310,7 @@ vocabulary for putting security into a persona definition**. What exists, and no
 | **a third-party pre-run gate bolted on** (scans skills + MCP before they run, emits audit evidence) | `openhands docs/DefenseClaw.md:3-18` | registered as ROADMAP 203; the gate exists, ours does not |
 | **nothing** | — | **no project declares, in the persona/seat definition: what needs human approval, which paths it may write, what its blast radius is, or which threat model applies.** CrewAI's `knowledge/` auto-ingest and metagpt's agent-authored skills go the *other* way. That gap is durian-pi's opening (and is why ruling 3 — approval gates on seat-prompt edits — has no precedent to copy and must be built)
 
-## The 2026-10-29 tool-and-skill lifecycle sweep (what makes an agent-authored capability durable and default)
+## The 2026-10-28 tool-and-skill lifecycle sweep (what makes an agent-authored capability durable and default)
 
 One question, nine pinned clones (`docs/VENDOR-PINS.md`, all cited by short HEAD) **plus our own installed harness**
 (`@earendil-works/pi-coding-agent@1.4.0`, whose TypeScript is readable because the shipped `.js.map` files carry
@@ -352,7 +352,7 @@ Cline, Goose — **unexamined here**). Registered as ROADMAP **235–239**; five
    hooks — **#978 is "Skills are not used unless explicitely stated"** and **#4438 is "`disable-model-invocation: true` makes a
    skill unreachable, not manual-only"** (both correctly cited by the round-2 report for *those* claims; the mis-attribution
    was the delegate's, and the report's own hooks claims sit on an undefined anchor). The fail-open behaviour is nevertheless
-   real and documented, at numbers the delegate fetched and title-checked on 2026-10-29:
+   real and documented, at numbers the delegate fetched and title-checked on 2026-10-28:
    [#2893](https://github.com/github/copilot-cli/issues/2893) *"preToolUse hooks silently bypassed under parallel tool calls
    (timeout->allow fallback + serial dispatch…)"* and
    [#3590](https://github.com/github/copilot-cli/issues/3590) *"PreToolUse hook `permissionDecision: "ask"` auto-approved by TUI
@@ -362,9 +362,9 @@ Cline, Goose — **unexamined here**). Registered as ROADMAP **235–239**; five
    outer guard is belt-and-braces only. **Protocol change this forced:** fetch the cited page/issue and read its title before
    repeating a claim (`docs/runbooks/research-request.md` Do 5, D159).
 
-## The 2026-10-29 public-harness pins (five clones: source-grade for three, docs-grade for two)
+## The 2026-10-28 public-harness pins (five clones: source-grade for three, docs-grade for two)
 
-Operator granted the clones (`--depth 1`) on 2026-10-29 so the public-harness half of the tool/skill-lifecycle
+Operator granted the clones (`--depth 1`) on 2026-10-28 so the public-harness half of the tool/skill-lifecycle
 study could stop resting on fetched pages. Pins are generated in `docs/VENDOR-PINS.md`; `node
 tools/vendor-pins.mjs --check` → **PIN CHECK PASS (14 clones)**. **No observed pass has been run on any of these
 five yet** — the round-2 report (`docs/reviews/harness-tools-skills-public-harnesses-research.md`) is entirely
@@ -373,13 +373,13 @@ behaviour read from that pin. That gap is ROADMAP **241**.
 
 | clone | pin | license | what is actually in the tree | grade |
 |---|---|---|---|---|
-| `codex` | `d373d649` | Apache-2.0 | **full Rust source** (`codex-rs/`) + `docs/` — the only one of the five whose policy/approval engine, hook-trust storage and AGENTS.md budget are readable at a pin | source — **partial observed pass run 2026-10-29**, guard axis + git-plane policy only:
-`docs/reviews/codex-enforcement-design-2026-10-29.md`. Permission profiles, the network tier and where `plugin_trust` is
+| `codex` | `d373d649` | Apache-2.0 | **full Rust source** (`codex-rs/`) + `docs/` — the only one of the five whose policy/approval engine, hook-trust storage and AGENTS.md budget are readable at a pin | source — **partial observed pass run 2026-10-28**, guard axis + git-plane policy only:
+`docs/reviews/codex-enforcement-design-2026-10-28.md`. Permission profiles, the network tier and where `plugin_trust` is
 persisted are unread, so this is **not** a full review and no row of it may be cited as a behaviour claim about Codex |
 | `cline` | `51f63e4f` | Apache-2.0 | full TS monorepo (`apps/`, `sdk/`) — rule merge order and `paths:`-conditional discovery are readable | source |
 | `goose` | `775b3958` | Apache-2.0 | full Rust (`crates/`) + `documentation/docs/` (the vendor-site paths the round-2 report cited are **404**; the repo paths are the resolvable ones) | source |
 | `claude-code-docs` | `58d6da1e` | UNRECOGNISED (`LICENSE.md`) | **CHANGELOG + docs + plugins + mods only — no implementation.** Can never yield `observed`; it does yield changelog-grade evidence, which is better than marketing copy | docs |
-| `copilot-cli` | `84ee80ea` | UNRECOGNISED (`LICENSE.md`) | **README + `install.sh` + changelog only** (596 KB — the small size is correct; the CLI is closed). Useful chiefly as a public **issue tracker**, each issue fetched and title-checked 2026-10-29 (`inputs/fetched/MANIFEST.md` §3): **#2893** preToolUse silently bypassed (`timeout->allow` fallback + parallel dispatch) · **#3590** `permissionDecision: "ask"` auto-approved · **#2540** **plugin-defined `hooks.json` hooks never fire, in the main session or subagents** · **#5098** adding `sandbox.userPolicy.filesystem` paths stops a `sessionStart` hook · **#4438** `disable-model-invocation` makes a skill unreachable rather than manual-only · **#978** skills unused unless explicitly named | docs |
+| `copilot-cli` | `84ee80ea` | UNRECOGNISED (`LICENSE.md`) | **README + `install.sh` + changelog only** (596 KB — the small size is correct; the CLI is closed). Useful chiefly as a public **issue tracker**, each issue fetched and title-checked 2026-10-28 (`inputs/fetched/MANIFEST.md` §3): **#2893** preToolUse silently bypassed (`timeout->allow` fallback + parallel dispatch) · **#3590** `permissionDecision: "ask"` auto-approved · **#2540** **plugin-defined `hooks.json` hooks never fire, in the main session or subagents** · **#5098** adding `sandbox.userPolicy.filesystem` paths stops a `sessionStart` hook · **#4438** `disable-model-invocation` makes a skill unreachable rather than manual-only · **#978** skills unused unless explicitly named | docs |
 
 **What the pins change, right now, without an observed pass:**
 1. **ROADMAP 241 exists because `codex` is now readable.** The operator ruled *research before 232*: before the
@@ -417,4 +417,4 @@ persisted are unread, so this is **not** a full review and no row of it may be c
    (`src/core/agent-session.ts:668-680`). Nobody in the sample is both non-fatal and closed, and Codex guards the git plane
    by **reachability** rather than verb-matching (`core-plugins/src/git_policy.rs:7-85`: 18 stripped `GIT_*` variables,
    `-c safe.bareRepository=explicit`, and a throwaway `GIT_DIR` repo for agent-initiated git). Table, citations and what this
-   changes for ROADMAP **232**/**238**: `docs/reviews/codex-enforcement-design-2026-10-29.md`.
+   changes for ROADMAP **232**/**238**: `docs/reviews/codex-enforcement-design-2026-10-28.md`.

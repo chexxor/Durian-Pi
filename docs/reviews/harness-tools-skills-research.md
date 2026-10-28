@@ -1,4 +1,4 @@
-# How harnesses make an agent's *own* tools and skills reusable — observed half (delegate, 2026-10-29, Linux)
+# How harnesses make an agent's *own* tools and skills reusable — observed half (delegate, 2026-10-28, Linux)
 
 **Question (the operator's, 2026-10-28):** *"I don't often see you using new tools you create, or new skills you
 created."* What mechanism makes an agent-authored capability **durable and default** at our scale — one operator, one
@@ -15,7 +15,7 @@ repo, two hosts, no cloud backend, a small local model?
 > the delegate's consumption note on top) and §9 below, which records the **corrections it forced on this file**. Three of the
 > five are now **pinned source-grade** (`codex d373d649`, `cline 51f63e4f`, `goose 775b3958`), so what was once "web-only"
 > is partly readable here — and the guard axis is answered in
-> `docs/reviews/codex-enforcement-design-2026-10-29.md` (ROADMAP **241**). The remaining open questions are routed as
+> `docs/reviews/codex-enforcement-design-2026-10-28.md` (ROADMAP **241**). The remaining open questions are routed as
 > `docs/reviews/harness-tools-skills-followup-2-research-prompt.md`. Do not treat the verdict below as the whole study.
 
 ## 1. Verdict up front
@@ -253,7 +253,7 @@ us. Our standing injection today is roughly **2,050 B ≈ 510 tokens** before an
 | instruction surfaces dilute each other on small models | oh-my-pi `.omp/skills/system-prompts/small-models.md`: "roughly 3–5 constraints before rules start displacing each other"; "Code already neutralizes a failure mode? DELETE its rule" | reported by maintainers |
 | an advertised-but-unused skill surface, priced | this rig: skills touched in **28 of 87** sessions while `docs/NEXT.md` was read in **75 of 87** (`docs/reviews/pi-harness-usage-audit-2026-10-28.md`) | observed (ours) |
 | newly authored instruments get reused for 1–2 sessions, pointer-named ones for 6–21 | same audit; re-ran here (`tools/harness-usage-census.mjs`) | observed (ours) |
-| **census numbers are corpus-scoped and the corpus is host-local** | re-run on 2026-10-29 on this host: **18 sessions / 2,356 tool calls / 267 ad-hoc (11.3%)** vs the 2026-10-28 figure of 87 sessions / 11,599 / 2,789 (24.0%). The 70 Windows-session transcripts are **not on this host** (`/mnt` shows no D: volume) | observed (ours) — correction to the audit's portability, see §7 of this file |
+| **census numbers are corpus-scoped and the corpus is host-local** | re-run on 2026-10-28 on this host: **18 sessions / 2,356 tool calls / 267 ad-hoc (11.3%)** vs the 2026-10-28 figure of 87 sessions / 11,599 / 2,789 (24.0%). The 70 Windows-session transcripts are **not on this host** (`/mnt` shows no D: volume) | observed (ours) — correction to the audit's portability, see §7 of this file |
 | agent-authored work vanishes silently | nine instruments lost; `git log --all --diff-filter=A` finds none; the harness transcript *does* hold their bodies (`pi-harness-usage-audit` §transcripts) | observed (ours) |
 | a destructive verb runs unconditionally and destroys cross-OS evidence | 36 → 1 worktree registrations in one session (`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`) | observed (ours) |
 | skill metadata is routinely malformed | validators exist and warn rather than fail: pi `skills.ts:115-126` (description required, ≤1,024), crewai `skills/models.py:43-79` (1–64 name, 1–1024 description, `requires`, `allowed-tools`) | inferred from maintainer code (they build lenient validators for exactly these fields) |
@@ -261,7 +261,7 @@ us. Our standing injection today is roughly **2,050 B ≈ 510 tokens** before an
 | **a guard that degrades to *allow* when its own machinery breaks** | **four of the five systems that ship one fail open**: Codex's `PreToolUse` returns the input unchanged on every hook error, exit-2-without-reason, malformed JSON and unsupported decision (`vendor/eval/codex · d373d649`, `codex-rs/hooks/src/events/pre_tool_use.rs`, whose own tests are named `unsupported_permission_decision_fails_open` and `deprecated_approve_decision_fails_open`); Copilot CLI guards **silently do not run** — a `timeout->allow` fallback under parallel dispatch
 ([#2893](https://github.com/github/copilot-cli/issues/2893)), an auto-approved `ask`
 ([#3590](https://github.com/github/copilot-cli/issues/3590)), plugin-declared hooks that never fire
-([#2540](https://github.com/github/copilot-cli/issues/2540)); Cursor's `failClosed` is **opt-in**; Cline is a fourth instance on the *rule* plane — *"If frontmatter can’t be parsed, Cline **fails open**. The rule activates with raw content visible to help debugging"* (`docs.cline.bot_features_cline-rules.html`, found verbatim 2026-10-29, sha256-pinned in `inputs/fetched/MANIFEST.md`). **pi is the exception**: `emitToolCall` has no `try/catch` and the caller re-throws as *"Extension failed, blocking execution"* (`agent-session.ts:668-680`) | observed (source) + advertised (vendor docs, issue tracker) — full table in `docs/reviews/codex-enforcement-design-2026-10-29.md` §2 |
+([#2540](https://github.com/github/copilot-cli/issues/2540)); Cursor's `failClosed` is **opt-in**; Cline is a fourth instance on the *rule* plane — *"If frontmatter can’t be parsed, Cline **fails open**. The rule activates with raw content visible to help debugging"* (`docs.cline.bot_features_cline-rules.html`, found verbatim 2026-10-28, sha256-pinned in `inputs/fetched/MANIFEST.md`). **pi is the exception**: `emitToolCall` has no `try/catch` and the caller re-throws as *"Extension failed, blocking execution"* (`agent-session.ts:668-680`) | observed (source) + advertised (vendor docs, issue tracker) — full table in `docs/reviews/codex-enforcement-design-2026-10-28.md` §2 |
 | a subagent silently not inheriting skills/permissions | only `hermes-agent`'s operator-guidance line already recorded in `docs/COMPETITORS.md` ("pinned skills are operator guidance for the user's session, not payload for every internal fork") | advertised, single source |
 
 ## 7. What this study cost, and what is still wrong in our own numbers
@@ -274,7 +274,9 @@ us. Our standing injection today is roughly **2,050 B ≈ 510 tokens** before an
   Citations in this file are to that extracted tree, i.e. **upstream `src/**` paths at pi 1.4.0**, and they will drift
   on a pi upgrade — re-extract rather than trusting the line numbers across versions.
 - `tools/harness-usage-census.mjs` silently changes denominator per host. It printed **18 sessions / 11.3% ad-hoc**
-  here and **87 / 24.0%** a day earlier when both hosts' transcripts were present. The tool does not name the corpus it
+  here and **87 / 24.0%** earlier the **same day** (host-local 2026-10-28 CDT; the audit was committed 17:00 CDT and this
+  re-run ~17:40 CDT) when both hosts' transcripts were present. **The difference is corpus, not date** — which is exactly why
+  the tool must print the corpus it is quoting. The tool does not name the corpus it
   is quoting. Fold the corpus into its own output (registered below as 237).
 - Nine of the ten instruments named in this file as "ours" live in `tools/` and are reachable only as `bash` strings.
   That is the finding, not the recommendation; the recommendation is §8.
@@ -326,11 +328,11 @@ requires a new product feature. Register in `docs/ROADMAP.md` as **registered, n
    build-time or cloud skill catalog (openhands `skills-service.ts:29-40`). Reasons are in §1; both make staleness
    invisible, which is our named failure class.
 
-**Deferred pending the web half — now partly resolved (2026-10-29, same day).** The public-harness half landed as
+**Deferred pending the web half — now partly resolved (2026-10-28, same day).** The public-harness half landed as
 `docs/reviews/harness-tools-skills-public-harnesses-research.md` (committed verbatim as `318838f5`), and five
 `--depth 1` pins were granted and taken the same day: `codex d373d649`, `cline 51f63e4f`, `goose 775b3958`,
 `claude-code-docs 58d6da1e`, `copilot-cli 84ee80ea` (rows generated in `docs/VENDOR-PINS.md`; `--check` PASS at 14
-clones). Per-project `COMPETITORS.md` entries for the five now exist under *"The 2026-10-29 public-harness pins"*. **Two
+clones). Per-project `COMPETITORS.md` entries for the five now exist under *"The 2026-10-28 public-harness pins"*. **Two
 corrections this half forced on the report above:** (1) "*no default or configurable intercept for `git worktree prune` /
 `git clean -fd`*" was true of the ten observed systems but **not** of the field at large — GitHub Copilot CLI ships
 `--deny-mode "command:git worktree prune"`, and its own tracker shows its guards **silently not running** — a
@@ -342,7 +344,7 @@ a recipe rather than a tool. (3) **A citation the delegate itself introduced whi
 defect of the whole round: an earlier version of this paragraph, and of `docs/COMPETITORS.md` and ROADMAP **241**, cited
 **#978/#4438** for Copilot CLI's fail-open hooks behaviour. Those issues are real, and the report cites them **correctly for
 its skills claims**; the hooks attribution was the delegate's, and it survived into three files before anyone fetched the
-issues and read their titles (2026-10-29). The verified hooks issues are **#2893/#3590/#2540/#5098**
+issues and read their titles (2026-10-28). The verified hooks issues are **#2893/#3590/#2540/#5098**
 (`inputs/fetched/MANIFEST.md` §3). **Protocol now:** fetch every cited pointer and read its title before repeating a claim
 (`docs/runbooks/research-request.md` Do 5, D159) — a reachable URL is not the same as a citation that points where claimed.
 Neither correction changes the recommendation's shape: an outer guard still cannot see our

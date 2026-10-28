@@ -4,7 +4,7 @@ I'll start by reading the attached documents.I have both prompts. The parent rep
 
 ---
 
-> ### Delegate consumption note (2026-10-29) — added by the delegate; the report body below is unmodified
+> ### Delegate consumption note (2026-10-28) — added by the delegate; the report body below is unmodified
 >
 > **Provenance.** Received from the operator's research agent, untracked, and committed **verbatim** as `318838f5`
 > before any amendment, so the artifact is attributable and durable (`docs/ROADMAP.md` 233 / D156: an untracked report is
@@ -22,11 +22,11 @@ I'll start by reading the attached documents.I have both prompts. The parent rep
 > **Citation integrity, measured on the file as committed.** 64 distinct in-body markers, 14 defined, **50 dangling**
 > (`[^542f21#49]`-style anchors into a fetched corpus that was never delivered — `inputs/fetched/` does not exist in this
 > repo), and **3 dead URLs**, all Goose (`…/getting-started/using-extensions`, `…/goose-architecture/extensions-design`,
-> `…/guides/recipes/recipe-reference`, all HTTP 404 on 2026-10-29); the resolvable equivalents are in the pin, e.g.
+> `…/guides/recipes/recipe-reference`, all HTTP 404 on 2026-10-28); the resolvable equivalents are in the pin, e.g.
 > `vendor/eval/goose/documentation/docs/tutorials/recipes-tutorial.md`. Repairs are routed as Task A of
 > `docs/reviews/harness-tools-skills-followup-2-research-prompt.md` and registered as ROADMAP **243**.
 >
-> **What the delegate re-confirmed on the live vendor pages on 2026-10-29** (so the findings survive even where the
+> **What the delegate re-confirmed on the live vendor pages on 2026-10-28** (so the findings survive even where the
 > anchors do not): Claude Code's "scales at 1% of the model's context window", "truncated at 1,536 characters", "first
 > 5,000 tokens of each" inside a "combined budget of 25,000 tokens", `/skill-doctor`, `/run-skill-generator`, `/verify`;
 > Codex `config-advanced`'s `project_doc_max_bytes`, `project_doc_fallback_filenames`, `thread.skills.truncated`,
@@ -43,7 +43,7 @@ I'll start by reading the attached documents.I have both prompts. The parent rep
 > ([#3590](https://github.com/github/copilot-cli/issues/3590)), **plugin-defined `hooks.json` hooks that never fire in the main
 > session or subagents** ([#2540](https://github.com/github/copilot-cli/issues/2540)), and a `sessionStart` hook that stops
 > running once `sandbox.userPolicy.filesystem` paths are added
-> ([#5098](https://github.com/github/copilot-cli/issues/5098)) — all four fetched and title-checked 2026-10-29, copies
+> ([#5098](https://github.com/github/copilot-cli/issues/5098)) — all four fetched and title-checked 2026-10-28, copies
 > sha256-pinned in `inputs/fetched/MANIFEST.md` §3. **This note previously cited #978/#4438 here, which was the delegate's
 > error, not the report's:** both issues are real and this report cites them correctly for its **skills** claims (titles:
 > "Skills are not used unless explicitely stated"; "`disable-model-invocation: true` makes a skill unreachable, not

@@ -1,6 +1,6 @@
 # Follow-up research prompt — tool and skill lifecycle: the public harnesses, and the four questions the delegate could not answer
 
-**Asked by:** the delegate, 2026-10-29 (Linux). **Route:** the operator hands this to the research agent; the delegate
+**Asked by:** the delegate, 2026-10-28 (Linux). **Route:** the operator hands this to the research agent; the delegate
 cannot call it (`docs/runbooks/research-request.md` Do 2).
 **Parent report:** `docs/reviews/harness-tools-skills-research.md` (observed half — installed pi 1.4.0 + the nine pinned
 clones in `vendor/eval/`). **Parent prompt:** `docs/reviews/harness-tools-skills-research-prompt.md`.

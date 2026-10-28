@@ -4,7 +4,7 @@
 > rounds that produced it. Everything it needs is in this file. Read every path listed under **Start here**
 > before writing anything.
 >
-> **Written:** 2026-10-29 by the durian-pi delegate, from `docs/reviews/harness-tools-skills-research.md`
+> **Written:** 2026-10-28 by the durian-pi delegate, from `docs/reviews/harness-tools-skills-research.md`
 > (round 1, observed) and `docs/reviews/harness-tools-skills-public-harnesses-research.md` (round 2, public
 > docs). **Parent prompt chain:** `harness-tools-skills-research-prompt.md` →
 > `harness-tools-skills-followup-research-prompt.md` → this file.
@@ -74,7 +74,7 @@ Do both halves of the repair:
   `inputs/fetched/README.md`), and searches for your quote in our copy. **A quote we cannot find is recorded `unverified`
   in our folded docs** — that is the test you should be aiming to pass.
 
-**Already confirmed by the delegate on 2026-10-29, from the live pages — do not re-verify, and correct your
+**Already confirmed by the delegate on 2026-10-28, from the live pages — do not re-verify, and correct your
 report if any of this contradicts it:** the Claude Code skills page states the listing budget "scales at 1%
 of the model's context window", `description` + `when_to_use` "truncated at 1,536 characters", re-attached
 skills keep "the first 5,000 tokens of each" within a "combined budget of 25,000 tokens", and it names

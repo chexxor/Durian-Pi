@@ -5898,7 +5898,7 @@ and **never** applies a fix.
 **Still perishable, still the operator's call.** Those 455 unreachable commits are anchored by nothing; a
 `git gc --prune=now` on either side destroys them for good. Anchoring them (e.g. `refs/rescued/orphan-*` per sha) is a
 repo-shape change the delegate did **not** make unasked.
-## D158 — Agent-authored harness customization ships as an installable package developed in the workspace, not as hand-written `.pi/` files; and 232 is gated on a read of shipped enforcement designs before any build (2026-10-29, operator ruling)
+## D158 — Agent-authored harness customization ships as an installable package developed in the workspace, not as hand-written `.pi/` files; and 232 is gated on a read of shipped enforcement designs before any build (2026-10-28, operator ruling)
 
 **The ruling.** Asked for three rulings (a `.pi/` grant for ROADMAP 235/236/238; whether to register the
 capture-on-success item; whether 232 stays first), the operator ruled: **"You can write into the .pi directory if
@@ -5942,7 +5942,7 @@ context window", "truncated at 1,536 characters", "first 5,000 tokens of each" /
 self-sweep, `docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md`). The delegate still does not claim, complete or
 route queue items: 240-243 are **registered-not-scheduled**, and pm owns ordering. The `.pi/` grant is real but
 **unused** so far — no `.pi/` path exists in this tree.
-## D159 — The research agent is off-host with no repo write access: the delegate is the landing path, and a citation's portable unit is a quote, not a line range (2026-10-29, operator statement; runbook amended by the delegate)
+## D159 — The research agent is off-host with no repo write access: the delegate is the landing path, and a citation's portable unit is a quote, not a line range (2026-10-28, operator statement; runbook amended by the delegate)
 
 **The constraint, stated by the operator.** *"The research agent is not on this computer, and does not have write access to
 the repo."* That invalidates two things already written down: the round-3 prompt asked the agent to `git add` its deliverable
@@ -5955,7 +5955,7 @@ defined, **50 unopenable from this repo**, plus 3 vendor URLs now HTTP 404.
 With no file channel, the only citation unit that survives the trip is **a verbatim quote of ≤ 40 words + the URL + the
 agent's own fetch date**: the delegate can fetch that page itself, on a later date, and still find the sentence. Asking for
 line ranges instead manufactures checkability that no one downstream can exercise — and the delegate's own copies are dated
-**2026-10-29**, later than the agent's read, so even a correct range may no longer point where it did. The rule is therefore:
+**2026-10-28**, later than the agent's read, so even a correct range may no longer point where it did. The rule is therefore:
 quote required, line range welcome **beside** it, and **a quote the delegate cannot locate is recorded `unverified` in the
 folded docs while the agent's report body stays verbatim** — we correct our record, not their artifact.
 
@@ -5980,7 +5980,7 @@ review notes): it cited `copilot-cli` #978/#4438 for *fail-open hooks* behaviour
 them **correctly for its skills claims** ("Skills are not used unless explicitely stated"; "`disable-model-invocation: true`
 makes a skill unreachable, not manual-only"). The report's own hooks rows sit on an **undefined** anchor; the report was more
 sound than the delegate's fold. **The rule now: fetch the cited pointer and read its title before repeating a claim.** The payoff
-was immediate — doing it surfaced better evidence than the report had, all title-checked 2026-10-29 and pinned in
+was immediate — doing it surfaced better evidence than the report had, all title-checked 2026-10-28 and pinned in
 `inputs/fetched/MANIFEST.md` §3: **#2893** *"preToolUse hooks silently bypassed under parallel tool calls (timeout->allow
 fallback + serial dispatch…)"*, **#3590** *"PreToolUse hook `permissionDecision: "ask"` auto-approved by TUI since v1.0.53"*,
 **#2540** *"Plugin-defined preToolUse hooks (hooks.json) do not fire — neither in main session nor subagents"*, **#5098**

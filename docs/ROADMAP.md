@@ -4352,7 +4352,7 @@ until `RealTimeIsCompatible=1`; do not answer this by assuming NTP (an unsynced 
 restart-spanning comparisons, since a restart drops the monotonic baseline — which is exactly why the **stamps** stay wall
 clock while the **budgets** go monotonic.
 
-## Registered 2026-10-29 by the delegate from the tool-and-skill lifecycle study — **registered, not scheduled**
+## Registered 2026-10-28 by the delegate from the tool-and-skill lifecycle study — **registered, not scheduled**
 
 Source: `docs/reviews/harness-tools-skills-research.md` (observed half: installed pi `@1.4.0` + the nine pinned clones in
 `vendor/eval/`, pins in `docs/VENDOR-PINS.md`). The public-harness half is not written yet —
@@ -4361,7 +4361,7 @@ Source: `docs/reviews/harness-tools-skills-research.md` (observed half: installe
 
 **235. Every delegate instrument is reachable only as a `bash` string, and the harness has a project-scoped tool
 registry that was never turned on: 24.0% of 11,599 past tool calls are one-off re-measurements.**
-*(delegate; needs the operator's `.pi/` grant; measured 2026-10-28 and re-measured 2026-10-29, Linux)* pi
+*(delegate; needs the operator's `.pi/` grant; measured 2026-10-28 and re-measured 2026-10-28, Linux)* pi
 auto-discovers `.pi/extensions/` for a trusted project (`@1.4.0 src/core/package-manager.ts:2484-2491`,
 `collectAutoExtensionEntries` at `package-manager.ts:599-640`) and `pi.registerTool()` puts a tool in the model's tool
 list with a schema, a one-line `promptSnippet` and optional `promptGuidelines`
@@ -4370,7 +4370,7 @@ the shape. Nothing in this repo has ever used it — `grep` for `.pi/` finds **n
 *not* doing it is measured twice: instruments named in the pointer get 6–21 sessions of reuse, instruments freshly
 authored get **1–2**, and **2,789 of 11,599 calls (24.0%)** in the 87-session corpus are ad-hoc measurement code
 (**267 of 2,356, 11.3%**, in the 18-session Linux-only corpus — see 237).
-*Owner:* delegate (harness surface, project-scoped under D157; **delivery shape ruled 2026-10-29, D158: develop it in
+*Owner:* delegate (harness surface, project-scoped under D157; **delivery shape ruled 2026-10-28, D158: develop it in
 this workspace as an installable pi package — conventional `extensions/` (+ optional `skills/`, `prompts/`) directories
 or a `pi` key in `package.json` — and install with `pi install --local ./<dir>`, whose only `.pi/` write is one line in
 `.pi/settings.json`, read only after project trust; hand-written `.pi/extensions/*.mjs` is the fallback, not the
@@ -4388,7 +4388,7 @@ for 230/232 — a tool that reaches the model is still a tool that reads a produ
 
 **236. Standing instruction surface is unbudgeted: `AGENTS.md` injects 5,765 B per request and the skill advertisement
 1,167 B, while our two skill descriptions leave 768 and 805 characters of pi's 1,024-character cap unused.**
-*(delegate; measured 2026-10-29, Linux)* pi assembles the system prompt as replaceable sections — `addendum` (from
+*(delegate; measured 2026-10-28, Linux)* pi assembles the system prompt as replaceable sections — `addendum` (from
 `.pi/APPEND_SYSTEM.md`), `project_context` (`AGENTS.md`/`CLAUDE.md` candidates, `src/core/resource-loader.ts:185`),
 `skills` (`formatSkillsForPrompt`, `src/core/skills.ts:280-305`), `docs`, `cwd`
 (`src/core/system-prompt.ts:150-186`); the project `APPEND_SYSTEM.md` **replaces** the user one rather than merging
@@ -4411,8 +4411,8 @@ rules and more code-side enforcement (the 235/238 pair is the code-side half); a
 user file means a host-level file the operator keeps would be shadowed — say so before adopting it.
 
 **237. `tools/harness-usage-census.mjs` publishes percentages without naming its corpus, and the corpus is host-local:
-the same tool printed 24.0% on 2026-10-28 and 11.3% on 2026-10-29.**
-*(devtools or delegate; measured 2026-10-29, Linux)* The 87-session / 11,599-call figure in
+the same tool printed 24.0% on 2026-10-28 and 11.3% on 2026-10-28.**
+*(devtools or delegate; measured 2026-10-28, Linux)* The 87-session / 11,599-call figure in
 `docs/reviews/pi-harness-usage-audit-2026-10-28.md` spans **two hosts**: 17 Linux sessions plus 70 Windows sessions under
 the pre-move cwd. On this host today, `~/.pi/agent/sessions/` holds **18** session files for this cwd and no Windows set
 (no D: volume is mounted), so the same command prints **18 sessions / 2,356 calls / 267 ad-hoc (11.3%)**. Sessions live
@@ -4431,7 +4431,7 @@ with different bounds.
 
 **238. No shipped harness in the observed set guards `git worktree prune` or `git clean -fd`, but pi ships a blocking
 `tool_call` hook and four example guards — and it blocks by default when there is no UI.**
-*(delegate + qa; harness-side belt-and-braces for 232; measured 2026-10-29)* pi's `tool_call` event fires before
+*(delegate + qa; harness-side belt-and-braces for 232; measured 2026-10-28)* pi's `tool_call` event fires before
 execution, exposes **mutable** `input`, and may return `{block:true, reason}`; later handlers see earlier mutations and
 nothing is re-validated afterwards (`src/core/extensions/types.ts:1194-1264`, `on("tool_call")` at `types.ts:1661`).
 Examples in the package: `permission-gate.ts` (regex over `bash`, **blocks outright when `ctx.hasUI` is false**),
@@ -4459,7 +4459,7 @@ bypassed under parallel tool calls") and silently auto-approves an `ask` decisio
 ([#3590](https://github.com/github/copilot-cli/issues/3590)); Cursor's
 `failClosed` is **opt-in** — while pi's contract throws and blocks
 (`src/core/agent-session.ts:668-680`, `Extension failed, blocking execution`). Nobody in the sample is both non-fatal and
-closed; the note is `docs/reviews/codex-enforcement-design-2026-10-29.md` §2.
+closed; the note is `docs/reviews/codex-enforcement-design-2026-10-28.md` §2.
 *Blind spots:* a harness-side guard is **not** the product fix and must not be reported as 232's closure — the
 unconditional `pruneWorktrees` call (`src/broker.mjs:1167` → `src/worktree.mjs:649`) still runs from inside the broker
 where no extension sees it; a guard on the outer agent cannot see a seat's verbs (217 governs those); regex guards on
@@ -4467,7 +4467,7 @@ shell strings are best-effort by nature (`git -C … worktree prune`, aliases, `
 guard that misfires on the runbooks' own commands will train everyone to disable it; and this row's headline ("no shipped
 harness guards these verbs") is scoped to the **ten observed systems** — GitHub Copilot CLI ships **opt-in** deny rules
 that do name them (`--deny-mode "command:git worktree prune"`) and fails open on timeout, so do not let the wider claim
-travel (`docs/reviews/codex-enforcement-design-2026-10-29.md` §2).
+travel (`docs/reviews/codex-enforcement-design-2026-10-28.md` §2).
 
 **239. A delegate-authored file is recoverable from the harness's own session transcripts, and the only instruments that
 do it are untracked — which is 233's failure class, still live.**
@@ -4494,7 +4494,7 @@ recovery **re-created**, per 233/D156; the Windows-host transcripts were unreach
 recovery attempt is corpus-bounded; and this row is about the **delegate's** files, not seat worktrees — seat work is in
 git or the store, and a seat's tool results are entries (137,427 of them), never transcripts.
 
-Registered 2026-10-29 (240-243), not scheduled. These come from the **public-harness half** of the tool/skill-lifecycle
+Registered 2026-10-28 (240-243), not scheduled. These come from the **public-harness half** of the tool/skill-lifecycle
 study (`docs/reviews/harness-tools-skills-public-harnesses-research.md`, round 2) and from the five public-harness pins
 that landed the same day (`codex d373d649`, `cline 51f63e4f`, `goose 775b3958`, `claude-code-docs 58d6da1e`,
 `copilot-cli 84ee80ea`; all `--depth 1`, all rows in `docs/VENDOR-PINS.md`, `--check` PASS at 14 clones).
@@ -4506,7 +4506,7 @@ ad-hoc share is paid again every session.**
 *(delegate; measured over pi 1.4.0 + 9 pinned clones + 5 public harnesses; class mixed — see citations)* Of fifteen
 systems examined across two rounds, exactly two close the loop. **Claude Code**: `/run-skill-generator` "Teach `/run`
 and `/verify` how to build and launch your project", and the docs state `/verify` "fails until that generator exists"
-(`https://code.claude.com/docs/en/skills`, class `advertised-elsewhere`, page confirmed live 2026-10-29). **Goose**:
+(`https://code.claude.com/docs/en/skills`, class `advertised-elsewhere`, page confirmed live 2026-10-28). **Goose**:
 runtime recipe write-back (`crates/goose/src/recipe/local_recipes.rs:155,194` — `generate_recipe_filename` + save into
 a recipe library) plus a session-mining "recipe cookbook generator"
 (`documentation/blog/2025-10-08-recipe-cookbook-generator/index.md`), which carries its own tombstone — *"the public
@@ -4530,12 +4530,12 @@ verifies (pi-subagents' rejected `auto-skill` pattern, row 239's sibling finding
 
 **241. Research 232 before building it: the enforcement designs of shipped harnesses are now readable at a pin, and one
 of them has a filed field failure.**
-*(operator ruling 2026-10-29: "Do more research before proceeding onto roadmap 232.")* Two things made this cheap on
+*(operator ruling 2026-10-28: "Do more research before proceeding onto roadmap 232.")* Two things made this cheap on
 the day it was ruled. (a) **Codex is readable in source** — `vendor/eval/codex` `d373d649` ships `codex-rs/`, a
 shipped permission/policy engine: approval-policy ladder, deny rules read from config, hook trust persisted
 **out-of-band** in an `mcp-oauth`-shape, outside config and outside git, so `git diff` never shows a permission grant;
 its `docs/config-file/config-advanced` keys (`project_doc_max_bytes`, `thread.skills.truncated`, `skill.injected`,
-`history.jsonl`, `hooks.json`, `PreToolUse`) were confirmed present on the live page 2026-10-29. (b) **The guard we
+`history.jsonl`, `hooks.json`, `PreToolUse`) were confirmed present on the live page 2026-10-28. (b) **The guard we
 would hand-write has a documented failure to study**: GitHub Copilot CLI ships `--deny-mode "command:git worktree
 prune"`, and its tracker shows guards **silently not working** in ways that are worse than a crash —
 [#2893](https://github.com/github/copilot-cli/issues/2893) *"preToolUse hooks silently bypassed under parallel tool calls
@@ -4545,7 +4545,7 @@ prune"`, and its tracker shows guards **silently not working** in ways that are 
 in main session nor subagents"*; [#5098](https://github.com/github/copilot-cli/issues/5098) *"sessionStart hook stops running
 after adding `sandbox.userPolicy.filesystem` paths"*. **Which plane a guard is declared on, and what config exists, decides
 whether it runs at all** — the failure mode D158's package-installed guard must be tested against, since an installed guard
-that never fires is indistinguishable from a working one. All four fetched and **title-checked** 2026-10-29, copies
+that never fires is indistinguishable from a working one. All four fetched and **title-checked** 2026-10-28, copies
 sha256-pinned in `inputs/fetched/MANIFEST.md` §3; class `advertised-elsewhere` (issue titles, not a reproduction). *A naming
 correction in the delegate's own earlier text:* the first version of this entry cited **#978/#4438** for the hooks behaviour;
 those issues are real and correctly cited by the round-2 report, but for its **skills** claims — the mis-attribution was
@@ -4554,7 +4554,7 @@ introduced during folding, which is why fetching a cited pointer and reading its
 *Signal that this is fixed:* a dated design note under `docs/reviews/` naming, for each of Codex / Copilot CLI / pi:
 where the rule lives, who can bypass it, what happens on guard timeout, whether the decision is recorded anywhere a
 reviewer can read, and whether a repo commit propagates the guard to a teammate. 232 is then claimed with a design
-chosen against evidence. **Partly delivered 2026-10-29 — `docs/reviews/codex-enforcement-design-2026-10-29.md` covers the rule
+chosen against evidence. **Partly delivered 2026-10-28 — `docs/reviews/codex-enforcement-design-2026-10-28.md` covers the rule
 layers, the fail-open/fail-closed axis and Codex's git-plane design, and reframes 232 from "intercept the verb" to "make the
 plane unreachable". 241 is **not closed**: unread are `permission_profile_catalog.rs`, `permissions_toml.rs`,
 `requirements_layers/permissions.rs`, `permission_path.rs`, `network_policy*.rs`, `requirements_exec_policy.rs`, and **where
@@ -4566,7 +4566,7 @@ for the delegate: the broker's own `pruneWorktrees` call runs where no outer ext
 *Do not:* treat the Codex engine as portable — it guards a *tool-call* plane inside one process; our destructive call
 is made by our own broker to itself. The transferable part is the shape (rules from the repo, out-of-band trust,
 fail-closed, recorded decisions), not the code.
-**Landed 2026-10-29 — the guard axis, `docs/reviews/codex-enforcement-design-2026-10-29.md`.** Three findings, all
+**Landed 2026-10-28 — the guard axis, `docs/reviews/codex-enforcement-design-2026-10-28.md`.** Three findings, all
 `observed` at `d373d649`: (1) Codex keeps rules as **one declarative file per config layer** (`config_folder()/rules/*.rules`
 loaded low→high, `core/src/exec_policy.rs:664-690`), the **project layer is a real layer** and trust is expressed by
 disabling it (`:665-668`), with an admin **requirements** tier above it (`:713`) — the repo-propagates-the-guard answer we
@@ -4582,7 +4582,7 @@ unconfirmed) are unread.
 
 **242. `tools/vendor-pins.mjs --tags` prints `_not fetched_` for prefixed tag schemes, so the pin table under-reports
 drift on the fastest-moving clone in the store.**
-*(delegate; observed 2026-10-29 while pinning `codex`)* The version-like tag filter rejects `rust-v0.106.0-alpha.9`,
+*(delegate; observed 2026-10-28 while pinning `codex`)* The version-like tag filter rejects `rust-v0.106.0-alpha.9`,
 `winget-test-rust-v0.106.0-alpha.9`, `voice-cygwin-…`, so `codex` shows no remote tag even though
 `git -C vendor/eval/codex ls-remote --tags origin` returns dozens. The tool exists because "a pin cannot live only in a
 gitignored directory" and because drift is its failure class; a row reading `_not fetched_` looks like "no releases
@@ -4597,7 +4597,7 @@ unopenable and 3 URLs are dead — ROADMAP 233's failure mode, one layer up, in 
 *(delegate; measured on `docs/reviews/harness-tools-skills-public-harnesses-research.md` as committed `318838f5`)*
 64 distinct in-body markers, 14 defined, **50 dangling** (`[^542f21#49]`-style anchors into the research agent's own
 `inputs/fetched/`, which is not in this tree), and **3 dead links** (the Goose vendor-site paths, all HTTP 404 as
-verified 2026-10-29; the resolvable paths are in the pin, `vendor/eval/goose/documentation/docs/…`). A dead URL is
+verified 2026-10-28; the resolvable paths are in the pin, `vendor/eval/goose/documentation/docs/…`). A dead URL is
 worse than no URL because it reads as evidence, and a line range into a file nobody has is a claim nobody can re-open.
 *Signal that this is fixed:* the delegate lands `inputs/fetched/` + a manifest (URL, fetch date, HTTP
 status, sha256, the page's own last-modified marker) for every page a report cites, every in-body anchor resolves, and
@@ -4614,7 +4614,7 @@ accepted only beside a quote, because a page re-fetched tomorrow does not preser
 fetches into `inputs/fetched/` and searches for each quote; a quote it cannot locate is recorded `unverified`
 (`inputs/fetched/README.md`). *Do not:* downgrade the report's conclusions because its citations are
 unresolvable — its load-bearing numbers were independently confirmed on the live vendor pages the same day
-(`docs/COMPETITORS.md`, "The 2026-10-29 public-harness pins"). Fix the chain, keep the findings.
+(`docs/COMPETITORS.md`, "The 2026-10-28 public-harness pins"). Fix the chain, keep the findings.
 
 **Delegate-side repair, done the same day (this part needed no agent).** `inputs/fetched/README.md` states the convention, and
 `inputs/fetched/MANIFEST.md` now records **11 fetched pages** (URL, UTC fetch time, HTTP status, bytes, sha256, page
@@ -4633,3 +4633,28 @@ parallel dispatch), **#3590** (`permissionDecision: "ask"` auto-approved), **#25
 fire**, main session or subagents) and **#5098** (adding `sandbox.userPolicy.filesystem` paths silently stops a hook running).
 **Protocol, now in the runbook (Do 5, Verify) and D159:** before repeating a cited claim, fetch the pointer and read its title —
 *reachable* is not *pointing where claimed*, and a wrong pointer is worse than none because it reads as verified.
+
+**244. A cited incident file has never existed in any branch, and this rig's measurement dates name no host or timezone —
+the evidence chain's *time* dimension is as unreliable as its file dimension.**
+*(delegate; discovered while repairing the round-2 citation chain, host-local 2026-10-28 CDT)* Two measured defects, one theme.
+(1) **A phantom citation.** `docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md` is cited as evidence in three tracked
+files — `docs/ROADMAP.md` (232/233), `docs/DECISIONS.md`, and
+`docs/reviews/codex-enforcement-design-2026-10-28.md` — but it **has never existed**: `git log --all --oneline -- <path>` returns
+**empty**, it is not on disk, and `ls docs/incidents/` has no `*windows-vm*` file. So the written account of the Windows suite
+run that swept its own worktree — the incident that gates 232 — is **not in this repo**. Either it lives only on the Windows host
+or it was never committed, which is ROADMAP **233**'s loss class again, now applied to the evidence used to *gate a priority*.
+(2) **Dates without hosts or zones.** Every measurement this session wrote was labelled **2026-10-29**, but the Linux host clock
+is **2026-10-28 CDT (UTC−5)** (`date` → `Wed Oct 28 06:02 PM CDT 2026`; `git log` commit dates `-0500`). The wrong date propagated
+into a **filename** (`docs/reviews/codex-enforcement-design-2026-10-29.md`, renamed the same day) and ~60 prose mentions, and it
+contradicted the machine-generated rows in `inputs/fetched/MANIFEST.md`, which carry true UTC timestamps
+(`2026-10-28T22:xxZ`). Note the trap this sets with a dual-host rig: a Windows host whose clock is a day ahead can produce
+filenames that the Linux host cannot reproduce, and nobody notices until two artifacts about the same measurement disagree.
+*Signal that this is fixed:* every measurement line names **host + timezone** (or is expressed in `Z`); a date-derived
+filename is produced from a command, not typed; and a small check — inline or instrumented — asserts that every
+`docs/…md` path a tracked file cites **exists in git** (`git log --all --diff-filter=A -- <path>` non-empty). For the phantom
+file specifically: the Windows-side account is recovered from the Windows host or from the broker's own session store, and
+committed at the path the citations already name.
+*Gated on:* the Windows host being reachable (the same gate as **237**'s Windows corpus and **232**'s reproduction), and pm
+sequencing the path-existence check. *Do not:* conclude the Windows incident did not happen — the *event* is corroborated by
+its consequences in the queue and by D155/D156; what is missing is the file the citations point at. *Do not* delete the
+citations to make them true: recover or reconstruct the file, then the citations stand.

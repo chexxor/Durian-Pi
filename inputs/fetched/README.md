@@ -4,10 +4,10 @@
 `[^20106b#1026]`, **50 of the report's 64 in-body anchors** — into a directory that stayed in the research agent's own
 workspace. Anyone holding only this repo could not open a single one of them. That is ROADMAP **233**'s failure mode one
 layer up: the *inputs* to a finding are not durable, so the finding is not checkable
-(`docs/reviews/harness-tools-skills-public-harnesses-research.md`, measured 2026-10-29; registered as **243**).
+(`docs/reviews/harness-tools-skills-public-harnesses-research.md`, measured 2026-10-28; registered as **243**).
 
 **Who fetches — the delegate, not the research agent.** The agent is **not on this machine and has no write access to this
-repo** (operator, 2026-10-29), so it cannot ship a corpus and must never be asked to. What it *can* supply is the portable
+repo** (operator, 2026-10-28), so it cannot ship a corpus and must never be asked to. What it *can* supply is the portable
 unit: **a verbatim quote of ≤ 40 words + the URL + its own fetch date**. The delegate fetches the page here, writes the
 manifest row, and searches for that quote in our copy. **A quote we cannot locate is recorded `unverified` in the folded
 docs**, while the agent's report body stays verbatim — we correct our record, not their artifact. The trap this avoids: a

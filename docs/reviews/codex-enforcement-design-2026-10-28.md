@@ -1,19 +1,21 @@
 # Design note — how shipped harnesses enforce destructive operations (ROADMAP 241: research before 232)
 
-**Written:** 2026-10-29, delegate. **Status: 241's guard axis answered; 241 stays open** (see §5 for what I did not
+**Written:** 2026-10-28, delegate, on the Linux host — **host-local CDT (UTC−5)**; name the host and zone on every
+measurement, because a dual-host rig can produce two "todays" (ROADMAP **244**: this file was first mis-dated `2026-10-29` and
+carried that date into its own filename; renamed the same day). **Status: 241's guard axis answered; 241 stays open** (see §5 for what I did not
 read). **This is not 232 and must never be reported as it.** Nothing here was built or changed in `src/`; the broker's
 own destructive call (`src/broker.mjs:1167` → `src/worktree.mjs:649`) still runs where no outer harness can see it, and
-232 stays unclaimed per the operator's ruling of 2026-10-29 (D158: *"Do more research before proceeding onto roadmap
+232 stays unclaimed per the operator's ruling of 2026-10-28 (D158: *"Do more research before proceeding onto roadmap
 232."*).
 
 **Sources, all reproducible without this session:**
 - **Codex CLI — `observed`:** `vendor/eval/codex · d373d649` (2026-10-28, Apache-2.0, `--depth 1`). Paths below are in
   that tree; `node tools/vendor-pins.mjs --check` covers the pin.
 - **pi — `observed`:** upstream `@1.4.0` `.ts` recovered read-only from the installed package's `dist/**/*.js.map`
-  `sourcesContent` (251 files, recipe in `docs/COMPETITORS.md` §"The 2026-10-29 tool-and-skill lifecycle sweep"). Line
+  `sourcesContent` (251 files, recipe in `docs/COMPETITORS.md` §"The 2026-10-28 tool-and-skill lifecycle sweep"). Line
   numbers are to **pi 1.4.0 upstream** and drift on upgrade — re-extract, never trust them across versions.
 - **GitHub Copilot CLI — `advertised-elsewhere`:** its own issue tracker. **Cursor — `advertised-elsewhere`:** vendor
-  docs, re-confirmed on the live page 2026-10-29. **No clone of either has source** (`copilot-cli 84ee80ea` is
+  docs, re-confirmed on the live page 2026-10-28. **No clone of either has source** (`copilot-cli 84ee80ea` is
   README/`install.sh`/changelog; Cursor publishes none).
 
 ## 1. Where the rule lives, and who can write it
@@ -39,9 +41,9 @@ just of the config — a subtlety none of our instruments model.
 | **Codex** | **fails OPEN (silent allow).** A hook that errors, exits non-zero (other than 2 with a reason), exits with no status code, returns malformed JSON, or returns an **unsupported** `permissionDecision` (e.g. `ask`, `approve`) ⇒ `status = Failed` **and `should_block = false`**. Exit 2 with **empty stderr** ⇒ `Failed`, no block. Input-serialization failure ⇒ `serialization_failure_outcome` with `should_block: false`. | observed | `hooks/src/events/pre_tool_use.rs` — `parse_completed` and `serialization_failure_outcome`; the vendor's **own test names** are the clearest citation: `unsupported_permission_decision_fails_open`, `deprecated_approve_decision_fails_open`, `exit_code_two_blocks_processing`, `invalid_json_like_stdout_fails_instead_of_becoming_noop` (status fails, call still proceeds) |
 | **Codex (asymmetry)** | **rule *loading* fails LOUD.** A missing/unparsable rules file returns `Err` (`ExecPolicyError::ReadFile` / `ParsePolicy`, `core/src/exec_policy.rs:244-271`) — the session does not start with a half-parsed policy. Config-time loud, run-time quiet. | observed | same file |
 | **pi** | **fails CLOSED, and loudly.** `emitToolCall` wraps its handler in **no** try/catch (`src/core/extensions/runner.ts:1248-1266`), and the caller re-throws: `throw new Error(\`Extension failed, blocking execution: ${String(err)}\`)` (`src/core/agent-session.ts:668-680`). Contrast `emitUserBash`/`emitProjectTrustEvent`, which *do* catch and record (`runner.ts:317`, `:1277-1291`) — pi chose different contracts per event, deliberately. | observed | those two files |
-| **Copilot CLI** | **guards silently do not run.** Its own tracker: hooks bypassed under parallel dispatch with a **`timeout->allow` fallback** ([#2893](https://github.com/github/copilot-cli/issues/2893)); an `ask` decision **auto-approved** by the TUI ([#3590](https://github.com/github/copilot-cli/issues/3590)); **plugin-defined `hooks.json` hooks never fire**, main session or subagents ([#2540](https://github.com/github/copilot-cli/issues/2540)); a `sessionStart` hook stops running once `sandbox.userPolicy.filesystem` paths are added ([#5098](https://github.com/github/copilot-cli/issues/5098)) | advertised-elsewhere — all four **fetched and title-checked 2026-10-29**, copies sha256-pinned in `inputs/fetched/MANIFEST.md` §3. *Not* cited here: #978/#4438, which are skills issues (see §6 of this file's naming note and `MANIFEST.md` §3) |
-| **Cursor** | **fails OPEN by default**; `failClosed: true` flips it — *"hook failures (crash, timeout, non-zero exit code, no output) block the action instead of allowing it through"* (live page, 2026-10-29). **Opt-in.** | advertised-elsewhere | `https://cursor.com/docs/hooks` |
-| **Cline (the rule plane, not hooks)** | **fails OPEN on a malformed guard rule.** *"If frontmatter can’t be parsed, Cline **fails open**. The rule activates with raw content visible to help debugging"* — the rule still *activates*, with its unparsed body as content. Same failure class on a different plane: a guard whose config broke is not absent, it is **live and wrong**. | advertised-elsewhere, **found verbatim 2026-10-29** | `https://docs.cline.bot/features/cline-rules` — our copy is sha256-pinned in `inputs/fetched/MANIFEST.md` §2 |
+| **Copilot CLI** | **guards silently do not run.** Its own tracker: hooks bypassed under parallel dispatch with a **`timeout->allow` fallback** ([#2893](https://github.com/github/copilot-cli/issues/2893)); an `ask` decision **auto-approved** by the TUI ([#3590](https://github.com/github/copilot-cli/issues/3590)); **plugin-defined `hooks.json` hooks never fire**, main session or subagents ([#2540](https://github.com/github/copilot-cli/issues/2540)); a `sessionStart` hook stops running once `sandbox.userPolicy.filesystem` paths are added ([#5098](https://github.com/github/copilot-cli/issues/5098)) | advertised-elsewhere — all four **fetched and title-checked 2026-10-28**, copies sha256-pinned in `inputs/fetched/MANIFEST.md` §3. *Not* cited here: #978/#4438, which are skills issues (see §6 of this file's naming note and `MANIFEST.md` §3) |
+| **Cursor** | **fails OPEN by default**; `failClosed: true` flips it — *"hook failures (crash, timeout, non-zero exit code, no output) block the action instead of allowing it through"* (live page, 2026-10-28). **Opt-in.** | advertised-elsewhere | `https://cursor.com/docs/hooks` |
+| **Cline (the rule plane, not hooks)** | **fails OPEN on a malformed guard rule.** *"If frontmatter can’t be parsed, Cline **fails open**. The rule activates with raw content visible to help debugging"* — the rule still *activates*, with its unparsed body as content. Same failure class on a different plane: a guard whose config broke is not absent, it is **live and wrong**. | advertised-elsewhere, **found verbatim 2026-10-28** | `https://docs.cline.bot/features/cline-rules` — our copy is sha256-pinned in `inputs/fetched/MANIFEST.md` §2 |
 
 **The pattern, stated so it can be cited:** of the five guard/rule designs I can inspect, **four degrade to allow** and the
 one that does not (pi) does so by crashing the turn. Nobody in this sample has found how to be *both* non-fatal and
