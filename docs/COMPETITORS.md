@@ -202,3 +202,62 @@ plus 14 static review rules mapped to ASI risks (`.../copilot-governance/src/rev
 deny-by-default budgets, security lint, output screening, reversibility-aware approval, vendored-code
 supply chain) - see the review Addendum and ROADMAP **145-150**. The enterprise certification
 mappings stay out of scope.
+
+---
+
+## The 2026-10-28 seven-clone sweep (seat-persona / system-prompt surface)
+
+Seven clones, all pinned on one vendor day (`2026-10-27/28`), all reviewed end-to-end against **one** question: *how do
+we define seat system prompts so they are easy to edit before the rig starts, and which existing standard can we reuse?*
+Full reviews: `docs/reviews/{crewai,symphony,hermes-agent,openhands,metagpt,oh-my-pi,prime-agent}-review.md`. Pins,
+licence signatures and highest tags: `docs/VENDOR-PINS.md` (generated; `node tools/vendor-pins.mjs --check`).
+Orientation for every walk started with `node tools/competitor-brief.mjs --project <name>` — **not** with a grep.
+
+**Where the seven land (the answer we can offer before the ruling).** Nobody in this set invents a persona DSL. The
+convergent shape is *a file with front matter, three override slots, and capability declarations*:
+
+| piece | whose | shape |
+|---|---|---|
+| the file format | **oh-my-pi** | markdown + front matter: `name`, `description`, `tools:` allowlist, `model: "@slow"` (a **role alias**), `spawns:`, `output.properties` (the return contract) — `packages/coding-agent/src/prompts/agents/reviewer.md:1-12` |
+| the override semantics | **prime-agent** | `custom_prompt` *replaces the static prefix, dynamic tail still applies*; `append_system_prompt` adds a rule — `crates/pa-core/src/prompts/system_prompt.rs:64-76` |
+| the protected default | **openhands** | a seeded `default` profile, non-renameable, which is the template new profiles copy — `.agents/skills/verify-openhands/references/feature-map/F13-agent-profiles.md:1-20` |
+| the reviewable artifact | **hermes-agent** | a committed snapshot of the **rendered** prompt + tool schemas per (surface × model family), regenerated through production code, gated by a test that prints the stale paths and the regenerate command — `scripts/ci/prompt_surface.py`, `tests/ci/test_prompt_surface.py:1-55` |
+| the cache contract | **prime-agent** + **hermes-agent** | static layers "must never contain session-specific values (**the cache-safety guard test pins the boundary**)", `cached_prefix_len`; hermes builds the prompt once/session for prefix-cache warmth — `prompts/layers.rs:1-2`, `agent/system_prompt.py:3-8` |
+| the truth rule | **prime-agent** | "the wake-up facts the daemonless line states **must match the embedding's wiring**" — the prompt may not claim a capability the harness did not grant — `system_prompt.rs:88-95` |
+
+**Rows worth their own line (mechanism → our counterpart).**
+
+| project | what it does (cited) | why it matters here | our counterpart |
+|---|---|---|---|
+| crewai | Persona = `role` / `goal` / `backstory` in `agents.yaml`; system prompt composed from **named slices** with `system_template` / `prompt_template` / `response_template` override slots (`crewai/lib/crewai/src/crewai/utilities/prompts.py`) | Editable-before-start personas in plain YAML, and an override seam that does not require rewriting the protocol | seat `instructions` as one opaque string (`rig.selfdev.json`); `wip/seat-prompt-files` |
+| crewai | Generates **`AGENTS.md` / `CLAUDE.md` / `CURSOR.md` / `GEMINI.md`** adapters for one project (`crewai-tools`) | One authored artifact, N harnesses — the same problem we have with `AGENTS.md` vs pi's config | `AGENTS.md`, `.agents/skills/` |
+| symphony | `WORKFLOW.md`: YAML front matter (config) + Markdown body (prompt), rendered with `strict_variables: true` / `strict_filters: true` (`prompt_builder.ex`); repo-versioned | Config and prompt in **one reviewable file**, and strict rendering that fails loudly on a typo instead of rendering empty | our runbook front matter (id/last_verified/done) is the same instinct, for docs not prompts |
+| symphony | A `SPEC.md` written in RFC keywords, but **no test-to-clause conformance evidence found** in the repo | A spec that outruns its tests is design, not proof — mark it `advertised` | ROADMAP 137/202 (`check` rules over claims) |
+| hermes-agent | Prompt tiers `stable` / `context` / `volatile`, each with **token counts per surface** (`tests/fixtures/prompt_surface/surfaces.json`: `context` 134 / `stable` 1829 / `volatile` 1528, + 11,242 tool tokens) | Seat prompt cost is currently unmeasured, and the 189 verifier ruling is being decided without it | ROADMAP 140, 189 |
+| hermes-agent | A test that checks the **failure summary names the surface and tool that changed** (`tests/ci/test_prompt_surface.py:46-55`) | Our seeded-bug gate proves a guard fails, never that its message is useful | D142 (publish the pattern with the count) |
+| hermes-agent | "pinned skills are **operator guidance for the user's session, not payload for every internal fork**" | Answers a question our persona design has not asked: what a subagent does *not* inherit | subagents (undefined today) |
+| openhands | `systemPromptMode: standard \| append \| custom`, stored in **different fields** (`persona` vs `system_message_suffix`), with precedence stated where enforced ("a stored persona wins over stored instructions", `src/routes/agent-settings.tsx:147, 316-317`) | The smallest vocabulary that covers "add a rule" vs "replace the identity", with no ambiguous state | seat prompt override semantics (none) |
+| openhands | Skill **scopes** `project > personal > public`, plus a legacy-path marker because "dropping it would silently misfile legacy skills as 'public'" (`src/utils/skill-scope.ts:3-14`) | Exactly D103's half-applied-rename bug class, solved with a marker instead of a switch | `src/config.mjs`, `DURIG_*`/`DURIAN_PI_*` |
+| openhands | **DefenseClaw** integration: scans skills and MCP servers **before they run**, inspects LLM traffic, emits audit evidence — no code changes to either project (`docs/DefenseClaw.md:3-18`) | A pre-run gate on skills/MCP that we do not have for `.agents/skills/` | nothing; ROADMAP 203 |
+| metagpt | Persona = a framework constant, `PREFIX_TEMPLATE = "You are a {profile}, named {name}, your goal is {goal}."`, with a `desc` escape hatch that replaces it (`metagpt/roles/role.py:51, 325-331`) | The pattern we are trying not to become: editing a persona means editing source | seat prompts in code vs data |
+| metagpt | `docs/.well-known/skills.yaml` declares each skill with `x-prerequisite.configurations` — the **env keys a skill needs**, typed, with links | Our skills declare nothing; D103 is precisely "a required setting nothing declares" | `.agents/skills/*/SKILL.md` front matter; ROADMAP 204 |
+| metagpt | **0 hits** for OWASP/NIST/CWE/guardrail/prompt-injection across its own `.md`/`.py` (pattern published in the review) | 28k prompt-template directories and no threat model at all — volume is not maturity | our own "zero with its pattern" discipline |
+| oh-my-pi | **Agent Hub**: subagent roster with usage, transcripts, steering/revive/kill, and it "discovers **parked** subagents from the current session's persisted artifacts when a session is resumed" (`docs/agent-hub.md:1-12`) | The orphan audit the operator asked for (`audit-15-orphans-and-5-parked`) is a **query over artifacts we already keep** | TUI, spool/audit records; ROADMAP 205 |
+| oh-my-pi | `.omp/commands/{triage,review-prs,fix-issues,cleanup,release}.md` — repo-versioned **runnable** commands | Our runbooks are prose for a human/delegate; theirs are steps the harness runs | `docs/runbooks/*`; ROADMAP 206 |
+| oh-my-pi | 12 per-model **tool-call dialect** docs (`docs/toolconv/*`) and model **capability screening** that excludes `embedding`/`rerank`/`ocr`/`guardrail` modes, with a declared `128000` context default (`docs/models.md:496`) | The pre-conditions for running a small local verifier (D140) | `docs/reviews/verifier-model-survey-2026-10-27.md` |
+| prime-agent | Prompt **layers** as files + a `layer_source()` provenance map (`crates/pa-core/src/prompts/layers.rs:4-16`) | Which paragraph came from which file — the reviewability we lack | seat prompts |
+| prime-agent | Evidence gates: refuses a round "with fewer than 2 measured cases per split"; "slots that only errored force `rerun`, never `keep`"; the analyzer must return **verbatim quotes with trace paths** (`src/prompts/tools/ratchet.md:19, 56`) | Rules our verifier family (189) needs and does not have | seeded-bug gate |
+| prime-agent | `docs/legacy-upgrade-contract.md:1-12`: scope, exclusions, method+date ("a full two-page GitHub Releases API query on 2026-10-09 returned 107 releases"), a linked JSON inventory, and "**inventory and source comparison are not evidence** that an installed-artifact upgrade … has passed testing" | The evidence-disclaimer sentence our own generated artifacts should carry | `docs/VENDOR-PINS.md` |
+
+**Not to borrow (recorded so the next reader does not re-litigate):** CrewAI's `knowledge/sources/agents/` auto-ingest
+(no gate on what enters context); Symphony's untested RFC-keyword spec as evidence of behaviour; hermes-agent's Docker/
+Modal container isolation layer (`security.md` layer 4) and its shipped dual-use skills
+(`optional-skills/security/godmode/`, `obliteratus`); OpenHands' guardrail-proxy sidecar and helm/cloud deployment;
+metagpt's agent-authored skills and hard-coded package-relative spec paths; oh-my-pi's Docker dev image and skill
+marketplace; prime-agent's persistent-REPL architecture and a second per-change-notes directory duplicating
+`docs/DECISIONS.md`.
+
+**Staleness alarm this sweep caught.** `metagpt`'s pinned commit date is **2026-01-21** while the other six are
+2026-10-27/28 — the vendor-day invariant holds the clones, not the upstream, so a project that stopped committing
+silently goes stale in the set. `--check` cannot see it (the table matches the clone); the pin table's *date column*
+is what surfaces it. Re-clone before acting on that row.

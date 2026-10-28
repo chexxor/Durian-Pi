@@ -5129,3 +5129,69 @@ uncommitted edit and the 2-line clock-in correction that is theirs to make.
 reviews whose clones are already gone (`aider`, `agent-governance-toolkit`, `anthropic-skills`, `agentskills-spec`,
 `superpowers`); if those NOTEs are still 5 next session, no review was re-pinned. If ROADMAP 201 is not scheduled and a
 session again runs 238 tests for a doc edit, the instrument exists and was not used — that is the number to look at.
+
+## D145 — The seven-clone sweep is done, and it converges on one shape: a persona file with three override slots (2026-10-28, delegate)
+
+**What was decided.** The competitor-review loop is no longer "half-done": all seven live clones
+(`symphony`, `hermes-agent`, `oh-my-pi`, `openhands`, `crewai`, `metagpt`, `prime-agent`) went through Do 4-9 end-to-end,
+each with a full review in `docs/reviews/<name>-review.md`, a `docs/COMPETITORS.md` section, and pins in the generated
+`docs/VENDOR-PINS.md`. The decision recorded here is the **finding the sweep produces for the operator's pending ruling
+(seat-persona surface)**: across seven projects nobody invents a persona DSL, and the four pieces that recur are owned by
+four different projects — so the ruling can be assembled from borrowed parts rather than designed from scratch.
+
+**The convergence, with the citation for each piece.**
+- **Format — oh-my-pi:** markdown + front matter carrying `name`, `description`, a `tools:` allowlist, `model: "@slow"`
+  (a **role alias**, resolved by `resolveModelRoleValue`, `extensibility/extensions/model-api.ts:27`), `spawns:`, and
+  `output.properties` (the sub-agent's **return contract**) — `packages/coding-agent/src/prompts/agents/reviewer.md:1-12`.
+  This is in our own lineage (`@oh-my-pi/pi-coding-agent`), so the format is already one pi-family harness understands.
+- **Override semantics — prime-agent:** `custom_prompt` **replaces the static prefix while "the dynamic tail still
+  applies"**, plus a separate `append_system_prompt` — `crates/pa-core/src/prompts/system_prompt.rs:64-76`. This is
+  better than the two alternatives found: OpenHands' mutually-exclusive `persona`/`system_message_suffix`
+  (`src/routes/agent-settings.tsx:316-317`) and metagpt's all-or-nothing `desc` (`metagpt/roles/role.py:325-326`).
+- **Protected default — openhands:** a seeded `default` profile that cannot be renamed or deleted and is **the template
+  new profiles copy** (`.agents/skills/verify-openhands/references/feature-map/F13-agent-profiles.md:1-20`).
+- **Reviewable artifact — hermes-agent:** a committed snapshot of the **rendered** prompt and tool schemas per
+  (surface × model family), regenerated through production code with clock/OS/paths pinned, gated by a test that prints
+  the stale paths *and* the regenerate command (`scripts/ci/prompt_surface.py:16-19, 63-66`;
+  `tests/ci/test_prompt_surface.py:1-42`).
+- **Two rules that make it safe:** the cache boundary is a tested invariant, not advice — "Layers must never contain
+  session-specific values (the cache-safety guard test pins the boundary)" + `cached_prefix_len`
+  (`prompts/layers.rs:1-2`, `system_prompt.rs:60`) — and the prompt may not claim a capability the harness did not
+  grant: "The wake-up facts the daemonless line states **must match the embedding's wiring**" (`system_prompt.rs:88-95`).
+
+**Why this is the right shape for us, stated as a constraint and not a preference.** Three of our own open items are the
+same problem wearing different clothes: `wip/seat-prompt-files` (12 inline instructions strings, byte-identity claimed by
+hand), ROADMAP 140 (context size), and ruling 3 / ROADMAP 189 (which verifier model, decided on
+cost/throughput/context/availability). hermes-agent's `surfaces.json` prints per-tier token counts per surface
+(`cli-code.claude` → `context` 134 / `stable` 1829 / `volatile` 1528, plus 11,242 tool tokens) and
+prime-agent exposes `cached_prefix_len`; **neither number exists in our rig**. A persona file with a static/dynamic split
+is what makes those numbers cheap to produce, which is why the persona decision should be taken before the verifier
+decision, not after.
+
+**What the sweep rejected, and why it matters that it is written down.** Dual-use skills shipped in the same tree as
+benign ones with no separate gate (`hermes-agent`: `optional-skills/security/godmode/`, `obliteratus`); guardrail-proxy
+sidecars and container sandboxing as the isolation layer (rejected by D131); agent-authored skills with no review gate
+(`metagpt`); a second per-change-notes directory duplicating `docs/DECISIONS.md` (`prime-agent` `.changes/`); skill
+marketplaces (distribution is not our problem, trust is). Recording these as rejections stops a later session from
+"discovering" them fresh.
+
+**New instruments and registrations from this sweep.** `tools/competitor-brief.mjs` is now the Do 4/Do 5 orientation read
+(0.9-1.1 s per project, index-bounded, ranks persona surfaces **by kind** because hit-count ranking put
+`tests/data/rsp_cache.json` above `metagpt/prompts/prompt.py` last session). Registered ROADMAP **203** (a pre-run gate
+on reachable skills/MCP — the control OpenHands integrates and we lack), **204** (a skill declares its required settings
+— metagpt's `x-prerequisite`, aimed straight at the D103 `DURIG_*`/`DURIAN_PI_*` trap), **205** (orphan/parked-work
+discovery as a read-only query over artifacts we already keep, which is the route to the operator's stranded
+`audit-15-orphans-and-5-parked` intent **without** a running broker), **206** (runbook steps as literal commands a
+`check` rule can verify exist).
+
+**Two traps this sweep found in our own method.** (1) **A vendored clone can go stale silently:** `metagpt` sits at a
+2026-01-21 commit while the other six are 2026-10-27/28; `--check` passes because pin columns compare the table to the
+clone, so the date column must be read by a human — the invariant "all HEADs share one vendor day" does not detect an
+upstream that stopped committing. (2) **Vocabulary collides across projects:** "prompt injection" means *defense* in
+`hermes-agent` and *mechanism* in `oh-my-pi` (`docs/tools/retain.md:10, 133`); a Do 5 conclusion without its pattern and
+its sense is not evidence, which is D142 restated in a new context.
+
+**Falsifiable next session.** `node tools/vendor-pins.mjs --check` should still exit 0 and print "7 clone(s) pass the
+review audit"; if it prints a DRIFT on a *pin column*, a clone moved and its review is now stale. If a session asks the
+operator the persona question without citing the four pieces above, the synthesis was not read. If ROADMAP 205 is not
+scheduled and the orphan audit is still waiting on the broker, the sweep's cheapest transferable idea was ignored.

@@ -3520,3 +3520,52 @@ an untracked table, green on a tag-only move. Until this lands, `tools/vendor-pi
 — nothing in `demo/` exercises it, so its behaviour is guaranteed only by the injections run against it by hand; a
 `demo/vendor-pins.test.mjs` (mapped into `demo/test-areas.json`, which `demo/test-areas.test.mjs` requires for every
 `demo/*.test.mjs`) belongs with whichever half of this work the team takes.
+
+## The seven-clone competitor sweep (2026-10-28) — what the reviews ask the rig to do
+
+All seven vendored clones are reviewed end-to-end (`docs/reviews/{crewai,symphony,hermes-agent,openhands,metagpt,
+oh-my-pi,prime-agent}-review.md`); the synthesis and the per-row table are in `docs/COMPETITORS.md` ("The 2026-10-28
+seven-clone sweep"). The items below are the mechanics those reviews ask for. None of them is the **seat-persona
+surface ruling** — that is the operator's (see `docs/NEXT.md` ruling 1); 203–206 are the parts that do not need it.
+
+**203. A pre-run gate on the skills and MCP servers a seat can reach — the control OpenHands integrates and we do not
+have.** `docs/reviews/openhands-review.md` Do 5: `docs/DefenseClaw.md:3` — "it scans skills and MCP servers before they
+run, inspects LLM traffic at runtime, and produces durable audit evidence". We ship `.agents/skills/` into every seat's
+context with no gate: no front-matter schema check, no citation/delimiter check, nothing that would catch the class of
+bug this rig already documents for vendored source (instructions-in-data). Reject the vendor *architecture* (a guardrail
+proxy sidecar adds a network hop and a second runtime to a local rig — review §"Where it does not fit").
+*Owner:* security · *Where:* `src/checkup.mjs` (a skill-lint rule over `.agents/skills/**/SKILL.md`: name/description
+present, no instruction-shaped text in a *data* file, no path outside the workspace) wired into the existing `check`
+surface. *Acceptance:* red on an injected skill whose description contains a directive to the seat; green today; no new
+process, no new daemon.
+
+**204. A skill must declare the settings it needs — metagpt's `x-prerequisite`, aimed at our own D103 trap.**
+`docs/reviews/metagpt-review.md` Do 4/Do 5: `docs/.well-known/skills.yaml:13-30` declares, per skill, the
+configurations it requires (`type`, `description`, doc link), and `metagpt/learn/skill_loader.py:70` reads that file.
+Our skills declare nothing, and `src/config.mjs` (`CONFIG_KEYS`, D103) is a live example of "a required setting nothing
+declares" — `DURIAN_PI_DB` silently opens an empty store because no artifact says which prefix a tool reads.
+*Owner:* devtools · *Where:* `.agents/skills/*/SKILL.md` front matter (a `requires:` list of env/config keys) + a
+`check` rule that a key named in a skill body also appears in `CONFIG_KEYS` (`src/config.mjs`) or is declared.
+*Acceptance:* red on a skill that reads `DURIAN_PI_*` while `CONFIG_KEYS` registers only `DURIG_*`; that is the D103
+bug expressed as a test, and it is the highest-value single line in this section.
+
+**205. Orphan and parked-work discovery as a query over artifacts we already keep — the one item that answers a
+stranded operator intent.** `docs/reviews/oh-my-pi-review.md` Do 4: `docs/agent-hub.md:1-12` — the Hub "discovers
+parked subagents from the current session's persisted artifacts **when a session is resumed**", and its roster carries
+per-agent **usage** and transcript access. The operator's `audit-15-orphans-and-5-parked` intent has been stranded with
+`pm` since `2026-10-27T05:04:46Z` because the broker has never been served on this box (`docs/NEXT.md` blocker 5) — but
+their design says the audit does not need a live broker: it reads **persisted artifacts**. *Owner:* impl · *Where:* a
+read-only `cli.mjs` verb (e.g. `orphans`) over the spool/audit/worktree artifacts, plus a `git worktree list --porcelain`
+cross-check as in `docs/runbooks/workspace-move.md`; TUI surface optional and later. *Acceptance:* it names each
+worktree/claim with no live claim behind it and exits 0 on a clean rig — `docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`
+is the worked case; this must not require the broker to be running.
+
+**206. A runbook step sequence the harness can run — oh-my-pi's `.omp/commands/*.md`, done with our front matter.**
+`docs/reviews/oh-my-pi-review.md` Do 4/adopt #7: `.omp/commands/{triage,review-prs,fix-issues,cleanup,release}.md` are
+repo-versioned procedures the agent executes, not prose it reads. Our runbooks carry the truth metadata (id,
+`last_verified`, done — `demo/runbook-frontmatter.test.mjs`) and the prose; the gap is the executable middle.
+*Owner:* pm (decomposition) · *Where:* `docs/runbooks/**` front matter gains a `steps:` list of literal commands, and a
+`check` rule asserts each step's command exists (`cli.mjs` verb, `scripts/*.mjs`, `tools/*.mjs`) — so a runbook cannot
+keep advertising a deleted verb. Do **not** add a second command directory; the runbook *is* the artifact (D144).
+*Acceptance:* red on a runbook step naming a non-existent verb (today: `docs/runbooks/competitor-review.md` steps all
+resolve — verify before claiming).

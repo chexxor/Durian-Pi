@@ -5,7 +5,7 @@ writes: false
 precondition: "none"
 last_verified: 2026-10-28
 verified_by: delegate
-evidence: "docs/reviews/aider-review.md (worked example, 2026-10-17); Do 2 + Verify re-run 2026-10-28 on 7 live clones — `tools/vendor-pins.mjs --format header --project symphony --tags` emitted the header, `--write docs/VENDOR-PINS.md --tags` wrote the tracked pin table, `--check` exit 0, and an injected hand-edited HEAD returned exit 1"
+evidence: "docs/reviews/aider-review.md (worked example, 2026-10-17); Do 2 + Verify re-run 2026-10-28 on 7 live clones — `tools/vendor-pins.mjs --format header --project symphony --tags` emitted the header, `--write docs/VENDOR-PINS.md --tags` wrote the tracked pin table, `--check` exit 0, and an injected hand-edited HEAD returned exit 1; Do 4-9 now run end-to-end on all 7 (`docs/reviews/{crewai,symphony,hermes-agent,openhands,metagpt,oh-my-pi,prime-agent}-review.md`, 2026-10-28) — `--check` reports \"7 clone(s) pass the review audit\", `node scripts/test.mjs --all` 238/238 in 40.9 s, and each walk started from `node tools/competitor-brief.mjs --project <name>` (0.9-1.1 s) rather than a grep"
 check_rule: "tools/vendor-pins.mjs --check (delegate audit; the `check` rule is ROADMAP 202)"
 ---
 
@@ -212,6 +212,19 @@ Keying on the clone's existence avoids flagging non-competitor reviews under `do
 (e.g. `security-codemode-review.md`). It deliberately does **not** require every `vendor/eval/` clone to have a
 review — that directory also holds dependency/TUI evals (`ansi-regex`, `bubbletea`, `node-pty`, …). Until the rule
 lands, the audit is `node tools/vendor-pins.mjs --check`, which a delegate runs and a seat does not.
+
+**Swept (2026-10-28): all seven clones through Do 4-9.** One question per sweep (seat-persona surface), one row per
+mechanism in the review's adoptable table, every row `observed` / `advertised` / `partial` by what was actually opened.
+Three things only a full sweep shows, now recorded here so the next reviewer does not re-learn them:
+1. **A vendored clone can go stale silently.** `metagpt`'s commit date is 2026-01-21 while the other six are 2026-10-27/28.
+   The vendor-day invariant holds *our clones*, not *upstream*, and `--check` passes because the table matches the clone —
+   so **read the pin table's date column**, and re-clone (Do 0) before acting on a stale row.
+2. **A short README is a sign to start from `AGENTS.md` and the crate/package map**, not from a grep: `prime-agent`'s
+   README advertises one doc link, and its whole persona surface (`crates/pa-core/src/prompts/`) is undocumented.
+   The brief's "README links, in document order" line makes that visible in seconds (it printed 1 link, cap 12).
+3. **Do 5's zero is a finding, publish it with the pattern.** `metagpt` → 0 files for OWASP/NIST/CWE/guardrail/prompt
+   injection across its own `.md`/`.py`; `prime-agent` → 2 files; `hermes-agent` → 120 files, where the earlier `ATF`
+   substring bug (`ATF` ⊂ `PLAT**ATF**ORM`) had inflated it to 156. A count without its pattern is not evidence (D142).
 
 ## If it fails
 - Clone blocked (network, license): do not vendor it; record the blocker in the review and fall back to

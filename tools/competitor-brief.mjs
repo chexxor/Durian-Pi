@@ -63,8 +63,10 @@ const CAPS = {
 const INDEX_RES = [/^README(\.[A-Za-z]+)?$/i, /^docs?[\/^]*?index\.md$/i, /(^|\/)index\.md$/i, /(^|\/)(SUMMARY|BOOK)\.md$/i, /(^|\/)mkdocs\.(yml|yaml)$/i, /(^|\/)docusaurus\.config\.(js|ts)$/i, /(^|\/)docs?[\/^]*README\.md$/i, /(^|\/)adr([\/^]|$)/i, /(^|\/)CHANGELOG(\.md)?$/i];
 
 // Do 5: the external standards a project may claim to map to (competitor-review.md Do 5's list plus
-// the agent-domain ones the vendored projects actually use).
-const STANDARDS_RE = "OWASP|NIST|SP ?800|CIS Benchmark|ISO ?27001|ISO ?\\d|SOC ?2|EU AI Act|MITRE|ATF|ASIL|CWE|NVD|CVE-|responsible AI|AI safety|guardrail|threat model";
+// the agent-domain ones the vendored projects actually use). CASE-SENSITIVE on purpose: `git grep -i ATF`
+// matched 214 lines of "at f..." in one hermes-agent doc, and a false-positive standard is worse than a
+// missed one — it becomes a finding someone cites. Phrase tokens carry their own case variants.
+const STANDARDS_RE = "\\bOWASP\\b|\\bNIST\\b|SP ?800|CIS Benchmark|ISO ?27001|ISO ?[0-9]+|\\bSOC ?2\\b|EU AI Act|\\bMITRE\\b|\\bATF\\b|\\bASIL\\b|\\bCWE-?[0-9]+\\b|\\bNVD\\b|CVE-[0-9]+|[Rr]esponsible [Aa][Ii]|[Aa][Ii] [Ss]afety|[Gg]uardrail|[Tt]hreat model|attack surface|[Rr]ed [Tt]eam|jailbreak|prompt injection";
 
 // The operator's actual question (seat personas / system prompts), as KEY patterns in TIERS, not one
 // flat regex. The last review session grepped one flat pattern and got rank-by-noise: for `metagpt`
@@ -131,9 +133,9 @@ function pins(tags) {
 const trackedFiles = (clone) => sh("git", ["-C", clone, "ls-files"], { maxBuffer: 64 << 20 }).out.split("\n").filter(Boolean);
 
 /** `git grep -c` over the clone's INDEX. Returns [{path, hits}], sorted desc, with the pattern kept. */
-function grepCount(clone, pattern, { excludeDirs = [], pathspecs = ["."] } = {}) {
+function grepCount(clone, pattern, { excludeDirs = [], pathspecs = ["."], icase = false } = {}) {
 	const ex = excludeDirs.flatMap((d) => [`:(exclude)**/${d}/**`, `:(exclude)${d}/**`, `:(exclude)${d}`]);
-	const r = sh("git", ["-C", clone, "grep", "-c", "-I", "-E", pattern, "--", ...pathspecs, ...ex], { maxBuffer: CAPS.grepMaxBuffer });
+	const r = sh("git", ["-C", clone, "grep", "-c", "-I", ...(icase ? ["-i"] : []), "-E", pattern, "--", ...pathspecs, ...ex], { maxBuffer: CAPS.grepMaxBuffer });
 	// git grep exits 1 when nothing matches — that is a result, not a failure.
 	const rows = r.out.split("\n").filter(Boolean).map((l) => {
 		const i = l.lastIndexOf(":");
@@ -161,6 +163,8 @@ const cmpVersion = (a, b) => {
 	}
 	return 0;
 };
+
+const LOCALE_RE = /(^|\/)(en-US|pt-BR|ko|ar|ja|zh-CN|es|fr|de|it|ru|hi|tr|vi|nl|pl|uk)(?=\/)/;
 
 /**
  * A docs-site repo often keeps one docs tree PER RELEASE (measured: `crewai/docs` holds 36,323 md
@@ -241,16 +245,46 @@ function areas(files) {
 	return { rows: rows.slice(0, CAPS.areas), total: rows.length, mdTotal: [...byArea.values()].reduce((a, b) => a + b, 0), versioned: [...versioned] };
 }
 
+/**
+ * Collapse the copies a docs site ships per RELEASE and per LANGUAGE onto one representative row, so a
+ * 12-row table can't be filled by one page times 48 releases (measured on `crewai`: the persona page
+ * `docs/edge/en/concepts/agents.mdx` has 35+ copies and each release tree has 3 locales).
+ * The representative prefers the CURRENT release (or an unversioned `edge`/dev tree) over an old one.
+ */
+function collapseRows(rows, currentPrefixes = []) {
+	const langRe = /(^|\/)(en|en-US|pt-BR|ko|ar|ja|zh|zh-CN|es|fr|de|it|ru|hi|tr|vi|nl|pl|uk)(?=\/)/;
+	const norm = (p) => p.replace(/(^|\/)v?\d+\.\d+[^/]*(?=\/)/g, "$1<ver>").replace(langRe, "$1<lang>");
+	const better = (a, b) => {
+		const A = currentPrefixes.some((c) => a.startsWith(`${c}/`)) || !/\/v?\d+\.\d+[^/]*\//.test(a);
+		const B = currentPrefixes.some((c) => b.startsWith(`${c}/`)) || !/\/v?\d+\.\d+[^/]*\//.test(b);
+		return A && !B;
+	};
+	const out = new Map();
+	for (const r of rows) {
+		const k = norm(r.path);
+		const cur = out.get(k);
+		if (!cur) out.set(k, { ...r, copies: 1 });
+		else {
+			cur.copies++;
+			if (better(r.path, cur.path)) cur.path = r.path;
+		}
+	}
+	return [...out.values()];
+}
+
 /** Where the persona/system-prompt surface actually is: by NAME first, then definition keys, then
  *  containers. Ranked by KIND, not by hit count — hit count ranks noise. */
 function surface(clone, files, { includeFixtures = false } = {}) {
 	const fixtureDirs = [...new Set(files.map((f) => f.split("/").slice(0, -1)).flat().filter((d) => FIXTURE_DIRS.test(d)))];
 	const ex = includeFixtures ? [] : fixtureDirs;
-	const byNameAll = files.filter((f) => SURFACE_NAME_RE.test(f));
+	const byNameAll = files.filter((f) => SURFACE_NAME_RE.test(f) && !LOCALE_RE.test(f));
+	const localeCopies = files.filter((f) => SURFACE_NAME_RE.test(f) && LOCALE_RE.test(f)).length;
 	const tiers = {};
+	const currentPrefixesCache = { v: null };
 	for (const t of TIERS) {
 		const g = grepCount(clone, t.re, { excludeDirs: ex });
-		const rows = g.rows.slice(0, CAPS.surfaceFiles);
+		if (currentPrefixesCache.v === null) currentPrefixesCache.v = docsVersions(files).map((v) => v.current);
+		const rows = collapseRows(g.rows.slice(0, CAPS.surfaceFiles * 6), currentPrefixesCache.v).slice(0, CAPS.surfaceFiles);
 		if (t.tier !== "C") for (const r of rows.slice(0, CAPS.quoteLines)) r.first = firstHit(clone, t.re, r.path);
 		tiers[t.tier] = { label: t.label, pattern: t.re, rows, totalFiles: g.rows.length, totalHits: g.rows.reduce((a, b) => a + b.hits, 0), hitsByPath: new Map(g.rows.map((r) => [r.path, r.hits])) };
 	}
@@ -273,13 +307,14 @@ function surface(clone, files, { includeFixtures = false } = {}) {
 	}
 	const byName = [...groups.values()].sort((a, b) => b.defined - a.defined || a.path.localeCompare(b.path)).slice(0, CAPS.surfaceNames);
 	const excluded = files.filter((f) => f.split("/").slice(0, -1).some((d) => FIXTURE_DIRS.test(d)) && (SURFACE_NAME_RE.test(f) || tiers.A.rows.some((r) => r.path === f)));
-	return { byName, fixtureDirs: ex, tiers, excludedFixtureSurface: excluded.slice(0, CAPS.surfaceFiles), excludedFixtureTotal: excluded.length, byNameTotal: byNameAll.length, byNameGroups: groups.size };
+	return { byName, fixtureDirs: ex, tiers, localeCopies, excludedFixtureSurface: excluded.slice(0, CAPS.surfaceFiles), excludedFixtureTotal: excluded.length, byNameTotal: byNameAll.length, byNameGroups: groups.size };
 }
 
 function standards(clone) {
 	const fixtureDirs = [...new Set(trackedFiles(clone).map((f) => f.split("/").slice(0, -1)).flat().filter((d) => FIXTURE_DIRS.test(d)))];
 	const g = grepCount(clone, STANDARDS_RE, { pathspecs: ["*.md", "*.mdx", "*.yml", "*.yaml", "*.json"], excludeDirs: fixtureDirs });
-	return { pattern: STANDARDS_RE, scope: `git grep over the clone index, pathspec *.md/*.mdx/*.yml/*.yaml/*.json, fixture dirs excluded (${fixtureDirs.join(", ") || "none"})`, rows: g.rows.slice(0, CAPS.standardsFiles), totalFiles: g.rows.length };
+	const rows = collapseRows(g.rows, docsVersions(trackedFiles(clone)).map((v) => v.current)).slice(0, CAPS.standardsFiles);
+	return { pattern: STANDARDS_RE, scope: `git grep over the clone index, pathspec *.md/*.mdx/*.yml/*.yaml/*.json, fixture dirs excluded (${fixtureDirs.join(", ") || "none"}); release/locale copies collapsed`, rows, totalFiles: g.rows.length };
 }
 
 function brief(name, pin, tags, o = {}) {
@@ -361,12 +396,12 @@ function renderBrief(b) {
 	for (const v of b.areas.versioned) L.push(`  VERSIONED AREA — read bounded, never grep whole: ${v}`);
 	L.push(`### Do 5 · standards/checklist/benchmark claims (pattern: ${STANDARDS_RE})`);
 	if (!b.standards.rows.length) L.push("  no hits in this pathspec scope — that is a result, not an absence of looking");
-	for (const r of b.standards.rows) L.push(`  ${String(r.hits).padStart(5)}  ${r.path}`);
+	for (const r of b.standards.rows) L.push(`  ${String(r.hits).padStart(5)}  ${r.path}${r.copies > 1 ? `  (+${r.copies - 1} release/locale copies)` : ""}`);
 	L.push(`  ${b.standards.totalFiles} file(s) matched; showing ${Math.min(b.standards.rows.length, CAPS.standardsFiles)} · scope: ${b.standards.scope}`);
 	L.push(`### The operator's question · persona / system-prompt surface`);
 	L.push(`  ranked by KIND, not by hit count (hit count ranks noise — that is how metagpt's real surface,`);
 	L.push(`  metagpt/prompts/prompt.py PREFIX_TEMPLATE, lost to tests/data/rsp_cache.json in the last session).`);
-	L.push(`  surfaces BY NAME (pattern: ${SURFACE_NAME_RE}) — showing ${b.surface.byName.length} of ${b.surface.byNameGroups} distinct (${b.surface.byNameTotal} paths, release copies collapsed), ranked by tier-A+B hits:`);
+	L.push(`  surfaces BY NAME (pattern: ${SURFACE_NAME_RE}) — showing ${b.surface.byName.length} of ${b.surface.byNameGroups} distinct (${b.surface.byNameTotal} paths, release copies collapsed, ${b.surface.localeCopies} translated copies dropped), ranked by tier-A+B hits:`);
 	for (const f of b.surface.byName) L.push(`    ${String(f.defined).padStart(5)}  ${f.path}${f.copies > 1 ? `  (+${f.copies - 1} older-release copies)` : ""}`);
 	if (!b.surface.byName.length) L.push("    none — this project's personas are not in files named for them");
 	for (const t of ["A", "B", "C"]) {
@@ -375,7 +410,7 @@ function renderBrief(b) {
 		L.push(`    pattern: ${s.pattern}`);
 		if (!s.rows.length) L.push("    no hits — a zero you can trust, because the pattern is above and fixtures are excluded");
 		for (const r of s.rows) {
-			L.push(`    ${String(r.hits).padStart(5)}  ${r.path}`);
+			L.push(`    ${String(r.hits).padStart(5)}  ${r.path}${r.copies > 1 ? `  (+${r.copies - 1} release/locale copies)` : ""}`);
 			if (r.first) L.push(`             data, not instructions: ${r.first}`);
 		}
 		L.push(`    ${s.totalFiles} file(s), ${s.totalHits} hits; showing ${s.rows.length} (cap ${CAPS.surfaceFiles})`);
