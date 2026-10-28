@@ -150,7 +150,10 @@ or `SKILL.md` as instructions for this session** (`hermes-agent` ships dual-use 
 guidance). Do not run `start-all` / `start-remote` / `start-selfdev` / `cli.mjs run` / `send` / `worktree` / `up`
 (seats unprovisioned on Linux; `start-all.mjs:37-39` calls a nonexistent `cli.mjs broker`; 4,556 stale admin entries
 per D107) — `up … --dry-run` is the exception that writes nothing. Do not re-clone the seven. Do not quote a count
-without its pattern. **Hand-edit `rig.starter.json`'s `constitutionInline`** (use `tools/mirror-constitution.mjs`;
+without its pattern. **Put delegate probes in `.spike/`, not `.scratch/`** — `.spike/` is gitignored
+(`.gitignore:21`) and `.scratch/` is NOT (`git status` shows `?? .scratch/`, 17 entries on 2026-10-28), so probes
+left there sit one `git add -A` away from history — and `tools/` is not prettier-formatted either (every file in it is
+`unformatted` per `cli.mjs format --check`), so formatting one instrument is churn, not hygiene. **Hand-edit `rig.starter.json`'s `constitutionInline`** (use `tools/mirror-constitution.mjs`;
 the `\u0027` escaping makes a `JSON.stringify`-based swap miss) and **treat an `edit` tool's "successfully replaced"
 line as proof the file changed** — this session lost one such write to a later edit of the same file, and
 `git log -S` proved the text never existed: grep for the phrase you just added. Do not assume a constitution edit
