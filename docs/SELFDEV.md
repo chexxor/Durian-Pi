@@ -98,7 +98,10 @@ DURIAN_PI_SEAT_ROOT=<that>/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs 
 DURIAN_PI_SEAT_ROOT=<that>/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs run --watch
 ```
 
-`up --refresh` re-points each seat's persisted `cwd`; the F12 guard fails closed if `DURIAN_PI_SEAT_ROOT`
+`up --refresh` re-points each seat's persisted `cwd` **only to whatever the rig file names** — measured 2026-10-28
+(Linux): with `rig.selfdev.json` still carrying `devtools.cwd = C:/Users/Alex/…/item-2801`, `up rig.selfdev.json
+--refresh --dry-run` reported `changes: {}` for all 12 seats, i.e. it re-asserted the dead Windows path. Fix the rig
+file first (ROADMAP 210). The F12 guard fails closed if `DURIAN_PI_SEAT_ROOT`
 disagrees with what a seat already has, so re-point rather than guessing.
 
 ## Pinned-pi reproduction in worktrees
@@ -318,7 +321,8 @@ Each of these cost real turns this session; they are habits, not trivia.
   breath (`…/swift-setup.out`), and give them a one-liner: `Get-Content <log> -Tail 5 -Wait`.
 - **A seat's model is read from `rig.selfdev.json` at wake (`cli.mjs:481`), not persisted per conversation.**
   A model change therefore needs **no `up --refresh`** — the next run picks it up. `up --refresh` re-points
-  cwds; do not run it (a writing verb) while the broker drives, just to make a model change take effect.
+  cwds **to the value the rig file names** (see the correction under "Running it": it cannot repair a cwd the rig file
+  itself carries); do not run it (a writing verb) while the broker drives, just to make a model change take effect.
 - **Check the machine before blaming the rig.** Swift 1.5 IQ2_XS holds **~22 GB of experts in RAM** on this
   32 GB box (PolyStrata wants ~48 GB RAM+VRAM, so it runs in low-RAM mode). With ~1 GB free, forks fail
   (`cygheap read copy failed`, `Resource temporarily unavailable`) and *every* tool call looks broken.
