@@ -5,11 +5,16 @@ operating decision, or audit a competitor. They are **not `check` rules and not 
 them, a seat does not, and none of them writes to the store, the rig, or the tree unless the verb is named
 (`--write`, `--start`). Every instrument prints the **patterns and thresholds it counted**, because a count with
 no pattern is not evidence (D142). The product-side halves of these ideas are registered as ROADMAP items
-(`check` rules are the team's work, not the delegate's).
+(`check` rules are the team's work, not the delegate's). **Every timing below is `real` from this box** — Linux
+(`Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`), `node v24.22.1`, store `./selfdev.sqlite` (273,995 entries),
+2026-10-28T16:4xZ — and every **exit code was re-measured rather than copied from a draft**: that habit caught two stale
+rows in the same hour it wrote this table (`competitor-brief --check` is **0.03 s · exit 2**, not "0.11 s · exit 1").
+Re-measure a row when you touch its tool; a cost table that drifts is worse than no table.
 
-**Read this before writing a probe.** The last two sessions each spent part of an hour re-deriving a read that
-already shipped (`scripts/read-constitution.mjs`; a store query that `tools/edit-failure-rate.mjs` now prints in
-~2 s). Discovery by `ls` + guessing is the slow path; this index is the short one. Also check `scripts/` — the
+**Read this before writing a probe.** The last sessions each spent part of an hour re-deriving a read that already
+shipped (`scripts/read-constitution.mjs`; store queries that `tools/edit-failure-rate.mjs` now prints in ~2.6 s). It
+happened **twice in one session even after the lesson was written into a pitfall list** — which is why the fix is this
+index rather than more prose (D150 §2). Discovery by `ls` + guessing is the slow path; this index is the short one. Also check `scripts/` — the
 product ships helpers (`scripts/read-constitution.mjs`, `scripts/clockin.mjs`, `scripts/sync-pi.mjs`,
 `scripts/test.mjs`).
 
@@ -46,3 +51,19 @@ product ships helpers (`scripts/read-constitution.mjs`, `scripts/clockin.mjs`, `
   `git add -A` away from history.
 - **`tools/` is not prettier-formatted** (`cli.mjs format --check` reports every file here unformatted), so
   reformatting one instrument in a functional change is churn, not hygiene.
+
+---
+
+## What is **not** in this index
+
+`scripts/` is the team's build/test surface — `scripts/test.mjs`, `scripts/audit.mjs`, `scripts/clockin.mjs`,
+`scripts/read-constitution.mjs` — and `scripts/model-bench.mjs` is **never** a build proof (a build uses
+`tools/model-probes/cold-prefill.mjs`). The **17 scripts under `tools/model-probes/`** are one-off provider
+measurements indexed by their own `tools/model-probes/README.md`; the coverage guard registered in **213** checks this
+file against the **8 top-level `tools/*.mjs`** instruments (broker-serve, competitor-brief, edit-failure-rate,
+mirror-constitution, queue-drain-audit, text-integrity-scan, vendor-pins, what-to-test), not against the probe pile.
+
+**Two rules that live only in `docs/SELFDEV.md`** (they are not tool gotchas, so they are named here once): the next
+free `ROADMAP` id comes from `grep '^\*\*[0-9]+\.' docs/ROADMAP.md | sed 's/\*\*//g' | cut -d. -f1 | sort -n | tail -1`
+— a bare `\b[0-9]{3}\b` grep returns prose citations, and **299 appears in text with no such item** — and `git status`
+has **no `--cached`**; staged state is `git diff --cached --name-only`.

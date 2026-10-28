@@ -3679,6 +3679,10 @@ staying under it today: a surface that only warns degrades silently, and the nex
 *Acceptance:* clock-in output contains a `PROOF COMMANDS` section naming at least the constitution,
 delivery-channel and byte-integrity reads with their expected exit codes; the digest stays under its cap and remains
 body-free (the pointer-only rule); a session that runs the block learns the three-copy rule without reading a runbook.
+**And one more guard in the same item:** a demo that fails while any **top-level `tools/*.mjs`** instrument is missing
+from `tools/README.md` — an index that can rot silently is not a surface, and that index is the source this block is
+generated from (D150 §2). Scope it to the 8 top-level instruments: `tools/model-probes/` holds 17 one-off measurement
+scripts indexed by their own `tools/model-probes/README.md`, and folding them in would be noise dressed as coverage.
 · *Blind spots:* it must print **commands**, not conclusions — a cached "constitution applied" line would be a lie the
 moment someone amends the file again (the same reason `check` re-reads the store); and this is the delegate-side twin of
 milestone **O1** (a seat boot contract) and adjacent to **206** (executable runbook steps) — claim it as the read-only
