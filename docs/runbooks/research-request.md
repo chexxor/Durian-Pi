@@ -83,6 +83,17 @@ judgement) and HTTP-check every URL in the evidence table. Dangling anchors and 
   URLs into `inputs/fetched/`, generate `inputs/fetched/MANIFEST.md`, confirm or refute each load-bearing number against
   our own copy, record the gap in a dated consumption note, and register it (**243**). What killed round 2's checkability
   was an *input* nobody could open — the same failure class as ROADMAP **233**, one layer up.
+- **Check the pointers themselves, twice.** (i) **Fetch each cited page/issue and read its title** before repeating the claim.
+  Worked example, 2026-10-28 (Linux host, host-local CDT/UTC−5): this delegate repeated a round-2 report's copilot-cli numbers
+  **#978/#4438** as evidence of *fail-open hooks*, wrote that into three files, and only then fetched them — their titles are
+  *"Skills are not used unless explicitely stated"* and *"`disable-model-invocation: true` makes a skill unreachable, not
+  manual-only"*. **The report had cited them correctly, for its skills claims; the mis-attribution was introduced in folding.**
+  Title-checking also produced better evidence than the report had: **#2893** (`timeout->allow` fallback under parallel dispatch),
+  **#3590** (`permissionDecision: "ask"` auto-approved), **#2540** (**plugin-declared hooks never fire at all**), **#5098** (a
+  sandbox config change silently stops a hook running). (ii) **Assert a cited repo path exists:**
+  `git log --all --diff-filter=A -- <path>` must be non-empty — the rig's own ROADMAP 232/233 citations point at
+  `docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md`, which has **never existed in any branch** (ROADMAP **244**).
+  **A wrong pointer is worse than no pointer, because it reads as verified** (D159 addendum).
 - **The agent cannot deliver files** (it is off-host and has no repo write access — the normal case). Ask it for
   **quoted text**, not artifacts: ≤ 40-word verbatim quotes + URL + its fetch date per load-bearing claim. The delegate
   then fetches, manifests, and searches for the quote in its own copy; a quote that cannot be found is `unverified` in the
