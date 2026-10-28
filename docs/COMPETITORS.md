@@ -135,7 +135,7 @@ reference text for our seats.
 ## aider — `Aider-AI/aider`
 
 - **Repo:** https://github.com/Aider-AI/aider
-- **Read at:** clone `../vendor/eval/aider`, HEAD `5dc9490` (shallow, 2026-10-17)
+- **Read at:** clone `../vendor/eval/aider`, HEAD `5dc9490` (shallow, 2026-10-17; **re-cloned and re-pinned to the same commit 2026-10-28 — `--freshness` says `CURRENT`, so aider is dormant at `5dc9490b`, latest remote tag `v0.86.3.dev`**; the pin now lives in the tracked table `docs/VENDOR-PINS.md`)
 - **What it is:** a terminal pair-programming agent (single repo, single agent). Not a multi-agent
   substrate — read it for its **edit-and-verify mechanics**: per-model edit formats, a ranked repository
   map, and a lint/test loop that repairs its own edits. Docs: `aider/website/docs/`; edit-format code:
@@ -145,8 +145,10 @@ reference text for our seats.
 | What it does | Why it is worth learning from | durig counterpart |
 |---|---|---|
 | **Per-model edit format** (`--edit-format`: whole/diff/diff-fenced/udiff) with defaults per model (`aider/website/docs/more/edit-formats.md`, `troubleshooting/edit-errors.md`) | One format does not fit every model; format is a first-class config knob | one exact-match `edit` tool for all seats — measure per model (ROADMAP 102) |
-| **High-level diffs** — coherent code blocks, not surgical line edits; 30–50% fewer errors without it (`aider/website/docs/unified-diffs.md`) | The model edits better when the unit is a whole function | seat edit guidance |
-| **Bounded flexible patching** — normalize a failed hunk to a real diff, split into sub-hunks, vary context (`unified-diffs.md`, `aider/coders/editblock_coder.py`) | 9× fewer apply failures with flexibility | `edit` is exact-match; take the strategies, **reject the `SequenceMatcher` similarity fallback** (silent wrong-region) |
+| **High-level diffs** — coherent code blocks, not surgical line edits. **Claim corrected 2026-10-28:** the tree says task score went **20% → 61%** (GPT-4 Turbo) and **26% → 59%** on 89 python refactoring tasks, laziness down **3×** — not "30–50% fewer errors", a figure that appears nowhere in the clone (`aider/website/docs/unified-diffs.md:36-45`) | The model edits better when the unit is a whole function | seat edit guidance |
+| **A failed edit is answered with candidates** — "Did you mean to match some of these actual lines from {path}?", an already-applied check, and "The other N blocks were applied successfully. Don't re-send them." (`aider/coders/editblock_coder.py:96-118`, `:602-624`) — **observed 2026-10-28** | 71% of our edit errors are anchor misses (153 of 215 — `tools/edit-failure-rate.mjs`) and pi's refusal names no candidate (`edit-diff.ts:256`) | the seat `edit` seam in `src/seattools.mjs` (ROADMAP **215**) |
+| **In-turn lint/test + bounded self-repair** — `auto_lint` default on, failures fed back as a `reflected_message`, `max_reflections = 3` (`aider/coders/base_coder.py:100-101,1599-1622`) | Gates the edit while the turn is still open; our gates are post-hoc | seat-side `node --check` + the item's demo after each edit (ROADMAP **218**) |
+| **Bounded flexible patching** — normalize a failed hunk to a real diff, split into sub-hunks, vary context (`unified-diffs.md`, `aider/coders/editblock_coder.py:133-181`). **Claim corrected 2026-10-28:** "9× fewer apply failures" is not in the clone. **And the similarity fallback is dead code** — a bare `return` at `editblock_coder.py:183` puts `replace_closest_edit_distance` (`:184-187`) past the end of the function's live path | Take the narrow strategies (whitespace tolerance, blank-line drop, `...` elision); there is nothing to reject at the similarity tier because aider never reaches it | `edit` is exact-match + silent typography-fold (`edit-diff.ts:34-53,221-243`) |
 | **Lint/test after every edit, auto-repair** (`--lint-cmd`/`--test-cmd`/`--auto-test`, `aider/website/docs/usage/lint-test.md`) | Catch a broken edit before it compounds | `node --check` + demo gate before accept (ROADMAP 106) |
 | **Repository map** — graph-ranked, token-budgeted (~1k) symbol map sent every request (`aider/website/docs/repomap.md`) | Gives the model repo-wide context cheaply | seats `read`/search; a repo-map section for seat prompts (ROADMAP 113) |
 | **Prompt-cache ordering + keepalive** (`aider/website/docs/usage/caching.md`) | Cache the stable prefix; ping to keep it warm | constitution-first byte-stable prefix; consider a keepalive (ROADMAP 114) |
@@ -154,7 +156,10 @@ reference text for our seats.
 | **Keep context <~25k; drop irrelevant files** (`troubleshooting/edit-errors.md`) | Too much context makes models disobey the edit format | thin-context contract |
 
 **Not to borrow:** whole-file edit as a default (returns the entire file), auto-commit-per-edit (conflicts
-with one-commit-per-concern + explicit paths), and the raw fuzzy **similarity** fallback.
+with one-commit-per-concern + explicit paths), and the **cross-file fallback** — a block that misses the named
+file is tried against every file in the chat (`aider/coders/editblock_coder.py:57-64`, observed 2026-10-28),
+which is the wrong-location hazard in feature form. (The `SequenceMatcher` **similarity** fallback we used to
+list here is **dead code** at this pin — `editblock_coder.py:183` returns before it. Nothing to reject.)
 
 **What it does not give us:** a runtime, durability, queue, seats, or verifier split. Edit/verify
 mechanics only.

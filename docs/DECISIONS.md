@@ -5350,3 +5350,78 @@ longer without naming checks, the wording misfired and the amendment should be r
 wrong. If anyone hand-edits `rig.starter.json`'s inline copy and the three mirror demos go green anyway, they changed
 nothing (the demos are the oracle). If `node tools/text-integrity-scan.mjs` and a later `check` disagree about whether
 a defect is latent, the changed-files-only scoping has moved.
+
+## D149 — Our edit errors are an **anchor-and-context** problem, not a tool-strictness problem — and two numbers in our own Aider review were never in Aider's tree (2026-10-28, delegate; measurement + review correction + operating rule)
+
+**The operator's question:** review `can1357/oh-my-pi` and `aider-ai/aider` for better file-editing tools, hoping the
+ideas would reduce edit errors. Answering it required pricing our own error rate first, and the answer reordered the
+roadmap. Full evidence: `docs/reviews/edit-machinery-2026-10-28.md`; items 214–218.
+
+**1. The rawest material was our own store, not the vendors' feature pages, and it localises the defect.**
+`node tools/edit-failure-rate.mjs ./selfdev.sqlite` over **137,368 entries**: `edit` = **1,872 tool results, 215 errors
+(11.5%)**, of which **153 (71%) are anchor misses** ("Could not find the exact text"), 10 uniqueness refusals, 22 missing
+files — while `write`, which needs no anchor, fails at **1.0%** in the same sessions, same seats, same models. A whole-file
+write and an anchored edit differ in exactly one thing: the anchor. So "better editing tools" for us means *better
+behaviour around the anchor*, and the cheapest borrow is the one both vendors ship and we do not: **an informed refusal**
+— aider's *"Did you mean to match some of these actual lines from {path}?"* (`aider/coders/editblock_coder.py:96,602-624`)
+and oh-my-pi's occurrence line-numbers + 5-line/80-char previews (`crates/pi-edit/src/fuzzy.rs:28-30,512-527`). Ours is
+mute: `edit-diff.ts:256` ("… must match exactly including all whitespace and newlines") and `:264-271" … must be unique"`.
+**The rule:** before adopting any mechanism a vendor advertises, count our own failure **class** from the store, and print
+the patterns you counted (D142). The naive count here was 1,065 hits for `%must be unique%` — almost all prompt text; the
+honest filter was pi's own harness envelope `%[error] %`, which cut it to 10 real duplicate refusals.
+
+**2. Context headroom plausibly outranks tool protocol, so 208 goes before 215/216.** aider commits its benchmark corpus
+to the repo (`aider/website/_data/*.yml`; metrics defined at `aider/benchmark/benchmark.py:486-525`). In `quant.yml`,
+`BF16`, `fp16`, `4bit`, `8bit`, `q4_K_M`, `q2_K` all sit at **88.7–95.5%** well-formed output (pass 48.9–60.2) —
+quantization barely moves it — but the single run at a **2k-token context window** collapses to **46.2% well-formed with
+165 malformed responses**. Our own `cli.mjs status` shows `advocate` at **244,751 / 200,000 = 1.22** of its window and
+`architect` at **1.09**, with the same provider answering HTTP 400 at 207,219 prompt tokens. **The rule:** treat the
+context-fraction guard (208) as an *edit-quality* control, and re-measure the anchor-miss share after it, before spending
+a milestone on editing machinery. Note also that aider's corpus does **not** support a naive "structured edits are better"
+claim: `edit_leaderboard.yml` (98 runs) means `whole` 99.0% well-formed / 1.7 malformed / 10.7 harness-error outputs /
+37.6% pass / $0.47 versus `diff` 94.4 / 16.1 / 29.6 / 54.1% / $4.55 — anchor formats **raise** malformed output and
+**raise** pass rate, and format was never randomized against model strength. The paired rows (`architect.yml`) are the
+honest read: same model, `diff` → propose-then-separate-editor repairs models that *were* malforming (claude-3.5-sonnet
+99.2/4/57.1 → 100/0/62.4; o1-preview 93.2/11/57.9 → 100/0/60.9-64.7) and does **nothing** for one that was not (o1-mini
+100/0/50.0 → 100/0/48.9-51.9).
+
+**3. Two numbers we had published about Aider were not in Aider's tree, and one mechanism we told ourselves to reject is unreachable code.**
+`docs/COMPETITORS.md` claimed "30–50% fewer errors" and "9× fewer apply failures". At pin `5dc9490b`,
+`git grep -i "9x\|30-50\|apply failur"` returns no such claim anywhere (only audio asset filenames). What the tree says
+(`aider/website/docs/unified-diffs.md:36-45`): task score **20% → 61%** and **26% → 59%** on 89 python refactoring tasks,
+laziness down **3×**. Separately, the `SequenceMatcher` similarity fallback we warned is a "silent wrong-region" risk sits
+**after a bare `return`** at `aider/coders/editblock_coder.py:183` — dead at `:184-187`, with no other caller in the repo.
+**The rule, and this is the pitfall worth saving a future session:** a number attributed to a competitor must be re-grepped
+at the pin on any re-read, and a mechanism must be checked for **reachability** before it is rejected — rejecting dead code
+costs us nothing and teaches the roadmap a false fact. Both corrections are in place in `docs/reviews/aider-review.md` and
+`docs/COMPETITORS.md`; the review's *missing* artifacts (header, surface inventory, standards pass, coverage matrix) are
+registered as 214 rather than quietly skipped, because the runbook says a delta re-review of a deficient review is the
+anti-pattern.
+
+**4. A probe aimed at one question found a bigger one: on Linux a seat has no shell.** I printed every tool name's count
+rather than only the question's, and `bash` came back **0 / 137,368 entries** while `powershell` returned **20,338**, the
+last at entry **216,527 of 273,995** — no seat shell call exists in the ~57k entries since the machine move. Cause,
+observed: `src/seattools.mjs:215-221` deliberately omits `bash` and registers `createPowerShellTool()`, and pi throws
+**"The powershell tool is only available on Windows."** (`vendor/pi-main/packages/coding-agent/src/utils/shell.ts:127`)
+with no `pwsh` installed here. So a Linux seat cannot run the demo suite the constitution makes its oracle. **The rule:**
+when you instrument, **survey the whole surface** — a targeted grep would have reported the edit rate and missed this. And
+always print zeros with their pattern: an uninterpretable zero is a finding, not an absence. Registered as 217 and added to
+the delivery-channel review; the rig's instruction text that says "The shell tool is powershell, all lowercase" lives in
+`rig.selfdev.json`, an **operator-owned** file, so I proposed rather than edited it (same discipline as the uncommitted
+`AGENTS.md`/`package.json` edits).
+
+**5. What was deliberately *not* adopted, and why.** No competitor's editor is portable here: aider is Apache-2.0 and
+oh-my-pi MIT (borrowable with attribution, but Python/Rust against our ESM), `vendor/eval/` is read-not-borrowed (D22),
+and pi is a **pinned build input** (`pi-main.pin.json`, `scripts/sync-pi.mjs`), so any tool-behaviour change must live at
+our seam (`src/seattools.mjs`, pi's `customTools`/`createEditTool` at `sdk.ts:31,94,142`) and survive a sync — which is
+why the fixture that pins a *failure* message is part of 215's acceptance and not a nicety. Rejected outright: aider's
+cross-file fallback (`:57-64`, a block that misses its named file is tried against every file in the chat — the
+wrong-location hazard as a feature, and fatal to per-item worktree isolation) and oh-my-pi's line-addressed `hashline`
+grammar (a protocol whose ceremony our 13,273-token candidate verifier cannot pay).
+
+**Falsifiable.** After 208 (or after compacting `advocate`/`architect`), re-run `node tools/edit-failure-rate.mjs
+./selfdev.sqlite`: if the anchor-miss **share** of edit errors does not fall while context fractions do fall, context was
+not the cause and 215/216 rise in priority. If 215 lands and the share stays at ~71%, informed refusals do not work and
+the replay in 216 becomes mandatory rather than optional. If `"toolName":"bash"` is still **0** on Linux after 217, seats
+still have no shell and the delivery channel is not actually open. If a future `git grep` at a re-pinned aider *does* find
+"30–50%", the tree moved and the review must be re-cut, not the grep trusted.

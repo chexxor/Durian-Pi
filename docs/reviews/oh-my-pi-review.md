@@ -25,6 +25,22 @@ reading "the manifest" gets nothing, while the project ships 12 versioned packag
 brief's start-here list found `packages/*/CHANGELOG.md` as the *de facto* index). Judge maturity from tag count + commit
 date, and treat per-package changelogs as the truth about what changed. MIT → borrowable with attribution.
 
+## Editing-machinery delta at this pin (2026-10-28)
+
+The operator asked a second question of the same clone — whether its **file-editing tools** are better than ours,
+as a way to reduce edit errors. Answered in **`docs/reviews/edit-machinery-2026-10-28.md`** §5, at this pin, from
+`crates/pi-edit/` (all rows marked `observed`): the version-tag refusals (`store.rs:12,79`; `error.rs:57-63`),
+the unseen-line refusal (`store.rs:39,106,210`; `error.rs:67`), the no-op refusal (`error.rs:73`), the candidate
+occurrence previews on a miss (`fuzzy.rs:28-30,512-527`), the bounded leniency thresholds (`fuzzy.rs:20-26`),
+the atomic stage-then-write apply (`session.rs:2,88,111`), and the byte-frozen, model-facing error contract
+(`error.rs` header). None of it is adopted here; the calls and the ROADMAP ids are in that review's §6.
+
+**Freshness of this pin: `BEHIND`.** `node tools/vendor-pins.mjs --freshness` (2026-10-28) reports upstream at
+`20d6a2cc` against our `6f3fbc94`. Every claim above is made **at the pin**; a re-review must
+`git fetch --unshallow origin` in place (Do 0: move-or-clone, never delete), and moving the pin needs the
+operator's grant (D146). The tracked tag cell (`v18.13.2`) has since drifted to `v18.13.3` — a NOTE, upstream
+state, not the pin.
+
 ## Do 4 · surface inventory (walked with `node tools/competitor-brief.mjs --project oh-my-pi`; 670 md files across 36 doc areas; README links walked in document order)
 
 | surface | opened? | what it yielded |

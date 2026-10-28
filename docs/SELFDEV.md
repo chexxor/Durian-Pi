@@ -906,6 +906,39 @@ advice. Read the headings; the body is only here if you need the numbers.
   are hard failures; upstream columns (remote tag, manifest version) are a NOTE, because they genuinely move —
   `prime-agent` published `v0.10.2-beta.15` between two runs of this tool ~30 minutes apart. A red check that fires
   on hourly upstream churn is a red check everyone learns to ignore.
+- **Count your own failure classes before adopting anyone else's machinery** — and count with the pattern printed.
+  `node tools/edit-failure-rate.mjs ./selfdev.sqlite` reads the store's persisted tool results and gives the number the
+  whole editing question turns on: **`edit` 1,872 results / 215 errors = 11.5%, of which 153 (71%) are anchor misses
+  ("Could not find the exact text"), while `write` — same seats, same models, no anchor — fails at 1.0%.** The naive
+  version of that count was wrong twice over: `%must be unique%` returns **1,065** rows because the tool *schema text*
+  repeats in prompt payloads, and the honest filter is pi's own harness envelope `%[error] %` (10 real duplicate
+  refusals). SQLite `LIKE` is also ASCII-case-insensitive, so `"toolName":"read"` and `"toolName":"Read"` are one count,
+  not two. Every count this tool prints names its pattern (D142) · reason: D149 · items: 215, 216, 218.
+- **Instrument the whole surface, not just the question's, and treat an uninterpretable zero as a finding.** Asking
+  that question for `bash` returned **0 hits in 137,368 entries**, while `powershell` returned **20,338** — the last at
+  entry **216,527 of 273,995**, i.e. no seat has run a shell command since the Linux move. Cause: `src/seattools.mjs:215-221`
+  registers `createPowerShellTool()` and deliberately omits `bash`, and pi throws "The powershell tool is only available
+  on Windows." (`vendor/pi-main/packages/coding-agent/src/utils/shell.ts:127`); there is no `pwsh` on this host. So a
+  Linux seat can edit a file and **cannot run the demo suite that is the constitution's oracle**. A grep aimed at
+  "edit errors" would have missed the larger hazard. Registered as ROADMAP **217**, added as precondition **2b** in
+  `docs/reviews/delivery-channel-linux-2026-10-28.md`.
+- **Re-grep a competitor's numbers at the pin, and test a mechanism for reachability before you reject it.** Our own
+  aider entry carried "30–50% fewer errors" and "9× fewer apply failures"; at pin `5dc9490b` neither string exists in the
+  clone (`git grep -i "9x\|30-50\|apply failur"` → audio filenames only), and what the tree says is task score
+  20%→61% / 26%→59% with laziness down 3× (`aider/website/docs/unified-diffs.md:36-45`). The `SequenceMatcher` similarity
+  fallback we had told ourselves to reject is **unreachable**: a bare `return` at `aider/coders/editblock_coder.py:183`
+  ends the function before the call at `:184-187`. Also: `node tools/vendor-pins.mjs --freshness` says aider is
+  **`CURRENT`** (the pin IS upstream HEAD), so re-cloning a dormant project returns the same commit and a delta re-review
+  finds nothing — the missing runbook artifacts, not upstream, are the gap (ROADMAP 214) · reason: D149.
+- **A re-clone turns the pin table red immediately, and that is the point.** Cloning `vendor/eval/aider` made
+  `node tools/vendor-pins.mjs --check` exit 1 with `pin table is missing a row for aider`; the fix is the generated
+  artifact, not a typed row: `--write docs/VENDOR-PINS.md --tags` then `--check` → PASS (8 clones). The tool's review
+  audit also cross-checks that a review naming a present clone cites *its* HEAD and has a `docs/COMPETITORS.md` entry —
+  which held here only because aider is dormant and the 2026-10-17 pin equals the 2026-10-28 pin.
+- **Query the store from a file, not from `node -e`.** Three attempts at `node -e '…'` failed on shell quoting before one
+  worked: SQLite wants `'table'` in single quotes (double quotes are identifiers) and a single-quoted shell string cannot
+  contain single-quoted SQL. Put the probe in `.spike/probe.mjs` with a heredoc (`cat > .spike/probe.mjs <<'EOF'`) —
+  `.spike/` is gitignored, `.scratch/` is not.
 - **Both are delegate instruments, not `check` rules, and they do not touch the product.** Nothing in `src/`,
   `scripts/`, `demo/` or `demo/test-areas.json` changed; the product-side halves are registered as ROADMAP 201 (a
   diff-aware selector in `scripts/test.mjs`, and a `docs` area that actually covers the doc surface) and ROADMAP 202

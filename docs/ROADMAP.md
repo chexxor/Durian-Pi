@@ -3721,3 +3721,134 @@ rig with a malformed inline span must be refused, not rewritten (the instrument'
 the store is a THIRD copy, which `up` re-applies separately, so the command must tell the operator whether the store
 still needs the `up` (the `check` rule `constitution-not-applied` is the oracle for that, and before this amendment it
 was a live error: store 2,693 bytes vs rig file 3,643).
+
+## File-editing machinery: what aider and oh-my-pi actually run, and what our own failure log says (2026-10-28)
+
+The operator asked whether `aider-ai/aider` and `can1357/oh-my-pi` have better file-editing tools, hoping the
+ideas would reduce edit errors. The review is `docs/reviews/edit-machinery-2026-10-28.md`; the follow-up prompt is
+`docs/reviews/edit-machinery-followup-research-prompt.md`. Two numbers drive everything below. **(a)** Our own
+store, counted by `tools/edit-failure-rate.mjs`: **1,872 `edit` tool results, 215 errors = 11.5%**, of which
+**153 (71%) are anchor misses** ("Could not find the exact text"), 10 are uniqueness refusals and 22 are missing
+files — while `write` (whole-file, no anchor) fails at **1.0%** in the same sessions with the same models. **(b)**
+aider's own committed benchmark corpus (`aider/website/_data/quant.yml`) has one run at a **2k-token context
+window** collapse to **46.2% well-formed output with 165 malformed responses**, where every quantization variant
+(4-bit, 8-bit, q4, q2, fp16, BF16) stayed **88.7–95.5%**. Context headroom, not tool strictness, is the largest
+observed effect in the material. All items below are **registered, not scheduled** — `pm` sequences them, and the
+operator gates any adoption (D22: vendored code is read, not borrowed).
+
+**214. `docs/reviews/aider-review.md` is missing the runbook's required artifacts, and two numbers in it are not in the tree.**
+*(delegate; measured 2026-10-28 at aider pin `5dc9490b`)* `docs/runbooks/competitor-review.md`'s Verify list
+requires a generated pin header, a surface-inventory table, a "not read" list, a standards/coverage matrix; the
+2026-10-17 review has none of them, which makes a **quality redo** the lawful re-review mode and a delta
+insufficient (the runbook's own anti-pattern table). Two of its claims are also unsupported at the pin:
+"30–50% fewer editing errors" and "9× fewer apply failures" — `git grep -i "9x\|30-50\|apply failur"` over the
+clone returns nothing but audio asset names; what the tree claims is task score **20% → 61%** and **26% → 59%**
+on 89 python refactoring tasks with laziness down 3× (`aider/website/docs/unified-diffs.md:36-45`). A third claim
+was over-cautious rather than wrong: the `SequenceMatcher` similarity fallback we told ourselves to reject is
+**unreachable dead code** — a bare `return` at `aider/coders/editblock_coder.py:183` puts the call at `:184-187`
+past the end of the live path, and `grep -rn replace_closest_edit_distance aider/` shows no other caller. The two
+numeric claims and the dead-code correction are already fixed in place (2026-10-28); what is *not* done is the
+redo. *Owner:* delegate · *Where:* `docs/reviews/aider-review.md` + its `docs/COMPETITORS.md` entry, driven by
+`node tools/competitor-brief.mjs --project aider` for Do 4/Do 5 orientation · *Acceptance:* the review carries a
+generated header, a surface-inventory table with a "not read" list, a per-standard adopt/adapt/reject table (aider
+→ **3 files** for the standards pattern, all configuration docs: a publishable zero **with its pattern**, per
+D142), and a durian-pi coverage matrix; `node tools/vendor-pins.mjs --check` stays green. · *Blind spots:* aider
+is **dormant at the pin** (`--freshness` → `CURRENT`, commit date 2026-05-22, latest remote tag `v0.86.3.dev`),
+so a redo buys artifact completeness, not new upstream behaviour — do not schedule it ahead of 208/217.
+
+**215. A refused edit tells the model nothing it did not already know — the highest-yield edit change is a better error message, not a new editor.**
+*(devtools; measured 2026-10-28)* Our seats use pi's `edit` unmodified (`src/seattools.mjs:218-221`;
+`grep -rn customTool src/*.mjs cli.mjs` → nothing), and pi's refusal on a miss is mute:
+`Could not find the exact text in X. The old text must match exactly including all whitespace and newlines.`
+(`vendor/pi-main/packages/coding-agent/src/core/tools/edit-diff.ts:256,260`), uniqueness → "Found N occurrences …
+must be unique" with no candidates (`:264-271`). Both competitors aim a mechanism at exactly this class: aider
+answers a failed block with *"Did you mean to match some of these actual lines from {path}?"*
+(`aider/coders/editblock_coder.py:96` + `find_similar_lines(…, 0.6)` at `:602-624`), an already-applied refusal
+(*"The REPLACE lines are already in {path}!"*, `:106-109`), and applied-state guidance (*"The other N blocks were
+applied successfully. Don't re-send them."*, `:113-118`); oh-my-pi returns candidate occurrences with line
+numbers and a 5-line/80-char preview each (`crates/pi-edit/src/fuzzy.rs:28-30,512-527`) plus a named no-op
+refusal (`src/error.rs:73` `no_change`). 153 of our 215 edit errors are this class. The seam is real and unclaimed:
+pi exports `createEditTool` and accepts `customTools` (`src/core/sdk.ts:31,94,142`), and `src/seattools.mjs` is
+where we already assemble the seat's tool set. *Owner:* devtools · *Where:* `src/seattools.mjs` (a rig-authored
+`edit` definition, or a wrapper around pi's, that keeps pi's exact-match + atomic semantics and improves only the
+refusal text) + a new `demo/edit-refusal.test.mjs` · *Acceptance:* failing-first demo that plants a near-miss
+anchor and asserts the refusal **names at least one candidate line number and the number of occurrences**; a
+second case asserting a no-op edit is refused as already-applied rather than silently succeeding; the fixture pins
+the message shape so a `scripts/sync-pi.mjs` bump cannot mute it; and `node tools/edit-failure-rate.mjs
+./selfdev.sqlite` re-run after landing shows anchor misses **below 71% of edit errors** with total edit results
+not falling (seats must not fix the rate by editing less). · *Blind spots:* **measure the near-miss share first**
+— pi already fuzzy-matches silently (`edit-diff.ts:34-53,221-243`: NFKC, curly quotes→ASCII, en/em dash→`-`,
+NBSP→space), so some of the 153 are already absorbed and the remaining yield may be small; a candidate preview
+costs prompt tokens on every miss for a rig whose context is already over budget (see 208), so cap it (oh-my-pi
+uses 5 lines / 80 chars, `fuzzy.rs:28-30`); and a fuzzy success that is not surfaced to the seat can normalize
+bytes on touched lines without anyone saying so — that is a separate, real finding worth its own row if a seat
+ever "fixes" hygiene silently.
+
+**216. Decide the edit-protocol question on our own replay, not on aider's leaderboard.**
+*(qa + lead; gated on 208 and 215)* aider's `--edit-format` knob presumes a menu of formats and a menu of models;
+we have one tool and, today, one model for all 12 seats (`local/iq3_s`). Its own corpus does not support a
+naive import: `website/_data/edit_leaderboard.yml` (98 runs) means `whole` 99.0% well-formed / 1.7 malformed /
+10.7 harness-error outputs / **37.6% pass** / $0.47, versus `diff` 94.4 / 16.1 / 29.6 / **54.1%** / $4.55 and
+`diff-fenced` 92.7 / 20.0 / 63.0 / 50.1% — i.e. anchor/diff formats **increase** malformed output and **increase**
+pass rate, at 10–20× cost, and format was never randomized against model strength. The paired rows
+(`architect.yml`) are better: same model, `diff` → propose-then-edit — `claude-3.5-sonnet` 99.2%/4 malformed/57.1%
+→ 100%/0/62.4%; `o1-preview` 93.2/11/57.9 → 100/0/60.9-64.7; but `o1-mini` 100/0/50.0 → 100/0/48.9-51.9, **no
+gain** for a model already producing well-formed edits. oh-my-pi's line-addressed `hashline` grammar with
+snapshot tags (`crates/pi-edit/prompts/hashline.md`, `src/store.rs:12,79`) is a *protocol*, and its ceremony
+costs tokens a 13,273-token verifier cannot pay (`docs/reviews/verifier-model-survey-2026-10-27.md`).
+*Owner:* qa (measurement design) with lead (adoption call) · *Where:* a replay harness under `tools/` that
+re-runs a fixed set of ≥12 real landed items against (a) today's `edit`, (b) whole-file `write`, (c) a
+tag/unseen-line-guarded variant — same seat, same model, same provider · *Acceptance:* a table of anchor-miss
+rate, apply failures, tokens per landed item, and rework turns, with the decision recorded in
+`docs/DECISIONS.md`; a mechanism is adopted only if it wins on **two** of the four measures. · *Blind spots:*
+one provider and one model means the result is about *this rig*, not about edit formats; the replay re-lands
+items in throwaway worktrees and must not touch the landing train; and a stale-read guard (oh-my-pi's
+`unseen_lines`, `store.rs:39,106,210`) needs a per-session snapshot map we do not have, so its cost is real
+before its benefit is known.
+
+**217. On Linux a seat has no shell at all: the seat shell is PowerShell by construction, and pi refuses PowerShell off Windows.**
+*(devtools; measured 2026-10-28 — found while counting edit failures, and it outranks the edit question for the standing priority)*
+`src/seattools.mjs:215-221` registers `shell: createPowerShellTool()` and states the reason — "`bash` is
+deliberately absent. On native Windows `bash` means Git Bash … the seat shell is PowerShell, which
+`createPowerShellTool` resolves as `pwsh`, then `powershell`". pi's `packages/coding-agent/src/utils/shell.ts:127`
+throws **"The powershell tool is only available on Windows."**, and this Linux box has neither
+(`command -v pwsh` → empty; `bash` is at `/usr/bin/bash`). The store corroborates the consequence:
+`"toolName":"bash"` appears **0 times in 137,368 entries**, `"toolName":"powershell"` appears **20,338** times,
+the last at entry **216,527 of 273,995** — so no seat has run a shell command since the machine move — and the
+powershell errors cite `C:\Users\…`. A seat that cannot run `node demo/<name>.test.mjs` cannot satisfy the
+constitution's oracle ("the demo suite … exit 0 is a pass") or the completion rule ("RUN the checks that exercise
+it and name them"), so this is a **delivery-channel precondition**, not a nicety: it goes in
+`docs/reviews/delivery-channel-linux-2026-10-28.md` beside the dead `devtools.cwd` row. It is the same cross-OS
+family as **209** and **210**, and it violates the D131 native-host rule in the direction nobody noticed: the
+rig was not adapted to Linux, it was carried there. *Owner:* devtools · *Where:* `src/seattools.mjs` (select the
+shell tool by host — `bash` on POSIX, PowerShell on Windows — with `src/seatguard.mjs:122`'s `SHELL_TOOLS`
+already whitelisting both names) + the per-seat instruction text in `rig.selfdev.json` that currently says
+"The shell tool is powershell, all lowercase" (**operator-owned file: propose, do not hand-edit**) +
+`demo/` coverage for the host-conditional choice · *Acceptance:* on Linux a seat's tool list contains a working
+shell and its instructions name that tool; a demo asserts the host→tool choice and asserts `seatguard` blocks
+`git push` through **whichever** name was chosen; and `node tools/edit-failure-rate.mjs` gains a shell row that
+is non-zero on Linux. Add the corresponding preflight block to `tools/broker-serve.mjs --dry-run`
+(`seat-shell-availability`): today it refuses on a dead seat cwd and a dirty tree but would happily start a broker
+whose seats cannot run a single command. · *Blind spots:* the guard's refusal semantics differ per shell (a `bash` refusal and a
+PowerShell refusal are different code paths — `src/seatguard.mjs:122` registers two names but the confinement
+tests were written on Windows); tool *names* are part of the seat prompt surface, so changing them changes the
+byte-stable prefix and invalidates prompt caches (D144 family) — measure the prefill cost of the change; and a
+seat with both tools available can pick the one the guard watches less closely, which is why the acceptance
+criterion names the guard, not the tool.
+
+**218. Move one deterministic gate inside the turn: after an edit, run the check the item already owes, and make the seat answer it.**
+*(devtools + qa; measured 2026-10-28)* Our gates fire after the fact — `cli.mjs check`,
+`src/textintegrity.mjs` (changed files only), the `demo/*.test.mjs` suite at review time. aider runs the gate
+while the turn is open: `auto_lint = True` by default, lint then test failures become a `reflected_message` the
+model must respond to, capped at `max_reflections = 3` (`aider/coders/base_coder.py:100-101,105,1599-1622`), and
+its benchmark metric `error_outputs` counts those harness answers (`aider/io.py:231,989`) — 10.7 per run for
+`whole` vs 29.6 for `diff`. Our analogue costs one `node --check` plus the item's own demo. *Owner:* devtools
+(driver), qa (does it catch what review catches) · *Where:* the seat turn loop in `cli.mjs` / `src/broker.mjs`
+(post-tool-call hook — see how `seatguard` already intercepts tool calls) · *Acceptance:* a seat that introduces
+a syntax error repairs it **without a second message from the harness**; the retry is bounded (≤2) and the bound
+is pinned in a demo; a broken edit cannot be completed as green. · *Blind spots:* a per-edit demo run is a
+wall-clock tax on a rig whose provider decodes at ~17 tok/s and prefills 438–1,946 tok/s cold
+(`tools/model-probes/`), so it must run on the touched file's item-scoped demo, not `--all`; a reflection loop
+can also burn a turn on a *false* failure (flaky demo) — the bound and the recorded error text are what make that
+auditable; and a gate inside the turn must not become a seat doing the verifier's job — verification stays a
+separate seat's ruling (D-family: author/verifier split).
