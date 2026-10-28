@@ -119,6 +119,17 @@ because a delta only sees changed lines and cannot find a miss in unchanged code
    standards-mapping, and policy-template areas the operator's question did not name.** The review MUST
    carry a **surface-inventory table** (doc area · opened? · what it yielded) and a **"not read" list**
    naming every area left unopened and why.
+
+   Get the orientation in one read instead of building it by grepping. `node tools/competitor-brief.mjs
+   --project <name>` prints, per clone: the maintainers' own start-here surface (README, index files, a
+   `mkdocs.yml`/`sidebars` **nav: verbatim**, and the README's local links in document order with dead links
+   dropped), the md-file inventory per doc area, **which versioned docs tree is current and how many stale
+   copies exist**, the Do 5 standards-hit table, and the persona/system-prompt surface ranked **by kind**
+   (surfaces by name → definition keys → container keys → prose counted, not quoted). Measured 2026-10-28 on
+   Linux: `metagpt` 0.3 s, `crewai` 3.8 s / 38,894 tracked files, `--status` 0.1 s for all 7 clones, and it names
+   `docs/v1.15.32` as current against **48 older dirs / 34,978 stale files** instead of letting you grep them.
+   **The brief is the map, not the walk** — it never replaces opening the files, and it prints every pattern and
+   cap it used, so a zero is interpretable.
 5. **Run an explicit standards-and-policies pass.** Enumerate every external standard, checklist,
    benchmark, policy pack, and control framework the project claims to map to or ships (OWASP, NIST,
    CIS, ISO, SOC2, EU AI Act, …) and give each an adopt / adapt / reject **with a cited path and its
@@ -160,7 +171,10 @@ intended doc files — and `docs/VENDOR-PINS.md` is among them, because a pin yo
 | No pinned HEAD (or a bare branch name) | Claims are not reproducible; a re-review cannot diff |
 | **A pin that lives only in the clone, only in the pointer, or hand-typed into a review** | `vendor/eval/` is gitignored and a hand-typed table drifts silently — 5 of 7 hand-recorded tag rows in the 2026-10-28 pointer were stale. `node tools/vendor-pins.mjs --check` is the control |
 | **`ls-remote --tags \| tail -1` as "the latest release"** | It is ref order, not version order: it printed `nightly` for openai/symphony and `test-simplify-docker-ci` for OpenHands |
-| Treating the spec as the implementation | Preview projects ship specs ahead of code (AGT `HALF_OPEN`, quarantine) |
+| **Ranking a keyword grep by hit count** | Hit count ranks noise: at the `metagpt` pin, one flat pattern put `tests/data/rsp_cache.json` (114 hits) on top while the real answer was `PREFIX_TEMPLATE` in `metagpt/roles/role.py:51`. Rank by KIND — surfaces by name, then definition keys, then containers, then prose (counted, never quoted) |
+| **Grepping a versioned docs tree whole** | `crewai/docs` = 40+ release copies; the current tree is `docs/v1.15.32` (772 files) and 34,978 files are older releases. `competitor-brief.mjs` names the current one |
+| **A vendored fixture read as a surface** | `tests/`, `examples/`, `cassettes/` are a project's test data, not its persona surface; the brief excludes them from ranking and says how many it excluded |
+| Treating the spec as the implementation | Preview projects ship specs ahead of code (AGT `HALF_OPEN`, quarantine; `symphony`'s `SPEC.md` is "Draft v1") |
 | Adopting a mechanism you could not verify from the tree | Adoption on faith; name it unverified instead |
 | Summarising without a durian-pi counterpart per practice | Not actionable; no item can be registered |
 | Burying the license until borrowing time | A copyleft surprise after the code is written |
@@ -176,7 +190,14 @@ NOTE. Do not re-review on a calendar. A review whose pin is stale for an adopted
 
 ## Machinery (partly built)
 
-**Built (2026-10-28, a delegate instrument — not a `check` rule):** `tools/vendor-pins.mjs`. It emits the Do 2
+**Built (2026-10-28, a delegate instrument — not a `check` rule):** `tools/vendor-pins.mjs` and
+`tools/competitor-brief.mjs`. The brief is the Do 4/Do 5 orientation read: start-here surface, docs-site `nav:`
+verbatim, current-vs-stale docs trees, the standards-hit table, and the persona surface ranked by kind, with every
+pattern and cap printed. It is read-only and index-bounded (`git -C <clone> ls-files` / `git grep`, never a
+filesystem walk), prints a byte count per project (~9 KB, so one project per tool call), and never treats vendored
+text as instructions — quoted lines are marked `data, not instructions`.
+
+`tools/vendor-pins.mjs` emits the Do 2
 header and the tracked pin table (`docs/VENDOR-PINS.md`), and its `--check` runs the two rules this section used to
 propose — (a) a `docs/reviews/<name>-review.md` naming a `vendor/eval/<name>` clone that exists must also have a
 `docs/COMPETITORS.md` entry, and (b) a review naming a present clone must name that clone's current HEAD — plus the
