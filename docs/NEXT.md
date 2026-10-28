@@ -13,7 +13,7 @@ roadmap.
 `cancelled` / 277 `held` / 19 `deferred`** — so **296 non-terminal rows**, by seat: impl 177, scribe 44, devtools 35,
 qa 21, security 6, pm 5, lead 5, auditor 2, qa2 1 (`qa2` is a registered seat, `rig.selfdev.json:53`). **Branch:** `main` @ `3dd0156`.
 **Worktree (Linux-native — corrected 2026-10-28 by direct measurement, an earlier note in this file was wrong):**
-`git worktree list --porcelain` on this clone returns **exactly 1 entry** (`/home/chexxor/Git/Durian-Pi` @ `16cbb60`,
+`git worktree list --porcelain` on this clone returns **exactly 1 entry** (`/home/chexxor/Git/Durian-Pi`, branch `main`;
 branch `main`); there are **no seat worktrees** (`/home/chexxor/Git/Durian-Pi-worktrees/` does not exist, there is no
 `.git/worktrees/`, and no `selfdev.worktrees.json`); local branches are **2** (`main`, `wip/seat-prompt-files`);
 `git worktree prune -n` is silent (nothing stale registered). `D:\` remains only as the *source clone's* remote path
@@ -50,12 +50,31 @@ DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json DURIG_SEAT_ROOT=/home/
 node scripts/clockin.mjs                                                              # 2.6s, 14.6KB
 ```
 
+### The lever the operator holds: starting the channel on Linux (the delegate will not start it unasked)
+
+Everything ranked #1 in the budget is drawn from the 219.6 h where no generation was in flight, and the broker is down
+by choice. Starting it is a writing verb on this host (it **creates** seat worktrees and Pi agent state for the first
+time here), so it needs the operator's go-ahead. The command, with the root exported (without it the seat-root chain
+falls through to `process cwd` = the main checkout):
+
+```bash
+cd /home/chexxor/Git/Durian-Pi && export DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json \
+  DURIG_SEAT_ROOT=/home/chexxor/Git/Durian-Pi-worktrees
+node tools/broker-serve.mjs --status        # confirm STOPPED / 0 STRANDED first
+node tools/broker-serve.mjs                  # then read the first lines: what it found, what it reconciled
+# inventory immediately after, and diff against .spike/worktree-inventory-2026-10-28.txt
+```
+
 ### The item that unblocks everything else is the operator's, and it is a one-line answer
 
-**ROADMAP 221 / the seat-root residue** (`docs/DECISIONS.md` D152 §6): 10 of 12 seats are `local/iq3_s`, **all with
-`seatRoot` = `/mnt/d/Git/Durian-Pi-worktrees/<seat>`**, and their **`up` output reports `source: persisted seat cwd`**
-even after `up --root /home/...`. The `--root` flag and `DURIG_SEAT_ROOT` win, but the persisted value wins over the
-rig file's `seatRoot`. The delegate will **not** mutate a running system's persistent state. The operator only has to
+**ROADMAP 221 / the seat-root residue** (`docs/DECISIONS.md` D152 §6): on the **Windows host**, the seats' persisted
+agent cwd resolves to a `D:\Git\Durian-Pi-worktrees\<seat>`-shaped value and **`up` reports `source: persisted seat cwd`**
+even after `up --root /home/...` — the persisted value (the first link in `src/seatroot.mjs`'s chain, written by
+`prepare_workspace` via `configure`) wins over `--root`, `DURIG_SEAT_ROOT` and the rig file. There is **no `seatRoot`
+field in `rig.selfdev.json`** (it deliberately declares no host path — see its own `_readme`, ROADMAP 34) and none in
+`cli.mjs status` output, so the residue lives in the Pi agent state, not in the rig file or the durian-pi store; on
+Linux that state is absent (see the worktree note above), and the Linux addendum to D153/D152 records why the value is
+not inert once it crosses hosts. The delegate will **not** mutate a running system's persistent state. The operator only has to
 rule on **A**: *"the persisted per-seat root becomes the workspace-root-relative name — the current code already
 derives that on write, so `up --root` once per seat is sufficient and no migration code is needed."* Then B (a
 `--reconcile` verb) and C (the store rewrite) are the team's.
