@@ -5898,3 +5898,47 @@ and **never** applies a fix.
 **Still perishable, still the operator's call.** Those 455 unreachable commits are anchored by nothing; a
 `git gc --prune=now` on either side destroys them for good. Anchoring them (e.g. `refs/rescued/orphan-*` per sha) is a
 repo-shape change the delegate did **not** make unasked.
+## D158 — Agent-authored harness customization ships as an installable package developed in the workspace, not as hand-written `.pi/` files; and 232 is gated on a read of shipped enforcement designs before any build (2026-10-29, operator ruling)
+
+**The ruling.** Asked for three rulings (a `.pi/` grant for ROADMAP 235/236/238; whether to register the
+capture-on-success item; whether 232 stays first), the operator ruled: **"You can write into the .pi directory if
+necessary. It would be ideal if we did not have to do that, but use existing mechanisms such as custom extension
+installation, which we could develop in this workspace."** Registration of capture-on-success: *"2. is fine."* On 232:
+**"Do more research before proceeding onto roadmap 232."** The clone grant came separately the same day: *"Please do the
+git cloning, depth 1, for us."*
+
+**Why the package shape is a substance call, not a tidiness call.** pi's package mechanism already gives the
+project-scoped surface with a smaller trust footprint than hand-written config: `pi install ./local-package` loads a
+**local path in place, without copying**, `--local` writes the declaration into `.pi/settings.json`, and "Pi reads
+declarations from that file only after project trust is granted"
+(`@1.4.0 docs/packages.md`, "Install and manage packages" / "Choose a source"). So the repo-committed object is a
+**directory of code plus one settings line**, both in `git ls-files`, both diffable, both reinstallable on the other
+host — instead of agent-authored `.mjs` sitting loose in the directory that *is* the trust decision. That difference is
+exactly what round 2 of this study says nobody solves: **no vendor distributes per-project instructions across two
+hosts**, and symlinks "work only if Windows Developer Mode is enabled"
+(`docs/reviews/harness-tools-skills-public-harnesses-research.md` §3.7). A package that lives in the tree and is
+installed by a one-line declaration is the only shape in this study that survives a host move.
+
+**What it changes in the register.** 235's *Where:* no longer names a hand-written
+`.pi/extensions/delegate-instruments.mjs`; it names a package in this tree (e.g. `packages/delegate-instruments/`) with
+conventional `extensions/` (+ optional `skills/`, `prompts/`) directories, installed `--local`. `.pi/extensions/` stays
+the fallback if the package path hits a wall, and `pi -e ./path` stays the no-write trial mode (`docs/usage.md` "Load
+extensions and packages from paths or packages"). 240 (capture-on-success) and **241** (research-before-232) were
+registered with reasons; **242** and **243** were registered from defects measured during this work, not from the
+operator's asks.
+
+**Evidence for the execution of the grant.** Five `--depth 1` clones landed under `vendor/eval/`: `codex d373d649`
+(139 M, full Rust source), `cline 51f63e4f` (122 M), `goose 775b3958` (647 M), `claude-code-docs 58d6da1e` (31 M,
+**CHANGELOG/docs only — no implementation**), `copilot-cli 84ee80ea` (596 K, **README/`install.sh`/changelog only** —
+the CLI is closed, so its value is its issue tracker). `node tools/vendor-pins.mjs --write docs/VENDOR-PINS.md --tags`
+then `--check` → **PIN CHECK PASS (14 clones)**; `git worktree list --porcelain` stayed at **1 registration** before and
+after the clones. Live-page confirmation of the report's load-bearing numbers, same day: Claude Code's "1% of the model's
+context window", "truncated at 1,536 characters", "first 5,000 tokens of each" / "combined budget of 25,000 tokens",
+`/skill-doctor`, `/run-skill-generator`; Codex `config-advanced`'s `project_doc_max_bytes`,
+`thread.skills.truncated`, `skill.injected`, `history.jsonl`, `hooks.json`, `PreToolUse`; Cursor's `beforeShellExecution`,
+`failClosed`, `pluginPaths`.
+
+**What did NOT change.** 232 is still unclaimed and untouched — no suite runs from this checkout (the 15-minute
+self-sweep, `docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md`). The delegate still does not claim, complete or
+route queue items: 240-243 are **registered-not-scheduled**, and pm owns ordering. The `.pi/` grant is real but
+**unused** so far — no `.pi/` path exists in this tree.

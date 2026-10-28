@@ -4370,8 +4370,12 @@ the shape. Nothing in this repo has ever used it — `grep` for `.pi/` finds **n
 *not* doing it is measured twice: instruments named in the pointer get 6–21 sessions of reuse, instruments freshly
 authored get **1–2**, and **2,789 of 11,599 calls (24.0%)** in the 87-session corpus are ad-hoc measurement code
 (**267 of 2,356, 11.3%**, in the 18-session Linux-only corpus — see 237).
-*Owner:* delegate (harness surface, project-scoped under D157) · *Where:* a new `.pi/extensions/delegate-instruments.mjs`
-registering `tools/channel-preflight.mjs`, `tools/broker-serve.mjs`, `tools/queue-drain-audit.mjs`,
+*Owner:* delegate (harness surface, project-scoped under D157; **delivery shape ruled 2026-10-29, D158: develop it in
+this workspace as an installable pi package — conventional `extensions/` (+ optional `skills/`, `prompts/`) directories
+or a `pi` key in `package.json` — and install with `pi install --local ./<dir>`, whose only `.pi/` write is one line in
+`.pi/settings.json`, read only after project trust; hand-written `.pi/extensions/*.mjs` is the fallback, not the
+plan**) · *Where:* a new package in this tree (e.g. `packages/delegate-instruments/`) registering
+`tools/channel-preflight.mjs`, `tools/broker-serve.mjs`, `tools/queue-drain-audit.mjs`,
 `tools/latency-budget.mjs`, `tools/instrument-provenance.mjs`, `tools/harness-usage-census.mjs`, `tools/vendor-pins.mjs`
 as schema tools with `promptSnippet`; `docs/VENDOR-PINS.md`-style provenance for the pin-dependent ones · *Acceptance:*
 a fresh session runs a baseline instrument without reading a doc; `harness-usage-census.mjs` shows each registered tool
@@ -4473,3 +4477,90 @@ must not paste store contents into docs, D-scope); recovering a body is not rest
 recovery **re-created**, per 233/D156; the Windows-host transcripts were unreachable on this host (see 237), so a
 recovery attempt is corpus-bounded; and this row is about the **delegate's** files, not seat worktrees — seat work is in
 git or the store, and a seat's tool results are entries (137,427 of them), never transcripts.
+
+Registered 2026-10-29 (240-243), not scheduled. These come from the **public-harness half** of the tool/skill-lifecycle
+study (`docs/reviews/harness-tools-skills-public-harnesses-research.md`, round 2) and from the five public-harness pins
+that landed the same day (`codex d373d649`, `cline 51f63e4f`, `goose 775b3958`, `claude-code-docs 58d6da1e`,
+`copilot-cli 84ee80ea`; all `--depth 1`, all rows in `docs/VENDOR-PINS.md`, `--check` PASS at 14 clones).
+**Registered with reasons as the runbook mandates; not scheduled — sequencing stays pm's** (`docs/SELFDEV.md` Standing
+rule, 2026-10-27). The order below is the study's ranking, not a queue order.
+
+**240. Nothing in the rig turns a successful ad-hoc run into a reusable repo-committed recipe, so the measured 11-24%
+ad-hoc share is paid again every session.**
+*(delegate; measured over pi 1.4.0 + 9 pinned clones + 5 public harnesses; class mixed — see citations)* Of fifteen
+systems examined across two rounds, exactly two close the loop. **Claude Code**: `/run-skill-generator` "Teach `/run`
+and `/verify` how to build and launch your project", and the docs state `/verify` "fails until that generator exists"
+(`https://code.claude.com/docs/en/skills`, class `advertised-elsewhere`, page confirmed live 2026-10-29). **Goose**:
+runtime recipe write-back (`crates/goose/src/recipe/local_recipes.rs:155,194` — `generate_recipe_filename` + save into
+a recipe library) plus a session-mining "recipe cookbook generator"
+(`documentation/blog/2025-10-08-recipe-cookbook-generator/index.md`), which carries its own tombstone — *"the public
+Recipe Cookbook submission program has ended"* — so cite it as **a vendor tutorial of a wound-down program**, not a
+supported feature. pi has the three near-misses and none of them close it: `SKILL.md` is authored by hand, `/plan` is a
+session *mode* that "cannot persist state" (`docs/session-mode.md:80`), and `{{shortcut}}` templates substitute a
+literal string (`docs/usage.md:334-354`). Our audit's own words decide the priority: *"every capability we re-derive ad
+hoc is a capability we pay for again"* (`docs/reviews/pi-harness-usage-audit-2026-10-28.md:25`) — an unused skill costs
+tokens once per request, an un-captured success costs the 11-24% every session.
+*Signal that this is fixed:* a session performs an ad-hoc procedure successfully, and a later session performs it
+**without re-deriving it** — shown by the census ad-hoc share falling for that verb family, not by the existence of a
+generator; and the captured recipe is a `git ls-files` object naming the commands and the run that proved them.
+*Gated on:* the package/`.pi/` delivery grant (D158) **and** a verification answer we do not yet have — Claude Code
+makes `/verify` + a login/deploy recipe an explicit prerequisite for generated skills, and a generated recipe with no
+verification step is an un-audited prompt (Goose's ended program is the cautionary citation). Round-3 prompt Q5
+(`docs/reviews/harness-tools-skills-followup-2-research-prompt.md`) asks for exactly that. It is also a **product**
+question, not only a delegate one: the same mechanism belongs to the seats eventually, which makes it pm's to
+decompose alongside 217.
+*Do not:* generate recipes from failed runs; call a hand-written `SKILL.md` "capture"; ship a generator no seat
+verifies (pi-subagents' rejected `auto-skill` pattern, row 239's sibling finding).
+
+**241. Research 232 before building it: the enforcement designs of shipped harnesses are now readable at a pin, and one
+of them has a filed field failure.**
+*(operator ruling 2026-10-29: "Do more research before proceeding onto roadmap 232.")* Two things made this cheap on
+the day it was ruled. (a) **Codex is readable in source** — `vendor/eval/codex` `d373d649` ships `codex-rs/`, a
+shipped permission/policy engine: approval-policy ladder, deny rules read from config, hook trust persisted
+**out-of-band** in an `mcp-oauth`-shape, outside config and outside git, so `git diff` never shows a permission grant;
+its `docs/config-file/config-advanced` keys (`project_doc_max_bytes`, `thread.skills.truncated`, `skill.injected`,
+`history.jsonl`, `hooks.json`, `PreToolUse`) were confirmed present on the live page 2026-10-29. (b) **The guard we
+would hand-write has a documented failure to study**: GitHub Copilot CLI ships `--deny-mode "command:git worktree
+prune"`, and its tracker reports those rules **failing open** on a 10 s timeout and on TCC denial
+([#978](https://github.com/github/copilot-cli/issues/978)) with no way to reload a changed rules file without
+restarting the session ([#4438](https://github.com/github/copilot-cli/issues/4438)) — class `advertised-elsewhere`,
+both URLs confirmed reachable 2026-10-29.
+*Signal that this is fixed:* a dated design note under `docs/reviews/` naming, for each of Codex / Copilot CLI / pi:
+where the rule lives, who can bypass it, what happens on guard timeout, whether the decision is recorded anywhere a
+reviewer can read, and whether a repo commit propagates the guard to a teammate. 232 is then claimed with a design
+chosen against evidence.
+*Gated on:* nothing but reading. **This is not 232 and must never be reported as it.** No claiming 232, no touching
+`src/worktree.mjs:649` / `src/broker.mjs:1167`, and no suite run from this checkout while 232 is open (the 15-minute
+self-sweep, `docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md`). A harness-side guard remains belt-and-braces
+for the delegate: the broker's own `pruneWorktrees` call runs where no outer extension can see it.
+*Do not:* treat the Codex engine as portable — it guards a *tool-call* plane inside one process; our destructive call
+is made by our own broker to itself. The transferable part is the shape (rules from the repo, out-of-band trust,
+fail-closed, recorded decisions), not the code.
+
+**242. `tools/vendor-pins.mjs --tags` prints `_not fetched_` for prefixed tag schemes, so the pin table under-reports
+drift on the fastest-moving clone in the store.**
+*(delegate; observed 2026-10-29 while pinning `codex`)* The version-like tag filter rejects `rust-v0.106.0-alpha.9`,
+`winget-test-rust-v0.106.0-alpha.9`, `voice-cygwin-…`, so `codex` shows no remote tag even though
+`git -C vendor/eval/codex ls-remote --tags origin` returns dozens. The tool exists because "a pin cannot live only in a
+gitignored directory" and because drift is its failure class; a row reading `_not fetched_` looks like "no releases
+exist" and stops a reader noticing the clone is far behind upstream. *Signal that this is fixed:* the `codex` row
+prints its release-shaped tag (or a labelled `prefixed-tags-only: rust-v…` note), and a test asserts a prefixed-tag
+repo is reported rather than silenced. *Gated on:* it changes a **tracked instrument**, so it is queue work — the
+delegate does not hand-patch team instruments while 232 gates suite runs. *Do not:* hand-edit the generated block in
+`docs/VENDOR-PINS.md` to compensate; `--check` failing on a hand-edit is the point.
+
+**243. A delivered research report cited a fetched-page corpus it never delivered: 50 of 64 in-body anchors are
+unopenable and 3 URLs are dead — ROADMAP 233's failure mode, one layer up, in the research pipeline.**
+*(delegate; measured on `docs/reviews/harness-tools-skills-public-harnesses-research.md` as committed `318838f5`)*
+64 distinct in-body markers, 14 defined, **50 dangling** (`[^542f21#49]`-style anchors into the research agent's own
+`inputs/fetched/`, which is not in this tree), and **3 dead links** (the Goose vendor-site paths, all HTTP 404 as
+verified 2026-10-29; the resolvable paths are in the pin, `vendor/eval/goose/documentation/docs/…`). A dead URL is
+worse than no URL because it reads as evidence, and a line range into a file nobody has is a claim nobody can re-open.
+*Signal that this is fixed:* the round-3 deliverable ships `inputs/fetched/` + a manifest (URL, fetch date, HTTP
+status, sha256, the page's own last-modified marker), every in-body anchor resolves, and
+`docs/runbooks/research-request.md` Do 4 gains a line: **a report whose citations point at files it did not deliver is
+returned, not folded**. *Gated on:* the round-3 research run (prompt written:
+`docs/reviews/harness-tools-skills-followup-2-research-prompt.md`, Task A). The delegate fixed the three Goose paths
+from the pin; it cannot invent the corpus. *Do not:* downgrade the report's conclusions because its citations are
+unresolvable — its load-bearing numbers were independently confirmed on the live vendor pages the same day
+(`docs/COMPETITORS.md`, "The 2026-10-29 public-harness pins"). Fix the chain, keep the findings.
