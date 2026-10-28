@@ -71,11 +71,22 @@ are now **corrected**, and the `drain first` option is **priced**:
   `staleRunbooks` (`scripts/clockin.mjs:110`) skips any runbook without a *dated* `last_verified` — so the staleness
   probe is structurally blind to exactly the runbooks that were never verified. That broker runbook is one of them.
 
-**Delivery channel, newly measured — this is the real critical path.** The broker is down and the **only launcher in
-`scripts/` is `serve-noroot.ps1`**; it is 15 lines (pin `DURIG_DB`, unset `DURIG_SEAT_ROOT`, spawn `node cli.mjs serve`
-detached into `.spike/serve.{out,err}`, print the pid). A Linux equivalent is ~15 lines plus a demo — 191's own pattern,
-"one mechanism, and a demo that proves the docs match the code". Until it exists (or the operator runs the equivalent by
-hand), **every** team-side item below is undeliverable, and no `delivered:true` receipt is obtainable.
+**Delivery channel, newly measured — this is the real critical path.** The broker is down, and the only launcher in
+`scripts/` is `serve-noroot.ps1` (15 lines: pin `DURIG_DB`, unset `DURIG_SEAT_ROOT`, spawn `node cli.mjs serve` detached
+into `.spike/serve.{out,err}`). On this Linux host there is **no broker artifact at all** — `selfdev.sqlite.broker.json`
+and `selfdev.sqlite.broker.log` are absent and no `[c]li.mjs serve` process exists, which is runbook shape (a) in its
+extreme form: **this store has never been served from this box.** And the cost of that is already booked:
+`selfdev.sqlite.broker.inbox/` holds **two operator intents to `pm`, stranded since 2026-10-27T05:04:46Z** —
+`audit-15-orphans-and-5-parked` and `memory-decompose-v2`. The operator commissioned the decomposition ~a day before
+this audit measured the backlog it would have had to work. **Do not spool my `.spike/delegate/pm-intent-held-drain.md`
+before reading those two bodies** — `audit-15-orphans-and-5-parked` is very likely the same ask, and a duplicate intent
+is noise delivered to a seat, not help. What is worth spooling is only the delta: the 71/69/30 measurements and the
+recovery ask.
+Provider status, measured and **stale in the roadmap's favour**: `ROADMAP.md:2875` says "none on the Linux box", but
+`127.0.0.1:47831` advertises `iq3_s` (Qwen3.8-Flash-Next IQ3_S, 1 GPU) and `127.0.0.1:1234` advertises
+`mistralai/ministral-3-14b-reasoning` — both HTTP 200. **161's provider gate is satisfied on this host right now**, which
+unblocks the A/B harness if the operator picks M5. A Linux launcher is ~15 lines plus a demo — 191's own pattern, "one
+mechanism, and a demo that proves the docs match the code".
 
 **Blocker:** unchanged in kind, and no build is waiting on it — four operator rulings (D141). (1) **ratify or
 replace the milestone** — answer `M5`, `189`, or `drain first`; this audit makes `drain first` a concrete
@@ -83,8 +94,8 @@ first option (**71** rows at floor 7, no GPU). (2) **The 189 verifier family** �
 choice, not a capability score; the gate cannot rank the resident families at n = 8 (D140). (3) **The five
 parked rows** — recommended replies already in `docs/reviews/parked-questions-2026-10-26.md`. (4) **`#4785`
 `done` with no artifact anywhere**; the "completion without an artifact" detector is still unregistered.
-D139's verifier-design ask is **still unsent** (broker down; `intent.mjs` spoofs operator input). **(5) NEW: the broker,
-or a Linux launcher** — see the delivery-channel paragraph; it gates (1)–(4) becoming real work.
+D139's verifier-design ask is **still unsent** (broker down; `intent.mjs` spoofs operator input). **(5) NEW and most urgent: the broker, or a Linux launcher** — two operator intents have been undelivered since
+2026-10-27; it gates (1)–(4) becoming real work.
 
 **Queue (re-measured):** 4,818 subjects — `done` 3,748 · `cancelled` 777 · `held` **274** · `deferred` **19** ·
 `queued` **0** · `claimed` **0**; broker `{state: down, reason: "no broker state"}`; attention = 5 seats

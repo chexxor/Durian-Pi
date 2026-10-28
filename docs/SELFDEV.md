@@ -791,3 +791,18 @@ leave it at 32 GB) and keep C: for the model; or take the 96 GB RAM route, where
   file"). A pitfall written only into a `SELFDEV.md` body is a *hint* the next session may open, not a control. Put what
   must never be re-discovered in the pointer block (cap 200 lines, `demo/next-pointer.test.mjs` enforces), and keep the
   long form here.
+
+## Operational pitfalls (third block — process and delivery surfaces)
+
+- **`pgrep -af "cli.mjs serve"` matches the command line of the very shell running it.** Two self-hits, and you conclude a
+  broker is alive when none is. Use a bracket class: `pgrep -af "[c]li.mjs serve"`. (Same trick as `ps | grep [p]attern`.)
+- **The stranded-intent surface is `<store>.broker.inbox/`, and nothing warns you it is filling up.** Two operator-authored
+  intents to `pm` sat there for a day (`audit-15-orphans-and-5-parked`, `memory-decompose-v2`, both
+  `createdAt 2026-10-27T05:04:46Z`) because no `serve` had run against this store on this host. Before spooling *any*
+  intent, `ls <store>.broker.inbox/` and read the pending `requestId`s — otherwise you deliver a duplicate of an ask the
+  operator already made, and a duplicate intent is noise to a seat, not help.
+- **Absence of `<store>.broker.json` AND `<store>.broker.log` is a different diagnosis from a dead broker.** It means the
+  store was never served on this machine — so `resume`/restart guidance is the wrong frame and a *launcher* is the missing
+  artifact. Always name the OS when you report which of the three you found.
+- **`ROADMAP.md` can be stale in your favour.** It says a provider is unavailable on the Linux box; `curl -s :47831/v1/models`
+  and `:1234/v1/models` both return 200 with models advertised. Re-check "we can't do X here" claims by probe, not by doc.
