@@ -280,3 +280,39 @@ CAL_SPIKE=.spike/gate/cand node tools/model-probes/gate.mjs http://127.0.0.1:123
 The corpus rebuilds itself from `git` and the working tree on every invocation, re-proves each mutant by
 execution, and prints the `PROOF …` lines quoted in §3 — so a reader on another clone of this repo gets the same
 8 items, and gets a loud `NOTE` plus a missing item rather than a silently different corpus if a file moved.
+
+## 9. Whole-module feasibility at the verifier's context ceiling — measured 2026-10-28T00:30Z
+
+ROADMAP 195 says a control should be shown as the **whole module** "whenever the context budget allows it
+(which for the A4000 verifier means ≤ ~12k tokens), so the module must fit — say so, and fail loudly when it does
+not". Before deciding what is even possible, the budget was measured rather than assumed.
+
+**What the gate actually sent** (read out of both transcripts, 24 prompts each):
+
+| model | max prompt tokens | median |
+|---|---|---|
+| candidate `ministral-3-14b-reasoning` | **2,942** | 941 |
+| control `local/iq3_s` | **2,961** | 1,018 |
+
+**What each corpus file would cost whole** (`wc -c` / 4 — code tokenises *worse* than 4 chars/token, so treat
+these as lower bounds), against the verifier's declared **13,273** context and its measured **HTTP 400 above
+~12k** (D137):
+
+| file | items | ≈ tokens | whole-module today? |
+|---|---|---|---|
+| `src/textwidth.mjs` | M1 | 2,491 | yes |
+| `src/job-object.mjs` | H2 | 3,229 | yes |
+| `src/driver.mjs` | M3 | 3,514 | yes |
+| `scripts/clockin.mjs` | H5 | 3,866 | yes |
+| `src/confine.mjs` | M2 | 8,401 | borderline — likely over once tokenised; must be *probed*, not assumed |
+| `src/rig.mjs` | H3, H4 | 17,133 | **no** |
+| `src/worktree.mjs` | H1 | 17,633 | **no** |
+
+So the de-artifacting experiment is runnable **now** for 4 of 8 items, with `confine.mjs` decided by a live
+400-not-400 probe, and **H1/H3/H4 structurally excluded** at this context. Raising the verifier's context (q8_0 KV
+halves the KV cost per token) is an operator action on an LM Studio instance the delegate does not touch.
+
+**One artifact disappears by construction:** the `__durig_probe__` header exists only because a fragment needed a
+wrapper to parse. Show `src/textwidth.mjs` whole and there is no synthetic function, no `width` declared outside
+the window, and therefore no scaffold for the model to (correctly) complain about — which is precisely the claim
+this session had to excuse by hand.

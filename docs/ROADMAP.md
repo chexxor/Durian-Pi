@@ -3338,6 +3338,13 @@ false-alarm rate measured on fragments is therefore inflated by construction. De
 classifies artifact claims (undefined-identifier/`ReferenceError`/parse-failure claims) separately from genuine
 false alarms, and a control is shown as the **whole module** whenever the context budget allows it (which for the
 A4000 verifier means ≤ ~12k tokens, so the module must fit — say so, and fail loudly when it does not).
+Measured scope (2026-10-28T00:30Z): the largest prompt the hardened gate actually sent was **2,942 tokens**, and
+the verifier's ceiling is **13,273 declared / ~12k usable** (HTTP 400 above that). Whole-module controls are
+therefore possible **today** for `src/textwidth.mjs` (≈2.5k tok), `src/job-object.mjs` (≈3.2k), `src/driver.mjs`
+(≈3.5k) and `scripts/clockin.mjs` (≈3.9k); **borderline** for `src/confine.mjs` (≈8.4k, code tokenises worse than
+4 chars/token — probe it, do not assume); and **impossible** for `src/rig.mjs` (≈17.1k) and `src/worktree.mjs`
+(≈17.6k) — i.e. 3 of the 8 items stay fragments unless the operator raises the verifier's context (q8_0 KV halves
+it; LM Studio owns that instance). Evidence: `docs/reviews/verifier-gate-hardening-2026-10-28.md` §9.
 
 **196. An unconditional "artifact" drop throws away the answers that carry the signal**
 *(qa; found while scoring the 2026-10-28 gate run, 2026-10-28)* — measured: the control model answered the M1

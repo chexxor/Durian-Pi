@@ -83,6 +83,9 @@ behind the first:
    verifier seat back on a **remote** family (`DEEPINFRA_API_KEY` + balance). The cheap measurement that would make
    this choice real is **195 (whole-module controls) + more items (194)**, then a ~3-minute re-run against the
    already-resident candidate — no download needed to try that first.
+   **195's scope is capped by your verifier's context, not by the code:** 3 of the 8 corpus items cannot be shown
+   whole at 13,273 tokens (`src/rig.mjs` ≈17.1k, `src/worktree.mjs` ≈17.6k). q8_0 KV would halve the KV cost per token
+   and change what fits; LM Studio owns that instance and the delegate does not touch it unasked.
 2. **Evidence binding (190)** — durable records cite store-native `entries.id`, not machine-local git objects?
    Decides how memory 165/167 and substrate 170 are written.
 3. **`#4785` was marked `done` with no artifact anywhere** (`500969f42` never existed on the Windows rig either).
@@ -101,7 +104,30 @@ the 238/238 above was measured against the pinned build. The delegate touched no
 but **not** gitignored (only `.spike/` is); the model probes are tracked under `tools/model-probes/` with a
 `README.md`, because a durable survey that cites scripts no clone contains is ROADMAP 190's own failure mode.
 
-**Exact next command** (baseline, then the rebuilt gate against the resident candidate):
+**Next thing, agreed with the operator at 00:35Z — this session clocked out; the work starts next session.**
+**ROADMAP 195, in the delegate's own apparatus:** add a whole-module control mode to
+`tools/model-probes/gate.mjs` (show the **entire file** when it fits the budget, and print a loud
+`SKIP <item>: whole module ≈N tok > budget` when it does not), then re-measure **both resident models** and report
+**fragment verdict vs whole-module verdict side by side**. This is the one measurement that decides whether last
+session's most uncomfortable result — **FALSE-ALARM 8/8 on fragment controls for *both* families under *both*
+framings** — is a property of the models or of my windowing. Cost: ~40 lines, ~12 min of already-resident GPU, no
+download, no seat touched, nothing restarted.
+
+Measured scope (§9 of the review doc, `wc -c`/4 lower bounds against 13,273 declared / ~12k usable): whole-module
+is possible **today** for **H2 `src/job-object.mjs` (≈3.2k tok), H5 `scripts/clockin.mjs` (≈3.9k), M1
+`src/textwidth.mjs` (≈2.5k), M3 `src/driver.mjs` (≈3.5k)**; **M2 `src/confine.mjs` (≈8.4k) is decided by a live
+400-not-400 probe**, not by assumption; **H1 (≈17.6k) and H3/H4 (≈17.1k) are structurally excluded** at this context.
+Note that the `__durig_probe__` wrapper — the artifact the control model correctly complained about — exists only
+for fragments, so it disappears by construction.
+
+**Then branch on the answer, do not pre-decide it:** if the false alarms **survive** whole modules, this is a
+*verification-design* question (how a verifier seat is fed; when a refusal is admissible) and it becomes a queue
+item the delegate **raises for the PM**, not something the delegate fixes. If they **collapse** for the control and
+not for the candidate, the gate is decision-grade on the false-alarm axis for the first time and option (a) can be
+refused on evidence instead of on "not demonstrated better".
+
+**Exact next command** (baseline, then the rebuilt gate; `--whole-module` does not exist yet — implementing it is
+the first act of the next session, and the plain run below is the control arm that must reproduce 3/8 first):
 
 ```bash
 DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json

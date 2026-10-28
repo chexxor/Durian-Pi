@@ -4750,6 +4750,18 @@ imports it called missing; `__durig_probe__` is my synthetic header). "A verifie
 a candidate property I can attribute to option (a) alone; it is a property of asking a reasoning model for a bug in a
 fragment. Operationally that points at how a verifier seat is *fed*, not only which model sits in it.
 
+**Sequencing decided, and on measured grounds (operator direction, 2026-10-28T00:35Z).** The next measurement is
+**195 — whole-module controls — before any new model is downloaded.** Why that order rather than option (b): the
+cheapest experiment in reach (~40 lines in the delegate's own `gate.mjs`, ~12 min of already-resident GPU, zero
+download) is also the one that decides what the expensive experiment is worth, because the current false-alarm
+signal is confounded by my own windowing and **no family comparison on that axis means anything until the confound
+is removed.** Its scope was measured, not assumed: the largest prompt the gate actually sent was 2,942 tokens; the
+verifier's usable ceiling is ~12k of a declared 13,273; whole-module controls are possible today for 4 of the 8
+items, one is decided by a live 400-not-400 probe (`src/confine.mjs`, ≈8.4k est), and three are structurally
+excluded (`src/rig.mjs` ≈17.1k, `src/worktree.mjs` ≈17.6k) unless the operator raises that context — an LM Studio
+action the delegate does not take. If the false alarms survive whole modules, the finding is about **how a verifier
+seat is fed**, and it goes to the PM as a queue item rather than being fixed by the delegate.
+
 **Not decided here.** Which family to run (operator, ruling 1) — the option set and the recommendation are unchanged,
 but option (b) (`Devstral-Small-2-24B UD-Q3_K_XL`, 11.85 GB) must be gated with the hardened gate, and the cheap
 next measurement is 195 + more items then a ~3-minute re-run against the already-resident candidate. Nothing was
