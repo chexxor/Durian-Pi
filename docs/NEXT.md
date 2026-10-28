@@ -8,8 +8,10 @@ roadmap.
 
 ## Current priority: **keep the delivery channel resident** — the wall-clock case for it is now measured
 
-**Rig:** `rig.selfdev.json` · **Store:** `./selfdev.sqlite` (274,068 records; 30,944 submissions; 3,755 non-terminal
-queue rows, **96 of them `ready`**) · **Branch:** `main` @ `16cbb60`.
+**Rig:** `rig.selfdev.json` · **Store:** `./selfdev.sqlite` (274,068 records; 30,944 submissions) · **Queue census**
+(`node cli.mjs queue --json | jq -r '.items[].status' | sort | uniq -c`): **4,821 items = 3,748 `done` / 777
+`cancelled` / 277 `held` / 19 `deferred`** — so **296 non-terminal rows**, by seat: impl 177, scribe 44, devtools 35,
+qa 21, security 6, pm 5, lead 5, auditor 2, qa2 1 (the degenerate seat). **Branch:** `main` @ `8f8052c`.
 **Worktree (Linux-native — corrected 2026-10-28 by direct measurement, an earlier note in this file was wrong):**
 `git worktree list --porcelain` on this clone returns **exactly 1 entry** (`/home/chexxor/Git/Durian-Pi` @ `16cbb60`,
 branch `main`); there are **no seat worktrees** (`/home/chexxor/Git/Durian-Pi-worktrees/` does not exist, there is no
@@ -44,7 +46,7 @@ node -e 'import("./src/seatroot.mjs").then(m=>console.log(m.describeSeatRoot({pe
 node tools/broker-serve.mjs --status                                                  # expect STOPPED, 0 STRANDED
 node tools/latency-budget.mjs --db ./selfdev.sqlite                                   # 3.0s: the two currencies
 DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json DURIG_SEAT_ROOT=/home/chexxor/Git/Durian-Pi-worktrees \
-  timeout 1200 node cli.mjs watch --to engineer --json --interval 2000                 # 96 ready rows, no scheduler
+  timeout 1200 node cli.mjs watch --to engineer --json --interval 2000                 # 277+19 parked rows, no scheduler
 node scripts/clockin.mjs                                                              # 2.6s, 14.6KB
 ```
 
@@ -84,22 +86,28 @@ derives that on write, so `up --root` once per seat is sufficient and no migrati
    currently **always exits 0**; a `--violation` fixture path is the deliverable (this rig ships broken CI demos twice,
    so "it runs" is not coverage).
 
-### The queue is readable — the old "4 rows" framing is **wrong**, verified twice this session
+### The queue verb has **no filters at all** — verified, and it changes how you must read the backlog
 
-`DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json DURIG_SEAT_ROOT=/home/chexxor/Git/Durian-Pi-worktrees \
-  timeout 60 node cli.mjs queue --to engineer --json` → **96 open rows (63 held, 11 running, 10 claimed, 9 pending,
-3 ready)** and **3,755 non-terminal rows** in `status`; the rig is **not** blocked on queue depth. Before starting
-seats, have `pm` decompose from that queue rather than assuming the backlog is parked. **Held-backlog audit** (delegate
-instruments, 1.0 s and 0.7 s):
+`cli.mjs` `cmdQueue` is `async function cmdQueue()` reading the whole `queue` document (`cli.mjs:1018-1021`): **it takes
+no arguments**, so **`--status held` and `--to pm` are silently ignored and every read returns all 4,821 items**
+(**21,178,646 B**; `status` is **22,748,093 B**). Unknown flags fail **open** — you cannot tell a filter was ignored.
+An earlier note in this file said "`queue --to engineer --json` → 96 open rows / 3,755 non-terminal": **that was wrong**,
+it was a number from a different structure. The measured census is the one in the header above (**296** non-terminal,
+**277 `held` + 19 `deferred`**), and the way to read it without pulling 21 MB into a session's context is to project
+(`jq` is installed at `/usr/bin/jq`):
 
 ```bash
-node tools/queue-drain-audit.mjs          # 277 held: 91 LANDING rows, 71 already fully on main = zero-build closable
-node tools/latency-budget.mjs --db ./selfdev.sqlite   # 277 held idle a median 213.5h; 19 deferred a median 145.1h
+node cli.mjs queue --json | jq -r '.items[] | select(.status=="held" or .status=="deferred")
+  | [.id,.status,(.to//"-"),(.subject//""|.[0:60])] | @tsv'      # 296 rows, 75 KB not 21 MB
+node tools/queue-drain-audit.mjs          # 1.0 s: of the 277 held, 91 LANDING rows, 71 already fully on main
+node tools/latency-budget.mjs --db ./selfdev.sqlite   # 3.0 s: held idle a median 213.5h; deferred a median 145.1h
 ```
 
+Before starting seats, have `pm` decompose from that projected list rather than assuming the backlog is parked.
 71 of 277 held rows being zero-build closable is now a **product** gap, not just a delegate measurement — that is
-**ROADMAP 227** (`checkup`/`attention` should say it; the delegate re-running a script every session is the tax).
-**Release/cancel decisions stay `pm`'s**; the delegate only measures.
+**ROADMAP 227** (`checkup`/`attention` should say it; the delegate re-running a script every session is the tax), and
+the missing filters plus the fail-open flags are **228**. **Release/cancel decisions stay `pm`'s**; the delegate only
+measures.
 
 ## What this session delivered (done / verified / unverified)
 
@@ -131,7 +139,10 @@ node tools/latency-budget.mjs --db ./selfdev.sqlite   # 277 held idle a median 2
 - **The long tail is the largest un-diagnosed term:** the 0.23% of generations that run ≥10 min hold **156.8 h
   (39.0%)** of machine busy time while their conversations committed **1–3 events** inside those windows. **ROADMAP 225**
   is the prerequisite for any "make it faster" decision.
-- **`cli.mjs status` prints 22.7 MB (~2 s) per read** — **ROADMAP 228**. `watch`/`tui`/scripted delegates pay it per pass.
+- **`cli.mjs status` prints 22,748,093 B and `cli.mjs queue --json` prints 21,178,646 B per read, and `queue` has no
+  filters** — **ROADMAP 228**. `cmdQueue` (`cli.mjs:1018`) takes no arguments, so `--status`/`--to` are accepted and
+  ignored: **unknown flags fail open**, and a reader cannot tell a filter was applied. `watch`/`tui`/scripted delegates
+  pay the full read per pass.
 - **Context is at its limit and nothing says so:** **23,053 prompts > 150,000 tokens, max 1,009,360** against a declared
   200,000 window (`status.context.window.denominator = "declared"`, `candidates.measured = null`); compaction cost
   **15.9 h** across 1,459 runs (max 1.5 h). **208** is the guard; the 94.0% cache-hit rate is what makes the fresh

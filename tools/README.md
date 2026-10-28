@@ -54,6 +54,13 @@ product ships helpers (`scripts/read-constitution.mjs`, `scripts/clockin.mjs`, `
   session died on `SyntaxError: Missing } in template expression`, and the offending template line parsed **fine in a
   standalone file** — the fault was in the surrounding context, so reading the line back at it was the slow path (6 min
   of wall-clock). `--check` finds it in hundredths of a second and names the line. Cheap guard, real saving.
+- **Project the big reads; do not dump them.** `cli.mjs status` is **22.7 MB** and `cli.mjs queue --json` is **21.2 MB**
+  on this store, and **`queue` has no filters** (`cmdQueue`, `cli.mjs:1018`, ignores every argument — `--status held`,
+  `--to pm` return all 4,821 rows, so an unrecognized flag **fails open**). Piping either into a session's context costs
+  21 MB of tokens for the 296 rows that matter. Use `jq` (`/usr/bin/jq`) or a tool:
+  `node cli.mjs queue --json | jq -r '.items[] | select(.status=="held" or .status=="deferred") | [.id,.status,(.to//"-"),(.subject//""|.[0:60])] | @tsv'`
+  → 296 rows in **75 KB**. Same reflex for `rig.selfdev.json` (seat `instructions` blocks are multi-KB each): select the
+  keys you need, never print the file. Registered as ROADMAP **228**.
 - **`tools/` is not prettier-formatted** (`cli.mjs format --check` reports every file here unformatted), so
   reformatting one instrument in a functional change is churn, not hygiene.
 

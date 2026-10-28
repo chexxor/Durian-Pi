@@ -4082,17 +4082,25 @@ landing is the case `land.mjs`'s `rerere` path exists for — check `git log --g
 citation dead, as `checkup.mjs:818` already instructs); releasing a row is `pm`'s verb and this rule must produce a
 notice, never an automatic release; and 47 ref tips cost ~1 s to enumerate, so the rule must batch, not `git` per row.
 
-**228. `cli.mjs status` prints 22.7 MB per read, and every viewer and every scripted delegate pays it.**
-*(devtools; measured 2026-10-28)* `node cli.mjs status` on this store emits **22,748,093 bytes in ~2 s**: all 4,821
-queue rows with **full `body` text** and all `transitions`, plus 12 seat context blocks. `watch`, `tui.mjs`,
-`queue-drain-audit` and `tools/latency-budget.mjs` each re-pay it per pass, and it is the reason a store read that is
-"~1 s" feels like several seconds at the terminal; it also makes `queue` unusable over a socket without a filter.
+**228. `cli.mjs status` prints 22.7 MB and `cli.mjs queue` prints 21.2 MB per read, `queue` has **no filters at all**,
+and unknown flags fail open.**
+*(devtools; measured 2026-10-28)* `node cli.mjs status` on this store emits **22,748,093 bytes** (all 4,821 queue rows
+with **full `body` text** and all `transitions`, plus 12 seat context blocks) and `node cli.mjs queue --json` emits
+**21,178,646 bytes**. Worse: `cmdQueue` is `async function cmdQueue()` with **no argument handling**
+(`cli.mjs:1018-1021`, read directly), so `queue --status held --json`, `--status deferred --json` and `--to pm --json`
+**all return the same 4,821 items** — the flags are accepted and silently ignored, so **a reader cannot tell that a
+filter was not applied** (a fail-open surface on the verb a delegate uses most). `watch`, `tui.mjs`,
+`queue-drain-audit` and `tools/latency-budget.mjs` each re-pay the full read per pass, and a session that pipes the
+output into its own context pays 21 MB of tokens for the 296 rows it actually cares about; today the only escape is a
+hand-written `jq` projection (75 KB).
 *Owner:* devtools · *Where:* `cli.mjs` `cmdStatus`/`cmdQueue` (a projection: `--ids`, `--status <state>`, `--to
 <seat>`, `--no-body`, and a `--fields` list; default stays the full document so nothing that parses it today breaks) +
 `docs/COMMANDS-AND-THE-BROKER.md` for the flag table + a demo asserting the filtered read is smaller and that the row
 count and attention output are **unchanged** between the two forms · *Acceptance:* `status --status held --no-body`
 prints the same held ids, same attention and same counts as the full read at <5% of the bytes; the full default is
-byte-identical to today; no flag changes the single-writer rule (these stay viewers: D11 — they must not schedule).
+byte-identical to today; **an unrecognized flag exits non-zero naming the known flags instead of being ignored** — the
+fail-open behaviour is part of the defect, not a detail; and no flag changes the single-writer rule (these stay viewers:
+D11 — they must not schedule).
 *Blind spots:* attention derivation must not be trimmed along with the body (a projection that hides the rows that
 make a notice is a false green); truncating bodies tempts a seat to act on a subject alone, which is the exact failure
 the "read the body before releasing a row" instruction exists to prevent — so `--no-body` is a **delegate/viewer**

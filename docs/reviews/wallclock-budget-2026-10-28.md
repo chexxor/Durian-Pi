@@ -156,8 +156,10 @@ correctness problem (**215/216**), so do not trade hours for it.
    (max 289.7 h), 19 `deferred` a median of 145.1 h — and `queue-drain-audit` measures 71 of the 277 as already fully
    on main (zero-build closable, 26% of held).** The logic exists only as a delegate instrument plus human diligence.
    New: **227**.
-5. **Make the queue readable: `cli.mjs status` prints 22,748,093 bytes (~2 s) on every read** because it serializes
-   all 4,821 rows with full bodies, and `watch`/`tui`/every scripted delegate pays it each pass. New: **228**.
+5. **Make the queue readable: `cli.mjs status` prints 22,748,093 bytes and `cli.mjs queue --json` prints 21,178,646
+   bytes** because each serializes all 4,821 rows with full bodies, and `watch`/`tui`/every scripted delegate pays it each
+   pass — and `cmdQueue` (`cli.mjs:1018`) **takes no arguments**, so `--status`/`--to` are accepted and ignored: **the
+   flags fail open**. New: **228**.
 6. **Hold the line on context, not on model quality: 23,053 prompts >150 k, max 1,009,360 vs a declared 200,000;
    15.9 h of compaction; 82–366 h of exposure if the 94.0% cache hit falls.** Item **208**.
 
@@ -177,6 +179,7 @@ Measured costs of what a session spends its own turns on, this box, this run:
 | `node scripts/test.mjs --all` | 41–55 s at 8 jobs (276.8 s serial) | already parallel; the `--jobs` default is pinned by a demo |
 | `node tools/latency-budget.mjs` | **3.0 s** | new; replaces ~1 h of ad-hoc store probing |
 | `node cli.mjs status` | ~2 s, **22.7 MB** | the read behind everything; **228** asks for a projection |
+| `node cli.mjs queue --json` | ~1 s, **21.2 MB**, and **`--status`/`--to` do nothing** | project with `jq` (below) instead of reading it |
 | `node tools/broker-serve.mjs --status` | 2.8–3.4 s | includes one real completion per provider |
 | `node tools/queue-drain-audit.mjs` | 0.9–1.0 s | do not re-run the 4-minute manual audit |
 | `node scripts/clockin.mjs` | 2.6 s, 14,542 B | under its 20,000 B cap again; still names no proof commands (**213**) |

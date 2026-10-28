@@ -5678,3 +5678,15 @@ mis-classifies as the live tree on Linux.** Two facts that change how 221 should
    mistook its ISOLATED item worktree for the LIVE tree"). 221's A/B/C ruling should be made with that asymmetry in
    mind: the value is not inert once it crosses hosts. (What the write guard does with such a value is **unverified** —
    the delegate ran no write verb to find out, and the team should not infer it from this note.)
+
+**Correction I owe this file (same day).** An earlier session's `NEXT.md` — which I re-checked rather than re-derived,
+and then re-published — said `cli.mjs queue --to engineer --json` returned "**96 open rows** … and **3,755 non-terminal
+rows** in `status`". Measured against the verb itself, that is **wrong**: `cmdQueue` is `async function cmdQueue()` with
+**no argument handling** (`cli.mjs:1018-1021`), so `--to`/`--status` are accepted and ignored and every read returns all
+**4,821** items (`21,178,646 B`), whose true state census is **3,748 `done` / 777 `cancelled` / 277 `held` / 19
+`deferred` — 296 non-terminal**, by seat impl 177, scribe 44, devtools 35, qa 21, security 6, pm 5, lead 5, auditor 2,
+qa2 1. Two lessons, both cheap to keep: (a) **a number carried forward from a previous NEXT.md is not a measurement** —
+the queue figures survived three sessions of copying before anyone read the verb that produces them; (b) a **fail-open
+flag surface** (`--status held` silently ignored) is what let a wrong number look plausible, which is why 228's
+acceptance now requires an unrecognized flag to exit non-zero. The corrected census and the `jq` projection recipe are
+in `docs/NEXT.md` and `tools/README.md`.
