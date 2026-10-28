@@ -52,6 +52,7 @@ node tools/broker-serve.mjs --status      # 2.8 s; now also raises `seat-shell-a
 node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 0.93 s: 91 non-terminal LANDING rows, 71 fully on main, ids printed
 node tools/latency-budget.mjs --db ./selfdev.sqlite      # 3.0 s: the two wall-clock currencies
 node tools/instrument-provenance.mjs && node scripts/clockin.mjs # 46 ms + 2.6 s: suite members git=238 disk=238 + ledger size (233, exits 1 on drift), then the digest
+node tools/harness-usage-census.mjs ~/.pi/agent/sessions/--home-chexxor-Git-Durian-Pi-- # 0.55 s: how often PAST sessions re-used each instrument vs re-deriving it (24% of all calls are one-off measurement code)
 ```
 
 ## Rig state, re-measured 2026-10-28T20:1xZ (Linux) — re-read, do not trust
@@ -125,6 +126,15 @@ this checkout** — run it in the disposable clone.
 4. **Edit C (done):** `instrument-provenance` is in the clock-in baseline. Skills steer the **outer agent**, never seats —
    seat tools come from `rig.selfdev.json`/`src/seattools.mjs` (217). **Ask:** A+B+C as delegate work, or rows for `pm`?
 
+## HARNESS LEVERS and the competitor-harness study the operator asked for (next session)
+
+**Zero-cost lever, available today:** open the session with `/skill:delegating-to-durian-pi` — `docs/skills.md` itself admits *"A model might fail to load a relevant skill, so use `/skill:name` when you need to force it"*. Measured over 87 past sessions: skills touched in **28**, `docs/NEXT.md` read in **75**.
+**Grant owed (project-scoped: `.pi/` lives in the repo and loads after project trust — and this repo has no `.pi/` at all):** `.pi/APPEND_SYSTEM.md` (~10 lines: instrument table, the "no suite runs from this checkout until 232 lands" rule, the baseline commands — always injected, survives compaction and small-model skipping).
+**Grant owed, part 2:** `.pi/extensions/delegate-instruments.mjs` — `pi.registerTool()` so the instruments sit in the **tool list** rather than in a file I must remember, a `before_agent_start` 3-line state digest (worktree registrations, suite-membership drift, `queued=0`), and a `tool_call` guard refusing `git worktree prune` / `git clean -fd` / suite runs on this checkout — the verbs that took the 36-row ledger, so belt-and-braces for **232**, not a substitute. Audit: `docs/reviews/pi-harness-usage-audit-2026-10-28.md`.
+**The study — do not re-derive its shape:** the prompt is drafted at `docs/reviews/harness-tools-skills-research-prompt.md`; hand it to the research agent (the delegate cannot call it); report to `docs/reviews/harness-tools-skills-research.md`; follow `docs/runbooks/research-request.md` **and** `docs/runbooks/competitor-review.md` (pin with `tools/vendor-pins.mjs`, register accepted items in ROADMAP as *registered, not scheduled*, add `docs/COMPETITORS.md` entries, write the follow-up prompt).
+**Question:** how a harness makes an agent's **own** tools and skills reusable — registration and surfacing (static list vs schema-registered vs dynamically activated), agent-authored tools, skill discovery/advertisement/on-demand load/precedence, the cross-session memory layer (are transcripts greppable, and do they carry tool arguments?), guardrails on destructive verbs, and the per-request context cost of each.
+**Rawest material:** the 9 pinned clones in `vendor/eval/` (aider, openhands, crewai, metagpt, oh-my-pi, prime-agent, pi-subagents, hermes-agent, symphony) walked with `node tools/competitor-brief.mjs --status` — **never grep first** (the named anti-pattern). Our own failure class is already priced by `tools/harness-usage-census.mjs`: 24% of 11,599 past calls are one-off measurement code, and new instruments get 1–2 sessions. **Do not duplicate:** `docs/reviews/agent-skills-review.md` (10-18), `skill-scope-tiers-research-prompt.md`, `agent-definition-format-standards-research-prompt.md`, `docs/COMPETITORS.md` §"The 2026-10-28 seven-clone sweep".
+
 ## Then, in this order (measured ranking — `docs/reviews/wallclock-budget-2026-10-28.md` §6, ruling D153, amended by D154)
 
 1. **#725 / #726 / #727 (channel resident) + the head of the queue** — **but land #217 + #232 + #233 first on this
@@ -174,25 +184,3 @@ different quantity, and the 5-minute **admission** deadline is a different 5 min
 removals (resets model+cwd only) — not a safety check. Model speed is **12.7%** of machine time. `tools/` is untested by
 design except where a demo is named.
 
-## CLOCK-OUT (2026-10-28T20:2xZ, delegate — seat capability, provider-era attribution, and a sweep caught in the act)
-
-**Done, committed not pushed (scoped paths).** `tools/channel-preflight.mjs` §7 *seat capability* (imports
-`src/seattools.mjs` instead of re-deriving the tool set; reads the pinned fallback programs from
-`vendor/pi-main/packages/durable/src/tools/bash.ts`; probes PATH; counts the store's shell evidence) and §5
-*provider-era attribution* (join to the **first assistant entry after the admitted one** — the admitted entry carries no
-`model[0]`, which is 229); `tools/broker-serve.mjs` raises **`seat-shell-availability` as a `block`**, so `--dry-run` and
-`--status` refuse rather than start seats with no shell (217's acceptance half); rows **232/233** + progress on
-**217/226**; `docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`.
-**Re-measured cost on this box:** preflight **2.0 → 3.3 s** — the store evidence is ONE `entries` scan holding all six
-`LIKE` patterns (~0.9 s; six separate scans cost ~1.9 s); `--dry-run` 2.93 s, `--status` 2.75 s.
-**Nearly-shipped error, corrected in public:** the recent `402` rows are **`deepinfra` history** — attributed, the live
-`local/iq3_s` era has **zero** failures. And the wake is the wrong celebration: a seat here cannot run
-`node demo/<name>.test.mjs`, so its completions are self-declared; `spawn powershell ENOENT` fired **inside the last
-broker pass** (entry #274074).
-**Unverified deliberately:** no channel start, no `up`/`worktree`/`run`/`send`, no queue transition, no intent spooled,
-no push. The sweep's file-loss half has **no mechanism** yet, and `demo/broker-serve.test.mjs` — which 217's acceptance
-asks you to extend — is among the lost files, so the suite's member list cannot be reproduced from git (233).
-**Pitfalls, so the next session does not pay twice:** (1) `sum(record like '%…%')` over `entries` is ~0.2 s per pattern —
-build ONE query with aliased aggregates; (2) a submission's `entry` is the admitted **input** entry, and a PATH probe must
-be `sh -c 'command -v "$1"' _ prog` (`sh -c 'command -v' prog` probes nothing); (3) an untracked instrument is an
-**uncreditable** one (`git ls-files` membership is part of "landed"; `scripts/suite.mjs:36` never reports a shrink).

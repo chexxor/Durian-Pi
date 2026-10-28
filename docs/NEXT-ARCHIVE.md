@@ -6912,3 +6912,29 @@ node tools/channel-preflight.mjs --db ./selfdev.sqlite   # 2.0 s — read §1/§
 node tools/broker-serve.mjs --status                     # confirm down / 0 spool / providers completing
 git worktree list --porcelain > .spike/worktree-inventory-after.txt   # diff against the 2026-10-28 baseline
 ```
+
+### cut 2026-10-28T23:0xZ — the 2026-10-28T20:2xZ delegate CLOCK-OUT block, verbatim (superseded in the pointer by the 22:4xZ state; kept because it records the measured preflight cost and the 402-era correction)
+
+
+**Done, committed not pushed (scoped paths).** `tools/channel-preflight.mjs` §7 *seat capability* (imports
+`src/seattools.mjs` instead of re-deriving the tool set; reads the pinned fallback programs from
+`vendor/pi-main/packages/durable/src/tools/bash.ts`; probes PATH; counts the store's shell evidence) and §5
+*provider-era attribution* (join to the **first assistant entry after the admitted one** — the admitted entry carries no
+`model[0]`, which is 229); `tools/broker-serve.mjs` raises **`seat-shell-availability` as a `block`**, so `--dry-run` and
+`--status` refuse rather than start seats with no shell (217's acceptance half); rows **232/233** + progress on
+**217/226**; `docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`.
+**Re-measured cost on this box:** preflight **2.0 → 3.3 s** — the store evidence is ONE `entries` scan holding all six
+`LIKE` patterns (~0.9 s; six separate scans cost ~1.9 s); `--dry-run` 2.93 s, `--status` 2.75 s.
+**Nearly-shipped error, corrected in public:** the recent `402` rows are **`deepinfra` history** — attributed, the live
+`local/iq3_s` era has **zero** failures. And the wake is the wrong celebration: a seat here cannot run
+`node demo/<name>.test.mjs`, so its completions are self-declared; `spawn powershell ENOENT` fired **inside the last
+broker pass** (entry #274074).
+**Unverified deliberately:** no channel start, no `up`/`worktree`/`run`/`send`, no queue transition, no intent spooled,
+no push. The sweep's file-loss half has **no mechanism** yet, and `demo/broker-serve.test.mjs` — which 217's acceptance
+asks you to extend — is among the lost files, so the suite's member list cannot be reproduced from git (233).
+**Pitfalls, so the next session does not pay twice:** (1) `sum(record like '%…%')` over `entries` is ~0.2 s per pattern —
+build ONE query with aliased aggregates; (2) a submission's `entry` is the admitted **input** entry, and a PATH probe must
+be `sh -c 'command -v "$1"' _ prog` (`sh -c 'command -v' prog` probes nothing); (3) an untracked instrument is an
+**uncreditable** one (`git ls-files` membership is part of "landed"; `scripts/suite.mjs:36` never reports a shrink).
+
+*(the cut block's heading, `docs/NEXT.md` line 177:* `## CLOCK-OUT (2026-10-28T20:2xZ, delegate — seat capability, provider-era attribution, and a sweep caught in the act)*)

@@ -7,41 +7,46 @@ harness's own session store instead of introspecting. Everything below is a coun
 
 `~/.pi/agent/sessions/` keeps one JSONL per session **per working directory**. For this project: **17 Linux sessions**
 (19 MB) + **70 Windows sessions** for the pre-move cwd
-(`…/Users/Alex/.pi/agent/sessions/--C--Users-Alex-dsh-Projects-pi-opendurig--`, 83 MB) = **87 sessions, 102 MB, 11,586
-`bash` calls**. Entry types seen: `session`, `message`, `model_change`, `thinking_level_change`, `compaction`, and (Windows)
-`custom_message`. This layer had never been consulted by any durian-pi session.
+(`…/Users/Alex/.pi/agent/sessions/--C--Users-Alex-dsh-Projects-pi-opendurig--`, 83 MB) = **87 sessions, 102 MB, 11,599
+tool calls**. Entry types seen: `session`, `message`, `model_change`, `thinking_level_change`, `compaction`, and (Windows)
+`custom_message`. This layer had never been consulted by any durian-pi session. The census is now an instrument, not a
+one-off: **`tools/harness-usage-census.mjs`** (read-only, 0.55 s over all 87 transcripts) prints every number below.
 
 ## What is actually forced, and how often it is honoured
 
 | surface | sessions (of 87) that touched it |
 |---|---|
-| `docs/NEXT.md` | **75** |
-| `.spike/` | 70 |
+| `docs/NEXT.md` | **75 (86%)** |
+| `.spike/` | 70 (80%) |
+| `cli.mjs` | 71 |
+| `demo/` | 63 |
 | `docs/runbooks/` | 58 |
 | `docs/DECISIONS.md` | 56 |
 | `docs/ROADMAP.md` | 53 |
-| `.agents/skills/` | **28** |
+| `.agents/skills/` | **28 (32%)** |
 
 The pointer works: it is read in 86% of sessions, which is exactly why instruments named in it get reused. Skills are
 *advertised* every session but *consumed* in about a third.
 
 ## Instrument reuse vs re-measuring from scratch
 
-| instrument | calls | distinct sessions |
+| instrument | calls | distinct sessions (of 87) |
 |---|---|---|
-| `scripts/suite.mjs` | 148 | 21 |
-| `scripts/clockin.mjs` | 138 | 13 |
-| `cli.mjs` | 2,815 | — |
-| `tools/broker-serve.mjs` | 98 | 8 |
-| `tools/channel-preflight.mjs` | 49 | 2 (created 2026-10-28) |
-| `tools/queue-drain-audit.mjs` | 38 | 6 |
-| `tools/latency-budget.mjs` | 32 | 3 |
-| `tools/broker-read.mjs` | 27 | 4 |
-| `tools/instrument-provenance.mjs` | 13 | 1 (created 2026-10-28) |
-| **ad-hoc measurement** (`node -e`, `sqlite3`, `node:sqlite`, `DatabaseSync`) | **2,086** | — |
+| `cli.mjs` | 2,909 | 71 |
+| `scripts/suite.mjs` | 134 | 18 |
+| `scripts/clockin.mjs` | 129 | 13 |
+| `tools/queue-drain-audit.mjs` | 30 | 6 |
+| `tools/broker-serve.mjs` | 71 | 4 |
+| `tools/latency-budget.mjs` | 28 | 2 |
+| `tools/channel-preflight.mjs` (created 2026-10-28) | 72 | **2** |
+| `tools/instrument-provenance.mjs` (created 2026-10-28) | 11 | **1** |
+| **ad-hoc measurement** (`node -e`, `sqlite3`, `node:sqlite`, `DatabaseSync`, ad-hoc `grep/cat` on the store) | **2,789 (24.0%)** | — |
+
+(Counting `bash` calls only and the narrower ad-hoc pattern set gives 11,586 calls and **2,086 ad-hoc, 18%** — the same
+finding with a smaller denominator. The instrument publishes the wider figure; both were measured, neither is hidden.)
 
 Read honestly: reuse **does** carry across sessions for instruments that sit in the pointer's baseline (6–21 sessions each),
-and does **not** happen for brand-new ones (1–2 sessions). Meanwhile **18% of all bash calls in 87 sessions are one-off
+and does **not** happen for brand-new ones (1–2 sessions). Meanwhile **a quarter of all tool calls in 87 sessions are one-off
 measurement code** — the single biggest recurring cost in this rig's history, and the reason instruments keep being
 re-invented instead of re-run.
 
@@ -98,5 +103,7 @@ now recoverable, which is a different statement and should be recorded as such.
 
 ## What this audit cost
 
-~35 min end to end, including two dead ends (`.dsh/sessions`, the Windows store bodies). The reusable part is now three
-scripts in `.scratch/` — which is itself the argument for levers 1–2: the next session will not find them.
+~35 min end to end, including two dead ends (`.dsh/sessions`, the Windows store bodies). The reusable part is now
+**`tools/harness-usage-census.mjs`** (tracked) plus two extractors still in `.scratch/` (`transcript-write-bodies.mjs`,
+`transcript-read-bodies.mjs`) — which is itself the argument for levers 1–2: an untracked instrument is a lost one, which is
+what ROADMAP 233 says, and this session nearly did it again.
