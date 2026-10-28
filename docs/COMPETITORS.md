@@ -414,7 +414,44 @@ persisted are unread, so this is **not** a full review and no row of it may be c
    Cursor's `failClosed` is **opt-in** (docs); Cline *activates* a rule whose frontmatter failed to parse (*"Cline **fails open**.
    The rule activates with raw content visible"* — docs, quoted verbatim in `inputs/fetched/MANIFEST.md` §2). **pi fails closed** — `emitToolCall` carries no
    try/catch (`src/core/extensions/runner.ts:1248-1266`) and the caller re-throws as `Extension failed, blocking execution`
-   (`src/core/agent-session.ts:668-680`). Nobody in the sample is both non-fatal and closed, and Codex guards the git plane
+   (`src/core/agent-session.ts:668-680`). ~~Nobody in the sample is both non-fatal and closed~~ — **corrected by research round 3
+   (2026-10-28): that sentence is too simple.** Copilot CLI's command `preToolUse` **fails closed** on crash/non-zero-exit/invalid
+   JSON, and the *same* guard flipped direction between releases (reporter's repro at **v1.0.18** let a malformed hook through;
+   the maintainer at **v1.0.57**: "those errors now **deny** instead of silently passing", #2540). The axis is per-event and
+   per-version, not a vendor property. Codex guards the git plane
    by **reachability** rather than verb-matching (`core-plugins/src/git_policy.rs:7-85`: 18 stripped `GIT_*` variables,
    `-c safe.bareRepository=explicit`, and a throwaway `GIT_DIR` repo for agent-initiated git). Table, citations and what this
    changes for ROADMAP **232**/**238**: `docs/reviews/codex-enforcement-design-2026-10-28.md`.
+
+## What research round 3 changed (2026-10-28) — first `observed` guard evidence for Goose, and the trust invariant we should copy
+
+Deliverable: `docs/reviews/harness-tools-skills-public-harnesses-research-r3.md` (landed byte-for-byte from the transcript).
+Verification: `docs/reviews/harness-tools-skills-r3-delegate-notes-2026-10-28.md` + `inputs/fetched/MANIFEST.md` §4 —
+**91 of 94 quoted fragments located in the delegate's own fetches**; 15 residual legacy anchors remain unresolvable, and one
+citation (`aaif-goose` on the Goose recipe page) does not support its claim.
+
+| goose · `775b3958` | **guard plane — `observed` at the pin, the first we have for Goose** |
+|---|---|
+| where the rule lives | hooks: plugin-discovered, **project-scoped at `<project>/.agents/plugins/<name>/hooks/hooks.json`**, user-scoped at `~/.agents/plugins/` (`documentation/docs/guides/context-engineering/hooks.md`), following the **Open Plugins hooks specification**; permissions: `crates/goose/src/config/permission.rs:21-24` → `AlwaysAllow / AskBefore / NeverAllow` |
+| who can write it | the docs' only control is a warning — "Run trusted hooks only" — i.e. **advice, not a gate** |
+| what happens when it breaks | a **model** decides approvals (`permission/permission_judge.rs`, prompt `prompts/permission_judge.md`); in that judge, a tool-call entry it cannot parse is **skipped**, not denied (`:103 None // Skip requests with errors in tool_call`) — so a judge with no opinion is indistinguishable from a judge that errored |
+| the real control | per-tool permission levels plus a **model judge**, and the state is **global** (`~/.config/goose/config.yaml`), while hooks are project-scoped — the two planes do not share a trust story |
+| correction this forces | the round-2 report's Goose `not found` for hooks is wrong (its site mirror has no hooks page; the repo does), and so is its Q3 "nothing repo-scoped" for plugins/hooks. **Goose is not guard-less.** |
+
+**The one design durian-pi should copy, from Codex, observed at the pin** (`codex-rs/hooks/src/config_rules.rs:8-14`, enforced at
+`:24-30`): *"Project, managed, and plugin layers can discover hooks, but they do not get to write user hook state"* — trust is
+`HookStateToml { enabled, trusted_hash, trusted_content_hash }` (`config/src/hook_config.rs:30-37`), written only from the
+`User`/`SessionFlags` layers and keyed to a **content hash**. **A repository may carry a guard; it may not enable or bless
+itself.** pi has the same idea one magnitude coarser — project `.pi/extensions` load only when `isProjectTrusted()`
+(`pi@1.4.0 · src/core/package-manager.ts:2465,2484`; untrusted storage throws, `:1783`) — but that is **one boolean for the whole
+directory, settable by a CLI flag** (`src/cli/args.ts:242`), with no per-component state and no re-review on edit. Registered as
+ROADMAP **245**.
+
+**Also registered from this round:** ROADMAP **246** — a guard that is *listed as active* while not running is the failure mode
+the Copilot CLI tracker documents three ways (#2540 plugin hooks never fire; #5098 a sandbox-config change silently stops a
+hook; #3590 `ask` rendered as allow), so the guard must emit **a per-decision record a reviewer can read**, not a log line.
+ROADMAP **240**'s "how do we know a recipe worked?" question **remains open**: the working summary of round 3 pointed at a Goose
+`checks/*.sh` exit-code mechanism, but that text is **not in the landed deliverable**, and neither `goose_scraper.md` nor any
+`checks` field in the recipe reader exists at `goose · 775b3958` (checked 2026-10-28: `find vendor/eval/goose -name "*scraper*"` →
+nothing; `grep checks vendor/eval/goose/crates/goose/src/recipes/` → nothing). **Do not register a mechanism that cannot be
+found.** See the truncation note in `docs/reviews/harness-tools-skills-r3-delegate-notes-2026-10-28.md` §5.

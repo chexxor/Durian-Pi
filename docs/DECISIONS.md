@@ -5989,3 +5989,23 @@ rig needs: **which plane a guard is declared on, and what config is present, dec
 guard that never fires is indistinguishable from a working one, which is why ROADMAP **235**'s package should ship a
 `guard-status` instrument and ROADMAP **238**'s guard must be self-attesting. **A reachable URL is not a citation; a wrong
 pointer is worse than no pointer, because it reads as verified.**
+
+**Second amendment, same day — round 3 tested the rule, and the rule held (plus a ruling the delegate must not re-litigate).**
+The research agent returned 60 numbered citations, each a URL + fetch date + ≤40-word quote, and **no files**; the delegate
+re-fetched every page and grepped every quote in its own copies: **91 of 94 fragments located** (14/14 issue-body quotes, all
+URLs 200). That is the evidence chain working, and it is now the template in `docs/runbooks/research-request.md`. Three things
+this bought, in order of value: (1) **it caught the delegate's own claims again** — a file size asserted from a working summary
+(**1,457** lines claimed, **680** measured), a claim that `docs/COMPETITORS.md` carried a "goose is guard-less" row when **no
+such row exists**, and a Goose `checks/*.sh` mechanism inherited from a summary that appears in **neither the deliverable nor
+the pin** — so it was **not registered**, and ROADMAP **240**'s success-predicate question stays open. The general form, which is
+what to remember: **a claim about a document is a claim about a file; run the command that reads the file before repeating it —
+including when the source of the claim is your own session summary.** (2) It **displaced a bad design instinct with a shipped
+one**: Codex keeps guard trust as `HookStateToml { enabled, trusted_hash, trusted_content_hash }` readable **only from the
+`User`/`SessionFlags` layers** — "Project, managed, and plugin layers can discover hooks, but they do not get to write user hook
+state" (`codex · d373d649 · hooks/src/config_rules.rs:8-14,24-30`) — which is exactly the split the rig needs between *the repo
+carries the instrument* (D158) and *the repo cannot bless it*; registered as ROADMAP **245**, with **246** for the per-decision
+record. (3) It killed a tidy conclusion: "four of five shipped guards fail open" is wrong — direction is **per event and per
+version**, and Copilot CLI's same hook flipped direction between v1.0.18 and v1.0.57 (#2540). **Also recorded here as a ruling:
+the operator released the phantom citation — "Forget about the phantom citation."** `docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md`
+stays missing; the recovery ask is withdrawn and no session should spend effort on it unless the operator reopens the question.
+The date/timezone half of ROADMAP **244** and its cited-path check remain live.

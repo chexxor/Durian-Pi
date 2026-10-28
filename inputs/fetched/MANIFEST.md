@@ -92,3 +92,51 @@ finds issues that support the fail-open conclusion **better** than anything roun
 **Lesson, stated as protocol:** an issue number is portable *only if it points where claimed*, and a wrong pointer is worse
 than none because it reads as verified. **Fetch the cited page or issue and read its title before repeating a claim** —
 that is now a required step in `docs/runbooks/research-request.md` (Do 5, Verify) alongside the quote check (D159).
+
+## 4. Round 3 corpus (fetched 2026-10-28 22:55–23:11Z, Linux, `UTC−5`) — the protocol held
+
+Round 3 came back under the D159 contract — 61 numbered citations, each a URL + fetch date + short verbatim quote. The
+delegate fetched every one and **grepped each quote in its own copy**. **91 of 94 fragments located literally** (77 of 80
+vendor-page fragments, 14 of 14 issue-body fragments); the seven distinct page URLs all returned **200**. The three literal
+misses are itemised below — two are wording differences over true content, one is a real citation defect.
+
+| copy | source URL | fetched | HTTP | bytes | sha256 (first 16) |
+|---|---|---|---|---|---|
+| `code.claude.com_docs_en_hooks.html` | https://code.claude.com/docs/en/hooks | 2026-10-28T23:11Z | 200 | 2,616,712 | `be3edf6a150d72d1` |
+| `learn.chatgpt.com_docs_hooks.html` | https://learn.chatgpt.com/docs/hooks | 2026-10-28T23:11Z | 200 | 528,904 | `8aea9e0090cae6ed` |
+| `cursor.com_docs_hooks2.html` | https://cursor.com/docs/hooks | 2026-10-28T23:11Z | 200 | 1,284,353 | `9698248e28a0a14f` |
+| `docs.cline.bot_customization_cline-rules.html` | https://docs.cline.bot/customization/cline-rules | 2026-10-28T23:11Z | 200 | 286,014 | `ca7dc20c5a542abf` |
+| `docs.github.com_en_copilot_reference_hooks-reference.html` | https://docs.github.com/en/copilot/reference/hooks-reference | 2026-10-28T23:11Z | 200 | 1,100,766 | `1205d0fab476f227` |
+| `goose-docs_ai_docs_getting-started_using-extensions_.md` | https://goose-docs.ai/docs/getting-started/using-extensions/ | 2026-10-28T23:11Z | 200 | 109,894 | `893bcc570b64482b` |
+| `goose-docs_ai_docs_guides_recipes_recipe-reference_.md` | https://goose-docs.ai/docs/guides/recipes/recipe-reference/ | 2026-10-28T23:11Z | 200 | 231,779 | `ecb11272fd4dc3ef` |
+| `gh-copilot-cli_issue_2893.html` | https://github.com/github/copilot-cli/issues/2893 | 2026-10-28T22:55Z | 200 | 531,316 | `aff0aab82d7542fb` |
+| `gh-copilot-cli_issue_3590.html` | https://github.com/github/copilot-cli/issues/3590 | 2026-10-28T22:55Z | 200 | 318,307 | `5f18b361fea55c7e` |
+| `gh-copilot-cli_issue_2540.html` | https://github.com/github/copilot-cli/issues/2540 | 2026-10-28T22:56Z | 200 | 809,034 | `63f5a107dcc720a4` |
+| `gh-copilot-cli_issue_5098.html` | https://github.com/github/copilot-cli/issues/5098 | 2026-10-28T22:56Z | 200 | 257,972 | `f2fa8466dc01a2f0` |
+
+**The three fragments that did not match literally, and what they actually say** (checked 2026-10-28, so the record is
+complete rather than a tidy pass):
+
+- **C26** (Cursor precedence) — found, but worded: "any **deny** wins over **ask**, and **ask** wins over **allow**,
+  regardless of source". Their quote used backticks where the page has bold. **Confirmed.**
+- **C6b** (Claude Code spill) — found as "writes the text to a file in the session directory and passes Claude the file path
+  with a **preview of up to the first 2,000 characters**". Their "2,000-char preview" is a paraphrase in the Q4 table, not a
+  quotation. **Confirmed, but it should have been marked as a paraphrase.**
+- **A1c** (Goose) — **not found.** The recipe page does not name `aaif-goose` anywhere, and links `validate_recipe.rs` with no
+  owner at all. The *substance* is nonetheless true, established independently below, but **the citation as given does not
+  support it** — the one real defect in an otherwise clean round.
+
+**Independent check of the Goose owner claim** (delegate, 2026-10-28, via `api.github.com`): `block/goose` returns **HTTP 301**;
+`aaif-goose/goose` returns **200** with `full_name: aaif-goose/goose`. So the canonical owner *has* moved — which means **our
+pinned clone's remote URL has moved out from under it**: `git -C vendor/eval/goose remote get-url origin` still reads
+`https://github.com/block/goose`, and `docs/VENDOR-PINS.md` records **no remote at all**, so a repo that changes orgs is
+invisible to `--check`. Registered on ROADMAP **242**.
+
+**Issue-body quotes round 3 asked the delegate to verify** (all from the copies above):
+
+| quote | where | found in our copy? |
+|---|---|---|
+| "implicit allow (fail-open)"; "stray log line on stdout"; "read once at session start"; the v1.0.104 control "all 10 denied, the last after waiting ~18 s" | #2893 | **yes, all four** — and the reporter's qualifier is present: "**when no response is received in the configured timeout**. … Not a Copilot defect." |
+| "never executed"; "as of 1.0.57 those errors **deny** instead of silently passing"; `PLUGIN_ROOT` absent | #2540 | **yes** — including the version pair (1.0.18 open, 1.0.57 closed) |
+| "never runs again. `/env` still lists the hook" | #5098 | **yes** |
+| "immediately auto-approved"; `79ms`; since v1.0.53 | #3590 | **yes** — written `79ms` with no space, measured from **a v1.0.56 session**, so the number belongs with that version |

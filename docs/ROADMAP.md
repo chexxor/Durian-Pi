@@ -4576,9 +4576,18 @@ redirection variables, forces `-c safe.bareRepository=explicit`, and for *automa
 `GIT_DIR` at a throwaway repository under `$CODEX_HOME/.tmp/git-*`, keeping the real repository for *manual*
 (user-requested) git. That last one reframes 232's question from "how do we intercept the verb" to "which of the rig's own
 automatic git operations need the real `.git/worktrees` at all" — probeable in the disposable clone with no product code.
-**241 is NOT closed:** permission profiles (`config/permissions.rs`, `permission_profile_catalog.rs`), the
-requirements-override semantics, the network tier, and **where `plugin_trust` is persisted** (the out-of-band claim stays
-unconfirmed) are unread.
+**241 is NOT closed, but its threat-model question now is.** The "who can flip the switch" answer landed at the pin:
+`codex-rs/hooks/src/config_rules.rs:8-14` states the invariant as a doc comment — *"Project, managed, and plugin layers can
+discover hooks, but they do not get to write user hook state"* — enforced at `:24-30` (only `User` and `SessionFlags` layers
+read), over `HookStateToml { enabled, trusted_hash, trusted_content_hash }` (`codex-rs/config/src/hook_config.rs:30-37`),
+merged field-by-field (`config_rules.rs:53-64`). So round 2's "out-of-band trust persistence" is **confirmed and now
+`observed`**: trust is keyed to a **content hash** and lives above the project layer. That becomes ROADMAP **245**.
+Still unread: the permission profiles (`core/src/config/permissions.rs` **883 lines**, `codex-rs/config/src/permissions_toml.rs`
+**680**, `core/src/config/permission_profile_catalog.rs` **145** — sizes measured at the pin 2026-10-28), the
+requirements-override semantics, the network tier, and whether a **hook definition** (as opposed to its *state*) may be carried
+by a project layer. Goose's guard plane is now `observed` too — hooks project-scoped at
+`<project>/.agents/plugins/*/hooks/hooks.json` plus `AlwaysAllow/AskBefore/NeverAllow` and a **model judge**
+(`config/permission.rs:21-24`, `permission/permission_judge.rs`) — which supersedes round 2's "Goose: no hook layer".
 
 **242. `tools/vendor-pins.mjs --tags` prints `_not fetched_` for prefixed tag schemes, so the pin table under-reports
 drift on the fastest-moving clone in the store.**
@@ -4588,7 +4597,15 @@ drift on the fastest-moving clone in the store.**
 gitignored directory" and because drift is its failure class; a row reading `_not fetched_` looks like "no releases
 exist" and stops a reader noticing the clone is far behind upstream. *Signal that this is fixed:* the `codex` row
 prints its release-shaped tag (or a labelled `prefixed-tags-only: rust-v…` note), and a test asserts a prefixed-tag
-repo is reported rather than silenced. *Gated on:* it changes a **tracked instrument**, so it is queue work — the
+repo is reported rather than silenced. **A second blind spot, found 2026-10-28 while checking a round-3 citation:** the pin
+file records **no remote URL**, so an upstream that *moves* is invisible to `--check`. `block/goose` now returns **HTTP 301** and
+the live repo is **`aaif-goose/goose`** (**200**, `full_name: aaif-goose/goose`, checked via `api.github.com`), while
+`git -C vendor/eval/goose remote get-url origin` still reads `https://github.com/block/goose` and the `goose` row in
+`docs/VENDOR-PINS.md` shows a HEAD with no remote to compare. A pin whose upstream changed hands still "passes". *Signal, both
+halves:* `--tags` prints its release-shaped tag (or a labelled `prefixed-tags-only: rust-v…` note) **and** the pin table carries
+the remote it was fetched from, with `--check` reporting a 301/redirect or a `full_name` mismatch as drift; a test asserts a
+prefixed-tag repo and a moved-org repo are both reported rather than silenced. *Gated on:* it changes a **tracked instrument**,
+so it is queue work — the
 delegate does not hand-patch team instruments while 232 gates suite runs. *Do not:* hand-edit the generated block in
 `docs/VENDOR-PINS.md` to compensate; `--check` failing on a hand-edit is the point.
 
@@ -4630,9 +4647,22 @@ Copilot CLI issues **#978/#4438** were cited for *fail-open hooks* behaviour, bu
 the report for its **skills** claims. Fetching the issues and reading their `<title>` fixed it — and replaced a weak citation
 with a strong one, because the fail-open mechanism is actually documented at **#2893** (*timeout->allow* fallback under
 parallel dispatch), **#3590** (`permissionDecision: "ask"` auto-approved), **#2540** (**plugin-declared `hooks.json` hooks never
-fire**, main session or subagents) and **#5098** (adding `sandbox.userPolicy.filesystem` paths silently stops a hook running).
+fire**, main session nor subagents) and **#5098** (adding `sandbox.userPolicy.filesystem` paths silently stops a hook running).
 **Protocol, now in the runbook (Do 5, Verify) and D159:** before repeating a cited claim, fetch the pointer and read its title —
 *reachable* is not *pointing where claimed*, and a wrong pointer is worse than none because it reads as verified.
+
+**Round 3 landed the same day and passed the protocol — the fix is measured, not hoped for.** The deliverable is
+`docs/reviews/harness-tools-skills-public-harnesses-research-r3.md`; the verification is
+`docs/reviews/harness-tools-skills-r3-delegate-notes-2026-10-28.md` and `inputs/fetched/MANIFEST.md` §4. The agent returned **60
+numbered citations (C1–C60), each a URL + fetch date + ≤40-word quote**; the delegate re-fetched every page (all 200) and
+grepped every quote: **91 of 94 fragments located literally** (77/80 page fragments, **14/14** issue-body quotes). **Residuals,
+recorded rather than smoothed over:** 24 old-style footnote markers survive, of which **15 use round 2's unresolved page-hash
+namespace**, so those cells remain uncheckable — and one of them, "a timed-out PreToolUse *doesn't block the tool call*", does
+**not appear in the fetched page at all** and is marked unverified. One citation (A1c, `aaif-goose` on the Goose recipe page)
+**does not support its claim**, though the substance held when checked independently (see **242**). And the delegate's working
+summary contained round-3 content **absent from the deliverable** (citations past C60; a Goose `checks/*.sh` success predicate,
+which exists neither in the file nor at `goose · 775b3958`) — so that mechanism was **not** registered, and ROADMAP **240**'s
+"how do we know a recipe worked?" stays open. **The protocol worked; the protocol is not a substitute for reading the artifact.**
 
 **244. A cited incident file has never existed in any branch, and this rig's measurement dates name no host or timezone —
 the evidence chain's *time* dimension is as unreliable as its file dimension.**
@@ -4658,3 +4688,51 @@ committed at the path the citations already name.
 sequencing the path-existence check. *Do not:* conclude the Windows incident did not happen — the *event* is corroborated by
 its consequences in the queue and by D155/D156; what is missing is the file the citations point at. *Do not* delete the
 citations to make them true: recover or reconstruct the file, then the citations stand.
+
+**Operator ruling on the phantom file (2026-10-28): "Forget about the phantom citation."** The recovery path above is **not to be
+pursued** unless the operator reopens it. What remains live in 244 is the **date/timezone half** and the **path-existence check** —
+and the check is what keeps finding new instances of the same failure in *this delegate's* work, logged here so the next session
+does not re-litigate them: (i) `permissions_toml.rs` asserted at "1,457 lines" from a working summary, measured at **680**;
+(ii) a claim that `docs/COMPETITORS.md` holds a "goose is guard-less" row — **no such row exists**, the file says Goose was
+unexamined, and the delegate repeated the claim without opening the file; (iii) a `goose_scraper.md` / `checks/*.sh` mechanism
+registered from a summary, absent from both the landed deliverable and the pin. *Pattern:* every one of these was **a fact about
+a document or a file, asserted from recall instead of from a command** — the same class as the mis-dated measurements, one layer
+up. The cheap defence is the one 244 already names: before repeating a claim about a file, run the command that reads the file.
+
+**245. Guard trust should be keyed to the guard's content and writable only from above the project layer — Codex ships
+exactly this, and pi's equivalent is one coarse boolean.**
+*(delegate; observed at `codex · d373d649` 2026-10-28)* `hooks/src/config_rules.rs:8-14` states the invariant — *"Project,
+managed, and plugin layers can discover hooks, but they do not get to write user hook state"* — and `:24-30` enforces it by
+reading only `User`/`SessionFlags` layers; state is `HookStateToml { enabled, trusted_hash, trusted_content_hash }`
+(`config/src/hook_config.rs:30-37`), merged field-by-field so a write cannot silently erase an enablement
+(`config_rules.rs:53-64`). **What it buys:** a repository can *carry* a guard and cannot *bless* it; editing the guard
+invalidates its trust because trust is the content hash; enable/disable survives independently of trust. **pi's counterpart,
+measured rather than remembered:** project `.pi/extensions` and `.pi/skills` load only when `isProjectTrusted()`
+(`pi@1.4.0 · src/core/package-manager.ts:2465,2484`; untrusted project storage throws, `:1783`) — **one boolean for the whole
+directory**, settable by a CLI flag (`src/cli/args.ts:242`), with no per-component state, no content hash, and no re-review when
+a file changes. The tension to design through, not around: **the rig wants repo-carriable delegate instruments (D158) and a
+guard that repo content cannot self-authorize** — those are compatible only if the *grant* lives above the project layer while
+the *definition* lives in the repo.
+*Acceptance when claimed:* a delegate instrument set can be committed to the repo, but enabling it and marking it trusted are
+separable acts recorded outside the repo, and editing the instrument invalidates its trust; demonstrate with a test that an
+edited instrument does not silently retain its previous grant. *Gated on:* **235** (the package exists first). *Do not:* solve
+this by adding another project-trust boolean — that is the granularity being replaced.
+
+**246. A guard that is *listed as active* while it is not running is indistinguishable from a working guard; the rig needs a
+per-decision record a reviewer can read, not a log line.**
+*(delegate; observed in the vendor's own tracker, copies pinned in `inputs/fetched/MANIFEST.md` §3/§4)* Three shipped failure
+modes, all silent, all in `github/copilot-cli`: **#2540** "Plugin-defined preToolUse hooks (hooks.json) do not fire - neither
+in main session or subagents" — the same guard placed in `copilot-settings.json` *does* fire, so **the plane a guard is declared
+on decides whether it runs**, and the reporter printed **`PLUGIN_ROOT` from inside the hook and got it unset**, proving
+non-execution; **#5098**
+"sessionStart hook stops running after adding `sandbox.userPolicy.filesystem` paths" — *"the hook … never runs again.
+`/env` still lists the hook"*, i.e. **the only visible signal is a lie**; **#3590** "PreToolUse hook permissionDecision: `ask`
+auto-approved by TUI since v1.0.53" — a guard's *ask* rendered as *allow*, `79ms` in a v1.0.56 session. Combined with 241's
+finding that **most** shipped designs degrade to allow on some events (and Copilot CLI's own command hook fails **closed** on
+others — the direction is per-event and moved between v1.0.18 and v1.0.57), this says the guard is not the control —
+**the record of what the guard did is the control.**
+*Signal that this is fixed:* the delegate's guard emits a structured decision per dangerous verb — verb, matched rule (or
+`no-rule`), guard status at the time, and the outcome — and `guard-status` (ROADMAP **235**'s package) reports the loaded rule
+set and registered handlers so "no rule matched" and "no guard installed" are distinguishable. **A per-decision record, not a
+log line**, because the Copilot cases are exactly "the log said it was registered". *Gated on:* **235**, **238**.
+*Do not:* treat a guard's presence in an extensions listing as evidence it ran — that is the failure mode being named.

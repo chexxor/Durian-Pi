@@ -45,11 +45,27 @@ just of the config — a subtlety none of our instruments model.
 | **Cursor** | **fails OPEN by default**; `failClosed: true` flips it — *"hook failures (crash, timeout, non-zero exit code, no output) block the action instead of allowing it through"* (live page, 2026-10-28). **Opt-in.** | advertised-elsewhere | `https://cursor.com/docs/hooks` |
 | **Cline (the rule plane, not hooks)** | **fails OPEN on a malformed guard rule.** *"If frontmatter can’t be parsed, Cline **fails open**. The rule activates with raw content visible to help debugging"* — the rule still *activates*, with its unparsed body as content. Same failure class on a different plane: a guard whose config broke is not absent, it is **live and wrong**. | advertised-elsewhere, **found verbatim 2026-10-28** | `https://docs.cline.bot/features/cline-rules` — our copy is sha256-pinned in `inputs/fetched/MANIFEST.md` §2 |
 
-**The pattern, stated so it can be cited:** of the five guard/rule designs I can inspect, **four degrade to allow** and the
-one that does not (pi) does so by crashing the turn. Nobody in this sample has found how to be *both* non-fatal and
-fail-closed. That is the design bar for ROADMAP 238, not an optional nicety: a guard that cannot tell the difference
-between "no rule matched" and "my rule never parsed" is worse than no guard, because it manufactures the belief of
-protection.
+**The pattern, as first stated (2026-10-28, before round 3) — and its correction.** I wrote: *"of the five guard/rule designs
+I can inspect, four degrade to allow and the one that does not (pi) does so by crashing the turn."* **That framing is too
+simple, and one half of it is wrong.** Research round 3 (`docs/reviews/harness-tools-skills-public-harnesses-research-r3.md`,
+verified in `docs/reviews/harness-tools-skills-r3-delegate-notes-2026-10-28.md`) shows the axis is not a vendor property but a
+**per-event, per-version** property:
+
+- **Copilot CLI's command `preToolUse` fails CLOSED** on crash, non-zero exit and invalid JSON — its docs say the CLI "assumes
+  the worst possible outcome … a deny" — which is why GitHub treats a plugin declaring `preToolUse` as a protection at all.
+- **The same guard changed direction between releases:** the reporter's repro at **v1.0.18** let a malformed hook through;
+  the maintainer's answer at **v1.0.57** is that "those errors now **deny** instead of silently passing" (#2540). Our copy of
+  that thread is sha256-pinned (`inputs/fetched/MANIFEST.md` §3/§4), and the reporter's own qualifier in #2893 — "**when no
+  response is received in the configured timeout** … Not a Copilot defect" — shows how easily a *timeout* gets reported as a
+  *crash*.
+- **Timeout is the common hole, not a universal one.** Claude Code is fail-open by default with **opt-in, version-gated**
+  `onFailure: "block"` (its docs: "Crashes, timeouts, and non-zero exit codes other than `2` fail open by default"); Codex's
+  `permissionDecision` path is fail-open at the pin; Cursor's `failClosed` is opt-in.
+
+**What survives the correction, and is the actual bar for ROADMAP 238:** a guard spec must **name the failure direction per
+event**, **pin the release it was measured against**, **re-assert it at load**, and **treat timeout as its own decision** —
+because every shipped design in this sample got these wrong in at least one place, and one of them changed its answer between
+releases. A guard that cannot distinguish "no rule matched" from "my rule never parsed" manufactures the belief of protection.
 
 ## 3. Codex protects the *git plane* by reachability, not by verb-matching — the finding that reframes 232
 
@@ -96,24 +112,35 @@ clone at `/home/chexxor/Git/Durian-Pi-ops` rather than on the working checkout.
 - **Copilot CLI / Cursor — not established.** Round 2 found no reviewer-readable decision log; I have no source to
   check. Record as `not found`, not as absent.
 
-## 5. What I did **not** read (241 is not closed)
+## 5. What I did **not** read (241 is not closed) — with one gap now closed
 
-Read but not analysed here: `core/src/config/permissions.rs`, `permission_profile_catalog.rs`, `permissions_toml.rs`,
-`requirements_layers/permissions.rs` (the **permission-profile** tier — sandbox/scope modelling, which is where
-"who can bypass" is really decided); `core/src/config/permission_path.rs`; `network_policy.rs` and
-`network_policy_decision.rs` (the network plane, a different blast radius); `auth_policy.rs`;
-`requirements_exec_policy.rs` (admin override semantics); the **out-of-band hook-trust persistence** round 2 reported in
-an `mcp-oauth` shape — I confirmed `ConfiguredHandler` carries `builtin`, `plugin_trust` and `source: HookSource::User`
-and that `can_apply_control_effects()` gates whether a handler may block at all
-(`pre_tool_use.rs:268`; `serialization_failure_outcome` at `:319-327`), **but I did not find where `plugin_trust` is
-stored**, so round 2's out-of-band claim stays `advertised-elsewhere` and unconfirmed.
+**Closed since the first draft — the "who can flip the switch" answer, observed at the pin.** Round 2 reported hook trust as
+an out-of-band thing; the mechanism is now in hand. `codex-rs/hooks/src/config_rules.rs` (269 lines) opens with the invariant
+as a doc comment — *"Project, managed, and plugin layers can discover hooks, but they do not get to write user hook state"*
+(`:8-14`) — and enforces it by reading **only** the `User` and `SessionFlags` layers (`:24-30`). The state itself is
+`HookStateToml { enabled, trusted_hash, trusted_content_hash }` (`codex-rs/config/src/hook_config.rs:30-37`), merged
+**field-by-field** so a later write cannot erase an existing enablement (`config_rules.rs:53-64`), and the app-server writes
+`trusted_content_hash` on the user's behalf (`app-server/src/config_manager_service.rs:451`). So: **a repository may carry a
+guard, but it may not enable or bless itself**, and blessing is keyed to a content hash. This is the shape durian-pi should
+copy — see ROADMAP **245**.
 
-**Next reads for 241, in priority order:** (1) where `plugin_trust` and `can_apply_control_effects()` come from — that
-is the "who can bypass" answer, and it decides whether a project-committed hook can block anything; (2)
-`permission_profile_*` — the reachability model, which is now the more valuable half given §3; (3) requirements layers,
-for the admin-override shape; (4) only then 232's design options. **Cline's** rule-frontmatter semantics are now confirmed
-by quote (§2 — malformed frontmatter **activates the rule anyway**), but its `clinerules` *implementation* is still unread
-now that `cline 51f63e4f` is pinned source-grade: read the tree rather than re-quoting the marketing page.
+**pi, by contrast, has the same idea one magnitude coarser** (checked against the installed build, not memory):
+project `.pi/extensions` and `.pi/skills` load **only if the project is trusted** (`pi@1.4.0 ·
+src/core/package-manager.ts:2465,2484`; untrusted project storage throws, `:1783`) — but `isProjectTrusted()` is **one boolean
+for the whole directory**, settable by a CLI flag (`src/cli/args.ts:242`). No per-component state, no content hash, no
+re-review on edit.
+
+Still unread here: `core/src/config/permissions.rs` (**883 lines** measured 2026-10-28),
+`codex-rs/config/src/permissions_toml.rs` (**680**), `core/src/config/permission_profile_catalog.rs` (**145**),
+`requirements_layers/permissions.rs` (the **permission-profile** tier — sandbox/scope modelling, where "who can bypass" is
+really decided); `core/src/config/permission_path.rs`; `network_policy.rs` / `network_policy_decision.rs` (the network plane,
+a different blast radius); `auth_policy.rs`; `requirements_exec_policy.rs` (admin override semantics).
+
+**Next reads for 241, in priority order:** (1) `permissions_toml.rs` + `permission_profile_catalog.rs` — the reachability
+model, now the most valuable half given §3; (2) requirements layers, for the admin-override shape; (3) whether a *hook
+definition* may be carried by a project layer (the **state** may not, per above); (4) `cline · 51f63e4f`'s actual
+`clinerules` loader, since its fail-open behaviour is confirmed by quote (§2) but its implementation is unread; (5) only then
+232's design options.
 
 ## 6. What this changes in our register (no code, no queue action taken)
 
@@ -136,5 +163,13 @@ now that `cline 51f63e4f` is pinned source-grade: read the tree rather than re-q
    not used unless explicitely stated"; "`disable-model-invocation: true` makes a skill unreachable, not manual-only") — the
    hooks attribution was introduced in folding. The verified hooks issues are **#2893/#3590/#2540/#5098** (§2). Protocol now:
    **fetch the cited pointer and read its title before repeating a claim** (`docs/runbooks/research-request.md` Do 5, D159).
-5. **Nothing here justifies touching `src/` today.** 232 unclaimed; no suite from this checkout
-   (`docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md`).
+5. **Nothing here justifies touching `src/` today.** 232 unclaimed; no suite from this checkout, and `docs/runbooks/*`
+   still cite an incident file that does not exist — ROADMAP **244**.
+6. **Added after research round 3 (2026-10-28).** Two mechanisms this file did not have and should not invent: **trust keyed
+   to guard content hash, writable only from a non-repo layer** (§5) and **a declared failure direction that is opt-in and
+   version-gated** (§2). Registered as ROADMAP **245**, not built. And the corollary of #2540/#5098 — that a guard can be
+   *listed as active while not running* — is now ROADMAP **246**: the guard must emit a per-decision record a reviewer can
+   read, not just a log line. **Correction to this file's own record-keeping:** an earlier draft of the round-3 notes asserted
+   `permissions_toml.rs` was "1,457 lines" from memory; measurement at the pin says **680** (`permissions.rs` 883,
+   `permission_profile_catalog.rs` 145). Treat any line count here without a measurement date as suspect — that is exactly
+   what ROADMAP **244** is for.
