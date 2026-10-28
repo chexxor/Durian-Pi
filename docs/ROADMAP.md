@@ -3662,12 +3662,21 @@ file only reaches seats after it is re-applied"). I did not find it: I grepped `
 `durig-constitution` section, and re-implemented the same read as a scratch probe, costing the better part of an hour
 of a session that was supposed to be a preflight. `clockin.mjs` has a `## READ MAP` section already; the fix is to make
 it also print a short **`## PROOF COMMANDS`** block: the ~20-second set that establishes rig state before any writing
-verb (`node tools/broker-serve.mjs --status`, `node scripts/read-constitution.mjs <db>`,
+verb (`node tools/broker-serve.mjs --status` **and** `--dry-run` — status prints state and exits 0, only `--dry-run`
+refuses, exit 1; `node scripts/read-constitution.mjs <db>`,
 `node tools/mirror-constitution.mjs --check`, `node tools/text-integrity-scan.mjs --kinds`,
-`node tools/queue-drain-audit.mjs --db <db>`, `node cli.mjs check <rig>`), each with the exit code it must return.
+`node tools/queue-drain-audit.mjs --db <db>`, `node tools/edit-failure-rate.mjs <db>` (the per-tool failure-rate
+read added 2026-10-28 — 2.65 s, D149), `node cli.mjs check <rig>`), each with the exit code it must return. The
+block should be generated from **`tools/README.md`**, which is now the index of these instruments and their
+measured costs, so the two cannot drift apart.
 *Owner:* devtools · *Where:* `scripts/clockin.mjs` (add the block; keep the pointer-only byte cap it already enforces)
 + `demo/clockin-digest.test.mjs` (pin that the block exists and names the commands — the demo already pins the
-digest's shape) · *Acceptance:* clock-in output contains a `PROOF COMMANDS` section naming at least the constitution,
+digest's shape) · *Sharpened by a measurement the same day:* `node scripts/clockin.mjs` now prints
+**"digest is 20861 B, over its 20000 B budget — a digest that grows into the dumps it exists to avoid has failed
+at its job"** and still **exits 0**, which `demo/clockin-digest.test.mjs` does not catch (it asserts the
+`## READ MAP` shape, not the cap). So the acceptance must include **enforcing the cap as a failing test**, not just
+staying under it today: a surface that only warns degrades silently, and the next session pays the token bill.
+*Acceptance:* clock-in output contains a `PROOF COMMANDS` section naming at least the constitution,
 delivery-channel and byte-integrity reads with their expected exit codes; the digest stays under its cap and remains
 body-free (the pointer-only rule); a session that runs the block learns the three-copy rule without reading a runbook.
 · *Blind spots:* it must print **commands**, not conclusions — a cached "constitution applied" line would be a lie the

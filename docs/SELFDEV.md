@@ -888,6 +888,23 @@ advice. Read the headings; the body is only here if you need the numbers.
   `node tools/text-integrity-scan.mjs` reported **42 files with faults on 2026-10-28: 31 `no-trailing-newline`,
   11 `bom`**. Fix the byte inside your change and say so in the message; do not fold a 42-file sweep into a functional
   change, and never strip the BOMs blind (some are Windows/encoding fixtures).
+- **`cat tools/README.md` before writing any probe.** It is now the delegate-instrument index — symptom → command, each
+  with its **measured cost and exit code** and the gotcha that produced it. It exists because I re-derived
+  `tools/queue-drain-audit.mjs` (1 s) and `tools/what-to-test.mjs` (0.04 s) as throwaway probes this session and still
+  proposed them as new. If you add an instrument, add its row and its timing there; the file is the discovery surface,
+  and it names the four tools that **write** so a read-only habit cannot be broken by accident.
+- **The pointer has a byte budget, and it warns instead of failing.** `scripts/clockin.mjs` prints the over-budget
+  message to **stderr and exits 0** (`DIGEST_BUDGET_BYTES`, `clockin.mjs:35-36,365-368`), and
+  `demo/clockin-digest.test.mjs` pins the digest's *shape*, not the cap — so nobody notices. Every paragraph added to
+  `docs/NEXT.md`'s `## NEXT SESSION` section is a **permanent context tax on every future session**: today's growth took
+  the digest from 19,494 B to 20,861 B and I only found it by reading `clockin`'s stderr. So after re-cutting the
+  pointer, **run `node scripts/clockin.mjs` and treat the warning as a failed edit** — detail belongs in the review
+  file, the pointer carries only what cannot be got elsewhere. Registered as **213**, whose acceptance adds a *failing*
+  test for the cap and a generated `PROOF COMMANDS` block (which is why `tools/README.md` is written to be its source).
+- **Finding the next free `ROADMAP` id:** grep `^\*\*[0-9]+\.` and `sort -n`. A bare `\b[0-9]{3}\b` grep returns prose
+  citations — **299 appears in text but no such item exists** — and invites a duplicate registration.
+- **`git status` has no `--cached`.** For staged state use `git diff --cached --name-only`; the preflight inside
+  `tools/broker-serve.mjs` prints the empty index before any commit is attempted (D142 §4).
 - **Before you write a probe, `ls scripts/ tools/` — the thing you need may already ship.**
   `scripts/read-constitution.mjs` prints the **store document the seats' prompts actually carry** and its header states
   the three-copy rule verbatim ("The constitution is a session DOCUMENT (injected into every seat prompt), not

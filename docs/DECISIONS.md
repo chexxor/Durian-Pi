@@ -5425,3 +5425,49 @@ not the cause and 215/216 rise in priority. If 215 lands and the share stays at 
 the replay in 216 becomes mandatory rather than optional. If `"toolName":"bash"` is still **0** on Linux after 217, seats
 still have no shell and the delivery channel is not actually open. If a future `git grep` at a re-pinned aider *does* find
 "30–50%", the tree moved and the review must be re-cut, not the grep trusted.
+
+## D150 — The delivery channel is priced at **five** preconditions, and two of them are not grants; plus two process fixes that had to become *surfaces* (2026-10-28, delegate; operating policy + process ruling, no operator ruling taken)
+
+**1. The channel ledger, with each blocker typed.** `tools/broker-serve.mjs --dry-run` refuses (exit 1) on
+**`stale-seat-cwd`** (`seats[devtools].cwd` = `C:/Users/Alex/dsh-Projects/pi-opendurig/item-2801`, unresolvable on Linux)
+and **`live-tree-dirty`** (`AGENTS.md`, `package.json`, `package-lock.json` — operator-owned, and a woken seat at this cwd
+could edit them). `check` adds **`single-model-rig`**. Measured while pricing it: **12 seats, 1 model family**, and the
+only verifier-family candidate answers at **ctx 13,273** (against `iq3_s`'s 200,000) while `advocate` already runs at
+**1.224** of its window and `architect` at **1.093**, and the server returns **HTTP 400 at 207,219 prompt tokens**. So
+the decision is to **defer the verifier-family split with a stated reason and the override path named**, not to defer it
+silently: a family split bought by dropping three seats onto a 13k-token window trades a diversity invariant for a
+harder constraint, and today's stranded intents are `pm` routing/decomposition work that needs no verifier.
+**The fifth precondition is new and is not a grant:** on Linux a seat has **no shell tool** at all (2b / **217**; counts
+and code paths in D149 §4). A rig whose seats can edit but cannot run `node demo/<name>.test.mjs` cannot satisfy the
+constitution's oracle, so "open it and see" is a worse option than fixing 217 first. **Type your blockers** — grants,
+code, and invariant-tensions behave differently and need different asks.
+
+**2. A process fix that should recur needs a named surface, not a better tip.** The operator asked whether the process
+had been improved enough that the next session avoids this session's slow-downs; auditing that question produced
+**`tools/README.md`** — symptom → command, each with a **measured** cost and exit code, plus the gotcha that produced it
+(`… --status` exits 0, only `--dry-run` refuses; `--freshness` exit 1 is expected; `--check` failing right after a
+re-clone is the tool working; never quote `throughput.mjs`'s prefill). I had *already* written two of this session's
+re-derivations into a prose pitfall list and still re-derived the tools, which is the evidence that prose lists are not
+a fix. Measured costs now on the record: `what-to-test` 0.04 s · 0, `mirror-constitution --check` 0.02 s · 0–1,
+`read-constitution` 0.04 s · 0, `broker-serve --status` 0.31 s · 0, `queue-drain-audit` 1.0 s · 0,
+`text-integrity-scan --kinds` 3.54 s · 0–1, `edit-failure-rate` 2.65 s · 0, `vendor-pins --check` 4.6 s · 0,
+`clockin` 2.62 s · 0-while-over-budget. The file also names the **four** tools that write, because "these are all
+read-only" is the kind of claim that breaks silently. **213**'s `PROOF COMMANDS` block is meant to be **generated from
+this index**, so the pointer and the index cannot drift apart.
+
+**3. A budget that only warns is not a budget.** `scripts/clockin.mjs` prints *"digest is N B, over its 20,000 B budget"*
+to **stderr and exits 0** (`DIGEST_BUDGET_BYTES`, `clockin.mjs:35-36,365-368`), and `demo/clockin-digest.test.mjs` pins
+the digest's *shape*, not the cap. This session's doc growth took the digest from **19,494 B to 20,861 B** — i.e. the
+mechanism built to stop sessions reading 99k-token dumps was itself drifting into one, and the only reason I noticed is
+that I read stderr. Every paragraph a session adds to `docs/NEXT.md`'s `## NEXT SESSION` section is a **permanent
+context tax on every later session**, so: after re-cutting the pointer, **run `node scripts/clockin.mjs` and treat the
+warning as a failed edit**; put detail in the review file; and **213**'s acceptance now requires a **failing test for
+the cap**, not merely "stay under it today". The pointer was trimmed back under budget (19,983 B) in the same change
+that reported the breach — reporting a slow-down while leaving it in place is not a fix.
+
+**Falsifiable.** If a future `check` on a rig that has not been moved reports `stale-seat-cwd`, the typing in §1 has
+slipped (it is a move artifact, not a config preference). If `tools/README.md` and `docs/SELFDEV.md`'s cost table
+disagree about a timing, the index has drifted and the index loses. If `clockin`'s digest exceeds 20,000 B at a future
+clock-out and the session committed anyway, §3 did not hold; once **213** lands, the suite should fail instead. If
+`"toolName":"bash"` is still **0** on Linux after 217, the channel is still not open in the sense that matters (D149's
+check, restated here because 2b is now a precondition rather than a finding).
