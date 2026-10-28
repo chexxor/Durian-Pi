@@ -47,8 +47,7 @@ seat-root ruling; an evaluable **"the queue drains"** (231); a grant to mint `re
 ### Read-only baseline — run this before anything else (all verified working, Linux, 2026-10-28T20:1xZ)
 
 ```bash
-cd /home/chexxor/Git/Durian-Pi
-git worktree list --porcelain | tee .spike/worktree-inventory-$(date +%Y-%m-%d)-after.txt   # 1 entry (main); the 36-row pre-move ledger is now COMMITTED: docs/incidents/evidence-2026-10-24-windows-ledger.txt
+cd /home/chexxor/Git/Durian-Pi && git worktree list --porcelain | tee .spike/worktree-inventory-$(date +%Y-%m-%d)-after.txt   # 1 entry (main); the 36-row pre-move ledger is now COMMITTED: docs/incidents/evidence-2026-10-24-windows-ledger.txt
 node tools/channel-preflight.mjs --db ./selfdev.sqlite --rig ./rig.selfdev.json      # 3.3 s — §1–§8, incl. seat capability (217), provider-era attribution (226), host-clock posture (234)
 node tools/broker-serve.mjs --status      # 2.8 s; now also raises `seat-shell-availability` (217)
 node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 0.93 s: 91 non-terminal LANDING rows, 71 fully on main, ids printed
@@ -83,17 +82,15 @@ never write there.
 
 ## INCIDENT (read before any `up`/`worktree`/`run`, and before trusting a "suite is green" claim)
 
-`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`. Measured in one delegate session that ran **no
-writing verb on the workspace**: the ledger went **36 → 1**; and `tools/worktree-cleanup.mjs`, `src/worktree-cleanup.mjs`
-plus six `demo/` members — `worktree-cleanup`, `broker-serve`, `clock-skew`, `broker-clock-step`, `verify-sweep-cleanup`,
-`verify-sweep-adversarial` (all `.test.mjs`) — were read or run earlier in that session and are now **absent from disk and from `git ls-files`** (never committed →
-`git status` shows no deletion, nothing to restore). Mechanism for the ledger half is named in the product
-(`src/broker.mjs:1167` → `pruneWorktrees`, `src/worktree.mjs:649`); the file-loss half is **unexplained**, and the same
-end state is recorded twice before (`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md:20-30`). The host clock is
-also suspect: `timedatectl show` → **`LocalRTC=yes`** on a dual-boot box, and a file written this session carries
-`2026-10-28T20:50:30Z` while a later `date -Is` printed `2026-10-28T15:07:48-05:00`.
+`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md` (+ its committed `evidence-2026-10-24-windows-ledger.txt`).
+In one session that ran **no writing verb on the workspace** the ledger went **36 → 1**, and eight instruments read or run
+earlier in it are now **absent from disk and from `git ls-files`** — never committed, so `git status` shows no deletion and
+there is nothing to restore. The ledger half is named in the product (`src/broker.mjs:1167` → `pruneWorktrees`,
+`src/worktree.mjs:649`); the file-loss half is **unexplained**, and the same end state is recorded twice before
+(`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md:20-30`, `:30`). Until 232/233 land: **do not run the suite from
+this checkout** — run it in the disposable clone.
 
-## OPERATOR OWES (five items; the team is blocked behind them)
+## OPERATOR OWES (four items; the team is blocked behind them — a fifth, the channel-start recipe, is superseded and cut to `docs/NEXT-ARCHIVE.md`)
 
 1. **ROADMAP 221 — the seat-root ruling** (D152 §6 + D153 addendum). Seats' persisted agent cwd resolves to a
    `D:\Git\Durian-Pi-worktrees\<seat>`-shaped value on the Windows host, and `up` reports `source: persisted seat cwd`
@@ -102,29 +99,32 @@ also suspect: `timedatectl show` → **`LocalRTC=yes`** on a dual-boot box, and 
    becomes the workspace-root-relative name; `up --root` once per seat is sufficient; no migration code.* Not inert on
    Linux: `classifyGitRoot("D:\Git\Durian-Pi-worktrees\engineer")` **on Linux** prints **`main-worktree`** — a stale
    Windows root mis-classifies as the LIVE tree (the F21 failure `src/seatroot.mjs` exists to prevent).
-2. **Permission to start the channel on Linux** (the delegate will not take it):
-
-```bash
-cd /home/chexxor/Git/Durian-Pi && export DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json \
-  DURIG_SEAT_ROOT=/home/chexxor/Git/Durian-Pi-worktrees
-node tools/channel-preflight.mjs --db ./selfdev.sqlite   # 2.0 s — read §1/§3/§6 first: DURIG_SEAT_ROOT is a BLOCK until exported
-node tools/broker-serve.mjs --status                     # confirm down / 0 spool / providers completing
-git worktree list --porcelain > .spike/worktree-inventory-after.txt   # diff against the 2026-10-28 baseline
-```
-
-3. **The definition of "the queue drains"** in the operator clause inside `#725`/`#726`/`#727` bodies
+2. **The definition of "the queue drains"** in the operator clause inside `#725`/`#726`/`#727` bodies
    (`SEQUENCING CONSTRAINT (operator): do NOT start the daemon-host work before #662/#710 are done and the queue drains;
    not ahead of TUI`). #662/#710 cleared 2026-10-17; the clause has no threshold, predicate or surface, so the three
    top-ranked rows have been `held` for 12 days. **`pm` cannot clear it and neither can the delegate** — it is your
    sentence, and 231 is the product half.
-4. **A grant on ledger surgery** (ROADMAP **232**). Today `pruneWorktrees` runs unconditionally from the broker sweep
+3. **A grant on ledger surgery** (ROADMAP **232**). Today `pruneWorktrees` runs unconditionally from the broker sweep
    and after every removal, and on a moved workspace that deletes the registrations this rig's own runbooks call
    evidence. Until it is scoped, the safe operator stance on this host is: **no `up`, no `worktree`, no channel start**
    from the main checkout, and re-inventory (`git worktree list --porcelain > .spike/…`) before and after any writing
    verb.
-5. **Commit-or-discard for untracked instruments** (ROADMAP **233**, the cost of **214**). Eight files this session read
+4. **Commit-or-discard for untracked instruments** (ROADMAP **233**, the cost of **214**). Eight files this session read
    or ran are gone and unrecordable; several ROADMAP rows credit them as landed. Either the team re-creates them (labelled
    as re-created, not restored) or the rows that cite them get amended — that is a scope call for you, not for a seat.
+
+## OPEN DELEGATE PROPOSALS (ungraded, not spooled, no grant yet — the operator asked that these be worked next)
+
+1. **The skill surface is the only thing a fresh session is *given*, and it is stale.** The harness injects every
+   `.agents/skills/*/SKILL.md` `name:`+`description:` at session start with no read; grepping the two skills for
+   `channel-preflight|broker-serve|instrument-provenance|queue-drain-audit|latency-budget|cross-clone` → **0 hits**.
+2. **Edit A (~15 lines):** an "instruments you already have" table (cost, question answered, what it refuses) in
+   `.agents/skills/delegating-to-durian-pi/SKILL.md`, plus those words in its `description:` so retrieval matches.
+3. **Edit B (highest value):** `docs/runbooks/cross-clone-object-recovery.md` **and its symptom row in
+   `docs/runbooks/README.md`** (`a cited commit sha resolves nowhere`; `the other OS's clone holds refs/objects this clone
+   lacks`) — `AGENTS.md` step 5 routes by symptom, no row matched, and the D156 archaeology cost ~15 turns.
+4. **Edit C (done):** `instrument-provenance` is in the clock-in baseline. Skills steer the **outer agent**, never seats —
+   seat tools come from `rig.selfdev.json`/`src/seattools.mjs` (217). **Ask:** A+B+C as delegate work, or rows for `pm`?
 
 ## Then, in this order (measured ranking — `docs/reviews/wallclock-budget-2026-10-28.md` §6, ruling D153, amended by D154)
 

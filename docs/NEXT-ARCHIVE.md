@@ -6900,3 +6900,15 @@ submissions at the head of pm's conversation are reported, not withdrawn.
 §DO-NOT-FIX — orphan ≠ releasable; `WAKE-after-reconcile` is a prediction; queue **items** and **submissions** are
 different tables. `node --check` on a new tool costs 0.02 s and found the two real syntax faults this session before
 they cost a run.
+
+### cut 2026-10-28T22:3xZ — OPERATOR OWES item 2, **superseded**: the channel start is withheld on ROADMAP 217, and exporting `DURIG_SEAT_ROOT` is now itself a block (221, D153 prefers the per-item root). Kept verbatim because it is the recipe an operator grant would restore.
+
+2. **Permission to start the channel on Linux** (the delegate will not take it):
+
+```bash
+cd /home/chexxor/Git/Durian-Pi && export DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json \
+  DURIG_SEAT_ROOT=/home/chexxor/Git/Durian-Pi-worktrees
+node tools/channel-preflight.mjs --db ./selfdev.sqlite   # 2.0 s — read §1/§3/§6 first: DURIG_SEAT_ROOT is a BLOCK until exported
+node tools/broker-serve.mjs --status                     # confirm down / 0 spool / providers completing
+git worktree list --porcelain > .spike/worktree-inventory-after.txt   # diff against the 2026-10-28 baseline
+```

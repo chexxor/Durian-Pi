@@ -90,3 +90,34 @@ queue-cited shas that resolved nowhere now resolve. The 6 that resolve in neithe
 4. **Unverified on purpose:** the file-loss mechanism behind the sweep is still a named candidate, not a finding
    (`.scratch/` surviving is unexplained by `git clean -fd`); 233 must not be closed by a restoration that leaves it
    unexplained.
+
+## Do the instruments this project builds for itself get found? (measured 2026-10-28T22:2xZ)
+
+A future session reaches a self-built tool by two mechanisms, and only one is automatic:
+
+- **Pushed (automatic).** The agent harness injects the `name:` + `description:` of every `.agents/skills/*/SKILL.md` at
+  session start, with no read — that is the only surface a session is *given* before it decides to look. This repo has two
+  skills (`delegating-to-durian-pi`, `driving-durian-pi`), and grepping them for
+  `channel-preflight|broker-serve|instrument-provenance|queue-drain-audit|latency-budget|cross-clone` returns **0 hits**:
+  not one instrument built or relied on this session is in the pushed surface.
+- **Pulled (must be routed there).** `tools/README.md` is the question→command table (2 hits per instrument), and
+  `docs/NEXT.md` is the forced read. But `scripts/clockin.mjs` prints **only** the first `## NEXT SESSION` section — its own
+  comment: *"The first `## NEXT SESSION` section of a NEXT.md-style file, verbatim. Nothing else."* — so anything not named in
+  the 199-line pointer is invisible to the session that would most need it, and the cap makes the pointer compressible when a
+  session needs room.
+
+**Proposals (now listed in `docs/NEXT.md` § OPEN DELEGATE PROPOSALS, ungraded, awaiting the operator's placement):**
+
+- **A (~15 lines):** an "instruments you already have" table in `.agents/skills/delegating-to-durian-pi/SKILL.md` — name,
+  measured cost, the question it answers, what it refuses — plus those words added to its `description:` so retrieval matches.
+- **B (highest value):** `docs/runbooks/cross-clone-object-recovery.md` **and its symptom row in `docs/runbooks/README.md`**
+  (`a cited commit sha resolves nowhere`; `the other OS's clone holds refs or objects this clone lacks`). `AGENTS.md` clock-in
+  step 5 sends a session to that index *by symptom*; no row matched, and the archaeology that produced D156 cost ~15 turns. The
+  runbook body is this file's "The one move that mattered" section, including the copy-only-`*.pack` rule and the
+  `fatal: mmap failed: Permission denied` pitfall.
+- **C (done):** `node tools/instrument-provenance.mjs` is in the pointer's read-only baseline, so 233's tripwire runs by
+  default rather than by memory.
+
+Skills steer the **outer agent** (the delegate), never the seats: a seat's tools come from `rig.selfdev.json` and
+`src/seattools.mjs`, which is precisely why ROADMAP 217 cannot be fixed by documentation. A skill that says "run the seat's
+tests" cannot make a `powershell` tool spawn on Linux.
