@@ -55,6 +55,7 @@ const USAGE = `node tools/broker-serve.mjs [--status] [--dry-run] [--start [--ma
 
   --status         preflight report only (default). READ-ONLY.
   --dry-run        preflight + the exact command and env that --start would run. No writes.
+  --no-probe       skip the one-call completion probe (it costs ~1s of prefill per provider).
   --start          spawn "node cli.mjs serve" detached, logs under .spike/, print the pid.
                    Refuses if any broker state is present; refuses unless --yes-pm-wakes is
                    passed when the spool holds operator intents (see the WOULD WAKE line).
@@ -80,6 +81,7 @@ for (let i = 0; i < argv.length; i++) {
 	else if (a === "--allow-stale-cwd") flags.allowStaleCwd = true;
 	else if (a === "--yes-pm-wakes") flags.yesPmWakes = true;
 	else if (a === "--db") dbOverride = argv[++i];
+	else if (a === "--no-probe") flags.noProbe = true;
 	else if (a === "--rig") rigOverride = argv[++i];
 	else if (a === "--max-duration") flags.maxDurationS = Number(argv[++i]);
 	else if (a.startsWith("--max-duration=")) flags.maxDurationS = Number(a.split("=")[1]);
@@ -191,6 +193,44 @@ for (const s of specs) {
 	if (err) finding(`provider-${s.prefix ?? "?"}-unreachable`, "block", `${s.baseUrl} did not answer /v1/models: ${err}`, "docs/runbooks/local-provider-down.md — a seat pointed at it fails with 'Connection error.', not a rig bug");
 	else if (ids && !ids.includes(s.modelId)) finding(`provider-${s.prefix ?? "?"}-model-absent`, "block", `${s.baseUrl} advertises [${ids.join(", ")}] but the config names '${s.modelId}'`, "point DURIG_" + `${(s.prefix ?? "LOCAL").toUpperCase()}_MODEL at an advertised id, or load that model`);
 	else console.log(`    ${s.id}: answers, advertises ${ids?.length ?? "?"} model(s) including ${s.modelId}`);
+	// A 2026-10-28 addition, from a near-miss: `/v1/models` answering is NOT proof a seat turn will
+	// work. The store holds **18,309 entries** whose text contains "402" — "You need positive balance to
+	// do inference" — i.e. a provider that advertises models and then refuses inference, which reaches a
+	// seat as `model_error` on every generation. So probe one real completion. Cost measured here: 55
+	// prompt tokens, ~1.1 s prefill, one call.
+	if (!flags.noProbe) {
+		let cErr = null;
+		let status = 0;
+		let body = null;
+		try {
+			const ctrl = new AbortController();
+			const t = setTimeout(() => ctrl.abort(), 20000);
+			const res = await fetch(`${String(s.baseUrl).replace(/\/$/, "")}/chat/completions`, {
+				method: "POST",
+				signal: ctrl.signal,
+				headers: { "content-type": "application/json", ...(process.env[s.apiKeyEnv] ? { authorization: `Bearer ${process.env[s.apiKeyEnv]}` } : {}) },
+				body: JSON.stringify({ model: s.modelId, messages: [{ role: "user", content: "Reply with exactly: ok" }], max_tokens: 64, stream: false }),
+			});
+			clearTimeout(t);
+			status = res.status;
+			body = await res.json().catch(() => null);
+			if (!res.ok) cErr = `HTTP ${res.status}: ${String(body?.error?.message ?? body?.message ?? "").slice(0, 160)}`;
+		} catch (e) {
+			cErr = e?.name === "AbortError" ? "timeout after 20s" : String(e?.cause?.code ?? e?.message ?? e);
+		}
+		const choice = body?.choices?.[0];
+		const u = body?.usage;
+		const tm = body?.timings;
+		if (cErr && (status === 401 || status === 402 || status === 429))
+			finding(`provider-${s.id}-refuses-inference`, "block", `${s.id} answers /v1/models but refused a 1-token completion — ${cErr}. A seat turn would die as model_error on every generation; the store shows this shape 18,309 times (402 "You need positive balance to do inference")`, "fund/restart the server, or point DURIG_" + `${(s.prefix ?? "LOCAL").toUpperCase()}_* at a provider that answers completions; do not start the broker on a provider that only lists models`);
+		else if (cErr) finding(`provider-${s.id}-completion-failed`, "block", `${s.id}: /chat/completions failed — ${cErr}`, "a seat generation will fail the same way; fix the provider before waking seats");
+		else
+			// No tok/s here on purpose: at 57 prompt tokens the number is a cache-wake artifact, and D147
+			// is exactly the story of quoting prefill from a small probe. This is health, not benchmark.
+			console.log(`    ${s.id}: completes (finish=${choice?.finish_reason ?? "?"}, prompt=${u?.prompt_tokens ?? "?"} tok, completion=${u?.completion_tokens ?? "?"} tok)`);
+		if (!cErr && choice && choice.message?.content == null)
+			finding(`provider-${s.id}-reasoning-only`, "note", `the completion returned content=null with reasoning_content and finish_reason=${choice.finish_reason} — a reasoning server that spends the token budget thinking`, "expected on our servers (D147); a seat's max_tokens must exceed the thinking budget, so a short budget reads like an empty answer");
+	}
 }
 
 // rig seats: the cross-family invariant and stale cwds from another OS
@@ -214,6 +254,23 @@ if (rig) {
 	if (models.size === 1) finding("single-model-rig", "note", `all ${(rig.seats ?? []).length} seats resolve to one model (${[...models.keys()][0]}), so the author/verifier cross-family invariant cannot hold`, "docs/SELFDEV.md §the author/verifier split — a model change is an operator action; DURIG_VERIFIER_* is already configured on this box");
 	if (staleCwd.length) finding("stale-seat-cwd", "block", `seat cwd(s) do not resolve on ${process.platform}: ${staleCwd.join(" | ")} — they live in the RIG FILE, so "up --refresh" re-asserts them rather than fixing them (measured 2026-10-28: up --dry-run reports changes:{} for every seat while devtools still names a Windows path)`, `docs/runbooks/workspace-move.md: fix or delete the cwd in ${RIG} first, then "up ${RIG} --refresh"`);
 }
+
+// 2026-10-28, from a real near-miss: this preflight reads the RIG FILE, but at wake a seat resolves
+// `seat.cwd ?? spec.cwd ?? DURIG_SEAT_ROOT` and falls back to the **persisted** `pi.agent.cwd`
+// (cli.mjs:679), which `up` writes only when the rig file NAMES a cwd (cli.mjs:815: `if (seatCwd !==
+// undefined && agent.cwd !== seatCwd)`). So deleting a cwd does not clear what the store carries. It
+// did not: after removing devtools' cwd and running `up --refresh`, pm's own `seat_root` tool result
+// returned `SEAT ROOT: <repo>/C:\Users\Alex\dsh-Projects\pi-opendurig — source: persisted seat cwd`,
+// and seats had created that path INSIDE the repo (two shapes: nested `C:/Users/...` and one flat
+// directory named `C:\Users\...`) and written `.durig/queue-{lead,qa,qa2,auditor}.md` into it.
+// Nothing in the CLI prints a persisted cwd (`ps` and `status` both omit it) — ROADMAP 221.
+try {
+	const junk = readdirSync(REPO).filter((n) => /^[A-Za-z]:/.test(n) || n.includes("\\") || n.includes("dsh-Projects"));
+	if (junk.length) finding("phantom-seat-root-path", "block", `${junk.length} repo-root director${junk.length === 1 ? "y" : "ies"} named for another OS's absolute path exist${junk.length === 1 ? "s" : ""} — ${JSON.stringify(junk.slice(0, 3))}. A seat wrote into them this run; this is the persisted-cwd fault made visible, and it means a woken seat is working OUTSIDE its intended tree`, "move the path out of the repo (preserve it as evidence), then clear/re-point the persisted seat cwd before restarting — the rig file alone will not do it (cli.mjs:815 writes the persisted cwd only when the file names one)");
+} catch (err) {
+	finding("phantom-seat-root-scan-failed", "note", `could not scan the repo root: ${err.message}`, "non-fatal; the persisted-cwd gap is ROADMAP 221");
+}
+finding("persisted-cwd-unreadable", "note", "this check validates the RIG FILE only: no CLI command prints a seat's persisted cwd (`ps` and `status` omit it), so a cleared rig-file field is NOT evidence the seat root is right. Read a seat's own `seat_root` tool result in `log <seat>` after a pass, or use `cli.mjs send <seat> seat_root`", "ROADMAP 221 asks for the missing read surface and for `up` to clear a cwd the rig file stops naming");
 
 // F23: seats resolve to the cwd of the write-side command that wakes them (F12). With no
 // isolated seat cwd on this box, a woken seat edits THIS tree — which may hold the operator's

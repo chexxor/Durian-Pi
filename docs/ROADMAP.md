@@ -3909,3 +3909,99 @@ one `src/worktree.mjs` invokes; each rule prints the offending path and the meas
 pnpm question is a genuine open product choice, and if the operator later chooses pnpm the rule must invert (one lockfile =
 `pnpm-lock.yaml`) rather than silently keep the npm assumption; and a second lockfile may be a *tooling* artifact of the
 harness rather than the project's — check which process wrote it before deleting anyone's work.
+
+## A seat's real root is a store fact, not a rig-file fact — and the operator queued a Pi-platform UX comparison (2026-10-28)
+
+**221. Deleting a `cwd` from the rig file does not clear the seat root the store carries, and the phantom path a seat then builds lands *inside the repo*.**
+*(devtools; measured 2026-10-28, during the first broker run this store ever had on Linux)* The accepted fix was to remove
+`seats[devtools].cwd` (`C:/Users/Alex/dsh-Projects/pi-opendurig/item-2801`) — devtools being the only one of 12 seats that
+named one — then `up rig.selfdev.json --refresh`. `tools/broker-serve.mjs` then reported **`stale-seat-cwd` cleared**, and I
+treated that as the repair. It was not. Minutes later, pm's own tool result read:
+`SEAT ROOT: /home/chexxor/Git/Durian-Pi/C:\Users\Alex\dsh-Projects\pi-opendurig — source: persisted seat cwd; tree:
+main-worktree`. Mechanism, read in the source: at wake a seat resolves `seat.cwd ?? spec.cwd ?? DURIG_SEAT_ROOT`
+(`cli.mjs:679`, also `:794`) and **otherwise falls back to the persisted `pi.agent.cwd`**; `up` writes that value only
+`if (seatCwd !== undefined && agent.cwd !== seatCwd)` (`cli.mjs:815`) — so a field the rig file *stops* naming is never
+cleared, and removing it guarantees the persisted (foreign-OS) value wins. The path was then **materialized inside the repo
+in two shapes**, because two different join semantics met the same string: a nested `C:/Users/Alex/dsh-Projects/pi-opendurig/item-2801/`
+(containing `.durig/queue-all.md`) and a single flat directory literally named `C:\Users\Alex\dsh-Projects\pi-opendurig`
+(containing `.durig/queue-{lead,qa,qa2,auditor}.md`) — i.e. **several seats** were writing outside their intended tree.
+Both trees are preserved at `.spike/phantom-seat-root-2026-10-28/`. **No CLI surface prints a seat's persisted cwd**:
+`cli.mjs ps` returns name/conversationId/role, and `status` returns context and attention (both measured) — so a delegate
+cannot see this condition except through a seat's own `seat_root` result. *Owner:* devtools · *Where:* `cli.mjs` `up`
+(clear the persisted cwd when the rig file stops naming one, or refuse and say so) + a read surface (`ps --full` or
+`status`) that prints the persisted root + `demo/seat-cwd-persist.test.mjs` · *Acceptance:* removing a `cwd` from a rig file
+and running `up --refresh` leaves **no** foreign-OS root persisted (asserted through the read surface); a rig file whose cwd
+does not resolve on the host produces an **error naming the seat and the value**, not a silent fallback; no writing verb ever
+creates a repo-root path whose name contains `:` or `\` (a refusal, with the persisted value quoted); the phantom-path
+detector I added to `tools/broker-serve.mjs` is mirrored as a `check` rule. · *Blind spots:* clearing a persisted cwd may
+strand a seat whose work legitimately lived in an item worktree (the D151 note that `dsh-pi-item-2801` no longer exists is
+the current truth here, but not a general one — check `git worktree list` first, per `docs/runbooks/workspace-move.md`);
+`src/broker.mjs:1054,1189-1215` already reads persisted cwds as the **liveness signal** for worktree reaping, so a cleared
+root changes what the reaper considers in use — the fix must not make a live seat's tree reapable; and `DURIG_SEAT_ROOT` is
+*not* the escape hatch (`cli.mjs:436-466` turns a mismatch into a hard stop, and a global root trips the F12 guard).
+
+**222. `cli.mjs <verb> --help` performs the verb. Two unintended writes in one session, both from the same shape.**
+*(devtools; measured 2026-10-28)* `node cli.mjs resume --help` **ran resume**: `found: 2`, one queued submission
+withdrawn (`id 207288`, conversation 4942, `status: unanswered`, `reason: aborted`) — a store write made while I believed I
+was reading usage text. `node cli.mjs serve --help` **started the resident broker**: it logged `START pid=1771484`,
+`INTENT delivered=3 dead=0 dup=0`, woke 8 seats, and ran 6 passes before the surrounding shell timeout killed it. Both
+subcommands ignore unknown arguments; only *some* commands have a usage path (`serve --help` printed nothing before serving,
+and `resume --help` printed JSON). The cost was not just surprise: the unintended `serve` did real work with no preflight,
+no `--yes-pm-wakes` ack, and no `--max-duration` bound, and the session had to spend its remaining budget on recovery.
+*Owner:* devtools · *Where:* the argument parser in `cli.mjs` (every subcommand honors `--help`/`-h` and exits before any
+write; unknown flags are an error, not ignored) + `demo/cli-help-never-writes.test.mjs` (for each subcommand, `--help`
+produces usage text and the store's max `entry`/`commit_seq` is unchanged) · *Acceptance:* the demo passes for `serve`,
+`resume`, `up`, `run`, `send`, `reset`, `compact`, `worktree`, `stop`; unknown flags exit non-zero with a named flag; the
+top-level `--help` list (which is good and exists) is the only place usage is printed. · *Blind spots:* `cli.mjs serve
+--help`'s harm came partly from being chained with `&&` in one shell line — a fix that only prints usage on `--help` still
+leaves `serve` starting under a garbage flag, so unknown-flag refusal is the half that prevents the accident; and there is a
+real tension with `resume`/`doctor` being the documented recovery verb (a `--help` that refuses loudly is better than one
+that acts, but a `--dry-run` for `resume` is what makes the recovery inspectable — check whether it exists before claiming it).
+
+**223. The operator queued a UX comparison against `nicobailon/pi-subagents`: should durian-pi's UI stop being a custom CLI and be built **on** Pi?**
+*(operator-requested, 2026-10-28T17:2xZ; **milestone-ranked after the functional backlog**, bumpable — see the trigger below)*
+The operator's reason is adoption and mental maps: "a potential adopter might be turned off when they discover that we are a
+different thing from Pi, rather than building on the Pi platform entirely. A user of Pi might expect to have similar UX to
+Pi, rather than learning a new UX outside or on top of pi." Today durian-pi's operator surface is a **custom CLI**
+(`cli.mjs watch`/`status`/`log --follow`, `src/chatview.mjs`) that shows every team member's state. The request: compare
+that against Pi-shaped UX, **consult `advocate` and `designer`** (the persona seats), and include **oh-my-pi** in the
+comparison because OMP explicitly values mental maps of tools. Pinned for the walk: `pi-subagents` at
+`312082429bda07714fe07729fe8d4935de4c5a` (`31208242`), commit date 2026-10-27T22:39:03-07:00, **MIT**
+(`vendor/eval/pi-subagents/LICENSE`), shallow clone, **no tags read** (`--tags` returned none — judge maturity from the
+commit date), manifest `"0.83.1"` (never cite that as the pin). *Owner:* pm decomposes once the channel is open; the
+delegate's part (clone + pin + brief) is done · *Where:* `docs/runbooks/competitor-review.md` (Do 0–9, and its rule that a
+question spanning projects gets its own file **without** replacing per-project reviews),
+`docs/reviews/pi-subagents-review.md` (**to be written** — Do 1–9 have not run; the clone is present and the pin is in
+`docs/VENDOR-PINS.md`), `docs/COMPETITORS.md` (row required by the audit), and a second, cross-project question file
+(`docs/reviews/operator-ux-on-pi-<date>.md`) covering Pi + OMP + pi-subagents together · *Acceptance:* a review that walks
+`vendor/eval/pi-subagents`'s actual surface (its `agents/`, `index.ts`, `install.mjs`, `inspector-runner.mjs` — not its
+README's claims), an **operator-side UX comparison** that states what a Pi user would and would not recognize, advocate and
+designer opinions recorded as *their* artifacts (not the delegate's paraphrase), a keep/reject table for our own CLI, and an
+explicit answer to the platform question: what breaks if `watch`/`status`/`log` become Pi-native surfaces — given that our
+store is the single writer (`docs/runbooks/README.md` §single writer) and `cli.mjs serve` **is** the broker, so "the UI is
+just Pi" has a real architectural constraint, not just a taste one · *Priority trigger (the operator's own):* this stays a
+subsequent milestone **after** the functional items, and **bumps** if any UX-related architecture gets prioritized — today's
+candidates are 217 (seat shell: what a seat can *do*, and what a UI can show it doing), 215/218 (edit refusals and in-turn
+gates: what the UI would surface in-turn), and 102 (`clockin --ask`). · *Blind spots:* do not read Pi's TUI as a fixed
+target — pi is a pinned build input (D22, `pi-main.pin.json` at `2ec55d80`), so a Pi-native UX inherits our pin's cadence;
+the audit does **not** currently require a review file per present clone (see 224), so "9 clones pass the review audit" is
+**not** evidence pi-subagents has been reviewed; and a UX comparison that only inspects screenshots/screensweeps will miss
+the part that matters to an adopter — whether the failure modes are legible (our `check`/`attention`/`parked` vocabulary vs
+Pi's conversation model).
+
+**224. "9 clone(s) pass the review audit" does not mean 9 clones were reviewed.**
+*(devtools; measured 2026-10-28, the hour pi-subagents was added)* `node tools/vendor-pins.mjs --check` printed
+**`PIN CHECK PASS … 9 clone(s) pass the review audit (a review naming a present clone cites its HEAD and has a COMPETITORS
+entry)`** the moment `pi-subagents` was cloned and added to the table — with **no** `docs/reviews/pi-subagents-review.md`
+in existence. The audit is a *consistency* check on reviews that already cite a clone, not a completeness check that every
+vendored clone has one; it even printed four NOTEs for reviews citing clones that are **absent** and passed anyway. I nearly
+reported the PASS as "every vendored project has been reviewed", which is the sentence the wording invites. *Owner:*
+devtools · *Where:* `tools/vendor-pins.mjs` (add `--require-reviews`, or make the PASS line state
+`N clone(s), M with a review file, K missing one` — the honest count, printed, with the missing names) +
+`demo/vendor-pins-audit.test.mjs` (a clone with no review file produces a **failure or an explicit named gap**, never a
+silent pass) · *Acceptance:* the PASS line cannot be read as coverage; a clone without a review file is listed by name on
+every run until it has one; the NOTE direction (review citing an absent clone) stays a note, since deleting a clone after
+review is legitimate (that is the aider lesson's twin, D146). · *Blind spots:* requiring a review per clone will break
+workflows where a clone exists to support a *pin experiment* that never becomes a review, so the gap must be nameable and
+schedulable rather than simply fatal; and the review audit's key is the `<name>-review.md` stem, so a cross-project review
+file (223's second file) does not satisfy it by itself.

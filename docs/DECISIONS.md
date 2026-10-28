@@ -5525,3 +5525,69 @@ delegate's "done" claim was made, §1 did not hold. If `sync-pi --sync` is ever 
 item must be re-cut. If `node_modules/@earendil-works/*` are **not** symlinks at a future clock-in, the runtime really is
 released npm packages and §3's correction is stale — re-run `npm ls @earendil-works/pi-coding-agent`, which prints the arrow
 or its absence in one line. If a future ROADMAP numbering collides with 219/220, the id grep in `docs/SELFDEV.md` was skipped.
+
+## D152 — The channel opened by accident and then by measurement: what the first Linux broker run did, what two `--help` flags wrote, and why I stopped instead of pressing on (2026-10-28, delegate; incident + operating decision)
+
+**1. The accepted plan, and the part that happened out of order.** Recommendations 1 and 2 were executed deliberately
+(pin made exact and recorded in D151; `seats[devtools].cwd` deleted from `rig.selfdev.json`, `up --refresh` run, `stale-seat-cwd`
+cleared). Recommendation 3 — open the channel with a scoping rider — **partly executed itself, through my own sloppiness**:
+`node cli.mjs serve --help` (chained in the same shell line as the real start) *started the resident broker*. Log:
+`2026-10-28T17:06:23.383Z START pid=1771484` → `INTENT delivered=3 dead=0 dup=0` → `WAKE impl, qa, lead, scribe, auditor,
+security, qa2` (pass 1, 5,076 ms) → `WAKE devtools` (pass 2) → four more idle passes → killed by my shell timeout at
+~17:10. All three intents (the two operator ones plus my rider, `requestId 26d1d943-…`) show `delivered: true` in
+`selfdev.sqlite.broker.inbox.out/*.json`. The spool is now empty; pm began working (`peek_queue`, `seat_root`, and a
+`thinking` entry: *"The operator has given a routing directive. I need to issue …"*). So the channel is **proved open** and
+**proved healable**, but it is **not** currently open: broker down, and I am deliberately leaving it down.
+
+**2. Two unintended writes, stated with ids, because "I didn't mean to" is not a record.** (a)
+`node cli.mjs resume --help` **executed resume**: `found: 2`, and the store shows submission **207288** (conversation 4942)
+moved from `queued` to `status: unanswered, reason: aborted`. (b) the `serve --help` above. Both subcommands ignore unknown
+arguments, so `--help` is not a read-only verb. Registered as **222** with the demo that should have prevented it. What I did
+*not* do: re-run `resume` to "undo" it (a second run reported `found: 0`, which is the evidence the first run's effect was
+exactly those two actions), and did not attempt to restore that submission — the row is named here so a verifier can see
+precisely what changed and decide.
+
+**3. The claim I corrected, immediately and in public: removing the rig-file `cwd` was not a repair.** `tools/broker-serve.mjs`
+reported `stale-seat-cwd` cleared and I read that as "seat roots are fine". pm's own tool result said otherwise:
+`SEAT ROOT: /home/chexxor/Git/Durian-Pi/C:\Users\Alex\dsh-Projects\pi-opendurig — source: persisted seat cwd; tree:
+main-worktree`. Cause, read in source: the persisted `pi.agent.cwd` wins when the rig file names nothing (`cli.mjs:679`,
+`:815`), so deleting a field *guarantees* the stale value is used. The path was then built **inside the repo** in two shapes
+(nested `C:/Users/Alex/dsh-Projects/pi-opendurig/item-2801/.durig/queue-all.md`, and one flat directory named
+`C:\Users\Alex\dsh-Projects\pi-opendurig` holding `.durig/queue-{lead,qa,qa2,auditor}.md`) — evidence that **several seats**
+were writing outside their intended tree, and that two join semantics met one string. Both trees are preserved at
+`.spike/phantom-seat-root-2026-10-28/`; the repo root is clean (verified by re-scan). Registered as **221**, with the
+instrument gap it exposed: **no CLI verb prints a seat's persisted cwd** (`ps` prints name/conversationId/role, `status`
+prints context/attention — both measured).
+
+**4. The decision: stop, don't press on.** State as I leave it: no `serve` process (`ps` checked), broker state file present
+with a dead pid (`pid=1771484`, heartbeat marked not alive), spool empty, **9 `running` tasks and 11 non-terminal
+submissions** left mid-flight by the kill, queue as pm saw it at 17:10: **296 non-terminal — 277 held, 19 deferred**. The
+next start is expected to settle those through the broker's own `STRANDED`/`RECONCILE` path (the documented Verify expectation
+in `docs/runbooks/broker-down-or-stalled.md`), **not** through another hand-run `resume`. I am not restarting now for two
+reasons: the persisted-cwd question is an **operator decision** (clearing or re-pointing store state touches every seat's
+root, and `src/broker.mjs:1189-1215` treats persisted cwds as the liveness signal for worktree reaping), and every wake until
+then writes outside the intended tree. My instrument now **blocks on the symptom** rather than restating the cause:
+`tools/broker-serve.mjs` gained (i) a real **completion probe** per configured provider — because `/v1/models` answering is
+not proof of inference, and the store carries **18,309 entries** whose text contains `402 "You need positive balance to do
+inference"` — and (ii) a **`phantom-seat-root-path`** blocker that fires when the repo root holds a directory named for
+another OS's absolute path. Measured: both providers *complete* (`local: completes (finish=stop, prompt=57 tok,
+completion=29 tok)`; verifier `finish=length`, its reasoning budget), and `--status` now costs **3.4 s** rather than 0.31 s —
+recorded in `tools/README.md` so the next session does not mistake the new cost for a hang. No tok/s is printed by that
+probe on purpose: at 57 prompt tokens it would be the same lie as the old prefill column (D147).
+
+**5. Also recorded, because it is the reason this session ended where it did:** the operator queued a new milestone — compare
+durian-pi's operator UX with **Pi-native** UX using `nicobailon/pi-subagents` (cloned and pinned: `31208242`, MIT,
+2026-10-27) and **oh-my-pi**, with `advocate` and `designer` giving their own opinions, on the grounds that adopters build a
+mental map of *Pi* and a custom CLI reads as a different product. Registered as **223**, ranked after the functional backlog
+with the operator's own bump trigger (any UX-adjacent architecture item — 217, 215, 218, 102 — promotes it). While setting it
+up I nearly misread a green signal again: `vendor-pins.mjs --check` printed **"9 clone(s) pass the review audit"** with
+**no review file for pi-subagents in existence** — the audit validates reviews that cite clones, it does not require a review
+per clone. Registered as **224**.
+
+**Falsifiable.** If a future `up --refresh` on a rig that no longer names a `cwd` leaves no persisted foreign root (testable
+through whatever read surface 221 adds), the mechanism claim in §3 is closed. If `cli.mjs resume --help` or `serve --help`
+ever acts again, 222 is unimplemented and the operator should assume every `cli.mjs` verb writes. If the next broker start
+does **not** log `STRANDED`/`RECONCILE` for the 9 orphaned tasks, §4's heal path is an assumption and 61–64 (supervision) is
+the real gap. If `.spike/phantom-seat-root-2026-10-28/` is gone and the repo root holds no such path but the store still
+reports `source: persisted seat cwd` for any seat, the cause is unaddressed and the cleanup was cosmetic. If a future
+`vendor-pins --check` prints a PASS that someone reads as review coverage, 224 has not landed.

@@ -905,6 +905,24 @@ advice. Read the headings; the body is only here if you need the numbers.
   citations — **299 appears in text but no such item exists** — and invites a duplicate registration.
 - **`git status` has no `--cached`.** For staged state use `git diff --cached --name-only`; the preflight inside
   `tools/broker-serve.mjs` prints the empty index before any commit is attempted (D142 §4).
+- **`cli.mjs <verb> --help` performs the verb.** Measured twice in one session: `resume --help` **ran resume** and withdrew a
+  queued submission (`id 207288`, conv 4942 → `unanswered`, `reason: aborted`); `serve --help` **started the resident broker**
+  (`START pid=…`, `INTENT delivered=3`, `WAKE` ×8 seats) before a shell timeout killed it. Unknown flags are ignored, so there
+  is no safe `--help` on a writing verb — read usage from the top-level `node cli.mjs --help`, and **never chain a verb you
+  have not run bare in the same `&&` line**. Registered as **222** (D152 §2).
+- **A seat's real root is a store fact, not a rig-file fact.** At wake a seat uses `seat.cwd ?? spec.cwd ?? DURIG_SEAT_ROOT`
+  and otherwise the **persisted** `pi.agent.cwd` (`cli.mjs:679`); `up` writes that value only when the rig file *names* one
+  (`cli.mjs:815`), so **deleting** a `cwd` guarantees the stale one wins. No CLI verb prints it (`ps` prints
+  name/conversationId/role; `status` prints context/attention). The tell is a repo-root directory whose name contains `:` or a
+  backslash — that happened here (`C:\Users\…`, with `.durig/queue-*.md` written into it by several seats). `tools/broker-serve.mjs`
+  now blocks on it (`phantom-seat-root-path`). **221** (D152 §3).
+- **A green instrument is not coverage.** `vendor-pins.mjs --check` printed "9 clone(s) pass the review audit" with **no**
+  review file for the 9th clone; the audit validates reviews that cite a clone, it does not require one per clone. Say "N
+  clones, M reviewed" until **224** prints exactly that (D152 §5).
+- **`/v1/models` answering is not proof of inference.** The store holds **18,309 entries** containing `402 "You need positive
+  balance to do inference"`. `tools/broker-serve.mjs` now runs one real completion per provider (`--status` 3.4 s instead of
+  0.31 s; `--no-probe` to skip), and deliberately prints **no** tok/s there — at 57 prompt tokens that number is the D147 lie
+  again.
 - **Before you write a probe, `ls scripts/ tools/` — the thing you need may already ship.**
   `scripts/read-constitution.mjs` prints the **store document the seats' prompts actually carry** and its header states
   the three-copy rule verbatim ("The constitution is a session DOCUMENT (injected into every seat prompt), not
