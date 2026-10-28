@@ -272,6 +272,32 @@ try {
 }
 finding("persisted-cwd-unreadable", "note", "this check validates the RIG FILE only: no CLI command prints a seat's persisted cwd (`ps` and `status` omit it), so a cleared rig-file field is NOT evidence the seat root is right. Read a seat's own `seat_root` tool result in `log <seat>` after a pass, or use `cli.mjs send <seat> seat_root`", "ROADMAP 221 asks for the missing read surface and for `up` to clear a cwd the rig file stops naming");
 
+// ROADMAP 217 asks for this block BY NAME: "today it refuses on a dead seat cwd and a dirty tree but would
+// happily start a broker whose seats cannot run a single command." Measured on this box 2026-10-28: the seat
+// shell is registered as `powershell`; the pinned pi-durable build spawns ["pwsh","powershell"] in order and
+// re-throws the LAST spawn error (`vendor/pi-main/packages/durable/src/tools/bash.ts:169`), and neither program
+// exists here. The store shows it firing, not just the risk: 3 `spawn powershell ENOENT` + 1 `spawn pwsh ENOENT`
+// entries, newest #274074 (conv 4930 = devtools) at 2026-10-28T17:09:07Z — inside the last broker pass. A seat
+// that cannot run `node demo/<name>.test.mjs` cannot satisfy the completion rule or the constitution's oracle.
+try {
+	const { seatTools } = await import("../src/seattools.mjs");
+	const shellName = seatTools.shell?.name ?? "(no shell tool registered)";
+	const durable = join(REPO, "vendor/pi-main/packages/durable/src/tools/bash.ts");
+	let programs = ["pwsh", "powershell"];
+	if (existsSync(durable)) {
+		const src = readFileSync(durable, "utf8");
+		const at = src.indexOf("options?.programs ?? [");
+		const m = at >= 0 ? src.slice(at).match(/programs \?\? \[([^\]]*)\]/) : null;
+		if (m) programs = m[1].split(",").map((s) => s.trim().replace(/^"|"$/g, "")).filter(Boolean);
+	}
+	const probe = IS_WINDOWS ? ["where", []] : ["sh", ["-c", 'command -v "$1"', "probe"]];
+	const resolved = programs.filter((p) => spawnSync(probe[0], [...probe[1], p], { encoding: "utf8" }).status === 0);
+	if (resolved.length) finding("seat-shell-availability", "note", `the seat shell tool "${shellName}" resolves here (${resolved.join(", ")}) — still confirm the seat INSTRUCTION in ${RIG} names that tool`, "ROADMAP 217's second half: the per-seat instruction text is operator-owned");
+	else finding("seat-shell-availability", "block", `the seat shell tool is registered as "${shellName}" and spawns [${programs.join(", ")}], NONE of which exists on ${process.platform} — every seat shell call is a guaranteed spawn error, so a woken seat can edit but cannot run the demo suite (the constitution's oracle) or run git, and its completions are self-declared`, "ROADMAP 217: host-conditional shell tool in src/seattools.mjs (pi-durable already ships createBashTool; src/tui/durable/adapter.mjs:612 already installs it) + the operator-owned instruction text in " + RIG + "; demo/seattools.test.mjs:30 currently ASSERTS the no-bash choice and must be rewritten failing-first");
+} catch (err) {
+	finding("seat-shell-probe-failed", "note", `could not resolve the seat shell: ${err.message}`, "non-fatal for this preflight, load-bearing for the start: run tools/channel-preflight.mjs §7");
+}
+
 // F23: seats resolve to the cwd of the write-side command that wakes them (F12). With no
 // isolated seat cwd on this box, a woken seat edits THIS tree — which may hold the operator's
 // uncommitted work.

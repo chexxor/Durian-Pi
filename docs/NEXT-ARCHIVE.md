@@ -6872,3 +6872,31 @@ recipe); this file's §DO-NOT-FIX; `.scratch/` is untracked and **not** gitignor
 command prints a seat's persisted cwd** (`ps`/`status` omit it), so a cleared rig-file field is not evidence the seat
 root is right — read a seat's own `seat_root` tool result, or `cli.mjs send <seat> seat_root`; that is exactly what
 221 asks for.
+
+<!-- cut VERBATIM from docs/NEXT.md on 2026-10-28 (2026-10-28T20:1xZ) when the seat-capability/session that landed ROADMAP 217's preflight block and recorded the cross-OS ledger prune (D155) superseded it -->
+## CLOCK-OUT (2026-10-28T19:35Z, delegate — channel-start pre-flight session)
+
+**Done and verified.** New instrument **`tools/channel-preflight.mjs`** (**2.0 s**, read-only, imports
+`advancingConvIds`/`admissionVerdict`/`selectWakes` so its verdicts are the product's own — 215 ms of import, no drift);
+review **`docs/reviews/channel-start-preflight-2026-10-28.md`**; ruling **D154**; rows **ROADMAP 229/230/231**;
+`tools/queue-drain-audit.mjs` now prints `heldLandingIds`/`orphanIds`/`gateProseIds` and its heading corrected to
+**non-terminal (`held`+`deferred`) LANDING rows** (the old "held LANDING" label double-counted `#4805`, which is both an
+on-main landing and an awaiting-human deferral); `tools/README.md` rows + the top-level tool count 8 → **10**; the pm
+release brief prepared at `.spike/delegate/pm-release-brief-2026-10-28.md` (**not spooled**).
+**The session's headline is a correction, not a build:** the top lever's blocker was recorded as "the operator has not
+started the broker"; measured, the chain is four links and the binding one is **an empty claimable head (0 rows, 6.1
+days)** plus **an unevaluable operator clause holding the top three rows**. The reassuring half: **a restart
+self-heals** — pass 1's `reconcileStrandedSubmissions` settles the 9 `placed` orphans and all 9 suppressed seats read
+`WAKE` afterwards.
+**One claim I nearly shipped and corrected in public:** my first instrument aged submissions from
+`record.admittedAt ?? record.createdAt`, printed `age n/a`, and I was about to write "the product has no admission
+timestamp". It does — **derived at `src/readapi.mjs:269-284`, never persisted**. Re-reading the producer turned a wrong
+claim into 229. Rule: **an `n/a` in your own output is a claim about your instrument until you have read the producer.**
+**Unverified deliberately:** no channel start, no `up`/`worktree`/`run`/`send`/`resume`/`doctor` — **no writing verb on
+this workspace**; no queue row claimed/released/cancelled/deferred/routed; no intent spooled; no push. The 2 `queued`
+submissions at the head of pm's conversation are reported, not withdrawn.
+**Pitfalls recorded** (so the next session does not pay twice): `tools/README.md` — print ids not just counts; the
+`held`+`deferred` label truth; import the product's decision function instead of re-deriving it. This file's
+§DO-NOT-FIX — orphan ≠ releasable; `WAKE-after-reconcile` is a prediction; queue **items** and **submissions** are
+different tables. `node --check` on a new tool costs 0.02 s and found the two real syntax faults this session before
+they cost a run.

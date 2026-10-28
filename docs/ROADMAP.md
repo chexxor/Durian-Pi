@@ -3848,6 +3848,24 @@ tests were written on Windows); tool *names* are part of the seat prompt surface
 byte-stable prefix and invalidates prompt caches (D144 family) — measure the prefill cost of the change; and a
 seat with both tools available can pick the one the guard watches less closely, which is why the acceptance
 criterion names the guard, not the tool.
+*Progress (delegate, 2026-10-28, committed not pushed):* the preflight half of this row **is landed and firing**.
+`tools/broker-serve.mjs` now resolves the seat tool set by **importing `src/seattools.mjs`** (not re-deriving it),
+reads the pinned build's fallback program list out of
+`vendor/pi-main/packages/durable/src/tools/bash.ts` (`options?.programs ?? ["pwsh", "powershell"]`, line 169 re-throws
+the last spawn error), probes each program on PATH (`command -v "$1"` on POSIX, `where` on Windows) and raises
+**`seat-shell-availability` as a `block`**, so `node tools/broker-serve.mjs --dry-run` and `--status` now *refuse*
+instead of offering to start a broker whose seats cannot run one command. Measured here: `the seat shell tool is
+registered as "powershell" and spawns [pwsh, powershell], NONE of which exists on linux`; cost `--dry-run` **2.93 s**
+(was 2.79 s), `--status` **2.75 s** (was 2.79 s) — the dynamic import is free at that resolution. The same probe, with
+the store evidence attached, is now §7 of `tools/channel-preflight.mjs`: `"toolName":"bash" -> 0 entries`,
+`"toolName":"powershell" -> 20,340`, `"spawn pwsh ENOENT" -> 1`, `"spawn powershell ENOENT" -> 3`, newest shell result
+`entry #274074 2026-10-28T17:09:07.533Z conv 4930 = devtools … isError=true "spawn powershell ENOENT"` — i.e. the
+fault fired **inside the last broker pass**, 0.2 s before that pass' last provider call, on the seat that owns #726.
+§7 costs ~0.9 s of the preflight's 3.3 s (one `entries` scan holding all six `LIKE` patterns; six separate scans cost
+~1.9 s). **The row's own acceptance test is gone:** `demo/broker-serve.test.mjs` was readable earlier in that session
+and is now absent from disk *and* from `git ls-files` (see
+`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`), so whoever lands 217 re-creates that file
+rather than extending it — and that is the first concrete cost of ROADMAP **233**.
 
 **218. Move one deterministic gate inside the turn: after an edit, run the check the item already owes, and make the seat answer it.**
 *(devtools + qa; measured 2026-10-28)* Our gates fire after the fact — `cli.mjs check`,
@@ -4060,6 +4078,18 @@ counter prints the class string it matched, never a bare count. *Blind spots:* "
 it does not abort in-flight ones; 402 vs 429 vs `model not available` need different remedies (add balance, back off,
 change model), so one class-blind halt is worse than none; and the store's error text crosses machines and providers
 (this store came from Windows), so a class counter must name the provider it saw it on.
+*Progress (delegate, 2026-10-28, committed not pushed):* the **measurement** half landed on the delegate side, and it
+corrects a false reading this session nearly acted on. `tools/channel-preflight.mjs` §5 now attributes each recent
+submission row to the provider that **ran the turn** — it has to join across tables, because the submission row carries
+no admission age (**229**): the row's `entry` is the *admitted input* entry (a timestamp, no `model[0]`), so the
+provider lives on the **first assistant entry after it** in that conversation (`select record from entries where
+conversation_id = ? and id > ? order by id limit 40`). Measured over the last 30 submission rows here:
+`attempts: local/iq3_s=14, unattributed=8, deepinfra/…=8`, `failures: deepinfra/gemma-4-31B-it, GLM-5.3-Flash ×2,
+DeepSeek-V4.1-Flash, DeepSeek-V4-Flash-0731, DeepSeek-V4.1-Flash-1017` — **every failure in the window is from the
+`deepinfra` era; the current `local/iq3_s` era has none.** The naive read of the same rows (`402 … ×5`) would have told
+the operator to go fund an account that is not in use any more, which is exactly the 14,377-rows-of-history trap this
+row warns about. The **halt** itself (`src/attention.mjs` counter, the breaker, the qa demo) is untouched and still the
+team's work.
 
 **227. Whether a `held` row is now drainable is computable, and only a delegate instrument computes it.**
 *(qa + pm; measured 2026-10-28)* **277 `held` rows sit a median 213.5 h (max 289.8 h) since their last transition and
@@ -4182,3 +4212,65 @@ audit's orphan list excludes rows whose hold reason is an uncleared operator cla
 stays the operator's; do not "fix" this by force-releasing #725-727 to unblock the demo, that destroys the operator's
 intent record; and a named predicate list is a small vocabulary, not a query language (invent nothing before a second
 consumer exists — the ROADMAP 27 discipline).
+
+**232. The broker's own worktree sweep prunes the ledger, so on a moved workspace the first pass erases the cross-OS
+evidence the runbooks tell the next session to protect.**
+*(devtools; measured 2026-10-28 — seen happening inside one delegate session)* `pruneWorktrees(repoPath)`
+(`src/worktree.mjs:649`) runs `git -C <repo> worktree prune`, which deletes **every registration whose directory this
+host cannot read**. It is called unconditionally at the end of the broker's sweep — `src/broker.mjs:1167`, whose own
+comment says *"Prune once at the end so the sweep self-heals those, **whether or not it removed anything this pass**"*
+— and again after every single removal (`src/worktree.mjs:667` `removeWorktree`, `src/worktree.mjs:1326`). On a
+workspace that moved between operating systems, that is a trigger: this session measured the main checkout's ledger go
+from **36 registrations (20 of them `C:\Users\Alex\dsh-Projects\…`, 2 under `.spike/wt`)** to **1 (`main` only, with
+`.git/worktrees` empty)**, while the only worktree-touching commands *this delegate* ran were
+`tools/worktree-cleanup.mjs --dry-run` twice (which prints `removes nothing — a removal under --dry-run is impossible
+by construction`) and the product's own demo suite from the main checkout (`demo/seat-root.test.mjs`,
+`demo/delivered-change-e2e.test.mjs`, `demo/broker-worktree-sweep.test.mjs` — all of which create and remove real
+worktrees through `src/worktree.mjs`, i.e. through `removeWorktree` → `pruneWorktrees(REPO)`). This is the **third**
+recording of the same end state: `docs/incidents/2026-10-26-worktree-and-scratch-sweep.md:20-30` already shows
+`git worktree list → 1 (main only)` and *"`.spike` entries created earlier in this same session … are gone; entries
+created after the event survive. So the sweep is bracketed in time, not inferred."* ROADMAP **212** assumes the sweep
+is planned by `tools/worktree-cleanup.mjs` and that the 25 foreign-OS rows are non-candidates; in fact the sweep runs
+ahead of the plan, without a grant, and with no record of what it cleared. *Owner:* devtools · *Where:*
+`src/worktree.mjs` (`pruneWorktrees` needs a caller-supplied allow-list of roots it may clear, and a refusal naming any
+registration that looks foreign — a path with a drive-letter prefix, a different hostname, or a root outside
+`resolveSeatRoot`/the origin) + `src/broker.mjs:1167` (report `pruned: N`, and raise an attention notice when N > 0 — a
+silent N is how this went unseen twice) + `src/attention.mjs` + `docs/runbooks/workspace-move.md` Step 1 (the
+inventory is the *input* to prune, not just a note) · *Acceptance:* a prune that would clear a registration outside the
+caller's own roots refuses and names it; `--dry-run` prints the exact list `prune` would clear; a demo plants a
+foreign-path registration and asserts it survives a sweep and a removal; the sweep's `pruned` count appears in
+`tools/broker-serve.mjs --status` output; and a test run that changes the **main** checkout's ledger fails unless that
+checkout is the one it owns. *Blind spots:* the registrations are also **evidence** for 209-214, so "self-healing" a
+ledger on a moved workspace is data loss even when it is correct on a native one; do not fix this by deleting
+`pruneWorktrees` (ghost registrations are a real problem it solved on 2026-10-19 — the comment cites 25 cleared then),
+the fix is a scoping grant, not removal; and any fix that shells out to `git worktree list --porcelain` again must not
+re-introduce a second ledger reader (213's single-reader rule).
+
+**233. An instrument can be credited as landed in `docs/ROADMAP.md` and be absent from the repo: five files this
+session ran or read are gone, and nothing in the rig can see it.**
+*(pm + operator; measured 2026-10-28)* `tools/worktree-cleanup.mjs`, `src/worktree-cleanup.mjs`,
+`demo/worktree-cleanup.test.mjs`, `demo/broker-serve.test.mjs`, `demo/clock-skew.test.mjs` — plus
+`demo/broker-clock-step.test.mjs`, `demo/verify-sweep-cleanup.test.mjs`, `demo/verify-sweep-adversarial.test.mjs` — were
+read or executed **earlier in this session** and are now `MISSING` from disk. `git log --all --diff-filter=A --name-only`
+for those paths prints **nothing**: they were **never committed**, so `git status --short -- .` shows no deletion, no
+diff exists, and there is nothing to restore. Rows **212**/**213** credit `tools/worktree-cleanup.mjs`/`src/worktree-cleanup.mjs`
+as landed (the workspace-move runbook tells the next session to run it before `up` — that command is now
+`MODULE_NOT_FOUND`), and row **217**'s acceptance names `demo/broker-serve.test.mjs`, which no longer exists to be
+extended. The suite cannot notice either: `scripts/suite.mjs:36` enumerates members with
+`readdirSync(demoDir)`, so a deleted member is not a failure, it is a **silently smaller suite** — the "210 signals"
+count in row 210 cannot be reproduced from a committed list. Full write-up with re-check commands:
+`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`. *Owner:* pm (the commit boundary is **214**,
+which this is the cost of) + operator (the push grant) · *Where:* `scripts/suite.mjs` (enumerate members from
+`git ls-files demo/` and fail on a member present in git but missing on disk, and report the count, so a loss is a diff
+rather than a shrink) + `scripts/clockin.mjs` / `docs/NEXT.md` digest (print suite member count from git, so the next
+session sees the shrink) + `scripts/verify-provenance.mjs` (or a new demo: fail when a path named in a ROADMAP row's
+`Where:`/`Acceptance:` is not in `git ls-files`) + `docs/DECISIONS.md` (a delegate may not credit an instrument it
+cannot `git show`) ·
+*Acceptance:* `git ls-files` contains every path any ROADMAP row's `Where:`/`Acceptance:` names — `tools/verify-provenance.mjs`
+(or a new demo) fails the check; the suite's member count is printed from git and compared to a pinned number; the five
+files above are either re-created from scratch (their absence must be stated in the row that re-creates them) or the
+rows that cite them are amended to say the instrument is gone. *Blind spots:* re-creating these files from memory is a
+**fabrication risk** — the new file must be labelled re-created, not restored; do not respond by committing noise
+("commit everything once and for all" is 214's discipline, not a blanket `git add -A`, which the work protocol already
+forbids); and the real defect behind the deletion may be 232 or something else entirely — 233 is about *visibility*, so
+it must not be closed by a restoration that leaves the sweep unexplained.

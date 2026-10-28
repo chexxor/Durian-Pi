@@ -140,19 +140,46 @@ const unq = (s) => String(s).replace(/^"|"$/g, "");
 // Recent provider outcomes: `unanswered` is the settled-with-an-error state.
 const recent = (() => {
 	const d = new DatabaseSync(DB, { readOnly: true });
-	const rows = d.prepare("select status, record from submissions order by id desc limit ?").all(RECENT);
-	d.close();
-	const out = { total: rows.length, unanswered: 0, patterns: new Map() };
+	const rows = d.prepare("select id, status, record from submissions order by id desc limit ?").all(RECENT);
+	const entryOf = d.prepare("select record from entries where conversation_id = ? and id > ? order by id limit 40");
+	const out = { total: rows.length, unanswered: 0, patterns: new Map(), attempts: new Map(), failures: new Map(), oldest: null, newest: null };
 	for (const r of rows) {
-		if (r.status !== "unanswered") continue;
-		out.unanswered++;
 		let rec = {};
 		try {
 			rec = JSON.parse(r.record);
 		} catch {}
+		// ERA ATTRIBUTION (ROADMAP 226, measured 2026-10-28): a raw window over `submissions` mixes provider
+		// regimes. Every seat here moved from deepinfra to the local endpoint when rig.selfdev.json landed the
+		// local models (commit b04215b, 2026-10-27T04:55Z) and every recorded 402 predates that, so "6 of the
+		// last 30 unanswered" reads as a live provider failure and is in fact history. The provider that RAN the
+		// turn is recoverable the same way the admission age is (229): join the submission's `entry` and read that
+		// entry's `model[0].provider`. Print both, or the next reader re-derives it and mis-ranks 226 again.
+		let prov = "(unattributed — no assistant entry after the admitted one)";
+		if (rec.entry != null) {
+			// The submission's own `entry` is the ADMITTED INPUT entry, which carries a timestamp but no
+			// `model[0]` — the provider/model that RAN the turn is on the first assistant entry after it.
+			for (const er of entryOf.all(Number(rec.conversationId ?? rec.conversation_id), Number(rec.entry))) {
+				try {
+					const m = JSON.parse(er.record)?.model?.[0];
+					if (!m?.provider) continue;
+					prov = `${m.provider}/${m.model}`;
+					const ts = Number(m.timestamp);
+					if (Number.isFinite(ts)) {
+						out.newest = Math.max(out.newest ?? ts, ts);
+						out.oldest = Math.min(out.oldest ?? ts, ts);
+					}
+					break;
+				} catch {}
+			}
+		}
+		out.attempts.set(prov, (out.attempts.get(prov) ?? 0) + 1);
+		if (r.status !== "unanswered") continue;
+		out.unanswered++;
+		out.failures.set(prov, (out.failures.get(prov) ?? 0) + 1);
 		const detail = unq(String(rec.detail ?? "")).slice(0, 60);
 		out.patterns.set(detail, (out.patterns.get(detail) ?? 0) + 1);
 	}
+	d.close();
 	return out;
 })();
 // Persisted task status is NOT the same field as pi-durable's derived `state.kind` (broker.mjs
@@ -176,6 +203,68 @@ const tasks = (() => {
 		if (st !== "terminal" && st !== "?") nonTerminal.push({ id: r.id, cid: Number(r.cid), kind: k, status: st, startedAt: c.startedAt ?? null });
 	}
 	return { tally, nonTerminal };
+})();
+
+// ---------------------------------------------------------------- 3c. can a seat do its job on THIS host?
+// The links above decide WHETHER a start wakes seats. None asks whether a woken seat can then DO the work:
+// the completion rule and the constitution's oracle both require running `node demo/<name>.test.mjs`, which
+// needs a shell. Import the product's own seat tool set rather than re-deriving it (tools/README rule), ask
+// the OS whether the program that tool spawns exists, then read what the store says the LAST attempt did —
+// the zero with its evidence, not the intention (ROADMAP 217).
+const seatToolsMod = await import("../src/seattools.mjs");
+const capability = (() => {
+	const names = Object.values(seatToolsMod.seatTools).map((t) => t.name);
+	const shellName = seatToolsMod.seatTools.shell?.name ?? null;
+	// The pinned build's fallback program list, read out of the vendored source so the pattern is printed.
+	const durable = "vendor/pi-main/packages/durable/src/tools/bash.ts";
+	let programs = null;
+	let programAt = null;
+	if (existsSync(durable)) {
+		const src = readFileSync(durable, "utf8");
+		const at = src.indexOf("options?.programs ?? [");
+		const m = at >= 0 ? src.slice(at).match(/programs \?\? \[([^\]]*)\]/) : null;
+		if (m) {
+			programs = m[1].split(",").map((s) => s.trim().replace(/^"|"$/g, "")).filter(Boolean);
+			programAt = `${durable}:${src.slice(0, at).split("\n").length}`;
+		}
+	}
+	programs = programs ?? ["pwsh", "powershell"];
+	const probe = process.platform === "win32" ? ["where", []] : ["sh", ["-c", 'command -v "$1"', "probe"]];
+	const resolution = programs.map((prg) => {
+		const r = spawnSync(probe[0], [...probe[1], prg], { encoding: "utf8" });
+		return { program: prg, path: r.status === 0 && String(r.stdout).trim() ? String(r.stdout).trim().split("\n")[0] : null };
+	});
+	// What the store actually shows for those tool names — including the name the rig does NOT register, whose
+	// zero IS the evidence. Counting only the registered name would hide it.
+	const d2 = new DatabaseSync(DB, { readOnly: true });
+	const namesToCount = [...new Set(["bash", "powershell", ...resolution.map((r) => r.program)])];
+	// ONE scan of `entries` for every pattern, aliased a0..an / e0..en: each separate LIKE is a full scan of a
+	// 274k-entry table (~0.22 s each), so six queries would triple this instrument's cost for the same rows.
+	const sel = [];
+	namesToCount.forEach((n, i) => {
+		sel.push(`sum(record like '%"toolName":"${n}"%') a${i}`);
+		sel.push(`sum(record like '%spawn ${n} ENOENT%') e${i}`);
+	});
+	const row = d2.prepare(`select ${sel.join(", ")} from entries`).get();
+	const counts = {};
+	const spawnFailures = {};
+	namesToCount.forEach((n, i) => {
+		counts[n] = Number(row[`a${i}`] ?? 0);
+		spawnFailures[n] = Number(row[`e${i}`] ?? 0);
+	});
+	let last = null;
+	for (const n of Object.keys(counts)) {
+		const row = d2.prepare(`select id, record from entries where record like '%"toolName":"${n}"%' order by id desc limit 1`).get();
+		if (!row) continue;
+		try {
+			const rec = JSON.parse(row.record);
+			const m = Array.isArray(rec.model) ? rec.model[0] : rec.model;
+			const cand = { name: n, id: Number(row.id), conv: Number(rec.conversationId), ts: Number(m?.timestamp) ?? null, isError: !!m?.isError, text: String(m?.content?.[0]?.text ?? "").replace(/\s+/g, " ").slice(0, 120) };
+			if (!last || cand.id > last.id) last = cand;
+		} catch {}
+	}
+	d2.close();
+	return { names, shellName, programs, programAt, resolution, counts, spawnFailures, last, resolvable: resolution.some((r) => r.path) };
 })();
 
 // ---------------------------------------------------------------- 4. run the product's own wake decision
@@ -280,6 +369,9 @@ p(`  VERDICT: ${channel.pidAlive === false && drivers.length === 0 ? "nothing is
 p("");
 p(`5 PROVIDER (last ${recent.total} submission rows — ROADMAP 226: waking onto a dead provider is wasted wall-clock)`);
 p(`  unanswered=${recent.unanswered} of ${recent.total}; detail patterns (first 60 chars): ${[...recent.patterns.entries()].map(([k, v]) => `"${k}"×${v}`).join("  ") || "none"}`);
+p(`  ERA ATTRIBUTION (entry join — which provider RAN the turn): window spans ${recent.oldest ? new Date(recent.oldest).toISOString() : "n/a"} → ${recent.newest ? new Date(recent.newest).toISOString() : "n/a"}`);
+p(`    attempts: ${[...recent.attempts.entries()].map(([k, v]) => `${k}=${v}`).join("  ")}`);
+p(`    failures: ${[...recent.failures.entries()].map(([k, v]) => `${k}=${v}`).join("  ") || "none"}   <- only failures in the CURRENT era can be repeated by a start; the rest is history (226's 14,377x402 rows all predate the move to local at 2026-10-27T04:55Z)`);
 p(`  provider liveness with reasons: run \`node tools/broker-serve.mjs --status\` (it probes one real completion per provider; /v1/models answering is not proof of inference)`);
 p("");
 p("6 SEAT ROOT AND TREE HYGIENE");
@@ -287,16 +379,26 @@ p(`  resolveSeatRoot(persistedCwd:undefined): source=${root.source} root=${root.
 p(`  honest gap (ROADMAP 221): no CLI surface prints a seat's PERSISTED cwd; this line passes persistedCwd:undefined on purpose, so it is NOT evidence the seat root is right. Read a seat's own \`seat_root\` tool result (\`cli.mjs send <seat> seat_root\` or \`log <seat>\`) after a pass.`);
 for (const c of checks) p(`  ${c.level.padEnd(6)} ${c.finding}: ${c.detail}${c.remedy ? `  → ${c.remedy}` : ""}`);
 p("");
+p("7 SEAT CAPABILITY — can a seat woken on THIS host do its job? (ROADMAP 217; nothing else on the rig answers this)");
+p(`  seat tool set (imported from src/seattools.mjs, not re-derived): ${capability.names.join(" ")}`);
+p(`  registered shell tool name: "${capability.shellName}" — the pinned build tries programs [${capability.programs.join(", ")}] in order and re-throws the LAST spawn error (${capability.programAt ?? "vendor/pi-main/packages/durable/src/tools/bash.ts"})`);
+p(`  PATH probe (${process.platform === "win32" ? "where" : "sh -c 'command -v'"}): ${capability.resolution.map((r) => `${r.program}=${r.path ?? "ABSENT"}`).join("  ")}`);
+p(`  store evidence (LIKE counts over all of \`entries\`, pattern printed): ${Object.entries(capability.counts).map(([k, v]) => `"toolName":"${k}" -> ${v} entries`).join("  ")}`);
+p(`  spawn-shape evidence (pattern "spawn <program> ENOENT"): ${Object.entries(capability.spawnFailures).map(([k, v]) => `${k} -> ${v}`).join("  ")}`);
+if (capability.last) p(`  last shell tool result: entry #${capability.last.id} ${capability.last.ts ? new Date(capability.last.ts).toISOString() : "ts n/a"} conv ${capability.last.conv}${seatByConv.get(capability.last.conv) ? ` = ${seatByConv.get(capability.last.conv)}` : ""} name=${capability.last.name} isError=${capability.last.isError} text="${capability.last.text}"`);
+p(`  VERDICT: ${capability.resolvable ? `a shell resolves on this host (${capability.resolution.filter((r) => r.path).map((r) => r.program).join(", ")}) — still check that the seat INSTRUCTION names the registered tool, not just that some shell exists` : `NO SHELL CAN START HERE. Every seat shell call on this host is a guaranteed spawn error, so a seat can edit but cannot run \`node demo/<name>.test.mjs\`: it cannot satisfy the completion rule or the constitution's oracle, and every completion it reports is self-declared. Fix: ROADMAP 217 (host-conditional shell tool in src/seattools.mjs + the operator-owned instruction text in ${RIG}). Measured to have fired on THIS host's shape: ${Object.values(capability.spawnFailures).reduce((a, b) => a + b, 0)} \`spawn … ENOENT\` results (of ${Object.values(capability.counts).reduce((a, b) => a + b, 0)} shell results overall — the rest are from the Windows era), newest ${capability.last?.ts ? H(Date.now() - capability.last.ts) + " ago" : "n/a"}, isError=${capability.last?.isError}.`}`);
+p("");
 p("WHAT MUST BE TRUE BEFORE A START DOES USEFUL WORK (ordered; the delegate decides none of these)");
 p(`  1. The channel start itself is an operator grant (tools/broker-serve.mjs --start refuses without --allow-dirty/--yes-pm-wakes).`);
 p(`  2. DURIG_SEAT_ROOT exported in the same shell, and the ROADMAP 221 seat-root ruling taken, before any worktree is created on this host (docs/runbooks/workspace-move.md).`);
 p(`  3. Head of queue is non-empty: pm releases held rows into \`queued\` (pm's verb). Spool the routing fact with \`node intent.mjs pm --body-file <file> --request-id <stable-id>\` — safe while the broker is down, it queues.`);
-p(`  4. If §5 shows a dead provider, fund or re-point it first: a wake onto a 402 burns the wake budget and lands nothing.`);
+p(`  4. If §5 shows failures attributed to the CURRENT provider era, fund or re-point it first: a wake onto a dead provider burns the wake budget and lands nothing. The era attribution separates those from history.`);
+p(`  5. A woken seat needs a shell that STARTS on this host (§7). Until ROADMAP 217 lands on this rig, a start produces work no seat can verify — and it is the only link in this report that needs NO operator ruling, while nothing in the queue works it: 0 of ${items.length} queue rows cite ROADMAP 210-231.`);
 p("");
 p(`next: pm owns every release/cancel; the delegate claims nothing. Cost ${ms()}ms, one queue read, one ps read, store opened read-only.`);
 
 console.log(L.join("\n"));
 if (OUT) {
-	writeFileSync(OUT, JSON.stringify({ at: new Date().toISOString(), db: DB, channel, byStatus, pendingNow: [...pendingNow], pendingAfter: [...pendingAfter], verdicts: verdicts.map((v) => ({ id: v.id, seat: v.seat, status: v.status, ageMs: v.ageMs })), wakeNow: before.woken, wakeAfter: after.woken, wakeReasonsNow: before.wakes, skipsNow: before.skips, skipsAfter: after.skips, checks }, null, 1));
+	writeFileSync(OUT, JSON.stringify({ at: new Date().toISOString(), db: DB, rig: RIG, channel, byStatus, pendingNow: [...pendingNow], pendingAfter: [...pendingAfter], verdicts: verdicts.map((v) => ({ id: v.id, seat: v.seat, status: v.status, ageMs: v.ageMs })), wakeNow: before.woken, wakeAfter: after.woken, wakeReasonsNow: before.wakes, skipsNow: before.skips, skipsAfter: after.skips, checks, providerWindow: { attempts: [...recent.attempts.entries()], failures: [...recent.failures.entries()], oldest: recent.oldest, newest: recent.newest }, capability: { names: capability.names, shellName: capability.shellName, programs: capability.programs, resolution: capability.resolution, counts: capability.counts, spawnFailures: capability.spawnFailures, last: capability.last, resolvable: capability.resolvable } }, null, 1));
 	note(`wrote ${OUT}`);
 }

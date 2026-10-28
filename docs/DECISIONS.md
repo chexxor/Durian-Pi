@@ -5772,3 +5772,65 @@ sent `pm` off to re-derive ids; it now prints and JSON-emits **`orphanIds`/`gate
 heading was corrected to the truth — the set spans **`held`+`deferred`**, not `held` alone (which is how `#4805` appears
 in both the on-main-landings set and the awaiting-human set). Same rule as D142's "print the pattern": **print the ids,
 not just the count**, or the next reader pays for the derivation twice.
+
+## D155 — A seat that cannot run a command is not a delivery channel: refuse the start, attribute the provider before asking for money, and stop crediting instruments git has never seen (2026-10-28, delegate; measurement + operating decision, no operator ruling taken)
+
+**What was decided, and why the *why* matters.** Three rules came out of one session that set out to answer "what
+happens if I start the channel now?".
+
+**1. Channel readiness is measured at the seat's *hands*, not at the broker's liveness.** `tools/broker-serve.mjs
+--dry-run` and `tools/channel-preflight.mjs` now refuse with **`seat-shell-availability`** (ROADMAP 217's own
+acceptance asked for this block) because the seat tool set registers `powershell`, the pinned build tries
+`["pwsh","powershell"]` and re-throws the last spawn error
+(`vendor/pi-main/packages/durable/src/tools/bash.ts:169`), and **neither exists on this Linux box**. *Why this is a
+ruling and not a bug note:* the constitution's oracle is "`node demo/<name>.test.mjs` … exit 0 is a pass", and the
+completion rule tells a seat to run the checks that exercise its item. With no spawnable shell a seat can still edit
+files, so it can still *produce* work it cannot *prove* — every completion becomes self-declared. A wake that cannot
+run the oracle is worse than no wake, because it manufactures green claims. The store proves it already fired, not
+merely that it could: `spawn powershell ENOENT` ×3 + `spawn pwsh ENOENT` ×1, newest `entry #274074`
+(`2026-10-28T17:09:07.533Z`, conv 4930 = **devtools**, the seat that owns #726) — **inside the last broker pass**,
+0.2 s before that pass' last provider call.
+
+**2. Attribute a provider error to an era before recommending money (ROADMAP 226/229).** `channel-preflight` §5's naive
+read of the last 30 submission rows prints `402 "You need positive balance" ×5`, which invites the operator to fund an
+account that is no longer in use. Attributed properly it is history: `attempts local/iq3_s=14, deepinfra/…=8,
+unattributed=8`, and **every failure belongs to the `deepinfra` era; the live `local/iq3_s` era has none** (the 14,377
+`402` generations predate the 2026-10-27T04:55Z move to local). *The join shape is the finding:* a submission row
+carries no admission age (**229**), and its `entry` is the **admitted input** entry — it has a timestamp but no
+`model[0]`. The provider/model that ran the turn lives on the **first assistant entry after it** in that conversation
+(`select record from entries where conversation_id = ? and id > ? order by id limit 40`). Joining to the admitted entry
+itself yields a timestamp and a **null provider**, which silently reads as "unattributed".
+
+**3. An untracked instrument is an uncreditable instrument (new ROADMAP 233).** Eight files this session read or ran —
+`tools/worktree-cleanup.mjs`, `src/worktree-cleanup.mjs`, and six `demo/` members (`worktree-cleanup`, `broker-serve`,
+`clock-skew`, `broker-clock-step`, `verify-sweep-cleanup`, `verify-sweep-adversarial`, all `.test.mjs`) — are now absent
+from disk **and from `git ls-files`**; `git log --all --diff-filter=A` for those paths prints nothing, so `git status`
+cannot show the loss and history cannot restore it. Two ROADMAP rows credit two of them as landed, and 217's acceptance
+names a test file that no longer exists to extend. `scripts/suite.mjs:36` enumerates with `readdirSync(demoDir)`, so a
+deleted member is a **silent shrink, not a failure**. **Rule adopted: "landed" requires `git ls-files` membership** —
+a delegate may not credit an instrument it cannot `git show`, and a delegate's own durable evidence goes to a tracked
+path (`docs/incidents/…`), not only to gitignored `.spike/`.
+
+**4. "Self-healing" a worktree ledger is data loss on a moved workspace (new ROADMAP 232).** `pruneWorktrees`
+(`src/worktree.mjs:649`) runs `git -C <repo> worktree prune`, which deletes every registration whose directory this host
+cannot read; it is called **unconditionally** at the end of the broker sweep (`src/broker.mjs:1167`, whose comment says
+"…whether or not it removed anything this pass") and after every removal (`src/worktree.mjs:667`, `:1326`). Measured
+inside one session that ran no writing verb on the workspace: the main checkout's ledger went **36 registrations (20 of
+them `C:\Users\Alex\…`) → 1**, `.git/worktrees` empty. The same end state is recorded at
+`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md:20-30`, so this is the third recording of one class, and the
+runbook's own Step-1 command (`node tools/worktree-cleanup.mjs --dry-run`) is now `MODULE_NOT_FOUND`. The fix is a
+**scoping grant**, not the removal of pruning — ghost registrations were a real problem the prune solved (25 cleared on
+2026-10-19).
+
+**Cost, stated so the next session does not re-derive it.** Preflight **2.0 → 3.3 s**; the whole delta is the store
+evidence, and it is **one** `entries` scan carrying all six `LIKE` patterns as aliased aggregates
+(`sum(record like '%…%') a0, … e5`) at ~0.9 s — six separate scans cost ~1.9 s on 137,427 rows. `broker-serve --dry-run`
+**2.93 s** (was 2.79 s), `--status` **2.75 s** (unchanged): importing `src/seattools.mjs` to read the *real* tool set
+rather than re-deriving it is free at that resolution.
+
+**What I deliberately did not decide.** No channel start, no `up`/`worktree`/`run`/`send`/`resume`/`doctor` — **no
+writing verb on this workspace**; no ledger surgery; no queue transition; no intent spooled; no push; no edit of the
+operator-owned `rig.selfdev.json` (the seat-instruction sentence that names "powershell" is theirs to change). The
+sweep's mechanism for the **file** losses is **named as a candidate, not proven**, and I did not "fix" it by hand —
+ROADMAP 212's acceptance (byte-identical pre-existing tree) is the instrument that would prove it, and it is still
+unimplemented.
