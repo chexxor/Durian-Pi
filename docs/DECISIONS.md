@@ -5062,3 +5062,70 @@ exact failure — *"a review that cannot cite the source path is a feature-page 
 2026-10-17 — and it also names the fix I did not have: enforcement belongs in `check` via a `competitor-review-covered`
 rule (ROADMAP 81/82), still unregistered. Combined with **0 of 39 runbooks filling `check_rule:`**, the pattern is
 consistent: this rig documents its controls and instruments almost none of them.
+
+## D144 — Two workflow costs got instruments, not more prose: diff-derived test selection, and a generated tracked pin table (2026-10-28, delegate)
+
+**The ask (operator):** *"finish these workflow improvements for yourself: (2) `node scripts/test.mjs --area docs`
+for doc-only edits (5 tests, not 238) — I burned 3 full suites on pointer formatting; (3) a pin step in the runbook's
+Do 2 that emits the header table automatically, so pins can't live only in a gitignored directory."*
+
+**What a top professional would have seen first, and what the ask did not say.** Neither cost was caused by a missing
+capability. The fast path existed (`--area docs`, 5 tests, **0.1 s** measured) and was still missed three times, and
+the runbook's Do 2 already told the reviewer to record a pin, and still produced hand-typed rows. Both failures are
+the same shape as the one this rig keeps paying for: **a rule with no reader.** (`held-drain-audit-2026-10-28`: **0 of
+39 runbooks fill `check_rule:`**; `src/citation.mjs` already says a runbook sentence "would not catch the next one".)
+So the deliverable is not a better reminder — it is (a) making the cheap check a **function of the actual diff**, so
+the choice of tests stops being a thing a session has to remember, and (b) making pin evidence a **generated,
+tracked, drift-checked artifact**, so forgetting it fails something.
+
+**Built (delegate instruments under `tools/`; no product file touched):**
+
+- **`tools/what-to-test.mjs`** — answers "which tests does THIS diff need". Selection is **derived from the demo
+  sources**: a test is implicated when its own text contains a changed path, its containing directory (two levels
+  down or deeper — `docs/runbooks/` yes, `docs/` no), or its file name. A hand-curated path→test map is exactly what
+  rots, which is why `demo/test-areas.test.mjs` exists for the area manifest; derivation cannot rot that way. It prints
+  the needle that selected every test (D142: never quote a count without its pattern), tiers direct vs mention, and
+  refuses to let a subset pose as the gate. **Measured 2026-10-28 (Linux):** a docs-only edit → **15 derived guards in
+  11.8 s** (5 direct in 5.3 s) against **238 in 41.8 s**. It also runs the byte-integrity scan the `SELFDEV` pitfall
+  describes and no demo covers (control bytes, zero-width, BOM/NBSP, mojibake) — and it flagged **its own source** on
+  its first run, because the mojibake pattern was written with literal characters; that is why the patterns are escapes.
+- **`tools/vendor-pins.mjs`** — emits the `competitor-review.md` **Do 2 header** (`--format header --project <name>
+  --tags`) and the tracked pin table `docs/VENDOR-PINS.md` (`--write`), and `--check` exits **1** when the table drifts
+  from the clones **or is not tracked by git**; `--write` **refuses a gitignored target** outright. Licence is read from
+  each clone's own `LICENSE`/`COPYING` with the evidence path in the cell; `maturity` is left as `<judge>` because the
+  tool refuses to infer it from a manifest version. It also runs the two rules the runbook has proposed since
+  2026-10-17 (`competitor-review-covered`): a review naming a present clone must name that clone's HEAD, and must have
+  a `docs/COMPETITORS.md` entry.
+- Runbook wiring: `competitor-review.md` Do 2 / Diagnose / Verify / anti-patterns / Re-review / Machinery (its pin half
+  is now `last_verified: 2026-10-28`, its surface-walk half still unverified); `run-your-area.md` gains **Do 0**, the
+  doc-only fast path; `runbooks/README.md` and `docs/COMPETITORS.md` point at both tools. Registered **ROADMAP 201**
+  (graduate the selector into `scripts/test.mjs --changed`, and fix area `docs`) and **202** (make the pin audit a
+  `check` rule) — **registered, not scheduled**; nothing was claimed, completed, deferred or routed.
+
+**The design call that matters: which drift is a failure, and which is not.** The pin columns (HEAD, commit date,
+licence, shallow-ness) describe the pin and must not move — a change there is red. The upstream columns (latest remote
+tag, manifest version) describe the world right now and genuinely move: **`prime-agent` published `v0.10.2-beta.15`
+between two runs of this tool ~30 minutes apart.** A guard that fires on hourly churn is a guard everyone learns to
+ignore, so those become NOTEs. `--check` compares rows, so the "Observed at" timestamp inside the block can never make
+a check fail.
+
+**A claim of mine is now dead, and it is recorded rather than quietly edited.** The seven tag rows I published in the
+2026-10-28 pointer came from `git ls-remote --tags origin | tail -1`, which is **ref order, not version order**.
+Re-measured with a version comparator: `openhands` **v1.34.0** (not `v1.9.0`), `crewai` **1.15.32** (not `v1.10.0.1`),
+`oh-my-pi` **v18.13.2** (not `v9.8.0`), `prime-agent` **v0.10.2-beta.15** (not `v0.9.9-beta.9`), `hermes-agent`
+**v2026.9.24** (not `v2026.9.7`) — **5 of 7 wrong**. That also kills the `SELFDEV` line "OpenHands' root `package.json`
+says `1.34.0` while its release tag is `v1.9.0`": the tag *is* v1.34.0; what is true is that the root `package.json`
+belongs to the `@openhands/agent-canvas` sub-package. The maturity trap stands; my evidence for it did not. The
+`SELFDEV` bullet recommending `tail -1` is corrected in place, because leaving it would re-arm the same mistake.
+
+**Why the delegate built these rather than routing them.** The operator asked directly ("for yourself"), and the work
+is measurement/devtools tooling that the team's own runbooks already treat as delegate-owned (precedent:
+`tools/queue-drain-audit.mjs`, `tools/model-probes/`). The **product** halves — a `--changed` flag in `scripts/test.mjs`,
+a corrected area partition, and a `check` rule — are the team's, so they are ROADMAP 201/202 and nothing under
+`src/`, `scripts/`, `demo/` or `demo/test-areas.json` was touched. `AGENTS.md` still carries the operator's own
+uncommitted edit and the 2-line clock-in correction that is theirs to make.
+
+**Falsifiable next session.** `node tools/vendor-pins.mjs --check` → exit 0 today over 7 clones, with 5 NOTEs for
+reviews whose clones are already gone (`aider`, `agent-governance-toolkit`, `anthropic-skills`, `agentskills-spec`,
+`superpowers`); if those NOTEs are still 5 next session, no review was re-pinned. If ROADMAP 201 is not scheduled and a
+session again runs 238 tests for a doc edit, the instrument exists and was not used — that is the number to look at.

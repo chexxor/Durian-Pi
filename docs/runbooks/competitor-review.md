@@ -3,10 +3,10 @@ runbook: competitor-review
 symptom: "you want to learn from another project/tool before building something yourself"
 writes: false
 precondition: "none"
-last_verified: unverified
+last_verified: 2026-10-28
 verified_by: delegate
-evidence: "docs/reviews/aider-review.md (worked example, 2026-10-17)"
-check_rule: null
+evidence: "docs/reviews/aider-review.md (worked example, 2026-10-17); Do 2 + Verify re-run 2026-10-28 on 7 live clones — `tools/vendor-pins.mjs --format header --project symphony --tags` emitted the header, `--write docs/VENDOR-PINS.md --tags` wrote the tracked pin table, `--check` exit 0, and an injected hand-edited HEAD returned exit 1"
+check_rule: "tools/vendor-pins.mjs --check (delegate audit; the `check` rule is ROADMAP 202)"
 ---
 
 # Review a competitor or vendor project
@@ -71,11 +71,12 @@ as true as its pin.
 - One review = one project; keep reviews comparable.
 
 ## Diagnose (read-only)
-Check whether the project is already reviewed: search `docs/COMPETITORS.md` and the `vendor/eval/`
-directory for its name before cloning.
+Check whether the project is already reviewed, and what is already pinned, BEFORE cloning: search
+`docs/COMPETITORS.md`, the pin table `docs/VENDOR-PINS.md`, and the `vendor/eval/` directory for its name.
 ```bash
+node tools/vendor-pins.mjs                 # every vendored clone and its current pin (offline)
 ls vendor/eval/
-rg -n "<project>" docs/COMPETITORS.md
+rg -n "<project>" docs/COMPETITORS.md docs/VENDOR-PINS.md
 ```
 If it **is** already reviewed, do not clone again and do not start from a blank review — pick a re-review
 mode (prompt 3): a **freshness delta** only when the prior review has its required artifacts (header,
@@ -90,16 +91,24 @@ because a delta only sees changed lines and cannot find a miss in unchanged code
    ```
    `--depth 1` is enough for a first review. A re-review needs history for a diff, so `fetch --unshallow`
    in place rather than deleting the directory (which would lose the pinned commit).
-2. **Pin the commit and open the review with a header.** Every claim must be reproducible, and a borrowed
-   mechanism must be legally borrowable:
+2. **Pin the commit and open the review with a GENERATED header.** Every claim must be reproducible, and a
+   borrowed mechanism must be legally borrowable. `vendor/eval/` is gitignored, so a pin that lives only in the
+   clone is not evidence the next session can reach — it has to be in a tracked file the moment you clone, and
+   transcribing it by hand is how it drifts. Emit it instead:
    ```bash
-   git -C vendor/eval/<name> rev-parse HEAD        # pinned commit
-   git -C vendor/eval/<name> log -1 --format=%cI   # commit date
+   node tools/vendor-pins.mjs --format header --project <name> --tags   # the header block — paste it verbatim
+   node tools/vendor-pins.mjs --write docs/VENDOR-PINS.md --tags        # the tracked pin table — commit it
+   node tools/vendor-pins.mjs --check                                  # table == clones, and the table is tracked
    ```
-   Record at the top of the review: **pinned HEAD + date · license · maturity · project version · the
-   operator's question**. Maturity matters: a `public-preview`/`alpha` project often ships its spec ahead
-   of its code (AGT did). Check the license **before** borrowing — MIT/Apache is borrowable with
-   attribution; a copyleft or missing license is an escalation (below), not a quiet copy.
+   The emitted header carries **pinned HEAD + commit date · license (read from the clone's own `LICENSE`/`COPYING`,
+   with the evidence path in the cell) · shallow-ness · latest remote tag · the operator's question**, plus the
+   exact command that produced each field. **Maturity stays your judgement** — the tool refuses to infer it and
+   leaves `<judge>`: a `public-preview`/`alpha` project often ships its spec ahead of its code (AGT did; `symphony`'s
+   `SPEC.md` is "Draft v1"), and manifest versions lie (see the anti-pattern table). Check the license **before**
+   borrowing — MIT/Apache is borrowable with attribution; a copyleft or missing licence is an escalation (below),
+   not a quiet copy.
+   **Do not** name a release from `git ls-remote --tags origin | tail -1`: that is ref order, and re-running it on
+   2026-10-28 printed `nightly` and `test-simplify-docker-ci` where `v0.0.3` and `v1.34.0` were true.
 3. **Read the project's own docs and source**, not aggregators. Prefer the docs directory the project
    maintains (for a docs-site repo, the `website/docs/` or `docs/` tree) and the source file that
    implements each mechanism. Cite a **path per claim**, and mark each mechanism **`observed`** (you
@@ -132,12 +141,14 @@ because a delta only sees changed lines and cannot find a miss in unchanged code
    the review rather than leaving an implicit open loop.
 
 ## Verify
-`vendor/eval/<name>` is cloned and its HEAD pinned; the review carries the **header** (HEAD + date, license,
-maturity, version, the question); every claim cites a path in that tree and is marked **`observed`** or
-**`advertised`**; the review carries a **surface-inventory table**, a **"not read" list**, a **durian-pi
-coverage matrix**, and a **per-standard adopt / adapt / reject table**; `docs/COMPETITORS.md` has the
-entry; each adopt call is either a registered `docs/ROADMAP.md` item or a named rejection; and any open
-question has a follow-up prompt or an explicit "closed". `git status` shows only the intended doc files.
+`node tools/vendor-pins.mjs --check` exits 0 (the pin table matches every clone's HEAD/date/licence **and the table
+is tracked by git**); `vendor/eval/<name>` is cloned and its HEAD pinned; the review carries the **header** (HEAD +
+date, license, maturity, the question) emitted by step 2 rather than a hand-typed one; every claim cites a path in
+that tree and is marked **`observed`** or **`advertised`**; the review carries a **surface-inventory table**, a
+**"not read" list**, a **durian-pi coverage matrix**, and a **per-standard adopt / adapt / reject table**;
+`docs/COMPETITORS.md` has the entry; each adopt call is either a registered `docs/ROADMAP.md` item or a named
+rejection; and any open question has a follow-up prompt or an explicit "closed". `git status` shows only the
+intended doc files — and `docs/VENDOR-PINS.md` is among them, because a pin you did not commit is a pin you lost.
 
 ## Anti-patterns (do not)
 
@@ -147,6 +158,8 @@ question has a follow-up prompt or an explicit "closed". `git status` shows only
 | **Delta-only re-review of a deficient prior review** | A diff cannot find a miss in unchanged code; the OWASP miss lived in unchanged code |
 | Reading aggregators, blog posts, or the project's README instead of its tree | A feature-page summary, not evidence |
 | No pinned HEAD (or a bare branch name) | Claims are not reproducible; a re-review cannot diff |
+| **A pin that lives only in the clone, only in the pointer, or hand-typed into a review** | `vendor/eval/` is gitignored and a hand-typed table drifts silently — 5 of 7 hand-recorded tag rows in the 2026-10-28 pointer were stale. `node tools/vendor-pins.mjs --check` is the control |
+| **`ls-remote --tags \| tail -1` as "the latest release"** | It is ref order, not version order: it printed `nightly` for openai/symphony and `test-simplify-docker-ci` for OpenHands |
 | Treating the spec as the implementation | Preview projects ship specs ahead of code (AGT `HALF_OPEN`, quarantine) |
 | Adopting a mechanism you could not verify from the tree | Adoption on faith; name it unverified instead |
 | Summarising without a durian-pi counterpart per practice | Not actionable; no item can be registered |
@@ -157,18 +170,27 @@ question has a follow-up prompt or an explicit "closed". `git status` shows only
 
 Re-run brief 3 when (a) upstream moves past the pinned HEAD **and** commits touch a mechanism we adopted
 or rejected; (b) a durian-pi mechanism the review named changes; or (c) a `check` rule it references changes.
-Do not re-review on a calendar. A review whose pin is stale for an adopted mechanism is a stale doc.
+**Detect (a), do not remember it:** `node tools/vendor-pins.mjs --check` prints a moved pin as its own line
+(`the PIN moved — the table says HEAD <old>, the clone says <new>`), and an upstream tag move shows as a DRIFT
+NOTE. Do not re-review on a calendar. A review whose pin is stale for an adopted mechanism is a stale doc.
 
-## Machinery (proposed)
+## Machinery (partly built)
 
-Enforcement belongs in `check` (ROADMAP 81/82), not in this prose: a **`competitor-review-covered`** rule
-that fails when (a) a `docs/reviews/<name>-review.md` whose `vendor/eval/<name>` clone exists has no
-`docs/COMPETITORS.md` entry, or (b) a review's pinned HEAD differs from its `vendor/eval/<name>` clone's
-HEAD. Keying on the clone's existence avoids flagging non-competitor reviews under `docs/reviews/`
-(e.g. `security-codemode-review.md`). It deliberately does **not** require every `vendor/eval/` clone to
-have a review — that directory also holds dependency/TUI evals (`ansi-regex`, `bubbletea`, `node-pty`, …)
-that are not competitor reviews. Until the rule lands, the read-only audit is: every competitor review
-has an entry, and its pin matches its clone.
+**Built (2026-10-28, a delegate instrument — not a `check` rule):** `tools/vendor-pins.mjs`. It emits the Do 2
+header and the tracked pin table (`docs/VENDOR-PINS.md`), and its `--check` runs the two rules this section used to
+propose — (a) a `docs/reviews/<name>-review.md` naming a `vendor/eval/<name>` clone that exists must also have a
+`docs/COMPETITORS.md` entry, and (b) a review naming a present clone must name that clone's current HEAD — plus the
+rule this runbook did not have: **the pin table itself must be tracked**, and `--write` refuses a gitignored target.
+A pin column (HEAD, commit date, licence, shallow-ness) that drifts is a hard failure; the upstream columns (remote
+tag, manifest version) drift hourly and are a NOTE — measured: `prime-agent` published `v0.10.2-beta.15` between
+two runs of this tool ~30 minutes apart.
+
+**Still unbuilt — enforcement belongs in `check` (ROADMAP 81/82; registered as ROADMAP 202):** a
+**`competitor-review-covered`** rule with those same conditions, so a seat cannot land a review whose pin drifted.
+Keying on the clone's existence avoids flagging non-competitor reviews under `docs/reviews/`
+(e.g. `security-codemode-review.md`). It deliberately does **not** require every `vendor/eval/` clone to have a
+review — that directory also holds dependency/TUI evals (`ansi-regex`, `bubbletea`, `node-pty`, …). Until the rule
+lands, the audit is `node tools/vendor-pins.mjs --check`, which a delegate runs and a seat does not.
 
 ## If it fails
 - Clone blocked (network, license): do not vendor it; record the blocker in the review and fall back to
@@ -181,4 +203,8 @@ registered items; operator — a license or vendoring question.
 
 ## Evidence
 Worked example: `docs/reviews/aider-review.md` → `docs/COMPETITORS.md` (Aider entry) → ROADMAP items
-(2026-10-17). `last_verified: unverified` until a second independent review exercises these steps.
+(2026-10-17). **Pin half re-verified 2026-10-28 natively on Linux** over the seven seat-persona clones
+(`symphony`, `hermes-agent`, `oh-my-pi`, `openhands`, `crewai`, `metagpt`, `prime-agent`): Diagnose, Do 1's pin,
+Do 2 and Verify ran, and pinning is now instrumented by `tools/vendor-pins.mjs` + `docs/VENDOR-PINS.md`. The Do 4–9
+artifacts for those seven are still missing (that review is half-done — `docs/NEXT.md`), so this runbook is
+**verified for its pinning half and unverified for the surface-walk half**.

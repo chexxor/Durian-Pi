@@ -1,12 +1,12 @@
 ---
 runbook: run-your-area
-symptom: "which tests do I run before landing? the demo suite is 120+ files"
+symptom: "which tests do I run before landing? the demo suite is 238 files"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-27
+last_verified: 2026-10-28
 verified_by: delegate
-evidence: "#1558 (test-area partition: demo/test-areas.json + src/testareas.mjs + scripts/test.mjs + demo/test-areas.test.mjs)"
-check_rule: null
+evidence: "#1558 (test-area partition); re-ran Diagnose/Do/Verify on 2026-10-28 on Linux: `--list` 238 tests / manifest covers all, `--area docs` 5 tests in 0.1 s, `--all` 238/238, and the new diff-derived path `tools/what-to-test.mjs --run` over a docs-only change: 15 derived guards in 11.8 s (5 direct guards in 5.3 s) against 41.8 s for the full suite"
+check_rule: "demo/test-areas.test.mjs (the partition cannot silently rot)"
 ---
 
 # Run your functional area — and the full gate before you land
@@ -36,6 +36,21 @@ A `manifest ROTATED` line names the offending files: a new test not mapped, a ma
 that no longer exists, or a file listed in two areas.
 
 ## Do
+0. **Changed only docs? Derive the guards from the diff instead of running everything:**
+   ```bash
+   node tools/what-to-test.mjs            # classify the working tree: which tests NAME what you changed
+   node tools/what-to-test.mjs --run      # run exactly that set (direct guards first)
+   node tools/what-to-test.mjs --direct-only   # the sub-5-second "did I break the pointer / a runbook?" check
+   ```
+   Measured 2026-10-28 (Linux, this box): a docs-only edit derives **15 tests in 11.8 s** (5 direct in 5.3 s)
+   against **41.8 s for all 238**. Two things this buys that a remembered area name does not: (a) it is derived
+   from the demo sources — a test is selected when it contains the changed path, its directory, or its file name —
+   so it cannot rot the way a hand-curated map rots; and (b) **`--area docs` is not the doc guard set**: it is 5
+   tests, and the derived set also includes `demo/runbook-frontmatter.test.mjs` (area `check`),
+   `demo/feature-row.test.mjs` / `demo/features-drift.test.mjs` (area `rig`), `demo/clockin-digest.test.mjs`
+   (area `toolchain`) and more. Running `--area docs` alone is how a doc edit lands with a guard unexercised.
+   The tool also scans changed text files for control bytes, zero-width characters and mojibake — invisible in
+   review, fatal in a repro command (`docs/SELFDEV.md`, 2026-10-28).
 1. Run your area (pick the one your change touches):
    ```bash
    node scripts/test.mjs --area <broker|check|docs|guard|readapi|rig|toolchain|tui|worktree>
@@ -59,10 +74,14 @@ that no longer exists, or a file listed in two areas.
 ```bash
 node scripts/test.mjs --list           # exit 0; "manifest covers all of them"
 node scripts/test.mjs --area toolchain # exit 0 (the tooling's own area)
+node tools/what-to-test.mjs --paths=docs/NEXT.md --direct-only   # exit 0; names demo/next-pointer.test.mjs as a direct guard
 ```
 
 ## If it fails
 - `unknown area "x"` → run `--list`; area names are the keys of `demo/test-areas.json`.
+- `what-to-test.mjs` says **not doc-only** → a non-doc path is in the diff (including someone else's uncommitted
+  file in a shared root); the gate is the full suite. It prints every changed path with its git status, so you can
+  see whose change it is.
 - `manifest ROTATED: "demo/x.test.mjs" is on disk but not mapped` → add the file to an
   area in `demo/test-areas.json`.
 - A test fails → read the tail the runner prints to stderr; the test file's own header
@@ -79,4 +98,7 @@ its owner.
 #1558 (the partition: `demo/test-areas.json`, `src/testareas.mjs`, `scripts/test.mjs`,
 `demo/test-areas.test.mjs`; full suite 124/124). Concurrency made the default on 2026-10-27:
 238/238 in 41.6s at jobs=8, measured against 276.8s serially (`demo/test-runner-concurrency.test.mjs`
-pins the default, the serial fallback, and the timeout bound). Verify last ran 2026-10-27.
+pins the default, the serial fallback, and the timeout bound). The diff-derived fast path (`tools/what-to-test.mjs`)
+and the measurements above are from 2026-10-28, prompted by the operator burning three full suites on pointer
+formatting — the fast path existed and was still missed, because an area name is not the same fact as "which
+guards does MY change carry".

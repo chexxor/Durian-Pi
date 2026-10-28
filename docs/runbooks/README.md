@@ -73,7 +73,7 @@ a **`How to re-verify this document`** section: literal commands whose output is
 | [../SEAT-LIFECYCLE.md](../SEAT-LIFECYCLE.md) | a seat from create to retire | seat-reset, compact-a-seat, degeneration-guard |
 | [../DISPOSITIONS.md](../DISPOSITIONS.md) | branch dispositions (decisions, not existence), the probe method, the append-only rule | branch-cleanup, land |
 | [../WORK-ITEM-LIFECYCLE.md](../WORK-ITEM-LIFECYCLE.md) | queue states and transitions, who may move an item, what wakes a seat, what is surfaced, why work gets stuck | stale-held-backlog, resume-while-broker-runs |
-| [run-your-area.md](run-your-area.md) | which tests do I run before landing? the demo suite is 120+ files | no |
+| [run-your-area.md](run-your-area.md) | which tests do I run before landing? the demo suite is 238 files — and **for a doc-only edit, `node tools/what-to-test.mjs` derives the guards from the diff (15 tests / 11.8 s measured) instead of the full gate** | no |
 
 **Rule for a topic doc:** a claim without a command that proves it is not allowed — mark it `UNVERIFIED`
 or drop it. That is what makes the doc audit-able instead of merely plausible.

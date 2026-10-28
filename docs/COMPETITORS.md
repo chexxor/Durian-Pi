@@ -16,6 +16,20 @@ pi-durable, tuios, hermes-agent) lives in the project workspace,
 commit you read, and cite a path per claim. One row per decision, with the durig
 counterpart it should change or inform.
 
+**Do not type a pin by hand.** `vendor/eval/` is gitignored, so the pin must land in a tracked file the moment
+you clone — emit it, and check it:
+
+```bash
+node tools/vendor-pins.mjs --format header --project <name> --tags   # the review's header block, paste verbatim
+node tools/vendor-pins.mjs --write docs/VENDOR-PINS.md --tags        # regenerate the tracked pin table
+node tools/vendor-pins.mjs --check                                  # table == clones, and the table is tracked
+```
+
+`docs/VENDOR-PINS.md` is the generated list of every vendored clone with its HEAD, commit date, licence (read from
+the clone's own `LICENSE`/`COPYING`), shallow-ness and highest version tag. Older entries below cite clones that
+have since been removed from this machine (`aider`, `agent-governance-toolkit`, the agent-skills set) — their pins
+now live only in prose, which is exactly what `--check` reports as a NOTE and ROADMAP 202 would make a finding.
+
 ---
 
 ## agent-fleet — `chankov/agent-fleet`

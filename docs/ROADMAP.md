@@ -3472,3 +3472,51 @@ holds in the **worst** replicate, not the average. Blind spots to name: more ite
 biases the corpus toward this repo's own failure modes, and a bigger corpus makes the whole-module arm's fit problem
 **worse**, not better — 3 of 8 items already cannot be shown whole at the verifier's 12,500-token budget — so 200
 should be read together with the operator's context-size choice, which is part of the same decision.
+
+**201. Make the cheap check a function of the diff: `scripts/test.mjs --changed`, and a `docs` area that actually
+covers the doc surface** *(devtools; registered 2026-10-28 from the operator's "I burned 3 full suites on pointer
+formatting"; shape already proved by the delegate instrument `tools/what-to-test.mjs`)* — measured: the full gate is
+**238 tests / 41.8 s at jobs=8**, `--area docs` is **5 tests / 0.1 s**, and the guards a docs edit really carries are
+**15 tests / 11.8 s** (5 direct in 5.3 s). So the area partition is simultaneously too expensive at the top and
+**wrong in the middle**: `demo/runbook-frontmatter.test.mjs` sits in area `check`, `demo/feature-row.test.mjs` and
+`demo/features-drift.test.mjs` in area `rig`, `demo/clockin-digest.test.mjs` in area `toolchain`, and a delegate who
+trusts `--area docs` lands a doc edit with those guards unexercised. Depends on: 1558 (the partition), and it should
+be read with the `run-your-area.md` rule that an area is never the landing gate.
+Measure: `node scripts/test.mjs --changed [<ref>]` selects tests **derived** from the diff — a test is implicated when
+its own source contains a changed path, its containing directory (two levels down or deeper: `docs/runbooks/` yes,
+`docs/` no), or its file name — prints the needle that selected each test (D142: a count without its pattern is not
+evidence), tiers them direct/mention, and **still fails the gate on `--all`**; the tool refuses to present a subset as
+sufficient. `demo/test-areas.test.mjs` additionally fails when a doc-surface guard (`next-pointer`,
+`clockin-digest`, `runbook-*`, `feature-row`, `features-drift`, `provenance`, `commit-message-encoding`) is mapped to
+an area that a doc-only change would not run, or the map names a file that no longer guards docs. *Owner:* devtools ·
+*Where:* `scripts/test.mjs`, `src/testareas.mjs`, `demo/test-areas.json`, a new demo test for the selection.
+*Acceptance:* a docs-only edit reaches green in <15 s including the run itself, and the selection demonstrably
+includes `runbook-frontmatter` + `next-pointer` (the two guards the 2026-10-28 pointer edits actually needed).
+Blind spots to name: name-needle matching over-selects on generic file names (`package.json` implicates the
+worktree demos) and the derivation only finds a guard that **names** its subject — a test that discovers its fixture
+by directory scan is invisible to it, so `--changed` must be reported as an implication set, never as a proof of
+coverage.
+
+**202. `competitor-review-covered`: a review whose pin drifted is a stale doc, and an untracked pin table is not a
+pin table** *(impl; the rule `docs/runbooks/competitor-review.md` has proposed since 2026-10-17 (ROADMAP 81/82) and
+now has an executable reference implementation in `tools/vendor-pins.mjs`, run 2026-10-28)* — the vendoring directory
+is gitignored **by design** (`vendor/eval/` "must never enter the tree's history"), so every review's evidence base —
+HEAD, commit date, licence — lives outside git unless a tracked artifact carries it. Today it does not, for the older
+reviews: `aider`, `agent-governance-toolkit`, `anthropic-skills`, `agentskills-spec` and `superpowers` are cited by
+`docs/reviews/*` and `docs/COMPETITORS.md` and their clones are gone from this machine, so their shas cannot be
+diffed or re-checked at all (`tools/vendor-pins.mjs --check` prints all five as NOTEs right now). Depends on: 190
+(evidence binding — a cited commit must resolve), 137 (cited-but-unverifiable artefacts).
+Measure: a `check` rule keyed on the **clone's existence** (so non-competitor reviews like
+`security-codemode-review.md` are untouched, and dependency/TUI clones like `ansi-regex` are not required to have a
+review) that fails when (a) a `docs/reviews/<name>-review.md` naming a present `vendor/eval/<name>` clone has no
+`docs/COMPETITORS.md` entry, (b) that review does not name the clone's current HEAD, or (c) the pin table
+(`docs/VENDOR-PINS.md`) is missing, untracked, or its **pin columns** (HEAD, commit date, licence, shallow-ness)
+disagree with the clones. It must NOT fail on the upstream columns — a remote tag moves hourly (measured:
+`prime-agent` published `v0.10.2-beta.15` between two runs ~30 minutes apart), and a guard that fires on hourly churn
+is a guard everyone learns to ignore; those are `fix-soon` advisories at most. *Owner:* impl · *Where:*
+`src/checkup.mjs` (new rule), the `runbooks`/`reviews` collection already needed by 81/82's `runbook-stale` wiring.
+*Acceptance:* red on an injected hand-edited HEAD (proven by the tool today: exit 1 naming the row and column), red on
+an untracked table, green on a tag-only move. Until this lands, `tools/vendor-pins.mjs` is itself **an untested surface**
+— nothing in `demo/` exercises it, so its behaviour is guaranteed only by the injections run against it by hand; a
+`demo/vendor-pins.test.mjs` (mapped into `demo/test-areas.json`, which `demo/test-areas.test.mjs` requires for every
+`demo/*.test.mjs`) belongs with whichever half of this work the team takes.
