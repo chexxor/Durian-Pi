@@ -5290,3 +5290,63 @@ cwd resolves, which is how a Windows path survived in `rig.selfdev.json` on a Li
 shut (expected until the operator answers rows 1–3 of the precondition table in `docs/NEXT.md`). If a later delegate
 runs `--start --allow-dirty --yes-pm-wakes` without an operator grant, this decision was not read. If anyone quotes a
 prefill figure from `throughput.mjs` without the header caveat, it was not read either.
+
+## D148 — The constitution is a THREE-copy artifact, and the copy the seats read is the one in the store (2026-10-28, delegate implementing an operator instruction; amendment + operating rule)
+
+**The operator's instruction:** "Before opening the team up, ensure their constitution is added to their system prompts,
+and includes the section about work protocol that you have in your agents file." Half of that turned out to be a
+mechanism question, not an editing question, and the mechanism is the part worth recording.
+
+**1. There are three copies, and only the third is what a seat sees.** (i) `constitution.txt` — the source, which
+`rig.selfdev.json` **references** (`"constitution": "constitution.txt"`, the single-source fix at `806ce7f`);
+(ii) `rig.starter.json`'s `constitutionInline` — a genuine **copy**, because `init` scaffolds a rig in a directory that
+has no `constitution.txt` beside it (#976, `3eac452`); (iii) a `durig.constitution` **document in the store**, which is
+the one the prompt actually carries: `src/rig.mjs:618` registers the `durig-constitution` section in the Router
+extension, `cli.mjs:392` installs that extension for every seat, and `demo/extensions.test.mjs` proves a registered
+section reaches the model's system prompt (its control shows the section absent when the extension is not installed).
+So a `constitution.txt` edit changes **nobody's** prompt until a writing verb runs — `cli.mjs:726` writes the store doc
+on every `up` that declares a constitution, and the section is session-scoped, so one write re-arms every seat on its
+next request. **The rule:** treat "amended" and "applied" as two states, and prove the second with
+`check`'s `constitution-missing` + `constitution-not-applied` pair, not with the mirror demos — the demos only prove the
+on-disk copies agree. Measured before applying: `store holds 2693 bytes …; the rig file has 3643 …` (an **error**
+finding, exit 1); after `up rig.selfdev.json`: both rules pass and reading the store document the way
+`demo/constitution.test.mjs` does returns 3,643 chars with `P2 Work protocol` present.
+
+**2. The hand-edit the runbook recommends for the starter copy is a trap, and the guard is a round-trip proof.**
+`docs/runbooks/constitution-amendment.md` Do step 2 said "There is no script for this yet; edit the JSON field
+directly". That field escapes apostrophes as `\u0027`, so `JSON.stringify(currentValue)` **is not a substring of the
+file** — a swap built on it silently misses, and re-serializing the whole file turns a one-line amendment into a
+300-line diff the runbook's own gate would have to review. `tools/mirror-constitution.mjs` now does it by locating the
+value span, refusing unless `JSON.parse(span) === parsed.constitutionInline`, re-escaping in the style the file
+already uses, and re-parsing before writing. **The general rule, beyond this file:** when regenerating a generated
+literal, prove the span you found round-trips to the parsed value *before* you touch it — an escaping convention you
+did not notice is invisible to a substring swap. Productization is ROADMAP **212**.
+
+**3. When the gate reports a defect you did not cause, in a file you must touch: fix the byte, name it, sweep the
+class later.** Re-mirroring the starter made `node demo/starter.test.mjs` RED on
+`[no-trailing-newline] rig.starter.json`. That blob has no final `0x0a` in history (`git show HEAD:rig.starter.json |
+tail -c 12` → `"\n}`); the rule fires because `check`'s `text-integrity` rule reads `git diff --name-only HEAD`
+(`src/textintegrity.mjs:trackedChangedPaths`) and so only ever sees files that differ from HEAD. Reading the committed
+blobs instead (`node tools/text-integrity-scan.mjs` → **42 files with faults: 31 `no-trailing-newline`, 11 `bom`**) shows
+the size of the latent set. **The rule:** add the missing byte inside your change (the gate cannot go green without
+it), say so in the commit message, and register the standing class (ROADMAP **211**) instead of expanding your change
+into a 42-file sweep — the 11 BOMs in particular may be intentional Windows/encoding fixtures and must not be stripped
+blind. Do **not** widen `check` to the whole tree by default: that makes an unrelated error block every seat.
+
+**4. Why the new rule is worded as subordination rather than as a peer.** The operator asked for the AGENTS.md
+*Work protocol* (make a deeper version of the task, not a bigger one: what a top professional would do unasked; the
+rawest material; the methods and tools; what would show the result is right; then execute the restatement). In a
+priority-ordered constitution where "the highest applicable rule governs", a second P2 rule that pulls toward
+reinterpreting the request sits at the same rank as `P2 Scope` ("one concern per change") and a small local model
+cannot adjudicate that tie. So the amendment lands as `P2 Work protocol` **immediately after** `P2 Scope` and says in
+its own sentence that it governs *how* you work and never *what* you touch, that P2 Scope bounds the change, and that a
+deeper read which turns into new work is routed with `send_work` or asked with `defer_work` — never taken silently.
+**This is the part to watch:** the rule is only worth having if it changes completions. The tell is not reply length —
+it is whether completions start naming the check that shows the result is right. If the next batch of completions gets
+longer without naming checks, the wording misfired and the amendment should be re-cut, not defended.
+
+**Falsifiable.** Amend `constitution.txt` and run `check` **before** `up`: it must report `constitution-not-applied`
+(error, exit 1) until the store write — if a future `up` stops writing the doc, this decision's mechanism claim is
+wrong. If anyone hand-edits `rig.starter.json`'s inline copy and the three mirror demos go green anyway, they changed
+nothing (the demos are the oracle). If `node tools/text-integrity-scan.mjs` and a later `check` disagree about whether
+a defect is latent, the changed-files-only scoping has moved.

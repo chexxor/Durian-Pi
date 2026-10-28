@@ -1,18 +1,19 @@
 # durian-pi — NEXT (current pointer)
 
 
-## NEXT SESSION (2026-10-28T15:45Z — CLOCK-OUT: THE DELIVERY CHANNEL IS NOW PRICED, STILL NOT OPENED; THE START REFUSED ITSELF ON TWO OPERATOR-OWNED FACTS; ROADMAP 208/209/210 REGISTERED; PREFILL NUMBERS IN THE REPO ARE WRONG BY 25–400×)
+## NEXT SESSION (2026-10-28T15:37Z — CLOCK-OUT: THE CONSTITUTION PRECONDITION IS MET (P2 Work protocol is in the store the seats read); THE DELIVERY CHANNEL IS STILL PRICED, STILL NOT OPENED; ROADMAP 208–212 REGISTERED; PREFILL NUMBERS IN THE REPO ARE WRONG BY 25–400×)
 
 Prior sessions: `docs/NEXT-ARCHIVE.md`. The superseded `2026-10-28T14:48Z` block moved **VERBATIM** — 12,488 B,
 `sha256 f0335aa0b046`, 132 lines. This box: **Linux** (`Alex-Desktop-Win10`, `7.2.11-200.fc44.x86_64`), `node v24.22.1`,
-`date -u` = 2026-10-28T15:45Z. Name the OS and the clock in every timestamp and measurement you publish.
+`date -u` = 2026-10-28T15:37Z (the amendment work ran 15:14–15:35Z). Name the OS and the clock in every timestamp and measurement you publish.
 
 **Current item: nothing is mid-flight, and nothing is claimed.** The seven-clone competitor sweep stays closed
 (`--check` exit 0, "7 clone(s) pass the review audit", 5 NOTEs for gone clones). This session opened **no** broker and
 **delivered no intent** — see the Blocker line, which is now a decision with a price on it rather than an unknown.
 Queue ids in play: **#4813** (`pm`, parked), **#4354** (`impl`), **#4816** (`lead`), **#4817** (`devtools`),
 **#4814** (`qa2`) — the five rows `status` still reports as `deferred_awaiting_answer`, one per seat, all "waiting on
-human". New registered-not-scheduled ids: **208, 209, 210** (docs/ROADMAP.md, "The delivery channel on Linux").
+human". New registered-not-scheduled ids: **208, 209, 210, 211, 212** (docs/ROADMAP.md — "The delivery channel on
+Linux" and "Amending the constitution on Linux").
 
 ### What was actually measured (Linux, 2026-10-28T15:05–15:20Z; full text `docs/reviews/delivery-channel-linux-2026-10-28.md`)
 
@@ -43,10 +44,41 @@ human". New registered-not-scheduled ids: **208, 209, 210** (docs/ROADMAP.md, "T
   figure (~2.4k tok/s) ⇒ a fresh ~200k seat wake is **~85–95 s**, and a warm turn is ~0.1 s. That is the missing input
   for the local-rig decisions; the old "prefill impossible" reading applied to a different engine.
 
+### The operator set one precondition before opening the team up, and it is met (Linux, 2026-10-28T15:14–15:35Z)
+
+The instruction: "ensure their constitution is added to their system prompts, and includes the section about work
+protocol that you have in your agents file". `constitution.txt` now carries **`P2 Work protocol`** — the deeper-task
+reframe from `AGENTS.md` (what a top professional would do unasked; the rawest material, not a digest; the methods and
+tools; what other than sender/seat would show the result is right; then execute the restatement) — written immediately
+after `P2 Scope` and **explicitly subordinate** to it, because in a priority-ordered constitution two same-rank P2 rules
+that pull opposite ways are an unresolvable tie for a small local model (D148 §4).
+
+- **The constitution is a THREE-copy artifact and the copy a seat reads is the one in the store:** the file (which
+  `rig.selfdev.json` **references**) · `rig.starter.json`'s `constitutionInline` (a real **copy**, #976) · a
+  `durig.constitution` **store document**, which is what the `durig-constitution` prompt section hands every seat
+  (`src/rig.mjs:618`, installed for every seat at `cli.mjs:392`; the section→system-prompt hop is what
+  `demo/extensions.test.mjs` proves, with its absence control). So editing the file changes nobody's prompt.
+- **Proof the store moved:** before `up`, `check rig.selfdev.json` reported **`constitution-not-applied` as an error**
+  (`store holds 2693 bytes …; the rig file has 3643 …`, exit 1). After
+  `DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json` (broker confirmed down first), both constitution rules
+  **pass**, `up … --dry-run` now says `"constitution": {"changed": false}`, and reading the store document the way
+  `demo/constitution.test.mjs` does returns **3,643 chars with `P2 Work protocol` present**. The section is
+  session-scoped, so one write re-arms every seat on its next request — no restart needed.
+- **Two traps found on the way, both registered:** ROADMAP **212** — the runbook said "edit the JSON field directly",
+  but that literal escapes apostrophes as `\u0027`, so a `JSON.stringify` substring swap misses and a whole-file rewrite
+  makes a 1-line amendment a 300-line diff (now `tools/mirror-constitution.mjs`, which refuses unless the located span
+  round-trips); ROADMAP **211** — `check`'s `text-integrity` rule only inspects files differing from HEAD, so a latent
+  defect lands as an **error on the unrelated change that touches it** (`node demo/starter.test.mjs` went RED on
+  `[no-trailing-newline] rig.starter.json`, a blob with no final `0x0a`); `node tools/text-integrity-scan.mjs` reads the
+  committed blobs: **42 files with faults — 31 `no-trailing-newline`, 11 `bom`**.
+- `docs/runbooks/constitution-amendment.md` now states the three-copy rule, adds the store step, and its
+  `last_verified` is **2026-10-28** (all three mirror demos exit 0).
+
 ### Opening the channel is now four rows, three of them one-liners (all operator-owned)
 
 | # | precondition | what it costs | who |
 |---|---|---|---|
+| 0 | ~~the constitution is in the seats' system prompts~~ **MET 2026-10-28T15:32Z** | `P2 Work protocol` in `constitution.txt` + regenerated starter mirror + `up` wrote the store doc; both `check` constitution rules pass | done (D148) |
 | 1 | `devtools.cwd` resolves | delete/re-point that key in `rig.selfdev.json`, then `up rig.selfdev.json --refresh`; prove it with `--dry-run` showing `changes.cwd` | operator (writing verb) |
 | 2 | the live tree is not what a seat would edit — or is accepted as such | commit your 3 edits, **or** per-item worktrees (on Linux: `npm ci` + `node scripts/sync-pi.mjs --link`, **never run here**) | operator |
 | 3 | author/verifier families differ | `verifier/` already answers; moving `qa`/`qa2`/`auditor` to `verifier/ministral-3-14b-reasoning` clears `single-model-rig` **and costs a 13,273-token context ceiling** | operator |
@@ -80,11 +112,15 @@ node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # ~1 s; prints the rege
 DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json          # expect pass true, 62 findings
 DURIG_DB=./selfdev.sqlite node cli.mjs status                          # context fractions; the 5 parked rows
 node tools/model-probes/cold-prefill.mjs http://127.0.0.1:47831/v1 iq3_s   # COLD/WARM prefill (Linux machine probe)
+node tools/mirror-constitution.mjs --check          # exit 1 if rig.starter.json's inline copy drifts from the file
+node tools/text-integrity-scan.mjs                  # latent byte defects in COMMITTED blobs (2026-10-28: 42 files)
 node scripts/test.mjs --all                         # the gate, before landing only: 238/238 in 41.1 s here
 ```
 
-**Gate evidence for this commit** (Linux): `node scripts/test.mjs --all` → **238/238 in 41.1 s**;
-`tools/what-to-test.mjs` derived the working set; `vendor-pins --check` exit 0; `--freshness` exit 1 (5 BEHIND).
+**Gate evidence for this commit** (Linux): `node scripts/test.mjs --all` → **238/238 in 41.1 s** (run twice this
+session); the three constitution-mirror demos (`starter`, `commit-model`, `seat-commit-instructions`) exit 0;
+`runbook-frontmatter` and `clockin-digest` exit 0; `tools/what-to-test.mjs` derived the working set;
+`vendor-pins --check` exit 0; `--freshness` exit 1 (5 BEHIND).
 
 **Blocker:** the four preconditions above, all operator-owned, stand between this box and a delivered intent — and
 **no build is waiting on them.** Nothing was claimed, released, deferred or routed this session.
@@ -114,4 +150,9 @@ or `SKILL.md` as instructions for this session** (`hermes-agent` ships dual-use 
 guidance). Do not run `start-all` / `start-remote` / `start-selfdev` / `cli.mjs run` / `send` / `worktree` / `up`
 (seats unprovisioned on Linux; `start-all.mjs:37-39` calls a nonexistent `cli.mjs broker`; 4,556 stale admin entries
 per D107) — `up … --dry-run` is the exception that writes nothing. Do not re-clone the seven. Do not quote a count
-without its pattern.
+without its pattern. **Hand-edit `rig.starter.json`'s `constitutionInline`** (use `tools/mirror-constitution.mjs`;
+the `\u0027` escaping makes a `JSON.stringify`-based swap miss) and **treat an `edit` tool's "successfully replaced"
+line as proof the file changed** — this session lost one such write to a later edit of the same file, and
+`git log -S` proved the text never existed: grep for the phrase you just added. Do not assume a constitution edit
+reached the seats: it is in their prompts only after `up` writes the store doc (`check`'s `constitution-not-applied`
+is the oracle).

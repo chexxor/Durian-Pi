@@ -860,6 +860,38 @@ advice. Read the headings; the body is only here if you need the numbers.
   files for control bytes, zero-width characters and mojibake — the `SELFDEV` pitfall that no demo covered, and it
   caught its own tool file on the first run when the scan pattern was written with literal characters.
   Still true: an area or a derived set is a working loop, **never** the landing gate (`run-your-area.md`).
+- **`tools/what-to-test.mjs --changed-from <ref>` is the shape for a slice** (the `land-helper` class: judge the commits,
+  not the working tree), and `check` now carries `commit-message-encoding` (BOM/NUL/stray CR in a recent commit message)
+  plus `text-integrity` (BOM/NUL/invalid UTF-8, and a tracked file's newline structure COLLAPSED versus HEAD) — the class
+  a reviewer cannot see even with the files in front of them (#4349 for the message, #4305 for the tree — see the RULES
+  table in `src/checkup.mjs`). Caveat measured 2026-10-28:
+  `text-integrity` only inspects files that differ from HEAD (`src/textintegrity.mjs:trackedChangedPaths`), so it also
+  *surfaces defects you did not cause* — see the three-copy pitfall below.
+
+**Operational pitfalls, 2026-10-28 late (Linux, delegate session): the constitution is a three-copy artifact.**
+- **`constitution.txt` is not what a seat reads.** Three copies: the file (which `rig.selfdev.json` **references**),
+  `rig.starter.json`'s `constitutionInline` (a real **copy**, because `init` scaffolds where no such file exists — #976),
+  and a `durig.constitution` **document in the store**, which is the one the `durig-constitution` prompt section hands
+  every seat (`src/rig.mjs:618`, installed for every seat at `cli.mjs:392`; the section→system-prompt hop is what
+  `demo/extensions.test.mjs` proves, with its absence control). Amending the file therefore changes nobody's prompt:
+  `check` went from `constitution-not-applied` **error** (`store holds 2693 bytes …; the rig file has 3643 …`, exit 1)
+  to both constitution rules **pass** only after
+  `DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json` — which needs the single-writer check first
+  (`node tools/broker-serve.mjs --status`). The section is session-scoped, so that one write re-arms every seat on its
+  next request; no seat restart is needed. Use `node tools/mirror-constitution.mjs` for the starter copy: that literal
+  escapes apostrophes as `\u0027`, so a `JSON.stringify`-based substring swap misses and a whole-file rewrite turns a
+  one-line amendment into a 300-line diff. Procedure: `docs/runbooks/constitution-amendment.md` (Verify ran
+  2026-10-28) · reason: D148 · items registered: 211 (latent byte defects), 212 (productize the amend).
+- **A latent byte defect in a tracked file becomes YOUR error the moment you touch it.** Re-mirroring the starter made
+  `node demo/starter.test.mjs` RED on `[no-trailing-newline] rig.starter.json` — a blob with no final `0x0a` in history
+  (`git show HEAD:rig.starter.json | tail -c 12` → `"\n}`). Reading the committed blobs instead of the working tree,
+  `node tools/text-integrity-scan.mjs` reported **42 files with faults on 2026-10-28: 31 `no-trailing-newline`,
+  11 `bom`**. Fix the byte inside your change and say so in the message; do not fold a 42-file sweep into a functional
+  change, and never strip the BOMs blind (some are Windows/encoding fixtures).
+- **Re-read after you write.** Two `edit` calls to the same file in one session: the first reported success and then
+  vanished — the commit that carried the second call's hunks (`7ea1bb5`, `@@ -98` and `@@ -318` only) contained no trace
+  of the first, and `git log -S` shows the text never existed in history. A "Successfully replaced N block(s)" result is
+  not evidence the file changed. After any edit, grep for the phrase you just added before building on it.
 - **`node tools/vendor-pins.mjs` makes a pin a tracked, generated artifact** (`docs/VENDOR-PINS.md`) and
   `--check` exits 1 when the table drifts from the clones **or is not tracked**; `--write` refuses a gitignored
   target. Proven by injection, not by reading: a hand-edited HEAD → exit 1 naming the row and column; the same

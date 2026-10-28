@@ -3650,3 +3650,50 @@ host, naming the seat, the path and the OS; green when `cwd` is absent (fallback
 the demo must build the fixture with a path from the *other* OS rather than a made-up one, or it tests nothing. Note:
 `check`'s demo suite has an existing false-positive class to avoid — `runbookFrontMatterProblems` expects typed
 front-matter, see `docs/runbooks/README.md`.
+
+## Amending the constitution on Linux (2026-10-28) — what the mirror and the gate cost
+
+The operator's precondition before opening the delivery channel was "ensure their constitution is added to their
+system prompts, and includes the section about work protocol that you have in your agents file". The amendment is
+landed (`P2 Work protocol` in `constitution.txt`, applied to `selfdev.sqlite`, mirrors green). These two items are the
+friction it exposed, not the amendment itself.
+
+**211. A latent byte defect in a tracked blob becomes someone else's error — `check` only looks at files that differ
+from HEAD.** *(impl; measured 2026-10-28)* `check`'s `text-integrity` rule reads its paths from
+`src/textintegrity.mjs:trackedChangedPaths` (`git diff --name-only HEAD`), so absolute faults — BOM, NUL, invalid
+UTF-8, no final newline — in untouched files are invisible until the first person who edits that file inherits them as
+an `error` finding, and `check` exits 1 on their change. Hit live: re-mirroring `rig.starter.json` for a constitution
+amendment turned `node demo/starter.test.mjs` RED on `[no-trailing-newline] rig.starter.json` — that blob has no final
+0x0a (`git show HEAD:rig.starter.json | tail -c 12` → `"\n}`), a defect months older than the change. Reading the
+committed blobs instead of the working tree (`node tools/text-integrity-scan.mjs`, delegate instrument, added
+2026-10-28) reports **42 files with faults: 31 `no-trailing-newline`, 11 `bom`**. *Owner:* impl · *Where:*
+`src/checkup.mjs` (a `text-integrity-latent` rule, or extend the existing rule to take a scope: changed files now,
+whole tree on a sweep) + a one-off hygiene commit · *Acceptance:* the 31 newline cases are fixed in one commit that
+touches no content; each of the 11 BOMs is either explained as intentional fixture material (some are Windows/encoding
+test material — do not strip them blind) or fixed, with the reason in the commit; a sweep command exists that reports
+the same set without a dirty tree, and `demo/text-integrity*.test.mjs` stays green. · *Blind spots:* a final-newline
+fix is a content-free diff that will show up as a modified line in blame, so it wants its own commit and should not be
+folded into a functional change (F30 class); and `check` judging only changed files is deliberate — judging the whole
+tree on every run would make an unrelated error block every seat — the fix is a scoped sweep, not a stricter default.
+
+**212. Productize the constitution amendment — the runbook still says "there is no script for this yet", and the
+hand edit it recommends is a trap.** *(impl; measured 2026-10-28)*
+`docs/runbooks/constitution-amendment.md` Do step 2 tells the reader to set `rig.starter.json`'s
+`constitutionInline` by hand because no script exists. That field's literal escapes apostrophes as `\u0027`, so the
+plain `JSON.stringify` form of the value is **not present in the file** — a substring swap built from
+`JSON.stringify(newValue)` misses, and a whole-file `JSON.stringify` rewrite turns a one-line amendment into a
+300-line diff that the runbook's own gate then has to review. The delegate instrument `tools/mirror-constitution.mjs`
+(added 2026-10-28) does it safely: locate the value span, prove `JSON.parse(span) === parsed.constitutionInline`
+before touching anything, re-escape in the style the file already uses, re-parse, write only if the round-trip equals
+`constitution.txt`, and print the byte delta (`inline 2693 -> 3643 chars; only the value span changed: true`).
+*Owner:* impl · *Where:* `scripts/amend-constitution.mjs` (or `cli.mjs constitution --amend <file> [--dry-run]`),
+reusing `src/rig.mjs`'s constitution resolution (`constitutionInline` **or** `constitution` path, and the ambiguity
+warning already at `cli.mjs:578`) so the tool also refuses when a rig sets both · *Acceptance:* given an amended
+`constitution.txt`, one command updates every rig file that carries an inline copy and leaves a rig that SOURCES the
+file alone (`rig.selfdev.json` → `"constitution": "constitution.txt"`) untouched; it is a no-op when already in sync;
+the three constitution-mirror demos (`starter`, `commit-model`, `seat-commit-instructions`) exit 0 after it runs; the
+runbook's Do step 2 stops telling humans to hand-edit JSON. · *Blind spots:* it can only mirror what it can parse — a
+rig with a malformed inline span must be refused, not rewritten (the instrument's round-trip guard is the model); and
+the store is a THIRD copy, which `up` re-applies separately, so the command must tell the operator whether the store
+still needs the `up` (the `check` rule `constitution-not-applied` is the oracle for that, and before this amendment it
+was a live error: store 2,693 bytes vs rig file 3,643).
