@@ -4005,3 +4005,96 @@ review is legitimate (that is the aider lesson's twin, D146). · *Blind spots:* 
 workflows where a clone exists to support a *pin experiment* that never becomes a review, so the gap must be nameable and
 schedulable rather than simply fatal; and the review audit's key is the `<name>-review.md` stem, so a cross-project review
 file (223's second file) does not satisfy it by itself.
+
+
+## The wall-clock budget: two currencies, and the model is only 12.7% of the machine's time (2026-10-28, delegate; measured by `tools/latency-budget.mjs`, evidence in `docs/reviews/wallclock-budget-2026-10-28.md`)
+
+Every previous session reasoned about "the loop is slow" in units of model tok/s. The store persists two unrelated
+quantities and they disagree: **item latency** (`queueItems[].transitions[].at`: 6,339.1 h summed over 3,748 done
+items — **WAIT 69.1% / WORK 13.7% / HELD 7.4%**, median 14.3 min, p95 7.2 h) and **machine time**
+(`tasks.record.startedAt/endedAt`: 402.4 h of generation busy time inside a 404.8 h span — model calls **51.1 h**,
+tool calls 18.0 h, compaction 15.9 h). The four items below each attack a measured term that is bigger than the model.
+The ranking is in the review §6; the demoting experiment is stated there (re-run the instrument after one day of a
+resident broker and compare).
+
+**225. A running generation's wall-clock is a black box, and the 0.23% longest runs hold 39.0% of all machine busy time.**
+*(devtools + architect; measured 2026-10-28)* 137 generations ran **≥10 min** and hold **156.8 h** of the 402.4 h of
+generation busy time, and inside their own windows the conversations committed **1–3 events each** — worst rows:
+`gen #268436` (seat `qa2`) 1,212 min, 3 events, outcome `failed 402 "You need positive balance"`; `gen #30250`
+(`advocate`) 631 min, 3 events, completed; `gen #12666` (`qa`) 586 min, **1 event**. So that time is **in flight, not
+working** — waiting on capacity, on a provider retry, on a tool queue, or on the harness being dead — and **no surface
+decomposes it**: `tasks.record.state.checkpoint.phase` exists mid-run (observed `phase:"request"`) but a terminal row
+carries no phase, no wait accounting and no slot-wait total, so `log`/`status`/`metrics` cannot say what the 10 hours
+were. Until this lands, every "make the rig faster" decision is a guess about the largest term in the machine budget.
+*Owner:* devtools (the accounting), architect (what the phases should be) · *Where:* `src/genlock.mjs`
+(`withGenerationSlot` — record slot-wait separately from the provider call it wraps), `src/broker.mjs` / the generation
+task's `state.checkpoint` (a per-phase accumulated duration written at phase change, so a terminal row keeps it),
+`src/attention.mjs` (a `generation_in_flight_long` notice carrying elapsed time, phase, and the event count the
+conversation produced), and `src/metrics.mjs` (a wall-clock-by-phase measure) · *Acceptance:* for a generation, the
+sum of its phase durations equals its wall-clock within 1%; a demo forces a slot wait and shows the wait attributed to
+the slot rather than to the model; a demo forces a long in-flight generation and asserts the attention row names the
+phase and the event count; `tools/latency-budget.mjs`'s long-tail section is reproducible from the store afterwards.
+*Blind spots:* `endedAt - startedAt` for a durable generation legitimately spans a **restart** (pi-durable resumes
+tasks), so part of the 156.8 h is downtime and belongs to item 1, not here — the phase accounting is exactly what tells
+those apart, so do not "fix" this by capping generation duration (that kills resumed work); the 5-minute degeneration
+bound (`src/degeneration.mjs`, D64/#874) is a *turn*-level guard on a different quantity — do not widen it on the
+strength of this item; and a per-phase write is a new write path (D24 says derive where possible), so the accounting
+must be checkpoint-scoped, not a new event stream.
+
+**226. 14,377 generations ended in one provider error and nothing stopped the wakes: 24.4% of runs are waste.**
+*(impl + devtools; measured 2026-10-28)* Of 59,851 generations, **14,630 (24.4%) ended in a non-completed outcome,
+holding 59.2 h (14.7%) of busy time**; the top class is a single unfunded account: **14,377 rows** ending
+`402 "You need positive balance to do inference"` (also present as text in **18,309 store entries** — D152 §4). Each
+such row is a full **wake**: the seat was admitted, its context moved (the rig's turns are 94.0% `cacheRead`-dominated
+— 9,071,180,595 cached tokens), and inference never happened. Today `attention.last_run_failed` is per-seat and about
+the most recent run only, so a 14,377-run burst is invisible as a burst, and nothing halts. *Owner:* impl (the halt),
+qa (does the halt hold without stranding real work) · *Where:* `src/attention.mjs` (a provider-error-class counter:
+last N generations grouped by error class, with the class string, count and total duration) + `src/supervisor.mjs`
+or the broker's wake path (a provider circuit-breaker: after K consecutive error-class outcomes across any seat, stop
+waking, log a `PROVIDER-BLOCKED` line to `<db>.broker.log`, and keep draining only when a probe completes) + the
+delegate's twin already exists in `tools/broker-serve.mjs --status` (one real completion per provider) · *Acceptance:*
+against a stub provider that always returns 402, the broker stops waking seats after K outcomes and says why in the
+log and in `attention`; a single transient 429 does **not** trip it (the bound is consecutive-and-classed); the
+counter prints the class string it matched, never a bare count. *Blind spots:* "stop waking" must not strand the 9
+`running` tasks / 11 non-terminal submissions a killed broker already left (D152 §2) — the breaker pauses new wakes,
+it does not abort in-flight ones; 402 vs 429 vs `model not available` need different remedies (add balance, back off,
+change model), so one class-blind halt is worse than none; and the store's error text crosses machines and providers
+(this store came from Windows), so a class counter must name the provider it saw it on.
+
+**227. Whether a `held` row is now drainable is computable, and only a delegate instrument computes it.**
+*(qa + pm; measured 2026-10-28)* **277 `held` rows sit a median 213.5 h (max 289.7 h) since their last transition and
+19 `deferred` rows a median 145.1 h**; `node tools/queue-drain-audit.mjs` (1 s) measures **91 held LANDING rows, 71 of
+them already fully on main — 26% of the held backlog is zero-build closable**, and 69 rows are orphan candidates whose
+cited gates are all terminal. The same condition was measured on 2026-10-19 as **153 held rows / ~51 with terminal
+gates** (`docs/runbooks/stale-held-backlog.md`, INC-2026-10-19): the runbook, the delegate instrument and `pm`'s
+diligence are what close these rows, session after session, which is a per-session wall-clock tax and a human-noticing
+dependency (`check`'s `citation-unresolvable` finds *dead* pointers, `metrics`' `queue-ageing` finds *old* rows —
+neither asks whether the cited work is **reachable from main now**). *Owner:* qa (the rule), pm (the release/cancel
+decision the rule names — the delegate never claims or releases these) · *Where:* `src/checkup.mjs` (a `held-gates-clear`
+finding: for each held row, resolve its citations to commits and test reachability from the shared branch — the
+reachability code already exists in `tools/queue-drain-audit.mjs`'s `git rev-list` pass over the ref tips) plus a
+matching `attention` notice that names the closable count and the command; `demo/` coverage against a fixture where the
+gate commit is reachable and one where it is not · *Acceptance:* the finding prints the count, the row ids, and the
+commit that makes each one closable; it is silent when citations are unresolvable (that is `citation-unresolvable`'s
+job, not a second verdict on the same fact); a demo shows reachable→finding, unreachable→silent, unresolvable→the
+other rule. *Blind spots:* reachability from a ref tip is not the same as patch-equivalence (a squashed or rebased
+landing is the case `land.mjs`'s `rerere` path exists for — check `git log --grep='#<id>'` before calling a dead
+citation dead, as `checkup.mjs:818` already instructs); releasing a row is `pm`'s verb and this rule must produce a
+notice, never an automatic release; and 47 ref tips cost ~1 s to enumerate, so the rule must batch, not `git` per row.
+
+**228. `cli.mjs status` prints 22.7 MB per read, and every viewer and every scripted delegate pays it.**
+*(devtools; measured 2026-10-28)* `node cli.mjs status` on this store emits **22,748,093 bytes in ~2 s**: all 4,821
+queue rows with **full `body` text** and all `transitions`, plus 12 seat context blocks. `watch`, `tui.mjs`,
+`queue-drain-audit` and `tools/latency-budget.mjs` each re-pay it per pass, and it is the reason a store read that is
+"~1 s" feels like several seconds at the terminal; it also makes `queue` unusable over a socket without a filter.
+*Owner:* devtools · *Where:* `cli.mjs` `cmdStatus`/`cmdQueue` (a projection: `--ids`, `--status <state>`, `--to
+<seat>`, `--no-body`, and a `--fields` list; default stays the full document so nothing that parses it today breaks) +
+`docs/COMMANDS-AND-THE-BROKER.md` for the flag table + a demo asserting the filtered read is smaller and that the row
+count and attention output are **unchanged** between the two forms · *Acceptance:* `status --status held --no-body`
+prints the same held ids, same attention and same counts as the full read at <5% of the bytes; the full default is
+byte-identical to today; no flag changes the single-writer rule (these stay viewers: D11 — they must not schedule).
+*Blind spots:* attention derivation must not be trimmed along with the body (a projection that hides the rows that
+make a notice is a false green); truncating bodies tempts a seat to act on a subject alone, which is the exact failure
+the "read the body before releasing a row" instruction exists to prevent — so `--no-body` is a **delegate/viewer**
+convenience and must be loud in its own output header; and the 22.7 MB is also a symptom of a 4,821-row queue, which
+227's drain, not a formatter, is the answer to.

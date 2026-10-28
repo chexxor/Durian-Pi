@@ -5591,3 +5591,90 @@ does **not** log `STRANDED`/`RECONCILE` for the 9 orphaned tasks, §4's heal pat
 the real gap. If `.spike/phantom-seat-root-2026-10-28/` is gone and the repo root holds no such path but the store still
 reports `source: persisted seat cwd` for any seat, the cause is unaddressed and the cleanup was cosmetic. If a future
 `vendor-pins --check` prints a PASS that someone reads as review coverage, 224 has not landed.
+
+
+## D153 — Wall-clock is a **two-currency** measurement, and the model is only 12.7% of machine time: the ranked removal list, and what I deliberately did *not* decide (2026-10-28, delegate; measurement + operating policy, no operator ruling taken)
+
+**Why this is a decision and not a note.** Every session that talked about "the loop being slow" talked in units of
+model tok/s (`tools/model-probes/`, the PolyStrata tables in `docs/SELFDEV.md`, the 5-minute degeneration bound). The
+store persists **two unrelated quantities**, and they disagree about where the time went, so any ranking built on one of
+them is wrong in a predictable direction. Choosing *which* term to attack first is an operating policy that the next
+session will otherwise re-argue from scratch; recording it is the point. Evidence:
+`docs/reviews/wallclock-budget-2026-10-28.md`; instrument `tools/latency-budget.mjs` (**3.0 s, exit 0**, read-only —
+store opened `readOnly:true`, and `cli.mjs status` is a viewer that never wakes a seat, D11); raw output at
+`.spike/latency-budget-2026-10-28.out`. Box: Linux (`Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`),
+`node v24.22.1`, run 2026-10-28T18:47:50Z.
+
+**1. The two currencies, with the numbers.** **Item latency** (from `queueItems[].transitions[].at`, read through the
+rig's own reader — never through SQL, because the queue is delta-encoded, `docs/runbooks/store-probe-identity.md`):
+6,339.1 h summed over 3,748 done items, median 14.3 min, p95 7.2 h, max 131.9 h, split **WAIT 69.1% / WORK 13.7% /
+HELD 7.4%**. **Machine time** (from `tasks.record.startedAt/endedAt`): 402.4 h of generation busy time inside a 404.8 h
+span, of which **model calls 51.1 h (12.7%)**, tool calls 18.0 h, compaction 15.9 h. Item latency is not elapsed time
+(many rows wait at once) and machine busy time is not wall-clock (generations overlap, max 11 in flight) — **the
+decision is that both must be printed before any optimization is ranked**, and neither may be quoted without the other.
+
+**2. The demonstration that already exists in this store, and outranks everything else.** Per-day claim-wait p50 and
+throughput: the `run`-invoked days 2026-10-13→15 waited **101.8–114.3 min** per item and landed 47–132 items; the
+resident-broker days 2026-10-17→21 waited **2.6–5.4 min** and landed **314–741**. That is a 10–40× claim-latency and
+~10× throughput difference from *keeping the broker up*, measured on this rig's own history. Corroborating from the
+other table: **219.6 h of the 404.8 h span (54.3%) had no generation in flight**, and the last `done` transition is
+**2026-10-22T17:29:11Z (145.3 h before the measurement)** — six days of zero landings. Consequence for the standing
+blocker: **the persisted-seat-root decision (221) is a wall-clock decision, not a hygiene one** — each session it stays
+unruled is drawn from the 219.6 h column, and 209 (a cross-platform launcher) plus 61–67 (a supervisor) are the items
+that convert that column into landings.
+
+**3. The ranked removal list I am proposing to the team** (ranked by measured hours; the four new rows are
+**225–228**, registered not scheduled): (1) keep the channel resident — 219.6 h idle, and 221/217 are today's gates;
+(2) **225** decompose a running generation, because the **0.23% of generations ≥10 min hold 39.0% (156.8 h)** of machine
+busy time while their conversations committed **1–3 events inside those windows** (worst: `gen #268436`, 1,212 min, 3
+events, ended `402`); (3) **226** stop waking seats onto a dead provider — **14,630 generations (24.4%) ended in an
+error, 59.2 h of busy time**, of which **14,377** are one unfunded account's `402`; (4) **227** drain the parked
+backlog instead of re-auditing it — **277 `held` rows idle a median 213.5 h**, and `queue-drain-audit` measures **71 of
+277 already fully on main** (zero-build closable) while only a delegate instrument plus human diligence knows that;
+(5) **228** give `status`/`queue` a projection — **22,748,093 bytes (~2 s) per read**; (6) hold context rather than
+chase model quality — **94.0% cache hit** over 9.07 B cached tokens is the only reason 576.7 M fresh tokens are
+affordable, **23,053 prompts exceeded 150 k** and the largest was **1,009,360 tokens against a declared 200,000**
+window (that is item **208**, not a new one).
+
+**4. What I explicitly did *not* decide.** No model change, no provider change, no `DURIG_MAX_CONCURRENT_SEATS` change
+and no degeneration-bound change. On the cap specifically: `durig.config.default.json` ships `"1"` while
+`durig.config.json` sets nothing and the observed profile is **not** single-flight (81 h at 1, 45 h at 2, … max 11 in
+flight) — so raising or lowering the cap on the strength of the default file would be acting on an unread merge rule
+(`src/config.mjs loadConfig`), and 225 is the prerequisite for touching it at all. I also claimed, completed, deferred
+or released **no** queue row: 227 names `pm` as the owner of every release, and the delegate's part stopped at the
+measurement and the rule request.
+
+**5. Two process facts, because they are where the delegate's own wall-clock goes.** (a) The **index beat the probe**:
+`tools/README.md` exists because earlier sessions re-derived shipped reads; this session started by reading it, and the
+one genuinely new read (wall-clock) became a 3.0 s instrument rather than an hour of SQL — that is the substitution to
+keep making. (b) **`node --check` before running a new tool** (0.02 s): an instrument died on `Missing } in template
+expression`, and the identical template line parsed fine standalone, so the fault was in the context and eyeballing it
+cost ~6 minutes. Both habits are written into `tools/README.md` rather than left as intent, per D150 §2 (a lesson in
+prose rots; a lesson in an index or a rule gets used).
+
+**Falsifiable.** If a resident-broker day re-measures claim-wait p50 above ~30 min, or landings near zero *with*
+generations in flight, then ranking channel-uptime first (§2/§3 item 1) is wrong and capacity (225) is the ceiling. If a
+broker start logs `STRANDED`/`RECONCILE` and the ≥10-minute tail shrinks in the next measurement, then part of the
+156.8 h was downtime being counted as busy time, and 225's phase accounting must be read as the discriminator rather
+than as a fix. If the next `tools/latency-budget.mjs` run reports a cache hit materially below 94.0%, §3 item 6 stops
+being a footnote and becomes the top constraint. If a `held-gates-clear` rule ever auto-releases a row, 227's owner
+boundary was violated — the rule reports, `pm` releases.
+
+**Addendum, measured later the same day (Linux clone) — the seat-root state is host-local, and a Windows-shaped root
+mis-classifies as the live tree on Linux.** Two facts that change how 221 should be read across machines:
+
+1. **This Linux clone has no seat-root state at all**: `git worktree list --porcelain` = **1 entry** (main), no
+   `/home/chexxor/Git/Durian-Pi-worktrees/`, no `.git/worktrees/`, no `selfdev.worktrees.json`, and no `*selfdev*` entry
+   under `~/.pi/agent` — so the **persisted seat cwd**, which is the first link in `src/seatroot.mjs`'s chain and the
+   thing 221/D152 §6 found stuck on `D:\`, **does not exist on this host**. `describeSeatRoot({persistedCwd: undefined,
+   env:{DURIG_SEAT_ROOT:"/home/chexxor/Git/Durian-Pi-worktrees/engineer"}})` prints `source: DURIG_SEAT_ROOT`. So Linux
+   is **clean-by-absence, not clean-by-fix**, `DURIG_SEAT_ROOT` must be exported on every Linux run (otherwise the chain
+   falls through to `process cwd` = the main checkout), and the first Linux `up`/`worktree` **creates** state rather than
+   migrating it — which is exactly when `docs/runbooks/workspace-move.md` says to inventory.
+2. **The residue is worse than wrong on the other OS.** `classifyGitRoot("D:\\Git\\Durian-Pi-worktrees\\engineer")`
+   measured on Linux prints **`main-worktree` ("the main checkout")**, because the Windows string resolves as a path
+   *relative to cwd* and the walk up finds this clone's `.git`. A stale Windows root on Linux is therefore
+   **mis-classified as the live tree** — the precise F21 failure `src/seatroot.mjs` exists to prevent ("a VERIFIER
+   mistook its ISOLATED item worktree for the LIVE tree"). 221's A/B/C ruling should be made with that asymmetry in
+   mind: the value is not inert once it crosses hosts. (What the write guard does with such a value is **unverified** —
+   the delegate ran no write verb to find out, and the team should not infer it from this note.)
