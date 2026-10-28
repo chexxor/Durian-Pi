@@ -5471,3 +5471,57 @@ disagree about a timing, the index has drifted and the index loses. If `clockin`
 clock-out and the session committed anyway, §3 did not hold; once **213** lands, the suite should fail instead. If
 `"toolName":"bash"` is still **0** on Linux after 217, the channel is still not open in the sense that matters (D149's
 check, restated here because 2b is now a precondition rather than a finding).
+
+## D151 — The pi pin: manifest made exact, the pnpm ambiguity ended, and **I published a wrong claim about this box's runtime from an instrument that reports nothing** (2026-10-28, delegate acting on accepted recommendations)
+
+**1. What was executed (operator accepted all three recommendations).** `package.json` dependency
+`"@earendil-works/pi-coding-agent"` reverted `^1.3.0` → **exact `1.3.0`**; `"packageManager": "npm@11.19.1"` added (measured
+absent before, as were `engines`); the **3,156-line** `package-lock.json` reformat discarded with
+`git checkout -- package-lock.json` rather than landed inside a functional change; the untracked
+`pnpm-lock.yaml` (46 KB) and `pnpm-workspace.yaml` **moved to `.spike/pin-hygiene-2026-10-28/`** rather than deleted, so the
+choice stays reversible. Verified, not assumed: the reverted lock declares exact `1.3.0` at root and resolves
+`pi-coding-agent-1.3.0.tgz`, so manifest and lock **agree** (the reason `npm ci` — what `src/worktree.mjs` runs per worktree —
+works at all), and `npm ci --dry-run --prefer-offline` exits **0** with only install-script warnings.
+
+**2. Why exact, when the range looked inert.** Two mechanisms protect us today and neither is a reason to relax the manifest:
+worktree prep runs `npm ci` (`src/worktree.mjs:207-210`), which obeys the lockfile, and it pre-links node_modules to the built
+pin (`:238-242`). But `^1.3.0` is the fallback for a bare `npm install` — human or seat — and `npm view` reported **published
+`1.4.0`** while `pi-main.pin.json` pins `2ec55d808d455b1a64a2bf7888198207a096120a` (2026-10-19) as "the commit durig is
+validated against". At the seam that matters most — `src/tui/durable/imports.mjs:1,8`, commented *"Resolve the PINNED
+coding-agent package"* — a drifting pi is a change to the **edit tool and shell tool semantics** that 215/217/218 are designed
+against. One character, so the cost side of the trade was trivial.
+
+**3. The correction, stated plainly: I was wrong, and an instrument is why.** I told the operator this box "runs released
+npm pi, not the built pin" and recommended `node scripts/sync-pi.mjs --sync`. That was **false**, and withdrawn. Direct
+evidence after `npm ls`: `@earendil-works/pi-coding-agent@1.3.0 -> ./vendor/pi-main/packages/coding-agent`, and **all 9**
+`node_modules/@earendil-works/*` entries are symlinks into `vendor/pi-main/packages/*` (created Oct 26 21:53), with
+`vendor/pi-main` at **`2ec55d8` = the pin sha** and `packages/coding-agent/dist/` built. The live tree has been running the
+pinned vendored build the whole time. The cause of my error is a genuine defect, registered as **219**: `sync-pi`'s default
+report prints `"buildTree": null, "built": [], "linked": null`, but `scripts/sync-pi.mjs:203-212` fills those only under
+`--sync`/`--update`/`--link` — **the default mode probes nothing about the tree it reports on**, and three nulls read naturally
+as "absent". Note also that `BUILD_DIR` **is** `vendor/pi-main` (`:30`), so there was never a second build tree to build.
+*Lesson, general and cheap to apply: a field that is `null` because an action did not run is not a measurement. Ask which
+code path writes a field before treating its absence as a fact about the world.* That is the same failure shape as the
+`--dry-run` that names no removals (the workspace-move runbook) and the `throughput.mjs` prefill column (D147) — three
+instruments now, all of which reported a *shape* of the tool rather than a property of the system.
+
+**4. My own prose citation failed inspection, again — and this time it was mine.** I recommended re-creating the devtools
+worktree with `worktree item 2801 --refresh` on the strength of "the branch exists and is 7 behind main", a fact carried
+forward from an earlier session's audit. On this box it does not exist: `git branch --list "*2801*"` → **empty**, and
+`git for-each-ref | grep 2801` → **empty** (the 2026-10-26 worktree sweep is the likely cause). So the correct follow-up is a
+fresh `worktree item 2801` if that item's work is wanted at all, and the `--refresh` half of my recommendation should be
+treated as withdrawn. D142 §2 ("treat `item NNN` in prose as unverified until the store confirms it") applies to claims the
+delegate itself published, not only to team prose.
+
+**5. What is now decided rather than latent.** Two lockfiles and no declared package manager is ended: one lockfile,
+`packageManager` names npm and matches the runtime (`npm -v` = 11.19.1). Whether the project *wants* pnpm is reopened only by
+an explicit operator choice, and **220**'s rule must invert rather than silently keep the npm assumption if that happens.
+**219** (probe and report real link state, plus a pin line at clock-in) and **220** (three `check` rules: exact ranges for
+`@earendil-works/*`, one lockfile, declared `packageManager`) are registered for the team; the delegate did not implement them.
+
+**Falsifiable.** If a future `check` reports an exact-range, one-lockfile, or `packageManager` violation on a tree where the
+delegate's "done" claim was made, §1 did not hold. If `sync-pi --sync` is ever run and `vendor/pi-main` moves off
+`pi-main.pin.json`'s sha without `--update` writing the pin, 219's premise (one build tree, at the pin) is wrong and the
+item must be re-cut. If `node_modules/@earendil-works/*` are **not** symlinks at a future clock-in, the runtime really is
+released npm packages and §3's correction is stale — re-run `npm ls @earendil-works/pi-coding-agent`, which prints the arrow
+or its absence in one line. If a future ROADMAP numbering collides with 219/220, the id grep in `docs/SELFDEV.md` was skipped.

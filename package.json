@@ -4,6 +4,7 @@
 	"description": "Minimal OpenRig-replacement rig layer on pi-durable: seats, durable cross-seat queue, router tools",
 	"license": "MIT",
 	"type": "module",
+	"packageManager": "npm@11.19.1",
 	"main": "src/rig.mjs",
 	"scripts": {
 		"test": "node scripts/test.mjs",

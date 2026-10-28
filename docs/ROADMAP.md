@@ -3865,3 +3865,47 @@ wall-clock tax on a rig whose provider decodes at ~17 tok/s and prefills 438–1
 can also burn a turn on a *false* failure (flaky demo) — the bound and the recorded error text are what make that
 auditable; and a gate inside the turn must not become a seat doing the verifier's job — verification stays a
 separate seat's ruling (D-family: author/verifier split).
+
+## Dependency pinning is a runtime invariant that nothing inspects (2026-10-28, delegate; found while pricing the delivery channel's dirty-tree blocker)
+
+**219. `sync-pi`'s default report prints `null` for state it never probes — and that non-report caused a wrong operating recommendation.**
+*(devtools; measured 2026-10-28)* `node scripts/sync-pi.mjs` with no flags prints `"buildTree": null, "built": [], "linked": null`
+— but those three fields are **action outputs, not measurements**: `scripts/sync-pi.mjs:203-205` populates `buildTree` and
+`built` only under `--sync`/`--update`, and `linked` only under `--link` (`:205-212`). The default run **probes nothing about
+the tree it is reporting on**. Read naturally, that JSON says "nothing built, not linked". It was false here: `node_modules/@earendil-works/*`
+are **symlinks into `vendor/pi-main/packages/*`** (all 9, created Oct 26 21:53), `vendor/pi-main` HEAD is `2ec55d8` — the pin
+itself — and `vendor/pi-main/packages/coding-agent/dist/` is built, so the live tree was running the **pinned vendored pi build**.
+Consequence, not hypothetical: a delegate read that output, concluded "this box runs released npm pi, not the built pin,"
+recommended `sync-pi --sync` to the operator, and had to withdraw it after `npm ls @earendil-works/pi-coding-agent` printed
+`… -> ./vendor/pi-main/packages/coding-agent`. *Owner:* devtools · *Where:* `scripts/sync-pi.mjs` (default mode must resolve
+`node_modules/@earendil-works/<pkg>` with `realpath` + `git -C <target> rev-parse HEAD` and report `linkState:
+{linked-to-pin | linked-elsewhere | released-npm}`, plus whether `dist/` exists at the pin) + `scripts/clockin.mjs` (one
+pin line: sha, drift-vs-main, linkState — `check` is the enforcement twin, 220) + `demo/sync-pi-report.test.mjs` (pin the
+shape against a fixture where the link is absent) · *Acceptance:* the default report **names the resolved target and its
+sha**; with the link removed it says so explicitly instead of printing three nulls; clock-in shows the pin line; a false
+"not linked" against a linked tree fails a demo. · *Blind spots:* `BUILD_DIR` **is** `vendor/pi-main` (`:30`), so a separate
+build dir was never the model here — do not "fix" this by inventing one; `src/worktree.mjs:238-242` notes the same link step
+**fails in every fresh worktree** (no `vendor/pi-main` there, #3821), so link-state reporting must distinguish "this tree is
+linked", "this worktree cannot link", and "unlinked on purpose", or it will drown seats in a known failure; and
+`dependencyNoteFor` (`src/worktree.mjs:189-201`) only warns when `--link` *failed*, which is a third state again.
+
+**220. Three dependency-pin invariants are real and none of them is inspected: exact ranges for the pinned pi packages, one tracked lockfile, declared `packageManager`.**
+*(devtools; measured 2026-10-28)* The uncommitted state found while pricing the channel's `live-tree-dirty` blocker was:
+`"@earendil-works/pi-coding-agent": "^1.3.0"` (manifest, live tree) while `package-lock.json` resolved `1.3.0`; a **3,156-line**
+lockfile reformat in the same change; **untracked `pnpm-lock.yaml` (46 KB) + `pnpm-workspace.yaml`** sitting beside
+`package-lock.json`; and **no `packageManager`, no `engines`** (`package.json` measured). Published `1.4.0` at the time
+(`npm view @earendil-works/pi-coding-agent version`), so a bare `npm install` would ask for a newer pi than the pin the rig is
+validated against — and `src/tui/durable/imports.mjs:1,8` resolves that package under the comment *"the PINNED coding-agent
+package"*. Mitigation that exists today, and must not be assumed: worktree prep runs **`npm ci`** (`src/worktree.mjs:207-210`),
+which obeys the lockfile rather than the range, and pre-installs a link to the built pin (`:238-242`). The delegate's interim
+fix was manual (`git checkout -- package-lock.json`; range reverted to exact `1.3.0`; pnpm files moved to `.spike/`;
+`"packageManager": "npm@11.19.1"` added) — which is exactly why it needs a rule: **a hand-applied invariant silently regresses.**
+*Owner:* devtools · *Where:* `cli.mjs check` (new rules in the `src/rig.mjs` rule set) + `demo/dep-pin-invariants.test.mjs` ·
+*Acceptance:* `check` **errors** when (a) any `@earendil-works/*` dependency range is not exact, (b) more than one lockfile is
+tracked or present-but-untracked in the repo root, (c) `packageManager` is absent or names a different package manager than the
+one `src/worktree.mjs` invokes; each rule prints the offending path and the measured value; a demo proves all three fire.
+*Blind spots:* "exact" must not become "frozen" — moving the pin is legitimate and has a path (`sync-pi --update`, then
+`--link`), so the rule polices the **manifest**, not the pin's age (that is 219's report and 195's cadence question); the
+pnpm question is a genuine open product choice, and if the operator later chooses pnpm the rule must invert (one lockfile =
+`pnpm-lock.yaml`) rather than silently keep the npm assumption; and a second lockfile may be a *tooling* artifact of the
+harness rather than the project's — check which process wrote it before deleting anyone's work.
