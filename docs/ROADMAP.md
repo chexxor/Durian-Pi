@@ -4454,7 +4454,9 @@ count over the stored session corpus is published with the pattern list (D142: c
 **three fail open** — Codex's `PreToolUse` sets `should_block:false` on hook error, malformed JSON, exit-2-without-a-reason
 and unsupported `permissionDecision` (`vendor/eval/codex · d373d649`, `hooks/src/events/pre_tool_use.rs`, whose own tests
 are named `unsupported_permission_decision_fails_open` and `deprecated_approve_decision_fails_open`); Copilot CLI fails
-open on a 10 s timeout and on TCC denial ([#978](https://github.com/github/copilot-cli/issues/978)); Cursor's
+open on a `timeout->allow` fallback ([#2893](https://github.com/github/copilot-cli/issues/2893), "preToolUse hooks silently
+bypassed under parallel tool calls") and silently auto-approves an `ask` decision
+([#3590](https://github.com/github/copilot-cli/issues/3590)); Cursor's
 `failClosed` is **opt-in** — while pi's contract throws and blocks
 (`src/core/agent-session.ts:668-680`, `Extension failed, blocking execution`). Nobody in the sample is both non-fatal and
 closed; the note is `docs/reviews/codex-enforcement-design-2026-10-29.md` §2.
@@ -4535,14 +4537,28 @@ shipped permission/policy engine: approval-policy ladder, deny rules read from c
 its `docs/config-file/config-advanced` keys (`project_doc_max_bytes`, `thread.skills.truncated`, `skill.injected`,
 `history.jsonl`, `hooks.json`, `PreToolUse`) were confirmed present on the live page 2026-10-29. (b) **The guard we
 would hand-write has a documented failure to study**: GitHub Copilot CLI ships `--deny-mode "command:git worktree
-prune"`, and its tracker reports those rules **failing open** on a 10 s timeout and on TCC denial
-([#978](https://github.com/github/copilot-cli/issues/978)) with no way to reload a changed rules file without
-restarting the session ([#4438](https://github.com/github/copilot-cli/issues/4438)) — class `advertised-elsewhere`,
-both URLs confirmed reachable 2026-10-29.
+prune"`, and its tracker shows guards **silently not working** in ways that are worse than a crash —
+[#2893](https://github.com/github/copilot-cli/issues/2893) *"preToolUse hooks silently bypassed under parallel tool calls
+(timeout->allow fallback + serial dispatch…)"*; [#3590](https://github.com/github/copilot-cli/issues/3590) *"PreToolUse hook
+`permissionDecision: "ask"` auto-approved by TUI since v1.0.53"*;
+[#2540](https://github.com/github/copilot-cli/issues/2540) *"Plugin-defined preToolUse hooks (hooks.json) do not fire - neither
+in main session nor subagents"*; [#5098](https://github.com/github/copilot-cli/issues/5098) *"sessionStart hook stops running
+after adding `sandbox.userPolicy.filesystem` paths"*. **Which plane a guard is declared on, and what config exists, decides
+whether it runs at all** — the failure mode D158's package-installed guard must be tested against, since an installed guard
+that never fires is indistinguishable from a working one. All four fetched and **title-checked** 2026-10-29, copies
+sha256-pinned in `inputs/fetched/MANIFEST.md` §3; class `advertised-elsewhere` (issue titles, not a reproduction). *A naming
+correction in the delegate's own earlier text:* the first version of this entry cited **#978/#4438** for the hooks behaviour;
+those issues are real and correctly cited by the round-2 report, but for its **skills** claims — the mis-attribution was
+introduced during folding, which is why fetching a cited pointer and reading its title is now protocol
+(`docs/runbooks/research-request.md` Do 5, D159).
 *Signal that this is fixed:* a dated design note under `docs/reviews/` naming, for each of Codex / Copilot CLI / pi:
 where the rule lives, who can bypass it, what happens on guard timeout, whether the decision is recorded anywhere a
 reviewer can read, and whether a repo commit propagates the guard to a teammate. 232 is then claimed with a design
-chosen against evidence.
+chosen against evidence. **Partly delivered 2026-10-29 — `docs/reviews/codex-enforcement-design-2026-10-29.md` covers the rule
+layers, the fail-open/fail-closed axis and Codex's git-plane design, and reframes 232 from "intercept the verb" to "make the
+plane unreachable". 241 is **not closed**: unread are `permission_profile_catalog.rs`, `permissions_toml.rs`,
+`requirements_layers/permissions.rs`, `permission_path.rs`, `network_policy*.rs`, `requirements_exec_policy.rs`, and **where
+`plugin_trust` is persisted** — so the out-of-band trust claim above stays `advertised-elsewhere` until that file is found.**
 *Gated on:* nothing but reading. **This is not 232 and must never be reported as it.** No claiming 232, no touching
 `src/worktree.mjs:649` / `src/broker.mjs:1167`, and no suite run from this checkout while 232 is open (the 15-minute
 self-sweep, `docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md`). A harness-side guard remains belt-and-braces
@@ -4583,8 +4599,8 @@ unopenable and 3 URLs are dead — ROADMAP 233's failure mode, one layer up, in 
 `inputs/fetched/`, which is not in this tree), and **3 dead links** (the Goose vendor-site paths, all HTTP 404 as
 verified 2026-10-29; the resolvable paths are in the pin, `vendor/eval/goose/documentation/docs/…`). A dead URL is
 worse than no URL because it reads as evidence, and a line range into a file nobody has is a claim nobody can re-open.
-*Signal that this is fixed:* the round-3 deliverable ships `inputs/fetched/` + a manifest (URL, fetch date, HTTP
-status, sha256, the page's own last-modified marker), every in-body anchor resolves, and
+*Signal that this is fixed:* the delegate lands `inputs/fetched/` + a manifest (URL, fetch date, HTTP
+status, sha256, the page's own last-modified marker) for every page a report cites, every in-body anchor resolves, and
 `docs/runbooks/research-request.md` Do 4 gains a line: **a report whose citations point at files it did not deliver is
 returned, not folded**. The convention, file naming and manifest columns are written down at `inputs/fetched/README.md`
 — that directory is **tracked on purpose** (it is not in `.gitignore`, unlike `vendor/eval/` and `.spike/`), because a
@@ -4599,3 +4615,21 @@ fetches into `inputs/fetched/` and searches for each quote; a quote it cannot lo
 (`inputs/fetched/README.md`). *Do not:* downgrade the report's conclusions because its citations are
 unresolvable — its load-bearing numbers were independently confirmed on the live vendor pages the same day
 (`docs/COMPETITORS.md`, "The 2026-10-29 public-harness pins"). Fix the chain, keep the findings.
+
+**Delegate-side repair, done the same day (this part needed no agent).** `inputs/fetched/README.md` states the convention, and
+`inputs/fetched/MANIFEST.md` now records **11 fetched pages** (URL, UTC fetch time, HTTP status, bytes, sha256, page
+`last-modified`) **plus the exact phrases found in those bytes** — "scales at 1% of the model's context window", "truncated at
+1,536 characters", `project_doc_max_bytes`, `beforeShellExecution`, `failClosed`, and Cline's "If frontmatter can't be parsed,
+Cline **fails open**. The rule activates with raw content visible". **The page bytes are deliberately untracked** (11 pages,
+**8.2 MB**, largest 2.6 MB): `inputs/fetched/*.html` is gitignored, the manifest is the durable record, and the URLs make it
+reproducible. Two rows are **404** and say so.
+
+**The defect the delegate found in *itself*, which is the one worth preventing.** While repairing these citations it discovered
+that **it had propagated a mis-attribution into three files** (`docs/COMPETITORS.md`, ROADMAP **241**, two review notes):
+Copilot CLI issues **#978/#4438** were cited for *fail-open hooks* behaviour, but those issues are real and correctly cited by
+the report for its **skills** claims. Fetching the issues and reading their `<title>` fixed it — and replaced a weak citation
+with a strong one, because the fail-open mechanism is actually documented at **#2893** (*timeout->allow* fallback under
+parallel dispatch), **#3590** (`permissionDecision: "ask"` auto-approved), **#2540** (**plugin-declared `hooks.json` hooks never
+fire**, main session or subagents) and **#5098** (adding `sandbox.userPolicy.filesystem` paths silently stops a hook running).
+**Protocol, now in the runbook (Do 5, Verify) and D159:** before repeating a cited claim, fetch the pointer and read its title —
+*reachable* is not *pointing where claimed*, and a wrong pointer is worse than none because it reads as verified.

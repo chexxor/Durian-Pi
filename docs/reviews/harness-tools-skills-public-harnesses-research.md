@@ -37,9 +37,19 @@ I'll start by reading the attached documents.I have both prompts. The parent rep
 >
 > **Two contradictions, recorded rather than quietly folded.** (1) Against the observed half: "*no default or
 > configurable intercept for `git worktree prune` / `git clean -fd`*" holds across the ten observed systems, but GitHub
-> Copilot CLI ships `--deny-mode "command:git worktree prune"` — and its own tracker reports those rules **failing open**
-> on a 10 s timeout and on TCC denial ([#978](https://github.com/github/copilot-cli/issues/978)), with no way to reload a
-> changed rules file without restarting the session ([#4438](https://github.com/github/copilot-cli/issues/4438)). (2)
+> Copilot CLI ships `--deny-mode "command:git worktree prune"` — and its own tracker shows its guards **silently not
+> running**: a `timeout->allow` fallback under parallel dispatch
+> ([#2893](https://github.com/github/copilot-cli/issues/2893)), an auto-approved `permissionDecision: "ask"`
+> ([#3590](https://github.com/github/copilot-cli/issues/3590)), **plugin-defined `hooks.json` hooks that never fire in the main
+> session or subagents** ([#2540](https://github.com/github/copilot-cli/issues/2540)), and a `sessionStart` hook that stops
+> running once `sandbox.userPolicy.filesystem` paths are added
+> ([#5098](https://github.com/github/copilot-cli/issues/5098)) — all four fetched and title-checked 2026-10-29, copies
+> sha256-pinned in `inputs/fetched/MANIFEST.md` §3. **This note previously cited #978/#4438 here, which was the delegate's
+> error, not the report's:** both issues are real and this report cites them correctly for its **skills** claims (titles:
+> "Skills are not used unless explicitely stated"; "`disable-model-invocation: true` makes a skill unreachable, not
+> manual-only"). The report's own hooks claims ("10 s timeout", "TCC denial", "no reload hook") sit on the **undefined**
+> anchor `[^b736c3#…]` and stay **unverified**; the nearest real issue is #4508, a feature request about reloading
+> *instructions* mid-session, not deny rules. (2)
 > Against this report's own second bullet: Goose writes capabilities back at runtime
 > (`crates/goose/src/recipe/local_recipes.rs:155,194` at the pin) — a repo-discovered capability that *does* get created
 > mid-session, though as a recipe rather than a callable tool.

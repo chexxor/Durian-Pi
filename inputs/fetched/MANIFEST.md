@@ -57,30 +57,38 @@ URL, because it reads as evidence** (ROADMAP **243**).
 the pinned clone: `vendor/eval/goose/documentation/docs/tutorials/recipes-tutorial.md` and
 `…/documentation/docs/` generally, at `775b3958` — cite repo paths at a pin, not dead site paths.
 
-## 3. GitHub issue pages fetched by the delegate (2026-10-29) — and a citation defect worth naming
+## 3. GitHub issue pages fetched by the delegate (2026-10-29) — and a citation error **the delegate made**
 
-The delegate fetched each cited issue **by number** and read its `<title>`. **Result: the round-2 report's Copilot CLI issue
-numbers do not match its claims.** Every number it cites for its *hook/deny-rule* claims belongs to a *skills* issue in the
-same repo, and none of the skills issues it cites belong to the claims it attached them to.
+The delegate fetched each cited issue **by number** and read its `<title>`. **The round-2 report's issue citations are
+sound**; the mis-attribution was introduced **during folding**, when this delegate attached the report's skills-issue
+numbers to its hooks/deny-rule claims and propagated them into `docs/COMPETITORS.md`, `docs/ROADMAP.md` **238**, and two
+review files. All of those have now been corrected to the citations below.
 
-| cited number | what that issue actually is (title as fetched) | our copy, sha256 (first 16) |
-|---|---|---|
-| **#978** | "Skills are not used unless explicitely stated" | `269ede757ec88450`-class copy in `.spike/fetch/gh-copilot-cli_issue_978.html` |
-| **#3122** | "Display Plugin name after skill name when using /skills command to display skill list" | `.spike/fetch/gh-copilot-cli_issue_3122.html` |
-| **#3123** | "/research can't write it's research report" | `.spike/fetch/gh-copilot-cli_issue_3123.html` |
-| **#4438** | "`disable-model-invocation: true` makes a skill unreachable, not manual-only (Skill not found on explicit invocation)" | `.spike/fetch/gh-copilot-cli_issue_4438.html` |
+**What the report's own numbers actually are (both correct for the claims it attached them to):**
 
-**The claims are nonetheless true — with the right numbers.** Searching that tracker (`api.github.com/search/issues`,
-2026-10-29) turns up issues that support the fail-open conclusion **better** than the ones cited:
-
-| real issue | title (verbatim from `<title>`) | what it establishes | sha256 (first 16) |
+| issue | title as fetched (2026-10-29) | the report's use of it | verdict |
 |---|---|---|---|
-| [#2893](https://github.com/github/copilot-cli/issues/2893) | "preToolUse hooks silently bypassed under parallel tool calls (timeout->allow fallback + serial dispatch…)" | **the fail-open mechanism, named by the vendor's own tracker**: a hook timeout falls back to *allow*, and parallel dispatch bypasses the hook | `aff0aab82d7542fb` |
-| [#3590](https://github.com/github/copilot-cli/issues/3590) | "PreToolUse hook permissionDecision: \"ask\" auto-approved by TUI since v1.0.53" | a guard's **ask** decision silently became an allow — the exact confusion ROADMAP **238** says the guard must not have | `5f18b361fea55c7e` |
-| [#2540](https://github.com/github/copilot-cli/issues/2540) | "Plugin-defined preToolUse hooks (hooks.json) do not fire - neither in main session nor subagents" | **which plane a guard is declared on decides whether it runs at all** — a plugin-declared guard never fires. Directly relevant to 241's trust question and to D158's package-based plan | `63f5a107dcc720a4` |
-| [#5098](https://github.com/github/copilot-cli/issues/5098) | "sessionStart hook stops running after adding `sandbox.userPolicy.filesystem` paths" | a **sandbox config edit silently disables a guard** — the two planes interfere | `f2fa8466dc01a2f0` |
+| [#978](https://github.com/github/copilot-cli/issues/978) | "Skills are not used unless explicitely stated" | skill advertisement unused unless named | **correct** |
+| [#4438](https://github.com/github/copilot-cli/issues/4438) | "`disable-model-invocation: true` makes a skill unreachable, not manual-only (Skill not found on explicit invocation)" | a visibility flag turns into a hard block | **correct** — and directly relevant to our own `exposure`/`"hidden"` question |
+| #3122 | "Display Plugin name after skill name when using /skills command to display skill list" | (delegate checked it while auditing; not a report citation) | skills-surface noise, no bearing |
+| #3123 | "/research can't write it's research report" | (delegate checked; **not** "Skill tool calls fail after SessionStart hook") | the round-2 row that maps to this claim cites a **dangling** anchor |
 
-**Lesson for the protocol, not just this report:** an issue number is a *pointer someone else can open*, so it is portable —
-but a wrong pointer is worse than none, because it reads as verified. **The delegate must fetch every cited issue and page
-and read its title before repeating the claim.** That is now the check the round-3 prompt requires alongside quotes
-(`docs/runbooks/research-request.md`, D159).
+**What is still unverified in the report:** its Copilot **hooks/deny-rule** claims — "deny-rule hook times out at 10 s with
+no way to reload a changed rules file" and "`sandbox:workspace-write` cannot read `~/.copilot` (macOS TCC)" — are cited to
+`[^b736c3#L18-24]` / `[^b736c3#L26-40]`, an **undefined anchor to an unidentified page**. The URLs resolve, but the citation
+is not checkable as written.
+
+**The claim survives; the citation was the wrong one.** Searching that tracker (`api.github.com/search/issues`, 2026-10-29)
+finds issues that support the fail-open conclusion **better** than anything round 2 cited:
+
+| real issue | title (verbatim from `<title>`) | what it establishes | our copy, sha256 (first 16) |
+|---|---|---|---|
+| [#2893](https://github.com/github/copilot-cli/issues/2893) | "preToolUse hooks silently bypassed under parallel tool calls (timeout->allow fallback + serial dispatch…)" | **the fail-open mechanism, named in the vendor's own tracker**: a hook timeout falls back to *allow*, and parallel dispatch skips the hook | `aff0aab82d7542fb` |
+| [#3590](https://github.com/github/copilot-cli/issues/3590) | "PreToolUse hook permissionDecision: \"ask\" auto-approved by TUI since v1.0.53" | a guard's **ask** silently became an **allow** — the exact confusion ROADMAP **238** forbids | `5f18b361fea55c7e` |
+| [#2540](https://github.com/github/copilot-cli/issues/2540) | "Plugin-defined preToolUse hooks (hooks.json) do not fire - neither in main session nor subagents" | **which plane a guard is declared on decides whether it runs at all.** Directly load-bearing for 241's trust question and for D158's package-installed-guard plan | `63f5a107dcc720a4` |
+| [#5098](https://github.com/github/copilot-cli/issues/5098) | "sessionStart hook stops running after adding `sandbox.userPolicy.filesystem` paths" | a **sandbox config edit silently disables a guard** — the planes interfere | `f2fa8466dc01a2f0` |
+| [#4508](https://github.com/github/copilot-cli/issues/4508) | "Feature request: reload .github/instructions mid-session (long-running sessions never pick up instruction updates)" | the closest real support for the report's "no way to reload" claim — and it is a **feature request about *instructions***, not deny rules, so that claim stays **unverified** | `5bdc488c2d1f247e` |
+
+**Lesson, stated as protocol:** an issue number is portable *only if it points where claimed*, and a wrong pointer is worse
+than none because it reads as verified. **Fetch the cited page or issue and read its title before repeating a claim** —
+that is now a required step in `docs/runbooks/research-request.md` (Do 5, Verify) alongside the quote check (D159).

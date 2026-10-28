@@ -22,7 +22,7 @@ own destructive call (`src/broker.mjs:1167` → `src/worktree.mjs:649`) still ru
 |---|---|---|
 | **Codex** `observed` | **one declarative rules file per config layer**: `load_exec_policy` iterates `config_stack.layers_low_to_high()` and loads `config_folder()/rules/*.rules` from each, later layers overriding earlier (`core/src/exec_policy.rs:664-690`, loop at `:671`); the user store is `$CODEX_HOME/rules/default.rules` (`:875`, `RULES_DIR_NAME`/`DEFAULT_POLICY_FILE` at `:54-56`). **The project layer is a real layer**, and the trust decision is expressed by *disabling* it: *"Disabled project layers already represent the trust decision, so hooks and exec-policy loading can reuse the normal trusted-layer view"* (`:665-668`). Above all layers sits a **requirements** tier (`config_stack.requirements().exec_policy`, `:713`) — an admin/org layer a repo cannot override. | **Yes**, with a trust gate — the shape our rig has no equivalent of. |
 | **pi** `observed` | no rules file. A guard is **code**: a `tool_call` handler in a project extension (`.pi/extensions/`, auto-discovered `package-manager.ts:2484-2491`), inert until project trust (`package-manager.ts:2465-2467`). | Yes (repo-committed extension + one trust click), but the policy lives in imperative code, not data. |
-| **Copilot CLI** advertised | a rules flag/config (`--deny-mode "command:git worktree prune"`, `sandbox:workspace-write`). | Claimed; and **changing the file needs a session restart** — [#4438](https://github.com/github/copilot-cli/issues/4438). |
+| **Copilot CLI** advertised | a rules flag/config (`--deny-mode "command:git worktree prune"`, `sandbox:workspace-write`). | Claimed. The "no way to reload a changed rules file without restarting" claim sits on an **undefined anchor** in the round-2 report and is **unverified**; the nearest real issue the delegate found is [#4508](https://github.com/github/copilot-cli/issues/4508) *"reload `.github/instructions` mid-session"* — about **instructions**, not deny rules. What is verified about this harness's guards: [#2893](https://github.com/github/copilot-cli/issues/2893), [#3590](https://github.com/github/copilot-cli/issues/3590), [#2540](https://github.com/github/copilot-cli/issues/2540), [#5098](https://github.com/github/copilot-cli/issues/5098) — see §2. |
 | **Cursor** advertised | `.cursor/hooks.json` at project or user level; `permission: allow\|deny\|ask` + `matcher` regex over the **full command string**. | Claimed (project-level file). |
 
 **Codex's approval persistence is a rules append, not only a cache:** an interactive approval becomes a prefix rule via
@@ -39,10 +39,11 @@ just of the config — a subtlety none of our instruments model.
 | **Codex** | **fails OPEN (silent allow).** A hook that errors, exits non-zero (other than 2 with a reason), exits with no status code, returns malformed JSON, or returns an **unsupported** `permissionDecision` (e.g. `ask`, `approve`) ⇒ `status = Failed` **and `should_block = false`**. Exit 2 with **empty stderr** ⇒ `Failed`, no block. Input-serialization failure ⇒ `serialization_failure_outcome` with `should_block: false`. | observed | `hooks/src/events/pre_tool_use.rs` — `parse_completed` and `serialization_failure_outcome`; the vendor's **own test names** are the clearest citation: `unsupported_permission_decision_fails_open`, `deprecated_approve_decision_fails_open`, `exit_code_two_blocks_processing`, `invalid_json_like_stdout_fails_instead_of_becoming_noop` (status fails, call still proceeds) |
 | **Codex (asymmetry)** | **rule *loading* fails LOUD.** A missing/unparsable rules file returns `Err` (`ExecPolicyError::ReadFile` / `ParsePolicy`, `core/src/exec_policy.rs:244-271`) — the session does not start with a half-parsed policy. Config-time loud, run-time quiet. | observed | same file |
 | **pi** | **fails CLOSED, and loudly.** `emitToolCall` wraps its handler in **no** try/catch (`src/core/extensions/runner.ts:1248-1266`), and the caller re-throws: `throw new Error(\`Extension failed, blocking execution: ${String(err)}\`)` (`src/core/agent-session.ts:668-680`). Contrast `emitUserBash`/`emitProjectTrustEvent`, which *do* catch and record (`runner.ts:317`, `:1277-1291`) — pi chose different contracts per event, deliberately. | observed | those two files |
-| **Copilot CLI** | **fails OPEN on timeout and on OS denial-of-access**, per its own tracker: 10 s timeout, TCC denial ([#978](https://github.com/github/copilot-cli/issues/978)). | advertised-elsewhere | issue cited; URL reachable 2026-10-29 |
+| **Copilot CLI** | **guards silently do not run.** Its own tracker: hooks bypassed under parallel dispatch with a **`timeout->allow` fallback** ([#2893](https://github.com/github/copilot-cli/issues/2893)); an `ask` decision **auto-approved** by the TUI ([#3590](https://github.com/github/copilot-cli/issues/3590)); **plugin-defined `hooks.json` hooks never fire**, main session or subagents ([#2540](https://github.com/github/copilot-cli/issues/2540)); a `sessionStart` hook stops running once `sandbox.userPolicy.filesystem` paths are added ([#5098](https://github.com/github/copilot-cli/issues/5098)) | advertised-elsewhere — all four **fetched and title-checked 2026-10-29**, copies sha256-pinned in `inputs/fetched/MANIFEST.md` §3. *Not* cited here: #978/#4438, which are skills issues (see §6 of this file's naming note and `MANIFEST.md` §3) |
 | **Cursor** | **fails OPEN by default**; `failClosed: true` flips it — *"hook failures (crash, timeout, non-zero exit code, no output) block the action instead of allowing it through"* (live page, 2026-10-29). **Opt-in.** | advertised-elsewhere | `https://cursor.com/docs/hooks` |
+| **Cline (the rule plane, not hooks)** | **fails OPEN on a malformed guard rule.** *"If frontmatter can’t be parsed, Cline **fails open**. The rule activates with raw content visible to help debugging"* — the rule still *activates*, with its unparsed body as content. Same failure class on a different plane: a guard whose config broke is not absent, it is **live and wrong**. | advertised-elsewhere, **found verbatim 2026-10-29** | `https://docs.cline.bot/features/cline-rules` — our copy is sha256-pinned in `inputs/fetched/MANIFEST.md` §2 |
 
-**The pattern, stated so it can be cited:** of the four guard designs I can inspect, **three degrade to allow** and the
+**The pattern, stated so it can be cited:** of the five guard/rule designs I can inspect, **four degrade to allow** and the
 one that does not (pi) does so by crashing the turn. Nobody in this sample has found how to be *both* non-fatal and
 fail-closed. That is the design bar for ROADMAP 238, not an optional nicety: a guard that cannot tell the difference
 between "no rule matched" and "my rule never parsed" is worse than no guard, because it manufactures the belief of
@@ -108,7 +109,9 @@ stored**, so round 2's out-of-band claim stays `advertised-elsewhere` and unconf
 **Next reads for 241, in priority order:** (1) where `plugin_trust` and `can_apply_control_effects()` come from — that
 is the "who can bypass" answer, and it decides whether a project-committed hook can block anything; (2)
 `permission_profile_*` — the reachability model, which is now the more valuable half given §3; (3) requirements layers,
-for the admin-override shape; (4) only then 232's design options.
+for the admin-override shape; (4) only then 232's design options. **Cline's** rule-frontmatter semantics are now confirmed
+by quote (§2 — malformed frontmatter **activates the rule anyway**), but its `clinerules` *implementation* is still unread
+now that `cline 51f63e4f` is pinned source-grade: read the tree rather than re-quoting the marketing page.
 
 ## 6. What this changes in our register (no code, no queue action taken)
 
@@ -122,6 +125,14 @@ for the admin-override shape; (4) only then 232's design options.
    `GIT_DIR` and see what actually breaks. That is a rehearsal, not a fix, and it belongs to the seat that claims 232.
 3. **A new instrument candidate, registered not built:** both vendors distinguish *no rule matched* from *the guard
    broke*. Our delegate has no way to distinguish them in pi. A `guard-status` instrument (loaded extensions, registered
-   `tool_call` handlers, last block decision) would; that is 235's package, and I did **not** write it.
-4. **Nothing here justifies touching `src/` today.** 232 unclaimed; no suite from this checkout
+   `tool_call` handlers, last block decision) would; that is 235's package, and I did **not** write it. Copilot CLI's
+   tracker shows why this matters more than a guard alone: **#2540** (*plugin-defined hooks never fire*) and **#5098**
+   (*a sandbox config change stops a hook running*) mean **an installed guard that is not firing looks exactly like one
+   that is working** — so the instrument is not polish, it is how you know the guard exists.
+4. **A naming correction the delegate owes this file.** An earlier draft cited **#978/#4438** for Copilot CLI's fail-open
+   behaviour. Those issues exist and are correctly cited by the round-2 report, but for its **skills** claims ("Skills are
+   not used unless explicitely stated"; "`disable-model-invocation: true` makes a skill unreachable, not manual-only") — the
+   hooks attribution was introduced in folding. The verified hooks issues are **#2893/#3590/#2540/#5098** (§2). Protocol now:
+   **fetch the cited pointer and read its title before repeating a claim** (`docs/runbooks/research-request.md` Do 5, D159).
+5. **Nothing here justifies touching `src/` today.** 232 unclaimed; no suite from this checkout
    (`docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md`).

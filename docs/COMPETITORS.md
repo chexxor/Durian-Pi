@@ -345,15 +345,22 @@ Cline, Goose — **unexamined here**). Registered as ROADMAP **235–239**; five
    `git worktree prune` / `git clean -fd`. pi ships the *hook* and three example policies; the policy itself is ours to
    write. Do not report a harness-side guard as 232's fix — the broker's own `pruneWorktrees` call
    (`src/broker.mjs:1167` → `src/worktree.mjs:649`) runs where no outer extension can see it.
-2. **Correction to finding 2, same day, class `advertised-elsewhere`.** "No configurable intercept" is wrong for
-   GitHub Copilot CLI: it ships command-pattern deny rules (`--deny-mode "command:git worktree prune"`, plus
-   `sandbox:workspace-write`) and its own tracker records that they **fail open on 10 s timeout and on TCC denial**
-   ([issue #978](https://github.com/github/copilot-cli/issues/978)), and that there is no hook to reload a changed
-   rules file without restarting the session
-   ([issue #4438](https://github.com/github/copilot-cli/issues/4438)). So the shape we want — deny rule read from the
-   repo, enforced by the harness, fail-closed — **exists in the field**; what is new to us is that its own tracker
-   shows it silently degrading. The 232 conclusion stands unchanged: the broker's own `pruneWorktrees` call runs where
-   no outer harness can see it, so an outer guard is belt-and-braces only.
+2. **Correction to finding 2, same day, and a second correction to this correction (also same day).** "No configurable
+   intercept" is wrong for GitHub Copilot CLI: it ships command-pattern deny rules (`--deny-mode "command:git worktree prune"`,
+   plus `sandbox:workspace-write`). What replaced it, and what the delegate then got wrong: an earlier version of this entry
+   attributed the fail-open behaviour to issues **#978/#4438**, fetched them, and found their titles are about *skills*, not
+   hooks — **#978 is "Skills are not used unless explicitely stated"** and **#4438 is "`disable-model-invocation: true` makes a
+   skill unreachable, not manual-only"** (both correctly cited by the round-2 report for *those* claims; the mis-attribution
+   was the delegate's, and the report's own hooks claims sit on an undefined anchor). The fail-open behaviour is nevertheless
+   real and documented, at numbers the delegate fetched and title-checked on 2026-10-29:
+   [#2893](https://github.com/github/copilot-cli/issues/2893) *"preToolUse hooks silently bypassed under parallel tool calls
+   (timeout->allow fallback + serial dispatch…)"* and
+   [#3590](https://github.com/github/copilot-cli/issues/3590) *"PreToolUse hook `permissionDecision: "ask"` auto-approved by TUI
+   since v1.0.53"* (copies sha256-pinned in `inputs/fetched/MANIFEST.md` §3). So the shape we want — deny rule read from the
+   repo, enforced by the harness, fail-closed — **exists in the field**, and its own tracker shows guards silently degrading.
+   The 232 conclusion stands unchanged: the broker's own `pruneWorktrees` call runs where no outer harness can see it, so an
+   outer guard is belt-and-braces only. **Protocol change this forced:** fetch the cited page/issue and read its title before
+   repeating a claim (`docs/runbooks/research-request.md` Do 5, D159).
 
 ## The 2026-10-29 public-harness pins (five clones: source-grade for three, docs-grade for two)
 
@@ -372,14 +379,20 @@ persisted are unread, so this is **not** a full review and no row of it may be c
 | `cline` | `51f63e4f` | Apache-2.0 | full TS monorepo (`apps/`, `sdk/`) — rule merge order and `paths:`-conditional discovery are readable | source |
 | `goose` | `775b3958` | Apache-2.0 | full Rust (`crates/`) + `documentation/docs/` (the vendor-site paths the round-2 report cited are **404**; the repo paths are the resolvable ones) | source |
 | `claude-code-docs` | `58d6da1e` | UNRECOGNISED (`LICENSE.md`) | **CHANGELOG + docs + plugins + mods only — no implementation.** Can never yield `observed`; it does yield changelog-grade evidence, which is better than marketing copy | docs |
-| `copilot-cli` | `84ee80ea` | UNRECOGNISED (`LICENSE.md`) | **README + `install.sh` + changelog only** (596 KB — the small size is correct; the CLI is closed). Useful only as a public *issue tracker*: #978 (deny rules fail open on 10 s timeout / TCC denial), #4438 (no hook to reload rules without restarting) | docs |
+| `copilot-cli` | `84ee80ea` | UNRECOGNISED (`LICENSE.md`) | **README + `install.sh` + changelog only** (596 KB — the small size is correct; the CLI is closed). Useful chiefly as a public **issue tracker**, each issue fetched and title-checked 2026-10-29 (`inputs/fetched/MANIFEST.md` §3): **#2893** preToolUse silently bypassed (`timeout->allow` fallback + parallel dispatch) · **#3590** `permissionDecision: "ask"` auto-approved · **#2540** **plugin-defined `hooks.json` hooks never fire, in the main session or subagents** · **#5098** adding `sandbox.userPolicy.filesystem` paths stops a `sessionStart` hook · **#4438** `disable-model-invocation` makes a skill unreachable rather than manual-only · **#978** skills unused unless explicitly named | docs |
 
 **What the pins change, right now, without an observed pass:**
 1. **ROADMAP 241 exists because `codex` is now readable.** The operator ruled *research before 232*: before the
    broker's destructive-call fix is scheduled, read what a shipped permission/policy engine looks like end-to-end —
    a policy engine, an approval-policy ladder, deny rules read from config, and trust persisted **out-of-band** (in
    an `mcp-oauth`-shape, outside config and outside git, so `git diff` never shows a permission grant). `codex-rs/`
-   answers whether that design is copyable for a broker, or only borrowable in shape.
+   answers whether that design is copyable for a broker, or only borrowable in shape. **A second reason, from that
+   tracker:** [#2540](https://github.com/github/copilot-cli/issues/2540) *"Plugin-defined preToolUse hooks (hooks.json)
+   do not fire - neither in main session nor subagents"* and
+   [#5098](https://github.com/github/copilot-cli/issues/5098) *"sessionStart hook stops running after adding
+   `sandbox.userPolicy.filesystem` paths"* — i.e. **which plane a guard is declared on, and what config is present,
+   decides whether it runs at all**. That is the failure mode D158's package-installed guard must be tested against:
+   a guard that is *installed* and *not firing* looks identical to one that is working.
 2. **Capture-on-success (ROADMAP 240) has a second instance, and it is readable.** Goose writes recipes into a
    recipe library at runtime (`crates/goose/src/recipe/local_recipes.rs:155,194` — `generate_recipe_filename` +
    save), and ships a documented *"recipe cookbook generator"* pattern that mines past sessions into recipes
@@ -392,12 +405,14 @@ persisted are unread, so this is **not** a full review and no row of it may be c
    Claude Code behaviour matters (the `/skill-doctor` cost report, the `/run-skill-generator` → `/verify` loop, the
    15-minute compaction window), it is either `advertised-elsewhere` or something we run on a host and label
    `observed` honestly — and Claude Code is not installed on this rig.
-4. **The guard-failure asymmetry, now partly `observed` (`codex` only, guard axis).** Of four guard designs the delegate
-   could inspect, **three fail open**: Codex's `PreToolUse` yields `should_block:false` on a hook error, malformed JSON,
+4. **The guard-failure asymmetry, now partly `observed` (`codex` only, guard axis).** Of five guard/rule designs the delegate
+   could inspect, **four fail open**: Codex's `PreToolUse` yields `should_block:false` on a hook error, malformed JSON,
    exit-2-without-a-reason, or an unsupported `permissionDecision` (`hooks/src/events/pre_tool_use.rs`, `parse_completed` —
    the vendor's own tests are named `unsupported_permission_decision_fails_open` and `deprecated_approve_decision_fails_open`),
    while its **rule loader fails loud** (`core/src/exec_policy.rs:244-271`); Copilot CLI fails open on a 10 s timeout and on
-   TCC denial (#978, advertised); Cursor's `failClosed` is **opt-in** (docs). **pi fails closed** — `emitToolCall` carries no
+   TCC denial is not the mechanism — the tracker names a **`timeout->allow` fallback** (#2893) and an auto-approved `ask` (#3590);
+   Cursor's `failClosed` is **opt-in** (docs); Cline *activates* a rule whose frontmatter failed to parse (*"Cline **fails open**.
+   The rule activates with raw content visible"* — docs, quoted verbatim in `inputs/fetched/MANIFEST.md` §2). **pi fails closed** — `emitToolCall` carries no
    try/catch (`src/core/extensions/runner.ts:1248-1266`) and the caller re-throws as `Extension failed, blocking execution`
    (`src/core/agent-session.ts:668-680`). Nobody in the sample is both non-fatal and closed, and Codex guards the git plane
    by **reachability** rather than verb-matching (`core-plugins/src/git_policy.rs:7-85`: 18 stripped `GIT_*` variables,

@@ -5973,3 +5973,19 @@ columns including *quotes found in this copy*, and the `grep` that is the verifi
 `docs/runbooks/research-request.md` "Escalate to"). The agent still owns the questions — the delegate taking over the
 *fetching* is plumbing, not the delegate answering research by guessing. And ROADMAP **240–243** remain
 registered-not-scheduled: pm sequences them.
+**Addendum the same day — the rule has a second half, learned from the delegate's own error.** Quotes are only half of
+citation integrity; the other half is **pointers**. While repairing round 2's evidence chain the delegate found that **it had
+mis-attributed and then propagated** two GitHub issue numbers across three files (`docs/COMPETITORS.md`, ROADMAP **241**, two
+review notes): it cited `copilot-cli` #978/#4438 for *fail-open hooks* behaviour, but those issues exist and the report cites
+them **correctly for its skills claims** ("Skills are not used unless explicitely stated"; "`disable-model-invocation: true`
+makes a skill unreachable, not manual-only"). The report's own hooks rows sit on an **undefined** anchor; the report was more
+sound than the delegate's fold. **The rule now: fetch the cited pointer and read its title before repeating a claim.** The payoff
+was immediate — doing it surfaced better evidence than the report had, all title-checked 2026-10-29 and pinned in
+`inputs/fetched/MANIFEST.md` §3: **#2893** *"preToolUse hooks silently bypassed under parallel tool calls (timeout->allow
+fallback + serial dispatch…)"*, **#3590** *"PreToolUse hook `permissionDecision: "ask"` auto-approved by TUI since v1.0.53"*,
+**#2540** *"Plugin-defined preToolUse hooks (hooks.json) do not fire — neither in main session nor subagents"*, **#5098**
+*"sessionStart hook stops running after adding `sandbox.userPolicy.filesystem` paths"*. Read together they say something this
+rig needs: **which plane a guard is declared on, and what config is present, decides whether it runs at all** — so an installed
+guard that never fires is indistinguishable from a working one, which is why ROADMAP **235**'s package should ship a
+`guard-status` instrument and ROADMAP **238**'s guard must be self-attesting. **A reachable URL is not a citation; a wrong
+pointer is worse than no pointer, because it reads as verified.**

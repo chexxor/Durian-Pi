@@ -6,13 +6,17 @@ repo, two hosts, no cloud backend, a small local model?
 **Prompt:** `docs/reviews/harness-tools-skills-research-prompt.md` (Q1–Q9, deliverable shape, evidence discipline).
 **Runbooks followed:** `docs/runbooks/research-request.md`, `docs/runbooks/competitor-review.md`.
 
-> **This file is the observed half of the study, authored by the delegate, and is deliberately partial.** Every claim
-> here comes from a tree that was open on this machine: the installed pi package and the nine pinned clones in
+> **This file is the observed half of the study, authored by the delegate, and was deliberately partial when written.** Every
+> claim here comes from a tree that was open on this machine: the installed pi package and the nine pinned clones in
 > `vendor/eval/` (`docs/VENDOR-PINS.md`; `node tools/vendor-pins.mjs --check` → PASS). The prompt's second system set —
-> **Claude Code, OpenAI Codex CLI, Cursor, Cline, Goose** — needs public docs and issue trackers, i.e. web access the
-> delegate does not have. Those five are **unexamined here**, and the questions this file cannot answer are collected in
-> `docs/reviews/harness-tools-skills-followup-research-prompt.md` for the research agent. Do not treat the verdict below
-> as the whole study.
+> **Claude Code, OpenAI Codex CLI, Cursor, Cline, Goose** — needed public docs and issue trackers, which the delegate does
+> not have. **That half has since landed**: see
+> `docs/reviews/harness-tools-skills-public-harnesses-research.md` (the research agent, committed verbatim as `318838f5`, with
+> the delegate's consumption note on top) and §9 below, which records the **corrections it forced on this file**. Three of the
+> five are now **pinned source-grade** (`codex d373d649`, `cline 51f63e4f`, `goose 775b3958`), so what was once "web-only"
+> is partly readable here — and the guard axis is answered in
+> `docs/reviews/codex-enforcement-design-2026-10-29.md` (ROADMAP **241**). The remaining open questions are routed as
+> `docs/reviews/harness-tools-skills-followup-2-research-prompt.md`. Do not treat the verdict below as the whole study.
 
 ## 1. Verdict up front
 
@@ -254,6 +258,10 @@ us. Our standing injection today is roughly **2,050 B ≈ 510 tokens** before an
 | a destructive verb runs unconditionally and destroys cross-OS evidence | 36 → 1 worktree registrations in one session (`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`) | observed (ours) |
 | skill metadata is routinely malformed | validators exist and warn rather than fail: pi `skills.ts:115-126` (description required, ≤1,024), crewai `skills/models.py:43-79` (1–64 name, 1–1024 description, `requires`, `allowed-tools`) | inferred from maintainer code (they build lenient validators for exactly these fields) |
 | a stale tool list caused a wrong action, upstream | **no evidence found** in any of the nine clones in the time spent | no evidence found |
+| **a guard that degrades to *allow* when its own machinery breaks** | **four of the five systems that ship one fail open**: Codex's `PreToolUse` returns the input unchanged on every hook error, exit-2-without-reason, malformed JSON and unsupported decision (`vendor/eval/codex · d373d649`, `codex-rs/hooks/src/events/pre_tool_use.rs`, whose own tests are named `unsupported_permission_decision_fails_open` and `deprecated_approve_decision_fails_open`); Copilot CLI guards **silently do not run** — a `timeout->allow` fallback under parallel dispatch
+([#2893](https://github.com/github/copilot-cli/issues/2893)), an auto-approved `ask`
+([#3590](https://github.com/github/copilot-cli/issues/3590)), plugin-declared hooks that never fire
+([#2540](https://github.com/github/copilot-cli/issues/2540)); Cursor's `failClosed` is **opt-in**; Cline is a fourth instance on the *rule* plane — *"If frontmatter can’t be parsed, Cline **fails open**. The rule activates with raw content visible to help debugging"* (`docs.cline.bot_features_cline-rules.html`, found verbatim 2026-10-29, sha256-pinned in `inputs/fetched/MANIFEST.md`). **pi is the exception**: `emitToolCall` has no `try/catch` and the caller re-throws as *"Extension failed, blocking execution"* (`agent-session.ts:668-680`) | observed (source) + advertised (vendor docs, issue tracker) — full table in `docs/reviews/codex-enforcement-design-2026-10-29.md` §2 |
 | a subagent silently not inheriting skills/permissions | only `hermes-agent`'s operator-guidance line already recorded in `docs/COMPETITORS.md` ("pinned skills are operator guidance for the user's session, not payload for every internal fork") | advertised, single source |
 
 ## 7. What this study cost, and what is still wrong in our own numbers
@@ -325,11 +333,19 @@ requires a new product feature. Register in `docs/ROADMAP.md` as **registered, n
 clones). Per-project `COMPETITORS.md` entries for the five now exist under *"The 2026-10-29 public-harness pins"*. **Two
 corrections this half forced on the report above:** (1) "*no default or configurable intercept for `git worktree prune` /
 `git clean -fd`*" was true of the ten observed systems but **not** of the field at large — GitHub Copilot CLI ships
-`--deny-mode "command:git worktree prune"`, and its own tracker reports those rules **failing open** on a 10 s timeout
-and on TCC denial ([#978](https://github.com/github/copilot-cli/issues/978)); (2) the report's own claim *"not one of the
+`--deny-mode "command:git worktree prune"`, and its own tracker shows its guards **silently not running** — a
+`timeout->allow` fallback ([#2893](https://github.com/github/copilot-cli/issues/2893)) and plugin-declared hooks that never
+fire ([#2540](https://github.com/github/copilot-cli/issues/2540)); (2) the report's own claim *"not one of the
 five lets the agent register a callable tool that survives the session"* needs Goose's runtime recipe **write-back**
 (`crates/goose/src/recipe/local_recipes.rs:155,194` at the pin) read against it — a capability that survives, though as
-a recipe rather than a tool. Neither correction changes the recommendation's shape: an outer guard still cannot see our
+a recipe rather than a tool. (3) **A citation the delegate itself introduced while folding** — and the most instructive
+defect of the whole round: an earlier version of this paragraph, and of `docs/COMPETITORS.md` and ROADMAP **241**, cited
+**#978/#4438** for Copilot CLI's fail-open hooks behaviour. Those issues are real, and the report cites them **correctly for
+its skills claims**; the hooks attribution was the delegate's, and it survived into three files before anyone fetched the
+issues and read their titles (2026-10-29). The verified hooks issues are **#2893/#3590/#2540/#5098**
+(`inputs/fetched/MANIFEST.md` §3). **Protocol now:** fetch every cited pointer and read its title before repeating a claim
+(`docs/runbooks/research-request.md` Do 5, D159) — a reachable URL is not the same as a citation that points where claimed.
+Neither correction changes the recommendation's shape: an outer guard still cannot see our
 broker's own `pruneWorktrees` call.
 
 ## 9. What we did not ask / could not answer here
