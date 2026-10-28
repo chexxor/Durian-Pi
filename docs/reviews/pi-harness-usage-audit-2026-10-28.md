@@ -12,6 +12,12 @@ tool calls**. Entry types seen: `session`, `message`, `model_change`, `thinking_
 `custom_message`. This layer had never been consulted by any durian-pi session. The census is now an instrument, not a
 one-off: **`tools/harness-usage-census.mjs`** (read-only, 0.55 s over all 87 transcripts) prints every number below.
 
+> **Corpus correction (re-measured 2026-10-29, this Linux host):** the corpus above is **two hosts**. On this box today
+> `~/.pi/agent/sessions/` holds **18** session files for this cwd and no Windows set (no D: volume is mounted), so the
+> same command prints **18 sessions / 2,356 tool calls / 267 ad-hoc (11.3%)** — not 87 / 11,599 / 24.0%. Both figures are
+> true of their corpus; the instrument does not print which one it is quoting, which is registered as ROADMAP **237**.
+> Quote a corpus with every percentage from this file.
+
 ## What is actually forced, and how often it is honoured
 
 | surface | sessions (of 87) that touched it |
@@ -107,3 +113,15 @@ now recoverable, which is a different statement and should be recorded as such.
 **`tools/harness-usage-census.mjs`** (tracked) plus two extractors still in `.scratch/` (`transcript-write-bodies.mjs`,
 `transcript-read-bodies.mjs`) — which is itself the argument for levers 1–2: an untracked instrument is a lost one, which is
 what ROADMAP 233 says, and this session nearly did it again.
+
+## Consumed 2026-10-29: the study this audit commissioned
+
+The prompt drafted from this file (`docs/reviews/harness-tools-skills-research-prompt.md`) was executed **by the delegate
+for the half readable on this machine** — installed pi `@1.4.0` (whose TypeScript is recoverable from the shipped
+`.js.map` `sourcesContent`) plus the nine pinned clones: **`docs/reviews/harness-tools-skills-research.md`**. The public
+harnesses (Claude Code, Codex CLI, Cursor, Cline, Goose) remain **unexamined** and are routed in
+`docs/reviews/harness-tools-skills-followup-research-prompt.md`. Levers 1–5 above became ROADMAP **235–239** (registered,
+not scheduled); the sweep rows are in `docs/COMPETITORS.md` §"The 2026-10-29 tool-and-skill lifecycle sweep". Two claims
+in this audit were narrowed by the study: lever 3's description budget is measured (768/805 unused chars of pi's 1,024
+cap), and lever 1's mechanism is pi's `addendum` section, where the project file **replaces** the user file
+(`docs/configuration.md:39`) — a host-level file would be shadowed, which this file did not know.

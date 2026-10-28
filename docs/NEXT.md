@@ -1,6 +1,9 @@
 # NEXT — current priority and exact next command
 
-**Last updated:** 2026-10-28T22:4xZ, delegate session (D156/D157: the pre-move volume became a git authority — refs and objects imported; nothing host-wide is delegated). Session notes: `docs/reviews/delegate-notes-2026-10-28-cross-os-recovery.md`; harness self-audit (87 past sessions mined): `docs/reviews/pi-harness-usage-audit-2026-10-28.md`. Linux box
+**Last updated:** 2026-10-29T00:2xZ, delegate session (the tool-and-skill lifecycle **study landed its observed half**: 10
+systems read, ROADMAP **235–239** registered, the public-harness half routed as a follow-up prompt). Prior session notes:
+`docs/reviews/delegate-notes-2026-10-28-cross-os-recovery.md`; harness self-audit (87 past sessions mined):
+`docs/reviews/pi-harness-usage-audit-2026-10-28.md`. Linux box
 `Alex-Desktop-Win10` (Fedora `7.2.11-200.fc44.x86_64`), `node v24.22.1`, box zone `America/Chicago` (CDT = UTC−5; every
 timestamp here is **Z**, and note the host's own clock is suspect — see §INCIDENT). Read me first — do not re-derive the
 priority from the ~4,300-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200
@@ -26,7 +29,8 @@ fail its first shell call (`spawn powershell ENOENT`, already firing inside the 
 drain audit's **orphan-candidate** list (#662/#710 both `done`) while an **operator prose clause — "and the queue drains"
 — has no definition anywhere in the tree** (ROADMAP **231**). Rows opened this session: **232** (the sweep prunes the ledger
 ahead of any plan), **233** (instruments credited as landed were never committed and are gone), **234** (every gate is
-wall-clock arithmetic while the store stamps relatively). Delegate halves landed: preflight §5/§7/§8, 233's check, refs+objects.
+wall-clock arithmetic while the store stamps relatively). Delegate halves landed: preflight §5/§7/§8, 233's check, refs+objects. Rows registered this session: **235–239** (harness lifecycle study,
+`docs/reviews/harness-tools-skills-research.md`) — registered, not scheduled; `pm` sequences them against 217/232/233.
 **Next command (delegate, read-only — run in this order, ~4 s total):**
 
 ```bash
@@ -34,6 +38,7 @@ node tools/channel-preflight.mjs --db ./selfdev.sqlite --rig ./rig.selfdev.json 
 node tools/broker-serve.mjs --dry-run    # 2.9 s and it now REFUSES: `seat-shell-availability` + `live-tree-dirty`
 DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json node cli.mjs queue --json \
   | jq -r '.items[] | select(.status=="queued" or .status=="claimed") | [.id,.status,(.to//"-")] | @tsv' | wc -l   # the head of the queue: 0 today
+# operator action owed (the delegate cannot call it): route docs/reviews/harness-tools-skills-followup-research-prompt.md to the research agent
 ```
 
 **Blocker:** the operator ruled (D156/D157): the start stays **withheld on ROADMAP 217**, rehearsals run in the disposable
@@ -113,7 +118,7 @@ this checkout** — run it in the disposable clone.
    or ran are gone and unrecordable; several ROADMAP rows credit them as landed. Either the team re-creates them (labelled
    as re-created, not restored) or the rows that cite them get amended — that is a scope call for you, not for a seat.
 
-## OPEN DELEGATE PROPOSALS (ungraded, not spooled, no grant yet — the operator asked that these be worked next)
+## OPEN DELEGATE PROPOSALS (ungraded, not spooled, no grant yet — the operator asked that these be worked next; the harness half is now ROADMAP 235–239, *registered, not scheduled*)
 
 1. **The skill surface is the only thing a fresh session is *given*, and it is stale.** The harness injects every
    `.agents/skills/*/SKILL.md` `name:`+`description:` at session start with no read; grepping the two skills for
@@ -126,14 +131,13 @@ this checkout** — run it in the disposable clone.
 4. **Edit C (done):** `instrument-provenance` is in the clock-in baseline. Skills steer the **outer agent**, never seats —
    seat tools come from `rig.selfdev.json`/`src/seattools.mjs` (217). **Ask:** A+B+C as delegate work, or rows for `pm`?
 
-## HARNESS LEVERS and the competitor-harness study the operator asked for (next session)
+## HARNESS STUDY — observed half DONE 2026-10-29; the public half is routed, not written
 
-**Zero-cost lever, available today:** open the session with `/skill:delegating-to-durian-pi` — `docs/skills.md` itself admits *"A model might fail to load a relevant skill, so use `/skill:name` when you need to force it"*. Measured over 87 past sessions: skills touched in **28**, `docs/NEXT.md` read in **75**.
-**Grant owed (project-scoped: `.pi/` lives in the repo and loads after project trust — and this repo has no `.pi/` at all):** `.pi/APPEND_SYSTEM.md` (~10 lines: instrument table, the "no suite runs from this checkout until 232 lands" rule, the baseline commands — always injected, survives compaction and small-model skipping).
-**Grant owed, part 2:** `.pi/extensions/delegate-instruments.mjs` — `pi.registerTool()` so the instruments sit in the **tool list** rather than in a file I must remember, a `before_agent_start` 3-line state digest (worktree registrations, suite-membership drift, `queued=0`), and a `tool_call` guard refusing `git worktree prune` / `git clean -fd` / suite runs on this checkout — the verbs that took the 36-row ledger, so belt-and-braces for **232**, not a substitute. Audit: `docs/reviews/pi-harness-usage-audit-2026-10-28.md`.
-**The study — do not re-derive its shape:** the prompt is drafted at `docs/reviews/harness-tools-skills-research-prompt.md`; hand it to the research agent (the delegate cannot call it); report to `docs/reviews/harness-tools-skills-research.md`; follow `docs/runbooks/research-request.md` **and** `docs/runbooks/competitor-review.md` (pin with `tools/vendor-pins.mjs`, register accepted items in ROADMAP as *registered, not scheduled*, add `docs/COMPETITORS.md` entries, write the follow-up prompt).
-**Question:** how a harness makes an agent's **own** tools and skills reusable — registration and surfacing (static list vs schema-registered vs dynamically activated), agent-authored tools, skill discovery/advertisement/on-demand load/precedence, the cross-session memory layer (are transcripts greppable, and do they carry tool arguments?), guardrails on destructive verbs, and the per-request context cost of each.
-**Rawest material:** the 9 pinned clones in `vendor/eval/` (aider, openhands, crewai, metagpt, oh-my-pi, prime-agent, pi-subagents, hermes-agent, symphony) walked with `node tools/competitor-brief.mjs --status` — **never grep first** (the named anti-pattern). Our own failure class is already priced by `tools/harness-usage-census.mjs`: 24% of 11,599 past calls are one-off measurement code, and new instruments get 1–2 sessions. **Do not duplicate:** `docs/reviews/agent-skills-review.md` (10-18), `skill-scope-tiers-research-prompt.md`, `agent-definition-format-standards-research-prompt.md`, `docs/COMPETITORS.md` §"The 2026-10-28 seven-clone sweep".
+**Landed:** `docs/reviews/harness-tools-skills-research.md` (Q1–Q8 over **10 systems**: installed pi `@1.4.0` + the 9 pinned clones; mechanism×system matrix, evidence table, cost table, failure modes) + its `docs/COMPETITORS.md` §"The 2026-10-29 tool-and-skill lifecycle sweep". `node tools/vendor-pins.mjs --check` → PASS (9 clones, review audit clean). Registered **235–239**; 2 mechanisms rejected with reasons (vector/embedding memory; a build-time/cloud skill catalog — both make staleness invisible, our named failure class).
+**The finding:** our own harness already ships the three mechanisms — `.pi/extensions/` auto-discovery + `pi.registerTool()` (pi `src/core/package-manager.ts:2484-2491`, `src/core/extensions/types.ts:1671`), `.pi/APPEND_SYSTEM.md` injected as the `addendum` section (`src/core/system-prompt.ts:172`, and the project file *replaces* the user file), and a **blocking** `tool_call` hook that blocks outright when there is no UI (`types.ts:1194-1264`, `examples/extensions/permission-gate.ts`) — and this repo has **no `.pi/` directory at all**. Across ten systems, **nothing** guards `git worktree prune`/`git clean -fd` (238 is belt-and-braces for **232**, never its substitute: the broker's own `pruneWorktrees` runs where no outer extension can see it).
+**Owed from here (the delegate cannot call the research agent):** route `docs/reviews/harness-tools-skills-followup-research-prompt.md` — Claude Code, Codex CLI, Cursor, Cline, Goose; injection budgets; dangerous-verb guards; dual-host config distribution. Until it lands the verdict is **half-evidenced**: pi's three mechanisms may be parochial.
+**Grant owed (project-scoped under D157; `.pi/` loads only after project trust):** 235 `.pi/extensions/delegate-instruments.mjs`, 236 `.pi/APPEND_SYSTEM.md` (≤40 lines) + the two skill `description:` rewrites (measured headroom: **768/805 unused chars** of pi's 1,024 cap), 238 the `tool_call` guard. Zero-cost today, no grant needed: open a session with `/skill:delegating-to-durian-pi` (`docs/skills.md` admits the model may skip a skill).
+**Corpus warning (237):** `tools/harness-usage-census.mjs` prints no corpus. On this host today: **18 sessions / 2,356 calls / 267 ad-hoc (11.3%)**; the audit's 87 / 11,599 / 24.0% needs both hosts' transcripts and the Windows set is absent here (no D: volume mounted). Quote the corpus with the number.
 
 ## Then, in this order (measured ranking — `docs/reviews/wallclock-budget-2026-10-28.md` §6, ruling D153, amended by D154)
 
