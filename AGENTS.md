@@ -37,12 +37,26 @@ three actors straight is the whole job:
    inventory after each writing verb. A `--dry-run` that names no removals is **not** evidence there are none —
    it previews model and cwd resets only. Evidence: `docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`.
 
+## Work protocol
+
+It's important to interpret operator prompts, roadmap items, milestones, and tasks in a flexible way, leaning towards producing a quality product for end-users. Towards that end, before taking action on anything, ensure you have a comprehensive plan towards achieving your goal. Towards that end, first do the following, and operate using the prompt resulting from this interpretation.
+
+Create a deeper version of the task, not a bigger one. Before rewriting it:
+(1) say what a top professional in this field would do here that the operator is not asking for;
+(2) name the rawest material they would start from instead of what has already been digested;
+(3) name the specific methods and tools they would use;
+(4) say what, other than you or me, would show the result is right.
+Then rewrite the operator's prompt to ask for exactly that.
+Then execute on that resulting promp.
+
 ## Clock out (before you stop)
 
 1. Update **`docs/NEXT.md`**: the current item, its queue id, the exact next command, and any
    blocker. Leave it truer than you found it, because the next session has only this file.
 2. Record a durable decision's *why* in `docs/DECISIONS.md`, not just its *what*.
 3. Report status — done / blocked / unverified, with evidence.
+4. Take notes in appropriate about trouble or pitfalls you encountered as well as propose solutions to ensure future efforts can shortcut the trouble.
+5. Consider the parts of your work that took a lot of wall-clock time to execute on, and propose solutions to hasten future efforts that are likely to also take a lot of wall-clock time, without sacrificing quality of the project.
 
 ## Non-negotiables
 
