@@ -5,7 +5,7 @@ writes: false
 precondition: "none"
 last_verified: 2026-10-28
 verified_by: delegate
-evidence: "docs/reviews/aider-review.md (worked example, 2026-10-17); Do 2 + Verify re-run 2026-10-28 on 7 live clones — `tools/vendor-pins.mjs --format header --project symphony --tags` emitted the header, `--write docs/VENDOR-PINS.md --tags` wrote the tracked pin table, `--check` exit 0, and an injected hand-edited HEAD returned exit 1; Do 4-9 now run end-to-end on all 7 (`docs/reviews/{crewai,symphony,hermes-agent,openhands,metagpt,oh-my-pi,prime-agent}-review.md`, 2026-10-28) — `--check` reports \"7 clone(s) pass the review audit\", `node scripts/test.mjs --all` 238/238 in 40.9 s, and each walk started from `node tools/competitor-brief.mjs --project <name>` (0.9-1.1 s) rather than a grep"
+evidence: "docs/reviews/aider-review.md (worked example, 2026-10-17); Do 2 + Verify re-run 2026-10-28 on 7 live clones — `tools/vendor-pins.mjs --format header --project symphony --tags` emitted the header, `--write docs/VENDOR-PINS.md --tags` wrote the tracked pin table, `--check` exit 0, and an injected hand-edited HEAD returned exit 1; Do 4-9 now run end-to-end on all 7 (`docs/reviews/{crewai,symphony,hermes-agent,openhands,metagpt,oh-my-pi,prime-agent}-review.md`, 2026-10-28) — `--check` reports \"7 clone(s) pass the review audit\", `node scripts/test.mjs --all` 238/238 in 40.9 s, and each walk started from `node tools/competitor-brief.mjs --project <name>` (0.9-1.1 s) rather than a grep; a second question (file-editing tools) ran Diagnose + Do 1/2 + Do 6 the same day on aider and oh-my-pi — `docs/reviews/edit-machinery-2026-10-28.md`, aider re-cloned to the SAME pin because it is dormant (`--freshness` = CURRENT), `--check` PASS at 8 clones after `--write`, and the run re-grepped two numbers this record had published about aider and found neither in the tree"
 check_rule: "tools/vendor-pins.mjs --check (delegate audit; the `check` rule is ROADMAP 202); freshness is a separate verb, `tools/vendor-pins.mjs --freshness` (D146)"
 ---
 
@@ -84,6 +84,14 @@ surface inventory, standards table, coverage matrix); otherwise a **quality redo
 because a delta only sees changed lines and cannot find a miss in unchanged code.
 
 ## Do
+**Before Do 1 — price our own failure class.** A competitor review answers
+   "how did they do it?"; it cannot tell you whether the mechanism would have fixed **your** defect. The rawest
+   material is usually already persisted: every seat tool result is in the store, and
+   `node tools/edit-failure-rate.mjs <db>` prints per-tool failure rates and per-class counts **with the patterns it
+   counted**. Measured 2026-10-28 over 137,368 entries: `edit` 11.5% (71% anchor misses) vs `write` 1.0% — which is
+   what decided that the adoptable mechanism was an *informed refusal message*, not a new editor, and it also exposed
+   that the naive filter (`%must be unique%`, 1,065 hits) was counting prompt schema text rather than failures. Do
+   this even when the question names a competitor; it is ~1 s, and it reorders the adoption list.
 1. **Shallow-clone read-only** into `vendor/eval/<name>` (gitignored; never a workspace root). Native
    Windows, no `wsl`/`docker`:
    ```bash
@@ -143,6 +151,13 @@ because a delta only sees changed lines and cannot find a miss in unchanged code
    our constraints; and an explicit adopt / adapt / reject call per practice **and per standard** from
    step 5. Each adopt names the durian-pi mechanism it would change, and calls out a conflict with a
    recorded `docs/DECISIONS.md` entry rather than silently contradicting one.
+   **A question that spans projects gets its own file, and it does not replace the per-project reviews
+   (learned 2026-10-28, `docs/reviews/edit-machinery-2026-10-28.md`).** "One review = one project" keeps
+   reviews comparable and keeps each project's pin audit working, so a cross-project answer must still
+   update each `docs/reviews/<name>-review.md` (aider's two unsupported numbers and its dead-code claim were
+   corrected in place; oh-my-pi's got a dated delta) and each `docs/COMPETITORS.md` row. The comparison file
+   is the answer; the per-project files stay the record. `vendor-pins --check`'s review audit keys on
+   `<name>-review.md`, so a comparison file is not audited — it must cite both HEADs itself.
 7. **Add or update its `docs/COMPETITORS.md` entry** (the maintained list). One row per decision, with the
    durian-pi counterpart it should change or inform, and the pinned HEAD + cited paths.
 8. **Register the accepted practices as ROADMAP items** (`registered, not scheduled`) with owner and
