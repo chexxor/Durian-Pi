@@ -37,19 +37,19 @@ DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json node cli.mjs queue --j
   | jq -r '.items[] | select(.status=="queued" or .status=="claimed") | [.id,.status,(.to//"-")] | @tsv' | wc -l   # the head of the queue: 0 today
 ```
 
-**Blocker:** the operator ruled (D156): the start stays **withheld on ROADMAP 217**, and rehearsals run in a disposable
-clone, never this checkout. Still owed: (1) the 221 seat-root ruling, (2) the definition of **"the queue drains"** (231),
-(3) a grant on what may prune/remove registrations here, (4) a grant to copy the Windows clone's **3 packs** here (rehearsed:
-**+13,057 objects, `git fsck` clean, 23/30 cited shas resolve**) and (5) the clock ruling (`LocalRTC=yes`, `RTC time 15:52:50`
-vs UTC `20:52:50` — a 5 h mislabel). **Routed:** routing fact spooled to `pm` as `delegate-routing-fact-20261028-2150`.
-**History:** `docs/NEXT-ARCHIVE.md`. **The start itself stays refused: `node tools/broker-serve.mjs --dry-run`.**
+**Blocker:** the operator ruled (D156/D157): the start stays **withheld on ROADMAP 217**, rehearsals run in a disposable
+clone, and **nothing host-wide is delegated** (`set-local-rtc 0` changes the whole OS — routed as ROADMAP **234**, detector
+`tools/channel-preflight.mjs` §8). **Applied under the grant:** the pre-move clone's 3 packs → this checkout: 9,301 →
+22,351 objects, `git fsck` clean, **23/30 cited shas resolve**, 455 commits still anchored by nothing. Still owed: the 221
+seat-root ruling; an evaluable **"the queue drains"** (231); a grant to mint `refs/rescued/orphan-*` for those 455.
+**Routed:** `delegate-routing-fact-20261028-2150`. **History:** `docs/NEXT-ARCHIVE.md`.
 
 ### Read-only baseline — run this before anything else (all verified working, Linux, 2026-10-28T20:1xZ)
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
 git worktree list --porcelain | tee .spike/worktree-inventory-$(date +%Y-%m-%d)-after.txt   # 1 entry (main); the 36-row pre-move ledger is now COMMITTED: docs/incidents/evidence-2026-10-24-windows-ledger.txt
-node tools/channel-preflight.mjs --db ./selfdev.sqlite --rig ./rig.selfdev.json      # 3.3 s — §1–§7, incl. seat capability (217) and provider-era attribution (226)
+node tools/channel-preflight.mjs --db ./selfdev.sqlite --rig ./rig.selfdev.json      # 3.3 s — §1–§8, incl. seat capability (217), provider-era attribution (226), host-clock posture (234)
 node tools/broker-serve.mjs --status      # 2.8 s; now also raises `seat-shell-availability` (217)
 node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 0.93 s: 91 non-terminal LANDING rows, 71 fully on main, ids printed
 node tools/latency-budget.mjs --db ./selfdev.sqlite      # 3.0 s: the two wall-clock currencies

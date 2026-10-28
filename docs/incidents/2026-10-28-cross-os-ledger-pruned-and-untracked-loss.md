@@ -138,3 +138,22 @@ there `node tools/broker-serve.mjs --dry-run` evaluates the whole preflight and 
 `seat-shell-availability` (ROADMAP 217), and **both** checkouts' `git worktree list` stayed at 1 row. Note the F12
 seat-root guard: a global `DURIG_SEAT_ROOT` with a *local* store/config is refused by `src/config.mjs`, so a rehearsal
 either copies the store to a global root or leaves `DURIG_SEAT_ROOT` unset (per-item worktrees) — the latter was used.
+
+## Recovery applied to the working checkout (granted, 2026-10-28T22:0xZ), and the clock item's boundary
+
+`cp <windows clone>/.git/objects/pack/*.pack .git/objects/pack/` then `git index-pack` on each: objects **9,301 → 22,351**,
+`git fsck --connectivity-only` clean (dangling only), ledger unchanged at **1 registration**. **23 of the 30** recorded
+unresolvable shas now resolve **here**; 6 resolve in neither clone. Commit objects **2,083** vs **1,628** reachable from
+refs, so **455 commits are anchored by nothing** — perishable until someone mints refs for them (not done: a repo-shape
+change beyond the grant). Re-check:
+`git cat-file --batch-all-objects --batch-check | wc -l; git rev-list --all --count; git cat-file --batch-all-objects
+--batch-check | awk '$2=="commit"' | wc -l`.
+
+**Clock boundary (D157).** `timedatectl show` (bare; `show -p A,B,C` prints nothing — a comma list is not accepted) on
+2026-10-28T22:02:43 local: `LocalRTC=yes`, `NTP=yes`, `NTPSynchronized=yes`, `RTCTimeUSec=Wed 2026-10-28 16:02:43 UTC` —
+the RTC holds local time, **5 h** behind true UTC. `set-local-rtc 0` would change the **whole OS** (and Windows' display at
+the next boot), so the operator withheld it; the project-scoped half is ROADMAP **234**, and the delegate-side detector is
+`tools/channel-preflight.mjs` §8 (raises `NOTE host-clock-step-risk`). Measured while writing it: `documents.created_at`
+is a **relative** stamp (`1 … 2,263,478`), not epoch-ms, and `entries` has no wall-clock column — the rig has no way to
+observe a step from its own store, and `demo/broker-clock-step.test.mjs` (row 210's regression) is among the files lost
+above.

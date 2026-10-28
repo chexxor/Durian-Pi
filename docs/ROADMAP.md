@@ -4317,3 +4317,37 @@ delegate-written work), from all **2,081** commit objects recovered out of the p
 from NTFS `$Recycle.Bin`; and this host shows no snapshot tooling to a normal user (`/.snapshots`, `/home/.snapshots`
 absent, no `snapper` binary, `btrfs subvolume list /home` → `Operation not permitted`). So 233's "re-created, and labelled
 as re-created" branch is the only branch — see D156 for what the drive *does* recover.
+
+**234. Every broker gate is wall-clock arithmetic while the store stamps relatively, so a host clock step silently
+rewrites the budgets — and no surface in the rig can see one happen.**
+*(devtools; measured 2026-10-28T22:0xZ, Linux)* The gates are `Date.now()` minus a stored stamp:
+`BROKER_HEARTBEAT_TIMEOUT_MS = 60_000` (`src/storeownership.mjs:39`), `STRANDED_ADMITTED_MS = 30_000`
+(`src/attention.mjs:28`), `ADMISSION_DEADLINE_MS = 300_000` and `BROKER_PROGRESS_MARGIN_MS = 60_000` and
+`DEFAULT_PASS_TIMEOUT_MS = 300_000` (`src/broker.mjs:866,2124,2127`), `RESERVATION_STALE_MS = 660_000`
+(`src/genlockreserve.mjs:31`), `INTENT_RESULT_TTL_MS = 600_000` (`src/broker.mjs:344`). This host reports
+`LocalRTC=yes` with `RTCTimeUSec=Wed 2026-10-28 16:02:43 UTC` when true UTC was `20:02:43Z` — the hardware clock holds
+CDT, a **5 h mislabel** a boot can hand to the system clock before NTP *steps* it — and a **42 m 42 s backward step
+inside a single session** is already recorded
+(`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`, §One host fact). Consequences in both
+directions, named so they are testable: a **forward** step makes a live broker's heartbeat read stale → a false `down`
+and a second broker taking the store; a **backward** step makes a stale heartbeat read fresh → two writers.
+**Correction, stated so nobody over-claims it:** the graceful-stop grace is **not** at risk on this rig —
+`stopGraceMs = 0` by default (`src/broker.mjs:1545`) and `rig.selfdev.json` sets none. Meanwhile the store cannot show
+any of it: `documents.created_at` spans `1 … 2,263,478` (epoch-ms in 2026 would be ~1.79e12, so these are **relative**
+stamps) and `entries` has **no wall-clock column at all** (stamps live inside `record` JSON) — no query can currently
+reveal a step. `demo/broker-clock-step.test.mjs`, named in row 210's signal list, is one of the files lost under **233**,
+so the product's own regression for this is gone as well. · *Owner:* devtools · *Where:* the gate call sites above (use a
+monotonic elapsed — `process.hrtime.bigint()`/`performance.now()` — for in-process budgets; keep wall clock only for
+**cross-process** stamps, written and compared in one place) + `src/storeownership.mjs` and `src/attention.mjs` (the two
+places a step becomes a wrong *safety* call: liveness and stranded-admitted) + `scripts/clockin.mjs` (print a one-line
+clock posture: `LocalRTC`, NTP sync state, and the wall-vs-monotonic delta measured across the digest — the shape
+`tools/channel-preflight.mjs` §8 already prints, at ~60 ms) · *Acceptance:* a demo that steps the wall clock (inject the
+offset the way `demo/degeneration-duration.test.mjs` injects time) and asserts the heartbeat verdict does **not** flip; a
+second asserts the admission deadline does not shorten; `scripts/clockin.mjs` prints the posture and flags
+`LocalRTC=yes`; the store gains a comparable **absolute** stamp so a step becomes a query (the 74-row relative column is
+not it) · *Blind spots:* the host-level fix (`sudo timedatectl set-local-rtc 0`) is **not this project's** and the operator
+explicitly withheld delegation of anything OS-wide (D157) — on a dual-boot box it also makes Windows show the wrong time
+until `RealTimeIsCompatible=1`; do not answer this by assuming NTP (an unsynced box must still work, so the rule is
+*monotonic inside a process, wall clock only across processes with a named epoch*); and a monotonic switch must not break
+restart-spanning comparisons, since a restart drops the monotonic baseline — which is exactly why the **stamps** stay wall
+clock while the **budgets** go monotonic.

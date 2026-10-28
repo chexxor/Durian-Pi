@@ -5870,3 +5870,31 @@ applied to the working checkout. (4) Re-created instruments are labelled **re-cr
 **What was deliberately not done.** No pack copy into the working checkout (awaiting the grant; the numbers above are the
 rehearsal's), no `git worktree prune`/`remove` anywhere, no queue transition, no `rig.selfdev.json` edit (the drafted
 `bash` sentence is recorded in ROADMAP 217 instead), no `set-local-rtc` (the operator held the clock item), and no push.
+
+## D157 — The delegate may act inside the project; nothing that changes the host operating system is delegated, and the pre-move object import is granted but bounded (2026-10-28, operator ruling)
+
+**The ruling.** Asked to act on the recommended actions and whether the clock change is host-wide, the operator granted the
+actions and set the boundary: **a change is approvable at delegate level only if it applies to this project/workspace**.
+`timedatectl set-local-rtc 0` is host-wide, so it stays unapplied and un-delegated.
+
+**Applied under the grant (working checkout, additive, reversible).** The pre-move Windows clone's **three `*.pack` files**
+were copied into `/home/chexxor/Git/Durian-Pi/.git/objects/pack/` and `git index-pack` run on each: object count
+**9,301 → 22,351**, `git fsck --connectivity-only` reports no corruption (dangling objects only), **2,083 commit objects
+against 1,628 reachable from refs — 455 commits exist only as unreachable objects**, and **23 of the 30** queue-cited shas
+that resolved nowhere now resolve here (the 6 that resolve in neither clone stay listed in the incident). `git worktree
+list` stayed at **1 registration** before and after. Only `*.pack` files were copied; copying a pack's
+`.idx/.rev/.mtimes/multi-pack-index` was measured to break every object read with `fatal: mmap failed: Permission denied`.
+
+**Why the boundary is right, not timid.** The clock item is not a preference: `LocalRTC=yes` with the RTC holding CDT is a
+**5 h** mislabel (`RTCTimeUSec=Wed 2026-10-28 16:02:43 UTC` while UTC was `20:02:43Z`), and a 42 m 42 s backward step
+already happened inside one session — but the fix rewrites the OS's reading of the hardware clock for **every** process and
+changes what Windows displays at the next boot. The project-scoped half of the same problem is real and is now routed as
+ROADMAP **234**: the rig's budgets are wall-clock arithmetic (`heartbeat 60 s`, `stranded-admitted 30 s`, `admission
+5 min`, `genlock reservation 11 min`) while the store's own stamps are **relative** (`documents.created_at` spans
+`1 … 2,263,478`; `entries` has no wall-clock column), so the rig cannot see a step happen. `tools/channel-preflight.mjs`
+§8 is the delegate-side tripwire: it prints the host clock posture and a wall-vs-monotonic delta (~60 ms of a 3.33 s run)
+and **never** applies a fix.
+
+**Still perishable, still the operator's call.** Those 455 unreachable commits are anchored by nothing; a
+`git gc --prune=now` on either side destroys them for good. Anchoring them (e.g. `refs/rescued/orphan-*` per sha) is a
+repo-shape change the delegate did **not** make unasked.
