@@ -1,6 +1,13 @@
 // The 189 gate runner. Scores a model against corpus.mjs and reports a PAIRED verdict.
 //
 //   node tools/model-probes/gate.mjs <baseUrl> <modelId> [label] [--compare <run.json>] [--out <file>]
+//        [--whole-module] [--budget <estTokens>] [--probe] [--material answer|answer+reasoning] [--plan]
+//
+// TWO FEEDINGS, and the difference between them is a measured question, not a style choice (ROADMAP 195):
+// the default shows a WINDOW around the defect; `--whole-module` shows the ENTIRE module and loudly SKIPS any
+// item whose whole module does not fit the endpoint's context. A window strips the import block and the
+// sibling declarations, so a model that reports "`resolve` is not imported" is telling the truth about MY
+// excerpt — and any false-alarm rate measured on windows is inflated by construction.
 //
 // THREE CONDITIONS per item, which is the whole point of the rewrite:
 //   defect        the code carries the defect            -> a HIT is naming the mechanism
@@ -62,7 +69,7 @@ const ASSERT = [
   "off-by-one",
 ];
 
-async function ask(baseUrl, model, code, file, userPrompt) {
+async function ask(baseUrl, model, code, file, userPrompt, maxTokens = Number(process.env.CAL_MAX_TOKENS || 3000)) {
   const body = {
     model,
     messages: [
@@ -72,7 +79,7 @@ async function ask(baseUrl, model, code, file, userPrompt) {
     temperature: 0.2,
     // Not cosmetic: at 900 the primary spent every token on reasoning and returned an EMPTY answer with
     // finish_reason=length (D134). A thinking model with a small budget does not fail loudly, it says nothing.
-    max_tokens: Number(process.env.CAL_MAX_TOKENS || 3000),
+    max_tokens: maxTokens,
   };
   const t0 = Date.now();
   const r = await fetch(`${baseUrl}/chat/completions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -127,9 +134,19 @@ const EXCERPT_ARTIFACT = [
   "__durig_probe__",
 ];
 
-function scoreDefect(item, res) {
-  const hay = `${res.reasoning}\n${res.text}`.toLowerCase();
+/**
+ * What a turn is SCORED ON is a declared setting, not whatever the endpoint happened to return (ROADMAP 197).
+ * The primary's endpoint returns `reasoning_content`; LM Studio returns none for `ministral-3-14b-reasoning`
+ * (D137), so "score whatever came back" scored the control on twice the material the candidate had — and two
+ * of the control's five historical HITs named the mechanism only in its trace (H2 3/3 -> 0/3, H5 3/3 -> 1/3).
+ */
+function materialOf(res, material) {
   const ans = (res.text || "").toLowerCase();
+  return { ans, hay: material === "answer" ? ans : `${res.reasoning}\n${res.text}`.toLowerCase() };
+}
+
+function scoreDefect(item, res, { material = "answer+reasoning", whole = false } = {}) {
+  const { ans, hay } = materialOf(res, material);
   if (!res.text && res.finish === "length") return { verdict: "TRUNCATED-EMPTY", groups: "0/0", need: item.need, phantoms: [] };
   // Rubric phrases are LITERAL substrings, never regexes: a mechanism phrase like `+ 1` crashed the first
   // version of this scorer when it was compiled as a pattern.
@@ -154,9 +171,8 @@ function scoreDefect(item, res) {
   };
 }
 
-function scoreClean(item, res) {
-  const hay = `${res.reasoning}\n${res.text}`.toLowerCase();
-  const ans = (res.text || "").toLowerCase();
+function scoreClean(item, res, { material = "answer+reasoning", whole = false } = {}) {
+  const { ans, hay } = materialOf(res, material);
   if (!res.text && res.finish === "length") return { verdict: "TRUNCATED-EMPTY", declined: false, namedMechanism: 0, asserted: false };
   // A named mechanism group is the strongest signal: it is describing the very defect that is NOT there.
   const named = item.groups.filter((g) => g.some((alt) => hay.includes(alt.toLowerCase()))).length;
@@ -164,16 +180,31 @@ function scoreClean(item, res) {
   const asserted = ASSERT.some((a) => ans.includes(a));
   const artifact = ARTIFACT.filter((a) => ans.includes(a));
   const excerpt = EXCERPT_ARTIFACT.filter((a) => ans.includes(a));
+  // THE 195 POINT: an absent-binding claim is only excusable when there IS an excerpt to blame. Show the whole
+  // module and the import block is on the page, so "`resolve` is not imported" is either a real defect in a
+  // file that has one, or a hallucination — never my scaffolding. It is then counted, not excused.
+  const excusable = whole ? [] : excerpt;
   // Same conditional as scoreDefect: excusing a control turn is only right when the model made no claim about
   // the code. "The excerpt is truncated, so nothing is wrong" is a corpus artifact; "the excerpt is truncated,
   // AND the npm argument order is wrong" on a control where the npm bug is FIXED is a false alarm.
-  if ((artifact.length || excerpt.length) && !named && !falseAlarm.length && !asserted) {
-    return { verdict: artifact.length ? "ARTIFACT" : "ARTIFACT-EXCERPT", declined: false, namedMechanism: 0, asserted: false };
+  if ((artifact.length || excusable.length) && !named && !falseAlarm.length && !asserted) {
+    return {
+      verdict: artifact.length ? "ARTIFACT" : "ARTIFACT-EXCERPT",
+      declined: false,
+      namedMechanism: 0,
+      asserted: false,
+      absentBindingClaims: excerpt,
+      artifactMention: artifact,
+    };
   }
   const declined = DECLINE.some((d) => ans.includes(d));
-  const verdict = declined && !asserted && !falseAlarm.length && named < 2
+  // In whole-module mode an absent-binding claim IS an assertion about the code shown, so it moves the verdict
+  // instead of excusing the turn — including against a turn that also said "no defect", because a verifier
+  // that declares clean code clean while hallucinating a missing binding is not a verifier to trust.
+  const assertedNow = asserted || (whole && excerpt.length > 0);
+  const verdict = declined && !assertedNow && !falseAlarm.length && named < 2
     ? "CLEAN-PASSED"
-    : asserted || falseAlarm.length || named >= 2
+    : assertedNow || falseAlarm.length || named >= 2
       ? "FALSE-ALARM"
       : "AMBIGUOUS";
   return {
@@ -182,7 +213,8 @@ function scoreClean(item, res) {
     namedMechanism: named,
     asserted,
     falseAlarmPhrases: falseAlarm,
-    ...(artifact.length || excerpt.length ? { artifactMention: [...artifact, ...excerpt] } : {}),
+    ...(excerpt.length ? { absentBindingClaims: excerpt } : {}),
+    ...(artifact.length ? { artifactMention: artifact } : {}),
   };
 }
 
@@ -204,7 +236,7 @@ function mcnemarExact(b, c) {
 
 const [,, baseUrl, model, labelArg, ...flags] = process.argv;
 if (!baseUrl || !model) {
-  console.error("usage: node gate.mjs <baseUrl> <modelId> [label] [--compare run.json] [--out file]");
+  console.error("usage: node gate.mjs <baseUrl> <modelId> [label] [--compare run.json] [--out file] [--whole-module] [--budget N] [--probe] [--material answer|answer+reasoning] [--plan]");
   process.exit(2);
 }
 const label = labelArg || model;
@@ -212,13 +244,52 @@ const flag = (name) => {
   const i = flags.indexOf(`--${name}`);
   return i >= 0 ? flags[i + 1] : null;
 };
+// HOW THE MODEL IS FED and what it is scored on are now PART OF THE RUN RECORD, because both moved the answer
+// on 2026-10-28: fragment vs whole controls, and reasoning-trace vs answer-only, each changed the verdict.
+const MODE = flags.includes("--whole-module") ? "whole" : "fragment";
+const BUDGET = Number(flag("budget") || process.env.CAL_TOKEN_BUDGET || 10000);
+const MATERIAL = flag("material") || process.env.CAL_MATERIAL || "answer+reasoning";
+const PROBE = flags.includes("--probe");
+const OPTS = { material: MATERIAL, whole: MODE === "whole" };
+if (!["answer", "answer+reasoning"].includes(MATERIAL)) {
+  console.error(`--material must be 'answer' or 'answer+reasoning', got '${MATERIAL}'`);
+  process.exit(2);
+}
+if (!Number.isFinite(BUDGET) || BUDGET <= 0) {
+  console.error(`--budget must be a positive token estimate, got '${BUDGET}'`);
+  process.exit(2);
+}
 
 const { items, notes } = await buildCorpus();
 console.log(`\nCORPUS: ${items.length} items (${items.filter((i) => i.kind === "mut").length} mutants with execution proofs, ${items.filter((i) => i.kind === "hist").length} from git fix history)`);
 for (const n of notes) console.log(`  NOTE ${n}`);
 for (const i of items) if (i.proof) console.log(`  PROOF ${i.id}: clean ${i.proof.cleanOut} != mutant ${i.proof.mutantOut}`);
 
+// The fit table, printed BEFORE any prompt is spent, so "which items are whole-module" is a checkable
+// decision rather than something the run quietly did.
+function planTable() {
+  console.log(`\nFEEDING: ${MODE === "whole" ? `WHOLE MODULE (budget ${BUDGET} est. tokens)` : "FRAGMENT window"}   scoring material: ${MATERIAL}`);
+  console.log(`  ${"item".padEnd(34)} ${"file".padEnd(22)} ${"frag~tok".padStart(8)} ${"whole~tok".padStart(9)}  decision`);
+  for (const it of items) {
+    const frag = it.fragment?.defectTokens ?? "-";
+    if (!it.whole) {
+      console.log(`  ${it.id.padEnd(34)} ${it.file.padEnd(22)} ${String(frag).padStart(8)} ${"n/a".padStart(9)}  NO whole-module text (see NOTE)`);
+      continue;
+    }
+    const fits = it.whole.estTokens <= BUDGET;
+    console.log(
+      `  ${it.id.padEnd(34)} ${it.file.padEnd(22)} ${String(frag).padStart(8)} ${String(it.whole.estTokens).padStart(9)}  ${fits ? "whole module" : `SKIP: whole module ~${it.whole.estTokens} tok > budget ${BUDGET}`}`,
+    );
+  }
+}
+planTable();
+if (flags.includes("--plan")) {
+  console.log("\n--plan: no prompts sent.");
+  process.exit(0);
+}
+
 const run = [];
+const skipped = [];
 const rescore = flag("rescore");
 if (rescore) {
   // Re-score a saved transcript with the CURRENT rubric and scorer, without spending another prompt. The
@@ -233,19 +304,45 @@ if (rescore) {
       continue;
     }
     const ans = { text: r.answer || "", reasoning: r.reasoning || "", finish: r.finish, completion: r.completion, dt: r.dt };
-    run.push({ ...r, score: r.cond === "defect" ? scoreDefect(it, ans) : scoreClean(it, ans) });
+    run.push({ ...r, score: r.cond === "defect" ? scoreDefect(it, ans, OPTS) : scoreClean(it, ans, OPTS) });
   }
   console.log(`\nRESCORE ${rescore} (label ${prev.label}, asked ${prev.at}) with the current scorer — no new prompts.`);
   for (const r of run) if (r.score) console.log(`  ${r.cond.padEnd(13)} ${r.id}: ${r.score.verdict}`);
 } else {
-console.log(`\n${"=".repeat(78)}\nGATE RUN: ${label} (${model}) @ ${baseUrl}\n${"=".repeat(78)}`);
+console.log(`\n${"=".repeat(78)}\nGATE RUN: ${label} (${model}) @ ${baseUrl}\n  feeding=${MODE} budget=${BUDGET} estTokens  material=${MATERIAL}${PROBE ? "  probe=on" : ""}\n${"=".repeat(78)}`);
 for (let n = 0; n < items.length; n++) {
   const it = items[n];
+  // A whole-module arm that quietly fell back to a fragment would measure nothing, so an item that does not fit
+  // is DROPPED LOUDLY and named in the summary — the reader sees the denominator shrink, and why.
+  if (MODE === "whole") {
+    if (!it.whole) {
+      console.log(`\n--- ${it.id} ---\n  SKIP ${it.id}: NO whole-module text for ${it.file} — NOT shown as a fragment.`);
+      skipped.push({ id: it.id, why: "no whole-module text" });
+      continue;
+    }
+    if (it.whole.estTokens > BUDGET) {
+      console.log(`\n--- ${it.id} ---\n  SKIP ${it.id}: whole module ~${it.whole.estTokens} tok (${it.whole.chars} chars) > budget ${BUDGET} — stays a FRAGMENT (ROADMAP 195).`);
+      skipped.push({ id: it.id, why: `whole ~${it.whole.estTokens} tok > budget ${BUDGET}` });
+      continue;
+    }
+  }
   // Counterbalance: half the items answer clean first, half defect first.
   const order = n % 2 === 0 ? ["defect", "clean", "clean-neutral"] : ["clean", "defect", "clean-neutral"];
-  console.log(`\n--- ${it.id} (${it.kind}, ${it.file}) ---`);
+  console.log(`\n--- ${it.id} (${it.kind}, ${it.file}) — ${MODE === "whole" ? `whole module, ~${it.whole.estTokens} est. tok` : "fragment window"} ---`);
+  if (MODE === "whole" && PROBE) {
+    // 400-or-not, empirically (195: "probe it, do not assume"). The estimate is calibrated to be CONSERVATIVE,
+    // so an item it calls too big was never close; an item it calls small can still be refused by the server.
+    try {
+      await ask(baseUrl, model, it.whole.defectText, it.file, "", 1);
+    } catch (e) {
+      console.log(`  SKIP ${it.id}: endpoint REFUSED the whole module (probe): ${e.message}`);
+      skipped.push({ id: it.id, why: `probe refused at ~${it.whole.estTokens} est. tok: ${e.message.slice(0, 120)}` });
+      continue;
+    }
+    console.log(`  PROBE ${it.id}: whole module ACCEPTED by the endpoint.`);
+  }
   for (const cond of order) {
-    const code = cond === "defect" ? it.defectText : it.cleanText;
+    const code = cond === "defect" ? (MODE === "whole" ? it.whole.defectText : it.defectText) : (MODE === "whole" ? it.whole.cleanText : it.cleanText);
     const prompt = cond === "clean-neutral" ? NEUTRAL : LEADING;
     let res;
     try {
@@ -255,8 +352,8 @@ for (let n = 0; n < items.length; n++) {
       run.push({ id: it.id, kind: it.kind, cond, error: e.message });
       continue;
     }
-    const s = cond === "defect" ? scoreDefect(it, res) : scoreClean(it, res);
-    run.push({ id: it.id, kind: it.kind, cond, score: s, finish: res.finish, dt: +res.dt.toFixed(1), completion: res.completion, prompt: res.prompt, answer: res.text, reasoning: res.reasoning });
+    const s = cond === "defect" ? scoreDefect(it, res, OPTS) : scoreClean(it, res, OPTS);
+    run.push({ id: it.id, kind: it.kind, cond, feed: MODE, score: s, finish: res.finish, dt: +res.dt.toFixed(1), completion: res.completion, prompt: res.prompt, answer: res.text, reasoning: res.reasoning });
     const tag = cond === "defect" ? `${s.verdict} groups=${s.groups} need=${s.need}${s.phantoms.length ? ` PHANTOM[${s.phantoms.join("|")}]` : ""}` : s.verdict;
     console.log(`  ${cond.padEnd(13)} ${tag}  ${res.dt.toFixed(1)}s finish=${res.finish} completion=${res.completion}`);
     console.log(`      ${res.text.replace(/\n/g, "\n      ").slice(0, 700)}`);
@@ -280,6 +377,13 @@ const passed = clean.filter((r) => r.score.verdict === "CLEAN-PASSED");
 const faN = neutral.filter((r) => r.score.verdict === "FALSE-ALARM");
 
 console.log(`\n${"=".repeat(78)}\nSUMMARY ${label}`);
+console.log(`  feeding: ${MODE === "whole" ? `WHOLE MODULE (shown when ~est. tokens <= ${BUDGET})` : "FRAGMENT window around the changed hunk"}   scoring material: ${MATERIAL}`);
+if (skipped.length) {
+  console.log(`  ITEMS SKIPPED BY THE WHOLE-MODULE ARM (195 — they stay fragments; every rate below is over the SHRUNKEN denominator):`);
+  for (const s of skipped) console.log(`    SKIP ${s.id}: ${s.why}`);
+}
+const absent = run.filter((r) => r.cond !== "defect" && r.score?.absentBindingClaims?.length);
+console.log(`  control turns claiming an absent binding (import/undefined/ReferenceError): ${absent.length} — ${MODE === "whole" ? "COUNTED as false alarms, the import block was on the page" : "excused where no code-level claim was made (ROADMAP 195)"}`);
 console.log(`  defect items named:  ${hits.length}/${scored.length} scored (${defects.length} attempted)${phantoms.length ? `   (pre-registered PHANTOM present in ${phantoms.length})` : ""}`);
 if (corpusBugs.length) console.log(`  CORPUS BUGS (rule G1 — EXCLUDED from the ranking): ${corpusBugs.map((r) => `${r.id}:${r.score.verdict}`).join(", ")}`);
 if (cleanAll.length !== clean.length || neutralAll.length !== neutral.length) console.log(`  control conditions dropped as corpus bugs: ${cleanAll.length - clean.length + neutralAll.length - neutral.length}`);
@@ -291,24 +395,61 @@ console.log(`  truncated (finish=length): ${run.filter((r) => r.finish === "leng
 const cmp = flag("compare");
 if (cmp) {
   const other = JSON.parse(readFileSync(cmp, "utf8"));
-  const mine = new Map(scored.map((r) => [r.id, r.score.verdict.startsWith("HIT")]));
-  const theirs = new Map((other.run || other).filter((r) => r.cond === "defect" && r.score && r.score.verdict !== "ARTIFACT" && r.score.verdict !== "TRUNCATED-EMPTY").map((r) => [r.id, r.score.verdict.startsWith("HIT")]));
+  const otherRun = other.run || other;
+  const byId = (rows) => {
+    const m = new Map();
+    for (const r of rows) {
+      if (!r.score) continue;
+      if (!m.has(r.id)) m.set(r.id, {});
+      m.get(r.id)[r.cond] = r;
+    }
+    return m;
+  };
+  const mine = byId(run);
+  const theirs = byId(otherRun);
+  // Pair on the items BOTH arms actually showed. A whole-module arm has a smaller denominator than a
+  // fragment arm by design (195 skips what does not fit), so an unintersected rate comparison would be
+  // comparing different sets of items and calling it a model difference.
+  const shared = [...mine.keys()].filter((id) => theirs.has(id));
+  const modeOf = (o) => o.mode || "fragment (transcript predates the mode field)";
+  console.log(`\n  SIDE BY SIDE — this run fed: ${modeOf({ mode: MODE })}   other (${other.label ?? cmp}) fed: ${modeOf(other)}`);
+  console.log(`  scoring material: this ${MATERIAL}, other ${other.material ?? "answer+reasoning (unrecorded)"}`);
+  console.log(`  shared items: ${shared.length} (this run ${mine.size}, other ${theirs.size})`);
+  for (const id of shared) {
+    const a = mine.get(id);
+    const b = theirs.get(id);
+    const v = (x, c) => (x[c]?.score?.verdict ?? "-");
+    console.log(`    ${id.padEnd(34)} defect: ${v(a, "defect").padEnd(12)} vs ${v(b, "defect").padEnd(12)} | clean: ${v(a, "clean").padEnd(12)} vs ${v(b, "clean").padEnd(12)} | neutral: ${v(a, "clean-neutral").padEnd(12)} vs ${v(b, "clean-neutral")}`);
+  }
+  const rowsOf = (m, ids, cond) => ids.map((id) => m.get(id)?.[cond]).filter((r) => r && r.score && !DROP.has(r.score.verdict) && r.score.verdict !== "ARTIFACT-EXCERPT");
+  const hitRows = rowsOf(mine, shared, "defect");
+  const theirHitRows = rowsOf(theirs, shared, "defect");
+  const theirHits = new Map(theirHitRows.map((r) => [r.id, r.score.verdict.startsWith("HIT")]));
   let b = 0;
   let c = 0;
-  for (const [id, me] of mine) {
-    if (!theirs.has(id)) continue;
-    if (me && !theirs.get(id)) b++;
-    if (!me && theirs.get(id)) c++;
+  for (const r of hitRows) {
+    if (!theirHits.has(r.id)) continue;
+    if (r.score.verdict.startsWith("HIT") && !theirHits.get(r.id)) b++;
+    if (!r.score.verdict.startsWith("HIT") && theirHits.get(r.id)) c++;
   }
   const p = mcnemarExact(b, c);
-  const otherFa = (other.run || other).filter((r) => r.cond === "clean" && r.score && r.score.verdict !== "ARTIFACT" && r.score.verdict !== "TRUNCATED-EMPTY").filter((r) => r.score.verdict === "FALSE-ALARM").length;
-  const otherClean = (other.run || other).filter((r) => r.cond === "clean" && r.score && r.score.verdict !== "ARTIFACT" && r.score.verdict !== "TRUNCATED-EMPTY").length;
-  console.log(`\n  PAIRED vs ${other.label}: i-hit-they-missed ${b}, they-hit-i-missed ${c}  ->  McNemar exact p = ${p.toFixed(3)}`);
-  console.log(`  false alarms: this ${fa.length}/${clean.length} vs other ${otherFa}/${otherClean}`);
-  console.log(`  NOTE a paired exact test needs >=6 one-sided discordant pairs to reach p<=0.05 at n=8. A 1-vs-0 gap is NOT evidence of a difference; it is a request for more items.`);
+  const myHits = hitRows.filter((r) => r.score.verdict.startsWith("HIT")).length;
+  const theirHits2 = theirHitRows.filter((r) => r.score.verdict.startsWith("HIT")).length;
+  const cleanMine = rowsOf(mine, shared, "clean");
+  const cleanTheirs = rowsOf(theirs, shared, "clean");
+  const neuMine = rowsOf(mine, shared, "clean-neutral");
+  const neuTheirs = rowsOf(theirs, shared, "clean-neutral");
+  const faOf = (rows) => rows.filter((r) => r.score.verdict === "FALSE-ALARM").length;
+  console.log(`\n  PAIRED on ${shared.length} shared items: defect hits this ${myHits}/${hitRows.length} vs other ${theirHits2}/${theirHitRows.length}; i-hit-they-missed ${b}, they-hit-i-missed ${c}  ->  McNemar exact p = ${p.toFixed(3)}`);
+  console.log(`  false alarms, leading prompt: this ${faOf(cleanMine)}/${cleanMine.length} vs other ${faOf(cleanTheirs)}/${cleanTheirs.length}`);
+  console.log(`  false alarms, neutral prompt: this ${faOf(neuMine)}/${neuMine.length} vs other ${faOf(neuTheirs)}/${neuTheirs.length}`);
+  console.log(`  NOTE a paired exact test needs >=6 one-sided discordant pairs to reach p<=0.05 at n=8, and >=${shared.length} at n=${shared.length} (one-sided exact). Compare ARMS only on shared items.`);
 }
 
 mkdirSync(resolve(".spike/gate"), { recursive: true });
 const out = flag("out") || resolve(`.spike/gate/run-${label.replace(/[^\w.-]/g, "_")}-${new Date().toISOString().replace(/[:.]/g, "")}.json`);
-writeFileSync(rescore ? `${out}.rescored.json` : out, JSON.stringify({ label, model, baseUrl, at: new Date().toISOString(), run }, null, 2));
+writeFileSync(
+  rescore ? `${out}.rescored.json` : out,
+  JSON.stringify({ label, model, baseUrl, at: new Date().toISOString(), mode: MODE, budget: BUDGET, material: MATERIAL, skipped, run }, null, 2),
+);
 console.log(`\ntranscript: ${rescore ? `${out}.rescored.json` : out}`);

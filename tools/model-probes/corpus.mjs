@@ -227,6 +227,40 @@ function histRegions(sha, file) {
   return { defect: render(pw), clean: render(qw) };
 }
 
+// ---------------------------------------------------------------- whole-module view (ROADMAP 195)
+//
+// A fragment control manufactures its own false alarms: windowing strips the import block and the
+// sibling declarations, so a model that reports "`resolve` is not imported" is telling the truth about MY
+// excerpt and gets scored as a judgement failure. The fix is to show the WHOLE MODULE whenever the
+// verifier's context can hold it — which requires knowing, before spending a prompt, whether it can.
+//
+// The estimate is calibrated, not guessed. Read out of the 2026-10-28 transcripts (`.spike/gate/run-*.json`,
+// 24 recorded `prompt` token counts per model) against the exact prompt text each turn sent, the ratio is
+// **0.2588-0.3244 tokens/char for `ministral-3-14b-reasoning`** and **0.2604-0.3609 for `local/iq3_s`**.
+// So 2.7 chars/token (0.370 tok/char) sits ABOVE the worst measured ratio for both families: a fit decision
+// made with it is conservative, and a module it calls too big was never close to fitting.
+const CHARS_PER_TOKEN = Number(process.env.CAL_CHARS_PER_TOKEN || 2.7);
+export const estimateTokens = (text) => Math.ceil(String(text).length / CHARS_PER_TOKEN);
+
+/** The whole module behind an item: pre-/post-fix files for a hist item, main/mutant for a mutant. */
+function wholeTexts(it, { mutText, main }) {
+  let defect, clean;
+  if (it.kind === "hist") {
+    // The authentic pair: the entire file as it was before the fix, and the entire file after it.
+    defect = gitShow(`${it.sha}^`, it.file);
+    clean = stripCommentLines(gitShow(it.sha, it.file));
+  } else {
+    defect = mutText;
+    clean = stripCommentLines(main);
+  }
+  defect = defect.trimEnd();
+  clean = clean.trimEnd();
+  // A whole file parses by definition — unless MY comment stripper broke it, which is exactly what this
+  // guard is for. Loud, not silent: a broken module shown as "the whole truth" is worse than a fragment.
+  if (!parses(defect, `${it.id}-whole-defect.mjs`) || !parses(clean, `${it.id}-whole-clean.mjs`)) return null;
+  return { defectText: defect, cleanText: clean, chars: defect.length, estTokens: estimateTokens(defect) };
+}
+
 /** Apply a mutation to a current-main region; exactly one occurrence or the item is invalid. */
 function mutate(text, m) {
   const hits = text.split(m.find).length - 1;
@@ -417,7 +451,16 @@ export async function buildCorpus({ outDir = SPIKE } = {}) {
         notes.push(`${it.id}: region does not PARSE (window repair failed); item EXCLUDED`);
         continue;
       }
-      items.push({ ...it, defectText: r.defect, cleanText: stripCommentLines(r.clean), label: `${it.file} @ ${it.sha}^` });
+      const whole = wholeTexts(it, {});
+      if (!whole) notes.push(`${it.id}: whole-module view does NOT PARSE (comment strip); no whole-module arm for this item`);
+      items.push({
+        ...it,
+        defectText: r.defect,
+        cleanText: stripCommentLines(r.clean),
+        fragment: { defectTokens: estimateTokens(r.defect), cleanTokens: estimateTokens(stripCommentLines(r.clean)) },
+        whole,
+        label: `${it.file} @ ${it.sha}^`,
+      });
       continue;
     }
     const main = gitShow("main", it.file);
@@ -457,10 +500,14 @@ export async function buildCorpus({ outDir = SPIKE } = {}) {
         notes.push(`${it.id}: region does not PARSE (window repair failed); item EXCLUDED`);
         continue;
       }
+      const whole = wholeTexts(it, { mutText, main });
+      if (!whole) notes.push(`${it.id}: whole-module view does NOT PARSE (comment strip); no whole-module arm for this item`);
       items.push({
         ...it,
         defectText: dText,
         cleanText: cText,
+        fragment: { defectTokens: estimateTokens(dText), cleanTokens: estimateTokens(cText) },
+        whole,
         label: `${it.file} @ main + injected mutation`,
         proof: { ...it.proof, cleanOut: a, mutantOut: b },
       });

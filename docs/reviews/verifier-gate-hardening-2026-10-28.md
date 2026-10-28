@@ -316,3 +316,120 @@ halves the KV cost per token) is an operator action on an LM Studio instance the
 wrapper to parse. Show `src/textwidth.mjs` whole and there is no synthetic function, no `width` declared outside
 the window, and therefore no scaffold for the model to (correctly) complain about — which is precisely the claim
 this session had to excuse by hand.
+
+## 10. Whole-module controls (195), measured 2026-10-28T00:40–01:05Z — the false alarms survive, and the defect axis does not replicate
+
+The question §9 set up was single and checkable: **is the `FALSE-ALARM 8/8` of §5c a property of the two model
+families, or of my windowing?** The branch was pre-registered in `docs/NEXT.md` before this session started — if
+the false alarms survive whole modules, the finding is about **how a verifier seat is fed**, and it goes to the PM
+as a queue item rather than being fixed by the delegate. **They survive.**
+
+**What was built** (delegate's apparatus, `tools/model-probes/`): `--whole-module` feeds the **entire module** —
+for a `hist` item the whole pre-fix file and the whole post-fix file, for a mutant the whole mutated file and the
+whole `main` file — and prints a loud `SKIP <item>: whole module ≈N tok > budget` for anything that does not fit,
+instead of quietly falling back to a window. `--plan` prints the fit decision for every item **before a single
+prompt is spent**. `--probe` sends the whole module at `max_tokens: 1` so fit is decided **400-or-not, not by
+assumption** (195's own word). `--material answer|answer+reasoning` makes the scoring material a declared,
+printed, identical-for-both-models setting (197's measure, first half). `corpus.mjs` gained `wholeTexts()` and
+`estimateTokens()`. `gate-side-by-side.mjs` is new and tracked, because four transcripts compared by hand in a
+chat is exactly how a denominator error hides.
+
+**The token estimator is calibrated on paid-for data, not guessed.** Reading the recorded `usage.prompt_tokens`
+of the 2026-10-27 transcripts against the exact text each turn sent: **0.2588–0.3244 tok/char** for
+`ministral-3-14b-reasoning`, **0.2604–0.3609** for `local/iq3_s`. So `estimateTokens` uses **2.7 chars/token
+(0.370 tok/char)** — deliberately above the worst measured ratio, so a module it calls too big was never close.
+Live whole-module costs measured this session (candidate endpoint, `max_tokens: 1` probe + the real runs):
+
+| item | module | whole-module chars (defect → clean) | est (2.7 c/tok) | **measured prompt tok** | in the 12,500-est-token arm? |
+|---|---|---:|---:|---:|---|
+| M1 | `src/textwidth.mjs` | 9,960 → 5,628 | 3,689 | **2,961** | yes |
+| H2 | `src/job-object.mjs` | 12,166 → 10,051 | 4,506 | **3,923** | yes |
+| M3 | `src/driver.mjs` | 14,023 → 4,561 | 5,194 | **3,741** | yes |
+| H5 | `scripts/clockin.mjs` | 13,822 → 11,039 | 5,120 | **4,465** | yes |
+| M2 | `src/confine.mjs` | 33,535 → 14,961 | 12,421 | **9,618** | yes — accepted on the live probe, 400-not-400, not assumed |
+| H3 | `src/rig.mjs` | 57,993 → 33,872 | 21,479 | (not attempted) | **SKIP** |
+| H4 | `src/rig.mjs` | 58,380 → 33,956 | 21,623 | (not attempted) | **SKIP** |
+| H1 | `src/worktree.mjs` | 69,702 → 31,097 | 25,816 | (not attempted) | **SKIP** |
+
+`§9`'s `wc -c / 4` lower bounds were **too pessimistic for `confine.mjs`** (it predicted "borderline — likely
+over"; it fits with ~1k tokens of headroom inside the declared 13,273 after reserving 2,400 for the answer) and
+**too optimistic per-item** for everything else. So the whole-module arm is **5 items, not 4**; three items remain
+structurally excluded until the operator raises the verifier's context (q8_0 KV halves the KV cost per token;
+LM Studio owns that instance and the delegate did not touch it).
+
+**Side by side — same corpus, same scorer, same `answer`-only material for both models, `temperature 0.2`,
+`CAL_MAX_TOKENS=2400`, both models already resident, zero download:**
+
+| arm | defect mechanisms named | false alarms, leading | false alarms, neutral | excerpt-artifact excuses |
+|---|---|---|---|---|
+| control `local/iq3_s`, fragments | **4/8** | 8/8 | 8/8 | 4 turns made absent-binding claims |
+| control `local/iq3_s`, **whole modules** | **2/5** | **5/5** | 4/5 (1 AMBIGUOUS) | **0** — there is no excerpt to blame |
+| candidate `ministral-3-14b-reasoning`, fragments | **3/8** | 8/8 | 8/8 | 3 turns made absent-binding claims |
+| candidate `ministral-3-14b-reasoning`, **whole modules** | **3/5** | **5/5** | **5/5** | **0** |
+
+1. **The excerpt artifact was real, and it is not what was making the models cry wolf.** In fragment mode the
+   control made an absent-binding claim in **4** clean-control turns and the candidate in **3** — and whole-module
+   mode produced **zero** such turns for either family, which is the direct proof that those claims were about my
+   window (the import block is on the page in whole mode). Removing the confound moved the false-alarm rate by
+   **exactly one cell out of fifteen per model** (control neutral 5/5 → 4/5, one cell reclassified AMBIGUOUS):
+   paired McNemar on the shared 5 items gives **0/0 discordant for both families on the leading prompt, p = 1.000**.
+   **So the standing caveat in D138 — "no false-alarm number is quotable until controls are whole modules" — is
+   discharged, and the number it was protecting is the same number.** A model that is shown a *whole, correct,
+   import-carrying module of its own repository's language* and told "is there a defect here? it may be correct as
+   written" still asserts a defect, **5 times out of 5, both families, both framings.**
+2. **That is now a verification-design finding, not an instrument artifact.** It survives the one treatment that
+   could have explained it away. It goes to the PM (drafted ask quoted in `docs/NEXT.md`), because the thing to
+   change is how a verifier seat is prompted and **when a refusal is admissible**, which is the team's design call,
+   not the delegate's fix.
+3. **The defect axis does not replicate, and this is the sharper result.** Two independent fragment runs of the
+   **same model, same corpus, same scorer, same scoring material** (`run-candidate-ministral.json` vs
+   `run-candidate-fragment-fresh.json`, rescoring both identically): the aggregate reproduced exactly — **3/8 both
+   times** — but **4 of 8 defect cells flipped**: `H4 HIT→MISS`, `M1 HIT→MISS`, `M2 MISS→HIT`, `M3 MISS→HIT`
+   (2/2 discordant, p = 1.000). The **false-alarm axis replicated perfectly** (8/8 in both runs, both framings).
+   The between-model gap the gate has been used to rank on (4/8 vs 3/8, 4/3 discordant) is therefore **no larger
+   than one model's own run-to-run movement on the same items.** The 4-vs-3 is not weak evidence of a difference;
+   on this corpus it is indistinguishable from the instrument's own noise floor. Registered as **ROADMAP 198**.
+4. **What this does to the routing question.** On the whole-module arm the candidate is *nominally* ahead
+   (3/5 vs 2/5) — the sign of §5c, reversed — with **1 discordant pair, p = 1.000**, and the control naming only
+   **2 of 5** means rule **G2** ("the control must name ≥ 4/8, else the instrument cannot rank") is not met *in
+   that arm either*. So: **no family ranking is available from either arm**, and **no seat is flipped; the
+   operator's D137 ruling stands unchanged.** If the gate is ever to rank families it needs **replication
+   (majority-of-k, and the replication rate printed)** and **more items** — not another prompt against the same
+   eight.
+
+**Reproduce §10.**
+
+```bash
+# the fit decision, free
+CAL_SPIKE=.spike/gate/cand node tools/model-probes/gate.mjs http://127.0.0.1:1234/v1 \
+  mistralai/ministral-3-14b-reasoning plan --whole-module --budget 12500 --material answer --plan
+# control, whole modules (15 prompts) and candidate, whole modules (15 prompts)
+CAL_SPIKE=.spike/gate/ctl  CAL_MAX_TOKENS=2400 node tools/model-probes/gate.mjs http://127.0.0.1:47831/v1 \
+  iq3_s control-iq3-whole        --whole-module --budget 12500 --probe --material answer --out .spike/gate/run-control-whole.json
+CAL_SPIKE=.spike/gate/cand CAL_MAX_TOKENS=2400 node tools/model-probes/gate.mjs http://127.0.0.1:1234/v1 \
+  mistralai/ministral-3-14b-reasoning candidate-ministral-whole \
+  --whole-module --budget 12500 --probe --material answer --out .spike/gate/run-candidate-whole.json
+# the four-cell comparison and the paired tests (transcripts are gitignored; this section is the record)
+PAIRS='[["control: fragment vs whole",0,1],["candidate: fragment vs whole",2,3],["WHOLE arm: control vs candidate",1,3],["FRAGMENT arm: control vs candidate",0,2]]' \
+  node tools/model-probes/gate-side-by-side.mjs --pairs .spike/gate/ctl-frag.rescored.json .spike/gate/run-control-whole.json \
+    .spike/gate/run-candidate-fragment-fresh.json .spike/gate/run-candidate-whole.json
+```
+
+**Limits of §10, stated before anyone re-quotes it.** n = 5 per whole-module arm, and 3 of the 8 items can never
+be shown whole at this verifier context, so the arm is biased toward **small modules** — `rig.mjs` and
+`worktree.mjs`, this rig's two biggest and most defect-bearing files, are excluded by the operator's context
+setting, not by the corpus. Single replicate per condition at `temperature 0.2` — which §10.3 shows is not nothing.
+Scoring material is `answer` only for both models, so the control is scored on less than it produced (its endpoint
+does emit a reasoning trace; LM Studio emits none for the candidate) — that asymmetry is 197 and is *not* fixed by
+this section, only made visible and declared. `AMBIGUOUS` is reported, not folded into either rate.
+
+**And one asymmetry this session found in its own pair, registered as ROADMAP 199.** `corpus.mjs` documents that
+**defect texts keep their comments and clean controls have comment-led lines stripped** (a post-fix region carries
+the fix's own commentary, which would spoil the control). At fragment scale that cost a few lines. At whole-module
+scale it is most of the file: the byte counts in the table above move **−17% to −67%** between the two conditions
+of the *same* item (`src/driver.mjs` 14,023 → 4,561; it is genuinely 137 comment-led lines of 254), so the "matched
+pair" a whole-module item shows is **not byte-matched** — the defect version is a documented file and the clean
+version is the same file with its documentation removed. Both sides still pass `node --check` (stripping did not
+break a single one of the 16 whole-module texts), so this is a **design confound, not a corruption**, and its effect
+on the verdicts is **unmeasured**: it is a candidate explanation for the control's whole-module hits falling 4/8 →
+2/5 and must be settled by stripping both sides identically (or neither) and re-running, not argued.

@@ -4768,3 +4768,49 @@ next measurement is 195 + more items then a ~3-minute re-run against the already
 claimed, completed, deferred or routed by the delegate; the broker is still down
 (`status.broker = {"state":"down","reason":"no broker state"}`).
 Full record: `docs/reviews/verifier-gate-hardening-2026-10-28.md`.
+
+## D139 — The 8/8 false-alarm finding survives whole-module controls; the defect axis does not replicate (2026-10-28, delegate)
+
+**What was decided.** ROADMAP **195** (whole-module controls) was run in the delegate's own apparatus before any
+model was downloaded, exactly as D138 sequenced it, and its result **closes the last open confound on the
+false-alarm finding and opens a new one on the defect axis.** Operationally: **still no seat flipped, `single-model-rig`
+stays honestly red, and the operator's D137 ruling is untouched.** The new decision of record is about *where the
+defect goes next*: the false-alarm result is now a **verification-design** finding — how a verifier seat is fed and
+when a refusal is admissible — so it goes **to the PM as a queue item**, and the delegate does not fix it.
+
+**Why the confound is closed.** `gate.mjs --whole-module` shows the model the entire module — the whole pre-fix and
+post-fix file for a historical item, the whole mutated and whole `main` file for a mutant — and prints
+`SKIP <item>: whole module ≈N tok > budget` for what does not fit rather than quietly falling back to a window.
+Fit was measured, not assumed: the token estimator is calibrated on recorded `usage.prompt_tokens`
+(**0.2588–0.3609 tok/char** across the two families, so 2.7 chars/token is deliberately pessimistic), and
+`--probe` settles the borderline item **400-or-not**: `src/confine.mjs` costs **9,618 measured prompt tokens** and
+is ACCEPTED, where §9's `wc -c/4` arithmetic had guessed "likely over". Five of eight items are whole-module-able;
+`rig.mjs` (57,993 chars) and `worktree.mjs` (69,702) stay excluded by the verifier's context, which is an operator
+setting the delegate did not touch. Feeding both families the same five whole modules, same scorer, `answer`-only
+material for both: **false alarms 5/5 under the leading prompt and 4/5 / 5/5 under the neutral prompt, both
+families** — against 8/8 for both on fragments. And the excerpt artifact is proven to have been mine:
+**absent-binding claims drop from 4 (control) / 3 (candidate) turns on fragments to 0 on whole modules.** So my
+windowing did manufacture particular false alarms, and removing it **did not change the rate**. "A verifier that
+cannot call clean code clean" is a property of asking these models whether a defect exists, not of my cut.
+
+**Why the defect axis is now the weak half.** Two runs of the **same** model, same 8 items, same scorer, same
+declared material reproduced their aggregate exactly (**3/8 twice**) while **4 of 8 per-item verdicts flipped**
+(`H4 HIT→MISS`, `M1 HIT→MISS`, `M2 MISS→HIT`, `M3 MISS→HIT`; 2/2 discordant, McNemar exact p = 1.000), and the
+false-alarm axis replicated perfectly both times. The between-family gap the gate has been asked to rank on
+(control 4/8 vs candidate 3/8) is **the same size as one model's movement against itself.** Registered as **198**
+(replicate k ≥ 3, print the replication rate, score the majority-of-k cell) with a companion **199**: a whole-module
+"matched pair" is **not byte-matched** — the clean side is comment-stripped and the defect side is not, −17% to −67%
+of the bytes (`src/driver.mjs` 14,023 → 4,561), which is a live candidate explanation for the control's whole-module
+hits moving 4/8 → 2/5.
+
+**What this does NOT license.** It does not make the candidate better. On the whole-module arm the sign flips
+(candidate 3/5 vs control 2/5) on **one discordant pair, p = 1.000**, and the control naming only **2 of 5** fails
+the pre-registered **G2** floor for that arm, so **neither arm can rank families**. No false-alarm number from
+before this session is upgraded or downgraded by it; §10 replaces it. **Nothing was claimed, completed, deferred or
+routed by the delegate**; the broker is still down (`status.broker = {"state":"down","reason":"no broker state"}`).
+
+**Standing rule restated.** A capability-gate verdict is a **sample, not a measurement**: no family ranking may
+route a seat from one replicate, and the false-alarm axis is currently the **only** axis that replicates. Sequencing
+for the operator's ruling 1 is unchanged in direction and cheaper than ever — the next measurement is **more items
+plus k ≥ 3 replication and symmetric pairs (198/199)**, not another single-pass prompt and not a download.
+Full record: `docs/reviews/verifier-gate-hardening-2026-10-28.md` §10.

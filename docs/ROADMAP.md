@@ -3372,3 +3372,40 @@ controls. Depends on: 194. Measure: the scoring material is a **declared, printe
 setting (`answer`, or `answer+reasoning`, with the latter unavailable — and stated unavailable — for families whose
 endpoint returns no trace); rubric matching excludes code spans the model reproduced from the excerpt; and a run
 prints both a raw and a quote-excluded `namedMechanism` count.
+
+**198. A capability-gate verdict does not replicate — the same model, corpus, and scorer flip 4 of 8 defect cells**
+*(qa, with devtools; found by re-running the 189 gate unchanged, 2026-10-28)* — measured: two independent runs of
+the **same** model (`ministral-3-14b-reasoning`) on the **same** 8 items with the **same** scorer and the **same**
+declared scoring material (`answer`) reproduced the aggregate exactly (**3/8 both times**) but flipped **4 of 8
+per-item defect verdicts** — `H4 HIT→MISS`, `M1 HIT→MISS`, `M2 MISS→HIT`, `M3 MISS→HIT` — 2/2 discordant,
+McNemar exact p = 1.000, at the harness's standing `temperature 0.2`
+(`tools/model-probes/gate.mjs:ask`). The **false-alarm axis replicated perfectly** (8/8 under the leading prompt and
+8/8 under the neutral prompt in both runs), so the instability is specific to the HIT/MISS rubric on the `defect`
+condition, not to the run. Consequence for the record: the between-model gap the gate has been used to rank on
+(control 4/8 vs candidate 3/8, 4/3 discordant) is **no larger than one model's own movement against itself on the
+same items**, so a single run is a sample, not a measurement, and no family ranking can rest on one. Depends on:
+194, 195. Measure: a gate run performs **k ≥ 3 replicates per condition**, prints the **per-cell replication rate**
+alongside every verdict table, scores the **majority-of-k** cell (reporting ties as AMBIGUOUS), and a ranking that
+does not print a replication rate is inadmissible for routing. The pre-registered significance bar must be stated
+against the replicated n, not the item count. Blind spot to name: k replicates multiply cost (24 prompts → 72 per
+model at k = 3), and if the temperature is ever set to 0 the *sampling* variance disappears while any
+**server-side nondeterminism (batching, continuous-batching order, MoE routing) remains** — a zero-temperature run
+that agrees with itself is not therefore reproducible on another instance.
+
+**199. Whole-module pairs are not byte-matched: the clean side is comment-stripped and the defect side is not**
+*(qa; found while building the 195 whole-module arm, 2026-10-28)* — measured: `corpus.mjs` documents that
+**defect texts keep their comments and clean controls have comment-led lines stripped** (a post-fix region carries
+the fix's own commentary, and a mutated file's neighbours carry the invariant the mutation breaks, so a control that
+*restates* the defect spoils its own item). At fragment scale that removes a few lines; at **whole-module** scale it
+removes most of the file — the pair for `src/driver.mjs` is 14,023 chars (defect) against **4,561** (clean), i.e.
+**−17% to −67%** across the eight items, and `src/driver.mjs` really is 137 comment-led lines of 254. Both sides
+pass `node --check`, so this is a **design confound, not a corruption**: the model is shown a documented file in one
+condition and the same file with its documentation deleted in the other, which is a plausible contributor to the
+control's whole-module hit count moving **4/8 → 2/5** while the candidate's held at 3/5. Depends on: 195, 198.
+Measure: every item prints a **pair delta** (bytes and line count, defect vs clean, and how much of it is comment
+stripping versus the defect itself); the stripping rule applies **identically to both sides of a pair** (or to
+neither side, with the fix-commentary spoiling checked explicitly by the scorer rather than by deleting text); and
+the gate re-reports the 2026-10-28 §10 table under the symmetric rule so the size of the confound is visible next to
+the numbers it moved. Blind spot to name: making the pair byte-matched *raises* the false-alarm risk the strip
+existed to remove, so the fix is scorer-side (detect a restatement of the defect and mark the item spoiled), not
+deletion-side.
