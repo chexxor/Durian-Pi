@@ -1,7 +1,6 @@
 # NEXT — current priority and exact next command
 
-**Last updated:** 2026-10-28T22:1xZ, delegate session (D156/D157: the pre-move volume became a git authority — refs and
-objects imported; nothing host-wide is delegated). Session notes: `docs/reviews/delegate-notes-2026-10-28-cross-os-recovery.md`. Linux box
+**Last updated:** 2026-10-28T22:4xZ, delegate session (D156/D157: the pre-move volume became a git authority — refs and objects imported; nothing host-wide is delegated). Session notes: `docs/reviews/delegate-notes-2026-10-28-cross-os-recovery.md`; harness self-audit (87 past sessions mined): `docs/reviews/pi-harness-usage-audit-2026-10-28.md`. Linux box
 `Alex-Desktop-Win10` (Fedora `7.2.11-200.fc44.x86_64`), `node v24.22.1`, box zone `America/Chicago` (CDT = UTC−5; every
 timestamp here is **Z**, and note the host's own clock is suspect — see §INCIDENT). Read me first — do not re-derive the
 priority from the ~4,300-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200
@@ -119,7 +118,7 @@ this checkout** — run it in the disposable clone.
    `.agents/skills/*/SKILL.md` `name:`+`description:` at session start with no read; grepping the two skills for
    `channel-preflight|broker-serve|instrument-provenance|queue-drain-audit|latency-budget|cross-clone` → **0 hits**.
 2. **Edit A (~15 lines):** an "instruments you already have" table (cost, question answered, what it refuses) in
-   `.agents/skills/delegating-to-durian-pi/SKILL.md`, plus those words in its `description:` so retrieval matches.
+   `.agents/skills/delegating-to-durian-pi/SKILL.md`, plus those words in its `description:`. Stronger version, measured in the audit: **`.pi/APPEND_SYSTEM.md`** (always injected, survives compaction) and **`.pi/extensions/`** — `pi.registerTool()` for the instruments, a `before_agent_start` state digest, and a `tool_call` guard refusing `git worktree prune` / `git clean -fd` / suite runs on this checkout (the verbs that took the ledger). **This repo has no `.pi/` directory at all.**
 3. **Edit B (highest value):** `docs/runbooks/cross-clone-object-recovery.md` **and its symptom row in
    `docs/runbooks/README.md`** (`a cited commit sha resolves nowhere`; `the other OS's clone holds refs/objects this clone
    lacks`) — `AGENTS.md` step 5 routes by symptom, no row matched, and the D156 archaeology cost ~15 turns.

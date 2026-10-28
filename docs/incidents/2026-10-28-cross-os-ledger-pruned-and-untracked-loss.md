@@ -157,3 +157,25 @@ the next boot), so the operator withheld it; the project-scoped half is ROADMAP 
 is a **relative** stamp (`1 … 2,263,478`), not epoch-ms, and `entries` has no wall-clock column — the rig has no way to
 observe a step from its own store, and `demo/broker-clock-step.test.mjs` (row 210's regression) is among the files lost
 above.
+
+## Correction to §5 — a fourth recovery surface exists, and it was never consulted until 2026-10-28T22:4xZ
+
+§5 says the eight instruments are unrecoverable. That is true **of the sources §5 searched**, but the search missed one, and
+the harness keeps it: `~/.pi/agent/sessions/<encoded cwd>/*.jsonl` holds every session's tool calls **with their full
+arguments**, so a `write` call contains the entire file body. Extracting `write`/`edit` arguments from the transcripts
+recovers bodies verifiably — measured on three files still on disk:
+
+```
+18,985 B  write  tools/channel-preflight.mjs      (session 2026-10-28T19-11)
+17,877 B  write  tools/broker-serve.mjs           (session 2026-10-28T14-54)
+ 6,643 B  write  tools/instrument-provenance.mjs  (session 2026-10-28T19-47)
+```
+
+Two transcript sets exist for this workspace: **17** Linux sessions (19 MB, cwd `--home-chexxor-Git-Durian-Pi--`) and **70**
+Windows sessions (83 MB, cwd `--C--Users-Alex-dsh-Projects-pi-opendurig--`) — 87 sessions, 11,586 `bash` calls. The eight
+lost instruments still do **not** appear as a `write` anywhere in those 87 sessions (only passing prose mentions; 12,115
+Windows-set tool calls probed), the Windows `selfdev.sqlite` mentions `worktree-cleanup` ×5 and `verify-sweep` ×1 with no
+body, and `~/.dsh/sessions` has no match. So: **still unrecovered — but "untracked and deleted" is no longer the same thing
+as "unrecoverable".** The consequence for ROADMAP 233 is sharper than a `git ls-files` check: the durable place for a
+delegate-written instrument is git, because the transcript layer is per-host, per-cwd, unversioned, and lost on a move.
+Instrument for the next session: `.scratch/transcript-write-bodies.mjs` (promote to `tools/transcript-recovery.mjs`).
