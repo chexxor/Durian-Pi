@@ -345,3 +345,48 @@ Cline, Goose — **unexamined here**). Registered as ROADMAP **235–239**; five
    `git worktree prune` / `git clean -fd`. pi ships the *hook* and three example policies; the policy itself is ours to
    write. Do not report a harness-side guard as 232's fix — the broker's own `pruneWorktrees` call
    (`src/broker.mjs:1167` → `src/worktree.mjs:649`) runs where no outer extension can see it.
+2. **Correction to finding 2, same day, class `advertised-elsewhere`.** "No configurable intercept" is wrong for
+   GitHub Copilot CLI: it ships command-pattern deny rules (`--deny-mode "command:git worktree prune"`, plus
+   `sandbox:workspace-write`) and its own tracker records that they **fail open on 10 s timeout and on TCC denial**
+   ([issue #978](https://github.com/github/copilot-cli/issues/978)), and that there is no hook to reload a changed
+   rules file without restarting the session
+   ([issue #4438](https://github.com/github/copilot-cli/issues/4438)). So the shape we want — deny rule read from the
+   repo, enforced by the harness, fail-closed — **exists in the field**; what is new to us is that its own tracker
+   shows it silently degrading. The 232 conclusion stands unchanged: the broker's own `pruneWorktrees` call runs where
+   no outer harness can see it, so an outer guard is belt-and-braces only.
+
+## The 2026-10-29 public-harness pins (five clones: source-grade for three, docs-grade for two)
+
+Operator granted the clones (`--depth 1`) on 2026-10-29 so the public-harness half of the tool/skill-lifecycle
+study could stop resting on fetched pages. Pins are generated in `docs/VENDOR-PINS.md`; `node
+tools/vendor-pins.mjs --check` → **PIN CHECK PASS (14 clones)**. **No observed pass has been run on any of these
+five yet** — the round-2 report (`docs/reviews/harness-tools-skills-public-harnesses-research.md`) is entirely
+`advertised-elsewhere`, and its claims citing `vendor/eval/<name> · <head>` are doc claims made *near* a pin, not
+behaviour read from that pin. That gap is ROADMAP **241**.
+
+| clone | pin | license | what is actually in the tree | grade |
+|---|---|---|---|---|
+| `codex` | `d373d649` | Apache-2.0 | **full Rust source** (`codex-rs/`) + `docs/` — the only one of the five whose policy/approval engine, hook-trust storage and AGENTS.md budget are readable at a pin | source |
+| `cline` | `51f63e4f` | Apache-2.0 | full TS monorepo (`apps/`, `sdk/`) — rule merge order and `paths:`-conditional discovery are readable | source |
+| `goose` | `775b3958` | Apache-2.0 | full Rust (`crates/`) + `documentation/docs/` (the vendor-site paths the round-2 report cited are **404**; the repo paths are the resolvable ones) | source |
+| `claude-code-docs` | `58d6da1e` | UNRECOGNISED (`LICENSE.md`) | **CHANGELOG + docs + plugins + mods only — no implementation.** Can never yield `observed`; it does yield changelog-grade evidence, which is better than marketing copy | docs |
+| `copilot-cli` | `84ee80ea` | UNRECOGNISED (`LICENSE.md`) | **README + `install.sh` + changelog only** (596 KB — the small size is correct; the CLI is closed). Useful only as a public *issue tracker*: #978 (deny rules fail open on 10 s timeout / TCC denial), #4438 (no hook to reload rules without restarting) | docs |
+
+**What the pins change, right now, without an observed pass:**
+1. **ROADMAP 241 exists because `codex` is now readable.** The operator ruled *research before 232*: before the
+   broker's destructive-call fix is scheduled, read what a shipped permission/policy engine looks like end-to-end —
+   a policy engine, an approval-policy ladder, deny rules read from config, and trust persisted **out-of-band** (in
+   an `mcp-oauth`-shape, outside config and outside git, so `git diff` never shows a permission grant). `codex-rs/`
+   answers whether that design is copyable for a broker, or only borrowable in shape.
+2. **Capture-on-success (ROADMAP 240) has a second instance, and it is readable.** Goose writes recipes into a
+   recipe library at runtime (`crates/goose/src/recipe/local_recipes.rs:155,194` — `generate_recipe_filename` +
+   save), and ships a documented *"recipe cookbook generator"* pattern that mines past sessions into recipes
+   (`documentation/blog/2025-10-08-recipe-cookbook-generator/index.md`). Read the caveats before citing it as a
+   success: that page carries an explicit update — *"the public Recipe Cookbook submission program has ended"* — so
+   this is **a vendor tutorial of a wound-down program**, not a supported feature. It is the closest prior art to the
+   mechanism our own usage audit ranks first, and it is a *prompt*, which means its output quality is unaudited.
+3. **Two clones will never produce `observed`, and that must be said in the row.** `claude-code-docs` and
+   `copilot-cli` are docs/issue trees. A future review must not report a CHANGELOG line as observed behaviour; where
+   Claude Code behaviour matters (the `/skill-doctor` cost report, the `/run-skill-generator` → `/verify` loop, the
+   15-minute compaction window), it is either `advertised-elsewhere` or something we run on a host and label
+   `observed` honestly — and Claude Code is not installed on this rig.
