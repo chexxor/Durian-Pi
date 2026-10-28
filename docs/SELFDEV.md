@@ -768,7 +768,10 @@ leave it at 32 GB) and keep C: for the model; or take the 96 GB RAM route, where
 - **`docs/NEXT.md` has a contract test: `demo/next-pointer.test.mjs`.** It requires `## NEXT SESSION` before any
   `## CLOCK-OUT`, a `**Current item:**` line, a `#NNN` queue id, a next command containing `node cli.mjs`, and a line
   starting with the literal `**Blocker:**` (a `**Blocker — …**` phrasing FAILS the suite). Run that demo after editing
-  the pointer, before declaring the suite green.
+  the pointer, before declaring the suite green. **The second reader is `demo/clockin-digest.test.mjs`** (a 2026-10-28
+  session restyled the pointer and turned it red): it asserts the **digest** — which is only the `## NEXT SESSION`
+  section, not the file's preamble — still contains `NEXT-ARCHIVE.md`, so **the archive link must sit inside the pointer
+  body**, not in the header above it. Both demos cost ~1 s; a restyle of this file is a code change with two readers.
 - **Doc writes carry invisible characters you typed.** A U+200B landed in a code fence via the `write` tool and made a
   repro command wrong. After writing docs, scan the touched region for control bytes **and** zero-width/BOM characters
   (`ord(c) in (0x200b,0x200e,0x200f,0xfeff,0xa0)`), not just 0x00–0x08.

@@ -5690,3 +5690,20 @@ the queue figures survived three sessions of copying before anyone read the verb
 flag surface** (`--status held` silently ignored) is what let a wrong number look plausible, which is why 228's
 acceptance now requires an unrecognized flag to exit non-zero. The corrected census and the `jq` projection recipe are
 in `docs/NEXT.md` and `tools/README.md`.
+
+**A pitfall I created and fixed the same day, recorded because the rule already existed and I skipped it.** I rewrote
+`docs/NEXT.md` wholesale and turned the suite red: **`demo/next-pointer.test.mjs` is the executable contract for the
+pointer** — it requires the first `## NEXT SESSION` to precede any `## CLOCK-OUT`, and that section to carry
+`**Current item:**`, a `#NNN` queue id, an exact command containing `node cli.mjs`, and its own `**Blocker:**` line; it
+also requires the live file to **link `docs/NEXT-ARCHIVE.md`** and to stay **≤200 lines** (`POINTER_CAP_LINES`,
+`scripts/clockin.mjs:34`, whose `## POINTER` header then degrades to the useless `lines -1--1` instead of warning). The
+rule is written in `docs/SELFDEV.md:768` — I did not read it because I believed I was doing prose tidiness, not a change
+with a reader. A second reader then went red: **`demo/clockin-digest.test.mjs`** digests only the `## NEXT SESSION`
+section, and asserts that digest still contains `NEXT-ARCHIVE.md` — so **the archive link belongs inside the pointer
+body**, not in the header above it. Cost: ~15 minutes and two red demos caught only because I ran the suite before
+clocking out. **Habit: after editing `docs/NEXT.md`, run `node demo/next-pointer.test.mjs && node
+demo/clockin-digest.test.mjs` (~1 s each) before committing it** — the same shape as the
+`node --check` rule above: any surface with an existing reader gets checked by running that reader, not by rereading the
+prose. Consequence for the pointer's substance, not just its shape: it now names real queue ids
+**#725/#726/#727** (ROADMAP 63/64/67 — the host supervisor, `durig daemon`, and the host chaos suite, all `held`) as
+the channel-resident work, and lists the **19 `deferred` rows waiting on the operator** that `clockin` reports.

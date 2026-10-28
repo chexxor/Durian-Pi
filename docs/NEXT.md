@@ -1,194 +1,137 @@
 # NEXT — current priority and exact next command
 
-**Last updated:** 2026-10-28 by the delegate (wall-clock measurement session, Linux box `Alex-Desktop-Win10`,
-`node v24.22.1`, `date -u` 2026-10-28T19:05Z). Read me first; do not re-derive the priority from the ~4,100-line
-roadmap.
+**Last updated:** 2026-10-28T19:55Z, delegate session. Linux box `Alex-Desktop-Win10` (Fedora
+`7.2.11-200.fc44.x86_64`), `node v24.22.1`. Read me first — do not re-derive the priority from the ~4,100-line
+roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200 lines** by
+`demo/next-pointer.test.mjs`, which also requires the `## NEXT SESSION` block below to carry a current item, a queue id,
+a `node cli.mjs` command and a `**Blocker:**` line — **rewrite it in place, do not restyle it** (this session broke that
+demo by restyling; see the clock-out log).
 
----
+## NEXT SESSION
 
-## Current priority: **keep the delivery channel resident** — the wall-clock case for it is now measured
+**Current item:** **keep the delivery channel resident** — the single largest measured wall-clock lever on this rig.
+**Queue ids:** **#725** (impl, ROADMAP 63 — `src/host.mjs` portable host supervisor: single-instance, backoff,
+kill-on-wedge, honors the down marker), **#726** (devtools, ROADMAP 64 — `durig daemon` CLI + per-platform trigger
+adapters), **#727** (qa, ROADMAP 67 — host chaos suite). All three are **`held`** and none is started.
+**Next command (delegate, read-only):**
+`DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json DURIG_SEAT_ROOT=/home/chexxor/Git/Durian-Pi-worktrees node cli.mjs watch --to engineer --json --interval 2000`
+(then the baseline block below).
+**Blocker:** two **operator** one-liners, both quoted in §OPERATOR OWES: (1) the ROADMAP 221 seat-root ruling, (2)
+permission to start the broker **on Linux**, which is a writing verb that creates worktrees and Pi agent state here for
+the first time. Until (2) is granted, the queue stays parked and the top term in the budget stays unpulled.
+**History:** `docs/NEXT-ARCHIVE.md` — older sessions live there verbatim; this file stays a pointer.
 
-**Rig:** `rig.selfdev.json` · **Store:** `./selfdev.sqlite` (274,068 records; 30,944 submissions) · **Queue census**
-(`node cli.mjs queue --json | jq -r '.items[].status' | sort | uniq -c`): **4,821 items = 3,748 `done` / 777
-`cancelled` / 277 `held` / 19 `deferred`** — so **296 non-terminal rows**, by seat: impl 177, scribe 44, devtools 35,
-qa 21, security 6, pm 5, lead 5, auditor 2, qa2 1 (`qa2` is a registered seat, `rig.selfdev.json:53`). **Branch:** `main` @ `3dd0156`.
-**Worktree (Linux-native — corrected 2026-10-28 by direct measurement, an earlier note in this file was wrong):**
-`git worktree list --porcelain` on this clone returns **exactly 1 entry** (`/home/chexxor/Git/Durian-Pi`, branch `main`;
-branch `main`); there are **no seat worktrees** (`/home/chexxor/Git/Durian-Pi-worktrees/` does not exist, there is no
-`.git/worktrees/`, and no `selfdev.worktrees.json`); local branches are **2** (`main`, `wip/seat-prompt-files`);
-`git worktree prune -n` is silent (nothing stale registered). `D:\` remains only as the *source clone's* remote path
-(`/mnt/d/Git/Durian-Pi`). Consequence: on this host a seat worktree is **created**, not migrated — the first
-`up`/`worktree`/`run`/`send` is the writing verb the workspace-move runbook gates.
-**Pi seat-agent state is host-local and absent here:** no `*selfdev*` entry under `~/.pi/agent`, so the seat's
-*persisted cwd* (the first link in `src/seatroot.mjs`'s chain `persisted seat cwd → DURIG_SEAT_ROOT → process cwd`)
-**does not exist on this box** — measured, not inferred: `describeSeatRoot({persistedCwd: undefined, env:
-{DURIG_SEAT_ROOT: …}})` prints `source: DURIG_SEAT_ROOT`. So 221's Windows residue is **not** present on Linux
-(clean-by-absence, not clean-by-fix), and **`DURIG_SEAT_ROOT` must be exported on every Linux run** or a seat resolves
-to `process cwd` — the main checkout.
-**Broker:** **DOWN BY CHOICE** since 2026-10-28T05:35Z (`node tools/broker-serve.mjs --stop`). `--status` reads
-`STOPPED`, 0 `STRANDED`, 0 `RECONCILE`, and a passing completion on **all 10** registered providers (3.4 s).
-
-**Why this priority, in measured hours (not intuition):** `node tools/latency-budget.mjs --db ./selfdev.sqlite`
-(3.0 s, read-only; added this session) says the model is **not** the ceiling — model calls are **51.1 h of 402.4 h of
-machine busy time (12.7%)**, while **219.6 h of the 404.8 h store span (54.3%) had no generation in flight at all**,
-and **69.1% of all item latency is WAIT** (claimable, unclaimed). The store's own history prices the fix: on the
-`run`-invoked days (2026-10-13→15) claim-wait p50 was **101.8–114.3 min** and 47–132 items landed per day; on the
-resident-broker days (2026-10-17→21) claim-wait p50 was **2.6–5.4 min** and **314–741** landed per day. Full budget and
-method: **`docs/reviews/wallclock-budget-2026-10-28.md`**; the ruling and ranked list are **D153**; the new rows are
-**ROADMAP 225–228**.
-
-### The next command (delegate, read-only) — re-baseline before touching anything
+### Read-only baseline — run this before anything else (all verified working, Linux, 2026-10-28)
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-git worktree list --porcelain | tee .spike/worktree-inventory-$(date +%Y-%m-%d).txt   # expect 1 entry (main), 0 seat wt
-node -e 'import("./src/seatroot.mjs").then(m=>console.log(m.describeSeatRoot({persistedCwd:undefined,env:process.env})))'   # expect source: DURIG_SEAT_ROOT
-node tools/broker-serve.mjs --status                                                  # expect STOPPED, 0 STRANDED
-node tools/latency-budget.mjs --db ./selfdev.sqlite                                   # 3.0s: the two currencies
-DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json DURIG_SEAT_ROOT=/home/chexxor/Git/Durian-Pi-worktrees \
-  timeout 1200 node cli.mjs watch --to engineer --json --interval 2000                 # 277+19 parked rows, no scheduler
-node scripts/clockin.mjs                                                              # 2.6s, 14.6KB
+git worktree list --porcelain | tee .spike/worktree-inventory-$(date +%Y-%m-%d).txt  # 1 entry (main); 0 seat worktrees
+node -e 'import("./src/seatroot.mjs").then(m=>console.log(m.describeSeatRoot({persistedCwd:undefined,env:process.env})))'
+   # source: process cwd UNLESS DURIG_SEAT_ROOT is exported in this same shell — export it or a seat resolves to main
+node tools/broker-serve.mjs --status      # STOPPED, 0 STRANDED, 0 RECONCILE, 10/10 providers complete (3.4 s)
+node tools/latency-budget.mjs --db ./selfdev.sqlite           # 3.0 s, read-only: the two wall-clock currencies
+node tools/queue-drain-audit.mjs                              # 1.0 s: which held rows are already closable
+node scripts/clockin.mjs                                      # 2.7 s, 4.1 KB (not 14.6 KB — earlier note was wrong)
 ```
 
-### The lever the operator holds: starting the channel on Linux (the delegate will not start it unasked)
+## Rig state, measured 2026-10-28 (Linux) — re-read, do not trust
 
-Everything ranked #1 in the budget is drawn from the 219.6 h where no generation was in flight, and the broker is down
-by choice. Starting it is a writing verb on this host (it **creates** seat worktrees and Pi agent state for the first
-time here), so it needs the operator's go-ahead. The command, with the root exported (without it the seat-root chain
-falls through to `process cwd` = the main checkout):
+**Store** `./selfdev.sqlite`: 274,068 records, 30,944 submissions, 12 seats. **Queue census**
+(`node cli.mjs queue --json | jq -r '.items[].status' | sort | uniq -c`): **4,821 items = 3,748 `done` / 777
+`cancelled` / 277 `held` / 19 `deferred`** → **296 non-terminal** (impl 177, scribe 44, devtools 35, qa 21, security 6,
+pm 5, lead 5, auditor 2, qa2 1). `clockin` reports **attention: 13**, `broker: DOWN lastPassAt=2026-10-28T17:09:58Z`,
+and **19 `deferred` rows waiting on the operator** (#4354, #4378, #4789, #4791, #4794, #4796, #4797, #4799, #4801, #4802,
+#4804, #4805, #4812, #4813, #4814, #4815, #4816, #4817, #4818) — impl holds 13 of them.
+**Worktrees:** `git worktree list --porcelain` = **1 entry** (this checkout, branch `main`); **no seat worktrees**
+(`/home/chexxor/Git/Durian-Pi-worktrees/` absent, no `.git/worktrees/`, no `selfdev.worktrees.json`); local branches: 2
+(`main`, `wip/seat-prompt-files`); `git worktree prune -n` silent. **Pi seat-agent state is host-local and absent here**
+(no `*selfdev*` under `~/.pi/agent`), so the seat's *persisted cwd* — first link in `src/seatroot.mjs`'s chain — does not
+exist on this box. **A seat worktree here is created, not migrated**: the first `up`/`worktree`/`run`/`send` is the
+writing verb `docs/runbooks/workspace-move.md` gates. `D:\` survives only as the source clone's remote path
+(`/mnt/d/Git/Durian-Pi`) — never write there.
+
+## OPERATOR OWES (two one-liners; the team is blocked behind them)
+
+1. **ROADMAP 221 — the seat-root ruling** (D152 §6 + D153 addendum). On the **Windows host** the seats' persisted agent
+   cwd resolves to a `D:\Git\Durian-Pi-worktrees\<seat>`-shaped value and `up` reports `source: persisted seat cwd` even
+   after `up --root /home/...`: the persisted value (written by `prepare_workspace` via `configure`) wins over `--root`,
+   `DURIG_SEAT_ROOT` **and** the rig file. There is **no `seatRoot` field in `rig.selfdev.json`** (it declares no host
+   path on purpose — its own `_readme`, ROADMAP 34) and none in `status` output, so the residue lives in Pi agent state.
+   Proposed ruling **A**: *the persisted per-seat root becomes the workspace-root-relative name; `up --root` once per seat
+   is sufficient; no migration code.* Then B (`--reconcile`) and C (store rewrite) are the team's. Why it is not inert on
+   Linux: measured `classifyGitRoot("D:\Git\Durian-Pi-worktrees\engineer")` **on Linux** prints
+   **`main-worktree` ("the main checkout")** — a stale Windows root mis-classifies as the LIVE tree, the exact F21
+   failure `src/seatroot.mjs` exists to prevent.
+2. **Permission to start the channel on Linux** (the #1 lever; the delegate will not take it):
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi && export DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json \
   DURIG_SEAT_ROOT=/home/chexxor/Git/Durian-Pi-worktrees
-node tools/broker-serve.mjs --status        # confirm STOPPED / 0 STRANDED first
-node tools/broker-serve.mjs                  # then read the first lines: what it found, what it reconciled
-# inventory immediately after, and diff against .spike/worktree-inventory-2026-10-28.txt
+node tools/broker-serve.mjs --status   # confirm STOPPED / 0 STRANDED first; commit any dirty tracked file first
+node tools/broker-serve.mjs            # read the first lines: what it found, what it reconciled
+git worktree list --porcelain > .spike/worktree-inventory-after.txt   # diff against 2026-10-28 baseline
 ```
 
-### The item that unblocks everything else is the operator's, and it is a one-line answer
+## Then, in this order (measured ranking — `docs/reviews/wallclock-budget-2026-10-28.md` §6, ruling D153)
 
-**ROADMAP 221 / the seat-root residue** (`docs/DECISIONS.md` D152 §6): on the **Windows host**, the seats' persisted
-agent cwd resolves to a `D:\Git\Durian-Pi-worktrees\<seat>`-shaped value and **`up` reports `source: persisted seat cwd`**
-even after `up --root /home/...` — the persisted value (the first link in `src/seatroot.mjs`'s chain, written by
-`prepare_workspace` via `configure`) wins over `--root`, `DURIG_SEAT_ROOT` and the rig file. There is **no `seatRoot`
-field in `rig.selfdev.json`** (it deliberately declares no host path — see its own `_readme`, ROADMAP 34) and none in
-`cli.mjs status` output, so the residue lives in the Pi agent state, not in the rig file or the durian-pi store; on
-Linux that state is absent (see the worktree note above), and the Linux addendum to D153/D152 records why the value is
-not inert once it crosses hosts. The delegate will **not** mutate a running system's persistent state. The operator only has to
-rule on **A**: *"the persisted per-seat root becomes the workspace-root-relative name — the current code already
-derives that on write, so `up --root` once per seat is sufficient and no migration code is needed."* Then B (a
-`--reconcile` verb) and C (the store rewrite) are the team's.
+1. **#725 / #726 / #727 (channel resident).** History prices it: `run`-invoked days 2026-10-13→15 waited
+   **101.8–114.3 min** per claim and landed 47–132 items/day; resident-broker days 10-17→21 waited **2.6–5.4 min** and
+   landed **314–741**/day. And **219.6 h of the 404.8 h store span (54.3%) had no generation in flight**; last `done`
+   transition **2026-10-22T17:29:11Z**.
+2. **ROADMAP 225 — decompose a running generation's wall-clock.** The **0.23% of generations ≥10 min hold 156.8 h
+   (39.0%)** of machine busy time while their conversations committed **1–3 events** in their own windows (worst:
+   `gen #268436`, seat `qa2`, 1,212 min, 3 events, ended `402`). Today no surface says what those hours were.
+3. **ROADMAP 226 — stop waking seats onto a dead provider.** **14,630 generations (24.4%) ended in an error, 59.2 h
+   (14.7% of busy time)**; **14,377** are one unfunded account's `402 "You need positive balance"`. `attention`
+   `last_run_failed` is per-seat and most-recent-only, so a 14,377-run burst is invisible as a burst.
+4. **ROADMAP 227 — make held-backlog drainability a product finding.** 277 `held` rows idle a median **213.5 h**
+   (max 289.8 h), 19 `deferred` a median **145.2 h**; `tools/queue-drain-audit.mjs` measures **71 of the 277 already
+   fully on main** (26% zero-build closable) — known today only because a delegate re-runs a script. Releasing stays
+   **`pm`'s** verb; the rule only reports.
+5. **ROADMAP 228 — project the big reads; `queue` has no filters at all.** `status` = **22,748,093 B**,
+   `queue --json` = **21,178,646 B**, and `cmdQueue` (`cli.mjs:1018-1021`) **takes no arguments**, so `--status`/`--to`
+   are accepted and ignored: **unknown flags fail open**. Delegate recipe meanwhile:
+   `node cli.mjs queue --json | jq -r '.items[] | select(.status=="held" or .status=="deferred") | [.id,.status,(.to//"-"),(.subject//""|.[0:60])] | @tsv'`
+   → 296 rows in **75 KB**.
+6. **ROADMAP 208 — hold context, don't chase model quality.** 60,503 assistant turns: **94.0% cache hit**
+   (576,678,609 fresh in / 9,071,180,595 `cacheRead`); **23,053 prompts > 150,000 tokens, max 1,009,360** against a
+   declared 200,000 window; compaction **15.9 h** over 1,459 runs. Cold-prefill exposure at this box's 438–1,946 tok/s
+   is **82–366 h** — the rig is one eviction policy away from being unable to start.
 
-### Then, in this order (all three are queued/roadmap and already costed)
+## Do not "fix" these on the strength of the docs
 
-1. **A first run at a Linux-native seat root** — the queue id for the operator's task is the one it carries. Expect
-   this host to **create** the state: `DURIG_SEAT_ROOT=/home/chexxor/Git/Durian-Pi-worktrees` exported, one worktree per
-   seat appearing under that dir, `<db>.worktrees.json` appearing for the first time, and the broker log's first lines
-   naming what it found. Inventory `git worktree list --porcelain` + `git branch --list` + `ls .spike | wc -l` into
-   `.spike/` **before and after** each writing verb and diff them; a `--dry-run` is **not** the safety check (it names no
-   removals and resets only model+cwd).
-   **Baseline measured 2026-10-28 (the numbers to diff against):** 1 registered worktree / 1 on disk (main), 0 seat
-   worktrees, 2 local branches, `prune -n` silent, 27 files in `.spike/`. If a later session sees a seat worktree at a
-   `D:\` path, or the count jumping by more than the seats it started, that is the incident
-   (`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`), not noise.
-   **Measured hazard for whoever runs it (grounded, read-only probe):** `classifyGitRoot("D:\\Git\\Durian-Pi-worktrees\\engineer")`
-   on **Linux** resolves that string as a path *relative to cwd* and prints **`main-worktree` ("the main checkout")** —
-   so a Windows-shaped persisted root on Linux is not merely wrong, it is **mis-classified as the live tree**, which is
-   the exact F21 confusion `src/seatroot.mjs` exists to prevent. The team should check what the write guard does with
-   that value; the delegate ran no write verb to find out.
-2. **ROADMAP 209** *(impl + devtools, unscheduled)* — a cross-platform `broker serve` launcher on **both** hosts:
-   single-instance, logs stdout/stderr to `<db>.broker.log`, exits non-zero on immediate failure, prints
-   `RECONCILE`/`STRANDED` on entry, survives terminal close. 222's four startup defects and 221's root were both found
-   by reading the operator's scrollback; only the delegate reads that scrollback today. **218's `landed-not-started`
-   notice is 96 rows wide right now** and is the cheapest way for a seat to see the backlog is there.
-3. **A `tools/` demo for the pin guard** — **ROADMAP 224** *(impl + qa, unscheduled)*. `tools/vendor-pins.mjs --check`
-   currently **always exits 0**; a `--violation` fixture path is the deliverable (this rig ships broken CI demos twice,
-   so "it runs" is not coverage).
+`DURIG_MAX_CONCURRENT_SEATS` is unset in `durig.config.json`, `"1"` in `durig.config.default.json`, and the observed
+profile is **not** single-flight (max 11 in flight; 81 h at 1, 45 h at 2) — read `src/config.mjs loadConfig` first
+(D153 §4). The 5-minute degeneration bound is a *turn* guard on a different quantity. A `--dry-run` names no removals
+(resets model+cwd only) — it is not a safety check. Model speed is **12.7%** of machine time, so a faster model is not a
+wall-clock intervention. `tools/` is untested by design except where a demo is named; `tools/latency-budget.mjs` needs a
+demo only if its `--json` becomes a contract `verify` consumes.
 
-### The queue verb has **no filters at all** — verified, and it changes how you must read the backlog
+## CLOCK-OUT (2026-10-28, delegate — wall-clock measurement session)
 
-`cli.mjs` `cmdQueue` is `async function cmdQueue()` reading the whole `queue` document (`cli.mjs:1018-1021`): **it takes
-no arguments**, so **`--status held` and `--to pm` are silently ignored and every read returns all 4,821 items**
-(**21,178,646 B**; `status` is **22,748,093 B**). Unknown flags fail **open** — you cannot tell a filter was ignored.
-An earlier note in this file said "`queue --to engineer --json` → 96 open rows / 3,755 non-terminal": **that was wrong**,
-it was a number from a different structure. The measured census is the one in the header above (**296** non-terminal,
-**277 `held` + 19 `deferred`**), and the way to read it without pulling 21 MB into a session's context is to project
-(`jq` is installed at `/usr/bin/jq`):
-
-```bash
-node cli.mjs queue --json | jq -r '.items[] | select(.status=="held" or .status=="deferred")
-  | [.id,.status,(.to//"-"),(.subject//""|.[0:60])] | @tsv'      # 296 rows, 75 KB not 21 MB
-node tools/queue-drain-audit.mjs          # 1.0 s: of the 277 held, 91 LANDING rows, 71 already fully on main
-node tools/latency-budget.mjs --db ./selfdev.sqlite   # 3.0 s: held idle a median 213.5h (max 289.8h); deferred a median 145.2h
-```
-
-Before starting seats, have `pm` decompose from that projected list rather than assuming the backlog is parked.
-71 of 277 held rows being zero-build closable is now a **product** gap, not just a delegate measurement — that is
-**ROADMAP 227** (`checkup`/`attention` should say it; the delegate re-running a script every session is the tax), and
-the missing filters plus the fail-open flags are **228**. **Release/cancel decisions stay `pm`'s**; the delegate only
-measures.
-
-## What this session delivered (done / verified / unverified)
-
-- **Done and verified:** the whole-store wall-clock budget — `docs/reviews/wallclock-budget-2026-10-28.md` +
-  `tools/latency-budget.mjs` (**3.0 s, exit 0**, read-only: store opened `readOnly:true`, `cli.mjs status` is a viewer)
-  + **D153** + **ROADMAP 225–228** + a `tools/README.md` row and two habits (`index before probe`; `node --check`
-  before running a new tool). Full suite green on this box: **`node scripts/test.mjs --all` → 238/238 in 41.1 s,
-  exit 0** (`demo/worktree-reuse-deps` and `demo/mergeguard`, previously read as known-red, pass now that the worktree
-  is Linux-rooted and clean).
-- **Verified:** worktree/branch/ref inventory on the Linux clone — **1 registered worktree (main only), 0 seat
-  worktrees, 2 local branches, `prune -n` silent, no `<db>.worktrees.json`, no Pi seat-agent state on this host**, and
-  **zero ref-tip moves** across a `run`, a `send`, and four `status` reads (`.spike/worktree-inventory-2026-10-28.txt`,
-  7 lines: the porcelain entry plus `git branch --list`). An earlier note in this file claimed "13 registered
-  worktrees"; that was **wrong** (it came from clock-in's store-derived seat roots, which are *persisted* values, not
-  registered trees) and is corrected above — the distinction is what the workspace-move runbook tells you to
-  inventory for exactly this reason.
-- **Unverified (deliberately):** no seat was woken or started beyond the read-only `run`/`send` identity probes, because
-  the broker is down by choice and 221's persisted root is unruled. Nothing in the review is a claim about the rig's
-  *future* throughput — the falsifying test is written into D153: re-measure after one resident-broker day.
-
-## Known-red / blocked register
-
-- **`DURIG_DB` vs `DURIAN_PI_DB` precedence is half-applied and points both ways** — **ROADMAP 191**.
-- **Provider 402 is real and quantified: 14,377 generations ended `402 "You need positive balance to do inference"`**
-  (22.5 h of busy time; 18,309 store entries carry that text). **24.4% of all 59,851 generations ended in an error —
-  59.2 h, 14.7% of busy time.** The operator funded the account; **ROADMAP 226** asks the rig to *count the class and
-  stop waking seats* rather than re-burning context on a dead provider. `tools/broker-serve.mjs --status` probes one
-  real completion per provider (3.4 s) — run it before a start.
-- **The long tail is the largest un-diagnosed term:** the 0.23% of generations that run ≥10 min hold **156.8 h
-  (39.0%)** of machine busy time while their conversations committed **1–3 events** inside those windows. **ROADMAP 225**
-  is the prerequisite for any "make it faster" decision.
-- **`cli.mjs status` prints 22,748,093 B and `cli.mjs queue --json` prints 21,178,646 B per read, and `queue` has no
-  filters** — **ROADMAP 228**. `cmdQueue` (`cli.mjs:1018`) takes no arguments, so `--status`/`--to` are accepted and
-  ignored: **unknown flags fail open**, and a reader cannot tell a filter was applied. `watch`/`tui`/scripted delegates
-  pay the full read per pass.
-- **Context is at its limit and nothing says so:** **23,053 prompts > 150,000 tokens, max 1,009,360** against a declared
-  200,000 window (`status.context.window.denominator = "declared"`, `candidates.measured = null`); compaction cost
-  **15.9 h** across 1,459 runs (max 1.5 h). **208** is the guard; the 94.0% cache-hit rate is what makes the fresh
-  576.7 M tokens affordable, so the exposure is a policy away, not a model away.
-- **`DURIG_MAX_CONCURRENT_SEATS` is unset in `durig.config.json`, `"1"` in `durig.config.default.json`, and the
-  observed profile is not single-flight** (max 11 generations in flight; 81 h at 1, 45 h at 2). Do not change the cap on
-  the strength of the default file — read `src/config.mjs loadConfig` first (D153 §4).
-- **`tools/latency-budget.mjs` is untested like most of `tools/`** (`tools/README.md` rules). If its `--json` shape ever
-  becomes a contract that `verify` consumes, **it needs a demo** — that is the moment to add one, not now.
-- **`.scratch/` is untracked and NOT gitignored** (`.gitignore:21` ignores `.spike/` only), and it already holds other
-  sessions' scratch (`audit-before.json`, `calibrate-verifier.mjs`, …). Consequence: `git status` noise at every clock-in
-  and a real chance a scratch file gets committed by a `git add -A`-minded seat. One line for `devtools`: either ignore
-  `.scratch/` or fold it into `.spike/` — do not leave two scratch roots with different rules.
-
-## If a new capability is being considered
-
-Read **`docs/reviews/EXTERNAL_REVIEW_v3_2026-10-26.md`** first. Its rule that this session's evidence supports:
-`node tools/external-capability-audit.mjs` scores candidate libraries against the in-house implementation before
-importing anything — and the wall-clock analogue applies, i.e. **measure the term before buying it** (D153: model
-speed is 12.7% of machine time, so a faster model is not a wall-clock intervention).
-
-## Clock-out checklist for the next session
-
-1. Read me, `docs/SELFDEV.md`, and `docs/runbooks/README.md` → the matching runbook
-   (`channel-offline.md` for broker down/stalled, `queue-deadlock.md`, `stale-held-backlog.md`, `store-probe-identity.md`
-   before any raw SQL — **stored enum strings carry embedded quotes**, so `WHERE kind='pi.generation'` matches nothing;
-   `queueItems` is **delta-encoded**, so query it through `cli.mjs status`, not SQL).
-2. Re-run the worktree inventory into `.spike/` before and after any writing verb (`up`, `worktree`, `run`, `send`) —
-   see the incident at `docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`.
-3. Report done / blocked / unverified with the command that shows it, naming the OS and the clock.
+**Done and verified.** The whole-rig wall-clock budget in two currencies — `docs/reviews/wallclock-budget-2026-10-28.md`,
+instrument `tools/latency-budget.mjs` (**2.9–3.0 s, read-only**: store opened `readOnly:true`, `status` is a viewer,
+D11), ruling **D153**, new rows **ROADMAP 225–228**, `tools/README.md` row + three habits (index before probe;
+`node --check` before running a new tool — 0.02 s, saved ~6 min; project big reads, never dump). Suite at last full run:
+**238/238 in 41.1 s, exit 0**. Commits `48eb6a6` `8f8052c` `3dd0156` `41a846b` `b793a02`.
+**Two claims I corrected in public (DECISIONS D153 correction + this file):** (a) "`queue --to engineer` → 96 open rows
+/ 3,755 non-terminal" had been copied across sessions; the verb ignores all arguments and the true census is **296
+non-terminal** — and the instrument printed `nonterm: 296` from its first run while prose said otherwise, which is the
+argument for re-measuring instead of re-reading; (b) "13 registered worktrees, no `D:\`" was clock-in's store-derived
+*persisted* seat roots, not registered trees — this clone has **1 worktree, 0 seat worktrees**.
+**Pitfall for the next editor of this file:** the pointer has **two executable readers** — `demo/next-pointer.test.mjs`
+(requires the first `## NEXT SESSION` before any `## CLOCK-OUT`; `**Current item:**`; a `#NNN` id; a command containing
+`node cli.mjs`; its own `**Blocker:**` line; ≤200 lines) and `demo/clockin-digest.test.mjs` (digests only that section,
+so **the `NEXT-ARCHIVE.md` link must be inside the pointer body**). Restyling NEXT.md without them turns the suite red —
+it went red twice on my rewrite and is green after this cut. After editing this file run:
+`node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs` (~1 s each).
+**Unverified deliberately:** no seat woken beyond read-only identity probes; no write verb on this host (broker down by
+choice since 2026-10-28T05:35Z, 0 STRANDED); no queue row claimed/completed/deferred/released; no push. The review's
+ranking is falsifiable and the test is written into D153: re-measure after one resident-broker day and compare
+(`node tools/latency-budget.mjs --db ./selfdev.sqlite --json > .spike/latency-$(date +%F).json`, 11.9 KB).
+**Notes taken** (pitfalls + speed-ups): `tools/README.md` (index-before-probe, `--check`, project-big-reads, `jq`
+recipe); this file's §DO-NOT-FIX; `.scratch/` is untracked and **not** gitignored while `.gitignore:21` ignores
+`.spike/` — one line for devtools to pick one scratch-root rule. `clockin` also printed a NOTE worth keeping: **no CLI
+command prints a seat's persisted cwd** (`ps`/`status` omit it), so a cleared rig-file field is not evidence the seat
+root is right — read a seat's own `seat_root` tool result, or `cli.mjs send <seat> seat_root`; that is exactly what
+221 asks for.
