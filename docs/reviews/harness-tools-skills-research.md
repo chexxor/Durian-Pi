@@ -318,15 +318,40 @@ requires a new product feature. Register in `docs/ROADMAP.md` as **registered, n
    build-time or cloud skill catalog (openhands `skills-service.ts:29-40`). Reasons are in §1; both make staleness
    invisible, which is our named failure class.
 
-**Deferred pending the web half:** the per-project reviews were **not** amended and no `docs/COMPETITORS.md` per-project
-entry was written for the five public harnesses, because none was opened (`competitor-review.md` anti-pattern: category
-dismissal). The 2026-10-29 sweep rows are added in `docs/COMPETITORS.md` instead, keyed to the pins above.
+**Deferred pending the web half — now partly resolved (2026-10-29, same day).** The public-harness half landed as
+`docs/reviews/harness-tools-skills-public-harnesses-research.md` (committed verbatim as `318838f5`), and five
+`--depth 1` pins were granted and taken the same day: `codex d373d649`, `cline 51f63e4f`, `goose 775b3958`,
+`claude-code-docs 58d6da1e`, `copilot-cli 84ee80ea` (rows generated in `docs/VENDOR-PINS.md`; `--check` PASS at 14
+clones). Per-project `COMPETITORS.md` entries for the five now exist under *"The 2026-10-29 public-harness pins"*. **Two
+corrections this half forced on the report above:** (1) "*no default or configurable intercept for `git worktree prune` /
+`git clean -fd`*" was true of the ten observed systems but **not** of the field at large — GitHub Copilot CLI ships
+`--deny-mode "command:git worktree prune"`, and its own tracker reports those rules **failing open** on a 10 s timeout
+and on TCC denial ([#978](https://github.com/github/copilot-cli/issues/978)); (2) the report's own claim *"not one of the
+five lets the agent register a callable tool that survives the session"* needs Goose's runtime recipe **write-back**
+(`crates/goose/src/recipe/local_recipes.rs:155,194` at the pin) read against it — a capability that survives, though as
+a recipe rather than a tool. Neither correction changes the recommendation's shape: an outer guard still cannot see our
+broker's own `pruneWorktrees` call.
 
 ## 9. What we did not ask / could not answer here
 
-See `docs/reviews/harness-tools-skills-followup-research-prompt.md`. The short list: the five public harnesses; whether
-pi's `tool_search`/`deferred` exposure beats always-on registration at our instrument count (needs a measured
-comparison, not a claim); pi's published retention/size policy for sessions (none found in the docs read); whether
-`exposure:"hidden"` + `prepareLoadout` is a legitimate way to hide built-in tool declarations we do not want; whether
-`allowed-tools`-style per-skill capability grants exist in pi (not found in the time spent); and whether any harness has
-*ever* shipped a guard for `git worktree prune` / `git clean -fd` (none found here).
+Round 2 was routed as `docs/reviews/harness-tools-skills-followup-research-prompt.md` and is answered (with the
+caveats above) in `docs/reviews/harness-tools-skills-public-harnesses-research.md`. **Round 3 is routed as
+`docs/reviews/harness-tools-skills-followup-2-research-prompt.md`** — it carries a blocking evidence-repair task (50 of
+that report's 64 in-body anchors point into a fetched corpus that was never delivered, and 3 of its URLs are dead; see
+ROADMAP **243**) plus the six questions that remain web-only: injection budgets for the harnesses that hide theirs;
+guard **defaults** vs opt-in and whether a repo commit propagates a guard to a teammate; **headless/CI** behaviour of an
+approval request and of a hook that times out; whether approval state is stored out-of-band and inherited by a
+non-interactive session; **capture-on-success** mechanisms and their verification prerequisites (feeds ROADMAP **240**);
+and dual-host Windows/Linux distribution of instruction files.
+
+Still unanswered from this file, and **now the delegate's own job at a pin rather than the research agent's** (operator
+ruled research-first on 232, ROADMAP **241**): whether any shipped harness guards `git worktree prune` / `git clean -fd`
+by default (none found in fifteen systems; Copilot CLI's opt-in deny rules are the nearest thing and fail open per its
+own tracker), and how a shipped permission/policy engine actually stores and enforces a deny rule — readable now in
+`vendor/eval/codex · d373d649`.
+
+Still unanswered, and web-only: whether pi's `tool_search`/`deferred` exposure beats always-on registration at our
+instrument count (needs a measured comparison, not a claim); pi's published retention/size policy for sessions (none
+found in the docs read); whether `exposure:"hidden"` + `prepareLoadout` is a legitimate way to hide built-in tool
+declarations we do not want; and whether `allowed-tools`-style per-skill capability grants exist in pi (not found in the
+time spent).

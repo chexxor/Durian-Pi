@@ -4,6 +4,46 @@ I'll start by reading the attached documents.I have both prompts. The parent rep
 
 ---
 
+> ### Delegate consumption note (2026-10-29) — added by the delegate; the report body below is unmodified
+>
+> **Provenance.** Received from the operator's research agent, untracked, and committed **verbatim** as `318838f5`
+> before any amendment, so the artifact is attributable and durable (`docs/ROADMAP.md` 233 / D156: an untracked report is
+> a lost report). The first line of this file is the agent's own narration, left in place for the same reason.
+>
+> **The Method line's premise changed the same day.** "No clones were made" was true on arrival. The operator then
+> granted `--depth 1` cloning and five pins now exist: `vendor/eval/codex d373d649` (**full Rust source**, `codex-rs/`),
+> `cline 51f63e4f` (full TS monorepo), `goose 775b3958` (full Rust + `documentation/docs/`), `claude-code-docs 58d6da1e`
+> (**CHANGELOG/docs only**), `copilot-cli 84ee80ea` (**README/install.sh/changelog only**). Rows are generated in
+> `docs/VENDOR-PINS.md`; `node tools/vendor-pins.mjs --check` → PASS at 14 clones. **Consequence: `observed` cells are now
+> obtainable for three of the five, and this half still has none.** Reading those trees against the claims below is
+> ROADMAP **241** — which the operator gated ahead of 232 ("*Do more research before proceeding onto roadmap 232*",
+> D158). Do not treat any row below as behaviour until then.
+>
+> **Citation integrity, measured on the file as committed.** 64 distinct in-body markers, 14 defined, **50 dangling**
+> (`[^542f21#49]`-style anchors into a fetched corpus that was never delivered — `inputs/fetched/` does not exist in this
+> repo), and **3 dead URLs**, all Goose (`…/getting-started/using-extensions`, `…/goose-architecture/extensions-design`,
+> `…/guides/recipes/recipe-reference`, all HTTP 404 on 2026-10-29); the resolvable equivalents are in the pin, e.g.
+> `vendor/eval/goose/documentation/docs/tutorials/recipes-tutorial.md`. Repairs are routed as Task A of
+> `docs/reviews/harness-tools-skills-followup-2-research-prompt.md` and registered as ROADMAP **243**.
+>
+> **What the delegate re-confirmed on the live vendor pages on 2026-10-29** (so the findings survive even where the
+> anchors do not): Claude Code's "scales at 1% of the model's context window", "truncated at 1,536 characters", "first
+> 5,000 tokens of each" inside a "combined budget of 25,000 tokens", `/skill-doctor`, `/run-skill-generator`, `/verify`;
+> Codex `config-advanced`'s `project_doc_max_bytes`, `project_doc_fallback_filenames`, `thread.skills.truncated`,
+> `skill.injected`, `history.jsonl`, `hooks.json`, `PreToolUse`; Cursor's `beforeShellExecution`, `failClosed`,
+> `pluginPaths` and the decisive sentence that with `failClosed: true` "hook failures (crash, timeout, non-zero exit code,
+> no output) block the action instead of allowing it through" — **so the default is fail-open** — and "Keep rules under
+> 500 lines" as guidance, not enforcement.
+>
+> **Two contradictions, recorded rather than quietly folded.** (1) Against the observed half: "*no default or
+> configurable intercept for `git worktree prune` / `git clean -fd`*" holds across the ten observed systems, but GitHub
+> Copilot CLI ships `--deny-mode "command:git worktree prune"` — and its own tracker reports those rules **failing open**
+> on a 10 s timeout and on TCC denial ([#978](https://github.com/github/copilot-cli/issues/978)), with no way to reload a
+> changed rules file without restarting the session ([#4438](https://github.com/github/copilot-cli/issues/4438)). (2)
+> Against this report's own second bullet: Goose writes capabilities back at runtime
+> (`crates/goose/src/recipe/local_recipes.rs:155,194` at the pin) — a repo-discovered capability that *does* get created
+> mid-session, though as a recipe rather than a callable tool.
+
 ## 1. Verdict up front
 
 The public harnesses **do converge on three of the delegate's mechanisms**, but they converge on them in a different order of importance than we ranked them, and on one mechanism we do not have at all:
