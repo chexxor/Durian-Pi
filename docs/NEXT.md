@@ -37,11 +37,12 @@ DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json node cli.mjs queue --j
   | jq -r '.items[] | select(.status=="queued" or .status=="claimed") | [.id,.status,(.to//"-")] | @tsv' | wc -l   # the head of the queue: 0 today
 ```
 
-**Blocker:** the operator ruled (D156) that the start stays **withheld on ROADMAP 217** and rehearsals run in a disposable
-clone, never this checkout. Still owed by the operator: (1) the ROADMAP 221 seat-root ruling, (2) the definition of **"the
-queue drains"** (231), (3) a grant on what may prune/remove registrations here, (4) a grant to copy the Windows clone's **3
-packs** into this checkout — rehearsed: **+13,057 objects, `git fsck` clean, 23/30 cited shas resolve** — and (5) `sudo
-timedatectl set-local-rtc 0` (clock item **held** pending the explanation). **History:** `docs/NEXT-ARCHIVE.md`.
+**Blocker:** the operator ruled (D156): the start stays **withheld on ROADMAP 217**, and rehearsals run in a disposable
+clone, never this checkout. Still owed: (1) the 221 seat-root ruling, (2) the definition of **"the queue drains"** (231),
+(3) a grant on what may prune/remove registrations here, (4) a grant to copy the Windows clone's **3 packs** here (rehearsed:
+**+13,057 objects, `git fsck` clean, 23/30 cited shas resolve**) and (5) the clock ruling (`LocalRTC=yes`, `RTC time 15:52:50`
+vs UTC `20:52:50` — a 5 h mislabel). **Routed:** routing fact spooled to `pm` as `delegate-routing-fact-20261028-2150`.
+**History:** `docs/NEXT-ARCHIVE.md`. **The start itself stays refused: `node tools/broker-serve.mjs --dry-run`.**
 
 ### Read-only baseline — run this before anything else (all verified working, Linux, 2026-10-28T20:1xZ)
 
@@ -52,8 +53,7 @@ node tools/channel-preflight.mjs --db ./selfdev.sqlite --rig ./rig.selfdev.json 
 node tools/broker-serve.mjs --status      # 2.8 s; now also raises `seat-shell-availability` (217)
 node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 0.93 s: 91 non-terminal LANDING rows, 71 fully on main, ids printed
 node tools/latency-budget.mjs --db ./selfdev.sqlite      # 3.0 s: the two wall-clock currencies
-node scripts/clockin.mjs                                 # 2.6 s
-node tools/instrument-provenance.mjs                     # 46 ms: suite members git=238 disk=238, cite census, ledger size (ROADMAP 233); exits 1 on drift
+node tools/instrument-provenance.mjs && node scripts/clockin.mjs # 46 ms + 2.6 s: suite members git=238 disk=238 + ledger size (233, exits 1 on drift), then the digest
 ```
 
 ## Rig state, re-measured 2026-10-28T20:1xZ (Linux) — re-read, do not trust
