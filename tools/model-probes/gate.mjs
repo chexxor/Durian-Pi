@@ -1,7 +1,19 @@
 // The 189 gate runner. Scores a model against corpus.mjs and reports a PAIRED verdict.
 //
 //   node tools/model-probes/gate.mjs <baseUrl> <modelId> [label] [--compare <run.json>] [--out <file>]
-//        [--whole-module] [--budget <estTokens>] [--probe] [--material answer|answer+reasoning] [--plan]
+//        [--whole-module] [--budget <estTokens>] [--probe] [--material answer|answer+reasoning]
+//        [--pair-comments strip-both|keep-both|strip-clean-only] [--replicate k] [--plan]
+//
+// ROADMAP 198 — a verdict from ONE pass is a sample, not a measurement. Measured on 2026-10-28: the same model,
+// the same 8 items, the same scorer and the same declared material reproduced its AGGREGATE exactly (3/8 twice)
+// while flipping **4 of 8 per-item verdicts** (exact McNemar 2/2 discordant, p = 1.000) — and the gap the earlier
+// routing decision (D137) was asked to rank on, 4/8 vs 3/8, is the same size as that movement. So `--replicate k`
+// runs the whole matrix k times (rotating which condition is answered first, so a rep cannot carry an order
+// effect), reports each cell's verdicts across reps, prints the **per-cell replication rate**, and scores the
+// **majority-of-k cell** — a cell is only scored if a strict majority of its reps agree, otherwise it is
+// UNSTABLE and named. Aggregates are printed per rep AND on the majority cells, and the G2 floor is reported
+// under the majority run AND under the worst replicate, because "the control found 4 of 8" is only usable for
+// calibration if it survives being run again.
 //
 // TWO FEEDINGS, and the difference between them is a measured question, not a style choice (ROADMAP 195):
 // the default shows a WINDOW around the defect; `--whole-module` shows the ENTIRE module and loudly SKIPS any
@@ -26,7 +38,6 @@
 
 import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { buildCorpus } from "./corpus.mjs";
 
 const SYSTEM =
   "You are a code reviewer. Find the defect that makes this code fail at RUNTIME on Linux. Be specific about the mechanism. If you see several, list them ranked by severity.";
@@ -250,6 +261,13 @@ const MODE = flags.includes("--whole-module") ? "whole" : "fragment";
 const BUDGET = Number(flag("budget") || process.env.CAL_TOKEN_BUDGET || 10000);
 const MATERIAL = flag("material") || process.env.CAL_MATERIAL || "answer+reasoning";
 const PROBE = flags.includes("--probe");
+// ROADMAP 199: whether COMMENTS stay in a pair, and on which side. corpus.mjs reads this at import time, so the
+// flag is applied to the environment before the module is imported (a static import would freeze the default).
+if (flag("pair-comments")) process.env.CAL_PAIR_COMMENTS = flag("pair-comments");
+const PAIR_POLICY = process.env.CAL_PAIR_COMMENTS || "strip-both";
+// ROADMAP 198: replicates. k = 1 is allowed (it is what every published table so far is) but it is labelled a
+// sample in the run record, because that labelling is the thing that was missing.
+const REPS = Number(flag("replicate") || process.env.CAL_REPLICATES || 1);
 const OPTS = { material: MATERIAL, whole: MODE === "whole" };
 if (!["answer", "answer+reasoning"].includes(MATERIAL)) {
   console.error(`--material must be 'answer' or 'answer+reasoning', got '${MATERIAL}'`);
@@ -259,6 +277,12 @@ if (!Number.isFinite(BUDGET) || BUDGET <= 0) {
   console.error(`--budget must be a positive token estimate, got '${BUDGET}'`);
   process.exit(2);
 }
+if (!Number.isInteger(REPS) || REPS < 1) {
+  console.error(`--replicate must be a positive integer, got '${REPS}'`);
+  process.exit(2);
+}
+
+const { buildCorpus } = await import("./corpus.mjs");
 
 const { items, notes } = await buildCorpus();
 console.log(`\nCORPUS: ${items.length} items (${items.filter((i) => i.kind === "mut").length} mutants with execution proofs, ${items.filter((i) => i.kind === "hist").length} from git fix history)`);
@@ -283,6 +307,28 @@ function planTable() {
   }
 }
 planTable();
+
+// ROADMAP 199 — the accounting that was missing. A "matched pair" is matched only if BOTH sides were treated
+// the same way about comments; the 2026-10-28 runs stripped the clean side and kept the defect side, which shed
+// 17.7-68.8% of the clean side's bytes. Printed per view, per item, with the comment share each side carries
+// and the leak `keep-both` would put into a control, so the policy is a measured choice.
+function pairTable() {
+  console.log(`\nMATCHED-PAIR ACCOUNTING (199) — policy: ${PAIR_POLICY}${PAIR_POLICY === "strip-both" ? "  (symmetric: the pair differs by the defect and nothing else)" : PAIR_POLICY === "keep-both" ? "  (symmetric: both sides authentic — see the leak lines below)" : "  (ASYMMETRIC — the 2026-10-28 configuration, kept reproducible)"}`);
+  console.log(`  ${"item".padEnd(34)} ${"view".padEnd(9)} ${"defect ch".padStart(9)} ${"clean ch".padStart(9)} ${"delta".padStart(8)} ${"d%".padStart(7)} ${"shown def".padStart(10)} ${"shown cln".padStart(10)} ${"cmt% def".padStart(9)} ${"cmt% cln".padStart(9)}`);
+  for (const it of items) {
+    for (const [view, a] of [["fragment", it.fragment?.pair], ["whole", it.whole?.pair]]) {
+      if (!a) continue;
+      console.log(
+        `  ${it.id.padEnd(34)} ${view.padEnd(9)} ${String(a.defectChars).padStart(9)} ${String(a.cleanChars).padStart(9)} ${String(a.delta).padStart(8)} ${`${a.deltaPct}%`.padStart(7)} ${String(a.shownDefectChars).padStart(10)} ${String(a.shownCleanChars).padStart(10)} ${`${a.defectCommentShare}%`.padStart(9)} ${`${a.cleanCommentShare}%`.padStart(9)}`,
+      );
+    }
+    const leak = it.whole?.leak || [];
+    console.log(
+      `  ${"".padEnd(34)} the whole-module CLEAN side carries ${leak.length} comment line(s) containing this item's own rubric vocabulary${leak.length ? ` — keep-both would LEAK the answer into a control, e.g.: ${leak.slice(0, 2).map((l) => l.slice(0, 80)).join(" | ")}` : " — keep-both is leak-free for this item"}`,
+    );
+  }
+}
+pairTable();
 if (flags.includes("--plan")) {
   console.log("\n--plan: no prompts sent.");
   process.exit(0);
@@ -290,7 +336,20 @@ if (flags.includes("--plan")) {
 
 const run = [];
 const skipped = [];
+const cellTable = []; // per-cell verdicts across replicates (198) — declared early so the transcript can carry it
+let majorityRows = []; // the SCORED cells of a k-replicate run, persisted so a later comparison cannot silently take a stray replicate instead
+const CONDS = ["defect", "clean", "clean-neutral"]; // the three conditions per item; --replicate rotates their order
 const rescore = flag("rescore");
+mkdirSync(resolve(".spike/gate"), { recursive: true });
+const out = flag("out") || resolve(`.spike/gate/run-${label.replace(/[^\w.-]/g, "_")}-${new Date().toISOString().replace(/[:.]/g, "")}.json`);
+// Written after EVERY item, not only at the end: a k-replicate whole-module arm costs tens of minutes of the
+// operator's GPU, and an interrupted session should keep everything it already paid for.
+function writeTranscript(final = false) {
+  writeFileSync(
+    rescore ? `${out}.rescored.json` : out,
+    JSON.stringify({ label, model, baseUrl, at: new Date().toISOString(), mode: MODE, budget: BUDGET, material: MATERIAL, pairPolicy: PAIR_POLICY, reps: REPS, skipped, cells: cellTable, majority: majorityRows, complete: final, run }, null, 2),
+  );
+}
 if (rescore) {
   // Re-score a saved transcript with the CURRENT rubric and scorer, without spending another prompt. The
   // scorer WILL change as corpus items teach it things (the `+ 1` regex crash, the excerpt-artifact rule);
@@ -309,93 +368,184 @@ if (rescore) {
   console.log(`\nRESCORE ${rescore} (label ${prev.label}, asked ${prev.at}) with the current scorer — no new prompts.`);
   for (const r of run) if (r.score) console.log(`  ${r.cond.padEnd(13)} ${r.id}: ${r.score.verdict}`);
 } else {
-console.log(`\n${"=".repeat(78)}\nGATE RUN: ${label} (${model}) @ ${baseUrl}\n  feeding=${MODE} budget=${BUDGET} estTokens  material=${MATERIAL}${PROBE ? "  probe=on" : ""}\n${"=".repeat(78)}`);
-for (let n = 0; n < items.length; n++) {
-  const it = items[n];
-  // A whole-module arm that quietly fell back to a fragment would measure nothing, so an item that does not fit
-  // is DROPPED LOUDLY and named in the summary — the reader sees the denominator shrink, and why.
-  if (MODE === "whole") {
-    if (!it.whole) {
-      console.log(`\n--- ${it.id} ---\n  SKIP ${it.id}: NO whole-module text for ${it.file} — NOT shown as a fragment.`);
-      skipped.push({ id: it.id, why: "no whole-module text" });
-      continue;
+console.log(`\n${"=".repeat(78)}\nGATE RUN: ${label} (${model}) @ ${baseUrl}\n  feeding=${MODE} budget=${BUDGET} estTokens  material=${MATERIAL}  pair-comments=${PAIR_POLICY}  replicates=${REPS}${PROBE ? "  probe=on" : ""}\n${"=".repeat(78)}`);
+if (REPS === 1) {
+  // ROADMAP 198: this line is the whole item. Nothing printed by a single pass is a measurement; it is one draw,
+  // and on 2026-10-28 the same model flipped 4 of 8 defect cells between two draws of the same instrument.
+  console.log(`  NOTE 198: k = 1 — every verdict below is a SAMPLE. Use --replicate 3 (or more) before any number here informs a routing decision.`);
+}
+const probed = new Set();
+for (let rep = 0; rep < REPS; rep++) {
+  if (REPS > 1) console.log(`\n${"#".repeat(78)}\nREPLICATE ${rep + 1} of ${REPS}\n${"#".repeat(78)}`);
+  for (let n = 0; n < items.length; n++) {
+    const it = items[n];
+    // A whole-module arm that quietly fell back to a fragment would measure nothing, so an item that does not fit
+    // is DROPPED LOUDLY and named in the summary — the reader sees the denominator shrink, and why.
+    // The fit decision is deterministic, so it is recorded once (rep 0) rather than k times.
+    if (MODE === "whole") {
+      if (!it.whole) {
+        if (rep === 0) {
+          console.log(`\n--- ${it.id} ---\n  SKIP ${it.id}: NO whole-module text for ${it.file} — NOT shown as a fragment.`);
+          skipped.push({ id: it.id, why: "no whole-module text" });
+        }
+        continue;
+      }
+      if (it.whole.estTokens > BUDGET) {
+        if (rep === 0) {
+          console.log(`\n--- ${it.id} ---\n  SKIP ${it.id}: whole module ~${it.whole.estTokens} tok (${it.whole.chars} chars) > budget ${BUDGET} — stays a FRAGMENT (ROADMAP 195).`);
+          skipped.push({ id: it.id, why: `whole ~${it.whole.estTokens} tok > budget ${BUDGET}` });
+        }
+        continue;
+      }
     }
-    if (it.whole.estTokens > BUDGET) {
-      console.log(`\n--- ${it.id} ---\n  SKIP ${it.id}: whole module ~${it.whole.estTokens} tok (${it.whole.chars} chars) > budget ${BUDGET} — stays a FRAGMENT (ROADMAP 195).`);
-      skipped.push({ id: it.id, why: `whole ~${it.whole.estTokens} tok > budget ${BUDGET}` });
-      continue;
+    // Counterbalance within a rep (half the items answer clean first) AND rotate across reps, so a replicate
+    // cannot carry an order effect into the majority cell (198).
+    const rot = CONDS.slice(rep % CONDS.length).concat(CONDS.slice(0, rep % CONDS.length));
+    const order = n % 2 === 0 ? rot : [rot[1], rot[0], rot[2]];
+    console.log(`\n--- ${it.id} (${it.kind}, ${it.file}) — ${MODE === "whole" ? `whole module, ~${it.whole.estTokens} est. tok` : "fragment window"} ---`);
+    if (MODE === "whole" && PROBE && !probed.has(it.id)) {
+      // 400-or-not, empirically (195: "probe it, do not assume"). The estimate is calibrated to be CONSERVATIVE,
+      // so an item it calls too big was never close; an item it calls small can still be refused by the server.
+      try {
+        await ask(baseUrl, model, it.whole.defectText, it.file, "", 1);
+      } catch (e) {
+        console.log(`  SKIP ${it.id}: endpoint REFUSED the whole module (probe): ${e.message}`);
+        skipped.push({ id: it.id, why: `probe refused at ~${it.whole.estTokens} est. tok: ${e.message.slice(0, 120)}` });
+        continue;
+      }
+      console.log(`  PROBE ${it.id}: whole module ACCEPTED by the endpoint.`);
+      probed.add(it.id);
     }
-  }
-  // Counterbalance: half the items answer clean first, half defect first.
-  const order = n % 2 === 0 ? ["defect", "clean", "clean-neutral"] : ["clean", "defect", "clean-neutral"];
-  console.log(`\n--- ${it.id} (${it.kind}, ${it.file}) — ${MODE === "whole" ? `whole module, ~${it.whole.estTokens} est. tok` : "fragment window"} ---`);
-  if (MODE === "whole" && PROBE) {
-    // 400-or-not, empirically (195: "probe it, do not assume"). The estimate is calibrated to be CONSERVATIVE,
-    // so an item it calls too big was never close; an item it calls small can still be refused by the server.
-    try {
-      await ask(baseUrl, model, it.whole.defectText, it.file, "", 1);
-    } catch (e) {
-      console.log(`  SKIP ${it.id}: endpoint REFUSED the whole module (probe): ${e.message}`);
-      skipped.push({ id: it.id, why: `probe refused at ~${it.whole.estTokens} est. tok: ${e.message.slice(0, 120)}` });
-      continue;
+    for (const cond of order) {
+      const code = cond === "defect" ? (MODE === "whole" ? it.whole.defectText : it.defectText) : (MODE === "whole" ? it.whole.cleanText : it.cleanText);
+      const prompt = cond === "clean-neutral" ? NEUTRAL : LEADING;
+      let res;
+      try {
+        res = await ask(baseUrl, model, code, it.file, prompt);
+      } catch (e) {
+        console.log(`  ${cond}: REQUEST FAILED ${e.message}`);
+        run.push({ id: it.id, kind: it.kind, cond, rep, error: e.message });
+        continue;
+      }
+      const s = cond === "defect" ? scoreDefect(it, res, OPTS) : scoreClean(it, res, OPTS);
+      run.push({ id: it.id, kind: it.kind, cond, rep, feed: MODE, score: s, finish: res.finish, dt: +res.dt.toFixed(1), completion: res.completion, prompt: res.prompt, answer: res.text, reasoning: res.reasoning });
+      const tag = cond === "defect" ? `${s.verdict} groups=${s.groups} need=${s.need}${s.phantoms.length ? ` PHANTOM[${s.phantoms.join("|")}]` : ""}` : s.verdict;
+      console.log(`  ${cond.padEnd(13)} ${tag}  ${res.dt.toFixed(1)}s finish=${res.finish} completion=${res.completion}`);
+      console.log(`      ${res.text.replace(/\n/g, "\n      ").slice(0, 700)}`);
     }
-    console.log(`  PROBE ${it.id}: whole module ACCEPTED by the endpoint.`);
-  }
-  for (const cond of order) {
-    const code = cond === "defect" ? (MODE === "whole" ? it.whole.defectText : it.defectText) : (MODE === "whole" ? it.whole.cleanText : it.cleanText);
-    const prompt = cond === "clean-neutral" ? NEUTRAL : LEADING;
-    let res;
-    try {
-      res = await ask(baseUrl, model, code, it.file, prompt);
-    } catch (e) {
-      console.log(`  ${cond}: REQUEST FAILED ${e.message}`);
-      run.push({ id: it.id, kind: it.kind, cond, error: e.message });
-      continue;
-    }
-    const s = cond === "defect" ? scoreDefect(it, res, OPTS) : scoreClean(it, res, OPTS);
-    run.push({ id: it.id, kind: it.kind, cond, feed: MODE, score: s, finish: res.finish, dt: +res.dt.toFixed(1), completion: res.completion, prompt: res.prompt, answer: res.text, reasoning: res.reasoning });
-    const tag = cond === "defect" ? `${s.verdict} groups=${s.groups} need=${s.need}${s.phantoms.length ? ` PHANTOM[${s.phantoms.join("|")}]` : ""}` : s.verdict;
-    console.log(`  ${cond.padEnd(13)} ${tag}  ${res.dt.toFixed(1)}s finish=${res.finish} completion=${res.completion}`);
-    console.log(`      ${res.text.replace(/\n/g, "\n      ").slice(0, 700)}`);
+    // Write the transcript as the run goes, not only at the end: a k-replicate whole-module arm costs tens of
+    // minutes of the operator's GPU, and losing it to an interrupted session would waste all of it.
+    writeTranscript();
   }
 }
 }
 
-const defects = run.filter((r) => r.cond === "defect" && r.score);
 const DROP = new Set(["ARTIFACT", "TRUNCATED-EMPTY"]);
-const scored = defects.filter((r) => !DROP.has(r.score.verdict));
-const corpusBugs = defects.filter((r) => r.score.verdict === "ARTIFACT" || r.score.verdict === "TRUNCATED-EMPTY");
-const cleanAll = run.filter((r) => r.cond === "clean" && r.score);
-const clean = cleanAll.filter((r) => !DROP.has(r.score.verdict) && r.score.verdict !== "ARTIFACT-EXCERPT");
-const excused = run.filter((r) => r.score?.verdict === "ARTIFACT-EXCERPT").length;
-const neutralAll = run.filter((r) => r.cond === "clean-neutral" && r.score);
-const neutral = neutralAll.filter((r) => !DROP.has(r.score.verdict) && r.score.verdict !== "ARTIFACT-EXCERPT");
-const hits = scored.filter((r) => r.score.verdict.startsWith("HIT"));
-const phantoms = defects.filter((r) => r.score.phantoms?.length);
-const fa = clean.filter((r) => r.score.verdict === "FALSE-ALARM");
-const passed = clean.filter((r) => r.score.verdict === "CLEAN-PASSED");
-const faN = neutral.filter((r) => r.score.verdict === "FALSE-ALARM");
-
-console.log(`\n${"=".repeat(78)}\nSUMMARY ${label}`);
-console.log(`  feeding: ${MODE === "whole" ? `WHOLE MODULE (shown when ~est. tokens <= ${BUDGET})` : "FRAGMENT window around the changed hunk"}   scoring material: ${MATERIAL}`);
-if (skipped.length) {
-  console.log(`  ITEMS SKIPPED BY THE WHOLE-MODULE ARM (195 — they stay fragments; every rate below is over the SHRUNKEN denominator):`);
-  for (const s of skipped) console.log(`    SKIP ${s.id}: ${s.why}`);
+// The same arithmetic the summary has always used, now callable over ANY row set — one replicate, or the
+// majority-of-k cells — so a run can report both and the reader can see the spread instead of one draw.
+function tally(rows, name) {
+  const defects = rows.filter((r) => r.cond === "defect" && r.score);
+  const scored = defects.filter((r) => !DROP.has(r.score.verdict));
+  const corpusBugs = defects.filter((r) => DROP.has(r.score.verdict));
+  const cleanAll = rows.filter((r) => r.cond === "clean" && r.score);
+  const clean = cleanAll.filter((r) => !DROP.has(r.score.verdict) && r.score.verdict !== "ARTIFACT-EXCERPT");
+  const excused = rows.filter((r) => r.score?.verdict === "ARTIFACT-EXCERPT").length;
+  const neutralAll = rows.filter((r) => r.cond === "clean-neutral" && r.score);
+  const neutral = neutralAll.filter((r) => !DROP.has(r.score.verdict) && r.score.verdict !== "ARTIFACT-EXCERPT");
+  const hits = scored.filter((r) => r.score.verdict.startsWith("HIT"));
+  const phantoms = defects.filter((r) => r.score.phantoms?.length);
+  const fa = clean.filter((r) => r.score.verdict === "FALSE-ALARM");
+  const passed = clean.filter((r) => r.score.verdict === "CLEAN-PASSED");
+  const faN = neutral.filter((r) => r.score.verdict === "FALSE-ALARM");
+  const unstable = rows.filter((r) => r.score?.verdict === "UNSTABLE");
+  console.log(`\n${"=".repeat(78)}\nSUMMARY ${name}`);
+  console.log(`  feeding: ${MODE === "whole" ? `WHOLE MODULE (shown when ~est. tokens <= ${BUDGET})` : "FRAGMENT window around the changed hunk"}   scoring material: ${MATERIAL}   pair-comments: ${PAIR_POLICY}`);
+  if (skipped.length) {
+    console.log(`  ITEMS SKIPPED BY THE WHOLE-MODULE ARM (195 — they stay fragments; every rate below is over the SHRUNKEN denominator):`);
+    for (const s of skipped) console.log(`    SKIP ${s.id}: ${s.why}`);
+  }
+  const absent = rows.filter((r) => r.cond !== "defect" && r.score?.absentBindingClaims?.length);
+  console.log(`  control turns claiming an absent binding (import/undefined/ReferenceError): ${absent.length} — ${MODE === "whole" ? "COUNTED as false alarms, the import block was on the page" : "excused where no code-level claim was made (ROADMAP 195)"}`);
+  console.log(`  defect items named:  ${hits.length}/${scored.length} scored (${defects.length} attempted)${phantoms.length ? `   (pre-registered PHANTOM present in ${phantoms.length})` : ""}`);
+  if (corpusBugs.length) console.log(`  CORPUS BUGS (rule G1 — EXCLUDED from the ranking): ${corpusBugs.map((r) => `${r.id}:${r.score.verdict}`).join(", ")}`);
+  if (cleanAll.length !== clean.length || neutralAll.length !== neutral.length) console.log(`  control conditions dropped as corpus bugs: ${cleanAll.length - clean.length + neutralAll.length - neutral.length}`);
+  console.log(`  clean, leading prompt:   FALSE-ALARM ${fa.length}/${clean.length}, CLEAN-PASSED ${passed.length}, AMBIGUOUS ${clean.length - fa.length - passed.length}`);
+  console.log(`  clean, neutral prompt:   FALSE-ALARM ${faN.length}/${neutral.length}`);
+  console.log(`  control claims EXCUSED as excerpt artifacts (ROADMAP 195, not counted as judgement failures): ${excused}`);
+  if (unstable.length) console.log(`  UNSTABLE cells (no strict majority across replicates, 198): ${unstable.map((r) => `${r.id}/${r.cond}[${(r.reps || []).join("|")}]`).join(" ")}`);
+  console.log(`  truncated (finish=length): ${rows.filter((r) => r.finish === "length").length} of ${rows.length} prompts`);
+  return { hits: hits.length, scored: scored.length, attempted: defects.length, fa: fa.length, clean: clean.length, faN: faN.length, neutral: neutral.length };
 }
-const absent = run.filter((r) => r.cond !== "defect" && r.score?.absentBindingClaims?.length);
-console.log(`  control turns claiming an absent binding (import/undefined/ReferenceError): ${absent.length} — ${MODE === "whole" ? "COUNTED as false alarms, the import block was on the page" : "excused where no code-level claim was made (ROADMAP 195)"}`);
-console.log(`  defect items named:  ${hits.length}/${scored.length} scored (${defects.length} attempted)${phantoms.length ? `   (pre-registered PHANTOM present in ${phantoms.length})` : ""}`);
-if (corpusBugs.length) console.log(`  CORPUS BUGS (rule G1 — EXCLUDED from the ranking): ${corpusBugs.map((r) => `${r.id}:${r.score.verdict}`).join(", ")}`);
-if (cleanAll.length !== clean.length || neutralAll.length !== neutral.length) console.log(`  control conditions dropped as corpus bugs: ${cleanAll.length - clean.length + neutralAll.length - neutral.length}`);
-console.log(`  clean, leading prompt:   FALSE-ALARM ${fa.length}/${clean.length}, CLEAN-PASSED ${passed.length}, AMBIGUOUS ${clean.length - fa.length - passed.length}`);
-console.log(`  clean, neutral prompt:   FALSE-ALARM ${faN.length}/${neutral.length}`);
-console.log(`  control claims EXCUSED as excerpt artifacts (ROADMAP 195, not counted as judgement failures): ${excused}`);
-console.log(`  truncated (finish=length): ${run.filter((r) => r.finish === "length").length} of ${run.length} prompts`);
+
+// A cell's class is what has to REPLICATE, not the exact verdict string: MISS and MISS+PHANTOM are the same
+// judgement about the model's capability, and treating them as different classes would report spurious
+// instability (and hide real instability in the other direction).
+const cellClass = (r) =>
+  r.cond === "defect"
+    ? DROP.has(r.score.verdict)
+      ? r.score.verdict
+      : r.score.verdict.startsWith("HIT")
+        ? "HIT"
+        : "MISS"
+    : r.score.verdict;
+
+let SCORED_ROWS = run;
+if (REPS > 1) {
+  const perRep = [];
+  for (let rep = 0; rep < REPS; rep++) perRep.push(tally(run.filter((r) => r.rep === rep), `${label} — replicate ${rep + 1} of ${REPS} (a SAMPLE; 198)`));
+  const byCell = new Map();
+  for (const r of run) {
+    if (!r.score) continue;
+    const k = `${r.id}|${r.cond}`;
+    if (!byCell.has(k)) byCell.set(k, []);
+    byCell.get(k).push(r);
+  }
+  const mrows = [];
+  console.log(`\n${"=".repeat(78)}\nREPLICATION (ROADMAP 198) — ${REPS} passes of the same items, scorer and material`);
+  const unanimity = { defect: [0, 0], clean: [0, 0], "clean-neutral": [0, 0] };
+  if (!cellTable.length && !byCell.size) {
+    console.log(`\n${"=".repeat(78)}\nREPLICATION (ROADMAP 198): NO cells — every item was skipped or failed, so there is nothing to replicate.`);
+  }
+  for (const [key, rs] of byCell) {
+    const [id, cond] = key.split("|");
+    const counts = new Map();
+    for (const r of rs) counts.set(cellClass(r), (counts.get(cellClass(r)) || 0) + 1);
+    const [topClass, topN] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    const agrees = topN * 2 > rs.length; // strict majority of passes must agree before the cell is scored at all
+    unanimity[cond][0] += topN === rs.length ? 1 : 0;
+    unanimity[cond][1] += 1;
+    cellTable.push({ id, cond, k: rs.length, verdicts: rs.map((r) => r.score.verdict), agreement: `${topN}/${rs.length}`, cell: agrees ? topClass : "UNSTABLE" });
+    console.log(`  ${id.padEnd(34)} ${cond.padEnd(13)} ${rs.map((r) => r.score.verdict).join(" | ").padEnd(42)} cell=${(agrees ? topClass : "UNSTABLE").padEnd(12)} agreement ${topN}/${rs.length}`);
+    const winner = agrees ? rs.find((r) => cellClass(r) === topClass) : null;
+    mrows.push(
+      winner
+        ? { ...winner, rep: "majority", reps: rs.map((r) => r.score.verdict) }
+        : { id, kind: rs[0].kind, cond, feed: MODE, rep: "majority", score: { verdict: "UNSTABLE", phantoms: [] }, reps: rs.map((r) => r.score.verdict) },
+    );
+  }
+  console.log(`  unanimous cells per axis: ${Object.entries(unanimity).map(([c, [u, t]]) => `${c} ${u}/${t}`).join("   ")}`);
+  const rng = (pick) => { const v = perRep.map(pick); return v.length ? `${Math.min(...v)}-${Math.max(...v)}` : "n/a"; };
+  console.log(`  spread across replicates: defect named ${perRep.map((t) => `${t.hits}/${t.scored}`).join(", ")}; false alarms (leading) ${rng((t) => t.fa)}/${perRep[0].clean}; false alarms (neutral) ${rng((t) => t.faN)}/${perRep[0].neutral}`);
+  SCORED_ROWS = mrows;
+  majorityRows = mrows; // persisted in the transcript (which is rewritten after every item, so an interrupted k-run keeps the cells it already paid for)
+  const maj = tally(mrows, `${label} — MAJORITY-of-${REPS} cells (198: THIS is the score that may inform a routing decision)`);
+  // G2 (pre-registered 2026-10-27): the control family must name >= 4 of 8 defects, else no floor exists to
+  // calibrate a candidate against. The arm's denominator is printed with it, because a whole-module arm has
+  // fewer items than a fragment arm BY DESIGN and its floor must be stated, not inherited.
+  if (maj.scored) {
+    const floor = Math.min(4, maj.scored);
+    const worst = Math.min(...perRep.map((t) => t.hits));
+    console.log(`  G2 FLOOR in this arm (the bar is defined for the CONTROL family; this run is ${label}): control must name >= ${floor} of ${maj.scored} (the pre-registered bar is 4 of 8; this arm shows ${maj.scored}). majority run: ${maj.hits}/${maj.scored} ${maj.hits >= floor ? "MET" : "NOT MET"}; worst replicate: ${worst}/${maj.scored} ${worst >= floor ? "MET" : "NOT MET"}.`);
+  }
+} else {
+  tally(run, label);
+}
 
 const cmp = flag("compare");
 if (cmp) {
   const other = JSON.parse(readFileSync(cmp, "utf8"));
-  const otherRun = other.run || other;
+  // If the compared transcript is itself a k-replicate run, pair against its SCORED cells, not its last replicate.
+  const otherRun = other.majority?.length ? other.majority : other.run || other;
   const byId = (rows) => {
     const m = new Map();
     for (const r of rows) {
@@ -405,7 +555,7 @@ if (cmp) {
     }
     return m;
   };
-  const mine = byId(run);
+  const mine = byId(SCORED_ROWS);
   const theirs = byId(otherRun);
   // Pair on the items BOTH arms actually showed. A whole-module arm has a smaller denominator than a
   // fragment arm by design (195 skips what does not fit), so an unintersected rate comparison would be
@@ -446,10 +596,5 @@ if (cmp) {
   console.log(`  NOTE a paired exact test needs >=6 one-sided discordant pairs to reach p<=0.05 at n=8, and >=${shared.length} at n=${shared.length} (one-sided exact). Compare ARMS only on shared items.`);
 }
 
-mkdirSync(resolve(".spike/gate"), { recursive: true });
-const out = flag("out") || resolve(`.spike/gate/run-${label.replace(/[^\w.-]/g, "_")}-${new Date().toISOString().replace(/[:.]/g, "")}.json`);
-writeFileSync(
-  rescore ? `${out}.rescored.json` : out,
-  JSON.stringify({ label, model, baseUrl, at: new Date().toISOString(), mode: MODE, budget: BUDGET, material: MATERIAL, skipped, run }, null, 2),
-);
+writeTranscript(true);
 console.log(`\ntranscript: ${rescore ? `${out}.rescored.json` : out}`);

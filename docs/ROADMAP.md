@@ -3392,6 +3392,16 @@ model at k = 3), and if the temperature is ever set to 0 the *sampling* variance
 **server-side nondeterminism (batching, continuous-batching order, MoE routing) remains** — a zero-temperature run
 that agrees with itself is not therefore reproducible on another instance.
 
+**Status (2026-10-28, measured in `docs/reviews/verifier-gate-hardening-2026-10-28.md` §11; the instrument landed,
+the claim still binds).** `gate.mjs --replicate k` now runs the matrix k times (rotating condition order across
+passes), scores the **majority-of-k cell** with a strict-majority gate that yields `UNSTABLE` otherwise, prints the
+**unanimous-cell rate per axis**, the spread across replicates, and the G2 floor under **both** the majority pass and
+the worst replicate; a single-pass run prints `NOTE 198: k = 1 — every verdict below is a SAMPLE`. Measured at k = 3:
+the control's fragment arm spans **2/8, 4/8, 5/8** across passes (majority 4/8) and the candidate's **0/8, 0/8, 2/8**,
+with only **5/8** and **6/8** of defect cells unanimous — while **every** control cell replicates (16/16 per fragment
+arm, and 78/78 leading-prompt false alarms pooled over four arms). So the rule has teeth in the tool now, and the
+reason it still cannot produce a routing number is **n**, registered as **200**.
+
 **199. Whole-module pairs are not byte-matched: the clean side is comment-stripped and the defect side is not**
 *(qa; found while building the 195 whole-module arm, 2026-10-28)* — measured: `corpus.mjs` documents that
 **defect texts keep their comments and clean controls have comment-led lines stripped** (a post-fix region carries
@@ -3409,3 +3419,34 @@ the gate re-reports the 2026-10-28 §10 table under the symmetric rule so the si
 the numbers it moved. Blind spot to name: making the pair byte-matched *raises* the false-alarm risk the strip
 existed to remove, so the fix is scorer-side (detect a restatement of the defect and mark the item spoiled), not
 deletion-side.
+
+**Status (2026-10-28, measured in §11; the instrument landed, the scorer-side half is still open).**
+`--pair-comments strip-both|keep-both|strip-clean-only` (default `strip-both`, the asymmetric 2026-10-28 behaviour
+kept runnable so §10 still reproduces) plus a printed **matched-pair accounting** table on every `--plan`. Pairs now
+differ by the fix or mutation and **0.0–11.7%** of bytes (`M1` −4 B, `M2` +7 B, `M3` +11 B, `H2` +739 B, `H5` +1,620 B)
+instead of −17%…−67%. The leak this item predicted is measured rather than assumed: `keep-both` leaves **41 / 51 /
+38 / 35** comment lines carrying the item's own rubric vocabulary on the **clean** side (H1 / M2 / M3 / M1), which is
+why the default strips both. Re-running §10 under symmetry moves cells but not rates — candidate fragment 3/8 → 0/8,
+control fragment 4/8 → 4/8, whole-module 3/5 → 1/5 and 2/5 → 1/5, and **0/0 discordant on every false-alarm axis,
+p = 1.000**. One implementation trap found on the way, recorded because it nearly destroyed items instead of fixing
+them: a line-regex stripper also matches lines **inside multi-line template literals**, and in `src/worktree.mjs` /
+`src/rig.mjs` three of those lines carry the template's **closing backtick**, so the module stops parsing; `corpus.mjs`
+now uses a state machine (`commentLedMask`) and **downgrades a pair symmetrically** to `keep-both` with a loud NOTE
+rather than dropping the item. What is **still open** is this item's real ask: a scorer-side spoiling check (detect a control restating the defect it is
+supposed to be free of and mark the item spoiled) — the current answer is deletion plus a printed leak count, which is
+weaker than what 199 calls for.
+
+**200. The 189 gate's binding constraint is now n, not the instrument — and G2's calibration floor is not
+replicate-stable** *(qa; measured 2026-10-28, §11 of the 2026-10-28 gate review)* — With symmetric pairs and k = 3 the
+gate **cannot rank the two resident families**: the whole-module arm ties at **1/5 vs 1/5** (discordant 1/1,
+p = 1.000) and the fragment arm's **4/8 vs 0/8** gap lands at **p = 0.125** with 3 of 8 control cells unstable. G2's
+floor — the control family must name ≥ 4 of 8 — is **met in the majority pass and missed in the worst replicate
+(2/8)**, so no stable calibration floor exists at 8 items, and in the whole-module arm (5 items) the control names
+1/5 and the floor is simply absent. Depends on: **194** (more items), 198, 199.
+Measure: the gate may state a family ordering only when (a) the corpus is large enough that the pre-registered
+McNemar bar is reachable — at n = 8 that means ≥ 6 one-sided discordant pairs, and the largest gap the corpus
+produced was 4/0; (b) every axis reports its **unanimous-cell rate at k ≥ 3**; and (c) the control family's G2 floor
+holds in the **worst** replicate, not the average. Blind spots to name: more items costs git-history mining and
+biases the corpus toward this repo's own failure modes, and a bigger corpus makes the whole-module arm's fit problem
+**worse**, not better — 3 of 8 items already cannot be shown whole at the verifier's 12,500-token budget — so 200
+should be read together with the operator's context-size choice, which is part of the same decision.

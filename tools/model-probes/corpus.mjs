@@ -26,6 +26,24 @@ import { resolve } from "node:path";
 const PAD = Number(process.env.CAL_PAD || 34); // lines of real code around the changed hunk
 const SPIKE = process.env.CAL_SPIKE || ".spike/gate";
 
+// ROADMAP 199 — HOW THE TWO SIDES OF A PAIR ARE TREATED ABOUT COMMENTS, and it is not free.
+// The instrument stripped comment-led lines from the CLEAN side only, and left the defect side authentic.
+// Measured, that removes 17.7-68.8% of the bytes of a "matched" pair (14.0 KB -> 4.4 KB at its worst), so the
+// pair was not matched and the whole-module arm was comparing a 14 KB file against a 4.4 KB file and calling
+// the difference the model's judgement. Two symmetric options, and BOTH have a measured cost:
+//   strip-both  comments leave both sides: the pair differs by the defect and nothing else
+//               (cost: the authentic pre-fix text is no longer what the author of the fix actually read, and
+//               comments carry real semantics — 17.7% of driver.mjs and 28.2% of confine.mjs are comments).
+//   keep-both   both sides authentic: the defect side is the real pre-fix file and a model may legitimately
+//               use its comments (cost, measured below per item: the CLEAN side's comments then stay on the page,
+//               and a post-fix file's comments NAME the fix that was made there — a leak into a control).
+//   strip-clean-only  the 2026-10-28 configuration, kept reproducible so D137/D138/D139's tables still run.
+// The default is strip-both: a control that carries the sentence describing its own bug spoils the item.
+const PAIR_COMMENTS = process.env.CAL_PAIR_COMMENTS || "strip-both";
+if (!["strip-both", "keep-both", "strip-clean-only"].includes(PAIR_COMMENTS)) {
+  throw new Error(`CAL_PAIR_COMMENTS must be strip-both|keep-both|strip-clean-only, got '${PAIR_COMMENTS}'`);
+}
+
 const gitShow = (rev, file) => {
   try {
     return execFileSync("git", ["show", `${rev}:${file}`], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -244,21 +262,29 @@ export const estimateTokens = (text) => Math.ceil(String(text).length / CHARS_PE
 
 /** The whole module behind an item: pre-/post-fix files for a hist item, main/mutant for a mutant. */
 function wholeTexts(it, { mutText, main }) {
-  let defect, clean;
+  let defectRaw, cleanRaw;
   if (it.kind === "hist") {
     // The authentic pair: the entire file as it was before the fix, and the entire file after it.
-    defect = gitShow(`${it.sha}^`, it.file);
-    clean = stripCommentLines(gitShow(it.sha, it.file));
+    defectRaw = gitShow(`${it.sha}^`, it.file);
+    cleanRaw = gitShow(it.sha, it.file);
   } else {
-    defect = mutText;
-    clean = stripCommentLines(main);
+    defectRaw = mutText;
+    cleanRaw = main;
   }
-  defect = defect.trimEnd();
-  clean = clean.trimEnd();
-  // A whole file parses by definition — unless MY comment stripper broke it, which is exactly what this
+  const pair = pairTexts(defectRaw, cleanRaw);
+  // A whole file parses by definition — unless MY pair treatment broke it, which is exactly what this
   // guard is for. Loud, not silent: a broken module shown as "the whole truth" is worse than a fragment.
-  if (!parses(defect, `${it.id}-whole-defect.mjs`) || !parses(clean, `${it.id}-whole-clean.mjs`)) return null;
-  return { defectText: defect, cleanText: clean, chars: defect.length, estTokens: estimateTokens(defect) };
+  if (!parses(pair.defect, `${it.id}-whole-defect.mjs`) || !parses(pair.clean, `${it.id}-whole-clean.mjs`)) return null;
+  return {
+    defectText: pair.defect,
+    cleanText: pair.clean,
+    chars: pair.defect.length,
+    estTokens: estimateTokens(pair.defect),
+    pair: pair.account,
+    pairDowngrade: pair.downgraded,
+    // ROADMAP 199's other half: `keep-both` sounds authentic, so measure what it would leak into the control.
+    leak: pairAccount(defectRaw, cleanRaw, it).cleanCommentsLeaking,
+  };
 }
 
 /** Apply a mutation to a current-main region; exactly one occurrence or the item is invalid. */
@@ -453,11 +479,18 @@ export async function buildCorpus({ outDir = SPIKE } = {}) {
       }
       const whole = wholeTexts(it, {});
       if (!whole) notes.push(`${it.id}: whole-module view does NOT PARSE (comment strip); no whole-module arm for this item`);
+      if (whole?.pairDowngrade) notes.push(`${it.id}: WHOLE-MODULE ${whole.pairDowngrade} — the pair stays symmetric, both sides authentic`);
+      const frag = pairTexts(r.defect, r.clean);
+      if (frag.downgraded) notes.push(`${it.id}: FRAGMENT ${frag.downgraded} — the pair stays symmetric, both sides authentic`);
+      if (!parses(frag.defect, `${it.id}-defect.js`) || !parses(frag.clean, `${it.id}-clean.js`)) {
+        notes.push(`${it.id}: region does not PARSE under pair policy ${PAIR_COMMENTS}; item EXCLUDED`);
+        continue;
+      }
       items.push({
         ...it,
-        defectText: r.defect,
-        cleanText: stripCommentLines(r.clean),
-        fragment: { defectTokens: estimateTokens(r.defect), cleanTokens: estimateTokens(stripCommentLines(r.clean)) },
+        defectText: frag.defect,
+        cleanText: frag.clean,
+        fragment: { defectTokens: estimateTokens(frag.defect), cleanTokens: estimateTokens(frag.clean), pair: frag.account },
         whole,
         label: `${it.file} @ ${it.sha}^`,
       });
@@ -494,19 +527,22 @@ export async function buildCorpus({ outDir = SPIKE } = {}) {
         notes.push(`${it.id}: no parseable window inside CAL_MAX_LINES; item EXCLUDED`);
         continue;
       }
-      const dText = dw.text;
-      const cText = stripCommentLines(cw.text);
+      const pair = pairTexts(dw.text, cw.text);
+      if (pair.downgraded) notes.push(`${it.id}: FRAGMENT ${pair.downgraded} — the pair stays symmetric, both sides authentic`);
+      const dText = pair.defect;
+      const cText = pair.clean;
       if (!parses(dText, `${it.id}-defect.js`) || !parses(cText, `${it.id}-clean.js`)) {
-        notes.push(`${it.id}: region does not PARSE (window repair failed); item EXCLUDED`);
+        notes.push(`${it.id}: region does not PARSE under pair policy ${PAIR_COMMENTS} (window repair failed); item EXCLUDED`);
         continue;
       }
       const whole = wholeTexts(it, { mutText, main });
       if (!whole) notes.push(`${it.id}: whole-module view does NOT PARSE (comment strip); no whole-module arm for this item`);
+      if (whole?.pairDowngrade) notes.push(`${it.id}: WHOLE-MODULE ${whole.pairDowngrade} — the pair stays symmetric, both sides authentic`);
       items.push({
         ...it,
         defectText: dText,
         cleanText: cText,
-        fragment: { defectTokens: estimateTokens(dText), cleanTokens: estimateTokens(cText) },
+        fragment: { defectTokens: estimateTokens(dText), cleanTokens: estimateTokens(cText), pair: pair.account },
         whole,
         label: `${it.file} @ main + injected mutation`,
         proof: { ...it.proof, cleanOut: a, mutantOut: b },
@@ -524,16 +560,154 @@ function sliceWindow(text, idx) {
 }
 
 /**
- * Strip comment-only lines from a CLEAN control. A post-fix region carries the fix's own commentary
- * ("#4374: `git checkout-index` is NOT a branch switch…"), and a mutated file's neighbours carry the
- * invariant the mutation breaks — so a control that NAMES the defect it is supposed to be free of
- * spoils the item and manufactures a false alarm out of a correct restatement. Behaviour is unaffected
- * (comments are not semantics), so the pair stays matched except for the defect itself.
- * Documented asymmetry: DEFECT texts keep their comments, because those are the authentic pre-fix file.
+  * Strip comment-led lines. WHICH SIDE it is applied to is now a declared policy (CAL_PAIR_COMMENTS, ROADMAP 199)
+ * rather than something this function did to the clean side only. A post-fix region carries the fix's own
+ * commentary ("#4374: `git checkout-index` is NOT a branch switch…"), and a mutated file's neighbours carry the
+ * invariant the mutation breaks — so a control that NAMES the defect it is supposed to be free of spoils the
+ * item and manufactures a false alarm out of a correct restatement. Behaviour is unaffected (comments are not
+ * semantics), but BYTES are: stripping one side only shed 17.7-68.8% of a "matched" pair's clean side.
  */
 export function stripCommentLines(text) {
-  return text
-    .split(/\r?\n/)
-    .filter((l) => !/^\s*(\/\/|\/\*|\*)/.test(l))
-    .join("\n");
+  const lines = String(text).split(/\r?\n/);
+  const mask = commentLedMask(text);
+  return lines.filter((_, i) => !mask[i]).join("\n");
+}
+
+/**
+ * Which lines of a module are COMMENT-ONLY, computed with a small state machine rather than a line regex.
+ * This is not pedantry, it is the thing that broke the first attempt at ROADMAP 199: a regex like
+ * `/^\s*(\/\/|\/\*|\*)/` also matches lines INSIDE a multi-line template literal, and in this repo two of them
+ * (src/worktree.mjs, src/rig.mjs) carry a line that starts `* remove\` is NOT a substitute…` — i.e. the line that
+ * CLOSES the template. Stripping it unbalances the backtick and the whole module stops parsing, which under a
+ * symmetric policy drops the item instead of fixing it. `#` is deliberately NOT treated as a comment: in .mjs a
+ * leading `#` is a class-private field, not a comment.
+ */
+export function commentLedMask(text) {
+  const lines = String(text).split(/\r?\n/);
+  const mask = new Array(lines.length).fill(false);
+  const stack = ["code"]; // code | tpl ; templates open and close across lines
+  let inBlock = false;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    let sawComment = inBlock; // a line that starts inside a block comment is comment continuation
+    let sawCode = false;
+    let str = null; // ' or " can only span this line
+    let j = 0;
+    while (j < l.length) {
+      const top = stack[stack.length - 1];
+      const c = l[j];
+      const nx = l[j + 1];
+      if (inBlock) {
+        if (c === "*" && nx === "/") {
+          inBlock = false;
+          j += 2;
+          continue;
+        }
+        j++;
+        continue;
+      }
+      if (top === "tpl") {
+        if (c === "\\") { j += 2; continue; }
+        if (c === "`") { stack.pop(); j++; continue; }
+        if (c === "$" && nx === "{") { stack.push("code"); j += 2; continue; }
+        sawCode = true; // template CONTENT is code context, even when the line starts with `*` or `//`
+        j++;
+        continue;
+      }
+      if (str) {
+        if (c === "\\") { j += 2; continue; }
+        if (c === str) str = null;
+        sawCode = true;
+        j++;
+        continue;
+      }
+      if (c === "/" && nx === "/") {
+        sawComment = true;
+        break; // to end of line
+      }
+      if (c === "/" && nx === "*") {
+        sawComment = true;
+        inBlock = true;
+        j += 2;
+        continue;
+      }
+      if (c === "'" || c === '"') {
+        str = c;
+        sawCode = true;
+        j++;
+        continue;
+      }
+      if (c === "`") {
+        stack.push("tpl");
+        sawCode = true;
+        j++;
+        continue;
+      }
+      if (/\s/.test(c)) { j++; continue; }
+      sawCode = true;
+      j++;
+    }
+    if (str) sawCode = true; // an unterminated string is not a comment line
+    mask[i] = sawComment && !sawCode;
+  }
+  return mask;
+}
+
+/** Every rubric phrase and pre-registered phantom of an item — the vocabulary that must NOT sit in a control. */
+export function rubricPhrases(it) {
+  return [...(it.groups || []).flat(), ...(it.phantoms || []), ...(it.falseAlarm || [])].map(String);
+}
+
+/**
+ * Apply the PAIR_COMMENTS policy to one pair and report what it cost, in bytes and comment share, per side.
+ * ROADMAP 199 exists because this accounting was not printed: a "matched pair" silently shed 17.7-68.8% of the
+ * clean side's bytes, and every whole-module rate printed before it was computed on that pair.
+ */
+export function pairAccount(defectRaw, cleanRaw, it) {
+  const d = defectRaw.trimEnd();
+  const c = cleanRaw.trimEnd();
+  const share = (raw) => {
+    const lines = raw.split(/\r?\n/);
+    const mask = commentLedMask(raw);
+    const cm = lines.filter((_, i) => mask[i]);
+    const chars = cm.reduce((s, l) => s + l.length + 1, 0);
+    return { lines: lines.length, commentLines: cm.length, commentShare: +((100 * chars) / Math.max(1, raw.length)).toFixed(1) };
+  };
+  return {
+    policy: PAIR_COMMENTS,
+    defectChars: d.length,
+    cleanChars: c.length,
+    delta: c.length - d.length,
+    deltaPct: +((100 * (c.length - d.length)) / Math.max(1, d.length)).toFixed(1),
+    defectCommentShare: share(d).commentShare,
+    cleanCommentShare: share(c).commentShare,
+    // `keep-both` is not free: the clean side's comment lines that carry this item's own rubric vocabulary
+    // are a leak into a control. Measured per item, so the policy choice is evidence and not a preference.
+    cleanCommentsLeaking: it ? (() => { const cl = c.split(/\r?\n/); const mask = commentLedMask(c); return cl.filter((_, i) => mask[i]).map((l) => l.trim()).filter((l) => rubricPhrases(it).some((p) => l.toLowerCase().includes(p.toLowerCase()))); })() : [],
+  };
+}
+
+/** The two texts a pair is SHOWN, under the policy. Both sides get the SAME treatment unless the caller asks
+ *  for the 2026-10-28 configuration, which is kept runnable so its tables stay reproducible. */
+export function pairTexts(defectRaw, cleanRaw) {
+  const d = defectRaw.trimEnd();
+  const c = cleanRaw.trimEnd();
+  const strip = PAIR_COMMENTS === "strip-both" || PAIR_COMMENTS === "strip-clean-only";
+  let defect = PAIR_COMMENTS === "strip-both" ? stripCommentLines(d) : d;
+  let clean = strip ? stripCommentLines(c) : c;
+  let downgraded = null;
+  // Symmetry outranks the policy: if stripping makes a text stop parsing, BOTH sides go back to authentic, so
+  // the pair is still matched and the item is still measured — with the downgrade named, not swallowed.
+  if (strip && (!parses(defect, "paircheck-defect.mjs") || !parses(clean, "paircheck-clean.mjs"))) {
+    downgraded = `${PAIR_COMMENTS} -> keep-both (a stripped text did not parse)`;
+    defect = d;
+    clean = c;
+  }
+  const account = pairAccount(defectRaw, cleanRaw);
+  // What was SHOWN, distinct from what was RAW: under strip-both the shown pair is smaller than the file, and a
+  // reader comparing arms needs both numbers to see what the policy cost (199).
+  account.shownDefectChars = defect.length;
+  account.shownCleanChars = clean.length;
+  account.policyApplied = downgraded || PAIR_COMMENTS;
+  return { defect, clean, account, downgraded };
 }

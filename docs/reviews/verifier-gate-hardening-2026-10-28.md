@@ -433,3 +433,127 @@ version is the same file with its documentation removed. Both sides still pass `
 break a single one of the 16 whole-module texts), so this is a **design confound, not a corruption**, and its effect
 on the verdicts is **unmeasured**: it is a candidate explanation for the control's whole-module hits falling 4/8 →
 2/5 and must be settled by stripping both sides identically (or neither) and re-running, not argued.
+
+## 11. Replication (198) and symmetric pairs (199), measured 2026-10-28T01:45–02:35Z — the defect axis collapses when you look at it twice; the false-alarm axis does not
+
+**What landed in the instrument first.** `gate.mjs --replicate k` runs the whole matrix k times, rotating which
+condition is answered first across passes (counterbalanced within a pass, rotated between them, so a replicate
+cannot carry an order effect), and scores the **majority-of-k cell**: a cell counts only if a strict majority of
+passes agree, else it is `UNSTABLE` and named. It prints per-cell verdicts, the **unanimous-cell rate per axis**,
+the spread across replicates, and the **G2 floor under both the majority pass and the worst replicate** — because
+"a floor met in one draw" is the thing G2 was supposed to guarantee. `--pair-comments strip-both|keep-both|
+strip-clean-only` (199) makes the comment treatment of a pair a declared setting, and `--plan` now prints a
+**matched-pair accounting** table per item. Transcripts are rewritten **after every item** (a k=3 whole-module arm
+is ~45 prompts and 20–45 min of the operator's GPU; losing one to an interrupted session is not acceptable) and
+carry `pairPolicy`, `reps`, `cells`, `majority` and `complete`. `gate-side-by-side.mjs` prints **which row scored
+each cell** ("majority row", "cell table agreement 2/3", or "single-pass"), because a comparison that quietly takes
+a replicate run's *last* row is 198's defect wearing a new hat — that sourcing bug was found and fixed while
+writing this section, and it had already moved one comparison I nearly quoted.
+
+**A bug worth recording, because it is the kind that silently deletes evidence.** My first comment stripper was a
+line regex. It also matches lines **inside multi-line template literals**, and in `src/worktree.mjs` and
+`src/rig.mjs` three such lines (`* remove` is NOT a substitute…`, `// --show-toplevel` returns…`,
+`* "queued"` alone…`) carry the backtick that **closes** the template — so stripping them unbalances the module,
+it stops parsing, and under a *symmetric* policy the guard drops the item. Measured: 2 lines in `worktree.mjs`, 1
+in `rig.mjs`. (`#` is deliberately not treated as a comment: in a `.mjs` a leading `#` is a class-private field.)
+`corpus.mjs` now uses `commentLedMask()`, a small state machine over block comments, templates and `${}`. And a
+policy that breaks a text **downgrades the item symmetrically** to `keep-both` with a loud NOTE — symmetry
+outranks the policy, and neither side may be silently smaller than the other.
+
+### 11.1 What the pairs actually weigh (199) — no prompts spent
+
+| item | file | raw bytes defect → clean | delta | what `strip-both` leaves shown | comment share defect/clean | clean-side comment lines carrying this item's own rubric words |
+|---|---|---|---|---|---|---|
+| M1-cell-budget-off-by-one | `src/textwidth.mjs` | 9,960 → 9,956 | **−4 B (0.0%)** | 5,632 / 5,628 | 43.5% / 43.5% | 35 |
+| M2-regex-word-boundary-overreach | `src/confine.mjs` | 33,535 → 33,542 | **+7 B (0.0%)** | 19,273 / 19,280 | 42.5% / 42.5% | 51 |
+| M3-pause-still-claims | `src/driver.mjs` | 14,023 → 14,034 | **+11 B (0.1%)** | 4,550 / 4,561 | 67.6% / 67.5% | 38 |
+| H3-truthy-sentinel-dead-code | `src/rig.mjs` | 57,993 → 58,380 | +387 B (0.7%) | 56,073 / 56,460 | 3.3% / 3.3% | 1 |
+| H1-npm-invocation | `src/worktree.mjs` | 69,702 → 70,344 | +642 B (0.9%) | 59,437 / 60,079 | 14.7% / 14.6% | 41 |
+| H4-doc-proxy-escape | `src/rig.mjs` | 58,380 → 58,980 | +600 B (1.0%) | 56,460 / 57,060 | 3.3% / 3.3% | 1 |
+| H2-process-death-deadline | `src/job-object.mjs` | 12,166 → 12,905 | +739 B (6.1%) | 11,057 / 11,796 | 9.1% / 8.6% | 1 |
+| H5-block-local-helper-swallowed | `scripts/clockin.mjs` | 13,822 → 15,442 | +1,620 B (11.7%) | 11,190 / 12,810 | 19.0% / 17.0% | 0 |
+
+**A "matched pair" now differs by the fix or the mutation and a handful of bytes** — §10's −17.7%…−68.8% clean-side
+shrinkage is gone. The costs are also printed rather than argued: stripping leaves **32.4%** of `driver.mjs`
+(67.6% of it is comments) and 57.5% of `confine.mjs`, and it is cheap in prompt terms — measured prompt tokens per
+whole-module turn fall from 9,804 → 6,080 (`confine`, control), 3,775 → 1,446 (`driver`, control), 9,618 → 5,873
+and 3,741 → 1,356 (candidate). It does **not** unlock the three excluded items: `rig.mjs` estimates 20,768/20,912
+and `worktree.mjs` 22,014 tokens against a 12,500 budget, so the whole-module arm is still **5 of 8 items**.
+The `keep-both` column is the reason the default is symmetric-stripped: the *clean* side of a post-fix file carries
+the fix's own commentary — 41 such lines at H1 (e.g. `// nothing was giving them one - so before this they worked
+in durig's LIVE tree`), 51 at M2, 38 at M3, 35 at M1 — and the item's rubric vocabulary in a control is a leak.
+That count is a **proxy** (it matches the item's rubric/phantom phrases, incidental matches included), so it is
+printed per item on every `--plan` rather than argued here.
+
+### 11.2 What the pair treatment did to verdicts (same family, same mode, same scorer, `answer` material)
+
+| arm | §10 (asymmetric pair, k = 1) | this section (symmetric pair, majority of 3) | flips | McNemar exact |
+|---|---|---|---|---|
+| control, fragment | 4/8 named | **4/8** | 2 (`H4 HIT→MISS`, `M2 MISS→HIT`) | 1/1, p = 1.000 |
+| candidate, fragment | 3/8 named | **0/8** | 3 (`H2`, `M2`, `M3`) | 3/0, p = 0.250 |
+| control, whole module | 2/5 named | **1/5** | 1 (`M2`) | 1/0, p = 1.000 |
+| candidate, whole module | 3/5 named | **1/5** | 2 (`M1`, `M2`) | 2/0, p = 0.500 |
+
+The pair treatment moves **cells**, never the false-alarm rate (0/0 discordant in all four comparisons, p = 1.000).
+The aggregate movements on the defect axis are **not separable from replicate noise** (§11.3 shows one family
+spanning 2/8–5/8 on the *same* settings), and none of them reaches significance at n = 5 or n = 8.
+
+### 11.3 Replication measured (198) — four arms × three passes
+
+| arm (symmetric pairs, `answer`, k = 3) | defect named, pass 1 / 2 / 3 | majority-of-3 | unanimous defect cells | unanimous control cells |
+|---|---|---|---|---|
+| control `local/iq3_s`, fragment | **2/8, 4/8, 5/8** | **4/8** | 5/8 | 16/16 |
+| candidate `ministral-3-14b-reasoning`, fragment | **0/8, 0/8, 2/8** | **0/8** | 6/8 | 16/16 |
+| control `local/iq3_s`, whole module | **2/5, 1/5, 1/5** | **1/5** | 2/5 | 9/10 (one cell `FALSE-ALARM×2 + AMBIGUOUS`) |
+| candidate `ministral-3-14b-reasoning`, whole module | **3/5, 1/5, 1/5** | **1/5** | 3/5 | 10/10 |
+
+Paired on the majority cells: **fragment arm control 4/8 vs candidate 0/8, discordant 4/0, exact p = 0.125**;
+**whole-module arm 1/5 vs 1/5, discordant 1/1, p = 1.000**. G2's floor is not replicate-stable: the control's
+fragment majority pass **4/8 MET** while its **worst replicate 2/8 NOT MET**, and in the whole-module arm the
+control names **1/5** against a floor of 4 — so that arm has **no calibration floor at all**.
+
+**11.4 The false-alarm axis, pooled and replicated: 78/78 and 77/78.** Across all four arms × three passes × both
+families, control turns that asserted a defect on clean code: **78 of 78** under the leading prompt and **77 of 78**
+under the neutral prompt (the exception scored `AMBIGUOUS`, not `CLEAN-PASSED`). Not one clean control in 156 turns
+was called clean. Whole modules, matched pairs, three replicates, declared `answer`-only scoring — §10's number
+survives every control this session could build, and the artifact counts move the way 195 said they would
+(6 absent-binding turns in the fragment arm, 0 in the whole-module arm).
+
+**11.5 What this settles about the routing question, and what it does not.** Under a symmetric corpus and k ≥ 3 the
+gate **cannot rank these two families**: the whole-module arm ties at 1/5 (p = 1.000) and the fragment arm's
+4/8-vs-0/8 gap does not reach significance (p = 0.125) with 3 of 8 control cells unstable. D137's ruling — do not
+route `qa`/`qa2`/`auditor` at the candidate — stands unaltered, and its *direction* is now a little better
+supported (every arm's majority favors the control family on defect-naming), while its *magnitude* remains
+unproven. Nothing changed about the candidate's false-alarm behaviour: it is 5/5 or 8/8 in every cell of every pass,
+which is a property of the task, not of the family — still the item for the PM, not a reason to pick a model.
+
+**11.6 Limits, stated before anyone re-quotes §11.** Majority-of-3 over 5–8 items is fragile: a cell flips when two
+of three passes disagree, and **6 of 26 defect cells were not unanimous**. `answer`-only scoring (197 declared, not
+resolved); `temperature 0.2`, not 0; the whole-module arm still excludes `H1`/`H3`/`H4`, so it remains biased to
+small modules; the corpus is **8 items with 3 execution-proved mutants**, and **n is now the binding constraint on
+every claim in this section** — that is ROADMAP **200**, and it makes 194 ("more items") the highest-value corpus
+work. Cost, for budget honesty: 156 model turns (4 arms × 3 passes × ~13 turns), measured ≈ 26 s/turn for the
+control on comment-free fragments, ≈ 55 s/turn on whole modules, ≈ 15–20 s/turn for the candidate — about 90
+minutes of the operator's GPU across the two already-resident servers, **no download, no server restarted, no seat
+touched**. Transcripts: `.spike/gate/k3-{ctl,cand}-{frag,whole}.json`; reproduce with the commands in §11.7.
+
+### 11.7 How to reproduce §11 exactly (native Linux, both servers already resident)
+
+```bash
+# 199's accounting, free — and the leak that `keep-both` would put into a control:
+node tools/model-probes/gate.mjs <base> <model> plan --whole-module --budget 12500 --material answer --plan
+# the four arms (drop --replicate 3 to see the NOTE 198 line that labels a single pass a sample):
+CAL_SPIKE=.spike/gate/ctl  CAL_MAX_TOKENS=2400 node tools/model-probes/gate.mjs http://127.0.0.1:47831/v1 iq3_s \
+  ctl-frag-k3  --material answer --replicate 3 --out .spike/gate/k3-ctl-frag.json
+CAL_SPIKE=.spike/gate/ctl  CAL_MAX_TOKENS=2400 node tools/model-probes/gate.mjs http://127.0.0.1:47831/v1 iq3_s \
+  ctl-whole-k3 --whole-module --budget 12500 --probe --material answer --replicate 3 --out .spike/gate/k3-ctl-whole.json
+CAL_SPIKE=.spike/gate/cand CAL_MAX_TOKENS=2400 node tools/model-probes/gate.mjs http://127.0.0.1:1234/v1 \
+  mistralai/ministral-3-14b-reasoning cand-frag-k3  --material answer --replicate 3 --out .spike/gate/k3-cand-frag.json
+CAL_SPIKE=.spike/gate/cand CAL_MAX_TOKENS=2400 node tools/model-probes/gate.mjs http://127.0.0.1:1234/v1 \
+  mistralai/ministral-3-14b-reasoning cand-whole-k3 --whole-module --budget 12500 --probe --material answer \
+  --replicate 3 --out .spike/gate/k3-cand-whole.json
+# then the paired tests, which report which row scored each cell:
+PAIRS='[["FRAGMENT: control vs candidate",0,1],["WHOLE: control vs candidate",2,3]]' \
+  node tools/model-probes/gate-side-by-side.mjs --pairs .spike/gate/k3-ctl-frag.json .spike/gate/k3-cand-frag.json \
+  .spike/gate/k3-ctl-whole.json .spike/gate/k3-cand-whole.json
+```

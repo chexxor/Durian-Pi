@@ -4814,3 +4814,55 @@ route a seat from one replicate, and the false-alarm axis is currently the **onl
 for the operator's ruling 1 is unchanged in direction and cheaper than ever — the next measurement is **more items
 plus k ≥ 3 replication and symmetric pairs (198/199)**, not another single-pass prompt and not a download.
 Full record: `docs/reviews/verifier-gate-hardening-2026-10-28.md` §10.
+
+## D140 — Re-run with matched pairs and k = 3 replicates, the gate cannot rank the two resident families; the false-alarm finding is pooled to 78/78 and is a task-design question, not a model question (2026-10-28, delegate)
+
+**What was decided.** ROADMAP **198** (replicate the gate) and **199** (symmetric matched pairs) were built into
+`tools/model-probes/` and run — four arms (control/candidate × fragment/whole-module) at **k = 3**, symmetric pairs,
+`answer`-only scoring, both families already resident: 156 model turns, ~90 min of the operator's GPU, **no download,
+no server restarted, no seat touched**. Result, recorded in
+`docs/reviews/verifier-gate-hardening-2026-10-28.md` §11 and summarised in ROADMAP **200** (registered, not
+scheduled): **the instrument can no longer produce a family ranking, and it never could have at this corpus size.**
+Operationally unchanged and deliberately so: **no seat flipped** (D137 stands), `single-model-rig` stays honestly red,
+and the delegate **claimed, completed, deferred and routed nothing**.
+
+**The numbers that close the capability axis.** With both sides of every pair treated identically (pairs now differ
+by the fix or mutation and **0.0–11.7%** of bytes — `M1` −4 B, `M2` +7 B, `M3` +11 B — replacing the −17%…−67% asymmetry
+199 measured) and each cell scored as a **majority of three** passes: whole-module arm **control 1/5 vs candidate 1/5**
+(discordant 1/1, exact p = 1.000); fragment arm **control 4/8 vs candidate 0/8** (discordant 4/0, **p = 0.125**, and
+3 of 8 control cells unstable across passes). Replication is the reason: the **same** control fragment arm names
+**2/8, then 4/8, then 5/8**; the candidate's fragment arm names **0/8, 0/8, 2/8**; only **5/8** and **6/8** of defect
+cells are unanimous. **G2's calibration floor** — the control family must name ≥ 4 of 8 — is **met in the majority
+pass and missed in the worst replicate (2/8)**, and in the whole-module arm the control names 1/5 against a floor of
+4, so that arm has no floor at all. A gate whose floor moves by ±3 cells between identical passes cannot calibrate a
+candidate against it.
+
+**The numbers that open the design question.** Pooled over all four arms × three passes × both families: control
+turns that asserted a defect on clean code = **78/78** under the leading prompt and **77/78** under the neutral prompt
+(the single exception scored `AMBIGUOUS`, never `CLEAN-PASSED`). **Not one clean control in 156 turns was called
+clean** — whole modules, matched pairs, three replicates, declared scoring material, both families. The instrument's
+one axis with signal is therefore **not a property of the family**; it is a property of asking a local model "what is
+wrong here?" about code, which is exactly the question a `qa`/`qa2`/`auditor` seat is built on. That is why the ask
+drafted in D139 belongs to the **PM** ("when is a refusal admissible, and what does a verifier cost the loop when it
+over-refuses?") and why the delegate does not answer it by editing a prompt.
+
+**What this does NOT license.** It does not make the candidate better *or* worse: every arm's majority favours the
+control family on defect-naming, but the largest gap the corpus can produce (4/0 discordant) is **p = 0.125** at
+n = 8, and the bar pre-registered for that n is ≥ 6 one-sided discordant pairs. It does not rescue §10's earlier
+tables either — those were produced on an asymmetric pair at k = 1, and this session found that `gate-side-by-side.mjs`
+was pairing against **the last replicate** of a multi-replicate transcript rather than its scored cells; that sourcing
+bug was fixed (transcripts now persist `majority` rows and the comparison prints which row scored each cell) before
+any number above was quoted. It does not license the Devstral download (option (b)): another single-pass score on a
+third family would be exactly the quantity this instrument cannot resolve. And it does not license treating the
+whole-module arm as a fair test of "large files": `H1`/`H3`/`H4` (`worktree.mjs`, `rig.mjs`) still cannot be shown
+whole at the operator's 12,500-token verifier budget — symmetry lowers the estimate (25,816 → 22,014 tokens for
+`worktree.mjs`) but does not close it, so the arm is biased to small modules by the operator's setting, not by choice.
+
+**Standing rule, sharpened.** A capability-gate verdict is a sample; **a capability-gate *floor* is also a sample**.
+No family ordering may route a seat unless the corpus is large enough to reach its pre-registered significance bar,
+every axis prints its unanimous-cell rate at k ≥ 3, and the control family's floor holds in the **worst** replicate.
+Until then the only admissible use of the 189 gate is as a **false-alarm instrument** — and what it says there is
+independent of which family you buy. For ruling 1 that changes the shape of the decision: the remaining cheap
+measurement is **more items (194)**, not another model, and the choice between the resident families now rests on
+cost, throughput, context headroom and availability — with the verifier-design item as the thing that actually moves
+outcomes.

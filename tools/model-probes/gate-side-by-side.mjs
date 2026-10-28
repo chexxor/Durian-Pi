@@ -17,15 +17,82 @@ if (FILES.length < 2) {
 }
 const runs = FILES.map((f) => {
   const d = JSON.parse(readFileSync(f, "utf8"));
+  // A --replicate transcript holds k rows per cell PLUS a `rep: "majority"` row, and the majority row is the one
+  // that SCORES (ROADMAP 198). Taking "the last row" instead would compare replicate 3 of one run against the
+  // majority cell of another and call the difference a model or arm difference.
+  const cellRows = new Map();
+  for (const r of d.run) {
+    if (!r.score || r.rep === "majority") continue;
+    const key = `${r.id}|${r.cond}`;
+    if (!cellRows.has(key)) cellRows.set(key, []);
+    cellRows.get(key).push(r);
+  }
+  // Which row SCORES a cell, in order of preference, and the choice is PRINTED because a comparison that
+  // silently takes "the last replicate" of a k-run is the 198 defect wearing a new hat.
+  const majorityBy = new Map((d.majority || []).map((r) => [`${r.id}|${r.cond}`, r]));
+  const classBy = new Map((d.cells || []).map((c) => [`${c.id}|${c.cond}`, c]));
   const items = new Map();
-  for (const r of d.run) if (r.score) items.set(r.id, { ...(items.get(r.id) || {}), [r.cond]: r.score.verdict });
+  let source = "single-pass";
+  for (const key of new Set([...cellRows.keys(), ...majorityBy.keys(), ...classBy.keys()])) {
+    const [id, cond] = key.split("|");
+    const rows = cellRows.get(key) || [];
+    const maj = majorityBy.get(key);
+    const cls = classBy.get(key);
+    let cell;
+    if (maj) {
+      cell = { verdict: maj.score.verdict, reps: maj.reps || rows.map((r) => r.score.verdict) };
+      source = "majority row (persisted)";
+    } else if (cls) {
+      cell = { verdict: cls.cell, reps: cls.verdicts };
+      source = `majority class from the transcript's cell table (agreement ${cls.agreement})`;
+    } else {
+      cell = { verdict: rows[rows.length - 1].score.verdict, reps: rows.map((r) => r.score.verdict) };
+    }
+    if (!items.has(id)) items.set(id, {});
+    items.get(id)[cond] = cell;
+  }
   for (const s of d.skipped || []) items.set(s.id, { skipped: s.why });
-  return { f, label: d.label, mode: d.mode || "fragment", material: d.material || "answer+reasoning (unrecorded)", skipped: d.skipped || [], items, raw: d.run };
+  return {
+    f,
+    label: d.label,
+    mode: d.mode || "fragment",
+    material: d.material || "answer+reasoning (unrecorded)",
+    pairPolicy: d.pairPolicy || "strip-clean-only (transcript predates the pair-policy field)",
+    reps: d.reps || 1,
+    cellSource: source,
+    complete: d.complete !== false,
+    skipped: d.skipped || [],
+    cells: d.cells || [],
+    items,
+    raw: d.run,
+  };
 });
 
 const ids = [...new Set(runs.flatMap((r) => [...r.items.keys()]))];
 const pad = (s, n) => String(s).padEnd(n);
-const verdict = (r, id, cond) => (r.items.has(id) ? (r.items.get(id)[cond] ?? (r.items.get(id).skipped ? "SKIP" : "-")) : "not-run");
+const verdict = (r, id, cond) => {
+  if (!r.items.has(id)) return "not-run";
+  const cell = r.items.get(id);
+  if (cell.skipped) return "SKIP";
+  return cell[cond]?.verdict ?? "-";
+};
+
+console.log(`\nTRANSCRIPTS`);
+for (const r of runs) console.log(`  ${pad(r.label, 26)} ${pad(r.mode, 9)} material=${pad(r.material, 22)} pair-comments=${pad(r.pairPolicy, 14)} replicates=${r.reps}${r.cells.length ? `   cells=${r.cells.length}` : ""}  scored from: ${r.cellSource}${r.complete ? "" : "   IN-COMPLETE (written mid-run)"}`);
+
+// ROADMAP 198: an arm comparison is only honest if the reader knows how much of each side REPLICATED.
+for (const r of runs) {
+  if (!r.cells.length) continue;
+  const byCond = new Map();
+  for (const c of r.cells) {
+    if (!byCond.has(c.cond)) byCond.set(c.cond, { unanimous: 0, total: 0, unstable: 0 });
+    const s = byCond.get(c.cond);
+    s.total++;
+    if (c.agreement === `${c.k}/${c.k}`) s.unanimous++;
+    if (c.cell === "UNSTABLE") s.unstable++;
+  }
+  console.log(`  REPLICATION ${r.label}/${r.mode} (k=${r.reps}): ${[...byCond].map(([c, s]) => `${c} unanimous ${s.unanimous}/${s.total}${s.unstable ? ` UNSTABLE ${s.unstable}` : ""}`).join("   ")}`);
+}
 
 for (const cond of ["defect", "clean", "clean-neutral"]) {
   console.log(`\n${cond.toUpperCase()} — per item`);
@@ -46,8 +113,8 @@ function mcnemarExact(b, c) {
   };
   return Math.min(1, 2 * binom(Math.min(b, c)));
 }
-const isHit = (x) => (x ?? "").startsWith("HIT");
-const isFa = (x) => x === "FALSE-ALARM";
+const isHit = (x) => ((x?.verdict ?? x) ?? "").startsWith("HIT");
+const isFa = (x) => (x?.verdict ?? x) === "FALSE-ALARM";
 
 function paired(A, B, cond, pred) {
   const shared = ids.filter((id) => A.items.has(id) && B.items.has(id) && !A.items.get(id).skipped && !B.items.get(id).skipped);
@@ -59,7 +126,7 @@ function paired(A, B, cond, pred) {
     const y = pred(B.items.get(id)[cond]);
     if (x && !y) b++;
     if (!x && y) c++;
-    if (x !== y) flips.push(`${id}: ${A.items.get(id)[cond]} -> ${B.items.get(id)[cond]}`);
+    if (x !== y) flips.push(`${id}: ${A.items.get(id)[cond]?.verdict ?? A.items.get(id)[cond]} -> ${B.items.get(id)[cond]?.verdict ?? B.items.get(id)[cond]}`);
   }
   return {
     n: shared.length,
