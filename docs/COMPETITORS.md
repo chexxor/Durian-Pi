@@ -257,7 +257,50 @@ metagpt's agent-authored skills and hard-coded package-relative spec paths; oh-m
 marketplace; prime-agent's persistent-REPL architecture and a second per-change-notes directory duplicating
 `docs/DECISIONS.md`.
 
-**Staleness alarm this sweep caught.** `metagpt`'s pinned commit date is **2026-01-21** while the other six are
-2026-10-27/28 — the vendor-day invariant holds the clones, not the upstream, so a project that stopped committing
-silently goes stale in the set. `--check` cannot see it (the table matches the clone); the pin table's *date column*
-is what surfaces it. Re-clone before acting on that row.
+**Freshness: corrected the same day it was first written.** The sweep's first read was "`metagpt`'s pinned commit is
+2026-01-21 while the other six are 2026-10-27/28, so our metagpt clone has gone stale." **Wrong**, and worth recording
+because a date column invites exactly that mistake: `node tools/vendor-pins.mjs --freshness` (clone HEAD vs
+`git ls-remote origin HEAD`) shows **metagpt's pin IS upstream's HEAD** — the *project* is dormant, the *clone* is
+current. The same run shows **five of the seven clones are already behind upstream** (`crewai`, `hermes-agent`,
+`oh-my-pi`, `openhands`, `prime-agent` moved within a day of being cloned). Operator ruling 2026-10-28 (D146): a
+**behind** clone is re-cloned or removed with a dated note; a **dormant** project stays as a labelled reference. Decided
+per clone by the verdict word, never by reading the date.
+
+## What the seven say about *formatting* a system-level prompt (standards vs de-facto vs missing)
+
+The operator asked directly whether there is a common pattern or standard for a system-level prompt **and its model,
+tools and security items**. Answer, in three registers — and the third one is the honest part.
+
+**(a) A real external standard exists for the *skill* surface, not the persona surface.** We already normalised against
+it: the Agent Skills format specification (`docs/reviews/agent-skills-review.md`, read at
+`vendor/eval/agentskills-spec/docs/specification.mdx`; that clone is now gone, so its pin is prose and
+`--check` NOTEs it). Our `.agents/skills/*/SKILL.md` front matter is spec-valid per that review.
+**AGENTS.md as a repo-level instruction convention is de-facto standard by adoption — 5 of 7 clones carry one**
+(`hermes-agent`, `oh-my-pi`, `openhands`, `crewai`, `prime-agent` have it at the repo root; `symphony` and `metagpt` do
+not, and both put instructions elsewhere: `WORKFLOW.md` and code).
+
+**(b) The persona-file vocabulary has converged without any body ratifying it.** The recurring key set, with the
+citation for each:
+
+| key | who | shape |
+|---|---|---|
+| `name`, `description` | oh-my-pi, crewai (`role`/`goal`/`backstory` instead of prose), openhands profiles, prime-agent layers (by file name) | identity + the selection signal |
+| `tools:` allowlist | **oh-my-pi** (`agents/reviewer.md:4`), **openhands** (`agentProfileSupportsTools`) | capability granted in the definition, not inherited silently |
+| `model:` as a **role alias** | **oh-my-pi** (`model: "@slow"`, `resolveModelRoleValue`); **aider** (older review: per-model edit format) | the definition states a *need*; the operator maps it |
+| `output:` structured return contract | **oh-my-pi** (`output.properties.…enum`, `metadata.description`); **prime-agent**'s analyzer takes `schema=CHANGE` with `evidence[{trace,quote}]`; **agent-fleet** (older review) ships a versioned `Verification Contract` | the return shape is **JSON-Schema/JTD-shaped** — oh-my-pi even codegens TypeScript from JTD (`src/tools/jtd-to-typescript.ts`) |
+| `spawns:` / recursion facts | **oh-my-pi** (`spawns: scout`); **prime-agent** (`allow_recursion`, `rlm_depth`, `rlm_parent_agent`, `can_spawn`) | the sub-agent graph is declared, and depth/parenthood are prompt inputs |
+| scope + precedence | **openhands** (`project` > `personal` > `public`; `systemPromptMode`), **prime-agent** (`custom_prompt` vs `append_system_prompt`), **oh-my-pi** (`getProjectPromptsDir`/`getPromptsDir`, `source: "(user)" / "(project)"`) | replace vs append, and which layer wins |
+| protected default | **openhands** (seeded `default`, non-deletable, the copy template) | the thing a new seat is cloned from |
+| a schema you can validate against | **nobody** for personas — prime-agent's `frontmatter.md` is a mustache *emitter*, crewai/metagpt use typed models (`YamlModel`) around config, not a public schema | the closest thing to validation is codegen from a template |
+
+**(c) Security items are the gap, and naming it is the useful answer.** Across seven projects there is **no shared
+vocabulary for putting security into a persona definition**. What exists, and no more:
+
+| what they do | cited | limit |
+|---|---|---|
+| **enforcement-gated fields** — a profile field is only *offered* where the backend enforces it: `agentProfileSupportsSecretRefs` ("cloud launches do not enforce a profile's secret scope yet"), `…SupportsTools` ("cloud launches ignore a profile's tools for now"), `…SupportsSkills`, `…SupportsRouter` | `openhands src/api/agent-profiles-service/profile-field-support.ts:1-21` | the strongest security-shaped pattern in the set: **if the runtime does not enforce it, do not let the definition claim it** — and it is *not* in the persona file, it is in the field layer |
+| **prompt facts must match wiring** + session capability inputs | `prime-agent crates/pa-core/src/prompts/system_prompt.rs:88-98` | runtime-computed, not authored per seat |
+| **CWE ids as inline anchors on safety branches** ("fail closed BEFORE resolution"), an 8-layer security doc, and a **ruleset that requires core-team approval to change the prompt-snapshot dir** | `hermes-agent gateway/session.py:610`, `cron/scheduler.py:2472`, `website/docs/user-guide/security.md:11-24`, `tests/ci/test_prompt_surface.py` docstring | repo-level and process-level — nothing a seat author can declare |
+| **guardrails as provider passthrough** (`guardrailIdentifier/Version/Trace` copied to Bedrock) | `oh-my-pi docs/models.md:122, 241`; `docs/toolconv/pi-native.md:110-122` | the guardrail is *someone else's*; the docs do not claim otherwise, which is the part to copy |
+| **a third-party pre-run gate bolted on** (scans skills + MCP before they run, emits audit evidence) | `openhands docs/DefenseClaw.md:3-18` | registered as ROADMAP 203; the gate exists, ours does not |
+| **nothing** | — | **no project declares, in the persona/seat definition: what needs human approval, which paths it may write, what its blast radius is, or which threat model applies.** CrewAI's `knowledge/` auto-ingest and metagpt's agent-authored skills go the *other* way. That gap is durian-pi's opening (and is why ruling 3 — approval gates on seat-prompt edits — has no precedent to copy and must be built)

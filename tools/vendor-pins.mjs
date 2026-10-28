@@ -30,6 +30,7 @@
 //   node tools/vendor-pins.mjs --format table|header|json
 //   node tools/vendor-pins.mjs --write <path>        rewrite the generated block in a tracked file
 //   node tools/vendor-pins.mjs --check [<path>]      drift-check the tracked table (exit 1 on drift)
+//   node tools/vendor-pins.mjs --freshness            clone HEAD vs upstream HEAD (network; exit 1 if any is behind)
 //
 // Exit: 0 clean; 1 drift or a failed check; 2 usage / no clones.
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -50,15 +51,18 @@ const USAGE = `usages:
   node tools/vendor-pins.mjs --project <name>      restrict to one project (repeatable)
   node tools/vendor-pins.mjs --format table|header|json   header = the review header block for competitor-review.md Do 2
   node tools/vendor-pins.mjs --write <path>        regenerate the generated block in a tracked file (default ${DEFAULT_TABLE})
-  node tools/vendor-pins.mjs --check [<path>]      fail if the tracked table drifts from the clones, or is not tracked`;
+  node tools/vendor-pins.mjs --check [<path>]      fail if the tracked table drifts from the clones, or is not tracked
+  node tools/vendor-pins.mjs --freshness [<path>]   clone-vs-upstream HEAD per clone: behind (re-clone per Do 0) vs
+                                                   dormant (the pin IS upstream's tip). Needs network; exit 1 if behind`;
 
 class UsageError extends Error {}
 
 function parseArgs(argv) {
-	const opts = { tags: false, projects: [], format: "table", write: null, check: false, checkPath: DEFAULT_TABLE, clones: DEFAULT_CLONE_DIR };
+	const opts = { tags: false, projects: [], format: "table", write: null, check: false, checkPath: DEFAULT_TABLE, freshness: false, clones: DEFAULT_CLONE_DIR };
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
 		if (a === "--tags") opts.tags = true;
+		else if (a === "--freshness") opts.freshness = true;
 		else if (a === "--project") {
 			const v = argv[++i];
 			if (!v) throw new UsageError("--project needs a name");
@@ -324,6 +328,42 @@ function spliceBlock(existing, block) {
 	return `${existing.slice(0, start)}${block}${existing.slice(end + END.length)}`;
 }
 
+function remoteHead(cloneRel) {
+	const r = git(["-C", cloneRel, "ls-remote", "origin", "HEAD"], { allowFail: true });
+	if (!r.ok) return { sha: null, note: `upstream HEAD unread (${(r.err || "no origin?").split("\n")[0].slice(0, 90)}) — freshness UNKNOWN, do not infer dormant` };
+	const sha = (r.out || "").split(/\s/)[0] || null;
+	return sha ? { sha, note: null } : { sha: null, note: "upstream advertises no HEAD" };
+}
+
+/**
+ * The two states a date column cannot tell apart (measured 2026-10-28, and it made this tool's own docs wrong):
+ * a clone that is BEHIND upstream (our artifact is stale — re-clone per Do 0) and a clone that IS upstream's tip
+ * while the project has simply stopped committing (the row is a dormant reference, and re-cloning changes nothing).
+ * Only comparing clone HEAD to `ls-remote origin HEAD` separates them, so that is what --freshness does.
+ */
+function freshnessReport(pins) {
+	const lines = [];
+	let behind = 0;
+	for (const p of pins) {
+		const up = remoteHead(p.clone);
+		if (!up.sha) {
+			lines.push(`  UNKNOWN  ${p.name.padEnd(14)} pin ${p.short} (${p.date}) — ${up.note}`);
+			continue;
+		}
+		if (up.sha === p.sha) {
+			lines.push(
+				`  CURRENT  ${p.name.padEnd(14)} pin ${p.short} IS upstream HEAD (${p.date})${p.shallow ? " — shallow: history depth limits blame/log claims; use \`git fetch --unshallow origin\` in place" : ""} — if the date looks old, the PROJECT is dormant, not the clone: a re-clone changes nothing, so label it a reference or remove it with a dated note`,
+			);
+		} else {
+			behind++;
+			lines.push(
+				`  BEHIND   ${p.name.padEnd(14)} pin ${p.short} (${p.date}) vs upstream ${up.sha.slice(0, 8)} — our artifact is stale: re-clone or \`git fetch --unshallow origin\` in place (Do 0: move-or-clone, never delete), then re-run Do 2`,
+			);
+		}
+	}
+	return { lines, behind };
+}
+
 function main(argv) {
 	const opts = parseArgs(argv);
 	if (opts.help) {
@@ -337,6 +377,16 @@ function main(argv) {
 	if (selected.length === 0) throw new UsageError(`no git clones under ${opts.clones}/ — clone first per docs/runbooks/competitor-review.md Do 1`);
 
 	const pins = selected.map((c) => pin(c, { tags: opts.tags }));
+
+	if (opts.freshness) {
+		const f = freshnessReport(pins);
+		process.stdout.write(
+			`FRESHNESS — clone HEAD vs \`git ls-remote origin HEAD\` (${pins.length} clone(s), ${new Date().toISOString()})\n` +
+				`${f.lines.join("\n")}\n` +
+				`${f.behind ? `${f.behind} clone(s) BEHIND upstream — the operator's grant covers re-cloning or removing them with a dated note (docs/runbooks/competitor-review.md Do 0, D146)` : "no clone is behind upstream — every pin is that project's current tip"}\n`,
+		);
+		return f.behind ? 1 : 0;
+	}
 
 	if (opts.check) {
 		const path = opts.checkPath;

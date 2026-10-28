@@ -6,7 +6,7 @@ precondition: "none"
 last_verified: 2026-10-28
 verified_by: delegate
 evidence: "docs/reviews/aider-review.md (worked example, 2026-10-17); Do 2 + Verify re-run 2026-10-28 on 7 live clones — `tools/vendor-pins.mjs --format header --project symphony --tags` emitted the header, `--write docs/VENDOR-PINS.md --tags` wrote the tracked pin table, `--check` exit 0, and an injected hand-edited HEAD returned exit 1; Do 4-9 now run end-to-end on all 7 (`docs/reviews/{crewai,symphony,hermes-agent,openhands,metagpt,oh-my-pi,prime-agent}-review.md`, 2026-10-28) — `--check` reports \"7 clone(s) pass the review audit\", `node scripts/test.mjs --all` 238/238 in 40.9 s, and each walk started from `node tools/competitor-brief.mjs --project <name>` (0.9-1.1 s) rather than a grep"
-check_rule: "tools/vendor-pins.mjs --check (delegate audit; the `check` rule is ROADMAP 202)"
+check_rule: "tools/vendor-pins.mjs --check (delegate audit; the `check` rule is ROADMAP 202); freshness is a separate verb, `tools/vendor-pins.mjs --freshness` (D146)"
 ---
 
 # Review a competitor or vendor project
@@ -206,6 +206,15 @@ A pin column (HEAD, commit date, licence, shallow-ness) that drifts is a hard fa
 tag, manifest version) drift hourly and are a NOTE — measured: `prime-agent` published `v0.10.2-beta.15` between
 two runs of this tool ~30 minutes apart.
 
+**`--freshness` is a separate verb with a separate question (added 2026-10-28, D146).** `--check` answers "does the
+tracked table still describe my clones?". `--freshness` answers "is my clone still upstream's tip?" by comparing the
+clone HEAD to `git ls-remote origin HEAD`, and prints one verdict word per clone: `CURRENT` (the pin IS upstream HEAD —
+so an old commit date means the **project** is dormant, not that our artifact is stale), `BEHIND` (our artifact is stale —
+re-clone or `git fetch --unshallow origin` in place per Do 0, then re-run Do 2), `UNKNOWN` (upstream unread — offline or
+no origin; **never infer dormant from this**). Exit 1 on any `BEHIND`. Measured on 2026-10-28, 7 clones, 10.3 s:
+**2 `CURRENT` (`metagpt`, `symphony`), 5 `BEHIND` (`crewai`, `hermes-agent`, `oh-my-pi`, `openhands`, `prime-agent`)** —
+fast-moving upstreams move within a day, so this is a "before you re-review" check, not a gate to run on every commit.
+
 **Still unbuilt — enforcement belongs in `check` (ROADMAP 81/82; registered as ROADMAP 202):** a
 **`competitor-review-covered`** rule with those same conditions, so a seat cannot land a review whose pin drifted.
 Keying on the clone's existence avoids flagging non-competitor reviews under `docs/reviews/`
@@ -216,9 +225,14 @@ lands, the audit is `node tools/vendor-pins.mjs --check`, which a delegate runs 
 **Swept (2026-10-28): all seven clones through Do 4-9.** One question per sweep (seat-persona surface), one row per
 mechanism in the review's adoptable table, every row `observed` / `advertised` / `partial` by what was actually opened.
 Three things only a full sweep shows, now recorded here so the next reviewer does not re-learn them:
-1. **A vendored clone can go stale silently.** `metagpt`'s commit date is 2026-01-21 while the other six are 2026-10-27/28.
-   The vendor-day invariant holds *our clones*, not *upstream*, and `--check` passes because the table matches the clone —
-   so **read the pin table's date column**, and re-clone (Do 0) before acting on a stale row.
+1. **A date column cannot tell a stale clone from a dormant project — and it made this session's prose wrong.**
+   `metagpt`'s commit date is 2026-01-21 against 2026-10-27/28 for the other six, which reads as "our clone is 9 months
+   stale". It is not: `node tools/vendor-pins.mjs --freshness` compares each clone to `git ls-remote origin HEAD` and
+   shows **the pin IS upstream's HEAD** — the *project* is dormant. The same run shows the other **five** clones
+   (`crewai`, `hermes-agent`, `oh-my-pi`, `openhands`, `prime-agent`) are **already behind upstream**, moved within a day
+   of being cloned. `--check` cannot see either case (it compares the table to the clone). So: **run `--freshness`, read
+   the verdict word** (`CURRENT` / `BEHIND` / `UNKNOWN`), and act on `BEHIND` only by Do 0 (move-or-clone, never delete);
+   `UNKNOWN` means offline — never infer "dormant" from it. Exit 1 when any clone is `BEHIND`.
 2. **A short README is a sign to start from `AGENTS.md` and the crate/package map**, not from a grep: `prime-agent`'s
    README advertises one doc link, and its whole persona surface (`crates/pa-core/src/prompts/`) is undocumented.
    The brief's "README links, in document order" line makes that visible in seconds (it printed 1 link, cap 12).

@@ -19,11 +19,16 @@ cat vendor/eval/metagpt/LICENSE  # licence signature
 git -C vendor/eval/metagpt ls-remote --tags origin   # tag
 ```
 
-**Maturity judgement — the one this row exists to teach.** The commit date is **2026-01-21**, while the other six clones
-are dated 2026-10-27/28. The competitor-review invariant is "all HEADs share one day", and **this row breaks it**: the
-`--check` tool does not fail it (the table matches the live clone, which is what `pin rows match their clone` means), so
-the freshness check is a *human read of the table*. Treat everything below as **~9 months stale**, and re-clone to
-`vendor/eval/metagpt` before acting on any of it (Do 0: move-or-clone, never delete). MIT → borrowable with attribution.
+**Maturity judgement — corrected mid-review, and the correction is the finding.** The commit date is **2026-01-21**
+while the other six clones are dated 2026-10-27/28, and the first reading was "this row is 9 months stale". **That was
+wrong.** Measured on 2026-10-28 with the instrument that settles it (`node tools/vendor-pins.mjs --freshness`, which
+compares the clone to `git ls-remote origin HEAD`): **`11cdf466` IS upstream's HEAD** — so the *clone* is current and the
+**project is dormant** (~9 months without a commit). Two consequences: every finding below is current with respect to
+upstream, so nothing needs a refresh; and this row is a **dormant reference**, which is a legitimate thing to keep in a
+vendor set as long as it is labelled as one. The same measurement inverts the other five rows — `crewai`,
+`hermes-agent`, `oh-my-pi`, `openhands` and `prime-agent` are all **behind upstream already** (cloned 2026-10-27/28,
+upstream moved within a day). A date column cannot tell those two states apart; only clone-vs-upstream-HEAD can. MIT →
+borrowable with attribution.
 
 ## Do 4 · surface inventory (walked with `node tools/competitor-brief.mjs --project metagpt`; 70,204 md files in 1,297 doc areas collapsed to 25; 1,666 surface-named paths collapsed to 526; 4,441 md / 443 json / 165 yaml in 9 fixture areas **held out of ranking**)
 
@@ -83,8 +88,8 @@ over `*.md *.mdx *.yml *.yaml *.json` with fixture dirs excluded → **0 files m
 ## Where it does not fit our constraints
 
 It is a multi-agent *framework* whose roles are Python classes; making a persona editable there means subclassing. That
-is the exact cost durian-pi is trying to avoid, so most of what is here is a **negative reference**. Second: at this pin
-it is 9 months stale, so nothing here may be adopted without a refresh (its own pin row is the alarm). Third: their
+is the exact cost durian-pi is trying to avoid, so most of what is here is a **negative reference**. Second: this row is a **dormant** project (upstream tip = our pin, last commit 2026-01-21), so it is a stable reference
+rather than moving practice — re-check with `--freshness` rather than on a calendar. Third: their
 `docs/` auto-generated trees (66k+ md) show what happens when documentation is generated without a review surface —
 the reason our brief collapses release/generated copies before ranking.
 
@@ -99,6 +104,7 @@ the reason our brief collapses release/generated copies before ranking.
 
 **Follow-up (Do 9):** inside this clone — open `metagpt/prompts/di/role_zero.py` and `team_leader.py` in full (the two
 multi-agent personas that actually compose prompts) and `metagpt/management/skill_manager.py` to see how a
-self-authored skill is validated. No research-agent prompt. One **operator** question raised by this row: **is a
-9-month-stale clone acceptable in the vendor set at all** — it should be re-cloned to the shared vendor day, or removed
-from the set with a dated note.
+self-authored skill is validated. No research-agent prompt. Resolved by the operator on 2026-10-28 (D146): a
+**dormant** clone may stay in the vendor set (it is labelled as one here), and a **behind-upstream** clone gets
+re-cloned or removed with a dated note — decided per clone by `node tools/vendor-pins.mjs --freshness`, not by reading
+a date column.

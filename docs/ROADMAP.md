@@ -3025,6 +3025,12 @@ component this substrate must not duplicate), item 53/57 (per-conversation tool 
 - Constitutional-evolution search, Big-Five trait injection, FIPA-ACL performatives,
   Contract-Net auctions, dynamic persona generation, blackboard architecture —
   evaluated against Core_Ideas.md; rationales in DECISIONS.md.
+- **Skill scope tiers (`project` > `personal` > `public`)** — the one scope model found in the set (openhands
+ `src/utils/skill-scope.ts:3-14`). **Deferred by the operator 2026-10-28 (D146): "we need more research on the value of
+ this for our project, so not right now."** Nothing changed in the tree on its behalf. The request is written and ready
+ to route: `docs/reviews/skill-scope-tiers-research-prompt.md`. Revisit when that report lands, or if a second workspace
+ or a second operator appears — at one operator / one repo / ~4 skills there is no evidence in the vendored set that
+ tiers pay for themselves.
 
 ## Consumed: the follow-up research reports (2026-10-26) — what they change in 161–174 (the two reports the research agent returned)
 
@@ -3569,3 +3575,22 @@ repo-versioned procedures the agent executes, not prose it reads. Our runbooks c
 keep advertising a deleted verb. Do **not** add a second command directory; the runbook *is* the artifact (D144).
 *Acceptance:* red on a runbook step naming a non-existent verb (today: `docs/runbooks/competitor-review.md` steps all
 resolve — verify before claiming).
+
+**207. An approval gate on seat-prompt edits — granted by the operator on 2026-10-28 ("yes, approval gates for seat
+prompt edits"), and the sweep's finding is that there is **no precedent in the vendor set to copy.** hermes-agent is the
+closest: its prompt-surface snapshot directory is protected by a repository ruleset so that "the snapshot path needs a
+hermes-agent-core approval" (`tests/ci/test_prompt_surface.py` docstring; `scripts/ci/prompt_surface.py:11-12`) — the gate
+is a **review authority on a path**, not a smarter prompt. Elsewhere the authority sits somewhere else entirely: openhands
+refuses to *offer* a field the backend does not enforce (`agentProfileSupportsSecretRefs`, `agentProfileSupportsTools`,
+`src/api/agent-profiles-service/profile-field-support.ts:1-21`), and prime-agent requires prompt facts to match wiring
+(`crates/pa-core/src/prompts/system_prompt.rs:88-95`). **No project declares an approval requirement inside the persona
+file itself** — see `docs/COMPETITORS.md` §"What the seven say about *formatting* a system-level prompt", register (c).
+*Owner:* impl (mechanism) + security (stance) · *Where:* `src/git-hooks` (D67) — a hook that refuses a commit touching a
+seat-persona path (`rig.selfdev.json` seat prompt fields, and `prompts/<seat>.md` if the parked branch lands) unless the
+message carries an explicit operator-approval marker. The rendered-snapshot artifact (hermes adopt #1) is what makes such a
+review meaningful, so this lands **after** that artifact, not before. *Acceptance:* a commit editing a seat prompt without
+the marker is refused, naming the path and the required marker; the same commit with the marker passes; the gate is listed
+in `docs/FEATURES.md` with its test. **State the caveat when routing it:** a path gate is review authority, not a security
+control — it does nothing about a prompt that claims a capability the harness did not grant (that is 203/206 territory), and
+any process that skips hooks bypasses it, so claiming it as protection would be exactly the kind of overclaim this rig's
+`check` rules exist to catch.

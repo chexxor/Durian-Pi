@@ -5184,10 +5184,14 @@ discovery as a read-only query over artifacts we already keep, which is the rout
 `audit-15-orphans-and-5-parked` intent **without** a running broker), **206** (runbook steps as literal commands a
 `check` rule can verify exist).
 
-**Two traps this sweep found in our own method.** (1) **A vendored clone can go stale silently:** `metagpt` sits at a
+**Two traps this sweep found in our own method.** (1) ~~**A vendored clone can go stale silently:** `metagpt` sits at a
 2026-01-21 commit while the other six are 2026-10-27/28; `--check` passes because pin columns compare the table to the
 clone, so the date column must be read by a human — the invariant "all HEADs share one vendor day" does not detect an
-upstream that stopped committing. (2) **Vocabulary collides across projects:** "prompt injection" means *defense* in
+upstream that stopped committing.~~ **Corrected the same day (D146): that reading was wrong.** The instrument is
+`tools/vendor-pins.mjs --freshness` (clone HEAD vs `git ls-remote origin HEAD`), and it reports metagpt's pin **is**
+upstream's HEAD — the project is dormant, the clone is current — while **five other clones are already behind upstream**.
+A commit-date column cannot separate those two states; the real trap is **conflating a stale clone with a dormant
+project**, and it produced a false alarm in three documents before the instrument existed. (2) **Vocabulary collides across projects:** "prompt injection" means *defense* in
 `hermes-agent` and *mechanism* in `oh-my-pi` (`docs/tools/retain.md:10, 133`); a Do 5 conclusion without its pattern and
 its sense is not evidence, which is D142 restated in a new context.
 
@@ -5195,3 +5199,54 @@ its sense is not evidence, which is D142 restated in a new context.
 review audit"; if it prints a DRIFT on a *pin column*, a clone moved and its review is now stale. If a session asks the
 operator the persona question without citing the four pieces above, the synthesis was not read. If ROADMAP 205 is not
 scheduled and the orphan audit is still waiting on the broker, the sweep's cheapest transferable idea was ignored.
+
+## D146 — Four operator rulings on the competitor sweep's open questions; one of them corrected a false alarm I had published (2026-10-28, operator rules / delegate records)
+
+**The ruling.** Answering the five questions the sweep returned (`docs/COMPETITORS.md`, `docs/NEXT.md` at the time):
+
+| # | question | ruling | what changed in the tree |
+|---|---|---|---|
+| 1 | is there a common pattern/standard for a system-level prompt + its model, tools and security items? | **asked of us**; answered here from the seven + prior reviews, with the limit stated | new `docs/COMPETITORS.md` §"What the seven say about *formatting* a system-level prompt"; external-standards request drafted: `docs/reviews/agent-definition-format-standards-research-prompt.md` |
+| 2 | old clones: re-clone or remove? | **re-clone or remove** (a grant, not a decision to do it now) | new verb `node tools/vendor-pins.mjs --freshness`; runbook Machinery + anti-pattern updated |
+| 3 | approval gate on seat-prompt edits? | **yes** | registered **ROADMAP 207** (not scheduled; the team routes it) |
+| 4 | skill scope tiers (`project`/`personal`/`public`)? | **not now — needs research on value for this project** | `docs/ROADMAP.md` "Explicitly deferred" gains a bullet; request drafted: `docs/reviews/skill-scope-tiers-research-prompt.md` |
+| 5 | dual-use skills / agent-authored skills | **agreed: rejected**, governance question recorded (already in D145 and the two reviews) | no change beyond the record |
+
+**Ruling 2 turned into an instrument, because my prose was wrong.** This session I published in three documents that
+`metagpt` "has gone stale — pinned at 2026-01-21 while the other six are 2026-10-27/28". Measured with
+`git -C vendor/eval/metagpt ls-remote origin HEAD`: upstream's HEAD **is** `11cdf466…` — the clone is current and the
+**project is dormant**. `--freshness` now compares clone HEAD to upstream HEAD and prints one verdict word per clone.
+Measured 2026-10-28 (Linux, 7 clones, **10.3 s**): **`CURRENT` metagpt, symphony · `BEHIND` crewai (f3d0099d→b95aa8bb),
+hermes-agent (07f075c2→5c668bbe), oh-my-pi (6f3fbc94→76772d0c), openhands (6354932e→e4765e2c), prime-agent
+(815e64b5→ea9d9602)** — i.e. five of seven fast-moving upstreams moved within **one day** of cloning. Exit code: 1 if any
+clone is behind, 0 if none, and `UNKNOWN` when upstream is unread (offline) — **never infer "dormant" from `UNKNOWN`.**
+
+**Why a separate verb, and not a column in `--check`.** `--check` answers "does the tracked table still describe my
+clones?" (pin columns = hard failure; upstream tag/version = NOTE, because tags move hourly — D144). `--freshness`
+answers a different question, needs the network for every clone, and its verdict implies an *action* (re-clone per Do 0).
+Folding it into `--check` would make a 10 s network call part of a gate that is currently ~2 s and offline-clean, and would
+blur the pin-vs-upstream split that makes `--check` trustworthy. The date column is now documented as **incapable** of
+distinguishing the two states, which is the lesson the false alarm buys us.
+
+**No re-clone performed.** The five `BEHIND` clones are re-cloned **when a mechanism from them is about to be adopted**,
+not on drift — the reviews are valid against their pins, and re-pinning without re-reviewing would destroy the evidence
+trail. The invariant to keep is "`--check` green + `--freshness` verdict recorded", not "all clones at upstream tip".
+
+**Ruling 1, as answered now (the honest three-register version).** (a) A real external standard exists for the **skill**
+surface only — the Agent Skills format specification, which our own `docs/reviews/agent-skills-review.md` already
+normalised against — and **AGENTS.md is de-facto standard by adoption: 5 of 7 clones carry one** (`hermes-agent`,
+`oh-my-pi`, `openhands`, `crewai`, `prime-agent`; `symphony` uses `WORKFLOW.md`, `metagpt` uses code). (b) The
+**persona**-file vocabulary has converged with nobody ratifying it: `name`/`description`, a `tools:` allowlist,
+`model:` as a resolvable **role alias**, a JSON-Schema/JTD-shaped `output:` return contract, `spawns:`/recursion facts,
+replace-vs-append override slots, and a protected seeded default — prime-agent's `prompts/agents/frontmatter.md`-analogue
+is a mustache *emitter*, and the nearest thing to validation is typed config models (crewai/metagpt `YamlModel`), not a
+public schema. (c) **Security in the definition file is the open gap**: nobody declares approval requirements, path or
+command grants, blast radius, or a threat model in a persona file. The two adjacent practices worth having are openhands'
+**enforcement-gated fields** ("cloud launches do not enforce a profile's secret scope yet" → don't offer the field) and
+prime-agent's **facts-must-match-wiring** rule. That gap is why ruling 3 (ROADMAP 207) has no prior art to copy.
+
+**Falsifiable next session.** `node tools/vendor-pins.mjs --freshness` should exit **1** with five `BEHIND` rows unless
+those clones were re-cloned; if it exits 0, someone re-vendored and the five reviews need their Do 2 headers re-emitted.
+If ROADMAP **207** is scheduled with a *security control* framing rather than a review-authority framing, the caveat
+above was not read. If either research prompt is answered without the version/date on each citation, the evidence
+discipline in that prompt was decorative.
