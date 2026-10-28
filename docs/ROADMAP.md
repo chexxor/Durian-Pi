@@ -4351,3 +4351,125 @@ until `RealTimeIsCompatible=1`; do not answer this by assuming NTP (an unsynced 
 *monotonic inside a process, wall clock only across processes with a named epoch*); and a monotonic switch must not break
 restart-spanning comparisons, since a restart drops the monotonic baseline — which is exactly why the **stamps** stay wall
 clock while the **budgets** go monotonic.
+
+## Registered 2026-10-29 by the delegate from the tool-and-skill lifecycle study — **registered, not scheduled**
+
+Source: `docs/reviews/harness-tools-skills-research.md` (observed half: installed pi `@1.4.0` + the nine pinned clones in
+`vendor/eval/`, pins in `docs/VENDOR-PINS.md`). The public-harness half is not written yet —
+`docs/reviews/harness-tools-skills-followup-research-prompt.md` is the routed prompt. `pm` sequences these against
+217/232/233; the delegate does not claim any of them.
+
+**235. Every delegate instrument is reachable only as a `bash` string, and the harness has a project-scoped tool
+registry that was never turned on: 24.0% of 11,599 past tool calls are one-off re-measurements.**
+*(delegate; needs the operator's `.pi/` grant; measured 2026-10-28 and re-measured 2026-10-29, Linux)* pi
+auto-discovers `.pi/extensions/` for a trusted project (`@1.4.0 src/core/package-manager.ts:2484-2491`,
+`collectAutoExtensionEntries` at `package-manager.ts:599-640`) and `pi.registerTool()` puts a tool in the model's tool
+list with a schema, a one-line `promptSnippet` and optional `promptGuidelines`
+(`src/core/extensions/types.ts:1671`, `ToolDefinition` at `types.ts:579-640`); `examples/extensions/dynamic-tools.ts` is
+the shape. Nothing in this repo has ever used it — `grep` for `.pi/` finds **no `.pi/` directory at all**. The cost of
+*not* doing it is measured twice: instruments named in the pointer get 6–21 sessions of reuse, instruments freshly
+authored get **1–2**, and **2,789 of 11,599 calls (24.0%)** in the 87-session corpus are ad-hoc measurement code
+(**267 of 2,356, 11.3%**, in the 18-session Linux-only corpus — see 237).
+*Owner:* delegate (harness surface, project-scoped under D157) · *Where:* a new `.pi/extensions/delegate-instruments.mjs`
+registering `tools/channel-preflight.mjs`, `tools/broker-serve.mjs`, `tools/queue-drain-audit.mjs`,
+`tools/latency-budget.mjs`, `tools/instrument-provenance.mjs`, `tools/harness-usage-census.mjs`, `tools/vendor-pins.mjs`
+as schema tools with `promptSnippet`; `docs/VENDOR-PINS.md`-style provenance for the pin-dependent ones · *Acceptance:*
+a fresh session runs a baseline instrument without reading a doc; `harness-usage-census.mjs` shows each registered tool
+used in ≥5 distinct sessions; the ad-hoc share falls below its corpus-named baseline.
+*Blind spots:* this is the **delegate's** tool surface, not the **seats'** — seat tools come from
+`rig.selfdev.json`/`src/seattools.mjs` (217) and a pi extension changes nothing for a seat; registration costs ~100 B of
+`promptSnippet` per tool on every request (236 sets the budget); an extension is *untrusted-project inert*
+(`package-manager.ts:2465-2467`), so it must be paired with the trust decision, not assumed; and it is not a substitute
+for 230/232 — a tool that reaches the model is still a tool that reads a product state the product does not print.
+
+**236. Standing instruction surface is unbudgeted: `AGENTS.md` injects 5,765 B per request and the skill advertisement
+1,167 B, while our two skill descriptions leave 768 and 805 characters of pi's 1,024-character cap unused.**
+*(delegate; measured 2026-10-29, Linux)* pi assembles the system prompt as replaceable sections — `addendum` (from
+`.pi/APPEND_SYSTEM.md`), `project_context` (`AGENTS.md`/`CLAUDE.md` candidates, `src/core/resource-loader.ts:185`),
+`skills` (`formatSkillsForPrompt`, `src/core/skills.ts:280-305`), `docs`, `cwd`
+(`src/core/system-prompt.ts:150-186`); the project `APPEND_SYSTEM.md` **replaces** the user one rather than merging
+(`docs/configuration.md:39`), and a skill's *body* is never injected — only its name/description/location, and
+`disable-model-invocation: true` removes even that (`skills.ts:262`). Measured on this repo: skills block **1,167 B** for
+2 skills, `AGENTS.md` **5,765 B**, pi's own `docs` section **1,142 B**, bodies 10,963 B / 5,186 B on demand,
+description cap 1,024 (`skills.ts:13`) against 256/219 used. Compare oh-my-pi `6f3fbc94`, which names a budget
+(`memories.summaryInjectionTokenLimit`, `docs/memory.md`) and whose maintainers wrote
+`.omp/skills/system-prompts/small-models.md`: *"a prompt carries roughly 3–5 constraints before rules start displacing
+each other"* — and we run the delegate on the same small local model as the seats.
+*Owner:* delegate (with `scribe` for wording once scheduled) · *Where:* `.pi/APPEND_SYSTEM.md` (new, ≤40 lines: the
+instrument table, the six baseline commands, the standing prohibitions) + the `description:` blocks of
+`.agents/skills/{delegating-to-durian-pi,driving-durian-pi}/SKILL.md` + `AGENTS.md` (trim, do not add) · *Acceptance:*
+an injection audit prints the bytes of every standing section and the total moves *down* while the instrument table is
+present; both `description:` fields open with a "This skill should be used to …" clause and name the instruments
+(the `openhands@6354932e .agents/skills/verify-openhands/SKILL.md:1-13` form, incl. its `triggers:` list).
+*Blind spots:* the cap is a *validation warning*, not a failure (`skills.ts:115-126`), so an oversized description
+degrades silently; more injected prose is not more reliability — the small-model finding argues for **fewer** standing
+rules and more code-side enforcement (the 235/238 pair is the code-side half); and `.pi/APPEND_SYSTEM.md` displacing the
+user file means a host-level file the operator keeps would be shadowed — say so before adopting it.
+
+**237. `tools/harness-usage-census.mjs` publishes percentages without naming its corpus, and the corpus is host-local:
+the same tool printed 24.0% on 2026-10-28 and 11.3% on 2026-10-29.**
+*(devtools or delegate; measured 2026-10-29, Linux)* The 87-session / 11,599-call figure in
+`docs/reviews/pi-harness-usage-audit-2026-10-28.md` spans **two hosts**: 17 Linux sessions plus 70 Windows sessions under
+the pre-move cwd. On this host today, `~/.pi/agent/sessions/` holds **18** session files for this cwd and no Windows set
+(no D: volume is mounted), so the same command prints **18 sessions / 2,356 calls / 267 ad-hoc (11.3%)**. Sessions live
+per working directory, grouped by cwd, relocatable via `--session-dir`, `PI_CODING_AGENT_SESSION_DIR` or `sessionDir`
+(pi `docs/sessions.md:50-54`) — i.e. **the corpus is a host artifact**, and a percentage quoted without it is a claim
+about one machine.
+*Owner:* devtools (the instrument is `tools/`, untested by design except where a demo is named) · *Where:*
+`tools/harness-usage-census.mjs` (print, per run: session count, bytes, per-cwd dirs read, **dirs it could not read**,
+and the same table for each corpus so a Linux figure can never be pasted where a two-host figure belongs) +
+`docs/reviews/pi-harness-usage-audit-2026-10-28.md` (label its denominators) · *Acceptance:* every percentage the tool
+prints is adjacent to its corpus line; re-running it with one dir yields a visibly different header, not the same prose.
+*Blind spots:* do not "fix" this by copying Windows transcripts across hosts (a session store is host-local state and
+may carry credentials); the honest fix is labelling, not merging; and the census measures the **outer** agent's history,
+never the seats' — seat tool results are in the rig store (`tools/edit-failure-rate.mjs`), which is a different corpus
+with different bounds.
+
+**238. No shipped harness in the observed set guards `git worktree prune` or `git clean -fd`, but pi ships a blocking
+`tool_call` hook and four example guards — and it blocks by default when there is no UI.**
+*(delegate + qa; harness-side belt-and-braces for 232; measured 2026-10-29)* pi's `tool_call` event fires before
+execution, exposes **mutable** `input`, and may return `{block:true, reason}`; later handlers see earlier mutations and
+nothing is re-validated afterwards (`src/core/extensions/types.ts:1194-1264`, `on("tool_call")` at `types.ts:1661`).
+Examples in the package: `permission-gate.ts` (regex over `bash`, **blocks outright when `ctx.hasUI` is false**),
+`protected-paths.ts` (blocks writes to `.env`, `.git/`), `confirm-destructive.ts` (cancels
+`session_before_switch`/`_fork`), `dirty-repo-guard.ts`; tool metadata even carries `destructiveHint` for exactly this
+decision (`types.ts:519-531`). hermes-agent `07f075c2` gates edits through `acp_adapter/edit_approval.py:1-45` with a
+`SENSITIVE_AUTO_APPROVE_NAMES` list — and **binds the guard per-runtime, so CLI and gateway sessions bypass it by
+construction**, the failure mode a guard of ours must not repeat. Across aider `5dc9490b`, crewai `f3d0099d`,
+metagpt `11cdf466`, openhands `6354932e`, oh-my-pi `6f3fbc94`, pi-subagents `31208242`, prime-agent `815e64b5`,
+symphony `be10a1b7`: **no guard found for the git verbs that took this rig's 36-row ledger**.
+*Owner:* delegate (harness surface) — the product half stays 232 · *Where:* `.pi/extensions/` (a `tool_call` handler on
+`bash`: `git worktree prune|remove`, `git clean -fd`, and suite/test runs from this checkout) + the same rules restated
+in `docs/runbooks/workspace-move.md` · *Acceptance:* a scripted session in which the guard refuses the command and
+`git worktree list --porcelain` is byte-identical across it; the guard **refuses in non-interactive mode**; a false-positive
+count over the stored session corpus is published with the pattern list (D142: count without pattern is not evidence).
+*Blind spots:* a harness-side guard is **not** the product fix and must not be reported as 232's closure — the
+unconditional `pruneWorktrees` call (`src/broker.mjs:1167` → `src/worktree.mjs:649`) still runs from inside the broker
+where no extension sees it; a guard on the outer agent cannot see a seat's verbs (217 governs those); regex guards on
+shell strings are best-effort by nature (`git -C … worktree prune`, aliases, `xargs`), so state the bypasses; and a
+guard that misfires on the runbooks' own commands will train everyone to disable it.
+
+**239. A delegate-authored file is recoverable from the harness's own session transcripts, and the only instruments that
+do it are untracked — which is 233's failure class, still live.**
+*(devtools or delegate; measured 2026-10-28/29)* pi's transcript carries the tool-call **arguments**, so `write` bodies
+survive file loss: extraction over 87 transcripts recovered `tools/channel-preflight.mjs` (18,985 B),
+`tools/broker-serve.mjs` (17,877 B) and `tools/instrument-provenance.mjs` (6,643 B)
+(`docs/reviews/pi-harness-usage-audit-2026-10-28.md` §transcripts, which also **narrows** D156's "unrecoverable": the
+eight lost instruments have no `write` call in any transcript, so *they* stay lost, but the class is recoverable). The
+extractors that did it are **untracked `.scratch/` files** (`.scratch/transcript-write-bodies.mjs`,
+`transcript-read-bodies.mjs`, and this session's `.spike/extract-pi-src.mjs`), and `.scratch/`/`.spike/` are gitignored —
+the instrument that would prove 233 is itself unproven. pi's session store is searchable by the picker (search, rename,
+delete, `/tree`, `/fork`, `docs/sessions.md:11-30`), and aider `5dc9490b` keeps the cheapest version of the same layer in
+plaintext: a chat-history and an input-history file (`aider/args.py:271-287`) with `/run` commands appended to the latter
+(`aider/coders/base_coder.py:2474`).
+*Owner:* devtools (a tracked `tools/` instrument) + scribe (the runbook row) · *Where:* promote the extractors to
+`tools/transcript-recovery.mjs` (read-only; `write`/`edit` argument extraction per session file, byte counts, no
+execution of anything it reads) + a `docs/runbooks/README.md` symptom row for *"a delegate-written file is gone and was
+never committed"* pointing at it, and a row in `docs/runbooks/tracked-files-missing-on-disk.md` · *Acceptance:* the
+instrument recovers a known file body from a known session and prints its byte count; running it never writes a file
+without an explicit `--out`; the runbook row exists and is reachable from the symptom index.
+*Blind spots:* transcripts are **host-local** and may contain secrets (this session found none, but a recovery tool
+must not paste store contents into docs, D-scope); recovering a body is not restoring a *reviewed* artifact — label a
+recovery **re-created**, per 233/D156; the Windows-host transcripts were unreachable on this host (see 237), so a
+recovery attempt is corpus-bounded; and this row is about the **delegate's** files, not seat worktrees — seat work is in
+git or the store, and a seat's tool results are entries (137,427 of them), never transcripts.
