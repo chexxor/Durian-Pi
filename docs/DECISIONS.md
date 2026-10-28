@@ -4941,3 +4941,58 @@ independent of which family you buy. For ruling 1 that changes the shape of the 
 measurement is **more items (194)**, not another model, and the choice between the resident families now rests on
 cost, throughput, context headroom and availability — with the verifier-design item as the thing that actually moves
 outcomes.
+
+## D142 — The held backlog is audited: 70 rows are bookkeeping for landings that already happened, and "8 unresolvable shas" was the width of my regex (2026-10-28, delegate)
+
+**What was decided.** (a) The held-backlog audit `docs/NEXT.md` named as the prerequisite for costing M5 is done and
+made durable in `docs/reviews/held-drain-audit-2026-10-28.md`; (b) **ROADMAP 190's live-side scope is restated from
+8 shas / 8 rows / 1 store to 30 shas / 38 rows / 2 stores**, of which **24 are recoverable** and **6 are absent from
+both stores**; (c) a standing measurement rule: **a count is only as wide as the regex that found it, so the regex is
+published with the count**; (d) the delegate **staged** its routing facts to `pm` in
+`.spike/delegate/pm-intent-held-drain.md` instead of spooling them, because the broker is `down` and the runbook's
+§Verify (a `delivered:true` receipt) cannot be satisfied — an unconfirmable delivery is not delivery.
+
+**The numbers, all measured at `0159af9` on native Linux.** Queue 4,818: `done` 3,748 · `cancelled` 777 · `held` 274 ·
+`deferred` 19 · `queued` 0 · `claimed` 0. Of the 86 held rows whose subject declares `LANDING LIST`/`LANDING ENTRY`,
+**70 cite only shas that are already ancestors of `main`** — the landing they exist to record has happened, so 26 % of
+the held backlog closes with **no build, no GPU and no model choice**. The §7 heuristic adds 67 rows whose cited gates
+are all terminal (12 of them citing no resolvable id at all). Wider bucketing over 274 rows: 117 all-cited-landed,
+5 all-cited-exist-unlanded, **38 with at least one unresolvable sha**, 114 citing no sha.
+
+**Why the previous session's "8 of 103" was wrong, and what the failure mode is.** It was not bad arithmetic — it was
+an undeclared citation pattern. Strict landing convention `@([0-9a-f]{7,40})` gives 135 distinct shas / 15 missing;
+loose hex (`\b(?=[0-9a-f]{7,40}\b)(?=[0-9]*[a-f])[0-9a-f]{7,40}\b`, ≥7 chars, must contain a letter) gives 237 / 30.
+The gap is the whole finding: a row that cites `b38d985` inline and a row that cites `@02f1a36` are the same kind of
+evidence, and a scan that matches only one of them silently under-counts an unrecoverable-work claim by 4×. This is the
+fourth time in five sessions a number of mine died on its own instrument (D136 throughput, D138 gate hardness, D140
+family ordering, D142 sha scan), so the rule is recorded as a rule, not as a correction to one figure.
+
+**The git fact that changes a recovery plan (and refutes an obvious one).** The rig has a second remote, `win` → the
+Windows box's repo, mounted at
+`/run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig`. Read read-only with
+`git --git-dir=<win>/.git cat-file -t <sha>`, **24 of the 30 missing shas exist as commit objects there** — real
+commits with real messages (`fd4c233` = the D113 decision commit, `1d45af6` = the #3192 idempotent-enqueue fix,
+`e29ddb8` = a dropped **stash** commit). But `branch -a --contains` is **empty** for every one: they are **dangling**.
+**Therefore `git fetch win` cannot recover them** — fetch transfers only objects reachable from advertised refs. The
+recovery is to make them reachable first (`update-ref refs/recovered/<sha> <sha>`) and then fetch, which is exactly
+what the four `refs/recovered/*` pins in this repo (`53fd8c6f8`, `bcf1a191c`, `be40620c9`, `dd2583b12`) already
+demonstrate — and those four are precisely why 5 held rows still resolve today. That write lands on the operator's
+Windows repo, so it is a grant or a seat task, not a delegate action. Six shas are in neither store
+(`0c6fd7665 5d8c6237a c04cfac cfb4457 e8fdab6 eb7e69c1e`); `cfb4457` alone is cited by six rows (#1779–1782, 1786,
+1788). Whether GitHub `origin` holds them is **unverified** — nothing was fetched or pushed.
+
+**The sync state this fell out of, which is the part that bears on M5.** `origin/main` = `refs/remotes/win/main` =
+`b4c86ea`; local `main` = `0159af9` is **33 ahead / 0 behind**, and the Windows store does not contain `0159af9`. So at
+this moment **33 commits of the project's own history exist only on the Linux box** (unpushed; the operator holds the
+grant) **and 24 shas that held rows pin their gates on exist only, unreachable, on the Windows drive**. Neither half is
+a rig fault — it is the ordinary cost of a workspace move when *evidence is a git sha*. It is the strongest empirical
+statement yet for **D133** (cite `entries.id`, never a sha) and for M5's substrate half: a queue whose gates are object
+positions in one machine's store has no durable truth layer beneath it, and a second machine cannot even be told what
+the queue believes.
+
+**What this does NOT license.** It does not release anything: releasing, cancelling and re-deriving are `pm`'s
+transitions, and the delegate did none of them. It does not make `all-cited-landed` proof outside the LANDING family —
+47 of the 117 rows in that bucket need their bodies read, and #994 (operator quiet window) and #2217 (machine capacity)
+sit inside the "cleared gates" set while being correctly held. It does not authorize writing to the Windows repo or
+fetching. And it does not settle the milestone: **D141's ratification is still owed**; the audit only makes `drain
+first` a priceable answer rather than a guess.
