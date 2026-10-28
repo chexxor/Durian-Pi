@@ -1,7 +1,7 @@
 # NEXT — current priority and exact next command
 
-**Last updated:** 2026-10-28T21:5xZ, delegate session (operator ruled D156: pre-move Windows volume is the evidence
-authority, rehearsals go in a disposable clone; refs restored, provenance check landed). Linux box
+**Last updated:** 2026-10-28T22:1xZ, delegate session (D156/D157: the pre-move volume became a git authority — refs and
+objects imported; nothing host-wide is delegated). Session notes: `docs/reviews/delegate-notes-2026-10-28-cross-os-recovery.md`. Linux box
 `Alex-Desktop-Win10` (Fedora `7.2.11-200.fc44.x86_64`), `node v24.22.1`, box zone `America/Chicago` (CDT = UTC−5; every
 timestamp here is **Z**, and note the host's own clock is suspect — see §INCIDENT). Read me first — do not re-derive the
 priority from the ~4,300-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200
@@ -25,9 +25,9 @@ fail its first shell call (`spawn powershell ENOENT`, already firing inside the 
 **Queue ids:** **#725** (impl, ROADMAP 63 — `src/host.mjs` portable host supervisor), **#726** (devtools, ROADMAP 64 —
 `durig daemon` CLI + trigger adapters), **#727** (qa, ROADMAP 67 — host chaos suite): all three `held`, all three in the
 drain audit's **orphan-candidate** list (#662/#710 both `done`) while an **operator prose clause — "and the queue drains"
-— has no definition anywhere in the tree** (ROADMAP **231**). New rows this session: **232** (the sweep prunes the
-ledger ahead of any plan), **233** (instruments credited as landed were never committed and are now gone); **217** and
-**226** gained landed delegate halves.
+— has no definition anywhere in the tree** (ROADMAP **231**). Rows opened this session: **232** (the sweep prunes the ledger
+ahead of any plan), **233** (instruments credited as landed were never committed and are gone), **234** (every gate is
+wall-clock arithmetic while the store stamps relatively). Delegate halves landed: preflight §5/§7/§8, 233's check, refs+objects.
 **Next command (delegate, read-only — run in this order, ~4 s total):**
 
 ```bash
@@ -37,10 +37,10 @@ DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json node cli.mjs queue --j
   | jq -r '.items[] | select(.status=="queued" or .status=="claimed") | [.id,.status,(.to//"-")] | @tsv' | wc -l   # the head of the queue: 0 today
 ```
 
-**Blocker:** the operator ruled (D156/D157): the start stays **withheld on ROADMAP 217**, rehearsals run in a disposable
-clone, and **nothing host-wide is delegated** (`set-local-rtc 0` changes the whole OS — routed as ROADMAP **234**, detector
+**Blocker:** the operator ruled (D156/D157): the start stays **withheld on ROADMAP 217**, rehearsals run in the disposable
+clone `/home/chexxor/Git/Durian-Pi-ops`, and **nothing host-wide is delegated** (`set-local-rtc 0` changes the whole OS — routed as ROADMAP **234**, detector
 `tools/channel-preflight.mjs` §8). **Applied under the grant:** the pre-move clone's 3 packs → this checkout: 9,301 →
-22,351 objects, `git fsck` clean, **23/30 cited shas resolve**, 455 commits still anchored by nothing. Still owed: the 221
+22,362 objects, `git fsck` clean, **23/30 cited shas resolve**, 455 commits still anchored by nothing. Still owed: the 221
 seat-root ruling; an evaluable **"the queue drains"** (231); a grant to mint `refs/rescued/orphan-*` for those 455.
 **Routed:** `delegate-routing-fact-20261028-2150`. **History:** `docs/NEXT-ARCHIVE.md`.
 
