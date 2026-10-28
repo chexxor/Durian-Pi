@@ -888,6 +888,13 @@ advice. Read the headings; the body is only here if you need the numbers.
   `node tools/text-integrity-scan.mjs` reported **42 files with faults on 2026-10-28: 31 `no-trailing-newline`,
   11 `bom`**. Fix the byte inside your change and say so in the message; do not fold a 42-file sweep into a functional
   change, and never strip the BOMs blind (some are Windows/encoding fixtures).
+- **Before you write a probe, `ls scripts/ tools/` — the thing you need may already ship.**
+  `scripts/read-constitution.mjs` prints the **store document the seats' prompts actually carry** and its header states
+  the three-copy rule verbatim ("The constitution is a session DOCUMENT (injected into every seat prompt), not
+  `constitution.txt`; editing the file only reaches seats after it is re-applied"). I missed it, grepped `src/`, found the
+  `durig-constitution` section, and re-implemented the same read as a scratch probe — most of an hour spent deriving what
+  one existing command prints in 200 ms. Clock-in (`scripts/clockin.mjs`, 2,545 ms) is excellent on headings and stale
+  runbooks but names no proof commands; registered as ROADMAP **213**.
 - **Re-read after you write.** Two `edit` calls to the same file in one session: the first reported success and then
   vanished — the commit that carried the second call's hunks (`7ea1bb5`, `@@ -98` and `@@ -318` only) contained no trace
   of the first, and `git log -S` shows the text never existed in history. A "Successfully replaced N block(s)" result is

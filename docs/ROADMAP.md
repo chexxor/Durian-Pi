@@ -3651,6 +3651,30 @@ the demo must build the fixture with a path from the *other* OS rather than a ma
 `check`'s demo suite has an existing false-positive class to avoid — `runbookFrontMatterProblems` expects typed
 front-matter, see `docs/runbooks/README.md`.
 
+## The clock-in surface does not point at the probes that already ship (2026-10-28)
+
+**213. The clock-in read map does not name the proof commands that already ship, so a delegate re-derives them.**
+*(devtools; measured 2026-10-28)* `scripts/clockin.mjs` costs **2,545 ms and 19,494 B** and is genuinely useful (it
+prints the SELFDEV heading map with line numbers, the stale-runbook list, provider state, and the last suite result),
+but nothing in it points at `scripts/read-constitution.mjs`, which prints the **store document the seats' prompts
+actually carry** — its own header states the three-copy rule ("The constitution is a session DOCUMENT … editing the
+file only reaches seats after it is re-applied"). I did not find it: I grepped `src/`, found the
+`durig-constitution` section, and re-implemented the same read as a scratch probe, costing the better part of an hour
+of a session that was supposed to be a preflight. `clockin.mjs` has a `## READ MAP` section already; the fix is to make
+it also print a short **`## PROOF COMMANDS`** block: the ~20-second set that establishes rig state before any writing
+verb (`node tools/broker-serve.mjs --status`, `node scripts/read-constitution.mjs <db>`,
+`node tools/mirror-constitution.mjs --check`, `node tools/text-integrity-scan.mjs --kinds`,
+`node tools/queue-drain-audit.mjs --db <db>`, `node cli.mjs check <rig>`), each with the exit code it must return.
+*Owner:* devtools · *Where:* `scripts/clockin.mjs` (add the block; keep the pointer-only byte cap it already enforces)
++ `demo/clockin-digest.test.mjs` (pin that the block exists and names the commands — the demo already pins the
+digest's shape) · *Acceptance:* clock-in output contains a `PROOF COMMANDS` section naming at least the constitution,
+delivery-channel and byte-integrity reads with their expected exit codes; the digest stays under its cap and remains
+body-free (the pointer-only rule); a session that runs the block learns the three-copy rule without reading a runbook.
+· *Blind spots:* it must print **commands**, not conclusions — a cached "constitution applied" line would be a lie the
+moment someone amends the file again (the same reason `check` re-reads the store); and this is the delegate-side twin of
+milestone **O1** (a seat boot contract) and adjacent to **206** (executable runbook steps) — claim it as the read-only
+surface only, or the two halves collide.
+
 ## Amending the constitution on Linux (2026-10-28) — what the mirror and the gate cost
 
 The operator's precondition before opening the delivery channel was "ensure their constitution is added to their

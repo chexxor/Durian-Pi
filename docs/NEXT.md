@@ -12,8 +12,8 @@ Prior sessions: `docs/NEXT-ARCHIVE.md`. The superseded `2026-10-28T14:48Z` block
 **delivered no intent** — see the Blocker line, which is now a decision with a price on it rather than an unknown.
 Queue ids in play: **#4813** (`pm`, parked), **#4354** (`impl`), **#4816** (`lead`), **#4817** (`devtools`),
 **#4814** (`qa2`) — the five rows `status` still reports as `deferred_awaiting_answer`, one per seat, all "waiting on
-human". New registered-not-scheduled ids: **208, 209, 210, 211, 212** (docs/ROADMAP.md — "The delivery channel on
-Linux" and "Amending the constitution on Linux").
+human". New registered-not-scheduled ids: **208, 209, 210, 211, 212, 213** (docs/ROADMAP.md — "The delivery channel on
+Linux", "The clock-in surface does not point at the probes that already ship", "Amending the constitution on Linux").
 
 ### What was actually measured (Linux, 2026-10-28T15:05–15:20Z; full text `docs/reviews/delivery-channel-linux-2026-10-28.md`)
 
@@ -114,6 +114,7 @@ DURIG_DB=./selfdev.sqlite node cli.mjs status                          # context
 node tools/model-probes/cold-prefill.mjs http://127.0.0.1:47831/v1 iq3_s   # COLD/WARM prefill (Linux machine probe)
 node tools/mirror-constitution.mjs --check          # exit 1 if rig.starter.json's inline copy drifts from the file
 node tools/text-integrity-scan.mjs                  # latent byte defects in COMMITTED blobs (2026-10-28: 42 files)
+node scripts/read-constitution.mjs ./selfdev.sqlite  # THE store doc the seats' prompts carry — the three-copy proof
 node scripts/test.mjs --all                         # the gate, before landing only: 238/238 in 41.1 s here
 ```
 
@@ -158,4 +159,6 @@ the `\u0027` escaping makes a `JSON.stringify`-based swap miss) and **treat an `
 line as proof the file changed** — this session lost one such write to a later edit of the same file, and
 `git log -S` proved the text never existed: grep for the phrase you just added. Do not assume a constitution edit
 reached the seats: it is in their prompts only after `up` writes the store doc (`check`'s `constitution-not-applied`
-is the oracle).
+is the oracle, and `node scripts/read-constitution.mjs <db>` prints the doc itself). And **do not write a probe before
+`ls scripts/ tools/`** — `scripts/read-constitution.mjs` printed exactly the store read I re-derived in scratch, and its
+header already stated the rule I spent an hour discovering.
