@@ -1,9 +1,6 @@
 # NEXT — current priority and exact next command
 
-**Last updated:** 2026-10-29T00:2xZ, delegate session (the tool-and-skill lifecycle **study landed its observed half**: 10
-systems read, ROADMAP **235–239** registered, the public-harness half routed as a follow-up prompt). Prior session notes:
-`docs/reviews/delegate-notes-2026-10-28-cross-os-recovery.md`; harness self-audit (87 past sessions mined):
-`docs/reviews/pi-harness-usage-audit-2026-10-28.md`. Linux box
+**Last updated:** 2026-10-29T01:1xZ, delegate session (the tool-and-skill lifecycle **study is now two halves**: the observed half (10 systems) + the public-harness half the operator's research agent delivered + **five `--depth 1` pins** (`codex d373d649`, `cline 51f63e4f`, `goose 775b3958`, `claude-code-docs 58d6da1e`, `copilot-cli 84ee80ea`). ROADMAP **235–243** registered; operator ruled on `.pi/` (D158) and **research-before-232**. Prior session notes: `docs/reviews/delegate-notes-2026-10-28-cross-os-recovery.md`; harness self-audit (87 sessions mined): `docs/reviews/pi-harness-usage-audit-2026-10-28.md`. Linux box
 `Alex-Desktop-Win10` (Fedora `7.2.11-200.fc44.x86_64`), `node v24.22.1`, box zone `America/Chicago` (CDT = UTC−5; every
 timestamp here is **Z**, and note the host's own clock is suspect — see §INCIDENT). Read me first — do not re-derive the
 priority from the ~4,300-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200
@@ -29,8 +26,7 @@ fail its first shell call (`spawn powershell ENOENT`, already firing inside the 
 drain audit's **orphan-candidate** list (#662/#710 both `done`) while an **operator prose clause — "and the queue drains"
 — has no definition anywhere in the tree** (ROADMAP **231**). Rows opened this session: **232** (the sweep prunes the ledger
 ahead of any plan), **233** (instruments credited as landed were never committed and are gone), **234** (every gate is
-wall-clock arithmetic while the store stamps relatively). Delegate halves landed: preflight §5/§7/§8, 233's check, refs+objects. Rows registered this session: **235–239** (harness lifecycle study,
-`docs/reviews/harness-tools-skills-research.md`) — registered, not scheduled; `pm` sequences them against 217/232/233.
+wall-clock arithmetic while the store stamps relatively). Delegate halves landed: preflight §5/§7/§8, 233's check, refs+objects. Rows registered this session: **235–239** (harness lifecycle study, `docs/reviews/harness-tools-skills-research.md`) and **240–243** (the public-harness half + its five pins, `docs/reviews/harness-tools-skills-public-harnesses-research.md`) — registered, not scheduled; `pm` sequences them against 217/232/233. **235's delivery shape is ruled (D158): an installable pi package developed in this tree (`pi install --local ./<dir>`), not hand-written `.pi/` files. 232 stays unclaimed: research first (241).**
 **Next command (delegate, read-only — run in this order, ~4 s total):**
 
 ```bash
@@ -38,14 +34,14 @@ node tools/channel-preflight.mjs --db ./selfdev.sqlite --rig ./rig.selfdev.json 
 node tools/broker-serve.mjs --dry-run    # 2.9 s and it now REFUSES: `seat-shell-availability` + `live-tree-dirty`
 DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json node cli.mjs queue --json \
   | jq -r '.items[] | select(.status=="queued" or .status=="claimed") | [.id,.status,(.to//"-")] | @tsv' | wc -l   # the head of the queue: 0 today
-# operator action owed (the delegate cannot call it): route docs/reviews/harness-tools-skills-followup-research-prompt.md to the research agent
+# operator action owed (the delegate cannot call it): route docs/reviews/harness-tools-skills-followup-2-research-prompt.md
+#   to the research agent — Task A first: 50 dangling citation anchors + 3 dead URLs in the round-2 report (ROADMAP 243)
 ```
 
 **Blocker:** the operator ruled (D156/D157): the start stays **withheld on ROADMAP 217**, rehearsals run in the disposable
 clone `/home/chexxor/Git/Durian-Pi-ops`, and **nothing host-wide is delegated** (`set-local-rtc 0` changes the whole OS — routed as ROADMAP **234**, detector
 `tools/channel-preflight.mjs` §8). **Applied under the grant:** the pre-move clone's 3 packs → this checkout: 9,301 →
-22,362 objects, `git fsck` clean, **23/30 cited shas resolve**, 455 commits still anchored by nothing. Still owed: the 221
-seat-root ruling; an evaluable **"the queue drains"** (231); a grant to mint `refs/rescued/orphan-*` for those 455.
+22,362 objects, `git fsck` clean, **23/30 cited shas resolve**, 455 commits still anchored by nothing. **Granted 2026-10-29 (D158):** `--depth 1` competitor clones (five taken, pins regenerated, `--check` PASS at 14 clones); `.pi/` writes **permitted but disfavoured** — ship an installable pi package developed in this tree instead; and **232 is gated on research (241): do not claim it, do not touch `src/worktree.mjs:649` / `src/broker.mjs:1167`, and run no suite from this checkout while it is open.** Still owed: the 221 seat-root ruling; an evaluable **"the queue drains"** (231); a grant to mint `refs/rescued/orphan-*` for those 455; the Windows-host session corpus + `.spike/delegate-inventory-2026-10-26.txt` (237).
 **Routed:** `delegate-routing-fact-20261028-2150`. **History:** `docs/NEXT-ARCHIVE.md`.
 
 ### Read-only baseline — run this before anything else (all verified working, Linux, 2026-10-28T20:1xZ)
@@ -118,7 +114,7 @@ this checkout** — run it in the disposable clone.
    or ran are gone and unrecordable; several ROADMAP rows credit them as landed. Either the team re-creates them (labelled
    as re-created, not restored) or the rows that cite them get amended — that is a scope call for you, not for a seat.
 
-## OPEN DELEGATE PROPOSALS (ungraded, not spooled, no grant yet — the operator asked that these be worked next; the harness half is now ROADMAP 235–239, *registered, not scheduled*)
+## OPEN DELEGATE PROPOSALS (ungraded, not spooled, no grant yet — the operator asked that these be worked next; the harness half is now ROADMAP **235–243**, *registered, not scheduled*)
 
 1. **The skill surface is the only thing a fresh session is *given*, and it is stale.** The harness injects every
    `.agents/skills/*/SKILL.md` `name:`+`description:` at session start with no read; grepping the two skills for
@@ -131,12 +127,11 @@ this checkout** — run it in the disposable clone.
 4. **Edit C (done):** `instrument-provenance` is in the clock-in baseline. Skills steer the **outer agent**, never seats —
    seat tools come from `rig.selfdev.json`/`src/seattools.mjs` (217). **Ask:** A+B+C as delegate work, or rows for `pm`?
 
-## HARNESS STUDY — observed half DONE 2026-10-29; the public half is routed, not written
+## HARNESS STUDY — BOTH halves landed 2026-10-29: observed (10 systems) + public (5 harnesses, 5 new pins)
 
-**Landed:** `docs/reviews/harness-tools-skills-research.md` (Q1–Q8 over **10 systems**: installed pi `@1.4.0` + the 9 pinned clones; mechanism×system matrix, evidence table, cost table, failure modes) + its `docs/COMPETITORS.md` §"The 2026-10-29 tool-and-skill lifecycle sweep". `node tools/vendor-pins.mjs --check` → PASS (9 clones, review audit clean). Registered **235–239**; 2 mechanisms rejected with reasons (vector/embedding memory; a build-time/cloud skill catalog — both make staleness invisible, our named failure class).
-**The finding:** our own harness already ships the three mechanisms — `.pi/extensions/` auto-discovery + `pi.registerTool()` (pi `src/core/package-manager.ts:2484-2491`, `src/core/extensions/types.ts:1671`), `.pi/APPEND_SYSTEM.md` injected as the `addendum` section (`src/core/system-prompt.ts:172`, and the project file *replaces* the user file), and a **blocking** `tool_call` hook that blocks outright when there is no UI (`types.ts:1194-1264`, `examples/extensions/permission-gate.ts`) — and this repo has **no `.pi/` directory at all**. Across ten systems, **nothing** guards `git worktree prune`/`git clean -fd` (238 is belt-and-braces for **232**, never its substitute: the broker's own `pruneWorktrees` runs where no outer extension can see it).
-**Owed from here (the delegate cannot call the research agent):** route `docs/reviews/harness-tools-skills-followup-research-prompt.md` — Claude Code, Codex CLI, Cursor, Cline, Goose; injection budgets; dangerous-verb guards; dual-host config distribution. Until it lands the verdict is **half-evidenced**: pi's three mechanisms may be parochial.
-**Grant owed (project-scoped under D157; `.pi/` loads only after project trust):** 235 `.pi/extensions/delegate-instruments.mjs`, 236 `.pi/APPEND_SYSTEM.md` (≤40 lines) + the two skill `description:` rewrites (measured headroom: **768/805 unused chars** of pi's 1,024 cap), 238 the `tool_call` guard. Zero-cost today, no grant needed: open a session with `/skill:delegating-to-durian-pi` (`docs/skills.md` admits the model may skip a skill).
+**Landed:** `docs/reviews/harness-tools-skills-research.md` (Q1–Q8 over **10 systems**: installed pi `@1.4.0` + 9 pinned clones; mechanism×system matrix, evidence + cost tables, failure modes) and `docs/reviews/harness-tools-skills-public-harnesses-research.md` (Claude Code, Codex CLI, Cursor, Cline, Goose — **every cell `advertised-elsewhere`, no `observed`**), both with `docs/COMPETITORS.md` sections. `node tools/vendor-pins.mjs --check` → PASS (**14 clones**, review audit clean). Registered **235–239** (observed half) + **240–243** (capture-on-success; research-before-232; the `--tags` prefixed-tag hole; the undelivered-citation-corpus hole). **2 mechanisms rejected with reasons:** vector/embedding memory and a build-time/cloud skill catalog — both make staleness invisible, our named failure class.
+**The finding:** our own harness already ships the three mechanisms — `.pi/extensions/` auto-discovery + `pi.registerTool()` (pi `src/core/package-manager.ts:2484-2491`, `src/core/extensions/types.ts:1671`), `.pi/APPEND_SYSTEM.md` injected as the `addendum` section (`src/core/system-prompt.ts:172`; the project file *replaces* the user file), and a **blocking** `tool_call` hook that blocks outright with no UI (`types.ts:1194-1264`, `examples/extensions/permission-gate.ts`) — and this repo has **no `.pi/` directory at all**. Two corrections the public half forced: GitHub Copilot CLI **does** ship `--deny-mode "command:git worktree prune"`, and its tracker says those rules **fail open** on a 10 s timeout ([#978](https://github.com/github/copilot-cli/issues/978)); and Goose writes capabilities back at runtime (`crates/goose/src/recipe/local_recipes.rs:155,194` at the pin). Neither substitutes **232** — the broker's own `pruneWorktrees` (`src/broker.mjs:1167` → `src/worktree.mjs:649`) runs where no outer extension can see it.
+**Granted 2026-10-29 (D158), still unbuilt:** the `.pi/`-shaped work (235/236/238) ships as an **installable pi package developed in this tree** (`pi install --local ./<dir>` → one line in `.pi/settings.json`, read only after project trust), not hand-written `.pi/` files; and 232 is **gated on 241** — read `vendor/eval/codex · d373d649`'s permission engine and the Copilot CLI failure class before anyone claims it. **Owed from here (the delegate cannot call the research agent):** route `docs/reviews/harness-tools-skills-followup-2-research-prompt.md`, **Task A first** (50 dangling anchors + 3 dead Goose URLs = ROADMAP **243**), then Q1–Q6. Zero-cost today, no grant needed: open a session with `/skill:delegating-to-durian-pi` (`docs/skills.md` admits the model may skip a skill).
 **Corpus warning (237):** `tools/harness-usage-census.mjs` prints no corpus. On this host today: **18 sessions / 2,356 calls / 267 ad-hoc (11.3%)**; the audit's 87 / 11,599 / 24.0% needs both hosts' transcripts and the Windows set is absent here (no D: volume mounted). Quote the corpus with the number.
 
 ## Then, in this order (measured ranking — `docs/reviews/wallclock-budget-2026-10-28.md` §6, ruling D153, amended by D154)
