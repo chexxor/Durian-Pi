@@ -5022,3 +5022,43 @@ both stores" is **not** "work lost" — `src/citation.mjs` says so in its own he
 `d5c268f`) for #3506/#3603/#3726/#3743/#4378 and **zero** for the `cfb4457` family (#1779–1782, 1786, 1788). So the six
 are typo/stale-pointer candidates, and they belong on row **#4804** (deferred → impl, "THE NINE SHAS ARE NOT REACHABLE —
 qa2 measured that `refs/heads/archived/` does not contain …") rather than in a new row.
+
+## D143 — The seat-persona surface will be copied from established practice, not invented here; the first attempt is parked with a byte-identical proof (2026-10-28, delegate)
+
+**Question.** The operator asked for seat system prompts to be easy to edit *before the rig starts*, then redirected
+mid-implementation: *"can we copy patterns for defining subagent system prompts from other projects with more mindshare?
+Maybe we can find some standards to re-use."* Seven projects are vendored and pinned (see `docs/NEXT.md`).
+
+**Why this is a decision and not a task.** The hazard is real and measured: this rig keeps **44,110 characters of seat
+prose as escaped JSON strings across 12 seats** in a ~380-line file, and `qa`/`qa2` share 4,504 chars each, so an edit to
+one either drifts or corrupts the other. But the *value* of a fix is not in durian-pi inventing a key. `compilePersona`
+(`src/rig.mjs:1428`) already states it *"Mirrors CrewAI's role/goal/backstory triad and MetaGPT's constraints"* — the
+operator's two named projects are the **source of the existing schema**. Any new surface must therefore be measured
+against what those projects actually do, or we are relitigating a decision already made and paid for.
+
+**Standing rules that came out of the attempt (these hold regardless of which format is chosen):**
+1. **One resolver.** `applyInstructionFiles` lives in `src/rig.mjs` and the apply path and the guard tests import the
+   SAME function. Two resolvers is how the constitution bug survived: `cli.mjs` read one form, the tests read the other.
+2. **Prove byte-identity, do not assert it.** A persona-file migration must show the resolved system prompt is
+   byte-identical to what the inline spec produced. The parked attempt proves **12/12** against
+   `git show HEAD:rig.selfdev.json`; that proof, not the extraction, is what makes the change safe.
+3. **A missing persona is a hard failure, never a silent drop.** The constitution bug let a 13-seat team run with no
+   grounding rule and nothing anywhere raised an error (`demo/constitution.test.mjs`). A seat with no prose must not
+   configure.
+4. **A persona edit must be visible in CI.** `hermes-agent` shows the shape: a committed surface inventory
+   (`tests/fixtures/prompt_surface/surfaces.json`) with `stable` / `volatile` / `context` token counts per surface plus
+   tool tokens, and a CI test that **names the surface and the tool description that changed**. durian-pi has no
+   equivalent — 44 KB of seat prose with nothing pinning what a seat receives or its context footprint, which is the
+   scarcest resource in a 12-seat rig on a 1-GPU local model.
+
+**Status: NOT ADOPTED.** The design is the operator's open ruling (blocker 1 in `docs/NEXT.md`). The `instructionsFile`
+attempt is parked on branch `wip/seat-prompt-files` @ `04e3ba6` — its guard tests were not updated, so landing it would
+turn the suite red; `main` stays green at **238/238**.
+
+**And the unflattering part, recorded because it is the third time this session.** I ran the competitor review **out of
+order**: I went straight to each project's prompt-keyword surface instead of walking its documentation in the
+maintainers' order, and wrote none of the required artifacts (`competitor-review.md` Do 4–9). That runbook names this
+exact failure — *"a review that cannot cite the source path is a feature-page summary"* and the OWASP ASI miss of
+2026-10-17 — and it also names the fix I did not have: enforcement belongs in `check` via a `competitor-review-covered`
+rule (ROADMAP 81/82), still unregistered. Combined with **0 of 39 runbooks filling `check_rule:`**, the pattern is
+consistent: this rig documents its controls and instruments almost none of them.
