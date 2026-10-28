@@ -4586,8 +4586,16 @@ worse than no URL because it reads as evidence, and a line range into a file nob
 *Signal that this is fixed:* the round-3 deliverable ships `inputs/fetched/` + a manifest (URL, fetch date, HTTP
 status, sha256, the page's own last-modified marker), every in-body anchor resolves, and
 `docs/runbooks/research-request.md` Do 4 gains a line: **a report whose citations point at files it did not deliver is
-returned, not folded**. *Gated on:* the round-3 research run (prompt written:
+returned, not folded**. The convention, file naming and manifest columns are written down at `inputs/fetched/README.md`
+— that directory is **tracked on purpose** (it is not in `.gitignore`, unlike `vendor/eval/` and `.spike/`), because a
+corpus that lives only in the research agent's workspace is the same loss with a better name. *Gated on:* the round-3 research run (prompt written:
 `docs/reviews/harness-tools-skills-followup-2-research-prompt.md`, Task A). The delegate fixed the three Goose paths
-from the pin; it cannot invent the corpus. *Do not:* downgrade the report's conclusions because its citations are
+from the pin; it cannot invent the corpus. **The mechanism was fixed at the runbook level the same day, after the operator
+stated the constraint** — the research agent is off-host and has **no write access to this repo**, so it can land nothing
+and must never be told to (`docs/runbooks/research-request.md`: Preconditions, Do 1, Do 5, Verify, "If it fails"; D159).
+The portable citation unit is now **a verbatim quote of ≤ 40 words + URL + the agent's fetch date**, with a line range
+accepted only beside a quote, because a page re-fetched tomorrow does not preserve yesterday's line numbers. The delegate
+fetches into `inputs/fetched/` and searches for each quote; a quote it cannot locate is recorded `unverified`
+(`inputs/fetched/README.md`). *Do not:* downgrade the report's conclusions because its citations are
 unresolvable — its load-bearing numbers were independently confirmed on the live vendor pages the same day
 (`docs/COMPETITORS.md`, "The 2026-10-29 public-harness pins"). Fix the chain, keep the findings.

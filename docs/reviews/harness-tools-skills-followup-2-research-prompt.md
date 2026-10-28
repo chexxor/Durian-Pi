@@ -53,8 +53,9 @@ Verified against the report as committed (`318838f5`):
 
 1. **50 of 64 in-body citation markers are dangling.** They are hash-and-line anchors of the form
    `[^542f21#49]`, `[^20106b#1026]`, `[^d32e06#246]`, `[^5389e9#216]`, `[^04a0b7#43]`, `[^3d9c8f#177]`,
-   `[^dccefb#400]`, `[^5f6188#593]`. Each names a page it fetched into `inputs/fetched/` — and that directory
-   **is not in this repo**. So on this host those line ranges cannot be opened.
+   `[^dccefb#400]`, `[^5f6188#593]`. Each names a page you fetched into **your own workspace** (the report describes them as
+   saved under `inputs/fetched/`), and that workspace is unreachable from this repo — you are off-host with no write access.
+   So on this host those line ranges cannot be opened, and no later round should repeat the pattern.
 2. The footnote definitions at the end of the report are a different, working set (`[^1]`…`[^14]`), each with
    a URL and a class. Those are fine.
 
@@ -64,10 +65,14 @@ Do both halves of the repair:
   its `[^1]`…`[^14]` URL (keeping the line range), or renumber the body to the existing table. Keep the line
   ranges — they are what make a claim checkable. A claim you cannot resolve to a URL becomes
   `unverified`, stated as such in the body.
-- **A2.** Ship the fetched corpus. For each page you cite, deliver the file plus a manifest row: source URL,
-  fetch date, HTTP status, sha256 of the file you cited, and the page's own `last-modified` / "last updated"
-  marker if it shows one. Put them at `inputs/fetched/` and the manifest at `inputs/fetched/MANIFEST.md`.
-  Without the corpus, a line-range citation is a claim about a page nobody can re-open.
+- **A2.** Make each citation portable, because **you cannot send us files.** You are not on the repo machine and you have
+  no write access to this repo — so a line range into a page *you* fetched is unusable here, and any instruction to commit,
+  `git add`, or create a path is an instruction to fail silently. For every load-bearing claim, give the unit a reader can
+  re-find anywhere: **a verbatim quote of ≤ 40 words from the page + the URL + your fetch date (as you state it)**. A line
+  range is welcome *beside* the quote, never instead of it. The delegate then re-fetches each URL into `inputs/fetched/`,
+  writes `inputs/fetched/MANIFEST.md` (`sha256`, HTTP status, the page's own `last-modified` — format in
+  `inputs/fetched/README.md`), and searches for your quote in our copy. **A quote we cannot find is recorded `unverified`
+  in our folded docs** — that is the test you should be aiming to pass.
 
 **Already confirmed by the delegate on 2026-10-29, from the live pages — do not re-verify, and correct your
 report if any of this contradicts it:** the Claude Code skills page states the listing budget "scales at 1%
@@ -137,14 +142,18 @@ Windows 34.0%).
   `not found`.
 - Do not restate round 1 or round 2 findings except where you are **contradicting** one; a contradiction is
   the most valuable thing you can send back, so flag it in a section named for it.
-- Do not write to any file in this repo except your deliverable and `inputs/fetched/`.
+- **You have no repo write access and are not on the repo machine.** Never attempt a file write, a clone, or a commit —
+  return text blocks and let the delegate land them.
 
 ## Deliverable
 
 Write to **`docs/reviews/harness-tools-skills-public-harnesses-research.md`** — the same file as round 2, so
-the report stays one artifact. Structure it as:
+the report stays one artifact. **You will not be the one who writes it** (you have no repo access): produce the full
+replacement text, **one fenced block per section, no narration outside the blocks** — round 2 arrived with your working
+notes glued to the title line, and the operator had to hand-separate the artifact from the chat. Structure it as:
 
-1. Task A result: what you changed, per citation, and the manifest.
+1. Task A result: every citation you changed, shown as before → after, and any claim you could not resolve marked
+   `unverified`.
 2. A **"Corrections"** section: every claim from round 2 you now withdraw or downgrade, with the reason.
 3. Q1–Q6 tables, in that order, with the six harness columns.
 4. An **evidence table**: row per claim — claim · class · URL · date · what it supports. Classes are
@@ -155,10 +164,10 @@ the report stays one artifact. Structure it as:
 **Budget: 6 pages / 30 KB of findings.** Prefer tables over prose. Every external claim carries its URL and
 its class inline.
 
-**Land it.** Commit your deliverable and the fetched corpus (`git add <the explicit paths> && git commit`) so
-the work is in `git ls-files` when you finish — an untracked report is a lost report. If you cannot run git,
-say in your final message that you did not land it, and name the paths, so the delegate can land it in the
-same turn it reads them.
+**How your work reaches the repo — not your job, and do not attempt it.** The operator pastes your blocks to the delegate;
+the delegate commits them (`git add` on explicit paths, one concern per commit) and does the fetching and manifesting that
+you cannot. End your message with one line stating that you did **not** write to the repo, so the delegate knows the
+channel it is receiving through.
 
 **End with a next-prompt block.** List the next research prompt's questions, naming the repo path of the
 parent prompt (`docs/reviews/harness-tools-skills-followup-2-research-prompt.md`) and its parent
