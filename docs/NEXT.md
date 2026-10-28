@@ -23,15 +23,28 @@ are now **corrected**, and the `drain first` option is **priced**:
   That is **26 % of the 274 held rows closeable with zero build work** — the cheapest capacity in the rig.
   Ids are in the review §4 and in the staged intent. (`#4378`, deferred→impl, is the team's own prior attempt
   at this class and may already cover a subset — `pm` should check before re-doing it.)
-- **ROADMAP 190's live side is 30 shas / 38 rows / 2 stores, not 8 / 8 / 1.** Of the 30 unresolvable shas,
-  **24 exist as commit objects in the Windows repo** (remote `win`, mounted at
-  `/run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig`) but are **reachable from no ref
-  there** — dangling. **`git fetch win` will NOT recover them** (fetch transfers only ref-reachable objects);
-  recovery is `git --git-dir=<win>/.git update-ref refs/recovered/<sha> <sha>` then fetch — a **write to the
-  operator's Windows repo**, so a grant, not a delegate action. That convention already exists here
+- **ROADMAP 190's live side is 30 shas / 38 rows / 2 stores, not 8 / 8 / 1** — and its **built detector is
+  under-scoped too**. `src/citation.mjs`'s `CITED = /\b[0-9a-f]{8,40}\b/` reports **178 distinct / 73 unresolvable /
+  218 rows / 4 non-terminal rows** (#3506, #3603, #3743, #4378); the same rule with the lower bound moved **8 → 7**
+  reports **1,048 / 213 / 957 / 39 non-terminal** — exactly my 38 held rows plus #4378. 7 is git's default short-sha
+  abbreviation and it is what this rig's landing convention writes (`@02f1a36`-style); **140 of the 213 unresolvable
+  shas are 7-char**. So "4 non-terminal rows" is the sound of the rule being blind, not a clean bill — the owed half of
+  190 needs the lower bound **plus an ambiguity check** (≈84 % of the new 7-char tokens resolve, so some resolve as an
+  abbreviation of a *different* object).
+- Of the 30 unresolvable shas, **24 exist as commit objects in the Windows repo** (remote `win`, mounted at
+  `/run/media/chexxor/0094126294125A8C/Users/Alex/dsh-Projects/pi-opendurig`) but are **on no ref there** — proven with
+  a `rev-list` over **every** ref tip (1,556 reachable objects; `win` has 32 `refs/heads`, 9 `refs/remotes/origin`,
+  HEAD, and **no `refs/archived/*`**), not with `branch -a --contains`, which walks only `refs/heads` + `refs/remotes`
+  and cannot see `refs/recovered/*` or `refs/archived/*`. **`git fetch win` will NOT recover them** (fetch transfers
+  only ref-reachable objects); recovery is `git --git-dir=<win>/.git update-ref refs/recovered/<sha> <sha>` then fetch
+  — a **write to the operator's Windows repo**, so a grant, not a delegate action. That convention already exists here
   (`refs/recovered/53fd8c6f8, bcf1a191c, be40620c9, dd2583b12`) and is why 5 held rows still resolve.
-  **6 shas are in neither store:** `0c6fd7665 5d8c6237a c04cfac cfb4457 e8fdab6 eb7e69c1e` — `cfb4457` is cited
-  by 6 rows (#1779–1782, 1786, 1788). Only GitHub `origin` could hold them; **unverified**, nothing was fetched.
+  **6 shas are in neither store:** `0c6fd7665 5d8c6237a c04cfac cfb4457 e8fdab6 eb7e69c1e` — but **that is not proof of
+  lost work**: `src/citation.mjs`'s own header says the rule cannot tell a stale pointer from a loss, and its worked
+  example is `0c6fd7665` (landing `0c6fd76e465…`, change on `main`). Patch-equivalence probes returned only
+  defect-about-the-defect commits (`6a8180b`, `d5c268f`) for #3506/#3603/#3726/#3743/#4378 and **zero** for the
+  `cfb4457` family (#1779–1782, 1786, 1788). Route the six to **#4804** (deferred → impl, "THE NINE SHAS ARE NOT
+  REACHABLE"), do not open a seventh row. Whether GitHub `origin` holds any of them is **unverified** — nothing fetched.
 - Why the old "8" was low: **the count was the width of its regex.** Strict `@([0-9a-f]{7,40})` → 135 distinct
   / 15 missing; loose hex (≥7, must contain a letter) → 237 / 30. Publish the regex with the count (D136, D138,
   D140, now D142).
@@ -82,13 +95,15 @@ its 200 B/line budget (`docs/NEXT.md` ≤ 200 lines).
 
 **Do not:** claim/complete/defer/route/release anything yourself; release a row on the strength of the §7
 heuristic without reading its body; **`git fetch win` expecting the 24 dangling shas back** (they are not
-ref-reachable — they will not transfer); write to the Windows repo (`update-ref refs/recovered/*`) without the
-operator's grant; quote a held-row count without the regex that produced it; treat `all-cited-landed` as proof
-outside the `LANDING LIST/ENTRY` family (47 of the 117 need their bodies read — #994, #2217 are legitimate);
-build a memory tier (165/166) before 167's gate, or an OS backstop (174) before 171's position doc; add a second
-summarizer next to pi-durable's compaction (176's rule); cite a git sha as durable evidence (D133 —
-`entries.id`); route `qa`/`qa2`/`auditor` at `ministral-3-14b-reasoning` (D137 stands) or edit
-`rig.selfdev.json` model fields (the family ruling is the operator's); run k = 3 gate arms without checking free
+ref-reachable — they will not transfer); use `branch -a --contains` to prove reachability (it cannot see
+`refs/recovered/*` or `refs/archived/*` — use `rev-list` over every ref tip); read the `citation-unresolvable`
+rule's 4 findings as a clean bill (its `{8,40}` floor is blind to 7-char citations); write to the Windows repo
+(`update-ref refs/recovered/*`) without the operator's grant; quote a held-row count without the regex that
+produced it; treat `all-cited-landed` as proof outside the `LANDING LIST/ENTRY` family (47 of the 117 need their
+bodies read — #994, #2217 are legitimate); build a memory tier (165/166) before 167's gate, or an OS backstop (174)
+before 171's position doc; add a second summarizer next to pi-durable's compaction (176's rule); cite a git sha as
+durable evidence (D133 — `entries.id`); route `qa`/`qa2`/`auditor` at `ministral-3-14b-reasoning` (D137 stands) or
+edit `rig.selfdev.json` model fields (the family ruling is the operator's); run k = 3 gate arms without checking free
 VRAM; restart the operator's LM Studio/Strata unasked; `git add -A`; push; run `wsl`/`docker`.
 
 **Still in the tree, not the delegate's, not landed:** `@earendil-works/pi-coding-agent` `1.3.0` → `^1.3.0`,

@@ -164,3 +164,46 @@ DURIG_DB=./selfdev.sqlite node cli.mjs queue > .spike/delegate/queue-audit.json
 Machine-readable sidecars: `.spike/delegate/held-sha-unresolvable.json` (30 shas → citing rows),
 `.spike/delegate/held-sha-reach.json` (missing + unlanded sets),
 `.spike/delegate/inventory-pre-20261028.txt` (worktree/branch/scratch inventory).
+
+## 9. Same-session reconciliation with the rig's OWN citation instrument (and a defect in it)
+
+§5 published counts from two ad-hoc regexes. The repo ships the instrument for this job —
+`src/citation.mjs`, wired into `check` as `citation-unresolvable` — so the honest move is to run it and
+reconcile rather than to keep a private number. Run over the same 4,818-row snapshot:
+
+| extractor | distinct citations | unresolvable | rows affected | **non-terminal rows** |
+|---|---:|---:|---:|---:|
+| shipped `CITED = /\b[0-9a-f]{8,40}\b/` (+ must carry a digit **and** a letter) | 178 | 73 | 218 | **4** — #3506, #3603, #3743 (held), #4378 (deferred) |
+| same rule, lower bound **7** | 1,048 | 213 | 957 | **39** — the 38 held rows of §5 **plus #4378** |
+
+**The finding this exposes is a defect in item 190's built half, not in §5.** `{8,40}` is **blind to every
+7-char citation**, and 7 chars is git's default short-sha abbreviation — which is exactly what this rig's
+landing convention writes (`impl-item-2356 @02f1a36`-style entries, and 140 of the 213 unresolvable shas at
+`{7,40}` are 7-char). So the detector that exists to protect the live queue under-reports the population it
+exists to protect by roughly **10×** (4 → 39 non-terminal rows), and `docs/ROADMAP.md` 190's "4 non-terminal
+rows + a 308-row terminal baseline" is the sound of that blindness, not a clean bill of health. The 5-char
+floor is a real cost (a 7-char token has ~1 in 16 chance of resolving spuriously as an abbreviation of a
+different object), so the fix is the lower bound **plus** an ambiguity check, not just `{7,40}`. Machine
+sidecar: `.spike/delegate/citation-lowerbound-compare.json`. §5's 30/38 is confirmed as the right magnitude:
+`{7,40}` yields 39 non-terminal rows = my 38 held + #4378.
+
+**Method correction to §5 of this same file.** §5 proved "reachable from no ref" with
+`git --git-dir=<win>/.git branch -a --contains <sha>`. That is the **wrong probe**: `branch -a` walks only
+`refs/heads` and `refs/remotes`, so it cannot see the namespaces this very rig uses for recovery —
+`refs/recovered/*` (local) and `refs/archived/*` (the Windows side's 13 commits on no ref, per commit
+`4a38a13`). Re-proved properly, over **every** ref tip in the Windows store
+(`git --git-dir=<win>/.git rev-list $(for-each-ref --format=%(objectname))` → 1,556 reachable objects):
+the win repo has 32 `refs/heads` + 9 `refs/remotes/origin` + HEAD and **no `refs/archived/*`**; **all 24 are
+genuinely dangling**, and the remaining 6 are not commit objects there at all. The conclusion stands; the
+evidence for it is now the kind that survives the namespace question.
+
+**"Neither store" ≠ "work lost", and the repo already says so.** `src/citation.mjs`'s own header states the
+rule cannot tell a **stale pointer** from **lost work**: its worked example is #3743/#4378 citing
+`0c6fd7665`, which matches no object while the landing is `0c6fd76e465…` and the change **is** on `main`. So
+the 6 shas absent from both stores (`0c6fd7665 5d8c6237a c04cfac cfb4457 e8fdab6 eb7e69c1e`) are candidates
+for typo/stale-pointer, and only patch-equivalence decides (`git log -S`, `--grep='#<id>'`, `git patch-id`).
+Probed that way: #3506, #3603, #3726, #3743, #4378 return commits, but every hit is the *citation-rule*
+commit `6a8180b` or a runbook commit **about the defect**, not the original landing — so those probes do not
+clear them. For the `cfb4457` family (#1779–1782, 1786, 1788) `--grep` returns **0** commits. And #4804
+(deferred → impl) is the team's own row about this: "THE NINE SHAS ARE NOT REACHABLE — qa2 measured that
+`refs/heads/archived/` does not contain …". Route the six to that row rather than opening a seventh.

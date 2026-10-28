@@ -4996,3 +4996,29 @@ transitions, and the delegate did none of them. It does not make `all-cited-land
 sit inside the "cleared gates" set while being correctly held. It does not authorize writing to the Windows repo or
 fetching. And it does not settle the milestone: **D141's ratification is still owed**; the audit only makes `drain
 first` a priceable answer rather than a guess.
+
+**Same-session correction, issued against this decision's own numbers, because the rule in (c) cuts both ways.** After
+committing the audit I ran the rig's **shipped** instrument (`src/citation.mjs`, the `citation-unresolvable` rule item
+190 already built) over the same snapshot, and the reconciliation is: it reports **178 distinct citations / 73
+unresolvable / 218 rows / 4 non-terminal rows** (#3506, #3603, #3743, #4378), where the same rule with its lower bound
+moved from **8 to 7** reports **1,048 / 213 / 957 / 39 non-terminal** — and those 39 are exactly the 38 held rows of this
+decision plus #4378. So (i) the 30/38 was the right magnitude, and (ii) **the defect is in 190's built half, not in the
+delegate's scan**: `CITED = /\b[0-9a-f]{8,40}\b/` is blind to **7-char** citations, and 7 is git's default short-sha
+abbreviation — which is what this rig's own landing convention writes (`@02f1a36`-style); 140 of the 213 unresolvable
+shas at `{7,40}` are 7-char. A rule that exists to protect the live queue under-reports the live population by ~10×, so
+**190's "4 non-terminal rows" line is not a clean bill of health.** A 7-char floor has a real cost — a short prefix can
+resolve as an abbreviation of a *different* object, and ~84 % of the new 7-char tokens do resolve — so the owed half
+needs the lower bound **plus an ambiguity check**, not just `{7,40}`.
+
+Two more self-corrections in the same breath. (1) The "reachable from no ref" proof first used
+`git branch -a --contains`, which walks only `refs/heads` and `refs/remotes` and so cannot see the recovery namespaces
+this rig itself uses (`refs/recovered/*` locally, `refs/archived/*` on the Windows side per commit `4a38a13`). Re-proved
+with a `rev-list` over **every** ref tip in the Windows store (1,556 reachable objects; `win` carries 32 `refs/heads`,
+9 `refs/remotes/origin`, HEAD, and **no `refs/archived/*`**): the 24 are genuinely dangling and the other 6 are not
+commit objects there at all. The conclusion stands; the evidence now survives the namespace question. (2) "Absent from
+both stores" is **not** "work lost" — `src/citation.mjs` says so in its own header and gives the worked example
+(#3743/#4378 cite `0c6fd7665`, which matches no object, while the landing is `0c6fd76e465…` and the change **is** on
+`main`). Patch-equivalence decides, and probing it returned only *defect-about-the-defect* commits (`6a8180b`,
+`d5c268f`) for #3506/#3603/#3726/#3743/#4378 and **zero** for the `cfb4457` family (#1779–1782, 1786, 1788). So the six
+are typo/stale-pointer candidates, and they belong on row **#4804** (deferred → impl, "THE NINE SHAS ARE NOT REACHABLE —
+qa2 measured that `refs/heads/archived/` does not contain …") rather than in a new row.

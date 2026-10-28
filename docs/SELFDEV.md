@@ -746,3 +746,25 @@ memory needs room there too (issue #60)" -- but on this PC that would cost anoth
 is exactly the drive the low-RAM install needs. Cheapest correct order: put the pagefile on **D:** (or
 leave it at 32 GB) and keep C: for the model; or take the 96 GB RAM route, where the install drops to ~87 GB
 (fits D:), C: stays free, and pagefile pressure effectively disappears.
+
+## Operational pitfalls (learned delegating, 2026-10-28 — all five cost a re-measurement)
+
+- **`git branch -a --contains <sha>` is NOT a reachability proof.** It walks `refs/heads` and `refs/remotes` only, so
+  it is blind to the recovery namespaces this rig itself uses: `refs/recovered/*` (local) and `refs/archived/*` (the
+  Windows side, per commit `4a38a13`). Prove it with `git rev-list $(git for-each-ref --format='%(objectname)')` and
+  test membership. A "these commits are on no ref" claim built on `branch -a` is unverified.
+- **`git fetch` can never recover a dangling commit** — fetch transfers only objects reachable from advertised refs.
+  "Just mount the other machine and fetch it" silently does nothing for the class ROADMAP 190 is about. Make the
+  object ref-reachable first (`update-ref refs/recovered/<sha> <sha>`), then fetch — and that write is to the
+  **operator's** repo on the other machine, so it is a grant, not a delegate action.
+- **A citation count is the width of its regex, and the shipped extractor has a floor.** `src/citation.mjs` uses
+  `/\b[0-9a-f]{8,40}\b/`, so it never sees **7-char** citations — which is git's default short-sha abbreviation and
+  what this rig's `@02f1a36` landing convention writes. Floor 8 → 7 moves the finding from 4 to 39 non-terminal rows
+  (D142). Never quote a count without the pattern that produced it, and never read a rule's low count as "clean".
+- **`docs/NEXT.md` has a contract test: `demo/next-pointer.test.mjs`.** It requires `## NEXT SESSION` before any
+  `## CLOCK-OUT`, a `**Current item:**` line, a `#NNN` queue id, a next command containing `node cli.mjs`, and a line
+  starting with the literal `**Blocker:**` (a `**Blocker — …**` phrasing FAILS the suite). Run that demo after editing
+  the pointer, before declaring the suite green.
+- **Doc writes carry invisible characters you typed.** A U+200B landed in a code fence via the `write` tool and made a
+  repro command wrong. After writing docs, scan the touched region for control bytes **and** zero-width/BOM characters
+  (`ord(c) in (0x200b,0x200e,0x200f,0xfeff,0xa0)`), not just 0x00–0x08.
