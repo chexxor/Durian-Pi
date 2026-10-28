@@ -366,7 +366,9 @@ behaviour read from that pin. That gap is ROADMAP **241**.
 
 | clone | pin | license | what is actually in the tree | grade |
 |---|---|---|---|---|
-| `codex` | `d373d649` | Apache-2.0 | **full Rust source** (`codex-rs/`) + `docs/` — the only one of the five whose policy/approval engine, hook-trust storage and AGENTS.md budget are readable at a pin | source |
+| `codex` | `d373d649` | Apache-2.0 | **full Rust source** (`codex-rs/`) + `docs/` — the only one of the five whose policy/approval engine, hook-trust storage and AGENTS.md budget are readable at a pin | source — **partial observed pass run 2026-10-29**, guard axis + git-plane policy only:
+`docs/reviews/codex-enforcement-design-2026-10-29.md`. Permission profiles, the network tier and where `plugin_trust` is
+persisted are unread, so this is **not** a full review and no row of it may be cited as a behaviour claim about Codex |
 | `cline` | `51f63e4f` | Apache-2.0 | full TS monorepo (`apps/`, `sdk/`) — rule merge order and `paths:`-conditional discovery are readable | source |
 | `goose` | `775b3958` | Apache-2.0 | full Rust (`crates/`) + `documentation/docs/` (the vendor-site paths the round-2 report cited are **404**; the repo paths are the resolvable ones) | source |
 | `claude-code-docs` | `58d6da1e` | UNRECOGNISED (`LICENSE.md`) | **CHANGELOG + docs + plugins + mods only — no implementation.** Can never yield `observed`; it does yield changelog-grade evidence, which is better than marketing copy | docs |
@@ -390,3 +392,14 @@ behaviour read from that pin. That gap is ROADMAP **241**.
    Claude Code behaviour matters (the `/skill-doctor` cost report, the `/run-skill-generator` → `/verify` loop, the
    15-minute compaction window), it is either `advertised-elsewhere` or something we run on a host and label
    `observed` honestly — and Claude Code is not installed on this rig.
+4. **The guard-failure asymmetry, now partly `observed` (`codex` only, guard axis).** Of four guard designs the delegate
+   could inspect, **three fail open**: Codex's `PreToolUse` yields `should_block:false` on a hook error, malformed JSON,
+   exit-2-without-a-reason, or an unsupported `permissionDecision` (`hooks/src/events/pre_tool_use.rs`, `parse_completed` —
+   the vendor's own tests are named `unsupported_permission_decision_fails_open` and `deprecated_approve_decision_fails_open`),
+   while its **rule loader fails loud** (`core/src/exec_policy.rs:244-271`); Copilot CLI fails open on a 10 s timeout and on
+   TCC denial (#978, advertised); Cursor's `failClosed` is **opt-in** (docs). **pi fails closed** — `emitToolCall` carries no
+   try/catch (`src/core/extensions/runner.ts:1248-1266`) and the caller re-throws as `Extension failed, blocking execution`
+   (`src/core/agent-session.ts:668-680`). Nobody in the sample is both non-fatal and closed, and Codex guards the git plane
+   by **reachability** rather than verb-matching (`core-plugins/src/git_policy.rs:7-85`: 18 stripped `GIT_*` variables,
+   `-c safe.bareRepository=explicit`, and a throwaway `GIT_DIR` repo for agent-initiated git). Table, citations and what this
+   changes for ROADMAP **232**/**238**: `docs/reviews/codex-enforcement-design-2026-10-29.md`.

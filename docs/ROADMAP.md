@@ -4442,16 +4442,30 @@ decision (`types.ts:519-531`). hermes-agent `07f075c2` gates edits through `acp_
 construction**, the failure mode a guard of ours must not repeat. Across aider `5dc9490b`, crewai `f3d0099d`,
 metagpt `11cdf466`, openhands `6354932e`, oh-my-pi `6f3fbc94`, pi-subagents `31208242`, prime-agent `815e64b5`,
 symphony `be10a1b7`: **no guard found for the git verbs that took this rig's 36-row ledger**.
-*Owner:* delegate (harness surface) — the product half stays 232 · *Where:* `.pi/extensions/` (a `tool_call` handler on
+*Owner:* delegate (harness surface) — the product half stays 232 · *Where:* the 235 package (D158: `pi install --local`,
+a `tool_call` handler on
 `bash`: `git worktree prune|remove`, `git clean -fd`, and suite/test runs from this checkout) + the same rules restated
 in `docs/runbooks/workspace-move.md` · *Acceptance:* a scripted session in which the guard refuses the command and
-`git worktree list --porcelain` is byte-identical across it; the guard **refuses in non-interactive mode**; a false-positive
+`git worktree list --porcelain` is byte-identical across it; the guard **refuses in non-interactive mode**; the guard is
+**fail-closed and self-attesting** — it prints the rule set it loaded at startup, a malformed rule **stops the session**
+rather than degrading to allow, and a test proves a *throwing* guard blocks; a false-positive
 count over the stored session corpus is published with the pattern list (D142: count without pattern is not evidence).
+**Why that last clause is now a requirement, not a preference:** of the four guard designs the delegate could inspect,
+**three fail open** — Codex's `PreToolUse` sets `should_block:false` on hook error, malformed JSON, exit-2-without-a-reason
+and unsupported `permissionDecision` (`vendor/eval/codex · d373d649`, `hooks/src/events/pre_tool_use.rs`, whose own tests
+are named `unsupported_permission_decision_fails_open` and `deprecated_approve_decision_fails_open`); Copilot CLI fails
+open on a 10 s timeout and on TCC denial ([#978](https://github.com/github/copilot-cli/issues/978)); Cursor's
+`failClosed` is **opt-in** — while pi's contract throws and blocks
+(`src/core/agent-session.ts:668-680`, `Extension failed, blocking execution`). Nobody in the sample is both non-fatal and
+closed; the note is `docs/reviews/codex-enforcement-design-2026-10-29.md` §2.
 *Blind spots:* a harness-side guard is **not** the product fix and must not be reported as 232's closure — the
 unconditional `pruneWorktrees` call (`src/broker.mjs:1167` → `src/worktree.mjs:649`) still runs from inside the broker
 where no extension sees it; a guard on the outer agent cannot see a seat's verbs (217 governs those); regex guards on
 shell strings are best-effort by nature (`git -C … worktree prune`, aliases, `xargs`), so state the bypasses; and a
-guard that misfires on the runbooks' own commands will train everyone to disable it.
+guard that misfires on the runbooks' own commands will train everyone to disable it; and this row's headline ("no shipped
+harness guards these verbs") is scoped to the **ten observed systems** — GitHub Copilot CLI ships **opt-in** deny rules
+that do name them (`--deny-mode "command:git worktree prune"`) and fails open on timeout, so do not let the wider claim
+travel (`docs/reviews/codex-enforcement-design-2026-10-29.md` §2).
 
 **239. A delegate-authored file is recoverable from the harness's own session transcripts, and the only instruments that
 do it are untracked — which is 233's failure class, still live.**
@@ -4536,6 +4550,19 @@ for the delegate: the broker's own `pruneWorktrees` call runs where no outer ext
 *Do not:* treat the Codex engine as portable — it guards a *tool-call* plane inside one process; our destructive call
 is made by our own broker to itself. The transferable part is the shape (rules from the repo, out-of-band trust,
 fail-closed, recorded decisions), not the code.
+**Landed 2026-10-29 — the guard axis, `docs/reviews/codex-enforcement-design-2026-10-29.md`.** Three findings, all
+`observed` at `d373d649`: (1) Codex keeps rules as **one declarative file per config layer** (`config_folder()/rules/*.rules`
+loaded low→high, `core/src/exec_policy.rs:664-690`), the **project layer is a real layer** and trust is expressed by
+disabling it (`:665-668`), with an admin **requirements** tier above it (`:713`) — the repo-propagates-the-guard answer we
+lacked; (2) its `PreToolUse` guard **fails open** while pi's throws and blocks (§2 table of the note); (3) Codex defends
+the **git plane by reachability, not verb-matching** — `core-plugins/src/git_policy.rs:7-85` strips 18 `GIT_*`
+redirection variables, forces `-c safe.bareRepository=explicit`, and for *automatic* (agent-initiated) git points
+`GIT_DIR` at a throwaway repository under `$CODEX_HOME/.tmp/git-*`, keeping the real repository for *manual*
+(user-requested) git. That last one reframes 232's question from "how do we intercept the verb" to "which of the rig's own
+automatic git operations need the real `.git/worktrees` at all" — probeable in the disposable clone with no product code.
+**241 is NOT closed:** permission profiles (`config/permissions.rs`, `permission_profile_catalog.rs`), the
+requirements-override semantics, the network tier, and **where `plugin_trust` is persisted** (the out-of-band claim stays
+unconfirmed) are unread.
 
 **242. `tools/vendor-pins.mjs --tags` prints `_not fetched_` for prefixed tag schemes, so the pin table under-reports
 drift on the fastest-moving clone in the store.**
