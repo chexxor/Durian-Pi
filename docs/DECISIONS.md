@@ -5942,3 +5942,34 @@ context window", "truncated at 1,536 characters", "first 5,000 tokens of each" /
 self-sweep, `docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md`). The delegate still does not claim, complete or
 route queue items: 240-243 are **registered-not-scheduled**, and pm owns ordering. The `.pi/` grant is real but
 **unused** so far — no `.pi/` path exists in this tree.
+## D159 — The research agent is off-host with no repo write access: the delegate is the landing path, and a citation's portable unit is a quote, not a line range (2026-10-29, operator statement; runbook amended by the delegate)
+
+**The constraint, stated by the operator.** *"The research agent is not on this computer, and does not have write access to
+the repo."* That invalidates two things already written down: the round-3 prompt asked the agent to `git add` its deliverable
+and to ship an `inputs/fetched/` corpus, and `docs/runbooks/research-request.md` asked for *"the deliverable path"* without
+ever saying **who moves the artifact into the repo**. Round 2 is what that omission costs: the report arrived citing
+`[^542f21#49]`-style line ranges into pages fetched into the agent's **own** workspace — 64 distinct in-body markers, 14
+defined, **50 unopenable from this repo**, plus 3 vendor URLs now HTTP 404.
+
+**Why this changes the prompt's shape, not just its last step.** A line range is an address into *a copy someone else has*.
+With no file channel, the only citation unit that survives the trip is **a verbatim quote of ≤ 40 words + the URL + the
+agent's own fetch date**: the delegate can fetch that page itself, on a later date, and still find the sentence. Asking for
+line ranges instead manufactures checkability that no one downstream can exercise — and the delegate's own copies are dated
+**2026-10-29**, later than the agent's read, so even a correct range may no longer point where it did. The rule is therefore:
+quote required, line range welcome **beside** it, and **a quote the delegate cannot locate is recorded `unverified` in the
+folded docs while the agent's report body stays verbatim** — we correct our record, not their artifact.
+
+**Changed today.** `docs/runbooks/research-request.md`: Preconditions (the constraint; prompts ask for *content to copy*,
+never for commits or repo writes), Do 1 (Deliverable gains the copy-paste shape — one fenced block per section, no narration,
+because round 2's arrival had the agent's working notes glued to the title line; Evidence discipline gains the
+quote-portability rule), Do 5 (the delegate commits **on the agent's behalf**, and fetches + manifests + quote-checks first),
+Verify (citation integrity is **measured**: marker-vs-definition count and an HTTP check of every evidence URL), and "If it
+fails" now names four failure modes with their handling. `inputs/fetched/README.md` states who fetches and why, the manifest
+columns including *quotes found in this copy*, and the `grep` that is the verification step. Round-3 prompt
+`docs/reviews/harness-tools-skills-followup-2-research-prompt.md` rewritten accordingly: Task A2 asks for quotes and states
+"you cannot send us files"; "What not to do" now forbids file writes, clones and commits outright.
+
+**What did NOT change.** The delegate still cannot call the research agent (routing stays the operator's,
+`docs/runbooks/research-request.md` "Escalate to"). The agent still owns the questions — the delegate taking over the
+*fetching* is plumbing, not the delegate answering research by guessing. And ROADMAP **240–243** remain
+registered-not-scheduled: pm sequences them.
