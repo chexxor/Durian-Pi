@@ -768,3 +768,26 @@ leave it at 32 GB) and keep C: for the model; or take the 96 GB RAM route, where
 - **Doc writes carry invisible characters you typed.** A U+200B landed in a code fence via the `write` tool and made a
   repro command wrong. After writing docs, scan the touched region for control bytes **and** zero-width/BOM characters
   (`ord(c) in (0x200b,0x200e,0x200f,0xfeff,0xa0)`), not just 0x00–0x08.
+
+## Operational pitfalls (second block, same session — measured, not remembered)
+
+- **`DURIAN_PI_DB` is ignored by the CLI, and you will not see it fail.** Discriminating test: `DURIAN_PI_DB=./nope.sqlite
+  node cli.mjs status` → `"db": "./selfdev.sqlite"`. `cli.mjs:143` is `CFG.DURIG_DB ?? "./rig.sqlite"`; the store is pinned
+  by **`durig.config.json`** in the repo root. So (i) bare `cli.mjs` opens the right store *on this repo only*, and (ii) an
+  explicit `DURIAN_PI_DB=` pointing at another store (an item worktree's, a moved workspace's) is **silently discarded**.
+  A test that passes `DURIAN_PI_DB=./selfdev.sqlite` and sees `./selfdev.sqlite` proves nothing — that is the confound I
+  walked into; discriminate by naming a path the default could not produce.
+- **A runbook you are told to follow can be single-OS.** `docs/runbooks/broker-down-or-stalled.md` `## Do` is
+  `taskkill /F /PID`, `$env:…`, `scripts/serve-noroot.ps1`; `scripts/` has **no `*.sh`**, and the repo has a second Linux
+  host (D131, and `ROADMAP.md:2875` already says "none on the Linux box" about the provider). Name the OS in every
+  measurement, and when a runbook's Diagnose/Do cannot run natively, say so as a finding instead of improvising an
+  equivalent — the gap is the work item.
+- **`runbook-stale` cannot see an unverified runbook.** `staleRunbooks` (`scripts/clockin.mjs:110`) requires a *dated*
+  `last_verified`; 7 of 39 runbooks say `unverified`, so they are skipped by staleness forever. A runbook whose
+  `last_verified: unverified` + `check_rule: null` is doubly uninstrumented — trust its *Diagnose* commands only after
+  re-running them on your OS.
+- **The guaranteed-read surface is narrower than "the docs".** `scripts/clockin.mjs` digests `docs/NEXT.md`'s
+  `## NEXT SESSION` section **verbatim** and `docs/SELFDEV.md` as **headings only** ("read the section you need, not the
+  file"). A pitfall written only into a `SELFDEV.md` body is a *hint* the next session may open, not a control. Put what
+  must never be re-discovered in the pointer block (cap 200 lines, `demo/next-pointer.test.mjs` enforces), and keep the
+  long form here.

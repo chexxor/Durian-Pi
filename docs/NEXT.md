@@ -58,13 +58,33 @@ are now **corrected**, and the `drain first` option is **priced**:
   exist only, unreachable, on the Windows drive. That is D133's cost, measured: **a queue that pins gates on
   git object positions has no durable truth layer under it** — the strongest argument yet for M5's substrate half.
 
+- **Three propagated claims that measured FALSE this session (native Linux, `cd52f76`).** (a) `DURIAN_PI_DB` is
+  **ignored by the CLI** — pointing it at `./definitely-not-a-store.sqlite` still resolved `db: ./selfdev.sqlite`;
+  `cli.mjs:143` is still `CFG.DURIG_DB ?? "./rig.sqlite"`, and what actually pins the store is **`durig.config.json`**
+  (`DURIG_DB: "./selfdev.sqlite"`, plus the LOCAL/VERIFIER provider URLs). So bare `cli.mjs` is safe *on this repo* and
+  wrong *anywhere else* — the passed path is silently discarded, which is worse than an error. `AGENTS.md` clock-in
+  step 4 states the old shape ("silently opens an empty `./rig.sqlite`"); it is the operator's file and dirty, so it is
+  a correction to *ask* for, not one to commit. (b) `docs/runbooks/broker-down-or-stalled.md` is **Windows-shaped**
+  (`taskkill /F`, `$env:`, `scripts/serve-noroot.ps1`) and `scripts/` contains **no `*.sh`** — on a Linux host the
+  runbook AGENTS.md step 5 mandates cannot be followed natively, and D131 forbids `wsl`/`docker`. Its own Diagnose
+  line also passes the ignored `DURIAN_PI_DB=`. (c) **7 of 39 runbooks are `last_verified: unverified`**, and
+  `staleRunbooks` (`scripts/clockin.mjs:110`) skips any runbook without a *dated* `last_verified` — so the staleness
+  probe is structurally blind to exactly the runbooks that were never verified. That broker runbook is one of them.
+
+**Delivery channel, newly measured — this is the real critical path.** The broker is down and the **only launcher in
+`scripts/` is `serve-noroot.ps1`**; it is 15 lines (pin `DURIG_DB`, unset `DURIG_SEAT_ROOT`, spawn `node cli.mjs serve`
+detached into `.spike/serve.{out,err}`, print the pid). A Linux equivalent is ~15 lines plus a demo — 191's own pattern,
+"one mechanism, and a demo that proves the docs match the code". Until it exists (or the operator runs the equivalent by
+hand), **every** team-side item below is undeliverable, and no `delivered:true` receipt is obtainable.
+
 **Blocker:** unchanged in kind, and no build is waiting on it — four operator rulings (D141). (1) **ratify or
 replace the milestone** — answer `M5`, `189`, or `drain first`; this audit makes `drain first` a concrete
-first option (70 rows, no GPU). (2) **The 189 verifier family** — a cost/throughput/context/availability
+first option (**71** rows at floor 7, no GPU). (2) **The 189 verifier family** — a cost/throughput/context/availability
 choice, not a capability score; the gate cannot rank the resident families at n = 8 (D140). (3) **The five
 parked rows** — recommended replies already in `docs/reviews/parked-questions-2026-10-26.md`. (4) **`#4785`
 `done` with no artifact anywhere**; the "completion without an artifact" detector is still unregistered.
-D139's verifier-design ask is **still unsent** (broker down; `intent.mjs` spoofs operator input).
+D139's verifier-design ask is **still unsent** (broker down; `intent.mjs` spoofs operator input). **(5) NEW: the broker,
+or a Linux launcher** — see the delivery-channel paragraph; it gates (1)–(4) becoming real work.
 
 **Queue (re-measured):** 4,818 subjects — `done` 3,748 · `cancelled` 777 · `held` **274** · `deferred` **19** ·
 `queued` **0** · `claimed` **0**; broker `{state: down, reason: "no broker state"}`; attention = 5 seats
@@ -77,7 +97,7 @@ D139's verifier-design ask is **still unsent** (broker down; `intent.mjs` spoofs
 
 **Next thing, if the operator says `M5`.** Spool the prepared intent — `.spike/delegate/pm-intent-milestone-5.md`
 (drain precondition + the 171→176 order + hard constraints) — and **also** `.spike/delegate/pm-intent-held-drain.md`
-(the 70 rows, the 67 candidates, the 6 lost shas, the recovery ask), `--request-id held-drain-facts-2026-10-28-1`.
+(the 71 rows, the 69 candidates, the 6 lost shas, the recovery ask), `--request-id held-drain-facts-2026-10-28-1`.
 Both need the broker up to confirm `delivered`. Then let `pm` decompose: the delegate does not claim, route or release.
 
 **Exact next command** (measure first, then the one question):
