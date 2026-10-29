@@ -4938,3 +4938,43 @@ skipped inside ``` fences while paths/sizes/URLs still count there; and a flag t
 swallow the next flag and leak its value into the positional path list, corrupting the machine output. A citation
 checker that cries wolf is deleted within a session, so it prints its patterns, its zeros, and its own soft findings —
 this note's own evidence file self-charges **14 findings, all soft**, and is inside its own scan.
+
+**253. No item reaches `done` until it is reviewed by a cross-family verifier AND its artifact is an ancestor of
+`main` — the operator's process ruling of 2026-10-29 has no mechanism behind it yet.**
+*(delegate; registered from the operator's instruction 2026-10-29, "every work item is reviewed and merged to the
+main branch before the item is completed")*
+**What exists today, measured at `src/rig.mjs:931-1060` in this checkout:** `complete_work(itemId, resultSummary,
+evidence?)` sets `item.status = "done"` **in the same commit** in which the author declares it, `evidence` is
+`Type.Optional`, and the same handler then runs workspace cleanup that *retires the item worktree* (`src/rig.mjs:1055`;
+`src/seatguard.mjs:75` records that it also silently resets the seat's cwd). The only thing that notices a missing
+evidence row is `check`'s `verification-without-evidence` rule — a **report**, not a gate: re-run 2026-10-29, it prints
+**fix-now naming 435 verification items completed without evidence**. Nothing anywhere requires a merge: `docs/runbooks/land.md`
+records the consequence twice (#3990, #4163 "closed while their branches were unlanded"), and **100** already asks for the
+*measure* (branch tip not an ancestor of `main` while the item reads `done`). This row is the **enforcement** half of 100.
+*Owner:* impl (with `qa`/`auditor` for the acceptance and `security` for the bypass surface — `ownership` classes
+`verification` and `src-tools-harness`). *Where:* the `complete_work` handler in `src/rig.mjs` (refuse the transition,
+not warn about it) + the queue state machine in `docs/WORK-ITEM-LIFECYCLE.md` (a pre-`done` state — proposed
+`awaiting_review` → `awaiting_merge` → `done`, so a reviewer's verdict and a merger's act are **two** records, not one
+narrative) + a `check` rule reusing 100's ancestry test + `scripts/land.mjs`'s existing **landing lock** as the merge
+mechanism.
+*Acceptance (failing-first, per `docs/failing-first-recipe.md`):* (1) a demo that is RED today: an author seat calls
+`complete_work` with an artifact whose tip is **not** an ancestor of `main` and the call **must be refused**, naming the
+sha and the missing ancestor; (2) the same call after the merge is accepted, and the recorded `evidence.artifact` is the
+**merge commit** on `main`, never a branch tip (the description already demands a derived artifact be named as MERGED —
+today only the prose says so); (3) a review by a seat whose resolved model string **equals the author's** does not
+satisfy the review half — measured 2026-10-29: `check` prints `single-model-rig` **fix-now**, "all 12 seats resolve to
+local/iq3_s", so criterion (3) is RED on this rig until a cross-family verifier is routed and gated (see
+`docs/reviews/delegate-notes-2026-10-29-flint-verifier.md`); (4) the guard holds through **whichever** shell tool the
+host registers (217), because a verifier that cannot re-run a command cannot produce the evidence this gate accepts;
+(5) the refused transition leaves the worktree and the claim **intact** — a gate that completes the cleanup before
+refusing destroys the thing it wanted landed.
+*Blind spots / sequencing:* **who holds the merge verb** is an unruled question — land.mjs's lock is held by the
+delegate/operator today, and if a seat may merge its own branch, 232's unscoped `pruneWorktrees` path (`src/broker.mjs:1167`,
+`src/worktree.mjs:649`) is in the same code family and is still unclaimed; items with **no git artifact** (a store audit,
+a routing decision) need an explicit alternative artifact form (`selfdev.sqlite@read` already appears in `check`'s own
+advice at `src/checkup.mjs:790`) or the gate will be routed around; and 217 must land first — a seat with no spawnable
+shell cannot produce re-runnable evidence, so this gate would either block everything or be switched off.
+*Do not:* treat `evidence` being present as verification (a command with no re-run is a claim — `src/rig.mjs`'s own
+comment cites lead #1553); add a human confirmation gate where the landing **lock** is the enforceable mechanism
+(`docs/runbooks/land.md`: "when a mechanism replaces a discipline, retire the discipline explicitly"); or mark an item
+done and merge it in a later landing pass, which is precisely the #4163 failure this row exists to end.
