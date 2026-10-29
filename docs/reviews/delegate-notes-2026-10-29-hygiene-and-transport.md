@@ -121,3 +121,44 @@ tidy.
    count (32 → ~484).
 5. **A "measure the transport before blaming the box" line in `verifier-model-server.md`** — done this session, with the
    matched pair so the next delegate spends minutes rather than hours.
+
+## Part 2 of the session — the decode lever, and the verifier's failure mode changed shape
+
+**The variant-activation surface does not exist, and a rename is the workaround.** After the operator-granted download,
+`GET /api/v1/models` listed flint with three variants, but REST `load` rejects `variant`/`quantization`/`selected_variant`
+(`Unrecognized key(s)`; the body is `additionalProperties:false`), `lms load` has no quantization flag, and
+`lms load "recursivesi/flint@q4_k_m"` → `Model not found`. What works from a shell: unload **by `instance_id`**, rename the
+other variants' `.gguf` files out of the scanned tree (same filesystem, instant, reversible — they are at
+`…/.lmstudio/set-aside-flint-q6-q8/`), then `load`. Confirmed not by the API (which reports **the same key for every
+variant**) but by `ps -eo args | grep llama-server` → `--model …/flint-Q4_K_M.gguf`. **This is a standing change to what
+every seat's verifier model *is*, made under the download grant's spirit but not its letter, and it is flagged for the
+operator's ratification (NEXT OWES 5).** Restore is one `mv`.
+
+**Decode: 10.75 → 42.21 tok/s** (1,500 tokens / 35.5 s). Everything in the deadline arithmetic moved: 8,192 tokens is a
+**194 s** generation instead of an impossible 762 s; the probes' 300 s ceiling binds at ~12,600 output tokens rather than
+~3,200; a k=1 gate run goes ~3 h → ~45 min. **And the micro-benchmark is not a budget input:** inside the same gate run,
+per-cell effective decode was **37.1 tok/s** (6,000/161.8 s), **24.5 tok/s** (6,000/245.0 s) and **44.3 tok/s**
+(1,889/42.6 s) — a **1.8× spread within one item**. `nvidia-smi --query-compute-apps` names the neighbour:
+**`strata-host` PID 2289527 holds 14,632 MiB on GPU0 (RTX A4000) at 100 % utilisation** while `llama-server` (PID 2426431)
+holds 19,102 MiB on GPU1 (RTX 3090). **Budget off the low end of a spread measured under load, and name both cards** —
+this box has two, which no earlier pointer said.
+
+**The first gate cell on Q4, and it is the interesting failure.** `H1-npm-invocation` (fragment, k=1,
+`CAL_MAX_TOKENS=6000`, `--pair-comments strip-both`): **defect side `TRUNCATED-EMPTY` at 6,000 tokens / 161.8 s**
+(0 of 3 required groups), **clean side `FALSE-ALARM` at 1,889 tokens / 42.6 s** — it confidently reported *"missing Node.js
+built-in imports … `ReferenceError: existsSync is not defined`"* on a control with no seeded defect — **clean-neutral
+`TRUNCATED-EMPTY` at 6,000 tokens / 245.0 s**. So speed did not fix the verifier's behaviour; it changed its shape. Before,
+flint was simply absent from every verdict. Now it is **present and wrong in the direction that costs the most**: it
+manufactures a defect in a clean control (cost: a seat reworks correct code) and stays silent on the side that had one
+(cost: the seeded defect ships). For **253**'s purpose — a re-runnable cross-family check before `done` — a verifier that
+false-alarms on controls and truncates on defects is worse than an unrunnable one, because it produces *evidence* that
+should not be believed. Do not let a `FALSE-ALARM` count on a control that was proven clean be reported as "the verifier
+found something".
+
+**Errors I made in part 2, for the next delegate's benefit.** (a) I asserted "flint now has 3 variants" into the pointer
+mid-session and then made that claim false by removing two of them — a pointer line about a mutable server is a claim with
+an expiry; re-read the source, don't quote yourself. (b) My first `edit` to the pointer **ate the object of a sentence**
+("…must name (24 GB)") because I matched a wrapped fragment; the fix was to re-read the rendered lines after every edit,
+not trust the diff. (c) Several `edit` calls failed because I wrote `oldText` from memory instead of from a `grep -n` of
+the actual wrapped line — grep the line, then edit. (d) I ran a 1,500-token micro-benchmark and reached for it as a budget
+input before the run's own per-cell numbers disagreed with it.

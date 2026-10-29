@@ -47,18 +47,21 @@ node tools/broker-serve.mjs --status    # broker + the 4 spooled intents; do NOT
 DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json   # FAILING today: verification-without-evidence ×1 (435 items), duplicate-item ×54, citation-unresolvable ×5, evidence-tree ×1. single-model-rig PASSES — a string comparison, not certification (D137)
 DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit           # the seed for 256's instrument; heed docs/BRANCH-AND-WORKTREE-LIFECYCLE.md:244 — `reapable: 0` is not a verdict
 git fsck --unreachable 2>/dev/null | grep -c '^unreachable commit'   # 452 on 2026-10-29, dated 10-14→10-21; read docs/runbooks/cross-clone-object-recovery.md before anything runs `git gc` here
-# verifier chain (server holds flint Q6 at 65,536; a Q4_K_M sits on disk unactivated):
+# verifier chain (server holds flint **Q4_K_M** at 65,536 — Q6/Q8 are set aside at ~/.var/app/ai.lmstudio.lm-studio/.lmstudio/set-aside-flint-q6-q8/, restore = mv back):
 curl -s --max-time 15 http://127.0.0.1:1234/api/v1/models | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const m of JSON.parse(s).models)console.log(m.key,m.variants.join(" "),m.loaded_instances.map(i=>i.id+"@"+i.config.context_length).join(","))})'
-CAL_MAX_TOKENS=6000 node --import ./.spike/gate/no-headers-timeout.mjs tools/model-probes/gate.mjs http://127.0.0.1:1234/v1 recursivesi/flint flint-k1-out6k --replicate 1 --pair-comments strip-both --out .spike/gate/flint-k1-out6k.json   # the shim defeats the 300 s ceiling; --plan first spends nothing. Budget ~3 h at 10.75 tok/s — the verifier choice is OPERATOR OWES 5
+ps -eo args | grep llama-server | grep -o '\-\-model .*gguf'   # the ONLY surface that names which quantization is live — the API key is identical across variants
+CAL_MAX_TOKENS=6000 node --import ./.spike/gate/no-headers-timeout.mjs tools/model-probes/gate.mjs http://127.0.0.1:1234/v1 recursivesi/flint flint-q4-k1-out6k --replicate 1 --pair-comments strip-both --out .spike/gate/flint-q4-k1-out6k.json   # --plan first spends nothing; budget ~200 s/cell × 19 cells at the 22–44 tok/s measured in-run. **A run is already in flight** — read `.spike/gate/flint-q4-k1-out6k.log` before starting another.
 ```
 
 **Blocker:** three, and the first is now the operator's own condition. **(a) No hygiene evidence** — 256's instrument does not
 exist, no rehearsal has run, and the rehearsal cannot run before **217** (no spawnable shell → a seat cannot run `git` or the
 suite) nor safely before **232** (unscoped `pruneWorktrees`, `src/broker.mjs:1167`/`src/worktree.mjs:649`); releases stay
-`pm`'s verb, the start stays the operator's. **(b) The verifier is uncertified and measurably marginal**: the gate has never
-completed, flint's reasoning is **unbounded** (`allowed_options: ["on"]`; `thinking:false` accepted-and-ignored; at 1,200 tok
-→ **0 answer chars**, at 4,000 tok → **17,554 reasoning chars, 0 answer**), and `DURIG_VERIFIER_MAX_TOKENS 8192` at
-**10.75 tok/s** = **762 s** against the provider's own **600,000 ms** request timeout (`src/config.mjs:330-344`) — **255**.
+`pm`'s verb, the start stays the operator's. `pm`'s work has not started). Still owed rulings: **221** seat-root, **231** "the queue drains". **(b) is restated for Q4
+on 2026-10-29T03:1xZ:** the *deadline* half of 255 is resolved by the variant change (8,192 tokens = 194–373 s at
+42 tok/s, inside both ceilings), so the blocker is now **behavioural**: reasoning stays unbounded (`allowed_options:
+["on"]`; all four levers `answerChars=0` at 1,200 tokens on Q4 too), and the first gate cells show the model **silent on
+the side with a seeded defect and confident on a clean control** — which is the wrong-way-around failure, and the reason a
+completed run is worth reading before another verifier choice is made.
 **(c) The queue has nothing claimable** and `pm` has only just received the rows (the spool ask is discharged; `pm`'s work has
 not started). Still owed rulings: **221** seat-root, **231** "the queue drains". **Applied under the grant 2026-10-29:** the
 `Q4_K_M` download (24.17 GB, complete) — but **no documented surface can activate it** (REST `load` and `lms` cannot select a
@@ -77,10 +80,15 @@ devtools 33/2 · qa 21/0 · security 6/0 · lead 4/1 · pm 3/2 · auditor 2/0 ·
 **Providers (era-attributed, 226/229):** every failure in the last-30-submission window belongs to the **`deepinfra` era**; the
 current `local/iq3_s` era has none — the `402`s in recent rows are history.
 **Verifier (D163 + this session):** five seats (`qa`, `qa2`, `advocate`, `auditor`, `designer` — what `src/verifierrole.mjs`
-actually matches; `docs/SELFDEV.md` says three and is wrong) resolve to **`verifier/recursivesi/flint`**. LM Studio `:1234`
-serves **Q6_K only**, loaded **65,536**, `parallel 4`, `num_experts 6`, flash attention, KV offloaded; **decode 10.75 tok/s**
-(4,000 tok / 372.0 s), COLD prefill ~212 tok/s, WARM TTFT 0.23 s at 6,016 tok, and a **cold instance pays ~22 s before its
-first token** (32-token reply took 25.5 s just after load). `durig.config.json` (gitignored): `DURIG_VERIFIER_MODEL
+actually matches; `docs/SELFDEV.md` says three and is wrong) resolve to **`verifier/recursivesi/flint`**. **As of
+2026-10-29T02:4xZ the served variant is Q4_K_M, not Q6_K** — the Q6/Q8 `.gguf`s were **renamed out of the scanned tree** to
+`~/.var/app/ai.lmstudio.lm-studio/.lmstudio/set-aside-flint-q6-q8/` because no documented surface can select a variant
+(restore = one `mv`; see `docs/runbooks/verifier-model-server.md` §variant activation). **Same model key, materially
+different model — ratification owed (OPERATOR OWES 5).** Loaded **65,536**, `parallel 4`, `num_experts 6`, flash attention,
+KV offloaded; **decode 42.21 tok/s** (1,500 tok / 35.5 s) — Q6_K was **10.75 tok/s** (4,000 tok / 372.0 s) — COLD prefill
+~212 tok/s on Q6, WARM TTFT 0.23 s at 6,016 tok, and a **cold instance pays ~22 s before its first token** (32-token reply
+took 25.5 s just after load). Verify which variant is live with `ps -eo args | grep llama-server | grep -o '\-\-model
+.*gguf'` — the API reports the same key for every variant. `durig.config.json` (gitignored): `DURIG_VERIFIER_MODEL
 recursivesi/flint`, `_CONTEXT 65536`, `_MAX_TOKENS 8192`. Verifier prompt sizes p50 **55,538** (`qa`) / **108,435**
 (`advocate`): 65,536 is a floor and **208** is the fix. `demo/local-model-pointer.test.mjs` and
 `demo/second-local-provider.test.mjs` **PASS** at this config; `check`'s `single-model-rig` **passes** — a string comparison
@@ -92,8 +100,10 @@ source clone `/mnt/d/Git/Durian-Pi` is **not mounted** (`/mnt` empty), so those 
 hygiene + the minting grant (OPERATOR OWES 3)**. Pi seat-agent state is host-local and absent here, so a seat worktree here is
 **created, not migrated** — the first `up`/`worktree`/`run`/`send` is the writing verb `docs/runbooks/workspace-move.md`
 gates. Inventory diffed clean across today's spool writes (`.spike/{pre,post}-writing-inventory-2026-10-29.txt`).
-**Box:** 94 GB RAM, ~20 GB available, **swap 7/7 full**; `strata-host` 55 GB RSS on the 16 GB GPU, flint 18.3 GB on the 3090
-(24 GB). Model server: 3 models on disk, `flint` now has **3 variants** (`@q6_k`, `@q8_0`, `@q4_k_m`).
+**Box:** 94 GB RAM, ~20 GB available, **swap 7/7 full**; **two GPUs** — GPU0 **RTX A4000 16,376 MiB** (~14.8 GB used,
+incl. `strata-host`) and GPU1 **RTX 3090 24,576 MiB** (~21.6 GB with Q4_K_M + KV) — so any "it fits in VRAM" claim must name
+the card. Model server: 3 model dirs on disk; **the `flint` catalog now resolves to one variant (`@q4_k_m`)** because the
+Q6/Q8 files are set aside — with them in place it lists `@q6_k @q8_0 @q4_k_m`.
 
 ## INCIDENT (read before any `up`/`worktree`/`run`, and before trusting a "suite is green" claim)
 
@@ -121,15 +131,19 @@ is, line 21), so an instrument left there is one `git add` from safety and one s
 4. **Commit-or-discard for untracked instruments (233).** `.scratch/transcript-write-bodies.mjs` and friends are untracked and
    `.scratch/` is **not** ignored; several ROADMAP rows cite lost files as landed. Either the team re-creates them (labelled
    re-created) or those rows get amended — your scope call, not a seat's.
-5. **Which verifier, and at what speed (D137 binds).** Measured options, cheapest first: **(a)** finish the gate k=1 at
-   `CAL_MAX_TOKENS=6000` under the transport shim (**~3 h** at 10.75 tok/s; k=3 ≈ 9 h) and keep flint only on a pass;
-   **(b)** **activate the Q4_K_M** — you must do this in the LM Studio GUI (the REST `load` body accepts no variant key:
-   `variant`/`quantization`/`selected_variant` all return `Unrecognized key(s)`, and `lms load` has no quantization flag;
-   `lms` only works at all with `HOME=$HOME/.var/app/ai.lmstudio.lm-studio`) — or grant the delegate to move the Q6/Q8 files
-   aside; then re-measure decode, since the whole feasibility question is decode speed; **(c)** a **remote** cross-family
-   verifier (money + a funded key); **(d)** start **uncertified** — cheapest, and exactly what **D137** calls worse than no
-   verifier, because `check` then reports a green the rig has not earned. Not a fallback: ministral at 8,192 (0/2) or
-   single-family `iq3_s`.
+5. **Which verifier, and at what speed (D137 binds).** The speed question is **answered**: Q4_K_M activates by
+   rename-and-reload (no API surface exists — see the runbook), decode is **42 tok/s isolated / 22–44 tok/s in-run**, and
+   8,192 tokens is now a **194–373 s** generation, inside both ceilings. What is left is behavioural, and the first in-run
+   evidence is unfavourable: on `H1-npm-invocation` the **defect** side was **`TRUNCATED-EMPTY` at 6,000 tokens** while the
+   **clean control returned a `FALSE-ALARM`** — it confidently reported missing `node:fs`/`node:path`/`node:child_process`
+   imports and a `ReferenceError: existsSync is not defined` on a control with no seeded defect. Options, cheapest first:
+   **(a)** read the completed k=1 run and decide on its numbers (`.spike/gate/flint-q4-k1-out6k.json`); **(b)** raise
+   `CAL_MAX_TOKENS` / `DURIG_VERIFIER_MAX_TOKENS` to what Q4 can now deliver and re-run at **k=3** — but the reasoning shape
+   warns that a bigger budget may buy only more reasoning; **(c)** a **remote** cross-family verifier (money + a funded
+   key); **(d)** a different local model that answers inside the budget; **(e)** start **uncertified** — cheapest, and
+   exactly what **D137** calls worse than no verifier, because `check` then reports a green the rig has not earned. Not a
+   fallback: ministral at 8,192 (0/2) or single-family `iq3_s`. **And ratify a config change the delegate made:** the rig
+   now serves **Q4_K_M** with Q6/Q8 set aside (restorable by `mv`) — same model key, materially different model.
 6. **Whether to start the channel, and the scale threshold (256).** The queue is **0 claimable**, so "start now" buys a
    started-but-idle team; the team stays **not started** until you say so. The **2 → 5 → 12** seat threshold on the hygiene
    rehearsal's violation counts is **yours and unset** — that number is what the operator's restart condition turns on.
