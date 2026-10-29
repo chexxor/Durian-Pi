@@ -6359,3 +6359,58 @@ and a context/`parallel` reconfiguration that returns KV bytes to weights) and w
 bigger Qwen quants. Relaxing D137 to admit a same-family verifier remains the operator's ruling to make, and this entry records
 the cost of making it: a verifier that shares a family shares its blind spots. **Status:** grants recorded, pointer re-cut to
 §OPERATOR GRANTS (the superseded §OPERATOR OWES is archived verbatim); nothing executed yet; nothing pushed.
+
+## D166 — Both local verifier candidates are now measured and rejected; the "flint thinks too much" story was substantially a *host instruction* and an *excerpt artifact*; and the 452 orphan commits are anchored (2026-10-29, operator's model swap + delegate measurement)
+
+**What the operator changed and what I corrected.** The operator unloaded flint and loaded
+`mistralai/ministral-3-14b-reasoning` **Q6_K**, then asked that things be configured correctly. They were not:
+`durig.config.json` pointed at `recursivesi/flint` — an **unloaded** model, so any verifier request would have made LM Studio
+re-offload a 24 GiB model onto a card already at 23.0/24.5 GiB — and it declared `DURIG_VERIFIER_CONTEXT 65536` against an
+instance launched `--ctx-size 8192 --parallel 4`, with `DURIG_VERIFIER_MAX_TOKENS 8192`, i.e. a request that cannot be
+satisfied (prompt + 8,192 output > 8,192 total). Now: model `mistralai/ministral-3-14b-reasoning`, context `8192`,
+max tokens `3000`. Registered as **259**, with a fixture for the impossible pair, because nothing in `check` catches it.
+
+**(1) The unbounded-thinking instruction is the host's, not the model's.** LM Studio's generated chat template sets a *default
+system message when the request carries none*: *"First draft your thinking process (inner monologue) until you arrive at a
+response… Be as casual and as long as you want…"*. Matched pair on ministral Q6_K, `temperature 0`: no system message →
+400/400 tokens, `finish=length`, `content=0ch`; with a bounding system message → **1.9 s, `finish=stop`, 62 tokens, correct
+verdict, `reasoning=0ch`**; raising that arm's budget to 1,200 changed nothing. Four request-level reasoning toggles were
+ignored. **Why it matters:** for days the budget was the thing being adjusted, and for requests without a system message the
+budget was never the variable — the instruction was. Every durig-initiated completion must carry a system message.
+**(2) `flint`'s "4/4 false alarms on clean controls" was mostly our instrument, and I withdraw it.** Three of four alarms were
+true statements about the excerpt my window showed — `existsSync`/`join`/`readFileSync` are imported at
+`src/worktree.mjs:11,13`; `isWindows` is declared at `src/job-object.mjs:30`; `clockin.mjs:27-29` imports all five the model
+named — and `corpus.mjs:250` already warned that windowing manufactures exactly these. The runner excuses an artifact turn only
+when it makes *no* code-level claim, so truth about my scaffolding scored as a judgement failure. The fourth cell's actual
+verdict was *"No — there's no defect…"* and was still counted an alarm for volunteering a wrong aside. Corrected restatement:
+flint's clean side has **≤1 genuine judgement failure**, its one scorable defect cell was a **HIT with the correct mechanism**,
+and its real failure is **non-termination**.
+**(3) Non-termination is a runaway loop, so a larger budget is the wrong lever.** Answered cells: 787–5,275 tokens, mean 4-gram
+repetition **0.13**, `dupLines=0/31`. Truncated cells: all stopped at exactly the ceiling, mean repetition **0.27**, with the
+same hypothesis repeated **34×**, **314** duplicate sentences, `dupLines=168/402` — and mid-reasoning passages arguing about
+irrelevant JavaScript syntax. The rig detects this class for seats (`src/degeneration.mjs`) and not for the model under probe.
+**(4) Ministral is operationally excellent and judgmentally unfit: measured and rejected.** 24/24 cells answered, 137–464
+tokens, 4.5–15.7 s, **31.6 tok/s**, zero truncations — but **0/16 clean controls**: it committed `VERDICT: DEFECT` for every
+control, and reversing the contract's option order did not change that (0/8 in the control arm). Its mechanisms are invented
+(`process.kill(pid,0)` supposedly fails for kernel threads/zombies; `toISOString()` supposedly emits non-UTC when the clock is
+unsynced — it cannot). Mechanism credit **HIT 2/8**. So the answer-first contract is **not** a free improvement: on a
+defect-prior model it converts vague hedging into a decisively wrong verdict 16/16 times, which is worse for routing than the
+hedging it replaced. Acceptance now gated on a clean-control calibration check (**258** follow-up).
+**Consequence the operator should weigh:** the two candidates fail in opposite directions — flint answers 5/24 but was the
+better-calibrated of the two, ministral answers 24/24 and is wrong every time on clean input. **Neither satisfies 253 today**,
+so the only option satisfying it now is a **remote cross-family verifier**; the cheap remaining local lever is a flint re-run
+under corrected conditions (bounded system message in the gate's own `SYSTEM` constant, which has never been varied;
+declaration-header or whole-module feeding — whole modules in this corpus are 1,686–22,014 est. tokens, so `--whole-module`
+needs ctx ≥ 24k at `--parallel 1`; my earlier "58,380 est. tokens for H4" was a misread of the pair-accounting **chars**
+column). Do **not** route ministral: `check` would then clear on a string comparison while verification got worse, which is the
+exact failure D137 was written to prevent.
+**Accountability, recorded because it constrains future probe work.** My arms helped OOM-kill the **seats'** server (`strata`).
+Swap was already 8/8 GiB used; I ran repeated arms against a 65,536-context flint Q4 instance with `strata-host` resident on the
+other card, plus `buildCorpus()` (a parse-check subprocess per candidate window) alongside, and I did not re-measure headroom
+between arms. Discipline now in the runbook: pre-flight print of available RAM / swap / per-GPU MiB with a named floor, one arm
+at a time, never a corpus build concurrent with a generation arm, one large-context engine resident.
+**Executed from the grants.** **GRANT 3 is done and verified**: `refs/rescued/orphan-<sha>` minted for all **452** unreachable
+commits; `refs/rescued` 32 → **484**; `git fsck --unreachable | grep -c '^unreachable commit'` → **0**; sample resolutions
+`orphan-0030993f5abe` ("merge: land devtools-item-4436 onto main"), `orphan-0102f3c23b1c` ("seatguard: refuse silent write
+corruption (#673)"). Reversible by `update-ref -d`; nothing was deleted, and **232 stays gated**. GRANT 5 partially executed:
+ministral measured, so the "which verifier" question is now evidence-shaped rather than speculative.

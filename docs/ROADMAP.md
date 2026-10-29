@@ -5147,3 +5147,44 @@ that a `32,768 / parallel 1` verifier config hands back to weights.
 *Do not:* raise `max_tokens` alone; do not relax **D137** to make a same-family candidate convenient (that is the
 operator's ruling, and it must be made with the correlated-blindness cost stated in the same sentence); and do not count a
 control false alarm against a candidate until the excerpt confound is controlled (`--whole-module`, **195**).
+*Measured follow-up (2026-10-29):* the answer-first contract works mechanically — it puts a parseable verdict on line 1 and
+reversing the option order (`CLEAN or DEFECT`) did **not** move it — but for a model with a defect prior it converts hedging
+into a **decisively wrong verdict 16/16 times** on clean controls. So acceptances (1) and (2) are gated on a **clean-control
+calibration check first**: a candidate's committed verdicts may not be routed on until it clears a small set of controls it
+knows are clean.
+
+**259. Nothing checks whether a completion request is even well-formed for the endpoint that will serve it: omitting a system
+message silently installs the host's unbounded-thinking instruction, a declared context the server does not offer is accepted,
+and no instrument distinguishes "budget too small" from "the generation degenerated into a loop".** *(delegate; registered
+2026-10-29 from reading the LM Studio chat template, and from my own probe arms helping OOM-kill the seats' server)*
+**What exists today, measured:** (a) the served template sets a *default system message used only when the request carries
+none*, and that text instructs the model to draft an inner monologue *"until you arrive at a response"* with thinking *"as long
+as you want"* — matched pair: no system message → 400/400 tokens, `content=0ch`; with a bounding system message → **1.9 s,
+62 tokens, correct verdict**, and `max_tokens` 400 vs 1,200 changed nothing; (b) `durig.config.json` carried
+`DURIG_VERIFIER_CONTEXT 65536` / `MAX_TOKENS 8192` against an instance launched `--ctx-size 8192 --parallel 4`, i.e. a request
+that cannot be satisfied (prompt + 8,192 output > 8,192 total) — no `check` rule notices; (c) `TRUNCATED-EMPTY` is one bucket
+that mixes budgets-that-were-too-small with runaway generation: answered cells mean **0.13** 4-gram repetition
+(`dupLines=0/31`) against **0.27** for the truncated ones (`34x` the same hypothesis, `dupLines=168/402`, `314` duplicate
+sentences), and the rig already has repetition detection for *seats* (`src/degeneration.mjs`) but none for the model under
+probe; (d) the excerpt-artifact excusal fires only when a turn makes **no** code-level claim, so a true statement about a
+binding my window cut (`src/worktree.mjs:11,13`, `src/job-object.mjs:30`, `scripts/clockin.mjs:27-29`) was scored as a
+judgement failure — 3 of 4 clean alarms in the 2026-10-29 run, and the reason I mis-judged a candidate.
+*Acceptance (failing-first):* (1) a `check` rule (or provider-layer assert) that compares the **declared** verifier context and
+max-tokens against what the served engine actually offers — read `--ctx-size`/`--parallel` from
+`ps -eo args | grep '[l]lama-server'` (the API model key never tells you) — fix-now when the declared context exceeds the
+served one or when prompt + maxTokens exceeds it; fixture: `65536/8192` declared against an 8,192 instance → **fix-now**; (2)
+every durig-initiated completion **carries a system message**, asserted and recorded in the run record, because a probe that
+sends none is measuring the host's default prompt rather than the model; (3) reuse `src/degeneration.mjs`'s vocabulary on the
+probe side — record per-cell 4-gram repetition and duplicate-line counts and emit **`RUNAWAY-REASONING`** instead of
+`TRUNCATED-EMPTY` when `finish=length` with repetition over threshold, so 257's denominators can separate "needs more budget"
+from "needs a different sampler"; (4) make the artifact excusal **window-aware**: excuse a missing-binding claim when that
+binding's declaration exists in the module but lies outside the shown window (the runner already knows both texts); (5) probe
+memory discipline — the runners print available RAM, swap used and per-GPU MiB before spending a prompt and refuse to start
+under a floor (named: < 10 GiB available or > 50 % swap), and no corpus build runs concurrently with a generation arm.
+*Blind spots:* the template file is **per-load and ephemeral** (`…/.internal/temp/lmstudio-chat-template-XXXX/`), so any claim
+about it must be re-read at the time, never remembered — and read it under `.var/app/ai.lmstudio.lm-studio/…`, not the
+`~/.lmstudio/…` path the process table prints; a repetition ratio is a heuristic that separated answered from truncated cleanly
+at n=24 but needs a k=3 baseline before a threshold is hard-coded; and the ctx/max-tokens rule must not assume llama.cpp
+semantics — engines clamp differently, so probe it (195's *"probe it, do not assume"*).
+*Do not:* read a `TRUNCATED-EMPTY` count as a capability rate (**257**); do not raise `max_tokens` before asserting the request
+carried a system message; and do not conclude a model is broken before checking what the host instructed it to do.

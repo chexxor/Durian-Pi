@@ -211,6 +211,51 @@ can deliver inside 300 s (~10,000 tokens at 34 tok/s)** — it removes the excer
 proof-backed mutants, and costs ~30 min. If the false-alarm-on-controls pattern survives that, change models rather than
 budgets (**D137**'s cross-family constraint is the operator's to relax, not a delegate's).
 
+## The host can hand the model an UNBOUNDED thinking instruction — check the request, not the model (measured 2026-10-29)
+
+**Symptom:** every completion ends `finish=length` with an **empty `content`** and a large `reasoning` field, at any
+`max_tokens`, and no reasoning toggle helps (`chat_template_kwargs {thinking:false}`, top-level `thinking:false`,
+`reasoning_effort:low`, `chat_template_kwargs {reasoning_enabled:false}` — all four measured, all ignored).
+
+**Cause, read off the disk:** `llama-server` runs with `--jinja --chat-template-file …/lmstudio-chat-template-*/chat-template.jinja`
+(real path under `/home/chexxor/.var/app/ai.lmstudio.lm-studio/.lmstudio/.internal/temp/…`; the cmdline prints the
+`~/.lmstudio/…` form). That template's first lines set a **default system message used only when the request carries no system
+message** (`{%- if messages[0]['role'] == 'system' %}`), and its text is:
+
+> `First draft your thinking process (inner monologue) until you arrive at a response … [THINK] … Be as casual and as long as you want until you are confident to generate the response … [/THINK] Here, provide a self-contained response.`
+
+**Matched pair** — `ministral-3-14b-reasoning` **Q6_K**, one-line task, `temperature 0`: no system message → 400/400 tokens,
+`finish=length`, `content=0ch`, `reasoning=1,644ch`; **with** a system message saying *"Answer directly. Keep any internal
+reasoning under 80 words. State your verdict first…"* → **1.9 s, `finish=stop`, 62 tokens, `content=283ch`, `reasoning=0ch`**,
+verdict correct. Raising that arm's budget to 1,200 changed **nothing** (still 62 tokens) — the budget was never the lever.
+`gate.mjs` does send a system message, so gate numbers are unaffected; **any new one-shot verifier/probe call site must send one
+too**, and a probe should assert that it did.
+
+**Retained artifact for the same failure mode**, so the claim survives the session: `.spike/gate/ministral-probe.json` — the
+counting task, **no** system message, `max_tokens 600` → `finish=length`, completion **600** of which
+`usage.completion_tokens_details.reasoning_tokens = 599`, `content` **0 chars**, `reasoning_content` **2,404 chars** — and the
+reasoning text says out loud *"typing out all 200 numbers manually would be tedious, but since this is a thought process
+simulation, I'll represent it as such"*. That is the same shape as flint's truncated cells: **the model spends the whole budget
+on the monologue and then abstains**. The 400-token arm in the matched pair was run in-session and its body was not retained; to
+reproduce, send the same one-line task twice with `temperature 0` and add a `"system"` message as `messages[0]` on the second
+call, and **keep both bodies this time**.
+
+**Serving facts to record with any model here** (the API model key never tells you any of this — read
+`ps -eo args | grep '[l]lama-server'`): ministral-3-14b-reasoning is served as **Q6_K**, `--ctx-size 8192`, `--parallel 4`,
+`--n-gpu-layers 999999`, `--flash-attn on`, **23.0/24.5 GiB on GPU1**, decode **31.6 tok/s**. A rig config declaring
+`DURIG_VERIFIER_CONTEXT 65536` against an 8,192-token server while `MAX_TOKENS 8192` is asking for an impossible request
+(prompt + 8,192 output > 8,192 total) — nothing in `check` catches that class today (ROADMAP 259).
+
+## Probe discipline on this box — my own arms helped OOM-kill the seats' server (2026-10-29, incident)
+
+Swap stood at **8 GiB of 8 GiB zram used, 0 free** before I started, and I ran repeated arms against a **65,536-context** flint
+Q4_K_M (≈19 GiB resident on GPU1) with `strata-host` holding ≈12.6 GiB on GPU0, plus `buildCorpus()` (a parse-check subprocess
+per candidate window) alongside. The kernel terminated the **Strata** service — i.e. the **seats'** model server. Before each
+arm: print `free -g` available, `swapon --show`, `nvidia-smi --query-gpu=memory.used,memory.total`; stop if available
+< 10 GiB or swap > 50 % used; **one arm at a time**; never a corpus build concurrently with a generation arm; keep **one**
+large-context engine resident. `buildCorpus()` alone exceeds 200 s here, so a re-scoring instrument that rebuilds the corpus per
+invocation looks "hung" before it looks wrong.
+
 ## What one RTX 3090 does and does not buy you as a verifier (2026-10-29, measured on this box)
 
 **Topology, from the config and the process table, not from memory:** the **seats** are served by `strata-host` on
@@ -235,11 +280,14 @@ flint `@q4_k_m`, `ministral-3-14b-reasoning` @q6_k/@q8_0, and `text-embedding-no
 | `gemma-3-27b` | ~17 GB (Q4) | **different family** ✓ | thinking optional | fits at ~32k ctx |
 | `qwen3-30b-a3b` / `qwen3-coder-30b-a3b` | ~18 GB (Q4) | **same family as the seats — a D137 violation** | best-in-class toggle | fits, and is the fastest option — **which is exactly why it is the trap** |
 | flint **Q8_0** (already on disk, set aside) | 42.35 GB | ✓ | none (same problem as Q4) | **does not fit** — restore only if the operator wants Q6/Q8 back |
+| `ministral-3-14b-reasoning @q6_k` — **measured 2026-10-29, rejected** | ~12.7 GB loaded | ✓ different family | answers **24/24** cells, 137–464 tokens, 4.5–15.7 s, **31.6 tok/s** | **0/16 clean controls**: commits `VERDICT: DEFECT` every time and invents the mechanism; reversing the contract's option order did not change it |
 
 Sizes above are the vendor's usual quantization footprints, **not** measured on this box — verify with
 `POST /api/v1/models/download` + `ls -la` before believing them, and note that `download` needs a **HuggingFace URL**, not a
 model key. **Every candidate gets the k=1 gate run (~30 min) before adoption, and the run record must name the variant and
-the measured decode (255 acceptance (5)).**
+the measured decode (255 acceptance (5)) — plus a clean-control calibration check BEFORE its verdicts are ever routed on:
+measured 2026-10-29, an answer-first contract turns a defect-prior model into a decisively wrong verdict 16/16 times, which is
+worse than the vague hedging it replaced.**
 
 **Three levers that need no download and no money — try these first (all are ROADMAP 258):** an **answer-first contract**
 (`VERDICT: DEFECT|CLEAN` as line one, ≤3 lines of mechanism, justification last) so a truncated tail still scores;
