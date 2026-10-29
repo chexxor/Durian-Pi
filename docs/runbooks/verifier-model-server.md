@@ -168,6 +168,49 @@ the verifier is being asked to find something, so a hello-world smoke test that 
 feasibility. Speed removed the **transport and deadline** blockers (254, 255); it has not yet produced a verifier that
 finishes an answer on the prompts that matter.
 
+## What the first **completed** gate run on this model measured — read the denominators before the rate
+
+`CAL_MAX_TOKENS=6000`, fragment feeding, `--pair-comments strip-both`, `--replicate 1`, Q4_K_M, 24 prompts, ~50 min wall
+clock (`.spike/gate/flint-q4-k1-out6k.log`; transcript `.spike/gate/flint-q4-k1-out6k.json`, 548,811 B). The
+instrument's own SUMMARY, quoted rather than paraphrased:
+
+```text
+control turns claiming an absent binding (import/undefined/ReferenceError): 3 — excused where no code-level claim was made (ROADMAP 195)
+defect items named:  1/1 scored (8 attempted)   (pre-registered PHANTOM present in 1)
+control conditions dropped as corpus bugs: 12
+clean, leading prompt:   FALSE-ALARM 1/1, CLEAN-PASSED 0, AMBIGUOUS 0
+clean, neutral prompt:   FALSE-ALARM 3/3
+control claims EXCUSED as excerpt artifacts (ROADMAP 195, not counted as judgement failures): 0
+truncated (finish=length): 19 of 24 prompts
+```
+
+**The reading, in order of how much it should change a decision.** (1) **19 of 24 prompts never reached
+`finish=stop`**, so the run is mostly *absence of evidence*; the flattering denominator (`1/1 scored`) and the honest one
+(`8 attempted`) sit four lines apart, and the shape of the line invites a reader to take the first — that is
+**ROADMAP 257**, and it matters because **253** would put this line in the path of `done`. (2) **Every control that
+answered was a false alarm** (leading 1/1, neutral 3/3): when the model does finish, it **over-claims on clean code**.
+(3) The one scorable defect cell was a real hit — `H2-process-death-deadline`, `HIT+PHANTOM groups=3/3 need=2`
+(108.1 s, 2,697 tokens) — the first HIT this model has ever recorded here, which is why the answer is *not* "flint is
+blind" but "flint cannot deliver a judgement inside the budget, and what it delivers when it can is miscalibrated".
+(4) **Two of the control false alarms are at least partly the instrument's fault, and the instrument half-knows it**: both
+claimed *missing `node:fs`/`node:path` imports* on a file whose import block **the fragment window had cut off** — a
+correct inference about the excerpt and a wrong claim about the file. **195**'s excuser saw the class
+(`control turns claiming an absent binding … : 3`) but excused **0**, because it excuses only when the turn makes *no*
+code-level claim. Before counting a control false alarm against a model, check whether the claim concerns material the
+run **did not feed**; and the clean control for that confound is `--whole-module` (the items that fit are 1,686–7,139 est.
+tokens), not a bigger `max_tokens`.
+(5) **Effective decode in-run was 21.8–48.9 tok/s (p50 35, n=24)** — a 2.2× spread inside one run, versus 42.21 in an
+isolated micro-benchmark. **Budget off the low end of a spread measured while the run is happening**, and note the
+neighbour: `nvidia-smi --query-compute-apps` shows `strata-host` PID 2289527 holding **14,632 MiB on GPU0 (RTX A4000) at
+100 % utilisation** while `llama-server` PID 2426431 holds 19,102 MiB on GPU1 (RTX 3090).
+
+**So: is this model a cross-family verifier? On this evidence, no — and the evidence is now re-runnable rather than
+absent.** The cheapest decisive next experiment is **not** another 6,000-token fragment run: it is a **`--whole-module`
+k=1 run over the items that fit (M1 2,086 / M3 1,686 / M2 7,139 / H2 4,096 / H5 4,145 est. tokens) at an output budget Q4
+can deliver inside 300 s (~10,000 tokens at 34 tok/s)** — it removes the excerpt confound, targets the three
+proof-backed mutants, and costs ~30 min. If the false-alarm-on-controls pattern survives that, change models rather than
+budgets (**D137**'s cross-family constraint is the operator's to relax, not a delegate's).
+
 ## The numbers that decide the window (measured 2026-10-29, this box)
 
 | Fact | Value | How it was read |

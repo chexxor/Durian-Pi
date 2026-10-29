@@ -5087,3 +5087,28 @@ because **0 of 4,821 rows are claimable**.
 *Do not:* infer hygiene from a green suite (a deleted test member is a silent shrink, `scripts/suite.mjs:36`);
 from `reapable: 0` in `worktree audit` (`docs/BRANCH-AND-WORKTREE-LIFECYCLE.md:244` — it does not mean nothing to
 prune); or from a rehearsal nobody instrumented. Releases stay `pm`'s verb and the start stays the operator's.
+
+**257. A gate run in which most prompts never became scorable still prints a rate, so a 79 %-truncated certification
+run can read as a pass — the certification instrument needs a scorability denominator and an INCONCLUSIVE floor.**
+*(delegate; registered 2026-10-29 from the first **completed** flint Q4 k=1 run, `.spike/gate/flint-q4-k1-out6k.log`)*
+**What exists today, measured:** that run's own SUMMARY prints **`defect items named: 1/1 scored (8 attempted)`** and,
+four lines away, **`truncated (finish=length): 19 of 24 prompts`**. The only line shaped like a score carries the
+flattering denominator. Under **253** that line becomes a **gate on `done`**, so a run in which 7 of 8 defect cells never
+reached an answer would certify a defect with "1/1" on the record. The instrument already owns the neighbouring
+machinery — **195**'s excerpt-artifact excuser (`control turns claiming an absent binding (import/undefined/
+ReferenceError): 3 — excused where no code-level claim was made`, `EXCUSED … 0`) and the **G1** corpus-bug exclusion
+(`control conditions dropped as corpus bugs: 12`) — so this is a **denominator** problem, not a missing concept.
+*Acceptance (failing-first):* (1) the run record and log header print **scorability** — scorable ÷ attempted, per side —
+next to every rate, and a rate printed without one is itself a defect; (2) a **minimum-scorability floor** (proposed:
+≥ ⅔ of prompts on **each** side reach `finish=stop`) below which the run reports **INCONCLUSIVE** and exits non-zero for a
+gate consumer instead of printing a percentage; (3) the same predicate readable by whatever **253** wires into `done`, so
+the seat-facing verdict and the run record cannot disagree; (4) a demo over a fixture transcript that is 80 %
+`finish=length` → RED (must be INCONCLUSIVE) and one that clears the floor → GREEN, so the rule cannot be vacuous.
+*Blind spots:* the floor interacts with **255**'s arithmetic — a low floor under an unreachable budget produces quiet
+passes, a high floor under a slow engine produces never-certifiable runs — so set both from **measured decode**, not from
+taste; `--replicate 1` is already labelled a sample (**198**), and a sample that is also mostly unscorable is doubly so;
+the 195 excuser excuses only when the turn makes *no* code-level claim, which is why the excerpt confound is real but not
+excused in bulk here — `--whole-module` (the fitting items are 1,686–7,139 est. tokens) is the clean control for it.
+*Do not:* read `1/1 scored` as a capability rate; and do not answer a truncated run by raising `CAL_MAX_TOKENS` alone —
+measure decode first (**255**), because at the measured **21.8–48.9 tok/s** the budget sets the wall-clock and the
+wall-clock is what truncates.

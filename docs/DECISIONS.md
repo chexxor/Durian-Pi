@@ -6283,3 +6283,24 @@ MiB and 24,576 MiB), and **`unload` requires `instance_id`** when an instance is
 `missing_required_parameter`; the identical shape looked harmless earlier only because nothing was loaded and it
 404'd). **Standing change to the rig, pending the operator's ratification:** the verifier is served from **Q4_K_M at
 65,536**, with Q6_K/Q8_0 set aside — same model key, materially different model.
+
+**D164 addendum 2 — the certification gate finished, and the defect it exposed was in the *instrument's* shape, not
+only the model's (257).** For the first time a seeded-bug gate ran to completion on this box (24 prompts, Q4_K_M,
+`CAL_MAX_TOKENS=6000`, fragment feeding, ~50 min, zero transport failures — which independently confirms 254's
+fix-by-shim). The instrument printed **`defect items named: 1/1 scored (8 attempted)`** and, four lines away,
+**`truncated (finish=length): 19 of 24 prompts`**. The line shaped like a score carries the flattering denominator,
+and **253** would put that line in the path of `done`: a run in which 7 of 8 defect cells never reached an answer
+would certify. Registered as **257** (scorability printed beside every rate; an INCONCLUSIVE floor — proposed ≥ ⅔ of
+prompts per side reaching `finish=stop` — below which a gate consumer gets a non-zero exit rather than a percentage;
+one predicate shared with 253 so the seat-facing verdict and the run record cannot disagree). Two findings that
+changed my own reading and should change the next one: **every control that produced an answer produced a false
+alarm** (leading 1/1, neutral 3/3) — so when the model finishes, it over-claims on clean code — **but two of those
+alarms claimed missing imports on a fragment whose import block the window had cut off**, i.e. a correct inference
+about the excerpt and a wrong claim about the file, a category `gate.mjs` already names (**195**) yet excused **0** of
+because it excuses only turns making no code-level claim. So the honest verdict is not "flint is blind" (its one
+scorable defect cell was `HIT+PHANTOM groups=3/3 need=2`, the first HIT this model recorded here) but **"it cannot
+finish inside the budget, and what it finishes is miscalibrated"** — and the decisive next experiment is
+**`--whole-module` over the fitting items and the three proof-backed mutants at ~10,000 output tokens (~30 min)**, not
+another 6,000-token fragment run and not a purchase. **Rule extracted: before a control-side verdict counts against a
+model, check whether the claim concerns material the run did not feed; and never accept a rate whose denominator is
+smaller than the number of prompts attempted.**

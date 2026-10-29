@@ -162,3 +162,46 @@ an expiry; re-read the source, don't quote yourself. (b) My first `edit` to the 
 not trust the diff. (c) Several `edit` calls failed because I wrote `oldText` from memory instead of from a `grep -n` of
 the actual wrapped line — grep the line, then edit. (d) I ran a 1,500-token micro-benchmark and reached for it as a budget
 input before the run's own per-cell numbers disagreed with it.
+
+## Part 3 — the gate **completed** for the first time, and what it actually said
+
+`CAL_MAX_TOKENS=6000`, fragment feeding, `strip-both`, k=1, Q4_K_M, 24 prompts, ~50 min wall clock, no transport failure
+(the shim held; no `REQUEST FAILED` row in the whole run). Artifacts: `.spike/gate/flint-q4-k1-out6k.log`, transcript
+`.spike/gate/flint-q4-k1-out6k.json` (548,811 B). Tally script (untracked, 233): `.spike/gate/summarize-run.mjs`.
+
+**Instrument SUMMARY, verbatim:** `defect items named: 1/1 scored (8 attempted)`, `truncated (finish=length): 19 of 24
+prompts`, `clean, leading prompt: FALSE-ALARM 1/1, CLEAN-PASSED 0`, `clean, neutral prompt: FALSE-ALARM 3/3`,
+`control conditions dropped as corpus bugs: 12`, `control turns claiming an absent binding (import/undefined/
+ReferenceError): 3 — excused where no code-level claim was made (195)`, `EXCUSED as excerpt artifacts: 0`.
+My own tally over the per-cell rows agrees: **defect HIT 1/8**, **controls FALSE-ALARM 4/16**, **truncated 19/24**,
+effective decode **21.8–48.9 tok/s, p50 35**.
+
+**What I got right, and what I nearly got wrong.** My mid-run read was "flint manufactures defects in clean controls and
+stays silent on real ones" — the second half is right (1/8 detection, 19/24 truncated) but the first half needed a
+correction I only caught by reading the *claims*: both early control false alarms said **the imports are missing**, and the
+**fragment window had cut the import block off the material**. So they are partly **instrument artifacts** — a correct
+inference about an excerpt, a wrong claim about the file — and `gate.mjs` already owns that category (**195**) while
+excusing **0** of them because it excuses only turns that make no code-level claim. Had I stopped at the label
+`FALSE-ALARM` I would have handed the operator a model-blame that is partly our feeding strategy. **The generalizable
+rule: before a control-side verdict counts against a model, check whether the claim concerns material the run did not
+feed.** And the honest shape of the result is not "flint is blind" — the one scorable defect cell was a clean
+**`HIT+PHANTOM groups=3/3 need=2`**, this model's first HIT here — it is **cannot finish inside the budget; and when it
+does finish on a control, it over-claims**.
+
+**The denominators are the defect I am registering (257).** The SUMMARY line shaped like a score carries `1/1`; the honest
+`8 attempted` sits four lines away; **under 253 that line gates `done`**, so a 79 %-truncated run would certify. 257 asks
+for scorability printed beside every rate, an INCONCLUSIVE floor (proposed: ≥ ⅔ of prompts per side reach `finish=stop`),
+and the same predicate read by whatever 253 wires in, so seat-facing verdict and run record cannot disagree.
+
+**Cheapest decisive next experiment, priced and ready (better than the one I would have run an hour ago):** a
+`--whole-module` k=1 run over the items that fit — **M1 2,086 / M3 1,686 / M2 7,139 / H2 4,096 / H5 4,145** est. tokens —
+at ~10,000 output tokens (what 34 tok/s fits inside 300 s): it removes the excerpt confound, aims at the three
+**proof-backed mutants** (`M1` clean `[3,4,"abc","aaaa"]` ≠ mutant `[4,5,"abcd","aaaaa"]`; `M2` clean `null` ≠ mutant
+`"refused by durig: …"`; `M3` clean `[]` ≠ mutant `[{"name":"impl",…}]`), and costs ~30 min. If controls still false-alarm
+whole-module, **change models, not budgets** (relaxing D137's cross-family constraint is the operator's call).
+
+**Two more of my own errors, for the record.** (a) I wrote the run name as `flint-k1-out6k` in the pointer and then
+launched `flint-q4-k1-out6k`, so the pointer named an artifact that did not exist until I fixed it — name the artifact you
+have, not the run you intend. (b) I let a ~50-minute run block my clock-out instead of committing the pointer first and
+treating the run as a separate deliverable; the commit-then-wait order (which I switched to mid-session) is the one that
+cost nothing when the run overran.
