@@ -3688,6 +3688,14 @@ moment someone amends the file again (the same reason `check` re-reads the store
 milestone **O1** (a seat boot contract) and adjacent to **206** (executable runbook steps) — claim it as the read-only
 surface only, or the two halves collide.
 
+**Amended 2026-10-29 (delegate): this rule as specified reports green on today's tree.** The rig file is clean — a scan of
+`rig.selfdev.json` and `durig.config.default.json` for `C:\`, `/home/`, `D:\` and `127.0.0.1` returns **0 hits** — while
+**12 of 12** seats resolve to a foreign `C:\Users\Alex\…` path carried in the store's `pi.agent.cwd`, because that layer
+wins (`src/seatroot.mjs:29`) and `seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT` (`cli.mjs:679`) is `undefined`
+for every seat. A `seat-cwd-unresolvable` rule scoped to `seats[].cwd` therefore sees nothing while every seat is broken.
+The seam half is **263**; the measurement that shows both layers at once is `tools/rig-portability-audit.mjs` (15 findings,
+exit 1, on the tree as it stands).
+
 ## Amending the constitution on Linux (2026-10-28) — what the mirror and the gate cost
 
 The operator's precondition before opening the delivery channel was "ensure their constitution is added to their
@@ -4270,6 +4278,15 @@ run, so a collapse becomes a visible event: it prints `1` here, and would have p
 session. Interim mitigation, operator-agreed and held for the rest of the session: **the working checkout is never the
 experiment** — rehearsals and any worktree-exercising run go in a disposable clone (`/home/chexxor/Git/Durian-Pi-ops`) —
 and no product demo was run from the main checkout, whose ledger stayed at 1 row throughout.
+
+**Amended 2026-10-29 (delegate): a second, distinct mechanism in the same blast radius — registered as 266, do not fold
+them together.** `classifyWorktrees` protects a seat's own tree by **exact normalized-string equality**
+(`src/broker.mjs:988-1010`), so when the stored seat roots came from another OS the `seat-root` keep-reason is
+**unreachable**: measured 0 matches of 12 stored roots against the registered worktree. `tools/rig-portability-audit.mjs
+--self-test` proves the classifier does protect a same-host root (`keepReason: "seat-root"`) and does not protect the
+foreign one (`"not-terminal"`) — a keep-guard that silently no-ops, hit at every broker start
+(`reconcileOrphanedWorktrees`, `src/broker.mjs:1145-1170`). 232 is registrations the host cannot read; 266 is the guard
+that never fires.
 
 **233. An instrument can be credited as landed in `docs/ROADMAP.md` and be absent from the repo: five files this
 session ran or read are gone, and nothing in the rig can see it.**
@@ -5299,3 +5316,114 @@ runbooks would have to be re-headed before that could be a gate.
 the guard's soft class into noise by widening it before the corpus is swept; and do not cite a sha you have not checked —
 `0a339d68` still resolves as a **dangling** object after being amended away, so `git cat-file -e <sha>^{commit}` is
 necessary but not sufficient; also confirm it is on a ref (`git branch --contains`).
+
+## Cross-platform portability of the team definition (2026-10-29, delegate; measured by `tools/rig-portability-audit.mjs`, evidence in `docs/reviews/cross-os-rig-portability-2026-10-29.md`)
+
+The operator's direction: *"we need to find a way to make the team and its definition cross-platform friendly … oh-my-pi
+claims to be cross-platform, so we should prioritize our learnings from their project."* Every competitor citation below is
+against a pinned clone in `docs/VENDOR-PINS.md` (`oh-my-pi` `6f3fbc94` 2026-10-27 MIT; `hermes-agent` `07f075c2`;
+`claude-code-docs` `58d6da1e`) — read the clone, not a review of it.
+
+**263. Host-qualified path resolution is missing: `seatroot.mjs` and `broker.mjs` hold two different normalizers, neither
+checks existence, and the value that wins is a store fact.**
+*(delegate; registered 2026-10-29; the seam half of 210/221 — the operator granted ruling A, this is the shape it lands on)*
+**What exists today, measured:** `resolveSeatRoot` returns a persisted cwd unconditionally (`src/seatroot.mjs:29`); 12/12
+seats resolve to `C:\Users\Alex\…` and `classifyGitRoot` calls the phantom **`main-worktree`**, so a seat is told it is in
+the live checkout while its file tools aim at nothing. Two normalizers disagree on the same string: `sameRoot`
+(`src/seatroot.mjs:36`) leans on node `resolve`, which on POSIX folds `C:\Users\…` into **one relative component**
+(producing `…/Durian-Pi/C:\Users\…`), while `classifyWorktrees`' `norm` (`src/broker.mjs:988`) folds backslashes.
+**Peer mechanism to copy (observed-externally):** oh-my-pi's `ShellPaths::resolve` is *"Resolves `path` to what the shell
+would open"* — relative paths join the seat's cwd, and *"Windows aliases (`/c/...`, `/tmp`) become native paths via
+`brush_core::sys::fs::normalize_shell_path`"*, with virtual paths short-circuited **before** host normalization and a
+documented sibling for inspect-without-following (`crates/pi-builtins/src/host.rs:427-434,439-458,461-468`); at the tool
+boundary a host cwd is *"resolved relative to session cwd … and **validated via filesystem `stat`**"*
+(`docs/bash-tool-runtime.md:84`). hermes falls through a configured cwd that fails `_existing_dir()` instead of letting it
+win (`agent/runtime_cwd.py:74-97`).
+*Owner:* impl · *Where:* `src/seatroot.mjs` becomes the only resolver — returns `{root, source, kind, reason}`, validates
+each layer, refuses to silently join a foreign-shaped value — plus its call sites `src/broker.mjs:988-1010`,
+`cli.mjs:679/794`. · *Acceptance:* red on a fixture whose persisted cwd is a path built on the **other** OS (210's fixture
+rule), naming seat, path, shape and the OS; green when no cwd is stored; and the worktree sweep reaches the **same verdict
+as the resolver because it calls it** — no second normalizer survives.
+*Blind spots:* validate-and-fall-through must never pick a root silently — 221's phantom directories are what happens when
+a fall-through is invisible, and the seat must be able to read the reason; and `sameRoot`'s Windows case-folding is
+load-bearing on Windows, so the seam stays host-conditional rather than "normalize everything to POSIX".
+*Do not:* add a third normalizer in the fix.
+
+**264. A seat cannot know what host it is on — nothing names the OS, WSL-ness, home, its resolved root, or which shell the
+shell tool actually starts, and the store shows a seat improvising one.**
+*(delegate; registered 2026-10-29; the context half of 217, which no code change satisfies)*
+**What exists today, measured:** seat reasoning captured live in entry **#274090** — *"PowerShell is not available? …
+Maybe the shell is pwsh on Linux?"* — and `tools/rig-portability-audit.mjs` finds **no** `Host:`/`Shell:`/OS string in any
+seat definition in `rig.selfdev.json`. Store-wide: `"toolName":"powershell"` 20,340 entries, `"bash"` **0**, `spawn
+powershell ENOENT` 3, `spawn pwsh ENOENT` 1.
+**Peer mechanism to copy (observed-externally):** hermes `_local_host_hints()` injects `Host:` (naming **WSL separately**
+from Linux), the user home, the resolved cwd and a scratch directory ("write temporary files and probes there, never under
+the system temp dir"), and on Windows appends a correction that hostname ≠ username plus `_WINDOWS_BASH_SHELL_HINT`, whose
+comment reads *"Windows-local terminal runs bash, not PowerShell — without this the model issues PowerShell syntax"*
+(`agent/prompt_builder.py:905-932`, `:796-802`).
+*Owner:* devtools · *Where:* `buildSeatPrompt` (`cli.mjs:485`) for the block, `makeSeatEnv` (`src/seattools.mjs`) for the
+capability values, and `check`/`doctor` printing the same report. · *Acceptance:* a seat asked "what host are you on, and
+what does your shell tool run?" answers from context with the OS and the registered tool name, and a demo goes red when the
+registered shell is absent on this host.
+*Blind spots:* the seat instruction text in `rig.selfdev.json` is the **operator's** file (217's fix names it as
+operator-owned) — propose the generated block, do not hand-edit the rig to smuggle host facts into the portable layer,
+which is 265's defect inverted.
+
+**265. The definition layers have no rule about which values may live where, and the remedy the operator granted (`up
+--root`) does not exist.**
+*(delegate; registered 2026-10-29)* **What exists today, measured:** the tracked layer is clean today (0 host-absolute hits
+in `rig.selfdev.json` / `durig.config.default.json`) and provider base URLs sit in gitignored `durig.config.json` — the
+layering is right but **unenforced**, so nothing keeps it right. `docs/DECISIONS.md:6314` grants *"`up --root` once per
+seat"*, but `node cli.mjs help` offers `up <rig.json> [--refresh] [--dry-run] [--serve|--no-serve]` — **no `--root` flag
+exists**; the mechanism that does exist is `seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT` (`cli.mjs:679`, diffed
+at `:794`, written only when defined), which is why 210/221 measured `changes: {}` for all twelve seats. `DURIG_SEAT_ROOT`
+is already a `CONFIG_KEYS` member (`src/config.mjs:132`).
+**Peer mechanism to copy:** claude-code-docs' scope-graded settings — user `~/.claude/settings.json` → project
+`.claude/settings.json` → host-local `.claude/settings.local.json` (created **gitignored**, `CHANGELOG.md:2919`) — carry an
+explicit **per-key allowlist of which scope may set which key** (`:3539` `defaultMode` ignored in repo settings; `:4330`
+repo-local settings can disable but never enable Remote Control).
+*Owner:* impl · *Where:* `src/checkup.mjs` (a `rig-host-coupling` rule: a tracked layer naming a drive letter, a POSIX
+absolute path, or a localhost endpoint is a finding naming the **key and the layer**) + `cli.mjs` (`up --root`, writing the
+workspace-root-relative identity 221 ruling A chose). · *Acceptance:* red on a fixture rig naming a path from the other OS;
+green on the current file; `up --root` `--dry-run` prints a `from→to` per named seat, and the bulk `--refresh` shape is
+rejected for pointing twelve seats at one root (it collides with per-item worktree isolation).
+*Blind spots:* the rule must key on **shape**, not on "does it exist" — a host-absolute path that happens to exist on both
+hosts (e.g. a relative-looking `./selfdev.sqlite`) is fine, and a `/home/…` path in a rig checked out on Linux is fine for
+*that* host; the finding is that the value is host-coupled, not that it is wrong here.
+
+**266. A seat's own worktree is protectable only by exact string equality, so after a host move the keep-guard silently
+never fires.**
+*(delegate; registered 2026-10-29; the sibling of 232, deliberately not folded into it)* **What exists today, measured:**
+`classifyWorktrees` (`src/broker.mjs:988-1010`) matched **zero** of 12 stored seat roots against the one registered
+worktree, so `keepReason: "seat-root"` is unreachable here; `tools/rig-portability-audit.mjs --self-test` proves the same
+classifier **does** return `seat-root` for a same-host root and `not-terminal` for the foreign one. The sweep runs at every
+broker start (`reconcileOrphanedWorktrees`, `src/broker.mjs:1145-1170`), which is the code path that took the ledger from
+36 rows to 1 (232, `docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`).
+*Owner:* impl · *Where:* `src/broker.mjs` — match through 263's seam, and if any stored root carries a foreign-OS shape,
+emit a diagnostic and **skip the sweep**, rather than proceeding with a guard that cannot fire. · *Acceptance:* red for a
+fixture in which the only keep-reason standing between a tree and `removeClaimedWorktree` is `seat-root` and the root is
+foreign-shaped — the sweep must refuse and report; green for a same-host root; the reason vocabulary stays the one ROADMAP
+76 defined.
+*Do not:* loosen the match to path prefixes or basenames — a keep-guard that keeps everything is the same bug wearing a
+different hat.
+
+**267. Cross-platform is an evidence claim, and we have no per-host evidence: no artifact shows a seat running one real
+command on this host, while oh-my-pi's smoke runs on eight OS legs in throwaway state.**
+*(delegate; registered 2026-10-29; feeds 256's rehearsal and 217's verification)* **What exists today, measured:** the
+suite's OS-shaped failures are recorded (`docs/runbooks/workspace-move.md` Step 5: **227 pass / 8 fail** on Linux —
+junction checks, Windows path fixtures, the Job Object path, worktree plumbing, and one defect that is not OS-shaped at
+all), and the store's shell evidence says the last real shell successes are from the **Windows era** (20,340 `powershell`
+results, **0** `bash`). Nothing names the host an artifact was produced on.
+**Peer mechanism to copy:** oh-my-pi's `release_smoke` matrix runs `--version` and **`--smoke-test`** with
+`HOME`/`XDG_DATA_HOME` pointed at a **throwaway directory** on eight legs including `windows-2025`, `windows-11-arm`,
+`macos-15` (`.github/workflows/ci.yml:905-935`) — while its unit legs are Linux (twelve `runs-on: ubuntu…`). Read the claim
+honestly: **own the layer, cross-build, and smoke a real invocation per OS** — not "every test passes everywhere". That is
+the version a single-box, native-host-only rig (D131) can afford.
+*Owner:* qa + auditor (evidence), devtools (the runner) · *Where:* a `tools/` runner (or demo) that opens a **throwaway
+store and worktree**, drives one seat through one real command, and writes an artifact naming platform, release, node
+version, registered shell and exit code; `check`/`doctor` report its age. · *Acceptance:* one artifact per host the rig
+claims to operate on, and a host with no artifact reads **unverified**, never green; the 2-seat rehearsal (256) consumes it
+rather than re-deriving it.
+*Blind spots:* never run this from the working checkout — 232's mitigation still holds (disposable clone
+`/home/chexxor/Git/Durian-Pi-ops`); and an OS-shaped suite failure must be **named as OS-shaped**, not counted as a
+regression (185–189), nor excused as "Linux" if it survives on both.

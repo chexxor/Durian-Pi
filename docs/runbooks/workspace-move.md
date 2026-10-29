@@ -3,9 +3,9 @@ runbook: workspace-move
 symptom: "the rig's workspace moved machines or operating systems — a fresh clone or copy, a Linux box for a Windows rig, a new user; worktree registrations, seat cwds, the pin's node_modules links, or commit shas cited in the queue do not resolve"
 writes: true
 precondition: "broker-stopped"
-last_verified: 2026-10-26
+last_verified: 2026-10-29
 verified_by: delegate
-evidence: "docs/incidents/2026-10-26-worktree-and-scratch-sweep.md; docs/DECISIONS.md D131; the Windows→Linux move of the selfdev rig"
+evidence: "docs/incidents/2026-10-26-worktree-and-scratch-sweep.md; docs/DECISIONS.md D131; the Windows→Linux move of the selfdev rig; re-run 2026-10-29 by a delegate on Linux (Fedora 7.2.11-200.fc44.x86_64, node v24.22.1, box Alex-Desktop-Win10) — Steps 1/3 read-only against ./selfdev.sqlite, measured output inline below; docs/reviews/cross-os-rig-portability-2026-10-29.md; ROADMAP 210, 217, 221, 232, 263-267"
 check_rule: null   # proposed: ROADMAP 190 (sha-citation resolution)
 ---
 
@@ -28,7 +28,8 @@ DURIG_DB=./selfdev.sqlite node broker.mjs status      # expect: not running / st
 node scripts/sync-pi.mjs                       # 1. the pin
 DURIG_DB=./selfdev.sqlite node cli.mjs ps      # 2. seat cwds (and the store's worktree count)
 git worktree list --porcelain; git branch      # 3. what git actually knows
-python3 - <<'PY'                               # 4. does the queue's evidence resolve here?
+node tools/rig-portability-audit.mjs           # 4. is this rig runnable HERE at all? exit 1 = findings, naming the layer
+python3 - <<'PY'                               # 5. does the queue's evidence resolve here?
 import json,subprocess,re
 d=json.load(open('.spike/delegate/queue-audit.json',encoding='utf-8'))
 bad=set()
@@ -49,6 +50,27 @@ What "moved, not yet a rig" looks like on this box:
 | Worktree registrations | store reported **13** worktrees; `git worktree list` returned **1** | the copied trees have `.git` pointer files whose gitdir is on the other machine; the pre-`up` scratch cleanup sees garbage, not worktrees |
 | Cited evidence | **90 of 178** distinct commit shas cited in the queue resolve **nowhere** — not this clone, not `vendor/pi-main/.git`, not `origin`; **14 non-terminal rows** (#3452 #3506 #3603 #3726 #3743 #3832 #3842 #4378 #4791 #4794 #4799 #4801 …) carry evidence nobody can re-check | the store came over; the git history did not |
 
+**What the Step 1 numbers hide, and what 2026-10-29 re-measurement added.** Run `node tools/rig-portability-audit.mjs`
+before **any** writing verb on a moved workspace. It composes the product's own seam (`resolveSeatRoot`, `classifyGitRoot`,
+`sameRoot`, `classifyWorktrees`) rather than re-deriving them, and per seat asks: *what is this seat's root, does it resolve
+here, and which layer supplied it?* Here it exits 1 with **15 findings**, 12 of them `seat-root-unresolvable`. Two facts fall
+out of it that the table above cannot show:
+
+1. **A seat's real root is the store's `pi.agent.cwd`, not the rig file.** `resolveSeatRoot` returns a persisted cwd
+   **unconditionally** (`src/seatroot.mjs:29`), and `classifyGitRoot` reports the phantom as **`main-worktree`** — so a woken
+   file-capable seat is told it is in the *live checkout* while its file tools aim at a path that does not exist on this
+   host. The tracked `rig.selfdev.json` is clean (0 host-absolute hits), which is exactly why a check that reads only the rig
+   file reports green (210's amendment; the trap is written into that row now).
+2. **The keep-guard that protects a seat's own tree does not survive the move** (266 — *distinct* from 232's missing
+   liveness guard; do not conflate them). `classifyWorktrees` (`src/broker.mjs:988-1010`) marks
+   `keepReason: "seat-root"` only on an **exact normalized-string** match, so after a host move none of the stored roots match
+   any registered tree and the guard **silently never fires** — while the sweep that consumes it runs at **every broker start**
+   (`reconcileOrphanedWorktrees`, `src/broker.mjs:1145-1170`). `rig-portability-audit.mjs --self-test` proves it with one
+   classifier and two synthetic roots: same-host → `seat-root`; the stored foreign-shaped root → `not-terminal`. Until 266
+   lands, a post-move `worktree audit` is **evidence about the ledger, never a safe place to reap**, and 232's mitigation
+   stands (rehearse `run`/`send`/`up --worktree` only in a disposable clone — `/home/chexxor/Git/Durian-Pi-ops/durian-pi`
+   today): from now on "nothing is `reapable`" is true only because the rows are already gone.
+
 ## Step 2 — restore the pin and the config, in that order
 
 ```bash
@@ -64,9 +86,14 @@ audits an empty `./rig.sqlite`).
 ## Step 3 — inventory before the first writing verb (this is the step that saves the work)
 
 ```bash
-{ git worktree list --porcelain; echo ---; git branch --list; echo ---; ls .spike | wc -l; } \
+{ git worktree list --porcelain; echo ---; git branch --list; echo ---; ls .spike | sort; } \
   > .spike/pre-writing-inventory.txt
 ```
+
+(**Names, not a count.** A count is weak evidence: observed 2026-10-29, a pre and a post inventory both printed `171`
+even though each snapshot counted *itself*, i.e. one scratch entry in and one unaccounted for. A name diff answers the
+question; a count could not. The `Never` list at the end of this file already says *"trust a count as a verdict"* — the
+inventory step has to obey it.)
 
 Then, and only then:
 
@@ -83,6 +110,24 @@ writing verb, `git worktree list` went 13 → 1, twelve `item-*` branches disapp
 `git fsck --unreachable` returned **0** unreachable commits, and the shas the pointer called unmerged
 (`500969f42`, `8990303`) stopped being objects. `up --refresh --dry-run` — the step whose entire purpose is
 to name the damage first — named **none** of it, because it previews model and cwd resets, not removals.
+
+**Measured 2026-10-29, and this part surprises people: `--refresh` alone repairs nothing about cwd.** The tracked rig
+declares **no** `cwd` for any seat, and `cli.mjs:679` computes `seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT`,
+writing it **only when defined**. So the preview above returned 12 seats of which **7 reported `{}` and 5 a `model` change
+only — zero seats got a `cwd` change, and the phantom foreign root stayed in the store.** Export the host root and the same
+command previews the whole repair:
+
+```bash
+DURIG_SEAT_ROOT=/path/to/this/host/checkout DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run
+# 12/12 seats now preview changes.cwd = {from: "C:\\Users\\Alex\\dsh-Projects\\pi-opendurig", to: "<the exported root>"}
+```
+
+**Do not apply that shape by reflex.** Pointing twelve seats at one root — least of all at the **live checkout** — collides
+with per-item worktree isolation and hands every file-capable seat the main tree (the F21 hazard in `docs/SELFDEV.md`), which
+`classifyGitRoot` calls `main-worktree` either way. Per-seat roots under a seat-root base are what 221 ruling A (a
+workspace-root-relative identity) and 265's **missing `up --root` flag** are for: `docs/DECISIONS.md:6314` grants an
+`up --root` **that does not exist** (`node cli.mjs help` has no such flag), so today the only mechanism is the environment
+variable above — bulk by construction. Record which one you used, and what you left unpointed, in `docs/NEXT.md`.
 
 ## Step 4 — bring the history, or accept the loss (a decision, not a cleanup)
 
@@ -163,7 +208,10 @@ bug, not drift, and must not be filed under "Linux".
 1. `sync-pi.mjs` reports `buildTree` = the pinned sha and the nine `@earendil-works/*` symlinks exist under
    `node_modules/`.
 2. `git worktree list` and the store's worktree count agree (or the disagreement is recorded as a finding).
-3. Every seat's persisted cwd `stat`s on this machine.
+3. Every seat's persisted cwd `stat`s on this machine — proved by `node tools/rig-portability-audit.mjs` exiting 0, not by
+   `cli.mjs ps`, which prints name/conversationId/role and **no cwd at all**. On 2026-10-29, three years of the store's own
+   history later, **twelve** seats still resolved to a `C:\Users\Alex\…` path and `classifyGitRoot` called that phantom
+   `main-worktree` — which is worse than an obvious failure, because the seat is told it is in the live checkout (221).
 4. The pre/post inventory diff shows no deletion you did not choose.
 5. `DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json` is read and its findings acted on — on a
    single-model local rig it will report **`single-model-rig`, severity fix-now** (ROADMAP 189). That is
@@ -175,4 +223,6 @@ bug, not drift, and must not be filed under "Linux".
 - Bare `up`, or any writing verb, before the Step 3 inventory.
 - `git add -A` (the entry point's rule; `docs/DECISIONS.md` D115).
 - Trust a count as a verdict — strays, worktrees, line counts, suite totals. Name the tree and the method.
+- "Fix" a dead seat cwd by pointing every seat at one root, the live checkout included. That is the F21 hazard wearing a
+  repair costume; per-seat roots are the fix (221, 265).
 - Carry the old OS's numbers forward: they are the fastest way to lie to the next session.
