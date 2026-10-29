@@ -4840,17 +4840,29 @@ ROADMAP already cites — has **184** marker occurrences over **23** distinct ba
 (its References block, lines 250–263). The **9 dangling** keys are
 `542f21 b736c3 20106b d32e06 04a0b7 5389e9 3d9c8f 5f6188 dccefb`, and they carry the load-bearing sentences
 (`[^20106b#405]` "the permission layer is the real gate", `[^04a0b7#427]` "session-only", `[^d32e06#246]` "no cap") —
-**none resolves to a URL from inside the file**. Round 4's Task A supplies source names for **6 of the 9** and lands
-3 unresolved, but it keys them as hex tags (`[^20106b]` beside `[^1]` = the same page) **and** re-uses two numbers with
-new meanings: round 2's `[^1]` = the Claude Code **hooks** reference while round 4's `[^1]` = its **skills** page;
-round 2's `[^2]` = skills, round 4's `[^2]` = Cursor rules. Merging text in that direction re-points citations that
+**none resolves to a URL from inside the file**. Round 4's Task A was read as supplying sources for **6 of the 9** with
+3 unresolved; **re-measured by the instrument on 2026-10-29 that tally is 3 confirmed + 5 inferred + 1 unnamed** —
+confirmed = the URL is printed in round 4's bytes (`542f21`, `5389e9`) or its bytes re-fetch byte-identical to a
+MANIFEST row for a canonical key (`d32e06` → `[^8]`); inferred = a name is asserted but no URL is printed
+(`20106b 04a0b7 3d9c8f 5f6188 dccefb`); and **`b736c3` has no named source anywhere in any round**. Round 4 keys them
+as hex tags (`[^20106b]` beside `[^1]` = the same page) **and** re-uses two numbers with new meanings: round 2's
+`[^1]` = the Claude Code **hooks** reference while round 4's `[^1]` = its **skills** page; round 2's `[^2]` = skills,
+round 4's `[^2]` = Cursor rules. Merging text in that direction re-points citations that
 ROADMAP already relies on.
 *Fix (docs + one small tool, no `src/`):* land **one alias table** in the report — `hex tag → existing number → URL at
-the `inputs/fetched/MANIFEST.md` pin` — before any merge, and make the machine check it: `tools/review-cite-check.mjs`
-(the unbuilt cheap half of 244) walks a `docs/reviews/*.md`, **fails on any marker with no definition in that file**,
-prints a cross-round key-collision table, resolves every `path:line` reference under a `vendor/eval/` pin, and in a
-second pass compares asserted "N lines" figures with `wc -l` at the pin. Both checks are cheap; both were run **by hand** in the session that found this, and the hand-written script sat in
-gitignored `.spike/` and is gone (233 recurring).
+the `inputs/fetched/MANIFEST.md` pin` — before any merge, and make the machine check it. **Both halves shipped on
+2026-10-29** (delegate, unclaimed): the table is `docs/reviews/harness-citation-registry.md` (**29** rows: 14 canonical
+keys + 15 hex aliases, each carrying an `evidence` column of `confirmed` / `inferred` / `none`, and the checker fails
+the run if a row contradicts the reports), and the checker is `tools/review-cite-check.mjs` — it walks a
+`docs/reviews/*.md`, fails on any marker with no definition in that file, prints the cross-round key-collision table,
+resolves every `path:line` reference under a `vendor/eval/` pin, compares asserted "N lines" figures with `wc -l` at
+the pin, and reports 8 aliases as **`inferred`** on every run because no round printed their URL. Measured cost
+**1.3 s / 127 files**, self-test **12/12**. What the instrument then saw, which the hand pass had missed: **round 3
+collides too** — `[^1]`, `[^2]` *and* `[^3]` are each defined with a different target in
+`…-research-r3.md` than in the round-2 base (`[^3]` = `learn.chatgpt.com/docs/hooks` vs
+`…/config-file/config-advanced`) — so a merge must re-key **round 3 as well**, and "already verified" is not the same
+thing as "key-compatible now". The **repair is still open**: rounds 3 and 4 are not re-keyed, and 8 of the 15 aliases
+still have no URL line. Corpus-wide counts are in **252** and `docs/reviews/citation-integrity-corpus-2026-10-29.md`.
 *Do not:* paste a research round's citation block as text; let two key styles name one page; treat a `#line` anchor as
 an address (§4 of `docs/reviews/harness-r4-verification-2026-10-29.md` measures that line ranges do not survive a
 re-fetch, and `inputs/fetched/MANIFEST.md` §4 that even a byte-stable page rots its URL). *Not gated on:* anything — the defect is in the docs and the tool, and it is the gate that
@@ -4875,3 +4887,54 @@ columnsets — claim → `grep` in `vendor/eval/<name>` at the pinned HEAD → r
 or mark it unfounded.
 *Do not:* leave a caveat that a later session will trust after the pins moved; re-anchor by re-fetching a web page
 (anchors rot, see 250); or reclassify a cell without reading the clone at the pin. *Not gated on:* anything.
+
+**252. Our own review corpus is the least-verified artifact in the repo: 89 undefined citation keys, 108 key
+collisions and 71 duplicate definitions sit in 16 document families, 9 path citations name files no branch ever
+had, and the checker that proves it now exists — so the repair is unowned queue work, not an unknown.**
+*(delegate; measured 2026-10-29 22:4x–23:2x CDT = 2026-10-29T03:4x–04:2xZ, Linux, `Alex-Desktop-Win10`, Fedora
+`7.2.11-200.fc42.x86_64`, node v24.22.1; full evidence and every command in
+`docs/reviews/citation-integrity-corpus-2026-10-29.md`)* `node tools/review-cite-check.mjs` over **127** files in
+`docs/reviews/` + `docs/incidents/` + `inputs/fetched/` — **81 of them clean** — reports **522 findings, 292 hard**
+(the same run printed **589 / 297** until eight defects in the checker itself were fixed; the 67 that vanished were
+false positives, see the *Also learned* paragraph): DANGLING KEY 148 (**89** hard, 59 soft from files that declare
+`cite-ns: quoted`) · KEY COLLISION **108** · DUP DEFINITION **71** (29 of them in
+`building-agent-systems-on-pi-research.md`, which defines `[^1]` at lines **111, 553, 987** with three different
+targets, and `[^2]`…`[^10]` the same way; 24 more in `tui-streaming-research.md`) · PATH NEVER EXISTED **9** (8 in
+`tui-attach-vs-poll.md`, which cites
+`src/harness/harness.ts:161`, `src/types.ts:917` — upstream pi paths cited as if they were ours — and 1 in
+`pi-harness-usage-audit-2026-10-28.md`) · PATH MALFORMED **2** (elided `vendor/pi-main/.../edit-diff.ts:256`) ·
+LINE OUT OF RANGE **2** at a pin (`crewai/lib/cli/src/crewai_cli/templates/CLAUDE.md:1-8` against a 7-line file) ·
+SIZE MISMATCH 24, of which **6** are hard at pins · DEAD URL LINKED **5**. The renderer-independent statement of the collision defect:
+where a file defines one key three times, **two of the three targets are unreachable from the body text no matter
+which tie-break a renderer picks** — and the vendored `marked` **18.0.11** (a transitive dependency; nothing in
+`src/` imports it, so this says nothing about our UI) resolves duplicates to the **first** definition and has **no
+footnote support at all**, rendering `[^1]: [Name](url)` as `<a href="%5BName%5D(url)">^1</a>`. The URL half
+deserves its own warning, because a naive probe lies: over **192** cited URLs, 176 returned 200 and **9 returned 403,
+4 returned 429, 1 returned 401** — all bot-blocks, none dead — while `curl` **without `-L`** returns **308** for
+`docs.cline.bot/features/cline-rules` and `cursor.com/docs/context/rules`, which are live pages at **rotted**
+addresses (`/customization/cline-rules`, `/docs/rules`), and the three Goose site paths the harness report cites as
+`[^4] [^9] [^10]` — printed again in its §2 matrix rows 17–19 under `advertised-elsewhere` — are **404 with no
+redirect** (probed 03:53Z and 03:57Z). Those verdicts now live as machine-readable rows in
+`inputs/fetched/MANIFEST.md` §6 so the offline gate sees them.
+*Signal that this is fixed:* `node tools/review-cite-check.mjs --gate` exits **0** on the corpus, and a doc-only change
+cannot land with a new hard finding — which needs the `check` rule (213's family), not more prose. Then a citation
+convention is **chosen**, not discovered: either every citation is `vendor/eval/<clone>/path:LINE` under a named pin,
+or numbered footnotes defined exactly once per file. The checker cannot pick one, and until someone does the 108 and
+71 will keep regrowing, because the failure mode is *appending a second References block under the same numbers* —
+which is what three of the 16 families already do.
+*Gated on:* pm sequencing (this is a docs-and-instrument queue, like 250/244/243, and the delegate claims nothing) and,
+for the `--gate` to become a landing rule, the `check`-rule surface. *Do not:* trust a URL probe's 403/429 as death;
+follow redirects before calling anything dead; treat a byte-identical re-fetch as proof a citation still resolves (its
+locator rotted — MANIFEST §4); re-anchor line numbers by re-fetching a page (250); fix a corpus citation by editing
+the *cited claim* rather than the address; or assume any renderer will make `[^n]` footnotes mean anything.
+*Also learned about building instruments here* (each produced a **false** finding on a real file before it was
+fixed, and each is now pinned by a `--self-test` case): `wc -l` counts newlines (a no-trailing-newline file reports
+one less than its content lines); the extension alternation matched `md` before `mdx` and called a real pin path a
+phantom; a URL regex that swallowed a trailing backtick called `cursor.com/docs/hooks\`` dead; own-tree size claims
+scored as hard inflated the pin count from 6 to 23; inferring a citation "family" from cross-citation alone
+merged 22 unrelated reports and invented 81 collisions; **a fenced example of a defect was scored as the file having
+it** (the evidence note was charged with the duplicate definition it was illustrating), so footnote syntax is now
+skipped inside ``` fences while paths/sizes/URLs still count there; and a flag that takes a value (`--json`) can
+swallow the next flag and leak its value into the positional path list, corrupting the machine output. A citation
+checker that cries wolf is deleted within a session, so it prints its patterns, its zeros, and its own soft findings —
+this note's own evidence file self-charges **14 findings, all soft**, and is inside its own scan.

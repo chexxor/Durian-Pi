@@ -1,5 +1,6 @@
 # Round 4 of the public-harness study — delegate verification (the integration gate)
 
+<!-- cite-ns: quoted -- this file quotes another file footnote namespace; tools/review-cite-check.mjs reads this marker -->
 **Run:** 2026-10-29T03:0x–03:1xZ (= 2026-10-28 22:0x–22:1x **host-local**, `America/Chicago` CDT = UTC−5) on
 `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, HEAD `8557071e`. **Linux** throughout; every
 number below came from a command in this session (Appendix A lists them), not from any other report.

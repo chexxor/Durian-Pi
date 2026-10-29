@@ -1,5 +1,6 @@
 # Delegate notes on research round 3 — what checked out, what didn't, and what the pins say
 
+<!-- cite-ns: quoted -- this file quotes another file footnote namespace; tools/review-cite-check.mjs reads this marker -->
 **Date:** 2026-10-28 (Linux host, clock `UTC−5`) · **Annotates:**
 `docs/reviews/harness-tools-skills-public-harnesses-research-r3.md` — landed **byte-for-byte from the session transcript**,
 so the delivered bytes are untouched and there is no note inside them. **Corpus:** `inputs/fetched/MANIFEST.md` §4.

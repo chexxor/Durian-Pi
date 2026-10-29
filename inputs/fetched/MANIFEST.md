@@ -180,3 +180,24 @@ open and reopened. `[^13]`'s #4438 thread (comment 2026-09-11) is what settles t
 explicit slash invocation successfully injects `<skill-context name="wayfinder">` … the assistant then redundantly calls
 `skill` … which returns `Skill not found`"*. Verdicts on all four round-4 corrections:
 `docs/reviews/harness-r4-verification-2026-10-29.md`.
+
+## 6. URLs probed live by the delegate (machine-readable for `tools/review-cite-check.mjs`)
+
+Probed **2026-10-29T03:55:36Z** (host-local Wed Oct 28 22:55 CDT, UTC−5) on `Alex-Desktop-Win10`, Linux Fedora
+`7.2.11-200.fc42.x86_64`, `curl -sSL -m 20 -w '%{http_code} %{url_effective}'`. The three Goose site paths the round-2
+report cites as `[^4] [^9] [^10]` (and prints again in its §2 matrix rows 17–19) are **dead today, with no redirect** —
+so the §2 cells labelled `advertised-elsewhere` point at a page that does not exist, which is exactly ROADMAP **243**'s
+failure mode. Two more rows are **not dead but moved**: the cited locator rots while the page lives, which no
+"does it resolve?" check catches and no re-fetch of the old URL shows.
+
+| file | source URL | probed (Z) | HTTP | final URL, or where to re-anchor |
+|---|---|---|---|---|
+| not fetched — 404 at probe | https://block.github.io/goose/docs/getting-started/using-extensions | 2026-10-29T03:55:36Z | **404** | re-anchor at `goose 775b3958` — `vendor/eval/goose/documentation/docs/` |
+| not fetched — 404 at probe | https://block.github.io/goose/docs/goose-architecture/extensions-design | 2026-10-29T03:55:36Z | **404** | re-anchor at `goose 775b3958` — `documentation/docs/goose-architecture/extensions-design.md` (127 lines by `wc -l`; no trailing newline, so 128 content lines) |
+| not fetched — 404 at probe | https://block.github.io/goose/docs/guides/recipes/recipe-reference | 2026-10-29T03:55:36Z | **404** | re-anchor at `goose 775b3958` — `documentation/docs/tutorials/recipes-tutorial.md` |
+| redirect, page live | https://docs.cline.bot/features/cline-rules | 2026-10-29T03:55:36Z | **200** | https://docs.cline.bot/customization/cline-rules |
+| redirect, page live | https://cursor.com/docs/context/rules | 2026-10-29T03:55:36Z | **200** | https://cursor.com/docs/rules |
+
+**A control that matters:** a probe without `-L` (or with `redirect: "follow"` disabled) reports both moved rows above as
+`308`, which a naive checker calls *dead*. `curl -sS -o /dev/null -w '%{http_code}'` without `-L` returned **308** for both.
+Classify 3xx as *moved*, never as dead; the 404s above return 404 with or without `-L`.

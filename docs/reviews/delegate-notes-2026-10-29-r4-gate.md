@@ -1,5 +1,6 @@
 # Delegate session notes — 2026-10-29 (round-4 research gate discharged)
 
+<!-- cite-ns: quoted -- this file quotes another file footnote namespace; tools/review-cite-check.mjs reads this marker -->
 **Host/timezone, per ROADMAP 244:** `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**,
 `America/Chicago` (CDT = UTC−5). Session span 2026-10-29T03:0x–03:3xZ. HEAD at clock-in `8557071e`; working tree clean
 except untracked `.scratch/` (1 worktree, `.git/worktrees` empty — unchanged from the previous session's inventory).
@@ -68,3 +69,56 @@ except untracked `.scratch/` (1 worktree, `.git/worktrees` empty — unchanged f
 - Land **233**'s decision (commit-or-discard) before the next session on either host: two instruments are still
   recoverable today, and that window is a function of nobody running a cleanup.
 - The spool grant (OPERATOR OWES item 5) is the single cheapest unblock: measured 0 rows for the whole blocking cluster.
+
+## 8. SAME DAY, SECOND SESSION (2026-10-29T03:4x–04:0xZ = 2026-10-28 22:4x–23:0x CDT, Linux, `Alex-Desktop-Win10`)
+
+Resumed from the previous session's next step. **Built** ROADMAP 250's two delegate halves —
+`tools/review-cite-check.mjs` and the alias table `docs/reviews/harness-citation-registry.md` — registered **252**,
+and appended URL-liveness rows as **MANIFEST §6**. No report prose was rewritten: the findings the instrument raises
+in the harness family **are** the deliverable, and re-keying rounds 3–4 is seat work.
+
+**What this session re-measured, and what it changed in the pointer:**
+
+| Claim inherited from §1–§7 / `NEXT.md` | What the instrument said |
+|---|---|
+| 9 dangling keys; "round 4 names a source for **6 of 9**, 3 unresolved" | **3 confirmed + 5 inferred + 1 unnamed** — and one key (`b736c3`) has no candidate anywhere |
+| round 3 is "verified: 60 citations, all URLs 200" | round 3 **collides on `[^1]`, `[^2]` and `[^3]`** with round 2 (`[^3]` = `learn.chatgpt.com/docs/hooks` vs `…/config-file/config-advanced`). Verification ≠ key-compatibility; the merge must re-key round 3 too |
+| the Goose rows are "fixed from the pin" (243) | the *citations* moved; the **page** `learn.chatgpt.com/docs/guides/goose-2-extensions` is **still 404 with no redirect**, and §2 matrix rows 17–19 cite it again — fixing References only fixes half |
+| `extensions-design.md` is 128 lines | `wc -l` = **127**; content lines = **128** (no trailing newline). The report was right and the naive check was wrong |
+
+**What cost turns — all instrument bug-hunting, none research:**
+1. **Extension alternation order** (`md|mdx` matched `md`) invented a phantom path for a file that exists at the pin. ~6 turns.
+2. **`wc -l` semantics** vs content lines. ~4 turns. Ranges now resolve against content lines, "N lines" prose against `wc`, and a pure missing-newline gap scores soft.
+3. **A URL regex that swallowed a trailing backtick** invented 3 dead URLs on a line that had none. ~3 turns.
+4. **Bot-blocks scored as dead** — the first `--fetch` run called **14 live pages dead** (9×403, 4×429, 1×401). The most dangerous of the six: a gate that calls live pages dead gets the page deleted. ~2 turns.
+5. **"Family" inferred from cross-citation** merged 22 unrelated reports and printed **81 fake collisions**. ~4 turns.
+6. **Own-tree size claims scored hard** — 23 instead of 6. ~2 turns.
+7. **It charged its own evidence note for a defect it was illustrating** — the `[^1]:` pair inside a ``` demo block
+   became a real `DUP DEFINITION`. ~3 turns. Footnote syntax is now skipped inside fences (paths, sizes and URLs still
+   count there, because real citations are written in fences); a checker that scores *examples* as *assertions* teaches
+   authors to stop writing examples.
+8. `--json --top 0` **corrupted its own machine output** — `--json` took `--top` as its filename and `0` leaked into the
+   positional path list, and `Number(0) || 12` turned "print no groups" back into 12. ~2 turns, and it mattered only
+   because I analyzed the JSON it wrote.
+
+**Proposals to shorten the next effort (same shape as §5):**
+- **Land the instrument before the finding.** Six turns went re-deriving facts the corpus already held; the checker paid
+  for itself the first time it contradicted the pointer that summoned it (it corrected two `NEXT.md` numbers inside its
+  first run). Keep 250's shape: one file, zero deps, `--self-test` inside the file.
+- **Pin every false finding as a self-test case the moment it is fixed.** 3 → 12 cases; it caught a regression while I
+  was still typing, for 137 ms.
+- **Run the corpus, not just the target file.** The harness family was 10 findings; the same 1.3 s over 127 files (81 of
+  them clean) found **292 hard**, including a single file defining `[^1]` three times (so two of its three targets are
+  unreachable under
+  any renderer tie-break). Cheap + wide beats expensive + narrow.
+- **Never trust an offline claim about a URL.** Every URL verdict now carries a MANIFEST probe timestamp or is soft.
+  "Fixed from the pin" is precisely how a dead link survives a fix.
+- **A correction is not a bad claim.** The gate must pass "680, not the 1,457 from memory"; firing on corrections trains
+  readers to ignore the gate — the exact failure mode 240–243 exist to prevent.
+- **Roadmap and MANIFEST have no executable reader** (re-confirmed: `grep -rl docs/ROADMAP\|inputs/fetched/MANIFEST
+  demo/*.test.mjs scripts/*.mjs` → nothing). Edits there fail silently, so a numbered item can be duplicated or a
+  manifest row malformed and every test stays green. A `tools/review-cite-check.mjs --gate` wired into the `check` rule
+  (213's family) is the cheap close.
+
+**Deliberately not done:** no report prose edited (250's re-keying and the 94/108/71 corpus repair are queue work);
+no `src/` change; no queue row created; no push.

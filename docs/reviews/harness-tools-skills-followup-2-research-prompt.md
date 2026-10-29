@@ -1,5 +1,6 @@
 # Research prompt — tool/skill lifecycle, round 3: evidence integrity + the closed-harness gaps
 
+<!-- cite-ns: quoted -- this file quotes another file footnote namespace; tools/review-cite-check.mjs reads this marker -->
 > **This prompt is self-contained.** A research agent runs in its own context window, with no memory of the
 > rounds that produced it. Everything it needs is in this file. Read every path listed under **Start here**
 > before writing anything.
