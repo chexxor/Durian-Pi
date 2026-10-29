@@ -6009,3 +6009,27 @@ version**, and Copilot CLI's same hook flipped direction between v1.0.18 and v1.
 the operator released the phantom citation — "Forget about the phantom citation."** `docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md`
 stays missing; the recovery ask is withdrawn and no session should spend effort on it unless the operator reopens the question.
 The date/timezone half of ROADMAP **244** and its cited-path check remain live.
+
+## D160 — a research prompt must be *self-contained*: the round-4 sandbox held no copy of this repo, so every `docs/` path in the prompt was unreadable, and an unverified artifact gets tracked the session it lands
+
+**Measured** (delegate, 2026-10-29T03:4xZ = 2026-10-28 22:4x host-local CDT, `Alex-Desktop-Win10`):
+`docs/reviews/harness-tools-skills-public-harnesses-research-4.md` (17,412 B / 196 lines, sha256 `8e028729…`) opens
+**"Status: I could not execute this as specified"** — *"The prompt file is not in this sandbox. `docs/` does not exist here."*
+It therefore answered **reconstructed** questions, could not write, and could not produce response headers or `sha256sum`
+output, refusing to fill the MANIFEST columns: *"A MANIFEST with those columns filled would be fabricated. Don't accept one."*
+**Why this is a decision and not just an incident:** D159 already ruled that the research agent is off-host and the delegate is
+the landing path, but it did not draw the consequence — if the agent cannot read the rig, **a prompt that points at `docs/` paths
+is a prompt the agent cannot execute**, and the round costs the round-trip anyway. So: *(1)* prompts carry the questions and the
+cited text inline, and name only paths as *descriptions of this repo*, never as things to open; *(2)* the byte-level evidence
+columns (HTTP status, sha256, `Last-Modified`) are **delegate-obtained only**, by a native re-fetch — that is where 244's rule
+about hashes already lives, and asking the researcher for them invites fabrication; *(3)* registered as ROADMAP **249** for the
+runbook edit.
+
+**Second half of the ruling (delegate practice, not an operator grant):** when a research artifact appears in the working tree,
+**track it verbatim and unverified in the same session**, in its own commit that adopts no claim from it. *Why:* ROADMAP **233**
+measured that untracked files this session reads are gone tomorrow, and D159 makes the artifact **non-regenerable** — the agent
+that produced it cannot re-run on demand. The cost of tracking it early is one commit of unverified text; the cost of waiting is
+that the evidence disappears, which is exactly what 243 recorded. Verification stays a separate commit, and the pointer says which
+claims are still unverified. *(Naming hazard recorded under 244(iv): the series is named four ways — round 2 has no version
+suffix, round 3 is `-r3.md`, round 4 is `-research-4.md`, and the prompt named `followup-2` is the round-3 prompt; a "round N"
+prose reference is ambiguous until it is quoted as a path.)*
