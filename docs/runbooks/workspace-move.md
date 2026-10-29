@@ -41,6 +41,11 @@ print("rows citing unresolvable commits:",len(bad)); [print("  ",*x) for x in so
 PY
 ```
 
+**Write an inventory as one name per line — no headers, no counts, no git output mixed in.** Measured this session: the
+pre-writing inventory was written in a mixed format, so the post-verb name-diff printed `pre=9` "lines" against **160** real
+files and buried the verdict (there was **zero** loss) in format noise. Regenerate bare-name inventories before trusting a
+diff — and note that a count-only inventory is doubly unsafe here, because the artifact counts itself.
+
 What "moved, not yet a rig" looks like on this box:
 
 | Divergence | Measured here | What it means |
