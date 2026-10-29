@@ -5038,6 +5038,22 @@ speed attempt: Q6_K's 32.72 GB cannot fit the 24 GB 3090 whole, which is *why* d
 verifier, and `single-model-rig` passing is a string comparison); and do not buy a bigger `max_tokens` for a
 model whose reasoning is unbounded — buy speed, or change models.
 
+**Update, same day (2026-10-29), and it moves this row's severity but not its cause.** The `Q4_K_M` variant was
+downloaded **and activated** (the mechanism is documented in `docs/runbooks/verifier-model-server.md` §"Activating a
+downloaded quantization (variant) without the GUI": neither REST `load` nor `lms` accepts a variant key, so the larger
+variants were set aside by rename until the catalog resolved to one). Measured decode **10.75 → 42.21 tok/s** (1,500
+tokens in 35.5 s), so `DURIG_VERIFIER_MAX_TOKENS: 8192` is a **194 s** generation — inside the rig's 600 s deadline and
+inside the probes' 300 s ceiling — and a k=1 gate run moves from ~3 h to ~45 min. **The 762 s figure in this row is
+therefore Q6_K-specific, and the row's defect stands unchanged: the config declared a budget with no measured decode
+speed behind it, and which speed you get is a property of a variant the config never names.** The capability half also
+stands: on corpus-like prompts Q4 still burns the whole budget reasoning — all four reasoning-lever arms at
+`max_tokens:1200` gave **`answerChars=0`** on Q4 too, and the gate's first cell (`H1-npm-invocation`, **defect** side)
+was **`TRUNCATED-EMPTY` at 6,000 tokens / 161.8 s** while the **same file's clean control answered at 1,889 tokens /
+42.6 s**. Add to acceptance: **(5)** any run record, `check` rule or seat finding that names a verifier model must name
+the **variant** and the **measured decode**, because the model *key is identical across quantizations* — today the only
+surface that prints which `.gguf` is live is `ps -eo args | grep llama-server` — so without (5), "we upgraded the
+verifier" is unfalsifiable.
+
 **256. Before the channel restarts at 12 seats: a measured seat-hygiene rehearsal, because "will they behave" is
 a question with a number in it.** *(delegate; registered 2026-10-29 from the operator's restart condition —
 "they need to be hygienic with their use of their seat-personal workspace, git branches, git worktrees, and

@@ -6256,3 +6256,30 @@ and buying a bigger `max_tokens` for a model whose reasoning never ends. **Statu
 unevaluated** (256, next session's first item, spooled to `pm`); the verifier is **certified no more than before** and is
 now additionally known to be **feasibility-bound by decode speed**; the pointer is corrected; no worktree or branch
 changed (pre/post inventory diffed, `.spike` +1).
+
+**D164 addendum, same session — the decode lever landed, and it moved the arithmetic without touching the capability
+finding.** The operator granted the `Q4_K_M` download; the surface to *activate* it does not exist: REST `load`
+rejects `variant`/`quantization`/`selected_variant` (`Unrecognized key(s)`; its body is `additionalProperties:false`),
+`lms load` has no quantization flag, and `lms load "recursivesi/flint@q4_k_m"` → `Model not found`. **What works from
+a shell:** unload by `instance_id`, **rename the other variants' `.gguf` files out of the scanned models tree** (same
+filesystem ⇒ instant, reversible; nothing deleted — they sit at
+`~/.var/app/ai.lmstudio.lm-studio/.lmstudio/set-aside-flint-q6-q8/`), then `load`; the catalog collapses to `@q4_k_m`
+and the ordinary load body starts it. **Verified by the only surface that prints the truth** — `ps -eo args | grep
+llama-server` → `--model …/flint-Q4_K_M.gguf` — because `GET /api/v1/models` reports the **same key** for every
+variant. Result: **decode 10.75 → 42.21 tok/s** (1,500 tokens in 35.5 s), so the 300 s probe ceiling moves to ~12,600
+output tokens, the rig's 600 s request deadline to ~25,200, and `DURIG_VERIFIER_MAX_TOKENS: 8192` from an impossible
+**762 s** to a **194 s** generation; a k=1 gate run goes ~3 h → ~45 min. **This is why 255's defect is "a declared
+budget with no measured speed behind it", not "762 s":** the number was a property of a *variant* the config never
+named, and a claim about a model's speed is a claim about a quantization (acceptance **(5)** added to 255: name the
+variant and the measured decode, or "we upgraded the verifier" is unfalsifiable). **What did not move:** the
+unbounded-reasoning finding. On Q4 the model answers trivial prompts (`"Count from 1 to 900"` at 1,500 tokens → 1,715
+answer chars; `"Reply with exactly: READY"` at 300 → `"READY"`, 89 reasoning chars) and still produces
+**`answerChars=0`** on the four reasoning-lever arms at 1,200 tokens (3,491–4,236 reasoning chars), and the gate's
+first cell — `H1-npm-invocation`, **defect** side — read **`TRUNCATED-EMPTY` at 6,000 tokens / 161.8 s** while **the
+same file's clean control answered at 1,889 tokens / 42.6 s**. Read the asymmetry, not just the failure: this model
+reasons hardest exactly where a verifier is being asked to find something, which is why a hello-world smoke test is
+not evidence about the gate. Two facts about this box that earlier pointers did not state: **it has two GPUs** (16,376
+MiB and 24,576 MiB), and **`unload` requires `instance_id`** when an instance is live (`{"model": …}` →
+`missing_required_parameter`; the identical shape looked harmless earlier only because nothing was loaded and it
+404'd). **Standing change to the rig, pending the operator's ratification:** the verifier is served from **Q4_K_M at
+65,536**, with Q6_K/Q8_0 set aside — same model key, materially different model.
