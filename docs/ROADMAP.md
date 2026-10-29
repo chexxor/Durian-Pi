@@ -4476,9 +4476,13 @@ survive file loss: extraction over 87 transcripts recovered `tools/channel-prefl
 `tools/broker-serve.mjs` (17,877 B) and `tools/instrument-provenance.mjs` (6,643 B)
 (`docs/reviews/pi-harness-usage-audit-2026-10-28.md` §transcripts, which also **narrows** D156's "unrecoverable": the
 eight lost instruments have no `write` call in any transcript, so *they* stay lost, but the class is recoverable). The
-extractors that did it are **untracked `.scratch/` files** (`.scratch/transcript-write-bodies.mjs`,
-`transcript-read-bodies.mjs`, and this session's `.spike/extract-pi-src.mjs`), and `.scratch/`/`.spike/` are gitignored —
-the instrument that would prove 233 is itself unproven. pi's session store is searchable by the picker (search, rename,
+extractors that did it were **untracked scratch files** at the time (the write-body and read-body extractors under
+`scratch/` and the pi-source extractor under the spike dir — their names are recorded in
+`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md` and D168, and scratch paths are deliberately
+NOT cited as tree claims here, per 233), and both scratch dirs are gitignored —
+the instrument that would prove 233 is itself unproven. **(Partly closed 2026-10-29 under GRANT 4:** the write-body
+extractor and the pi-source extractor are now tracked at `tools/transcript-recovery.mjs` and
+`tools/extract-pi-src.mjs`; the read-body extractor and the 233-witness probe are still scratch**) pi's session store is searchable by the picker (search, rename,
 delete, `/tree`, `/fork`, `docs/sessions.md:11-30`), and aider `5dc9490b` keeps the cheapest version of the same layer in
 plaintext: a chat-history and an input-history file (`aider/args.py:271-287`) with `/run` commands appended to the latter
 (`aider/coders/base_coder.py:2474`).
@@ -4493,6 +4497,16 @@ must not paste store contents into docs, D-scope); recovering a body is not rest
 recovery **re-created**, per 233/D156; the Windows-host transcripts were unreachable on this host (see 237), so a
 recovery attempt is corpus-bounded; and this row is about the **delegate's** files, not seat worktrees — seat work is in
 git or the store, and a seat's tool results are entries (137,427 of them), never transcripts.
+*Progress (delegate, 2026-10-29, GRANT 4 / 233 hygiene — this is NOT a claim on the row and it has no queue row: 0 of
+4,821 rows cite 239):* the write-body extractor is promoted to **`tools/transcript-recovery.mjs`** (the exact name this
+row asked for) and now honours the acceptance clause "running it never writes a file without an explicit `--out`" —
+measured both ways on this host (Linux, node v24.22.1): without `--out` it prints `7,178 B` for
+`tools/doc-integrity-guard.mjs` and writes nothing, with `--out .spike/recovered-test` it writes 7,202 B; and
+**`tools/extract-pi-src.mjs`** (promoted from `.spike/extract-pi-src.mjs`) extracted **83** pi source files from
+`node_modules/@earendil-works/pi-durable` (installed **1.3.0**, pin `2ec55d808d45`), whose recovered
+`src/tools/bash.ts` agrees with `vendor/pi-main` at **168/169** — the line numbers **217** cites. Still owed by this
+row: the scribe half (`docs/runbooks/README.md` symptom row + the `tracked-files-missing-on-disk.md` row), the
+read-body extractor, and whoever lands it must keep the **re-created** label (233/D156).
 
 Registered 2026-10-28 (240-243), not scheduled. These come from the **public-harness half** of the tool/skill-lifecycle
 study (`docs/reviews/harness-tools-skills-public-harnesses-research.md`, round 2) and from the five public-harness pins
@@ -5000,8 +5014,11 @@ resulting ceiling `timeout_s × tok/s`, because a run whose cells are mostly `TR
 *Blind spots:* the same non-streaming `fetch` sits in `calibrate-verifier.mjs:42`, `throughput.mjs:24`,
 `cold-prefill.mjs:53` (and `stream-probe.mjs:13` streams, so the family is inconsistent, not uniform) — fix the
 family or the next session re-hits it in a different file; `tools/` is untested by design except where a demo is
-named, so this row must name its demo. A working `--import` shim exists today at `.spike/gate/no-headers-timeout.mjs`
-— it is **untracked**, and 233's whole lesson is that untracked instruments vanish; land this in the instrument.
+named, so this row must name its demo. A working `--import` shim **landed** 2026-10-29 at
+`tools/model-probes/no-headers-timeout-shim.mjs` under GRANT 4 (the spike copy that made the measurement stays in the
+gitignored spike dir, where it was taken; 233's lesson is that untracked instruments vanish — which is why this row
+cites only the tracked one).
+**254 replaces the shim properly** — a shim is a labelled workaround, not the fix.
 *Do not:* raise `CAL_MAX_TOKENS` before measuring decode (a bigger budget on a slow engine just moves the run past
 the ceiling); and do not read `fetch failed` as "the model is dead".
 
