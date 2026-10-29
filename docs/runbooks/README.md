@@ -132,6 +132,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Runbook | Use when | Writes? |
 |---|---|---|
 | [workspace-move.md](workspace-move.md) | the rig's workspace moved machines or operating systems (fresh clone/copy, Linux box for a Windows rig, new user) — worktree registrations, seat cwds, the pin's links, or queue-cited commit shas do not resolve | yes |
+| [cross-clone-object-recovery.md](cross-clone-object-recovery.md) | a cited commit sha resolves in no object store here; the workspace arrived from another machine/OS and the history did not travel; `git fsck --unreachable` reports commits anchored by no ref (urgent — `git gc` deletes them) | yes (`.git` only, never the store) |
 | [verifier-model-server.md](verifier-model-server.md) | a seat's model is not what `rig.selfdev.json` claims; the model server lists an instance that no request can use (`Failed to load model`); you must change which model a provider serves, its context window, or free RAM for a second model; `check` reports `single-model-rig` | yes (server only, not the store) |
 | [broker-down-or-stalled.md](broker-down-or-stalled.md) | seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale `PASS` (dormant); log stops after a storage error or `database is locked` | yes |
 | [broker-safe-change.md](broker-safe-change.md) | a model/constitution/reset change must apply without corrupting the store | yes |
@@ -183,6 +184,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Write guard / source files | write-corruption-recovery |
 | Constitution / starter mirror | constitution-amendment |
 | Worktrees | leaked-worktrees, prepare-workspace-etarget, worktree-unlinked-deps, prepare-workspace-refused |
+| Git objects / shas cited from another machine | cross-clone-object-recovery, workspace-move |
 | Missing files on disk | tracked-files-missing-on-disk |
 | Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
 | Queue / parked work | stale-held-backlog |
