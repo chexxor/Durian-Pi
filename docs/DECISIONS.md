@@ -6244,10 +6244,11 @@ mounted** — `git fsck --unreachable | grep -c '^unreachable commit'` = 452, `r
 across 2 packs. The minting grant (`refs/rescued/orphan-*`) is now time-critical rather than tidiness.
 
 **A delegate-caused near-loss, logged because it is the same class as ROADMAP 233.** While appending this entry the
-delegate used a whole-file write instead of an append and replaced **`docs/DECISIONS.md` (6,175 lines) with 76**. It was
-recoverable in one command **only because that file was committed**; the eight instruments lost in the 2026-10-28
-incident were not committed and are gone forever. Rule: a long append to a large committed file goes through an append,
-never a rewrite, and `git status --short` + `wc -l` are read **after** the write verb, not before.
+delegate used a whole-file write instead of an append and replaced **`docs/DECISIONS.md` (6,175 lines as it stood that day —
+the file moves, so treat that as an incident-scale figure, not a current one) with 76**. It was recoverable in one command
+**only because that file was committed**; the eight instruments lost in the 2026-10-28 incident were not committed and are
+gone forever. Rule: a long append to a large committed file goes through an append, never a rewrite, and
+`git status --short` + `wc -l` are read **after** the write verb, not before.
 
 **Alternatives considered and rejected:** starting the channel now at 0 claimable rows (a started team idles or
 improvises); treating "will they behave" as an operator judgement (the operator asked *when*, which is a dependency
@@ -6304,3 +6305,57 @@ finish inside the budget, and what it finishes is miscalibrated"** — and the d
 another 6,000-token fragment run and not a purchase. **Rule extracted: before a control-side verdict counts against a
 model, check whether the claim concerns material the run did not feed; and never accept a rate whose denominator is
 smaller than the number of prompts attempted.**
+
+## D165 — Six delegate asks become six operator grants: seat-root ruling A, a defined "queue drains", mint-before-`gc`, instrument hygiene, the verifier path (whole-module first, Q4_K_M ratified), and decomposition-not-seats with a stated scale threshold (2026-10-29, operator ruling; the delegate executes next session)
+
+**The operator accepted all six recommendations and directed that they be executed in the next session**, which converts
+six open asks into grants with owners and costs. Recorded here because the *why* is what the next session cannot re-derive.
+
+**(1) ROADMAP 221 — ruling A is the ruling:** the persisted per-seat root becomes the workspace-root-relative name, `up --root`
+once per seat, **no migration code**. Chosen over a migration because the value is only wrong for future seats on this host and
+a migration would rewrite history-bearing config for no benefit; and it is not a cosmetic ruling — `classifyGitRoot("D:\Git\Durian-Pi-worktrees\engineer")`
+prints **`main-worktree`** on Linux, and **256**'s hygiene audit cannot score a seat's workspace discipline while the seat root
+is an unreadable cross-machine path. Implementation is the team's (failing-first demo in `src/`), not the delegate's.
+**(2) "The queue drains" gets a two-clause predicate, not a count:** *every released row reaches a terminal state within one
+resident-broker day* (the 314–741 items/day regime from `docs/reviews/wallclock-budget-2026-10-28.md`) **and** *no `held` row
+older than **7 days** survives a `pm` pass without being released or explicitly cancelled*. A bare "claimable == 0" definition
+was rejected on measurement: the queue is **4,821 rows / 0 claimable**, so such a definition would declare the queue
+permanently non-draining and make the clause an unpassable gate on #725/#726/#727 (already `held` 12 days). The product half
+is **231**; releases stay `pm`'s verb, so those three rows remain `held` until the predicate exists and `pm` releases them.
+**(3) Minting `refs/rescued/orphan-*` is granted, and the grant is deliberately split from 232.** Minting is reversible,
+cheap (one `git update-ref` each) and closes a real decay window — **452 unreachable commits dated 2026-10-14→10-21**
+(`25008d8c` #1274, `5e00ee7e` #1558, `81005c62` #2111) sit anchored by no ref past `gc.pruneExpire`, with the supplying clone
+unmounted; deletion stays a separate decision. Reassuringly-measured: this store has **267 loose objects** against
+`gc.auto`'s 6,700 threshold, so an auto-gc will not fire on its own — the exposure is a human or seat running `git gc`, which
+is exactly what the next session's first command closes. **232 remains gated** on the 241 design note: nobody touches
+`src/worktree.mjs:649` / `src/broker.mjs:1167`, and no suite runs from this checkout while it is open.
+**(4) Instrument hygiene (233) is scoped, not deferred:** land the one shim that earned it (`.spike/gate/no-headers-timeout.mjs`
+→ `tools/model-probes/`, labelled as such until **254** replaces it properly), label the other two
+`instrument-provenance` lists under **UNTRACKED BUT CITED** as **re-created** or amend the rows that cite them, then gitignore
+`.scratch/` (**38 files**). The rationale is this session's own evidence twice over: the 2026-10-28 instruments that were
+never committed are gone forever, while today's destroyed-then-restored `docs/DECISIONS.md` (6,175 lines → 76 → 6,175 by one
+`git checkout --`) survived **only because it was committed**. Untracked work is work that can vanish; committed work cannot.
+**(5) The verifier path is (a) then (c), and the Q4_K_M serving change is ratified.** First the **`--whole-module` mutant run**
+(~30 min, removes the excerpt confound, targets the three proof-backed mutants); only if that still false-alarms on controls
+does the rig pay for a **remote cross-family verifier**, which is the only option satisfying **253** today. Bigger budgets
+(k=3 at ~10,000 tokens, ~2.5 h) are explicitly **not** funded before (a) resolves the confound, and starting uncertified is
+ruled out on **D137** grounds. The Q4_K_M switch (Q6/Q8 set aside by rename, restorable with one `mv`) is kept because 3.9×
+decode is what makes any local verifier discussable — with the standing caveat that **the model key did not change while the
+model did**, which is why 255 acceptance (5) now demands variant + measured decode in every run record.
+**(6) Decomposition starts, seats do not; the scale threshold is accepted as proposed.** The channel stays down because the
+queue has **0 claimable** rows — a started team would idle or improvise (and at 5 seats the broker already spent **48.5 %** of a
+window in `askSeat` with **42.9 %** of dispatches `no_healthy_seat`, so "more seats" is not "more throughput" by construction).
+Scale gate: **zero violations of the hard dimensions** (no leaked worktree, no stray seat, no branch unmerged while its item
+reads `done`) over the bounded 2-seat rehearsal, **≤2 soft violations per seat-run**, then 5 seats with the audit re-run, then
+12. The numbers come from the operator's own restart condition, made measurable by **256**.
+
+**Consequence the operator should see plainly: the RTX 3090 was never the verifier's constraint.** The seats live on the other
+card (`strata-host`, `Qwen3.8-Flash-Next IQ3_S`, 14.6 GB on the A4000), so the 3090 is effectively a dedicated verifier box.
+The binding constraints are (i) flint's non-terminating reasoning under an output budget, and (ii) **D137's cross-family rule**,
+which disqualifies the fastest single-card models — the Qwen3 MoE family — precisely because the seats are Qwen3.8-Flash-Next.
+That is why **258** is registered (answer-first contracts, forced-choice scoring, structured output, `llama-server`-direct flags,
+and a context/`parallel` reconfiguration that returns KV bytes to weights) and why the candidate list in
+`docs/runbooks/verifier-model-server.md` names `gpt-oss-20b`, `mistral-small-3.x-24b` and `gemma-3-27b` rather than the
+bigger Qwen quants. Relaxing D137 to admit a same-family verifier remains the operator's ruling to make, and this entry records
+the cost of making it: a verifier that shares a family shares its blind spots. **Status:** grants recorded, pointer re-cut to
+§OPERATOR GRANTS (the superseded §OPERATOR OWES is archived verbatim); nothing executed yet; nothing pushed.

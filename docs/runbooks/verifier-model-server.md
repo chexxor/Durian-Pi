@@ -211,6 +211,46 @@ can deliver inside 300 s (~10,000 tokens at 34 tok/s)** — it removes the excer
 proof-backed mutants, and costs ~30 min. If the false-alarm-on-controls pattern survives that, change models rather than
 budgets (**D137**'s cross-family constraint is the operator's to relax, not a delegate's).
 
+## What one RTX 3090 does and does not buy you as a verifier (2026-10-29, measured on this box)
+
+**Topology, from the config and the process table, not from memory:** the **seats** are served by `strata-host` on
+`DURIG_LOCAL_BASE_URL http://127.0.0.1:47831/v1`, model **`Qwen3.8-Flash-Next IQ3_S`** (label from its own `/v1/models`),
+held on **GPU0 = RTX A4000 16,376 MiB, 14,632 MiB resident**. The **verifier** is LM Studio `:1234` on
+**GPU1 = RTX 3090 24,576 MiB**, where `llama-server` holds **19,102 MiB** for flint Q4_K_M. So the 3090 is already
+**effectively dedicated to the verifier** — capacity is *not* the blocker, and any claim that "the verifier is slow because
+the box is full" should be checked against those two numbers.
+
+**What the card buys:** decode (**10.75 → 42.21 tok/s** by changing quantization), and headroom for a bigger/wider model or
+a longer window. **What it does not buy:** an answer from a model that will not stop reasoning — at **6,000** output tokens
+**19 of 24** prompts still ended `finish=length`, and 42 tok/s means 10,000 tokens costs **~4 min per call**, so a k=3
+run over 8 items ≈ **2.5 h** of pure generation for a verifier that may still not finish.
+
+**Candidate verifier models (a download grant is required for anything not already on disk; LM Studio currently holds only
+flint `@q4_k_m`, `ministral-3-14b-reasoning` @q6_k/@q8_0, and `text-embedding-nomic-embed-text-v1.5`):**
+
+| Candidate | Approx. on-disk size | Family vs the seats' `Qwen3.8-Flash-Next` (**D137**) | Reasoning control | Fit on one 3090 |
+|---|---|---|---|---|
+| `gpt-oss-20b` | ~13 GB (MXFP4) | **different family** ✓ | thinking is optional per request | comfortable — leaves room for a long window |
+| `mistral-small-3.x-24b` | ~14 GB (Q4) | **different family** ✓ | non-reasoning by default | comfortable |
+| `gemma-3-27b` | ~17 GB (Q4) | **different family** ✓ | thinking optional | fits at ~32k ctx |
+| `qwen3-30b-a3b` / `qwen3-coder-30b-a3b` | ~18 GB (Q4) | **same family as the seats — a D137 violation** | best-in-class toggle | fits, and is the fastest option — **which is exactly why it is the trap** |
+| flint **Q8_0** (already on disk, set aside) | 42.35 GB | ✓ | none (same problem as Q4) | **does not fit** — restore only if the operator wants Q6/Q8 back |
+
+Sizes above are the vendor's usual quantization footprints, **not** measured on this box — verify with
+`POST /api/v1/models/download` + `ls -la` before believing them, and note that `download` needs a **HuggingFace URL**, not a
+model key. **Every candidate gets the k=1 gate run (~30 min) before adoption, and the run record must name the variant and
+the measured decode (255 acceptance (5)).**
+
+**Three levers that need no download and no money — try these first (all are ROADMAP 258):** an **answer-first contract**
+(`VERDICT: DEFECT|CLEAN` as line one, ≤3 lines of mechanism, justification last) so a truncated tail still scores;
+**forced-choice scoring** (`--force-verdict`), which turns the verifier into a ~50-token classifier and makes **k=3 over the
+whole corpus a minutes-long experiment** instead of a 50-minute one; and **running `llama-server` directly** instead of
+through LM Studio, where `--chat-template`, `--reasoning-parser`, `--grammar` and `--temp 0` are reachable (the backend
+binary is already on disk at `…/.lmstudio/extensions/backends/llama.cpp-linux-x86_64-nvidia-cuda12-avx2-2.65.1/llama-server`,
+which is what proved the live `.gguf` in the section above). Also free: **cut the verifier's own window** —
+`65,536 @ parallel 4` spends gigabytes of KV on the 3090; `32,768 @ parallel 1` returns it to weights, which is where decode
+speed comes from.
+
 ## The numbers that decide the window (measured 2026-10-29, this box)
 
 | Fact | Value | How it was read |

@@ -5112,3 +5112,38 @@ excused in bulk here — `--whole-module` (the fitting items are 1,686–7,139 e
 *Do not:* read `1/1 scored` as a capability rate; and do not answer a truncated run by raising `CAL_MAX_TOKENS` alone —
 measure decode first (**255**), because at the measured **21.8–48.9 tok/s** the budget sets the wall-clock and the
 wall-clock is what truncates.
+
+**258. A verifier that must finish thinking before it may answer cannot be scored at any budget this box can afford in
+wall-clock — the gate has no output contract that puts the answer first, and it is D137's cross-family rule, not the GPU,
+that narrows the candidate set.** *(delegate; registered 2026-10-29 from the completed run plus the operator's correct
+challenge: "we have a full RTX 3090 for the verifier — what is the blocker?")*
+**What exists today, measured:** flint emits its answer **after** reasoning, so the output budget decides whether a verdict
+exists at all — **19 of 24 prompts truncated at 6,000 tokens**, and every lever returned **0 answer chars**
+(`chat_template_kwargs {thinking:false}`, top-level `thinking:false`, `reasoning_effort:low`; the model reports
+`capabilities.reasoning.allowed_options: ["on"]`). At **42.21 tok/s** on Q4_K_M a 10,000-token answer fits inside 300 s,
+so **the box is not the blocker.** What is: (a) `gate.mjs`'s corpus prompts ask for free-prose analysis and score
+`answer+reasoning`, so the first tokens are always reasoning; (b) nothing in `tools/model-probes/` has a forced-choice or
+structured-output mode — no answer-first contract, no GBNF/schema, and `--material answer` only removes reasoning from
+*scoring*, it does not stop it being generated; (c) LM Studio's whole chat inventory is **flint `@q4_k_m` +
+`ministral-3-14b-reasoning` (already 0/2) + an embedder**, while the **seats run `Qwen3.8-Flash-Next IQ3_S`**
+(`DURIG_LOCAL_BASE_URL http://127.0.0.1:47831/v1`, GPU0) — so **D137 disqualifies the Qwen3 family**, which is exactly the
+set of fast single-card MoE models that would otherwise fit the 3090.
+*Acceptance (failing-first):* (1) an **answer-first contract** in the corpus prompt (first line `VERDICT: DEFECT|CLEAN`,
+then ≤3 lines of mechanism, then justification) with a fixture proving a **truncated tail still scores** — that converts
+truncation from "no evidence" into "partial evidence"; (2) a **forced-choice mode** (`--force-verdict`) scored on the first
+line only, which makes a verifier usable as a **classifier** at ~50 output tokens per item — a whole corpus in minutes, so
+the HIT-vs-FALSE-ALARM rate becomes cheap to measure at **k=3** instead of a 50-minute k=1 sample; (3) **probe and record**
+whether structured output (GBNF / `response_format`) constrains tokens while the reasoning parser is active — **do not
+assume it does**; (4) if the LM Studio surface hides those levers, run the candidate **directly under `llama-server`** (the
+backend is already on disk at `…/llama.cpp-linux-x86_64-nvidia-cuda12-avx2-2.65.1/llama-server`), where `--chat-template`,
+`--reasoning-parser`, `--grammar` and `--temp 0` exist, and record which flag did what; (5) every candidate **gets the k=1
+gate run before adoption**, and the run record names its **variant and measured decode** (**255** acceptance (5)).
+*Blind spots / candidate set:* a **triage ladder** (trust a local verifier's HITs, escalate its abstentions to a remote
+cross-family check) is a routing policy, not a model fix, and it needs **257**'s scorability floor or "abstained" will be
+misread as "passed"; **same-family speed is the trap** — the fastest one-card models (Qwen3-30B-A3B, Qwen3-Coder-30B-A3B)
+are disqualified because the seats are Qwen3.8-Flash-Next, and a verifier that shares a family shares its blind spots; and
+the 3090's real headroom is **context and offload, not only tokens/s** — `parallel 4` at 65,536 ctx spends gigabytes of KV
+that a `32,768 / parallel 1` verifier config hands back to weights.
+*Do not:* raise `max_tokens` alone; do not relax **D137** to make a same-family candidate convenient (that is the
+operator's ruling, and it must be made with the correlated-blindness cost stated in the same sentence); and do not count a
+control false alarm against a candidate until the excerpt confound is controlled (`--whole-module`, **195**).
