@@ -1,6 +1,6 @@
 ---
 name: delegating-to-durian-pi
-description: Drive a durian-pi team on the operator's behalf — deliver the operator's intent to the team, read the rig's state, and verify the team's result. Use as an external delegate; you do not do the team's work, and the team's PM owns decomposition and routing.
+description: Drive a durian-pi team on the operator's behalf — deliver the operator's intent to the team, read the rig's state with its existing instruments (channel-preflight, broker-serve, queue-drain-audit, latency-budget, instrument-provenance, review-cite-check, model-probes, vendor-pins) rather than re-deriving measurements, and verify the team's result. Use as an external delegate; you do not do the team's work, and the team's PM owns decomposition and routing.
 ---
 
 # Delegating to a durian-pi team
@@ -158,6 +158,35 @@ uncommitted ones). Count it in the tree you are testing; do not trust README/FEA
 - `metrics` = "is it getting worse?" — four measures, each declaring its band and **blind spot**;
   a reading it cannot judge says so (`no data`, `no baseline yet`, `silent`) rather than guessing.
 - A rules finding it cannot judge is **skipped with a reason**, never reported as a pass.
+
+## Instruments you already have — run them, do not re-derive the measurement
+
+A third of what past delegates spent their session on was one-off measurement code: **24.0%** of all tool calls
+in the audited corpus (87 measurement calls per session) and **11.1%** on this host alone
+(`node tools/harness-usage-census.mjs ~/.pi/agent/sessions/--home-chexxor-Git-Durian-Pi--`, 0.55 s). Every
+question below has already been instrumented; the numbers in the middle column are measured costs, so the
+comparison is "seconds" vs "a session".
+
+| Run it when you need the answer | Cost | What it answers, and what it refuses |
+|---|---|---|
+| `node tools/channel-preflight.mjs --db ./selfdev.sqlite --rig ./rig.selfdev.json` | 3.3 s | §1–§8: the four delivery links, whether a seat's **shell can even spawn** (§7), provider-era attribution (don't chase old `402`s), host-clock posture. It does **not** start anything. |
+| `node tools/broker-serve.mjs --status` / `--dry-run` | 2.8 s / 2.9 s | Broker liveness, spool backlog, providers answered, and it **refuses** on `seat-shell-availability` and `live-tree-dirty`. A `--dry-run` previews **model and cwd resets only** — it names no removals, so it is not a safety check. |
+| `node tools/queue-drain-audit.mjs --db ./selfdev.sqlite` | 1.0 s | Which `held` rows have every cited gate terminal, and which artifacts are **already fully on `main`** (prints ids). An orphan-candidate verdict is **not** a release recommendation — `pm` owns release/cancel. |
+| `node tools/latency-budget.mjs --db ./selfdev.sqlite` | 3.0 s | The two wall-clock currencies (what machine time costs, and where it waits). Model speed is ~12.7% of machine time. |
+| `node tools/instrument-provenance.mjs` | 46 ms | Does every cited/credited script exist in `git ls-files` (ROADMAP 233), and does the suite's disk set match git's. Exits 1 on drift — a deleted suite member is otherwise a **silent shrink** (`scripts/suite.mjs` enumerates the directory). |
+| `node tools/review-cite-check.mjs --gate` | 1.3 s | Docs integrity across `docs/reviews` + `docs/incidents`: undefined/colliding footnote keys, `path:line` anchors resolved **at a pin**, asserted line counts vs the pin, dead URLs. `--gate` = the wrong-today set; `--fetch N` only if you accept that 403/429 are bot-blocks, not deaths. |
+| `node tools/model-probes/gate.mjs <baseUrl> <model-id> <label> --plan` | 0 (then ~2 min per cell) | The only thing that certifies a **verifier model**: defect vs matched clean control vs clean-neutral, k≥3 majority cells, false alarms on controls. `--plan` prints the fit and pair tables and spends nothing. **Gate before flipping seats** — `check`'s `single-model-rig` is a string comparison, so clearing it without a gate is a green lie (`D137`). |
+| `node tools/model-probes/cold-prefill.mjs [baseUrl] [model]` | minutes | What a seat's **first** turn costs vs a prefix-cached re-send, with `MemAvailable`/`SwapUsed`/load printed beside every row — a slow model and an out-of-RAM box look identical from the endpoint. |
+| `node tools/edit-failure-rate.mjs` | seconds | How seats' edits actually fail (217's acceptance names it for its shell row). |
+| `node tools/vendor-pins.mjs --check` | seconds | The competitor pins are at their recorded shas (14 clones) — cite at a pin, never by re-fetching a URL (anchors rot). |
+| `node scripts/clockin.mjs` | 2.6 s | The clock-in digest, in one call. |
+| `DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json` | seconds | The rig's structural rules. **Always name the rig**: a bare `check` pairs `rig.json` and reports findings about a rig nobody runs. |
+
+Three habits that come with them: **name the host, OS and timezone on every measurement you report** (244 — a
+number without them cannot be compared across this rig's two machines); **a cited script is a durable artifact**
+— if you build an instrument, commit it or move it into `tools/`, because eight instruments credited as landed in
+`docs/ROADMAP.md` are gone from disk and from git history entirely (233, recurred 2026-10-29); and **the
+verifier's capability is a measurement, not a config choice** (`docs/runbooks/verifier-model-server.md`).
 
 ## Where to read further
 

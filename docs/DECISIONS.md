@@ -6110,6 +6110,62 @@ files in `docs/reviews/`, `docs/incidents/`, `inputs/fetched/`: **524 findings, 
    `pm` and a seat own (D161); the delegate's deliverable is the instrument, the registry, MANIFEST §6 and the evidence.
    Half-grammar — the repair is now *unowned queue work*, not an unknown: **0 queue rows** name 250/244/243/252.
 
+## D163 — The verifier moves to a second served model, and `done` stops meaning "the author says so" (2026-10-29, operator rulings; executed by the delegate)
+
+**What the operator ruled, in one session.** (1) The verifier seats go onto the secondary model server
+(LM Studio at `http://127.0.0.1:1234`) **before** the team starts. (2) Every work item is **reviewed and merged to
+`main` before the item is completed** — a process requirement, registered as **ROADMAP 253**. (3) The delegate may
+**operate the model server**: unload a model, load another, and change load configurations, provided both models
+can be served if they fit.
+
+**Why the first ruling was not the small one it looked like.** The rig has been running **one model for all twelve
+seats**: `check` reports `single-model-rig` **fix-now** — "all 12 seats resolve to `local/iq3_s`, so a shared blind
+spot is systemic" — which means the author/verifier family invariant `SELFDEV.md` describes has been **false for
+the whole period since the Linux move**, and `verification-without-evidence` is red on **435** items. So the flip is
+not a tuning change; it restores a property the rig claims to have. And the seat count is **5, not 3**: calling the
+product's own predicate (`src/verifierrole.mjs`, `seatsAreVerifier(seat)` — one seat object, not two strings) against
+`rig.selfdev.json` matches `qa`, `qa2`, `auditor`, **`advocate`** and **`designer`**, because VERIFIER_TERMS includes
+`"review"` and those two roles say "design reviewer" / "UX reviewer". `docs/SELFDEV.md` names only three, which is a
+docs defect the scribe owns, not a delegate edit.
+
+**Why the flip is staged rather than started.** `D137` binds: *"a verifier that fails the seeded-bug gate is worse
+than no verifier"*, because clearing `single-model-rig` is only a **string comparison** (`src/checkup.mjs`), and a
+verifier that invents a confident wrong mechanism injects false verdicts rather than removing blind spots. So the
+rig/config change landed, and the **start** is gated on `tools/model-probes/gate.mjs --replicate 3` against flint,
+which was still running at clock-out (`~2 min` per cell on a reasoning-heavy model). If flint fails the gate, the
+answer is a remote cross-family verifier — **not** a return to the previous state: that model (`ministral-3-14b-reasoning`)
+scored **0/2** (`D137`) and its loaded window was **8,192**, below every verifier seat's median prompt.
+
+**The measurement that sets the window, and it is not a preference.** Over **60,503** `pi.assistant` turns in this
+store (`input + cacheRead` joined to seats by conversationId): `qa` p50 **55,538** / p95 251,311 · `advocate` p50
+**108,435** · `designer` p50 **66,258** · `auditor` p95 329,252 · `qa2` p95 48,640; **37,348** of the 60,503 exceed
+32,768. A verifier window under ~55k guarantees compaction; 65,536 is a **floor**, and the durable fix is the
+prompt-size work (**208**, the context-fraction guard), not an ever-larger window. `DURIG_VERIFIER_CONTEXT` was
+declaring **13,273** while the server had that model loaded at **8,192** — the rig has been stating a window it was
+not being given, and `DURIG_VERIFIER_MAX_TOKENS=32768` (raised in `D136` to survive a truncation artifact) was
+larger than the whole declared window; it is now **8192** so 57,344 tokens of the 65,536 remain for the prompt.
+
+**What was done to the server, and the trap that made it necessary.** LM Studio reported flint **loaded** at
+`context_length: 262144` while every inference call returned `Failed to load model` — a *zombie instance*: the
+listing is a registration, not a health check. Unloading and reloading with a **flat** body
+(`context_length: 65536`, `flash_attention`, `offload_kv_cache_to_gpu`) fixed servability in **18.3 s**, and
+unloading ministral freed **~12.7 GB** of the 3090; flint decodes **9.8 tok/s**, prefills COLD ~**212 tok/s**, and
+**WARM** at 0.23 s for a 6,016-token cached prefix — which is why the 55k-prompt economics are survivable at all.
+Both responses came back to curl as `HTTP 000` while the action had **landed**. Recorded as a runbook
+(`docs/runbooks/verifier-model-server.md`) rather than prose in a pointer, because the next delegate will otherwise
+spend a session rediscovering the endpoint set — two plausible-looking endpoints (`/api/v1/system`,
+`/api/v1/loading`) do not exist on this build.
+
+**And the process ruling, which is the larger one.** Today `complete_work` (`src/rig.mjs:931`) sets `done` in the
+same commit as the author's own declaration, `evidence` is `Type.Optional`, and the same handler retires the item
+worktree — so an item can be closed while its branch was never merged, which `docs/runbooks/land.md` records
+happening twice (#3990, #4163). **ROADMAP 100** asked for the *measure* of that (branch tip not an ancestor of
+`main` while the item reads `done`); the operator's ruling is the *gate*, registered as **253**: `done` requires a
+cross-family verifier's re-runnable evidence **and** an artifact that is an ancestor of `main`, with the merge
+mechanism staying `scripts/land.mjs`'s lock — because that runbook's own lesson is *when a mechanism replaces a
+discipline, retire the discipline explicitly*. **217 lands first or 253 gets switched off**: a seat with no
+spawnable shell cannot produce re-runnable evidence, and a gate that blocks everything is a gate that gets disabled.
+
 **Also learned about instruments here, and it is worth a rule of its own:** eight of this instrument's findings were
 findings **against itself** (`wc -l`, `md` matching before `mdx`, a backtick inside a URL, own-tree sizes scored hard, a
 correction line, cross-citation families, fenced examples, and `--json` swallowing the next flag so `--top` became a
