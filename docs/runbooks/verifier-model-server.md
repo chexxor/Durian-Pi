@@ -1,3 +1,14 @@
+---
+runbook: verifier-model-server
+symptom: "a seat's model is not what rig.selfdev.json claims; the model server lists an instance no request can use (`Failed to load model`); you must change which model a provider serves, change its context window, or free room for a second model; check reports `single-model-rig` fix-now; or the OS reports an out-of-memory kill involving a model server"
+writes: true                 # model-server state only — load, unload, context_length, variant activation. It never opens the store, so no broker stop is required
+precondition: "read-only through the Diagnose steps; loading/unloading or re-windowing a model needs the operator's grant AND the affected seats idle — never during a probe or gate run"
+last_verified: 2026-10-29
+verified_by: delegate
+evidence: "every endpoint, schema and number in the Diagnose/Do steps was executed 2026-10-29 on Linux (Fedora, box Alex-Desktop-Win10, node v24.22.1) against LM Studio's v1 REST API at http://127.0.0.1:1234; the memory numbers and the cgroup cap results in §probe discipline were re-measured the same day; commit c34bb232 carries the same evidence"
+check_rule: "demo/local-model-pointer.test.mjs is the offline half that fails when rig.selfdev.json and durig.config.json disagree; the live installed-vs-loaded half is docs/ROADMAP.md 261"
+---
+
 # Control the model server behind a provider (LM Studio at `:1234`)
 
 **Status:** delegate-written, partially verified. Verified: every endpoint, schema and number below was

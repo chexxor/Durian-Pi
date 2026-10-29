@@ -5247,3 +5247,38 @@ mis-read it; and "loaded" is per-engine-instance, so a model can be loaded with 
 259's ctx rule is the pair to this one, and neither belongs in `single-model-rig`, whose job is model-count honesty only.
 *Do not:* fix this by making `single-model-rig` stricter — it gates a different thing, and folding the two together would
 let a passing family check keep masking a dead pointer.
+
+**262. Doc integrity is unaudited: `check` never supplies runbook data, the clock-in digest skips any runbook that has no
+front matter, and nothing verifies that a cited item number or an index row resolves to something that exists.**
+*(delegate; registered 2026-10-29 because four of my own surprises were false greens, and the guard this session landed
+found pre-existing rot on its first run)*
+**What exists today, measured:** (a) `DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json` answers
+`runbook-stale`, `runbook-unverified` and `runbook-front-matter` with **"no runbook data was supplied, so no runbook can be
+judged"** — three rules permanently SKIPPED on the path a commit passes through; (b) the only consumer that *does* read
+`docs/runbooks/*` is `scripts/clockin.mjs`, whose `staleRunbooks()` (`scripts/clockin.mjs:112`) does
+`if (!fm) continue;` at line **123** — a runbook with no header is invisible, and the digest reported
+`RUNBOOKS dated 31 | stale 21` while my brand-new runbook was not among them; (c) `docs/runbooks/verifier-model-server.md`
+— the most-used runbook this session — has **no front-matter block at all**, only a prose `**Status:**` line; (d) I added an
+index row for `hygiene-and-dead-model-pointers.md` **before the file existed**, and nothing anywhere noticed; (e)
+`docs/ROADMAP.md` registers items in two forms, `**254. title` (87 of them) and `231. title` (186) — an instrument that
+matches only the first sees **87 of 262** and cries wolf, which is how a guard gets ignored; and (f)
+`docs/runbooks/branch-cleanup.md:252` contains `**269**` with no item 269 registered.
+*Acceptance (failing-first):* `tools/doc-integrity-guard.mjs` (delegate-landed 2026-10-29) is the interim instrument —
+it hard-fails on: NEXT pointer over the cap (counted the way `demo/next-pointer.test.mjs` counts it: `split("\n")`, so
+`wc -l` must be ≤ 199); an item number cited by `docs/NEXT.md` or any `docs/runbooks/*.md` that no registration form
+resolves to, with a bold-number-is-a-quantity exclusion so `**269** entries` is not a finding; a `docs/runbooks/README.md`
+link to a missing file; and a runbook whose front matter lacks any `RUNBOOK_FRONT_MATTER_KEYS` key **imported from
+`src/checkup.mjs`** so there is one truth. Product half: (1) `cli.mjs check` must actually pass runbook data so the three
+rules run instead of skipping; (2) `staleRunbooks` must report a header-less runbook as a **fix-now** finding rather than
+skipping it; (3) `doctor` prints, per doc, the same four checks so a seat sees them before landing; (4) the pointer-cap
+constant lives in one place shared by `demo/next-pointer.test.mjs` and the guard.
+*Blind spots:* the item-number check needs both registration forms and a quantity exclusion or it drowns in false
+positives (that is what the 87-vs-262 count above is evidence for); `docs/DECISIONS.md` and `docs/reviews/*` carry
+pre-existing unresolved references (**6** sampled at registration time, e.g. 274, 308, 314) and are deliberately reported
+as a **count, not a gate** until the corpus is swept — say the scope when reporting the verdict, per **245**; and a runbook
+whose front matter exists but whose sections do not match `_template.md` is a soft finding here, because 31 existing
+runbooks would have to be re-headed before that could be a gate.
+*Do not:* add an index row before the runbook file exists (the guard now fails that, and it was my own error); do not make
+the guard's soft class into noise by widening it before the corpus is swept; and do not cite a sha you have not checked —
+`0a339d68` still resolves as a **dangling** object after being amended away, so `git cat-file -e <sha>^{commit}` is
+necessary but not sufficient; also confirm it is on a ref (`git branch --contains`).

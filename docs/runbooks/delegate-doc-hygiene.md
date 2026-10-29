@@ -1,96 +1,120 @@
+---
+runbook: delegate-doc-hygiene
+symptom: "an edit reported success but the text is not in the file; the NEXT pointer went red on its line cap; a citation check flags findings you did not make; a commit sha you quoted turns out not to exist; a `cat >> file <<'EOF'` executed part of its own body as shell; you added a runbook and nothing noticed"
+writes: false
+precondition: "read-only"
+last_verified: 2026-10-29
+verified_by: delegate
+evidence: "docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box Alex-Desktop-Win10, node v24.22.1); the failure counts are from this session's own mistakes"
+check_rule: "not yet — see docs/ROADMAP.md **262**: `check` reports `runbook-front-matter` as SKIPPED, and `scripts/clockin.mjs:123` skips any runbook with no front matter, so a header-less runbook is currently invisible to both"
+---
+
 # When your own doc edit does not land, or a pointer/citation check turns red on you
 
-**Symptom:** you edited `docs/ROADMAP.md` / `docs/DECISIONS.md` / `docs/NEXT.md`, the edit tool said *successfully
-replaced*, and the text is not in the file. **Or:** `node demo/next-pointer.test.mjs` fails on the line cap. **Or:**
-`tools/review-cite-check.mjs` prints failing rows for files you did not touch. **Or:** you appended to a session note and
-now believe you wrote shas that `git rev-parse` does not know. **Or:** a `cat >> file <<'EOF'` you ran executed part of
-its own body as shell.
+## When to use
 
-Do these in order. Every one of them happened on 2026-10-29 and cost time.
+You edited `docs/ROADMAP.md`, `docs/DECISIONS.md` or `docs/NEXT.md` and the tool said *successfully replaced* but the text
+is not in the file. Or `node demo/next-pointer.test.mjs` fails on the line cap. Or `tools/review-cite-check.mjs` prints
+findings for files you did not touch. Or a commit sha you wrote from memory does not resolve. Or a `cat >> … <<'EOF'` you
+ran executed part of its own body as shell. Or you added a runbook and want to know whether the rig can even see it.
 
-## 1. Never trust an edit's return value — re-verify the file
+## Impact
+
+Every one of these produced a **false green** this session. The worst: a `docs/ROADMAP.md` addition reported
+`Successfully replaced 1 block(s)` and was never written — two registered items (260, 261) silently did not exist while
+`docs/NEXT.md` cited them, so the next session would have gone looking for rules that were never recorded. A runbook with
+no front matter is invisible to the only consumer that reads real runbooks, so the convention cannot fail. Untouched docs
+that *look* verified are worse than missing docs: the pointer is the only state a future session gets.
+
+## Preconditions
+
+Read-only: nothing here writes to the store, so no broker stop is required. Work in the checkout you were given; `git add`
+explicit paths only (never `-A`) because `.spike/` and `.scratch/` hold cited instruments.
+
+## Diagnose (read-only)
 
 ```bash
-grep -c "the phrase you just wrote" docs/ROADMAP.md      # 0 = it did not land, whatever the tool said
+node tools/doc-integrity-guard.mjs          # one verb: pointer cap, roadmap refs, runbook links, runbook headers
+```
+
+That instrument is what this runbook's advice turned into, because advice had already failed. Its four checks, and the
+manual form of each if you want to see the raw evidence:
+
+```bash
+grep -c "the phrase you just wrote" docs/ROADMAP.md      # 0 = the edit is a rumour, whatever the tool reported
 stat -c '%y %s' docs/ROADMAP.md                          # mtime older than your last commit = the file was never touched
-git status --short -- docs/ROADMAP.md                    # clean after an "edit" means the edit is a rumour
+git status --short -- docs/ROADMAP.md                    # clean after an "edit" means it did not happen
+wc -l docs/NEXT.md                                       # see the cap trap below
+grep -s "^| \[" docs/runbooks/README.md | grep -c "\](.*\.md)"   # index rows; compare with ls docs/runbooks/*.md | wc -l
 ```
 
-On 2026-10-29 a `docs/ROADMAP.md` addition reported `Successfully replaced 1 block(s)` and the file's mtime stayed at the
-timestamp of the previous commit — the two items were simply not there, and the only reason I noticed is that I counted
-afterwards. **Count after every write.**
+## Do
 
-## 2. `docs/DECISIONS.md` and `docs/ROADMAP.md` are append-only — append with a quoted heredoc
+1. **Never trust a write's return value — count after it.** `grep -c` the new phrase, `stat` the mtime, `git status` the
+   path. A 6,400-line append-only file that shows clean after an "edit" means the edit never landed.
+2. **Append to `docs/DECISIONS.md` / `docs/ROADMAP.md`; do not rewrite them in place.** They are full of apostrophes,
+   backticks, backslashes, em dashes, `$` and quoted shell lines, so an exact-match edit misses, and a whole-file rewrite
+   reflows lines you never touched — which the citation checker then reports as *your* findings.
+3. **Watch the nested-heredoc trap.** `cat > f <<'EOF'` whose body contains an example ending in a bare `EOF` terminates
+   at that inner line and **runs the rest of your document as shell**. This runbook was itself truncated that way at 29 of
+   ~60 lines, with `bash: has: command not found` and `sed: unknown command: '<'` as the only clue, and a zero exit status.
+   Either use the `write` tool for content that contains heredocs, or pick an outer delimiter that cannot appear inside
+   (e.g. `<<'RUNBOOK_EOF'` — the delimiter used when appending the memory section to the verifier runbook).
+4. **Do not put shell snippets inside a `python3` heredoc's string literals** — Python strips backslashes and ends the
+   string on the embedded quote, so you get a Python error far from the cause. Put the block in a temp file, or splice by
+   line number.
+5. **The pointer cap is counted as `split("\n")`, so `wc -l` ≤ 199 is the passing maximum.** Seen in order: 224 → FAIL;
+   then the test's own message, "…is 201 lines; the cap is 200"; and a file at 200 by `wc -l` → **still FAILS**, because
+   the trailing newline counts as a line. Re-run `node demo/next-pointer.test.mjs` after every trim.
+6. **Copy the archived pointer, never retype it,** then prove the copy *and* the offset in one command — a range one line
+   short still looks complete:
 
-Both files are full of apostrophes, backticks, backslashes, em dashes, `$`, and quoted shell lines, so an exact-match
-`edit` is likely to miss (and a whole-file rewrite of a 6,400-line file risks reflowing lines you never touched, which is
-what the citation checker then reports as your findings). Append instead, then verify the count moved and the marker exists.
+   ```bash
+   diff <(git show <sha-NEXT-had-before>:docs/NEXT.md) <(sed -n '<start>,<end>p' docs/NEXT-ARCHIVE.md)   # silent = proof
+   ```
 
-## 3. The nested-heredoc trap: an inner `EOF` terminates your outer heredoc
+7. **Check shas you quote.** Three commit ids written into a session note from memory did not exist as objects.
+   `git cat-file -e <sha>^{commit}` before you cite one; `git log --oneline -1` after every commit, because an amended
+   message changes the id you were about to quote.
+8. **New runbook ⇒ write the front matter from `_template.md`.** `runbook`, `symptom`, `writes`, `precondition`,
+   `last_verified`, `verified_by`, `evidence`, `check_rule`, then the fixed headings (`When to use`, `Impact`,
+   `Preconditions`, `Diagnose (read-only)`, `Do`, `Verify`, `If it fails`, `Escalate to`, `Evidence`). Add the index row
+   in `docs/runbooks/README.md` — the symptom → runbook table is how anyone finds it.
+9. **A red `review-cite-check.mjs` may be pre-existing; bound it before you report or act.** `tools/citation-registry.json`
+   turns any path it cannot match into a soft finding (56 at one point), and `docs/ROADMAP.md:4905` was flagged before this
+   session. Run it over the files your commit touched, and report the scope in the same breath as the verdict. Do not claim
+   tree-wide `0 failing` when the tree is not.
 
-Writing this very file, I used `cat > docs/runbooks/… <<'EOF'` and the body contained an example that itself began with
-`cat >> docs/DECISIONS.md <<'EOF'` and ended with a line reading exactly `EOF`. **That line closed my outer heredoc.**
-Everything after it ran as shell: `bash: has: command not found`, `sed: unknown command: '<'`, and a 29-line truncated
-file where a 60-line one should be. Nothing about the exit status said "your document was eaten".
-
-Rules that avoid it:
-- if the content contains a heredoc example, **write the file with the `write` tool** (no shell quoting at all), or pick an
-  outer delimiter that cannot appear inside the body (`<<'RUNBOOK_EOF'`);
-- never let a line in your body be a bare `EOF` / `PY` / any delimiter you also use as an outer one;
-- after any heredoc, `wc -l` the file and `tail` it — a truncated write looks like success.
-
-## 4. `docs/NEXT.md` has a 200-line cap, and the archive copy has an off-by-one you must prove
+## Verify
 
 ```bash
-wc -l docs/NEXT.md          # the test counts split("\n") so a trailing newline counts: 199 by wc is the passing maximum
+node tools/doc-integrity-guard.mjs                        # expect: DOC INTEGRITY GUARD … 0 hard findings, exit 0
+node demo/next-pointer.test.mjs                           # NEXT POINTER TEST PASS
+node tools/review-cite-check.mjs <the paths you staged>   # VERDICT: 0 failing …  exit 0
 ```
 
-Failures seen, in order: 224 → FAIL; then the test's own message, "…is 201 lines; the cap is 200"; and then a file at 200 by
-`wc -l` → **still FAILS**, because the trailing newline is counted as a line. So plan for **199**, not 200 — and re-run the
-test after every trim, because the count is what gates the commit, not your reading of the cap. (Do not put a bare
-"<N> lines" next to a path citation on the same line either: `review-cite-check.mjs` reads it as a size claim about that
-file and logs a soft finding against you.)
+Note that `"224 lines"` written next to a path citation on the same line is read by the citation checker as a **size claim
+about that file**, and `swapon`/`free`-style instruments can silently print `NaN` when you parse their header line — both
+produced findings this session. Re-run the checker after rewording.
 
-To move the previous pointer into `docs/NEXT-ARCHIVE.md`: **copy the old text, do not retype it** — a retyped pointer
-silently loses the commit shas it cites. Then prove the copy *and* the offset in one command:
+## If it fails
 
-```bash
-diff <(git show <sha-NEXT-had-before>:docs/NEXT.md) <(sed -n '<start>,<end>p' docs/NEXT-ARCHIVE.md)   # silent = proof
-node demo/next-pointer.test.mjs
-```
+Nothing here writes, so there is nothing to roll back except your own edits: `git checkout -- <path>` restores a doc you
+mangled, and `git restore --staged <path>` unstages. If a *registered roadmap item* is missing (my 260/261 case), re-append
+it and re-count; do not edit the pointer's citation, fix the target. If a runbook refuses to conform, `docs/runbooks/_template.md`
+is the source of truth, not this file.
 
-My first proof was one line short at the end and still looked complete; the diff range must span the archived block's own
-header line through the last copied line. Separately: three commit shas I wrote into a session note **from memory** did not
-exist as objects. Check them: `git cat-file -e <sha>^{commit}` — the citation checker caught them before the operator read them.
+## Escalate to
 
-## 5. Do not embed shell snippets inside a `python3` heredoc's string literals
+`pm` — when a doc-integrity finding is about the *product's* audit surface rather than a delegate's writes: **262** asks that
+`cli.mjs check` actually supply runbook data (today it answers `no runbook data was supplied, so no runbook can be judged`
+for `runbook-stale`, `runbook-unverified` and `runbook-front-matter`) and that `scripts/clockin.mjs:123` stop skipping a
+runbook that has no front matter at all. The operator decides whether a doc-hygiene item outranks a queued feature.
 
-Python string literals strip backslashes and terminate on embedded quotes, so a shell line in the string is corrupted in
-place and the error surfaces as a Python syntax error far from the cause. For prose edits that contain shell lines, put the
-replacement block in a temp file and splice by line number, or use the `write`/`edit` tools.
+## Evidence
 
-## 6. A red `review-cite-check.mjs` may be pre-existing — bound it before you act or report it
-
-`tools/citation-registry.json` maps prose aliases to real paths, and **any path it does not match becomes a soft finding**
-("unmatched prose path: `durig.config.json`" — 56 soft findings at one point, including bare filenames like
-`selfdev.sqlite`). It also flagged `docs/ROADMAP.md:4905` (`src/audit-log.mjs`) and the `_NAMES` registry entries, both of
-which pre-dated the session that found them.
-
-```bash
-node tools/review-cite-check.mjs "$(git show --stat --name-only --format= HEAD | grep -E '^(docs|src|scripts|tools)/' | tr '\n' '')"
-```
-
-That bounds the check to the files your commit touched. Report the scoped verdict **and** say in the same breath that the
-tree-wide posture carries pre-existing findings. Do not quiet a registry-wide warning, and do not claim tree-wide
-`0 failing` when it is not — **245** already requires this class resolved or scoped, so name the scope in the message.
-
-## 7. After any model change, the guard is a test, not `check`
-
-```bash
-node demo/local-model-pointer.test.mjs     # rig file seat strings vs the machine config's registered provider models
-node demo/second-local-provider.test.mjs
-```
-
-`cli.mjs check` and `tools/single-model-rig.mjs` both **passed** while five seats pointed at `verifier/recursivesi/flint`
-and no loaded instance served it (**261**). The pointer test is the one that fails — run it before you tell the operator the
-rig is pointed at the new model.
+Registered as **262**. Instruments: `tools/doc-integrity-guard.mjs` (this session) over `docs/NEXT.md`, `docs/DECISIONS.md`,
+`docs/ROADMAP.md`, `docs/runbooks/README.md`. Counts observed when it first ran, all mine: `docs/NEXT.md` 200 lines
+(over cap); `docs/ROADMAP.md` items 260/261 registered=missing while cited; `docs/runbooks/README.md` 46 index rows vs 32
+runbook files; `docs/runbooks/delegate-doc-hygiene.md` front matter **absent** — the file this runbook describes was itself
+non-conformant until fixed in the same commit that added the guard.

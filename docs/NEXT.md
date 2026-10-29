@@ -14,13 +14,13 @@ ask returns below. Three intents were **spooled to `pm`** (now discharged); **25
 **`docs/reviews/delegate-notes-2026-10-29-hygiene-and-transport.md`** and **`docs/reviews/delegate-notes-2026-10-29-verifier-serving-and-calibration.md`**; durable: **D164**–**D167**. **Prior sessions, one line each:**
 flint verifier flip + **253** (D163); round-4 research gate + **250/251**; `tools/review-cite-check.mjs` + **252** (D162);
 **241** closed by the permission-plane note → **247/248/249**. **Committed, not pushed (233 hygiene) — read
-`git log --oneline -3`, never shas quoted in a pointer.** Read me first — do not re-derive the priority from the
-~5,000-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200 lines** by
-`demo/next-pointer.test.mjs`, which also requires the `## NEXT SESSION` block below to carry a current item, a queue id,
+`git log --oneline -3`, never shas quoted in a pointer.** Read me first — do not re-derive the priority from the ~5,000-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200 lines (so `wc -l` ≤ 199)** by `demo/next-pointer.test.mjs`, which also requires the `## NEXT SESSION` block below to carry a current item, a queue id,
 a `node cli.mjs` command and a `**Blocker:**` line — **rewrite it in place, do not restyle it.** Its two executable
-readers are `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` (the digest reads only this section, so the
-**`NEXT-ARCHIVE.md` link must stay inside the pointer body**). After editing:
-`node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs`.
+readers are `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` (the digest reads only this section, so the **`NEXT-ARCHIVE.md` link must stay inside the pointer body**). After editing:
+`node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs && node tools/doc-integrity-guard.mjs` — the third verb
+is new this session (**262**): it hard-fails on an edit that never landed (a cited `**NNN**` with no registration behind it,
+like my 260/261 for an hour), a `docs/runbooks/README.md` row pointing at a runbook that was never written, a runbook with no
+front matter (which both consumers used to skip silently), and the pointer cap counted the way the test counts it.
 
 ## NEXT SESSION
 
