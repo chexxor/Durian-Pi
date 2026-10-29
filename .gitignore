@@ -19,6 +19,12 @@ vendor/pi-warden/
 vendor/eval/
 # delegate/seat scratch, recovery patches, and captured logs
 .spike/
+# Delegate scratch scripts and captured transcripts. Gitignored as of 2026-10-29 under GRANT 4 (ROADMAP 233, D165):
+# this tree lost eight instruments that were read or run in a session which ran no writing verb
+# (docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md), and while `.scratch/` was NOT ignored,
+# every instrument there was one accidental `git add` from safety and one sweep from loss. Anything that must survive
+# belongs in `tools/` as a tracked, cited instrument — see tools/model-probes/no-headers-timeout-shim.mjs.
+.scratch/
 # Operational exhaust from driving seats: stdout/stderr captures and scratch logs.
 .impl.log
 .*.out
