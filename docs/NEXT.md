@@ -38,7 +38,13 @@ the queue drains" **still has no definition anywhere in the tree** (ROADMAP **23
 `hygiene-rehearsal-20261029`, `verifier-merge-20261029`, `release-brief-20261028` — all addressed to **`pm`**.
 **Read `docs/reviews/roadmap256-rehearsal-prompt-2026-10-29.md` before decomposing item 1** — it carries the rehearsal
 brief (the defect slice, the audit instrument, the verdict file), the settled ordering, what is already measured, and the
-trap (answer with a gate, not a date). **History:** `docs/NEXT-ARCHIVE.md` (this session's own superseded pointer is cut there verbatim).
+trap (answer with a gate, not a date). **The verifier half of that plan just lost its assumption:** the seeded-bug gate
+**completed for the first time** (24 prompts, Q4_K_M, `.spike/gate/flint-q4-k1-out6k.log`) and flint is **not certifiable on
+that feeding/budget** — `truncated 19 of 24`, `defect items named: 1/1 scored (8 attempted)`, **every control that answered
+was a FALSE-ALARM** (leading 1/1, neutral 3/3), while the one scorable defect cell was a clean **HIT** — so **253**'s
+"verifier re-runnable evidence before `done`" has no local instrument behind it yet, and **256**'s rehearsal cannot assume
+a working verifier gate. **257** is registered for the instrument gap that run exposed (a mostly-unscorable run printing a
+rate shaped like a pass). **History:** `docs/NEXT-ARCHIVE.md` (this session's own superseded pointer is cut there verbatim).
 **Next command (delegate, read-only first, in this order, ~12 s total):**
 
 ```bash
@@ -50,18 +56,21 @@ git fsck --unreachable 2>/dev/null | grep -c '^unreachable commit'   # 452 on 20
 # verifier chain (server holds flint **Q4_K_M** at 65,536 — Q6/Q8 are set aside at ~/.var/app/ai.lmstudio.lm-studio/.lmstudio/set-aside-flint-q6-q8/, restore = mv back):
 curl -s --max-time 15 http://127.0.0.1:1234/api/v1/models | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const m of JSON.parse(s).models)console.log(m.key,m.variants.join(" "),m.loaded_instances.map(i=>i.id+"@"+i.config.context_length).join(","))})'
 ps -eo args | grep llama-server | grep -o '\-\-model .*gguf'   # the ONLY surface that names which quantization is live — the API key is identical across variants
-CAL_MAX_TOKENS=6000 node --import ./.spike/gate/no-headers-timeout.mjs tools/model-probes/gate.mjs http://127.0.0.1:1234/v1 recursivesi/flint flint-q4-k1-out6k --replicate 1 --pair-comments strip-both --out .spike/gate/flint-q4-k1-out6k.json   # --plan first spends nothing; budget ~200 s/cell × 19 cells at the 22–44 tok/s measured in-run. **A run is already in flight** — read `.spike/gate/flint-q4-k1-out6k.log` before starting another.
+CAL_MAX_TOKENS=6000 node --import ./.spike/gate/no-headers-timeout.mjs tools/model-probes/gate.mjs http://127.0.0.1:1234/v1 recursivesi/flint flint-q4-k1-out6k --replicate 1 --pair-comments strip-both --out .spike/gate/flint-q4-k1-out6k.json   # **DONE — do not re-run it**: 24 prompts, 19 truncated, transcript .spike/gate/flint-q4-k1-out6k.json
+node .spike/gate/summarize-run.mjs .spike/gate/flint-q4-k1-out6k.log   # per-cell tally + scorability (untracked instrument, 233)
+CAL_MAX_TOKENS=10000 node --import ./.spike/gate/no-headers-timeout.mjs tools/model-probes/gate.mjs http://127.0.0.1:1234/v1 recursivesi/flint flint-q4-whole-mutants --whole-module --budget 10000 --replicate 1 --pair-comments strip-both --out .spike/gate/flint-q4-whole-mutants.json   # **the decisive next experiment (~30 min)**: whole-module removes the excerpt confound and targets the 3 proof-backed mutants (M1 2,086 / M3 1,686 / M2 7,139 est. tok) — see the runbook's "first completed gate run" section
 ```
 
 **Blocker:** three, and the first is now the operator's own condition. **(a) No hygiene evidence** — 256's instrument does not
 exist, no rehearsal has run, and the rehearsal cannot run before **217** (no spawnable shell → a seat cannot run `git` or the
 suite) nor safely before **232** (unscoped `pruneWorktrees`, `src/broker.mjs:1167`/`src/worktree.mjs:649`); releases stay
-`pm`'s verb, the start stays the operator's. `pm`'s work has not started). Still owed rulings: **221** seat-root, **231** "the queue drains". **(b) is restated for Q4
-on 2026-10-29T03:1xZ:** the *deadline* half of 255 is resolved by the variant change (8,192 tokens = 194–373 s at
-42 tok/s, inside both ceilings), so the blocker is now **behavioural**: reasoning stays unbounded (`allowed_options:
-["on"]`; all four levers `answerChars=0` at 1,200 tokens on Q4 too), and the first gate cells show the model **silent on
-the side with a seeded defect and confident on a clean control** — which is the wrong-way-around failure, and the reason a
-completed run is worth reading before another verifier choice is made.
+`pm`'s verb, the start stays the operator's. `pm`'s work has not started). Still owed rulings: **221** seat-root, **231** "the queue drains". **(b) is now settled as a
+measurement, not a suspicion (2026-10-29T04:0xZ):** the gate **completed** — 24 prompts, no transport failures, transcript
+kept — and flint **fails it as a verifier**: `truncated (finish=length): 19 of 24`, `defect items named: 1/1 scored
+(8 attempted)`, `clean, leading prompt: FALSE-ALARM 1/1`, `clean, neutral prompt: FALSE-ALARM 3/3`, and the one scorable
+defect cell a **`HIT+PHANTOM groups=3/3`**. The deadline half of **255** is resolved by the variant change (8,192 tokens =
+194–373 s at 42 tok/s); what remains is behavioural, and **257** now covers the instrument trap (a mostly-unscorable run
+shaped like a pass).
 **(c) The queue has nothing claimable** and `pm` has only just received the rows (the spool ask is discharged; `pm`'s work has
 not started). Still owed rulings: **221** seat-root, **231** "the queue drains". **Applied under the grant 2026-10-29:** the
 `Q4_K_M` download (24.17 GB, complete) — but **no documented surface can activate it** (REST `load` and `lms` cannot select a
@@ -131,19 +140,19 @@ is, line 21), so an instrument left there is one `git add` from safety and one s
 4. **Commit-or-discard for untracked instruments (233).** `.scratch/transcript-write-bodies.mjs` and friends are untracked and
    `.scratch/` is **not** ignored; several ROADMAP rows cite lost files as landed. Either the team re-creates them (labelled
    re-created) or those rows get amended — your scope call, not a seat's.
-5. **Which verifier, and at what speed (D137 binds).** The speed question is **answered**: Q4_K_M activates by
-   rename-and-reload (no API surface exists — see the runbook), decode is **42 tok/s isolated / 22–44 tok/s in-run**, and
-   8,192 tokens is now a **194–373 s** generation, inside both ceilings. What is left is behavioural, and the first in-run
-   evidence is unfavourable: on `H1-npm-invocation` the **defect** side was **`TRUNCATED-EMPTY` at 6,000 tokens** while the
-   **clean control returned a `FALSE-ALARM`** — it confidently reported missing `node:fs`/`node:path`/`node:child_process`
-   imports and a `ReferenceError: existsSync is not defined` on a control with no seeded defect. Options, cheapest first:
-   **(a)** read the completed k=1 run and decide on its numbers (`.spike/gate/flint-q4-k1-out6k.json`); **(b)** raise
-   `CAL_MAX_TOKENS` / `DURIG_VERIFIER_MAX_TOKENS` to what Q4 can now deliver and re-run at **k=3** — but the reasoning shape
-   warns that a bigger budget may buy only more reasoning; **(c)** a **remote** cross-family verifier (money + a funded
-   key); **(d)** a different local model that answers inside the budget; **(e)** start **uncertified** — cheapest, and
-   exactly what **D137** calls worse than no verifier, because `check` then reports a green the rig has not earned. Not a
-   fallback: ministral at 8,192 (0/2) or single-family `iq3_s`. **And ratify a config change the delegate made:** the rig
-   now serves **Q4_K_M** with Q6/Q8 set aside (restorable by `mv`) — same model key, materially different model.
+5. **Which verifier, now that the gate has an answer (D137 binds).** The gate **completed** on Q4_K_M (24 prompts, ~50 min,
+   no transport failures): **flint is not certifiable on that configuration** — `truncated 19 of 24`, `defect items named:
+   1/1 scored (8 attempted)`, **FALSE-ALARM 1/1 leading + 3/3 neutral** (every control that answered over-claimed on clean
+   code), one scorable defect cell a clean **HIT**. Speed is no longer the question (42 tok/s isolated, 21.8–48.9 in-run);
+   behaviour is. Options, cheapest first: **(a)** the **`--whole-module` mutant run** above (~30 min, removes the excerpt
+   confound, aims at the 3 proof-backed mutants) — the delegate recommends this before any purchase; **(b)** raise
+   `CAL_MAX_TOKENS`/`DURIG_VERIFIER_MAX_TOKENS` toward 10,000 and re-run at **k=3** (~2.5 h) — the reasoning shape warns a
+   bigger budget may buy only more reasoning; **(c)** a **remote** cross-family verifier (money + a funded key) — the only
+   option that satisfies 253 **today**; **(d)** another local model that answers inside the budget; **(e)** start
+   **uncertified** — cheapest, and what **D137** calls worse than no verifier, since `check` then reports a green the rig
+   has not earned. Not a fallback: ministral at 8,192 (0/2) or single-family `iq3_s`. **And ratify a config change the
+   delegate made:** the rig now serves **Q4_K_M** with Q6/Q8 set aside (restorable by `mv`) — same model key, materially
+   different model.
 6. **Whether to start the channel, and the scale threshold (256).** The queue is **0 claimable**, so "start now" buys a
    started-but-idle team; the team stays **not started** until you say so. The **2 → 5 → 12** seat threshold on the hygiene
    rehearsal's violation counts is **yours and unset** — that number is what the operator's restart condition turns on.
@@ -154,13 +163,20 @@ is, line 21), so an instrument left there is one `git add` from safety and one s
 `budget_tok ÷ measured_tok_per_s` against 300 s (probes) and 600 s (the rig's SDK) and print `err.cause` (**254**, D164).
 **A `TRUNCATED-EMPTY` verdict measures the output budget as much as the model** — read the run's budget and the model's
 reasoning shape first; flint emits **0 answer chars** at 1,200 and at 4,000 tokens, so no budget tuning fixes it.
-**An unreachable commit is somebody's work, not garbage** — `git gc` deletes it (cross-clone runbook). **A
-`single-model-rig` PASS is not certification** (**D137**). **`reapable: 0` in `worktree audit` is not a verdict**
-(`docs/BRANCH-AND-WORKTREE-LIFECYCLE.md:244`). **0 claimable rows means a started team idles or improvises.** **An
-orphan-candidate verdict is not a release recommendation** (#725/#726/#727 are *correctly* held). **A swept worktree ledger
-is not "self-healing"** (`src/broker.mjs:1167`). **A suite that runs green after files vanished is not green**
-(`scripts/suite.mjs:36`). **A `402` in a recent row is not current provider state.** **A `WAKE` in the preflight's post-pass-1
-column is a prediction.** **`queued` (submissions) ≠ `queued` (claimable items).** **`DURIG_MAX_CONCURRENT_SEATS` is unset in
-`durig.config.json`, `"1"` in the default — read `src/config.mjs loadConfig` (D153 §4).** **A `--dry-run` names no removals.**
-**Model speed is 12.7% of machine time.** **A loaded_instances entry is not a health check.** **Never quote your own shas in
+**`1/1 scored` is not a capability rate** — in the completed run 19 of 24 prompts never reached `finish=stop`, so the
+flattering denominator is an artifact of the print, not a result (**257**). **A control-side `FALSE-ALARM` may be our
+feeding, not the model** — two of them claimed missing imports on a fragment whose import block the window had cut off;
+**195**'s excuser saw the class and excused 0. **Decode is not a constant**: 42.21 tok/s isolated vs **21.8–48.9 tok/s
+(p50 35)** inside one run, with `strata-host` at 100 % on the other GPU — budget off the low end, and **a model speed claim
+is a claim about a quantization** (**255** acceptance (5)). **A model key does not identify a model** — verify the live
+`.gguf` with `ps -eo args | grep llama-server`. **An unreachable commit is somebody's work, not garbage** — `git gc`
+deletes it (cross-clone runbook). **A `single-model-rig` PASS is not certification** (**D137**). **`reapable: 0` in
+`worktree audit` is not a verdict** (`docs/BRANCH-AND-WORKTREE-LIFECYCLE.md:244`). **0 claimable rows means a started team
+idles or improvises.** **An orphan-candidate verdict is not a release recommendation** (#725/#726/#727 are *correctly*
+held). **A swept worktree ledger is not "self-healing"** (`src/broker.mjs:1167`). **A suite that runs green after files
+vanished is not green** (`scripts/suite.mjs:36`). **A `402` in a recent row is not current provider state.** **A `WAKE` in
+the preflight's post-pass-1 column is a prediction.** **`queued` (submissions) ≠ `queued` (claimable items).**
+**`DURIG_MAX_CONCURRENT_SEATS` is unset in `durig.config.json`, `"1"` in the default — read `src/config.mjs loadConfig`
+(D153 §4).** **A `--dry-run` names no removals.** **Model speed is 12.7% of machine time.** **A loaded_instances entry is
+not a health check.** **Never quote your own shas in
 a pointer.**
