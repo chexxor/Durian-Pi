@@ -4978,3 +4978,96 @@ shell cannot produce re-runnable evidence, so this gate would either block every
 comment cites lead #1553); add a human confirmation gate where the landing **lock** is the enforceable mechanism
 (`docs/runbooks/land.md`: "when a mechanism replaces a discipline, retire the discipline explicitly"); or mark an item
 done and merge it in a later landing pass, which is precisely the #4163 failure this row exists to end.
+
+**254. Every model probe in `tools/model-probes/` is deaf to a long generation, and prints a message that hides
+why.** *(delegate; registered 2026-10-29 from a certification run that died three times and was misdiagnosed as
+RAM pressure in this session's own pointer)*
+**What exists today, measured:** `gate.mjs:96` calls **non-streaming** `fetch`, and llama-server sends response
+*headers* only when generation completes, so Node's global-fetch default `headersTimeout` of **300 s** aborts any
+generation longer than five minutes. `gate.mjs:426` prints only `e.message`, which is the useless
+`fetch failed`. Matched pair, same request body, `.spike/gate/timeout-hypothesis.out`: global fetch → **300.8 s,
+`TypeError: fetch failed`, cause `HeadersTimeoutError` [`UND_ERR_HEADERS_TIMEOUT`]**; `node:http` with
+`req.setTimeout(0)` → **HTTP 200 in 372.0 s**. At the measured **10.75 tok/s** the instrument's effective output
+ceiling is **~3,200 tokens** — *below* the budget a reasoning verifier needs — which is the real reason 6 of 7
+cells read `TRUNCATED-EMPTY` on 2026-10-29, not the machine.
+*Acceptance (failing-first, per `docs/failing-first-recipe.md`):* (1) a demo that is RED today: drive the request
+layer against a local fake that delays its headers past the ceiling, and assert the client either **streams** or
+raises the transport timeout — and that a failed request logs **`err.cause`** (name + code), not just
+`e.message`; (2) `--only <id|file>` so a smoke run costs minutes, not the ~60–70 min a k=1 full corpus costs on a
+local 40B; (3) the run **header** prints the output budget (`CAL_MAX_TOKENS`), the measured decode rate, and the
+resulting ceiling `timeout_s × tok/s`, because a run whose cells are mostly `TRUNCATED-EMPTY` is measuring its
+**budget**, not the model (D137's lesson, restated); (4) every `TRUNCATED-EMPTY` row names the budget it hit.
+*Blind spots:* the same non-streaming `fetch` sits in `calibrate-verifier.mjs:42`, `throughput.mjs:24`,
+`cold-prefill.mjs:53` (and `stream-probe.mjs:13` streams, so the family is inconsistent, not uniform) — fix the
+family or the next session re-hits it in a different file; `tools/` is untested by design except where a demo is
+named, so this row must name its demo. A working `--import` shim exists today at `.spike/gate/no-headers-timeout.mjs`
+— it is **untracked**, and 233's whole lesson is that untracked instruments vanish; land this in the instrument.
+*Do not:* raise `CAL_MAX_TOKENS` before measuring decode (a bigger budget on a slow engine just moves the run past
+the ceiling); and do not read `fetch failed` as "the model is dead".
+
+**255. `DURIG_VERIFIER_MAX_TOKENS` declares an output budget the rig's own request deadline cannot deliver, and
+no instrument compares the two.** *(delegate; registered 2026-10-29 while asking whether the certification run's
+failures were the box or the config)*
+**What exists today, measured:** the provider path is the `openai` SDK with a **600,000 ms** total request
+timeout and **2 SDK-level retries** (`src/config.mjs:222-262`, `:330-344`); `DURIG_STREAM_TIMEOUT_MS` is `null`
+(platform default) in `durig.config.json`. Flint decodes **10.75 tok/s** on this box, so the declared
+`DURIG_VERIFIER_MAX_TOKENS: 8192` is a **762 s** generation — over the rig's own 600 s ceiling, three times in a
+row. The prompt side spends the same budget of time: `qa`'s measured prompt p50 **55,538** tokens at COLD prefill
+**~212 tok/s** is **≈262 s** before a single token of answer. And the answer may never arrive at any budget: LM
+Studio reports flint `capabilities.reasoning: {allowed_options: ["on"]}` — no API switch to disable reasoning —
+and `chat_template_kwargs {thinking:false}` / top-level `thinking:false` were both **accepted and ignored**
+(82.0 s / 82.5 s / 80.6 s at `max_tokens:1200`, **0 answer chars** each; at 4,000 tokens: **17,554 chars of
+reasoning, 0 of answer**, `finish_reason: length`).
+*Acceptance (failing-first):* (1) a `check` rule, **RED today**, that multiplies what the config declares by what
+the box measures — `prefill(prompt p50) + (MAX_TOKENS ÷ measured_decode)` — against `DURIG_STREAM_TIMEOUT_MS`, and
+reports the arithmetic and **both** ceilings (the rig's 600 s and the probes' 300 s, 254); (2) a decode/prefill
+measurement recorded once (`tools/model-probes/cold-prefill.mjs` already measures both, but its prefill/decode
+columns print `?` against LM Studio because it reads `timings`, which this server does not return — fix that too,
+or take wall-clock and `usage`), so the rule has a number to multiply; (3) a provider timeout surfacing as a
+named finding on the seat, not `Connection error.`;
+(4) a demo pairing RED (8,192 tok @ 10.75 tok/s) with GREEN (a budget that fits a measured decode), so the rule
+cannot be vacuous.
+*Blind spots / sequencing:* **208** (the context-fraction guard) is the same arithmetic on the **prompt** side —
+do not build two rules that disagree; a **remote** cross-family verifier changes the numbers (network latency,
+but decode is the provider's problem, and a funded key is the operator's grant); raising
+`DURIG_STREAM_TIMEOUT_MS` trades a short failure for a long one, because the broker's pass bound is *stream
+timeout + margin* (`src/broker.mjs:2122-2152`) and a slower verifier advances seats more slowly (the wall-clock
+budget's two currencies). The `Q4_K_M` quantization downloaded under the operator's grant 2026-10-29 is the
+speed attempt: Q6_K's 32.72 GB cannot fit the 24 GB 3090 whole, which is *why* decode is 10 tok/s.
+*Do not:* fix this by switching the verifier gate off (**D137** — a verifier that cannot answer is worse than no
+verifier, and `single-model-rig` passing is a string comparison); and do not buy a bigger `max_tokens` for a
+model whose reasoning is unbounded — buy speed, or change models.
+
+**256. Before the channel restarts at 12 seats: a measured seat-hygiene rehearsal, because "will they behave" is
+a question with a number in it.** *(delegate; registered 2026-10-29 from the operator's restart condition —
+"they need to be hygienic with their use of their seat-personal workspace, git branches, git worktrees, and
+regular merging of their branches back to main after a review")*
+**What exists today:** `cli.mjs worktree audit` (`cli.mjs:2532`, `:2990`; `auditWorktrees` in `src/broker.mjs`)
+already cross-references worktrees ↔ queue items ↔ seat roots; `src/seatroot.mjs` + `demo/seatroot-name.test.mjs`;
+the confine family (`src/confine.mjs`, `demo/confine.test.mjs`, `confine-rebase-property`, `confine-token-awareness`);
+scratch-per-tree (`demo/verify-scratch-per-tree.test.mjs`, `verify-scratch-cleanup`, `cleanVerifyScratch`);
+`check` rules `shared-tree-on-main`, `stray-seat`, `evidence-tree`; runbooks `leaked-worktrees`, `branch-cleanup`,
+`land`, `merge`, `per-row-marker`; **100** (the ancestry measure) and **253** (the review-then-merge gate).
+**The negative evidence, which is why this row exists:** `docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`
+(36 → 1 worktree registrations inside one session), `docs/runbooks/land.md` (#3990, #4163 — items closed while
+their branches were unlanded), **232** (unscoped `pruneWorktrees` in the same code family as 253's
+worktree-retirement-on-`complete`), and the store's own hygiene record: seats made **20,340** `powershell` calls
+and **0** `bash` calls, so on this host a seat has never run `git` or the demo suite at all — its hygiene is not
+good or bad, it is **unmeasured** (217).
+*Acceptance (failing-first):* (1) `tools/seat-hygiene-audit.mjs`, read-only, that snapshots **per seat** before and
+after a bounded rehearsal: worktrees created and left behind, branches created and whether each is an ancestor of
+`main` or explicitly abandoned (naming pattern `item-<id>`), writes outside its own worktree or into the live tree,
+untracked files left in a shared tree, and any item it marked `done` whose artifact is not an ancestor of `main`;
+exit non-zero on any violation and **print its denominator**, so 1 violation in 3 is not reported as 0 in 1; (2) a
+bounded rehearsal — **2 seats, a fixed item count, in the disposable clone `/home/chexxor/Git/Durian-Pi-ops`**
+(D156/D157) — with the audit's verdict written to `docs/reviews/`; (3) scale-to-12 as an explicit operator
+threshold on that verdict, not a follow-up feeling.
+*Blind spots / sequencing:* the rehearsal **cannot** run before **217** (a seat with no spawnable shell cannot run
+`git`, so its branch/worktree hygiene is unobservable) and is unsafe before **232** (the sweep that prunes the
+ledger is the same family as the retire-on-`done` path 253 touches); the audit must not itself become a writing
+verb on the live tree — the workspace-move inventory discipline (`git worktree list --porcelain` before/after,
+diffed) applies to it; and a rehearsal on today's queue tests nothing until `pm` decomposes 217/232/233/235–255,
+because **0 of 4,821 rows are claimable**.
+*Do not:* infer hygiene from a green suite (a deleted test member is a silent shrink, `scripts/suite.mjs:36`);
+from `reapable: 0` in `worktree audit` (`docs/BRANCH-AND-WORKTREE-LIFECYCLE.md:244` — it does not mean nothing to
+prune); or from a rehearsal nobody instrumented. Releases stay `pm`'s verb and the start stays the operator's.

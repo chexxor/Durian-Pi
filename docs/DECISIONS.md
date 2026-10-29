@@ -6173,3 +6173,86 @@ correction line, cross-citation families, fenced examples, and `--json` swallowi
 asymmetry: **`docs/ROADMAP.md` and `inputs/fetched/MANIFEST.md` have no executable reader** (re-confirmed: grepping
 `demo/*.test.mjs` and `scripts/*.mjs` for them → nothing), so a duplicated item number or a malformed manifest row
 leaves every test green — the cheap close is wiring `review-cite-check --gate` into the `check` rule (213's family).
+
+## D164 — An instrument's **transport ceiling** masquerades as a model failure or a memory failure; measure both deadlines before believing any gate verdict — and the team restart is now conditioned on a **measured hygiene rehearsal** (2026-10-29, delegate measurement + one operator ruling)
+
+**The ruling that matters most this session is the operator's, and it is a *condition*, not a date.** Asked whether the
+team can start again — with the explicit hope of more throughput from more agents running at once — the operator
+conditioned the restart on behaviour: seats must be hygienic about their **seat-personal workspace, git branches, git
+worktrees, and regular merging of their branches back to `main` after a review**, and asked that this be *evaluated* at
+the start of the next session. Registered as **ROADMAP 256**. What makes that a decision rather than a wish is that it
+is answerable: the rig has instruments for the artifacts (`cli.mjs worktree audit` cross-references worktrees ↔ queue
+items ↔ seat roots; the confine family; scratch-per-tree; `check`'s `shared-tree-on-main`, `stray-seat`,
+`evidence-tree`; `land.md`/`merge.md`/`branch-cleanup.md`/`leaked-worktrees.md`; 100's ancestry measure and 253's
+review-then-merge gate) and it has **no instrument that watches a seat do these things and counts violations**. That
+gap is the row. And the reason the question cannot be answered from history is measurable: **20,340** `powershell` tool
+calls, **0** `bash` calls, `spawn powershell ENOENT → 3` — on this host a seat has never run `git` or the demo suite, so
+its hygiene is not good or bad, it is **unobserved** (217). Hence the ordering, which the next session should not
+re-litigate: **217 (a seat must be able to run `git`) → 232 (the sweep that prunes the worktree ledger is the same code
+family as the retire-on-`done` path 253 touches) → the hygiene audit → a 2-seat bounded rehearsal in the disposable
+clone → an explicit operator threshold before scaling.** The payoff is priced in
+`docs/reviews/wallclock-budget-2026-10-28.md`: resident-broker days waited **2.6–5.4 min** per claim and landed
+**314–741 items/day** against **101.8–114.3 min** and 47–132/day for `run`-invoked days.
+
+**The finding that overturns a previous session's diagnosis, recorded because the pointer asserted the wrong cause.**
+Three model-probe runs "died partway with `REQUEST FAILED fetch failed` under memory pressure (swap 7/7 GB full)". The
+cause is the **transport**: `tools/model-probes/gate.mjs:96` calls **non-streaming** `fetch`, llama-server sends the
+response **headers** only when generation completes, and Node's global fetch default `headersTimeout` is **300 s**.
+Matched pair, identical body, one variable (`.spike/gate/timeout-hypothesis.out`): global fetch → **300.8 s**,
+`TypeError: fetch failed`, cause **`HeadersTimeoutError` [`UND_ERR_HEADERS_TIMEOUT`]**; `node:http` with
+`req.setTimeout(0)` → **HTTP 200 in 372.0 s**. `gate.mjs:426` prints only `e.message`, so the useful half of the error
+never reached the operator or the pointer. Registered as **254**. The consequence is arithmetic, not mood: at the
+measured **10.75 tok/s** the instrument's real output ceiling is **~3,200 tokens**, which is *below* what a reasoning
+verifier needs — that, and not the box, is why 6 of 7 cells read `TRUNCATED-EMPTY` on 2026-10-28.
+
+**The second deadline is the one that decides the verifier, and it is shorter than the first.** The provider path is
+the `openai` SDK with a **600,000 ms** total request timeout plus 2 SDK retries (`src/config.mjs:222-262`, `:330-344`;
+`DURIG_STREAM_TIMEOUT_MS` unset = platform default). `DURIG_VERIFIER_MAX_TOKENS: 8192` at 10.75 tok/s is a **762 s**
+generation: **the rig declares an answer it cannot receive**, and `qa`'s p50 prompt (55,538 tok) at COLD prefill
+(~212 tok/s) spends another **≈262 s** of the same window. Registered as **255**, in the same family as **208** (the
+prompt side of the same arithmetic) — two sides of one measurement, not two rules that can disagree.
+
+**And a capability fact about `recursivesi/flint` that no budget can work around.** LM Studio reports
+`capabilities.reasoning: {allowed_options: ["on"], default: "on"}` — reasoning **cannot be turned off** — and two
+route-arounds were **accepted and ignored**: at `max_tokens:1200` on a 20-line file with an explicit "answer in under
+120 words" instruction, baseline / `chat_template_kwargs {thinking:false}` / top-level `thinking:false` all returned
+`finish_reason=length` with **0 answer characters** (82.0 / 82.5 / 80.6 s), and at **4,000 tokens** the model spent
+**17,554 characters on reasoning and emitted no answer**. So `TRUNCATED-EMPTY` is not a knob-tuning problem; on this
+hardware the lever is **decode speed or model choice**. Q6_K's 32.72 GB cannot fit the 24 GB 3090 whole, which is *why*
+decode is ~10 tok/s.
+
+**What the operator granted, and the surface that does not exist.** The delegate was permitted to download flint
+**`Q4_K_M`** (24,166,841,184 B; `POST /api/v1/models/download` requires a **HuggingFace URL**, not a model key — passing
+`lmstudio-community/flint-GGUF` returns `Downloading community models as artifacts is not supported`). The file arrived
+and registered as a third variant (`recursivesi/flint` variants: `@q6_k`, `@q8_0`, `@q4_k_m`), **but no documented
+surface can activate a variant**: REST `load` rejects `variant`, `quantization` and `selected_variant`
+(`Unrecognized key(s)`), `lms load` has no quantization flag and `lms load "recursivesi/flint@q4_k_m"` → `Model not
+found`. Durable workarounds for the runbook: the bundled CLI only works at all with
+`HOME=$HOME/.var/app/ai.lmstudio.lm-studio` (host-side it dies on `ENOENT …/lms-key-2`), and a second `unload` of an
+already-gone instance returns **404** — an idempotency signal, not a failure. The rig was left **as found plus a
+verified server**: Q6 reloaded at 65,536 and servable (`"READY"`, 32 completion tokens, 25.5 s — of which ~22 s was
+cold-instance warm-up, itself a wall-clock fact worth pricing).
+
+**Spool grant discharged; a new urgency found while landing the owed runbook.** The three intents
+(`hygiene-rehearsal-20261029`, `verifier-merge-20261029`, `release-brief-20261028`) were spooled to **`pm`** via
+`intent.mjs` with the broker down, so they queue and start nothing; decomposition stays `pm`'s. Landing the owed runbook
+(`docs/runbooks/cross-clone-object-recovery.md`, + 2 rows in the runbook index — **Edit B discharged**) required
+re-measuring the object store, which surfaced the urgent item: **452 unreachable commits** dated **2026-10-14 →
+2026-10-21** (incl. `25008d8c` #1274, `5e00ee7e` #1558, `81005c62` #2111) sit in this checkout's store anchored by **no
+ref**, past `gc.pruneExpire`'s default 2 weeks, while the clone that supplied them (`/mnt/d/Git/Durian-Pi`) is **not
+mounted** — `git fsck --unreachable | grep -c '^unreachable commit'` = 452, `refs/rescued/*` = 32, `in-pack 22362`
+across 2 packs. The minting grant (`refs/rescued/orphan-*`) is now time-critical rather than tidiness.
+
+**A delegate-caused near-loss, logged because it is the same class as ROADMAP 233.** While appending this entry the
+delegate used a whole-file write instead of an append and replaced **`docs/DECISIONS.md` (6,175 lines) with 76**. It was
+recoverable in one command **only because that file was committed**; the eight instruments lost in the 2026-10-28
+incident were not committed and are gone forever. Rule: a long append to a large committed file goes through an append,
+never a rewrite, and `git status --short` + `wc -l` are read **after** the write verb, not before.
+
+**Alternatives considered and rejected:** starting the channel now at 0 claimable rows (a started team idles or
+improvises); treating "will they behave" as an operator judgement (the operator asked *when*, which is a dependency
+question with measured costs); turning the verifier gate off to unblock 253 (**D137** — `check`'s green would be a lie);
+and buying a bigger `max_tokens` for a model whose reasoning never ends. **Status:** the hygiene gate is **queued and
+unevaluated** (256, next session's first item, spooled to `pm`); the verifier is **certified no more than before** and is
+now additionally known to be **feasibility-bound by decode speed**; the pointer is corrected; no worktree or branch
+changed (pre/post inventory diffed, `.spike` +1).
