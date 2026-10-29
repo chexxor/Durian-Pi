@@ -256,6 +256,32 @@ arm: print `free -g` available, `swapon --show`, `nvidia-smi --query-gpu=memory.
 large-context engine resident. `buildCorpus()` alone exceeds 200 s here, so a re-scoring instrument that rebuilds the corpus per
 invocation looks "hung" before it looks wrong.
 
+## Switching which model the rig uses — TWO config surfaces and one oracle (measured 2026-10-29)
+
+A model swap is not one edit. These two must agree, or the rig sends a request the server will not serve:
+
+| surface | tracked? | what it names |
+|---|---|---|
+| `durig.config.json` → `DURIG_VERIFIER_BASE_URL` / `_MODEL` / `_CONTEXT` / `_MAX_TOKENS` | **no** (gitignored) | the provider: endpoint, default model id, declared window, declared output ceiling |
+| `rig.selfdev.json` → each seat's `"model": "<provider>/<modelId>"` | **yes** | the per-seat pointer — **five** seats carry `verifier/…` |
+
+`src/seatmodel.mjs:19` splits at the **first** `/`, and only when that leading segment names a registered provider, so a model id
+that itself contains a slash is fine: `verifier/mistralai/ministral-3-14b-reasoning` → provider `verifier`, model
+`mistralai/ministral-3-14b-reasoning`. **Editing only the first surface is the trap I fell into:** on 2026-10-29 the config said
+ministral while all five verifier seats still said `verifier/recursivesi/flint`, and `check` did not notice — `single-model-rig`
+**passed**. The oracle is the pointer test, which was RED until both surfaces agreed:
+
+```bash
+node demo/local-model-pointer.test.mjs      # seat pointer vs what the provider exposes — run after ANY model change
+node demo/second-local-provider.test.mjs    # the two-provider wiring
+DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json | head -40   # single-model-rig, no-verifier-seat
+curl -s http://127.0.0.1:1234/v1/models | python3 -c 'import sys,json;[print(m["id"]) for m in json.load(sys.stdin)["data"]]'   # ids the server will accept
+```
+
+**Why the disagreement is dangerous rather than merely wrong:** a seat request naming a model with **no loaded instance** cannot be
+served as intended, and what the host does next was **not tested here** — either it errors, or it loads the model, and a `flint`
+load onto a card already holding 23.0 of 24.5 GiB is the second branch. Do not discover which one on a live conversation.
+
 ## What one RTX 3090 does and does not buy you as a verifier (2026-10-29, measured on this box)
 
 **Topology, from the config and the process table, not from memory:** the **seats** are served by `strata-host` on

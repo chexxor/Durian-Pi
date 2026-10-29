@@ -91,12 +91,12 @@ current `local/iq3_s` era has none — the `402`s in recent rows are history.
 `qa2` count as verifiers**, and **no code enforces family separation**: `single-model-rig` is an exact-string test on resolved
 models (`src/checkup.mjs:591-598`; "different family" is its *remedy text*). **Served verifier now
 `mistralai/ministral-3-14b-reasoning` Q6_K — `--ctx-size 8192 --parallel 4 --n-gpu-layers 999999 --flash-attn on`, 23.0/24.5
-GiB on GPU1, 31.6 tok/s**; flint **unloaded** (Q4_K_M on disk; Q6/Q8 at
-`~/.var/app/ai.lmstudio.lm-studio/.lmstudio/set-aside-flint-q6-q8/`). **`durig.config.json` was mis-configured and is
-corrected** — it named the unloaded `recursivesi/flint` (any request would have re-offloaded 24 GiB onto a nearly full card) and
-declared `_CONTEXT 65536` / `_MAX_TOKENS 8192` against an 8,192-token server, i.e. an unsatisfiable request; now
-`ministral… / 8192 / 3000` (**259**). **Even corrected, 8,192 cannot hold a real verifier conversation:** verifier prompt sizes
-are p50 **55,538** (`qa`) / **108,435** (`advocate`) — ~7× too small, and **208** is the fix.
+GiB on GPU1, 31.6 tok/s**; flint **unloaded** (Q4_K_M on disk, Q6/Q8 set aside — path in the next-command block). **Both config
+surfaces were mis-set and both are corrected:** `durig.config.json` named the unloaded flint and declared `_CONTEXT 65536`/
+`_MAX_TOKENS 8192` against an 8,192-token server, and `rig.selfdev.json` still pointed five seats at `verifier/recursivesi/flint`
+— **`demo/local-model-pointer.test.mjs` was RED until they agreed; run it after ANY model change.** Now `ministral… / 8192 /
+3000` plus `verifier/mistralai/ministral-3-14b-reasoning` ×5 (**259**). **Even corrected, 8,192 cannot hold a real verifier
+conversation:** verifier prompts run p50 **55,538** (`qa`) / **108,435** (`advocate`) — ~7× too small, **208** is the fix.
 **Seat capability (217):** seat tools are `read write edit powershell prepare_workspace seat_root`; `pwsh`/`powershell` absent here, `bash` present and unregistered. **Unsettled submissions:** 9 `placed` + 2 `queued` → 9 of 12 seats count ADVANCING.
 **Worktrees:** **1 (this checkout, `main`)**; branches 2; `refs/rescued/*` **484** — the **452** orphan commits (dated
 10-14→10-21) were anchored under GRANT 3 on 2026-10-29, so `git fsck --unreachable | grep -c '^unreachable commit'` is now

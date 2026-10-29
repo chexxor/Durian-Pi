@@ -135,3 +135,30 @@ from removal. **GRANT 5** partially executed (ministral measured; Q4_K_M decisio
 Still owed by the operator: **which verifier** now that both local candidates are measured and rejected — remote cross-family
 key (the only thing satisfying 253 today), or fund the corrected flint re-run, or accept `single-model-rig` staying red.
 Still owed by the team: 217, 232, 233, 254, 257, 258, 259.
+
+## 7. The config lesson I paid for: a model swap touches TWO surfaces, and only a test catches the gap
+
+I corrected `durig.config.json` and reported the verifier as switched. That was wrong: `rig.selfdev.json` still named
+`verifier/recursivesi/flint` on all five verifier seats, so the next verifier request would have named a model with **no loaded
+instance** — and `cli.mjs check` did **not** see the disagreement (`single-model-rig` passed, because it is an exact-string test
+between providers, not a consistency test between the two surfaces). `demo/local-model-pointer.test.mjs` is the instrument that
+does see it, and it was **RED** until both surfaces agreed. Evidence, in order:
+
+```
+node demo/local-model-pointer.test.mjs
+  AssertionError: seat "qa" points at verifier/recursivesi/flint, but the "verifier" provider exposes only
+  "mistralai/ministral-3-14b-reasoning" — the rig file and the machine config disagree
+# after the five `"model"` strings in rig.selfdev.json were repointed:
+  LOCAL MODEL POINTER PASS (providers=local=iq3_s, verifier=mistralai/ministral-3-14b-reasoning, pinned seats=12)
+  SECOND-LOCAL-PROVIDER TEST PASS
+```
+
+The resolution rule is in `src/seatmodel.mjs:19` (first `/`, and only if the leading segment is a registered provider), which is
+why `verifier/mistralai/ministral-3-14b-reasoning` is a legal seat string even though the model id has its own slash. **Shortcut
+for the next session:** after *any* model change, run the pointer test before believing the switch happened — it costs seconds and
+it is the only instrument in the tree that compares the two surfaces.
+
+**What is still not safe:** `DURIG_VERIFIER_CONTEXT 8192` is honest about the served window, but real verifier prompts measured
+in this store run p50 **55,538** (`qa`) / **108,435** (`advocate`) tokens. So this configuration can run *probes*; it cannot run
+the *seat*. Starting the team on it would put every verifier item into a conversation the server refuses or truncates. **208** is
+the item that fixes that; until then a started team needs the verifier seats off, or the window raised.
