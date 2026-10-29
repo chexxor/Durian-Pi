@@ -7235,3 +7235,41 @@ returns `finish_reason: stop` with empty content), and **`TRUNCATED-EMPTY` rows 
 model** — read the run's budget before reading its verdict. **A model server's `loaded_instances` entry is not a health
 check**: the zombie that started this session listed flint loaded at 262,144 while every request 400'd.
 
+
+
+---
+
+## CUT VERBATIM 2026-10-29T05:0xZ from `docs/NEXT.md` §OPERATOR OWES (the six-item list as it stood when the operator ACCEPTED all six recommendations; superseded below by §RULINGS ACCEPTED — the *asks* became *grants*, so this block is history, not a to-do)
+
+## OPERATOR OWES (six; the team is behind them)
+
+1. **ROADMAP 221 — the seat-root ruling** (D152 §6 + D153 addendum): seats' persisted cwd resolves to a
+   `D:\Git\Durian-Pi-worktrees\<seat>`-shaped value; `up --root` does not clear it and no CLI prints it. Proposed ruling **A**:
+   the persisted per-seat root becomes the workspace-root-relative name; `up --root` once per seat; no migration code. Not
+   inert on Linux — `classifyGitRoot("D:\Git\Durian-Pi-worktrees\engineer")` prints **`main-worktree`** here.
+2. **The definition of "the queue drains"** inside #725/#726/#727. No threshold, predicate or surface exists, so those three
+   top-ranked rows have been `held` 12 days. Neither `pm` nor the delegate can supply it (231 is the product half).
+3. **A grant on ledger surgery (232) and on minting `refs/rescued/orphan-*` — now time-critical.** `pruneWorktrees` runs
+   unconditionally from the broker sweep, and **452 unreachable commits dated 2026-10-14→10-21** (incl. `25008d8c` #1274,
+   `5e00ee7e` #1558, `81005c62` #2111) sit in this object store anchored by **no ref**, past `gc.pruneExpire`'s 2 weeks, with
+   the source clone unmounted. One `git gc` anywhere deletes them. Procedure + the ladder:
+   `docs/runbooks/cross-clone-object-recovery.md`.
+4. **Commit-or-discard for untracked instruments (233).** `.scratch/transcript-write-bodies.mjs` and friends are untracked and
+   `.scratch/` is **not** ignored; several ROADMAP rows cite lost files as landed. Either the team re-creates them (labelled
+   re-created) or those rows get amended — your scope call, not a seat's.
+5. **Which verifier, now that the gate has an answer (D137 binds).** The gate **completed** on Q4_K_M (24 prompts, ~50 min,
+   no transport failures): **flint is not certifiable on that configuration** — `truncated 19 of 24`, `defect items named:
+   1/1 scored (8 attempted)`, **FALSE-ALARM 1/1 leading + 3/3 neutral** (every control that answered over-claimed on clean
+   code), one scorable defect cell a clean **HIT**. Speed is no longer the question (42 tok/s isolated, 21.8–48.9 in-run);
+   behaviour is. Options, cheapest first: **(a)** the **`--whole-module` mutant run** above (~30 min, removes the excerpt
+   confound, aims at the 3 proof-backed mutants) — the delegate recommends this before any purchase; **(b)** raise
+   `CAL_MAX_TOKENS`/`DURIG_VERIFIER_MAX_TOKENS` toward 10,000 and re-run at **k=3** (~2.5 h) — the reasoning shape warns a
+   bigger budget may buy only more reasoning; **(c)** a **remote** cross-family verifier (money + a funded key) — the only
+   option that satisfies 253 **today**; **(d)** another local model that answers inside the budget; **(e)** start
+   **uncertified** — cheapest, and what **D137** calls worse than no verifier, since `check` then reports a green the rig
+   has not earned. Not a fallback: ministral at 8,192 (0/2) or single-family `iq3_s`. **And ratify a config change the
+   delegate made:** the rig now serves **Q4_K_M** with Q6/Q8 set aside (restorable by `mv`) — same model key, materially
+   different model.
+6. **Whether to start the channel, and the scale threshold (256).** The queue is **0 claimable**, so "start now" buys a
+   started-but-idle team; the team stays **not started** until you say so. The **2 → 5 → 12** seat threshold on the hygiene
+   rehearsal's violation counts is **yours and unset** — that number is what the operator's restart condition turns on.

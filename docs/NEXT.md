@@ -1,16 +1,18 @@
 # NEXT — current priority and exact next command
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces ([^1] [^2] [^3] …); it does not own them (ROADMAP 250) -->
 
-**Last updated:** 2026-10-29T07:2xZ = **2026-10-29 02:2x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is **Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1, **Linux**. Delegate session, operator-approved continuation. **This session corrected a cause this pointer asserted wrongly.** The gate's
+**Last updated:** 2026-10-29T05:1xZ = **2026-10-29 00:1x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is **Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1, Linux. **The state changed twice this session, in this order: the transport cause of `REQUEST FAILED fetch failed` was corrected, then the verifier variant changed and the gate FINISHED.**fc42.x86_64`, node v24.22.1, **Linux**. Delegate session, operator-approved continuation. **This session corrected a cause this pointer asserted wrongly.** The gate's
 `REQUEST FAILED fetch failed` rows are **Node's 300 s undici `headersTimeout`**, not memory pressure: `gate.mjs:96` calls
 non-streaming `fetch` and llama-server sends headers only when generation finishes. Matched pair, same body
 (`.spike/gate/timeout-hypothesis.out`): fetch → **300.8 s, cause `HeadersTimeoutError` [`UND_ERR_HEADERS_TIMEOUT`]**;
-`node:http` + `req.setTimeout(0)` → **200 in 372.0 s**. Registered as **254**. **The seeded-bug gate has still never completed**
-(see NEXT SESSION). Three intents were **spooled to `pm`** under the 2026-10-28 spool ask (now discharged); **254/255/256**
+`node:http` + `req.setTimeout(0)` → **200 in 372.0 s**. registered as **254**. **The seeded-bug gate has now COMPLETED (2026-10-29T04:0xZ, 24 prompts, no transport failures) and
+flint failed it** — see NEXT SESSION and OPERATOR GRANTS 5. **Six asks became six grants** (operator accepted all six,
+2026-10-29T05:0xZ) — the next session **executes** them rather than re-asking; durable: **D165**. Three intents were
+**spooled to `pm`** under the 2026-10-28 spool ask (now discharged); **254/255/256/257/258**
 registered; runbook `docs/runbooks/cross-clone-object-recovery.md` landed (+ 2 index rows, so the owed Edit B is
 **discharged**); `docs/runbooks/verifier-model-server.md` corrected and extended. The operator set a **new restart
 condition** (seat hygiene — **256**) and it is the current item below. Session notes:
-**`docs/reviews/delegate-notes-2026-10-29-hygiene-and-transport.md`**; durable: **D164**. **Prior sessions, one line each:**
+**`docs/reviews/delegate-notes-2026-10-29-hygiene-and-transport.md`**; durable: **D164** and **D165**. **Prior sessions, one line each:**
 flint verifier flip + **253** (D163); round-4 research gate + **250/251**; `tools/review-cite-check.mjs` + **252** (D162);
 **241** closed by the permission-plane note → **247/248/249**. **Committed, not pushed (233 hygiene) — read
 `git log --oneline -3`, never shas quoted in a pointer.** Read me first — do not re-derive the priority from the
@@ -93,7 +95,7 @@ actually matches; `docs/SELFDEV.md` says three and is wrong) resolve to **`verif
 2026-10-29T02:4xZ the served variant is Q4_K_M, not Q6_K** — the Q6/Q8 `.gguf`s were **renamed out of the scanned tree** to
 `~/.var/app/ai.lmstudio.lm-studio/.lmstudio/set-aside-flint-q6-q8/` because no documented surface can select a variant
 (restore = one `mv`; see `docs/runbooks/verifier-model-server.md` §variant activation). **Same model key, materially
-different model — ratification owed (OPERATOR OWES 5).** Loaded **65,536**, `parallel 4`, `num_experts 6`, flash attention,
+different model — **ratified by the operator 2026-10-29 (GRANT 5, D165)**.** Loaded **65,536**, `parallel 4`, `num_experts 6`, flash attention,
 KV offloaded; **decode 42.21 tok/s** (1,500 tok / 35.5 s) — Q6_K was **10.75 tok/s** (4,000 tok / 372.0 s) — COLD prefill
 ~212 tok/s on Q6, WARM TTFT 0.23 s at 6,016 tok, and a **cold instance pays ~22 s before its first token** (32-token reply
 took 25.5 s just after load). Verify which variant is live with `ps -eo args | grep llama-server | grep -o '\-\-model
@@ -106,7 +108,7 @@ recursivesi/flint`, `_CONTEXT 65536`, `_MAX_TOKENS 8192`. Verifier prompt sizes 
 here, `bash` present and unregistered. **Unsettled submissions:** 9 `placed` + 2 `queued` → 9 of 12 seats count ADVANCING.
 **Worktrees:** **1 (this checkout, `main`)**; branches 2; `refs/rescued/*` **32**; **452 unreachable commits**; the Windows
 source clone `/mnt/d/Git/Durian-Pi` is **not mounted** (`/mnt` empty), so those commits have one home left — **237/233
-hygiene + the minting grant (OPERATOR OWES 3)**. Pi seat-agent state is host-local and absent here, so a seat worktree here is
+hygiene + the minting grant, **now GIVEN** (GRANT 3, D165 — mint the refs before anything runs `git gc` here)**. Pi seat-agent state is host-local and absent here, so a seat worktree here is
 **created, not migrated** — the first `up`/`worktree`/`run`/`send` is the writing verb `docs/runbooks/workspace-move.md`
 gates. Inventory diffed clean across today's spool writes (`.spike/{pre,post}-writing-inventory-2026-10-29.txt`).
 **Box:** 94 GB RAM, ~20 GB available, **swap 7/7 full**; **two GPUs** — GPU0 **RTX A4000 16,376 MiB** (~14.8 GB used,
@@ -124,38 +126,45 @@ same end state is recorded twice before (`docs/incidents/2026-10-26-worktree-and
 **do not run the suite from this checkout** — run it in the disposable clone. `.scratch/` is **not** gitignored (only `.spike/`
 is, line 21), so an instrument left there is one `git add` from safety and one sweep from loss (**233**).
 
-## OPERATOR OWES (six; the team is behind them)
+## OPERATOR GRANTS (six; accepted 2026-10-29T05:0xZ — **execute these, do not re-ask**; durable record: **D165**)
 
-1. **ROADMAP 221 — the seat-root ruling** (D152 §6 + D153 addendum): seats' persisted cwd resolves to a
-   `D:\Git\Durian-Pi-worktrees\<seat>`-shaped value; `up --root` does not clear it and no CLI prints it. Proposed ruling **A**:
-   the persisted per-seat root becomes the workspace-root-relative name; `up --root` once per seat; no migration code. Not
-   inert on Linux — `classifyGitRoot("D:\Git\Durian-Pi-worktrees\engineer")` prints **`main-worktree`** here.
-2. **The definition of "the queue drains"** inside #725/#726/#727. No threshold, predicate or surface exists, so those three
-   top-ranked rows have been `held` 12 days. Neither `pm` nor the delegate can supply it (231 is the product half).
-3. **A grant on ledger surgery (232) and on minting `refs/rescued/orphan-*` — now time-critical.** `pruneWorktrees` runs
-   unconditionally from the broker sweep, and **452 unreachable commits dated 2026-10-14→10-21** (incl. `25008d8c` #1274,
-   `5e00ee7e` #1558, `81005c62` #2111) sit in this object store anchored by **no ref**, past `gc.pruneExpire`'s 2 weeks, with
-   the source clone unmounted. One `git gc` anywhere deletes them. Procedure + the ladder:
-   `docs/runbooks/cross-clone-object-recovery.md`.
-4. **Commit-or-discard for untracked instruments (233).** `.scratch/transcript-write-bodies.mjs` and friends are untracked and
-   `.scratch/` is **not** ignored; several ROADMAP rows cite lost files as landed. Either the team re-creates them (labelled
-   re-created) or those rows get amended — your scope call, not a seat's.
-5. **Which verifier, now that the gate has an answer (D137 binds).** The gate **completed** on Q4_K_M (24 prompts, ~50 min,
-   no transport failures): **flint is not certifiable on that configuration** — `truncated 19 of 24`, `defect items named:
-   1/1 scored (8 attempted)`, **FALSE-ALARM 1/1 leading + 3/3 neutral** (every control that answered over-claimed on clean
-   code), one scorable defect cell a clean **HIT**. Speed is no longer the question (42 tok/s isolated, 21.8–48.9 in-run);
-   behaviour is. Options, cheapest first: **(a)** the **`--whole-module` mutant run** above (~30 min, removes the excerpt
-   confound, aims at the 3 proof-backed mutants) — the delegate recommends this before any purchase; **(b)** raise
-   `CAL_MAX_TOKENS`/`DURIG_VERIFIER_MAX_TOKENS` toward 10,000 and re-run at **k=3** (~2.5 h) — the reasoning shape warns a
-   bigger budget may buy only more reasoning; **(c)** a **remote** cross-family verifier (money + a funded key) — the only
-   option that satisfies 253 **today**; **(d)** another local model that answers inside the budget; **(e)** start
-   **uncertified** — cheapest, and what **D137** calls worse than no verifier, since `check` then reports a green the rig
-   has not earned. Not a fallback: ministral at 8,192 (0/2) or single-family `iq3_s`. **And ratify a config change the
-   delegate made:** the rig now serves **Q4_K_M** with Q6/Q8 set aside (restorable by `mv`) — same model key, materially
-   different model.
-6. **Whether to start the channel, and the scale threshold (256).** The queue is **0 claimable**, so "start now" buys a
-   started-but-idle team; the team stays **not started** until you say so. The **2 → 5 → 12** seat threshold on the hygiene
-   rehearsal's violation counts is **yours and unset** — that number is what the operator's restart condition turns on.
+1. **221 seat-root — ruling A is the ruling.** The persisted per-seat root becomes the workspace-root-relative name;
+   `up --root` once per seat; **no migration code**. Implementation is the team's (failing-first demo, `src/`); the delegate's
+   part is to spool the ruling to `pm` and hold the line that `up --root` alone does not clear the persisted value
+   (`classifyGitRoot("D:\Git\Durian-Pi-worktrees\engineer")` prints **`main-worktree`** on Linux, so this is not inert).
+2. **"The queue drains" — predicate granted:** *every released row reaches a terminal state within one resident-broker day*
+   (the 314–741 items/day regime), **and** *no `held` row older than **7 days** survives a `pm` pass without being released
+   or explicitly cancelled*. 231 is the product half: a `check` rule plus a surface that prints it. **#725/#726/#727 stay
+   `held`** until the predicate exists and `pm` releases them — releases are `pm`'s verb.
+3. **Mint the refs — granted, and it is the first command of the next session** (it decays on its own clock). Then re-measure:
+   ```bash
+   git fsck --unreachable 2>/dev/null | awk '$1=="unreachable"&&$2=="commit"{print $3}' > .spike/orphans-20261029.txt
+   wc -l .spike/orphans-20261029.txt            # 452 on 2026-10-29
+   while read -r s; do git update-ref "refs/rescued/orphan-$s" "$s"; done < .spike/orphans-20261029.txt
+   git for-each-ref refs/rescued | wc -l        # 32 → ~484
+   git fsck --unreachable 2>/dev/null | grep -c '^unreachable commit'   # → 0 once every orphan carries a ref
+   ```
+   **232 itself stays gated** on the 241 design note: nobody touches `src/worktree.mjs:649` / `src/broker.mjs:1167`, and no
+   suite runs from this checkout while it is open.
+4. **233 instrument hygiene — plan granted.** Land `.spike/gate/no-headers-timeout.mjs` into `tools/model-probes/` as a
+   labelled shim (**254** replaces it properly), label the other two cited-but-lost files **re-created** or amend the rows
+   that cite them, then `.gitignore` `.scratch/` (**38 files** today). `instrument-provenance` prints the exact three under
+   **UNTRACKED BUT CITED**: `.scratch/transcript-write-bodies.mjs`, `.spike/extract-pi-src.mjs`,
+   `.spike/gate/no-headers-timeout.mjs`.
+5. **Verifier — option (a) now, (c) if (a) fails; the Q4_K_M serving change is ratified.** Do not re-run the finished
+   fragment run; run the **`--whole-module` mutant run** (in the next-command block, ~30 min). Then, if controls still
+   false-alarm: **the 3090 is not the constraint — D137's cross-family rule is.** The seats run
+   **`Qwen3.8-Flash-Next IQ3_S`** (strata-host `:47831`, GPU0), so the obvious fast one-card models (**Qwen3 / Qwen3-Coder
+   MoE**) are **the same family as the seats** and would certify a verifier that shares the seats' blind spots. LM Studio's
+   entire chat inventory is **flint `@q4_k_m` + `ministral-3-14b-reasoning` (already 0/2) + an embedder**, so a real choice
+   needs a download grant: candidates priced in `docs/runbooks/verifier-model-server.md` are **`gpt-oss-20b`** (MoE,
+   non-thinking by default, ~13 GB), **`mistral-small-3.x-24b`** (non-reasoning, ~14 GB), **`gemma-3-27b`** (~17 GB) — each
+   then gets the k=1 gate run (~30 min) before adoption, never before. **258** covers the cheaper output-contract lever
+   (answer-first / forced-choice / structured output) that may rescue a reasoning model without changing it.
+6. **Start decomposition, not seats; the hygiene threshold is accepted as proposed.** The channel stays down; `pm` decomposes
+   217/232/233/235–258 on next start. Scale gate: **hard dimensions zero** (no leaked worktree, no stray seat, no branch
+   unmerged while its item reads `done`) **over the bounded 2-seat rehearsal, ≤2 soft violations per seat-run**, then 5 seats
+   with the audit re-run, then 12.
 
 ## Do not "fix" these on the strength of the docs
 
