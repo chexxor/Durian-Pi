@@ -6033,3 +6033,32 @@ that the evidence disappears, which is exactly what 243 recorded. Verification s
 claims are still unverified. *(Naming hazard recorded under 244(iv): the series is named four ways — round 2 has no version
 suffix, round 3 is `-r3.md`, round 4 is `-research-4.md`, and the prompt named `followup-2` is the round-3 prompt; a "round N"
 prose reference is ambiguous until it is quoted as a path.)*
+
+## D161 — a research round's citation block is never merged as text: land a key-alias table first, and re-anchor at the pin, not at the URL
+
+**Delegate practice, not an operator grant** (delegate session 2026-10-29, Linux, `Alex-Desktop-Win10`; evidence in
+`docs/reviews/harness-r4-verification-2026-10-29.md` and `inputs/fetched/MANIFEST.md` §4). Registered as ROADMAP **250**.
+
+**Measured first.** The *integrated* report, `docs/reviews/harness-tools-skills-public-harnesses-research.md`, carries
+**184** marker occurrences over **23** base keys and defines only **14** of them (its References block, lines 250–263) —
+so **9 keys are dangling** (`542f21 b736c3 20106b d32e06 04a0b7 5389e9 3d9c8f 5f6188 dccefb`) while carrying sentences
+`docs/ROADMAP.md` already relies on. Round 4's Task A names a source for 6 of the 9 — and **re-uses `[^1]` and `[^2]` for
+different pages than round 2 does** (round 2: `[^1]` = the Claude Code hooks reference, `[^2]` = its skills page; round 4:
+`[^1]` = skills, `[^2]` = Cursor rules) while also re-keying the same pages as hex tags. A paste in that direction does
+not fail: it **silently re-points citations that already have downstream consumers**. Separately, re-fetching two cited
+pages reproduced their recorded sha256 **exactly** (`bfde51ac…`, `ca7dc20c…`) while the Cline locator had rotted
+(`docs.cline.bot/features/…` → `/customization/…`), and the "closed issue" claim that would have been pasted from round 4
+is **false** (`github/copilot-cli#978` is open, `state_reason: reopened`).
+
+**The ruling, and why.** (1) **Alias table before merge.** One table mapping `hex tag → existing key → URL at the
+`inputs/fetched/MANIFEST.md` pin`, committed *before* any anchor is merged, and merging runs only old-keys → new-round,
+never the reverse. *Why:* key namespaces in these reports are unowned — that is what produced the 9 dangling keys, and
+the collision is invisible to a reader because both styles render identically. (2) **Re-anchor at the pin, not by
+re-fetch.** For any vendor in `docs/VENDOR-PINS.md`, resolve the claim by reading the clone at its pinned HEAD; a web
+page is for web-only vendors, and there only ≤40-word quotes travel (D159). *Why:* line anchors survive neither a
+re-render nor a redirect, and this session proved the strongest form locally — `vendor/eval/cline@51f63e4
+docs/customization/cline-rules.mdx` (398 lines) never mentions "Memory Bank", so round 2's `[^d32e06#79]` is page chrome,
+a finding **no** re-fetch of the page can establish. (3) **A cited GitHub issue carries four API fields** — `state`,
+`state_reason`, `reactions.total_count`, `comments`, read from `api.github.com` — because the issue *page* is unpinned
+and mutable. *Why:* that one call is what caught a false correction in the report this gate existed to police, and it
+cost ~3 s against a round that cost a session.

@@ -140,3 +140,43 @@ invisible to `--check`. Registered on ROADMAP **242**.
 | "never executed"; "as of 1.0.57 those errors **deny** instead of silently passing"; `PLUGIN_ROOT` absent | #2540 | **yes** — including the version pair (1.0.18 open, 1.0.57 closed) |
 | "never runs again. `/env` still lists the hook" | #5098 | **yes** |
 | "immediately auto-approved"; `79ms`; since v1.0.53 | #3590 | **yes** — written `79ms` with no space, measured from **a v1.0.56 session**, so the number belongs with that version |
+
+## 4. Delegate re-fetch of 2026-10-29 — the columns the research sandbox cannot fill (ROADMAP 249)
+
+The research sandbox states it plainly: *"no response headers. There is no shell, so no `sha256sum`"*
+(`docs/reviews/harness-tools-skills-public-harnesses-research-4.md`). Those columns are therefore **delegate-obtained,
+on this host** (`Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, Linux, fetched 2026-10-29T03:10Z = 2026-10-28
+22:10Z host-local, `America/Chicago` CDT; copies in gitignored `.spike/fetch-r4/`):
+
+| requested URL | final URL after redirect | HTTP | bytes | sha256 (first 16) | vs §1 pin |
+|---|---|---:|---:|---|---|
+| `https://cursor.com/docs/context/rules` | unchanged | 200 | 514,147 | `bfde51ac1ed89008` | **identical to §1** |
+| `https://docs.cline.bot/features/cline-rules` | `…/customization/cline-rules` | 200 | 286,014 | `ca7dc20c5a542abf` | **identical to §1 — the path moved** |
+
+**Two rules this settles.** (1) A sha256 column is worth having: the bytes reproduced exactly one day later. (2) A MANIFEST
+row must record the **final** URL, not the requested one — the Cline locator rotted (`features/` → `customization/`) while
+the bytes did not, so a row can be byte-reproducible and still unfindable. And **line-number anchors survive neither
+event**: round 4's copies are `web_fetch` markdown (476 / 1,073 lines), these are HTML (514 KB / 286 KB); there is no
+mapping. For the five harnesses now pinned in `docs/VENDOR-PINS.md`, re-anchor at the **pin** (`grep` the source doc),
+not at the page; for web-only vendors, only ≤40-word quotes are portable (D159).
+
+**Source-level proof that three round-2 anchors are page chrome, not content.** `vendor/eval/cline` at pin `51f63e4`
+carries the doc that generates that page: `docs/customization/cline-rules.mdx`, **398 lines**, which mentions
+"Memory Bank" **0 times** — so `[^d32e06#79]` (and `#63`, "Hooks") cannot be content anchors. Confirmed in the fetched
+bytes too: "Memory Bank" appears only as `data-title="Memory Bank"` sidebar markup and in nav JSON
+(`"group":"Best Practices","pages":[{"title":"Memory Bank"…`).
+
+**User-report rows the §1 table does not cover** (three GitHub issues round 2 cites as `[^12] [^13] [^14]`; read from
+`api.github.com` at 2026-10-29T03:10Z — the API is the stable surface, the HTML issue page is not pinned):
+
+| key | issue | state (2026-10-29) | reactions | comments |
+|---|---|---|---:|---:|
+| `[^12]` | `anthropics/claude-code#57776` | **closed**, `state_reason: duplicate` | **0** | 3 |
+| `[^13]` | `github/copilot-cli#4438` | **open** | 19 | 12 |
+| `[^14]` | `github/copilot-cli#978` | **open**, `state_reason: reopened` | 8 | 12 |
+
+`[^14]`'s state matters directly: a round-4 correction claimed it was "author closed as model issue" — **false**, it is
+open and reopened. `[^13]`'s #4438 thread (comment 2026-09-11) is what settles the direction of that finding: *"the
+explicit slash invocation successfully injects `<skill-context name="wayfinder">` … the assistant then redundantly calls
+`skill` … which returns `Skill not found`"*. Verdicts on all four round-4 corrections:
+`docs/reviews/harness-r4-verification-2026-10-29.md`.

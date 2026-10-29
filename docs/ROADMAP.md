@@ -4825,3 +4825,53 @@ questions and the cited text inline; assume the sandbox holds none of this repo"
 *Do not:* credit a report with columns it states it could not fill; re-route the same prompt at a sandbox that cannot read it;
 or treat round 4's Q1–Q6 as answers to this rig's questions. *Not gated on:* anything — the defect is in the runbook and the
 prompt template, and it cost one full research round to discover it.
+
+---
+
+Registered 2026-10-29 by the delegate, from the round-4 verification gate
+(`docs/reviews/harness-r4-verification-2026-10-29.md`). Same cluster as 235–249: **registered, not scheduled**; `pm`
+sequences them, the delegate claims nothing.
+
+**250. Citation keys are a namespace nobody owns: the integrated report uses 9 keys with line anchors and never
+defines them, and the next research round reused `[^1]`/`[^2]` for *different pages* — so "paste the repair as text"
+is a silent mis-citation, not a fix.**
+*(delegate; measured 2026-10-29, Linux)* `docs/reviews/harness-tools-skills-public-harnesses-research.md` — the report
+ROADMAP already cites — has **184** marker occurrences over **23** distinct base keys, but only **14** definition lines
+(its References block, lines 250–263). The **9 dangling** keys are
+`542f21 b736c3 20106b d32e06 04a0b7 5389e9 3d9c8f 5f6188 dccefb`, and they carry the load-bearing sentences
+(`[^20106b#405]` "the permission layer is the real gate", `[^04a0b7#427]` "session-only", `[^d32e06#246]` "no cap") —
+**none resolves to a URL from inside the file**. Round 4's Task A supplies source names for **6 of the 9** and lands
+3 unresolved, but it keys them as hex tags (`[^20106b]` beside `[^1]` = the same page) **and** re-uses two numbers with
+new meanings: round 2's `[^1]` = the Claude Code **hooks** reference while round 4's `[^1]` = its **skills** page;
+round 2's `[^2]` = skills, round 4's `[^2]` = Cursor rules. Merging text in that direction re-points citations that
+ROADMAP already relies on.
+*Fix (docs + one small tool, no `src/`):* land **one alias table** in the report — `hex tag → existing number → URL at
+the `inputs/fetched/MANIFEST.md` pin` — before any merge, and make the machine check it: `tools/review-cite-check.mjs`
+(the unbuilt cheap half of 244) walks a `docs/reviews/*.md`, **fails on any marker with no definition in that file**,
+prints a cross-round key-collision table, resolves every `path:line` reference under a `vendor/eval/` pin, and in a
+second pass compares asserted "N lines" figures with `wc -l` at the pin. Both checks are cheap; both were run **by hand** in the session that found this, and the hand-written script sat in
+gitignored `.spike/` and is gone (233 recurring).
+*Do not:* paste a research round's citation block as text; let two key styles name one page; treat a `#line` anchor as
+an address (§4 of `docs/reviews/harness-r4-verification-2026-10-29.md` measures that line ranges do not survive a
+re-fetch, and `inputs/fetched/MANIFEST.md` §4 that even a byte-stable page rots its URL). *Not gated on:* anything — the defect is in the docs and the tool, and it is the gate that
+currently blocks integrating round 4 at all.
+
+**251. A report's evidence table cites a vendor outside its own comparison set, and its "nothing here is cloned"
+caveat is already stale — 4 of its 5 vendors are now pinned, so the `advertised-elsewhere` cells are upgradeable to
+`observed` at a pin.**
+*(delegate; measured 2026-10-29, Linux)* Round 2 compares five harnesses (Claude Code, Codex CLI, Cursor, Cline, Goose)
+but its §6 user-report rows are `[^12]` (`anthropics/claude-code#57776`), `[^13]`, `[^14]` (`github/copilot-cli`): a
+**sixth vendor with no row in the §2 matrix** — and round 4's own claim that "§6 is effectively a two-vendor table
+presented as five" is **real**. Its §8 item 7 (line 244) says *"none of these five is cloned, so no `observed` claim has
+been made"* and tells a future reader to clone them; as of this session `claude-code-docs 58d6da1`, `codex d373d64`,
+`cline 51f63e4`, `goose 775b395` and `copilot-cli 84ee80e` **are** cloned and pinned (14 clones,
+`node tools/vendor-pins.mjs --check` PASS). The stale caveat is the expensive half: it makes the cells look permanently
+`advertised-elsewhere` when they are locally re-checkable they are re-checkable locally — measured example: `[^d32e06#79]` ("Memory Bank") is page
+chrome, proved at the pin (`vendor/eval/cline/docs/customization/cline-rules.mdx`, 398 lines, **0** mentions), which no
+re-fetch of the page can show.
+*Fix (docs-only):* amend §8 item 7 to name the pins; give §6 an "adjacent vendor, not in the matrix" label on the three
+copilot-cli rows (or add its §2 row from the pin); and run a **pin re-anchor pass** over the report's five vendor
+columnsets — claim → `grep` in `vendor/eval/<name>` at the pinned HEAD → reclass `advertised-elsewhere` → `observed`,
+or mark it unfounded.
+*Do not:* leave a caveat that a later session will trust after the pins moved; re-anchor by re-fetching a web page
+(anchors rot, see 250); or reclassify a cell without reading the clone at the pin. *Not gated on:* anything.
