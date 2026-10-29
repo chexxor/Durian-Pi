@@ -134,6 +134,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [workspace-move.md](workspace-move.md) | the rig's workspace moved machines or operating systems (fresh clone/copy, Linux box for a Windows rig, new user) — worktree registrations, seat cwds, the pin's links, or queue-cited commit shas do not resolve | yes |
 | [cross-clone-object-recovery.md](cross-clone-object-recovery.md) | a cited commit sha resolves in no object store here; the workspace arrived from another machine/OS and the history did not travel; `git fsck --unreachable` reports commits anchored by no ref (urgent — `git gc` deletes them) | yes (`.git` only, never the store) |
 | [verifier-model-server.md](verifier-model-server.md) | a seat's model is not what `rig.selfdev.json` claims; the model server lists an instance that no request can use (`Failed to load model`); you must change which model a provider serves, its context window, or free RAM for a second model; `check` reports `single-model-rig` | yes (server only, not the store) |
+| [verifier-model-server.md](verifier-model-server.md) §Activating a downloaded quantization (variant) without the GUI | a model download finished and the variant is in the catalog but **nothing can start it** (`variant`/`quantization`/`selected_variant` → `Unrecognized key(s)`; `lms load "model@q4_k_m"` → `Model not found`); or you need to know **which `.gguf` is actually live** (the API never says — the `llama-server --model` path does); or `unload` returns `missing_required_parameter` | yes (server only; the move is a reversible rename, and **ask first** — it changes what every seat's verifier model *is* while the model key stays identical) |
 | [broker-down-or-stalled.md](broker-down-or-stalled.md) | seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale `PASS` (dormant); log stops after a storage error or `database is locked` | yes |
 | [broker-safe-change.md](broker-safe-change.md) | a model/constitution/reset change must apply without corrupting the store | yes |
 | [store-corruption-recovery.md](store-corruption-recovery.md) | every write verb fails with `Session failed after a storage error`, or the broker repeats `wake-failed … unresolvable path` and one seat is never woken | yes |
@@ -185,6 +186,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Constitution / starter mirror | constitution-amendment |
 | Worktrees | leaked-worktrees, prepare-workspace-etarget, worktree-unlinked-deps, prepare-workspace-refused |
 | Git objects / shas cited from another machine | cross-clone-object-recovery, workspace-move |
+| Which model/quantization a provider is actually serving (variant activation, unload-by-`instance_id`, model-server lifetime vs a live run) | verifier-model-server, model-server-broker-race |
 | Missing files on disk | tracked-files-missing-on-disk |
 | Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
 | Queue / parked work | stale-held-backlog |

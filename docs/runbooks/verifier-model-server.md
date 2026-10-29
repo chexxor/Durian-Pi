@@ -78,7 +78,11 @@ Two ceilings, and the rig's is **shorter** than the instrument's. The provider p
 **600,000 ms** total request timeout (`src/config.mjs:330-344`, `DURIG_STREAM_TIMEOUT_MS` is `null` = platform
 default) plus **2 SDK-level retries**. So on this box a generation longer than **10 minutes fails as a provider
 error three times in a row**, and `DURIG_VERIFIER_MAX_TOKENS 8192` at the measured **10.75 tok/s** is **762 s** —
-a declared output budget the rig cannot receive. That mismatch is **ROADMAP 255**.
+a declared output budget the rig cannot receive. That mismatch is **ROADMAP 255**. **Both figures in that paragraph are
+variant-specific, and the variant changed later the same day — read the variant-activation section below before quoting
+them:** at Q4_K_M's measured **42.21 tok/s** the same 8,192-token budget is a **194 s** generation, i.e. comfortably
+inside both ceilings. The defect (**a declared budget with no measured decode speed behind it**) is unchanged; its
+severity is what moved.
 
 And the reasoning budget is not a knob on this model. `GET /api/v1/models` reports flint
 `capabilities.reasoning: {allowed_options: ["on"], default: "on"}` — **there is no API switch to turn reasoning
@@ -90,12 +94,79 @@ an explicit "answer in under 120 words" instruction (`.spike/gate/reasoning-leve
 | baseline | 82.0 s, `finish=length`, completion **1200**, **answer 0 chars**, reasoning 3,814 chars |
 | `chat_template_kwargs {thinking:false}` | accepted, ignored: 82.5 s, `finish=length`, **answer 0 chars**, reasoning 4,160 chars |
 | `thinking:false` (top level) | 80.6 s, `finish=length`, **answer 0 chars**, reasoning 4,016 chars |
-| `max_tokens 4000` (separate probe) | 372.0 s, `finish=length`, completion **4000**, **answer 0 chars**, reasoning **17,554 chars** |
+| `max_tokens 4000` (separate probe, **Q6_K**) | 372.0 s, `finish=length`, completion **4000**, **answer 0 chars**, reasoning **17,554 chars** |
 
 **Read that before concluding `TRUNCATED-EMPTY` is a knob-tuning problem.** A model that never reaches its answer
 inside the budget this hardware can deliver is not a verifier, however good its reasoning would be; the lever is
 **decode speed** (a smaller quantization that fits the GPU, or a different model), not a bigger `max_tokens`.
 `max_context_length` is not the constraint either: flint will load at 262,144 on paper and cannot be served there.
+
+**And the reasoning preamble scales with prompt difficulty — which is why a smoke test on this model proves nothing.** The
+same model, same server, two prompts: `"Reply with exactly: READY"` at `max_tokens:20` → **empty answer, all 20 tokens
+consumed as reasoning**; the same request at `max_tokens:300` → **`"READY"`, `finish=stop`, 24 completion tokens, 89
+reasoning chars**. A trivial prompt clears its preamble in ~30 tokens, so it looks healthy at any sane budget; the class
+of prompt a verifier exists for (a file with a seeded defect) reasoned for **17,554 chars without answering**. So
+**measure the reasoning preamble at corpus-like prompts**, never at a hello-world, before concluding a verifier is
+feasible at some `max_tokens`.
+
+## Activating a downloaded quantization (variant) without the GUI — measured 2026-10-29; it changed every deadline in this runbook
+
+**Symptom: the download succeeded, the variant is in the catalog, and nothing you can call can start it.** After
+`POST /api/v1/models/download`, `GET /api/v1/models` listed `recursivesi/flint` with **three** variants (`@q6_k`,
+`@q8_0`, `@q4_k_m`), but selection is not exposed: REST `load` rejects `variant`, `quantization` and `selected_variant`
+with `Unrecognized key(s)` (its body is `additionalProperties:false`), `lms load --help` has **no quantization flag**, and
+`lms load "recursivesi/flint@q4_k_m"` → **`Model not found`**. The upstream wording that mentions `selected_variant`
+describes the **GUI's** request body, not the REST server's.
+
+**What works from a shell (reversible, one rename each, nothing deleted):** unload the live instance, move the *other*
+variants' `.gguf` files out of the scanned models tree, then `load` — with one variant on disk the catalog collapses and
+the plain load body starts it.
+
+```bash
+# 0. which .gguf is actually live — the API never says; the process line does:
+ps -eo args | grep llama-server | grep -o '\-\-model .*gguf'
+# 1. unload BY instance_id (see trap 1), then confirm it is gone
+curl -s -X POST http://127.0.0.1:1234/api/v1/models/unload -H 'content-type: application/json' \
+  -d '{"instance_id":"recursivesi/flint"}'
+# 2. set the other variants aside — same filesystem ⇒ instant rename; restore = mv back
+mkdir -p ~/.var/app/ai.lmstudio.lm-studio/.lmstudio/set-aside-flint-q6-q8
+mv ~/.var/app/ai.lmstudio.lm-studio/.lmstudio/models/lmstudio-community/flint-GGUF/flint-Q6_K.gguf \
+   ~/.var/app/ai.lmstudio.lm-studio/.lmstudio/models/lmstudio-community/flint-GGUF/flint-Q8_0.gguf \
+   ~/.var/app/ai.lmstudio.lm-studio/.lmstudio/set-aside-flint-q6-q8/
+# 3. load as usual, then re-run step 0 to VERIFY the file the server opened
+curl -s -X POST http://127.0.0.1:1234/api/v1/models/load -H 'content-type: application/json' \
+  -d '{"model":"recursivesi/flint","context_length":65536,"flash_attention":true,"offload_kv_cache_to_gpu":true}'
+```
+
+Measured on this box: catalog 3 variants → **`recursivesi/flint@q4_k_m` only**; `load` returned
+`{instance_id, load_time_seconds, status}`; `ps` confirmed `--model …/flint-gguf/flint-Q4_K_M.gguf`; **decode
+10.75 → 42.21 tok/s** (1,500 tokens in 35.5 s). At 42 tok/s the probes' 300 s transport ceiling binds at **~12,600**
+output tokens and the rig's 600 s request deadline at **~25,200**, so `DURIG_VERIFIER_MAX_TOKENS: 8192` is a **194 s**
+generation instead of 762 s, and a k=1 gate run moves from ~3 h to ~45 min. **Ask before doing it on a rig you do not
+own**: it changes what every other seat's verifier model *is*, even though the model key does not change.
+
+**Traps, all hit on 2026-10-29.** (1) **`unload` requires `instance_id` when an instance is live** — `{"model": …}`
+returns `missing_required_parameter`; the same shape appeared to "work" earlier only because nothing was loaded and the
+call 404'd. (2) **`loaded_instances[].id` is not stable** — it read `llamaserv.cppyyvz2t8` and later
+`recursivesi/flint`; re-read it immediately before an `unload`. (3) **Moving a live instance's file out from under it
+does not kill it** (the handle stays open), so it looks like the unload happened when it did not — unload first. (4)
+**Verify the variant by the `--model` path, never by the model key**: the key is identical across variants, which is
+exactly how a "we upgraded the verifier" claim can be false. (5) **Two path identities for the same tree** — the scanned
+catalog is `~/.var/app/ai.lmstudio.lm-studio/.lmstudio/models/…` while the server's command line prints
+`~/.lmstudio/models/…`, and `~/.lmstudio` does not exist as a host directory here. (6) **This box has two GPUs** —
+`nvidia-smi` reports a **16,376 MiB** card and the **24,576 MiB** 3090 — so any "it fits in VRAM" claim must name which
+card; Q4_K_M's ~22.5 GiB of weights nearly fill the 3090 alone.
+
+**The capability finding does not travel with the speed win — that is the trap for whoever picks up the verifier.** Q4
+answers when the prompt is simple (`"Count from 1 to 900"` at `max_tokens:1500` → 1,715 **answer** chars + 1,968
+reasoning chars; `"Reply with exactly: READY"` at 300 tokens → `"READY"`, `finish=stop`, 24 tokens, 89 reasoning chars),
+but on **corpus-like** prompts it still spends the whole budget reasoning: all four reasoning-lever arms at
+`max_tokens:1200` returned **`answerChars=0`** on Q4 too (3,491–4,236 reasoning chars in 24.7–25.7 s), and the first cell
+of the seeded-bug gate — `H1-npm-invocation`, **defect** side — came back **`TRUNCATED-EMPTY` at 6,000 tokens / 161.8 s**
+while its **clean control on the same file answered at 1,889 tokens / 42.6 s**. The model reasons hardest precisely where
+the verifier is being asked to find something, so a hello-world smoke test that clears the budget says nothing about gate
+feasibility. Speed removed the **transport and deadline** blockers (254, 255); it has not yet produced a verifier that
+finishes an answer on the prompts that matter.
 
 ## The numbers that decide the window (measured 2026-10-29, this box)
 
@@ -104,7 +175,7 @@ inside the budget this hardware can deliver is not a verifier, however good its 
 | Verifier seats, per the product's own `seatsAreVerifier` (`src/verifierrole.mjs`) | **5**: `qa`, `qa2`, `auditor`, `advocate`, `designer` | called the real predicate on `rig.selfdev.json` — `docs/SELFDEV.md` names only 3, which is stale: `advocate`/`designer` match on "review" in their **role** text |
 | A verifier seat's prompt size | `qa` p50 **55,538** / p95 251,311 / max 356,355 · `auditor` p95 329,252 · `advocate` p50 **108,435** · `designer` p50 **66,258** · `qa2` p95 48,640 | `input + cacheRead` over **60,503** `pi.assistant` turns joined to seat via `cli.mjs status` conversationIds; **37,348** of them exceed 32,768 |
 | ministral before this run | loaded at **8,192** while `DURIG_VERIFIER_CONTEXT` declared **13,273** | `GET /api/v1/models` vs `durig.config.json` — the rig was declaring a window the server never gave, and the model scored **0/2** on the seeded-bug gate (`D137`) |
-| flint | `recursivesi/flint`, 40B, arch `flint`, Q6_K **32.72 GB**, `max_context_length` 262,144; loads at 65,536 in **18.3 s**; decode **9.8–10.75 tok/s** (4,000 tokens in 372.0 s is the cleanest measurement); COLD prefill ~**212 tok/s** (6,016 tok in 28.4 s); WARM TTFT **0.23 s** at 6,016 tok (prefix cache). Only **Q6_K and Q8_0** are on disk here — `~/.var/app/ai.lmstudio.lm-studio/.lmstudio/models/lmstudio-community/flint-GGUF/` — and Q6_K does **not** fit the 24 GB 3090 whole, which is why decode is ~10 tok/s | `GET /api/v1/models`, a completion, and `tools/model-probes/cold-prefill.mjs` (its prefill/decode columns print `?` against LM Studio — it reads `timings`, which this server does not return — so the usable columns are TTFT and the machine line) |
+| flint | `recursivesi/flint`, 40B, arch `flint`, `max_context_length` 262,144. Three variants on disk: **Q6_K 32.72 GB** — does **not** fit the 24 GB 3090 whole, which is why its decode is **9.8–10.75 tok/s** (4,000 tok in 372.0 s is the cleanest Q6 measurement); **Q8_0 42.35 GB**; **Q4_K_M 24.17 GB** — loads at 65,536 and decodes **42.21 tok/s** (1,500 tok in 35.5 s). Q6 loads at 65,536 in **18.3 s**; COLD prefill ~**212 tok/s** on Q6 (6,016 tok in 28.4 s); WARM TTFT **0.23 s** at 6,016 tok (prefix cache). Tree: `~/.var/app/ai.lmstudio.lm-studio/.lmstudio/models/lmstudio-community/` — `flint-GGUF/` (Q6/Q8) and `flint-gguf/` (Q4_K_M); **the Q6/Q8 files are set aside** at `…/.lmstudio/set-aside-flint-q6-q8/` since 2026-10-29T02:4xZ so `load` picks Q4 — restore is one `mv` | `GET /api/v1/models`, completions, `ps -eo args \| grep llama-server` (the only surface that prints **which `.gguf` is live**), and `tools/model-probes/cold-prefill.mjs` (its prefill/decode columns print `?` against LM Studio — it reads `timings`, which this server does not return — so the usable columns are TTFT and the machine line) |
 | Unloading ministral | freed **~12.7 GB** on the 3090 (22,315 → 9,635 MiB); flint's engine process holds **26.4 GB RSS** | `nvidia-smi`, `ps --sort=-rss`, before/after the unload |
 | The box, during all of it | 94 GB RAM, 26–27 GB available, **swap 7/7 GB full**, `strata-host` (the primary `iq3_s` provider) **51.3 GB RSS** | `free -g`, `ps` — the same "slow model vs out-of-RAM box look identical" warning `cold-prefill.mjs` prints |
 
