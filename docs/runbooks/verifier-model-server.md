@@ -59,7 +59,43 @@ while the broker is down or with the affected seats idle, and never in the middl
    Run `node tools/model-probes/gate.mjs http://127.0.0.1:1234/v1 <model-id> <label> --plan` first (spends
    nothing, prints the matched-pair accounting), then the real arm with `--replicate 3 --pair-comments
    strip-both`. Cost measured 2026-10-29 on flint: **~2 minutes per cell** (reasoning-heavy decode), i.e.
-   ~1.5–2 h for the 54-cell k=3 matrix — budget it, and expect `fetch failed` rows if the box is out of RAM.
+   ~1.5–2 h for the 54-cell k=3 matrix — budget it.
+7. **Before you blame the box for `REQUEST FAILED fetch failed`, check the transport.** `gate.mjs:96` (and every
+   other probe in `tools/model-probes/`) calls **non-streaming** `fetch`, and llama-server sends the response
+   *headers* only when generation finishes — so Node's global-fetch default `headersTimeout` of **300 s** kills
+   any generation longer than five minutes, and `gate.mjs:426` prints only `e.message`, which is the useless
+   `fetch failed`. Measured 2026-10-29 (Linux, node v24.22.1, `.spike/gate/timeout-hypothesis.out`), same request
+   body both times: **global fetch** → `300.8s`, `TypeError: fetch failed`, cause
+   **`HeadersTimeoutError` [`UND_ERR_HEADERS_TIMEOUT`]**; **`node:http` with `req.setTimeout(0)`** → **200 in
+   372.0 s**. A 300-second ceiling therefore *looks exactly like* an out-of-RAM box, and last session's pointer
+   blamed swap. Work out which one you have: reproduce the call printing `err.cause`, and compute
+   `output_budget_tokens ÷ measured_decode_tok_s` — if that exceeds 300 s, the ceiling, not memory, got your run.
+   The product fix (stream, or a dispatcher timeout, and print `err.cause`) is **ROADMAP 254**.
+
+## The arithmetic that decides whether a local model can be a verifier at all
+
+Two ceilings, and the rig's is **shorter** than the instrument's. The provider path is the `openai` SDK with a
+**600,000 ms** total request timeout (`src/config.mjs:330-344`, `DURIG_STREAM_TIMEOUT_MS` is `null` = platform
+default) plus **2 SDK-level retries**. So on this box a generation longer than **10 minutes fails as a provider
+error three times in a row**, and `DURIG_VERIFIER_MAX_TOKENS 8192` at the measured **10.75 tok/s** is **762 s** —
+a declared output budget the rig cannot receive. That mismatch is **ROADMAP 255**.
+
+And the reasoning budget is not a knob on this model. `GET /api/v1/models` reports flint
+`capabilities.reasoning: {allowed_options: ["on"], default: "on"}` — **there is no API switch to turn reasoning
+off** — and two attempts to route around it changed nothing, both at `max_tokens: 1200` on a *20-line* file with
+an explicit "answer in under 120 words" instruction (`.spike/gate/reasoning-lever-arms.out`, 2026-10-29):
+
+| Arm | Result |
+|---|---|
+| baseline | 82.0 s, `finish=length`, completion **1200**, **answer 0 chars**, reasoning 3,814 chars |
+| `chat_template_kwargs {thinking:false}` | accepted, ignored: 82.5 s, `finish=length`, **answer 0 chars**, reasoning 4,160 chars |
+| `thinking:false` (top level) | 80.6 s, `finish=length`, **answer 0 chars**, reasoning 4,016 chars |
+| `max_tokens 4000` (separate probe) | 372.0 s, `finish=length`, completion **4000**, **answer 0 chars**, reasoning **17,554 chars** |
+
+**Read that before concluding `TRUNCATED-EMPTY` is a knob-tuning problem.** A model that never reaches its answer
+inside the budget this hardware can deliver is not a verifier, however good its reasoning would be; the lever is
+**decode speed** (a smaller quantization that fits the GPU, or a different model), not a bigger `max_tokens`.
+`max_context_length` is not the constraint either: flint will load at 262,144 on paper and cannot be served there.
 
 ## The numbers that decide the window (measured 2026-10-29, this box)
 
@@ -68,7 +104,7 @@ while the broker is down or with the affected seats idle, and never in the middl
 | Verifier seats, per the product's own `seatsAreVerifier` (`src/verifierrole.mjs`) | **5**: `qa`, `qa2`, `auditor`, `advocate`, `designer` | called the real predicate on `rig.selfdev.json` — `docs/SELFDEV.md` names only 3, which is stale: `advocate`/`designer` match on "review" in their **role** text |
 | A verifier seat's prompt size | `qa` p50 **55,538** / p95 251,311 / max 356,355 · `auditor` p95 329,252 · `advocate` p50 **108,435** · `designer` p50 **66,258** · `qa2` p95 48,640 | `input + cacheRead` over **60,503** `pi.assistant` turns joined to seat via `cli.mjs status` conversationIds; **37,348** of them exceed 32,768 |
 | ministral before this run | loaded at **8,192** while `DURIG_VERIFIER_CONTEXT` declared **13,273** | `GET /api/v1/models` vs `durig.config.json` — the rig was declaring a window the server never gave, and the model scored **0/2** on the seeded-bug gate (`D137`) |
-| flint | `recursivesi/flint`, 40B, arch `flint`, Q6_K **32.72 GB**, `max_context_length` 262,144; loads at 65,536 in **18.3 s**; decode **9.8 tok/s**; COLD prefill ~**212 tok/s** (6,016 tok in 28.4 s); WARM TTFT **0.23 s** at 6,016 tok (prefix cache) | `GET /api/v1/models`, a completion, and `tools/model-probes/cold-prefill.mjs` (its prefill/decode columns print `?` against LM Studio — it reads `timings`, which this server does not return — so the usable columns are TTFT and the machine line) |
+| flint | `recursivesi/flint`, 40B, arch `flint`, Q6_K **32.72 GB**, `max_context_length` 262,144; loads at 65,536 in **18.3 s**; decode **9.8–10.75 tok/s** (4,000 tokens in 372.0 s is the cleanest measurement); COLD prefill ~**212 tok/s** (6,016 tok in 28.4 s); WARM TTFT **0.23 s** at 6,016 tok (prefix cache). Only **Q6_K and Q8_0** are on disk here — `~/.var/app/ai.lmstudio.lm-studio/.lmstudio/models/lmstudio-community/flint-GGUF/` — and Q6_K does **not** fit the 24 GB 3090 whole, which is why decode is ~10 tok/s | `GET /api/v1/models`, a completion, and `tools/model-probes/cold-prefill.mjs` (its prefill/decode columns print `?` against LM Studio — it reads `timings`, which this server does not return — so the usable columns are TTFT and the machine line) |
 | Unloading ministral | freed **~12.7 GB** on the 3090 (22,315 → 9,635 MiB); flint's engine process holds **26.4 GB RSS** | `nvidia-smi`, `ps --sort=-rss`, before/after the unload |
 | The box, during all of it | 94 GB RAM, 26–27 GB available, **swap 7/7 GB full**, `strata-host` (the primary `iq3_s` provider) **51.3 GB RSS** | `free -g`, `ps` — the same "slow model vs out-of-RAM box look identical" warning `cold-prefill.mjs` prints |
 
@@ -79,6 +115,18 @@ guard), not a bigger window. `DURIG_VERIFIER_MAX_TOKENS` was **32768** for a pro
 room inside 65,536 and still clears the measured reasoning cost with room to spare (D136's reason for raising it
 at all was the `finish_reason: length` + empty-answer truncation at 128–256 tokens; if that reappears, raise it
 again and record it, don't guess).
+
+## Downloading a quantization (measured 2026-10-29, and note the two gotchas)
+
+`POST /api/v1/models/download` needs a **HuggingFace URL**, not a model key:
+`{"model":"https://huggingface.co/lmstudio-community/flint-gguf"}` → `{"job_id":"job_…","status":"downloading",
+"total_size_bytes":24166841184}`. Passing `lmstudio-community/flint-GGUF` returns
+`Downloading community models as artifacts is not supported. Please use the HuggingFace model URL instead.` The
+second gotcha: the **repo name's case differs from the local directory** (`flint-gguf` on the hub, `flint-GGUF` on
+disk), and the download lands under the *lower-case* directory, so a `find` for the old path misses the arriving
+file — it is written as `.lmstudio/models/…/flint-gguf/downloading_<file>.gguf.part`, and `GET /api/v1/models`
+lists the model only once the rename finishes. `POST /api/v1/models/download/status` does **not** exist on this
+build; poll the file, or `GET /api/v1/models` and check `loaded_instances`/the model appears.
 
 ## Do not
 
