@@ -7,12 +7,11 @@ non-streaming `fetch`, and llama-server sends headers only when generation finis
 (`.spike/gate/timeout-hypothesis.out`): fetch → **300.8 s, cause `HeadersTimeoutError` [`UND_ERR_HEADERS_TIMEOUT`]**;
 `node:http` + `req.setTimeout(0)` → **200 in 372.0 s**. Registered as **254**. **Six asks became six grants** (all six accepted,
 2026-10-29T05:0xZ) — the next session **executes** them rather than re-asking (**D165**); **GRANT 3 is already done**, and one
-ask returns below. Three intents were **spooled to `pm`** (now discharged); **254–259** registered;
-`docs/runbooks/cross-clone-object-recovery.md` landed (+ 2 index rows, so the owed Edit B is **discharged**);
-`docs/runbooks/verifier-model-server.md` corrected and extended. The operator set a **new restart condition** (seat hygiene —
-**256**) and it is the current item below. Session notes:
-**`docs/reviews/delegate-notes-2026-10-29-hygiene-and-transport.md`** and **`docs/reviews/delegate-notes-2026-10-29-verifier-serving-and-calibration.md`**;
-durable: **D164**, **D165**, **D166**. **Prior sessions, one line each:**
+ask returns below. Three intents were **spooled to `pm`** (now discharged); **254–261** registered (**260** = a probe arm must
+  pre-flight the box and run inside its own cgroup, now instrumented; **261** = a seat's `provider/model` string can name a
+  model no loaded instance serves and `check` says nothing);
+`docs/runbooks/cross-clone-object-recovery.md` landed (+ 2 index rows, so the owed Edit B is **discharged**); `verifier-model-server.md` corrected and extended (§Switching which model the rig uses, §probe discipline); **`docs/runbooks/delegate-doc-hygiene.md`** landed. The operator set a **new restart condition** (seat hygiene — **256**) and it is the current item below. Session notes:
+**`docs/reviews/delegate-notes-2026-10-29-hygiene-and-transport.md`** and **`docs/reviews/delegate-notes-2026-10-29-verifier-serving-and-calibration.md`**; durable: **D164**–**D167**. **Prior sessions, one line each:**
 flint verifier flip + **253** (D163); round-4 research gate + **250/251**; `tools/review-cite-check.mjs` + **252** (D162);
 **241** closed by the permission-plane note → **247/248/249**. **Committed, not pushed (233 hygiene) — read
 `git log --oneline -3`, never shas quoted in a pointer.** Read me first — do not re-derive the priority from the
@@ -59,7 +58,7 @@ git fsck --unreachable 2>/dev/null | grep -c '^unreachable commit'   # 452 on 20
 # verifier chain (ministral Q6_K served at ctx 8,192; flint UNLOADED, Q4_K_M on disk, Q6/Q8 set aside at ~/.var/app/ai.lmstudio.lm-studio/.lmstudio/set-aside-flint-q6-q8/ — restore = mv back):
 curl -s --max-time 15 http://127.0.0.1:1234/api/v1/models | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const m of JSON.parse(s).models)console.log(m.key,m.variants.join(" "),m.loaded_instances.map(i=>i.id+"@"+i.config.context_length).join(","))})'
 ps -eo args | grep '[l]lama-server' | tr ' ' '\n' | grep -E '^--(model|ctx-size|parallel|n-gpu-layers)' -A1 | tr '\n' ' '   # the ONLY surface naming variant + ctx + parallel — the API key never tells you
-free -g | awk 'NR==2{print "available GiB:",$7}'; swapon --show; nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv,noheader   # PROBE PRE-FLIGHT, mandatory: my arms helped OOM-kill strata (the seats' server) on 2026-10-29; do not start an arm under 10 GiB available or >50% swap
+node tools/model-probes/probe-preflight.mjs   # PROBE PRE-FLIGHT, mandatory before any prompt (exit 1 = do not start an arm)   ||   free -g | awk 'NR==2{print "available GiB:",$7}'; swapon --show; nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv,noheader   # measured 2026-10-29: MemAvailable 25.5/94.2 GiB, swap=zram 8 GiB at 78%, GPU0 12,648/16,376 MiB, GPU1 23,019/24,576 (94%), seat server 50.3 GiB RSS of which 40.7 GiB shmem — my arms helped OOM-kill `strata-host` at 11:57, so run every arm as: node tools/model-probes/capped-run.mjs --node-mem-max 6G -- <cmd> (measured: MemoryMax=300M+MemorySwapMax=0 kills the ARM, servers stay resident; MemorySwapMax=1G lets the arm eat the zram you were protecting). A desktop notification naming a `run-<digits>.scope` = the cap worked, say so with the peak line; one naming `app-…appimage@…service` or a `strata`/`llama-server` unit = an incident (§probe discipline in the verifier runbook)
 node .spike/gate/verdict-line-score.mjs .spike/gate/ministral-q6-decl.json   # the two axes kept apart: committed verdict vs mechanism credit (257)
 # verifier ARMS ARE BLOCKED on the operator's ruling (below): flint is UNLOADED, and a whole-module arm needs ctx >= 24k at --parallel 1 (whole modules here are 1,686-22,014 est. tokens — my earlier "58,380 for H4" misread the pair-accounting CHARS column)
 ```
@@ -73,11 +72,12 @@ gate's own `SYSTEM` constant, which no run ever varied; declaration-header or wh
 excusal), but flint is **unloaded** and whole-module feeding needs ctx ≥ 24k, so it is the operator's call — until then **253**'s
 evidence clause cannot be met locally and `single-model-rig` passing is a string comparison (**D137**). **(c) The queue has
 nothing claimable**, `pm` has only just received the rows, and the still-owed rulings are **221** seat-root and **231** "the queue
-drains". **Granted 2026-10-28 (D158):** `--depth 1` competitor clones (5 taken, `vendor-pins --check` PASS at 14 clones);
+drains". **(d) the box itself refuses right now** — `node tools/model-probes/probe-preflight.mjs` exits 1 at swap 77 % (zram
+8 GiB), GPU1 holds only 1,559 MiB free behind ministral, and the seat server holds 51 GiB RSS / 40.7 GiB of shmem; so a flint
+arm needs ministral unloaded *and* `capped-run.mjs` around it (**260**, **D167**). **Granted 2026-10-28 (D158):** `--depth 1` competitor clones (5 taken, `vendor-pins --check` PASS at 14 clones);
 `.pi/` writes permitted-but-disfavoured; **232 gated on research (241): do not claim it, do not touch `src/worktree.mjs:649` /
 `src/broker.mjs:1167`, and run no suite from this checkout while it is open.** **Granted 2026-10-29:** model-server control
-(unload/load/`context_length`) and the verifier-seat edit in `rig.selfdev.json`; **seat instruction text remains
-operator-owned and untouched.**
+(unload/load/`context_length`) and the verifier-seat edit in `rig.selfdev.json`; **seat instruction text remains operator-owned and untouched.**
 
 ## Rig state, re-measured at clock-in 2026-10-29T06:2xZ (Linux) — re-read, do not trust
 

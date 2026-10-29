@@ -5188,3 +5188,62 @@ at n=24 but needs a k=3 baseline before a threshold is hard-coded; and the ctx/m
 semantics — engines clamp differently, so probe it (195's *"probe it, do not assume"*).
 *Do not:* read a `TRUNCATED-EMPTY` count as a capability rate (**257**); do not raise `max_tokens` before asserting the request
 carried a system message; and do not conclude a model is broken before checking what the host instructed it to do.
+
+**260. A probe arm can grow without bound, and when the box runs out of memory the kernel kills the LARGEST process —
+which is a model server, not the probe.** *(delegate; registered 2026-10-29 from the kernel's own record)*
+**What exists today, measured:** `journalctl -b | grep -i "invoked oom-killer"` returns
+`esbuild invoked oom-killer ... oom_score_adj=200` then `Out of memory: Killed process 2289527 (strata-host)
+total-vm:132182136kB, anon-rss:53969596kB, shmem-rss:2016944kB` — the victim was the **seats' server**, and the
+allocating process was `esbuild`, a toolchain process. The scale no surface printed: the IQ3_S pack is two GGUFs of
+**52 GB + 27 GB**, only **12.6 GiB** of its 47 GiB working set is on GPU0, and its `smaps_rollup` reads
+`Pss_Shmem 42,651,468 kB` — the server pins **tens of GiB of host RAM**, and `cli.mjs status` / `doctor` / `check` print
+none of it. Swap is zram-only at **8 GiB**, already ~80 % used, so "out of swap" arrives well before "out of RAM". The
+containment primitive works and is measured here: `systemd-run --user --scope -p MemoryMax=200M node -e 'while(true)
+Buffer.alloc(64MB)'` → **exit 137**, journal `"…run-p2756020-i2781901.scope: Failed with result 'oom-kill'… 200M memory
+peak"`, and in the same window `strata-host` RSS moved 52,712,604 → 52,602,224 kB with `llama-server` unchanged at
+3,926,924 kB — the scope died, the servers lived.
+*Acceptance (failing-first):* the two instruments this session landed — `tools/model-probes/probe-preflight.mjs`
+(MemAvailable, swap %, per-GPU free MiB, resident model servers with RSS + shmem + served `--ctx-size`/`--parallel`, and
+the declared-vs-served verifier window) and `tools/model-probes/capped-run.mjs` (runs the arm in its own scope with
+`MemoryMax`/`MemorySwapMax`, then reports the scope's peak and whether the cap fired) — become **mandatory at every call
+site that sends a prompt to a local server**: (1) `gate.mjs`, `calibrate.mjs`, `suite.mjs` and `bench-served-model.mjs`
+call preflight first and refuse under the floor (named: < 10 GiB available, > 50 % swap, < 1 GiB free on the GPU a load
+would need) unless `--force`; (2) they are started through `capped-run.mjs`, and the run record stores the cap and the
+observed peak; (3) `check` gains a rule reporting each server's host-RSS footprint against `MemAvailable`, fix-now when
+an arm could not fit; (4) a `run-*.scope` OOM notification is expected and reported as *containment working*, while an
+`app-…appimage@…service` or llama-server/strata kill is an incident — the runbook must say so in those words.
+*Blind spots:* cgroup2 delegation on this box is confirmed for systemd-managed units, **not** for systemd-managed
+processes' children (`pam`/`systemd --user` sit at the root of `user.slice` and `cgroup.procs` there is empty — that is a
+reporting quirk of that kernel, so read the unit's own journal line for its peak instead); and the OOM victim is chosen by
+score, so a *lower*-`oom_score_adj` server is protected only relatively — `doctor` should print the adj of each model
+server (the killed one was `200`, i.e. not protected at all).
+*Do not:* treat "the probe finished" as evidence it was contained, and do not raise a seat server's `--max-context` to
+accommodate the verifier — they compete for the same host RAM and the same box.
+
+**261. A seat's `provider/model` string is trusted even when the provider exposes that model name but no running
+instance serves it — `check` passes, `single-model-rig` passes, and every seat silently aims at a dead endpoint.**
+*(delegate; registered 2026-10-29 after a model swap I performed left the rig in exactly that state)*
+**What exists today, measured:** after I moved the machine config to `DURIG_VERIFIER_MODEL=mistralai/ministral-3-14b-reasoning`,
+`rig.selfdev.json` still held `"model": "verifier/recursivesi/flint"` for all five verifier seats. `GET :1234/v1/models`
+**still listed `recursivesi/flint`** (LM Studio lists installed models whether loaded or not — the loaded set is
+`GET /api/v1/models`), while the live `llama-server` process was `… Ministral-3-14B-Reasoning-2512-Q6_K.gguf …`.
+`DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json` reported no problem, and
+`tools/single-model-rig.mjs` still printed `TRUE` (it compares strings). The rig has **two config surfaces** —
+`durig.config.json` (gitignored, holds the machine's endpoint + model) and `rig.selfdev.json` (tracked, holds each seat's
+`provider/model`) — and `src/seatmodel.mjs:19` resolves the leading segment against registered providers only, so the
+trailing model name is never validated against anything.
+*Acceptance (failing-first):* (1) a `check` rule, fix-now, that for every seat with an explicit `model` resolves it
+against the provider's **registered** models and, when the endpoint answers, against its **loaded** set, naming the seat
+and both spellings; fixture: rig file says `verifier/recursivesi/flint` while the config registers
+`mistralai/ministral-3-14b-reasoning` and only that one is loaded → **fix-now** — and a live variant that queries
+`/v1/models` + `/api/v1/models` and reports "installed but not loaded" separately from "not installed"; (2) `doctor`
+prints, per provider, `registered model` vs `models the endpoint lists` vs `models with a loaded instance`; (3) the
+existing `demo/local-model-pointer.test.mjs` stays the guard for the offline half (it caught this: *seat "qa" points at
+verifier/recursivesi/flint, but the "verifier" provider exposes only mistralai/…*) and a second fixture covers the
+loaded/installed distinction.
+*Blind spots:* the string form is `<provider>/<model>` split at the **first** slash only when the leading segment is a
+registered provider, so `recursivesi/flint` on the local provider is *unqualified* and a rule that naively splits will
+mis-read it; and "loaded" is per-engine-instance, so a model can be loaded with a different ctx than the rig declares —
+259's ctx rule is the pair to this one, and neither belongs in `single-model-rig`, whose job is model-count honesty only.
+*Do not:* fix this by making `single-model-rig` stricter — it gates a different thing, and folding the two together would
+let a passing family check keep masking a dead pointer.

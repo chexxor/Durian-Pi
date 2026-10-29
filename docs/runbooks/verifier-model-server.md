@@ -365,3 +365,114 @@ direction, the instructions are not); …do a JSON round-trip of `rig.selfdev.js
 and mojibake's the em-dashes in the seat instructions — patch the byte ranges, and check `git diff --stat` says
 5 lines, not 374); …assume ministral is worthless because it is idle today (its decode is **~33 tok/s**, ~3×
 flint — it lost on capability and on its 8,192 window, not on speed).
+
+## Probe memory discipline — read this before you spend a prompt, and again when the desktop blames you
+
+**Symptom:** the OS says *"The background service `run-p2756020-i2781901.scope` has been terminated by the Linux kernel
+because the system is low on memory"* — or a seat goes silent mid-run, or `cli.mjs status` shows seats stuck.
+
+**Do not assume this is an incident.** Two shapes look identical from the desktop and mean opposite things:
+
+| unit name in the message | what it is | what to do |
+|---|---|---|
+| `run-<digits>-<digits>.scope` | a **capped arm we started** with `capped-run.mjs`; the cap did its job | nothing — report "the cap fired, the servers lived", with the peak line |
+| `app-…appimage@…service`, or a `llama-server` / `strata` unit | a **model server died** | incident: §"the server was killed under memory pressure" below |
+
+Prove which one it is before saying anything:
+
+```bash
+ps -eo pid,rss,etime,comm | grep -E 'strata|llama-server' | grep -v grep     # both alive? ELAPSED pre-dates the event?
+journalctl --user -b --since "-30 min" --no-pager | grep -iE 'oom|memory peak' | tail   # which unit, what peak
+journalctl -b --no-pager | grep -i "invoked oom-killer" | tail                        # host-level kill? who was the victim?
+```
+
+**What the host-level kill looked like on 2026-10-29 (the reason this section exists):**
+
+```
+kernel: esbuild invoked oom-killer: ... oom_score_adj=200 ...
+kernel: Out of memory: Killed process 2289527 (strata-host) total-vm:132182136kB,
+        anon-rss:53969596kB, file-rss:65056kB, shmem-rss:2016944kB, oom_score_adj:200
+```
+
+The victim was the **seats' server**; the allocating process was `esbuild`, a toolchain process. The kernel chooses the
+**largest** process, so on this box an unbounded probe is a random number generator for which server dies.
+
+**The footprint nobody printed** (measure it yourself, it changes with the pack):
+
+```
+pack IQ3_S = two GGUFs, 52 GB + 27 GB on disk          strata-host: 50.3 GiB RSS, of which 40.7 GiB is Pss_Shmem
+GPU0 (A4000) 12,648 / 16,376 MiB   ← only ~12.6 GiB of that working set is on the card
+GPU1 (3090)  23,019 / 24,576 MiB   ← the verifier instance; 94 % full, no room for a second engine
+MemAvailable 25.5 GiB of 94.2      Swap: zram ONLY, 8 GiB total, ~78 % already used
+```
+
+So: **the seat server is a host-RAM hog, and the ceiling we hit first is zram, not RAM.** A verifier that "only needs
+8 GiB" is not free — it is 8 GiB out of a headroom that was already 25 GiB with swap half-gone.
+
+**The discipline, as instruments (this is the fix, not a suggestion):**
+
+```bash
+node tools/model-probes/probe-preflight.mjs          # GO / REFUSE + the numbers; exit 1 means do not start an arm
+node tools/model-probes/capped-run.mjs --node-mem-max 6G -- <your probe command...>
+```
+
+`probe-preflight.mjs` prints MemAvailable, swap %, per-GPU free MiB, each resident server's RSS **and its shmem**, the
+`--ctx-size`/`--parallel`/`--resident-experts` it was started with, and the rig's declared verifier ctx vs max-tokens.
+It refuses at the floor named in **260** (< 10 GiB available, > 50 % swap, < 1 GiB free on the GPU a load would need).
+`capped-run.mjs` runs the arm in its own scope and afterwards prints the scope's peak and whether the cap fired.
+
+**Two measured facts about the cap, because the naive version is a placebo:**
+
+1. **`MemorySwapMax` must be `0`.** With `MemoryMax=300M MemorySwapMax=1G`, a 600 MiB page-touched job **survived** —
+   `MemoryMax` caps RAM only and the extra allowance is the box's swap, which is the scarce resource. Same job with
+   `MemorySwapMax=0`: *"the CAP fired — the arm was killed inside its own scope"*, and afterwards `strata-host` was still
+   resident at 52,739,964 kB and `llama-server` at 3,926,924 kB. That is the outcome you are buying.
+2. **Allocating is not residing.** `Buffer.alloc` is zero-filled lazily, so 400 × 1 MiB of untouched buffers passed a
+   300 MB cap untouched. Test a cap with `b.fill(1)` (or you will certify a guard that never fires).
+
+**If preflight says REFUSE and you need the arm to run, the levers, cheapest first:**
+
+- stop the verifier instance, or shrink its window (`--ctx-size 16384 --parallel 1` instead of a big parallel multi-slot);
+- shrink the **seat** server's host-RAM appetite — `--max-context 131072` instead of 204800, drop `--resident-experts`,
+  lower `--kv-resident` — **this changes seat output quality, so it is the operator's trade, not yours**;
+- add real swap on disk (e.g. a 32 GB swap file) so a transient spike is absorbed instead of a server being executed;
+- run only one generation arm at a time, and never a corpus build or `npm test` from the main checkout alongside one.
+
+**Say which OS you measured on.** These numbers are Linux/Fedora on `Alex-Desktop-Win10`; `swappiness`, `min_free_kbytes`
+and the semantics of a killed process differ on Windows, and `src/seatguard.mjs:122` registers both `bash` and
+`powershell` for that reason.
+
+### Who the OOM killer will actually pick, and the one knob that is ours to turn
+
+Measured on this box, 2026-10-29 (`Linux/Fedora`):
+
+```
+cat /proc/2686804/oom_score_adj   # strata-host  -> 200
+cat /proc/2687793/oom_score_adj   # llama-server -> 200
+cat /proc/$$/oom_score_adj        # this shell, and every probe arm -> 200
+```
+
+Everything important runs at the **same** score, so the killer falls back to **size** — and on this box size means the seat
+server. Two consequences, one we can act on and one we cannot:
+
+- **Ours (unprivileged):** make the arm the cheaper victim. Raising a score is allowed to the owning user, and
+  `capped-run.mjs` now does it inside the scope — the bootstrap writes its own `/proc/self/oom_score_adj` to **700** and
+  execs the arm, which inherits it. Verified: inside the scope, `arm oom_score_adj = 700`. The naive `choom -p $$` form
+  does not survive quoting (`choom: invalid PID argument: '$'`) — use the `/proc/self` write.
+- **Not ours (needs `CAP_SYS_RESOURCE`):** protecting the servers. `choom -n -1000 -p <pid>` fails with
+  *"failed to set score adjust value: Permission denied"*, and `systemd-run --user -p OOMScoreAdjust=-1000` fails with
+  *"Unknown assignment"* (that key is not a scope property). If the operator wants the servers unkillable-by-accident, the
+  way is to launch them from a context that can set it — e.g. a system-level unit with `OOMScoreAdjust=-1000`, or
+  `sudo choom -n -1000 -p <pid>` after start — and `oom_score_adj_min` is what pins it once set. Ask; do not improvise a
+  privileged change.
+
+**And the swap is not the model servers.** Summing `VmSwap` across the processes visible to the user account accounts for
+**5.74 GiB of the 6.2 GiB** in zram, while `strata-host` held **5,880 kB** and `llama-server` a few kB. The long-lived
+desktop processes hold it: `librewolf` 355 MiB, `kwin_wayland` 349 MiB, `DiscoverNotifie` 274 MiB, `sunshine` 243 MiB,
+`pi` 204 MiB, `Isolated Web Co` 199 MiB — several started **Oct 26**, i.e. three days of accumulation. So "close a few
+long-lived desktop apps" is a real lever with numbers behind it, and it is the cheapest way to get the box back under the
+pre-flight floor. Check it yourself:
+
+```bash
+grep -s VmSwap /proc/[0-9]*/status | awk -F'[:\t ]+' '$3>0{print $3, $1}' | sort -rn | head   # who is in swap
+```
