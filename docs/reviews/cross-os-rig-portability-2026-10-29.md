@@ -155,3 +155,14 @@ node tools/rig-portability-audit.mjs               # 15 findings on today's tree
 DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit   # the same 12 seatRoots, from the product's own surface
 git -C vendor/eval/oh-my-pi rev-parse --short HEAD      # 6f3fbc94 — the pin every citation above resolves to
 ```
+
+## 7. What the loop cost, measured (so the next session buys time deliberately)
+
+Everything on the critical path of this class is **fast**; the wall-clock went to prose and to re-measuring state that an
+instrument already prints. On this box (Linux, node v24.22.1): `rig-portability-audit` **0.565 s**; its `--self-test`
+**<0.2 s**; `roadmap-queue-coverage --min 200` **0.9 s**; `broker-serve --status`/`--dry-run` **<1 s**; `cli.mjs check`
+**~2 s**; `worktree audit` **~1 s**. The one expensive honest instrument is an **external** completion — `probe_completion`
+**~22 min** — and `probe-preflight` refuses local arms at swap **71 %**, so a local verifier arm is a **scheduling** decision
+(unload ministral, or lower the seat-server window, 260), not an execution one. Practical consequence: the portability class
+can be driven end-to-end by **sub-second gates**, and 267's per-host oracle should stay under a second — which means the
+oracle is affordable **per session**, not per release, and a host that was not smoked is visibly stale the same day.
