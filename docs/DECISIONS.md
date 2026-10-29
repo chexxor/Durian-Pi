@@ -6062,3 +6062,58 @@ a finding **no** re-fetch of the page can establish. (3) **A cited GitHub issue 
 `state_reason`, `reactions.total_count`, `comments`, read from `api.github.com` — because the issue *page* is unpinned
 and mutable. *Why:* that one call is what caught a false correction in the report this gate existed to police, and it
 cost ~3 s against a round that cost a session.
+
+## D162 — citation integrity is a machine check, not a reading habit: family = filename stem, a URL verdict must name its evidence class, and the gate fails only on anchors that are wrong *today* (2026-10-29, delegate; instrument design + measurement, no operator ruling taken)
+
+`tools/review-cite-check.mjs` (774 lines, zero deps, `--self-test` 12/12) plus the alias table
+`docs/reviews/harness-citation-registry.md` (29 rows) now check the claims ROADMAP 250/244/243 registered. Over 127
+files in `docs/reviews/`, `docs/incidents/`, `inputs/fetched/`: **522 findings, 292 hard, 81 files clean** —
+148 dangling keys (89 hard), **108 key collisions**, **71 duplicate definitions**, 9 path citations no branch ever had,
+2 elided addresses, 2 anchors past EOF at a pin, 6 size claims false at a pin, 5 dead URLs. Evidence and every command:
+`docs/reviews/citation-integrity-corpus-2026-10-29.md`; the corpus item is **ROADMAP 252**.
+
+**The rulings, and why.**
+
+1. **An address is machine-checked or it is a rumor.** *Why:* `building-agent-systems-on-pi-research.md` defines
+   `[^1]` at lines **111, 553, 987** with three targets, so **two of the three are unreachable no matter which
+   tie-break a renderer picks** — and the vendored `marked` **18.0.11** (a transitive dependency; nothing in `src/`
+   imports it, so this says nothing about our UI) resolves duplicates to the **first** and has **no footnote support at
+   all**, rendering `[^1]: [Name](url)` as `<a href="%5BName%5D(url)">^1</a>`. A reader cannot see the defect, so a
+   reader cannot fix it; the check is the only thing that makes the corpus repairable.
+2. **A citation "family" is a shared filename stem, never mere cross-citation.** *Why:* inferring the namespace from
+   who-cites-whom merged 22 unrelated reports and printed **81 fake collisions** around the 3 real ones. Ordinary
+   Markdown gives every file its own footnote namespace; a checker that cries wolf is deleted within a session, and the
+   whole point of 240–243 is that unread evidence is how phantom citations survived.
+3. **A URL verdict must name its evidence class: 404/410/510 = dead; 401/403/429/503 = bot-blocked (soft); 3xx =
+   rotted locator at a live page (soft, record the final URL in `inputs/fetched/MANIFEST.md` §6); network failure =
+   unprobed, never dead.** *Why:* over **192** cited URLs, 9×403 + 4×429 + 1×401 were all **live** pages, and `curl`
+   **without `-L`** returns **308** for `docs.cline.bot/features/cline-rules` and `cursor.com/docs/context/rules`, which
+   are alive at moved addresses. The naive "does it resolve?" probe this replaces would have deleted live evidence and
+   kept dead evidence — the Goose paths round 2 cites as `[^4] [^9] [^10]` are 404 **with no redirect** and are still
+   cited in its §2 matrix.
+4. **A fence is an example, a correction is not a bad claim, and a missing trailing newline is not a lie.** *Why:* the
+   checker charged its own evidence note for the duplicate definition it was *illustrating* inside a ``` block, scored
+   "680 lines, not the 1,457 from memory" as a defect, and called a 128-content-line file 127 because `wc -l` counts
+   newlines. Failing corrections and examples trains readers to ignore the gate — the exact failure mode 240–243 exist
+   to prevent. So: footnote syntax is skipped inside fences (paths, sizes, URLs still count there), corrections are
+   `SIZE CLAIM CORRECTED IN LINE` soft, and off-by-one explained by a missing newline is soft.
+5. **Two postures, deliberately different sets.** Full audit = every hard finding (the review queue). `--gate` = the
+   **wrong-today** set only: collisions, duplicate definitions, phantom/malformed paths, anchors past EOF, pin drift,
+   dead URLs, size claims at a pin — **203 of 522**, leaving the 89 hard dangling keys for the audit. *Why:* a gate that
+   fires on 292 findings on day one is a gate nobody runs; a gate that fires on the 203 that are provably wrong now is a
+   gate a doc-only change can be held to.
+6. **Suppression is counted, never silent** — `<!-- cite-ns: quoted -->`, `<!-- cite-check: ignore-line -->`,
+   `ignore-file`; the run prints `2 SUPPRESSED by cite-check markers`. *Why:* the runbook rule that a documented escape
+   hatch beats the exception someone adds under pressure. The same run keeps `ALIAS INFERRED — NEEDS URL (8)` failing-
+   visible every time, because 8 of the 15 registry aliases have a page name and no URL.
+7. **The delegate fixed no report prose.** *Why:* re-keying rounds 3 and 4 onto round 2's numbers is the merge decision
+   `pm` and a seat own (D161); the delegate's deliverable is the instrument, the registry, MANIFEST §6 and the evidence.
+   Half-grammar — the repair is now *unowned queue work*, not an unknown: **0 queue rows** name 250/244/243/252.
+
+**Also learned about instruments here, and it is worth a rule of its own:** eight of this instrument's findings were
+findings **against itself** (`wc -l`, `md` matching before `mdx`, a backtick inside a URL, own-tree sizes scored hard, a
+correction line, cross-citation families, fenced examples, and `--json` swallowing the next flag so `--top` became a
+10,558-byte file literally named `--top` in the repo root). Every one is now a `--self-test` case. And a related
+asymmetry: **`docs/ROADMAP.md` and `inputs/fetched/MANIFEST.md` have no executable reader** (re-confirmed: grepping
+`demo/*.test.mjs` and `scripts/*.mjs` for them → nothing), so a duplicated item number or a malformed manifest row
+leaves every test green — the cheap close is wiring `review-cite-check --gate` into the `check` rule (213's family).
