@@ -4588,6 +4588,21 @@ requirements-override semantics, the network tier, and whether a **hook definiti
 by a project layer. Goose's guard plane is now `observed` too — hooks project-scoped at
 `<project>/.agents/plugins/*/hooks/hooks.json` plus `AlwaysAllow/AskBefore/NeverAllow` and a **model judge**
 (`config/permission.rs:21-24`, `permission/permission_judge.rs`) — which supersedes round 2's "Goose: no hook layer".
+**Closed 2026-10-29T03:0xZ (= 2026-10-28 host-local) by the second note: `docs/reviews/codex-permission-model-and-guard-plane-2026-10-28.md`.**
+The files above were then read at the same pin, and the two questions 241 was open on are answered: **where the rule
+lives** (config layers `PackagedDefaults −10 … Project 25 … SessionFlags 30`, `config_layer_source.rs:33-50`, *above*
+all of which sits a **requirements** tier whose sources are MDM/System/EnterpriseManaged/legacy only — **there is no
+`Project` and no `User` variant of `RequirementSource`**, `config_requirements.rs:48-72`); **who can bypass it** (the
+project layer may *carry* a guard — `discovery.rs:156` walks every layer and `:1029-1045` maps `Project` →
+`is_managed = false` — but may not bless it, `:917-928`, and an admin `allow_managed_hooks_only` deletes the whole
+non-managed plane, `:114`); and **where the trust bit is persisted** (`<user config dir>/.hook-trust/<sha256 of
+config-path ‖ plugin-id>`, one immutable baseline written with `persist_noclobber`, re-verified against the plugin's
+**live contents at every execution** — `plugin_trust.rs:29-66,72-113`). Two mechanisms new to our register are
+registered as **247** (the deny-only, additive ratchet and the validator that disqualifies a candidate which cannot
+honour a managed restriction) and **248** (the per-component load/trust/enable status model Cline already types as
+`PluginLoadDiagnostics`). *Residual, still unread:* `config/src/auth_policy.rs` (exists at the pin; only its 3-line
+header opened — "Authentication restrictions supplied by locally managed requirements") and `core/src/config/permissions.rs`
+end-to-end (**883** lines; read for its exports only). **This is still not 232.**
 
 **242. `tools/vendor-pins.mjs --tags` prints `_not fetched_` for prefixed tag schemes, so the pin table under-reports
 drift on the fastest-moving clone in the store.**
@@ -4698,6 +4713,11 @@ unexamined, and the delegate repeated the claim without opening the file; (iii) 
 registered from a summary, absent from both the landed deliverable and the pin. *Pattern:* every one of these was **a fact about
 a document or a file, asserted from recall instead of from a command** — the same class as the mis-dated measurements, one layer
 up. The cheap defence is the one 244 already names: before repeating a claim about a file, run the command that reads the file.
+(iv) a research-series filename asserted from recall: this session grepped `docs/reviews/harness-tools-skills-public-harnesses-research-2.md`,
+which **has never existed in any commit** (`git log --all --` that path: empty). The series names do not line up — round 1 is
+`harness-tools-skills-research.md`, round 2 is `harness-tools-skills-public-harnesses-research.md` (**no version suffix**), round 3 is
+`…-research-r3.md`, round 4 is `…-research-4.md`, and the prompt file named `harness-tools-skills-followup-2-research-prompt.md`
+titles itself the **round-3** prompt. Any round-N reference in prose is ambiguous until it is quoted as a path.
 
 **245. Guard trust should be keyed to the guard's content and writable only from above the project layer — Codex ships
 exactly this, and pi's equivalent is one coarse boolean.**
@@ -4736,3 +4756,72 @@ others — the direction is per-event and moved between v1.0.18 and v1.0.57), th
 set and registered handlers so "no rule matched" and "no guard installed" are distinguishable. **A per-decision record, not a
 log line**, because the Copilot cases are exactly "the log said it was registered". *Gated on:* **235**, **238**.
 *Do not:* treat a guard's presence in an extensions listing as evidence it ran — that is the failure mode being named.
+
+**247. The rig has no plane that can only tighten: Codex's requirements tier is additive, deny-only, and disqualifies
+candidates that cannot honour a managed restriction — our config merge does the opposite.**
+*(delegate; observed at `codex · d373d649` 2026-10-29T02:4xZ, `docs/reviews/codex-permission-model-and-guard-plane-2026-10-28.md` §1-§2)*
+Three properties compose into a ratchet, each enforced by a type or a parse error rather than a convention: (a) **additive**
+— *"Requirements rules are additive across layers"* (`requirements_layers/rules.rs:1-2`), *"`permissions.filesystem.deny_read`
+is intentionally additive across requirements layers"* (`requirements_layers/permissions.rs:1-2`), *"Hook events are
+append-only across requirements layers … conflicting values for the active platform fail closed"* (`hooks.rs:1-5`, asserted
+`stack_tests.rs:1317,1346`); (b) **cannot grant** — a requirements rule with `decision = allow` is a parse error whose text
+names the algebra: *"…which is not permitted in requirements.toml: Codex merges these rules with other config and uses the
+most restrictive result (use 'prompt' or 'forbidden')"* (`requirements_exec_policy.rs:81-84`), and a rule with no
+justification or no decision is also a parse error (`:75-79`); (c) **capability-consistent** — if a managed `deny_read` is in
+force, any profile whose sandbox mode is `DangerFullAccess`/`ExternalSandbox` is **rejected** rather than the denial ignored
+(`core/src/config/permission_profile_catalog.rs:129-144`, ordering rationale at `:127-128`), and the client-facing catalog
+reports `allowed: bool` computed by *compiling each profile*, so an uncompilable one is unavailable, not an error (`:21-27,71-87`).
+**Why it is a finding, not trivia:** the rig has no such plane at all, measured rather than remembered —
+`mergeConfig` is `{ ...defaults, ...fileValues }` and then **env over everything, unconditionally and in both
+directions** (`src/config.mjs:169-179`), and `loadConfig` keeps **one** file: the first hit in
+`DEFAULT_CONFIG_PATHS = ["durig.config.json", ".durig/config.json"]` (`:14`) or the single `DURIG_CONFIG` file,
+with a `break` after it (`:191-217`), and only its path retained as `source`. The one validation a config file
+gets is `assertNoSecretsInFile` (`:213-215`), which fails closed on a secret and says nothing about confinement.
+So a seat's own environment can loosen anything the operator wrote, and nothing records which layer a value came
+from. 245 solved *who may bless a guard*; this is *who may tighten, and in which direction the merge moves* — and
+232's guard is unimplementable without an answer, because a rule the broker can also turn off is not a rule. *Signal, when claimed:* a named upper layer (operator- or
+host-owned, source-tagged like `RequirementSource`) that can add denials and confine, cannot be overridden by the repo layer or
+by `durig.config.json`, and fails the *configuration* rather than silently degrading when a declared confinement cannot be
+applied; assert with a test that a repo-layer edit cannot remove an operator denial. *Gated on:* nothing for the research
+half; the product half is queue work and belongs to **232**/**235**'s owner. *Do not:* implement it by making `durig.config.json`
+read-only, and do not confuse it with 245 (trust ≠ tightening).
+
+**248. "Loaded", "enabled", "trusted" and "overridden" are four different states, and Cline already types all four — our
+guard-status (235) and per-decision record (246) have no data model at all.**
+*(delegate; observed at `cline · 51f63e4f` 2026-10-29T02:5xZ, same note §7)* Cline separates them by type: a resolver returns
+`disabledPaths` and `discoveryFailures` distinctly — *"paths that cannot be resolved come back as `discoveryFailures`, and paths
+turned off in settings come back as `disabledPaths`, so callers can report both"* (`extensions/plugin/plugin-config-loader.ts:190-198,201-224`)
+— the session surfaces *"Plugins the session asked for but does not have (failed, disabled)"* (`:343`), and initialization is
+reported as `PluginLoadDiagnostics { failures: [{pluginPath, pluginName, phase: "load" | "setup", message, stack}], warnings:
+[duplicate_plugin_override] }` (`extensions/plugin/plugin-load-report.ts:1-20`): **a guard that failed to load, a guard switched
+off, a guard a later plugin overrode, and a guard never installed are four different rows.** Codex reaches the same shape from the
+other side: every discovered hook appears in `hook_entries` with its own `trust_status` (`Managed|Untrusted|Trusted|Modified`,
+`hooks/src/engine/discovery.rs:1000-1017`) and an `enabled` flag independent of trust (`:1019-1021`), while only trusted handlers
+enter the run set (`:917-928`) — so "listed" and "ran" are never the same list. *Signal, when claimed:* `guard-status` prints those
+four states **per component** (not one project-trust boolean, which 245 rejects), names the layer and path each came from, and a
+test asserts that a failing/overridden guard is reported as such rather than reported absent. *Gated on:* **235** (the package) and
+**238** (the guard); the type shape is settled by these two pins and needs no new research. *Do not:* report a guard as installed
+because a listing shows it, and do not collapse `failed` into `disabled` — that collapse is 246's failure mode.
+
+**249. The research sandbox has no copy of this repo, no write access, and no way to obtain HTTP status, sha256 or
+`Last-Modified` — so a prompt that points at `docs/` paths or demands those MANIFEST columns returns a failure report, not
+evidence, and any manifest that *has* them filled is fabricated.**
+*(delegate; measured on the round-4 reply, 2026-10-29T03:3xZ, host `Alex-Desktop-Win10` / `America/Chicago`)*
+`docs/reviews/harness-tools-skills-public-harnesses-research-4.md` (**17,412 B / 196 lines**, sha256 `8e028729…`, mtime
+**2026-10-28 21:44:06 host-local = 2026-10-29T02:44:06Z**, untracked when this row was written — landed verbatim this session,
+not integrated) opens **"Status: I could not execute this as specified"** and gives three reasons, each checkable from this clone:
+(1) **its workspace contains no `docs/`**, so it never read the prompt it was answering — and **no round-4 prompt exists in this
+repo**: the newest prompt file, `harness-tools-skills-followup-2-research-prompt.md`, titles itself the *round-3* prompt, so the
+round-4 run was aimed at instructions it could only reconstruct (its own words: *"**\"Q1–Q6\" below is my reconstruction from the
+parent and follow-up prompts, not your Q1–Q6**"*); (2) **it cannot write**, so it committed nothing and said so; (3) `web_fetch` gives
+page text, a tag and a line count — *"no response headers. There is no shell, so no `sha256sum`"* — so it refused to fill the columns: *"A MANIFEST with those columns filled would be
+fabricated. Don't accept one."* Its fetched pages did not reach this host either: `inputs/fetched/` holds only `MANIFEST.md`
+(14,785 B) and `README.md` (2,766 B), unmodified since 18:22 host-local, and `MANIFEST.md`'s own table header asks for
+`HTTP | bytes | sha256 (first 16) | page last-modified/etag`.
+*Fix, docs-only, cheap:* `docs/runbooks/research-request.md` gains **"a research prompt must be self-contained — paste the
+questions and the cited text inline; assume the sandbox holds none of this repo"**, and the MANIFEST columns split into
+**always obtainable** (URL, fetch date, line count as a weak integrity proxy) and **delegate-obtained only** (HTTP status, sha256,
+`Last-Modified` — produced by a native re-fetch on this host, which is where 244's byte-hash rule already lives).
+*Do not:* credit a report with columns it states it could not fill; re-route the same prompt at a sandbox that cannot read it;
+or treat round 4's Q1–Q6 as answers to this rig's questions. *Not gated on:* anything — the defect is in the runbook and the
+prompt template, and it cost one full research round to discover it.

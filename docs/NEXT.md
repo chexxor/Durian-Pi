@@ -1,21 +1,6 @@
 # NEXT — current priority and exact next command
 
-**Last updated:** 2026-10-28T23:5xZ, delegate session (the tool-and-skill lifecycle **study is now three rounds**: the observed
-half (10 systems) + the public-harness half + **round 3, which passed the citation protocol** — 60 numbered citations, **91 of 94**
-quoted fragments located in the delegate's own re-fetches; `docs/reviews/harness-tools-skills-public-harnesses-research-r3.md` +
-its verification note `docs/reviews/harness-tools-skills-r3-delegate-notes-2026-10-28.md`). **Five `--depth 1` pins**
-(`codex d373d649`, `cline 51f63e4f`, `goose 775b3958`, `claude-code-docs 58d6da1e`, `copilot-cli 84ee80ea`). ROADMAP **235–246**
-registered; operator ruled on `.pi/` (D158), the off-host citation channel (D159), the phantom citation (**withdrawn**) and
-**research-before-232**. Prior session notes: `docs/reviews/delegate-notes-2026-10-28-cross-os-recovery.md`; harness self-audit
-(87 sessions mined): `docs/reviews/pi-harness-usage-audit-2026-10-28.md`. Linux box
-`Alex-Desktop-Win10` (Fedora `7.2.11-200.fc44.x86_64`), `node v24.22.1`, box zone `America/Chicago` (CDT = UTC−5; every
-timestamp here is **Z**, and note the host's own clock is suspect — see §INCIDENT). Read me first — do not re-derive the
-priority from the ~4,300-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200
-lines** by `demo/next-pointer.test.mjs`, which also requires the `## NEXT SESSION` block below to carry a current item,
-a queue id, a `node cli.mjs` command and a `**Blocker:**` line — **rewrite it in place, do not restyle it.** Its two
-executable readers are `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` (the digest reads only this
-section, so **the `NEXT-ARCHIVE.md` link must stay inside the pointer body**). After editing this file:
-`node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs`.
+**Last updated:** 2026-10-29T03:2xZ = **2026-10-28 22:2x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is **Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1. Delegate session. **ROADMAP 241's research gate is discharged:** the second design note read the permission planes at the pin — `docs/reviews/codex-permission-model-and-guard-plane-2026-10-28.md` — answering where a rule lives, who may bypass it and where the trust bit persists, with **58 of 59** citation/size self-checks PASSING at the pin. Registered from it: **247** (an upper layer that can only tighten — `src/config.mjs:169-219` has no such direction) and **248** (loaded ≠ enabled ≠ trusted ≠ overridden, typed per component); **249** registers the round-4 sandbox's structural limits. **Round 4 landed mid-session, unverified and unintegrated** — see the HARNESS STUDY section. Session notes (what was re-measured, what cost turns, speed proposals): `docs/reviews/delegate-notes-2026-10-28-241-closed.md`. **Newly measured, and it reorders the work: ROADMAP 217, 232, 233 and 235–248 have no queue rows** — none of 4,821 rows names them, so nothing has ever been spooled to `pm` for the items this pointer calls blocking. Five pins (`codex d373d649`, `cline 51f63e4f`, `goose 775b3958`, `claude-code-docs 58d6da1e`, `copilot-cli 84ee80ea`); `tools/vendor-pins.mjs --check` PASS at 14 clones, re-run 2026-10-29T02:44Z. Read me first — do not re-derive the priority from the ~4,700-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200 lines** by `demo/next-pointer.test.mjs`, which also requires the `## NEXT SESSION` block below to carry a current item, a queue id, a `node cli.mjs` command and a `**Blocker:**` line — **rewrite it in place, do not restyle it.** Its two executable readers are `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` (the digest reads only this section, so **the `NEXT-ARCHIVE.md` link must stay inside the pointer body**). After editing: `node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs`.
 
 ## NEXT SESSION
 
@@ -25,7 +10,7 @@ start** (ROADMAP **217**), and the product's own worktree sweep **prunes the `gi
 moved workspace erases the cross-OS evidence the runbooks call protected (new ROADMAP **232**,
 `docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`). The channel is still the largest measured
 wall-clock lever: `queued=0` and `claimed=0` of 4,821 rows, all **296 non-terminal rows parked** (277 `held`, 19
-`deferred`), and the last `done` transition anywhere is **2026-10-22T17:29:11.923Z — 6.1 days stale**. A broker started
+`deferred`), and the last `done` transition anywhere is **2026-10-22T17:29:11.923Z (row #4787) — 153.4 h, 6.4 days stale**. A broker started
 now wakes 9 seats onto *parked rows only* (`selectWakes`/`hasParked`, `src/driver.mjs:108`), and every one of them would
 fail its first shell call (`spawn powershell ENOENT`, already firing inside the last broker pass).
 **Queue ids:** **#725** (impl, ROADMAP 63 — `src/host.mjs` portable host supervisor), **#726** (devtools, ROADMAP 64 —
@@ -33,7 +18,7 @@ fail its first shell call (`spawn powershell ENOENT`, already firing inside the 
 drain audit's **orphan-candidate** list (#662/#710 both `done`) while an **operator prose clause — "and the queue drains"
 — has no definition anywhere in the tree** (ROADMAP **231**). Rows opened this session: **232** (the sweep prunes the ledger
 ahead of any plan), **233** (instruments credited as landed were never committed and are gone), **234** (every gate is
-wall-clock arithmetic while the store stamps relatively). Delegate halves landed: preflight §5/§7/§8, 233's check, refs+objects. Rows registered this session: **235–239** (harness lifecycle study, `docs/reviews/harness-tools-skills-research.md`) and **240–243** (the public-harness half + its five pins, `docs/reviews/harness-tools-skills-public-harnesses-research.md`) — registered, not scheduled; `pm` sequences them against 217/232/233. **235's delivery shape is ruled (D158): an installable pi package developed in this tree (`pi install --local ./<dir>`), not hand-written `.pi/` files. 232 stays unclaimed: research first (241).**
+wall-clock arithmetic while the store stamps relatively). Delegate halves landed: preflight §5/§7/§8, 233's check, refs+objects. Rows registered as **235–239** (harness lifecycle study) and **240–243** (the public-harness half + its five pins) — registered, not scheduled; `pm` sequences them against 217/232/233. Registered this session: **247** (a deny-only, additive upper plane; `src/config.mjs:169-219` has no such direction) and **248** (loaded ≠ enabled ≠ trusted ≠ overridden, typed per component — the data model 235's `guard-status` needs). **235's delivery shape is ruled (D158): an installable pi package developed in this tree (`pi install --local ./<dir>`), not hand-written `.pi/` files. 232's research gate (241) is DISCHARGED — but 232 is still unclaimed, has no queue row, and still needs the ledger grant.**
 **Next command (delegate, read-only — run in this order, ~4 s total):**
 
 ```bash
@@ -41,6 +26,8 @@ node tools/channel-preflight.mjs --db ./selfdev.sqlite --rig ./rig.selfdev.json 
 node tools/broker-serve.mjs --dry-run    # 2.9 s and it now REFUSES: `seat-shell-availability` + `live-tree-dirty`
 DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json node cli.mjs queue --json \
   | jq -r '.items[] | select(.status=="queued" or .status=="claimed") | [.id,.status,(.to//"-")] | @tsv' | wc -l   # the head of the queue: 0 today
+DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json node cli.mjs queue --json \
+  | python3 -c "import sys,json,re; o=json.JSONDecoder().raw_decode(sys.stdin.read())[0]; print(sum(1 for i in o['items'] if re.search(r'ROADMAP (217|232|233|23[5-9]|24[0-8])\b', i.get('subject','') or '')))"   # 0 — the blocking items were never spooled to pm
 # operator action owed (small): confirm whether the round-3 paste lost its tail — the delegate's working summary held content
 #   absent from the delivered file (citations past C60; a Goose `checks/*.sh` success predicate in neither the file nor the pin).
 #   If such a mechanism exists, re-send that part; if not, record that the channel invented it.
@@ -48,8 +35,11 @@ DURIG_DB=./selfdev.sqlite DURIG_CONFIG=./rig.selfdev.json node cli.mjs queue --j
 ```
 
 **Blocker:** the operator ruled (D156/D157): the start stays **withheld on ROADMAP 217**, rehearsals run in the disposable
-clone `/home/chexxor/Git/Durian-Pi-ops`, and **nothing host-wide is delegated** (`set-local-rtc 0` changes the whole OS — routed as ROADMAP **234**, detector
-`tools/channel-preflight.mjs` §8). **Applied under the grant:** the pre-move clone's 3 packs → this checkout: 9,301 →
+clone `/home/chexxor/Git/Durian-Pi-ops` (present, HEAD `6a5f7f89`, 469 MB, carries `.env.rehearsal`), and **nothing host-wide
+is delegated** (`set-local-rtc 0` changes the whole OS — routed as ROADMAP **234**, detector `tools/channel-preflight.mjs` §8).
+**The binding constraint is now spooling, not research:** 241's gate is discharged and 217's fix is small (host-conditional
+shell tool in `src/seattools.mjs`; `demo/seattools.test.mjs:30 asserts the opposite and must be rewritten failing-first`), yet
+no queue row exists for 217/232/233/235–248 and all 296 non-terminal rows are parked, so no seat can be pointed at it. **Applied under the grant:** the pre-move clone's 3 packs → this checkout: 9,301 →
 22,362 objects, `git fsck` clean, **23/30 cited shas resolve**, 455 commits still anchored by nothing. **Granted 2026-10-28 (D158):** `--depth 1` competitor clones (five taken, pins regenerated, `--check` PASS at 14 clones); `.pi/` writes **permitted but disfavoured** — ship an installable pi package developed in this tree instead; and **232 is gated on research (241): do not claim it, do not touch `src/worktree.mjs:649` / `src/broker.mjs:1167`, and run no suite from this checkout while it is open.** Still owed: the 221 seat-root ruling; an evaluable **"the queue drains"** (231); a grant to mint `refs/rescued/orphan-*` for those 455; the Windows-host session corpus + `.spike/delegate-inventory-2026-10-26.txt` (237).
 **Routed:** `delegate-routing-fact-20261028-2150`. **History:** `docs/NEXT-ARCHIVE.md`.
 
@@ -65,7 +55,7 @@ node tools/instrument-provenance.mjs && node scripts/clockin.mjs # 46 ms + 2.6 s
 node tools/harness-usage-census.mjs ~/.pi/agent/sessions/--home-chexxor-Git-Durian-Pi-- # 0.55 s: how often PAST sessions re-used each instrument vs re-deriving it (24% of all calls are one-off measurement code)
 ```
 
-## Rig state, re-measured 2026-10-28T20:1xZ (Linux) — re-read, do not trust
+## Rig state, re-measured 2026-10-28T20:1xZ (Linux) — re-read, do not trust; the counts below were **re-confirmed identical** 2026-10-29T02:4x–03:0xZ (queue 4,821 = 3,748 done / 777 cancelled / 277 held / 19 deferred; 1 worktree; broker down, last pass 2026-10-28T17:09:58.308Z, pid 1771484 dead)
 
 **Store** `./selfdev.sqlite` (438,329,344 B): `entries` **137,427 rows, max id 274,114**, 12 seats. **Queue census**
 `node cli.mjs queue --json | jq -r '.items[].status' | sort | uniq -c` → **4,821 = 3,748 done / 777 cancelled / 277 held
@@ -100,7 +90,7 @@ there is nothing to restore. The ledger half is named in the product (`src/broke
 (`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md:20-30`, `:30`). Until 232/233 land: **do not run the suite from
 this checkout** — run it in the disposable clone.
 
-## OPERATOR OWES (four items; the team is blocked behind them — a fifth, the channel-start recipe, is superseded and cut to `docs/NEXT-ARCHIVE.md`)
+## OPERATOR OWES (five items; the team is blocked behind them — a sixth, the channel-start recipe, is superseded and cut to `docs/NEXT-ARCHIVE.md`)
 
 1. **ROADMAP 221 — the seat-root ruling** (D152 §6 + D153 addendum). Seats' persisted agent cwd resolves to a
    `D:\Git\Durian-Pi-worktrees\<seat>`-shaped value on the Windows host, and `up` reports `source: persisted seat cwd`
@@ -122,6 +112,13 @@ this checkout** — run it in the disposable clone.
 4. **Commit-or-discard for untracked instruments** (ROADMAP **233**, the cost of **214**). Eight files this session read
    or ran are gone and unrecordable; several ROADMAP rows credit them as landed. Either the team re-creates them (labelled
    as re-created, not restored) or the rows that cite them get amended — that is a scope call for you, not for a seat.
+5. **A grant to spool the blocking ROADMAP items to `pm` at all** (measured 2026-10-29T03:0xZ). `queue --json` returns 4,821
+   rows and **not one subject names ROADMAP 217, 232, 233 or 235–248** — they exist only in `docs/ROADMAP.md`, so no seat has
+   ever been able to claim them and `pm` has never decomposed them. 241's research gate is discharged, so the cheapest real
+   unblock (**217**: a host-conditional seat shell in `src/seattools.mjs`, with `demo/seattools.test.mjs:30` — which asserts
+   the current no-`bash` choice — rewritten failing-first) is now queue work with no row. **Ask:** may the delegate spool one
+   intent asking `pm` to decompose 217/232/233 and the 235–248 cluster against the existing parked rows? Spooling while the
+   broker is down only queues (no wake), and decomposition stays `pm`'s.
 
 ## OPEN DELEGATE PROPOSALS (ungraded, not spooled, no grant yet — the operator asked that these be worked next; the harness half is now ROADMAP **235–243**, *registered, not scheduled*)
 
@@ -135,18 +132,21 @@ this checkout** — run it in the disposable clone.
    lacks`) — `AGENTS.md` step 5 routes by symptom, no row matched, and the D156 archaeology cost ~15 turns.
 4. **Edit C (done):** `instrument-provenance` is in the clock-in baseline. Skills steer the **outer agent**, never seats —
    seat tools come from `rig.selfdev.json`/`src/seattools.mjs` (217). **Ask:** A+B+C as delegate work, or rows for `pm`?
+5. **A citation-checking instrument, unbuilt (the cheap half of 244):** `tools/review-cite-check.mjs` would walk any
+   `docs/reviews/*.md`, resolve every `path:line` reference under a `vendor/eval/` pin, and fail on any that does not resolve
+   — plus a second pass comparing asserted "**N lines**" figures with `wc -l` at the pin. This session hand-ran the 59-row
+   version of that check (58 PASS, one probe-side FAIL), but the script sits in `.spike/`, which is gitignored, so it does not
+   survive to the next session — that is 233 recurring, and the design note says how to re-derive it
+   (`docs/reviews/codex-permission-model-and-guard-plane-2026-10-28.md` Appendix A). It changes nothing in
+   `src/` and needs no pin re-fetch.
 
-## HARNESS STUDY — three rounds landed (2026-10-28). The two-halves block and the first 241 summary are cut **VERBATIM** to `docs/NEXT-ARCHIVE.md` (last heading: 2026-10-28T23:5xZ) — that archived text still carries the **#978 mis-citation** this session corrected, so read the pointer, not the archive.
+## HARNESS STUDY — rounds 1–3 landed and verified; **241 closed by a second design note**; **round 4 landed UNVERIFIED and is not a duplicate**
 
-**Round 3 landed and is verified:** `docs/reviews/harness-tools-skills-public-harnesses-research-r3.md` (as delivered, byte-for-byte from the session transcript) + `docs/reviews/harness-tools-skills-r3-delegate-notes-2026-10-28.md` (the check). 60 numbered citations; the delegate re-fetched every cited page and located **91 of 94** quoted fragments (14/14 issue-body quotes, all URLs 200). **Corpus:** `inputs/fetched/MANIFEST.md` §4.
+Round 3 is verified (`docs/reviews/harness-tools-skills-public-harnesses-research-r3.md`, delivered byte-for-byte from the transcript, + `docs/reviews/harness-tools-skills-r3-delegate-notes-2026-10-28.md`: 91/94 quoted fragments located, all URLs 200). `docs/reviews/codex-permission-model-and-guard-plane-2026-10-28.md` then read the permission planes at the pin and closed 241; register delta = **245/246** plus this session's **247/248**. Everything else from that block — round 3's register changes, the corrected "four of five fail open" tally, the Goose `301` → `aaif-goose/goose` pin blind spot (242), the corpus warning and the two integrity rules — is cut **VERBATIM** to `docs/NEXT-ARCHIVE.md` (heading "CUT VERBATIM 2026-10-29T03:2xZ"); that archive still carries the **#978 mis-citation**, so read the pointer, not the archive. **Census re-measured this session (237 — quote the corpus with the number):** this host alone = **19 sessions / 2,669 tool calls / 296 ad-hoc measurement calls (11.1%)**; the audit's 87 / 11,599 / 24.0% needs both hosts, and the Windows transcripts are not on this box (no D: volume mounted).
 
-**Register changes:** 241's threat-model question is **answered at the pin** (hook trust = `HookStateToml { enabled, trusted_hash, trusted_content_hash }`, writable only from the `User`/`SessionFlags` layers — `codex · d373d649 · hooks/src/config_rules.rs:8-14,24-30`) → registered **245**: *a repository may carry a guard; it may not bless itself*. **246** registered — a guard *listed as active while not running* (#2540 plugin hooks never fire; #5098 a sandbox-config change silently stops a hook, "`/env` still lists the hook"; #3590 `ask` rendered as allow) means **the per-decision record is the control, not the guard**. **242** gained a second blind spot: pins record **no remote**, and `block/goose` → **HTTP 301** → `aaif-goose/goose` (200), so a moved upstream still "passes" `--check`. Goose is **not guard-less** — first `observed` guard evidence at `goose · 775b3958`: project-scoped `<project>/.agents/plugins/*/hooks/hooks.json`, `AlwaysAllow/AskBefore/NeverAllow` (`config/permission.rs:21-24`) and a **model-based judge** (`permission/permission_judge.rs`).
+**Owed from here (the delegate cannot call the research agent):** verify round 4's Task A text against round 2 before integrating **any** of it — count the dangling markers, re-anchor them from `vendor/eval/` and `inputs/fetched/MANIFEST.md`, and decide which of its "four things that do not survive re-checking" are real; then decide whether the Q1–Q6 half is even answering this rig's questions (it is not, per its own caveat). Two integrity rules in one line: **fetch the cited pointer and read its title before repeating the claim**, and **name host + timezone on every measurement** (244) — the phantom-citation half of 244 is **withdrawn by the operator**; do not chase it. Zero-cost, no grant: open a session with `/skill:delegating-to-durian-pi` (`docs/skills.md` admits the model may skip a skill).
 
-**The tally this pointer used to carry ("four of five fail open") is corrected:** failure direction is **per-event and per-version** — Copilot CLI's command `preToolUse` fails **closed** on crash/invalid JSON, and the *same* guard flipped direction between **v1.0.18 and v1.0.57** (#2540). Specify the direction per event, pin the release it was measured against, re-assert it at load, and treat **timeout** as its own decision. **241 stays open** on the permission profiles (`core/src/config/permissions.rs` 883, `config/src/permissions_toml.rs` 680, `permission_profile_catalog.rs` 145 — measured at the pin 2026-10-28) and the requirements/network tiers; that is now **delegate source work, not more web research**, alongside `cline · 51f63e4f`'s real `clinerules` loader. **Granted 2026-10-28 (D158), still unbuilt:** the `.pi/`-shaped work (235/236/238) ships as an **installable pi package developed in this tree** (`pi install --local ./<dir>` → one line in `.pi/settings.json`, read only after project trust), not hand-written `.pi/` files; and 232 is **gated on 241** — read `vendor/eval/codex · d373d649`'s permission engine and the Copilot CLI failure class before anyone claims it. **Owed from here (the delegate cannot call the research agent):** route `docs/reviews/harness-tools-skills-followup-2-research-prompt.md`, **Task A first** (50 dangling anchors + 3 dead Goose URLs = ROADMAP **243**), then Q1–Q6. Zero-cost today, no grant needed: open a session with `/skill:delegating-to-durian-pi` (`docs/skills.md` admits the model may skip a skill).
-
-**Corpus warning (237):** `tools/harness-usage-census.mjs` prints no corpus. On this host today: **18 sessions / 2,356 calls / 267 ad-hoc (11.3%)**; the audit's 87 / 11,599 / 24.0% needs both hosts' transcripts and the Windows set is absent here (no D: volume mounted). Quote the corpus with the number.
-
-**Two integrity rules this session produced, both cheap to keep.** (a) **Fetch the pointer, read its title, then repeat the claim** (D159 addendum): the delegate had attributed copilot-cli **#978/#4438** — real issues, correctly cited by the report for its *skills* claims — to that harness's *hooks* behaviour, and propagated it into three files; title-checking replaced a weak citation with #2893/#3590/#2540/#5098. Delegates fetch cited pages into `inputs/fetched/` and keep `MANIFEST.md` (URL, HTTP, sha256, phrases found; **page bytes untracked on purpose** — 8.2 MB). (b) **Name the host and timezone on every measurement** (ROADMAP **244**): every date this session wrote said **2026-10-29** while the host clock is **2026-10-28 CDT (UTC−5)**, and the wrong date reached a filename (now renamed) and ~60 prose lines. **The phantom-citation half of 244 is closed by the operator (2026-10-28): "Forget about the phantom citation"** — `docs/incidents/2026-10-29-windows-vm-suite-self-sweep.md` stays missing and the recovery ask is **withdrawn**; do not chase it unless the operator reopens it. What stays live is the **date/timezone half** and the **cited-path check**, and round 3 caught the same class in the delegate three more times — a `permissions_toml.rs` size asserted from a summary (**1,457** claimed, **680** measured), a claim that `docs/COMPETITORS.md` holds a "goose is guard-less" row when **no such row exists**, and a Goose `checks/*.sh` mechanism inherited from a summary that is in **neither the deliverable nor the pin** (so it was **not registered**, and ROADMAP **240**'s "how do we know a recipe worked?" stays open). One command prevents all of it: read the file before repeating a claim about it.
+**NEW, landed verbatim, NOT integrated: `docs/reviews/harness-tools-skills-public-harnesses-research-4.md`** — it appeared mid-session (mtime **2026-10-28 21:44:06 host-local = 2026-10-29T02:44:06Z**, 17,412 B / 196 lines, sha256 `8e028729…`), untracked. **It is not a duplicate**, measured: **0 exact shared lines** with round 2 or round 3, and only **21 of its 64** distinct `[^key]` markers also appear among round 2's 65 — so it is new material that partly re-cites the same sources. It opens **"Status: I could not execute this as specified"**: its sandbox had no `docs/` (it never read the prompt — and **no round-4 prompt exists in this repo**, since `…-followup-2-research-prompt.md` titles itself the **round-3** prompt), it has **no write access**, and it states *"There is no shell, so no `sha256sum`"* / *"no response headers"*, so the MANIFEST columns 244 asks for are **unobtainable there** — registered as **249**, whose fix is runbook-side (self-contained prompts; split the columns into always-obtainable vs delegate-obtained). Its fetched pages are **not on this host**: `inputs/fetched/` = `MANIFEST.md` 14,785 B + `README.md` 2,766 B, unchanged since 18:22 host-local. What it *offers*: **Task A as text** (~50 re-anchored citation rows; the repair target is round 2's **184 marker occurrences / 65 distinct keys**) and **"Four things in the report that do not survive re-checking"** — both unverified, and its Q1–Q6 is **its own reconstruction**, by its own admission. (Already done, do not redo: the 3 dead Goose URLs are fixed from the pin — ROADMAP **243**.)
 
 ## Then, in this order (measured ranking — `docs/reviews/wallclock-budget-2026-10-28.md` §6, ruling D153, amended by D154)
 
