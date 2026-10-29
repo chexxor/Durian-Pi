@@ -26,9 +26,9 @@ one that does not. `--self-test` is **12 cases, 137 ms**.
 ## 2. The census (full audit, `--top 0`, re-run 2026-10-29T04:2xZ after every instrument fix in §5)
 
 **127 files scanned** (`docs/reviews/`, `docs/incidents/`, `inputs/fetched/`) · **81 files clean** ·
-**522 findings: 292 hard-failing, 230 not-failing, 2 suppressed by markers** — and the two suppressed ones are
+**524 findings: 292 hard-failing, 232 not-failing, 2 suppressed by markers** — and the two suppressed ones are
 *printed*, not hidden, because a checker that hides its own exceptions is not auditable. The same run before the
-§5 fixes printed **589 findings / 297 hard**; the 67 that disappeared were **the instrument's own false positives**.
+§5 fixes printed **589 findings / 297 hard**; the 65 that disappeared were **the instrument's own false positives**.
 
 | class | n | hard | what it means |
 |---|---:|---:|---|
@@ -36,7 +36,7 @@ one that does not. `--self-test` is **12 cases, 137 ms**.
 | KEY COLLISION | 108 | **108** | the same key DEFINED with different targets inside one document family |
 | DUP DEFINITION | 71 | **71** | `[^1]:` twice or more in one file — 29 in `building-agent-systems-on-pi-research.md`, 24 in `tui-streaming-research.md`, 12 in `llm-prompting-for-git-merging-followup.md`, 5 in `memory-followup-research.md`, 2 elsewhere |
 | PATH AMBIGUOUS / UNRESOLVED / UNNAMED-CLONE / CLONE ABSENT | 129 | 0 | real soft queue: bare basenames that resolve in 2–7 clones, clones not on this host, citations that land in a tree the file never names |
-| SIZE MISMATCH | 24 | **6** | "N lines" claims measured at an **immutable pin** (`permissions_toml.rs` 1,457 claimed vs **680** at `codex d373d64`; `metagpt/…/skill_manager.py` 278 vs **79**; `symphony/elixir/AGENTS.md` 30 vs **76**). The other 18 are own-tree claims, soft by design — our repo drifts, a pin does not |
+| SIZE MISMATCH | 26 | **6** | "N lines" claims measured at an **immutable pin** (`permissions_toml.rs` 1,457 claimed vs **680** at `codex d373d64`; `metagpt/…/skill_manager.py` 278 vs **79**; `symphony/elixir/AGENTS.md` 30 vs **76**). The other 20 are own-tree claims, soft by design — our repo drifts, a pin does not |
 | PATH NEVER EXISTED | 9 | **9** | **phantom cites**: no branch ever had the path. 8 in `tui-attach-vs-poll.md` (`src/harness/harness.ts`, `src/types.ts:917` — upstream pi paths cited as if they were ours), 1 in `pi-harness-usage-audit-2026-10-28.md` (`docs/configuration.md:39`) |
 | PATH MALFORMED PATH | 2 | **2** | elided addresses: `vendor/pi-main/.../edit-diff.ts:256` (`aider-review.md:35`), `.../storage/sqlite/node.ts:146` (`architecture-broker-review.md:220`). This row quotes them, so the row carries the ignore-line marker — the count stays 2, the quote stays legal <!-- cite-check: ignore-line --> |
 | LINE OUT OF RANGE | 2 | **2** | anchors past EOF at a pin: `crewai/…/templates/CLAUDE.md:1-8` (7 lines), `codex/sdk/python/…/models.py:81` (76 lines) |
@@ -45,9 +45,9 @@ one that does not. `--self-test` is **12 cases, 137 ms**.
 | ALIAS INFERRED — NEEDS URL | 8 | 0 | the registry maps a hex tag to a canonical key **without** the round ever printing its URL (250) |
 | SIZE CLAIM CORRECTED IN LINE | 3 | 0 | a line that says "680, not the 1,457 from memory" is a **correction**, and failing it would train readers to ignore the gate |
 | UNUSED DEFINITION | 3 | 0 | a definition nothing cites — soft, because a References block may legitimately anticipate a citation |
-| REGISTRY defined_in STALE | 1 | 0 | the registry names a file that no longer defines that key |
+| REGISTRY defined_in STALE | 0 (it was **1** earlier the same session) | 0 | the registry names a file that no longer defines that key — the class fired once mid-session, which is exactly why every count in this note carries the hour it was measured |
 
-This note is inside its own scan and **self-charges 14 findings, all soft** (it quotes other reports' keys and paths,
+This note is inside its own scan and **self-charges 15 findings, all soft** (it quotes other reports' keys and paths,
 and declares `cite-ns: quoted`). That is deliberate: an instrument that exempts its own author is the one 240–243
 exist to prevent.
 

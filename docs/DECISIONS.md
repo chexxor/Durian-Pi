@@ -6067,7 +6067,7 @@ cost ~3 s against a round that cost a session.
 
 `tools/review-cite-check.mjs` (774 lines, zero deps, `--self-test` 12/12) plus the alias table
 `docs/reviews/harness-citation-registry.md` (29 rows) now check the claims ROADMAP 250/244/243 registered. Over 127
-files in `docs/reviews/`, `docs/incidents/`, `inputs/fetched/`: **522 findings, 292 hard, 81 files clean** —
+files in `docs/reviews/`, `docs/incidents/`, `inputs/fetched/`: **524 findings, 292 hard, 81 files clean** —
 148 dangling keys (89 hard), **108 key collisions**, **71 duplicate definitions**, 9 path citations no branch ever had,
 2 elided addresses, 2 anchors past EOF at a pin, 6 size claims false at a pin, 5 dead URLs. Evidence and every command:
 `docs/reviews/citation-integrity-corpus-2026-10-29.md`; the corpus item is **ROADMAP 252**.
@@ -6099,7 +6099,7 @@ files in `docs/reviews/`, `docs/incidents/`, `inputs/fetched/`: **522 findings, 
    `SIZE CLAIM CORRECTED IN LINE` soft, and off-by-one explained by a missing newline is soft.
 5. **Two postures, deliberately different sets.** Full audit = every hard finding (the review queue). `--gate` = the
    **wrong-today** set only: collisions, duplicate definitions, phantom/malformed paths, anchors past EOF, pin drift,
-   dead URLs, size claims at a pin — **203 of 522**, leaving the 89 hard dangling keys for the audit. *Why:* a gate that
+   dead URLs, size claims at a pin — **203 of 524**, leaving the 89 hard dangling keys for the audit. *Why:* a gate that
    fires on 292 findings on day one is a gate nobody runs; a gate that fires on the 203 that are provably wrong now is a
    gate a doc-only change can be held to.
 6. **Suppression is counted, never silent** — `<!-- cite-ns: quoted -->`, `<!-- cite-check: ignore-line -->`,

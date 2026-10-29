@@ -4894,8 +4894,8 @@ had, and the checker that proves it now exists — so the repair is unowned queu
 *(delegate; measured 2026-10-29 22:4x–23:2x CDT = 2026-10-29T03:4x–04:2xZ, Linux, `Alex-Desktop-Win10`, Fedora
 `7.2.11-200.fc42.x86_64`, node v24.22.1; full evidence and every command in
 `docs/reviews/citation-integrity-corpus-2026-10-29.md`)* `node tools/review-cite-check.mjs` over **127** files in
-`docs/reviews/` + `docs/incidents/` + `inputs/fetched/` — **81 of them clean** — reports **522 findings, 292 hard**
-(the same run printed **589 / 297** until eight defects in the checker itself were fixed; the 67 that vanished were
+`docs/reviews/` + `docs/incidents/` + `inputs/fetched/` — **81 of them clean** — reports **524 findings, 292 hard**
+(the same run printed **589 / 297** until eight defects in the checker itself were fixed; the 65 that vanished were
 false positives, see the *Also learned* paragraph): DANGLING KEY 148 (**89** hard, 59 soft from files that declare
 `cite-ns: quoted`) · KEY COLLISION **108** · DUP DEFINITION **71** (29 of them in
 `building-agent-systems-on-pi-research.md`, which defines `[^1]` at lines **111, 553, 987** with three different
