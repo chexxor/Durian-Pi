@@ -6537,3 +6537,46 @@ acknowledge `seat-shell-availability`.** If anyone calls this session's run "gre
 **7. And a second, independent reason the same start must refuse even once the filter is fixed:** with 16 claimable rows addressed across 10 seats, the first-pass wake set is **not** coordinator-only — the product's own `toolRemovalsFor` says `pm` and `lead` are the only seats with the shell removed (`architect` keeps it: capability `review`; so `review` is a WORKING_CAPABILITY and "coordinator" is not a name for `architect`/`designer`/`advocate`/`auditor`/`security`). A broker start therefore cannot be made coordinator-scoped while the claimable head stands; the only bootstrap that wakes exactly the coordinators is `cli.mjs send` with **no broker running**, which is deprecated as a second harness owner and admissible only for that reason.
 
 **Falsifiable next session.** `node tools/rig-portability-audit.mjs` must report **2 findings, both 217** — if it reports 12 `seat-root-unresolvable`, the store's roots went foreign again (name the tree, do not trust `ps`, which prints no cwd). `git worktree list --porcelain` must show **2** registered worktrees. `ls -A | grep -E '^[A-Za-z]:|\\|dsh-Projects'` must print nothing. If anyone starts the broker with `--ack-coordinator-wake` and reports it worked, ask them to show the admissibility suffix — a bare `--start` past a BLOCK is not the grant.
+
+## D173 — 217 closes by ONE REGISTRY that separates "can START" from "is PREFERRED" (2026-10-30; authored by seat `impl`, verified by the delegate; **NOT landed on `main`**)
+
+**The why.** 217 did not fail because the rig picked the wrong shell. It failed because **two surfaces each kept their own private answer to "what is a shell"**: `src/seattools.mjs` registered exactly one hardcoded tool
+(`createPowerShellTool()`), while `src/seatguard.mjs` kept its own literal set of shell-tool NAMES for the one decision it cares about — which tool calls carry a command string worth inspecting. On the Windows host the two copies
+happened to agree, so the duplication was invisible; the move to Linux broke them **in the same direction, twice**: the registered tool's programs (`pwsh`, then `powershell`) do not exist here, so every seat shell call was a spawn
+ENOENT (22 such results in the store, newest entry #274427, and `tools/channel-preflight.mjs` §7 printing "NO SHELL CAN START HERE"), while `bash`, which *does* exist, was unreachable because nothing registered it — yet the guard
+already whitelisted the name `bash`. **The guard was inspecting a tool that was not a tool.** So the fix is not "add bash": it is one registry, read by both surfaces, keeping two questions apart — `canStart(host)` (is the program
+launchable here; a PATH SCAN, never a spawn, because the module is imported by the CLI, the broker, the seat harness and `tools/rig-portability-audit.mjs`, and the selection runs at module load) versus `preferredOn(host)` (which shell
+this host gets when more than one can start). The 217 failure was a *preference* that was correct for Windows, applied where the program could not *start*.
+
+**What was deliberately NOT folded in, and why.** lead's rejected edge (#4864 item 3): a host-OS or per-seat-shell field is **store schema** (the D24 / #3506 family, the axis #3456 wants explicit) and it changes what 263/264 read. So
+the schema half is its own row, **#4879** (architect). impl held that boundary and said so. The measured cost of the split is visible in the gate: `tools/rig-portability-audit.mjs` went **2 findings → 1**, and the survivor is
+`seat-host-unaware` — i.e. **217 is genuinely half-closed**, and the instrument proves it rather than the prose claiming it.
+
+**Evidence (delegate-run, Linux host `Alex-Desktop-Win10`, 2026-10-30T07:0xZ, in `/home/chexxor/Git/durian-dev/seatroot`):** `seatTools.shell.name` resolves to **`bash`**; the audit run from that tree against the real store prints **1
+finding** (`seat-host-unaware`) and **`seat-shell-availability` is gone**, while the same command from the live checkout still prints 2 — because `main` does not have the change, and *that difference is the measurement*. GREEN:
+`demo/seattools.test.mjs`, `demo/seatguard.test.mjs`, `demo/ctxline.test.mjs` exit 0. **RED verified, not assumed:** the delegate reverted `src/seattools.mjs` + `src/seatguard.mjs` to HEAD and moved `src/shellregistry.mjs` aside —
+`demo/seatguard.test.mjs` then fails on a **substantive assertion** ("the degraded-cwd shell refusal NAMES the verb it refused and the shell registered on this host"), while `demo/seattools.test.mjs` fails **only by a missing import**.
+Whether an import-failure RED counts as failing-first is an OPEN question the delegate refused to settle alone, and the verifier briefed to judge it could not be woken (below). All five files were restored **byte-identically**
+(`sha256sum -c`: OK).
+
+**Full-suite attribution (238 demos × 2 trees).** `main` fails 4 (`broker-stop-audit`, `deepinfra-catalog`, `dry-run`, `init`); the seat root fails 3 (`clockin-digest`, `deepinfra-catalog`, `local-model-pointer`). The divergent pairs are
+tree-shaped, not change-shaped: `local-model-pointer` asserts a *configured* `local` provider, and the seat root has **no `./durig.config.json`** at all (the audit's own note: "a moved workspace has no host config at all");
+`clockin-digest` runs `git rev-list --count main..(no branch)`, which cannot resolve on a **detached** worktree. Re-running both against the real store still fails, confirming host-config rather than store. **No regression is
+attributable to the change.** The durable lesson: when you isolate a seat root you must also give it the host layer, or the suite starts measuring the tree instead of the code.
+
+**The verifier leg is blocked at the host, and that is now load-bearing rather than theoretical.** `qa` could not be woken at all: two sends (a ~7k-char brief and a 1.1k-char brief) both returned `settledReason: model_error` with no
+reply, and the mechanism is measured — a direct request to the served model is refused with `exceed_context_size_error: request (9129 tokens) exceeds the available context size (8192 tokens), try increasing it`. The verifier slot on
+this box is **n_ctx 8192**, so a real verifier conversation cannot fit; `compact qa` also fails (`no compaction entry was written for seat qa`) because compaction needs the same window. This upgrades ROADMAP **208** from a design
+concern to a **hard failure of the ratified loop** (impl authors → delegate runs the oracle → qa reviews): the first two legs worked, the third cannot. Raising the served context is a **host-side** change on a GPU already at
+22.6/24.6 GiB, so it is the operator's call — not a seat's, and not an `up --refresh` (the `local-provider-down` runbook forbids treating a provider-shape problem as a refresh).
+
+**And the approved root decays once per coordinator completion.** `complete_work` re-points a seat's PERSISTED cwd to `process.cwd()` of whichever process served the wake (`src/rig.mjs:1047-1051`; the product already calls that cwd
+degraded at `src/seatguard.mjs:369,382`), so `pm` and `lead` are back on the live checkout while the other ten seats stay on the approved root — and the seat-root guard at `cli.mjs:443-466` checks **every** seat, so one drifted seat
+refused the operator's only working channel (`send pm`) until the delegate unset `DURIG_SEAT_ROOT`. Registered as **#4882** (reset semantics, impl), **#4883** (guard scope, devtools), **#4884** (the carrier telling #4854/#4855 that the
+portability audit printed 0 root findings in the minute those seats moved — the instrument is blind to this path). **Interim convention while those rows are held: operate with `DURIG_SEAT_ROOT` unset**, because `up --refresh` can only
+re-point all 12 at once and per-seat re-point is exactly what #4852 lacks.
+
+**The operator's architecture ruling, recorded.** Asked whether each seat should be its own pi-durable instance with its own database, the operator accepted the recommendation **not** to split — every seat is already its own pi-durable
+conversation (`cli.mjs:699-706` `tx.createConversation` per seat), and the queue with its party-scoped gates and claim leases *is* the product — **on condition the question be researched rather than held as chat opinion**. Registered as
+**#4885** (architect, held, trigger-gated on the report landing); the request prompt is `docs/reviews/seat-scoped-durable-state-research-prompt.md`, and only the operator can route it to the off-host research agent.
+
