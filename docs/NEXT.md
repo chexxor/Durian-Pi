@@ -34,6 +34,9 @@ tolerates it. Row: **#4886** (`impl`, held).
 pm's ruling that one capability-scoped leg plus the delegate oracle is enough, then let pm take the landing act on #4849.**
 Order of work is still lead's: **217 → 263 → 264 → 221/265 → 266 → 267**, 232 gated on #4846.
 
+**Archive:** everything superseded is verbatim in `docs/NEXT-ARCHIVE.md` (this cut: marker line 8553, body 8554–8695); grants
+1–11 and the older do-not lists live there, not here.
+
 **Next commands (delegate, Linux; the first one is the actual next act):**
 
 ```bash
@@ -62,8 +65,10 @@ what to set it to"), carrier row **#4887**; the delegate offered it, the operato
 is the only trigger for **#4885**.
 
 **Channel:** `send` remains the only wake on this host (a broker start is still refused on `seat-shell-availability`, which
-carries **no ack flag**). **Blocker:** none hard; the soft one is that #4886 makes every verifier turn a gamble until it is
-fixed — pre-flight with `tools/seat-turn-shape.mjs` instead of discovering it for 12 minutes.
+carries **no ack flag**).
+
+**Blocker:** none hard. The soft one is that #4886 makes every verifier turn a gamble until it is fixed — pre-flight with
+`tools/seat-turn-shape.mjs` instead of discovering it for 12 minutes.
 
 ## What landed this session, with its evidence
 
@@ -126,5 +131,6 @@ GPU1. **LM Studio restores `--ctx-size 8192 --parallel 4` on app relaunch.** **L
 measures** — pin `DURIG_DB` to a scratch store before the suite there. **The portability audit is blind to the `complete_work` root
 decay** (#4884). **`complete_work` re-points a seat's persisted cwd to `process.cwd()`** (#4882). **A `--dry-run` that names no
 removals is not evidence there are none.** **Never read an exit code through a pipe.** **Append prose with a quoted heredoc +
-`cat >>`, not `printf`.** **A promoted instrument is "cited but untracked" until you stage it.** **Run prettier before committing —
+`cat >>`, not `printf`, and never put backticks inside a `git commit -m "…"` string — bash command-substitutes them and silently
+edits your own evidence line (it ate two phrases in this session's commit until it was amended with `-F <file>`).** **A promoted instrument is "cited but untracked" until you stage it.** **Run prettier before committing —
 `demo/format.test.mjs` gates it.** **LM Studio's GGUF stores each KV value's type as a 4-byte field.** **Never quote shas.**
