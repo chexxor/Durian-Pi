@@ -8831,3 +8831,28 @@ removals is not evidence there are none.** **Never read an exit code through a p
 `cat >>`, not `printf`, and never put backticks inside a `git commit -m "…"` string — bash command-substitutes them and silently
 edits your own evidence line (it ate two phrases in this session's commit until it was amended with `-F <file>`).** **A promoted instrument is "cited but untracked" until you stage it.** **Run prettier before committing —
 `demo/format.test.mjs` gates it.** **LM Studio's GGUF stores each KV value's type as a 4-byte field.** **Never quote shas.**
+
+--- ARCHIVE ENTRY: the D176 pointer's "What landed this session, with its evidence" section (20 lines,
+verbatim), cut out of `docs/NEXT.md` when D177 replaced it 2026-10-30T20:2xZ. The rest of the D176 pointer is
+still live in `docs/NEXT.md`; only this section was superseded.
+
+## What landed this session, with its evidence
+
+- **Leg 2 executed to completion:** bare `reset qa2` (dry-run `writes: 0` → `resetEntryId 275460`), pre-flight
+  `next send: ADMISSIBLE`, one bounded brief, **`stopReason=stop`**, `#4891 done by qa2` (claimed 18:51:08Z, done
+  18:52:11Z), and qa2 minted its own report row **#4897** so the completion is recoverable from the store.
+- **Leg 1's gap is now named instead of papered over:** qa claimed #4890 (18:42:52Z) and never completed it —
+  entries 275452 (`read` → `shellregistry.mjs`, `input=17,445`), **275457** (`pi.compaction`), 275459
+  (`input=20,109, output=1, length`, empty). The delegate deliberately did **not** close or re-drive it.
+- **pm's rulings landed even though its turn errored** (`settledStatus: unanswered`, `settledReason: model_error`,
+  `stopReason: toolUse`): **#4890 and #4891 released to `queued`**, and three new rows minted — **#4894** (impl:
+  commit before completing; #4882 can strand the 5 files), **#4895** (`rig-portability-audit.mjs` answers
+  differently per tree — the gate depends on where you stood), **#4896** (`seat-turn-shape.mjs` as pre-flight and as
+  #4886's fixture source; the 6/12 parity break is a separate concern). All three are `held`.
+- **Seat-root drift repaired:** `up rig.selfdev.json --refresh` re-pointed **pm, lead, qa2** to
+  `/home/chexxor/Git/durian-dev/seatroot`; re-dry-run shows `changes: {}` for all 12; worktrees/branches unchanged;
+  `refs/rescued` still **489**.
+- **Docs:** `docs/runbooks/compact-a-seat.md` corrected from "effectively dead" to the measured trap (with the entry
+  ids and usage figures); `docs/runbooks/verifier-serving-headroom.md` Step 5 gained the **reading cliff** (name the
+  size of every file you point a seat at, and bound the read).
+

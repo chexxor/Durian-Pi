@@ -6802,3 +6802,48 @@ act's. Read the queue, not the transcript, to find out what a seat decided.
 `up-refresh-applied.json` → re-dry-run; inventories `inv-{worktrees,branches}-{before,after}.txt`; turn shape before and
 after `.spike/fix-20261031/turn-shape-{clockin,clockout}.txt`; store backup
 `.spike/fix-20261031/store-backup-20261030-135039.sqlite` taken before the `reset`/`up` writes.
+
+## D177 — a seat at its context ceiling cannot be repaired by `compact`, because compaction IS a summarization call and fails for the same reason the turn did; an operator ruling reaches the team only as a seat's row, and only sender/recipient may release; and the delegate's own session died of host memory pressure (delegate, 2026-10-30, Linux)
+
+**Decision.** (1) The operator's ruling — **"Yes, I authorize those actions"** (19:1xZ), covering the #4887
+compaction-config build, raising #4886's priority, and spending no further verifier capacity — was **conveyed to a
+seat and recorded as grants 13–15**, and the delegate deliberately did **not** enact any part of it by hand. It
+travelled as **lead's rows #4898/#4899**, not as a delegate write. (2) The delegate stopped trying to reach `pm`
+after one failed send and stopped trying to repair it after `compact` failed, and instead **escalated the ceiling**
+rather than reaching for `reset` on a seat whose routing history is load-bearing. (3) Every seat run launched from
+now on is **detached with `setsid`**, and host RAM is pre-flighted before the 441 MB store is touched.
+
+**Why (1) — the rig has no path from an operator to a held row except through a party to it.** `pm` holds #4887 and
+was unreachable, and lead's own prior measurement (**#4867**) is that **only sender or recipient may release**, while
+`revise_work` edits subject/body only and cannot fix a `held` row's body or tier. So the only lawful route was
+**lead → impl (#4898, `queued`)** instructing the **recipient** to `release_work(4887)`. This is also why the ruling
+must not be recorded as "done": **#4886's tier is still `feature` and still `held by pm`** — lead ruled the priority
+in prose and could not set it. A ruling is not an act; the row is the act.
+
+**Why (2) — `compact` cannot save a seat at its ceiling, and the failure is the same failure.** `status` names it for
+`pm` (context **184,507/200,000 = 0.9225**): **`Compaction failed: Summarization hit the token limit; the summary is
+incomplete`**, `settledReason: model_error`, and the turn recorded **no assistant entry at all** (entry 275487 is a bare
+user turn). Then `compact qa2 --dry-run` failed the same way at **18,453 of 24,576** — so #4876 ("`compact` returns
+`no compaction entry was written`") reproduces on a **small** seat too, and D176's reading is now sharpened:
+**compaction needs headroom to summarize, not just to fire.** That single fact is the strongest argument yet for the
+#4887 values, and it retires `compact` from the delegate's list of repairs, leaving only `reset` (#4886) — amnesia.
+
+**Why (3) — the delegate's own harness died mid-act and took the seat run with it.** `nohup … &` detaches from the
+terminal, not from the harness's process group; when the harness died, lead's submission 275494 was left `placed` and
+`send-lead-out.json` stayed empty. Re-arm instruments: **`resume`/`doctor` CANCELS a `placed` run, it does not retry
+it** (`cli.mjs:1101-1112`), and **`cli.mjs <verb> --help` RUNS THE VERB** — the delegate's `doctor --help` performed a
+real cancel (benign, intended in the following deliberate call, recorded as an unintended write). The brief itself
+survived as entry **275493**, so the fix was a **short nudge** (a ~60-token deposit) rather than a re-send of the whole
+findings file; lead then answered `stopReason=stop`. Host cause is **UNVERIFIED but bounded**: 7 kernel OOM kills in
+this user's slice, `user.slice memory.peak 96.1 GB` against `MemTotal 98,780,144 kB`, swap 62 % used, `strata-host`
+50.6 GB RSS, and **no core dump in the crash window** (SIGKILL leaves none, whereas this box does core node SIGABRTs).
+Full record: `docs/incidents/2026-10-30-delegate-session-lost-to-host-memory-pressure.md`.
+
+**Evidence.** `status` `latestByConv["3"]` (pm: `unanswered`/`model_error` + the compaction detail) and
+`context.pm` (184,507/200,000); `compact --dry-run` failures as tasks **275491** (pm) and **275492** (qa2); queue
+verification `.spike/fix-20261031/queue-after-lead2.json` → census **4,899 = 3,757 done / 780 cancelled / 321 held /
+22 queued / 17 deferred / 2 claimed (#4849 impl, #4890 qa)**, new **#4898** (lead→impl, `queued` 20:08:39.757Z) and
+**#4899** (lead→devtools, `held` 20:08:39.766Z), **#4886 still `held`, tier `feature`**; lead's answer at entry
+**275506** and `.spike/fix-20261031/send-lead-nudge-out.json` (`settledStatus: done`, `stopReason: stop`); session
+JSONL gap `19:56:54.590Z → 19:59:02.199Z`; `coredumpctl list --since '2026-10-30 14:50'` → none, vs cores at
+02:30:54/02:30:55/02:43:07/11:28:09/11:29:05; `/proc/vmstat oom_kill 7`; `du -sh .spike` → 3.3 GB.

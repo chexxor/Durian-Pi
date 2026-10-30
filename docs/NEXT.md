@@ -2,9 +2,11 @@
 
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
-**Last updated:** 2026-10-30T19:0xZ (**Z** — D176), host-local 2026-10-30 13:5x (`America/Chicago`, CDT = UTC−5).
-Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D176).
-The superseded 141-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (entry marker line **8697**, body **8698–8833**).
+**Last updated:** 2026-10-30T20:2xZ (**Z** — D177), host-local 2026-10-30 15:2x (`America/Chicago`, CDT = UTC−5).
+Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D177).
+Updated **in place** this session (197 lines, cap 200); the superseded 141-line pointer is cut **verbatim** to
+`docs/NEXT-ARCHIVE.md` (entry marker line **8697**, body **8698–8833**), and D176's "What landed this session" section
+was cut separately when D177 replaced it (marker **8835**, body **8839–8857**).
 
 **BOTH VERIFY LEGS ON #4849 NOW EXIST, AND BOTH ARE IMPERFECT IN DIFFERENT WAYS — read both before anyone calls
 this window verified.** qa's leg (row **#4890**) returned **`VERDICT: PROCEED`** on C1/C2 and is text-complete
@@ -48,12 +50,17 @@ other way once a seat's persisted cwd disagrees with `DURIG_SEAT_ROOT`.
 
 ## NEXT SESSION
 
-**Current item: give `pm` one batched findings brief (it holds the routing) — it needs the citation defect, the
-compaction dead band, and the fact that #4890 is `claimed` but uncompleted — and get the operator's ruling on the
-three things only the operator holds (below). #4849 stays `claimed` by `impl`; pm declined the landing act and
-ruled the order in addendum #4894: `impl` commits the 5 files FIRST (explicit paths), then completes with
-`ROUTED …, NOT YET LANDED` and names the runtime half UNVERIFIED.** Order of work is still lead's:
-**217 → 263 → 264 → 221/265 → 266 → 267**, 232 gated on #4846.
+**Current item: watch `impl` take row #4898 (`queued`, lead → impl) and release #4887 as the RECIPIENT — the
+operator's authorization travels in #4898's body, not from the delegate.** The operator ruled **"Yes, I authorize
+those actions"** at 19:1xZ on all three asks (build #4887; raise #4886; spend no further verifier capacity), and that
+ruling reached the rig only because **`pm` proved unreachable at its context ceiling** — the delegate conveyed it to
+**lead**, which answered `stopReason=stop` with three acts: **#4898 `queued`** (release instruction + corrected
+premise + approved values + constraints), **#4899 `held`** (devtools — the citation-integrity class, #4891 as the
+non-vacuous fixture), and a **prose** priority raise for #4886 it **could not enact** (row `held by pm`, tier still
+`feature`; lead's own #4867 measurement says only sender or recipient may release, and `revise_work` sets no tier).
+#4849 stays `claimed` by `impl`; pm's order in addendum #4894 stands: `impl` commits the 5 files FIRST (explicit
+paths), then completes with `ROUTED …, NOT YET LANDED` and names the runtime half UNVERIFIED. Order of work is still
+lead's: **217 → 263 → 264 → 221/265 → 266 → 267**, 232 gated on #4846.
 
 **Archive:** everything superseded is verbatim in `docs/NEXT-ARCHIVE.md` (this cut: marker line 8697, body
 8698–8833); grants 1–11 and the older do-not lists live there, not here.
@@ -61,32 +68,39 @@ ruled the order in addendum #4894: `impl` commits the 5 files FIRST (explicit pa
 **Next commands (delegate, Linux; the first one is the actual next act):**
 
 ```bash
-# 1. the batched findings brief to pm (local-model seat: ~12-15 min wall clock; write the file first, never inline)
-DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=./selfdev.sqlite \
-  node cli.mjs send pm --body-file .spike/fix-20261031/send-pm-findings.md
-# 2. pre-flight the SHAPE before every send, never after (read-only, <1 s, 0 writes)
+# 1. did impl take #4898 and move #4887 off `held`? If #4887 is still `held`, lead's act did not land.
+DURIG_DB=./selfdev.sqlite node cli.mjs queue
+# 2. is pm STILL unreachable? read the context fraction, not prose — 0.9225 is where it died
+DURIG_DB=./selfdev.sqlite node cli.mjs status > .spike/status.json; node -e '
+const fs=require("fs"),t=fs.readFileSync(".spike/status.json","utf8"),j=JSON.parse(t.slice(t.indexOf("{"),t.lastIndexOf("}")+1));
+console.log("pm context:",JSON.stringify(j.context.pm));console.log("pm last run:",JSON.stringify(j.latestByConv["3"]));
+console.log("lead context:",JSON.stringify(j.context.lead));'
+# 3. pre-flight the SHAPE before every send, never after (read-only, <1 s, 0 writes)
 DURIG_DB=./selfdev.sqlite node tools/seat-turn-shape.mjs            # --seat qa | --json | --strict | --explain qa
 node demo/seat-turn-shape.test.mjs                                  # its fixture; part of the suite
-# 3. rig state — #4849 (impl) and #4890 (qa) MUST still be `claimed`; #4891 is `done`; #4894-#4896 held
+# 4. rig state — #4849 (impl) and #4890 (qa) MUST still be `claimed`; #4891 `done`; #4894-#4896, #4899 held
 DURIG_DB=./selfdev.sqlite node cli.mjs queue
 DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run   # the seat-root drift, read-only
-# 4. the verifier slot MUST still be 24576×1 — LM Studio restores 8192×4 on app relaunch
+# 5. the verifier slot MUST still be 24576×1 — LM Studio restores 8192×4 on app relaunch
 node -e 'fetch("http://127.0.0.1:1234/api/v0/models").then(r=>r.json()).then(j=>console.log(j.data.map(m=>[m.id,m.state,m.loaded_context_length].join(" "))))'
 nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv,noheader   # GPU0 ~15.2/16.4 GiB = verifier; GPU1 ~23.0 GiB = strata local
-# 5. the clock-out trio, always all three, in BOTH trees
+# 6. HOST RAM — this is what killed the delegate's own session on 2026-10-30; check it BEFORE loading the 441 MB store
+free -h | head -2; awk '$1=="oom_kill"{print "kernel oom_kill since boot:",$2}' /proc/vmstat
+cat /sys/fs/cgroup/user.slice/memory.peak        # 96,140,943,360 B ≈ 96.1 GB peak on a 94 GiB box
+# 7. the clock-out trio, always all three, in BOTH trees
 node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs && node tools/doc-integrity-guard.mjs
 node tools/instrument-provenance.mjs                                 # suite membership + cite resolution
 git for-each-ref refs/rescued | wc -l                                # 489; read runbooks/cross-clone-object-recovery.md before anything runs `git gc`
 ```
 
-**THREE DECISIONS ARE THE OPERATOR'S, NOT THE DELEGATE'S.** (a) **What "I accept your recommendations" covers.**
-The operator said it at the start of D176; the delegate read it as approving the _plan of work_ and **did NOT
-convert it into a release ruling on #4887** (the compaction config), because that row's body was written before the
-mechanism was known and pm owns its release. Say which it grants and pm can act. (b) **pm's escalation: raise
-#4886's priority?** Its workaround is a bare `reset`, i.e. **amnesia as a fix** — tonight `qa2` needed one and it
-cost that seat 1,632 turns of context (dry-run first: `writes: 0`, then `resetEntryId 275460`). (c) **Whether to
-spend more verifier capacity** — GPU0 has ~1,160 MiB free ≈ 4,096 tokens at 160 KiB/token; the delegate did NOT
-raise the slot, since the dead band is a policy defect, not a size defect. The research prompt
+**THE OPERATOR RULED (D177), AND THE RULING IS THE TEAM'S TO ENACT, NOT THE DELEGATE'S TO OBEY-BY-HAND.** Asked
+whether the opening "I accept your recommendations" covered the compaction build, the operator answered **"Yes, I
+authorize those actions"** at 19:1xZ, covering: **(a) build #4887** (the `DURIG_COMPACTION_*` → `modelOverrides`
+change, values and call site in `docs/runbooks/compact-a-seat.md`); **(b) raise #4886's priority**; **(c) spend no
+further verifier capacity** — fix the policy, don't widen the window. Recorded as grants **13–15** below and as
+**D177** in `docs/DECISIONS.md`; carried into the queue by **lead** in **#4898**, not by the delegate. **Still open
+and still an act a seat owes:** #4886's _tier_ is unchanged (`feature`, `held by pm`) — lead ruled the priority in
+prose and cannot set a tier. The research prompt
 `docs/reviews/seat-scoped-durable-state-research-prompt.md` still sits with the operator; it is the only trigger
 for **#4885**.
 
@@ -94,36 +108,38 @@ for **#4885**.
 which carries **no ack flag**). `send` prints `DEPRECATED … prefer intent.mjs` — with the broker down that advice is
 inert, and it is the only verb that wakes a seat here.
 
-**Blocker:** none hard. The soft one is that a verifier leg cannot finish until the compaction policy is configured:
-**the only leg that ever completed was bounded by hand.** Do not re-drive `qa`'s #4890 blind — its post-compaction
-context is already ~20k, so another send re-triggers the same cut and deposits another empty turn.
+**Blocker:** hard, new in D177 — **`pm` cannot receive anything.** Its context is **184,507 / 200,000 = 0.9225** and its
+run died _inside_ compaction — `status` `latestByConv["3"].detail`: **`Compaction failed: Summarization hit the token
+limit; the summary is incomplete`**. The delegate's findings brief is **in pm's history as an unanswered user turn
+(275487/275488)**, so it is recoverable the moment pm can run; do NOT re-send it (a second send is a deposit).
+`compact` cannot fix this: it is itself a summarization call, and it failed on **two** seats — pm at 184,507/200,000
+and **qa2 at 18,453 / 24,576** (`no compaction entry was written`, tasks 275491 and 275492) — which is #4876
+reproduced on a small seat. So the rig has **no non-amnesiac repair** for a seat at its ceiling, and `reset` (#4886) is
+the only one: that is the operator's call for `pm`, whose routing history is load-bearing. Soft blocker unchanged: a
+verifier leg cannot finish until the compaction policy is configured — **the only leg that ever completed was bounded
+by hand.** Do not re-drive `qa`'s #4890 blind: its post-compaction context is already ~20k.
 
-## What landed this session, with its evidence
+## What landed this session (D177), with its evidence
 
-- **Leg 2 executed to completion:** bare `reset qa2` (dry-run `writes: 0` → `resetEntryId 275460`), pre-flight
-  `next send: ADMISSIBLE`, one bounded brief, **`stopReason=stop`**, `#4891 done by qa2` (claimed 18:51:08Z, done
-  18:52:11Z), and qa2 minted its own report row **#4897** so the completion is recoverable from the store.
-- **Leg 1's gap is now named instead of papered over:** qa claimed #4890 (18:42:52Z) and never completed it —
-  entries 275452 (`read` → `shellregistry.mjs`, `input=17,445`), **275457** (`pi.compaction`), 275459
-  (`input=20,109, output=1, length`, empty). The delegate deliberately did **not** close or re-drive it.
-- **pm's rulings landed even though its turn errored** (`settledStatus: unanswered`, `settledReason: model_error`,
-  `stopReason: toolUse`): **#4890 and #4891 released to `queued`**, and three new rows minted — **#4894** (impl:
-  commit before completing; #4882 can strand the 5 files), **#4895** (`rig-portability-audit.mjs` answers
-  differently per tree — the gate depends on where you stood), **#4896** (`seat-turn-shape.mjs` as pre-flight and as
-  #4886's fixture source; the 6/12 parity break is a separate concern). All three are `held`.
-- **Seat-root drift repaired:** `up rig.selfdev.json --refresh` re-pointed **pm, lead, qa2** to
-  `/home/chexxor/Git/durian-dev/seatroot`; re-dry-run shows `changes: {}` for all 12; worktrees/branches unchanged;
-  `refs/rescued` still **489**.
-- **Docs:** `docs/runbooks/compact-a-seat.md` corrected from "effectively dead" to the measured trap (with the entry
-  ids and usage figures); `docs/runbooks/verifier-serving-headroom.md` Step 5 gained the **reading cliff** (name the
-  size of every file you point a seat at, and bound the read).
+- **The operator's ruling reached the rig without the delegate doing a seat's work.** `pm` was unreachable
+  (context 184,507/200,000; `Compaction failed: Summarization hit the token limit`), so the delegate conveyed the
+  ruling to **lead**, which produced `stopReason=stop` and three store acts, verified in the queue rather than
+  trusted from prose: **#4898 `queued` lead→impl** (release #4887 yourself, corrected premise, approved values,
+  constraints), **#4899 `held` lead→devtools** (cite-check proves path-exists + range-fits, never that the range
+  _contains_ the cited symbol; #4891 as the non-vacuous fixture), and a **prose** #4886 priority raise that lead
+  **could not enact** — its own #4867 measurement says only sender/recipient may release and `revise_work` sets no
+  tier. The lead run survived because it was detached with `setsid`.
+- **`compact` is broken as a repair on two seats, not one** — pm (184,507/200,000) and qa2 (**18,453/24,576**):
+  `no compaction entry was written`, tasks 275491 / 275492, and the `status` detail names the cause: the
+  summarization call itself hits the limit. #4876 reproduced on a small seat; no durable entry written either time.
+- **The delegate's own session was killed mid-`send`** — evidence in `docs/incidents/2026-10-30-delegate-session-lost-to-host-memory-pressure.md`.
 
-## Rig state, re-measured at clock-out 2026-10-30T19:0xZ (Linux) — re-read, do not trust
+## Rig state, re-measured at clock-out 2026-10-30T20:2xZ (Linux) — re-read, do not trust
 
 **Store** `./selfdev.sqlite` (this session's backup `.spike/fix-20261031/store-backup-20261030-135039.sqlite`,
 before the `reset`/`up` writes); 12 seats; **all 12 now on the approved root** `/home/chexxor/Git/durian-dev/seatroot`,
-branch `seatroot/linux`. **Queue census 4,897 = 3,757 done / 780 cancelled / 320 held / 21 queued / 17 deferred /
-2 claimed (#4849 `impl`, #4890 `qa`) → CLAIMABLE 21.** **Broker DOWN, deliberately.** **Verifier** LM Studio
+branch `seatroot/linux`. **Queue census 4,899 = 3,757 done / 780 cancelled / 321 held / 22 queued / 17 deferred /
+2 claimed (#4849 `impl`, #4890 `qa`) → CLAIMABLE 22.** **Broker DOWN, deliberately.** **Verifier** LM Studio
 Ministral-3-14B-Reasoning Q6_K on **GPU0** (`:1234`, 15,214/16,376 MiB, **ctx 24576, parallel 1**, verified via
 `GET /api/v0/models` `loaded_context_length`); **local** `strata` `iq3_s` on **GPU1** (~22,950/24,576 MiB) — pm,
 impl, lead, scribe, devtools, security, architect; verifier family (qa, qa2, advocate, auditor, designer) on GPU0.
@@ -133,12 +149,14 @@ parity break, 9 seats `AT RISK` for their next `send`, 3 `ADMISSIBLE`** (`.spike
 `Date.now()` arithmetic — `timedatectl set-local-rtc 0` is the operator's call (ROADMAP 234). `probe-preflight`
 REFUSES (swap max 50 %), so no probe arm may start.
 
-## OPERATOR GRANTS (twelve through D175; none widened this session)
+## OPERATOR GRANTS (fifteen through D177)
 
 1–9. Unchanged from the archived pointer (seat-root ruling A; the "queue drains" predicate; mint the refs; instrument hygiene; the
 verifier paths; decomposition-not-seats with the scale gate; the Linux isolated seat root; the `send` bootstrap while the broker is
 un-startable; research-don't-re-architect). 10. **Host model-serving may be changed through the vendor's own API** — report the headroom you measured; do not spend it again
-unasked. (Not spent this session.) 11. **Tree-shape acts on the approved seat root are the delegate's** — used: `up … --refresh` re-pointed three seats onto the root. 12. **A4000 headroom may be spent for the verifier** — a capacity spend, not a licence to keep raising (KV is 160 KiB/token here).
+unasked. (Not spent this session.) 11. **Tree-shape acts on the approved seat root are the delegate's** — used: `up … --refresh` re-pointed three seats onto the root. 12. **A4000 headroom may be spent for the verifier** — a capacity spend, not a licence to keep raising (KV is 160 KiB/token here). 13. **The #4887 compaction-config build is AUTHORIZED** (operator, 19:1xZ: "Yes, I authorize those actions") — a grant
+to _build it_, held by the team as rows #4887 + #4898; it is not a licence for the delegate to edit `src/`. 14. **#4886's priority RAISE is AUTHORIZED** — enacted only in prose by lead; the tier act is still owed by a seat. 15. **No further verifier capacity for this leg** — the standing grant 12 stays unspent on purpose; report rather than
+spend it "while we're at it".
 
 **The operator's opening "I accept your recommendations" was NOT treated as a grant widening any of the above. See
 decision (a) under THREE DECISIONS.**
@@ -166,3 +184,15 @@ every heading) and silently broke the "cut verbatim" claim — restore with `git
 `demo/format.test.mjs` does **not** gate repo-wide formatting: its own header says the format verb is
 "explicit-paths-only and never a tree walk or a hook", and `docs/DECISIONS.md`, `docs/NEXT-ARCHIVE.md` and both
 verifier runbooks are **unformatted at HEAD** (checked with `prettier --check`).
+**`compact` cannot rescue a seat at its ceiling — it IS a summarization call and fails for the same reason the turn
+failed** (pm 184,507/200,000: `Summarization hit the token limit`; qa2 at 18,453/24,576: `no compaction entry was
+written`). **`resume`/`doctor` CANCELS a `placed` run, it does not retry it** (`cli.mjs:1101-1112`: `already_placed` →
+`conv.abort()`), and it is a compound write. **`cli.mjs <verb> --help` RUNS THE VERB** — there is no per-verb help; the
+delegate's `doctor --help` performed a real cancel (benign here, logged in D177). **A backgrounded seat run dies with
+the harness unless it is detached with `setsid`** — tonight the delegate's session died mid-`send`, the child died with
+it, and lead's submission was left `placed` (the brief itself survived in the conversation). **The host is out of RAM
+headroom**: `strata-host` holds **50.6 GB RSS**, `user.slice` **memory.peak 96.1 GB** on a 94 GiB box with **swap 5.1/8
+GiB used** and **`/proc/vmstat oom_kill 7`** (7 kernel OOM kills in this user's slice; the killed cgroups are transient
+and their counters vanish, and **a SIGKILL leaves no core dump** — `coredumpctl` had cores at 02:30/02:43/11:28/11:29
+and **none** in the crash window). Before loading the 441 MB store: check `free -h`, `/proc/vmstat`, and
+`/sys/fs/cgroup/user.slice/memory.peak`, and keep **one** store copy, not five.
