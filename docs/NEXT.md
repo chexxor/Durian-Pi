@@ -1,162 +1,153 @@
 # NEXT — current priority and exact next command
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces ([^1] [^2] [^3] …); it does not own them (ROADMAP 250) -->
 
-**Last updated:** 2026-10-30T05:0xZ = **2026-10-30 00:0x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is
+**Last updated:** 2026-10-30T06:2xZ = **2026-10-30 01:2x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is
 **Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session.
-The superseded 199-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (entry header at archive line 7898; proof:
-`tail -199 docs/NEXT-ARCHIVE.md | md5sum` = the pre-cut file, byte-identical).
+The superseded 162-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (entry header at archive line 8102, body
+8103–8264).
 
-**THE D169 CLOSED LOOP IS OPEN.** The operator granted the bounded, coordinator-scoped wake (grant at 2026-10-30T04:2xZ,
-"yes"). It executed, and the grant exposed a defect in this repo's own gate: **a BLOCK the operator has ruled on had no way
-to be recorded.** `--yes-pm-wakes` acknowledges the spool and `--allow-dirty` acknowledges the tree; `seat-shell-availability`
-had **no ack at all**, so `--start` was refused no matter what the operator decided — the instrument could name a hazard but
-could not carry the ruling about it. Landed: `tools/broker-serve.mjs --ack-coordinator-wake` (2 commits), which is **measured
-per seat by the product's own `toolRemovalsFor`** (`src/seattools.mjs:249`) and never a waiver — a seat that loses its shell
-also loses `read/write/edit/prepare_workspace`, so for those seats the absent shell guards an act that runs no command and
-lands no artifact; if ANY wake-set seat keeps the shell tool the block stands. It also requires `--max-duration`.
+**THE HOST IS ADDRESSABLE NOW — AND ONE ITEM IS ALL THAT REMAINS.** The operator ruled the cross-host deadlock gets broken
+**here**, not on the Windows box (grant recorded as **D172**): an isolated Linux worktree of `main` at
+`/home/chexxor/Git/durian-dev/seatroot`, created with `node cli.mjs worktree`, deps installed offline (`npm ci
+--prefer-offline`, **4.4 s**), pinned pi linked (`scripts/sync-pi.mjs --link` → 9 `@earendil-works/*` links), and the oracle
+**verified runnable there by the delegate** (`demo/next-pointer`, `demo/seattools`, `demo/ctxline` each exit 0). The 12 seats
+were re-pointed at it. **`node tools/rig-portability-audit.mjs` went 15 findings → 2, and both survivors are ROADMAP 217.**
+The 12 `seat-root-unresolvable` findings are gone, and the **232 `seat-root-unmatchable` finding cleared as a side effect** —
+the stored roots now match a *registered* worktree under the guard's exact normalized equality, so the `seat-root` keep-reason
+is reachable on this host for the first time since the machine move. No phantom `C:\…` directory can be written again unless
+the store goes foreign (the filesystem name-scan is still the only instrument that sees that class).
 
-**What the wake did** (all re-measured, Linux): **6/6 intents delivered** (`INTENT delivered=6 dead=0 dup=0`); `pm` decomposed
-across two coordinator turns; queue rows **4,821 → 4,861**; **CLAIMABLE 0 → 16**; coverage `roadmap-queue-coverage` items ≥200
-named by a row **1 → 15**, with **no row 67 → 53**. The portability class was minted as ONE chain with ONE root: **263 #4847**
-(the one validating resolver) → **217 #4849** → **264 #4851** → **221 #4852 + 265 #4854** → **266 #4853** → **267 #4855** →
-**256 #4857**; **232 #4850** carries the 241 gate on **#4846**; **233 #4848**; the thin ranges **#4859–#4861**. `pm` revised
-its own **#4840/#4842** in place to "folded into 263/221 and 217/264" rather than forking a second seam, and registered
-**#4856** (`hold_work` refuses a row it created while `release_work` succeeded as sender — one-way authority).
-**Durable: D171.** **New hazard, and it is the headline for the next session: 16 rows are `queued` on a host where no
-registered shell exists and all 12 seat roots are foreign — a claimable row is not a runnable row.**
+**AND THE ACK THIS RIG MINTED YESTERDAY IS INERT — measured, not inferred.** `tools/broker-serve.mjs:322` computes the
+coordinator-ack wake set as `pending.filter((p) => p.to !== "?" && p.op === "?")`, i.e. only spool files with **no `op`
+field**. The product's own producer `intent.mjs` writes `{"op":"message", …}`, and the broker defaults a missing op to
+`"message"` (`src/broker.mjs:421`). So with the spool holding exactly two coordinator messages, `--dry-run --yes-pm-wakes
+--ack-coordinator-wake --max-duration 600` is **REFUSED** on `seat-shell-availability` with **no admissibility suffix** —
+the computed wake set is empty, so the ack can never be measured admissible. D169's remedy ("record the operator's ruling,
+do not bypass the guard") is therefore unexecuted in practice. Fix is one seam — ask the broker's own op-resolution what the
+op is — and it must be failing-first, not a fourth hand-rolled filter.
 
 ## NEXT SESSION
 
-**Current item: rule on the release ORDER — #4858 (`lead`, `queued`) is the landing plan the class is missing. Nothing in it
-is workable until something says in which order 217/221 land *before* the 16 claimable rows are allowed to wake a
-file-capable seat. Do not restart the broker to find out.** `pm` named the cost itself and reversed its own earlier `#3350`
-release rather than issue the rest: with no broker, no shell that exists and 12 phantom roots, "the class has no order in
-which anything is *workable*". The row is `lead`-addressed and claimable, so this needs a wake to act on — which is exactly
-the decision the operator now owns, not a gap to fill by hand.
+**Current item: choose the channel that wakes ONLY the coordinators, so lead can rule #4858 and `pm` can re-gate the 16
+claimable rows to that order.** There is now a second, independent reason a broker start must refuse even after the ack
+filter is fixed: with 16 claimable rows spread over 10 seats, the first-pass wake set is **not** coordinator-only. The
+product's own `toolRemovalsFor` removes the shell from **`pm` and `lead` only** — `architect`, `designer`, `advocate`,
+`auditor`, `security`, `scribe`, `devtools`, `impl`, `qa`, `qa2` all **keep** it (`review` and `security` are
+WORKING_CAPABILITIES, so "coordinator" is NOT a name for architect/designer/advocate/auditor/security; seat `capabilities`
+in `rig.selfdev.json` decide it, not the seat's name). **`cli.mjs pause` is rig-level only** (`to: null`, one control doc),
+so there is no per-seat gate to lean on. The only bootstrap that wakes exactly the two coordinators is
+`node cli.mjs send <seat> --body-file <file>` **with no broker running** — deprecated as a second harness owner, and
+admissible only for exactly that reason. Briefs are already written and spooled:
+`.spike/repoint-20261030/brief-pm-20261030.md`, `.spike/repoint-20261030/brief-lead-20261030.md` (rids in that directory).
 
-**Ordering is the team's verb.** `pm` minted it and it holds: **263 → 217 → 264 → 221 + 265 → 266 → 267**, with **232 gated on
-#4846** (the 241 design note — nobody touches `src/worktree.mjs:649` / `src/broker.mjs:1167` while it is open) and **#4858**
-sitting above the class. Read `docs/reviews/cross-os-rig-portability-2026-10-29.md` and `#4847`'s body before decomposing
-further; 263's acceptance is that the sweep **calls** the resolver — do not add a third path normalizer.
+**Ordering stays the team's verb.** lead's **#4858** (`queued`, `lead`-addressed, claimable) is the landing plan the class is
+missing: **263 → 217 → 264 → 221 + 265 → 266 → 267**, **232 gated on the 241 note (#4846)**. The delegate put ONE measured
+question in front of lead rather than deciding it: since the re-point, 217 is the *only* finding this rig's instrument
+reports, and 217 is what stops every author from running its own oracle — so may **#4849 (217)** be released AHEAD of
+**#4847 (263)**? 217 changes the seat-shell **registry** (`src/seattools.mjs`, `src/seatguard.mjs:122`, and
+`demo/seattools.test.mjs:30` which asserts the no-bash choice and must be rewritten failing-first) and does not touch path
+resolution, so it arguably does not fork 263's seam. If lead holds the order, it must name the mechanism by which 263's
+author runs any check on this host at all.
 
-**Two facts about waking that cost this session its share of wall-clock — read them before diagnosing again.**
-1. **Delivered ≠ woken.** `INTENT delivered=6` and every pass still logged `SKIP pm reason=pending conv=3`. That is the
-   **per-seat suppression** variant (`docs/runbooks/broker-down-or-stalled.md` case (b), one-seat variant), NOT a down broker
-   and not a wedged loop: fresh `heartbeatAt`, frozen `lastPassAt`, no `genlock`, GPU0 at 0 %. The remedy is
-   **stop → `resume` (broker STOPPED) → restart**, and it worked: `resume` found **9** and withdrew them (`pm #273999`
-   `placed→run-cancelled`, six `queued→settled`).
-2. **`resume` cuts a seat's in-flight work short.** Those six withdrawn `queued` submissions were `pm`'s remaining
-   generations — which is why the first turn produced 26 rows (**#4820–#4845**) on the memory/LINUX-track numbering and
-   **none** of the portability class. Completing the granted act needed one more coordinator turn, delivered with
-   `node cli.mjs send pm --body-file .spike/portability-brief-20261030.md --request-id <uuid>`; `send` settled
-   `done`. **`send` prints a DEPRECATION warning — it opens a full writing harness = a second owner.** It was admissible
-   only because no broker was running, and it is not the sanctioned path (`intent.mjs` + a startable broker is). Do not
-   reach for it while a broker drives.
+**Blocker:** three, none mine to lift. **(a)** The sanctioned channel's gate is broken (above) and no coordinator-scoped
+broker start exists while the claimable head stands — the operator has the channel question. **(b)** 53 registered items
+≥200 still have no row naming them (`236–238`, `243–252`, `254–255`, `258–262` among them). **(c)** OWES 2 (which verifier)
+is unanswered and `probe-preflight` still **REFUSES** (swap 58 %, MemAvailable 17.3 GiB, GPU1 95 % full — strata holds
+51.1 GiB RSS), so no verifier arm may start.
 
-**Blocker:** three, none mine to lift. **(a)** The class is un-wakeable as a *product* act: 16 claimable rows would wake
-`impl`/`devtools`/`scribe`/`qa`/`security` with **no registered shell that exists** (217) and a **foreign persisted root**
-(221), which is how the phantom dirs below got written. `--ack-coordinator-wake` will not cover a wake set containing them,
-by design. **(b)** 53 registered items ≥200 still have no row naming them (`236–238`, `243–252`, `254–255`, `258–262` among
-them) — `pm` registered the ranges thin on purpose, because it has no file tools and would not write 30 bodies from a
-summary of a doc it could not read. **(c)** OWES 2 (which verifier) is unanswered and `probe-preflight` still **REFUSES**
-today (swap **64 %**), so no verifier arm may start.
+**Five rows are `deferred` awaiting a HUMAN answer** — **#4813, #4354, #4816, #4817, #4814** (oldest parked 315 h;
+`queue-ageing 62.9 min`). The delegate recommended answers (below, §PARKED QUESTIONS); **the operator's adoption is what
+makes them answers.** Do not deliver them as rulings until adopted.
 
-**Older sessions are verbatim in [NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)** — this session's cut sits at archive lines 7900–8098.
-(`scripts/clockin.mjs` reads only this `## NEXT SESSION` section, so the link to this file's own history lives inside it on
-purpose — `demo/clockin-digest.test.mjs` fails if it drifts below the next heading.)
-
-**Next command (delegate, read-only first, in this order, ~35 s total; Linux):**
+**Next command (delegate, read-only first, in this order, ~40 s total; Linux):**
 
 ```bash
-node tools/roadmap-queue-coverage.mjs --min 200   # CLAIMABLE 16; 68 items >=200, 53 with NO row naming them. Re-run before reporting: this is the instrument that proves the wake landed (it read 1/67 last session).
-node tools/rig-portability-audit.mjs              # exit 1, 15 findings; --self-test exit 0. Re-run after any 217/221/263/266 work — it is the ~1s gate, and 267's oracle belongs per-session.
-node tools/broker-serve.mjs --status              # broker DOWN (I stopped it); no genlock. A --dry-run now refuses on seat-shell-availability WITHOUT the ack — correct: the wake set now contains file-capable seats.
-DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit   # 1 worktree, 12 seatRoots all foreign-shaped; `reapable: 0` is NOT a verdict (266)
-ls -A | grep -E '^[A-Za-z]:|\\|dsh-Projects'      # MUST print nothing. These are the phantom roots; git status CANNOT see them (.gitignore:12 `.durig/` matches at any depth). Evidence preserved in .spike/evidence-phantom-roots-20261029/
-DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json   # 61 findings, pass:true — a string comparison, not certification (D137); it never looks at a store-carried cwd (210/265)
-node demo/local-model-pointer.test.mjs            # PASS today; run after ANY model change (261's offline half)
-node tools/model-probes/probe-preflight.mjs       # REFUSE: MemAvailable 22.1 GiB, swap 5.1/8.0 GiB (64%), GPU0 12,648/16,376, GPU1 22,893/24,576. Any allowed arm: node tools/model-probes/capped-run.mjs --node-mem-max 6G -- <cmd>
+node tools/rig-portability-audit.mjs              # MUST be exit 1 with exactly 2 findings, both 217; --self-test exit 0. 12 seat-root-unresolvable ⇒ the store's roots went foreign again.
+node tools/roadmap-queue-coverage.mjs             # CLAIMABLE 16; 68 items >=200, 15 named / 53 no row. The instrument that proves the wake landed.
+node tools/broker-serve.mjs --status              # broker DOWN. BLOCK seat-shell-availability; spool holds 2 coordinator messages + 2 stale `?` read intents (>1 h).
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit   # 2 registered worktrees; `reapable: 0` is NOT a verdict (266)
+git worktree list --porcelain | grep '^worktree ' # MUST show 2: the live checkout + /home/chexxor/Git/durian-dev/seatroot
+ls -A | grep -E '^[A-Za-z]:|\\|dsh-Projects'      # MUST print nothing (git status cannot see `.durig/` leaks at any depth)
+DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run   # the ONLY surface that prints a seat's persisted cwd; must show changes:{} for 12 seats and no model resets
+node tools/model-probes/probe-preflight.mjs       # REFUSE: swap 4.7/8.0 GiB. Any allowed arm: node tools/model-probes/capped-run.mjs --node-mem-max 6G -- <cmd>
 git fsck --unreachable 2>/dev/null | grep -c '^unreachable commit'   # 0 (GRANT 3 held); refs/rescued 484 — read docs/runbooks/cross-clone-object-recovery.md before anything runs `git gc`
 node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs && node tools/doc-integrity-guard.mjs   # the clock-out trio, always all three
 ```
 
-**If the operator rules on a second wake, the sequence that worked, verbatim** (bounded, coordinator-scoped, 2026-10-30):
-back up the store → `node tools/broker-serve.mjs --start --yes-pm-wakes --ack-coordinator-wake --max-duration 600 --no-probe`
-→ watch `./selfdev.sqlite.broker.log`, not the store → expect `INTENT delivered=N` → if a seat shows `reason=pending`,
-`node tools/broker-serve.mjs --stop`; if it does not exit and **no `*.genlock.*` exists**, `kill -TERM <pid>` (mine landed
-late; prove `ESRCH` before touching the state file — I removed `selfdev.sqlite.broker.json` only after proving the pid gone)
-→ `node cli.mjs resume` → restart. `serve --stop` is a REQUEST. A broker that hits `--max-duration` may sit dormant past it.
+**To execute the channel ruling once the operator picks it** (recommended: `send`, because a broker start cannot be scoped
+to coordinators while 16 rows are claimable):
+`DURIG_DB=./selfdev.sqlite node cli.mjs send pm --body-file .spike/repoint-20261030/brief-pm-20261030.md --request-id <rid in .spike/repoint-20261030/rid-pm.txt>`
+then the same for `lead`. `send` **blocks until the whole generation settles**; a harness timeout that kills it strands the
+seat (`runbooks/broker-safe-change.md`). Delete the two stale `?` read intents from `selfdev.sqlite.broker.inbox/` before a
+start if a broker is ever chosen — they are >1 h `op:"read"` requests, not intents, and they pollute the wake line.
 
-## INCIDENT CLASS, measured on my watch — read before trusting `git status` as a safety check
+**PARKED QUESTIONS — delegate recommendations, pending the operator's adoption** (all grounded this session, no queue verb
+touched):
+1. **#4816 (pm→lead, the `brokerHealth`/`pass-failed` shape).** It is already answered twice and needs a SHAPE, not an
+   answer: lead ruled it at **#4822** (it is the GAP, not the contract; halves **#4819** defect = split attempt-time from
+   last-good-pass-time, **#4820** wiring = an attention row), and pm's own operator-approved row **#4844** is queued to lead
+   (`lastPassOkAt`/`lastPassAttemptAt`, `up`/`stalled`/`failing`, `pass-failed` as an ARGUMENT to the verdict). **Recommend:**
+   adopt #4844 verbatim, and `resume_work 4816` → complete citing #4822/#4844. Do not re-defer.
+2. **#4813 (impl→pm, the notice assertion).** **Recommend: close as answered-by-ruling, not built.** impl's refusal to write
+   the assertion was right — an idle rig cannot emit `pass-failed` at all, so a demo would pass because the mechanism does
+   not exist; the assertion belongs in **#4820**'s demo. impl's "stray count of 8 was wrong, I over-reported by NAME"
+   correction stands and is now closed by the measurement below.
+3. **#4817 (pm→devtools, re-measure the landing gate).** **Recommend: hand devtools the re-measured numbers and let them
+   land exactly one branch** (measured on `main` at this clock-out): `git log --oneline 910fac7..HEAD | wc -l` = **554**
+   commits; registered worktrees = **2**; stray `item-*` directories at the repo root = **0 by name AND by registration**
+   (so the ten plain directories are gone and the gate question they were waiting on has no strays left); `land.mjs` lives
+   at **`scripts/land.mjs`**, not `tools/`. The honest test of "does it still refuse" is one real landing, then confirm
+   `main` moved, then stop — never a batch.
+4. **#4814 (pm→qa2, re-measure with the sha).** **Recommend: close it.** Re-measured on `main`: `docs/NEXT.md` = **162
+   lines**, `docs/NEXT-ARCHIVE.md` = **8,264** lines — neither the scribe's 157 nor qa2's 186, because the pointer has been
+   re-cut twice since; both prior numbers were correct for their own trees. Any future count names its tree and command.
+5. **#4354 (pm→impl, name rung 9→10 + the ONE intersection fixture).** **Recommend: unblocked, but hold it until 217
+   lands.** Its blocker is clear — designer's **#4352 is `done`** and its re-derived §4 (NAME rung 10, "rung ≥ longest seat
+   name + 1", fixed 34→35) is in `docs/reviews/designer-landing-screen-spec.md`; and the work is genuinely owed, since
+   `src/tui/client.mjs:238` still reads `pad(truncate(sanitizeTerminalText(seat.name), 9), 9)` and the intersection fixture
+   (`architect4q · 175p`) exists in no demo. It is a failing-first golden-and-goldens change, which no seat can prove here
+   while 217 stands.
 
-During the 10-minute broker window, three repo-root directories named for another OS's absolute path appeared: **`C:`**,
-**`C:\Users\Alex\dsh-Projects\pi-opendurig`**, **`C:\Users\Alex\dsh-Projects\pi-opendurig\item-4789`**, containing
-`.durig/queue-{all,security,scribe,impl}.md` — harness per-seat views written into seats' foreign persisted roots (221 made
-visible, exactly as `tools/broker-serve.mjs` `phantom-seat-root-path` predicts). Proven by **name diff**, not counts: my
-pre-verb inventory `.spike/pre-wake-root.txt` (67 entries) vs after — exactly 3 new, **zero tracked changes, zero losses**.
-**They are invisible to `git status`** because `.gitignore:12` is `.durig/`, which matches at any depth — so the *filesystem*
-scan is the only instrument that sees this class, and this is the same shape as the 2026-10-26/28 file-loss incidents.
-Moved (not deleted) to `.spike/evidence-phantom-roots-20261029/` — 6 files. **Measured distinction that matters:** `pm`'s
-turn wrote **none** of them; only **file-capable** seats produce them, which is the coordinator exception holding in the
-wild. Do not "repair" this by pointing 12 seats at one root — that is F21 in a repair costume.
+## Rig state, re-measured at clock-out 2026-10-30T06:2xZ (Linux) — re-read, do not trust
 
-## Rig state, re-measured at clock-out 2026-10-30T05:0xZ (Linux) — re-read, do not trust
+**Store** `./selfdev.sqlite` (backed up at `.spike/repoint-20261030/store-backup-20261030-005816.sqlite`); **12 seats**, all
+12 now resolving to `/home/chexxor/Git/durian-dev/seatroot` (one shared root — the F21 compromise, see D172 §4).
+**Queue census 4,861 = 3,748 `done` / 778 `cancelled` / 301 `held` / 16 `queued` / 18 `deferred` → CLAIMABLE 16.**
+**Broker DOWN, deliberately** — the start was refused on the broken gate, and no coordinator-scoped broker exists while the
+claimable head stands. **Portability gate: exit 1, 2 findings (both 217); `--self-test` exit 0.** **Worktrees: 2**
+(this checkout + the seat root); `reapable 0`; branches 2; `refs/rescued/*` 484; unreachable 0; phantom-named dirs at repo
+root 0. **Pre/post name-diff over worktrees + branches + `.spike`: 4 added lines, zero deletions.** **Live tree: 0 tracked
+changes.** **Providers:** `local/iq3_s` (strata, GPU0) — pm, impl, lead, scribe, devtools, security, architect;
+`verifier/ministral-3-14b-reasoning` (`:1234`, GPU1) — qa, qa2, advocate, auditor, designer; **both answer and complete**.
+The store's stale `local/iq3_s` for the five verifier-family seats was reset by the re-point (D172 §4a). **flint NOT
+LOADED**; 8,192 ctx cannot hold a real verifier conversation (208). **Supervisor:** the last window logged
+`reason=degeneration` for `auditor, devtools, qa2` — pre-existing, UNVERIFIED here, no seat reset;
+`docs/runbooks/degeneration-guard.md` is the entry point. **Box:** 94 GB RAM, 17.3 GiB available, **zram swap 4.7/8.0 GiB
+(58 %)** is the ceiling; GPU0 12,648/16,376 MiB, GPU1 23,468/24,576 MiB (95 %); strata holds 51.1 GiB RSS.
+**`LocalRTC=yes` on a dual-boot box** while every broker gate is `Date.now()` arithmetic — `timedatectl set-local-rtc 0` is
+host-wide, so it stays the operator's call (ROADMAP 234).
 
-**Store** `./selfdev.sqlite`: **137,427+** entries; **12** seats. **Queue census 4,861 = 3,748 `done` / 778 `cancelled` /
-301 `held` / 16 `queued` / 18 `deferred` → CLAIMABLE 16** (was 0 at clock-in). **Broker DOWN by me, deliberately** — the
-granted wake's window closed; the channel is stopped because the 16 claimable rows are not runnable here.
-**Portability gate** `tools/rig-portability-audit.mjs`: exit **1**, **15 findings**; `--self-test` exit **0**.
-**Providers:** `local/iq3_s` (strata `:47831`, GPU0) — `pm, impl, lead, scribe, devtools, security, architect`;
-`verifier/ministral-3-14b-reasoning` (`:1234`, GPU1, `--ctx-size 8192 --parallel 4`) — `qa, qa2, advocate, auditor, designer`.
-Both answered at preflight. **flint NOT LOADED** (Q4_K_M on disk); 8,192 cannot hold a real verifier conversation (208).
-**Unsettled submissions:** 9 found by `resume`, all withdrawn (that count is now 0 for the seats it touched).
-**Worktrees:** 1 (this checkout, `main`); branches 2; `refs/rescued/*` **484**; unreachable **0**; seat roots **12, all
-foreign-shaped**; phantom-named dirs at repo root **0** (moved, evidence kept). **Supervisor:** every pass of my run logged
-`supervisor: escalated … reason=degeneration` for **auditor, devtools, qa2** — pre-existing degenerate claims from the
-Windows era, UNVERIFIED here; `docs/runbooks/degeneration-guard.md` is the entry point, and no seat was reset.
-**Box:** 94 GB RAM, **22.1 GiB available**, **zram swap 5.1/8.0 GiB (64 %)** — swap, not VRAM, is the ceiling; GPU0 RTX
-A4000 12,648/16,376 MiB (seats), GPU1 RTX 3090 22,893/24,576 MiB (verifier, 93 % full).
+## OPERATOR GRANTS (six from 2026-10-29, D165; the seventh this session, D172)
 
-## OPERATOR GRANTS (six accepted 2026-10-29T05:0xZ; durable record D165) — and OWES (now one)
-
-1. **221 seat-root, ruling A** — the persisted per-seat root becomes the workspace-root-relative **name**; no migration
-   code; implementation is the team's (failing-first demo, `src/`). Amended by D170: `up --root` **does not exist**; today
-   the only mechanism is `DURIG_SEAT_ROOT` + `up --refresh`, which is **bulk** (all 12 seats). Now **row #4852**, held,
-   gated behind #4847.
-2. **"The queue drains" predicate granted** — every released row reaches a terminal state within one resident-broker day,
-   AND no `held` row older than 7 days survives a `pm` pass unreleased/uncancelled. 231 is the product half; **#725/#726/#727
-   stay `held`** until it exists and `pm` releases them. **Releases are `pm`'s verb; the start is the operator's.**
-3. **Mint the refs — done** (452 → 0 unreachable, 484 refs, reversible per ref). **232 itself stays gated** on the 241 note:
-   nobody touches `src/worktree.mjs:649` / `src/broker.mjs:1167`, and no suite runs from this checkout while it is open.
-4. **233 instrument hygiene — GRANTED, LARGELY DONE.** 262's product half (`check`/`doctor` wiring + a shape check on the
-   runbook index) is open.
-5. **Verifier — GRANTED, amended by measurement (D166): both local candidates measured and REJECTED.** The whole-module
-   mutant run waits on OWES 2; **do not re-run the finished fragment run.** D137's cross-family rule, not the 3090, is the
-   constraint; a download grant is priced in `docs/runbooks/verifier-model-server.md`; k=1 gate **before** adoption.
-6. **Start decomposition, not seats; hygiene threshold accepted.** **This session executed the decomposition half.** Scale
-   gate: hard dimensions zero (no leaked worktree, no stray seat, no branch unmerged while its item reads `done`) over the
-   bounded 2-seat rehearsal, ≤2 soft violations per seat-run, then 5, 12. **The phantom dirs above are a soft violation
-   already on the record — count them, do not launder them.**
-
-**OPERATOR OWES (one):** **which verifier (D166).** **(A)** remote cross-family verifier — the only option satisfying **253**
-today, needs a funded key; **(B)** the corrected local flint re-run (Q4_K_M, **ctx ≥ 24k, `--parallel 1`**, bounding system
-message, ~40 min GPU, no money) — highest-value cheap lever, **but the box refuses today** (swap 64 %); **(C)** verification
-stays uncertified and `single-model-rig` stays red as an honest finding (D137). **Recommendation unchanged: (B) then (A).
-Do not route ministral** — fast + wrong on 16/16 clean controls would clear `single-model-rig` while making verification worse.
-A **release order for the portability class** is `pm`'s/`lead`'s verb and now has a row (**#4858**); it becomes actionable
-the moment the operator rules on whether a broker may run at all here.
+1–6. Unchanged from the archived pointer (seat-root ruling A; the "queue drains" predicate; mint the refs; instrument
+hygiene; the verifier paths; decomposition-not-seats with the scale gate). **Grant 6's scale gate now has a cheaper
+rehearsal available:** `impl` authors 217 in the isolated tree with `write`/`edit`, the delegate runs
+`demo/seattools.test.mjs`, `qa` reviews by reading — 2 seats, oracle run by the delegate.
+7. **NEW — this host, not the Windows box.** Isolated Linux worktree of `main` as the seat root; `up --refresh` under
+`DURIG_SEAT_ROOT` applies it; the five model resets and the one shared root are its accepted costs. **Nothing from the
+isolated tree lands on `main` without a landing act, and no landing runs while a wake window is open.**
 
 ## Do not "fix" these on the strength of the docs
 
-**A `BLOCK seat-shell-availability` is not advice to bypass it, and it is not proof the whole start is unsafe** — the
-operator's ruling now has a name (`--ack-coordinator-wake`), and that name **refuses** when any wake-set seat keeps the
-shell tool. **`--yes-pm-wakes` does NOT acknowledge the shell block** (measured: the first `--start` was refused with it).
-**Delivered ≠ woken**; `SKIP <seat> reason=pending` is a per-seat suppression, and no broker-level remedy fixes it —
-`resume` does, with the broker stopped. **`resume` cancels in-flight generations**; it cut `pm`'s decomposition short and
-cost a second turn. **`send` is deprecated as a second harness owner** — admissible only with no broker running. **A
-`queued` row is not a runnable row** on a host with no shell and foreign roots. **`git status` cannot see `.durig/` leaks**
-at any depth; scan the filesystem by name. **A `--dry-run` that names no removals is not evidence there are none**; its
-finding count moves for real reasons (probe transience, `live-tree-dirty` from my own edits) — **re-run before reporting,
-and never read an exit code through a pipe** (`| tail` reports `tail`'s status; I nearly reported the portability gate as
-exit 0). **A promoted instrument is "cited but untracked" until you stage it.** **Append to a growing file with `>>`; never
-rewrite a file from its own contents** (D170) — and **diff names, not counts**. **Never quote shas.**
+**A `BLOCK seat-shell-availability` is not advice to bypass it** — but it is also not proof the start is unsafe: check
+whether the finding is *computing* anything. `--ack-coordinator-wake` currently never can (the `op === "?"` filter above).
+**A broker start is not coordinator-scoped just because you addressed coordinators** — the queue's claimable head decides
+who wakes. **`pause` is rig-level**; there is no per-seat gate. **"Coordinator" is a capability verdict, not a seat name** —
+`review` and `security` keep the shell. **A `--refresh` without `DURIG_SEAT_ROOT` exported repairs nothing about the root**
+(it writes `cwd` only when defined, `cli.mjs:679`), and `--refresh` is all-12 at once and applies model resets you did not
+ask for — read its `wouldReset`. **`vendor/pi-main` is gitignored, so a new worktree has none**: copy the built one
+(723 MB, 2 s) and run `sync-pi --link` rather than rebuilding the pin; `npm ci --prefer-offline` is 4.4 s offline, not the
+~12 s quoted in the code comment. **`git status` cannot see `.durig/` leaks** at any depth; scan the filesystem by name.
+**A `--dry-run` that names no removals is not evidence there are none.** **Never read an exit code through a pipe.**
+**A promoted instrument is "cited but untracked" until you stage it.** **Append to a growing file with `>>`; never rewrite a
+file from its own contents** (D170) — and **diff names, not counts**. **Never quote shas.**
