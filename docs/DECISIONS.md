@@ -6941,3 +6941,18 @@ list and that `node_modules` is absent in its own worktree — both false in the
 gitignored `durig.config.json`, so a whole-suite sweep run inside one manufactures a **FALSE RED** —
 `demo/local-model-pointer.test.mjs` is exit 1 in `item-4898` (no `local` provider configured) and exit 0 in the seat
 root. Attribute every RED to a tree before calling it a regression.
+
+**Clock-out note (D178): what cost wall-clock, and what would shorten the next one.** (1) **The 200-line pointer cap is
+now the dominant cost of a clock-out** — ~40 min went to re-compressing `docs/NEXT.md` from 213 to 199 lines because the
+pointer had grown past the cap mid-session and every new fact displaced another. The cap is right (a 4,724-line pointer
+overflowed a 50 KB read cap into 8 chunked reads — see the comment in `demo/next-pointer.test.mjs`), but the *act* it
+demands is mechanical: a seat should own it. Proposed row for pm/devtools: a `tools/pointer-fit.mjs` that prints the
+per-paragraph line counts and the archive-append command with the `sed -n "s,e p"` proof filled in, so the next delegate
+spends judgement on what to cut, not on `wc -l` loops. (2) **Two measurements I re-derived by hand this session are now
+one command each** — `.spike/fix-20261101/rows.mjs` prints the row state, the parked-on-pm set, and the reachability map
+from `queue --json` / `status --json`; promote it to `tools/` if the team accepts the finding that `status.attention`
+under-reports over-window seats. (3) **Wake yield, measured:** the queue sat ~1.5 h with zero movement because no seat
+was awake; one `send` moved 3 rows and cleared 2 acts in ~20 min of wall clock (21:14:31 → 21:31:09). A brief that
+carries TWO items plus their release instruction, with the approved values inlined (branch lag makes doc-section anchors
+unusable), roughly doubles what one wake returns. (4) **A fresh worktree costs a false RED** unless the gitignored
+`durig.config.json` is copied or the sweep is attributed per tree — check for that file before believing any suite RED.
