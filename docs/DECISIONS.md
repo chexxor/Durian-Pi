@@ -6922,3 +6922,21 @@ delegate-run suites in the seat root, `node demo/seatguard.test.mjs` exit 0 "PAS
 `local/iq3_s` and `verifier/…` — the `rig.selfdev.json`-vs-docs model mismatch is why `SELFDEV.md` tells you to
 re-derive the seat table rather than read it.
 
+
+**Outcome (recorded after the decision was written, because it changed the decision's meaning).** The one wake
+(`send impl`, request id `d178-impl-4849-4887`, cwd = the approved seat root, `DURIG_SEAT_ROOT` set, store backed up to
+`.spike/fix-20261101/store-backup-pre-send-20261030-161115.sqlite` first) settled `done` / `stopReason: stop` and moved
+three rows: **#4849 `done`**, **#4898 `done`**, **#4887 released to `queued`** for the next owner. The seat performed
+BOTH acts pm attached to the withdrawn #4894 — so "a seat cannot act without a shell" was too strong: `claim`,
+`complete` and `prepare_workspace` are rig tools, not shell verbs. What the missing shell costs is exactly `git`: the
+seat used `prepare_workspace`, which created a **new locked worktree + branch `item-4898` off the seat root's HEAD
+`3860e5d1`**, and its commit act is now a ruling for someone who can run `git` — the same blocker from the other side.
+Delegate-run verification of that build: `node --check` ×3 exit 0, `demo/config.test.mjs` exit 0 including a new
+COMPACTION POLICY section (the 2 `DURIG_MODEL_*` regressions D177 predicted did NOT fire), full sweep 2 RED both
+attributed by the #4895 method. **Two findings routed, not fixed:** the seat's report claimed there is no `CONFIG_KEYS`
+list and that `node_modules` is absent in its own worktree — both false in the tree it was working in (`CONFIG_KEYS` at
+`src/config.mjs:111`; `node_modules` present with `@mariozechner/pi-coding-agent` 3.1.6 and 2.8.3), and the four new
+`DURIG_COMPACTION_*` keys are **not** registered in it. **Durable lesson, generalized:** a fresh worktree carries no
+gitignored `durig.config.json`, so a whole-suite sweep run inside one manufactures a **FALSE RED** —
+`demo/local-model-pointer.test.mjs` is exit 1 in `item-4898` (no `local` provider configured) and exit 0 in the seat
+root. Attribute every RED to a tree before calling it a regression.
