@@ -6935,8 +6935,9 @@ Delegate-run verification of that build: `node --check` ×3 exit 0, `demo/config
 COMPACTION POLICY section (the 2 `DURIG_MODEL_*` regressions D177 predicted did NOT fire), full sweep 2 RED both
 attributed by the #4895 method. **Two findings routed, not fixed:** the seat's report claimed there is no `CONFIG_KEYS`
 list and that `node_modules` is absent in its own worktree — both false in the tree it was working in (`CONFIG_KEYS` at
-`src/config.mjs:111`; `node_modules` present with `@mariozechner/pi-coding-agent` 3.1.6 and 2.8.3), and the four new
-`DURIG_COMPACTION_*` keys are **not** registered in it. **Durable lesson, generalized:** a fresh worktree carries no
+`src/config.mjs:111`; `node_modules` present with `@mariozechner/pi-coding-agent` 3.1.6 and 2.8.3), and the five new
+`DURIG_COMPACTION_*` keys (`ENABLED`, `MODEL_OVERRIDES`, `RESERVE_TOKENS`, `KEEP_RECENT_TOKENS`, `BACKGROUND_TOKENS`) are
+**not** registered in it. **Durable lesson, generalized:** a fresh worktree carries no
 gitignored `durig.config.json`, so a whole-suite sweep run inside one manufactures a **FALSE RED** —
 `demo/local-model-pointer.test.mjs` is exit 1 in `item-4898` (no `local` provider configured) and exit 0 in the seat
 root. Attribute every RED to a tree before calling it a regression.
