@@ -6450,3 +6450,72 @@ ministral measured, so the "which verifier" question is now evidence-shaped rath
 *Calibration I want in the record, so the next session does not oversell:* after 217/263/264 land, the honest claim is **"the host-dependent layer is ours, it validates, and one real seat turn is proven on each named host"** — not "durian-pi is cross-platform". A claim with no per-host artifact behind it is the exact failure mode 267 exists to prevent.
 *Blind spots, and one of them is mine:* while assembling this pointer I ran a read-modify-write of `docs/NEXT-ARCHIVE.md` that **truncated it in place (7,687 → 207 lines)**; `git status` caught it before commit and `git checkout --` restored it byte-identical (md5 `712c4097…` matches HEAD) — which is only true because the archive is **tracked**, the same lesson 233/239 already teach about untracked work, now demonstrated on a delegate instrument rather than a seat's. Append to a growing file with `>>`, never by rewriting it from its own contents, and check `wc -l` **before** the first write to any file you intend to grow. Two inventories also both printed `171` for `.spike` while each counted itself — one scratch entry in, one unaccounted, no tracked loss, and a controlled probe cleared `up --refresh --dry-run` and `worktree audit` as the mover; the count could not answer that, so the runbook now says diff **names**.
 *Do not:* call the audit's 15 findings a fix; "repair" a dead cwd by pointing every seat at one root; add a third path normalizer (263's acceptance is that the sweep **calls** the resolver); or start a wake on the strength of this class — the channel stays down and the wake ask is unchanged.
+
+**D171 (2026-10-30). An operator ruling a guard cannot express is not a ruling — instrument the exception, do not bypass the guard; and the closed loop D169 named is open, at a measured price.**
+
+**What the operator decided.** Asked for one bounded, coordinator-scoped `pm` wake (OWES 1), the operator answered **"yes"**
+at 2026-10-30T04:2xZ. This is the first operator grant in this rig's history that a preflight then refused to execute.
+
+**1. The finding is about the instrument, not the loop.** `node tools/broker-serve.mjs --start --yes-pm-wakes
+--max-duration 600` printed **`START REFUSED: seat-shell-availability`**. `--yes-pm-wakes` acknowledges the *spool*
+(D147 §1) and `--allow-dirty` acknowledges the *tree*; **`seat-shell-availability` had no ack flag at all**, so the start was
+refused *no matter what the operator decided*. A preflight exists to make an operator-owned hazard visible before a write;
+a hazard the operator has ruled on and the tool still cannot record turns the preflight into a veto it does not own. That is
+the second face of D169's loop: the loop was not only "no row exists", it was **"the ruling has no representation."**
+
+**2. The exception is measured, never asserted.** `--ack-coordinator-wake` does not waive the block. For every seat in the
+predicted first-pass wake set it asks the product's own `toolRemovalsFor` (`src/seattools.mjs:249`, `COORDINATOR_REMOVALS`)
+whether that seat keeps the shell tool. A seat that loses its shell also loses `read`/`write`/`edit`/`prepare_workspace`, so
+for exactly those seats the absent shell guards an act that runs no command and lands no artifact. Applied to the live rig
+file (Linux, `Alex-Desktop-Win10`, node v24.22.1): **`pm` and `lead` are coordinators** (`keepsShell=false`); **the other ten
+keep the shell** — so the downgrade is neither vacuous nor general, and it requires `--max-duration`. Measured behaviour:
+without the ack `--dry-run` exits **1**; with it, the finding becomes a NOTE; `--start` with the ack and no `--max-duration`
+exits **2**; and after the spool emptied of intents the ack **correctly declined** (an empty wake set is absence of evidence,
+not evidence nobody shell-needing wakes).
+*Why not just run `cli.mjs serve` directly:* that skips every other check in the preflight and leaves no record. The pointer's
+own line — "name the exception, do not bypass the guard" — was followed by **giving the exception a name**.
+
+**3. Two wake semantics I had to learn out loud, and they are the cheap part of future sessions.** (a) **Delivered ≠ woken**:
+`INTENT delivered=6 dead=0 dup=0` and every pass still logged `SKIP pm reason=pending conv=3` — the **per-seat suppression**
+variant (runbook `broker-down-or-stalled.md` case (b), one-seat variant), discriminated by fresh `heartbeatAt` + frozen
+`lastPassAt` + no `genlock` + GPU0 at 0 %. Remedy: **stop → `resume` (broker STOPPED) → restart**; `resume` found **9** and
+withdrew them. (b) **`resume` cancels in-flight generations.** Six of the withdrawn submissions were `pm`'s remaining
+queued generations, which is why turn one produced 26 rows (**#4820–#4845**) on the memory/LINUX-track numbering and **zero**
+of the portability class. Completing the granted act needed a second coordinator turn via
+`cli.mjs send pm --body-file … --request-id …` (settled `done`). **`send` prints a DEPRECATION warning: it opens a full
+writing harness = a second owner.** It was admissible only because no broker was running; the sanctioned path stays
+`intent.mjs` + a startable broker. **Do not reach for `send` while a broker drives.**
+
+**4. What the wake bought, measured by instruments rather than by my narration.** Queue rows **4,821 → 4,861**;
+**CLAIMABLE 0 → 16**; `tools/roadmap-queue-coverage.mjs` items ≥200 named by a row **1 → 15**, no-row **67 → 53**.
+`pm` minted ONE seam: **263 #4847 → 217 #4849 → 264 #4851 → 221 #4852 + 265 #4854 → 266 #4853 → 267 #4855 → 256 #4857**, with
+**232 #4850** gated on the 241 note (**#4846**, which it minted as an artifact because the note had no row to hang a gate on),
+**233 #4848**, thin ranges **#4859–#4861**, and **#4858** (`lead`) registering the missing **landing plan**. It **revised
+#4840/#4842 in place** ("folded into 263/221 and 217/264 — hold on claim") instead of forking a second seam, and registered
+**#4856** when `hold_work` refused a row it had created while `release_work` succeeded as sender — one-way authority. It also
+**reversed its own earlier `#3350` release** rather than release into an unworkable class. That is the discipline this rig
+exists to produce, and it happened under a 600-second window.
+
+**5. The price, and it goes on the record as a soft violation, not a clean run.** Inside that window, three repo-root
+directories named for another OS's absolute path appeared — **`C:`**, **`C:\Users\Alex\dsh-Projects\pi-opendurig`**, and
+**`…\item-4789`** — holding `.durig/queue-{all,security,scribe,impl}.md`: harness per-seat views written into the foreign
+persisted cwds (221 made visible). Proven by **name diff** (`.spike/pre-wake-root.txt`, 67 entries → exactly 3 new, zero
+tracked changes, zero losses), preserved by **moving** to `.spike/evidence-phantom-roots-20261029/` (6 files). **They are
+invisible to `git status`, because `.gitignore:12` is `.durig/`, which matches at any depth** — so a clean `git status` is
+NOT evidence a seat wrote nowhere, and the filesystem scan (`phantom-seat-root-path`) is the only surface that sees this
+class. This is the same shape the 2026-10-26 and 2026-10-28 incidents recorded. **Measured distinction that decides the
+exception:** `pm`'s turn wrote **none** of them; only **file-capable** seats produce them — the coordinator exception holding
+in the wild, not just in the predicate.
+
+**6. The standing conclusion, and it is uncomfortable.** Opening the channel **worked** and the team **did** decompose. But
+the result of decomposition is **16 `queued` rows on a host where no registered shell exists and all 12 seat roots are
+foreign** — so `--ack-coordinator-wake` now refuses any further wake by design, and the honest reading is: **a claimable row
+is not a runnable row.** The rig's bottleneck moved from "nothing is tracked" to "the work is tracked and this machine cannot
+execute it." 217 and 221 are therefore not hygiene items any more; they are the gate on whether this box can run its own
+team at all, and #4858 (the release order) is the next real decision.
+
+**Falsifiable next session.** `ls -A | grep -E '^[A-Za-z]:|\\|dsh-Projects'` must print **nothing**; if it prints anything,
+a seat woke and 221 fired again — name-diff against `.spike/pre-wake-root.txt` before touching it.
+`tools/roadmap-queue-coverage.mjs` must not regress below **15 named / 53 no-row**. If a delegate runs
+`--start --yes-pm-wakes` and reports "the operator granted it", they did not read this decision: **`--yes-pm-wakes` does not
+acknowledge `seat-shell-availability`.** If anyone calls this session's run "green", they did not count the phantom dirs.
