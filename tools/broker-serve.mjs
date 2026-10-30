@@ -63,12 +63,18 @@ const USAGE = `node tools/broker-serve.mjs [--status] [--dry-run] [--start [--ma
   --db / --rig     override the store / rig file; default = effective DURIG_DB config + rig.selfdev.json
   --allow-dirty    acknowledge the F23 hazard: tracked files modified in the live tree while
                    seats have no isolated cwd (a woken seat's cwd is this process's cwd, F12).
-  --allow-stale-cwd  acknowledge seat cwd values that cannot resolve on this OS.`;
+  --allow-stale-cwd  acknowledge seat cwd values that cannot resolve on this OS.
+  --ack-coordinator-wake  acknowledge seat-shell-availability for a start whose ENTIRE first-pass
+                   wake set is coordinators. NOT a waiver: the exception is measured per seat with
+                   the product's own toolRemovalsFor (src/seattools.mjs:249) — a seat that loses its
+                   shell also loses write/edit/read, so waking it runs no command and lands no
+                   artifact, and the absent shell is irrelevant to it. If ANY seat in the wake set
+                   keeps the shell tool, the block stands. Requires --max-duration on --start.`;
 
 // ---------------------------------------------------------------- args
 
 const argv = process.argv.slice(2);
-const flags = { action: "status", maxDurationS: null, allowDirty: false, allowStaleCwd: false, yesPmWakes: false };
+const flags = { action: "status", maxDurationS: null, allowDirty: false, allowStaleCwd: false, yesPmWakes: false, ackCoordinatorWake: false };
 let dbOverride = null;
 let rigOverride = null;
 for (let i = 0; i < argv.length; i++) {
@@ -80,6 +86,7 @@ for (let i = 0; i < argv.length; i++) {
 	else if (a === "--allow-dirty") flags.allowDirty = true;
 	else if (a === "--allow-stale-cwd") flags.allowStaleCwd = true;
 	else if (a === "--yes-pm-wakes") flags.yesPmWakes = true;
+	else if (a === "--ack-coordinator-wake") flags.ackCoordinatorWake = true;
 	else if (a === "--db") dbOverride = argv[++i];
 	else if (a === "--no-probe") flags.noProbe = true;
 	else if (a === "--rig") rigOverride = argv[++i];
@@ -90,6 +97,12 @@ for (let i = 0; i < argv.length; i++) {
 }
 if (flags.maxDurationS !== null && !(flags.maxDurationS > 0)) {
 	console.error(`broker-serve: --max-duration must be a positive number of seconds, got ${flags.maxDurationS}`);
+	process.exit(2);
+}
+// The coordinator exception is only ever a BOUNDED act: it opens the channel on a host where most
+// seats cannot run a command, so an unbounded broker is not an acceptable price for it.
+if (flags.ackCoordinatorWake && flags.action === "start" && flags.maxDurationS === null) {
+	console.error("broker-serve: --ack-coordinator-wake requires --max-duration <s> on --start (the wake must be bounded).");
 	process.exit(2);
 }
 
@@ -280,7 +293,7 @@ finding("persisted-cwd-unreadable", "note", "this check validates the RIG FILE o
 // entries, newest #274074 (conv 4930 = devtools) at 2026-10-28T17:09:07Z — inside the last broker pass. A seat
 // that cannot run `node demo/<name>.test.mjs` cannot satisfy the completion rule or the constitution's oracle.
 try {
-	const { seatTools } = await import("../src/seattools.mjs");
+	const { seatTools, toolRemovalsFor } = await import("../src/seattools.mjs");
 	const shellName = seatTools.shell?.name ?? "(no shell tool registered)";
 	const durable = join(REPO, "vendor/pi-main/packages/durable/src/tools/bash.ts");
 	let programs = ["pwsh", "powershell"];
@@ -293,7 +306,27 @@ try {
 	const probe = IS_WINDOWS ? ["where", []] : ["sh", ["-c", 'command -v "$1"', "probe"]];
 	const resolved = programs.filter((p) => spawnSync(probe[0], [...probe[1], p], { encoding: "utf8" }).status === 0);
 	if (resolved.length) finding("seat-shell-availability", "note", `the seat shell tool "${shellName}" resolves here (${resolved.join(", ")}) — still confirm the seat INSTRUCTION in ${RIG} names that tool`, "ROADMAP 217's second half: the per-seat instruction text is operator-owned");
-	else finding("seat-shell-availability", "block", `the seat shell tool is registered as "${shellName}" and spawns [${programs.join(", ")}], NONE of which exists on ${process.platform} — every seat shell call is a guaranteed spawn error, so a woken seat can edit but cannot run the demo suite (the constitution's oracle) or run git, and its completions are self-declared`, "ROADMAP 217: host-conditional shell tool in src/seattools.mjs (pi-durable already ships createBashTool; src/tui/durable/adapter.mjs:612 already installs it) + the operator-owned instruction text in " + RIG + "; demo/seattools.test.mjs:30 currently ASSERTS the no-bash choice and must be rewritten failing-first");
+	else {
+		// D169 named the closed loop: 217 needs a woken seat, and the block refuses the wake *because* 217
+		// has not landed. The operator can rule on that, and the instrument has to be able to RECORD the
+		// ruling rather than only refuse it — but the exception is MEASURED, never asserted from a seat's
+		// name. toolRemovalsFor (src/seattools.mjs:249, COORDINATOR_REMOVALS) removes read/write/edit/shell/
+		// prepare_workspace from any seat declaring no WORKING_CAPABILITY, so for exactly those seats the
+		// absent shell guards an act that runs no command and lands no artifact. Admissible only when EVERY
+		// seat in the predicted first-pass wake set is a coordinator by that predicate.
+		const wakeSet = [...new Set(pending.map((p) => p.to))];
+		const needsShell = [];
+		for (const name of wakeSet) {
+			const seat = (rig?.seats ?? []).find((s) => s.name === name);
+			if (!seat) needsShell.push(`${name}(absent from ${RIG})`);
+			else if (!toolRemovalsFor(seat).includes(seatTools.shell)) needsShell.push(name);
+		}
+		if (wakeSet.length && !needsShell.length && flags.ackCoordinatorWake) {
+			finding("seat-shell-availability-acked", "note", `seat-shell-availability DOWNGRADED for this start: the absent shell (${programs.join(", ")}) guards NOTHING in the first-pass wake set (${wakeSet.join(", ")}) — the product's own toolRemovalsFor reports each as a coordinator: no shell, no write, no edit, no read, so this wake runs no command and lands no artifact. Bounded to ${flags.maxDurationS ?? "?"}s. FIRST PASS ONLY: routing can wake a file-capable seat, for which 217 is real and its persisted root is foreign (221) — watch one pass, then --stop and re-run --status.`, "ROADMAP 217 still owed: host-conditional shell tool in src/seattools.mjs + the operator-owned instruction text in " + RIG + "; demo/seattools.test.mjs:30 asserts the current choice and must be rewritten failing-first");
+		} else {
+			finding("seat-shell-availability", "block", `the seat shell tool is registered as "${shellName}" and spawns [${programs.join(", ")}], NONE of which exists on ${process.platform} — every seat shell call is a guaranteed spawn error, so a woken seat can edit but cannot run the demo suite (the constitution's oracle) or run git, and its completions are self-declared${wakeSet.length && !needsShell.length ? ` | a coordinator-scoped exception IS measurable for this wake set: ${wakeSet.join(", ")}` : ""}${needsShell.length ? ` | NOT admissible: these wake-set seats keep the shell tool: ${needsShell.join(", ")}` : ""}`, "ROADMAP 217: host-conditional shell tool in src/seattools.mjs (pi-durable already ships createBashTool; src/tui/durable/adapter.mjs:612 already installs it) + the operator-owned instruction text in " + RIG + "; demo/seattools.test.mjs:30 currently ASSERTS the no-bash choice and must be rewritten failing-first. For one bounded coordinator-scoped wake the operator may ack it: --ack-coordinator-wake with --max-duration <s>.");
+		}
+	}
 } catch (err) {
 	finding("seat-shell-probe-failed", "note", `could not resolve the seat shell: ${err.message}`, "non-fatal for this preflight, load-bearing for the start: run tools/channel-preflight.mjs §7");
 }
