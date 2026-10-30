@@ -6580,3 +6580,82 @@ re-point all 12 at once and per-seat re-point is exactly what #4852 lacks.
 conversation (`cli.mjs:699-706` `tx.createConversation` per seat), and the queue with its party-scoped gates and claim leases *is* the product — **on condition the question be researched rather than held as chat opinion**. Registered as
 **#4885** (architect, held, trigger-gated on the report landing); the request prompt is `docs/reviews/seat-scoped-durable-state-research-prompt.md`, and only the operator can route it to the off-host research agent.
 
+
+---
+
+## D174 — the verifier leg was killed by a ROLE SEQUENCE plus migration residue, not by its context window; raising the window was necessary and is not sufficient (delegate, 2026-10-30, Linux)
+
+**What the previous record claimed, and why it had to be re-opened.** D173 recorded the dead verifier leg as `n_ctx 8192`: both `send qa`
+attempts returned `model_error` with no reply, and a direct request to the served model was refused with `exceed_context_size_error:
+request (9129 tokens) exceeds the available context size (8192 tokens)`. That measurement was real. The *attribution* was wrong, and
+re-testing it in one command falsifies it: the seat request the harness sends the verifier is refused **before** the window is ever
+reached, in ~30 ms with zero tokens generated, by the chat template — `Engine protocol predict request returned 500 … Jinja Exception:
+After the optional system message, conversation roles must alternate user and assistant roles except for tool calls and results.` The
+check is LM Studio's own: lines 43-52 of the template it generated for this model
+(`.lmstudio/.internal/temp/lmstudio-chat-template-*/chat-template.jinja`, preceded by the comment `Checks for alternating user/assistant messages.`).
+
+**The shape that triggers it, pinned at its minimum.** After a clean `cli.mjs reset qa` **with no handoff**, the outgoing conversation is
+three messages — `system, user, user` — and that alone is enough: the `reset <seat> <handoff>` handoff is a **user** turn and `send` appends
+another. So the product writes consecutive user roles in its normal operation, and a strict-template model refuses them outright.
+
+**Why the rig tolerated this until now.** The residue predates the provider move. Counting `pi.user` / `pi.assistant` entries per seat
+(`cli.mjs log <seat> --limit 400`): qa 184 user turns / 193 errored assistant turns / **1** assistant turn carrying any text; qa2 189/189/1;
+auditor 158/159/**0**; pm 140; lead 181; impl 157. 180 of qa's errors read `402: {"message":"You need positive balance to do inference` —
+this rig's verifier used to be a **paid cloud provider**, those turns never got answers, and the store came over in the Windows→Linux move
+while the answers did not. The local provider (Strata `iq3_s`, declared window 200,000) accepts consecutive user turns, which is why the
+local seats look healthy and only the verifier cannot wake at all. Read this as migration residue meeting a strict template, i.e. a member
+of the same portability class as 217/221/263/265 — not as a model-capacity problem.
+
+**What was changed on the host, by the operator's explicit instruction to use LM Studio's own API.** `lms unload` then
+`lms load mistralai/ministral-3-14b-reasoning -c 16384 --parallel 1 --gpu max` (the CLI shipped in LM Studio's own package, reached with
+`HOME` pointed at the flatpak's `.lmstudio`; the app's REST surface on `:1234` exposes only `GET /api/v0/models` on this build — `POST`,
+`PATCH`, `PUT`, `DELETE` on that route all answer `Unexpected endpoint or method`). Before: `--ctx-size 8192 --parallel 4`; after: `--ctx-size 16384 --parallel 1`,
+confirmed three ways — `/api/v0/models` reports `loaded_context_length: 16384`, the new `llama-server` cmdline reads `--ctx-size 16384 --parallel 1`,
+and the identical 9,627-token probe that returned **HTTP 400** now returns **HTTP 200** with a completion. The rig's `DURIG_VERIFIER_CONTEXT`
+was corrected from `8192` to `16384` in the gitignored host config so the declared window stops lying. GPU arithmetic, computed from the
+model file's own metadata (`.spike/gguf-arch.mjs`, 40 layers × 8 KV heads × (128+128) × 2 B at `--cache-type-k/v f16` = **160 KiB/token**):
+8192×4 = 5.00 GiB of KV, 16384×1 = 2.50 GiB — the raise *shrinks* the pool. Measured footprint on GPU0 went 12,648 → 13,914 MiB.
+LM Studio's own `--estimate-only` guardrail agrees it fits (13.43 GiB at 16384, 14.39 at 24576, 15.36 at 32768 against a 16,376 MiB card).
+
+**Two corrections the record needs, both expensive if left.** (a) **The GPUs were recorded backwards.** The verifier model runs on **GPU0**, the
+RTX A4000 (16,376 MiB) — unloading it dropped GPU0 from 12,648 MiB to 59 MiB. The 22.9 GiB on GPU1, the RTX 3090, is the **local** model, and
+that is not LM Studio at all: it is a separate process, `strata --serve --pack …/iq3_s --native Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S… --max-context 204800 --kv int8`
+(`/v1/models` reports `"gpus":[1]`). Any plan that spends "the free space on GPU1" is spending the local model's card. (b) **`compact` is broken
+independently of the window.** `cli.mjs compact qa "…"` returns `{"ok":false,"error":"compact: no compaction entry was written for seat qa (task 275369)"}`
+at a now-ample 16384, with no entry in `log qa`; "compaction needs the same window" no longer explains it.
+
+**What the raise bought, measured, and where it stops.** With the window fixed and a no-handoff reset, `qa` WAKED and worked: it planned
+(`stopReason=toolUse`), read `src/shellregistry.mjs` (8,754 chars) and `src/seattools.mjs` (16,505 chars), and was then cut mid-review at
+`in=14184 out=1 stopReason=length`. So a whole-file review of #4849 does not fit in any window this box can currently serve, and the binding
+rule (#4866: a seat without an oracle may author, may not close) still has no reachable verifier. **`#4849 remains UNVERIFIED and `claimed`;
+nothing landed.** The decision now on the operator is a host-capacity one: 24,576 tokens costs ~1.1 GiB more KV on the A4000 (measured headroom
+~2.4 GiB, LM Studio estimate 14.39 GiB of 16,376 MiB — tight), or the delegate pre-chunks review briefs so each leg fits an existing window.
+
+**Operating acts the delegate took, with their warrant.** Two `reset` writes on `qa` — first with a handoff (which is what produced the
+`system, user, user` payload and is now part of DEFECT 1's evidence), then without one — both via the product's own
+`cli.mjs reset <seat> [handoff] [--dry-run]`, whose `--dry-run` was run first and reported `writes: 0`. A reset **writes a boundary and keeps
+the transcript**; `docs/runbooks/degeneration-guard.md` is the entry point for a degenerate seat and D78 is the reason a reset is never casual.
+`qa2` and `auditor` carry the same residue (189 and 158 unanswered user turns) and were deliberately **left alone** — three verifier-family
+seats reset in one session is a rig-level call, not a delegate's.
+
+**Insurance minted, because the change was one sweep from unrecoverable.** `src/shellregistry.mjs` was **untracked** and its blob existed
+nowhere in the object database (`git hash-object` then `git cat-file -e` → absent); the only copy outside the detached worktree was under
+gitignored `.spike/`. All five #4849 files are now blob refs `refs/rescued/impl-4849-{shellregistry.mjs, seattools.mjs, seatguard.mjs,
+seattools.test.mjs, seatguard.test.mjs}`, each round-tripped byte-identical to the file in the tree. That is anti-sweep insurance, **not**
+evidence about the change — read the files in the worktree (the standing rule against citing machine-local git objects as durable evidence,
+ROADMAP 190, still holds).
+
+**Tree-shape fixes, granted by the operator as "fix the inconsistency".** `/home/chexxor/Git/durian-dev/seatroot` moved off detached HEAD onto
+branch **`seatroot/linux`** at the same commit (no commit moved; the 5 uncommitted files untouched) and received a gitignored
+`durig.config.json` — deliberately carrying the **absolute** `DURIG_DB` path so an instrument run there measures this rig rather than silently
+opening an empty store (the #4884 finding). RED-then-GREEN, both measured in that tree before and after: `demo/local-model-pointer.test.mjs`
+(was `seat "pm" points at local/iq3_s, but no "local" provider is configured`) and `demo/clockin-digest.test.mjs` (was `Command failed:
+git rev-list --count main..(no branch)`) now exit 0. Suite control, both trees, with `DURIG_DB` pinned to a scratch store so no demo can touch
+the operator's store: **seat root 237 PASS / 1 FAIL, live checkout the same single FAIL** — `demo/deepinfra-catalog.test.mjs`
+(`seat "qa" names verifier/mistralai/ministral-3-14b-reasoning, which is not in the fallback catalog — it would resolve to no_model`),
+identical in both trees. The main-4 / seat-root-3 divergence D173 carried is now **zero**, and no failure is attributable to #4849.
+
+**What was routed, and to whom.** A findings brief went to **pm** (`.spike/fix-20261030/send-pm-findings.md`) asking the decomposition owner —
+not the delegate — to mint rows for the role-sequence defect, the `compact` defect, and ROADMAP **208**, which still prints `NO ROW 208` in
+`tools/roadmap-queue-coverage.mjs` despite being a live measured constraint. The operator still holds the research prompt
+(`docs/reviews/seat-scoped-durable-state-research-prompt.md`) whose landing is the only trigger for **#4885**.

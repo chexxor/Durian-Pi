@@ -1,122 +1,141 @@
 # NEXT — current priority and exact next command
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
-**Last updated:** 2026-10-30T07:3xZ = **2026-10-30 02:3x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is
-**Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session.
-The superseded 153-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (entry marker at line 8265, body 8266–8422).
+**Last updated:** 2026-10-30T17:0xZ (**Z** — ROADMAP 244), host-local 2026-10-30 12:0x (`America/Chicago`, CDT = UTC−5).
+Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D174).
+The superseded 122-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (entry marker line **8426**, body **8427–8549**).
 
-**217 IS AUTHORED AND VERIFIED — IN A WORKTREE, AND IT HAS NOT LANDED.** Seat `impl` wrote `src/shellregistry.mjs` (new) and rewired
-`src/seattools.mjs` + `src/seatguard.mjs` + both demo suites in `/home/chexxor/Git/durian-dev/seatroot`; the delegate ran the oracle
-and the portability gate went **2 findings → 1** there (`seat-shell-availability` gone, `seat-host-unaware` survives as 217's schema
-half, **#4879**). From the live checkout the gate still prints 2, because `main` does not carry the change — *that difference is the
-measurement*. Full details and the why are in **D173**; the queue row is **#4849**, status **claimed**, deliberately **not closed**
-(lead's rule #4866: a seat without an oracle may author, may not close).
+**THE VERIFIER LEG IS ALIVE, AND IT IS NOT THE WINDOW THAT WAS KILLING IT.** The seat request is refused **before** any window is
+reached — `Engine protocol predict request returned 500 … Jinja Exception: After the optional system message, conversation roles
+must alternate user and assistant roles …` — by LM Studio's converted template (`chat-template.jinja` lines 43–52, its own comment:
+"Checks for alternating user/assistant messages"). Minimum trigger, measured: after `reset qa` **with** a handoff, the outgoing
+conversation is **`system, user, user`** (the handoff is a user turn, `send` appends another). The residue behind it predates the
+provider move: **qa 184 user turns / 193 errored assistants / 1 with any text; qa2 189/189/1; auditor 158/159/0; pm 140; lead 181;
+impl 157**, and 180 of qa's errors are `402 … You need positive balance to do inference` — the verifier used to be a **paid cloud
+provider**, those turns were never answered, and the store came over in the move without the answers. The local model tolerates
+consecutive user turns, which is exactly why only the verifier could not wake. Full why-and-evidence: **D174**.
 
-**THE VERIFIER LEG OF THE RATIFIED LOOP IS DEAD ON THIS HOST, MEASURED.** Two `send qa` attempts (~7k-char brief, then 1.1k-char)
-both returned `settledReason: model_error` with **no reply**, and the mechanism is pinned by a direct request to the served model:
-`exceed_context_size_error: request (9129 tokens) exceeds the available context size (8192 tokens), try increasing it`. The verifier
-slot is **n_ctx 8192**; `compact qa` fails too (`no compaction entry was written`) because compaction needs the same window. This
-upgrades ROADMAP **208** from a design concern to a hard failure: **impl authors → delegate runs the oracle → qa reviews** works for
-two legs and not the third, and all five verifier-family seats (`qa, qa2, advocate, auditor, designer`) are on that same slot, so
-there is no substitute leg on this box. Raising it is a host-side model-serving change on a GPU already at 22.6/24.6 GiB —
-**operator's call**, and per `runbooks/local-provider-down.md` it is never an `up --refresh`.
+**The window raise the operator authorized was still needed, and it is not sufficient.** `lms load mistralai/ministral-3-14b-reasoning
+-c 16384 --parallel 1 --gpu max` (the app's `:1234` REST surface on this build exposes only `GET /api/v0/models`; `POST/PATCH/PUT/DELETE`
+answer `Unexpected endpoint or method`). Pinned three ways: `/api/v0/models` → `loaded_context_length: 16384`; the `llama-server`
+cmdline → `--ctx-size 16384 --parallel 1`; the **same 9,627-token probe that returned HTTP 400 now returns HTTP 200**. `qa` then woke,
+planned, read `src/shellregistry.mjs` (8,754 ch) and `src/seattools.mjs` (16,505 ch), and was cut **mid-review** at
+`in=14184 out=1 stopReason=length`. **A whole-file review of #4849 does not fit in any window this box serves today.**
+
+**#4849 is UNVERIFIED, still `claimed`, and nothing landed.** Per pm's ruling on this session's findings brief, a turn ending on
+`length` is **NOT-FINISHED, never a verdict**, and the oracle requirement attaches to **claims, not to seats**: a read/write-only leg
+may certify what is readable in the diff and assertable at the call site, and must return `OUT-OF-SCOPE-NEEDS-RUNTIME-PROOF` for the
+spawn behaviour it cannot observe. **pm minted 8 rows, all held, none released**: #4886 (role-sequence defect, impl), #4887 (`compact`
+writes no entry, impl), **#4888 = ROADMAP 208 at last** (lead), #4889 (D173 correction, scribe), **#4890/#4891 = the two verify-only
+legs for #4849** (qa primary, qa2 boundary — qa2 must first name the model it is actually served), #4892 (auditor reconciles the suite
+control), #4893 (the one remaining suite failure, devtools).
 
 ## NEXT SESSION
 
-**Current item: close the verifier leg, then land #4849, then let the class resume in lead's order (217 → 263 → 264 → 221/265 → 266
-→ 267).** Nothing may land while #4849's verifier is unreachable, and nothing may be authored by a seat that cannot run its own
-done-condition until 217 is on `main`. Two delegate-side facts gate that: (1) the seat root has **no `./durig.config.json`**, so
-`demo/local-model-pointer.test.mjs` refuses there and the audit prints "a moved workspace has no host config at all"; (2) the root
-is a **detached** worktree, so `demo/clockin-digest.test.mjs` dies on `git rev-list --count main..(no branch)`. Both are tree-shape,
-not code — but until they are fixed, a seat working in the approved root cannot get a clean suite, and the suite is the constitution's
-oracle.
+**Current item: run the two scoped verify legs (#4890 qa, #4891 qa2) on a *named, pinned scope* small enough to fit the window, then
+carry their verdicts to lead for the landing act on #4849.** One host decision gates whether they fit at all (below). Order is still
+lead's: **217 → 263 → 264 → 221/265 → 266 → 267**, 232 gated on #4846.
 
-**Archive:** everything superseded by this cut is verbatim in `docs/NEXT-ARCHIVE.md` (entry marker line 8265, body 8266–8422); the
-grants 1–7 and the older do-not lists live there, not here.
+**The one decision the operator holds (host capacity, delegate cannot spend it):** raise the verifier window again, or accept
+delegate-chunked briefs. Measured cost, from the model file's own metadata (`.spike/gguf-arch.mjs`: 40 layers × 8 KV heads × (128+128)
+× 2 B at `--cache-type-k/v f16` = **160 KiB/token**): 8192×4 = 5.00 GiB of KV (what was running), 16384×1 = 2.50 GiB (what is running
+now — the raise *shrank* the pool), 24576×1 = 3.6 GiB. LM Studio's `--estimate-only`: 13.43 GiB @16384, **14.39 @24576**, 15.36 @32768,
+against a **16,376 MiB A4000** whose measured usage went 12,648 → 13,914 MiB. So 24576 is ~1.4 GiB of headroom left on that card
+(estimate has run ~0.5 GiB low against measurement); 32768 is not credible. Chunking instead: one leg per file-group, verdict per leg.
+
+**Two traps to not re-fall into.** (1) **The GPUs were recorded backwards in D173.** The verifier is on **GPU0 = RTX A4000** (unloading it
+dropped GPU0 12,648 → 59 MiB). The 22.9 GiB on **GPU1 = RTX 3090** is the **local** model and is **not LM Studio**: `strata --serve
+--pack …/iq3_s --native Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S… --max-context 204800 --kv int8`, and its `/v1/models` says `"gpus":[1]`.
+Any plan that spends "free space on GPU1" spends the local model's card. (2) **`reset <seat> <handoff>` writes a user turn**, so a reset
+with a handoff followed by `send` produces the very sequence a strict template rejects. Reset **without** a handoff until #4886 lands.
+
+**Archive:** everything superseded is verbatim in `docs/NEXT-ARCHIVE.md` (marker 8426, body 8427–8549); grants 1–7 and the older do-not
+lists live there, not here.
 
 **Next commands (delegate, read-only first, in this order; Linux):**
 
 ```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs queue            # #4849 MUST still be `claimed`, not `done`; #4879/#4882/#4883/#4884/#4885 MUST be held
-DURIG_DB=./selfdev.sqlite node cli.mjs status           # attention notices; qa2 escalated `reason=degeneration` earlier and no seat has been reset
+DURIG_DB=./selfdev.sqlite node cli.mjs queue            # #4849 MUST still be `claimed`, not `done`; #4886-#4893 MUST be held
+DURIG_DB=./selfdev.sqlite node cli.mjs status           # attention notices; 2 measures out of band -> node cli.mjs metrics
 DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit   # 2 registered worktrees; `reapable: 0` is NOT a verdict (266)
-node tools/rig-portability-audit.mjs                    # run from the LIVE checkout: 2 findings (both 217). Run from the seat root with --db/--rig: 1 finding. Read both; one number is not the state.
-node tools/roadmap-queue-coverage.mjs                   # CLAIMABLE 21, claimed 1; items >=200 with no row naming them: 52
-node tools/broker-serve.mjs --status                    # broker DOWN; BLOCK seat-shell-availability persists until 217 lands (it has no remedy and NO ack flag)
-curl -s http://127.0.0.1:1234/v1/chat/completions -H 'content-type: application/json' -d '{"model":"mistralai/ministral-3-14b-reasoning","messages":[{"role":"user","content":"x x x <9000 tokens>"}],"max_tokens":8}'   # the 8192 wall, in one command
+node tools/rig-portability-audit.mjs                    # LIVE checkout: 2 findings (both 217). Seat root with --db/--rig: 1. Read both.
+node tools/roadmap-queue-coverage.mjs                   # CLAIMABLE 21; items >=200 with no row naming them: 51 (was 52 — 208 is now named)
+node tools/broker-serve.mjs --status                    # broker DOWN by design; BLOCK seat-shell-availability persists until 217 lands
+curl -s http://127.0.0.1:1234/v1/chat/completions -H 'content-type: application/json' -d '{"model":"mistralai/ministral-3-14b-reasoning","messages":[{"role":"user","content":"x x x <9000 tokens>"}],"max_tokens":8}'   # now HTTP 200; a 400 here means the slot fell back to 8192
+node -e 'const b="x ".repeat(9500);fetch("http://127.0.0.1:1234/api/v0/models").then(r=>r.json()).then(j=>console.log(j.data.map(m=>[m.id,m.state,m.loaded_context_length].join(" "))))'   # verifier must read loaded_context_length 16384
 node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs && node tools/doc-integrity-guard.mjs   # the clock-out trio, always all three
-git fsck --unreachable 2>/dev/null | grep -c '^unreachable commit'   # 0 (GRANT 3 held); refs/rescued 484 — read runbooks/cross-clone-object-recovery.md before anything runs `git gc`
+git for-each-ref refs/rescued | wc -l                   # 489 (was 484; the 5 new = the #4849 files). Read runbooks/cross-clone-object-recovery.md before anything runs `git gc`
 ```
 
-**To resume the loop once the verifier window exists:** re-send the pinned review brief to `qa` (`.spike/repoint-20261030/send-qa-4849.md`
-+ the evidence copy at `/home/chexxor/Git/durian-dev/seatroot/.spike/review-4849-evidence.md`), then route the verdict to pm for the
-landing act. **Channel:** `cli.mjs send <seat> --body-file <file>` remains the only wake on this host (a broker start is refused on
-`seat-shell-availability`, which carries **no ack flag** — `--yes-pm-wakes --ack-coordinator-wake --allow-dirty --yes-stale-cwd` do
-not touch it), and it must run with **`DURIG_SEAT_ROOT` unset** until #4882 lands: the guard checks EVERY seat, and `pm`/`lead` are on
-the live checkout because `complete_work` moved them there.
+**To run the verify legs (the actual next work):** write a **scoped** brief naming the claims in play — the registry/guard selection rule
+(`src/seatguard.mjs`'s guard set vs the registered set, `src/shellregistry.mjs`'s `canStart`/`preferredOn` split) — not "review all five
+files", which is what overflowed. Send with **`DURIG_SEAT_ROOT` unset** from the live checkout:
+`env -u DURIG_SEAT_ROOT DURIG_DB=./selfdev.sqlite node cli.mjs send qa --body-file <file>`. Pins for the tree under review:
+`/home/chexxor/Git/durian-dev/seatroot`, branch **`seatroot/linux`**, 5 uncommitted files, and the delegate's own oracle results in
+`/home/chexxor/Git/durian-dev/seatroot/.spike/review-4849-evidence.md`. **Channel:** `send` remains the only wake on this host (a broker
+start is refused on `seat-shell-availability`, which carries **no ack flag**).
 
-**Blocker:** three, none mine to lift. **(a)** The verifier slot is n_ctx 8192 — a host-side serving change (GPU1 22.6/24.6 GiB), so
-the operator holds it; until then no seat can verify anything. **(b)** 52 registered items ≥200 still have no row naming them
-(`236–238`, `243–252`, `254–255`, `258–262` among them). **(c)** The operator holds the research prompt
-`docs/reviews/seat-scoped-durable-state-research-prompt.md` — it must be routed to the off-host research agent, and its landing is the
-trigger for **#4885**.
+**Blocker:** two, none mine to lift. **(a)** The verifier window: 16,384 cannot hold a whole-file review (measured `in=14184 out=1`);
+24,576 leaves ~1.4 GiB on the A4000. Operator's call. **(b)** The operator still holds the research prompt
+`docs/reviews/seat-scoped-durable-state-research-prompt.md`; its landing is the only trigger for **#4885**.
 
 ## What landed this session, with its evidence
 
-- **lead ruled #4858**: **217 → 263 → 264 → 221/265 → 266 → 267**, 232 gated on #4846; adopted #4844 with the amendment *an
-  unreadable verdict renders `unknown` and never collapses to `up`*; #3743 (does the process exist) and #4844 (is it making progress)
-  stay separate axes — **ALIVE-and-FAILING is legal**. It could not execute its own gate: `release_work(4849)` was refused to the
-  adjudicator ("only the sender or recipient may release it") → **#4867**, third member of the #3570/#4856 gate-authority family.
-- **pm re-gated and executed it**: released #4849 (as sender), cancel-and-re-minted the stale-premise rows (#4847→**#4874**,
-  #4850→**#4876**, each required to *manufacture* its RED rather than lean on a broken host), split the schema half as **#4879**,
-  routed the adopted parked-question answers as **#4869/#4871**, registered the instrument defects as **#4872/#4873**, the phantom-dir
-  dispositions as **#4878**, and the root-decay family as **#4882/#4883/#4884**. It also named two traps: #4852 is gated on the now
-  -cancelled #4847 (re-mint at its turn, never release), and it cannot re-park #3350.
-- **impl authored #4849** after its first turn died on `stopReason: length` with **zero files changed** (it had drafted the whole
-  registry in prose). The corrective was one short directive — *apply, do not re-derive, one `edit` per hunk, no code in prose* — and
-  the second turn settled with `stopReason: stop` and 5 files changed. Its own report flagged that 217's two findings will not both
-  close without the schema row, which the audit confirms.
-- **The delegate's verification** (all commands and outputs in `D173` and `.spike/repoint-20261030/`): GREEN on
-  `demo/seattools/seatguard/ctxline`; **RED verified** by reverting the two `src` files and moving the new module aside —
-  `seatguard.test.mjs` fails on a substantive assertion, `seattools.test.mjs` fails **only by a missing import**, and *whether that
-  counts as failing-first is an open question a verifier must answer, not the delegate*; files restored byte-identically
-  (`sha256sum -c` OK). Suite 238×2: `main` 4 fails, seat root 3, divergences attributed to the missing host config and the detached
-  HEAD. **No regression attributable to the change.**
-- **The architecture ruling** (operator): do not split per seat; research it. Registered **#4885** (architect, trigger-gated), prompt
-  committed at `docs/reviews/seat-scoped-durable-state-research-prompt.md`.
+- **Host: the verifier is re-served at 16,384 / parallel 1** by the operator's grant to use LM Studio's own API; `DURIG_VERIFIER_CONTEXT`
+  corrected 8192 → 16384 in the gitignored `./durig.config.json`. Before/after on one command: HTTP 400 `n_ctx 8192` → HTTP 200 at the
+  same 9,627 tokens. Restore recipe captured verbatim: `.spike/fix-20261030/verifier-llama-server-cmdline.pre.txt`.
+- **Rig: the tree-shape inconsistency is fixed** (operator: "fix the inconsistency"). Seat root detached HEAD → branch `seatroot/linux`
+  (same commit, working tree untouched); a gitignored `durig.config.json` placed there carrying an **absolute** `DURIG_DB` so an
+  instrument there cannot silently measure an empty store (#4884). RED-then-GREEN in that tree: `local-model-pointer` (was "no `local`
+  provider is configured") and `clockin-digest` (was `git rev-list --count main..(no branch)`) now exit 0.
+- **Suite control, both trees, `DURIG_DB` pinned to a scratch store so no demo touches the operator's store** (`.spike/fix-20261030/
+  suite-{seatroot,live}.txt`): **237 PASS / 1 FAIL in each tree, the identical `demo/deepinfra-catalog.test.mjs`** — the main-4 / seat-root-3
+  divergence is **zero** and no failure is attributable to #4849. pm did not trust it: #4892 asks auditor to reconcile it.
+- **Insurance minted:** `src/shellregistry.mjs` was untracked with **no blob anywhere** in the object DB; all five #4849 files are now
+  `refs/rescued/impl-4849-*` blob refs, each round-tripped byte-identical. refs/rescued 484 → **489**.
+- **Seat acts:** `reset qa` twice via the product's own verb (`--dry-run` first, `writes: 0`), which is what woke the leg. `qa2` and
+  `auditor` carry the same residue (189 / 158 unanswered turns) and were **left alone** — a rig-level call, not a delegate's.
+- **Routed, not fixed by the delegate:** findings brief to **pm** (`.spike/fix-20261030/send-pm-findings.md`) → 8 rows minted and held,
+  and pm's done-condition ruling (four verdicts; `length` ⇒ NOT-FINISHED; oracle attaches to claims, not seats).
 
-## Rig state, re-measured at clock-out 2026-10-30T07:3xZ (Linux) — re-read, do not trust
+## Rig state, re-measured at clock-out 2026-10-30T17:0xZ (Linux) — re-read, do not trust
 
-**Store** `./selfdev.sqlite` (last full backup `.spike/repoint-20261030/store-backup-20261030-005816.sqlite`); 12 seats; **`pm` and
-`lead` are on the live checkout, the other 10 on the approved seat root** (root decay, D173). **Queue census 4,885 = 3,756 done / 780
-cancelled / 311 held / 20 queued / 17 deferred / 1 claimed → CLAIMABLE 21** (the 1 claimed is #4849). **Broker DOWN, deliberately.**
-**Portability gate:** 2 findings from the live checkout, 1 from the seat root; `--self-test` exit 0. **Worktrees: 2**; `reapable 0`;
-`refs/rescued/*` 484; unreachable 0; phantom-named dirs at repo root 0; tracked changes 0 at clock-out. **Providers:** `local/iq3_s`
-(GPU0 12.6/16.4 GiB) — pm, impl, lead, scribe, devtools, security, architect; `verifier/ministral-3-14b-reasoning` (`:1234`, GPU1
-22.6/24.6 GiB, **n_ctx 8192**) — qa, qa2, advocate, auditor, designer. Both providers answer and complete a *tiny* probe, which is
-exactly why a port probe is not a health check. **flint NOT loaded** (8,192 ctx cannot hold a real conversation, 208). **Supervisor:**
-last window logged `reason=degeneration` for `auditor, devtools, qa2` — pre-existing, UNVERIFIED, no seat reset;
-`runbooks/degeneration-guard.md` is the entry point. **Box:** 94 GB RAM, ~19 GiB available, zram swap ~58 % is the ceiling;
-`probe-preflight` REFUSES (swap max 50 %), so no probe arm may start. **`LocalRTC=yes` on a dual-boot box** while every gate is
-`Date.now()` arithmetic — `timedatectl set-local-rtc 0` is host-wide, operator's call (ROADMAP 234).
+**Store** `./selfdev.sqlite` (last full backup `.spike/repoint-20261030/store-backup-20261030-005816.sqlite`); 12 seats; `pm`/`lead` on the
+live checkout, the other 10 on the approved seat root, now on branch `seatroot/linux`. **Queue census 4,893 = 3,756 done / 780 cancelled /
+319 held / 20 queued / 17 deferred / 1 claimed (#4849) → CLAIMABLE 21** (8 new rows all held). **Broker DOWN, deliberately** (no
+`cli.mjs serve`/`src/broker.mjs` process; `ps`, `status` and `broker-serve --status` agree). **Portability gate:** 2 findings live checkout,
+1 from the seat root. **Worktrees 2**; `reapable 0`; unreachable commits 0; phantom dirs 0; tracked changes: `docs/DECISIONS.md`,
+`docs/NEXT.md`, `docs/NEXT-ARCHIVE.md` at this cut. **Providers:** local `strata` `iq3_s` on **GPU1** (22.9/24.6 GiB, `--max-context 204800`)
+— pm, impl, lead, scribe, devtools, security, architect; verifier LM Studio Ministral-3-14B-Reasoning Q6_K on **GPU0** (`:1234`, 13,914/16,376
+MiB, **ctx 16384, parallel 1**, YaRN over an original 16,384, file declares 262,144) — qa, qa2, advocate, auditor, designer. `flint` is
+**not** a fallback verifier: 40B MoE, 22.51 GiB on disk as Q4_K_M, cannot fit either card alongside what is loaded. **Supervisor:** last
+window logged `reason=degeneration` for `auditor, devtools, qa2` — pre-existing, UNVERIFIED, no reset applied beyond the two on `qa`.
+**Box:** 94 GB RAM, ~21 GiB available; `probe-preflight` REFUSES (swap max 50 %), so no probe arm may start. **`LocalRTC=yes`** on a
+dual-boot box while every gate is `Date.now()` arithmetic — `timedatectl set-local-rtc 0` is operator's call (ROADMAP 234).
 
-## OPERATOR GRANTS (seven through D172; two more this session)
+## OPERATOR GRANTS (eleven through D174)
 
-1–7. Unchanged from the archived pointer (seat-root ruling A; the "queue drains" predicate; mint the refs; instrument hygiene; the
-verifier paths; decomposition-not-seats with the scale gate; the Linux isolated seat root).
-8. **The `send` bootstrap is sanctioned for this rig while the broker is un-startable** — `cli.mjs send pm|lead|impl|qa --body-file …`.
-It is deprecated as a second harness owner and admissible only because no broker runs; a working seat's turn writes real files, so the
-delegate runs the oracle and no seat closes its own row on a degraded host.
+1–7. Unchanged from the archived pointer (seat-root ruling A; the "queue drains" predicate; mint the refs; instrument hygiene; the verifier
+paths; decomposition-not-seats with the scale gate; the Linux isolated seat root).
+8. **The `send` bootstrap is sanctioned while the broker is un-startable** — `cli.mjs send pm|lead|impl|qa --body-file …`. Deprecated as a
+second harness owner; admissible only because no broker runs; the delegate runs the oracle and no seat closes its own row on a degraded host.
 9. **Do not re-architect per seat; research it.** The delegate crafts the prompt, the operator routes it, the delegate lands the report.
+10. **NEW: host model-serving may be changed through the vendor's own API** — used for the verifier ctx/parallel change on explicit
+instruction. It is a spend of the operator's GPU, so report the headroom you measured and do not spend it again unasked.
+11. **NEW: tree-shape acts on the approved seat root are the delegate's** (branch it, give it a host config) — they are host ops, not seat
+work; record what changed under the seats in the pointer, because the suite is the constitution's oracle.
 
 ## Do not "fix" these on the strength of the docs
 
-**A provider that answers a 26-token probe is not healthy** — the verifier is alive and unusable at 8,192 tokens; probe with a *real
-request size*. **Brevity does not fix a window**: qa failed at 1.1k characters too. **`compact` cannot rescue a seat whose window is
-the wall.** **`pgrep -f "cli.mjs send …"` matches the shell that asked** — it lied "RUNNING" three times tonight; test the process
-line or the JSON's `stopReason` instead. **Running any instrument inside a worktree silently changes the rig it measures** — no
-`./durig.config.json`, no store, detached HEAD: `rig-portability-audit` there read an EMPTY store and printed clean roots. **The
-portability audit is blind to the `complete_work` root decay** (#4884 is the carrier for that). **`complete_work` re-points a seat's
-persisted cwd to `process.cwd()`** — never treat a re-point as durable before #4882. **A `--dry-run` that names no removals is not
-evidence there are none.** **Never read an exit code through a pipe.** **Append prose with a quoted heredoc + `cat >>`, not `printf`**
-(parentheses in the text abort the shell). **A promoted instrument is "cited but untracked" until you stage it.** **Never quote shas.**
+**A provider that answers a 26-token probe is not healthy** — probe with a *real request size*; and now: **a 200 at 9,627 tokens is still
+not a working verifier** — the leg lives or dies on role *sequence*, not size. **`reset <seat> <handoff>` appends a user turn** →
+`system, user, user` → a strict template answers 500 in ~30 ms with zero tokens. **An errored turn leaves its user message in the
+conversation**, so the next attempt is structurally inadmissible and the poison grows monotonically (qa: 193 errored turns, 1 answer).
+**`compact` writing no entry is not a window problem.** **Never treat "the free GPU" as the one you think** — the local model owns GPU1.
+**`pgrep -f "cli.mjs send …"` matches the shell that asked** — test the process line or the JSON's `stopReason`. **Running any instrument
+inside a worktree silently changes the rig it measures** — the seat root now has a config with an absolute `DURIG_DB`, so pin `DURIG_DB`
+to a scratch store before running the suite there. **The portability audit is blind to the `complete_work` root decay** (#4884 is the
+carrier). **`complete_work` re-points a seat's persisted cwd to `process.cwd()`** — never treat a re-point as durable before #4882.
+**A `--dry-run` that names no removals is not evidence there are none.** **Never read an exit code through a pipe.** **Append prose with a
+quoted heredoc + `cat >>`, not `printf`.** **A promoted instrument is "cited but untracked" until you stage it.** **Never quote shas.**
+**LM Studio's GGUF stores each KV value's type as a 4-byte field** — a 1-byte reader desyncs by 3 bytes (`.spike/gguf-arch.mjs`).
