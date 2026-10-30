@@ -6847,3 +6847,78 @@ verification `.spike/fix-20261031/queue-after-lead2.json` → census **4,899 = 3
 **275506** and `.spike/fix-20261031/send-lead-nudge-out.json` (`settledStatus: done`, `stopReason: stop`); session
 JSONL gap `19:56:54.590Z → 19:59:02.199Z`; `coredumpctl list --since '2026-10-30 14:50'` → none, vs cores at
 02:30:54/02:30:55/02:43:07/11:28:09/11:29:05; `/proc/vmstat oom_kill 7`; `du -sh .spike` → 3.3 GB.
+
+## D178 — a seat cannot commit its own verified work on this host (there is no seat shell on Linux), so the delegate INSURED the work rather than committing it or dogfooding the unlanded fix; and `up … --refresh --dry-run` printing `changes: {}` is a VACUOUS pass about the seat root (delegate, 2026-10-30, Linux)
+
+**Decision.** Two acts, both chosen against a tempting alternative:
+
+1. **Insure, do not impersonate, and do not dogfood the unlanded fix.** The five files of #4849 (ROADMAP 217,
+   authored by seat `impl`, cross-family verified) sat UNCOMMITTED in the approved seat root. The delegate captured
+   them as a patch plus verbatim copies with sha256sums and a manifest, and left the commit to a ruling — rather than
+   (a) committing them itself, or (b) serving `impl` from the seat root so its own new code would give it a shell.
+2. **Stop citing `up … --refresh --dry-run` → `changes: {}` as evidence about the seat root.** It is vacuous in this
+   rig's configuration. The honest read is the newest `pi.agent` document revision in the store.
+
+**Why (1) — the order the team is operating under is inenactable by its recipient, and the reason is the item's own
+defect.** pm's addendum **#4894** tells `impl` to commit its five files *before* completing #4849, because
+`complete_work` can re-point a seat's persisted cwd (#4882) and strand them. Measured on this host, **no seat has a
+shell at all** in the landed code: `src/seattools.mjs:214-222` reads "`bash` is deliberately absent … the seat shell is
+PowerShell" and registers `shell: createPowerShellTool()`, which resolves `pwsh` then `powershell`; neither exists here
+(`bash` does). `tools/rig-portability-audit.mjs` states the consequence in its own words: *"every seat shell call is a
+spawn error: **no git, no demo suite, and completions are self-declared**"*. So the fix for "a seat cannot run git" is
+itself the thing that would let the seat run git — a dependency inversion that will recur on every landing until 217
+lands, and the reason #4849's own author could not protect its own work.
+
+Both available shortcuts were rejected for named reasons, not deference:
+
+- **Committing on the seat's behalf** is arguably inside grant 11 (tree-shape acts on the approved seat root), but
+  #4849 is `claimed`: the delegate would be authoring a commit into another actor's in-flight item and pre-empting the
+  three landing gates in `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md`. Insurance removes the loss hazard, which was the
+  actual worry, without touching attribution.
+- **Serving `impl` from the seat root** would have run its own uncommitted code as the harness. Measured at code level
+  (read-only import, no harness, no store): `shellToolNames()` → `["powershell","bash"]`, `selectSeatShell()` →
+  `{"name":"bash","degraded":false}` with `canStart: true`, and `programOnPath("bash")` → `/usr/bin/bash`. So it would
+  very likely have worked — and it is still the wrong call, because the runtime half of that mechanism is exactly what
+  the queue is waiting to land and what qa2 abstained from (`OUT-OF-SCOPE-NEEDS-RUNTIME-PROOF`: the 22 `spawn … ENOENT`
+  arms, `bash` permitted at execution time). Promoting unverified code to the serving harness to make a commit
+  convenient would manufacture the evidence instead of earning it. Both paths are now a ruling for **lead or the
+  operator**, and the delegate said so in the wake brief.
+
+**Why (2) — the pass had no comparison in it.** D177 recorded "12 seats, `changes: {}`" as proof the root was repaired.
+But the refresh target is `seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT` (`cli.mjs:679`, `cli.mjs:794`), and
+`rig.selfdev.json` declares **no** cwd for any seat (grep: 0 occurrences of the root path in the rig file). With
+`DURIG_SEAT_ROOT` unset, all three operands are undefined, so every seat prints `changes: {}` no matter where it
+actually points. Reading the store instead: 12 seats on `/home/chexxor/Git/durian-dev/seatroot` (so D177's conclusion
+was right, its evidence was not), **plus a 13th `pi.agent` document — doc 216675, revision 2263478 — still at
+`C:\Users\Alex\dsh-Projects\pi-opendurig`**. That is an orphan conversation, not one of the 12 roster seats, which is
+why it never trips the F12 guard (the guard iterates the roster) and why it has survived every `--refresh`: a leaked
+root that no instrument names. Also false on this build: `docs/SELFDEV.md` still claims `ps`/`status` show each seat's
+`root` (#261) — `status.seats[]` carries no such field.
+
+**A third thing this exposed, because it silently costs turns.** Rows that send a seat to a doc section must account for
+the seat's branch lag: `seatroot/linux` is **8 commits behind `main`**, and #4898 pointed `impl` at
+`docs/runbooks/compact-a-seat.md` §"What auto-compaction is configured to, and what to set it to" — text that exists
+only on `main`. The delegate inlined the operator-approved values into the brief and re-verified the code anchors **in
+the seat's own tree** rather than quoting main's line numbers (`src/config.mjs:246`, `cli.mjs:414`/`:423`,
+`cli.mjs:1344` all match in that tree by luck, not by construction).
+
+**What this changes for the next delegate.** Pre-flight the root by reading the newest `pi.agent` revision, not by a
+dry-run; run `send` with **cwd = the approved seat root** (that is what causes the #4882 re-point in the first place —
+D177's drift came from serving from the live checkout) and with `DURIG_SEAT_ROOT` set so the F12 guard is live; and
+when a plan depends on a seat running `git`, `node`, or any shell verb, treat it as blocked until 217 lands and route
+the measurement through the #4858 delegate-run carve-out instead.
+
+**Evidence.** `src/seattools.mjs:214-222` and `src/seatguard.mjs:122` (`SHELL_TOOLS = new Set(["bash","powershell"])` —
+the *guard* allows bash, the *tool* is PowerShell-only); `tools/rig-portability-audit.mjs` → "NOT PORTABLE ON THIS
+HOST — 2 finding(s)", findings `seat-shell-availability` and `seat-host-unaware`, cost 581 ms; insurance at
+`.spike/fix-20261101/insurance-4849/` (manifest naming tree/branch/HEAD `3860e5d1`, `patch-4849-tracked.diff` 245
+lines sha256 `c7e1afb1…`, `files/shellregistry.mjs` 8,793 B sha256 `8e5476f6…`, plus the four modified files);
+delegate-run suites in the seat root, `node demo/seatguard.test.mjs` exit 0 "PASS — the guard holds" and
+`node demo/seattools.test.mjs` exit 0 "PASS — the controls are wired" (exit codes read directly, never through a pipe);
+`node .spike/fix-20261101/read-cwd4.mjs` for the roots; `tools/channel-preflight.mjs` → 22 claimable rows, broker down,
+`placed=0 queued=0`, "the wedge does NOT survive a restart"; `durig.config.json` in the seat root pins
+`DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite`, `local` = `http://127.0.0.1:47831/v1` `iq3_s` ctx 200000,
+`verifier` = `http://127.0.0.1:1234/v1` `ministral-3-14b-reasoning` ctx 24576 max 3000; `rig.selfdev.json` models are
+`local/iq3_s` and `verifier/…` — the `rig.selfdev.json`-vs-docs model mismatch is why `SELFDEV.md` tells you to
+re-derive the seat table rather than read it.
+
