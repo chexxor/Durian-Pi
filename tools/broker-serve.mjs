@@ -314,7 +314,13 @@ try {
 		// prepare_workspace from any seat declaring no WORKING_CAPABILITY, so for exactly those seats the
 		// absent shell guards an act that runs no command and lands no artifact. Admissible only when EVERY
 		// seat in the predicted first-pass wake set is a coordinator by that predicate.
-		const wakeSet = [...new Set(pending.map((p) => p.to))];
+		// The spool carries more than intents: a `cli.mjs status` while a broker runs leaves an
+		// {"op":"read","view":"health",...} request, and readIntentFiles maps a missing `to` to the literal "?".
+		// Reading every spool file as an intent therefore invented a wake-set member "?(absent from
+		// rig.selfdev.json)" and made a measurable exception look inadmissible. An intent is a file with a
+		// real recipient and no `op` (a read request carries `op:"read"`).
+		const intents = pending.filter((p) => p.to !== "?" && p.op === "?");
+		const wakeSet = [...new Set(intents.map((p) => p.to))];
 		const needsShell = [];
 		for (const name of wakeSet) {
 			const seat = (rig?.seats ?? []).find((s) => s.name === name);
