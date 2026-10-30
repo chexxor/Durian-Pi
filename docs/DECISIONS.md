@@ -6659,3 +6659,67 @@ identical in both trees. The main-4 / seat-root-3 divergence D173 carried is now
 not the delegate — to mint rows for the role-sequence defect, the `compact` defect, and ROADMAP **208**, which still prints `NO ROW 208` in
 `tools/roadmap-queue-coverage.mjs` despite being a live measured constraint. The operator still holds the research prompt
 (`docs/reviews/seat-scoped-durable-state-research-prompt.md`) whose landing is the only trigger for **#4885**.
+
+---
+
+## D175 — the alternation rule is the provider template's, not "consecutive user turns"; auto-compaction is dead by construction on a small window; the A4000 spend (delegate, 2026-10-30, Linux)
+
+**The instrument I wrote on this grant was wrong in the way that matters, and the rig showed it immediately.** The operator asked for the
+"render the outgoing conversation shape" diagnostic (my own next-session improvement #1). I wrote `tools/seat-turn-shape.mjs` with a
+*plausible* predicate — "two consecutive `user` roles" — and it **cleared a `qa` turn that then failed**: the request died at a 24,576-token
+window with `stopReason=error`, `input=0`, and the template's 500. So the predicate was replaced with the template's literal rule, read from
+LM Studio's generated file (`.lmstudio/.internal/temp/lmstudio-chat-template-OrONg3/chat-template.jinja`, block *"Checks for alternating
+user/assistant messages."*, `raise_exception` at line 48):
+
+```jinja
+{%- if message.role == 'user' or (message.role == 'assistant' and message.tool_calls | length == 0) %}
+    {%- if (message['role'] == 'user') != (ns.index % 2 == 0) %} raise_exception(...)
+```
+
+The projection that must alternate is **every `user` plus every `assistant` that carries NO tool calls**, from index 0 as
+`user, assistant, user, …`. Therefore **a tool-calling assistant does not satisfy the alternation** and a tool result is never counted:
+a seat resuming after a tool-calling turn is in the wrong slot the moment anything appends a user turn. That is the real shape of #4886,
+sharper than D174's "consecutive user turns", and it explains why the failure reappeared after a *successful* tool-using turn.
+**The lesson to keep: an instrument that encodes your guess about a contract, instead of the contract, is worse than no instrument — it
+buys confidence.** The fixture now pins the exact rule (`demo/seat-turn-shape.test.mjs`: a tool-calling assistant must NOT enter the
+projection; a tool result is uncounted; the first counted message must be `user`; an empty assistant with no tool calls IS counted).
+
+**RED→GREEN for the instrument, in the field.** Read straight off the store through `replayView` + `storage.scanEntries`: immediately before
+the failed attempt it said `next send: AT RISK` (correct), and after a bare `cli.mjs reset qa` (no handoff — the handoff is itself a user
+turn) it said `window 0 messages … next send: ADMISSIBLE`, which is what gated the retry. Measured across the 12 seats at that moment:
+**6 windows already carried a parity break and 11 of 12 seats would be refused on their next `send`** — including the healthy local ones,
+whose provider tolerates it. That is a rig-level fact for #4886, not a qa fact.
+
+**A `compact` that completes and writes nothing is a documented no-op, not a failure — and on this window auto-compaction can never fire.**
+Read from the shipped dependency: the task's `select` phase does `const cut = selectCut(view, policy.keepRecentTokens)` and
+**`if (cut === undefined) return complete(...)`** (`vendor/pi-main/.../harness/compaction.js:69-71`); `selectCut` returns `undefined` when
+walking back never accumulates `keepRecentTokens` tokens (`compaction.js:211-234`). durian-pi passes **no** compaction policy — the only
+harness setting is `settings: streamSettings(CFG)` (`cli.mjs:414-423`, and `streamSettings` returns `stream.timeoutMs` alone,
+`src/config.mjs:246-259`) — so every seat runs `DEFAULT_COMPACTION_POLICY`: `reserveTokens 16384, keepRecentTokens 20000,
+backgroundTokens 32768` (`harness/agent.js:10-15`). Against a 24,576 window: blocking = 8,192, background = **−24,576 (impossible)**, and
+`thresholdCompaction` refuses to start unless `selectCut` finds a cut (`generation.js:236-245`) — which needs >20,000 tokens kept, i.e.
+within ~4,500 tokens of the ceiling. And the summary request would be `min(0.8·16384, model.maxTokens)` = up to **13,107 tokens, larger than
+the window compaction exists to protect**. So `cli.mjs:1344`'s `no compaction entry was written` was reporting a legitimate no-op as a
+defect, at both 16,384 and 24,576 — which retires the "compaction needs the same window" theory for good.
+**Recommendation offered to the operator (not decided, not built; carrier row #4887, `impl`):** feed pi-durable's existing
+`modelOverrides` seam (`compaction.js:194-201`) from new `DURIG_COMPACTION_*` keys via a `compactionSettings(CFG)` next to `streamSettings`,
+one call site at `cli.mjs:414-423`; verifier class `reserveTokens 4096 / keepRecentTokens 8192 / backgroundTokens 8192` (blocking 20,480,
+background 12,288, summary capped at 3,000); **leave the local class on defaults** (coherent at 200,000); and split the reporting into
+`NO-OP / FAILED (<compactionFailure>) / COMPACTED (<entry id>)` with distinct exit codes, printing the seat's token count against the
+policy. `contextConsumption` (`src/context.mjs:104`) already computes the "will there be anything to cut?" answer, before spending the verb.
+
+**Capacity, spent on the operator's grant and measured.** `lms load … -c 24576 --parallel 1 --gpu max`: GPU0 15,202/16,376 MiB, and a
+**21,135-token** request completed in **19.1 s** (at 8,192 that same size was refused; at 16,384 a review was cut at `in=14184`). LM Studio's
+`--estimate-only` said 14.39 GiB where 14.85 GiB loaded — **the estimate runs ~0.35 GiB low**, so budget against measurement. `lms` is the
+only write surface: the app's `:1234` REST exposes `GET /api/v0/models` only. **LM Studio restores `--ctx-size 8192 --parallel 4` on app
+relaunch**, so the three-way re-check (API / server cmdline / a request at the real size) belongs after every restart.
+
+**Landed this session (all cited, all staged):** `tools/seat-turn-shape.mjs` + `demo/seat-turn-shape.test.mjs` (read-only, exits 1 on an
+unreadable store, `--strict` for a gate); `docs/runbooks/verifier-serving-headroom.md` (front-matter conformant; indexed in
+`docs/runbooks/README.md` twice) carrying the KV cost formula from the model file's own metadata (**160 KiB/token**: 40 layers × 8 KV heads ×
+(128+128) × 2 B), the ctx→GiB table, the GPU ownership correction, the vendor-tool procedure with a captured restore recipe, and the
+**briefing arithmetic** — one batched brief per seat per session (measured: a 21k-token verifier completion = 19 s; a 162k-token local seat
+turn = 12–15 min), name the claims and cap the files, demand the verdict before the reading, and never re-send a failed brief because it is
+a deposit, not a retry. Plus new sections in `docs/runbooks/compact-a-seat.md` (the no-op mechanism and the recommended policy, labelled
+RECOMMENDED pending the operator). Suite-relevant checks run green: `demo/seat-turn-shape.test.mjs`, `demo/format.test.mjs`,
+`demo/runbook-frontmatter.test.mjs`, `tools/doc-integrity-guard.mjs` (41 runbooks, 0 hard).
