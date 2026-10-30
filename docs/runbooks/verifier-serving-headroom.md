@@ -149,6 +149,12 @@ Measured costs on this box: a verifier completion at **21,135 input tokens = 19.
 - **Name the claims, cap the files, demand the verdict before the reading.** A "review all five files" brief
   overflowed at `in=14184` and the seat never stated a verdict. A scoped brief ("read only these two files; state
   PROCEED / REFUSE / NOT-FINISHED / OUT-OF-SCOPE-NEEDS-RUNTIME-PROOF before you run out of room") fits.
+- **Cap the READING, not just the claims — and put the cliff in the brief.** A correctly scoped two-file brief still
+  died on 2026-10-30 because one of the files is 26,532 chars: reading it whole pushed the request to `input=20,109`,
+  which tripped a threshold compaction (`compact-a-seat.md`), and the next turn returned `output=1,
+  stopReason=length` empty. So name the byte and line size of every file you point a seat at, and bound the read
+  ("489 lines — do NOT read it whole; read the import block and the region where the set is defined"). A seat told
+  *what* to read but not *how much* will read the big one and lose the turn.
 - **Never re-send the same brief.** A failed `send` already appended a user turn; a second one compounds it and the
   seat gets further from admissible, not closer (Step 1).
 - `parallel 1` means verifier-family seats **serialize** on one slot. If several wake at once they queue; that is a

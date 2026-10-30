@@ -6664,6 +6664,11 @@ not the delegate — to mint rows for the role-sequence defect, the `compact` de
 
 ## D175 — the alternation rule is the provider template's, not "consecutive user turns"; auto-compaction is dead by construction on a small window; the A4000 spend (delegate, 2026-10-30, Linux)
 
+> **CORRECTED BY D176 — the middle clause of this heading is false.** Auto-compaction is not unavailable on a small
+> window; it is available only near the ceiling, where the summary it writes keeps the newest 20,000 tokens anyway and
+> the turn dies anyway. Measured the same night (`qa`, entries 275457 / 275459). Read D176 before quoting this heading
+> as policy.
+
 **The instrument I wrote on this grant was wrong in the way that matters, and the rig showed it immediately.** The operator asked for the
 "render the outgoing conversation shape" diagnostic (my own next-session improvement #1). I wrote `tools/seat-turn-shape.mjs` with a
 *plausible* predicate — "two consecutive `user` roles" — and it **cleared a `qa` turn that then failed**: the request died at a 24,576-token
@@ -6723,3 +6728,77 @@ turn = 12–15 min), name the claims and cap the files, demand the verdict befor
 a deposit, not a retry. Plus new sections in `docs/runbooks/compact-a-seat.md` (the no-op mechanism and the recommended policy, labelled
 RECOMMENDED pending the operator). Suite-relevant checks run green: `demo/seat-turn-shape.test.mjs`, `demo/format.test.mjs`,
 `demo/runbook-frontmatter.test.mjs`, `tools/doc-integrity-guard.mjs` (41 runbooks, 0 hard).
+
+## D176 — auto-compaction is not "dead" on a small window, it is a trap that fires at the ceiling; a `done` verify row can cite lines that point nowhere; and the operator's acceptance was not converted into a ruling the operator had not given (delegate, 2026-10-30, Linux)
+
+**Correction to D175, in D175's own heading.** D175 recorded "auto-compaction is dead by construction on a small
+window." That is **false as stated**, and the rig produced the counter-example the same night: on `qa`'s verifier leg
+(window 24,576) a turn went out at `input=17,445`, the next request crossed `selectCut`'s `keepRecentTokens = 20,000`
+budget, a **real `pi.compaction` entry was written (275457)**, and the turn after it came back
+**`input=20,109, output=1, stopReason=length` with an empty reply (275459)**. The arithmetic that made D175 look right
+is real — `background = (window − reserveTokens) − backgroundTokens = 8,192 − 32,768 = −24,576`, so the background tier
+can never fire — but `blocking` fires at 8,192 and `selectCut` only refuses *below* 20,000 accumulated tokens. So on a
+24,576 window auto-compaction is **not unavailable; it is available only in the last ~4,500 tokens, and by then the
+summary it writes keeps the newest 20,000 tokens anyway, which is the whole window.** That is a worse failure than the
+no-op D175 described: a no-op misleads, this one **destroys a turn that was about to produce a verdict**. The wording in
+`docs/runbooks/compact-a-seat.md` is corrected to that effect with these entry ids as evidence.
+**Why it matters beyond the wording:** it changes the status of the #4887 recommendation. The proposed values
+(`reserveTokens 4096`, `keepRecentTokens 8192`, `backgroundTokens 8192`) are not a tidy-up — with them background fires
+at 12,288 *while there is room to answer*, which is the only configuration in which a verifier leg on this window
+completes reliably. Tonight's single successful leg completed **only because the delegate bounded the reading by hand**
+(`src/seatguard.mjs` is 26,532 chars; reading it whole is what pushed the request into the band).
+
+**A `done` verify row is not a verified claim: the substance and its citations can come apart, and the instrument that
+exists does not see the gap.** `qa2` completed #4891 (`stopReason=stop`) with PROCEED on C3 — the guard's set is
+*derived*, `export const SHELL_TOOLS = new Set(shellToolNames())` — which my own independent read corroborates
+(`shellToolNames()` maps `SHELL_CANDIDATES`, `src/shellregistry.mjs:106-107`). But its citations do not resolve: it
+placed `SHELL_TOOLS` at `seatguard.mjs:350-354` (it is at **`:144`**; 348–356 is an unrelated control-plane comment),
+the registry import at **line 20** (it is **`:22`**), and `SHELL_CANDIDATES` at **lines 20–30** (they are at **`:79`**).
+`node tools/review-cite-check.mjs` on the dumped summary returns **exit 0 with `pathCites 1/0`** — it validates that a
+path exists and that a range fits inside the file, never that the cited lines contain the cited symbol. D162 said
+citation integrity is a machine check, not a reading habit; this is the next step that claim implies: **the check needs
+to bind a citation to the symbol it names**, or a verifier that satisfies P1 Grounding's *shape* still reports evidence
+that does not exist. No row owns that yet — it is pm's to mint, and qa2's own report row **#4897** is in front of pm.
+
+**The delegate did not turn the operator's "I accept your recommendations" into a ruling the operator had not
+specifically given.** Row #4887's release was the one thing labelled *RECOMMENDED — the operator has not ruled*, and its
+body predated the mechanism. Writing an attributed ruling into the store — through `pm`, who then holds it, releases
+it, and directs `impl` by it — is the kind of act that gets load-bearing in one round trip and costs a retraction plus a
+wrong seat-build to undo. So the grant was **asked about, not inferred**, and the pointer now names it as an open
+operator decision. The contrast that makes this the right call: where the operator *had* granted capacity (grant 12),
+the delegate spent it and reported the measurement; the difference is specificity, not caution.
+
+**Two deliberate non-acts, both grounded.** (1) The delegate did **not** re-drive `qa`'s #4890 after it died: its
+post-compaction context is already ~20,109 tokens, so another send re-triggers the same cut, and re-sending a brief is a
+deposit not a retry (the store keeps the user turn and the empty assistant turn). (2) The delegate did **not** raise the
+verifier slot this session even though ~1,160 MiB (~4,096 tokens at 160 KiB/token) is free on GPU0, because tonight's
+failure is a **policy** defect, not a size defect — raising the window moves the band, it does not remove it. Recorded
+so the next session does not read the free space as an invitation.
+
+**The completion reset is still live, and this time it moved a seat onto the live checkout.** `qa2`'s `complete_work`
+re-pointed its persisted cwd to the serving process's cwd — `/home/chexxor/Git/Durian-Pi` — so pm, lead **and qa2** were
+off the operator-approved root (#4882's mechanism, self-worsening per closed item, exactly as that row says). The
+delegate repaired it under grant 11: `up rig.selfdev.json --refresh --dry-run` named all three
+(`from: /home/chexxor/Git/Durian-Pi → to: /home/chexxor/Git/durian-dev/seatroot`), the refresh applied, the re-dry-run
+shows `changes: {}` for all 12 seats, and the worktree/branch inventories diffed unchanged with `refs/rescued` still 489.
+**The habit to keep: run `send` from the approved root, and re-check seat drift with `up … --refresh --dry-run` (a
+read-only verb that names every pending re-point) before the next writing verb** — because the F12 guard
+(`cli.mjs:466`) fails closed in whichever direction the persisted cwd currently disagrees.
+
+**What pm's rulings looked like when pm's own turn errored:** `send pm` settled `unanswered / model_error` with
+`stopReason: toolUse`, yet the queue records what pm decided — **#4890 and #4891 released to `queued`**, and **#4894**
+(commit the 5 files *before* completing, because #4882 can strand them), **#4895** (`rig-portability-audit.mjs` gives
+different findings from the seat root than from the live checkout, so the gate depends on where you stood), **#4896**
+(`seat-turn-shape.mjs` as pre-flight and as #4886's fixture source; the 6/12 parity break is its own concern).
+**A turn that errors after a tool call still committed that call**: the model_error is the *reply*'s failure, not the
+act's. Read the queue, not the transcript, to find out what a seat decided.
+
+**Evidence:** `send pm` out `.spike/fix-20261031/send-pm-verdict-out.json`; queue diffs
+`.spike/fix-20261031/queue.json` / `queue-after-pm.json` / `queue-after-qa2.json`; qa's dead turn
+`.spike/fix-20261031/log-qa-after-close.json` (entries 275452 / 275457 / 275459); qa2's completion
+`.spike/fix-20261031/send-qa2-out.json` and `qa2-4891-resultSummary.md`; the cite-check run on that summary (exit 0,
+`pathCites 1/0`); the re-read regions in `/home/chexxor/Git/durian-dev/seatroot/src/{seatguard,shellregistry}.mjs`
+(lines `:22`, `:144`, `:79`, `:106-107`); drift repair `.spike/fix-20261031/up-refresh-dryrun.json` →
+`up-refresh-applied.json` → re-dry-run; inventories `inv-{worktrees,branches}-{before,after}.txt`; turn shape before and
+after `.spike/fix-20261031/turn-shape-{clockin,clockout}.txt`; store backup
+`.spike/fix-20261031/store-backup-20261030-135039.sqlite` taken before the `reset`/`up` writes.

@@ -105,7 +105,14 @@ The verb's wording implies a failure. pi-durable's shipped source says otherwise
    `blocking - backgroundTokens` (background) **and only when `selectCut` finds a cut** (`generation.js:236-245`).
    Here blocking = 8,192; background = **−24,576, impossible**; and selection refuses until >20,000 tokens are kept —
    within ~4,500 tokens of the ceiling, i.e. past the point where a turn can still run. **On the verifier's window
-   auto-compaction is effectively dead, and a manual `compact` there is a no-op that reads like a defect.**
+   auto-compaction is not dead — it is a trap: it can fire only in the last ~4,500 tokens of the window, and firing
+   there kills the turn.** A manual `compact` below that band is a no-op that reads like a defect.
+   MEASURED, 2026-10-30 (`qa`, verifier window 24,576): a turn went out at `input=17,445`; the next request crossed
+   the selection budget, so a real `pi.compaction` entry landed (entry **275457**), and the turn after it came back
+   **`input=20,109, output=1, stopReason=length` with an empty reply** (entry **275459**). The seat had read a
+   26,532-char file whole. That is the failure mode this policy produces: not a silent no-op, but a summary written
+   at the moment there is no room left to answer, followed by an empty assistant turn that then counts against the
+   turn-shape rule (`verifier-serving-headroom.md` Step 1).
 5. It is **not** the window size alone — the same verb failed identically at 16,384. Do not “fix” it by raising
    context; that is the trap `verifier-serving-headroom.md` documents.
 
