@@ -16,8 +16,19 @@ release instruction) and #4887 (the operator-authorized compaction build).** The
 `.spike/fix-20261101/send-impl.out`, brief `.spike/fix-20261101/brief-impl-4849-4887.md`, retried only with
 `--request-id d178-impl-4849-4887` (a bare retry is a second deposit). It was launched with **cwd = the approved seat
 root** and `DURIG_SEAT_ROOT` set, which is what prevents the #4882 cwd re-point at the source instead of repairing it
-afterwards. At clock-out the seat root still held the 5 files UNCOMMITTED and no Act-2 file existed yet — so treat the
-run as UNSETTLED, and read `settledStatus` from the out file rather than assuming either half happened.
+afterwards. At clock-out the run was **still live** (`settledStatus` unread), so treat BOTH halves as UNSETTLED.
+
+**What the run had already done when this pointer was cut (a live mid-run snapshot, not a verdict).** `impl` used
+`prepare_workspace` (a tool — no shell needed) and created **locked worktree `/home/chexxor/Git/durian-dev/seatroot/item-4898`
+on branch `item-4898`** at base `3860e5d1`; `git worktree list` went 2 → 3, so any sweep must name it (ROADMAP 266:
+"`reapable 0` is not a verdict"). Act 2 was being authored there in the **approved shape**: `compactionSettings(config)`
+at `src/config.mjs:361` (19 `DURIG_COMPACTION_*` mentions), **exactly one** call site — `cli.mjs:430`
+`settings: { ...streamSettings(CFG), ...compactionSettings(CFG) }` — and `compactionReport` imported with a use at
+`cli.mjs:1363`, i.e. it is also fixing the three-state reporting. Diff at that moment: `src/config.mjs` +145, `cli.mjs`
++67/−12, **nothing committed**. **The failing-first demo is still owed**: no `demo/*.test.mjs` mentions
+`DURIG_COMPACTION`. Act 1's five files were still uncommitted in the seat root. Everything in this paragraph must be
+re-read, not trusted: it is inside a worktree, so any instrument you run there changes the rig it measures — pin
+`DURIG_DB` (the seat root's `durig.config.json` already pins the absolute store).
 
 **THE COMMIT IS NOW A RULING, NOT A TASK — and it is the operator's or lead's to make.** Measured: **no seat has a
 shell on this host**, so pm's addendum **#4894** ("`impl` commits the 5 files FIRST") is inenactable by its recipient.
@@ -132,7 +143,8 @@ pm **0.9225** (184,507/200,000), impl **0.756** (151,197/200,000), lead 0.308 (6
 DeepInfra** — `rig.selfdev.json` serves `local/iq3_s` (strata, GPU1 22,579/24,576 MiB, ctx 200,000) and
 `verifier/mistralai/ministral-3-14b-reasoning` (LM Studio GPU0 15,214/16,376 MiB, `loaded_context_length` **24576**,
 parallel 1); `durig.config.json` (host layer, gitignored) carries the base URLs — no API key needed on this host.
-**Worktrees 2**, branches 3, `refs/rescued` **489**. **Host:** 74 Gi used / 19 Gi available at clock-in, swap 4.9/8 GiB,
+**Worktrees 3** (the new one is locked `item-4898`, nested in the seat root), **branches 4** (`item-4898` added),
+`refs/rescued` **489**. **Host:** 74 Gi used / 19 Gi available at clock-in, swap 4.9/8 GiB,
 `/proc/vmstat oom_kill` **7 (unchanged)**, `user.slice memory.peak` 96,140,943,360 B (unchanged). **Clock-out trio
 PASS at HEAD `d3332af2`**; `doc-integrity-guard` 0 hard / 1 soft.
 
