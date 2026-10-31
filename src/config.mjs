@@ -130,6 +130,18 @@ export const CONFIG_KEYS = [
 	"DURIG_STRANDED_MS",
 	"DURIG_CONTEXT_WINDOW",
 	"DURIG_SEAT_ROOT",
+	// The compaction policy surface (#4887, registered by the #4931 re-cut). Measured, not assumed:
+	// nothing in `src/` or `cli.mjs` consumes this array - there is NO unknown-key rule at load time -
+	// so `CONFIG_KEYS` is the DECLARED inventory of what a config file may set, and the demos are what
+	// enforce it (demo/local-provider.test.mjs:75, demo/second-local-provider.test.mjs:146, and now
+	// demo/config.test.mjs). Leaving these five out of the inventory while the environment path read them
+	// is the drift #2114 already named: one setting, two sources, and nothing to notice the gap. This is
+	// CONFORMANCE, not runtime: the values already reach `Harness.open` either way.
+	"DURIG_COMPACTION_ENABLED",
+	"DURIG_COMPACTION_MODEL_OVERRIDES",
+	"DURIG_COMPACTION_RESERVE_TOKENS",
+	"DURIG_COMPACTION_KEEP_RECENT_TOKENS",
+	"DURIG_COMPACTION_BACKGROUND_TOKENS",
 	"DEEPINFRA_API_KEY",
 ];
 

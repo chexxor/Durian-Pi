@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+	CONFIG_KEYS,
 	compactionReport,
 	compactionSettings,
 	describeConfig,
@@ -367,6 +368,16 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 	const compactionDescribed = describeConfig({ config: {}, source: null });
 	for (const key of ["DURIG_COMPACTION_ENABLED", "DURIG_COMPACTION_RESERVE_TOKENS", "DURIG_COMPACTION_KEEP_RECENT_TOKENS", "DURIG_COMPACTION_BACKGROUND_TOKENS", "DURIG_COMPACTION_MODEL_OVERRIDES"]) {
 		assert.equal(compactionDescribed[key], null, `${key} must be reported (null = the platform default stands)`);
+	}
+
+	// REPORTED is not REGISTERED. The five keys were read from the environment and named in the config
+	// report while `CONFIG_KEYS` (src/config.mjs:111) left them out. Measured at this base: nothing in
+	// `src/` or `cli.mjs` reads that array, so it is a DECLARED inventory and the demos are its only
+	// enforcement - which is exactly why no assertion here could notice the gap until this one existed.
+	// Precedent #2114 (`DURIG_LOCAL_API_KEY`); shape from demo/local-provider.test.mjs:75. Conformance,
+	// not runtime: the values already reach `Harness.open` either way.
+	for (const key of ["DURIG_COMPACTION_ENABLED", "DURIG_COMPACTION_MODEL_OVERRIDES", "DURIG_COMPACTION_RESERVE_TOKENS", "DURIG_COMPACTION_KEEP_RECENT_TOKENS", "DURIG_COMPACTION_BACKGROUND_TOKENS"]) {
+		assert.ok(CONFIG_KEYS.includes(key), `${key} must be a config-file key, not only an environment variable`);
 	}
 
 	// And through the REAL open path: a bad compaction value must surface at Harness.open, which is
