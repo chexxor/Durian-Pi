@@ -173,7 +173,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [resume-while-broker-runs.md](resume-while-broker-runs.md) | you want to run `resume`/`doctor` but the broker is up | no |
 | [request-trace.md](request-trace.md) | you need the ACTUAL request body durig sends (thinking / reasoning_effort / max_tokens / store), not the programmed config | no |
 | [per-row-marker.md](per-row-marker.md) | you must decide whether a held landing row's work actually landed on main, and choose a marker to probe for it — bare identifiers give false positives, whole added lines give false negatives | no |
-| [verifier-independence.md](verifier-independence.md) | a verifier wants to edit the artefact it is verifying, or is about to report an `artifact`/SHA it did not run — a verifier's only write is a report | no |
+| [verifier-independence.md](verifier-independence.md) | a verifier wants to edit the artefact it is verifying, or is about to report an `artifact`/SHA it did not run — a verifier's only write is a report; **or** a verify leg must state which kind of independence it has when author and verifier run the SAME model, and what a `local/` verifier re-point would break | no |
 
 ## Index (mechanism)
 
@@ -200,6 +200,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Credentials / secrets | leaked-secret |
 | Review method | security-trust-boundary-review |
 | Verification / verifier independence | verifier-independence |
+| A verify leg on the same model as the author (which axes survive), and what a `local/` verifier re-point would make an instrument claim | verifier-independence, verifier-serving-headroom, hygiene-and-dead-model-pointers, local-provider-down |
 | Merge / conflicts | merge, land, resolve-merge-conflict, branch-cleanup |
 | Landing-row audit / per-row markers | per-row-marker |
 | Daemon / host | daemon-not-running |
