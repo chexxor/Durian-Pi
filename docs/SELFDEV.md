@@ -1129,3 +1129,55 @@ every exit code, per #4939.
   to `/tmp`. So the serving path can compact on its own: **check for a head marker before asking the operator to grant a
   manual `compact`.** (Same for `qa` `@275457`, `qa2` `@275460`.) Probe kept at `.spike/fix-20261102/compmarks.mjs` —
   promote via `tools/` if it earns its keep (#4960).
+
+## Operational pitfalls and speed-ups (delegating, 2026-10-31 evening, D186 — every number measured in this session)
+
+- **The do-not-send predicate is the counted projection's LAST entry, not the `AT RISK` flag.** Read it in one line
+  before any `send`:
+  `DURIG_DB=$PWD/selfdev.sqlite node tools/seat-turn-shape.mjs | grep -E "^seat |counted projection"` — take the last
+  comma-separated element. **Ends on `user` ⇒ the send is refused before the window is reached: `model_error`, empty
+  reply, ZERO tokens written (`consumed` does not move) and one more `user` is deposited, so the seat gets further
+  from admissible with every attempt.** Ends on `assistant` ⇒ the turn runs (and may still die at the end on size —
+  a different class). Measured 2026-10-31: the five seats whose projections end on `user` (`impl` 6, `pm` 15,
+  `advocate` 1, `designer` 1, `architect` 1) are exactly the seats carrying `last_run_failed: model_error`; the seven
+  that end on `assistant` (`qa` 4, `lead` 27, `scribe` 11, `devtools` 7, `auditor` 11, `security` 5, `qa2` 4) all
+  completed rows while ALSO flagged `AT RISK`. So the old line "AT RISK is not a gate" is only true of seats that end
+  on `assistant` — that half-sentence cost one `impl` wake. Routed as **#4967** (`scribe`) to correct
+  `docs/runbooks/verifier-serving-headroom.md` and the NEXT do-not-fix line; do not "fix" it by re-sending.
+- **A landing un-satisfies the pointer's own "seat root must equal `main`" precondition.** `scripts/land.mjs`
+  advances `main`; the seat root does not follow. Land FIRST, then
+  `git -C /home/chexxor/Git/durian-dev/seatroot merge --ff-only main` (exit 0 here), then wake. If you write a brief
+  that tells a seat to STOP unless the root equals `main`, land before you send it — otherwise your own STOP clause is
+  what fires. Prove the roster afterwards with the licensed read (`up … --refresh --dry-run` →
+  `wouldRefresh[].changes.cwd`), not by assertion.
+- **`node scripts/suite.mjs --jobs 8` in a deps-complete tree is 48 s for 240 demos**, not the "~10 min" the runbooks
+  quote. Run the FULL gate after a landing instead of a derived subset, and name the tree + dependency set with the
+  verdict. Measured at `9ee578b1` (shared tree = `main`, clean, this checkout's `node_modules` + `vendor/pi-main`):
+  `pass=239 fail=1 environmental=0`, exit 1; the one red (`demo/deepinfra-catalog.test.mjs`) was PROVEN pre-existing
+  by checking that its two input paths were last touched by commits that are ancestors of the *pre*-landing tip, and
+  it already has row **#4893**.
+- **A `-D` grant is conditional — re-derive the condition, do not bank it.** `item-4898`'s grant was "after #4931
+  lands"; its patch-id `258dccc5…` equals `c97e1f11`, which lives *inside unlanded `item-4931`*, so deleting it
+  tonight would have destroyed the only copy of that patch. Proofs that did hold: `item-4904` @`f8840349` patch-id
+  `279e0d98…` = landed `8a950542` (`--is-ancestor` exit 0); `item-4957`'s tip is **identical** to `item-4931`'s, so
+  `-D` removed zero objects.
+- **Deleting redundant `refs/rescued` blob refs frees nothing and costs nothing — and that asymmetry is the whole
+  argument.** 490 → 485 refs, pack unchanged at 17.58 MiB, all 485 survivors are commits. Re-derive byte-identity
+  before deleting: `git cat-file blob <ref> | diff - <path>`.
+- **`cli.mjs send` now prints `send is DEPRECATED … prefer node intent.mjs <seat> --body-file <file>`** on every call,
+  but `intent.mjs` needs a **resident broker** to deliver, and this rig has had none (`status.broker.state: "down"`)
+  all session. With no broker, `send` is the only working delivery verb — no entry point (`AGENTS.md`, `SELFDEV.md`,
+  `session-start-cost.md`, both skills) says which case you are in. Carried to `lead`; not yet registered.
+- **Sequencing that cost wall-clock this session, and the shortcut:** the refused `impl` wake was ~3 min and zero
+  tokens (cheap in tokens, expensive in state — it poisons the window). The `lead` wake was ~11 min and DID land four
+  rows before dying. So: run the shape read (0.1–0.4 s) BEFORE composing a brief, and if the seat is ends-on-`user`,
+  send the ask to a seat that can carry it and let it re-route — do not spend the wake.
+- **Scratch written inside a worktree dies with it.** A backgrounded command that opens `cd <worktree> || cd .` writes
+  its `.spike/` output INTO the worktree; `git worktree remove <path>` then deletes the report you meant to keep. Run
+  measurement legs in the shared tree with an absolute `DURIG_DB`, or write scratch with an absolute path.
+- **Two instruments named in the pointer's guard block do not exist on `main`:** `scripts/citation-sentinel.mjs` and
+  `scripts/markdown-lint.mjs` (both `MODULE_NOT_FOUND`, measured 2026-10-31). The citation checker that exists is
+  `tools/review-cite-check.mjs` (positional files, `--gate`, `--json`; it reported 3 pre-existing HARD findings —
+  `docs/DECISIONS.md:2462`, `docs/DECISIONS.md:6700`, `docs/SELFDEV.md:789` — and 0 findings in any block appended
+  this session). `demo/review-cite-check.mjs` exists only on the unmerged `item-*` trees. Do not "fix" the pointer by
+  writing those scripts; carry it.

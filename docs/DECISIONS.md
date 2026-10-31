@@ -7517,3 +7517,125 @@ fired this session** (the licensed read was `compact-eval` without `--yes`, whic
 can compact on its own — look for a marker before asking the operator for a manual `compact` grant. The genuine
 headroom pairs at clock-out: `impl` 300 msgs @183,689, `pm` 153 @184,507 with `cacheRead 0 / input 183,402` (fresh,
 uncached), `lead` 170 @163,686, `scribe` 175 @151,039, `security` 100 @89,530.
+
+---
+
+## D186 (2026-10-31 evening, Linux, `Alex-Desktop-Win10`): the do-not-send gate is the projection's LAST counted entry, not `AT RISK`; and a landing moves `main` out from under the seat root
+
+**Recorded by:** delegate. Host: Linux, box `Alex-Desktop-Win10`, kernel `7.2.11-200.fc44.x86_64`, node
+v24.22.1, `America/Chicago` (CDT = UTC−5). Every number below was produced by a command in this session.
+
+**What the operator granted (six answers to the six asks in the D185 pointer):** land `item-4958`; re-cut
+`item-4931` onto current `main` then land it; three `-D` grants (`item-4904`, `item-4957`, and `item-4898` only
+*after* #4931 lands); delete the 5 redundant `refs/rescued` **blobs** (leave the 485 commit refs); land
+`wip/seat-prompt-files` **as a row**; and for `impl` — **re-arm**, do not fire a compaction.
+
+**Decision D186.1 — the real do-not-send predicate is the shape of the LAST counted entry, and both existing docs
+under-specify it.** I sent `impl` one brief (a re-cut request for its own row #4931). It settled
+`settledStatus: unanswered`, `settledReason: model_error`, `reply: null`, and — decisively — **no usage record was
+written**: `status.context.impl.consumed` is byte-identical before and after at **183,689**, so **zero tokens were
+generated**. That is failure class (1) in `docs/runbooks/verifier-serving-headroom.md` ("refused before the window is
+reached"), not the size class; the window never mattered. The discriminator, measured across all 12 seats with
+`tools/seat-turn-shape.mjs`, is the **last entry of the counted projection** (every `user` plus every `assistant`
+carrying no tool calls):
+
+| projection ends on | seats (counted-projection length) | what actually happened |
+| --- | --- | --- |
+| **`user`** | `impl` 6, `pm` 15, `advocate` 1, `designer` 1, `architect` 1 | exactly the seats carrying attention `last_run_failed: model_error` with no reply |
+| `assistant` | `qa` 4, `lead` 27, `scribe` 11, `devtools` 7, `auditor` 11, `security` 5, `qa2` 4 | these seats **completed rows tonight while also flagged `AT RISK`** |
+
+So NEXT.md's standing line — "`AT RISK` is a strict-template warning, NOT a do-not-send gate on this host" — is
+**half right and it cost me a wake**: the flag is a *parity-break-anywhere* verdict, while the refusal is the *next
+`user` landing in the assistant slot*. `scribe` and `security` finished rows under the flag because their projections
+**end on `assistant`**; `impl` died because its window's last counted entry was a `user` (the turn before it was a
+tool-calling assistant plus tool results, and a tool-calling assistant does **not** satisfy alternation). And the
+deposit is monotonic: `impl` went from projection 5 (`user,assistant,user`) to 6 (`…,user,user`) from that one
+refused send — a retry moves a seat *further* from admissible. **Rule adopted:** read the projection's last counted
+entry before any `send`; if it is `user`, do not send — the repair is a context boundary (a `compact`/`reset` head
+marker restarts the replay window, which is why a reset ever "fixed" alternation), and that is an operator grant, not
+a delegate act. **I did not re-send**, which is what the runbook's "never re-send the same brief" protects.
+
+**Decision D186.2 — `resume` was the licensed re-arm and there was nothing to re-arm; the "re-arm" the situation
+needed was a context boundary, which needs a grant.** No broker was running (`status.broker.state: "down"`), so per
+`docs/runbooks/resume-while-broker-runs.md` the verb was legal without stopping anything: `cli.mjs resume` →
+`{"found":0,"actions":[]}`, exit 0 — consistent with the D185 note that `impl`'s `admitted_not_started` flag had
+cleared itself. `reset impl --dry-run` → `{"wouldReset":true,"writes":0}` exit 0 (the free preview; `reset` has a
+`--dry-run`, `compact` does **not**). I did **not** fire `compact`/`reset`: grant 19 authorises the dry run only. The
+re-cut of #4931 is therefore **blocked on a context decision**, not on git — escalated rather than worked around.
+
+**Decision D186.3 — a landing moves `main`, so it silently un-satisfies the "seat root must equal `main`" precondition
+the same brief asserts.** Landing `item-4958` advanced `main` `7844fcff → 9ee578b1`, which left the approved seat root
+one commit behind *after* I had already written a brief telling `impl` to STOP unless
+`git -C /home/chexxor/Git/durian-dev/seatroot rev-parse HEAD` equals `main`. Sequence rule: **land first, then
+fast-forward the seat root, then wake.** Re-ran `git -C <root> merge --ff-only main` (exit 0) and the
+`up --refresh --dry-run` read afterwards still prints **no drift** in `wouldRefresh[].changes.cwd`; bare-name
+inventory diff across the whole session = exactly the 3 worktrees + 3 branches I removed, nothing else moved.
+
+**Landing/cleanup evidence (all re-derived this session, not inherited):**
+- `item-4958` @ `5e2273ee` → merge `9ee578b1`; `merge-base --is-ancestor` exit 0, `%p` = `7844fcff 5e2273ee`,
+  +82/−5 over 2 doc files. Full gate in the shared tree (which *is* `main`, clean, deps = this checkout +
+  `vendor/pi-main`): **`pass=239 fail=1 environmental=0`**, demos=240, exit 1. The single red is
+  `demo/deepinfra-catalog.test.mjs` and it **pre-existed**: its two input paths (`demo/deepinfra-catalog.test.mjs`,
+  `rig.selfdev.json`) were last touched by `9882632a` and `ecdeb70f`, both ancestors of the *pre*-landing tip
+  `7844fcff`, and my merge changed only 2 doc paths. It already has a row — **#4893** (`held`, pm->devtools). The
+  derived doc-only set (13 tests) also passed, exit 0. **Do not report this as "green except one"** — report the
+  pair.
+- `item-4957`: tip **identical** to `item-4931`'s (`8fa8f3a2`), so `-D` removed zero objects; worktree was clean.
+  `item-4904` @ `f8840349`: patch-id `279e0d9861b4…` equals landed `8a950542` (itself `--is-ancestor` exit 0), so the
+  content is on `main` under a different sha — `-D` justified, and `git branch --no-merged` was *not* the verdict.
+- `item-4898` @ `9beb1ae3` **left in place**: its patch-id `258dccc521f8…` equals `c97e1f11`, which lives **inside
+  unlanded `item-4931`**, so the grant's precondition ("after #4931 lands") is not satisfied. Acting on the grant
+  early would have destroyed the only copy of that patch.
+- `refs/rescued`: deleted the 5 blob refs **by name** after re-deriving byte-identity (`git cat-file blob <ref> |
+  diff - <path>` → identical for all five: `src/seatguard.mjs`, `src/seattools.mjs`, `src/shellregistry.mjs`,
+  `demo/seatguard.test.mjs`, `demo/seattools.test.mjs`). **490 → 485 refs, 0 blob refs left, all remaining refs are
+  commits, pack unchanged at 17.58 MiB** — i.e. the deletion freed nothing and cost nothing, which is exactly the
+  asymmetry that justified keeping the 485 commit refs. No `gc` run.
+- Worktree/branch state at clock-out: **7 worktrees, 8 branches** (was 10/11); `worktree prune --dry-run --verbose`
+  printed nothing.
+
+**Decision D186.4 — `cli.mjs send` now prints a DEPRECATION notice that no entry point mentions.** Every `send` this
+session printed: "send is DEPRECATED (opens a full writing harness = a second owner): prefer
+`node intent.mjs <seat> --body-file <file>` (the broker delivers)". `AGENTS.md`, `docs/SELFDEV.md`,
+`docs/runbooks/session-start-cost.md` and both skills still prescribe `send --body-file` as the delivery verb, and
+`intent.mjs` requires a **resident broker** to deliver — with the broker down (the state this rig has been in all
+session) `send` is the only path that works. Either the entry points should name `intent.mjs` **plus** the broker
+precondition, or the notice should say when the fallback is correct. Registered nowhere; I carried it to `lead`.
+
+**Instrument asks routed (not implemented by me):** #4937 (detector class, `held`), #4959 (window denominators),
+#4960 (promote `.spike/` probes into `tools/`), #4962 (217 half-delivered — one seat is still told "the shell tool is
+powershell" on a Linux host, 0 told bash, 11 told nothing) — all pre-existing rows; and to `lead` in this session's
+brief: the projection-last-entry predicator, which likely folds into #4959 or #4937 rather than minting a fifth row.
+
+**Cost accounting (so the next session can price a wake):** one refused `impl` send ≈ 3 minutes of wall-clock and
+**zero** model tokens, and it moved the seat one entry further from admissible. One `lead` turn ≈ 8–19 min. The full
+demo gate in a deps-complete tree is **48 s at `--jobs 8`**, not "10 minutes" — cheap enough to run after every
+landing rather than a subset. `cli.mjs queue --json` 0.84 s / 21.8 MB. `tools/seat-turn-shape.mjs` 0.1–0.4 s.
+
+**Decision D186.5 — the rig has lost its sendable routing capacity, and that is now the binding blocker (not git).**
+After the two wakes in this session, the attention and shape state is: `pm`, `impl` **and `lead`** all carry
+`last_run_failed: model_error`, and all three have a counted projection that **ends on `user`** (`pm` 15, `impl` 6,
+`lead` 28). `lead`'s turn was *productive before it died* — it generated tokens, ran `send_work` and `complete_work`,
+minted four rows, and only then settled `unanswered / model_error` at `consumed 185,156` with `cacheRead 0 /
+input 183,366` (a fresh uncached prompt, the expensive case). So the two classes must be kept apart: **ends-on-`user`
+⇒ zero tokens, no work, and one more `user` deposited; ends-on-`assistant` ⇒ the turn runs and can still die at the
+end on size.** The seats still sendable (`qa` 4, `qa2` 4, `devtools` 7 @0.2656, `scribe` 11, `security` 5) are the
+verifier and docs seats. Every build the operator authorised is addressed to `impl` — **#4955** (claimed), **#4966**
+(persona files, feature), **#4968** (trivial), **#4937**/**#4964** (held) — and neither `pm` nor `lead` can re-route
+it. The licensed repair is a context boundary on the three stuck seats (`compact` = 1 summarizer call each, no
+`--dry-run`; `reset` has `--dry-run` and I ran it: `{"wouldReset":true,"writes":0}`), which grant 19 does not cover.
+Inference, not proof: a *fresh* head marker restarts the replay window, so the next counted entry becomes a `user` in
+slot 0, which is admissible — supported by `qa` (`pi.compaction` marker, projection ends on `assistant`, ADMISSIBLE)
+and by the runbook's note that a reset "appeared to fix" alternation. **The re-cut of #4931 therefore has no carrier
+row**: #4931 is `done`, my re-cut brief was refused, and re-sending it is the deposit the runbook forbids.
+
+**What `lead` minted from the operator's ruling (verified in the store, not from prose):** **#4966** `lead→impl`
+(feature) "re-cut `wip/seat-prompt-files` @04e3ba6b onto current main, fix the 2 broken demos + add …" — the
+operator's "land as a row" ruling now has a carrier; **#4967** `lead→scribe` (trivial) "the shape discriminator is
+the projection's LAST counted entry (ends-on-`user`), NOT `AT RISK`" — my D186.1 finding, routed rather than
+implemented by me; **#4968** `lead→impl` (217's push-refusal never asserted through the `bash` name); **#4969**
+`lead→scribe` (one-path-per-`node --check` + the 40-hex redaction rule into `verifier-independence.md`); and
+**#4962** was completed by `lead` with F1→#4938, F2→#4966 + re-scoped #4906 (the `check` rule for persona text naming
+a shell outside the registry, gated behind #4966 so it starts green), F3→#4923, F4→#4968, F5→#4969, F6→#2055/#2056.
+D186.4's `send`-deprecation notice was carried to `lead` in the same round trip and was **not** minted — the notice
+names `intent.mjs`, which needs a resident broker, and no entry point says so.

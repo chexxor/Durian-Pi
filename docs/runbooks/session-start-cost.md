@@ -54,6 +54,20 @@ DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.m
 #    marker and the window length next to the fraction. A post-`compact` grant question starts here: `impl` carries
 #    `pi.compaction@276279` in the live store although no `compact` verb was fired this session, which means the serving
 #    path can compact on its own — check for a marker before asking the operator to fire one.
+# 2b. MAY I SEND AT ALL — one field, 0.4 s, and it is NOT the `AT RISK` flag. Measured 2026-10-31 (D186):
+DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.mjs \
+  | grep -E '^seat |counted projection'   # read the LAST comma-separated element per seat
+#    ends on `user`      ⇒ DO NOT SEND. The provider call is refused before the window is reached: attention
+#                         `last_run_failed: model_error`, empty reply, and **zero tokens** — `status.context.consumed`
+#                         does not move at all. The refused send still APPENDS a user entry, so the seat moves further
+#                         from admissible every attempt (impl went proj 5 → 6).
+#    ends on `assistant` ⇒ the turn runs; it may still die at the END on size, which is a different class and leaves
+#                         its tool calls applied (lead minted four rows and then settled model_error at 185,156).
+#    Measured split: ends-on-user = impl 6, pm 15, advocate 1, designer 1, architect 1 — exactly the seats carrying
+#    `last_run_failed`; ends-on-assistant = qa 4, lead 27, scribe 11, devtools 7, auditor 11, security 5, qa2 4 — all
+#    of which completed rows while ALSO flagged `AT RISK`. So the `AT RISK` verdict (a parity break ANYWHERE in the
+#    window) is not the gate; the boundary slot is. Correcting both docs is row **#4967**; do not "fix" a stuck seat
+#    by re-sending it.
 # 3. are the seats pointed at the approved root? THE INSTRUMENT ANSWERS THIS — read the JSON field, not prose. 1.3 s.
 DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite \
   node cli.mjs up rig.selfdev.json --refresh --dry-run > .spike/<session>/updry.json
@@ -112,7 +126,16 @@ git worktree list | grep ' locked$'                          # terse form: the l
 10. **Give `node --check` one path per invocation.** It checks only the FIRST path and ignores the rest: two
     deliberately broken files in one call printed only the first and exited 1, so a multi-file call is a false
     green whenever the first file is fine.
-11. **Remove your proof scratch before a landing, and never leave it at the repo root.** `scripts/land.mjs` refused
+11. **Land first, THEN fast-forward the approved seat root, then wake.** `scripts/land.mjs` advances `main` and the
+    seat root does not follow, so a brief written before the landing can carry a STOP clause ("STOP unless the root
+    equals `main`") that the landing itself trips. Measured 2026-10-31: landing `item-4958` moved `main`
+    `7844fcff → 9ee578b1` and left the root one behind; `git -C <root> merge --ff-only main` exit 0, roster dry run
+    then printed no drift, and the bare-name inventory diff across the whole session was exactly the removals.
+12. **The full demo gate is 48 s, not 10 minutes.** `node scripts/suite.mjs --jobs 8` = 240 demos in 47.8 s in a
+    deps-complete tree (measured at `9ee578b1`, shared tree = `main`, `node_modules` + `vendor/pi-main`). Prefer it
+    over a derived subset after a landing; name the tree and the dependency set with the verdict, and prove any red
+    is pre-existing by checking that its input paths were last touched by ancestors of the PRE-landing tip.
+13. **Remove your proof scratch before a landing, and never leave it at the repo root.** `scripts/land.mjs` refused
     the whole pass on one untracked path (`.main-check/`); the stray-worktree gate (#4139) reads the directory
     list, not `git status --porcelain`.
 
