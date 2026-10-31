@@ -7172,3 +7172,97 @@ the seat received a *path* instead of a brief and refused to infer content from 
 - **Wake yield, re-measured:** one `send` to `lead` (0.3555) with a ~2.4 KB brief closed and minted six rows in ~4 min;
   the same content to `pm` (0.9225, `model_error`) would have parked silently. **Batching briefs is worth far more on this
   rig than parallel wakes.**
+
+---
+
+## D182 — the merge grant was executed through `scripts/land.mjs`, not raw git, and it landed on the AUTHOR's seat-run proof with the INDEPENDENT leg explicitly unverified; the new seat defect is a run that settles `done` having executed nothing (delegate, 2026-10-31, Linux)
+
+**The ruling.** The operator: (1) **spend nothing** — no GPU capacity for the verifier slot; (2) **"I grant you permission to
+merge."** The delegate read that as merge-to-`main` only and **said so before acting**: push was not granted and nothing was
+pushed (`main` is 41 ahead of `origin/main`). The approved five-act order was kept — the grant removed an authority blocker,
+it did not promote the merge above the verify leg.
+
+**Why `scripts/land.mjs` and not `git merge`.** The repo already owns a landing chokepoint, and its header states the harm
+it exists to prevent: a 2026-10-17 landing merged into the **shared** working tree while the rig was live, so the tree sat
+with `.git/MERGE_HEAD` and `<<<<<<<` markers in `src/checkup.mjs` and **every `cli.mjs` verb died**. `land.mjs` merges in a
+**scratch detached worktree** and advances `main` only by a clean fast-forward, refuses on tracked modifications or an
+already-mid-merge tree, and takes the **generation slots** across the FF (#1497/#1498/#1509 — the version that *refused* on
+a live lock stalled every landing). Raw `git merge` in the shared checkout would have re-opened exactly that failure for a
+convenience gain. Result: exit 0, `main de8429b1 → ddb94763`, `lock: slots 1 held 1 liveHolders 0`, no scratch left behind.
+
+**Why a merge commit rather than rebase-then-FF.** Two reasons that both matter later. (a) `main`'s history is **60/60
+`merge: land <branch> onto main`** — inventing a linear landing for one change makes the next bisect stranger. (b) A merge
+leaves the author's commit **`8a950542` intact**, so the reviewed-diff pin stayed checkable end-to-end: the landed change
+still reports patch-id **`279e0d9861b4d6958cf1f36af03dc00c96fcaa23`**, the same value gated at #4916. A second rebase would
+have put the delegate in the position of performing the author's rebase (#3271 says the author owns that act) and would have
+created a new commit id whose content claim had to be re-proven.
+
+**The judgment call the operator should be able to audit: 217 landed with an AUTHOR's seat-run proof and NO independent
+seat verification.** These are different claims and the record keeps them apart.
+- **True:** a seat executed the acceptance itself, on the tree that landed. `impl` in `item-4916` @ `8a950542` ran `uname -s`,
+  `git rev-parse`, three `node --check`, both demo suites and `git status`, each exit 0 with no pipe (#4916, D181).
+- **Not true:** that an *independent* seat verified it. #4930 (`devtools`) is still **`claimed`** because the seat never
+  executed a verb. The delegate's own runs in the deps-linked seat root and on landed `main` are labelled
+  **delegate-run**, and the pointer says so.
+The landing is justified by the operator's grant plus the author's seat-run evidence plus a clean sweep; it is **not**
+justified as independent review, and `lead` still owes #4930 a disposition (release, re-mint to a seat that can execute, or
+park it under a defect row). Leaving #4930 `claimed` rather than quietly completing it is deliberate: **a delegate must not
+move another seat's row** — measured this session from the other direction too, since even `lead` was refused
+`hold_work(4905)` with *"addressed to devtools, not you"* (a refinement to #4856: a sender may **release** its own row but may
+not **park** it, which is why ordering has to go into the body).
+
+**The new defect, and it is a class: a run that settles `done` having executed nothing.** `devtools` claimed #4930, created
+the **correct, locked** worktree (`item-4930 @ 8a950542` — locking is itself the fix for the D180 drift class), reasoned
+correctly about the tree in its thinking block, and then emitted
+`<tool_call>…<function=powershell>…` **as prose**, twice, with an explicit repair nudge in between. `stopReason:
+"stop"`, `settledStatus: "done"`, zero tools run, row still open. Two mechanisms are tangled and both are worth naming:
+(i) **the local model writes tool-call markup into `text`**, so the harness legitimately treats the message as a final
+answer; (ii) it names **`powershell`**, the tool recorded **20,350 times in its own history**, when the landed tree registers
+**`bash`** — transcript pressure beating the registered schema. (ii) raises the priority of #4906 (delete "the shell tool is
+powershell" from `rig.selfdev.json`), which looked trivial and is not. **Do not add a detector pattern by hand**: the guard's
+patterns are a registry (`TEXT_PATTERNS`, `src/attention.mjs`) proven against **real fixtures**
+(`demo/fixtures/degenerate-text/`), the detector is `impl`'s, and `demo/degeneration-text.test.mjs` plus
+`scripts/degen-scan.mjs` on a **store copy** is the bar. Route it.
+
+**`land.mjs` does not regression-check unless `--suite` is passed — and it says so in its own report.** So the landing was
+incomplete until the sweep ran separately: **239 demo tests, 2 stable RED + 1 flaky**, and each was **attributed rather than
+called a regression**: `deepinfra-catalog` (environmental: seat pins name the verifier model, absent from the fallback
+catalog, no key), `test-areas` (**`demo/seat-turn-shape.test.mjs` is on disk but unmapped in the areas manifest** — a real
+pre-existing gap that needs a trivial row nobody has), `checkup-citation` (exit 0 standalone, order-dependent). Attribution
+method that took seconds and is worth reusing: `git show --name-only` on the landed commit (5 files, none referenced by the
+failing tests), `git ls-tree <pre-merge main>` for the unmapped test's existence at the parent, and a standalone re-run to
+separate flakiness from failure.
+
+**Root move: `merge --ff-only`, not `reset --hard`.** D181 needed `reset` because the rebased tip was not an FF of the
+branch; after landing, it *was*, so `git -C …/seatroot merge --ff-only main` is strictly safer — it refuses unless the move
+is a true fast-forward, which is the property you want when re-pointing the tree every seat forks from. The ref inventory
+diffed by exactly the three expected groups. **And one inventory line looked catastrophic and was not:** `.spike` **191 → 4**.
+That was the script reporting **the seat root's own `.spike`** because the inventory ran with a different `cwd`. Given this
+rig's history (the 2026-10-26 scratch sweep), a false "4 entries" reading is precisely the shape that would have justified a
+"cleanup" — **record `pwd` inside every inventory.** Re-verified from the main checkout: 191 entries, both insurances still
+verify, 7 worktrees, 8 branches, 490 rescue refs.
+
+**`lead`'s anti-vacuity ruling survived the landing, and it should be the model for gates generally.** After 217 landed, the
+portability audit reports **1 finding, `seat-host-unaware`**, and that is the **pass** condition: the remainder was cut out of
+#4849 at #4858, folded into #4906 with the condition that it *stays named*, because "a clean audit after that change would be
+the suspicious result". Meanwhile #4914's prediction landed as measured fact: `channel-preflight` now reads the registered
+shell correctly (`"bash"`) and still prints **`NO SHELL CAN START HERE`** because §7 probes only the vendored
+`pwsh`/`powershell` list — directly contradicting its own evidence two lines below (`name=bash isError=false`, 2.0 h ago). An
+instrument whose verdict moves while its evidence does not is a routing target, not a reason to re-open 217.
+
+### Clock-out notes — where the wall-clock went, and what would shorten it next time
+
+- **Two dead `devtools` turns (~12 min) bought a defect, not a verification.** The pre-wake gate should include a **cheap
+  capability probe of the seat's own last successful tool call** — `channel-preflight` already prints
+  `last shell tool result: … name=bash isError=false` and the per-tool `toolName` counts, so a wake-time warning of the form
+  "this seat's last N shell calls were `powershell`/`ENOENT`" is buildable from evidence the tool already gathers. Routed as a
+  refinement to #4914 rather than built here.
+- **The sweep is the expensive step and it is currently opt-in.** `land.mjs` already imports `landingChangedPaths`
+  (`src/textintegrity.mjs`), so a **`--changed-suite` mode running only the tests mapped to changed paths** (the areas
+  manifest that `test-areas.test.mjs` validates!) would turn a ~10-minute full sweep into seconds for a 5-file landing, with
+  the full sweep reserved for release. Worth a row: it makes the honest path the cheap path.
+- **The no-spend reachability map is now load-bearing and cheap to produce**: turn shape per seat (~1 s each), `--ctx-size`
+  from `ps`, the declared `DURIG_VERIFIER_CONTEXT`, and one probe at the failing size. Four commands decide whether a verify
+  leg is possible at all; tonight they were run *after* three failed turns instead of before.
+- **Attribution beats re-running**: the `git show --name-only` / `git ls-tree <parent>` / standalone-rerun trio settled three
+  sweep REDs in well under a minute and is what let the operator's landing be reported honestly.
