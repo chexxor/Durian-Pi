@@ -32,7 +32,7 @@
 // gated on MEASURED incidence (ROADMAP 100).
 //
 // usage:
-//   node scripts/land.mjs <branch> [<branch>...] [--repo <dir>] [--db <path>] [--suite] [--keep] [--json]
+//   node scripts/land.mjs <branch> [<branch>...] [--repo <dir>] [--db <path>] [--suite | --changed-suite] [--keep] [--json]
 //
 //   --repo <dir>   the shared repository root (default: the repo containing cwd)
 //   --db <path>    the rig store, for the genlock pre-flight (default: DURIG_DB, else the store the
@@ -40,6 +40,12 @@
 //                  with a live genlock — and only then `./rig.sqlite`; #1383)
 //   --suite        run every demo/*.test.mjs IN the scratch worktree and refuse to advance
 //                  main if any fails (exit 0 = pass)
+//   --changed-suite (#4936) run only the tests the change DERIVES, selected by the same
+//                  `tools/what-to-test.mjs` the operator uses — no second path→test map — then
+//                  report which AREAS ran and which did NOT. It is never a green gate: a pass here
+//                  means "the derived subset is green", and if the derivation finds NO test under
+//                  the change the landing is REFUSED rather than advanced unchecked. Opt-in; the
+//                  default stays no regression check at all, and `--suite` still wins if both are given.
 //   --keep         keep the scratch worktree on failure, so a conflict can be resolved there
 //   --json         machine-readable report (always printed; this flag is accepted for symmetry)
 //
@@ -52,6 +58,10 @@ import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, unl
 import { basename, dirname, join, resolve } from "node:path";
 import { DEFAULTS_CONFIG_PATHS, DEFAULT_CONFIG_PATHS } from "../src/config.mjs";
 import { landingChangedPaths, readTextIntegrity } from "../src/textintegrity.mjs";
+// #4936: the CHANGED-SUITE scope report — which areas ran and which did NOT. It reads the SAME
+// area data as `scripts/test.mjs` and `tools/what-to-test.mjs`; it is a reporter, not a second
+// selector, and that is the whole point (#4922: a second mechanism is the thing that drifts).
+import { changedSuiteScope } from "../src/testareas.mjs";
 // The PRIORITY reservation + the wait-with-priority claim (#1497/#1498, lead #2054 precondition
 // (c)). Imported from a deliberately DEPENDENCY-FREE module (node:fs/node:path only) so this
 // chokepoint still loads when the provider stack is broken — the #1164 Q3 rule this file's own
@@ -82,6 +92,10 @@ const option = (name) => {
 	return at >= 0 ? args[at + 1] : undefined;
 };
 const wantSuite = args.includes("--suite");
+// #4936: the cheap honest path. Measured cost of the alternatives: `--suite` is ~239 tests / ~10 min,
+// and with neither flag the pass runs NOTHING and still reports ok:true. A seat under turn pressure
+// picks "run nothing" unless something cheaper than the full gate exists.
+const wantChangedSuite = args.includes("--changed-suite");
 const keepScratch = args.includes("--keep");
 
 /** Run git and capture everything; the caller decides whether a failure is fatal. */
@@ -520,14 +534,96 @@ for (const branch of branches) {
 /* ───────── optional: prove the result in the scratch before advancing main ───────── */
 
 const suiteResults = [];
+// #4936: what this pass actually covered, or null when no regression check ran. Declared out here so
+// EVERY report path — including a STOPPED mid-suite run and the final ok — carries the same statement.
+let suiteScope = null;
 await (async () => {
-	if (wantSuite) {
+	if (wantSuite || wantChangedSuite) {
 	const demoDir = join(scratch, "demo");
-	const tests = existsSync(demoDir)
+	const allTests = existsSync(demoDir)
 		? readdirSync(demoDir)
 				.filter((n) => n.endsWith(".test.mjs"))
 				.sort()
 		: [];
+	let tests = allTests;
+	if (wantChangedSuite && !wantSuite) {
+		/* ── #4936: derive the set; never invent one ── */
+		// `tools/what-to-test.mjs` is the selector (it derives from what each demo's own source
+		// names). It runs IN THE SCRATCH against the main that scratch forked from, so the change it
+		// classifies is the change being landed — not the state of the shared tree, which is the
+		// measurement error #4436 and the clean-root pre-flight exist to prevent.
+		const wtt = spawnSync(process.execPath, [join(scratch, "tools", "what-to-test.mjs"), "--json", `--base=${mainBefore.out}`], { cwd: scratch, encoding: "utf8" });
+		let verdict = null;
+		try {
+			verdict = JSON.parse(wtt.stdout ?? "");
+		} catch {
+			verdict = null;
+		}
+		if (!verdict || !Array.isArray(verdict.selected)) {
+			if (!keepScratch) removeScratch();
+			report(
+				{
+					...base,
+					error:
+						`--changed-suite could not classify this landing: tools/what-to-test.mjs exited ${wtt.status} ` +
+						`(${(wtt.stderr ?? "").trim().split("\n").slice(-3).join(" | ") || "no output"}). Nothing was advanced: a subset ` +
+						"that cannot be derived is not a check. Re-run with --suite.",
+					merged,
+				},
+				1,
+			);
+		}
+		if (verdict.scanFindings?.length) {
+			// Recorded, not duplicated: this file already owns the landing byte-integrity gate
+			// (`landingChangedPaths` / `readTextIntegrity`), so the finding is surfaced here rather
+			// than gate-checked twice by two mechanisms.
+			console.error(`changed-suite: what-to-test's byte scan flagged ${verdict.scanFindings.length} character(s) in changed files — see its own report`);
+		}
+		suiteScope = null;
+		try {
+			suiteScope = changedSuiteScope(scratch, { selected: verdict.selected.map((s) => s.test).filter((t) => typeof t === "string") });
+		} catch (e) {
+			// A rig with no area manifest has no area partition to derive FROM. Say that, with the
+			// remedy, rather than dying in an uncaught throw inside the lock hold.
+			if (!keepScratch) removeScratch();
+			report(
+				{
+					...base,
+					error: `--changed-suite is unavailable here: ${e.message}. Nothing was advanced — the area manifest is what makes a subset honest.`,
+					merged,
+				},
+				1,
+			);
+		}
+		base.suiteScope = suiteScope;
+		// stdout carries the JSON report (#4403), so the scope goes to stderr where a human sees it live.
+		console.error(
+			`changed-suite: ran ${suiteScope.ranCount}/${suiteScope.totalTests} derived test(s) — areas RAN [${suiteScope.areasRan.join(", ") || "none"}], ` +
+				`areas NOT RUN [${suiteScope.areasNotRun.join(", ") || "none"}] · NOT the full gate (${suiteScope.gate.command})`,
+		);
+		if (suiteScope.missingFromDisk.length) {
+			console.error(`changed-suite: the selection named ${suiteScope.missingFromDisk.length} file(s) not on disk: ${suiteScope.missingFromDisk.join(", ")}`);
+		}
+		if (suiteScope.coverage === "none") {
+			// The shape that makes this safe: a change with no mapped test under it must read as
+			// NO COVERAGE, and a landing must not advance on a gate that ran zero tests.
+			if (!keepScratch) removeScratch();
+			report(
+				{
+					...base,
+				error:
+						`--changed-suite found NO coverage for this change: none of the ${suiteScope.totalTests} tests in the area manifest names any ` +
+						`changed path (areas: ${suiteScope.areas.join(", ")}). Nothing was advanced — zero tests run is not a green gate. ` +
+						"Re-run with --suite, or land with an explicit no-regression-check note.",
+					merged,
+					suiteScope,
+					suite: "not run — the derived set was empty (no coverage, not a pass)",
+				},
+				1,
+			);
+		}
+		tests = suiteScope.ran.map((t) => t.replace(/^demo\//, ""));
+	}
 
 	/* ── concurrency knob ── */
 	const concurrency = Math.max(1, parseInt(process.env.DURIG_SUITE_CONCURRENCY, 10) || 4);
@@ -799,7 +895,10 @@ report(
 		// shape one layer out: a landing tool whose regression gate is off reports success without
 		// checking. The default stays off (the suite runs INSIDE the lock hold, so its runtime lands in
 		// the wait), but its ABSENCE now SAYS SO, with the reason and the remedy.
-		suite: wantSuite ? suiteResults : "not run — --suite not passed; the gate is opt-in, so this landing was NOT regression-checked. Re-run with --suite, or run the suite on main separately",
+		suite: wantSuite || wantChangedSuite ? suiteResults : "not run — neither --suite nor --changed-suite was passed; the gate is opt-in, so this landing was NOT regression-checked. Re-run with --suite (the full gate) or --changed-suite (the derived subset, which is NOT the gate), or run the suite on main separately",
+		// #4936: a subset number with no statement of what it did NOT cover is not a measurement
+		// (#3743's four-state probe, #4858's rule). `null` means the FULL gate ran — every area covered.
+		suiteScope,
 	},
 	0,
 );

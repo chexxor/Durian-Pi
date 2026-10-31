@@ -88,6 +88,60 @@ export function validateManifest(root = process.cwd()) {
 }
 
 /**
+ * What a CHANGED-SUITE run did and did NOT cover (#4936).
+ *
+ * The law this exists to enforce: a subset run must never be reportable as a clean
+ * suite. A count of green tests with no statement of what was NOT run is not a
+ * measurement (the same law as #3743's four-state probe and #4858's "a number with no
+ * tree/section"), and `scripts/land.mjs` is exactly where the temptation lives — a
+ * full sweep is ~239 tests / ~10 minutes, and under turn pressure a seat picks
+ * "run nothing" unless the honest path is also the cheap path.
+ *
+ * Pure data: it takes the SELECTION (produced elsewhere — by
+ * `tools/what-to-test.mjs`, never by a second selector) and reports the partition
+ * against the manifest. It never decides what to run.
+ *
+ * Returns `{ coverage, ran, ranCount, areasRan, areasNotRun, testsNotRun, byArea, areas }`.
+ * `coverage` is `"none"` when nothing in the selection exists on disk — the case that
+ * must read as NO COVERAGE and never as a pass.
+ */
+export function changedSuiteScope(root = process.cwd(), { selected = [] } = {}) {
+	const manifest = readManifest(root);
+	const areas = areaNames(manifest);
+	const onDisk = discoverTests(root);
+	const known = new Set(onDisk);
+	const areaOf = new Map();
+	const byArea = {};
+	for (const area of areas) {
+		const files = filesForArea(manifest, area);
+		byArea[area] = { mapped: files.length, ran: 0 };
+		for (const f of files) areaOf.set(f, area);
+	}
+	// Dedupe and keep only files that exist: a selection naming a deleted or unmapped
+	// file is reported, not silently counted as coverage.
+	const ran = [...new Set(selected)].filter((t) => known.has(t));
+	const missing = [...new Set(selected)].filter((t) => !known.has(t));
+	for (const t of ran) {
+		const area = areaOf.get(t);
+		if (area) byArea[area].ran += 1;
+	}
+	const areasRan = areas.filter((a) => byArea[a].ran > 0);
+	return {
+		coverage: ran.length === 0 ? "none" : "partial",
+		ran,
+		ranCount: ran.length,
+		missingFromDisk: missing,
+		areas,
+		areasRan,
+		areasNotRun: areas.filter((a) => byArea[a].ran === 0),
+		testsNotRun: onDisk.length - ran.length,
+		totalTests: onDisk.length,
+		byArea,
+		gate: { command: "node scripts/test.mjs --all", tests: onDisk.length },
+	};
+}
+
+/**
  * Resolve a selection. `area` picks one functional area; otherwise the WHOLE
  * suite on disk (never the manifest union, so an unmapped file still runs in the
  * full gate — the coverage rule flags it separately).
