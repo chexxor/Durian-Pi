@@ -1181,3 +1181,10 @@ every exit code, per #4939.
   `docs/DECISIONS.md:2462`, `docs/DECISIONS.md:6700`, `docs/SELFDEV.md:789` — and 0 findings in any block appended
   this session). `demo/review-cite-check.mjs` exists only on the unmerged `item-*` trees. Do not "fix" the pointer by
   writing those scripts; carry it.
+- **`git worktree list | awk '{print $2}'` yields SHAS, not paths** — so a per-worktree dirty count built that way is a
+  probe that asserts nothing: it ran `git -C <sha>` (which fails) and `wc -l` returned `0` for every row, which looked
+  like "all trees clean". The working read is
+  `git worktree list --porcelain | awk '/^worktree /{print substr($0,10)}'`, and you prove it fires by seeding a file
+  and re-counting. Corrected counts at D186 clock-out: 6 trees clean, `item-4955` carries `?? .probe-cli/` (another
+  seat's scratch in its own tree — leave it). **A worktree's dirt is invisible to the shared tree's `git status`**, and
+  `/item-*/` is gitignored (`.gitignore` line 51), so a stray `item-NNNN/` directory never shows up there either.
