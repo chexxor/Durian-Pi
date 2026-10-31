@@ -18,13 +18,16 @@ row. Also use it when you are deciding **how many seats to wake** — each wake 
 this file prices the cheap ones.
 
 ## Impact
-The expensive verbs are the ones that spend a model turn. Measured: a `lead` turn ≈ 8 minutes, an `impl`
-working turn ≈ 70 minutes, and every failed or redundant wake **deposits rows** (a cancel alone emitted
-four queued rows, #4932/#4941–#4943). Re-deriving state by hand does three things: it burns wall-clock
-before anything was asked of the team, it produces numbers with no provenance (a hand query cannot be
-re-run by the next session), and it invents defects — the delegate "fixed" a provider that was healthy
-because a probe's single sample was read as a verdict (D183). Meanwhile the read-only instruments cost
-**hundredths of a second** and write nothing.
+The expensive verbs are the ones that spend a model turn. Measured: a `lead` turn ≈ 8 minutes (a second `lead`
+brief this session cost ≈ 19 minutes for a 16-part turn), an `impl`-working turn ≈ 34 minutes for **three rows of
+work in one wake**, and an `impl` turn that died mid-flight cost the whole wake anyway — `settledStatus:
+unanswered`, `settledReason: model_error`, empty reply, at 0.9041 of its window, leaving an orphan
+`admitted_not_started` submission in `status.attention` that the **resume/doctor verb** re-arms (re-sending a fresh
+brief is not the repair). Every failed or redundant wake **deposits rows** (a cancel alone emitted four queued
+rows, #4932/#4941–#4943). Re-deriving state by hand does three things: it burns wall-clock before anything was
+asked of the team, it produces numbers with no provenance (a hand query cannot be re-run by the next session), and
+it invents defects — the delegate "fixed" a provider that was healthy because a probe's single sample was read as a
+verdict (D183). Meanwhile the read-only instruments cost **hundredths of a second** and write nothing.
 
 ## Preconditions
 Read-only. The broker may be down (it was, on 2026-10-31). None of the commands below opens a writing
@@ -83,6 +86,15 @@ git worktree list | grep ' locked$'                          # terse form: the l
    cheap read → this file. New trap → the next `## Operational pitfalls` block in `docs/SELFDEV.md`. A
    probe worth keeping → ask `lead` to mint a row to promote it from `.spike/` into `tools/`; `.spike/` is
    gitignored, so an unpromoted probe is gone next session.
+9. **Check the seat's context fraction and its `settledReason` before the NEXT wake.** A seat over 0.88 is in the
+   measured break-class edge; `impl` at 0.9041 died mid-turn and the wake bought nothing. If the row is already
+   `claimed`, the work survived the death — re-arm, don't re-brief.
+10. **Give `node --check` one path per invocation.** It checks only the FIRST path and ignores the rest: two
+    deliberately broken files in one call printed only the first and exited 1, so a multi-file call is a false
+    green whenever the first file is fine.
+11. **Remove your proof scratch before a landing, and never leave it at the repo root.** `scripts/land.mjs` refused
+    the whole pass on one untracked path (`.main-check/`); the stray-worktree gate (#4139) reads the directory
+    list, not `git status --porcelain`.
 
 ## Verify
 Every instrument above ran on 2026-10-31 with the costs in the front-matter `evidence:` line, and both doc
@@ -102,8 +114,8 @@ confidently wrong verdict (#4938, #4949 are its rows). The operator — any deci
 or GPU spend; capacity is never a delegate or seat ruling.
 
 ## Evidence
-D183 in `docs/DECISIONS.md` (the placement class, the single-sample probes, the empty-reply `done` settle,
-the cancel-deposits mechanism). Rows #4947, #4948, #4949, #4950. Timings measured 2026-10-31 in the
-Diagnose block above. The delegate's ad-hoc probes for this session live in `.spike/fix-20261101/` and
-`.spike/fix-20261101b/` and are **gitignored — unpromoted, so they are already partly lost**; promoting
-them is the standing speed-up.
+D183 and D184 in `docs/DECISIONS.md` (the placement class, the single-sample probes, the empty-reply `done`
+settle, the cancel-deposits mechanism, the create-on-read opener, the landing proof pair). Rows #4947–#4950,
+#4955–#4960. Timings measured 2026-10-31 in the Diagnose block above. The delegate's ad-hoc probes for this
+session live in `.spike/fix-20261101/` and `.spike/fix-20261101b/` and are **gitignored — unpromoted, so they are
+already partly lost**; `lead` minted **#4960** to `devtools` to promote them into `tools/`.

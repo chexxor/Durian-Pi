@@ -1032,3 +1032,38 @@ identical in the deps-linked root (187 packages, `vendor/pi-main` present) and a
 vendor). Landing `44fe9438` (the areas-manifest fix) clears the manifest-coverage RED and starts RUNNING this
 one — which is why the landing was gated on #4948. Named the artifact set (package count + vendor link) with
 every exit code, per #4939.
+
+### Operational pitfalls found 2026-10-31 during the D184 landing and verify-routing session (Linux, `Alex-Desktop-Win10`, node v24.22.1) — the landing pass and its traps
+
+- **The store opener creates a file on READ**, and `*.sqlite` is gitignored (`.gitignore:2`), so an unqualified read
+  silently stands up an empty rig that nobody can see in `git status`. The approved seat root carries one right now:
+  **122,880 B dated Oct 30**, and any tool run there without `DURIG_DB` resolves it and fails with
+  `no seat named null` (measured: `tools/seat-turn-shape.mjs` with no `DURIG_DB` at that root). Consequence for
+  demos: **a "read-only" assertion written as absence-of-git-churn is vacuous** — assert bytes (`sha256`
+  before/after), and skip NAMED and environmental when no store resolves (row #4955, D184).
+- **`node --check` checks only the FIRST path and ignores the rest.** Two deliberately broken files in one call
+  printed only the first and exited 1; three good files exit 0. One path per invocation, or you are reporting a
+  green that covers exactly one file.
+- **`scripts/land.mjs` refuses a landing on ONE untracked path at the repo root** — my own proof scratch
+  `.main-check/` blocked the whole pass, because the stray-worktree gate (#4139) reads the directory list, not
+  `git status --porcelain`. Remove proof scratches before landing.
+- **A landing's proof is a before/after suite PAIR in a named tree and dependency environment**, not one post-merge
+  run: `pass=234 fail=5 environmental=0, demos=239` at `6d63a3c5` → **`pass=237 fail=3 environmental=0, demos=240`**
+  at `a629973e`, with the three survivors ATTRIBUTED (two exit 0 in the shared tree that has the gitignored
+  `durig.config.json` — the fresh-worktree false-red class; `deepinfra-catalog` is genuinely red and pre-existing: a
+  pinned `verifier/mistralai/ministral-3-14b-reasoning` is absent from the curated fallback catalog). Attribute,
+  never excuse.
+- **Re-fast-forward the seat root to `main` after every landing pass**, or the next `prepare_workspace` forks from a
+  stale base. `item-4937` is now two landings behind `main` and its row is still `held` — say so in the pointer.
+- **A seat wake can die and still deliver.** `impl` ended `unanswered / model_error` at 0.9041 of its window with an
+  empty reply, after it had already cancelled #4952 and claimed #4955. `status.attention` then carried
+  `admitted_not_started — submission #276834 admitted 966 s ago, no run started and no slot held` — the repair is
+  the **resume/doctor verb**, and the read before the next wake is the context fraction, not the reply text.
+- **A cancel's notice row can carry a wrong self-reference and sit queued to a seat that cannot reach it**: `lead`'s
+  #4934 cancel emitted #4954, whose body cites itself as the replacement row (the row is #4956), and #4954 is
+  `queued` to `auditor`, whose model returned an engine 500 mid-grammar. `lead` re-minted two bodies for exactly
+  this class — report the id pair to the seat; do not edit another seat's row.
+- **Do not accept "the deepinfra catalog is green now" as a win from re-pointing seats to `local/…`**:
+  `demo/deepinfra-catalog.test.mjs`'s `resolvable()` returns true for ANY `local/` id, so that move turns the red off
+  without fixing it. `lead` refused the re-point for exactly this reason (D184) — the instrument was about to be
+  tuned to agree.

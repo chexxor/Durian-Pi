@@ -7346,3 +7346,91 @@ not the same failure as D182's zero-tool run, and the only thing that tells them
 #4915, #4925) and each cancel emitted a notice row (#4932, #4941, #4942, #4943) — four `queued` rows, one of them addressed
 to `architect`, whose context projection is 1.0932, i.e. UNREACHABLE, and which `status.attention` still does not flag. A
 cleanup pass is not free and does not converge: it deposits.
+
+## D184 — the operator granted the landing and answered the capacity question; both were carried, and the landing was proved before and after in a NAMED tree
+
+Decided 2026-10-31T10:5xZ by the OPERATOR and executed by the delegate (`Alex-Desktop-Win10`, Linux, node
+v24.22.1). D183 named the open asks; this record is what was done with them and *why* each step was sequenced
+the way it was, because the next delegate inherits a `main` that moved under three branches.
+
+**Grant 18 — the landing is the operator's and the delegate carries it.** `item-4935` @ `44fe9438`,
+`item-4936` @ `24a479c8`, `item-4948` @ `fa1300a2` are ON `main` as merges `abca484d`, `d0a5b7ad`,
+`a629973e`. Why the delegate ran `scripts/land.mjs` rather than a seat: the land runbook says `land` is the
+delegate's/operator's action, not the team's, and the helper is the enforcement chokepoint. Why `#4948` was
+landed rather than skipped: `lead` gated its own disposition on running `demo/seat-turn-shape.test.mjs` in a
+deps-linked root, and I measured it RED on two dependency sets (187-package root and 80-package thin tree, both
+`Error: no seat named null` at `tools/seat-turn-shape.mjs:166`). **A gate you measure is a gate you can grant
+past; a gate you repeat from prose is a gate you do not understand.**
+
+**The proof is the before/after pair, in a named tree AND dependency environment.** Before, at `6d63a3c5`:
+`node scripts/suite.mjs --jobs 8` in a clean detached worktree inside the repo → `pass=234 fail=5
+environmental=0, demos=239`. After, at `a629973e`, same construction → **`pass=237 fail=3 environmental=0,
+demos=240`**; the two target demos (`seat-turn-shape`, `test-areas`) went GREEN. The three survivors are
+ATTRIBUTED, not excused: `clockin-digest` and `local-model-pointer` exit **0** in the shared tree that holds
+the gitignored `durig.config.json` (the known fresh-worktree false-red class), and `deepinfra-catalog` exits 1
+in both trees for a real pre-existing reason — a pinned `verifier/mistralai/ministral-3-14b-reasoning` is absent
+from the curated fallback catalog, so it "would resolve to `no_model`". Each landing carries `merge-tree` exit 0
+immediately before it, `git merge-base --is-ancestor` exit 0 after it, and `%p` showing TWO parents (structure,
+not subject), with the lock reported (`{slots:1, held:1, waitedMs:0, reserved:true, liveHolders:0}`).
+
+**Grant 19 — "use local AI" for the verification leg: no new GPU capacity, no bigger slot.** The delegate's job
+was to hand `lead` the measurements and let the seat decide routing/decomposition; two realisations are on the
+table (re-point the five verifier-pinned seats to `local/iq3_s`, or route the verify legs to local-model seats
+that did not author the artifact), and both lose **model diversity** — the author was already on the local model,
+and `docs/runbooks/verifier-independence.md` governs what a verifier may WRITE, not which model reads it. Two
+rows are blocked on this and were named as such: `lead`'s **#4934** (the independent verify of 217, so 217 stays
+"landed, independently unverified") and `impl`'s **#4952** (the verify of the compaction build, resolver
+`operator`). **A capacity ruling is not a config edit the delegate makes unasked**; it changes what every
+verifier seat *is*, and the runbook that governs it demands the operator's grant.
+
+**Why "read-only" needed a byte check, and it is the durable lesson of the turn.** `impl` measured that the store
+opener **creates a file on read**: a base run left `selfdev.sqlite` and `demo/definitely-not-a-store.sqlite`, both
+118,784 B, invisible to `git status` because `.gitignore:2` covers `*.sqlite` — and that empty rig is what threw
+`no seat named null`. The demo's read-only assertion was therefore **vacuous**: absence of git churn proves
+nothing about a file git was told to ignore. Fixed by a `sha256` byte comparison plus a NAMED environmental skip
+when no store resolves. Same shape as the landing gates: *record what a check proves, not only what it
+returned.* If the create-on-read opener itself is wrong, that is a row for the seat to own — routed to `lead`,
+not hand-fixed by the delegate.
+
+**Two hygiene decisions, taken because `lead` recommended them and the operator said to take its
+recommendations.** Removed by name, never by sweep, with `git branch -d` only after `git merge-base
+--is-ancestor` proved the tip reachable, then `git worktree prune`: `item-4902`, `item-4933` (pre-landing),
+then `item-4935`, `item-4936`, `item-4948` (post-landing). Each pass was proved by a **bare-name inventory
+diff** — the first removed exactly 4 lines, the second exactly 7, nothing else moved. Held: `item-4937`
+(`impl` holds it honestly now — `hold_work`, locked, zero files written, because releasing a claim detaches it
+from its locked worktree, which is the `item-4930` deadlock), `item-4898` (patch-id reference for the compaction
+re-cut), `item-4904`, `item-4916`, `item-4930` (devtools' lock — only devtools releases it), and
+`item-4931` @ `8fa8f3a2` (unlanded until #4952 runs). The seat root was fast-forwarded to `a629973e`: the
+invariant "seat root == `main`" has to be RE-ESTABLISHED after every landing pass or the next worktree forks from
+a stale base.
+
+**Placement: the habit works, and the mechanism is still open.** Issuing `send` with cwd at the approved seat
+root placed `item-4948` and `item-4931` under `/home/chexxor/Git/durian-dev/seatroot`, while the earlier sends
+left `item-4935/4936/4937` in the operator's checkout — the class is `#4947` (detect and name) → `#4950` (place
+under the resolved root, held). Note `item-4948` came out **stacked on** `24a479c8` rather than on `main`; `impl`
+states a deliberate reason (the mapping must exist for the demo to run) and the mechanism inside
+`prepare_workspace` is UNVERIFIED — record it as an observation, and let the row that fixes placement settle
+what the base really is.
+
+**Cost of the turn, so the next delegate can plan.** `impl` 34 minutes for #4948 + #4931 + an honest park of
+#4937 (three rows of work, one wake); `lead` ≈ 10 minutes per wake. The landing pass itself is minutes — its
+cost was one refusal: **`scripts/land.mjs` correctly refused the pass because my own proof scratch `.main-check/`
+was an untracked path at the repo root.** Keep proof scratches out of the repo root, or remove them before
+landing: the gate is the repo's *directory* cleanliness, not porcelain. Full procedure and the measured costs of
+the cheap reads: `docs/runbooks/session-start-cost.md`.
+
+**How the capacity ruling landed in the queue (the seat's call, and it refused the tempting option).** `lead`
+chose option **(b) — route the verify legs to local-model seats that did not author the artifact** — and rejected
+re-pointing the five verifier-pinned seats because `demo/deepinfra-catalog.test.mjs` goes green under that move
+only by making `resolvable()` return true for *any* `local/` id: **that is tuning the instrument to agree, and it
+would hide a red that is doing real work.** Rows: **#4934 cancelled** (auditor could never carry an 8192-token
+slot at p50 16,518), **#4956 security** = the independent verify of 217 on `main` @ `a629973e`, **#4957 scribe** =
+the compaction build @ `8fa8f3a2` with the live `compact --dry-run` repro DEFERRED (no broker tonight, and a green
+config demo is not proof of a live path), **#4958 scribe** = update `verifier-independence.md` to state the three
+axes (seat + transcript + execution) and name the lost model-family diversity, **#4959 devtools** =
+`status.context` must report effective capacity and BOTH denominators (it declared 24,576 where the slot is 8192,
+and that fiction caused lead's own re-mint error), **#4960 devtools** = promote the four `.spike/` reads into
+`tools/` with demos mapped in the manifest and read-only/create-nothing guarantees, **#4955 impl** = the
+create-on-read opener defect, which also resolves the `item-4933`/`item-4936` contradiction inside #4923 (the
+audit may have read a store it created itself). **Independence is now stated as seat + transcript + execution,
+with model-family diversity named as lost** — not claimed.
