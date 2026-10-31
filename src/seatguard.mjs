@@ -19,6 +19,7 @@ import { isInside, refusalFor } from "./confine.mjs";
 import { writeTargets } from "./writetargets.mjs";
 import { resolveSeatRoot, sameRoot } from "./seatroot.mjs";
 import { SECRET_PREFIX_PATTERNS } from "./config.mjs";
+import { seatShellSelection, shellToolNames } from "./shellregistry.mjs";
 import { afterTool as redactToolResult } from "./secretredact.mjs";
 
 /** pi-durable's own write-path normalization (tools/path-utils.js): unicode
@@ -82,7 +83,7 @@ async function persistedSeatCwd(api, context) {
  * guards (confine.mjs is the boundary). `process.cwd()` is the shared root because the guard runs
  * inside the broker/CLI process, which is started from the shared checkout.
  */
-async function sharedTreeRefusal(api, context, { path = null, command = null, shell = false } = {}) {
+async function sharedTreeRefusal(api, context, { path = null, command = null, shell = false, verb = null } = {}) {
 	// Only a KNOWN persisted cwd can be "degraded": with no persisted cwd the root is a fallback
 	// (DURIG_SEAT_ROOT / process cwd) and a seat that never prepared a workspace is not our case.
 	const seatRoot = await persistedSeatCwd(api, context);
@@ -97,7 +98,13 @@ async function sharedTreeRefusal(api, context, { path = null, command = null, sh
 		return (
 			`refused by durig: your seat cwd IS the SHARED checkout (${seatRoot}), not an item worktree - a ` +
 			`shell command here can destroy the shared tree. The cwd degrades to the shared tree after ` +
-			`complete_work; call prepare_workspace first, then run your command.`
+			`complete_work; call prepare_workspace first, then run your command.` +
+			// #3663's rule on the seat shell: a refusal that does not NAME the verb it refused reads as a
+			// verdict on the whole class. With a host-conditional shell (#4849) the verb a seat types is now
+			// host-dependent, so the block says which call it refused AND which shell this host registered —
+			// the two facts needed to re-issue the command instead of guessing at a shell that does not exist
+			// here. Nothing new is refused by this sentence: it is wording, not a rule.
+			(verb === null ? "" : ` Refused as a \`${verb}\` call; the seat shell registered on this host is \`${seatShellSelection.name}\`.`)
 		);
 	}
 	if (path !== null) {
@@ -118,8 +125,23 @@ async function sharedTreeRefusal(api, context, { path = null, command = null, sh
 	return null;
 }
 
-/** Tools whose whole argument is a command string, so that string is what to inspect. */
-const SHELL_TOOLS = new Set(["bash", "powershell"]);
+/**
+ * Tools whose whole argument is a command string, so that string is what to inspect.
+ *
+ * DERIVED, never re-listed (#4849 / ROADMAP 217). This used to be the literal
+ * `new Set(["bash", "powershell"])` — a SECOND copy of the shell truth, in the file whose job is to
+ * inspect whatever the registry installs. It cost nothing while the registered tool happened to be in
+ * the list, and it hid the 217 failure twice over: the guard whitelisted the name `bash` while no
+ * durian-pi module registered a `bash` tool, and the `powershell` tool that WAS registered could not
+ * start on this host at all. The direction of that drift is the reason for the derivation: a shell
+ * added to the registry with no matching literal here is a shell whose command string the guard never
+ * reads — a hole, not a cosmetic mismatch. `demo/seattools.test.mjs` pins guard set == registry set.
+ *
+ * It is the set of names a shell tool CAN have, not the one tool this host installed: a nested codemode
+ * call, a future seat on another host, and `demo/seatguard.test.mjs` today all reach this hook with
+ * either name, and an uninspected name is the failure that matters.
+ */
+export const SHELL_TOOLS = new Set(shellToolNames());
 
 /**
  * Refuse a call, or let it through.
@@ -387,7 +409,7 @@ export async function beforeTool(call, api, context) {
 	}
 	// #3992: any OTHER shell command from a degraded cwd is refused outright, before any command
 	// classification - `run` is what has actually destroyed work in this repo.
-	const degradedShell = await sharedTreeRefusal(api, context, { shell: true });
+	const degradedShell = await sharedTreeRefusal(api, context, { shell: true, verb: call?.name });
 	if (degradedShell !== null) return { block: degradedShell };
 	// #1966 layer (ii): a shell command naming the spool directory is refused (best-effort).
 	// #4374: the refusal is given the seat root and cwd, so a PATH-AWARE entry (`checkout-index`)

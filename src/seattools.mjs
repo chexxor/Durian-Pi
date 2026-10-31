@@ -10,11 +10,11 @@ import { join } from "node:path";
 import { AgentDoc, configure, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import {
 	createEditTool,
-	createPowerShellTool,
 	createReadTool,
 	createWriteTool,
 } from "@earendil-works/pi-durable/tools";
 import { Type } from "@earendil-works/pi-ai";
+import { seatShellSelection } from "./shellregistry.mjs";
 import { seatsAreVerifier } from "./verifierrole.mjs";
 import { authorEnv, verifierEnv, NON_INTERACTIVE_GIT } from "./confine.mjs";
 import { RigQueue, Seats } from "./rig.mjs";
@@ -211,15 +211,25 @@ const seatRoot = defineTool({
 	},
 });
 
-// `bash` is deliberately absent. On native Windows `bash` means Git Bash - an undeclared
-// dependency that may simply not be installed - and WSL is unsupported on this host by policy,
-// so the seat shell is PowerShell, which `createPowerShellTool` resolves as `pwsh`, then
-// `powershell`.
+// The seat shell is HOST-CONDITIONAL and read from one registry (#4849 / ROADMAP 217).
+//
+// What used to sit here was the comment "`bash` is deliberately absent. On native Windows `bash`
+// means Git Bash - an undeclared dependency that may simply not be installed - and WSL is
+// unsupported on this host by policy, so the seat shell is PowerShell" plus `shell:
+// createPowerShellTool()`. That was true OF WINDOWS and became a dead tool the day this rig moved
+// to Linux: neither `pwsh` nor `powershell` exists here, so every seat shell call was
+// `spawn … ENOENT` (22 such results in the store, newest entry #274427, and
+// `tools/channel-preflight.mjs` §7 printing "NO SHELL CAN START HERE"), while `bash` — which does
+// exist — was unreachable because nothing registered it. The registry in `src/shellregistry.mjs`
+// separates "can it start here" from "which does this host prefer"; `seatShell` below is what THIS
+// host got, and `src/seatguard.mjs`'s shell set reads the same registry, so the tool set and the
+// guard's set cannot disagree about what a shell is.
+export const seatShell = seatShellSelection;
 export const seatTools = {
 	read: createReadTool(),
 	write: createWriteTool(),
 	edit: createEditTool(),
-	shell: createPowerShellTool(),
+	shell: seatShellSelection.tool,
 	prepareWorkspace,
 	seatRoot,
 };

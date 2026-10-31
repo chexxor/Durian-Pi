@@ -8,7 +8,9 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { COORDINATOR_REMOVALS, VERIFIER_REMOVALS, SeatTools, fillRoster, makeSeatEnv, toolRemovalsFor } from "../src/seattools.mjs";
+import { COORDINATOR_REMOVALS, VERIFIER_REMOVALS, SeatTools, fillRoster, makeSeatEnv, seatShell, toolRemovalsFor } from "../src/seattools.mjs";
+import { seatShellSelection, shellPlan, shellToolNames } from "../src/shellregistry.mjs";
+import { SHELL_TOOLS } from "../src/seatguard.mjs";
 
 let failures = 0;
 function check(label, condition, detail = "") {
@@ -24,10 +26,79 @@ const root = await mkdtemp(join(tmpdir(), "durig-seattools-"));
 const context = {};
 
 try {
-	console.log("\nThe tool set is what the design says, and bash is deliberately absent");
+	console.log("\nThe tool set carries exactly ONE shell, and it is the shell this host can START (#4849 / ROADMAP 217)");
 	const names = SeatTools.tools.map((tool) => tool.name).sort();
-	check("read, write, edit, a shell, prepare_workspace and seat_root are bundled", JSON.stringify(names) === JSON.stringify(["edit", "powershell", "prepare_workspace", "read", "seat_root", "write"]), JSON.stringify(names));
-	check("no bash tool — native-Windows bash is an undeclared Git Bash dependency", !names.includes("bash"));
+	const plan = shellPlan();
+	// The expected set is host-conditional BY CONSTRUCTION, so the same assertion is true on a Windows
+	// host and on this Linux box — the old assertion baked `powershell` into a literal and was therefore
+	// wrong the moment the rig moved hosts. Its replacement fails on the old tree (which registered
+	// `powershell` here) and passes on the new one.
+	const expected = ["edit", "prepare_workspace", "read", "seat_root", "write", plan.name].sort();
+	check(
+		`read, write, edit, ONE shell, prepare_workspace and seat_root are bundled (${process.platform} -> ${plan.name})`,
+		JSON.stringify(names) === JSON.stringify(expected),
+		JSON.stringify(names),
+	);
+	const bundledShells = names.filter((n) => shellToolNames().includes(n));
+	check(
+		"exactly one shell tool is bundled, never both candidates",
+		bundledShells.length === 1,
+		JSON.stringify(bundledShells),
+	);
+	// The surface `tools/rig-portability-audit.mjs` §5 imports to decide `seat-shell-availability`, so
+	// pinning it here is what stops the audit's finding from moving by accident.
+	check(
+		`the registered shell is what the registry selects for ${process.platform} (the audit reads this exact field)`,
+		seatShell.name === plan.name,
+		`registered=${seatShell.name ?? "(none)"} plan=${plan.name}`,
+	);
+	check(
+		"no shell is bundled that this host cannot start (the 217 shape: a registered tool that ENOENTs)",
+		plan.degraded === false || process.platform === "win32",
+		JSON.stringify(plan.tried),
+	);
+
+	console.log("\nHost-conditional selection, asserted for hosts this box is not");
+	check(
+		"Linux with no PowerShell but a bash on PATH selects bash — the measured 217 host",
+		shellPlan({ platform: "linux", exists: () => false, lookup: (p) => (p === "bash" ? "/usr/bin/bash" : null) }).name === "bash",
+		JSON.stringify(shellPlan({ platform: "linux", exists: () => false, lookup: (p) => (p === "bash" ? "/usr/bin/bash" : null) })),
+	);
+	check(
+		"Windows keeps the Windows shell even when bash is ALSO present (Git Bash is not an implicit dependency)",
+		shellPlan({ platform: "win32", exists: () => false, lookup: (p) => (p === "bash" || p === "pwsh" ? `/x/${p}` : null) }).name === "powershell",
+		JSON.stringify(shellPlan({ platform: "win32", exists: () => false, lookup: (p) => (p === "bash" || p === "pwsh" ? `/x/${p}` : null) })),
+	);
+	check(
+		"a Windows host with neither pwsh nor powershell falls through to a bash that CAN start, rather than a dead shell",
+		shellPlan({ platform: "win32", exists: () => false, lookup: (p) => (p === "bash" ? "/x/bash" : null) }).name === "bash",
+		JSON.stringify(shellPlan({ platform: "win32", exists: () => false, lookup: (p) => (p === "bash" ? "/x/bash" : null) })),
+	);
+	check(
+		"a host where NOTHING resolves still gets the platform-preferred shell, labelled degraded — never tool-less",
+		(() => {
+			const none = shellPlan({ platform: "linux", exists: () => false, lookup: () => null });
+			return none.name === "bash" && none.degraded === true;
+		})(),
+		JSON.stringify(shellPlan({ platform: "linux", exists: () => false, lookup: () => null })),
+	);
+	check(
+		"the selection this process registered agrees with the plan for this host",
+		seatShell.name === seatShellSelection.name && seatShellSelection.tool.name === seatShell.name,
+		`registered=${seatShell.name} selection=${seatShellSelection.name}/${seatShellSelection.tool.name}`,
+	);
+
+	console.log("\nThe guard's shell set IS the registry — two lists drift, and the drift is a hole");
+	check(
+		"seatguard's SHELL_TOOLS equals the shell registry (read from it, not re-listed as a literal)",
+		JSON.stringify([...SHELL_TOOLS].sort()) === JSON.stringify(shellToolNames().sort()),
+		`guard=${JSON.stringify([...SHELL_TOOLS].sort())} registry=${JSON.stringify(shellToolNames().sort())}`,
+	);
+	check(
+		"the shell a seat is ACTUALLY handed is inside the guard's set (a shell the guard does not inspect is the hole)",
+		SHELL_TOOLS.has(seatShell.name),
+		`registered=${seatShell.name}`,
+	);
 	check("a verifier loses write and edit", JSON.stringify(VERIFIER_REMOVALS.map((t) => t.name).sort()) === JSON.stringify(["edit", "write"]));
 
 	console.log("\ncli.mjs actually installs and scopes them (an uninstalled control is not a control)");
@@ -51,7 +122,7 @@ try {
 	check(
 		"a coordinator loses read, write, edit, the shell AND prepare_workspace, so it can only route",
 		JSON.stringify(removalNames(toolRemovalsFor({ name: "pm", role: "program manager", capabilities: ["route", "plan"] }))) ===
-			JSON.stringify(["edit", "powershell", "prepare_workspace", "read", "write"]),
+			JSON.stringify(["edit", "prepare_workspace", "read", "write", seatShell.name].sort()),
 	);
 	check(
 		"a verifier loses write and edit but keeps read, the shell AND prepare_workspace, so it can still re-run in its own tree",
