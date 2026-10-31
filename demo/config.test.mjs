@@ -8,6 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+	compactionReport,
+	compactionSettings,
 	describeConfig,
 	loadConfig,
 	loadShippedDefaults,
@@ -244,8 +246,8 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 	const cliSource = readFileSync(join(durigDir, "cli.mjs"), "utf8");
 	assert.match(
 		cliSource,
-		/settings:\s*streamSettings\(CFG\)/,
-		"openHarness must pass streamSettings(CFG) as the harness settings",
+		/settings:\s*\{\s*\.\.\.streamSettings\(CFG\),\s*\.\.\.compactionSettings\(CFG\)\s*\}/,
+		"openHarness must pass BOTH streamSettings(CFG) and compactionSettings(CFG) as the harness settings (#4898)",
 	);
 	// #491 C6: the shipped defaults must be in the REAL load path (wiring, not just
 	// exports): the cli anchors the shipped file to its own install directory.
@@ -282,6 +284,112 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 	});
 	assert.equal(goodOpen.code, 0, `a valid stream timeout must open fine: ${goodOpen.stderr.slice(0, 200)}`);
 	console.log("STREAM TIMEOUT OK (default stands, override reaches Harness.open, bad value fails)");
+
+	/* ---- #4898: the compaction POLICY, and honest reporting of one `compact` verb ----
+	 * Measured, not theorized. This rig set NO policy, so every seat ran reserve 16384 /
+	 * keepRecent 20000 / background 32768. On the 24,576 verifier window that fires only above
+	 * ~20,100 input and then keeps the newest 20,000 anyway: seat qa wrote a real pi.compaction entry
+	 * (275457) and the NEXT turn came back input 20,109, output 1, stopReason=length, EMPTY (275459).
+	 * And `compact` printed the SAME words for a no-op (pm, task 275491) and for a repair that failed
+	 * (qa2 at 18,453/24,576, task 275492). Both halves are pinned here. */
+
+	// ONE call site, no second mechanism: pi-durable's `modelOverrides` layering already does the
+	// per-model work, and a second place assembling compaction settings is the drift class this rig
+	// keeps hitting (the seat-shell registry was the same shape). Counted as the SPREAD into
+	// `settings:` — `cmdCompact` also calls compactionSettings(CFG), to report the policy in force, and
+	// that is a read, not a second assembly site.
+	assert.equal(
+		(cliSource.match(/\.\.\.compactionSettings\(CFG\)/g) ?? []).length,
+		1,
+		"exactly one Harness.open settings site may spread compactionSettings(CFG)",
+	);
+	// Unset must invent NOTHING: pi-durable's documented defaults stand.
+	assert.deepEqual(compactionSettings({}), {}, "an unset policy must not fabricate numbers");
+	assert.deepEqual(compactionSettings({ DURIG_COMPACTION_RESERVE_TOKENS: "" }), {}, "an empty value is unset");
+	// The approved verifier-class triple (window 24,576) reaches pi-durable's field spellings.
+	assert.deepEqual(
+		compactionSettings({
+			DURIG_COMPACTION_RESERVE_TOKENS: "4096",
+			DURIG_COMPACTION_KEEP_RECENT_TOKENS: "8192",
+			DURIG_COMPACTION_BACKGROUND_TOKENS: "8192",
+		}),
+		{ compaction: { reserveTokens: 4096, keepRecentTokens: 8192, backgroundTokens: 8192 } },
+		"the verifier-class numbers reach the harness-wide policy",
+	);
+	// The local class (window 200,000) is LEFT ON THE DEFAULTS — asserted so nobody ships one number
+	// for every class.
+	assert.deepEqual(compactionSettings({ DURIG_MODEL: "local/big" }), {}, "a class with no key keeps the platform default");
+	for (const bad of ["soon", "-5", "0", "NaN"]) {
+		assert.throws(
+			() => compactionSettings({ DURIG_COMPACTION_KEEP_RECENT_TOKENS: bad }),
+			/DURIG_COMPACTION_KEEP_RECENT_TOKENS must be a positive number of tokens/,
+			`${JSON.stringify(bad)} must be rejected, not ignored`,
+		);
+	}
+	assert.deepEqual(compactionSettings({ DURIG_COMPACTION_ENABLED: "0" }), { compaction: { enabled: false } }, "compaction can be switched off explicitly");
+	assert.throws(() => compactionSettings({ DURIG_COMPACTION_ENABLED: "maybe" }), /must be a boolean/, "a mistyped boolean is an error, not a silent default");
+	// Per-model layering, in both shapes a config FILE and an ENVIRONMENT can each produce.
+	assert.deepEqual(
+		compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: { "local/qwen": { reserveTokens: 4096 } } }),
+		{ modelOverrides: { "local/qwen": { reserveTokens: 4096 } } },
+		"an object map passes through",
+	);
+	assert.deepEqual(
+		compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: '{"local/qwen":{"keepRecentTokens":8192}}' }),
+		{ modelOverrides: { "local/qwen": { keepRecentTokens: 8192 } } },
+		"an env value is parsed as JSON, the rule every other structured setting uses",
+	);
+	assert.throws(() => compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: "{oops" }), /must be JSON/);
+	assert.throws(
+		() => compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: '{"local/qwen":{"keepRecentTokens":"soon"}}' }),
+		/\["local\/qwen"\]\.keepRecentTokens must be a positive number of tokens/,
+		"a bad per-model value names the model AND the field",
+	);
+	// The reporting half: three states, DISTINCT exit codes, the numbers beside the verdict.
+	assert.deepEqual(
+		compactionReport({ consumed: 20109, policy: { keepRecentTokens: 8192 }, summaryEntry: { id: 275457 } }),
+		{ state: "compacted", exitCode: 0, summaryEntryId: 275457, consumed: 20109, keepRecentTokens: 8192, willCut: null },
+		"an entry means COMPACTED, exit 0",
+	);
+	assert.deepEqual(
+		compactionReport({ consumed: 18453, policy: { keepRecentTokens: 20000 }, summaryEntry: null, failureReason: null }),
+		{ state: "no-op", exitCode: 2, reason: "no compaction entry was written and no failure was reported", consumed: 18453, keepRecentTokens: 20000, willCut: false },
+		"qa2's real case: nothing to cut is a NO-OP at exit 2, and it explains itself with its own numbers",
+	);
+	assert.equal(
+		compactionReport({ consumed: 18453, policy: { keepRecentTokens: 20000 }, summaryEntry: null, failureReason: "summarizer call failed" }).exitCode,
+		1,
+		"a named failure is FAILED, exit 1 — never the same words as a no-op",
+	);
+	assert.equal(compactionReport({ consumed: null, policy: {}, summaryEntry: null, failureReason: null }).willCut, null, "no usage means UNKNOWN, not an answered no");
+	assert.equal(compactionReport({ consumed: 8192, policy: { keepRecentTokens: 8192 }, summaryEntry: null, failureReason: null }).willCut, true, "the gate sits at the budget, inclusive");
+	// A policy nobody can see is the defect: the keys must be REPORTED, null = default stands.
+	const compactionDescribed = describeConfig({ config: {}, source: null });
+	for (const key of ["DURIG_COMPACTION_ENABLED", "DURIG_COMPACTION_RESERVE_TOKENS", "DURIG_COMPACTION_KEEP_RECENT_TOKENS", "DURIG_COMPACTION_BACKGROUND_TOKENS", "DURIG_COMPACTION_MODEL_OVERRIDES"]) {
+		assert.equal(compactionDescribed[key], null, `${key} must be reported (null = the platform default stands)`);
+	}
+
+	// And through the REAL open path: a bad compaction value must surface at Harness.open, which is
+	// what proves it is IN the settings path rather than merely exported. Same vehicle as the stream
+	// timeout — `resume` opens a harness; `ps`/`queue` are reads and open none.
+	const badCompaction = await runCliNew(dir, ["resume"], {
+		...cleanEnv,
+		DURIG_PROVIDER: "faux",
+		DURIG_DB: join(dir, "compaction.sqlite"),
+		DURIG_COMPACTION_RESERVE_TOKENS: "soon",
+	});
+	assert.equal(badCompaction.code, 1, "an invalid compaction budget must fail the command, not be ignored");
+	assert.match(`${badCompaction.stdout}${badCompaction.stderr}`, /DURIG_COMPACTION_RESERVE_TOKENS must be a positive number of tokens/, "and it must name the setting");
+	const goodCompaction = await runCliNew(dir, ["resume"], {
+		...cleanEnv,
+		DURIG_PROVIDER: "faux",
+		DURIG_DB: join(dir, "compaction.sqlite"),
+		DURIG_COMPACTION_RESERVE_TOKENS: "4096",
+		DURIG_COMPACTION_KEEP_RECENT_TOKENS: "8192",
+		DURIG_COMPACTION_BACKGROUND_TOKENS: "8192",
+	});
+	assert.equal(goodCompaction.code, 0, `the verifier-class triple must open a harness fine: ${goodCompaction.stderr.slice(0, 200)}`);
+	console.log("COMPACTION POLICY OK (unset invents nothing, verifier triple reaches Harness.open, bad values fail loudly, three report states)");
 
 	console.log("CONFIG TEST PASS");
 } finally {

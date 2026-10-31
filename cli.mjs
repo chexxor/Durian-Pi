@@ -56,7 +56,10 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { describeConfig, loadConfig, loadShippedDefaults, streamSettings } from "./src/config.mjs";
+import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings } from "./src/config.mjs";
+// The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
+// against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
+import { contextConsumption } from "./src/context.mjs";
 import { applyEscalations, applyResets, failureStreak, planEscalations, planResets } from "./src/supervisor.mjs";
 import { assessRun } from "./src/degeneration.mjs";
 import {
@@ -417,10 +420,14 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
       models,
       registry,
       env: makeSeatEnv(seatRoster),
-      // Only `stream` is configurable here; the rest of pi-durable's settings keep
-      // their built-in defaults, which were chosen deliberately and which nothing
-      // in durig's use argues against. See `streamSettings` for why this one matters.
-      settings: streamSettings(CFG),
+      // `stream` AND `compaction` are configurable here; everything else keeps pi-durable's
+      // built-in defaults, which were chosen deliberately and which nothing in durian-pi's use argues
+      // against. Compaction was added because the ABSENCE of a policy was a measured defect (#4898):
+      // the defaults (reserve 16384 / keepRecent 20000 / background 32768) sit above the whole
+      // verifier-class window of 24,576, so the policy fired too late to leave room to answer. ONE
+      // call site, and no second mechanism - pi-durable's `modelOverrides` layering does the per-model
+      // work. See `streamSettings` and `compactionSettings` for why each one matters.
+      settings: { ...streamSettings(CFG), ...compactionSettings(CFG) },
     },
     BACKGROUND_CONTEXT,
   );
@@ -1332,26 +1339,62 @@ async function cmdCompact(seatName, instructions) {
     const text = instructions !== undefined && instructions.trim() !== "" ? instructions : undefined;
     const taskId = await conv.compact(text, BACKGROUND_CONTEXT);
     // Drive the task to completion. Without this the verb would return a task id for work nobody
-    // runs — exactly the stub the item forbids.
-    await harness.waitForTask(taskId, BACKGROUND_CONTEXT);
+    // runs — exactly the stub the item forbids. The settled record is kept because it is where a
+    // FAILED compaction names its reason (#4898's three-state reporting).
+    const settled = await harness.waitForTask(taskId, BACKGROUND_CONTEXT);
 
     // PROVE the compaction happened, not merely that a task ran: pi-durable places a
-    // `pi.compaction` summary entry. Report its id (null would mean the task completed without
-    // compacting — e.g. nothing to compact — and must not be reported as success).
+    // `pi.compaction` summary entry. THREE STATES with distinct exit codes (#4898), because the old
+    // single message covered two opposite facts and misled four sessions: "no compaction entry was
+    // written" was printed for a NO-OP (nothing was worth cutting - pm at 184,507/200,000, task
+    // 275491) AND for a repair that did not work (qa2 at 18,453 of 24,576, task 275492). COMPACTED 0,
+    // FAILED 1, NO-OP 2 (not an error: the rig declined to spend a summarizer call).
     const after = await conv.entries({ order: "descending" }, 50, undefined, BACKGROUND_CONTEXT);
     const summary = after.items.find((e) => e.kind === CompactionEntry.kind);
-    if (!summary) {
-      fail(`compact: no compaction entry was written for seat ${seatName} (task ${taskId})`);
+    // The failure reason is whatever the platform reported, never a guess. `waitForTask`'s return shape
+    // could not be re-read in this worktree (it has no `node_modules` of its own and this seat's reads
+    // are confined to the worktree), so the reason is read from whichever field carries it and the
+    // report prints `unknown` when none does.
+    const failureReason = settled?.error ?? settled?.failure?.reason ?? settled?.reason ?? null;
+    // The seat's token count against the policy, so a NO-OP explains itself. The selection gate is the
+    // accumulation budget (`keepRecentTokens`), not the window - the window is context, and printing it
+    // is what lets an operator see WHY the gate sat where it does.
+    const consumption = contextConsumption(after.items, { declared: declaredContextWindow(CFG, seat.model ?? seat.modelId ?? null) });
+    const policy = compactionSettings(CFG).compaction ?? {};
+    const report = compactionReport({
+      consumed: consumption.consumed,
+      policy,
+      summaryEntry: summary ?? null,
+      failureReason,
+    });
+    if (report.state === "failed") {
+      fail(
+        `compact: ${report.reason} for seat ${seatName} (task ${taskId}) - consumed=${report.consumed}, ` +
+          `keepRecentTokens=${report.keepRecentTokens ?? "platform default"}, willCut=${report.willCut ?? "unknown"}` +
+          (summary ? "" : "; no pi.compaction entry among the newest 50 entries"),
+      );
     }
     out({
       ok: true,
       command: "compact",
+      state: report.state,
       seat: seatName,
       taskId,
       instructions: text ?? null,
-      summaryEntryId: summary.id,
+      summaryEntryId: report.summaryEntryId ?? null,
+      // The numbers beside the verdict: what the seat had consumed, the window it is measured against,
+      // the policy in force for it, and whether that policy would have cut anything at that count.
+      consumed: report.consumed,
+      window: consumption.window?.value ?? null,
+      windowDenominator: consumption.window?.denominator ?? null,
+      fraction: consumption.fraction,
+      policy,
+      willCut: report.willCut,
       db: DB_PATH,
     });
+    // A NO-OP exits 2 so a script can tell it apart from a compaction (0) and a failure (1). The
+    // `state` field carries the same fact even in a tree where a later dispatcher overwrites the code.
+    if (report.exitCode !== 0) process.exitCode = report.exitCode;
   } finally {
     await harness.close(BACKGROUND_CONTEXT);
   }
