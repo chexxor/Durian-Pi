@@ -7266,3 +7266,83 @@ instrument whose verdict moves while its evidence does not is a routing target, 
   leg is possible at all; tonight they were run *after* three failed turns instead of before.
 - **Attribution beats re-running**: the `git show --name-only` / `git ls-tree <parent>` / standalone-rerun trio settled three
   sweep REDs in well under a minute and is what let the operator's landing be reported honestly.
+
+## D183 — the seat-root guard checks the SEAT's cwd while `prepare_workspace` places the worktree beside the SERVING PROCESS's tree; and two instruments are now confidently wrong about the seat shell (delegate, 2026-10-31, Linux)
+
+**The ruling.** `DURIG_SEAT_ROOT` pins the **guard**, not the **placement**. A `send` can pass the root-drift guard and still
+fork every item worktree inside the delegate's own checkout. Tonight the fix is operator-visible in the tree:
+`/home/chexxor/Git/Durian-Pi/item-4933`, `item-4935`, `item-4936` — three nested worktrees at `31d10565` in the operator's
+checkout, created by a seat whose persisted cwd was the approved root the whole time.
+
+**Measured, in order.** (1) The write-side guard is roster-wide, not target-scoped: `cli.mjs:443-466` walks EVERY seat in the
+roster and fails closed if any persisted cwd != `DURIG_SEAT_ROOT`, so a send to `lead` was refused over `impl` sitting in
+`item-4916` and `devtools` in `item-4930`. (2) The sanctioned repair — `DURIG_SEAT_ROOT=<root> … up rig.selfdev.json
+--refresh` — ran clean: `--dry-run` named **exactly** the two drifted cwds and nothing else, the write landed, and a
+read-only re-probe of the newest `pi.agent` revision showed all 12 live seats at `/home/chexxor/Git/durian-dev/seatroot`
+(the 13th, doc 216675, still carries the dead `C:\Users\Alex\…` path and is not in the roster, so it does not trip the
+guard). The ref/worktree/branch inventory diffed by exactly one line — the timestamp. (3) With every seat at the approved
+root and the guard satisfied, `prepare_workspace` still created `item-4933` **beside the process that served the turn**:
+`src/seattools.mjs:35-37` passes `worktreeRoot: source`, and `src/worktree.mjs:877` states the rule in its own comment —
+"`worktreeRoot` is the directory the seat is working from (durig's own tree, the **broker's process cwd**)."
+
+**Why D178's "`--refresh --dry-run` is VACUOUS" needed correcting, and where the line is.** D178 recorded it because
+`rig.selfdev.json` then carried a dead `devtools.cwd`, so the dry run re-asserted a path that did not exist and printed
+`changes: {}` for all 12 seats. Tonight the rig file names **no** cwd for any seat, and the same flag produced a real,
+complete preview (two cwd resets, `constitution.changed:false`, `edges.changed:false`). So the vacuity is a property of the
+**rig file**, not of the flag: with no `cwd` in the rig file, `--refresh --dry-run` previews the resets the root guard
+needs. Still true and unchanged: a dry run names no *removals*, so it is never a safety check.
+
+**What the delegate owes the operator because of this.** The nested worktrees are the operator's to dispose of, not mine:
+they are clean checkouts of a landed tip, auto-ignored by `git status` and visible to `git worktree list`, which is exactly
+the shape that made the 2026-10-26 sweep look like cleanup (`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`). The
+habit that prevents it: **run the `send` with `cwd` set to the approved seat root** — that is why `item-4898`, `item-4904`,
+`item-4916` and `item-4930` live under `durian-dev/seatroot` and tonight's three did not. Exporting `DURIG_SEAT_ROOT` is
+necessary and, on its own, not sufficient.
+
+**Second finding: two instruments now print a confidently false shell verdict on a landed-217 tree, in the same way.**
+`tools/channel-preflight.mjs` §7 prints `NO SHELL CAN START HERE` and `tools/broker-serve.mjs` prints
+`BLOCK seat-shell-availability`, both **after** correctly reading `registered shell tool name: "bash"`, and both because they
+then probe the vendored PowerShell candidate list `[pwsh, powershell]`. Their own evidence contradicts them two lines
+later: `last shell tool result: entry #275973 2026-10-31T04:42:34Z conv 9 = impl name=bash isError=false`, and tonight
+`impl` ran `git`, `grep` and `node demo/test-areas.test.mjs` through a tool named `bash` at exit 0. `src/shellregistry.mjs`
+(217, landed) says why the probe list is the wrong question: `createBashTool` hands the command string to `env.exec`, which
+resolves `/bin/bash`, else `bash` on PATH, else `sh -c` — "on POSIX that chain cannot come back empty". So the pointer line
+"`VERDICT: NO SHELL CAN START HERE` is a stale alarm" is now **measured on a landed tree**, not predicted, and it applies to
+`broker-serve` as well as `channel-preflight`. Routed as #4938 (devtools), not hand-fixed.
+
+**Third finding, and it is the one that will waste the next session's time: the provider probes in `tools/broker-serve.mjs
+--status` are single-sample with a 20-second budget, and over 85 minutes they blocked a DIFFERENT provider each run.**
+Run A, 07:11Z, with a `send` to `lead` in flight (started 07:08): `BLOCK provider-local-completion-failed: local:
+/chat/completions failed — timeout after 20s`, while the same endpoint answered `/v1/models` at `:47831` advertising
+`iq3_s`, and while that very send was completing tool calls.
+Run B, 08:36Z, nothing running: `local: completes (finish=stop, prompt=57 tok, completion=30 tok)` — the earlier BLOCK is
+gone — and now `BLOCK provider-verifier-completion-failed: verifier: /chat/completions failed — timeout after 20s`. A direct
+verifier request of the same shape 40 seconds later answered in **8.45 s** using **63 of 64 completion tokens for
+reasoning**. Two mechanisms, both real and both invisible in the report: the local engine serves one request at a time, so
+probing it during a seat turn is a guaranteed timeout, and a reasoning-heavy verifier can blow a 20 s budget while being
+perfectly healthy. A delegate that believes either BLOCK wastes its wake budget "fixing" a provider that works. Minimum
+honest instrument behaviour: say DEFERRED with the reason when a generation is in flight, retry or widen the budget, and
+report the probe as a sample with its latency instead of a verdict. Routed, not hand-fixed.
+
+**Fourth: the verifier decision the operator is holding has two sizes, and they were never priced separately.** Read from
+the store (read-only, `usage.input` over assistant turns with real usage), the actual cost of a verifier turn is: `qa`
+n=17 min 108 / p25 7,121 / p50 9,734 / max 31,601; `qa2` n=13 p25 7,106 / p50 17,302 / max 24,037; `auditor` n=5 p25 5,314
+/ p50 16,518 / max 23,419. Against the slot as configured (`8192 × 4`, probes: 6,128 tokens OK, 9,128 → HTTP 400) that means
+**a real review does not fit at all tonight** — only a claim-scoped verdict with at most one small read. `lms load
+--estimate-only` (free, it never loads; on this box the binary lives in the flatpak dir,
+`HOME=~/.var/app/ai.lmstudio.lm-studio ~/.var/app/ai.lmstudio.lm-studio/.lmstudio/bin/lms`) prices the two reloads at
+**13.43 GiB for 16384×1** and **14.39 GiB for 24576×1** on GPU0 (16,376 MiB total, 12,626 used); the runbook's measured
+actuals are 13,914 MiB and 15,202 MiB, i.e. the estimate runs ~0.4 GiB low. So "fund the verifier" is not one decision:
+16384×1 covers the p50 of real review turns and leaves ~2.4 GiB on the card; 24576×1 leaves ~1.5 GiB.
+
+**Fifth: a settled run can report nothing and still have done the work — the reply is not the report, the rows are.**
+`impl`'s batch turn (70 minutes, real tool calls throughout) settled `settledStatus done` / `stopReason stop` with a reply
+whose only part was `thinking` and whose **text length was 0**. The work is legible only at the row level: #4933, #4935 and
+#4936 `done`, #4937 left `claimed`, and three completion notices (#4944, #4945, #4946) queued to `lead`. Its context also
+hit auto-compaction mid-turn (`input=158,420` at entry 276276, compaction summary at 276279) and it kept working — which is
+not the same failure as D182's zero-tool run, and the only thing that tells them apart is reading the entries.
+
+**Sixth, and it is a mechanism not a mistake: cancelling costs rows.** `lead` cancelled four rows tonight (#4930, #4914,
+#4915, #4925) and each cancel emitted a notice row (#4932, #4941, #4942, #4943) — four `queued` rows, one of them addressed
+to `architect`, whose context projection is 1.0932, i.e. UNREACHABLE, and which `status.attention` still does not flag. A
+cleanup pass is not free and does not converge: it deposits.
