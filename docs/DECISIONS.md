@@ -7072,3 +7072,103 @@ failure with an **empty** reason. `#4910` (queued, devtools→lead) — the firs
 **A new org-edge class defect surfaced while filing them: a seat cannot register a row to itself** (`org edge` refusal on
 `devtools → devtools`), so held backlog for your own next session must be minted by another seat — which is why #4914 and
 #4915 are addressed to `lead` with an explicit "re-mint it to `devtools` when the gate clears" instruction.
+
+---
+
+## D181 — the landing sequence can be executed *without* landing anything: the author's rebase with a patch-id gate, then the delegate moves the root, then everything stops at the merge; and a forgotten GPU slot spent three seat turns before one probe named it (delegate, 2026-10-31, Linux)
+
+**The decision.** The operator agreed to a five-act sequence: `lead` mints/releases the rebase row → `impl` rebases with a
+patch-id equivalence gate → the delegate moves the approved seat root to the rebased tip → an independent seat verifies on
+a worktree forked from that tip → **stop at the merge/landing gate**. Acts 1–3 are done and verified; act 4 is blocked on a
+host spend the operator holds; act 5 was never attempted. Nothing was merged, nothing pushed.
+
+**Why the root move was the point, and why it was worth doing before the merge.** `seatroot/linux` was **15 commits behind
+`main`**, which is not a cosmetic fact: `prepare_workspace` forks from the seat root, so **every worktree any seat created
+was born 15 commits stale**, and that is exactly the condition that manufactured the fresh-worktree false REDs of D180
+(#4915's `DEPENDENCY NOT LINKED`, the `schema version 2 > 1` failure, 80-vs-187 package counts). After the move the root is
+**0 behind, 1 ahead**, so the staleness class is closed for every future wake — and #4905/#4906/#4917 were released by
+`lead` in the same minute because the base stopped being a reason to hold them. **Fix divergence by landing, not by
+re-rooting seats onto a tree that cannot run a seat shell** (landed `main` has no `src/shellregistry.mjs`; `devtools` there
+got `spawn powershell ENOENT`).
+
+**Why a patch-id, not a diff or an ancestry comparison, was the right pin.** A rebase changes the commit id and can change
+the parent, while the *reviewed content* must not move. `git merge-tree --write-tree` (read-only) had already shown the
+merge would be clean with all five 217 blobs byte-identical, so the pin made the rebase checkable in one boolean:
+`279e0d9861b4d6958cf1f36af03dc00c96fcaa23` before and after. `impl` did it correctly — `git rebase main` (the two-argument
+`--onto` form is refused by #4136's argument matching), exit 0, no conflict, tip `8a950542`, `main..HEAD` = 1,
+`HEAD..main` = 0, parent count 1. **The delegate's role was deliberately the boring one:** rescue ref
+(`refs/rescued/seatroot-linux-f8840349`), then `reset --hard`, with the workspace-move inventory taken as **refs, not only
+directories** — `lead`'s sharpening, because the 2026-10-26 casualties were *branches* — and it paid for itself: **206
+lines before, 206 after, exactly one changed line.**
+
+**The discovery that changes how every "assert sha X" instruction must be written here: the redactor eats 40-hex tokens,
+including the pinned patch-ids inside a row body.** `impl`'s geometry output and `lead`'s own pins came back as
+`[redacted by durig: secret-shaped value (high-entropy-token)]`, i.e. the gate as written was **un-checkable**, and a seat
+reporting "matched" against an unreadable pin would have been an unfalsifiable claim. `impl` kept it honest by computing
+the comparison **inside the shell** and reporting a boolean plus two id halves. Routed as **#4922** (`security`): fix by
+checker *class* (artifact-id vs credential), not by widening an allowlist, with the two-position demo as the non-vacuous
+test.
+
+**Three seat turns were spent before one probe named the blocker.** The verify leg died three times — `qa2` returned
+`settledStatus:"done"` with **`stopReason:"length"`** and the reply `"I"`; `auditor` returned `unanswered`/`model_error`
+twice. The reflex was to blame the seat (context band) and then the conversation shape; both were wrong. The cause was
+measured in ~30 s: **LM Studio relaunched and restored `--ctx-size 8192 --parallel 4 --n-gpu-layers 27`** while both
+gitignored `durig.config.json` files declare `DURIG_VERIFIER_CONTEXT = 24576`. Probing **at the size that fails** (not a
+26-token probe) settles it: **6,128 tokens → `finish_reason=length`** (accepted, no room to answer), **9,128 → HTTP 400**,
+**20,128 → HTTP 400** `exceeds the available context size (8192 tokens)`. This is `verifier-serving-headroom.md` Step 4's
+recorded regression — "LM Studio forgets" — and it was re-encountered anyway because nothing in the wake path checks it.
+**`raise-capacity-is-the-operator's-spend` held: the reload was costed (15,202 MiB at 24576×1 against 16,376, needing the
+`Qwen3-VL-4B` 8192×4 slot unloaded) and not spent.** The zero-spend alternative is routing the verify leg to a
+**local-model** seat (`security` 0.1367, `scribe` 0.1676) whose endpoint is healthy.
+
+**A routing principle worth keeping: a fresh seat is the *more* independent verifier, not the less.** `lead` first chose
+`qa2` over `qa` for "headroom plus independence"; the delegate's own brief destroyed the headroom premise (qa2 grew
+18,842 → 20,192 of 24,576 = **0.8216**, statistically identical to qa's 0.8183), and `lead` cancelled its own row with its
+error named in the reason. Independence is really **absence of anchoring** — a seat with `null` context (`auditor`) carries
+no transcript of the debate about the change, so it cannot be talked into the author's conclusion. That argument is
+stronger than the one for a peer who watched the whole thing.
+
+**Two delegate errors, recorded because they are the repeatable kind.** (1) A **4.5 KB brief to a seat at 0.77 of a
+24,576-token window** — the run never read a file. Brief size is a budget variable: the runbook's Step 5 already says
+"cap the reading, put the cliff in the brief", and this rig's verifier seats have ~5.9k tokens of headroom at that band.
+(2) **Backticks in a `printf`-written brief**: the shell ate `prepare_workspace(itemId: 4927)`, `main`, `item-4898`,
+`refs/`, so the seat received a payload with its boundaries deleted — and the run errored. Write briefs with a file tool,
+never through a shell command line. **And do not re-send a failed brief**: each attempt appends a user turn
+(`Never re-send the same brief`, Step 1), so a retry is a deposit, not a repair.
+
+**Anti-vacuity, from `lead`, worth restating.** After the rebase the portability audit went **2 findings → 1**
+(`seat-shell-availability` gone; `seat-host-unaware` remaining). `lead` ruled the remainder **not 217's debt** — cut out
+of #4849 at #4858 — and folded it into #4906 with the condition that the finding **stays named as outstanding**, because
+"a clean audit after that change would be the suspicious result". A pass condition that *expects* a named outstanding
+finding is the right shape for a gate that would otherwise be satisfied by deleting the evidence.
+
+**Routed, not fixed (none of it hand-patched by the delegate).** **#4923** (`devtools`, urgent) — `rig-portability-audit`
+prints **`seat roots read: 0`** while the store carries **13 resolving cwds** (`read-cwd4.mjs`, doc = conv+5, one orphan on
+a dead `C:\` path); this breaks the denominator under `lead`'s own 2→0 gate, so any ruling that cites a count must cite a
+verified reader. Same family: the audit printed **`model-slots: none loaded`** while two `llama-server` processes run.
+**#4928** — **`done` + `stopReason:"length"` is a false green**; surface `stopReason` beside `settledStatus` and refuse at
+`send` when the brief plus the seat's remaining window cannot fit (that arithmetic was computable *before* qa2 ran, and it
+would have caught `lead`'s own row choice too); no new status word before measuring what the existing mapping pair
+carries (#3112/#3021). **#4924** (held) — `> /dev/null` is refused as "a write outside your worktree": a discard is not a
+write, and refusing it pushes seats into pipes, which is the false-green class this rig keeps meeting. **#4925**
+(`architect`) — for `seat-host-unaware`, probe beats declaration: a declared host can be false, a probe cannot, so a
+declaration is admissible only with a named consumer. **#4917** — **inline briefs**: `--file` is not a recognized flag, so
+the seat received a *path* instead of a brief and refused to infer content from a filename.
+
+### Clock-out notes — where the wall-clock went, and what would shorten it next time
+
+- **Three dead provider wakes (~4–7 min each) cost more than the entire rebase.** The fix is a **pre-wake provider gate**,
+  in this order and all three read-only: `seat-turn-shape` (seconds; the trap that cost four sessions), then
+  `ps -eo args | grep -o -- "--ctx-size [0-9]*"` **compared against `DURIG_VERIFIER_CONTEXT` in `durig.config.json`**,
+  then one probe **at the failing size**. Propose folding that second and third check into
+  `tools/seat-turn-shape.mjs` as a capacity column — one instrument call instead of a session's worth of guessing. Routed
+  as a finding, not built by the delegate.
+- **`rows.mjs --context` is now load-bearing**: it prints census, requested rows, parked-on-`pm` rows, context fractions,
+  and reachability from one 23 MB dump. `find.mjs` searches queue dumps for text the census cannot show. Both stayed in
+  `.spike/fix-20261101/`.
+- **Pointer-cap compression is again the largest clock-out line item** (199-line cap, verbatim archive cut). The
+  `tools/pointer-fit.mjs` proposal from D178 stands: a checker that reports the pointer's line count and the first
+  section boundary, so compression is measured before it is written by hand.
+- **Wake yield, re-measured:** one `send` to `lead` (0.3555) with a ~2.4 KB brief closed and minted six rows in ~4 min;
+  the same content to `pm` (0.9225, `model_error`) would have parked silently. **Batching briefs is worth far more on this
+  rig than parallel wakes.**

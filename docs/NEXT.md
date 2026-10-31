@@ -2,198 +2,188 @@
 
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
-**Last updated:** 2026-10-30T21:5xZ (**D178**), host-local 2026-10-30 16:5x (`America/Chicago`, CDT = UTC−5).
-Box `Alex-Desktop-Win10`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D178).
-Updated **in place** (this file is the pointer, cap 200); the superseded 198-line pointer is cut **verbatim** to
-`docs/NEXT-ARCHIVE.md` (marker line **8860**, body **8862–9059**). Verbatim proof, re-runnable:
-`sed -n '8862,9059p' docs/NEXT-ARCHIVE.md | diff - <(git show HEAD:docs/NEXT.md)` prints nothing.
+**Last updated:** 2026-10-31T05:1xZ (**D181**), host-local 2026-10-31 00:1x (`America/Chicago`, CDT = UTC−5).
+Box `Alex-Desktop-Win10`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D181).
+Updated **in place** (this file is the pointer, cap 200); the superseded 199-line pointer is cut **verbatim** to
+`docs/NEXT-ARCHIVE.md` (marker line **9061**, body **9063–9261**). Verbatim proof, re-runnable:
+`sed -n '9063,9261p' docs/NEXT-ARCHIVE.md | diff - <(git show 7e64d33e:docs/NEXT.md)` prints nothing.
 
 ## NEXT SESSION
 
-**Current item: 217 and the compaction build are COMMITTED on branches, and 217's execution half is now proven BY A SEAT
-— the open act is the MERGE RULING lead minted (#4904 `done`; #4907 is qa's verify leg, gated on the merge).** On the
-operator's grant the delegate committed: `seatroot/linux` **`f8840349`** (#4849 / ROADMAP 217: new
-`src/shellregistry.mjs` + `src/seattools.mjs` + `src/seatguard.mjs` + two demos, 273 insertions) and branch `item-4898`
-**`9beb1ae3`** (#4887/#4898 compaction build, 3 files, 310 insertions). Nothing pushed, no merge, `main` untouched.
+**Current item: 217 is REBASED onto `main` and the approved seat root now forks from current `main`. The open act is the
+independent VERIFY LEG #4927 (`lead→auditor`, `queued`) — and it is blocked by a HOST SPEND, not by the team. Behind it
+sits the MERGE grant, which the operator holds.**
 
-**THE SEAT RAN ITS OWN ACCEPTANCE — the artifact this rig had never produced.** `lead` minted **#4904** (lead→impl is a
-permitted edge) precisely to be the *claimed item* `prepare_workspace` requires; `impl` claimed it, got
-`WORKSPACE READY (created): …/seatroot/item-4904` (branch `item-4904`, tip read FIRST = `f8840349`), and ran six commands
-with exit codes read with no pipe: `uname -s` → `Linux` **0**; `git rev-parse --short HEAD` → `f8840349` **0**;
-`node --check` ×3 **0**; `demo/seatguard.test.mjs` → **"PASS — the guard holds"** **0**; `demo/seattools.test.mjs` →
-**"PASS — the controls are wired"** **0**; `git status --short` → empty **0**. Its own suite printed the new rule passing:
-`ok #3992: a shell command from a seat's OWN worktree is NOT refused`. Report = **#4908 → devtools**; store:
-**#4904 `done` by impl @00:57:52Z**.
+**What the team did (#4916, `done` by `impl` @04:43:43Z).** `lead` minted and released **#4916** after accepting the
+delegate's merge simulation; `impl` claimed it, `prepare_workspace(itemId: 4916)` forked `/home/chexxor/Git/durian-dev/
+seatroot/item-4916` from `f8840349`, and it ran **one-argument `git rebase main`** (the two-argument form is refused by
+#4136's argument matching) → **exit 0, no conflict**. New tip **`8a950542`**; merge-base == `main`'s tip `7e64d33e`;
+`main..HEAD` = **1**, `HEAD..main` = **0**; parent count 1, not a merge commit. Its **patch-id gate PASSED — computed
+inside the shell** and reported as a boolean plus two id halves, because the redactor eats 40-hex tokens (see D181).
+Acceptance in its own worktree, exit codes with **no pipe**: `node --check` ×3 → **0**; `demo/seatguard.test.mjs` →
+**0** "PASS — the guard holds"; `demo/seattools.test.mjs` → **0** "PASS — the controls are wired" with `(linux -> bash)`;
+`git status --short` empty.
 
-**So D178's blocker is SPLIT, and the split is the discovery.** A seat's shell works **inside its item worktree**; it is
-still refused **in the shared checkout**, by design — "your seat cwd IS the SHARED checkout … call `prepare_workspace`
-first", and that refusal text is 217's own wording naming `bash`. Chain for any seat-executed act: *claimed row →
-worktree forked from a ref that carries the change → shell allowed there*. The delegate's commit was not "doing the
-seat's work"; it supplied the missing ref that breaks the loop (no shell → no commit → no ref to fork → no shell).
+**What the delegate did, and only that (the move was the agreed Act 3; nothing was merged).** Rescue ref first
+(`refs/rescued/seatroot-linux-f8840349`), then `git -C …/seatroot reset --hard 8a950542`. Inventories per
+`docs/runbooks/workspace-move.md`, **refs not just directories** (`lead`'s sharpening — the 2026-10-26 casualties were
+branches): **206 lines pre, 206 lines post, one changed line** (`seatroot/linux f8840349` → `8a950542`). Geometry at the
+move: `seatroot..main` = **0**, `main..seatroot` = **1**, tip patch-id unchanged; delegate-run acceptance from that tree (deps
+linked, 187 packages): `node --check` ×3 → 0, both demos → 0. **Re-measure, do not quote: the delegate's own clock-out docs
+commit (`a7ab8655`) advanced `main`, so at clock-out the root is 1 behind / 1 ahead again** — the zero-behind state was real
+at the move and decays one commit per commit landed on `main`, which is why the next session runs the geometry command. **`tools/rig-portability-audit.mjs` from the moved root:
+2 findings → 1.** `seat-shell-availability` is **gone**; what remains is **`seat-host-unaware`**, which `lead` ruled is
+**not 217's debt** (it was cut out of #4849 at #4858 and folded into #4906, whose done-condition now *requires* that
+finding stay named outstanding — a clean 0 would be the suspicious result).
 
-**lead's merge ruling (in #4904's body, 00:52Z) — the delegate will NOT execute it, it is a seat act:** do NOT merge
-`seatroot/linux` anywhere (it is **14 commits behind `main`**, 1 ahead — `3860e5d1` is the merge-base; lead's brief said 8,
-re-count before acting on any lag number, and merging an older tree is the `595b714` failure mode). Land **217 first** by
-author rebase onto `main` (#3271 author-owns-own-rebase), then **re-cut** `item-4898 @ 9beb1ae3` onto `main`+217 as a
-stacked pair; compare per-file
-**content**, not ancestry (#3337); pin the reviewed diff and treat a tip move as an abort. Neither set attempts `land.mjs`
-before #4904's outputs exist — they exist now.
+**THE BLOCKER IS A FORGOTTEN GPU SLOT — read `docs/runbooks/verifier-serving-headroom.md` Step 4 before acting.** The
+verify leg failed three times and the delegate initially mis-read why. Measured root cause: LM Studio relaunched and
+**restored `--ctx-size 8192 --parallel 4 --n-gpu-layers 27`** (llama-server pid 4095683 on ephemeral `:33893`, proxied by
+`lm-studio` on `:1234`), while both gitignored `durig.config.json` files declare `DURIG_VERIFIER_CONTEXT = 24576`.
+Probes at the size that actually failed (not a 26-token probe): **6,128 tokens → `finish_reason=length`** (no room to
+answer), **9,128 → HTTP 400**, **20,128 → HTTP 400** `request exceeds the available context size (8192 tokens)`. So the
+symptoms were: `qa2` → `settledStatus:"done"` + **`stopReason:"length"`** + reply `"I"`; `auditor` → `unanswered` /
+`model_error` twice. **Shape was NOT the cause** (`seat-turn-shape` was clean for `auditor`/`qa2`); check shape first
+anyway — it is two seconds and it is the trap that cost four sessions.
+**Cost of the repair, measured, unspent:** `lms unload --all && lms load mistralai/ministral-3-14b-reasoning -c 24576
+--parallel 1 --gpu max -y`; the runbook's measured load is **15,202 MiB at 24576** against GPU0's 16,376 (now
+14,489 used with `Qwen3-VL-4B-Instruct` holding an 8192×4 slot, which must be unloaded). **Per that runbook this is the
+operator's spend — measure, report, do not spend it unasked.**
 
-**Rows minted while this ran:** **#4905** (`devtools`, held) the org-edge question (`impl maySendTo` has no `lead`, yet
-**27 rows `from=impl, to=lead`** exist, #42 … #4901); **#4906** (`devtools`, held, trivial) **delete** the "the shell tool
-is powershell" sentence from `rig.selfdev.json` — devtools' ruling on it, unexecuted: per-seat instruction text should
-name **no** shell tool, single source `shellToolNames()`; **#4907** (`qa`, held) the verify leg gated at mint time
-(`blockedBy` #4904). **`devtools` then closed #4902/#4903/#4908/#4845 and minted #4910/#4914/#4915** (above).
-**Un-gating condition for #4906/#4907/#4914/#4915: 217 reaching `main`.**
+**Row level (the census is never evidence):** **#4916 `done`**, #4904/#4849/#4898/#4902/#4903/#4908/#4845 `done`;
+**#4927 `queued` (`lead→auditor`)** — short body (~1.5 KB), tree + tip fixed to `8a950542`, read-the-tip-first-and-refuse,
+audit pass condition = **1 named finding**, `seat roots read: 0` to be ignored (#4923), patch-id computed inside the shell
+with pin halves, **CONFIG_KEYS marked pending** (asserting it against a tree without `item-4898` manufactures a false
+RED), explicit permission to abstain. **#4919 `cancelled`** by `lead`, its reason carrying its own error (the headroom
+premise died: qa2 0.8216 vs qa 0.8183 is one band, and its own 4,954-byte body was the same mistake as the delegate's
+brief); #4907 `cancelled` earlier for the same reason. **New rows from the delegate's findings:** **#4922** (`security`)
+40-hex redaction inside row bodies is a gate-killer for patch-id work — fix by checker class, not a wider allowlist;
+**#4923** (`devtools`, urgent) `rig-portability-audit` prints `seat roots read: 0` while the store carries 13 resolving
+cwds — it breaks the denominator under `lead`'s own 2→0 gate; **#4924** (`devtools`, held) `> /dev/null` is refused as "a
+write outside your worktree" — a discard, not a write, and refusing it pushes seats into pipes, the false-green class;
+**#4925** (`architect`, queued) probe vs declaration for `seat-host-unaware` — a declared host can be false, a probe
+cannot; **#4928** (`devtools`) `settledStatus:"done"` + `stopReason:"length"` is a false green, surface `stopReason` beside
+`settledStatus` and refuse at `send` when brief + remaining window cannot fit; **#4920** (`impl→devtools`, tier
+`undefined`) and **#4921** (`impl→lead`) the seat's own reports. **Watch for a triple-sent verify leg: #4926 (`lead→qa2`)
+and #4918 (`lead→qa`) are also `queued`** — `qa`, `qa2` and `auditor` are all pinned to the same down-to-8192 verifier
+slot, so waking all three spends three turns for one capacity failure. Pick **one** seat per option above. **#4917** now enforces **inline briefs**: a `--file` argument sends the path,
+not the brief, and `lead` refused to infer content from a filename. **#4905 / #4906 / #4917 released and `queued` to
+`devtools`** — workable now that the base is current. **Still gated/held:** #4914 (small) and #4915 (feature)
+`devtools→lead`, both "re-mint to devtools when the gate clears", because **a seat cannot author a row to itself**.
+3 queued rows still park on the unreachable `pm` (#4826, #4897, #4900).
 
-**THREE FINDINGS ARE NOW ROWS, not prose — `devtools` did that, in its own wake, and it corrected two delegate numbers
-while doing it.** **#4915** (`devtools→lead`, **held, feature**): a fresh item worktree is **not a comparable
-verification tree** — `prepare_workspace` itself printed `DEPENDENCY NOT LINKED … the sync-pi --link step FAILED
-(vendor/pi-main is not built in this worktree … run --sync first)` and the versions are **identical (`1.3.0`) while the
-artifacts differ** (lockfile copy vs the vendored build the pin validates against). That is the mechanism under the
-delegate's `Durable SQLite schema version 2 … newer than supported version 1` and the 80-vs-187 package counts — which
-**devtools could not re-verify** (no shell), so they stay delegate-measured. **#4914** (held, small): the landing-gate
-instruments don't read the registered shell — `channel-preflight` §7 scrapes the vendored PowerShell fallback and will
-print **"NO SHELL CAN START HERE" AFTER 217 LANDS**; `rig-portability-audit` printed the worktree failure with an **empty**
-reason. **#4910** (`queued`): devtools' own `spawn powershell ENOENT`. **New class defect surfaced while filing them: a
-seat cannot register a row to itself** (`org edge` refuses `devtools → devtools`), so held backlog for your own next
-session needs another author — #4914/#4915 carry an explicit "re-mint it to `devtools` when the gate clears".
+**ASK THE OPERATOR — two questions, the delegate picks neither.**
+1. **How does the verify leg get a model?** **(A)** authorize the LM Studio reload above (GPU spend, ~1.2 GiB of card
+   free at 24576×1, then the runbook's three-way check — the API, the real `--ctx-size` in `ps`, and a probe at the
+   failing size; **LM Studio forgets on every relaunch**), or **(B)** spend nothing: `lead` re-mints #4927 to a
+   **local-model** seat — `security` (13,204/96,768 = **0.1367**) or `scribe` (0.1676) — both permitted `lead→…` edges,
+   both untouched by 217, and a security seat is a defensible independent reviewer for a change that *widens* what a
+   seat may execute. Option B is cheaper and available tonight.
+2. **The merge grant.** 217 now sits **1 commit ahead of `main`** at `8a950542` (`seatroot/linux`, `item-4916`); the
+   compaction build is still `item-4898 @ 9beb1ae3`, **not yet re-cut** onto `main`+217 and still missing the five
+   `DURIG_COMPACTION_*` registrations in `CONFIG_KEYS` (`src/config.mjs:111`). Nothing is pushed; `main` is 38 ahead of
+   `origin/main`. Standing ask unchanged: `pm` is at its ceiling and **`reset` (#4886) is the only repair**, at the cost
+   of its routing history; #4886's tier act is still owed by a seat.
 
-**TOP HAZARD, and it is the delegate's doing — read D180 before you touch a wake. `DURIG_SEAT_ROOT` is the ROOT SELECTOR,
-not just a guard input.** A wake under it was refused because **another** seat's cwd had drifted (`impl` left in an
-unlocked `item-4904` by #4904's `prepare_workspace`), and the error's own advice — "or unset `DURIG_SEAT_ROOT`" — moved
-`devtools` from the approved root into **`/home/chexxor/Git/Durian-Pi`** (its newest `pi.agent` doc 4935 rev 2373156 says
-so) and produced a **nested worktree `Durian-Pi/item-4902`** (clean, no commits, invisible to `git status`, visible to
-`git worktree list`). Consequence: **two seats, same rig, same minute, two registrations** — `impl` at `f8840349` got
-`bash`; `devtools` at landed `main` got `powershell` and **cannot spawn anything** (`src/shellregistry.mjs` does not exist
-there). So "what the rig can do" is only true **of the tree you read it from**.
-
-**Archive:** everything superseded is verbatim in `docs/NEXT-ARCHIVE.md` (this cut: marker 8860, body 8862–9059) —
-grants 1–12 and the older do-not lists live there, not here.
-
-**Next commands (delegate, Linux; the first one is the actual next act):**
+**Next commands (delegate, Linux; the first block is the actual next act):**
 
 ```bash
-# 1. confirm no wake is running, read the rows (NOT the census), and re-verify both insurances still match the trees
-pgrep -af "cli.mjs send impl" | grep -v pgrep || echo "no wake running (expected: settled done)"
-tail -3 .spike/fix-20261101/send-impl-3.out   # settledStatus: done, stopReason: stop
+# 1. is anything still running, and where do the rows stand (row truth, not census)
+pgrep -af "cli.mjs send" | grep -v pgrep || echo "no wake running (expected: settled)"
+tail -3 .spike/fix-20261101/send-auditor2.out      # last attempt: unanswered / model_error (capacity, not shape)
 DURIG_DB=./selfdev.sqlite node cli.mjs queue --json > .spike/fix-20261101/q.json 2>/dev/null
-node .spike/fix-20261101/rows.mjs 4849 4887 4890 4894 4898 4899 4900 4901 4904 4907 4908 < .spike/fix-20261101/q.json
-(cd .spike/fix-20261101/insurance-4849 && sha256sum -c sha256sums.txt) && (cd .spike/fix-20261101/insurance-4898 && sha256sum -c sha256sums.txt)
-git worktree list --porcelain | grep -c "^worktree"   # 4: main, seatroot, LOCKED seatroot/item-4898, seatroot/item-4904
-# 2. pre-flight the ROOT THE HONEST WAY. `up … --refresh --dry-run` printing `changes: {}` is VACUOUS here (D178): the
-#    target is `seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT` (cli.mjs:679,794) and rig.selfdev.json declares 0 cwds. Keep
-#    the dry-run only as a belt: with DURIG_SEAT_ROOT set it is the F12 guard that fails closed on drift.
-node .spike/fix-20261101/read-cwd4.mjs      # newest pi.agent revision per seat (doc = conv+5); 13 rows, 1 orphan on a dead C:\ path
-#    A WAKE MUST SET DURIG_SEAT_ROOT or it SELECTS A DIFFERENT CHECKOUT (D180: devtools got landed main, no shell, and left
-#    a nested worktree in this repo). If the drift guard refuses because SOME OTHER seat moved, do NOT unset it — record it.
-# 3. pre-flight the SHAPE and the REACHABILITY before every send, never after (read-only, seconds, 0 writes)
-DURIG_DB=./selfdev.sqlite node tools/seat-turn-shape.mjs            # --seat impl | --json | --strict | --explain impl
+node .spike/fix-20261101/rows.mjs 4916 4927 4926 4918 4919 4920 4921 4922 4923 4924 4925 4928 4905 4906 4917 4914 4915 4910 4890 < .spike/fix-20261101/q.json; rm -f .spike/fix-20261101/q.json
+(cd .spike/fix-20261101/insurance-4849 && sha256sum -c sha256sums.txt) && (cd .spike/fix-20261101/insurance-4898 && sha256sum -c sha256sums.txt)   # both OK at clock-out
+# 2. the provider check that took the longest to reason out — do it FIRST, it is seconds (runbook Step 1 + Step 4)
+DURIG_DB=./selfdev.sqlite node tools/seat-turn-shape.mjs          # shape before size; AT RISK ⇒ do NOT send
+ps -eo args | tr '\0' ' ' | grep -o -- "--ctx-size [0-9]*"        # expect 8192 until the operator spends the slot
+curl -s http://127.0.0.1:1234/api/v0/models | grep -o '"loaded_context_length":[0-9]*'
+nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv,noheader   # GPU0 14489/16376, GPU1 23500/24576
+# 3. geometry: the seat root must still be main+217, one ahead, zero behind
+git -C /home/chexxor/Git/durian-dev/seatroot rev-parse --short HEAD; git rev-list --count seatroot/linux..main; git rev-list --count main..seatroot/linux
+git worktree list        # 6 at clock-out; item-4898 LOCKED; item-4902 is the nested one inside this repo — remove BY NAME only if authorized
+node .spike/fix-20261101/read-cwd4.mjs    # newest pi.agent revision per seat (doc = conv+5); 1 orphan on a dead C:\ path
+# 4. pre-flight EVERY wake: shape, then context, then the store backup. Never unset DURIG_SEAT_ROOT (D180).
 DURIG_DB=./selfdev.sqlite node cli.mjs status --json > .spike/fix-20261101/s.json 2>/dev/null
-node .spike/fix-20261101/rows.mjs --context < .spike/fix-20261101/s.json; rm -f .spike/fix-20261101/s.json  # 23 MB dump
-# 4. rig state — #4904/#4849/#4898 MUST still be `done`; #4902/#4903/#4908 `queued`→devtools; #4905/#4906/#4907 `held`;
-#    #4887 `queued`→impl; #4890 `claimed`; #4894-#4896, #4899 `held`
-git -C /home/chexxor/Git/durian-dev/seatroot rev-list --count seatroot/linux..main   # 13 behind
-DURIG_DB=./selfdev.sqlite node cli.mjs queue
-# 5. the wake channel — the ONLY wake on this host is `send`; channel-preflight says what a broker start would do
-DURIG_DB=./selfdev.sqlite node tools/channel-preflight.mjs --db ./selfdev.sqlite --rig rig.selfdev.json
-node -e 'fetch("http://127.0.0.1:1234/api/v0/models").then(r=>r.json()).then(j=>console.log(j.data.map(m=>[m.id,m.state,m.loaded_context_length].join(" ")).join("\n")))' && nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv,noheader  # GPU0 ~15.2/16.4 verifier; GPU1 ~22.6/24.6 local
-# 6. HOST RAM — check BEFORE loading the 441 MB store (this is what killed the delegate's session on 2026-10-30)
-free -h | head -2; awk '$1=="oom_kill"{print "kernel oom_kill since boot:",$2}' /proc/vmstat; cat /sys/fs/cgroup/user.slice/memory.peak
-# 7. the clock-out trio, always all three; plus the insurance re-check if anything touches the seat root
+node .spike/fix-20261101/rows.mjs --context < .spike/fix-20261101/s.json; rm -f .spike/fix-20261101/s.json   # 23 MB dump
+cp selfdev.sqlite .spike/fix-20261101/store-backup-pre-<item>-$(date +%H%M%S).sqlite
+cd /home/chexxor/Git/durian-dev/seatroot && DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot setsid nohup node cli.mjs send <seat> --request-id <id> --body-file <file> > .spike/fix-20261101/send-<x>.out 2>&1 < /dev/null &
+# 5. clock-out trio, always all three
 node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs && node tools/doc-integrity-guard.mjs && node tools/instrument-provenance.mjs
-git for-each-ref refs/rescued | wc -l       # 489; read runbooks/cross-clone-object-recovery.md before anything runs `git gc`
+git for-each-ref refs/rescued | wc -l       # 490 at clock-out; read runbooks/cross-clone-object-recovery.md before anything runs `git gc`
 ```
 
-**ASK THE OPERATOR — two questions now, and the delegate picks neither.** (1) **Landing:** both change sets are on
-branches and 217's proof is a seat's own, so the only thing left is `lead`'s merge topology (217 rebased onto `main` by
-its author, then `item-4898` re-cut on top; never merge `seatroot/linux`, **14 behind `main`**) — and **that rebase
-un-gates #4906/#4907/#4914/#4915**, so it is now on the critical path for the whole team, not just for these two rows.
-(2) **Which tree serves seats** (asked first-hand by `devtools` in #4910): landed `Durian-Pi` — host-blind, no shell on
-Linux — or `durian-dev/seatroot @ f8840349`, which carries unlanded 217? Tonight the answer was accidental and differed
-per seat. Standing ask unchanged: `pm` is at its ceiling and **`reset` (#4886) is the only repair**, at the cost of its
-routing history; #4886's **tier is still `feature`, `held by pm`**.
+**Archive:** everything superseded is verbatim in `docs/NEXT-ARCHIVE.md` (this cut: marker **9061**, body **9063–9261**)
+— grants 1–12 and the older do-not lists live there, not here.
 
-**Channel:** `send` remains the only wake on this host (a broker start is refused on `seat-shell-availability`, which
-carries **no ack flag** — that finding IS 217). `send` prints `DEPRECATED … prefer intent.mjs` — inert while the broker is.
+**Blocker:** the verify leg has no model to run on — LM Studio restored the verifier slot to **`8192 × 4`** while
+`DURIG_VERIFIER_CONTEXT = 24576` is declared, so a 9,128-token request is refused with HTTP 400 and a 6,128-token one is
+truncated to nothing; `qa`, `qa2`, `auditor`, `advocate`, `designer` are all pinned to that slot. Repairing it is a GPU
+spend the runbook assigns to the operator. **Second blocker (carried): `pm` cannot receive anything** — 184,507/200,000 =
+**0.9225**, conv 3 `unanswered`/`model_error`, `Compaction failed: Summarization hit the token limit`; `compact` cannot
+repair a seat at its ceiling (it IS a summarization call), so `reset` (#4886) is the only repair and it is amnesia; three
+queued rows already park there (#4826, #4897, #4900). And the merge itself is **not blocked, it is not granted** — the operator holds that verb.
 
-**Blocker:** the D178 blocker is **resolved inside item worktrees and still refuses in the shared checkout — by design.**
-A seat's shell runs real processes in its own item worktree (#4904: `uname`, `git log`/`rev-parse`/`status`,
-`node --check`, both demo suites, all exit 0); in the shared checkout the guard refuses on degraded cwd. What is blocked
-NOW is that **nothing is on `main`**: 217 sits on `seatroot/linux` `f8840349`, the compaction build on `item-4898`
-`9beb1ae3`, so every instrument reading landed code still reports the old state (`rig-portability-audit.mjs` → NOT
-PORTABLE, 2 findings; `channel-preflight` → `registered shell tool name: "powershell"`) until a seat executes lead's
-rebase/re-cut. Separately: a fresh item worktree resolves an OLDER pi-durable (80 vs 187 packages; `Durable SQLite
-schema version 2 … newer than supported version 1`) — measure from `main` or the seat root, never from a fresh worktree.
-**Blocker (carried):** **`pm` cannot receive anything** — context **184,507 / 200,000 = 0.9225**, `latestByConv["3"]`
-`status:unanswered`, `reason:model_error`, `Compaction failed: Summarization hit the token limit`. Its findings brief
-sits in its history as an unanswered user turn (275487/275488) — do NOT re-send it; two completion reports are parked on
-it (#4826, #4897, #4900). `compact` cannot repair a seat at its ceiling (it IS a summarization call — failed on pm at
-184,507/200,000 and qa2 at 18,453/24,576, tasks 275491/275492); `reset` (#4886) is the only way, and it is amnesia.
+## What landed this session (D181), with its evidence — durable record: `docs/DECISIONS.md` **D178–D181**
 
-## What landed this session (D179), with its evidence — durable record: `docs/DECISIONS.md` **D178 and D179**
+- **The landing topology ran without landing anything:** mint → rebase by the author with a patch-id gate → move the root
+  → stop at the merge. The root moved from 15-behind to **0-behind**, which un-gates every future worktree and #4905 /
+  #4906 / #4917, and it did so with a ref-level inventory that showed **exactly one** changed line.
+- **Two delegate errors, both named in the record and both routed rather than buried:** a **4.5 KB brief to a seat at
+  0.77 of a 24,576 window** (`length` death, qa2's window grew 18,842 → 20,192), and **backticks in a `printf`-written
+  brief**, which the shell ate — the payload reached `auditor` missing `prepare_workspace`, `main`, `item-4898`, `refs/`,
+  and the run errored. Write briefs with the file tool, never through the shell; **size the brief to the seat's remaining
+  window** (Step 5 of the runbook), and **never re-send a failed brief** — each attempt deposits a user turn.
+- **The instrument that lied:** `settledStatus:"done"` for a one-token run. `stopReason` is the only signal (#4928).
 
-- **The grant ran in order:** (b) two wakes from the seat root for the runtime proof → (a) the two commits, because the
-  proof needed a ref to fork from → (c) the residue (win32 paths, 22 ENOENT arms, audit still NOT PORTABLE) unverified.
-- **Insurance became a backup, not the only copy** (`insurance-4849`/`insurance-4898`: patch + verbatim copies +
-  sha256sums, re-verified against the live trees at clock-out), and **seat-authored commit discipline is worth copying:**
-  `impl` left `EXIT=__` placeholders in its own commit-message file with the rule that only a real runner may fill them —
-  the delegate ran them in that tree, filled them, and appended a RUNNER block naming itself, the OS and the tree (#4858).
+## Rig state, re-measured at clock-out 2026-10-31T05:1xZ (Linux) — re-read, do not trust
 
-## Rig state, re-measured at clock-out 2026-10-31T01:0xZ (Linux) — re-read, do not trust
-
-**Store** `./selfdev.sqlite` (441 MB); pre-wake backups in `.spike/fix-20261101/` (`…pre-send-20261030-161115.sqlite`,
-`…pre-d179-193819.sqlite`, `…pre-devtools-20261030-224825.sqlite`). **Queue census = 4,915 rows: 3,764 done / 780
-cancelled / 325 held / 28 queued / 17 deferred / 1 claimed (`#4890` `qa` only)** — **the census is never evidence here.**
-Row level: **#4904/#4902/#4903/#4908/#4845 `done`**; **#4910 `queued` devtools→lead**; **#4914 (small) / #4915 (feature)
-`held` devtools→lead**, both "re-mint to devtools when the gate clears"; #4905/#4906 `held` (devtools), #4907 `held` (qa),
-#4887 `queued`→impl, #4894-#4896 `held` by pm, #4899 `held`. **3 queued rows park on the unreachable pm (#4826, #4897,
-#4900)** — the re-wedge hazard, quantified.
-**Broker DOWN, deliberately**; `channel-preflight`: `placed=0 queued=0`, 0 advancing conversations, "the wedge does NOT
-survive a restart", 24 claimable rows so a start has real work to wake onto. **Context fractions (`status.context`, full
-store):** pm **0.9225** (184,507/200,000), **impl 0.3961 (79,220/200,000 — it was 0.7985 mid-session: its consumed FELL
-by half during the run, auto-compaction working — the strongest evidence yet for #4887/#4898)**, lead 0.3077,
-**qa 0.8183 (20,110/24,576 — the dead band, do not re-drive blind)**, qa2 0.7667, **`advocate` 9.9589 (244,751/24,576)**
-and **`architect` 1.0932 (218,645/200,000)**. **Instrument finding, route it, do not fix it: `status.attention` never
-flags a seat whose fraction is over 1** — neither over-window seat appears in `attention` or on the blocked list. Take
-the map from `rows.mjs --context` (unreachable: pm 0.92, advocate 9.96, architect 1.09; `latestByConv`
-shows exactly one unanswered row, conv 3 = pm, `model_error`). **Turn shape:** 11 findings across 12 seats, 5 counted-projection parity breaks; **ADMISSIBLE only for `impl`, `qa`,
-`qa2`**; the other nine AT RISK. **Models are local/verifier, not DeepInfra** — `rig.selfdev.json` serves `local/iq3_s`
-(GPU1 22,579/24,576 MiB, ctx 200,000) and `verifier/mistralai/ministral-3-14b-reasoning` (GPU0 15,214/16,376 MiB,
-`loaded_context_length` **24576**, parallel 1); the gitignored `durig.config.json` carries base URLs, no API key here.
-**Persisted cwd drift (docs map conv+5): doc 14 = `impl` → `seatroot/item-4904` (unlocked); doc 4935 = `devtools` →
-`/home/chexxor/Git/Durian-Pi`.** Both clean. **Worktrees 5** — the 5th is the nested `Durian-Pi/item-4902` (`item-4898`
-locked; `item-4904` clean and **unlocked**). If you remove anything, remove it BY NAME after the workspace-move inventory,
-never by sweep: `git worktree remove /home/chexxor/Git/Durian-Pi/item-4902`. **Branches 6**, `refs/rescued` **489**.
-**Host:**
-74 Gi used / 19 Gi available, swap 4.9/8 GiB, `/proc/vmstat oom_kill` **7 (unchanged)**, `user.slice memory.peak`
-96,140,943,360 B (unchanged). **Clock-out trio PASS at the pre-commit HEAD** (re-run them at clock-out, always).
+**Store** `./selfdev.sqlite` (441 MB); pre-wake backups in `.spike/fix-20261101/` (`…pre-rel4919-*`, `…pre-auditor-*`,
+`…pre-qa2-*`, `…pre-d179-*`). **Census 4,928 rows: 3,765 done / 782 cancelled / 323 held / 40 queued / 17 deferred /
+1 claimed (`#4890` `qa` only)** — insensitive, never evidence. **Context:** pm **0.9225** (unreachable, conv 3
+`unanswered`/`model_error`, compaction hit the token limit), **qa 0.8183 / qa2 0.8216 (both dead band)**, impl 0.5111,
+lead 0.3555, scribe 0.1676, security 0.1367, devtools `null`, **auditor `null` (fresh — the strongest independence
+argument: no transcript of this debate to anchor on)**, `advocate` **9.9589**, `architect` **1.0932** (both over-window
+and **not** in `status.attention`). **Turn shape:** `auditor` showed 1 parity break before its first send; `lead` was
+AT RISK earlier in the session — re-run, never re-send blind. **Models:** `local/iq3_s` is healthy at
+`DURIG_LOCAL_BASE_URL = http://127.0.0.1:47831/v1` (strata, `--max-context 204800`, GPU1 23,500/24,576); the verifier
+slot is the broken one, as above. **The shell env still carries dead pins** (`DURIG_VERIFIER_BASE_URL=:8083`,
+`:8081` → HTTP 000) while the gitignored config pins win (`:1234`) — an env-vs-config trap; `rig-portability-audit`'s
+`model-slots: none loaded` line is also wrong while two `llama-server` processes run (same family as #4923).
+**Worktrees 6** — this repo, the seat root, `item-4898` (**locked**), `item-4904`, `item-4916`, and the nested
+`Durian-Pi/item-4902` (clean; remove BY NAME only if authorized). **Branches 7**, `refs/rescued` **490**.
+**Host:** 65 Gi used / **28 Gi available**, `/proc/vmstat oom_kill` **7 (unchanged)**. **Clock-out trio PASS.**
 
 ## OPERATOR GRANTS (fifteen through D177; none widened this session)
 
 1–12 unchanged (see the archive). **13.** the #4887 compaction build is AUTHORIZED — a licence to *build* it, held as
 rows #4887 + #4898, **not** a licence for the delegate to edit `src/`. **14.** #4886's priority RAISE is authorized, but
-enacted only in prose; the tier act is owed by a seat. **15.** no further verifier capacity for this leg. **Grant 11
-(tree-shape acts on the approved seat root) was NOT used to commit either change set** — D178 records the reason.
+enacted only in prose. **15.** **no further verifier capacity for this leg** — the reload above is a fresh ask, not a
+continuation of 15. The sequence the operator approved (mint → rebase → move the root → verify → stop at the merge) is
+**executed through the move**; the verify leg is where it stopped, and the delegate stopped at the merge gate.
 
 ## Do not "fix" these on the strength of the docs
 
-**A seat's shell WORKS in its own item worktree and REFUSES in the shared checkout — do not "fix" the refusal.** The
-guard's degraded-cwd rule is correct and 217's own demo proves it (`ok #3992: a shell command from a seat's OWN worktree
-is NOT refused`). To get any seat-executed act you need a **claimed row** first: `prepare_workspace` refuses without one
-(`no claimed item #NNNN is yours`), and its **default** re-attaches to the most recently claimed item — pass the itemId
-explicitly or you land in someone else's worktree. **`up … --refresh --dry-run`
-printing `changes: {}` is not evidence about the seat root** when the rig file names no cwd. **A seat's `complete_work`
-moves its persisted cwd to the serving process's cwd** — run `send` with **cwd = the approved seat root**, and NEVER unset
-`DURIG_SEAT_ROOT` to get past a drift refusal: that is how a seat gets served from a **different checkout** (D180).
-**`status.attention` never lists a seat whose `context` fraction
-exceeds 1** (measured: `advocate` 9.96, `architect` 1.09, both absent) — compute reachability from `status.context`
-before every wake. **A `DONE` verify row can cite lines that point nowhere and `review-cite-check.mjs` exits 0 on them.**
-**Auto-compaction fires late, not never** (D176/D177), and **`compact` cannot rescue a seat at its ceiling**. **Never read
-an exit code through a pipe.** **A `--dry-run` that names no removals is not evidence there are none.** **A backgrounded
-seat run dies with the harness unless detached with `setsid`.** **`cli.mjs <verb> --help` RUNS the verb; `resume`/
-`doctor` CANCELS a `placed` run.** **Pin `DURIG_DB` — running an instrument inside a worktree silently changes the rig
-it measures.** **A FRESH worktree has no gitignored `durig.config.json`, so a suite sweep run there returns a FALSE
-RED** (#4895 tree-class). **Append prose with a quoted heredoc or `cat file >>`, never `printf`; never put backticks in
-`git commit -m` — use `-F <file>`.** **Run prettier only on paths you authored, NEVER on `docs/NEXT-ARCHIVE.md` or a
-durable record you are appending to.** **LM Studio restores `8192×4` on relaunch.**
+**A dead provider is not a shape defect and not a seat defect** — probe at the failing size, read `--ctx-size` in `ps`,
+and compare against `DURIG_VERIFIER_CONTEXT` before blaming a seat (this session burned three turns learning it).
+**Raising GPU capacity is the operator's spend.** **`send` reporting `done` proves nothing** — read `stopReason`
+(`length` = capacity, `error`/`model_error` = refused, and 6,128 input tokens already leaves no room to answer).
+**A seat's shell WORKS in its own item worktree and REFUSES in the shared checkout — do not "fix" the refusal.** Any
+seat-executed act needs a **claimed row** first; `prepare_workspace` refuses without one and its **default** re-attaches to
+the most recently claimed item — **pass the itemId explicitly**. **`up … --refresh --dry-run` printing `changes: {}` is
+VACUOUS**; **never unset `DURIG_SEAT_ROOT` to get past a drift refusal** (D180: that is how a seat gets served from a
+different checkout and leaves a nested worktree); **a seat's `complete_work` moves its persisted cwd to the serving
+process's cwd**, so serve from the approved root. **`status.attention` never lists a seat whose `context` fraction
+exceeds 1.** **A `DONE` verify row can cite lines that point nowhere and `review-cite-check.mjs` exits 0 on them.**
+**Auto-compaction fires late, not never**, and **`compact` cannot rescue a seat at its ceiling**. **Never read an exit
+code through a pipe**; **`> /dev/null` is refused** (#4924) — redirect into your own worktree. **A `--dry-run` that names
+no removals is not evidence there are none.** **A backgrounded seat run dies with the harness unless `setsid`.**
+**`cli.mjs <verb> --help` RUNS the verb; `resume`/`doctor` CANCELS a `placed` run.** **Pin `DURIG_DB` — running an
+instrument inside a worktree silently changes the rig it measures.** **A FRESH worktree has no gitignored
+`durig.config.json` and its deps are not linked, so a suite run there is a FALSE RED** (#4915: `DEPENDENCY NOT LINKED`;
+`Durable SQLite schema version 2 … newer than supported version 1`; 80 vs 187 packages). **The redactor eats 40-hex
+tokens — including pinned patch-ids inside a row body — so assert shas by computing the comparison inside the shell and
+reporting halves** (#4922). **Backticks in a shell-written brief are eaten.** **Append prose with a quoted heredoc or
+`cat file >>`, never `printf`; never put backticks in `git commit -m` — use `-F <file>`.** **Run prettier only on paths
+you authored, NEVER on `docs/NEXT-ARCHIVE.md` or a durable record you are appending to.** **LM Studio restores
+`8192×4` on relaunch.**
