@@ -27,9 +27,11 @@ three actors straight is the whole job:
    other way in other entry points — `scripts/clockin.mjs:236` accepts `DURIAN_PI_DB` first, and `tui.mjs:42`
    treats `DURIG_TUI_DB` as the deprecated alias of `DURIAN_PI_TUI_DB` (D103). Registered as ROADMAP 191.
 5. If this session is an **operating situation a runbook covers** — broker down/stalled, store
-   corruption, a degenerate seat, leaked worktrees, a merge/conflict, or you need external research —
-   read the matching `docs/runbooks/<symptom>.md` **before improvising**. The index (symptom → runbook)
-   is `docs/runbooks/README.md`; read `docs/runbooks/research-request.md` before commissioning research.
+   corruption, a degenerate seat, leaked worktrees, a merge/conflict, session-start cost (**read
+   `docs/runbooks/session-start-cost.md` before you hand-query `selfdev.sqlite` or decide how many seats to
+   wake**), or you need external research — read the matching `docs/runbooks/<symptom>.md` **before
+   improvising**. The index (symptom → runbook) is `docs/runbooks/README.md`; read
+   `docs/runbooks/research-request.md` before commissioning research.
 6. Resume from `NEXT.md`. Do not re-derive the priority from the 1300-line roadmap.
 7. **Before the first writing verb on a workspace that arrived from another machine or operating system**
    (`up`, `worktree`, `run`, `send`, `complete`), run `docs/runbooks/workspace-move.md`: inventory
@@ -57,6 +59,10 @@ Then execute on that resulting promp.
 3. Report status — done / blocked / unverified, with evidence.
 4. Take notes in appropriate about trouble or pitfalls you encountered as well as propose solutions to ensure future efforts can shortcut the trouble.
 5. Consider the parts of your work that took a lot of wall-clock time to execute on, and propose solutions to hasten future efforts that are likely to also take a lot of wall-clock time, without sacrificing quality of the project.
+   **Write those speed-ups into a doc, not only into the report** (operator directive 2026-10-31): a new cheap
+   state read goes in `docs/runbooks/session-start-cost.md`, a new trap goes in the next `## Operational pitfalls`
+   block of `docs/SELFDEV.md`, and a probe worth keeping gets a row from `lead` to promote it out of gitignored
+   `.spike/` into `tools/` — an unpromoted probe is lost next session.
 
 ## Non-negotiables
 

@@ -131,6 +131,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 
 | Runbook | Use when | Writes? |
 |---|---|---|
+| [session-start-cost.md](session-start-cost.md) | a session is spending its first 30–60 minutes re-deriving rig state an instrument already prints; you are about to hand-query `selfdev.sqlite`; or you are deciding how many seats to wake (each wake is the expensive verb, and a failed one deposits rows) | no |
 | [workspace-move.md](workspace-move.md) | the rig's workspace moved machines or operating systems (fresh clone/copy, Linux box for a Windows rig, new user) — worktree registrations, seat cwds, the pin's links, or queue-cited commit shas do not resolve | yes |
 | [cross-clone-object-recovery.md](cross-clone-object-recovery.md) | a cited commit sha resolves in no object store here; the workspace arrived from another machine/OS and the history did not travel; `git fsck --unreachable` reports commits anchored by no ref (urgent — `git gc` deletes them) | yes (`.git` only, never the store) |
 | [verifier-model-server.md](verifier-model-server.md) | a seat's model is not what `rig.selfdev.json` claims; the model server lists an instance that no request can use (`Failed to load model`); you must change which model a provider serves, its context window, or free RAM for a second model; `check` reports `single-model-rig` | yes (server only, not the store) |
@@ -195,6 +196,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Missing files on disk | tracked-files-missing-on-disk |
 | Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
 | Queue / parked work | stale-held-backlog |
+| Which reads are free and which verb is expensive; batching a brief; promoting a `.spike` probe into `tools/` | session-start-cost, verifier-serving-headroom, run-your-area |
 | Credentials / secrets | leaked-secret |
 | Review method | security-trust-boundary-review |
 | Verification / verifier independence | verifier-independence |

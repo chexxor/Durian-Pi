@@ -981,3 +981,54 @@ advice. Read the headings; the body is only here if you need the numbers.
   `scripts/`, `demo/` or `demo/test-areas.json` changed; the product-side halves are registered as ROADMAP 201 (a
   diff-aware selector in `scripts/test.mjs`, and a `docs` area that actually covers the doc surface) and ROADMAP 202
   (the `competitor-review-covered` rule). Until they land, a seat is not expected to run either tool.
+
+## Operational pitfalls and speed-ups (delegating, 2026-10-31, D183/D184 — every number measured in one session)
+
+**The expensive verb is the WAKE, and the free verbs are the ones the delegate keeps re-deriving.** Measured
+clock-in read, all read-only, all 0 writes, total ≈ 7 s: `cli.mjs queue --json` 1.5 s (21,710,535 B — file it,
+never read it into a terminal); `tools/seat-turn-shape.mjs` 3.6 s (58,566 entries; ADMISSIBLE vs AT RISK per
+seat — AT RISK ⇒ do not send); `tools/what-to-test.mjs --base=<sha>` 0.13 s (a docs-only diff derives 6 guards
+against the 239-test suite); `tools/doc-integrity-guard.mjs` 0.10 s; `tools/instrument-provenance.mjs` 0.07 s.
+Against that: one `lead` turn ≈ 8 minutes and one `impl` working turn ≈ 70 minutes. **So batch one brief per
+seat, not one per row** — a single `send` to `lead` on 2026-10-31 minted #4947, #4948, #4949, #4950, closed
+#4944–#4946 and revised #4923 in one turn. Full procedure: `docs/runbooks/session-start-cost.md`.
+
+**`better-sqlite3` is NOT installed in either tree.** `node -e 'require("better-sqlite3")'` returns
+`MODULE_NOT_FOUND` from `/home/chexxor/Git/Durian-Pi` and from `/home/chexxor/Git/durian-dev/seatroot`. Use
+`node:sqlite` (`DatabaseSync`) for a probe, and remember the store's tables are opaque JSON `record` blobs — a
+hand query is slower and less re-runnable than `cli.mjs log <seat>` / `queue --json` / `worktree audit`.
+
+**Issue every `send` with cwd at the approved seat root.** Placement follows the SERVING PROCESS's tree
+(`src/seattools.mjs:35-37` passes `worktreeRoot: source`; `src/worktree.mjs:877` says the broker's process cwd),
+not the root the roster-wide `DURIG_SEAT_ROOT` guard checks. Sending from the operator's checkout forked
+`item-4933/4935/4936/4937` there, and within 80 minutes a later `send` was REFUSED because a seat was parked in
+one of them. Routed as #4947 (detect and name) then #4950 (place under the resolved root, held).
+
+**A provider BLOCK from `tools/broker-serve.mjs --status` is one sample with a 20 s budget, not a verdict.**
+Same command, 85 minutes apart: `local` BLOCKed during a live seat turn (the engine serves one request at a
+time), `verifier` BLOCKed at idle while a direct probe answered in 8.45 s using 63 of 64 completion tokens for
+reasoning. Confirm with `/v1/models` + one direct completion before spending a wake on a "dead" provider.
+Routed as #4949; the stale shell-name sibling is #4938.
+
+**`status.context` declares the wrong denominator for verifier-family seats.** `qa`, `qa2`, `auditor`,
+`advocate`, `designer` are configured to the `verifier` provider and shown against a **24,576** window while the
+loaded slot is **8192 × 4** — so `qa` reads a comfortable 0.8183 and its next real turn HTTP-400s (probe: 6,128
+tok OK, 9,128 tok → HTTP 400). Read the loaded `--ctx-size` from the process args, not the projected fraction.
+
+**A `done` settle is not a report.** `impl`'s 70-minute turn settled `settledStatus done` / `stopReason stop`
+with reply parts `[thinking]` and **text length 0**, while #4933/#4935/#4936 were genuinely done. And a **cancel
+deposits**: four cancels emitted four queued notice rows (#4932, #4941–#4943), one addressed to a seat over its
+window at 1.0932. A cleanup pass does not converge, it adds rows.
+
+**Two pointer-test traps cost two failed guard runs; the assertions are literal.** `demo/next-pointer.test.mjs`
+requires a line STARTING `**Blocker:**` (not the word inside a sentence) inside the first `## NEXT SESSION`
+section, and `demo/clockin-digest.test.mjs` asserts the string `NEXT-ARCHIVE.md` appears in the **pointer
+section body** — `scripts/clockin.mjs` prints only that section, so an archive link in the header above the
+heading does not count. Keep the archive-cut sentence inside NEXT SESSION.
+
+**`demo/seat-turn-shape.test.mjs` is RED on every tree and only passes unseen because it is unmapped on
+`main`**: exit 1 with `Error: no seat named null` at `tools/seat-turn-shape.mjs:166` via `src/readclient.mjs:68`,
+identical in the deps-linked root (187 packages, `vendor/pi-main` present) and a fresh worktree (80 packages, no
+vendor). Landing `44fe9438` (the areas-manifest fix) clears the manifest-coverage RED and starts RUNNING this
+one — which is why the landing was gated on #4948. Named the artifact set (package count + vendor link) with
+every exit code, per #4939.
