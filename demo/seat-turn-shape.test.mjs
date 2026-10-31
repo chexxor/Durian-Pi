@@ -31,8 +31,32 @@ import {
 	windowIsComplete,
 } from "../tools/seat-turn-shape.mjs";
 
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { createRegistry, Harness } from "@earendil-works/pi-durable";
+import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+import { registerSeat } from "../src/rig.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
-const tool = join(here, "..", "tools", "seat-turn-shape.mjs");
+const rootDir = join(here, "..");
+const tool = join(rootDir, "tools", "seat-turn-shape.mjs");
+// The scratch the fixture store and the failure-path probe both live in. Section 8 used to point
+// `--db` at `demo/definitely-not-a-store.sqlite` and section 9 at `./selfdev.sqlite`; neither path
+// exists in a fresh worktree, and opening a MISSING path CREATES it — measured at this base: one run
+// of this demo left a 118,784-byte `selfdev.sqlite` at the repo root AND a 118,784-byte
+// `demo/definitely-not-a-store.sqlite`, both invisible to `git status` because `.gitignore:2`
+// ignores `*.sqlite`. Section 10 asserts this demo stops writing into the tree.
+const tmp = mkdtempSync(join(tmpdir(), "durig-seat-turn-shape-"));
+const sqliteInRepo = () =>
+	[...readdirSync(rootDir), ...readdirSync(join(rootDir, "demo"))]
+		.filter((n) => n.endsWith(".sqlite"))
+		.sort();
+const litterAtStart = sqliteInRepo();
+const skips = [];
+const sha256 = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
 
 const user = () => ({ role: "user", content: [{ type: "text", text: "go" }] });
 const system = () => ({ role: "system", content: [{ type: "text", text: "s" }] });
@@ -179,7 +203,7 @@ const asstToolCall = () => ({
 {
 	const r = spawnSync(
 		process.execPath,
-		[tool, "--db", join(here, "definitely-not-a-store.sqlite")],
+		[tool, "--db", join(tmp, "definitely-not-a-store.sqlite")],
 		{
 			encoding: "utf8",
 		},
@@ -188,23 +212,109 @@ const asstToolCall = () => ({
 	assert.match(r.stderr, /cannot read/, "and must name the failure on stderr");
 }
 
-// 9. a real read of the rig's own store: one shape per seat, and nothing written.
+// 9. a real store read: a FIXTURE store the demo owns, plus the rig's own store WHEN it resolves.
+//
+// Why the fixture exists (#4948): the repo-root store is gitignored, so a fresh item worktree has NO
+// store at the root and `DURIG_DB` is unset there, and this section died with
+// `Error: no seat named null` — an ENVIRONMENTAL failure wearing the clothes of a behaviour red
+// (#2126/#2287/#2288's classification). The fixture keeps the wiring that matters running in EVERY
+// tree — seat document → `scanEntries` → `replayView` → `assessWindow`, through the same `readLocal`
+// path the product uses — and the real-store leg stays, reporting a NAMED skip rather than either a
+// silent pass or a bare red when no store resolves. The file stays MAPPED in `demo/test-areas.json`
+// and section 9 is not deleted: unmapping it would be tuning the instrument to agree (#4923).
 {
-	const shapes = await readSeatShapes(join(here, "..", "selfdev.sqlite"), { maxEntries: 500 });
-	assert.ok(shapes.length >= 1, "the rig's own store must yield at least one seat shape");
+	const fixtureDb = join(tmp, "fixture.sqlite");
+	const storage = await openNodeSqliteStorage(fixtureDb);
+	const harness = await Harness.open(storage, { registry: createRegistry() }, BACKGROUND_CONTEXT);
+	harness.resume();
+	try {
+		await harness.commit(async (tx) => {
+			for (const name of ["shape-healthy", "shape-parity"]) {
+				const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
+				await registerSeat(tx, name, conv.id, "implementation");
+			}
+		}, BACKGROUND_CONTEXT);
+	} finally {
+		await storage.close(BACKGROUND_CONTEXT);
+	}
+	const fixtureHashBefore = sha256(fixtureDb);
+	const shapes = await readSeatShapes(fixtureDb, { maxEntries: 500 });
+	assert.equal(shapes.length, 2, `one shape per registered seat, got ${shapes.map((s) => s.seat).join(",")}`);
+	assert.deepEqual(
+		shapes.map((s) => s.seat).sort(),
+		["shape-healthy", "shape-parity"],
+		"the seat names come from the store's own seat document, not from an argument",
+	);
+	assert.equal(new Set(shapes.map((s) => s.conversationId)).size, 2, "and each shape is its own conversation");
 	for (const s of shapes) {
-		assert.ok(s.seat && s.conversationId, "every shape names its seat and conversation");
 		assert.equal(typeof s.violations, "number", "every shape carries the predicate result");
 		assert.equal(typeof s.nextSendAdmissible, "boolean", "and the send pre-flight");
+		assert.equal(typeof s.entriesScanned, "number", "and how much of the window it read");
 	}
-	const after = spawnSync("git", ["status", "--porcelain", "--", "selfdev.sqlite"], {
-		cwd: join(here, ".."),
-		encoding: "utf8",
-	});
-	assert.equal(after.stdout.trim(), "", "the instrument must not touch the store on disk");
+	// The read-only claim, checked on BYTES rather than on `git status`. The old check asked git
+	// whether the store had changed, and `.gitignore` answers "nothing happened" for every `*.sqlite`
+	// — a green from that check is vacuous (#4813's shape): it passed while the run was CREATING a
+	// 118 KB store in the tree.
+	assert.equal(sha256(fixtureDb), fixtureHashBefore, "the read must leave the store bytes identical");
+
+	// The rig's own store: run it when it resolves. Every failure mode measured at this base is
+	// ENVIRONMENTAL, and none of them may read as a behaviour red OR as a silent pass:
+	//   - no file at the path (a fresh worktree — `*.sqlite` is gitignored, `.gitignore:2`);
+	//   - a file this tree's pinned `@earendil-works/pi-durable` cannot open — measured on a COPY of the
+	//     seat root's store: `Durable SQLite schema version 2 is newer than supported version 1`;
+	//   - a store that opens but holds no seat document — `src/readapi.mjs:60-61` says an absent session
+	//     document is "an empty rig, not an error: the wrong-database guardrail is the caller's job".
+	// Tolerating those here is NOT tuning the instrument to agree: the fixture store above exercises the
+	// same `readSeatShapes` path unconditionally, so a behaviour regression in the reader still fails
+	// this demo whatever the live leg finds. The live leg exists for the real-pages value (D78), and it
+	// reports what it met.
+	const liveDb = process.env.DURIG_DB || join(rootDir, "selfdev.sqlite");
+	if (!existsSync(liveDb)) {
+		skips.push(`no store at ${liveDb} (DURIG_DB=${process.env.DURIG_DB ?? "unset"})`);
+		process.stdout.write(
+			`  SKIP (ENVIRONMENTAL — not a behaviour red) ${liveDb}: no store resolves in this tree; the fixture leg above ran\n`,
+		);
+	} else {
+		const liveBefore = sha256(liveDb);
+		let live = null;
+		let liveFailure = null;
+		try {
+			live = await readSeatShapes(liveDb, { maxEntries: 500 });
+		} catch (err) {
+			liveFailure = String(err?.message ?? err);
+		}
+		if (live) {
+			for (const s of live) {
+				assert.ok(s.seat && s.conversationId, "every shape names its seat and conversation");
+				assert.equal(typeof s.violations, "number");
+				assert.equal(typeof s.nextSendAdmissible, "boolean");
+			}
+			assert.equal(sha256(liveDb), liveBefore, `the read must not modify ${liveDb}`);
+			process.stdout.write(`  ok   REAL STORE ${liveDb}: ${live.length} seat shape(s), bytes unchanged\n`);
+		} else {
+			const emptyRig = /no seat named/.test(liveFailure ?? "");
+			skips.push(`${liveDb}: ${emptyRig ? "opens, but holds no seat document — an empty rig, not an error (src/readapi.mjs:60-61)" : liveFailure}`);
+			process.stdout.write(
+				`  SKIP (ENVIRONMENTAL — not a behaviour red) ${liveDb}: ${emptyRig ? `opens, but no seat document; the reader's own message is ${JSON.stringify(liveFailure)}` : liveFailure}\n`,
+			);
+		}
+	}
 }
 
+// 10. this demo leaves no store inside the repo. Measured at this base, one run CREATED
+// `selfdev.sqlite` (118,784 bytes) at the repo root and `demo/definitely-not-a-store.sqlite`
+// (118,784 bytes): opening a path that does not exist creates it. That belongs to the storage opener
+// (`openNodeSqliteStorage` via `src/readclient.mjs`), not to this demo, so it is REPORTED for its own
+// row rather than pinned here as expected behaviour. What IS this demo's job is to stop writing into
+// the tree, and both scratch paths now live in a temp dir.
+{
+	const litter = sqliteInRepo().filter((n) => !litterAtStart.includes(n));
+	assert.deepEqual(litter, [], `the demo created store file(s) inside the repo: ${litter.join(", ")}`);
+}
+
+rmSync(tmp, { recursive: true, force: true });
+
 console.log(
-	"SEAT TURN SHAPE TEST PASS (the template's own counted projection: a tool-calling assistant does not satisfy alternation; tool results uncounted; empty assistants counted and reported; caps admitted; unreadable store exits 1; a real read stays read-only)",
+	`SEAT TURN SHAPE TEST PASS (the template's own counted projection: a tool-calling assistant does not satisfy alternation; tool results uncounted; empty assistants counted and reported; caps admitted; unreadable store exits 1; a store read stays read-only on BYTES; the store read ran against a FIXTURE store${skips.length ? `; SKIPPED (environmental): ${skips.join(" | ")}` : ", and against the rig's own store"})`,
 );
 process.exit(0);
