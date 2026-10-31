@@ -8,18 +8,17 @@ Updated **in place** — the archive cut is named inside NEXT SESSION below.
 
 ## NEXT SESSION
 
-**Archive cut:** the superseded 160-line D183 pointer is in `docs/NEXT-ARCHIVE.md` **verbatim** — marker line
-**9630**, body **9632–9791** — proof, re-runnable:
-`sed -n '9632,9791p' docs/NEXT-ARCHIVE.md | diff - <(git show e3cc8afa:docs/NEXT.md)` prints nothing.
+**Archive cut:** the superseded 160-line D183 pointer is in `docs/NEXT-ARCHIVE.md` **verbatim** — marker **9630**,
+body **9632–9791** — re-runnable proof: `sed -n '9632,9791p' docs/NEXT-ARCHIVE.md | diff - <(git show
+e3cc8afa:docs/NEXT.md)` prints nothing.
 
-**Current item: the three gated branches are LANDED and the queue is now working the verify legs — one build is
-unlanded (`item-4931` @ `8fa8f3a2`, the compaction re-cut) and the rig's next acts are seats, not git.** `main` =
-**`a629973e`**; the seat root `/home/chexxor/Git/durian-dev/seatroot` is fast-forwarded to the same sha;
-**50 ahead of `origin/main` at that sha (51 counting this pointer commit), nothing pushed.** Landed under the
-operator's grant 18, by the delegate,
-via `scripts/land.mjs`: **#4935 @ `44fe9438` → merge `abca484d`**, **#4936 @ `24a479c8` → merge `d0a5b7ad`**,
-**#4948 @ `fa1300a2` → merge `a629973e`** (each: `git merge-tree` exit 0 immediately before, `git merge-base
---is-ancestor` exit 0 after, `%p` = two parents, lock `{slots:1, held:1, waitedMs:0, reserved:true,
+**Current item: one unlanded build (`item-4931` @ `8fa8f3a2`, the compaction re-cut), and its gate is a seat wake,
+not git — #4957 (`scribe`) was DISPATCHED 2026-10-31T19:0xZ under the operator's confirmed routing.** `main` =
+**`db560b26`** (`a629973e` + three docs commits); the seat root `/home/chexxor/Git/durian-dev/seatroot` is
+fast-forwarded to the same sha; **53 ahead of `origin/main`, nothing pushed.** Landed earlier under the operator's
+grant 18, by the delegate, via `scripts/land.mjs`: **#4935 @ `44fe9438` → merge `abca484d`**, **#4936 @ `24a479c8` →
+merge `d0a5b7ad`**, **#4948 @ `fa1300a2` → merge `a629973e`** (each: `git merge-tree` exit 0 immediately before,
+`git merge-base --is-ancestor` exit 0 after, `%p` = two parents, lock `{slots:1, held:1, waitedMs:0, reserved:true,
 liveHolders:0}`).
 
 **Blocker:** the rig is running out of HEADROOM on its working seats, and that — not code — is what stops next.
@@ -68,8 +67,9 @@ DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.m
 ps -eo args | tr '\0' ' ' | grep -o -- "--ctx-size [0-9]*"  # 8192 ⇒ the verifier family is dead regardless of what status.context claims
 # 2. impl is CLAIMED-but-dead: re-arm, do not re-send a fresh brief. Read the resume/doctor verb first, then:
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs doctor rig.selfdev.json   # report ONLY; the re-arm verb is named by attention
-#    bring the compaction numbers to the operator BEFORE any compaction (grant 17 was dry-run + report):
-DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs compact impl --dry-run --config rig.compact.json
+#    the ONLY licensed offline compaction read (there is NO `compact --dry-run` — see the do-not-fix list):
+DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node scripts/compact-eval.mjs item --seat impl --limit 400 --out .spike/<session>/compact-impl-dry.txt
+#    measured 19:0xZ, operator-authorised: 400 records ~296,807 est tokens; dropped zone 1 needle + 3 paths; firing = 1 summarizer call + ~10 probes ~890,421 est tokens.
 # 3. BEFORE any send: re-point the roster — a seat parked in its own item worktree refuses EVERY write verb
 DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite \
   node cli.mjs up rig.selfdev.json --refresh --dry-run     # names the drifted cwds; then drop --dry-run; diff a bare-name inventory
@@ -82,38 +82,50 @@ git worktree add --detach "$PWD/.main-check" main && ( cd .main-check && node sc
 git for-each-ref refs/rescued | wc -l       # 490 at clock-out; read runbooks/cross-clone-object-recovery.md before anything runs `git gc`
 ```
 
-**ASK THE OPERATOR — three, and none is a code decision.** (1) **`impl` is at 0.9041 and just died of
-`model_error` mid-turn; `pm` is at 0.9225 and unreachable.** Both are past the 0.88 measured break-class edge and
-neither has an in-wake auto-compaction (`selfCompacts` false). The licensed repair is `reset` (#4886) for `pm` and
-a `compact --dry-run` proposal for `impl` — **do you authorise the compaction, or a reset?** Say which, and expect
-to rule on `lead` at 0.8184 next. (2) **Push grant.** `main` is 51 commits ahead of `origin/main` and nothing has
-been pushed for several sessions; `refs/rescued` holds 490 refs that exist because objects once could not travel
-between machines. One working tree with no remote copy is the largest single unrecoverable loss on this rig. (3)
-**Confirm `lead`'s independence realisation is what you meant by "use local AI"**: the verify legs now run on
-local-model non-author seats (`security` for 217, `scribe` for the compaction build) and **model-family diversity
-is lost — the author seat runs the same model**, which `lead` named in the rows rather than smoothing over.
-Standing ask unchanged: `pm`'s three parked rows (#4826, #4897, #4900) and #4813.
+**ASK THE OPERATOR — three small grants and one decision, all cheap, none a code call.** (1) **`git branch -D
+item-4904`** (its content landed: patch-id `f8840349` = landed `8a950542`), and later **`git branch -D item-4898`**
+(patch-id `9beb1ae3` = `c97e1f11` inside `item-4931`) once #4931 lands. `-d` refuses because the commits are not
+ancestors, and `-D` is a named grant I have not taken. Say yes/no per branch. (2) **Delete the 5 redundant
+`refs/rescued` blobs by name?** Each is byte-identical to a tracked file on `main` (proof above); the 485 rescued
+**commit** refs I recommend leaving alone — 17.58 MiB total pack, 475 of them the only copy of their objects. (3)
+**`wip/seat-prompt-files` @ `04e3ba6b`** — parked pending a competitor-pattern decision, `git cherry` says not
+applied upstream: land it as a row, defer it, or drop it? (4) **`impl` needs a context decision**: it is at 0.9041,
+died mid-turn, and its row #4955 is still `claimed`; the dry-run numbers you authorised are in the next-commands
+block (≈890k est tokens to fire the eval, 1 summarizer call to fire the compaction itself). `pm` at 0.9225 still
+wants `reset` (#4886). **Standing ask unchanged:** `pm`'s three parked rows (#4826, #4897, #4900) and #4813.
 
-**Grants in force.** **15** = no further verifier capacity (standing). **16** = merge of 217 (used). **18** =
-landing of the stacked branches (**used**: `abca484d`, `d0a5b7ad`, `a629973e`). **19** = "use the local AI for the
-verification leg" — no new GPU capacity, no new slot; `lead` owns the routing (realised: #4956/#4957). **No push
-grant.** Grant 11's tree-shape licence used only for `up … --refresh` re-pointing, with bare-name inventories.
+**Grants in force:** **15** standing (no further verifier capacity) · **16** used (merge of 217) · **18** used
+(landing: `abca484d`, `d0a5b7ad`, `a629973e`) · **19** used (local-AI verify legs: #4956/#4957 on non-author
+local-model seats, **operator-confirmed 19:0xZ**; the `impl` compaction DRY RUN authorised and used —
+`scripts/compact-eval.mjs`, estimates only, nothing fired, no tokens spent) · **no push grant (reaffirmed)**.
+Grant 11's tree-shape licence was used only for `up … --refresh` re-pointing, with bare-name inventories.
+**Grants 1–14 are in `docs/NEXT-ARCHIVE.md`.**
 
 ## Rig state, re-measured at clock-out 2026-10-31T11:4xZ (Linux) — re-read, do not trust
 
 **Store** `/home/chexxor/Git/Durian-Pi/selfdev.sqlite` (444 MB); this session's pre-write backup
-`.spike/fix-20261101b/store-backup-pre-lead-020622.sqlite`. **`git worktree list` 10**: the two checkouts
-(`/home/chexxor/Git/Durian-Pi` @ `a629973e`, `/home/chexxor/Git/durian-dev/seatroot` @ `a629973e` on branch
-`seatroot/linux`) and 8 item trees — `item-4937` (LOCKED, #4937 `held`, still based on `31d10565`), `item-4898`
-(`9beb1ae3`, the patch-id reference for the compaction re-cut), `item-4904` (`f8840349`), `item-4916`
-(`8a950542`), `item-4930` (LOCKED over a cancelled row — only `devtools` releases it), `item-4931` (`8fa8f3a2`,
-UNLANDED until #4957 runs), `item-4955` (`a629973e`, LOCKED, impl's dead run), `item-4956` (`a629973e`, `security`'s
-verify leg — clean, commit-free). Once #4955 and #4962 settle, `item-4956` is a remove-by-name candidate, but
-removal is a named grant and `item-4955` is LOCKED over a `claimed` row, so neither moves without `lead`'s say-so.
-`git branch --list` **11**
-(incl. `wip/seat-prompt-files`, no worktree). `refs/rescued` **490**. Removed this session by name with
-`git branch -d` only, each pass inventory-diffed: `item-4902`, `item-4933`, `item-4935`, `item-4936`,
-`item-4948`. **Provider:** local `iq3_s` at `:47831` (`--max-context 204800`, GPU1 23,237/24,576); verifier
+`.spike/fix-20261101b/store-backup-pre-lead-020622.sqlite`. **`git worktree list` 8** and **`git branch --list` 9**
+after the 2026-10-31T19:0xZ cleanup pass: the two checkouts (`/home/chexxor/Git/Durian-Pi` @ `db560b26` on `main`,
+`/home/chexxor/Git/durian-dev/seatroot` @ **`db560b26` on `seatroot/linux`** — re-fast-forwarded from `a629973e`,
+deps intact: 187 packages, `vendor/pi-main` present) and 6 item trees.
+
+**WORKTREE / BRANCH AUDIT, 2026-10-31T19:0xZ — full table, commands and verdicts are in
+`docs/runbooks/leaked-worktrees.md` §"Disposition audit"; the short version:** removed by name this pass
+(`merge-base --is-ancestor` exit 0 → `worktree remove` → `branch -d` → `prune`, bare-name inventory diff = exactly
+4 lines): **`item-4916`**, **`item-4956`**. `git worktree prune --dry-run --verbose` prints nothing. **`item-4931`
+@ `8fa8f3a2` is the ONLY unlanded build** (2 ahead: `c97e1f11` re-cut + `8fa8f3a2` fold-in) and it is gated on
+#4957, not on git. **Two branches need a `-D` grant, not a cleanup decision**: `item-4904` (patch-id `f8840349` =
+landed `8a950542`, so its content is IN `main`) and `item-4898` (patch-id `9beb1ae3` = `c97e1f11` inside
+`item-4931`, so its reference role is discharged once #4931 lands). **`item-4930` (locked, row cancelled) is
+`devtools`' to unlock; `item-4937` (locked, `held`) and `item-4955` (locked, `claimed`, its only dirt is
+untracked scratch `.probe-cli/status.out`) stay.** `wip/seat-prompt-files` @ `04e3ba6b`: `git cherry` prints `+`
+(not applied upstream) — a parked operator/PM decision. **`refs/rescued` = 490 refs (485 commits + 5 blobs), only
+15 reachable from `main`; the 5 blobs are byte-identical to tracked files on `main` (grant to delete by name), and
+the 485 commit refs should be LEFT — the whole pack is 17.58 MiB and 475 of them are the only copy.** Read
+`docs/runbooks/cross-clone-object-recovery.md` before anything runs `git gc`.
+
+Removed earlier in the session by name, `git branch -d` only, each pass inventory-diffed: `item-4902`, `item-4933`,
+`item-4935`, `item-4936`, `item-4948`. **Provider:** local `iq3_s` at `:47831` (`--max-context 204800`, GPU1 23,237/24,576); verifier
 `ministral-3-14b-reasoning` at **8192 × 4** on GPU0 (12,618/16,376) and `status.attention` now carries
 `auditor last_run_failed: model_error … Engine protocol predict request returned 500` — direct evidence the
 verifier slot cannot carry agent turns. `lms` only as `HOME=~/.var/app/ai.lmstudio.lm-studio
@@ -135,13 +147,13 @@ demos=240`; the 3 are attributed in D184 and two are the fresh-worktree false-re
 the commit message; `demo/next-pointer.test.mjs`, `demo/clockin-digest.test.mjs`,
 `tools/doc-integrity-guard.mjs`, `tools/instrument-provenance.mjs` all exit 0.
 
-## OPERATOR GRANTS (see the archive for 1–14)
-
-15 no further verifier capacity. 16 merge of 217 (used). 18 landing of the stacked branches (used). 19 use the
-local AI for the verification leg — no new GPU capacity, no new slot, realised by `lead` as #4956/#4957 on non-author
-local-model seats. **No push grant.**
-
 ## Do not "fix" these on the strength of the docs
+
+**`cli.mjs compact` has NO `--dry-run` and no `--config` flag** — `cli.mjs:2941` is `compact <seat> [instructions]`
+and it WRITES a compaction boundary; only `reset` has `--dry-run` (`cli.mjs:2940`). A pointer near-miss of mine sent
+the next session hunting for a `rig.compact.json` that does not exist in either tree. The licensed offline read is
+**`scripts/compact-eval.mjs item --seat <name> --store …` without `--yes`** — estimates only, and it ALWAYS copies
+the store to temp (`--store` defaults to `DURIG_DB`; the original is never opened for write).
 
 **Every 40-hex value inside a SEAT's transcript is redacted as `secret-shaped value`** — measured on `security`'s
 #4956 leg: both commit shas, `sync-pi`'s `pinnedSha` and both patch-ids came out redacted, so the seat could not

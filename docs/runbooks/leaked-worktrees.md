@@ -232,6 +232,37 @@ branch. A **locked** worktree is an intentional keep; unlock one only when its i
 content qualifies above. This is a mechanical, read-only-to-the-store git operation; the broker may keep
 driving.
 
+### Disposition audit, measured 2026-10-31T19:0xZ (D185, Linux `Alex-Desktop-Win10`) — the METHOD, not just the answers
+
+Every verdict below came from a command in this pass, so re-run it rather than trusting the table.
+
+| Tree / branch | State | Verdict and the command that proves it |
+|---|---|---|
+| `item-4916` @ `8a950542`, `item-4956` @ `a629973e` | clean, tip an ancestor of `main`, row `done` | **removed by name**: `git merge-base --is-ancestor <br> main` (exit 0) → `git worktree remove <path>` → `git branch -d <br>` → `git worktree prune`. Bare-name inventory diff afterwards = exactly 4 lines (`4d3`, `8d6`, `13d10`, `18d14`), nothing else moved. |
+| `item-4931` @ `8fa8f3a2` | clean, 2 ahead (`c97e1f11`, `8fa8f3a2`) | **the only unlanded build** — not a cleanup, a landing, gated on its independent verify. |
+| `item-4904` @ `f8840349` | clean, 1 ahead, `--no-merged`, row `done` | **content already landed**: `git patch-id --stable < <(git show <c>)` gives `279e0d98…` for BOTH `f8840349` and landed `8a950542`. `-d` refuses (not an ancestor) → **`-D` needs a named grant.** |
+| `item-4898` @ `9beb1ae3` | clean, 1 ahead | **reference role discharged**: patch-id `9beb1ae3` = `258dccc5…` = `c97e1f11`, the re-cut inside `item-4931`. Removable by `-D` grant once #4931 lands. |
+| `item-4930` @ `8a950542` | merged, row `cancelled`, **LOCKED** | only the seat that locked it (`devtools`) may unlock — a queue action, not a git one. |
+| `item-4937` @ `31d10565`, `item-4955` @ `a629973e` | clean-or-scratch, **LOCKED**, rows `held` / `claimed` | **leave**. `item-4955`'s `dirty=1` was untracked scratch only (`.probe-cli/status.out`), so a dead wake lost no tracked work. `item-4937` is based 4 landings behind `main` — say so in the pointer. |
+| `wip/seat-prompt-files` @ `04e3ba6b` | no worktree | **not a cleanup**: `git cherry main wip/seat-prompt-files` prints `+` (not applied upstream), so it is a parked decision for the operator/PM. |
+
+**Patch-id is the tool that separates "landed" from "not merged"** — `git branch --no-merged` is not the verdict you
+want, because a re-cut lands as a different sha with the same content. And when a seat's transcript redacts 40-hex
+values, ask for the id in HALVES and re-derive the whole with `git patch-id --stable` yourself.
+
+**`refs/rescued` census: 490 refs = 485 commits + 5 blobs, and only 15 of the 490 are reachable from `main`**
+(loop `git merge-base --is-ancestor` over `git for-each-ref --format='%(refname)' refs/rescued`). The 5 blobs are
+each **byte-identical to a tracked file on `main`** (`git cat-file blob <ref> | diff - <path>`): `impl-4849-seatguard.mjs`
+= `src/seatguard.mjs`, `impl-4849-seattools.mjs` = `src/seattools.mjs`, `impl-4849-shellregistry.mjs` =
+`src/shellregistry.mjs`, plus the two demos — provably redundant, deletable by name **under a grant**. The 485 commit
+refs are the opposite: **the whole pack is 17.58 MiB** (`git count-objects -vH`), so keeping them is free and
+deleting them is irreversible. **Do not prune; do not `gc` without reading
+`docs/runbooks/cross-clone-object-recovery.md`.** If they ever must go, the cheap safe precursor is a patch-id sweep
+(a `tools/rescued-ref-audit.mjs` row) that separates "content already in `main`" from "the only copy that exists".
+
+**Always finish with `git worktree prune --dry-run --verbose`** — on 2026-10-31 it printed nothing, which is how you
+prove the admin area is clean rather than assuming it.
+
 ## Verify
 `git worktree list` no longer lists the resolved worktree; `git status` is quiet for `item-*`.
 
