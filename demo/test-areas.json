@@ -47,6 +47,7 @@
    "demo/resume.test.mjs",
    "demo/revise-work-contract.test.mjs",
    "demo/run.test.mjs",
+   "demo/seat-turn-shape.test.mjs",
    "demo/seatmodel.test.mjs",
    "demo/seatroot.test.mjs",
    "demo/settled-within.test.mjs",
