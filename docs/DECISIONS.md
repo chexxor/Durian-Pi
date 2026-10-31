@@ -6896,7 +6896,8 @@ root that no instrument names. Also false on this build: `docs/SELFDEV.md` still
 `root` (#261) — `status.seats[]` carries no such field.
 
 **A third thing this exposed, because it silently costs turns.** Rows that send a seat to a doc section must account for
-the seat's branch lag: `seatroot/linux` is **8 commits behind `main`**, and #4898 pointed `impl` at
+the seat's branch lag: `seatroot/linux` is **13 commits behind `main`** (`git rev-list --count seatroot/linux..main` =
+13, measured 2026-10-31; an earlier note in this file said 8 — recount before you act on a lag number), and #4898 pointed `impl` at
 `docs/runbooks/compact-a-seat.md` §"What auto-compaction is configured to, and what to set it to" — text that exists
 only on `main`. The delegate inlined the operator-approved values into the brief and re-verified the code anchors **in
 the seat's own tree** rather than quoting main's line numbers (`src/config.mjs:246`, `cli.mjs:414`/`:423`,
@@ -6956,3 +6957,51 @@ was awake; one `send` moved 3 rows and cleared 2 acts in ~20 min of wall clock (
 carries TWO items plus their release instruction, with the approved values inlined (branch lag makes doc-section anchors
 unusable), roughly doubles what one wake returns. (4) **A fresh worktree costs a false RED** unless the gitignored
 `durig.config.json` is copied or the sweep is attributed per tree — check for that file before believing any suite RED.
+
+## D179 — a landing ruling has a *sequencing* consequence the options did not state: committing the change is what makes the author's own proof possible; and "the seat has no shell" turned out to be two different blockers (delegate, 2026-10-31, Linux)
+
+**What the operator granted.** Given the three options in D178, the operator said to proceed and finish. The delegate read
+that as: execute **(b)** first (it is the only path that can produce the runtime evidence the team has been refusing to
+fake), then **(a)** for whatever the seat cannot close, with **(c)** as the honest residue if the proof fails — *report the
+unverified half rather than paper over it.*
+
+**Executed, with shas.** `(a)` — `seatroot/linux` **`f8840349`** = #4849/ROADMAP 217 (5 files, 273 insertions, new
+`src/shellregistry.mjs`); branch `item-4898` **`9beb1ae3`** = #4887/#4898 (3 files, 310 insertions). Both committed with
+explicit paths, nothing pushed, no merge, `main` untouched, both insurances re-verified byte-identical first. `(b)` — two
+detached wakes served **from the seat root itself**, so the seat root's own code was the harness.
+
+**What (b) actually measured, and why the answer is better than the proof I asked for.** The seat's shell call **reached
+a tool named `bash`** and was refused by the *degraded-cwd* rule: "your seat cwd IS the SHARED checkout … call
+`prepare_workspace` first … Refused as a `bash` call; the seat shell registered on this host is `bash`". That refusal text
+is 217's own wording, evaluated live from the tree carrying it — so **registration and selection are proven at runtime**,
+which is strictly more than D178 had. The execution half is still unproven, for a reason nobody had named: the second
+wake's `prepare_workspace` failed with `no claimed item #4902 is yours; call claim_work first`. So the chain to a
+seat-executed acceptance is: *claimed row → worktree forked from a ref that carries the change → shell allowed there*.
+The seat correctly refused to hand-create a worktree (its acceptance would then test the wrong tree) and refused to run
+the suite in a fork that lacked its files.
+
+**The circularity, and what breaks it.** No shell → cannot commit; no commit → no ref to fork → cannot get a worktree →
+cannot get a shell. The delegate's grant-11 commit is the thing that breaks the loop, and that is the part of the ruling
+worth keeping: it was not "the delegate does the seat's work", it was *supplying the missing ref*. The remaining act is a
+seat act and stays one: a fresh row addressed to `impl` (`lead -> impl` is a permitted edge) that `impl` can claim, with
+`prepare_workspace` given that explicit itemId — because the default re-attaches to the most recently claimed item, whose
+worktree was the **delegate's `item-4898`**.
+
+**Keeping a carve-out honest.** The seat authored its own commit-message file with the file tool (not the shell) and left
+the exit codes as literal `EXIT=__` with the rule: *"Do not commit this message with the placeholders filled by anyone who
+did not run the commands in this tree."* The delegate then ran them in that tree (`node --check` ×3 exit 0;
+`demo/seatguard.test.mjs` exit 0 "PASS — the guard holds"; `demo/seattools.test.mjs` exit 0 "PASS — the controls are
+wired"), filled the placeholders from that run, and appended a RUNNER block naming the delegate, the OS, the tree state
+(`3860e5d1` + the then-uncommitted files) and what remains unverified. **A carve-out that does not name its runner is a
+fake oracle wearing real evidence.**
+
+**Two findings the delegate routed rather than fixed.** (1) **Org edge vs. store:** `rig.selfdev.json` gives
+`impl maySendTo: pm, qa, auditor, advocate, designer, scribe, devtools, security, architect, qa2` — `lead` absent — yet the
+store holds **27 rows with `from=impl, to=lead`** (#42 … #4901). `impl` was refused when told to report to `lead` and
+redirected to `devtools` (#4902, #4903). The delegate's own brief had made that mistake; the seat caught it. (2) The
+`rig.selfdev.json` instruction text still says "The shell tool is powershell, all lowercase" for 1 of 12 seats — after
+`f8840349` the name is host-conditional (`bash` on Linux), so the exact-names block is now a lie about this host.
+
+**Still open after this decision (do not read "committed" as "landed"):** neither change set is on `main`; the merge
+topology is `lead`'s ruling under the merge runbook; 217's execution half, all win32 paths, and the 22 ENOENT arms remain
+unverified; the five `DURIG_COMPACTION_*` keys are still unregistered in `CONFIG_KEYS` (`src/config.mjs:111`).
