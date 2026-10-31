@@ -1072,3 +1072,39 @@ every exit code, per #4939.
   `demo/deepinfra-catalog.test.mjs`'s `resolvable()` returns true for ANY `local/` id, so that move turns the red off
   without fixing it. `lead` refused the re-point for exactly this reason (D184) — the instrument was about to be
   tuned to agree.
+
+### Operational pitfalls found 2026-10-31 evening during the verify leg (D185; Linux, `Alex-Desktop-Win10`, node v24.22.1) — the verify leg came back and corrected the delegate twice
+
+- **Check a branch's BASE before you believe a verify leg.** `git merge-tree` exit 0 says the trees combine, not that
+  the branch forked from where you are landing. `scribe` (#4957) refused to let its own green count as landing proof:
+  for `item-4931`, `merge-base main HEAD` = **`6d63a3c5`**, `--is-ancestor main HEAD` exit **1**, and `a629973e` sat
+  inside `HEAD..main`. So its runs proved the **tip**, not the merged tree. Verb:
+  `git merge-base --is-ancestor main <branch>` — now **step 0b of `docs/runbooks/land.md`**. A stale base is a
+  **re-cut job for a seat** (then re-gate by content with `git patch-id --stable`), never a delegate's merge job.
+- **A seat's reply can be staler than its own rows.** `scribe` wrote "#4952 still needs `impl` to cancel it"; the row
+  said `cancelled` **by impl at 11:12:01Z**, four hours earlier, with notice #4961. Re-read `queue --json` before
+  repeating any status a seat states — including good news about your own control working.
+- **A `file:line` cite is tree-relative.** `scribe` measured `cli.mjs:1358` on **its** base; on `main` the string it
+  quoted (`settled?.failure?.reason`) **does not appear anywhere in `cli.mjs`**, and `main`'s compact path requires a
+  `pi.compaction` entry (`fail("compact: no compaction entry was written…")`) while the spool path checks `awaited.ok`
+  (`cli.mjs:1271-1272`). Row **#4964 is therefore unverified on `main`** — don't fix it from the prose, don't dismiss
+  it: have the seat re-derive it against current `main`. Same class as `rig-portability-audit.mjs:171` asserting a
+  store claim as a literal: **a claim that cannot fail is not evidence, and a cite that cannot resolve is not a defect.**
+- **The same version LABEL is not the same code.** npm tarball and pinned build both say `1.3.0`; the tarball has
+  **0** `modelOverrides` occurrences, the pinned build has the seam at `dist/harness/compaction.js:194-197`.
+  **`vendor/pi-main` is the fixture.** A thin worktree cannot even read the live store: `compact-eval` exit 1,
+  "schema version 2 is newer than supported version 1". Pinning the package version is not pinning the artifact set.
+- **Grep the cited file before a demo cite goes into a pointer.** My pointer repeated `lead`'s claim that
+  `demo/local-model-pointer.test.mjs` asserts `verifier=mistralai/…`; on `main` that literal is not in the file (it
+  guards `verifier/<id>` + `DURIG_VERIFIER_BASE_URL` two-sided, and the id comes from machine config,
+  `src/providers/local.mjs:42`). The sibling claim WAS right: `demo/deepinfra-catalog.test.mjs:76` returns true for
+  anything starting `local/`. One commit of a wrong citation is a correction task for the next session.
+- **An empty reply after a long turn is context headroom, not routing — and do not re-send it.** `impl` again: 400 turns
+  cost 3.68 M completion tokens, mean 9,193/turn, and its wake died at **183,689 consumed = 0.9184** with
+  `last_run_failed: model_error` **after** doing the row work (#4952 cancelled, #4955 claimed). Read the fraction
+  before you wake; the repair verb is `reset` (#4886), and `admitted_not_started` in `status.attention` means
+  **re-arm** (`cli.mjs resume` / alias `doctor`, a compound WRITE that refuses while a broker drives —
+  `docs/runbooks/resume-while-broker-runs.md`), not re-send.
+- **A verify leg's worktree is usually a copy of the build it verified.** `item-4957` and `item-4931` had the
+  **identical** tip `8fa8f3a2…`, so `item-4957` is the safest `-D` on the board (deletes zero objects; ancestry is
+  moot for an identical sha). Disposition table: `docs/runbooks/leaked-worktrees.md` §"Disposition audit".

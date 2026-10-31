@@ -7450,3 +7450,47 @@ That is almost certainly what made 217's original verify report look unverifiabl
 a transcript filter as seat negligence twice. `security` worked around it by printing id HALVES
 (`279e0d9861b4d6958cf1|f36af03dc00c96fcaa23`), which is the pattern to ask for: the value in halves **plus the
 command that prints it**, so the reader can re-derive the whole thing.
+
+## D185 (2026-10-31 evening, Linux, `Alex-Desktop-Win10`): the verify leg came back and corrected the delegate twice
+
+**Context:** first legs run under the operator's confirmed routing (grant 19: local-model seats that did not author the
+artifact, **no new GPU capacity**). `scribe` returned #4957 (verify of the compaction build) and #4958 (the
+verifier-independence runbook) in one ~30-minute wake; `security`'s #4956 leg was recorded in D184.
+
+1. **A verify leg must say what it proved: the tip, or the merged tree. And a landing needs the BASE checked first.**
+   `scribe` verified the compaction build green across eight demos in both a thin and a deps-linked tree, then refused
+   to let that count as landing proof, because `merge-base main HEAD` = **`6d63a3c5`**, `--is-ancestor main HEAD` exit
+   **1**, and `a629973e` sat inside `HEAD..main`. So `item-4931` is **not landable as-is**; it needs an `impl` re-cut
+   onto current `main` and the content gate again (`git patch-id --stable`). This is why the delegate's earlier
+   "land it when #4957 is clean" next-command was wrong: **clean ≠ current base**. Land runbook step **0b** now makes
+   the check explicit.
+2. **The row beats the reply, including when the reply is about your own control.** `scribe`'s text said #4952 "still
+   needs `impl` to cancel it"; the row was `cancelled` **by impl at 11:12:01Z**, four hours earlier, notice #4961. I
+   nearly reported a false follow-up.
+3. **A `file:line` cite is tree-relative; a cite that cannot resolve is not a defect.** `scribe`'s row #4964 quotes
+   `cli.mjs:1358` and the read `settled?.error ?? settled?.failure?.reason ?? settled?.reason`. On `main` that string
+   is **absent from `cli.mjs`**: the direct compact path requires a `pi.compaction` entry
+   (`fail("compact: no compaction entry was written…")`) and the spool path checks `awaited.ok` (`cli.mjs:1271-1272`).
+   So **#4964 is unverified on `main`** and must be re-derived there. Same class as `security`'s finding that
+   `tools/rig-portability-audit.mjs:171` asserts a store claim as a string literal over a zero-row store.
+4. **The same dependency version label is not the same artifact set.** The npm tarball and the pinned build both say
+   `1.3.0`; the tarball has **0** `modelOverrides` occurrences while the pinned build has the seam at
+   `dist/harness/compaction.js:194-197`, and **a thin worktree cannot open the live store at all** — `compact-eval`
+   exit 1, "schema version 2 is newer than supported version 1". `vendor/pi-main` is the fixture (#4939's family).
+5. **I corrected my own propagated demo cite.** My pointer claimed `demo/local-model-pointer.test.mjs` asserts
+   `verifier=mistralai/…`; on `main` no such literal exists there (it guards `verifier/<id>` +
+   `DURIG_VERIFIER_BASE_URL` two-sided; the id comes from machine config, `src/providers/local.mjs:42`). The sibling
+   claim held: `demo/deepinfra-catalog.test.mjs:76` returns true for anything starting `local/`. **Durable rule: grep
+   the cited file before a demo cite goes into a pointer** — I asserted from `lead`'s prose, which is exactly the
+   error the rig's own guard (`tools/instrument-provenance.mjs`) exists to catch for code.
+6. **Cleanup dispositions, with proof:** `item-4957`'s tip sha is **identical** to `item-4931`'s (`8fa8f3a2…`), so it is
+   the safest `-D` candidate (deletes zero objects); `item-4904`'s content is in `main` by patch-id
+   (`f8840349` = landed `8a950542`); `item-4898`'s role is discharged once `item-4931` lands (patch-id of its tip =
+   `c97e1f11` inside `item-4931`). **Removed by name this pass: `item-4916`, `item-4956`** (ancestor proof, then
+   `worktree remove` → `branch -d` → `prune`, bare-name inventory diff = exactly 4 lines). `wip/seat-prompt-files` is
+   a parked decision, not a cleanup. Full table: `docs/runbooks/leaked-worktrees.md` §"Disposition audit".
+
+**Correction I own:** the D183 correction to D178 was over-broad. `up --refresh --dry-run` on a rig file that names no
+`cwd` **does** print `model/cwd from -> to` for drifted seats — I ran it and it named `security`. D178's claim that the
+dry run is "COMPLETELY VACUOUS" is false as stated; what survives is that it **previews no removals**. Full proof and
+the retraction are in the runbook.

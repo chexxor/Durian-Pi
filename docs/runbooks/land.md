@@ -444,6 +444,17 @@ The helper's pre-flight, in code (the enforcement chokepoint):
    in use (it now REFUSES a mis-resolved store instead of passing silently). **Restart the broker
    afterwards.** *Durable fix:* ROADMAP **131** (`pause`/`unpause`, #1388) — pause, let seats settle,
    then land with the broker parked but not driving, so no stop is needed.
+0b. **Prove the branch's BASE is current before you preflight the merge.** `merge-tree` exiting 0 says the trees
+    combine; it says nothing about whether the branch forked from where you are landing.
+    ```bash
+    git merge-base --is-ancestor main <branch>; echo "main-in-branch exit=$?"   # 0 = current base, 1 = STALE base
+    git merge-base main <branch>                                                # the actual fork point
+    ```
+    Measured 2026-10-31T19:2xZ: for `item-4931`, `merge-base main HEAD` = **`6d63a3c5`**, `--is-ancestor main HEAD`
+    exit **1**, and `a629973e` (one of the landings you are about to build on) sits inside `HEAD..main`. A verify leg
+    that ran green **on that tip** therefore proves the tip, not the merged tree — `scribe` said so on #4957 and
+    refused to treat its own green as landing proof. A stale-base branch is a **re-cut job for a seat** (rebase or
+    re-cut, then re-gate by content with `git patch-id --stable`), not a merge job for a delegate.
 1. Confirm the branch and sha, and that the shared tree has no tracked changes:
    ```bash
    git -C <repo> log --oneline -1 <branch>
