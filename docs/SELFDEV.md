@@ -1108,3 +1108,9 @@ every exit code, per #4939.
 - **A verify leg's worktree is usually a copy of the build it verified.** `item-4957` and `item-4931` had the
   **identical** tip `8fa8f3a2…`, so `item-4957` is the safest `-D` on the board (deletes zero objects; ancestry is
   moot for an identical sha). Disposition table: `docs/runbooks/leaked-worktrees.md` §"Disposition audit".
+- **Do not `git commit --amend` after you have fast-forwarded the seat root onto that commit.** The amend replaces the
+  sha and the two checkouts **diverge**: `merge --ff-only main` then fails with "Diverging branches can't be
+  fast-forwarded". Measured at clock-out: seat root held `15553620`, `main` became `81c49788`. Repair with proof, not
+  guesswork — `git -C <root> status --short` clean, and `git -C <root> diff --stat HEAD main` showing the ONLY delta
+  was the one amended line — then `git -C <root> reset --hard main`. Better: make a second small commit instead of
+  amending once another checkout tracks the commit.
