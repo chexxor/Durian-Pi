@@ -2,7 +2,7 @@
 
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
-**Last updated:** 2026-10-31T11:3xZ (**D184**), host-local 2026-10-31 06:3x (`America/Chicago`, CDT = UTC−5).
+**Last updated:** 2026-10-31T11:4xZ (**D184**), host-local 2026-10-31 06:4x (`America/Chicago`, CDT = UTC−5).
 Box `Alex-Desktop-Win10`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D184).
 Updated **in place** — the archive cut is named inside NEXT SESSION below.
 
@@ -99,15 +99,18 @@ landing of the stacked branches (**used**: `abca484d`, `d0a5b7ad`, `a629973e`). 
 verification leg" — no new GPU capacity, no new slot; `lead` owns the routing (realised: #4956/#4957). **No push
 grant.** Grant 11's tree-shape licence used only for `up … --refresh` re-pointing, with bare-name inventories.
 
-## Rig state, re-measured at clock-out 2026-10-31T11:3xZ (Linux) — re-read, do not trust
+## Rig state, re-measured at clock-out 2026-10-31T11:4xZ (Linux) — re-read, do not trust
 
 **Store** `/home/chexxor/Git/Durian-Pi/selfdev.sqlite` (444 MB); this session's pre-write backup
-`.spike/fix-20261101b/store-backup-pre-lead-020622.sqlite`. **`git worktree list` 9**: the two checkouts
+`.spike/fix-20261101b/store-backup-pre-lead-020622.sqlite`. **`git worktree list` 10**: the two checkouts
 (`/home/chexxor/Git/Durian-Pi` @ `a629973e`, `/home/chexxor/Git/durian-dev/seatroot` @ `a629973e` on branch
-`seatroot/linux`) and 7 item trees — `item-4937` (LOCKED, #4937 `held`, still based on `31d10565`), `item-4898`
+`seatroot/linux`) and 8 item trees — `item-4937` (LOCKED, #4937 `held`, still based on `31d10565`), `item-4898`
 (`9beb1ae3`, the patch-id reference for the compaction re-cut), `item-4904` (`f8840349`), `item-4916`
 (`8a950542`), `item-4930` (LOCKED over a cancelled row — only `devtools` releases it), `item-4931` (`8fa8f3a2`,
-UNLANDED until #4957 runs), `item-4955` (`a629973e`, LOCKED, impl's dead run). `git branch --list` **10**
+UNLANDED until #4957 runs), `item-4955` (`a629973e`, LOCKED, impl's dead run), `item-4956` (`a629973e`, `security`'s
+verify leg — clean, commit-free). Once #4955 and #4962 settle, `item-4956` is a remove-by-name candidate, but
+removal is a named grant and `item-4955` is LOCKED over a `claimed` row, so neither moves without `lead`'s say-so.
+`git branch --list` **11**
 (incl. `wip/seat-prompt-files`, no worktree). `refs/rescued` **490**. Removed this session by name with
 `git branch -d` only, each pass inventory-diffed: `item-4902`, `item-4933`, `item-4935`, `item-4936`,
 `item-4948`. **Provider:** local `iq3_s` at `:47831` (`--max-context 204800`, GPU1 23,237/24,576); verifier
@@ -126,7 +129,7 @@ seats):** ADMISSIBLE `qa`, `qa2`; **AT RISK** `pm`, `impl`, `lead`, `advocate`, 
 (verifier grammar 500); `idle_with_queued_work` for `lead` (8), `devtools` (14), `scribe` (3), `security` (5),
 `qa` (2), `qa2` (2), `architect` (1); step-repetition 3% (2/66); queue-ageing 1834.5 min (band 30). **Still
 never flagged: `advocate` 9.9589 and `architect` 1.0932.** **Queue census at clock-out (NOT evidence — rows
-are):** `{"done":3773,"cancelled":792,"held":323,"queued":54,"deferred":17,"claimed":2}`. **Host:** 94 GiB total,
+are):** `{"done":3774,"cancelled":792,"held":323,"queued":54,"deferred":17,"claimed":2}` at 11:41Z. **Host:** 94 GiB total,
 61 used, 32 available. **Suite on `main` (detached clean worktree):** `pass=237 fail=3 environmental=0,
 demos=240`; the 3 are attributed in D184 and two are the fresh-worktree false-red class. **Clock-out tests:** see
 the commit message; `demo/next-pointer.test.mjs`, `demo/clockin-digest.test.mjs`,
@@ -161,7 +164,10 @@ read the live `--ctx-size` from process args. **A `broker-serve --status` provid
 budget** (#4949). **`channel-preflight` §7 and `seat-shell-availability` probe `[pwsh, powershell]` after reading
 `registered shell tool name: "bash"`** (#4938). **The roster-wide `DURIG_SEAT_ROOT` guard refuses EVERY write verb
 when any seat is parked in an item worktree** — `up … --refresh` under the root, never unsetting it (D180);
-expect this after **every** turn that used `prepare_workspace` (it fired twice this session).
+expect this after **every** turn that used `prepare_workspace` (it fired three times this session — off `item-4937`,
+`item-4931` and `item-4955`; the roster was re-pointed clean at clock-out, refresh 5, whose inventory diff showed
+nothing removed and only `item-4956` added by `security`'s turn — so no refusal is pending, and the next turn in any
+item worktree re-arms it).
 **`prepare_workspace` places beside the SERVING PROCESS's tree, not the seat root** (#4947/#4950) — `cd` to the
 approved root before `send`; that habit is what put `item-4948`/`item-4931`/`item-4955` under the seat root.
 **`up … --refresh --dry-run` is NOT vacuous when the rig file names no `cwd`**, and it never names removals.
