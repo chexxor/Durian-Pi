@@ -123,6 +123,7 @@
   ],
   "worktree": [
    "demo/complete-teardown-root.test.mjs",
+   "demo/land-changed-suite.test.mjs",
    "demo/land-helper.test.mjs",
    "demo/landing-data.test.mjs",
    "demo/mergeguard.test.mjs",
