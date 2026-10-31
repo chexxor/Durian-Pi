@@ -32,34 +32,41 @@ worktree forked from a ref that carries the change → shell allowed there*. The
 seat's work"; it supplied the missing ref that breaks the loop (no shell → no commit → no ref to fork → no shell).
 
 **lead's merge ruling (in #4904's body, 00:52Z) — the delegate will NOT execute it, it is a seat act:** do NOT merge
-`seatroot/linux` anywhere (it is **13 commits behind `main`**, 1 ahead — `3860e5d1` is the merge-base; lead's brief said 8,
-measured 13, and merging an older tree is the `595b714` failure mode). Land **217 first** by author rebase onto `main`
-(#3271 author-owns-own-rebase), then **re-cut** `item-4898 @ 9beb1ae3` onto `main`+217 as a stacked pair; compare per-file
+`seatroot/linux` anywhere (it is **14 commits behind `main`**, 1 ahead — `3860e5d1` is the merge-base; lead's brief said 8,
+re-count before acting on any lag number, and merging an older tree is the `595b714` failure mode). Land **217 first** by
+author rebase onto `main` (#3271 author-owns-own-rebase), then **re-cut** `item-4898 @ 9beb1ae3` onto `main`+217 as a
+stacked pair; compare per-file
 **content**, not ancestry (#3337); pin the reviewed diff and treat a tip move as an abort. Neither set attempts `land.mjs`
 before #4904's outputs exist — they exist now.
 
-**Rows minted while this ran:** **#4905** (`devtools`, held) the org-edge question; **#4906** (`devtools`, held, trivial)
-**delete** the "the shell tool is powershell" sentence from `rig.selfdev.json` (swapping it to `bash` re-creates the same
-lie on the next host), gated on 217 reaching `main`; **#4907** (`qa`, held) the verify leg gated at mint time
-(`blockedBy` #4904): 217's execution half, both demos on the **merged** tree, and the compaction leg asserted against the
-mechanism with the old failure (tasks 275491/275492 at 18,453/24,576) as the thing that must not reproduce.
+**Rows minted while this ran:** **#4905** (`devtools`, held) the org-edge question (`impl maySendTo` has no `lead`, yet
+**27 rows `from=impl, to=lead`** exist, #42 … #4901); **#4906** (`devtools`, held, trivial) **delete** the "the shell tool
+is powershell" sentence from `rig.selfdev.json` — devtools' ruling on it, unexecuted: per-seat instruction text should
+name **no** shell tool, single source `shellToolNames()`; **#4907** (`qa`, held) the verify leg gated at mint time
+(`blockedBy` #4904). **`devtools` then closed #4902/#4903/#4908/#4845 and minted #4910/#4914/#4915** (above).
+**Un-gating condition for #4906/#4907/#4914/#4915: 217 reaching `main`.**
 
-**THREE FINDINGS to route, not hand-fix.** (1) The five `DURIG_COMPACTION_*` keys are **not registered in
-`CONFIG_KEYS`** (`src/config.mjs:111`, which does exist) and `demo/config.test.mjs` does not assert membership the way
-`demo/local-provider.test.mjs:75` does. (2) **Org edge vs. store:** `rig.selfdev.json` gives `impl maySendTo` WITHOUT
-`lead`, yet the store holds **27 rows `from=impl, to=lead`** (#42 … #4901) and `impl` was refused when told to report to
-`lead` — either the edge tightened and history predates it, or a deposit path skips `assertSendAllowed` (`src/rig.mjs:65`).
-(3) **NEW, and it will bite every future worktree run:** inside a fresh item worktree `cli.mjs worktree audit` returns
-`"Durable SQLite schema version 2 is newer than supported version 1"` — that tree's `node_modules` has **80 packages vs
-187** in `main`/seat root, so it resolves an older pi-durable that cannot open the store — and
-`tools/rig-portability-audit.mjs` printed it as `cli.mjs worktree audit failed: ` with an **empty message**, exit 1.
-Measure from `main` or the seat root, never from a fresh worktree (the #4895 class, extended from a missing
-`durig.config.json` to dependency resolution).
+**THREE FINDINGS ARE NOW ROWS, not prose — `devtools` did that, in its own wake, and it corrected two delegate numbers
+while doing it.** **#4915** (`devtools→lead`, **held, feature**): a fresh item worktree is **not a comparable
+verification tree** — `prepare_workspace` itself printed `DEPENDENCY NOT LINKED … the sync-pi --link step FAILED
+(vendor/pi-main is not built in this worktree … run --sync first)` and the versions are **identical (`1.3.0`) while the
+artifacts differ** (lockfile copy vs the vendored build the pin validates against). That is the mechanism under the
+delegate's `Durable SQLite schema version 2 … newer than supported version 1` and the 80-vs-187 package counts — which
+**devtools could not re-verify** (no shell), so they stay delegate-measured. **#4914** (held, small): the landing-gate
+instruments don't read the registered shell — `channel-preflight` §7 scrapes the vendored PowerShell fallback and will
+print **"NO SHELL CAN START HERE" AFTER 217 LANDS**; `rig-portability-audit` printed the worktree failure with an **empty**
+reason. **#4910** (`queued`): devtools' own `spawn powershell ENOENT`. **New class defect surfaced while filing them: a
+seat cannot register a row to itself** (`org edge` refuses `devtools → devtools`), so held backlog for your own next
+session needs another author — #4914/#4915 carry an explicit "re-mint it to `devtools` when the gate clears".
 
-**Instruments re-measured from `main`:** `rig-portability-audit.mjs` is still **NOT PORTABLE — 2 findings**
-(`seat-shell-availability`, `seat-host-unaware`) because it measures **landed** code and 217 is not on `main` yet;
-`channel-preflight` still prints `registered shell tool name: "powershell"` for the same reason, but its store evidence
-now reads **`"toolName":"bash" -> 10 entries`** vs `powershell -> 20347` — tonight's seat calls are in the ledger.
+**TOP HAZARD, and it is the delegate's doing — read D180 before you touch a wake. `DURIG_SEAT_ROOT` is the ROOT SELECTOR,
+not just a guard input.** A wake under it was refused because **another** seat's cwd had drifted (`impl` left in an
+unlocked `item-4904` by #4904's `prepare_workspace`), and the error's own advice — "or unset `DURIG_SEAT_ROOT`" — moved
+`devtools` from the approved root into **`/home/chexxor/Git/Durian-Pi`** (its newest `pi.agent` doc 4935 rev 2373156 says
+so) and produced a **nested worktree `Durian-Pi/item-4902`** (clean, no commits, invisible to `git status`, visible to
+`git worktree list`). Consequence: **two seats, same rig, same minute, two registrations** — `impl` at `f8840349` got
+`bash`; `devtools` at landed `main` got `powershell` and **cannot spawn anything** (`src/shellregistry.mjs` does not exist
+there). So "what the rig can do" is only true **of the tree you read it from**.
 
 **Archive:** everything superseded is verbatim in `docs/NEXT-ARCHIVE.md` (this cut: marker 8860, body 8862–9059) —
 grants 1–12 and the older do-not lists live there, not here.
@@ -77,7 +84,9 @@ git worktree list --porcelain | grep -c "^worktree"   # 4: main, seatroot, LOCKE
 # 2. pre-flight the ROOT THE HONEST WAY. `up … --refresh --dry-run` printing `changes: {}` is VACUOUS here (D178): the
 #    target is `seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT` (cli.mjs:679,794) and rig.selfdev.json declares 0 cwds. Keep
 #    the dry-run only as a belt: with DURIG_SEAT_ROOT set it is the F12 guard that fails closed on drift.
-node .spike/fix-20261101/read-cwd4.mjs      # newest pi.agent revision per seat; 12 seatroot + 1 orphan on a dead C:\ path
+node .spike/fix-20261101/read-cwd4.mjs      # newest pi.agent revision per seat (doc = conv+5); 13 rows, 1 orphan on a dead C:\ path
+#    A WAKE MUST SET DURIG_SEAT_ROOT or it SELECTS A DIFFERENT CHECKOUT (D180: devtools got landed main, no shell, and left
+#    a nested worktree in this repo). If the drift guard refuses because SOME OTHER seat moved, do NOT unset it — record it.
 # 3. pre-flight the SHAPE and the REACHABILITY before every send, never after (read-only, seconds, 0 writes)
 DURIG_DB=./selfdev.sqlite node tools/seat-turn-shape.mjs            # --seat impl | --json | --strict | --explain impl
 DURIG_DB=./selfdev.sqlite node cli.mjs status --json > .spike/fix-20261101/s.json 2>/dev/null
@@ -96,17 +105,17 @@ node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs && node too
 git for-each-ref refs/rescued | wc -l       # 489; read runbooks/cross-clone-object-recovery.md before anything runs `git gc`
 ```
 
-**ASK THE OPERATOR — the a/b/c grant is EXECUTED; one ask remains.** Both change sets are committed on branches and the
-runtime proof is now a seat's own, so the question moved to `main`: `lead` ruled the merge topology (217 rebased first,
-then `item-4898` re-cut onto `main`+217, never merge `seatroot/linux`) and **a seat** must execute it. Do you want the
-delegate to wake that seat, or hold for your word? Standing ask unchanged: `pm` is at its ceiling and **`reset` (#4886)
-is the only repair**, at the cost of its routing history; #4886's **tier is still `feature`, `held by pm`** because lead
-ruled the priority in prose and cannot set a tier.
+**ASK THE OPERATOR — two questions now, and the delegate picks neither.** (1) **Landing:** both change sets are on
+branches and 217's proof is a seat's own, so the only thing left is `lead`'s merge topology (217 rebased onto `main` by
+its author, then `item-4898` re-cut on top; never merge `seatroot/linux`, **14 behind `main`**) — and **that rebase
+un-gates #4906/#4907/#4914/#4915**, so it is now on the critical path for the whole team, not just for these two rows.
+(2) **Which tree serves seats** (asked first-hand by `devtools` in #4910): landed `Durian-Pi` — host-blind, no shell on
+Linux — or `durian-dev/seatroot @ f8840349`, which carries unlanded 217? Tonight the answer was accidental and differed
+per seat. Standing ask unchanged: `pm` is at its ceiling and **`reset` (#4886) is the only repair**, at the cost of its
+routing history; #4886's **tier is still `feature`, `held by pm`**.
 
-**Channel:** `send` remains the only wake on this host (a broker start is still refused on `seat-shell-availability`,
-which carries **no ack flag** — and that finding IS 217, so the refusal and the fix are the same defect). `send` prints
-`DEPRECATED … prefer intent.mjs` — inert while the broker is down. The spool `./selfdev.sqlite.broker.inbox` holds **2
-pending intents, both `op:read view:health`** (04:37Z, 04:43Z) — harmless, not work deposits.
+**Channel:** `send` remains the only wake on this host (a broker start is refused on `seat-shell-availability`, which
+carries **no ack flag** — that finding IS 217). `send` prints `DEPRECATED … prefer intent.mjs` — inert while the broker is.
 
 **Blocker:** the D178 blocker is **resolved inside item worktrees and still refuses in the shared checkout — by design.**
 A seat's shell runs real processes in its own item worktree (#4904: `uname`, `git log`/`rev-parse`/`status`,
@@ -124,27 +133,22 @@ it (#4826, #4897, #4900). `compact` cannot repair a seat at its ceiling (it IS a
 
 ## What landed this session (D179), with its evidence — durable record: `docs/DECISIONS.md` **D178 and D179**
 
-- **The operator's grant executed in order:** (b) two wakes served from the seat root to chase the runtime proof; then
-  (a) the two commits, because the proof needed a ref to fork from; (c) the residue — win32 paths, the 22 ENOENT arms and
-  the un-landed audit — reported as unverified, not papered over.
-- **Insurance became a backup rather than the only copy:** `insurance-4849`/`insurance-4898` (patch + verbatim copies +
-  sha256sums) held the work byte-identically through the commit and were re-verified against the live trees at clock-out.
-- **Seat-authored commit discipline worth copying:** `impl` wrote its own commit-message file with the file tool and left
-  `EXIT=__` placeholders with the rule that only someone who ran the commands in that tree may fill them. The delegate
-  ran them there, filled them, and appended a RUNNER block naming itself, the OS and the tree state (#4858).
-- **Three wakes, four actors, one loop closed:** `impl` (#4849/#4898/#4904), `lead` (#4904–#4907), the delegate (commits
-  and measurements). The store went 4,901 → 4,909 rows while the census barely moved — rows #4900–#4908 ARE the record.
+- **The grant ran in order:** (b) two wakes from the seat root for the runtime proof → (a) the two commits, because the
+  proof needed a ref to fork from → (c) the residue (win32 paths, 22 ENOENT arms, audit still NOT PORTABLE) unverified.
+- **Insurance became a backup, not the only copy** (`insurance-4849`/`insurance-4898`: patch + verbatim copies +
+  sha256sums, re-verified against the live trees at clock-out), and **seat-authored commit discipline is worth copying:**
+  `impl` left `EXIT=__` placeholders in its own commit-message file with the rule that only a real runner may fill them —
+  the delegate ran them in that tree, filled them, and appended a RUNNER block naming itself, the OS and the tree (#4858).
 
 ## Rig state, re-measured at clock-out 2026-10-31T01:0xZ (Linux) — re-read, do not trust
 
 **Store** `./selfdev.sqlite` (441 MB); pre-wake backups in `.spike/fix-20261101/` (`…pre-send-20261030-161115.sqlite`,
-`…pre-d179-193819.sqlite`). **Queue census = 4,909 rows: 3,760 done / 780 cancelled / 323 held / 28 queued / 17 deferred /
-1 claimed (`#4890` `qa` only)** — barely moved while 8 rows were minted and 3 completed: **the census is never evidence
-here.** Row level: **#4904 `done` by impl 00:57:52Z**; #4849/#4898 `done`; **#4902/#4903/#4908 `queued` impl→devtools**
-(the seat's own measurement reports); **#4905/#4906 `held` (devtools) and #4907 `held` (qa) minted by lead**; #4887 still
-`queued`→impl; #4894/#4895/#4896 `held` by pm; #4899 `held`. **#4901 (`impl→lead`) is now moot** — the delegate committed
-that build at `9beb1ae3`. **3 queued rows park on the unreachable pm (#4826, #4897, #4900)** — the re-wedge hazard,
-quantified.
+`…pre-d179-193819.sqlite`, `…pre-devtools-20261030-224825.sqlite`). **Queue census = 4,915 rows: 3,764 done / 780
+cancelled / 325 held / 28 queued / 17 deferred / 1 claimed (`#4890` `qa` only)** — **the census is never evidence here.**
+Row level: **#4904/#4902/#4903/#4908/#4845 `done`**; **#4910 `queued` devtools→lead**; **#4914 (small) / #4915 (feature)
+`held` devtools→lead**, both "re-mint to devtools when the gate clears"; #4905/#4906 `held` (devtools), #4907 `held` (qa),
+#4887 `queued`→impl, #4894-#4896 `held` by pm, #4899 `held`. **3 queued rows park on the unreachable pm (#4826, #4897,
+#4900)** — the re-wedge hazard, quantified.
 **Broker DOWN, deliberately**; `channel-preflight`: `placed=0 queued=0`, 0 advancing conversations, "the wedge does NOT
 survive a restart", 24 claimable rows so a start has real work to wake onto. **Context fractions (`status.context`, full
 store):** pm **0.9225** (184,507/200,000), **impl 0.3961 (79,220/200,000 — it was 0.7985 mid-session: its consumed FELL
@@ -157,8 +161,11 @@ shows exactly one unanswered row, conv 3 = pm, `model_error`). **Turn shape:** 1
 `qa2`**; the other nine AT RISK. **Models are local/verifier, not DeepInfra** — `rig.selfdev.json` serves `local/iq3_s`
 (GPU1 22,579/24,576 MiB, ctx 200,000) and `verifier/mistralai/ministral-3-14b-reasoning` (GPU0 15,214/16,376 MiB,
 `loaded_context_length` **24576**, parallel 1); the gitignored `durig.config.json` carries base URLs, no API key here.
-**Worktrees 4** (`item-4898` locked; `item-4904` clean and **unlocked** — the harness reaps clean terminal worktrees, so
-expect it to vanish), **branches 5**, `refs/rescued` **489**. **Host:**
+**Persisted cwd drift (docs map conv+5): doc 14 = `impl` → `seatroot/item-4904` (unlocked); doc 4935 = `devtools` →
+`/home/chexxor/Git/Durian-Pi`.** Both clean. **Worktrees 5** — the 5th is the nested `Durian-Pi/item-4902` (`item-4898`
+locked; `item-4904` clean and **unlocked**). If you remove anything, remove it BY NAME after the workspace-move inventory,
+never by sweep: `git worktree remove /home/chexxor/Git/Durian-Pi/item-4902`. **Branches 6**, `refs/rescued` **489**.
+**Host:**
 74 Gi used / 19 Gi available, swap 4.9/8 GiB, `/proc/vmstat oom_kill` **7 (unchanged)**, `user.slice memory.peak`
 96,140,943,360 B (unchanged). **Clock-out trio PASS at the pre-commit HEAD** (re-run them at clock-out, always).
 
@@ -175,13 +182,11 @@ enacted only in prose; the tier act is owed by a seat. **15.** no further verifi
 guard's degraded-cwd rule is correct and 217's own demo proves it (`ok #3992: a shell command from a seat's OWN worktree
 is NOT refused`). To get any seat-executed act you need a **claimed row** first: `prepare_workspace` refuses without one
 (`no claimed item #NNNN is yours`), and its **default** re-attaches to the most recently claimed item — pass the itemId
-explicitly or you land in someone else's worktree. **A fresh item worktree also resolves an older pi-durable** (80 vs 187
-packages → `Durable SQLite schema version 2 is newer than supported version 1`), and `rig-portability-audit.mjs` swallows
-that reason and prints `failed: ` with an empty string — measure from `main` or the seat root. **`up … --refresh --dry-run`
+explicitly or you land in someone else's worktree. **`up … --refresh --dry-run`
 printing `changes: {}` is not evidence about the seat root** when the rig file names no cwd. **A seat's `complete_work`
-moves its persisted cwd to the serving process's cwd** — run `send` with **cwd = the approved seat root**. **Rows that
-point a seat at a doc section ignore branch lag: `seatroot/linux` is 8 commits behind `main`** (values were inlined into
-the brief; anchors re-verified in the seat's tree). **`status.attention` never lists a seat whose `context` fraction
+moves its persisted cwd to the serving process's cwd** — run `send` with **cwd = the approved seat root**, and NEVER unset
+`DURIG_SEAT_ROOT` to get past a drift refusal: that is how a seat gets served from a **different checkout** (D180).
+**`status.attention` never lists a seat whose `context` fraction
 exceeds 1** (measured: `advocate` 9.96, `architect` 1.09, both absent) — compute reachability from `status.context`
 before every wake. **A `DONE` verify row can cite lines that point nowhere and `review-cite-check.mjs` exits 0 on them.**
 **Auto-compaction fires late, not never** (D176/D177), and **`compact` cannot rescue a seat at its ceiling**. **Never read

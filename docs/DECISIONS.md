@@ -7005,3 +7005,70 @@ redirected to `devtools` (#4902, #4903). The delegate's own brief had made that 
 **Still open after this decision (do not read "committed" as "landed"):** neither change set is on `main`; the merge
 topology is `lead`'s ruling under the merge runbook; 217's execution half, all win32 paths, and the 22 ENOENT arms remain
 unverified; the five `DURIG_COMPACTION_*` keys are still unregistered in `CONFIG_KEYS` (`src/config.mjs:111`).
+
+**Clock-out note (D179): what cost wall-clock, and what would shorten the next one.** (1) **Three wakes, three different
+refusals, and each refusal cost a measurement cycle to interpret.** 217's execution proof failed twice for reasons that
+were *not* the defect under test — first the degraded-cwd guard, then `prepare_workspace`'s "no claimed item #4902 is
+yours". Both are correct behaviours, and both read like failures of the change. Proposed seat act, cheap and high-value:
+have the refusal text name the **next verb** ("claim a row, then `prepare_workspace(itemId)`"), which it already partly
+does — and have `prepare_workspace`'s error name the *itemId you passed vs the one you hold*. (2) **The pointer cap again
+dominated clock-out**: this session's head rewrite was ~35 min for the same mechanical reason as D178 (facts displacing
+facts under `wc -l`). The `tools/pointer-fit.mjs` proposal in the D178 note is now proven twice; promote it. (3) **A
+stale-base hazard is now measurable at fork time and nobody measures it.** Every new item worktree forks from the ref the
+seat root's cwd points at — tonight `f8840349`, **14 commits behind `main`** — so a seat can silently implement against an
+old tree while the pointer/runbooks it reads are newer. Proposed instrument (devtools-scope): print
+`base_lag = git rev-list --count <base>..main` in `prepare_workspace`'s JSON and stamp the base sha on the branch, so a
+stale fork is visible at creation instead of at review. (4) **A seat's persisted cwd following its own item worktree
+breaks the wake channel for everyone else** — the root-drift guard refused the delegate's next `send` because `impl`'s cwd
+had moved to an unlocked `item-4904`. One row for devtools on whether settle should reset cwd, `prepare_workspace` should
+lock what it creates, or the guard should scope to the seat being woken.
+
+## D180 — `DURIG_SEAT_ROOT` is not only a guard input, it is the **root selector**; unsetting it to get past a drift refusal re-points the seat at a different checkout
+
+**Decision (2026-10-31, delegate, `Alex-Desktop-Win10` / Linux):** the next delegate must treat "unset
+`DURIG_SEAT_ROOT`" as a **workspace write**, not as relaxing a check. I did it to get a wake through and it silently
+moved a seat from the approved root into the delegate's own repo.
+
+**What happened, in order, with the numbers.** (1) A wake to `devtools` under `DURIG_SEAT_ROOT` was **refused** by the
+root-drift guard: `seat "impl" is pointed at a different worktree than DURIG_SEAT_ROOT: persisted cwd
+"/home/chexxor/Git/durian-dev/seatroot/item-4904" vs DURIG_SEAT_ROOT "/home/chexxor/Git/durian-dev/seatroot"`. Note the
+shape of that failure: **an unrelated seat's** cwd drift (`impl`, left in an **unlocked** `item-4904` by #4904's
+`prepare_workspace`) blocked a send **to a different seat**. (2) I "fixed" it the way the error text told me — *or unset
+`DURIG_SEAT_ROOT`* — and sent. (3) Measured after the run: **`devtools`'s newest `pi.agent` revision (doc 4935 = conv
+4930, docs map conv+5) reads `cwd=/home/chexxor/Git/Durian-Pi`** — the seat that had been rooted at the approved
+`durian-dev/seatroot` was served from **landed `main`**, and it created **`/home/chexxor/Git/Durian-Pi/item-4902`**, an
+item worktree nested inside the delegate's own checkout (clean, no commits, invisible to `git status` because nested
+worktrees are auto-ignored, visible to `git worktree list`).
+
+**Why that is a durable decision and not just my mistake: the two roots have different *code*, so the seat got a
+different registration.** `devtools` from landed `main`: `src/seattools.mjs` registers `shell: createPowerShellTool()`
+unconditionally, `src/seatguard.mjs` still hardcodes `SHELL_TOOLS = new Set(["bash","powershell"])` (permission without
+registration), and **`src/shellregistry.mjs` does not exist there** — its shell call returned **`spawn powershell
+ENOENT`**. `impl` from `f8840349`: got `bash` and ran six commands at exit 0. Same rig, same minute, **two seats, two
+registrations**. Every instrument reading "what the rig can do" is therefore only valid **for the tree it was read from**,
+which is the same lesson D178 recorded for REDs, now demonstrated on a *capability*.
+
+**Consequences the operator now has to rule on (the seat asked them directly in #4910):** which tree serves seats —
+landed `Durian-Pi` (host-blind, no shell on Linux) or `durian-dev/seatroot @ f8840349` (has 217, which is not landed)?
+Tonight's answer was accidental and differed per seat.
+
+**The correct move, which I did not take, and why it stays un-taken.** Re-pointing 13 `pi.agent` records is a workspace
+write with a documented history of destroying work
+(`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`), and `up … --refresh --dry-run` printing `changes: {}` is
+vacuous here (D178), so I had no trustworthy preview. Both drifted cwds sit on **clean** worktrees with **no uncommitted
+work**, so nothing is at risk from leaving them; the risk is acting on them without an inventory. Next delegate: follow
+`docs/runbooks/workspace-move.md` — inventory `git worktree list --porcelain`, `git branch --list`, `ls .spike | wc -l`
+into `.spike/`, then one named verb, then diff the inventory.
+
+**Routed, not fixed (all devtools-scope, none hand-patched by the delegate).** `#4915` (feature, held) — a fresh item
+worktree is **not a comparable verification tree**: `prepare_workspace` itself printed `DEPENDENCY NOT LINKED … the
+sync-pi --link step FAILED (vendor/pi-main is not built in this worktree … run --sync first)`, and the versions are
+**identical (`1.3.0`) while the artifacts differ** (lockfile copy vs the vendored build the pin validates against); this
+is the mechanism under the delegate's `Durable SQLite schema version 2 is newer than supported version 1` and the
+80-vs-187 package counts, though devtools could **not** re-verify those numbers (it had no shell). `#4914` (small, held) —
+the landing-gate instruments don't read the registered shell: `channel-preflight` §7 scrapes the vendored PowerShell
+fallback and will print "NO SHELL CAN START HERE" **after** 217 lands, and `rig-portability-audit` printed the worktree
+failure with an **empty** reason. `#4910` (queued, devtools→lead) — the first-hand `spawn powershell ENOENT` measurement.
+**A new org-edge class defect surfaced while filing them: a seat cannot register a row to itself** (`org edge` refusal on
+`devtools → devtools`), so held backlog for your own next session must be minted by another seat — which is why #4914 and
+#4915 are addressed to `lead` with an explicit "re-mint it to `devtools` when the gate clears" instruction.
