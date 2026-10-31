@@ -205,6 +205,14 @@ try {
 		degradedShell?.block?.includes("SHARED checkout") && /prepare_workspace/.test(degradedShell.block),
 		JSON.stringify(degradedShell).slice(0, 200),
 	);
+	// #3663's rule applied to the seat shell, which #4849 made host-dependent: the block names the verb it
+	// refused (the CALL's name, host-independent) AND the shell this host registered, so a seat can
+	// re-issue the command instead of concluding that no shell is allowed here.
+	check(
+		"the degraded-cwd shell refusal NAMES the verb it refused and the shell registered on this host",
+		degradedShell?.block?.includes("Refused as a `bash` call") && /seat shell registered on this host is `(bash|powershell)`/s.test(degradedShell.block),
+		JSON.stringify(degradedShell).slice(0, 320),
+	);
 	const ownShell = await beforeTool(
 		{ type: "toolCall", id: "d3", name: "bash", arguments: { command: "git status" } },
 		ownApi,
