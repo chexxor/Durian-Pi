@@ -1114,3 +1114,18 @@ every exit code, per #4939.
   guesswork — `git -C <root> status --short` clean, and `git -C <root> diff --stat HEAD main` showing the ONLY delta
   was the one amended line — then `git -C <root> reset --hard main`. Better: make a second small commit instead of
   amending once another checkout tracks the commit.
+- **`status.context.consumed` is the LAST model call's prompt accounting (`input + cacheRead + output`), not the live
+  window.** It goes stale the moment a reset or compaction moves the head marker. Decisive contradiction measured with
+  two rig instruments: `architect` consumed **218,645 = fraction 1.0932** while `tools/seat-turn-shape.mjs` shows its
+  window is **1 message**; `advocate` 244,751 = 9.9589, same artifact. So (a) an over-1 fraction on a post-reset seat is
+  not an emergency, (b) "attention never flags `advocate`/`architect`" was MY mis-specification, and (c) row **#4959**
+  should print the **head marker and the window message-count** beside the fraction, not just both denominators.
+- **`AT RISK` from `seat-turn-shape` is a strict-alternating-template warning, not a do-not-send gate on this host.**
+  `scribe` (window 175, head marker `pi.reset`) and `security` (100, `pi.reset`) were both flagged AT RISK and both
+  completed rows minutes later on the local model (#4957/#4958, #4956). My own runbook shorthand "AT RISK ⇒ do not send"
+  would have cancelled tonight's verify legs; the runbook now says what the verdict means and which pairs to read.
+- **A `pi.compaction` entry exists in the LIVE store for `impl` (`pi.compaction@276279`) although no `compact` verb was
+  fired this session** — the only licensed read was `scripts/compact-eval.mjs …` without `--yes`, which copies the store
+  to `/tmp`. So the serving path can compact on its own: **check for a head marker before asking the operator to grant a
+  manual `compact`.** (Same for `qa` `@275457`, `qa2` `@275460`.) Probe kept at `.spike/fix-20261102/compmarks.mjs` —
+  promote via `tools/` if it earns its keep (#4960).

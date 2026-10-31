@@ -42,8 +42,18 @@ cd /home/chexxor/Git/Durian-Pi
 # 1. rows, not the census. 1.5 s, 21.7 MB → redirect; never read the queue into a terminal.
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs queue --json > .spike/<session>/q.json
 node .spike/fix-20261101/rows.mjs 4947 4948 4950 4949 4937 4931 4934 < .spike/<session>/q.json
-# 2. may I send at all? 3.6 s, 58,566 entries, 0 writes. AT RISK ⇒ do not send that seat.
-DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.mjs
+# 2. may I send at all, and what is the seat's REAL window? 0.4-3.6 s, ~58.6k entries, 0 writes.
+DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.mjs   # prints `window N messages` + head marker + parity breaks per seat
+#    `AT RISK` here is a STRICT-ALTERNATING-TEMPLATE warning, NOT a do-not-send gate on this host: measured 2026-10-31,
+#    `scribe` (window 175, marker pi.reset) and `security` (100, pi.reset) were both flagged AT RISK and both completed
+#    rows minutes later on the local model. Do not cancel a verify leg on that verdict alone.
+#    PAIR IT with `status.context`, and understand which number is which: `consumed` = input+cacheRead+output of the
+#    LAST model call, so it goes STALE the moment a reset/compaction moves the head marker. Measured contradiction:
+#    `architect` consumed 218,645 = fraction 1.0932 while its live window is 1 message; `advocate` 244,751 = 9.9589, same
+#    artifact. So an over-1 fraction on a post-reset seat is NOT an emergency, and #4959's fix should print the head
+#    marker and the window length next to the fraction. A post-`compact` grant question starts here: `impl` carries
+#    `pi.compaction@276279` in the live store although no `compact` verb was fired this session, which means the serving
+#    path can compact on its own — check for a marker before asking the operator to fire one.
 # 3. are the seats pointed at the approved root? THE INSTRUMENT ANSWERS THIS — read the JSON field, not prose. 1.3 s.
 DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite \
   node cli.mjs up rig.selfdev.json --refresh --dry-run > .spike/<session>/updry.json

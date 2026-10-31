@@ -7503,3 +7503,17 @@ assert "clean" from an empty grep. Corollary from the same probe: **do not hand-
 `documents.kind` values are JSON-quoted (`"durig.seats"`) and that document's `record` is only a header
 (`{id,kind,scope,createdAt}`), so a hand probe returns "count 0" and looks like an empty roster when the real seats sit
 in `document_revisions.content` (whose shape I did not resolve). The runbook step 3 now carries the correct command.
+
+**Third correction, and the one that changes the priority: `status.context.consumed` is not headroom.** It is the last
+model call's prompt accounting — `architect` shows consumed **218,645 = 1.0932** while `tools/seat-turn-shape.mjs` shows
+its live window is **1 message** (`advocate` 244,751 = 9.9589, same artifact, both post-`pi.reset`). So the
+`Blocker` I wrote ("`advocate`/`architect` are over their windows and attention never flags them") was **mis-specified
+by me**, not a rig defect; #4959's spec widens to "report the head marker and the window message-count beside the
+fraction". Two consequences that matter operationally: (1) **`AT RISK` from `seat-turn-shape` is a strict-template
+warning, not a do-not-send gate on this host** — `scribe` (window 175, `pi.reset`) and `security` (100, `pi.reset`) were
+both flagged and both finished rows minutes later, so my own runbook shorthand would have cancelled the verify legs the
+operator just authorised; (2) **`impl` carries `pi.compaction@276279` in the live store though no `compact` verb was
+fired this session** (the licensed read was `compact-eval` without `--yes`, which copies to `/tmp`), so the serving path
+can compact on its own — look for a marker before asking the operator for a manual `compact` grant. The genuine
+headroom pairs at clock-out: `impl` 300 msgs @183,689, `pm` 153 @184,507 with `cacheRead 0 / input 183,402` (fresh,
+uncached), `lead` 170 @163,686, `scribe` 175 @151,039, `security` 100 @89,530.

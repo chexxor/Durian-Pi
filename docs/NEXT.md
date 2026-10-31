@@ -22,11 +22,17 @@ seat wake). Earlier landings (grant 18, `scripts/land.mjs`): **#4935 @ `44fe9438
 `d0a5b7ad`**, **#4948 @ `fa1300a2` → `a629973e`**, each with `merge-tree` exit 0 before, `--is-ancestor` exit 0 after,
 `%p` = two parents.
 
-**Blocker:** the rig is running out of HEADROOM on its working seats, and that — not code — is what stops next.
-**`impl` is at 183,689 = 0.9184 with `last_run_failed: model_error`** (its wake died mid-turn after doing the row
-work: #4952 cancelled, #4955 claimed). `pm` is at 0.9225 and unreachable, `lead` was 0.8184, and `advocate` 9.9589 /
-`architect` 1.0932 are over their windows with `status.attention` still not flagging them. Three rows are still
-parked on unreachable `pm` (#4826, #4897, #4900).
+**Blocker:** the working seats are near their windows — but read that correctly, because I had it partly WRONG.
+`status.context.consumed` is the **last model call's prompt accounting** (`input` + `cacheRead` + `output`), not the
+live window: it goes stale the moment a reset or compaction moves the head marker. Two instruments at 19:4xZ disagree
+and the store proves which: `architect` reports consumed 218,645 = **1.0932** while `seat-turn-shape` shows its window
+is **1 message**; `advocate` 244,751 = 9.9589, same artifact. **So two of my three "over-window" alarms were bogus and
+"attention never flags them" is mis-specified.** Read window length AND consumed together: `impl` **300 msgs @183,689 =
+0.9184** (head marker `pi.compaction@276279`, `last_run_failed: model_error` — its wake died after doing the row work:
+#4952 cancelled, #4955 claimed), `pm` **153 @184,507** with `cacheRead 0 / input 183,402` (a fresh uncached prompt, the
+expensive case), `lead` 170 @163,686, `scribe` 175 @151,039, `security` 100 @89,530, `devtools` 79 @53,113, `qa2` 16
+@20,192, `qa` 13 @20,110, `advocate`/`designer`/`architect` **window 1**. Three rows stay parked on `pm` (#4826, #4897,
+#4900).
 
 **#4956 (`security`, `done` @ 11:40:31Z, report row #4962) verified 217's code half on a tree it did not author**
 (patch-id of landed `8a950542` = authored `f8840349`); its three routed findings: the stale shell probe lives in the
@@ -59,8 +65,7 @@ DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs queue --json > 
 node .spike/fix-20261101/rows.mjs 4955 4957 4958 4959 4960 4962 4938 4931 4937 4947 4950 < .spike/fix-20261102/q.json
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status --json | head -c 4000   # attention carries `admitted_not_started` — see block 2
 DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run > .spike/fix-20261102/updry.json   # roster placement: read `wouldRefresh[].changes.cwd`; grepping for "drifted" finds nothing (D178's "vacuous" claim is retracted — see runbook step 3)
-node .spike/fix-20261101b/turncost.mjs                     # per-seat turn-cost percentiles (this priced the verifier question without loading a model)
-DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.mjs   # AT RISK ⇒ do NOT send that seat
+DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.mjs   # window LENGTH per seat + parity; AT RISK = strict-template warning, not a do-not-send gate here (see do-not-fix list)
 ps -eo args | tr '\0' ' ' | grep -o -- "--ctx-size [0-9]*"  # 8192 ⇒ the verifier family is dead regardless of what status.context claims
 # 2. impl is at 0.9184 (183,689 of a declared 200,000) with attention `last_run_failed: model_error`; its
 #    `admitted_not_started` flag CLEARED on its own, so there is nothing to re-arm. If you see that flag again,
@@ -70,9 +75,8 @@ ps -eo args | tr '\0' ' ' | grep -o -- "--ctx-size [0-9]*"  # 8192 ⇒ the verif
 #    the ONLY licensed offline compaction read (there is NO `compact --dry-run` — see the do-not-fix list):
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node scripts/compact-eval.mjs item --seat impl --limit 400 --out .spike/<session>/compact-impl-dry.txt
 #    measured 19:0xZ, operator-authorised: 400 records ~296,807 est tokens; dropped zone 1 needle + 3 paths; firing = 1 summarizer call + ~10 probes ~890,421 est tokens.
-# 3. BEFORE any send: re-point the roster — a seat parked in its own item worktree refuses EVERY write verb
-DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite \
-  node cli.mjs up rig.selfdev.json --refresh --dry-run     # names the drifted cwds; then drop --dry-run; diff a bare-name inventory
+# 3. BEFORE any send: if the dry run above named a drifted cwd, drop --dry-run (same command) — a seat parked in its
+#    own item worktree refuses EVERY write verb. Diff a bare-name inventory around it (grant 11's tree-shape licence).
 # 4. DO NOT land item-4931 as-is: #4957 measured merge-base main HEAD = 6d63a3c5 and --is-ancestor main HEAD exit 1,
 #    so it needs an impl RE-CUT onto current main + the content gate (git patch-id --stable) first. What you CAN land
 #    is scribe's docs commit: preflighted merge-tree exit 0, docs-only, 2 files +82/-5.
@@ -81,7 +85,6 @@ git merge-base --is-ancestor item-4958 main && echo LANDED   # then remove item-
 # 5. clock-out: the pointer trio, plus a suite pair in a NAMED tree — REMOVE the scratch BEFORE any landing
 node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs && node tools/doc-integrity-guard.mjs && node tools/instrument-provenance.mjs
 git worktree add --detach "$PWD/.main-check" main && ( cd .main-check && node scripts/suite.mjs --jobs 8 ); echo "exit=$?"; git worktree remove .main-check
-git for-each-ref refs/rescued | wc -l       # 490 at clock-out; read runbooks/cross-clone-object-recovery.md before anything runs `git gc`
 ```
 
 **ASK THE OPERATOR — grants, all cheap, none a code call.** (1) **Land `item-4958`?** scribe's docs commit `5e2273ee`
@@ -92,8 +95,9 @@ to `item-4931`, removes nothing), `item-4898` (after #4931 lands). (4) **Delete 
 Each byte-identical to a tracked file; I recommend leaving the 485 commit refs alone (17.58 MiB pack, 475 are
 one-of-a-kind). (5) **`wip/seat-prompt-files` @ `04e3ba6b`** (`git cherry` = `+`): land as a row, defer, or drop?
 (6) **`impl` context decision**: 0.9184 with `last_run_failed: model_error`, row #4955 still `claimed`; firing the
-compaction costs 1 summarizer call, firing the *eval* ≈890k est tokens. `pm` at 0.9225 still wants `reset` (#4886),
-and `pm`'s three parked rows (#4826, #4897, #4900) plus #4813 stand.
+compaction costs 1 summarizer call, firing the *eval* ≈890k est tokens — but `impl` already carries a live
+`pi.compaction@276279` head marker that I did NOT fire, so ask whether the serving path auto-compacts before granting a
+one. `pm` carries `pi.reset@273959` yet 153 msgs @184,507 with `cacheRead 0`, so #4886's reset did not free it.
 
 **Grants in force:** **15** standing (no further verifier capacity) · **16** used (merge of 217) · **18** used
 (landing: `abca484d`, `d0a5b7ad`, `a629973e`) · **19** used (local-AI verify legs: #4956/#4957 on non-author
@@ -110,47 +114,43 @@ at clock-out: the two checkouts (`/home/chexxor/Git/Durian-Pi` on `main`,
 `/home/chexxor/Git/durian-dev/seatroot` on `seatroot/linux`, fast-forwarded to `main`; deps intact, 187 packages,
 `vendor/pi-main`) and 8 item trees.
 
-**WORKTREE / BRANCH AUDIT — full table, commands and verdicts live in `docs/runbooks/leaked-worktrees.md`
-§"Disposition audit"; the short version.** Removed by name (`--is-ancestor` exit 0 → `worktree remove` → `branch -d`
-→ `prune`; bare-name inventory diff = exactly 4 lines): **`item-4916`**, **`item-4956`**; earlier in the session the
-same way: `item-4902`, `item-4933`, `item-4935`, `item-4936`, `item-4948`. `git worktree prune --dry-run --verbose`
-prints nothing. **Needs a `-D` grant (each proof is in the runbook): `item-4904`** (its content is in `main` by
-patch-id), **`item-4898`** (role discharged once #4931 lands), **`item-4957`** (its tip sha is **identical** to
-`item-4931`'s, so deleting it removes zero objects — the safest of the three). **Leave the locked ones:** `item-4930`
-(row cancelled; only `devtools` unlocks), `item-4937` (`held`), `item-4955` (`claimed`; its only dirt is untracked
-`.probe-cli/status.out`). `item-4958` @ `5e2273ee` is scribe's UNLANDED docs commit. `wip/seat-prompt-files` is a
-parked decision, not a cleanup. **`refs/rescued` = 490 refs (485 commits + 5 blobs), only 15 reachable from `main`;**
-delete the 5 blobs only under grant (each byte-identical to a tracked file), and **leave the 485 commit refs — the
-whole pack is 17.58 MiB and 475 are one-of-a-kind**; read `docs/runbooks/cross-clone-object-recovery.md` before any `git gc`. **Provider:** local `iq3_s` at `:47831` (`--max-context 204800`, GPU1 23,237/24,576); verifier
+**WORKTREE / BRANCH AUDIT — full table, commands and verdicts in `docs/runbooks/leaked-worktrees.md` §"Disposition
+audit"; short version.** Removed by name (`--is-ancestor` exit 0 → `worktree remove` → `branch -d` → `prune`; bare-name
+inventory diff = 4 lines): `item-4916`, `item-4956`; earlier: `item-4902`, `item-4933`, `item-4935`, `item-4936`,
+`item-4948`; `worktree prune --dry-run --verbose` prints nothing. **`-D` grants needed (proofs in the runbook):
+`item-4904`** (content in `main` by patch-id), **`item-4898`** (role discharged once #4931 lands), **`item-4957`** (tip
+sha **identical** to `item-4931`'s → removes zero objects, safest). **Leave the locked:** `item-4930` (cancelled; only
+`devtools` unlocks), `item-4937` (`held`), `item-4955` (`claimed`; only dirt untracked `.probe-cli/status.out`).
+`item-4958` @ `5e2273ee` = scribe's UNLANDED docs commit; `wip/seat-prompt-files` is a parked decision. **`refs/rescued`
+= 490 refs (485 commits + 5 blobs), 15 reachable from `main`;** delete the 5 blobs only under grant (byte-identical to
+tracked files) and **leave the 485 commit refs — whole pack 17.58 MiB, 475 one-of-a-kind**; read
+`docs/runbooks/cross-clone-object-recovery.md` before any `git gc`. **Provider:** local `iq3_s` at `:47831` (`--max-context 204800`, GPU1 23,237/24,576); verifier
 `ministral-3-14b-reasoning` at **8192 × 4** on GPU0 (12,618/16,376) and `status.attention` now carries
 `auditor last_run_failed: model_error … Engine protocol predict request returned 500` — direct evidence the
 verifier slot cannot carry agent turns. `lms` only as `HOME=~/.var/app/ai.lmstudio.lm-studio
 ~/.var/app/ai.lmstudio.lm-studio/.lmstudio/bin/lms` (flatpak). **Shape (fresh, 13 parity findings across 12
-seats):** ADMISSIBLE `qa`, `qa2`; **AT RISK** `pm`, `impl`, `lead`, `advocate`, `scribe`, `devtools`, `auditor`,
-`designer`, `security`, `architect`; counted-projection parity breaks `pm` 11, `lead` 26, `scribe` 8, `devtools`
-6, `auditor` 5, `security` 2. **Context (consumed / declared 200000 unless noted):** `pm` 184,507 = 0.9225
-(unreachable), **`impl` 183,689 = 0.9184 (died mid-turn, `last_run_failed: model_error`)**, `lead` 163,686 = 0.8184,
-`qa2` 20,192 = 0.8216 (window 24,576), `qa` 20,110 = 0.8183 (24,576), `advocate` 244,751 = **9.9589** (24,576),
-`architect` 218,645 = **1.0932**, `devtools` 53,113 = 0.2656, **`scribe` 151,039 = 0.7552 (one wake cost it ~117k)**,
-**`security` 89,530 = 0.4477 (its verify leg cost ~62k)**, `auditor` 0, `designer` 0. **The shape you need for #4959:**
-`status.context.<seat>.window` = `{denominator:"declared", value, candidates:{measured:null, declared, advertised:null}}`
-— it always picks `declared`, and `measured`/`advertised` are null even for the 8192-slot seats. **Attention (19:35Z):**
+seats):** ADMISSIBLE `qa`, `qa2`; AT RISK the other ten; counted-projection parity breaks `lead` 26, `pm` 11, `scribe`
+8, `devtools` 6, `auditor` 5, `security` 2. **Do NOT read `AT RISK` as a do-not-send gate on this host:** `scribe`
+(window 175, head marker `pi.reset`) and `security` (100, `pi.reset`) both completed rows tonight — it is a warning
+about strict alternating templates, and the local model is tolerant. **Per-seat consumed/window pairs are in the
+Blocker above; the rule that matters is that `consumed` is the LAST call's prompt accounting and goes stale when a
+reset/compaction moves the head marker** (`impl` carries `pi.compaction@276279` — a compaction entry exists in the live
+store although I never fired `compact`, so the serving path compacts on its own; re-read for a marker before asking for
+a manual `compact` grant). **The shape #4959 must fix:** `status.context.<seat>.window` =
+`{denominator:"declared", value, candidates:{measured:null, declared, advertised:null}}` — always `declared`, and
+`measured`/`advertised` null even for the 8192-slot seats; it should also carry the head marker and the window length. **Attention (19:35Z):**
 `impl last_run_failed: model_error`; `auditor last_run_failed` (verifier grammar 500); `idle_with_queued_work` for
 `lead`/`devtools`/`scribe`/`security`/`qa`/`qa2`/`architect`; step-repetition 3% (2/66); queue-ageing 1834.5 min.
-**`impl admitted_not_started` cleared on its own — never assume it persists. Still never flagged: `advocate` 9.9589 and
-`architect` 1.0932.** **Queue census at 19:35Z (NOT evidence — rows are):**
-`{"done":3776,"cancelled":792,"held":324,"queued":54,"deferred":17,"claimed":2}`, 4965 rows. **Host:** 94 GiB total,
-61 used, 32 available. **Suite on `main` (detached clean worktree, before/after pair):** `pass=234 fail=5
-demos=239` at `6d63a3c5` → **`pass=237 fail=3 environmental=0, demos=240`** at `a629973e`; the 3 survivors are
-attributed in D184 — `clockin-digest` and `local-model-pointer` exit 0 in a tree that has the gitignored
-`durig.config.json` (fresh-worktree false red), and `deepinfra-catalog` is genuinely red because a pinned
-`verifier/mistralai/...` is absent from the curated fallback catalog. **CORRECTION I owed you: `demo/local-model-pointer.test.mjs`
-does NOT assert `verifier=mistralai/…`** — I propagated that from `lead`'s prose; on `main` the file contains no such
-literal and the demo is two-sided about `verifier/<id>` plus `DURIG_VERIFIER_BASE_URL` (the id comes from machine
-config, `src/providers/local.mjs:42`). The `deepinfra-catalog` shortcut IS real: `demo/deepinfra-catalog.test.mjs:76`
-returns true for anything starting `local/`. **Clock-out tests:** see
-the commit message; `demo/next-pointer.test.mjs`, `demo/clockin-digest.test.mjs`,
-`tools/doc-integrity-guard.mjs`, `tools/instrument-provenance.mjs` all exit 0.
+**`impl admitted_not_started` cleared on its own — never assume an attention flag persists; and do not chase the
+`advocate`/`architect` fractions: those windows are 1 message long, so the fraction is stale, not a missed alarm.**
+Census at 19:35Z (NOT evidence): `{"done":3776,"cancelled":792,"held":324,"queued":54,"deferred":17,"claimed":2}`,
+4965 rows. **Host:** 94 GiB total, 61 used, 32 available. **Suite pair (clean detached worktree): `pass=234 fail=5
+demos=239` at `6d63a3c5` → `pass=237 fail=3 environmental=0, demos=240` at `a629973e`;** the 3 survivors are attributed
+in D184 and in the CORRECTION below. **CORRECTION: `demo/local-model-pointer.test.mjs` does NOT assert
+`verifier/mistralai`-style literals** — I took that from `lead`'s prose; the literal is absent on `main` (it guards
+`verifier/<id>` + `DURIG_VERIFIER_BASE_URL` two-sided, id from machine config `src/providers/local.mjs:42`). The
+shortcut claim held: `demo/deepinfra-catalog.test.mjs:76` accepts any `local/` id. **Clock-out guards exit 0:** the four
+named in the commit message plus the 14-test derived set (`tools/what-to-test.mjs --run --base=HEAD`).
 
 ## Do not "fix" these on the strength of the docs
 
@@ -184,16 +184,16 @@ nothing removed and only `item-4956` added by `security`'s turn — so no refusa
 item worktree re-arms it).
 **`prepare_workspace` places beside the SERVING PROCESS's tree, not the seat root** (#4947/#4950) — `cd` to the
 approved root before `send`; that habit is what put `item-4948`/`item-4931`/`item-4955` under the seat root.
-**`up … --refresh --dry-run` is NOT vacuous when the rig file names no `cwd`**, and it never names removals.
-**A `done` settle can have an empty reply** (parts `[thinking]`, text 0) — read the rows. **A cancel emits a
-notice row** — and that notice can sit `queued` to a seat that cannot reach it (`#4954` → auditor) while its own
-body self-refers to the wrong id; `lead` re-minted two bodies tonight for exactly that class. **`git worktree
-remove` refuses a dirty tree on purpose, `--force` is data loss, `git branch -d` never `-D`, gated by `git
-merge-base --is-ancestor`** (`runbooks/leaked-worktrees.md`). **`scripts/land.mjs` refuses on ONE untracked path
-at the repo root** — a proof scratch named `.main-check/` blocked this session's whole pass; the stray-worktree
-gate (#4139) is the directory list, not porcelain. **Never read an exit code through a pipe**; **`pgrep -f
-"cli.mjs send"` matches your own `bash -c` command line — match `node cli.mjs send`, exclude `bash -c`**; **`>
-/dev/null` is refused by the confine guard**; **an `.spike`/worktree count is a function of cwd — take BARE-NAME
-inventories**; **`better-sqlite3` is NOT installed in either tree — use `node:sqlite`**; **inline briefs, no
-backticks**; **AT RISK ⇒ do not send**; **a fresh worktree has 80 packages and no `vendor/pi-main` — name the
-artifact set with every exit code** (#4939); **LM Studio restores `8192×4` on relaunch**.
+**`up … --refresh --dry-run` is NOT vacuous when the rig file names no `cwd`** (drift shows as
+`wouldRefresh[].changes.cwd`), and it never names removals. **A `done` settle can have an empty reply** (parts
+`[thinking]`, text 0) — read the rows; **a cancel emits a notice row** that can sit queued to an unreachable seat with a
+wrong self-reference (#4954). **`git worktree remove` refuses a dirty tree, `--force` is data loss, `branch -d` never
+`-D`, gated by `merge-base --is-ancestor`; `scripts/land.mjs` refuses on ONE untracked path at the repo root** (the
+#4139 gate is the directory list, not porcelain) — detail in `runbooks/leaked-worktrees.md` and SELFDEV. **Never read an
+exit code through a pipe**; **`pgrep -f "cli.mjs send"` matches your own `bash -c` line — match `node cli.mjs send`,
+exclude `bash -c`**; **`> /dev/null` is refused by the confine guard**; **take BARE-NAME inventories**; **
+`better-sqlite3` is absent in both trees — use `node:sqlite`**; **inline briefs, no backticks**; **`AT RISK` from
+`seat-turn-shape` is a strict-template warning, NOT a do-not-send gate on this host — `scribe` and `security` completed
+rows tonight while flagged** (the real gate is the window/consumed pair plus GPU capacity); **a fresh worktree has 80
+packages and no `vendor/pi-main` — name the artifact set with every exit code** (#4939); **LM Studio restores `8192×4`
+on relaunch**.
