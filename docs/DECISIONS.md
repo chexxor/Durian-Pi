@@ -7490,7 +7490,16 @@ verifier-independence runbook) in one ~30-minute wake; `security`'s #4956 leg wa
    `worktree remove` → `branch -d` → `prune`, bare-name inventory diff = exactly 4 lines). `wip/seat-prompt-files` is
    a parked decision, not a cleanup. Full table: `docs/runbooks/leaked-worktrees.md` §"Disposition audit".
 
-**Correction I own:** the D183 correction to D178 was over-broad. `up --refresh --dry-run` on a rig file that names no
-`cwd` **does** print `model/cwd from -> to` for drifted seats — I ran it and it named `security`. D178's claim that the
-dry run is "COMPLETELY VACUOUS" is false as stated; what survives is that it **previews no removals**. Full proof and
-the retraction are in the runbook.
+**Correction I own (second one in the same session):** the D183 correction to D178 was over-broad. `up --refresh
+--dry-run` on a rig file that names no `cwd` **does** print `model/cwd from -> to` for drifted seats — I ran it and it
+named `security`. D178's claim that the dry run is "COMPLETELY VACUOUS" is false as stated; what survives is that it
+**previews no removals**. Full proof and the retraction are in the runbook.
+
+**And the reason I nearly clocked out on a false "no drift":** I grepped the dry run's output for the word `drifted`
+twice and got nothing, then measured the JSON and found the field is **`wouldRefresh[].changes.cwd = {from,to}`** — at
+19:4xZ it named exactly one parked seat (`scribe`, `seatroot/item-4958 → seatroot`). **The instrument was right; my
+read of it was wrong.** The durable rule: parse the JSON keys of an instrument you have not read before, and never
+assert "clean" from an empty grep. Corollary from the same probe: **do not hand-query the roster document** —
+`documents.kind` values are JSON-quoted (`"durig.seats"`) and that document's `record` is only a header
+(`{id,kind,scope,createdAt}`), so a hand probe returns "count 0" and looks like an empty roster when the real seats sit
+in `document_revisions.content` (whose shape I did not resolve). The runbook step 3 now carries the correct command.

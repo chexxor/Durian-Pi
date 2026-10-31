@@ -15,7 +15,7 @@ e3cc8afa:docs/NEXT.md)` prints nothing.
 **Current item: `item-4931` @ `8fa8f3a2` is the ONLY unlanded build, and the independent verify came back with a
 BASE-DRIFT finding that changes the next act: it must be RE-CUT onto current `main` by `impl` before it can land.**
 `scribe` (#4957, `done` @ 19:23:36Z) measured `git merge-base main HEAD` = **`6d63a3c5`**, `--is-ancestor main HEAD`
-exit **1**, and `a629973e` sitting in `HEAD..main` — so its green runs prove the **tip**, not the merged tree. **`main` = the last docs commit (re-read `git rev-parse main`; **55 ahead of `origin/main`, nothing pushed** — no push
+exit **1**, and `a629973e` sitting in `HEAD..main` — so its green runs prove the **tip**, not the merged tree. **`main` = the last docs commit (re-read `git rev-parse main`; **ahead of `origin/main` (re-read `git rev-list --count origin/main..main`), nothing pushed** — no push
 grant).** The seat root `/home/chexxor/Git/durian-dev/seatroot` is on `seatroot/linux` and was fast-forwarded to `main`
 at clock-out (check: `git -C /home/chexxor/Git/durian-dev/seatroot rev-parse HEAD` must equal `main` before any new
 seat wake). Earlier landings (grant 18, `scripts/land.mjs`): **#4935 @ `44fe9438` → `abca484d`**, **#4936 @ `24a479c8` →
@@ -58,7 +58,7 @@ pgrep -af "node cli.mjs send" | grep -v "bash -c" || echo "no wake running"   # 
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs queue --json > .spike/fix-20261102/q.json   # 1.5 s, 21.7 MB — file it
 node .spike/fix-20261101/rows.mjs 4955 4957 4958 4959 4960 4962 4938 4931 4937 4947 4950 < .spike/fix-20261102/q.json
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status --json | head -c 4000   # attention carries `admitted_not_started` — see block 2
-node .spike/fix-20261101/read-cwd4.mjs                     # seats' persisted cwd — the ONLY honest root-drift read
+DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run > .spike/fix-20261102/updry.json   # roster placement: read `wouldRefresh[].changes.cwd`; grepping for "drifted" finds nothing (D178's "vacuous" claim is retracted — see runbook step 3)
 node .spike/fix-20261101b/turncost.mjs                     # per-seat turn-cost percentiles (this priced the verifier question without loading a model)
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.mjs   # AT RISK ⇒ do NOT send that seat
 ps -eo args | tr '\0' ' ' | grep -o -- "--ctx-size [0-9]*"  # 8192 ⇒ the verifier family is dead regardless of what status.context claims

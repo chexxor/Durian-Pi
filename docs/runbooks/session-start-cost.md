@@ -44,10 +44,20 @@ DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs queue --json > 
 node .spike/fix-20261101/rows.mjs 4947 4948 4950 4949 4937 4931 4934 < .spike/<session>/q.json
 # 2. may I send at all? 3.6 s, 58,566 entries, 0 writes. AT RISK ⇒ do not send that seat.
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.mjs
-# 3. are the seats pointed at the approved root? (up --refresh --dry-run does NOT answer this)
-node .spike/fix-20261101/read-cwd4.mjs
+# 3. are the seats pointed at the approved root? THE INSTRUMENT ANSWERS THIS — read the JSON field, not prose. 1.3 s.
+DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite \
+  node cli.mjs up rig.selfdev.json --refresh --dry-run > .spike/<session>/updry.json
+node -e 'const j=JSON.parse(require("fs").readFileSync(".spike/<session>/updry.json","utf8"));
+ console.log((j.wouldRefresh||[]).filter(w=>Object.keys(w.changes||{}).length).map(w=>w.seat+" "+JSON.stringify(w.changes)).join("\n")||"no drift")'
+#    The field is `wouldRefresh[].changes.cwd = {from,to}`. Grepping the output for the word "drifted" finds NOTHING and
+#    will make you clock out claiming a clean roster while `scribe` sits parked in its own item worktree (measured
+#    2026-10-31T19:4xZ: one entry, scribe seatroot/item-4958 -> seatroot). This dry run previews model/cwd writes and
+#    NEVER removals — see docs/runbooks/leaked-worktrees.md before deleting anything. Do NOT hand-query the roster
+#    document instead: `documents.kind` values are JSON-QUOTED (`"durig.seats"`), and that document's `record` is only
+#    a header (`{id,kind,scope,createdAt}`, 0 `cwd` occurrences) while the real seats sit in `document_revisions.content`
+#    whose shape I could not resolve — a hand probe there returned "count 0" and is NOT evidence of an empty roster.
 # 4. what did real verifier turns cost, from the store? (the sizing question, answered without loading a model)
-node .spike/fix-20261101b/turncost.mjs
+node .spike/fix-20261101b/turncost.mjs   # gitignored probe; row #4960 (devtools) exists to promote these into tools/
 # 5. the loaded slot, without asking the model server
 ps -eo args | tr '\0' ' ' | grep -o -- "--ctx-size [0-9]*"
 # 6. docs/git state, all sub-second, all exit 0 when clean
