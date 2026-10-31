@@ -7434,3 +7434,19 @@ and that fiction caused lead's own re-mint error), **#4960 devtools** = promote 
 create-on-read opener defect, which also resolves the `item-4933`/`item-4936` contradiction inside #4923 (the
 audit may have read a store it created itself). **Independence is now stated as seat + transcript + execution,
 with model-family diversity named as lost** — not claimed.
+
+**The independent leg came back, and it found the transcript filter that had been hiding evidence.** `security`
+finished #4956 (`done` @ 11:40:31Z, report row #4962 to `lead`): 217's code half verifies on a tree it did not
+author, with the patch-id of landed `8a950542` EQUAL to authored `f8840349`. It also answered #4938 as a row — the
+stale shell probe lives in the PRE-217 instruments (`tools/broker-serve.mjs:298-307`,
+`tools/channel-preflight.mjs:220-234` scrape the first `options?.programs ?? [...]` from the pinned `bash.ts`, and
+that literal is inside `createPowerShellTool` at `bash.ts:169` while `createBashTool` at line 145 has no program
+list), which makes `channel-preflight --dry-run` **exit 1 and refuse a broker start on a host whose seat shell
+works**; 217 is **half-delivered** (`rig.selfdev.json` still instructs one seat "The shell tool is powershell", 0
+name bash, 11 name none); and `tools/rig-portability-audit.mjs:171` asserts a store claim as a string literal while
+its own run read a store with zero seat rows — **a claim that cannot fail is not evidence.** The durable discovery is
+the one nobody named before: **every 40-hex value inside a seat's transcript is redacted as `secret-shaped value`.**
+That is almost certainly what made 217's original verify report look unverifiable at row level in D182/D183 — we read
+a transcript filter as seat negligence twice. `security` worked around it by printing id HALVES
+(`279e0d9861b4d6958cf1|f36af03dc00c96fcaa23`), which is the pattern to ask for: the value in halves **plus the
+command that prints it**, so the reader can re-derive the whole thing.

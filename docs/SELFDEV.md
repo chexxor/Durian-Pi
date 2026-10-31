@@ -1063,6 +1063,11 @@ every exit code, per #4939.
   #4934 cancel emitted #4954, whose body cites itself as the replacement row (the row is #4956), and #4954 is
   `queued` to `auditor`, whose model returned an engine 500 mid-grammar. `lead` re-minted two bodies for exactly
   this class — report the id pair to the seat; do not edit another seat's row.
+- **Every 40-hex value in a seat's transcript is redacted as `secret-shaped value`** (`security`, #4956 leg: both
+  commit shas, `sync-pi`'s `pinnedSha`, and both patch-ids). The seat worked around it by printing **halves** of each
+  id, which is the pattern to ask for — `sha` + the command that prints it — because otherwise a verify report looks
+  unverifiable at row level. Read D182/D183's "the 217 verify report had redacted outputs and an empty transcript" in
+  this light: **a transcript filter, not seat negligence.**
 - **Do not accept "the deepinfra catalog is green now" as a win from re-pointing seats to `local/…`**:
   `demo/deepinfra-catalog.test.mjs`'s `resolvable()` returns true for ANY `local/` id, so that move turns the red off
   without fixing it. `lead` refused the re-point for exactly this reason (D184) — the instrument was about to be

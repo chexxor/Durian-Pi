@@ -29,20 +29,30 @@ performed). `pm` is at 0.9225 and unreachable, `lead` at 0.8184, and `advocate` 
 over their windows with `status.attention` still not flagging them. Three rows are still parked on unreachable
 `pm` (#4826, #4897, #4900).
 
-**The verifier-capacity ruling is realised, in the seat's choice, not mine.** Operator grant 19: **no new GPU
-capacity, no bigger slot — verification legs run on the local AI.** `lead` chose **route the legs to local-model
-non-authors** and REFUSED the config re-point, because `demo/deepinfra-catalog.test.mjs` goes green under it only
-by making `resolvable()` true for any `local/` id — **tuning the instrument to agree, hiding a red that is doing
-real work.** Rows now: **#4934 cancelled** (auditor pinned to an 8192-token slot at p50 16,518 — it could never
-carry the leg), **#4956 `security`** = independent verify of 217 on `main` @ `a629973e` (DISPATCHED this session,
-served from the approved root), **#4957 `scribe`** = verify of the compaction build @ `8fa8f3a2` with the live
-`compact --dry-run` repro DEFERRED (no broker tonight; a green config demo is not proof of a live path),
-**#4958 `scribe`** = `docs/runbooks/verifier-independence.md` must state the three axes and name the lost
-model-family diversity, **#4959 `devtools`** = `status.context` must report effective capacity AND both
-denominators (it declares 24,576 where the slot is 8192, and that fiction caused `lead`'s own re-mint error),
-**#4960 `devtools`** = promote the four `.spike/` reads into `tools/` with demos mapped in the manifest and
-read-only / create-nothing guarantees, **#4955 `impl`** = the create-on-read opener defect (claimed, run died —
-see next command). **#4952 is cancelled by its author**, so the compaction build's verify leg is #4957 alone.
+**The verifier-capacity ruling is realised, in the seat's choice, not mine, and the first leg came back.** Operator
+grant 19: **no new GPU capacity, no bigger slot — verification legs run on the local AI.** `lead` chose **route the
+legs to local-model non-authors** and REFUSED the config re-point, because `demo/deepinfra-catalog.test.mjs` goes
+green under it only by making `resolvable()` true for any `local/` id — **tuning the instrument to agree, hiding a
+red that is doing real work.** **#4956 (`security`) is `done` @ 11:40:31Z: 217's code half verifies on a tree it did
+not author** (patch-id of landed `8a950542` vs authored `f8840349` EQUAL, halves
+`279e0d9861b4d6958cf1|f36af03dc00c96fcaa23`), and its report is row **#4962** (queued to `lead`). Three findings from
+it need routing, all measured by `security` in `/home/chexxor/Git/durian-dev/seatroot/item-4956` after it
+deps-linked its own thin tree (`sync-pi --sync` then `--link`, both exit 0, 80 → 187 packages): **(1) #4938 is a
+defect in the PRE-217 instruments and it is load-bearing** — `tools/broker-serve.mjs:298-307` and
+`tools/channel-preflight.mjs:220-234` scrape the first `options?.programs ?? […]` out of the pinned `bash.ts`, and
+that literal sits at `bash.ts:169` inside `createPowerShellTool` while `createBashTool` (line 145) has no program
+list, so **`channel-preflight --dry-run` exits 1 and refuses a broker start on a host where the seat shell works**;
+**(2) 217 is HALF-DELIVERED** — `rig.selfdev.json` in this tree still has **1 seat instructed "The shell tool is
+powershell", 0 naming bash, 11 naming no shell at all**; **(3)** `tools/rig-portability-audit.mjs:171` asserts "the
+store shows it guessing (entries #274090)" as a **string literal while its own run read a store with zero seat rows —
+a claim that cannot fail is not evidence.** Other rows now: **#4934 cancelled** (auditor pinned to an 8192-token slot
+at p50 16,518), **#4957 `scribe`** = verify of the compaction build @ `8fa8f3a2` with the live `compact --dry-run`
+repro DEFERRED, **#4958 `scribe`** = `docs/runbooks/verifier-independence.md` must state the three axes and name the
+lost model-family diversity, **#4959 `devtools`** = `status.context` must report effective capacity AND both
+denominators (it declares 24,576 where the slot is 8192), **#4960 `devtools`** = promote the four `.spike/` reads
+into `tools/` with demos mapped in the manifest and read-only / create-nothing guarantees, **#4955 `impl`** = the
+create-on-read opener defect (claimed, run died — see next command). **#4952 is cancelled by its author** (notice
+#4961), so the compaction build's verify leg is #4957 alone.
 
 **Next commands (delegate, Linux; block 1 is the actual next act):**
 
@@ -50,7 +60,7 @@ see next command). **#4952 is cancelled by its author**, so the compaction build
 # 1. row truth + the pointer trio, all read-only, all priced in docs/runbooks/session-start-cost.md
 pgrep -af "node cli.mjs send" | grep -v "bash -c" || echo "no wake running"   # NEVER bare pgrep -f "cli.mjs send" — it matches your own command line
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs queue --json > .spike/fix-20261102/q.json   # 1.5 s, 21.7 MB — file it
-node .spike/fix-20261101/rows.mjs 4955 4956 4957 4958 4959 4960 4931 4937 4947 4949 4950 < .spike/fix-20261102/q.json
+node .spike/fix-20261101/rows.mjs 4955 4957 4958 4959 4960 4962 4938 4931 4937 4947 4950 < .spike/fix-20261102/q.json
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status --json | head -c 4000   # attention carries `admitted_not_started` — see block 2
 node .spike/fix-20261101/read-cwd4.mjs                     # seats' persisted cwd — the ONLY honest root-drift read
 node .spike/fix-20261101b/turncost.mjs                     # per-seat turn-cost percentiles (this priced the verifier question without loading a model)
@@ -125,9 +135,18 @@ the commit message; `demo/next-pointer.test.mjs`, `demo/clockin-digest.test.mjs`
 ## OPERATOR GRANTS (see the archive for 1–14)
 
 15 no further verifier capacity. 16 merge of 217 (used). 18 landing of the stacked branches (used). 19 use the
-local AI for the verification leg — no new GPU capacity, no new slot. **No push grant.**
+local AI for the verification leg — no new GPU capacity, no new slot, realised by `lead` as #4956/#4957 on non-author
+local-model seats. **No push grant.**
 
 ## Do not "fix" these on the strength of the docs
+
+**Every 40-hex value inside a SEAT's transcript is redacted as `secret-shaped value`** — measured on `security`'s
+#4956 leg: both commit shas, `sync-pi`'s `pinnedSha` and both patch-ids came out redacted, so the seat could not
+transcribe a sha and had to print **halves** (`279e0d9861b4d6958cf1|f36af03dc00c96fcaa23`). **This is very likely why
+217's original verify report read as unverifiable at row level** (D182/D183 called its tool outputs redacted and its
+transcript empty) — a transcript filter, not seat negligence. Consequence: ask seats to report **short halves plus
+the command that prints them**, and when you cannot transcribe a claim, re-run the instrument yourself rather than
+discounting the seat.
 
 **`node --check` checks only the FIRST path and silently ignores the rest** — measured here: two deliberately
 broken files in one call printed only the first and exited 1, so a three-file `--check` proves one file and exits
