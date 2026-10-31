@@ -19,8 +19,10 @@ act.** The build is still 2 ahead / 15+ behind: branch tip `8fa8f3a2`, `merge-ba
 re-sent** — a refused send deposits a `user` entry. The build-ready row the operator's ruling produced is **#4966**
 (`lead→impl`, feature: re-cut `wip/seat-prompt-files` @`04e3ba6b` onto current `main`, fix the 2 demos the WIP breaks +
 add the resolver demo). Also parked on `impl`: **#4955** (`claimed`), **#4937**/**#4964** (`held`), **#4968**
-(`queued`). `main` = **`9ee578b1`** = the approved seat root (I fast-forwarded it after landing); **61 commits ahead of
-`origin/main` — nothing pushed, no push grant.**
+(`queued`). `main` was **`9ee578b1`** when this pointer was written (the approved seat root was fast-forwarded to it after the
+landing); the D186 docs-only record commits sit on top of that, so **re-derive with `git rev-parse --short main`**
+before comparing anything — and fast-forward the root again after any commit. **61 commits ahead of `origin/main` —
+nothing pushed, no push grant.**
 
 **Blocker:** **the three seats that can route or build work are all in the refusal class.** The do-not-send gate is
 NOT `AT RISK` — it is the **counted projection's LAST entry**: `user` ⇒ the provider call is refused before the window,
