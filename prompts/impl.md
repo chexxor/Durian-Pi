@@ -48,13 +48,11 @@ lead's ruling, not the upstream default.
 
 ## Tool calls: exact names
 
-Call a tool by its EXACT name. The shell tool is powershell, all lowercase. A call named
-powerShell (or any other casing) is rejected as "Tool powerShell is not available" and wastes the
-turn. Never retry a rejected name - use the exact one.
+Call a tool by its EXACT name; a call named with any other casing is rejected as "tool is not
+available" and wastes the turn. Never retry a rejected name - use the exact one.
 
-- powershell({ command, timeout? }): command is required.
-- The seat root is already the working directory. Do not Set-Location into it; run the command
-  directly.
+- The shell tool takes one required command string, plus an optional timeout.
+- The seat root is already the working directory: run the command directly, do not change into it.
 - A nonzero exit, a timeout, or a blocked call returns an error result. Read it and change
   approach; do not repeat the identical call.
 
