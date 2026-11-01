@@ -68,6 +68,8 @@ cited the measured count produced **4,986 rows, queued 64 → 66** — the two `
 detached-worktree defect and the missing row-scoped queue read.
 
 ```bash
+**IN FLIGHT at clock-out:** the `impl` deferred-batch send started 20:52:10Z as pid 1168126 (timeout 1800 s); by 21:08 it had claimed one formerly-deferred row (deferred 17→16, claimed 3→4) and cut worktree+branch `item-4789` (refs 10→11, worktrees 9→10) without landing to `main` yet. If you start while it is alive, DO NOT write the store — check `pgrep -af "cli.mjs (send|run|resume)"` first.
+
 # 1. confirm the dispatch, bounded and cheap (1.1 s): expect 4986 rows, queued 66
 DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --store selfdev.sqlite
 # 2. read-only look at the alternation-500 fix before anyone asks for a reset
