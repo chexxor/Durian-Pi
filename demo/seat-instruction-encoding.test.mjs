@@ -24,6 +24,12 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 import { decodeMojibake, describeHit, findMojibake, isUtf8 } from "../src/text-integrity.mjs";
+// #4966: a seat persona may now live in `prompts/<seat>.md` behind an `instructionsFile`
+// pointer. This guard must check the text a seat is ACTUALLY WOKEN WITH, so it resolves the
+// spec through the ONE resolver the product uses (`applyInstructionFiles`) instead of reading
+// `seat.instructions` off the raw JSON — a guard that reads a surface no seat reads can go
+// green while the real persona is corrupt.
+import { applyInstructionFiles } from "../src/rig.mjs";
 
 const root = process.cwd();
 
@@ -32,7 +38,7 @@ const root = process.cwd();
 // corruption on purpose (docs/NEXT.md line 50 does) does not have to be allow-listed.
 const RIG_SPECS = ["rig.json", "rig.v2.json", "rig.starter.json", "rig.selfdev.json"];
 const SINGLE_FILES = ["constitution.txt", "AGENTS.md"];
-const DIRS = [".agents", "skills", "docs/runbooks"];
+const DIRS = [".agents", "skills", "docs/runbooks", "prompts"];
 
 function walk(dir, out = []) {
 	let entries;
@@ -110,6 +116,9 @@ try {
 	};
 	for (const spec of RIG_SPECS) {
 		const parsed = JSON.parse(readFileSync(join(root, spec), "utf8"));
+		// Resolve instructionsFile -> instructions first (see the import above), so the parsed
+		// strings checked below include text that lives in prompts/*.md.
+		await applyInstructionFiles(parsed, join(root, spec));
 		const all = strings(parsed);
 		const bad = all.filter(([, s]) => findMojibake(s).length > 0);
 		check(`${spec}: every string value clean after parse`, bad.length === 0, bad.map(([p]) => p).slice(0, 3).join(", "));
@@ -123,6 +132,7 @@ try {
 	//    instructions must still contain REAL em dashes. Stripping them to ASCII would make
 	//    every check above pass while quietly changing what the seats are told.
 	const selfdev = JSON.parse(readFileSync(join(root, "rig.selfdev.json"), "utf8"));
+	await applyInstructionFiles(selfdev, join(root, "rig.selfdev.json"));
 	const seatText = selfdev.seats.map((s) => s.instructions ?? "").join("\n");
 	check("rig.selfdev.json: instructions still carry U+2014", seatText.includes("\u2014"), `${(seatText.match(/\u2014/g) ?? []).length} em dash(es)`);
 	check(

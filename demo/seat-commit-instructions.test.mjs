@@ -14,10 +14,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+// #4966: selfdev seat personas live in prompts/<seat>.md behind `instructionsFile`. Resolve through
+// the product's ONE resolver, or this guard reads `undefined` for every seat and goes red on a
+// migration that changed nothing about what seats are told.
+import { applyInstructionFiles } from "../src/rig.mjs";
 
 const durigDir = process.cwd();
 const starter = JSON.parse(readFileSync(join(durigDir, "rig.starter.json"), "utf8"));
 const selfdev = JSON.parse(readFileSync(join(durigDir, "rig.selfdev.json"), "utf8"));
+await applyInstructionFiles(selfdev, join(durigDir, "rig.selfdev.json"));
 const constitution = readFileSync(join(durigDir, "constitution.txt"), "utf8");
 
 // AUTHOR WARNING (#977, D83): a byte-equality compare MUST be EOL-insensitive. This repo has
