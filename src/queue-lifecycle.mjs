@@ -16,8 +16,15 @@
 // Read-only by construction: no store write, no new writer (D53: the enqueue path is the ONE write path).
 
 /** The workflow axis vocabulary. The MAPPING onto it is a later slice; the vocabulary is fixed here so
- * the field model and every consumer agree on the names. */
-export const STAGES = ["open", "active", "closed"];
+ * the field model and every consumer agree on the names.
+ *
+ * `deferred` IS A STAGE, not a block bolted onto `active` (lead's ruling item 3; architect's measurement
+ * at `src/queue-lifecycle.mjs:290`/`:311`). `active` means ONE thing: a live owner is working this item.
+ * Representing "parked on an unanswered question" as `active` + `block` puts that row in the SAME stage
+ * as a running one, and the stage is the axis the redesign derives `waiting`/`workable` from (#2951) —
+ * so the axes would say "someone is on it" while the truth is "nobody may claim it, and the answer must
+ * wake it". That is the correctness defect the ruling was written to prevent, not a taxonomy preference. */
+export const STAGES = ["open", "active", "deferred", "closed"];
 
 /** The closed reason vocabulary. `backlog` is the registration shape — no clock (F10). */
 export const BLOCK_REASONS = [
@@ -231,8 +238,8 @@ function parkTransitionAt(item, events) {
  *   `pm`); a row a seat parked after claiming is a `manual` park owned by that seat. Both get
  *   `reviewBy: null`: the legacy population is ~160 rows and mapping it to a near-term clock is the
  *   alarm firehose F10/CR-2 name. A human promotes a real park by authoring a `block`.
- * - `deferred` — a `question` block, `stage` unchanged (`active` when the holder deferred, `open` when
- *   the supervisor escalated a never-claimed row).
+ * - `deferred` — a `question` block. The stage is `deferred` (#4789): who parked it is carried by
+ *   `resolver` (`deferredTo`), not by which stage the row was forced into.
  *
  * Legacy rows are NEVER mapped to `reason: "dependency"` (F2): only an authored declaration may
  * auto-open.
@@ -274,20 +281,35 @@ function legacyBlock(item) {
 
 /**
  * The stage of an item: the AUTHORED `stage` when the row has one, else the legacy read-mapping.
- * `deferred` does not force a stage — it is `active` when the holder deferred it and `open` when the
- * supervisor escalated a row nobody had claimed (§2, architect F1).
+ *
+ * A stored `deferred` is stage `deferred`, WHOEVER parked it. `wasEverClaimed` is deliberately NOT on
+ * this path: whether a seat ever claimed the row says who parked it (the block's `resolver`/`payload`
+ * carry that) — it says nothing about whether the item may be claimed now, and using it here made the
+ * stage depend on the transition log instead of on the park itself. So both populations that the design
+ * split across two stages — a holder deferring its own claimed item, and a supervisor escalating a
+ * never-claimed row — are `deferred`, and each names its resolver in its block.
+ *
+ * (W) ADMISSION, tightened by lead's ruling item 3: on AUTHORED state, `active` admits `block === null`
+ * ONLY. The pair `active` + `block` is refused rather than mapped, because it is the exact shape that
+ * makes a parked row look like a running one. The LEGACY half stays TOTAL (advocate CR-1): a stored row
+ * with no authored `stage` never reaches this check, so ~160 unmigrated rows cannot turn `check` red.
  */
 export function effectiveStage(item) {
 	if (item?.stage !== undefined) {
 		if (!STAGES.includes(item.stage)) {
 			throw new Error(`unknown stage ${JSON.stringify(item.stage)} on item #${item?.id}`);
 		}
+		if (item.stage === "active" && effectiveBlock(item) !== null) {
+			throw new Error(
+				`item #${item?.id}: stage "active" admits block === null; a parked item is stage "deferred", whose block names the reason and the resolver`,
+			);
+		}
 		return item.stage;
 	}
 	const status = legacyStatusOf(item);
 	if (status === "done" || status === "cancelled") return "closed";
 	if (status === "claimed") return "active";
-	if (status === "deferred") return wasEverClaimed(item) ? "active" : "open";
+	if (status === "deferred") return "deferred";
 	return "open"; // queued, held, and any unknown legacy value
 }
 
@@ -302,13 +324,18 @@ export function effectiveBlock(item) {
 
 /**
  * The familiar four states, as a VIEW of the axes (§2). Every existing surface keeps rendering what it
- * rendered before: `queued`/`held` for an open item, `claimed`/`deferred` for an active one. A closed
- * item renders its outcome.
+ * rendered before: `queued`/`held` for an open item, `claimed` for an active one, `deferred` for a
+ * deferred one. A closed item renders its outcome.
+ *
+ * The mapping goes BOTH ways now, which is the point of the stage: stored `deferred` -> stage
+ * `deferred` -> view `deferred`, with no round-trip through `active`. `active` renders `claimed` and
+ * NOTHING else, because (W) guarantees an active row carries no block.
  */
 export function legacyStatus(item) {
 	const stage = effectiveStage(item);
 	if (stage === "closed") return legacyStatusOf(item) === "cancelled" ? "cancelled" : "done";
-	if (stage === "active") return effectiveBlock(item) === null ? "claimed" : "deferred";
+	if (stage === "deferred") return "deferred";
+	if (stage === "active") return "claimed";
 	return effectiveBlock(item) === null ? "queued" : "held";
 }
 
