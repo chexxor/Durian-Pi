@@ -1188,3 +1188,35 @@ every exit code, per #4939.
   and re-counting. Corrected counts at D186 clock-out: 6 trees clean, `item-4955` carries `?? .probe-cli/` (another
   seat's scratch in its own tree — leave it). **A worktree's dirt is invisible to the shared tree's `git status`**, and
   `/item-*/` is gitignored (`.gitignore` line 51), so a stray `item-NNNN/` directory never shows up there either.
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-01 overnight, D187 — every number measured in this session)
+
+- **The do-not-send rule in D186 is FALSE for this rig's seat model, and the field that proves it is
+  `submissions.detail`.** Read it first (recipe in `session-start-cost.md` step 2c). Four seats (`pm` 275488,
+  `impl` 277348, `lead` 277352, `scribe` 277515) all read `Compaction failed: Summarization hit the token limit; the
+  summary is incomplete` — a seat is not "shape-poisoned", it is a **compaction casualty**, and a `reset` clears it in
+  one write with zero provider tokens. Refutation of the old rule, measured twice: a direct `:47831` request with two
+  consecutive `user` turns returned **HTTP 200 / 64 prompt tokens**, and every seat freshly reset by this session has
+  a counted projection of exactly `[user]` (which the old rule called un-sendable) and ran fine afterwards.
+- **Never hold two store writers at once.** Two concurrent `cli.mjs send` produced
+  `Session failed after a storage error; close and reopen it` on the second one; the CLI prints
+  `send is DEPRECATED (opens a full writing harness = a second owner)` on every call. Broker has been down since
+  `2026-10-30T04:55:33Z`, so `send` is the only delivery verb — which means **serialize sends**, or start a resident
+  broker and deliver with `intent.mjs`. Check first: `pgrep -af "cli.mjs (send|serve|run)" | grep -v "bash -c"`.
+- **`cli.mjs resume` CANCELS in-flight work.** Invited by the rig's own `admitted_not_started` notice, it returned
+  `action: "run-cancelled"` and killed `impl`'s run on #4966 (`last_run_failed: aborted`). Staged work in the item
+  worktree survived, but `store-corruption-recovery.md` already names a `resume`-aborts-in-flight cycle as the leading
+  candidate writer of a corrupt `pi.live`. Do not reach for it while any seat is running.
+- **Brief a seat inside its `capabilities`.** `lead` is `caps=["decide","adjudicate"]`, so its callable inventory is
+  the queue verbs only — asking it to run `cli.mjs status`, `seat-turn-shape.mjs` or a store query wastes an arm, and
+  it ended by writing tool-call markup into its text turn (row #4972 registers the cause: the arm's prose advertises
+  `Bash, Read, Edit…` while the inventory does not carry them).
+- **The 8192-token per-turn output cap truncates big writes.** `scribe`'s #4967 arm ended `stopReason: "length"` with
+  nothing committed, same `DURIG_LOCAL_MAX_TOKENS ?? 8192` default (`src/providers/local.mjs:76`). Split large doc or
+  code asks across arms instead of hoping for one.
+- **`durig.config.json` is gitignored** (`.gitignore:8`). A setting change there is invisible to `git status` and to
+  every later diff — prove it with `node tools/broker-serve.mjs --status` (prints `ctx=` and `out=` per provider) and
+  name it in the pointer.
+- **Wall-clock shortcut.** The whole night's hunt cost hours; the `detail` read above costs ~2 s. Also: the two
+  productive `lead` arms after `reset` were ~4 min each, while the two dead arms cost ~3–11 min and zero work. Diagnose
+  with the store, then wake once.

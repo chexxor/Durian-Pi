@@ -162,3 +162,16 @@ settle, the cancel-deposits mechanism, the create-on-read opener, the landing pr
 #4955–#4960. Timings measured 2026-10-31 in the Diagnose block above. The delegate's ad-hoc probes for this
 session live in `.spike/fix-20261101/` and `.spike/fix-20261101b/` and are **gitignored — unpromoted, so they are
 already partly lost**; `lead` minted **#4960** to `devtools` to promote them into `tools/`.
+
+# 2c. WHY A RUN DIED — one field, ~2 s, and it beats every shape read. Measured 2026-11-01 (D187):
+node -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("/home/chexxor/Git/Durian-Pi/selfdev.sqlite",{readOnly:true});
+ for(const [s,c] of Object.entries({pm:3,impl:9,lead:21,scribe:4924,auditor:4936}))
+  for(const r of db.prepare("select id,status,record from submissions where conversation_id=? order by id desc limit 2").all(c)){
+   const j=JSON.parse(r.record);console.log(s,r.id,r.status,j.reason,JSON.stringify(j.detail||null).slice(0,180));}'
+#    `submissions.detail` is the field that names the cause. Four seats were un-sendable overnight and every one of
+#    them read "Compaction failed: Summarization hit the token limit; the summary is incomplete" — a summarization
+#    OUTPUT budget (compaction.ts:148 = min(0.8*reserveTokens 16384, model maxTokens) and a local seat's maxTokens is
+#    DURIG_LOCAL_MAX_TOKENS ?? 8192, src/providers/local.mjs:76), not a window and not a shape. status collapses the
+#    same fact to `last_run_failed: model_error` and truncates the rest, so nobody found it for a session.
+#    Do NOT hand-query the store for anything else first; this read is the whole diagnosis for the compaction class.
+#    A `node:sqlite` readOnly open writes nothing, but the opener CREATES the file if the path is wrong — pin absolute.
