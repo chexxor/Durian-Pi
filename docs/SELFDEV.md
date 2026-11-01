@@ -1220,3 +1220,41 @@ every exit code, per #4939.
 - **Wall-clock shortcut.** The whole night's hunt cost hours; the `detail` read above costs ~2 s. Also: the two
   productive `lead` arms after `reset` were ~4 min each, while the two dead arms cost ~3–11 min and zero work. Diagnose
   with the store, then wake once.
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-01 daytime, D188 — every number measured in this session)
+
+- **`up rig.selfdev.json --refresh` writes NO seat cwd unless `DURIG_SEAT_ROOT` is in the INVOKING environment — and it
+  still reports success.** Measured: `impl`/`scribe` were persisted at `/home/chexxor/Git/Durian-Pi/item-4966` and
+  `/item-4967` (worktrees in the operator's checkout); the bare `--refresh` printed `refreshed: pm,impl,…,architect`
+  and changed nothing, and the dry run still printed the same two `cwd {from,to}`. Cause is arithmetic, not a bug in
+  reporting: `seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT` (`cli.mjs:679`, preview at `:794`) and
+  `rig.selfdev.json` declares **no** `cwd` for any of the 12 seats, so without the env var `seatCwd` is `undefined`
+  and the cwd field is simply omitted from the write. With the env var set, the same command landed: the follow-up
+  `--refresh --dry-run` printed **no drift**. The trap bites because `up` does NOT enforce the F12 seat-root guard
+  (only `send`/`run`/`worktree`/`complete` pass `enforceSeatRoot: true`), so the guard's own remedy — "re-point it with
+  `up --refresh` under the new root" — reads as impossible unless you know to set the var. Prove any roster write with
+  the dry run plus a bare-name inventory diff (`wt-before/after`), never with the command's own exit code.
+- **There are TWO private copies of `durig.config.json`, and they disagree.** It is gitignored (`.gitignore:8`), so
+  `git status` never shows the drift: the operator checkout carries `DURIG_LOCAL_CONTEXT 160000` (the D187 stopgap)
+  while the approved seat root `/home/chexxor/Git/durian-dev/seatroot` carries **`200000`**. Precedence is env →
+  `./durig.config.json` **in the cwd** → `./.durig/config.json` (`src/config.mjs:7`), so *which number a read reports*
+  depends on where the delegate stands and *which number a seat runs under* depends on where the serving process
+  stands. A wake dispatched from the approved root therefore ran at 200000 against an engine `--max-context 204800` —
+  the exact condition D187 measured the four seat deaths under — while every read taken from the checkout said 160000.
+  Before any capacity statement: `diff` the two copies, and name the cwd (or the explicit env) with the number.
+- **Re-measure the SERVED verifier window before any verifier wake; LM Studio restores `8192×4` on relaunch.** Read the
+  pair in 0.1 s: `ps -eo args | tr '\0' ' ' | grep -oE -- '--ctx-size [0-9]+|--max-context [0-9]+'` (served) against
+  `durig.config.json` (declared `24576`). Measured 2026-11-01: served **8192**, declared **24576** — a 9,627-token
+  probe that returned HTTP 200 at 24576 on 2026-10-30 returns HTTP 400 at 8192, so a `qa` wake is a capacity question
+  first and a verification question second. Capacity is the operator's ruling; do not spend a wake to discover it.
+- **`tools/broker-serve.mjs --status` prints two wrong verdicts on this host today** (devtools family: #4938/#4949/
+  #4959). (a) `BLOCK seat-shell-availability` — §7 greps the vendored `bash.ts` for `programs ?? ["pwsh",
+  "powershell"]` (that list belongs to `createPowerShellTool`, `bash.ts:169`) and applies it to the registered tool;
+  `src/shellregistry.mjs` reports **`bash`, `degraded:false`** and `node demo/seatguard.test.mjs` +
+  `node demo/seattools.test.mjs` both **PASS** in the 187-package + `vendor/pi-main` tree. So that BLOCK is not a
+  reason to refuse a broker start. (b) `NOTE stranded-intent: 2 intent(s)` — both spool files are
+  `{"op":"read","view":"health","from":"cli"}` left by `cli.mjs status`; line 322 already filters them out for the wake
+  set, lines 182-183 do not. Read the spool file before acting on either verdict.
+- **Do not `&&`-chain a probe whose output you then verify.** A `node -e` that threw (a field name I guessed) short-
+  circuited the chain and the verification dry run never wrote its file — which reads as "the repair was verified" if
+  you only look at the last line. Run the write, then the proof, as separate commands.
