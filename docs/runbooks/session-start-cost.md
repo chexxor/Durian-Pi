@@ -82,8 +82,25 @@ node -e 'const j=JSON.parse(require("fs").readFileSync(".spike/<session>/updry.j
 #    whose shape I could not resolve — a hand probe there returned "count 0" and is NOT evidence of an empty roster.
 # 4. what did real verifier turns cost, from the store? (the sizing question, answered without loading a model)
 node .spike/fix-20261101b/turncost.mjs   # gitignored probe; row #4960 (devtools) exists to promote these into tools/
-# 5. the loaded slot, without asking the model server
-ps -eo args | tr '\0' ' ' | grep -o -- "--ctx-size [0-9]*"
+# 5. the loaded slot, without asking the model server — AND the pair that decides a verifier wake:
+ps -eo args | tr '\0' ' ' | grep -oE -- '--ctx-size [0-9]+|--max-context [0-9]+'   # SERVED (llama-server / strata)
+node -e 'console.log(require("fs").readFileSync("durig.config.json","utf8"))'      # DECLARED
+#    0.1 s. Measured 2026-11-01 (D188): served `--ctx-size 8192 --parallel 4` (LM Studio llama-server, Ministral-3-14B
+#    Q6_K, GPU0 12,618/16,376 MiB) against DURIG_VERIFIER_CONTEXT "24576" — the #4959 mismatch, live. A verifier wake
+#    costs ~3x less context than status.context will claim, so it reads as context death, not as a config error.
+#    Read this pair BEFORE sending a verify leg (#4974 on `qa` is exactly such a wake), and name the dial you moved.
+# 5b. which shell can a seat actually start — 0.2 s, and it is NOT the broker-serve verdict:
+node -e 'import("./src/shellregistry.mjs").then(m=>console.log(m.seatShellSelection.name, "degraded:"+m.seatShellSelection.degraded))'
+#    Measured 2026-11-01: `bash degraded:false` on this Linux box, while `tools/broker-serve.mjs --status` prints
+#    `BLOCK seat-shell-availability … registered as "bash" and spawns [pwsh, powershell]`. That BLOCK is the instrument
+#    reading the VENDORED default (`vendor/pi-main/packages/durable/src/tools/bash.ts:169` `programs ?? ["pwsh",
+#    "powershell"]`, which belongs to createPowerShellTool) instead of the registry — `createBashTool` hands the string
+#    to env.exec. Proof the shell works: `node demo/seatguard.test.mjs` PASS and `node demo/seattools.test.mjs` PASS
+#    in the 187-package + vendor/pi-main tree at 238ff91d. Do NOT start a wake to "fix" the host on that BLOCK, and do
+#    not treat `--start` refusal as a host condition: it is an instrument defect (devtools family: #4938/#4949/#4959).
+#    Same file, second wrong verdict: `NOTE stranded-intent` counts `op:"read"` health requests left by `cli.mjs status`
+#    (both 2026-11-01 spool files are `{"op":"read","view":"health","from":"cli"}`) because line 182 uses `pending`
+#    rather than the `intents` filter line 322 introduces. Read the spool files before concluding the channel is jammed.
 # 6. docs/git state, all sub-second, all exit 0 when clean
 node tools/doc-integrity-guard.mjs; node tools/instrument-provenance.mjs
 node tools/what-to-test.mjs --base=<sha-before-the-diff>     # 0.13 s; derived guard set vs the 239-test suite
