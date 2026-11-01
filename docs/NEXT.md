@@ -44,6 +44,19 @@ the delegate must not touch queue rows, so **#4974 stays queued against a 400-re
 resizes the slot or `pm`/`impl` (#4982) moves it. Second blocker: the broker has been down since
 `2026-10-30T04:55:33Z`, so every delivery is a `send` = a second-owner writer; serialize them.
 
+**Deferred rows audited, answers proposed, awaiting the operator:** all **17** `deferred` rows (every one
+`deferredTo: "human"`) were read from a `cli.mjs queue` dump and audited against today's tree; the proposal document is
+`.spike/fix-20261101c/deferred-answers.md` (gitignored — promote it if it must survive a machine move). The shape of
+the answer set: **5 re-cuts** of work that was reviewed, reported DONE and then lost only from `refs/heads/` — it
+survives in **`refs/rescued/`** (485 refs: 33 named `rescued/item-<id>`, the rest `rescued/orphan-<sha>`), covering
+#4791/#4794/#4799/#4801 plus the unlanded `idle` verdict at `refs/rescued/item-4746 @81be8985`; **5 still-live builds**
+(#4789 the missing `deferred` stage — `src/queue-lifecycle.mjs:20` still has three stages, #4796 wake transition-memory,
+#4797 the holder-named refusal, #4354 and #4812 with a mandatory premise re-measure because their premises no longer
+reproduce); **5 that only need a CLOSE** because measurement answered them (#4817 gate re-measure, #4814 pointer
+numbers, #4813 the notice-is-a-third-thing finding, #4815 landed-by-content, #4805 cancelled-duplicate with survivor
+#4136). Delivery is `send`-only — `cli.mjs` has no operator queue verb — so `impl` (ADMISSIBLE) can take one batched
+brief, `qa2` (ADMISSIBLE) its own, and `pm`/`devtools` need a `resume` pass plus a shape re-check first (both AT RISK).
+
 ## What moved while the last pointer slept (`impl` ~2 h, then this delegate session — all measured)
 
 * **#4966 LANDED**: `main` = `986a9e37`; `refs/heads/item-4966` @ `605ebf07` (five commits, from `wip/seat-prompt-files`,

@@ -1282,4 +1282,23 @@ every exit code, per #4939.
   partial one when a landing is at stake.
 - **`scripts/clockin.mjs` is the clock-in read this session skipped.** One budgeted pass prints POINTER / RIG / QUEUE /
   GIT / RUNBOOKS / PROVIDER / READ MAP / COST (measured 6,936 B, exit 0). Run it BEFORE hand-assembling six instrument
-  calls; it also proves the pointer contract, since it parses the pointer itself.
+  calls; it also proves the pointer contract, since it parses the pointer itself. **But it is broken in a detached
+  worktree** — it computes landing debt as `git rev-list --count main..$(branch)`, and the branch is `(no branch)` there.
+- **A reaped branch is usually NOT lost — look in `refs/rescued/` before declaring work gone.** Measured 2026-11-01:
+  `git for-each-ref refs/rescued` = **485 refs** (33 named `rescued/item-<id>` / `rescued/<seat>-item-<id>`, the rest
+  `rescued/orphan-<sha12>`). Four deferred LANDING ENTRY rows whose `refs/heads/` branches are absent are fully
+  recoverable — `refs/rescued/item-3033 @ba5186c5`, `item-4755 @1607ad13`, `item-4786 @851c3e9c`, `item-4790 @e979e08e`
+  — and so is `item-4746 @81be8985`, the `brokerHealth` **`idle` verdict** whose absence I had read as "never built".
+  `git for-each-ref refs/remotes` (41 refs) also reaches all five as `refs/remotes/win/item-<id>`. So the answer to
+  #4804's three-outcome question is outcome 1 with a naming fix: the nine survived, under `refs/rescued/orphan-<sha>`,
+  not `refs/heads/archived/`. Recovery verb: `git cherry-pick -x refs/rescued/item-<id>` onto a fresh branch off current
+  `main`. **Bound the listing**: `git for-each-ref --format='%(refname:short) %(objectname:short)' refs/rescued |
+  grep -E "item-<id>( |$)"` — and do not anchor with `$` right after the id when the format prints the sha after the
+  name (that anchor failure is what made me dump 485 refs and spend ~4k tokens on them).
+- **"The content is already in main" needs a line-by-line probe, not a grep.** I first reported #4801's runbook change
+  as landed because one grep matched; the honest probe (`git show <sha> -- <file> | grep '^+'` → compare each added line
+  against `git show main:<file>`) returned **9 of 9 MISSING**. Run the loop, print `missing_lines=N`.
+- **There is no row-scoped queue read.** `cli.mjs queue` is **21,927,512 B**; there is no `show`/`item`/`--id` verb
+  (`node cli.mjs bogus` prints the full usage list). Triaging 17 deferred rows cost one 22 MB dump plus a filter script
+  (`.spike/fix-20261101c/{queue.json,deferred.mjs}`). A `queue --id <id>[,<id>…]` filter would make this class ~20×
+  cheaper — worth a row at `lead`/`pm`.
