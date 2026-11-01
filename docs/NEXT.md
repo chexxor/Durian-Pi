@@ -27,6 +27,16 @@ DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_LOC
   DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status   # a bare `status` RESUMES sessions
 ```
 
+**Ready-to-send brief, and the seat-shape gate on the rest:** the `qa` verification brief for the merged tree is written
+and un-sent at `.spike/fix-20261101c/qa-4974-verify.md` (gitignored — promote it to `docs/` or `tools/` if it must
+survive a machine move; it demands artifact/tree identity — thin 80-package set vs the
+full 187-package + `vendor/pi-main` set — and names the 8192/24576 finding). Whether to spend that wake before the slot
+is resized is the operator's call, not the delegate's. `tools/seat-turn-shape.mjs` at clock-in said **ADMISSIBLE =
+`impl`, `qa`, `lead`, `qa2`** and predicted a turn ending on `user` for **`pm`** — so the pm verb that would move
+**#4974** is itself gated on pm's transcript shape, and a `reset` there destroys history. `scripts/clockin.mjs` after the
+landing reports `refs=10 worktrees=9 unmerged=3` — `item-4898 +1`, `item-4931 +2`, and `wip/seat-prompt-files +1`
+(`no-row`, the provenance branch #4966 was cut from; its content IS in main, the branch is not an ancestor).
+
 **Blocker:** the verifier slot is loaded at **8192** (`--ctx-size 8192 --parallel 4`) against a declared
 `DURIG_VERIFIER_CONTEXT 24576` — LM Studio restores `8192×4` on relaunch — so `qa`/`qa2`/`auditor`/`advocate`/
 `designer` wakes die on the provider, not on their own work. `lead` cannot park **#4974** (`not yours to revise`) and
@@ -103,7 +113,7 @@ is the procedure (it flagged one residue for that procedure: `item-4955`'s `.pro
 
 ## Rig state, re-measured 2026-11-01T18:4xZ — re-read, do not trust
 
-`main` = `refs/heads/seatroot/linux` = **`986a9e37`** (the landing and the delegate's docs commits are landed locally;
+`main` = `refs/heads/seatroot/linux` = **`67855c77`** (the landing and the delegate's docs commits are landed locally;
 **not pushed** — `origin/main` = `eea4effb`, 60+ commits behind, no push grant). Store `selfdev.sqlite`
 **448,335,872 B, no `-wal`, no `genlock`**; `cli.mjs status` exits 0 with empty stderr, so D187's storage error did not
 recur and no repair was shown necessary. Rows **4,976** before `lead`'s turn (+8 minted); non-terminal 406 = `held 328 /
