@@ -240,6 +240,7 @@
    "demo/suite-env.test.mjs"
   ],
   "docs": [
+   "demo/commit-discipline-personas.test.mjs",
    "demo/commit-model.test.mjs",
    "demo/deepinfra-catalog.test.mjs",
    "demo/next-pointer.test.mjs",

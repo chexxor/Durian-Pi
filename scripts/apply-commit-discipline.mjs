@@ -12,7 +12,11 @@
 // Run: node scripts/apply-commit-discipline.mjs  (exits nonzero on any mismatch)
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+// #4966: a seat persona may live in `prompts/<seat>.md` behind `instructionsFile`. The tool must
+// go through the product's ONE resolver, or every split seat reads as `instructions: undefined`
+// and the discipline block is either dropped from the persona or re-inlined into the JSON.
+import { applyInstructionFiles } from "../src/rig.mjs";
 
 const root = process.cwd();
 const P2_AMENDED =
@@ -83,51 +87,100 @@ function withDisciplineBlock(text) {
 	return `${base}\n\n${SEAT_BLOCK}`;
 }
 
+/**
+ * Seat-KEYED inline replacement (#4966). `updateJsonLines` fills `"instructions"` lines in FILE
+ * ORDER from a seat-ORDERED array — safe only while EVERY seat is inline. Once some seats are
+ * file-backed the two orders differ, and a seat-ordered array written into file-ordered lines puts
+ * one seat's persona into another seat's line. So each seat's own span is located by its exact
+ * encoded value and replaced in place, and the tool refuses rather than guesses.
+ */
+function replaceSeatSpan(raw, seat, value) {
+	const span = `"instructions": ${JSON.stringify(seat.instructions)}`;
+	const first = raw.indexOf(span);
+	if (first === -1 || first !== raw.lastIndexOf(span)) return { ok: false, reason: "inline span not uniquely located" };
+	return { ok: true, raw: raw.slice(0, first) + `"instructions": ${JSON.stringify(value)}` + raw.slice(first + span.length) };
+}
+
 for (const rigFile of ["rig.starter.json", "rig.selfdev.json"]) {
 	const path = join(root, rigFile);
 	const spec = JSON.parse(readFileSync(path, "utf8")); // parse first: refuse invalid JSON
 	const seats = spec.seats ?? [];
-	const seatTexts = seats.map((s) => withDisciplineBlock(typeof s.instructions === "string" ? s.instructions : ""));
-	const needsInline = spec.constitutionInline !== constitutionNew;
-	const needsSeats = seats.some((s, i) => s.instructions !== seatTexts[i]);
-	if (!needsInline && !needsSeats) {
+	// Which personas live in files, and where — relative to the rig FILE, the same rule the
+	// product's resolver uses.
+	const rigDir = dirname(resolve(path));
+	const backing = seats.map((s) =>
+		typeof s.instructionsFile === "string" && s.instructionsFile !== "" ? join(rigDir, s.instructionsFile) : null,
+	);
+	// Resolve so `s.instructions` is the text a seat is ACTUALLY given (the file wins over inline).
+	await applyInstructionFiles(spec, path);
+	const seatTexts = seats.map((s, i) =>
+		withDisciplineBlock(backing[i] === null ? String(s.instructions ?? "") : String(readFileSync(backing[i], "utf8")).replace(/\n$/, "")),
+	);
+
+	// #4966: a rig may REFERENCE the constitution (`"constitution": "constitution.txt"`) instead of
+	// carrying an inline mirror. There is then no `constitutionInline` line to write, and demanding
+	// one made this tool exit 1 against the selfdev rig — a run that is never clean cannot be
+	// idempotent, so check the reference instead of writing a mirror.
+	const mirrorsInline = Object.prototype.hasOwnProperty.call(spec, "constitutionInline");
+	const needsInline = mirrorsInline && spec.constitutionInline !== constitutionNew;
+	const needsInlineFile = backing.some((p, i) => p !== null && readFileSync(p, "utf8").replace(/\n$/, "") !== seatTexts[i]);
+	const needsSeatsInline = seats.some((s, i) => backing[i] === null && s.instructions !== seatTexts[i]);
+	if (!needsInline && !needsInlineFile && !needsSeatsInline) {
 		note(true, `${rigFile}: already amended`);
 		continue;
 	}
-	const updates = {};
-	if (needsInline) updates.constitutionInline = [constitutionNew];
-	if (needsSeats) updates.instructions = seatTexts;
+
 	let raw = readFileSync(path, "utf8");
-	for (const [key, values] of Object.entries(updates)) {
-		const res = updateJsonLines(raw, key, values);
+	if (needsInline) {
+		const res = updateJsonLines(raw, "constitutionInline", [constitutionNew]);
 		if (!res.ok) {
-			note(false, `${rigFile}: ${key} lines updated ${res.updated}/${res.expected} — refusing to write a partial`);
+			note(false, `${rigFile}: constitutionInline lines updated ${res.updated}/${res.expected} — refusing to write a partial`);
 			raw = null;
-			break;
+		} else raw = res.raw;
+	}
+	// A file-backed seat's block goes back INTO THE FILE. It is never re-inlined.
+	if (raw !== null && needsInlineFile) {
+		for (const [i, p] of backing.entries()) {
+			if (p !== null) writeFileSync(p, `${seatTexts[i]}\n`, "utf8");
 		}
-		raw = res.raw;
+		note(true, `${rigFile}: discipline block rewritten in ${backing.filter(Boolean).length} persona FILE(S), not inline`);
+	}
+	if (raw !== null && needsSeatsInline) {
+		for (const [i, seat] of seats.entries()) {
+			if (backing[i] !== null || seat.instructions === seatTexts[i]) continue;
+			const res = replaceSeatSpan(raw, seat, seatTexts[i]);
+			if (!res.ok) {
+				note(false, `${rigFile}: seat ${seat.name}: ${res.reason} — refusing to guess which line to write`);
+				raw = null;
+				break;
+			}
+			raw = res.raw;
+		}
 	}
 	if (raw === null) continue;
 	const reparse = JSON.parse(raw);
-	if (reparse.constitutionInline !== constitutionNew) {
+	if (mirrorsInline && reparse.constitutionInline !== constitutionNew) {
 		note(false, `${rigFile}: constitutionInline does not equal new constitution after edit`);
 		continue;
 	}
-	if (reparse.seats.some((s, i) => s.instructions !== seatTexts[i])) {
-		note(false, `${rigFile}: seat instructions mismatch after edit`);
-		continue;
-	}
 	writeFileSync(path, raw, "utf8");
-	note(true, `${rigFile}: constitutionInline mirrored + ${seats.length} seats' discipline set to the current block (parse-verified)`);
+	note(true, `${rigFile}: parse-verified (${seats.length} seats; ${backing.filter(Boolean).length} file-backed, ${backing.filter((p) => p === null).length} inline)`);
 }
 
 // --- final self-check ----------------------------------------------------------
 const c = readFileSync(constitutionPath, "utf8");
 for (const rigFile of ["rig.starter.json", "rig.selfdev.json"]) {
 	const spec = JSON.parse(readFileSync(join(root, rigFile), "utf8"));
-	note(spec.constitutionInline === c, `${rigFile}.constitutionInline === constitution.txt (final byte check)`);
+	if (Object.prototype.hasOwnProperty.call(spec, "constitutionInline")) {
+		note(spec.constitutionInline === c, `${rigFile}.constitutionInline === constitution.txt (final byte check)`);
+	} else {
+		note(spec.constitution === "constitution.txt", `${rigFile}: constitution SOURCES constitution.txt (no inline mirror to byte-check)`);
+	}
 }
+// #4966: the discipline + model must be present in the RESOLVED text — for split seats that text
+// lives in prompts/<seat>.md, so resolve first or this check reads `undefined` and passes vacuously.
 const selfdevFinal = JSON.parse(readFileSync(join(root, "rig.selfdev.json"), "utf8"));
+await applyInstructionFiles(selfdevFinal, join(root, "rig.selfdev.json"));
 note(
 	selfdevFinal.seats.length > 0
 		&& selfdevFinal.seats.every((s) => s.instructions?.includes("Commit discipline:")
