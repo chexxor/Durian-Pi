@@ -56,6 +56,17 @@ demos the WIP breaks, add the resolver demo. It is **`claimed` by `impl` @2026-1
 **`/home/chexxor/Git/Durian-Pi/item-4966`** (locked, based on `613028f9` = `main`; `cli.mjs` modified, `prompts/*.md`
 staged, nothing committed yet). **It is stalled, not lost** — see Blocker.
 
+**State at this clock-out (2026-11-01T01:2xZ, measured):** `impl` is **actively working #4966** — it has committed
+**`ca59b43e` `feat(rig): seat personas move to prompts/<seat>.md behind instructionsFile (#4966)`** on top of
+`613028f9`, still has 5 changed paths in `item-4966`, and its window is at **consumed 114,856 = 0.718** of 160,000.
+**Watch it:** past ~0.9 the compaction class returns and the arm dies. `scribe` holds **#4967 `claimed`** with **both
+its worktree (`item-4967`, at the repo root, locked) and `seatroot` clean** — the arm was cut by the 8192 output cap,
+so it needs a follow-up arm, not a reset. Two sends I wrote but did **not** run (one-writer rule): `lead` re-scope of
+#4970/#4973 (`.spike/fix-20261103/lead-correct-4970.md`, ready) and `pm` triage of #4826/#4897/#4900. Docs records
+landed on `main` this session: **`09f8d247`** (D187 + this pointer) and **`7c8ce1d5`** (runbook step 2c + the D187
+pitfalls block), and the approved seat root was fast-forwarded to `7c8ce1d5` — **root == main == `7c8ce1d5`**.
+**Ref trap:** `git rev-parse seatroot/linux` fails with `Needed a single revision`; use `refs/heads/seatroot/linux`.
+
 **Blocker (three parts, all delegate-caused or delegate-recoverable):**
 1. `impl`'s first run was **cancelled by my own `cli.mjs resume`** — `resume` reported `{"seat":"impl","submission":
    277446,"status":"placed","action":"run-cancelled"}` and the seat then showed `last_run_failed: aborted`. A recovery
@@ -77,8 +88,9 @@ pgrep -af "cli.mjs (send|serve|run)" | grep -v "bash -c" || echo "no writer aliv
 ls -1 selfdev.sqlite.genlock* 2>/dev/null; DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status >/dev/null   # stderr clean?
 git -C /home/chexxor/Git/Durian-Pi/item-4966 status --short | head    # staged work survives
 node cli.mjs send impl --body-file .spike/fix-20261103/impl-4966-resume.md --no-stream   # brief already written
-# 2. then the two cheap, uncontested sends, one at a time (never concurrently):
+# 2. then the two cheap, uncontested sends, ONE AT A TIME (never concurrently):
 node cli.mjs send lead   --body-file .spike/fix-20261103/lead-correct-4970.md --no-stream  # re-scope #4970/#4973 to the 8192 budget
+node cli.mjs send scribe --body-file <finish the claimed #4967 in worktree item-4967> --no-stream   # arm was cut at 8192 output tokens
 node cli.mjs send pm     --body-file <triage: #4826 #4897 #4900 + #4813 needs the human> --no-stream
 # 3. clock-in reads (all read-only, priced in docs/runbooks/session-start-cost.md):
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.mjs | grep -E '^seat |counted projection'
