@@ -13,7 +13,8 @@ import { configure, defineDoc, defineExtension, defineTool, section } from "@ear
 import { Type } from "@earendil-works/pi-ai";
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { seatHasReadTool } from "./seattools.mjs";
 import { normalizeBlock } from "./queue-lifecycle.mjs";
 import { removeSeatWorkspace } from "./worktree.mjs";
@@ -1440,6 +1441,64 @@ export function compilePersona(seat) {
 	}
 	if (seat.instructions) parts.push(seat.instructions);
 	return parts.join("\n");
+}
+
+/**
+ * Resolve each seat's `instructionsFile` pointer into `instructions`, in place, so every
+ * consumer of a rig spec (`compilePersona`, the optimizer seam, `previewUp`'s change detection,
+ * `detectModelMismatch`, seat creation, and the guard tests that re-read a rig file) resolves a
+ * seat persona the SAME way. One implementation, because two would drift.
+ *
+ * WHY: a seat's system prompt is prose — this rig's 12 seats carry 44,110 characters of it — and
+ * it could only live inline in the rig JSON as one escaped string per seat. Editing seat guidance
+ * meant editing escapes inside a ~380-line JSON file, which turns a wording change into a
+ * corruption event. `instructionsFile: "prompts/<seat>.md"` makes a markdown file the surface.
+ *
+ * Three rules, each with an incident behind it:
+ *  - the FILE WINS when both keys are set, because the file is the surface meant for editing
+ *    (the inverse of the constitution's inline-wins rule, where inline is the generated mirror);
+ *  - a missing or unreadable file is a HARD failure, never a silent drop — reading one form and
+ *    dropping the text is the constitution bug demo/constitution.test.mjs pins: a 13-seat team ran
+ *    with no grounding rule and nothing anywhere raised an error;
+ *  - exactly ONE trailing newline is stripped, because a POSIX text file ends with one and the
+ *    inline string does not. Stripping it keeps the resolved prompt byte-identical to what the
+ *    inline spec produced, which is what made the migration provably safe.
+ *
+ * Paths resolve relative to the rig FILE (falling back to cwd) so a rig in a subdirectory still
+ * finds its personas.
+ *
+ * @param {{seats?: Array<Record<string, unknown>>}} spec parsed rig file (mutated in place)
+ * @param {string} rigFile path to the rig file, used for relative resolution
+ * @returns {Promise<string[]>} names of seats that set both keys (caller reports the note)
+ * @throws when a named persona file cannot be read — a seat must never run with no persona
+ */
+export async function applyInstructionFiles(spec, rigFile) {
+	const dir = dirname(resolve(rigFile));
+	const conflicts = [];
+	for (const seat of spec.seats ?? []) {
+		const ref = seat.instructionsFile;
+		if (typeof ref !== "string" || ref === "") continue;
+		const candidates = [resolve(dir, ref), resolve(ref)];
+		let text;
+		for (const p of candidates) {
+			try {
+				text = await readFile(p, "utf8");
+				break;
+			} catch {
+				/* try the next candidate */
+			}
+		}
+		if (text === undefined) {
+			throw new Error(
+				`seat ${seat.name ?? "(unnamed)"}: instructionsFile "${ref}" not found (tried: ${candidates.join(
+					", ",
+				)}) — refusing to configure a seat with no persona`,
+			);
+		}
+		if (typeof seat.instructions === "string" && seat.instructions !== "") conflicts.push(String(seat.name));
+		seat.instructions = text.endsWith("\n") ? text.slice(0, -1) : text;
+	}
+	return conflicts;
 }
 
 export { Router };

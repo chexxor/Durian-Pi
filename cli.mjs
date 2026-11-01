@@ -53,6 +53,7 @@ import {
   RigQueue,
   Router,
   Seats,
+  applyInstructionFiles,
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
@@ -578,6 +579,15 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
   if (typeof spec.constitutionInline === "string" && spec.constitution) {
     console.error(
       `note: ${rigFile} sets both constitutionInline and constitution; using the inline text`,
+    );
+  }
+  // Seat personas resolve from files before ANY consumer sees the spec. ONE resolver — imported
+  // from src/rig.mjs, not re-implemented here, because two copies drift (the WIP had two).
+  // Resolved outside the transacting action for the same reason the constitution is: a retry would
+  // print the note once per attempt.
+  for (const name of await applyInstructionFiles(spec, rigFile)) {
+    console.error(
+      `note: ${rigFile}: seat ${name} sets both instructions and instructionsFile; using the file`,
     );
   }
   const created = [];

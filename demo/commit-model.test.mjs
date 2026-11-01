@@ -16,10 +16,15 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+// #4966: selfdev seat personas moved to `prompts/<seat>.md` behind `instructionsFile`. The
+// commit model must be asserted against the text a seat is actually given, so this demo
+// resolves the spec through the product's ONE resolver instead of reading the raw JSON key.
+import { applyInstructionFiles } from "../src/rig.mjs";
 
 const durigDir = process.cwd();
 const starter = JSON.parse(readFileSync(join(durigDir, "rig.starter.json"), "utf8"));
 const selfdev = JSON.parse(readFileSync(join(durigDir, "rig.selfdev.json"), "utf8"));
+await applyInstructionFiles(selfdev, join(durigDir, "rig.selfdev.json"));
 const constitution = readFileSync(join(durigDir, "constitution.txt"), "utf8");
 // AUTHOR WARNING (#977, D83): a byte-equality compare MUST be EOL-insensitive. This repo has
 // core.autocrlf=true, so the LF blob is checked out as CRLF while a JSON-parsed inline copy
