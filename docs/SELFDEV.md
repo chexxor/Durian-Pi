@@ -1258,3 +1258,28 @@ every exit code, per #4939.
 - **Do not `&&`-chain a probe whose output you then verify.** A `node -e` that threw (a field name I guessed) short-
   circuited the chain and the verification dry run never wrote its file — which reads as "the repair was verified" if
   you only look at the last line. Run the write, then the proof, as separate commands.
+- **`scripts/land.mjs --changed-suite` is currently unlandable on this rig, and the refusal is not about the branch.**
+  Measured landing of `item-4966`: 129/242 derived tests ran in `.land-scratch-*`, and the landing STOPPED on
+  `demo/clockin-digest.test.mjs` — because `scripts/clockin.mjs` computes landing debt as
+  `git rev-list --count main..$(current branch)`, and in a **detached** worktree that name is `(no branch)`, so the
+  script throws. One scratch-only failure, zero content failures, main not advanced (exit 1, tree untouched, scratch
+  cleaned). The honest path the tool itself prints: land on the documented default and run the suite on `main`
+  separately (`"suite": "not run … the gate is opt-in … run the suite on main separately"`). Needs its own `devtools`
+  row alongside #4977/#4978/#4979.
+- **`git archive <sha>` is NOT a clean baseline for "this red is pre-existing"** — some demos read gitignored local
+  state. Measured: `demo/local-model-pointer.test.mjs` is **red in a `/tmp` archive of `3fde09e3`** and **green in the
+  live tree at `986a9e37`**; `demo/deepinfra-catalog.test.mjs` is red in both (its assertion: seat `qa` names
+  `verifier/mistralai/ministral-3-14b-reasoning`, "not in the fallback catalog"). Name the TREE each red was measured
+  in, and prefer a same-machine pre/post pair over an archive copy.
+- **The pointer file has a machine-checked contract, and losing it cost two suite reds.**
+  `demo/next-pointer.test.mjs` + `demo/clockin-digest.test.mjs` were red on `main` since D186's re-cut because
+  `docs/NEXT.md` had no `## NEXT SESSION` heading (the first one must precede the first `## CLOCK-OUT`; the body must
+  carry "current item", a `#NNN`, a command matching `node cli\.mjs`, and a `**Blocker:**` line) and because the link to
+  `docs/NEXT-ARCHIVE.md` had been demoted to an HTML comment **above** the section — `scripts/clockin.mjs` extracts the
+  pointer **by line range**, so it must be inside it. Both PASS after this session; cap is `wc -l <= 199`
+  (`docs/NEXT.md` is 152). Corroboration for the cheap gate: `scripts/suite.mjs --jobs 8` = **242 demos in 52 s wall**
+  on this 16-core host (runbook item 12 measured 240 in 47.8 s) — the full gate is affordable, so prefer it over a
+  partial one when a landing is at stake.
+- **`scripts/clockin.mjs` is the clock-in read this session skipped.** One budgeted pass prints POINTER / RIG / QUEUE /
+  GIT / RUNBOOKS / PROVIDER / READ MAP / COST (measured 6,936 B, exit 0). Run it BEFORE hand-assembling six instrument
+  calls; it also proves the pointer contract, since it parses the pointer itself.

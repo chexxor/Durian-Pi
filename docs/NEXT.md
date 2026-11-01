@@ -2,55 +2,69 @@
 
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
-## NEXT SESSION (2026-11-01T18:4xZ — D188 daytime, Linux: land `item-4966`, then fix the verifier window, then re-arm `scribe`)
+## NEXT SESSION (2026-11-01T19:0xZ — D188 daytime, Linux: `item-4966` is LANDED — fix the verifier window, then the `qa` leg, then `scribe`'s re-arm)
 
 **History:** everything this pointer supersedes is kept **verbatim** in `docs/NEXT-ARCHIVE.md`; re-derive the cut from
 `git log --oneline -- docs/NEXT.md` — never re-point by hand.
 
-**Current item:** the operator-granted persona-files re-cut, **#4966**, is **`done` on the row** and `lead` has now
-ruled the order (its verdict, `.spike/fix-20261101c/lead-send.out`, settled `done`): **land `refs/heads/item-4966` @
-`605ebf07` FIRST; the `qa` leg (#4974) follows the landing and does not gate it**, because the persona files are
-*derived* and the meaningful verify is the merged 187-package + `vendor/pi-main` tree. Rows opened by that turn:
-**#4977/#4978/#4979** (`devtools`, the three instrument defects below), **#4980** (`scribe` — the re-arm brief for its
-claimed **#4967**), **#4981** (`architect` — the compaction *legibility* half, ungated), **#4982/#4983** (`impl`; #4983
-`held`). **#4970** was revised to "HALF B" — the config-authoritative + bounding-policy questions, which are the
-operator's, not a seat's.
+**Current item:** **#4966** (persona files) **was LANDED by the delegate** on `lead`'s ruling and the operator's
+standing grant: `node scripts/land.mjs item-4966 --db …/selfdev.sqlite` → **exit 0**, `main` = **`986a9e37` "merge: land
+item-4966 onto main"**, `git merge-base --is-ancestor refs/heads/item-4966 main` **exit 0**, tree clean, and
+`seatroot/linux` fast-forwarded to the same sha — so the 12 `prompts/<seat>.md` files are now IN the approved root
+(F5: a root left at an older main silently loses a seat's persona). Open around it: **#4974** (the `qa` verify leg, still
+`queued` — `lead` cannot park a row it minted and the delegate must not touch queue rows, so **#4982** (`impl`) or `pm`
+must move it), **#4970** (revised to "HALF B": the config-authoritative + bounding-policy questions, which are the
+operator's), **#4981** (`architect`, compaction *legibility*, ungated), **#4983** (`impl`, `held`), **#4977/#4978/#4979**
+(`devtools` instrument defects), **#4980** (`scribe` re-arm for its claimed **#4967**), plus a **fourth instrument
+defect this session found** (below) that needs its own row.
 
-**Exact next command** (delegate, from `/home/chexxor/Git/Durian-Pi`, no second writer alive, land then re-point):
+**Exact next command** (delegate, from `/home/chexxor/Git/Durian-Pi`; read the suite result before anything else):
 
 ```bash
-git merge-tree --write-tree main refs/heads/item-4966                      # expect a tree sha, exit 0
-node scripts/land.mjs item-4966 --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite   # operator grant; --suite would
-                                                                                   # refuse on main's 4 pre-existing reds
-git -C /home/chexxor/Git/durian-dev/seatroot merge --ff-only main          # LAND, THEN re-point the root, then wake
-node scripts/suite.mjs --jobs 8; echo "exit=$?"                            # expect the same 4 reds; prove pre-existing
-DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status    # re-read attention afterwards
+node scripts/test.mjs --red --all --json          # fast red list; compare against this session's baseline
+git -C /home/chexxor/Git/durian-dev/seatroot merge --ff-only main   # rule 11: land, THEN re-point, THEN wake
+DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_LOCAL_CONTEXT=160000 \
+  DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status   # a bare `status` RESUMES sessions
 ```
 
 **Blocker:** the verifier slot is loaded at **8192** (`--ctx-size 8192 --parallel 4`) against a declared
 `DURIG_VERIFIER_CONTEXT 24576` — LM Studio restores `8192×4` on relaunch — so `qa`/`qa2`/`auditor`/`advocate`/
 `designer` wakes die on the provider, not on their own work. `lead` cannot park **#4974** (`not yours to revise`) and
-the delegate must not touch queue rows, so **#4974 stays queued against a 400-returning server** until either the
-operator resizes the slot or `pm`/`impl` (#4982) moves it. Second blocker: the broker has been down since
+the delegate must not touch queue rows, so **#4974 stays queued against a 400-returning server** until the operator
+resizes the slot or `pm`/`impl` (#4982) moves it. Second blocker: the broker has been down since
 `2026-10-30T04:55:33Z`, so every delivery is a `send` = a second-owner writer; serialize them.
 
-## What moved while the last pointer slept (`impl`, ~2 h, measured by this session)
+## What moved while the last pointer slept (`impl` ~2 h, then this delegate session — all measured)
 
-* Branch **`refs/heads/item-4966` @ `605ebf07`**, five commits (`44e9a86d` re-cut: `instructionsFile` resolver +
-  `prompts/<seat>.md` + rig JSON span + `cli.mjs` + the demos the split breaks · `64029957` persona prose names no
-  shell tool · `bcf0d9dc` `apply-commit-discipline` must not re-inline · `48ed6476` resolver demo · `605ebf07`
-  FEATURES row). Worktree `/home/chexxor/Git/Durian-Pi/item-4966` clean, unlocked. Nothing was merged or pushed.
-* Currency at measurement: `git merge-base --is-ancestor main refs/heads/item-4966` **exit 0**, ahead=5 behind=0
-  against `main = 238ff91d`. Ref trap: bare `item-4966` is ambiguous (a directory of that name exists) — use
-  `refs/heads/<name>`. `merge-tree` after the delegate's docs commits: **exit 0**, tree `76ca662e`.
-* **Delegate first-pass, THIN dependency set** (80 `node_modules` entries, no `vendor/pi-main` in that worktree):
-  `instruction-files` (plain and `DURIG_PREMIGRATION_REF=main`), `seat-instruction-encoding`, `commit-model`,
-  `commit-discipline-personas` → all **exit 0**. Not the verifier leg; name the artifact set with every exit code
-  (#4939).
-* **`main` carries four pre-existing suite reds** (impl proved them on a pristine `git archive main`; the delegate
-  reproduced two): `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` — both because the pointer file
-  lost its `## NEXT SESSION` heading when D186 re-cut it (this pointer restores it) — plus
-  `demo/deepinfra-catalog.test.mjs` and `demo/local-model-pointer.test.mjs`, which are machine-config.
+* **#4966 LANDED**: `main` = `986a9e37`; `refs/heads/item-4966` @ `605ebf07` (five commits, from `wip/seat-prompt-files`,
+  which stays as provenance) is an ancestor of `main`. Sequence evidence: pre-merge `merge-tree` exit 0 (tree
+  `6cbfbb98`), land exit 0 with the store lock reserved (`held 1/1`, `liveHolders 0`), scratch cleaned, worktree/branch
+  inventories unchanged, **no push** (`origin/main` still `eea4effb`, 60+ behind). Ref trap: bare `item-4966` is
+  ambiguous (a directory of that name exists) — use `refs/heads/<name>`.
+* **The landing was NOT regression-checked by the tool**: `--changed-suite` **refused to advance main** — 129/242 derived
+  tests ran in the scratch and `demo/clockin-digest.test.mjs` failed THERE for an instrument reason, not a content one:
+  `scripts/clockin.mjs` runs `git rev-list --count main..(no branch)`, i.e. it derives landing debt from the **current
+  branch name**, which is `(no branch)` in a detached worktree. **That is a fourth instrument defect** and needs its own
+  `devtools` row (#4977/#4978/#4979 cover the other three). Landing then proceeded on the documented default path, and
+  the tool's own report says to run the suite on `main` separately — which is what this session did.
+* **Two of `main`'s four suite reds were fixed by this session** (the pointer file is delegate-owned):
+  `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` had been red on `main` since D186's re-cut because
+  `docs/NEXT.md` lost its `## NEXT SESSION` heading and its **in-section** link to `docs/NEXT-ARCHIVE.md` (the digest
+  extracts the pointer by line range, so an HTML comment above the section does not count). Both **PASS** now. Remaining
+  known reds: `demo/deepinfra-catalog.test.mjs`, `demo/local-model-pointer.test.mjs` (machine/network).
+* **Roster placement repaired**: `impl` had been persisted at `/home/chexxor/Git/Durian-Pi/item-4966`, `scribe` at
+  `/item-4967`. The bare documented repair printed `refreshed: <all 12 seats>` and **changed nothing** —
+  `seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT` (`cli.mjs:679`/`:794`) and `rig.selfdev.json` names **no**
+  `cwd`, so without the env var the field is omitted from the write (**#4979**). With it set all 12 seats persist
+  `/home/chexxor/Git/durian-dev/seatroot`, proven by the `--dry-run` "no drift" plus the bare-name worktree inventory
+  diff — not by the command's own report. `up` does not enforce the F12 guard (only `send`/`run`/`worktree`/`complete`
+  pass `enforceSeatRoot: true`), which is why it can re-point at all. The `item-4966` / `item-4967` worktrees are still
+  at the repo root but **registered**, so they are not `scripts/land.mjs`'s stray gate; `lead` ruled **do not route
+  deletion** — both branches are live artifacts; `docs/runbooks/leaked-worktrees.md` is the procedure (it flagged one
+  residue for that procedure: `item-4955`'s `.probe-cli`).
+* **Delegate first-pass on the artifact, THIN dependency set** (80 `node_modules` entries, no `vendor/pi-main`): the
+  five #4966 demos passed at `605ebf07` in that worktree, and `demo/seatguard.test.mjs` + `demo/seattools.test.mjs` +
+  `src/shellregistry.mjs` (`bash`, `degraded:false`) passed at `238ff91d` in the full 187-package tree.
 
 ## The operator's dials (all measured 2026-11-01, Linux)
 
@@ -89,13 +103,13 @@ is the procedure (it flagged one residue for that procedure: `item-4955`'s `.pro
 
 ## Rig state, re-measured 2026-11-01T18:4xZ — re-read, do not trust
 
-`main` = `refs/heads/seatroot/linux` (the delegate's docs commits are landed locally and the root fast-forwarded after
-each; **not pushed** — `origin/main` = `eea4effb`, 60+ commits behind, no push grant). Store `selfdev.sqlite`
-**448,110,592 B, no `-wal`, no `genlock`**; `cli.mjs status` exits 0 with empty stderr, so D187's storage error did not
+`main` = `refs/heads/seatroot/linux` = **`986a9e37`** (the landing and the delegate's docs commits are landed locally;
+**not pushed** — `origin/main` = `eea4effb`, 60+ commits behind, no push grant). Store `selfdev.sqlite`
+**448,335,872 B, no `-wal`, no `genlock`**; `cli.mjs status` exits 0 with empty stderr, so D187's storage error did not
 recur and no repair was shown necessary. Rows **4,976** before `lead`'s turn (+8 minted); non-terminal 406 = `held 328 /
 queued 58 / deferred 17 / claimed 3`. Claimed: `scribe` **#4967** (worktree clean, **0 commits ahead, nothing
-committed** — the arm was cut by the 8192 output cap: **re-arm (#4980), do not reset**), `impl` **#4955**, `qa`
-**#4890**. `attention`: `pm` deferred(2)+idle(4); `impl` deferred(13)+idle(16); `qa` idle(3); `lead` idle(10);
+committed** — the arm was cut by the 8192-token summarization budget: **re-arm (#4980), do not reset**), `impl`
+**#4955**, `qa` **#4890**. `attention`: `pm` deferred(2)+idle(4); `impl` deferred(13)+idle(16); `qa` idle(3); `lead` idle(10);
 `scribe` idle(2); `devtools` deferred(1)+idle(14); `auditor` **last_run_failed** (Jinja alternation 500 — that refusal
 belongs to the **verifier** engine, not the local strata seats); `security` idle(4); `qa2` deferred(1)+idle(2).
 Send gate (`tools/seat-turn-shape.mjs`, 0.73 s): **ADMISSIBLE = `impl`, `qa`, `lead`, `qa2`**; counted projection ends
@@ -130,6 +144,9 @@ GPU1 23,047/24,576 MiB; verifier on GPU0 12,618/16,376 MiB). `git worktree list`
   `up --refresh --dry-run` never previews removals; scratch inside a worktree dies with it; `pgrep -f "cli.mjs send"`
   matches your own `bash -c` line; do not `&&`-chain a probe whose output you then verify.
 - **A cheap clock-in read exists and was not used:** `scripts/clockin.mjs` (D126) prints POINTER / RIG / QUEUE / GIT /
-  RUNBOOKS / PROVIDER / READ MAP / COST in one budgeted pass — measured 6,936 B, exit 0, and it extracts the pointer by
-  line range, which is why the pointer must keep its `## NEXT SESSION` heading AND name `docs/NEXT-ARCHIVE.md` *inside*
-  that section. Run it before hand-assembling six instrument calls.
+  RUNBOOKS / PROVIDER / READ MAP / COST in one budgeted pass — measured 6,936 B, exit 0 at the root, and it extracts the
+  pointer **by line range**, which is why the pointer must keep its `## NEXT SESSION` heading AND name
+  `docs/NEXT-ARCHIVE.md` *inside* that section. Run it before hand-assembling six instrument calls. **But it is broken
+  in a detached worktree**: it computes landing debt as `git rev-list --count main..$(branch)`, and the branch is
+  `(no branch)` there, so the script throws `git rev-list --count main..(no branch)` — which is what made
+  `demo/clockin-digest.test.mjs` fail inside `scripts/land.mjs`'s scratch and block a `--changed-suite` landing.
