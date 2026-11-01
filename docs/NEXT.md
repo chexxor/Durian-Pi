@@ -44,7 +44,7 @@ the delegate must not touch queue rows, so **#4974 stays queued against a 400-re
 resizes the slot or `pm`/`impl` (#4982) moves it. Second blocker: the broker has been down since
 `2026-10-30T04:55:33Z`, so every delivery is a `send` = a second-owner writer; serialize them.
 
-**Deferred rows audited, answers proposed, awaiting the operator:** all **17** `deferred` rows (every one
+**Deferred rows audited, answers APPROVED, dispatch UNDER WAY (2026-11-01):** all **17** `deferred` rows (every one
 `deferredTo: "human"`) were read from a `cli.mjs queue` dump and audited against today's tree; the proposal document is
 `.spike/fix-20261101c/deferred-answers.md` (gitignored — promote it if it must survive a machine move). The shape of
 the answer set: **5 re-cuts** of work that was reviewed, reported DONE and then lost only from `refs/heads/` — it
@@ -56,6 +56,26 @@ reproduce); **5 that only need a CLOSE** because measurement answered them (#481
 numbers, #4813 the notice-is-a-third-thing finding, #4815 landed-by-content, #4805 cancelled-duplicate with survivor
 #4136). Delivery is `send`-only — `cli.mjs` has no operator queue verb — so `impl` (ADMISSIBLE) can take one batched
 brief, `qa2` (ADMISSIBLE) its own, and `pm`/`devtools` need a `resume` pass plus a shape re-check first (both AT RISK).
+The operator approved all of it ("I approve those re-cuts" / "Approved" ×3 / "D1" for the resume-first route). What the
+dispatch actually did: `cli.mjs resume` reported **`found: 0`** — the AT RISK seats are not resumable submissions, they
+are transcript-shaped, so D1 changed nothing. `qa2` send `#278316` **died with the strict Jinja alternation 500** ("After
+the optional system message, conversations should begin with a user message") even though `tools/seat-turn-shape.mjs`
+rated it ADMISSIBLE — its engine is the **`verifier`** role, and that template validates the whole conversation start,
+not the last turn. `cli.mjs reset qa2 --dry-run` → `{"wouldReset":true,"writes":0}` is the read-only look at the fix;
+the reset itself is HELD for the operator (D118: a blind reset destroyed in-flight work — though `qa2` holds no claimed
+row). `lead` was briefed twice: the first turn reported verbs and the queue stayed **4,984**; a second, shorter send that
+cited the measured count produced **4,986 rows, queued 64 → 66** — the two `devtools` rows for the `clockin.mjs`
+detached-worktree defect and the missing row-scoped queue read.
+
+```bash
+# 1. confirm the dispatch, bounded and cheap (1.1 s): expect 4986 rows, queued 66
+DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --store selfdev.sqlite
+# 2. read-only look at the alternation-500 fix before anyone asks for a reset
+DURIG_NO_SERVE=1 DURIG_DB=./selfdev.sqlite node cli.mjs reset qa2 --dry-run
+# 3. the qa verify leg for the landed persona split (needs the operator's context risk-accept, or fix the engine first)
+DURIG_NO_SERVE=1 DURIG_DB=./selfdev.sqlite node cli.mjs send qa "$(cat .spike/fix-20261101c/qa-4974-verify.md)"
+```
+The briefs are gitignored: `.spike/fix-20261101c/{deferred-answers,impl-deferred-batch,devtools-deferred-batch,pm-deferred-batch,qa2-4814,lead-rows-and-rulings,lead-mint2,qa-4974-verify}.md` — promote `deferred-answers.md` if it must survive a machine move.
 
 ## What moved while the last pointer slept (`impl` ~2 h, then this delegate session — all measured)
 
