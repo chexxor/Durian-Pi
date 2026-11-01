@@ -120,8 +120,8 @@ const deferredByHolder = legacy("deferred", {
 	],
 });
 check(
-	"deferred by its holder → stage stays ACTIVE (F1)",
-	effectiveStage(deferredByHolder) === "active",
+	"deferred by its holder → stage is DEFERRED (#4789, lead ruling item 3)",
+	effectiveStage(deferredByHolder) === "deferred",
 	effectiveStage(deferredByHolder),
 );
 check(
@@ -150,9 +150,15 @@ const escalated = legacy("deferred", {
 	],
 });
 check(
-	"a supervisor escalation of a never-claimed row → stage stays OPEN (F1)",
-	effectiveStage(escalated) === "open",
+	"a supervisor escalation of a never-claimed row → stage is DEFERRED too (#4789)",
+	effectiveStage(escalated) === "deferred",
 	effectiveStage(escalated),
+);
+check(
+	"…and WHO parked it rides the block, not the stage: holder = impl, escalation = supervisor",
+	effectiveBlock(deferredByHolder)?.resolver === "human" &&
+		effectiveBlock(deferredByHolder)?.payload?.deferredTo === "human" &&
+		effectiveBlock(escalated)?.resolver === "human",
 );
 check("the escalated row is blocked", effectiveBlock(escalated)?.reason === "question");
 
@@ -173,13 +179,25 @@ const authoredActiveBlocked = {
 	stage: "active",
 	block: { reason: "question", resolver: "human" },
 };
+// #4789: this pair is no longer representable. `active` means a live owner is working the item, and a
+// row parked on an unanswered question is not that. (W) REFUSES it instead of mapping it, so a writer
+// cannot author the shape that made a parked row read as a running one. The LEGACY half stays total
+// (advocate CR-1) — this refusal is only on AUTHORED state.
+let refused = "";
+try {
+	effectiveStage(authoredActiveBlocked);
+} catch (e) {
+	refused = e.message;
+}
 check(
-	"an authored ACTIVE+blocked row is representable (F1)",
-	effectiveStage(authoredActiveBlocked) === "active",
+	"an authored ACTIVE+blocked row is REFUSED by (W), not mapped (#4789)",
+	refused.includes('stage "active" admits block === null'),
+	refused || "no throw — active+block is still representable",
 );
 check(
-	"…and it renders as the familiar `deferred`",
-	legacyStatus(authoredActiveBlocked) === "deferred",
+	"…and the same park authored as `deferred` IS representable and renders `deferred`",
+	effectiveStage({ ...authoredActiveBlocked, stage: "deferred" }) === "deferred" &&
+		legacyStatus({ ...authoredActiveBlocked, stage: "deferred" }) === "deferred",
 );
 const authoredOpenBlocked = {
 	id: 4,

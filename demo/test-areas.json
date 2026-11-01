@@ -37,6 +37,7 @@
    "demo/peekqueue.test.mjs",
    "demo/persistence.test.mjs",
    "demo/primer.test.mjs",
+   "demo/queue-lifecycle-deferred-stage.test.mjs",
    "demo/queue-lifecycle-m1.test.mjs",
    "demo/queue-lifecycle-m1a.test.mjs",
    "demo/race.test.mjs",

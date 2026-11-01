@@ -58,23 +58,35 @@ That is false for two live populations: a holder that defers its own claimed ite
 and an escalated-but-unclaimed item is `open` + `block`. Claimability is no longer asserted in the
 invariant because it depends on the seat (`requires`, used at `src/rig.mjs:393`, is not persisted — F1).
 
+> **AMENDED — #4789, lead's ruling item 3.** The conclusion above is withdrawn; the diagnosis is not. The
+> two live populations are real, but the vocabulary they needed was a fourth **stage**, not a block bolted
+> onto `active`. Shipping F1's version put a row parked on an unanswered question in the SAME stage as a
+> running item, and the stage is the axis §8/`#2951` derive `waiting`/`workable` from — so the axes read
+> "a live owner is on this" about a row nobody may claim and that an answer must wake. Lead's words: it
+> "makes a deferred item look claimable, so a seat could claim work whose blocking question is
+> unanswered." So (W) now admits `active` **only with `block === null`**, and both parkings are stage
+> `deferred` (who parked it rides `block.resolver`/`payload`, not the stage). Measured consequence of the
+> old shape, in the demo: the escalated row also rendered the view **`held`**, and this table's own rows
+> give `held` and `deferred` OPPOSITE wake semantics (`no` vs "answer wakes the target") — the old mapping
+> parked an answer-wakes row in the never-wakes view. Proof: `demo/queue-lifecycle-deferred-stage.test.mjs`.
+
 ## 2. Two orthogonal axes
 
 | Axis | Values | Meaning |
 |---|---|---|
-| `stage` | `open` · `active` · `closed` | where the item is in the workflow |
+| `stage` | `open` · `active` · `deferred` · `closed` | where the item is in the workflow (`deferred` added by #4789) |
 | `block` | `null` · `{…}` (§3) | why it is not progressing — only while not `closed` |
 | `outcome` | `done` · `cancelled` | set iff `stage: closed` (terminal, WORK-ITEM-SCHEMA §2) |
 
-Legacy view mapping — the four familiar states survive as **views**, and `deferred` no longer forces a
-stage:
+Legacy view mapping — the four familiar states survive as **views**, and `deferred` is now a stage of
+its own (#4789) rather than a view forced out of `active`/`open`:
 
 | Legacy status | New shape | Claimable? | Wakes? |
 |---|---|---|---|
 | `queued` | `stage: open`, `block: null` | yes (if `workable`) | yes |
 | `held` | `stage: open`, `block: {…}` | no | no |
 | `claimed` | `stage: active`, `block: null` | n/a | (running) |
-| `deferred` | **stage unchanged** (`active` if the holder deferred; `open` if the supervisor escalated an unclaimed row), `block: {reason:"question", …}` | no | answer wakes the target via the QUESTION enqueue (§4.1) |
+| `deferred` | **stage `deferred`** (who parked it is `block.resolver`/`payload.deferredTo`, not the stage), `block: {reason:"question", …}` | no | answer wakes the target via the QUESTION enqueue (§4.1) |
 
 `claimable` = `workable(item, seat)`, a function of `stage`, `block`, and the seat's capabilities — not
 a field.
@@ -250,7 +262,8 @@ that fails when `"held"`/`"deferred"` appear outside the mapping module.
    surface exists.
 2. **Read both.** One mapping for one stored status: legacy `held` → `block:{source:"legacy",
    reason:"backlog"|"manual", resolver:"pm"|<item.to>, reviewBy:null|far-out}`; legacy `deferred` →
-   `block:{reason:"question", payload:{deferredTo,question}}`, **stage unchanged**.
+   `block:{reason:"question", payload:{deferredTo,question}}`, **stage `deferred`** (#4789 — was "stage
+   unchanged", which is what made the row read as claimable-adjacent).
 3. **Backfill lazily, by a human, never by script.** When a row is re-touched, convert its *prose* gate
    into a `block.note` (prose) — **never** into `blockedBy` (architect F2). A human may promote a note to a
    declared constraint. A `dependency` may only be written by the declaration path.
