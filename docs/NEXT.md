@@ -126,7 +126,8 @@ is the procedure (it flagged one residue for that procedure: `item-4955`'s `.pro
 
 ## Rig state, re-measured 2026-11-01T18:4xZ — re-read, do not trust
 
-`main` = `refs/heads/seatroot/linux` = **`67855c77`** (the landing and the delegate's docs commits are landed locally;
+`main` = `refs/heads/seatroot/linux` = **`aa0faca2`** (the landing merge `986a9e37` plus the delegate's docs commits are
+landed locally;
 **not pushed** — `origin/main` = `eea4effb`, 60+ commits behind, no push grant). Store `selfdev.sqlite`
 **448,335,872 B, no `-wal`, no `genlock`**; `cli.mjs status` exits 0 with empty stderr, so D187's storage error did not
 recur and no repair was shown necessary. Rows **4,976** before `lead`'s turn (+8 minted); non-terminal 406 = `held 328 /

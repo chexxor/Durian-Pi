@@ -1277,7 +1277,8 @@ every exit code, per #4939.
   carry "current item", a `#NNN`, a command matching `node cli\.mjs`, and a `**Blocker:**` line) and because the link to
   `docs/NEXT-ARCHIVE.md` had been demoted to an HTML comment **above** the section — `scripts/clockin.mjs` extracts the
   pointer **by line range**, so it must be inside it. Both PASS after this session; cap is `wc -l <= 199`
-  (`docs/NEXT.md` is 152). Corroboration for the cheap gate: `scripts/suite.mjs --jobs 8` = **242 demos in 52 s wall**
+  (`docs/NEXT.md` is 175 `wc -l` / 176 counted **at `main` = `aa0faca2`**). Corroboration for the cheap gate:
+  `scripts/suite.mjs --jobs 8` = **242 demos in 52 s wall**
   on this 16-core host (runbook item 12 measured 240 in 47.8 s) — the full gate is affordable, so prefer it over a
   partial one when a landing is at stake.
 - **`scripts/clockin.mjs` is the clock-in read this session skipped.** One budgeted pass prints POINTER / RIG / QUEUE /
@@ -1302,3 +1303,7 @@ every exit code, per #4939.
   (`node cli.mjs bogus` prints the full usage list). Triaging 17 deferred rows cost one 22 MB dump plus a filter script
   (`.spike/fix-20261101c/{queue.json,deferred.mjs}`). A `queue --id <id>[,<id>…]` filter would make this class ~20×
   cheaper — worth a row at `lead`/`pm`.
+- **Any line/byte count you write into `docs/NEXT.md` goes false the moment you edit `docs/NEXT.md`.** This session
+  quoted "162 lines" in a pointer, then grew the pointer to 175 (`wc -l`) / 176 (`split("\n")`), so the number that was
+  meant to prove a cap was being met had itself been invalidated by the edit that recorded it. Name the sha with the
+  count (`175 wc -l / 176 counted at main = aa0faca2`), and re-run `wc -l` after the last edit rather than before it.
