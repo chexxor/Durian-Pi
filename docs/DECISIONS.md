@@ -7639,3 +7639,64 @@ implemented by me; **#4968** `lead→impl` (217's push-refusal never asserted th
 a shell outside the registry, gated behind #4966 so it starts green), F3→#4923, F4→#4968, F5→#4969, F6→#2055/#2056.
 D186.4's `send`-deprecation notice was carried to `lead` in the same round trip and was **not** minted — the notice
 names `intent.mjs`, which needs a resident broker, and no entry point says so.
+
+## D187 (2026-11-01 overnight, Linux, `Alex-Desktop-Win10`): the D186.1 do-not-send gate was a false diagnosis — the seats died of a summarization output budget, and the field that says so was never printed
+
+**What was falsified, and by what.** D186.1 above ("the do-not-send predicate is the counted projection's LAST entry")
+was a correlation, not a mechanism. The mechanism is recorded in the store in the `submissions` column `detail`: `pm`
+subs 275488/275424, `impl` 277348/276834, `lead` 277352 and `scribe` 277515 all read **"Compaction failed:
+Summarization hit the token limit; the summary is incomplete"**, which
+`vendor/pi-main/packages/durable/src/harness/compaction.ts:363` raises when the **summarizer call** ends
+`stopReason: "length"`. Direct probe of this rig's seat model on `:47831` returned **HTTP 200 for two consecutive
+`user` turns** (64 prompt tokens), so the strict alternation rule does NOT gate the seat model; it gates the verifier
+engine, verbatim in `auditor` sub 276042 (`Jinja Exception: After the optional system message, conversation roles must
+alternate user and assistant ro…`). The `AT RISK` verdict is a finding about strict templates, not a send gate here —
+which is why `scribe` 11, `devtools` 7, `security` 5 and `auditor` 11 completed rows while flagged.
+
+**The arithmetic that actually binds (product defect, not operator error).** `compaction.ts:148` sets the summarization
+output budget to `Math.min(Math.floor(0.8 * policy.reserveTokens), model.maxTokens)`; default policy
+`harness/agent.ts:29-30` is `reserveTokens 16384`, `keepRecentTokens 20000` (so 13,107), and a local seat's
+`model.maxTokens` is `src/providers/local.mjs:76` → `DURIG_LOCAL_MAX_TOKENS ?? **8192**`, a key `durig.config.json`
+does not set. A seat whose window has grown to ~100–150k therefore cannot summarize its prefix in 8192 tokens, so
+compaction always fails and the seat is un-sendable until an outside `reset` writes a boundary. The same 8192 cap cut
+`scribe`'s #4967 arm mid-write with `stopReason: "length"` and nothing committed. Four seats died this way in one
+night; it is a liveness failure and a data-loss path.
+
+**Why the earlier ceiling theory was wrong, and what the stopgap does.** I inferred declared-window (200000) versus
+served ceiling (`--max-context 204800`, from
+`/home/chexxor/.strata/data/native-instances/982e2f99-b185-4dfd-a19d-8eb77fad89fb.json`) was binding. Measurement
+refuted it: after `durig.config.json` `DURIG_LOCAL_CONTEXT` was lowered **200000 → 160000** (operator-granted
+stopgap; note `durig.config.json` is **gitignored** at `.gitignore:8`, so read the file or
+`node tools/broker-serve.mjs --status`, not git), `scribe` still failed at 0.944 of the new window. The stopgap moves
+*when* compaction fires; it does not make it succeed. Revert-or-keep is an operator call; the real levers are the
+summary output budget, the `reserveTokens`/`keepRecentTokens` pair, chunked summarization, or refusing compaction and
+re-anchoring — ruled on by `architect` in **#4970**, build gated behind it in **#4973**.
+
+**The repair that worked, and the boundary I was missing.** Four `reset`s fired under the operator's grant — `lead`
+277390, `impl` 277443 (+handoff), `pm` 277511 (+handoff), `scribe` 277526 (+handoff). Every one cleared
+`last_run_failed`, left the durable transcript intact, and `lead` then ran twice with `settledStatus: done` (consumed
+26,254 and 44,534 = 0.278 of the new window). A reset leaves the window at exactly 1 message whose counted projection
+is `[user]` — which by D186.1's rule would be "do not send", and the send worked. That is the second, independent
+refutation of D186.1.
+
+**Two delegate errors worth recording as traps.** (1) I ran **two `cli.mjs send` harnesses concurrently** (`impl` +
+`scribe`); each `send` opens a full writing harness — the CLI says so on every call — and the `impl` one died with
+`Session failed after a storage error; close and reopen it`, the `store-corruption-recovery.md` symptom. No
+`unreadable pi.live` appeared on `status` stderr, `-wal` stayed 49,472 B, no `genlock.*` existed, so no repair was run;
+**one store writer at a time** is the rule, or run the broker and deliver with `intent.mjs`. (2) `cli.mjs resume`,
+invited by the rig's own `admitted_not_started` notice, reported `action: "run-cancelled"` and **cancelled `impl`'s
+in-flight run on #4966** (`last_run_failed: aborted`) — the same `resume`-aborts-in-flight cycle
+`store-corruption-recovery.md` already names as the leading candidate for orphaning a `pi.live`. The staged work
+survived in `item-4966`.
+
+**What the team did with it (verified in the store, not from prose).** `lead`, re-armed, re-scoped **#4967** to the
+corrected premise (`revised 2026-11-01T00:01:50Z`; `scribe` claimed it 00:23:36Z) and minted **#4970**
+(`architect`, feature, queued — the compaction seam ruling), **#4971** (`impl`, held — print the `detail` column in
+`status`, with cause classes), **#4972** (`impl`, held — the prompt advertises `Bash, Read, Edit…` while the callable
+inventory for `caps=[decide,adjudicate]` carries only queue verbs, which is what made `lead` write tool-call markup
+into its text turn), and **#4973** (`impl`, held, `blockedBy=[4970]`). I sent `lead` a follow-up to re-scope #4970 and
+#4973 onto the 8192-token budget rather than the 204800 ceiling.
+
+**Standing constraints this session:** no push (61 commits ahead of `origin/main`, still unpushed); nothing landed —
+`item-4931` is still 2 ahead / 20 behind `main` and the granted landing fires only through #4966; the withheld
+`-D item-4898` condition is still unmet.
