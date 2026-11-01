@@ -1299,10 +1299,28 @@ every exit code, per #4939.
 - **"The content is already in main" needs a line-by-line probe, not a grep.** I first reported #4801's runbook change
   as landed because one grep matched; the honest probe (`git show <sha> -- <file> | grep '^+'` → compare each added line
   against `git show main:<file>`) returned **9 of 9 MISSING**. Run the loop, print `missing_lines=N`.
+- **A single grep over a file is not a content probe.** The delegate read "add this paragraph to the runbook" as already
+  landed because a keyword matched; the honest probe is line-by-line and returned **9 of 9 added lines missing**:
+  `git show <sha> -- <file> | grep '^+'` → test each added line against `git show main:<file>`, print `missing_lines=N`.
+  Same discipline for a whole branch: `git diff --stat main..<ref>` + a per-line probe, never one keyword grep.
 - **There is no row-scoped queue read.** `cli.mjs queue` is **21,927,512 B**; there is no `show`/`item`/`--id` verb
   (`node cli.mjs bogus` prints the full usage list). Triaging 17 deferred rows cost one 22 MB dump plus a filter script
   (`.spike/fix-20261101c/{queue.json,deferred.mjs}`). A `queue --id <id>[,<id>…]` filter would make this class ~20×
   cheaper — worth a row at `lead`/`pm`.
+- **A brief that names a hazard can eat the turn you meant it to spend on work, and one `send` is one turn.** The `impl`
+  batch brief (7 KB, 11 rows) said "one store writer at a time — the delegate will not send while you run"; impl spent
+  part of the turn hashing `selfdev.sqlite` across 8 s to confirm no writer was live, and
+  `timeout 1800 node cli.mjs send impl …` was **cut at 30 min with no settle JSON and 0 commits**, having only managed
+  `#4789 deferred → claimed` plus a worktree of scratch files. Two rules: state hazards as settled measurements with the
+  evidence line rather than as things to verify, and budget **one row-set per send** — `send` blocks until the turn
+  settles, so a long brief is a guaranteed cut.
+- **`tools/seat-turn-shape.mjs` ADMISSIBLE is necessary, not sufficient.** `qa2` rated ADMISSIBLE (window ends
+  `assistant`) and its send still died with the strict Jinja alternation 500 (entry `#278316`, verbatim in
+  `cli.mjs log qa2`), because that template requires the conversation to begin with a `user` message after the system
+  block — a window whose *start* is an assistant message (post-compaction) is refused even when its end is legal. The
+  seat's **engine role** decides the template: `qa`/`qa2` are `verifier`-role and strict; the strata/`local` engine is
+  the tolerant one. `cli.mjs reset <seat> --dry-run` → `{"wouldReset":true,"writes":0}` shows read-only whether a reset
+  boundary would clear it.
 - **Any line/byte count you write into `docs/NEXT.md` goes false the moment you edit `docs/NEXT.md`.** This session
   quoted "162 lines" in a pointer, then grew the pointer to 175 (`wc -l`) / 176 (`split("\n")`), so the number that was
   meant to prove a cap was being met had itself been invalidated by the edit that recorded it. Name the sha with the

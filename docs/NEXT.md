@@ -68,7 +68,7 @@ cited the measured count produced **4,986 rows, queued 64 → 66** — the two `
 detached-worktree defect and the missing row-scoped queue read.
 
 ```bash
-**IN FLIGHT at clock-out:** the `impl` deferred-batch send started 20:52:10Z as pid 1168126 (timeout 1800 s); by 21:08 it had claimed one formerly-deferred row (deferred 17→16, claimed 3→4) and cut worktree+branch `item-4789` (refs 10→11, worktrees 9→10) without landing to `main` yet. If you start while it is alive, DO NOT write the store — check `pgrep -af "cli.mjs (send|run|resume)"` first.
+**OUTCOME of the in-flight `impl` send (pid 1168126, started 20:52:10Z, `timeout 1800`):** it was CUT at 21:24:42Z with **no JSON settle emitted** and **0 commits** on `refs/heads/item-4789` (worktree holds only `.gate-main.txt`, `.sts*.txt` scratch). What it did achieve: `#4789` moved `deferred → claimed` (deferred 17→16, claimed 3→4). Its last log entries show it spending the turn hashing `selfdev.sqlite` over 8 s to check whether a writer was live — i.e. **a brief that names a hazard can consume the turn verifying the hazard**; state it as a settled measurement instead. No writer is alive now (`pgrep -af "cli.mjs (send|run|resume)"` empty, no `-wal`). The remaining 16 deferred rows and `#4789` are UNVERIFIED and still need seat turns, one row-set per send, not one 7 KB brief.
 
 # 1. confirm the dispatch, bounded and cheap (1.1 s): expect 4986 rows, queued 66
 DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --store selfdev.sqlite
