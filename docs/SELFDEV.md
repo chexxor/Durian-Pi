@@ -1446,3 +1446,46 @@ every exit code, per #4939.
   seat engine (strata pid 345372) holds **14,770 MiB on the A4000 and 20,712 MiB on the 3090 at once** (`/v1/models` →
   `gpus:[0,1]`). "The free card can fit it" was false on both cards — and `probe-preflight.mjs` said GO on memory in the same minute.
 
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-02 evening, D192 — every number measured in this session, Linux `chexxor@ThinkStation-P3`, kernel 6.17.5-100.fc42, node v24.22.1)
+
+**What cost wall-clock, and the shortcut for next time.** Two landings + the full-suite verify + the new-red investigation ≈
+55 min. The parts worth shortening:
+
+- **Read the reds before you read the pointer.** `node scripts/test.mjs --all --jobs 8` is **44.0 s** (245 files; ~37 s at
+  `--jobs 4`). The pointer claimed 2 reds with a cause; reality was 2 reds and a *different* cause. Run the suite once at
+  session start and route from its output, not from the pointer's cause line. A seat's gate is the **derived** subset, not the
+  full suite: `node tools/what-to-test.mjs --no-scan --paths=<changed files>` (1.7 s) tells you which of the HEAD reds the seat
+  actually inherits — at `8ced6cfb` that was 3 of 9, at `ae151408` 1 of 9.
+- **`cli.mjs log` is a context sink: ~50 KB per turn** because it embeds thinking/tool blobs. A one-file reader over
+  `log <seat> <n> --json` that prints kind, tool calls, ts, duration, tokens and `stopReason` is ~3 KB per turn and cost ~15
+  lines to write (`.spike/delegate-20261102/logcompact.mjs`, promotion asked as **#5022**). Same shape for the queue: one
+  `queue --json` redirect + `.spike/delegate-20261102/rows.mjs <file> [nonterminal|grep <re>]` (13 s + 1 s) instead of
+  `queue --help` (22,111,408 B) or eight greps.
+- **`send` is fire-and-forget but not instant.** A `send` to an awake seat returns only after the seat's whole turn ends —
+  `lead`'s reply took **95 min** (three attempts: two `Model stopped generating without finishing a response`, the third
+  `Error: 400: context window exceeded`, the reply finally arriving in the **log**, not in `message read`). Budget for it and
+  re-read with `log lead 3` rather than re-sending.
+
+**Traps found here, each with its fix site.**
+
+1. **`genlock` sees no seat generation on the `send` path** (`src/broker.mjs:1761` wraps slots; `cli.mjs:1311` wraps fetch
+   only), so `land.mjs`'s `liveHolders: 0` guard reported an empty rig beside a live 95-minute writer. **Land anyway is not
+   the lesson — the lesson is that `land.md`'s "the lock is what makes it safe" is broker-only.** #5020.
+2. **A read-write open of a SQLite store mutates the file when the WAL is non-empty** (`src/readapi.mjs:40` →
+   `src/sidecar.mjs:115`), which made `demo/seat-turn-shape.test.mjs:292` green-or-red on the WAL's accident. Probe the
+   sidecars (`ls -la selfdev.sqlite*`) before trusting any file-hash immutability assertion. #5019.
+3. **`cli.mjs worktree` writes `.git/worktrees/<name>/` before its symlink gate refuses** (exit 1 on
+   `junction/symlink detected at undefined/anthropic-ai-sdk`, #5001), so the name stays `already registered` — but do **not**
+   delete anything by hand: `git worktree prune` (stale-registration-only, and only after the `worktree list --porcelain` /
+   `branch --list` / `ls .spike | wc -l` inventory of `runbooks/workspace-move.md`) restored 14/14/0 both times.
+   `complete_work`'s own cleanup refuses for the same `undefined`-root reason (`src/repair.mjs:343-353`), which is how
+   `item-4985`, `item-4995`, `item-5013` became orphans for `pm`'s #5004 pass.
+4. **Provider health reads are four different questions and two tools collapse them.** `broker-serve --status` printed
+   `provider-local-completion-failed: timeout after 20s` for an endpoint answering `/v1/models` in 5 ms (Strata busy);
+   `clockin.mjs` printed `local endpoint: DOWN (fetch failed)` from a hardcoded `:8080` (#4999). The one that decides is
+   `cli.mjs config` + `curl -s -o /dev/null -w '%{http_code} %{time_total}s' $URL/models`. #5021 asks for the four-state
+   vocabulary in the tool.
+5. **A key in the environment is not a spend grant, and `/v1/models` would not tell you if the key were wrong** — keyed and
+   unkeyed responses were byte-identical. `gate.mjs --plan` is the free first arm (exit 0, no request); the paid arm needs the
+   cap that does not exist yet (#5015).

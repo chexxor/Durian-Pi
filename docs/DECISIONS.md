@@ -7873,3 +7873,73 @@ The three real filters are ctx ≥ 128k (against a declared `DURIG_VERIFIER_CONT
 unfixed), tool-calling (the five verifier seats carry no `tools` restriction, so a verify leg runs the seat loop), and a
 bounding system message (D166). The delegate chose no model and loaded nothing; the shortlist and the reasoning are in
 `docs/NEXT.md` §7.
+
+## D192 — Landing the two keystone substrate fixes at a red-at-HEAD gate, and what the landing itself exposed (delegate, 2026-11-02T20:3xZ, Linux `chexxor@ThinkStation-P3`, kernel 6.17.5-100.fc42, node v24.22.1)
+
+Executed the operator's 2026-11-02T03:11Z "attempt to fix the substrate" order through the team: `item-4995` and `item-5013`
+**landed** (`main` `8ced6cfb → ae151408`), four rows registered with `lead` by brief (not by hand), the DeepInfra **free** arm
+run and the **paid** arm refused, nothing pushed, no verifier model loaded.
+
+**(1) The pointer's cause was wrong, and the row body would have inherited it.** `NEXT.md` §1 attributed the
+`deepinfra-catalog` red to a missing `DEEPINFRA_API_KEY`. The measured failure at `8ced6cfb` is
+`fallback catalog must resolve verifier/mistralai/ministral-3-14b-reasoning — Error: no_model`: `demo/deepinfra-catalog.test.mjs:82`
+(`resolvable()`) exempts the `local/` prefix and has no exemption for `verifier/`, so it is red for **every** value with or
+without a key (it has been red since D166). *The rule, restated with a second datum:* before a cause goes into a durable
+artifact — a pointer, a marker, a queue body — run it. A wrong cause in a row body becomes the rig's memory of the defect, and
+the next session's gate decision is built on it.
+
+**(2) "Red at HEAD" is not "the gate is red" — the derived selection is per-path, so the baseline has to be re-cut after every
+landing.** At `8ced6cfb` the full suite was 2/245, but a seat on the substrate paths drew a **9-test** derived gate carrying
+**3** failures (`tools/what-to-test.mjs --no-scan --paths=src/broker.mjs,…` → 9 guards: broker 7, docs 1, rig 1). After the
+two landings the same full run is **244/245 in 44.0 s (`--jobs 8`)** and the derived set over the substrate paths is one red
+shorter. `lead` ruled on its 20:14Z turn that **#4997's seed must drop the landed members** — carrying landed fixes in a
+baseline is how a red set stops meaning anything — and that **#5019 lands before #4997's baseline is frozen**, or the baseline
+freezes a live defect as a standing exemption, which is the failure #4997 exists to prevent. Coverage stays a count: the gate
+that ran for these landings was **6/245** derived tests, not the full suite.
+
+**(3) `genlock`'s `liveHolders: 0` is not evidence about live generation on this rig.** `scripts/land.mjs:201` reads the
+`<db>.genlock.<i>` slot files (`src/genlock.mjs:109`), and `runLiveHolders` refuses at ≥1. During the second landing the probe
+found **0 slots** while a `cli.mjs send`-hosted `devtools` turn was generating (pid 47541, request
+`delegate-20261102-landings-registrations`, 95 min wall): `src/broker.mjs` acquires provider slots around generation
+(`src/broker.mjs:1761` — `genlock.mjs:7` says so in its own header) and `cli.mjs:1311` wraps only *fetch* slots; the `send`
+path wraps nothing for generation, so the slot file appears and disappears within the turn. `land.md`'s "the lock is what
+makes it safe" is therefore true of the **broker** path only, and a green merge on this rig is currently luck about file
+layout — `runMerge` (`src/git.mjs:535`) runs `git merge --no-ff` in a throwaway `git worktree add --detach`, so no
+`index.lock` is ever held where the `send`-hosted seat works. Registered as **#5020 → impl**: the fix is the non-broker path
+taking the same slot; a `status` read that surfaces "a seat is generating with no slot" is the second half and may accept but
+never decide.
+
+**(4) A conditionally-red member is the same silencer class as a moving-ref anti-vacuity control, so "flaky" is banned as a
+label.** `demo/seat-turn-shape.test.mjs:292` hashes the live `selfdev.sqlite`, runs `readSeatShapes`, and re-hashes
+("the read must not modify …"). Reproduced A/B at `ae151408` on **private copies** of the live store (source copy and control
+byte-identical, 7,618,564 B; run 1 FAILED, control copy green, 12 ms): the WAL sidecar was non-empty (`-wal` 4,120,032 B,
+`-shm` 32,768 B), and opening the db read-write — `src/readapi.mjs:40` → `src/sidecar.mjs:115` (`openWithSchemas` returns the
+handle; `:49` `db.close()`), `src/sidecar.mjs:86-93` — replays/truncates the WAL, changing the main file's bytes. The member
+has been **green only while the WAL happened to be empty**, and the broker holds a WAL while it is up. Registered as
+**#5019**, and `lead` put the fix in **product** (a read-only open in `src/readapi.mjs`) rather than in the demo cluster, with
+the demo forced to **construct** a non-empty WAL instead of hoping for one — the demo complaining that a read mutated the
+store is *right*.
+
+**(5) `#5001` fired live twice more, and the delegate still did not hand-clean.** Both `complete_work` calls refused their
+cleanup step with `refusing to remove worktree …: junction/symlink detected at undefined/anthropic-ai-sdk`
+(`src/repair.mjs:343-353` passes `undefined` into `checkForSymlinks`, whose `path.join(root, …)` then prefixes the first
+component with the cwd). Three worktrees are now orphaned — `item-4985`, `item-4995`, `item-5013` (the latter two are
+landed-and-merged, so their refs are disposition material, not live work). The delegate ran `git worktree prune` only where the
+registration was stale from a **refused create** (`cli.mjs worktree` writes `.git/worktrees/<name>/` before the symlink gate
+returns 1, or the next `worktree`/`remove` fails with `already registered`), and handed the rest to `pm`'s orphan pass on
+**#5004** with inventory-before-removal per `runbooks/leaked-worktrees.md`. A third "clean up the leaks" row is how the queue
+got to 5,018 rows.
+
+**(6) A key in the environment does not authorise spend; the cap is still prose, and that ordering is now a product seam.**
+`DEEPINFRA_API_KEY` arrived env-only (`cli.mjs config` → `set`; `durig.config.json` untouched, and it stays out — `#4991`
+landed gitignoring it). The delegate ran only the **free** arm (`tools/model-probes/gate.mjs … --plan`, exit 0, no request
+issued) and declined the `--replicate`/paid arm, because `docs/SELFDEV.md` §0 permits paid models only "with hard caps and the
+cost recorded — D147/D166" and `grep -nE "SPEND|BUDGET|CAP_|MAX_SPEND" src/config.mjs cli.mjs` still returns nothing. `lead`
+released **#5015** to `architect` on exactly that ground: with no cap and no ledger, a metered provider becomes the **shipped
+default** (`DURIG_PROVIDER=deepinfra`, `DURIG_MODEL=zai-org/GLM-5.3-Flash`), and the 12-seats-all-name-a-model fact is an
+observation about this hour, not a protection — any `#4826`-class reset or `up --refresh` slip (#4979) inherits it instead of
+erroring. Free measurements worth keeping: live `/v1/models` returns **173** models (116,968 B) and is **byte-identical keyed
+and unkeyed**, so a wrong key would not show up there; the curated 16-entry fallback omits `openai/gpt-oss-20b`,
+`openai/gpt-oss-120b`, `google/gemma-4-26B-A4B-it` and `mistralai/ministral-3-14b-reasoning`; and priced on this rig's own verifier prompt
+shape the shipped default is **$0.00983/turn, 4.7× the cheapest credible candidate** — so the shortlist goes through
+`gate.mjs` with clean controls and k≥3, not through the price column.
