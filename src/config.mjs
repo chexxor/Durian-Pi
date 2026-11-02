@@ -130,6 +130,18 @@ export const CONFIG_KEYS = [
 	"DURIG_STRANDED_MS",
 	"DURIG_CONTEXT_WINDOW",
 	"DURIG_SEAT_ROOT",
+	// The compaction policy surface (#4887, registered by the #4931 re-cut). Measured, not assumed:
+	// nothing in `src/` or `cli.mjs` consumes this array - there is NO unknown-key rule at load time -
+	// so `CONFIG_KEYS` is the DECLARED inventory of what a config file may set, and the demos are what
+	// enforce it (demo/local-provider.test.mjs:75, demo/second-local-provider.test.mjs:146, and now
+	// demo/config.test.mjs). Leaving these five out of the inventory while the environment path read them
+	// is the drift #2114 already named: one setting, two sources, and nothing to notice the gap. This is
+	// CONFORMANCE, not runtime: the values already reach `Harness.open` either way.
+	"DURIG_COMPACTION_ENABLED",
+	"DURIG_COMPACTION_MODEL_OVERRIDES",
+	"DURIG_COMPACTION_RESERVE_TOKENS",
+	"DURIG_COMPACTION_KEEP_RECENT_TOKENS",
+	"DURIG_COMPACTION_BACKGROUND_TOKENS",
 	"DEEPINFRA_API_KEY",
 ];
 
@@ -322,6 +334,142 @@ export function declaredContextWindow(config, modelKey = null) {
 }
 
 /**
+ * The compaction POLICY from configuration, or `{}` to leave pi-durable's own defaults in force.
+ *
+ * WHY THIS EXISTS, measured on this rig (ROADMAP 217-adjacent operator row #4898, operator-
+ * authorized): durian-pi set NO compaction policy at all, so every seat ran pi-durable's built-in
+ * defaults - `reserveTokens 16384 / keepRecentTokens 20000 / backgroundTokens 32768`. On the verifier
+ * class (declared window 24,576) blocking can fire only above ~20,100 input tokens, `selectCut`
+ * refuses a cut until 20,000 tokens have accumulated, and the summary then KEEPS those newest 20,000
+ * anyway. Measured on seat qa: a turn went out at input 17,445; crossing the selection budget wrote
+ * a real `pi.compaction` entry (275457); the NEXT turn returned input 20,109, output 1,
+ * `stopReason=length` with an EMPTY reply (275459). So the failure is not "auto-compaction can never
+ * fire" - it fires too late to leave room to answer. `compact pm --dry-run` (task 275491) and
+ * `compact qa2 --dry-run` (task 275492, at only 18,453 of 24,576) both reported "no compaction entry
+ * was written", which is the same policy seen from the reporting side.
+ *
+ * NO SECOND MECHANISM. pi-durable already layers a per-model `modelOverrides` entry over the
+ * harness-wide policy field by field (`compactionPolicy(settings, model)`, cited by lead at
+ * compaction.js:194-201), so this function only BUILDS that object; durian-pi decides nothing about
+ * when or how compaction runs. UNVERIFIED IN THIS TREE: the item-4898 worktree has no `node_modules`
+ * of its own and reads are confined to the worktree, so I could not re-read the pinned file to confirm
+ * the key spellings - they are taken from lead's measured body. `demo/config.test.mjs` therefore pins
+ * the call site AND the shape durian-pi sends, so a wrong spelling surfaces as a RED demo rather than
+ * as a value that is set and silently ignored.
+ *
+ * Keys, in the existing one-vocabulary `DURIG_*` spelling (no second name to learn):
+ *   DURIG_COMPACTION_ENABLED               "1"/"0" - the only key allowed to TURN COMPACTION OFF
+ *   DURIG_COMPACTION_RESERVE_TOKENS        headroom to keep free for the answer
+ *   DURIG_COMPACTION_KEEP_RECENT_TOKENS    what the summary keeps verbatim (the selection budget)
+ *   DURIG_COMPACTION_BACKGROUND_TOKENS     the blocking threshold input
+ *   DURIG_COMPACTION_MODEL_OVERRIDES       JSON: "provider/modelId" -> any of the fields above
+ * The verifier class (window 24,576) wants `4096 / 8192 / 8192`; the local class (window 200,000) is
+ * LEFT ON THE DEFAULTS on purpose - 20,000 kept tokens is affordable there, and inventing a number for
+ * a class that was never measured is how a policy becomes folklore.
+ *
+ * @param {Record<string, unknown>} [config]
+ * @returns {{compaction?: object, modelOverrides?: Record<string, object>}}
+ */
+export function compactionSettings(config) {
+	const out = {};
+	const policy = {};
+	const enabled = config?.DURIG_COMPACTION_ENABLED;
+	if (enabled !== undefined && enabled !== null && enabled !== "") {
+		const text = String(enabled).trim().toLowerCase();
+		if (["1", "true", "yes", "on"].includes(text)) policy.enabled = true;
+		else if (["0", "false", "no", "off"].includes(text)) policy.enabled = false;
+		// Fail loudly: an operator who wrote the key meant to change something, and a silently
+		// ignored spelling is exactly the defect this row is fixing.
+		else throw new Error(`DURIG_COMPACTION_ENABLED must be a boolean (1/0, true/false), got: ${enabled}`);
+	}
+	for (const key of ["DURIG_COMPACTION_RESERVE_TOKENS", "DURIG_COMPACTION_KEEP_RECENT_TOKENS", "DURIG_COMPACTION_BACKGROUND_TOKENS"]) {
+		const raw = config?.[key];
+		if (raw === undefined || raw === null || raw === "") continue;
+		const n = Number(raw);
+		// Same rule as `streamSettings`: a value that is set and quietly ignored is worse than one
+		// never set, and a token budget that lands at 0 or NaN would compact every turn or none.
+		if (!Number.isFinite(n) || n <= 0) {
+			throw new Error(`${key} must be a positive number of tokens, got: ${raw}`);
+		}
+		policy[{"DURIG_COMPACTION_RESERVE_TOKENS": "reserveTokens", "DURIG_COMPACTION_KEEP_RECENT_TOKENS": "keepRecentTokens", "DURIG_COMPACTION_BACKGROUND_TOKENS": "backgroundTokens"}[key]] = n;
+	}
+	if (Object.keys(policy).length > 0) out.compaction = policy;
+	const overrides = config?.DURIG_COMPACTION_MODEL_OVERRIDES;
+	if (overrides !== undefined && overrides !== null && overrides !== "") {
+		// Accepted as an object (a config FILE may hold one) or as a JSON string (an ENVIRONMENT
+		// variable cannot hold a structure, and every other structured setting here is JSON too).
+		let map = overrides;
+		if (typeof overrides === "string") {
+			try {
+				map = JSON.parse(overrides);
+			} catch {
+				throw new Error(`DURIG_COMPACTION_MODEL_OVERRIDES must be JSON, got: ${overrides}`);
+			}
+		}
+		if (!map || typeof map !== "object" || Array.isArray(map)) {
+			throw new Error(`DURIG_COMPACTION_MODEL_OVERRIDES must be an object keyed by "provider/modelId", got: ${JSON.stringify(overrides)}`);
+		}
+		const layered = {};
+		for (const [model, fields] of Object.entries(map)) {
+			if (!fields || typeof fields !== "object") {
+				throw new Error(`DURIG_COMPACTION_MODEL_OVERRIDES["${model}"] must be an object of policy fields, got: ${JSON.stringify(fields)}`);
+			}
+			const one = {};
+			if (fields.enabled !== undefined) one.enabled = Boolean(fields.enabled);
+			for (const field of ["reserveTokens", "keepRecentTokens", "backgroundTokens"]) {
+				if (fields[field] === undefined) continue;
+				const n = Number(fields[field]);
+				if (!Number.isFinite(n) || n <= 0) {
+					throw new Error(`DURIG_COMPACTION_MODEL_OVERRIDES["${model}"].${field} must be a positive number of tokens, got: ${fields[field]}`);
+				}
+				one[field] = n;
+			}
+			if (Object.keys(one).length > 0) layered[model] = one;
+		}
+		if (Object.keys(layered).length > 0) out.modelOverrides = layered;
+	}
+	// Nothing set means NO override, so pi-durable's documented defaults stand rather than a made-up
+	// durian-pi number - the same honesty rule as `streamSettings({})` returning `{}`.
+	return out;
+}
+
+/**
+ * Pure classification of ONE `compact` verb outcome into three states (the reporting half of #4898).
+ *
+ * The measured defect: this same verb reported "compact: no compaction entry was written" for BOTH a
+ * no-op (nothing was worth cutting) and a real failure (the summarizer call died), which misled four
+ * sessions - an operator cannot tell "the seat did not need it" from "the repair did not work", and a
+ * repair that silently does not work is how a seat gets reset instead of fixed. Exit codes are
+ * DISTINCT so a script can branch: COMPACTED 0, FAILED 1, NO-OP 2 (not an error, but nothing was
+ * done - the operator asked for a cut and the rig spent no model call to decline one).
+ *
+ * It also carries the ANSWER to "was there anything to cut?" next to the outcome, because that question
+ * is what makes a NO-OP self-explanatory: the selection gate is the accumulation budget, so
+ * `willCut` is `consumed >= keepRecentTokens` - the window is context, not the gate.
+ *
+ * `failureReason` is whatever the platform reported (never invented): when it is null the report says
+ * `unknown` rather than guessing a cause.
+ */
+export function compactionReport({ consumed = null, policy = {}, summaryEntry = null, failureReason = null }) {
+	const keep = policy.keepRecentTokens ?? null;
+	if (summaryEntry) {
+		return { state: "compacted", exitCode: 0, summaryEntryId: summaryEntry.id, consumed, keepRecentTokens: keep, willCut: null };
+	}
+	const willCut = Number.isFinite(consumed) && Number.isFinite(keep) ? consumed >= keep : null;
+	if (failureReason) {
+		return { state: "failed", exitCode: 1, reason: String(failureReason), consumed, keepRecentTokens: keep, willCut };
+	}
+	return {
+		state: "no-op",
+		exitCode: 2,
+		reason: "no compaction entry was written and no failure was reported",
+		consumed,
+		keepRecentTokens: keep,
+		willCut,
+	};
+}
+
+/**
  * Human/LLM-readable summary of the effective configuration, with secrets
  * reduced to a boolean so this is always safe to print or log.
  */
@@ -339,6 +487,15 @@ export function describeConfig({ config, source }) {
 		DURIG_STREAM_TIMEOUT_MS: config.DURIG_STREAM_TIMEOUT_MS ?? null,
 		// null means src/attention.mjs's STRANDED_ADMITTED_MS (30 s) stands.
 		DURIG_STRANDED_MS: config.DURIG_STRANDED_MS ?? null,
+		// The compaction policy (#4898), reported rather than left implicit: a seat's context failure
+		// is undiagnosable if the numbers that decided it are not printed anywhere. null = pi-durable's
+		// built-in default stands (16384 / 20000 / 32768), which on a 24,576-class window is the shape
+		// that let compaction fire too late to leave room to answer.
+		DURIG_COMPACTION_ENABLED: config.DURIG_COMPACTION_ENABLED ?? null,
+		DURIG_COMPACTION_RESERVE_TOKENS: config.DURIG_COMPACTION_RESERVE_TOKENS ?? null,
+		DURIG_COMPACTION_KEEP_RECENT_TOKENS: config.DURIG_COMPACTION_KEEP_RECENT_TOKENS ?? null,
+		DURIG_COMPACTION_BACKGROUND_TOKENS: config.DURIG_COMPACTION_BACKGROUND_TOKENS ?? null,
+		DURIG_COMPACTION_MODEL_OVERRIDES: config.DURIG_COMPACTION_MODEL_OVERRIDES ?? null,
 		DEEPINFRA_API_KEY: config.DEEPINFRA_API_KEY ? "set" : "unset",
 	};
 }
