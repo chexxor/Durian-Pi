@@ -231,3 +231,29 @@ test -f "$PWD/durig.config.json" && echo "config present" || echo "NO CONFIG IN 
 #    "settledReason":"no_model","reply":null}` in <20 s with zero tokens. Dispatch write verbs from a tree that has the
 #    file (the operator checkout or the approved seat root), and pin DURIG_LOCAL_CONTEXT explicitly when the two
 #    private copies disagree (160000 vs 200000 — row #4970 HALF B is the operator's).
+
+# 11. LANDING, WITHOUT LOSING THE SESSION TO THE GATE — measured 2026-11-02, Linux, `main` e2f85719 → c80bd7f0.
+#     The cheap reads first, all of them seconds:
+#       git merge-base --is-ancestor <branch-tip> main   # per branch: is it ALREADY on main? (4966, 4977 were)
+#       git log --oneline main..<branch>                  # what is actually unlanded (and is it a RE-CUT of another?)
+#       git diff --stat main...<branch>                   # two branches touching the same files = one is superseded debt
+#       git show main:<file> | grep -c <symbol>           # the CONTENT check: ancestry passes even if the block was lost
+#       node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 1.5 s: 70 of 89 LANDING rows already fully on main
+#     `scripts/land.mjs` counts **untracked** paths as a dirty tree, so an uncited file in `inputs/fetched/` blocks every
+#     landing (`?? inputs/fetched/strata-batching.md` blocked the first attempt). Move it to gitignored `.spike/`, do not
+#     `git stash`/`clean` (AGENTS.md non-negotiable), and name the move where the next session will read it.
+
+# 12. THE LANDING GATE IS NOT GREEN-ABLE TODAY — so buy the evidence back differently, and say which gate you ran.
+#     Measured: `--changed-suite` STOPPED twice on a clean landing. Causes, both environment, both proven by re-running
+#     ONE demo in a throwaway detached worktree (`cli.mjs worktree <path>`, then `git worktree remove <path>` — inventory
+#     back to 14):
+#       demo/clockin-digest.test.mjs:215 → `git rev-list --count main..(no branch)` in the DETACHED scratch (the #4985
+#         defect: land that class of fix BEFORE anything gated on it — landing order was load-bearing);
+#       demo/local-model-pointer.test.mjs:40 → needs the gitignored `durig.config.json`; GREEN with the four provider vars
+#         exported, so **export DURIG_LOCAL_BASE_URL/_MODEL + DURIG_VERIFIER_BASE_URL/_MODEL in the shell that runs the
+#         lander**;
+#       demo/deepinfra-catalog.test.mjs → no `DEEPINFRA_API_KEY` in this shell (`cli.mjs config` says `unset`).
+#     Then land ungated with the note `land.mjs` prints, and compare two FULL suite runs (50-58 s each, and never while a
+#     seat is writing): `node scripts/test.mjs --all --jobs 8 --json > before.json` before the landing, same after, and diff
+#     the `failed[]` arrays — 243/245 both sides was the evidence that nothing regressed. `main` red-at-HEAD (2 of 245) is
+#     why `--suite` cannot pass at all until a known-red baseline exists (minted 2026-11-02).

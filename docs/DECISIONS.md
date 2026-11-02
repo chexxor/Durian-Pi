@@ -7759,3 +7759,62 @@ operator holds that grant and the delegate flags the durability risk rather than
 (`selfdev.sqlite.broker.json` absent), and `tools/broker-serve.mjs --start` still refuses on the false shell verdict —
 which is why `#4977` was this session's chosen wake: it is the row that converts every future delivery from a
 second-owner `send` back into broker-delivered `intent.mjs`.
+
+## D190 (2026-11-02 morning, Linux, `Alex-Desktop-Win10`): the landing gate is the bottleneck once the model is not; a control pinned to `main` is a control that dies when you land
+
+**What was decided, and by whom.** The delegate put four questions to the operator (land which branches; wake which
+verifier; start the broker when; mint what). The operator answered "recommend answers… then accept them as the operator's
+and work on them", and separately reported **"Strata is now serving two as concurrency size"**. That ruling style —
+delegate proposes, operator adopts — is why the decisions below are recorded as operator rulings, not delegate habits, and
+why the broker start is still a grant the operator names.
+
+**Two landings, and the rule that made them checkable.** `item-4985` → merge `4c0d4810`; `item-4931` → merge `c80bd7f0`.
+The *why* of landing `item-4931` and **not** `item-4898`: git says they are the same work — `item-4931`'s subject is "re-cut
+of the compaction build (#4887/#4898) onto current main, unchanged in substance" and both branches touch exactly three files
+(`cli.mjs`, `demo/config.test.mjs`, `src/config.mjs`). A branch that is a re-cut is **superseded debt, not landing debt**, and
+closing it is `pm`'s verb. `item-4898` and `wip/seat-prompt-files` are now recorded that way. The content check that settled
+whether the landing meant anything: `git show main:src/config.mjs | grep -c DURIG_COMPACTION` = **24** after, **empty**
+before — ancestry alone would have passed on either branch.
+
+**A self-annihilating control (the durable lesson).** `demo/broker-serve-shell-availability.test.mjs:150` proves its own
+non-vacuity by asserting that `git show main:tools/broker-serve.mjs` FAILS the check the demo enforces. That is true right up
+to the moment the fix lands — then the demo is red forever, and it was the only red on `main` that was ours rather than the
+environment's (`node scripts/test.mjs --all --jobs 8`: 243/245, reds `broker-serve-shell-availability` +
+`deepinfra-catalog`, identical before and after both landings). **A failing-first control must be pinned to an immutable
+sha (or a recorded pin), never to a moving ref it expects to stay wrong.** The same trap in the opposite direction showed up
+as an ordering dependency: `demo/clockin-digest.test.mjs:215` runs `git rev-list --count main..(no branch)` inside the
+lander's **detached** scratch, so any landing gated on it fails until the `#4985` fix is on `main` — landing order was
+load-bearing, and the gate told us only because it runs in a detached tree.
+
+**Why the gate could not be satisfied at all, and what was done instead.** `main` is red at HEAD (2 of 245), so `--suite`
+and `--changed-suite` can never pass on this rig; the honest path was the one `land.mjs` itself prints — land ungated with an
+explicit no-regression-check note — and then buy the evidence back with a **full suite on `main` compared to a baseline
+taken before the landing** (53.4 s → 50.1 s, same red set). Two environment-caused blockers had to be proven environmental
+before that was defensible: (a) `demo/local-model-pointer.test.mjs:40` asserts a configured `local` provider, and the values
+live in the gitignored `durig.config.json`, so every scratch tree fails it — proven by A/B in one throwaway detached
+worktree (no config → the lander's exact red; same tree with the four `DURIG_LOCAL_*`/`DURIG_VERIFIER_*` vars exported →
+`LOCAL MODEL POINTER PASS (… pinned seats=12)`); (b) `deepinfra-catalog.test.mjs` needs a key this shell does not have
+(`cli.mjs config` prints `"DEEPINFRA_API_KEY": "unset"`). Minted as rows so the fix is the rig's, not this session's
+invention: a **known-red baseline** the gate diffs against, in the shape of the existing "a baseline is (test name, measured
+rate, tree)" precedent (#4600/#4605).
+
+**The verifier ruling, and the number that made it cheap.** The previous session's framing was "the verifier window is the
+blocker"; the measured blocker is that **there is no verifier host at all**: `ps` shows no LM Studio process, and strata pid
+345372 holds **14,770 MiB on the A4000 and 20,712 MiB on the 3090** (`gpus:[0,1]`, 48 GiB RSS), leaving 1,472 + 1,574 MiB
+free. So "load the one file that fits" would mean evicting the engine all seven author seats run on, for the model at **0/16
+clean controls**. Ruling: **keep the verifier provider dark**, and run verify legs the way `#4956`/`#4962` already did —
+**independent by seat/transcript/execution, and state that in the report** — with `tools/model-probes/gate.mjs` as the
+pre-condition for ever flipping a seat. This narrows D137 rather than overriding it: D137 forbids claiming cross-family
+independence without a gate; it never required paying to load a failing model.
+
+**Concurrency is now a rig lever, not a model wish.** The operator raised strata to concurrency 2, while `cli.mjs config`
+reports `DURIG_MAX_CONCURRENT_SEATS = "1"`. So the next start must set `DURIG_MAX_CONCURRENT_SEATS=2`, per the standing
+SELFDEV recipe (cap durig at the engine's slot count so seats queue in durig rather than inside the model). The start is
+**held one step** because six claimable rows (`qa` 3, `qa2` 2, `auditor` 1) point at the dead provider, and every failed wake
+deposits rows — `#4982` is the queued row that parks `#4974`. Sequencing a wake onto a dead provider is the same defect
+ROADMAP 226 prices; the era-attribution half of `channel-preflight` §5 is the instrument that shows it before you pay.
+
+**Housekeeping that was a real gate, recorded so nobody re-trips it:** `scripts/land.mjs` counts **untracked** paths as a
+dirty tree, and an uncited fetch sat in `inputs/fetched/` (`strata-batching.md`, sha256 `d1f7d558…`) — a directory whose own
+README says what a report does not cite does not belong there. It was moved to `.spike/inputs/` (kept on disk, named in
+`docs/NEXT.md`), not deleted.

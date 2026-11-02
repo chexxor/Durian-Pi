@@ -1417,3 +1417,32 @@ every exit code, per #4939.
   `JSON.parse(raw.slice(raw.indexOf("{")))`. The document's shape is `{ok, area, total, passed, failed[], timedOut[],
   jobs, slowest[], ms, coverage[]}` — `passed` is the count (do not flatten `slowest` and call it the pass count, which is
   how this session first mis-read 241 as 0).
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-02 morning — landing under a red-at-HEAD gate)
+
+- **Ask what a "not landed" branch IS before offering to land it.** Measured: `item-4898` (+1) and `item-4931` (+2) touch the
+  same three files and `item-4931`'s own subject says "re-cut of the compaction build (#4887/#4898) … unchanged in substance".
+  Landing both duplicates a change; the correct act is `git diff --stat main…<branch>` on both, then land one and hand the other
+  to `pm` as **superseded debt**. Same shape for `wip/seat-prompt-files` (its re-cut `#4966` is already in `main`).
+- **A failing-first demo that pins its control to `main` dies on its own landing.**
+  `demo/broker-serve-shell-availability.test.mjs:150` asserts `git show main:tools/broker-serve.mjs` FAILS the check it
+  enforces; once #4977 landed, that assertion is permanently red and is currently the only non-environment red on `main`.
+  When you write a non-vacuity control, pin it to an **immutable sha** (the branch's base), never to a ref you intend to move.
+  The mirror-image trap is ordering: `demo/clockin-digest.test.mjs:215` runs inside the lander's **detached** scratch, so it
+  fails on `git rev-list --count main..(no branch)` until the fix that resolves refs is on `main` — land that class of fix first.
+- **Export the four provider vars in the shell that runs `scripts/land.mjs`.** `demo/local-model-pointer.test.mjs:40` asserts a
+  configured `local`/`verifier` provider, and those values live in the gitignored `durig.config.json` — which no scratch worktree
+  has. Proven A/B in one throwaway detached worktree: config-less → the lander's exact red; same tree with
+  `DURIG_LOCAL_BASE_URL/_MODEL` + `DURIG_VERIFIER_BASE_URL/_MODEL` exported → PASS. Without them `--changed-suite` refuses clean
+  landings and you cannot tell environment from regression.
+- **When the gate cannot pass, land ungated with the note and buy the evidence back with two full suites.** `main` is red at HEAD
+  (2 of 245: `broker-serve-shell-availability`, `deepinfra-catalog`), so `--suite` fails for everyone. The check that actually
+  proves "no regression" is the **diff of the `failed[]` arrays** before and after (measured: identical, 243/245 both sides).
+  Never run either suite while a seat run is writing the store.
+- **`scripts/land.mjs` counts UNTRACKED paths as a dirty tree** (`dirtyPaths: ["inputs/fetched/strata-batching.md"]` → refused).
+  Move the stray into gitignored `.spike/` and name it in `docs/NEXT.md`; never `git stash`/`git clean` to satisfy it.
+- **A GPU reading must name the holder, not just the percentage.** `--query-gpu` said both cards were 91 %/94 % full; the sentence
+  that decides whether a second model can load at all came from `nvidia-smi --query-compute-apps=pid,gpu_name,used_memory`: the
+  seat engine (strata pid 345372) holds **14,770 MiB on the A4000 and 20,712 MiB on the 3090 at once** (`/v1/models` →
+  `gpus:[0,1]`). "The free card can fit it" was false on both cards — and `probe-preflight.mjs` said GO on memory in the same minute.
+
