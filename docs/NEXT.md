@@ -1,50 +1,49 @@
-## NEXT SESSION (2026-11-02T20:2xZ — D192, Linux: the two keystone substrate fixes are **ON `main`**; a **new** red-at-HEAD replaced it; the operator has put `DEEPINFRA_API_KEY` in the environment and the **paid** verifier arm is still unauthorised)
+## NEXT SESSION (2026-11-02T21:0xZ — D192, Linux: **three substrate fixes are ON `main` and the suite reads 245/245 — by WAL luck, not by fix**; the operator put `DEEPINFRA_API_KEY` in the environment and the **paid** verifier arm is still unauthorised)
 
-**Current item:** keep the substrate order, now re-cut by `lead`'s 20:14Z turn. `#4995` and `#5013` landed, so the derived
-gate over the substrate paths is two reds shorter; the order `lead` ruled is **#5019 (the new WAL red, §1b) BEFORE #4997's
-baseline is frozen** — freezing a live defect as a standing exemption is exactly the failure #4997 exists to prevent — and
-#4997's seed must **drop the two landed members** (244/245 proves they are gone). In parallel: **#4996**
-(config-hermeticity of `demo/local-model-pointer.test.mjs`), **#5020** (the missing generation lease on the non-broker path),
-**#5015** (now `queued` to `architect` — the spend-cap/cost-ledger seam, released by `lead`), and **#5007/#4993** which still
-need `pm`'s release. Second item unchanged: the operator's **DeepInfra backup verifier** (§7).
-**Next command:** `node scripts/clockin.mjs` (~5 s) then `DURIG_DB=./selfdev.sqlite node cli.mjs log lead 3` — `lead`'s turn
-at 19:12Z→20:14Z already answered `.spike/delegate-20261102/delegate-landings-and-registrations.md` (out at
-`.spike/delegate-20261102/send-lead-landings.out`; the reply is also saved at
-`.spike/delegate-20261102/lead-final.json`) and minted **#5019** (impl, the §1b red), **#5020** (impl, the §1c lease gap),
-**#5021** (devtools, the 20 s provider-probe vocabulary), **#5022** (devtools, ROADMAP 233 promotion of the two §1e probes),
-re-scoped **#4997** (sha256 `5e133981e8ca36f0`) and **#5015** (sha256 `51d4dc9b2dafc1fd`), and **released #5015** — if the
-operator wants it parked again, `pm` must do it: a sender cannot re-park its own row (#5007's asymmetry, demonstrated).
-**Blocker:** `main` is still **red at HEAD** (§1b: a seat touching `src/readapi.mjs` inherits it in a 9-test derived gate);
-the broker start is still refused by the two verifier BLOCKs (`tools/broker-serve.mjs --dry-run`); and the paid DeepInfra arm
-needs **two operator rulings** only the operator can give (§7). Earlier pointer blocks moved VERBATIM to
-`docs/NEXT-ARCHIVE.md` — keep that link inside the pointer's first ~15% of lines or `demo/clockin-digest.test.mjs:251` refuses
-landings in the scratch (that is how this session's first `item-4996` attempt came back exit 1).
+**Current item:** the order `lead` ruled at 20:14Z, now that **#4995, #5013 and #4996 have all landed**: **#5019 (the WAL red,
+§1b) must LAND before #4997's baseline is frozen** — freezing a live defect as a standing exemption is the failure #4997 exists
+to prevent — and #4997's seed must **drop the three landed members** (245/245 at `9ca6c755`) while **keeping the WAL member with
+its mechanism**. In parallel: **#5020** (the generation lease missing on the non-broker path), **#5021/#5022** (devtools),
+**#5015** (`queued` to `architect` — the spend-cap/cost-ledger seam, released by `lead`), and **#5007/#4993**, still needing
+`pm`'s release. Second item unchanged: the operator's **DeepInfra backup verifier** (§7).
+**Next command:** `node scripts/clockin.mjs` (~5 s), then `DURIG_DB=./selfdev.sqlite node cli.mjs status` plus one `queue
+--json` read (§1e) to see whether `impl` has claimed **#5019/#5020** — nothing else in the substrate order is reachable until it
+does. `lead`'s reply to the delegate brief is saved at `.spike/delegate-20261102/lead-final.json`: it minted #5019–#5022,
+re-scoped #4997 (sha256 `5e133981e8ca36f0`) and #5015 (`51d4dc9b2dafc1fd`), and **released #5015** itself — to park it again
+`pm` must act: a sender cannot re-park its own row (#5007's asymmetry, demonstrated).
+**Blocker:** `main` reads **245/245 only because the WAL happens to be empty** — §1b is unfixed and #5019 unclaimed, so a seat
+on `src/readapi.mjs` still inherits the member in a 9-test derived gate; the broker start is still refused by the two verifier
+BLOCKs (`tools/broker-serve.mjs --dry-run`); and the paid DeepInfra arm needs **two operator rulings** only the operator can
+give (§7). Earlier pointer blocks moved VERBATIM to `docs/NEXT-ARCHIVE.md` — keep that link inside the pointer's first ~15% of
+lines or `demo/clockin-digest.test.mjs:251` refuses landings in the scratch (§0a.3).
 
-### 0a. Two facts the delegate established by measurement, not by repeating a colleague — read before reusing tonight's red set
+### 0a. Three facts the delegate established by measurement, not by repeating a colleague — read before reusing tonight's red set
 
-1. **`main`'s red set at `ae151408` is `demo/seat-turn-shape.test.mjs` only** (244/245, `--jobs 8`, live tree with
-   `durig.config.json` present, 44.0 s). The two reds the last three sessions carried are **gone** — do not re-report them,
-   and do not carry them into #4997's baseline (`lead` ruled exactly that on its 20:14Z turn).
-2. **The one remaining red is conditional, and the condition is the store's WAL, not the code** (§1b). A run against a
-   private store copy with no other writer fails identically, so nobody may call it a regression from the landings.
+1. **`main` is GREEN at HEAD for the first time in this stretch: 245/245 at `9ca6c755` (42.6 s, `--jobs 8`, live tree).** That
+   is the §1b lottery, not a fix: `ls selfdev.sqlite*` at that moment shows **no `-wal` sidecar**, which is exactly the state
+   that lets `demo/seat-turn-shape.test.mjs` pass. Green here does **not** mean fixed — #4997's seed must still carry it.
+2. **The remaining red is conditional, and the condition is the store's WAL, not the code** (§1b). A run against a private
+   store copy with no other writer fails identically, so nobody may call it a regression from the landings.
+3. **A pointer edit can refuse a landing.** `scripts/land.mjs` is in the derived set of
+   `demo/clockin-digest.test.mjs`, and that test asserts the **live** pointer's first ~15% of lines mention
+   `docs/NEXT-ARCHIVE.md` (`:251`). Keep the archive link in the top block; the first `item-4996` attempt died on it (exit 1).
 
 ## 1. What moved THIS session (all verified, none pushed — the operator holds the push grant)
 
-- **`main` moved once: `8ced6cfb → ae151408`**, and it landed two things: `item-4995` (`e04ef32c`, merge `bbd6ef34`) and
-  `item-5013` (`13dfdf6e`, merge `ae151408`). `git log -1 --format=%p main` → `parents = bbd6ef34 13dfdf6e` (TWO parents = a
-  merge landed something). Ancestry: `git merge-base --is-ancestor` exit 0 for both shas. Content: `main` carries
-  `demo/fixtures/broker-serve-shell-pre-4977.txt` (64 lines), the moving-ref control is **gone** from the broker-serve demo
-  (grep count 0), and `isLocalProviderId` appears 4× in `demo/deepinfra-catalog.test.mjs`.
-  `git diff --name-only 8ced6cfb..main` = exactly those 3 files — which is what makes §1b provably NOT a regression.
+- **`main` moved three times: `8ced6cfb → ae151408 → 2a6422fa` (this pointer's own docs commit) `→ 9ca6c755`**, landing
+  `item-4995` (`e04ef32c`, merge `bbd6ef34`), `item-5013` (`13dfdf6e`, merge `ae151408`) and `item-4996` (`40583ac6`, merge
+  `9ca6c755`, gate `ran 9/245 — areas RAN [check, guard, toolchain, tui, worktree]`). Ancestry exit 0 for all three; `git log -1
+  --format=%p main` → two parents. Content proofs: the frozen fixture `broker-serve-shell-pre-4977.txt` (64 lines) is on `main`,
+  the moving-ref control grep = 0, `isLocalProviderId` 4× in the catalog demo, `SKIP` 3× in `demo/local-model-pointer.test.mjs`
+  — and the gate itself then reported `SKIP: no local provider is configured on this machine … skipped here, not passed`.
 - **Gate run:** `node scripts/land.mjs refs/heads/item-4995 refs/heads/item-5013 --db ./selfdev.sqlite --changed-suite`
   exit 0, `changed-suite: ran 6/245 derived test(s) — areas RAN [broker, docs, rig]`. `refs/heads/<name>` was needed because
   `item-<n>` is ambiguous (branch *and* directory): `git log --oneline -1 item-4995` → `fatal: ambiguous argument`.
-- **`origin/main` is still at `e2f85719`; `main` is 14 ahead** (one of them is this pointer's own `docs(delegate, D192)`
-  commit). Re-measure with `git rev-list --count origin/main..main`.
-- **Two landed items' worktrees are leaked on purpose** (not force-removed): `complete_work`'s cleanup refused with
-  `refusing to remove worktree …/item-4995: junction/symlink detected at undefined/anthropic-ai-sdk` — that is **`#5001`
-  firing live, twice** (`item-4995`, `item-5013`, both landed, both refs still pinned). Do not hand-clean; `docs/runbooks/
-  leaked-worktrees.md` forbids forcing, and the guard's own defect is registered.
+- **`origin/main` is still at `e2f85719`; `main` is 17 ahead.** Re-measure with `git rev-list --count origin/main..main`.
+- **Three landed items' worktrees are still registered and were NOT hand-cleaned**: `complete_work`'s cleanup refused for
+  `item-4995`/`item-5013` with `refusing to remove worktree …: junction/symlink detected at undefined/anthropic-ai-sdk` — that
+  is **`#5001` firing live** — and `item-4996`'s worktree outlived its landing too. All three refs are now landed, so they are
+  disposition material for `pm`'s #5004 pass, not live work; `docs/runbooks/leaked-worktrees.md` forbids forcing.
 
 ### 1b. THE NEW RED — `demo/seat-turn-shape.test.mjs:292` is red for any store with a non-empty WAL (A/B, mechanism named)
 
@@ -100,8 +99,7 @@ is the second half, never the guard.
 
 1. **Land `item-4985`-class fixes BEFORE anything gated on them.** The first `--changed-suite` attempt STOPPED with
    `demo/clockin-digest.test.mjs` failing in the **detached** landing scratch:
-   `Error: Command failed: git rev-list --count main..(no branch)` (`demo/clockin-digest.test.mjs:215`) — the #4985 defect.
-   Landing `item-4985` first cleared it; its own gate run was 10/10 green in a detached scratch.
+   `Error: Command failed: git rev-list --count main..(no branch)` — the #4985 defect; landing that branch first cleared it.
 2. **`demo/local-model-pointer.test.mjs` is non-hermetic** (`:40` needs the gitignored `durig.config.json`). Proven A/B in a
    throwaway detached worktree at `4c0d4810` (`cli.mjs worktree /home/chexxor/Git/durian-dev/scratch-4931`, removed after —
    worktree count back to 14): no config → the exact red the lander reported; same worktree with `DURIG_LOCAL_BASE_URL`

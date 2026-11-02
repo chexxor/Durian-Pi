@@ -7943,3 +7943,14 @@ and unkeyed**, so a wrong key would not show up there; the curated 16-entry fall
 `openai/gpt-oss-120b`, `google/gemma-4-26B-A4B-it` and `mistralai/ministral-3-14b-reasoning`; and priced on this rig's own verifier prompt
 shape the shipped default is **$0.00983/turn, 4.7× the cheapest credible candidate** — so the shortlist goes through
 `gate.mjs` with clean controls and k≥3, not through the price column.
+
+**(7) A third landing, a green suite, and what the green does *not* mean.** After the D192 pointer commit, `item-4996` landed
+too (`40583ac6`, merge `9ca6c755`; gate `ran 9/245 derived test(s) — areas RAN [check, guard, toolchain, tui, worktree]`, 9/9
+green), and the full suite on `main` came back **245/245 in 42.6 s — the first green-at-HEAD in this stretch**. That green is
+the §(4) mechanism showing its face: `ls selfdev.sqlite*` at that moment showed **no `-wal` sidecar**, the exact state that
+makes `demo/seat-turn-shape.test.mjs` pass. So the report says *green by WAL luck*, #4997's seed still carries the member, and
+**#5019 stays open until `src/readapi.mjs` opens read-only**. Also landed for free in that branch: `scripts/land.mjs` now
+reports a suite **SKIP** attributed to the tree instead of counting it as a pass — which matters because the fix for #4996 makes
+`demo/local-model-pointer.test.mjs` skip in a config-less scratch, and a silent skip is the opposite lie from a false red.
+*The rule:* after a landing, report the suite count **with the state of the store sidecars** beside it; a count without its
+condition is the "conditional red" defect wearing a green coat.

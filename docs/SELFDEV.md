@@ -1489,3 +1489,11 @@ every exit code, per #4939.
 5. **A key in the environment is not a spend grant, and `/v1/models` would not tell you if the key were wrong** — keyed and
    unkeyed responses were byte-identical. `gate.mjs --plan` is the free first arm (exit 0, no request); the paid arm needs the
    cap that does not exist yet (#5015).
+
+**6. A pointer edit can refuse someone else's landing (`demo/clockin-digest.test.mjs:251`, fired live 2026-11-02).** The
+landing gate's derived set for `scripts/land.mjs` includes `demo/clockin-digest.test.mjs`, and that test reads the **live**
+`docs/NEXT.md` and asserts the digest's POINTER section (its first ~15% of lines, `lines 1-30 of 198`) still contains
+`NEXT-ARCHIVE.md`. This session's first `item-4996` landing came back exit 1 on `AssertionError: the pointer still links its
+own archive` purely because a pointer rewrite had pushed the archive mention below line 30. **Keep the archive link in the
+pointer's top block**, and when a landing refuses on a docs assertion, read the failing test's assertion before touching the
+branch — the branch was fine (9/9 green after the pointer fix, `9ca6c755`).
