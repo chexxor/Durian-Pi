@@ -22,6 +22,7 @@
 //   node scripts/clockin.mjs --db <path>     # a specific store
 //   node scripts/clockin.mjs --json          # the sections as one JSON document
 //   node scripts/clockin.mjs --no-git        # skip the branch/worktree debt walk
+//   node scripts/clockin.mjs --base <ref>    # what to measure landing debt AGAINST (default: main)
 //   node scripts/clockin.mjs --no-runbooks   # skip the runbook staleness probe
 
 import { execFileSync } from "node:child_process";
@@ -205,7 +206,15 @@ export function renderDigest(s) {
 		.map((i) => `#${i.id} (${i.to}) ${String(i.subject || "").slice(0, 55)}`);
 	if (human.length) say(`deferred (awaiting the operator): ${human.join(" · ")}`);
 	if (s.git) {
-		say(`\n## GIT  refs=${s.git.refs} worktrees=${s.git.worktrees} unmerged=${s.git.debt.length}`);
+		const head = s.git.head ? `${s.git.head.state}${s.git.head.at ? `@${s.git.head.at}` : ""}` : "?";
+		const baseTag = s.git.baseSha
+			? `base=${s.git.base}@${s.git.baseSha.slice(0, 8)}`
+			: `base=${s.git.base} UNRESOLVED`;
+		say(
+			`\n## GIT  refs=${s.git.refs} worktrees=${s.git.worktrees === null ? "?" : s.git.worktrees} unmerged=${s.git.debt.length} ${baseTag} head=${head}${s.git.probeFailures ? ` rev-list-failures=${s.git.probeFailures}` : ""}`,
+		);
+		if (s.git.skipped) say(`RANGE NOT COMPUTED: ${s.git.skipped}`);
+		if (s.git.listError) say(`BRANCH LIST: ${s.git.listError}`);
 		if (s.git.debt.length) say(s.git.debt.join(" · "));
 	}
 	if (s.runbooks) {
@@ -237,18 +246,21 @@ function parseArgs(argv) {
 		json: false,
 		git: true,
 		runbooks: true,
+		base: "main",
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
 		if (a === "--db") opts.db = argv[++i];
+		else if (a === "--base") opts.base = argv[++i];
 		else if (a === "--json") opts.json = true;
 		else if (a === "--no-git") opts.git = false;
 		else if (a === "--no-runbooks") opts.runbooks = false;
 		else if (a === "--help" || a === "-h") {
 			console.log(
-				"usage: node scripts/clockin.mjs [--db <path>] [--json] [--no-git] [--no-runbooks]\n" +
+				"usage: node scripts/clockin.mjs [--db <path>] [--base <ref>] [--json] [--no-git] [--no-runbooks]\n" +
 					"Read-only cold-start digest: pointer, rig verdict, queue counts, broker liveness,\n" +
-					"unmerged-branch debt, runbook staleness, provider config, read map. Never row bodies.",
+					"unmerged-branch debt (against --base, default main; skipped with a reason if it cannot\n" +
+					"resolve), runbook staleness, provider config, read map. Never row bodies.",
 			);
 			process.exit(0);
 		} else {
@@ -282,24 +294,110 @@ function gitSafe(args) {
 	}).trim();
 }
 
-function branchDebt(db, items) {
-	const git = gitSafe;
-	const branches = git(["branch", "--format=%(refname:short)"])
-		.split("\n")
-		.filter((b) => b && b !== "main");
+/**
+ * Landing debt: which local branches carry commits the base ref does not, joined to their queue row's status.
+ *
+ * WHY THIS SHAPE, with the fatal that produced it (#4985, measured 2026-11-02). The first version listed
+ * branches with `git branch --format=%(refname:short)` and interpolated the NAME into a range. In a DETACHED
+ * worktree — which is exactly the tree `scripts/land.mjs --changed-suite` creates (`.land-scratch-<pid>` at
+ * land.mjs:483-497) — git 2.56.0 emits a literal `(no branch)` entry for the detached HEAD, so the digest ran
+ * `git rev-list --count main..(no branch)` → `fatal: ambiguous argument` → clockin exit 1 → the landing gate
+ * stopped mid-suite. Measured in a detached scratch worktree at `43e26dcc`:
+ *   `git branch --format='%(refname:short)'` → 15 lines, one of them `(no branch)`
+ *   `git rev-list --count 'main..(no branch)'` → exit 128
+ * Three rules come out of it, and the function is built to them:
+ *   1. the branch list comes from the REFS (`for-each-ref refs/heads/`), never from a listing that decorates
+ *      HEAD's state — a HEAD state is not a branch;
+ *   2. every operand of a git range is a RESOLVED sha, obtained in one listing call — no name ever reaches a
+ *      range, so no name can be unresolvable there;
+ *   3. when the BASE itself cannot be resolved (a clone whose base is not `main`), the section is SKIPPED and
+ *      SAYS so. A crash stops the landing gate; `unmerged=0` would be a lie. Both are worse than a stated skip.
+ *
+ * @param {object} o
+ * @param {Array<{id:string|number,status:string}>} [o.items]  queue rows, to join a branch to its row's status
+ * @param {string} [o.base="main"]                             named ref to measure debt against
+ * @param {(args:string[])=>string} [o.git]                    injectable git runner (the demo captures argv)
+ */
+export function branchDebt({ items = [], base = "main", git = gitSafe } = {}) {
+	const head = headState(git);
+	const baseSha = resolveRef(base, git);
+	// ONE call for every local branch: sha + short name, namespace-pinned to refs/heads/, so a detached HEAD
+	// cannot appear (it is not a ref under refs/heads/) and so every tip is already a sha.
+	let branches = [];
+	let listError = null;
+	try {
+		branches = git(["for-each-ref", "--format=%(objectname) %(refname:short)", "refs/heads/"])
+			.split("\n")
+			.map((line) => line.match(/^([0-9a-f]{40}) (.+)$/))
+			.filter(Boolean)
+			.map(([, sha, name]) => ({ sha, name }));
+	} catch (e) {
+		listError = `branch listing failed: ${e.message}`;
+	}
+	let worktrees = null;
+	try {
+		worktrees = git(["worktree", "list", "--porcelain"]).split("\n").filter((l) => l.startsWith("worktree ")).length;
+	} catch {
+		worktrees = null; // printed as `worktrees=?`; a listing failure must not kill the digest (#4985 rule 3)
+	}
 	const statusOf = new Map((items || []).map((i) => [String(i.id), i.status]));
 	const debt = [];
-	for (const b of branches.slice(0, 60)) {
-		const ahead = Number(git(["rev-list", "--count", `main..${b}`]));
-		if (!ahead) continue;
-		const id = (b.match(/(\d+)/) || [])[1];
-		debt.push(`${b} +${ahead} [#${id || "-"} ${statusOf.get(id) || "no-row"}]`);
+	let probeFailures = 0;
+	if (baseSha) {
+		for (const { sha, name } of branches.slice(0, 60)) {
+			if (name === base || sha === baseSha) continue;
+			let ahead = 0;
+			try {
+				ahead = Number(git(["rev-list", "--count", `${baseSha}..${sha}`]));
+			} catch {
+				probeFailures++; // one bad range is a row that reads `?`, not a digest that dies
+				continue;
+			}
+			if (!ahead) continue;
+			const id = (name.match(/(\d+)/) || [])[1];
+			debt.push(`${name} +${ahead} [#${id || "-"} ${statusOf.get(id) || "no-row"}]`);
+		}
 	}
 	return {
-		refs: branches.length + 1,
-		worktrees: git(["worktree", "list"]).split("\n").length,
+		base,
+		baseSha,
+		head,
+		refs: branches.length,
+		worktrees,
 		debt,
+		probeFailures,
+		listError,
+		skipped:
+			baseSha === null
+				? `the base ref "${base}" does not resolve to a commit in this tree — the unmerged range was NOT computed (pass --base <ref>)`
+				: null,
 	};
+}
+
+/** `git rev-parse --verify --quiet <ref>^{commit}`, or null. An unresolved ref must never reach a range. */
+function resolveRef(ref, git) {
+	if (!/^[A-Za-z0-9._/-]{1,200}$/.test(ref)) return null; // a name git would read as a pathspec/range is not a ref
+	try {
+		const sha = git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+		return /^[0-9a-f]{7,40}$/.test(sha) ? sha : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Is HEAD a branch here, or detached? A landing scratch is detached, and the digest should SAY which tree it measured. */
+function headState(git) {
+	try {
+		const name = git(["symbolic-ref", "-q", "--short", "HEAD"]);
+		if (name) return { state: "branch", at: name };
+	} catch {
+		/* detached (git exits 1 quietly) — fall through */
+	}
+	try {
+		return { state: "detached", at: git(["rev-parse", "--short", "HEAD"]) };
+	} catch {
+		return { state: "unknown", at: "?" };
+	}
 }
 
 async function probeLocal() {
@@ -332,7 +430,7 @@ export async function main(argv = process.argv.slice(2)) {
 	try {
 		marker = suiteMarker(
 			readFileSync(resolve(".spike/delegate/suite-marker.json"), "utf8"),
-			opts.git ? gitSafe(["rev-parse", "--short", "main"]) : null, // --no-git means "no git calls", so no staleness check either
+			opts.git ? gitSafe(["rev-parse", "--short", opts.base]) : null, // --no-git means "no git calls", so no staleness check either. #4985: the base is a NAMED ref the caller chose, not a hardcoded `main` — this call is inside try/catch, but a marker compared against the wrong ref is a stale-vs-fresh lie.
 		);
 	} catch {
 		marker = null;
@@ -344,7 +442,7 @@ export async function main(argv = process.argv.slice(2)) {
 		broker: brokerLiveness({ stateFile: `${db}.broker.json` }),
 		items: status.queueItems || [],
 		counts: queueCounts(status.queueItems),
-		git: opts.git ? branchDebt(db, status.queueItems) : null,
+		git: opts.git ? branchDebt({ items: status.queueItems, base: opts.base }) : null,
 		runbooks: opts.runbooks ? staleRunbooks({}) : null,
 		config: {
 			provider: config.DURIG_PROVIDER,
