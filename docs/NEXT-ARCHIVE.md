@@ -10147,3 +10147,32 @@ is worse than none.
 - **Native host only** (Linux here; D131). **`DURIG_DB` for the CLI**, never `DURIAN_PI_DB` (D103).
 - **Never dispatch a write verb from a claimed worktree** (§4), and **never run `doctor`/`resume` while a seat is running**
   (D187, re-measured this session).
+
+---
+
+**Cut from the live pointer 2026-11-02T09:35Z (delegate):** §4 “Measured state at clock-out (08:10Z, `main = c80bd7f0`)” moved VERBATIM below — those counts are stale by design, and the live file must stay under the 200-line pointer cap. Re-run instead: `node scripts/clockin.mjs`, `node tools/queue-drain-audit.mjs`, `node tools/broker-serve.mjs --status`.
+
+## 4. Measured state at clock-out (08:10Z, `main = c80bd7f0`) — re-read the cheap ones, they move
+
+- Queue (clockin, 5.5 s): **4,994 rows — 3,784 done / 795 cancelled / 329 held / 66 queued / 12 deferred / 8 claimed = 415
+  non-terminal**; 12 seats, 16 attention notices. `channel-preflight`: **66 claimable**, and per-seat
+  `impl 19, devtools 17, lead 11, scribe 4, security 4, qa 3, architect 3, qa2 2, pm 2, auditor 1`.
+- `tools/queue-drain-audit.mjs` (1.5 s): **70 of 89 non-terminal LANDING rows are already fully on `main`** (zero-build
+  closable), 70 orphan candidates, 12 rows whose gate prose cites no resolvable id. `#4799` is still `claimed` although its
+  work landed at `67aa0096`. `pm` owns every release/cancel.
+- Broker NOT resident; 1 unsettled submission (`devtools` `placed`, 5.8 h) that
+  `reconcileStrandedSubmissions` settles on pass 1 — "the wedge does NOT survive a restart". 2 intents have sat in the spool
+  since 2026-10-29.
+- Local engine **UP and completing** (`broker-serve`: `local: answers … local: completes`). `cli.mjs config` reports
+  **`DURIG_MAX_CONCURRENT_SEATS = "1"`** while the operator has raised strata to **concurrency 2** — start the broker with
+  `DURIG_MAX_CONCURRENT_SEATS=2` so seats queue in durig, not inside the model.
+- Still-false instrument reads, re-measured on post-landing `main` (all minted in the lead brief): `cli.mjs config` prints
+  14 keys and **not one `DURIG_LOCAL_*`/`DURIG_VERIFIER_*`**; `scripts/clockin.mjs` prints `local=NOT SET` and
+  `local endpoint: DOWN (fetch failed)` about a hardcoded `:8080`; `src/attention.mjs:435` still says "re-arm it with the
+  resume/doctor verb" and no re-arm path exists; `tools/channel-preflight.mjs:234` still defaults `programs = ["pwsh",
+  "powershell"]` and prints "NO SHELL CAN START HERE" while `broker-serve` prints `NOTE … bash CAN start on linux`
+  (**that one is already `#4992`, queued to impl — do not re-mint**).
+- Strata topology: **re-measure every session, 0.2 s** —
+  `nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv` then
+  `nvidia-smi --query-compute-apps=pid,gpu_name,used_memory --format=csv`. It has flipped twice in three days and it decides
+  whether any second model can load at all.

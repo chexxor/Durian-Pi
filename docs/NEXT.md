@@ -1,15 +1,32 @@
-## NEXT SESSION (2026-11-02T08:15Z — D190, Linux: `item-4985` and `item-4931` are LANDED; the broker start is the next grant, and it is held on six verifier-pointed rows)
+## NEXT SESSION (2026-11-02T09:30Z — D190 addendum, Linux: the operator directed **"attempt to fix the substrate"**; dispatched, and the measured answer is *yes, that is a problem* — the gate blocks it)
 
-**Current item:** `#4970` HALF A — the operator's broker `--start` decision. It is now the top of the stack because the
-row that blocked it (`#4977`'s false shell BLOCK) landed, and because `#4993` (gated on `#4985` being on `main`) is now
-**unblocked**. Second item: the six rows `lead` is minting right now from
-`.spike/delegate-20261102/lead-landing-gate-defects.md` (sent 08:04Z, `--request-id delegate-20261102-landinggate`, pid
-in `.spike/delegate-20261102/send-lead.pid`, reply at `.spike/delegate-20261102/send-lead.out`).
-**Next command:** `node cli.mjs log lead 20` — read that turn and confirm the six rows exist — then the operator's start:
-`DURIG_MAX_CONCURRENT_SEATS=2 node tools/broker-serve.mjs --start --db ./selfdev.sqlite --rig ./rig.selfdev.json --yes-pm-wakes --max-duration 3600`.
-**Blocker:** six claimable rows point at a provider with **no process behind it** — `qa` 3, `qa2` 2, `auditor` 1, and
-`tools/broker-serve.mjs --status` prints `BLOCK provider-DURIG_VERIFIER_-unreachable: http://127.0.0.1:1234/v1 … ECONNREFUSED`.
-Starting before those are parked burns six wakes and deposits rows for each.
+**Current item:** the substrate order, ahead of the broker. Reason, measured: `tools/what-to-test.mjs --no-scan
+--paths=src/rig.mjs,rig.selfdev.json,src/providers/deepinfra-models.ts` derives **93 guards**, and that set contains
+**three red demos** — `demo/broker-serve-shell-availability.test.mjs` (#4995), `demo/deepinfra-catalog.test.mjs`
+(**unregistered**, §0a), `demo/local-model-pointer.test.mjs` (#4996). With `main` red-at-HEAD, **the team cannot land its own
+substrate fixes**, so #4995 + the catalog guard + #4997 (no known-red baseline) are keystones, not comfort rows. Second
+item: the operator's **DeepInfra backup verifier** (§7) — cheap in dollars (~$0.003–$0.005 per verify turn) and currently
+unsafe in the substrate.
+**Next command:** `node cli.mjs log lead 12` — read the turn answering
+`.spike/delegate-20261102/lead-substrate-order-and-correction.md` (sent 09:25Z, out at
+`.spike/delegate-20261102/send-lead-substrate.out`): it asks `lead` to correct #4982's body, mint ONE catalog-guard row,
+release #5007, and close pm's #5008 question with the wake-gate measurement.
+**Blocker:** three red-at-HEAD demos sit inside the derived landing gate for exactly the paths this work must touch; and a
+paid verifier needs `DEEPINFRA_API_KEY` in the **environment** (never in `durig.config.json` — `src/config.mjs:31,106`
+documents a key that once leaked there) plus a spend cap and cost ledger **that do not exist in the code** (§7).
+
+### 0a. A claim the delegate got wrong, and where it spread — read this before reusing tonight's red set
+
+`demo/deepinfra-catalog.test.mjs` is **not** red because `DEEPINFRA_API_KEY` is unset. Measured, keyless:
+`AssertionError … seat "qa" names verifier/mistralai/ministral-3-14b-reasoning, which is not in the fallback catalog — it
+would resolve to no_model` at `demo/deepinfra-catalog.test.mjs:82`. Its `resolvable()` helper exempts the `local/` provider
+prefix ("a separately registered provider, not this catalog") but has **no exemption for `verifier/`**, so the guard is red
+for any value and therefore protects nothing — the silencer shape the rig's acceptance rules forbid. It has been red since
+the verifier pointer moved (D166, 2026-10-29). The wrong cause travelled into **`lead`'s #4982 body** and into the
+delegate's `docs/NEXT.md` + `.spike/delegate/suite-marker.json`, because the delegate repeated `lead`'s finding instead of
+running the demo. The suite's two failures are actually **three findings**: #4995, this one, and #4996 (which only fires
+non-hermetically).
+
 
 Older sessions live verbatim in `docs/NEXT-ARCHIVE.md` (this pointer's 2026-11-02T02:10Z predecessor was cut there at the
 tail, byte-identical, proof in this file's own cut note).
@@ -25,7 +42,7 @@ tail, byte-identical, proof in this file's own cut note).
 - **Full gate after both landings:** `node scripts/test.mjs --all --jobs 8` → **total 245, passed 243**, failed =
   `[demo/broker-serve-shell-availability.test.mjs, demo/deepinfra-catalog.test.mjs]` — byte-identical to the pre-landing
   baseline this session took at `e2f85719` (53.4 s then, 50.1 s after). **No regression.**
-- **`origin/main` is at `e2f85719`; `main` is 6 ahead.** Still no push grant — the operator pushed once (the 94-ahead
+- **`origin/main` is at `e2f85719`; `main` is 8 ahead.** Still no push grant — the operator pushed once (the 94-ahead
   figure the old pointer quoted is closed) and these two merges have not been offered.
 - **`item-4898` was deliberately NOT landed** — it is superseded, not unlanded: `item-4931`'s subject is "re-cut of the
   compaction build (#4887/#4898) onto current main, unchanged in substance" and both touch the same three files
@@ -59,30 +76,20 @@ MiB on the 3090** (`/v1/models` says `gpus:[0,1]`, `--max-context 204800`, 48 Gi
 the way `#4956`/`#4962` already did — **independent by seat/transcript/execution, and say so in the report** — never claim
 model independence without first running `tools/model-probes/gate.mjs <baseUrl> <id> <label>`.
 
-## 4. Measured state at clock-out (08:10Z, `main = c80bd7f0`) — re-read the cheap ones, they move
+## 4. Measured state at 08:10Z — moved VERBATIM to docs/NEXT-ARCHIVE.md (a pointer holds pointers, not counts)
 
-- Queue (clockin, 5.5 s): **4,994 rows — 3,784 done / 795 cancelled / 329 held / 66 queued / 12 deferred / 8 claimed = 415
-  non-terminal**; 12 seats, 16 attention notices. `channel-preflight`: **66 claimable**, and per-seat
-  `impl 19, devtools 17, lead 11, scribe 4, security 4, qa 3, architect 3, qa2 2, pm 2, auditor 1`.
-- `tools/queue-drain-audit.mjs` (1.5 s): **70 of 89 non-terminal LANDING rows are already fully on `main`** (zero-build
-  closable), 70 orphan candidates, 12 rows whose gate prose cites no resolvable id. `#4799` is still `claimed` although its
-  work landed at `67aa0096`. `pm` owns every release/cancel.
-- Broker NOT resident; 1 unsettled submission (`devtools` `placed`, 5.8 h) that
-  `reconcileStrandedSubmissions` settles on pass 1 — "the wedge does NOT survive a restart". 2 intents have sat in the spool
-  since 2026-10-29.
-- Local engine **UP and completing** (`broker-serve`: `local: answers … local: completes`). `cli.mjs config` reports
-  **`DURIG_MAX_CONCURRENT_SEATS = "1"`** while the operator has raised strata to **concurrency 2** — start the broker with
-  `DURIG_MAX_CONCURRENT_SEATS=2` so seats queue in durig, not inside the model.
-- Still-false instrument reads, re-measured on post-landing `main` (all minted in the lead brief): `cli.mjs config` prints
-  14 keys and **not one `DURIG_LOCAL_*`/`DURIG_VERIFIER_*`**; `scripts/clockin.mjs` prints `local=NOT SET` and
-  `local endpoint: DOWN (fetch failed)` about a hardcoded `:8080`; `src/attention.mjs:435` still says "re-arm it with the
-  resume/doctor verb" and no re-arm path exists; `tools/channel-preflight.mjs:234` still defaults `programs = ["pwsh",
-  "powershell"]` and prints "NO SHELL CAN START HERE" while `broker-serve` prints `NOTE … bash CAN start on linux`
-  (**that one is already `#4992`, queued to impl — do not re-mint**).
-- Strata topology: **re-measure every session, 0.2 s** —
-  `nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv` then
-  `nvidia-smi --query-compute-apps=pid,gpu_name,used_memory --format=csv`. It has flipped twice in three days and it decides
-  whether any second model can load at all.
+- Queue histogram, per-seat claimable spread, drain-audit counts and the spooled intents as of 08:10Z are **in the archive —
+  and stale by design**. Re-run the instruments instead: `node scripts/clockin.mjs` (5.5 s) and
+  `node tools/queue-drain-audit.mjs` (1.5 s) are cheaper than trusting a remembered count.
+- Rows that carry the findings so the prose can go: **#4998** (`cli.mjs config` prints no `DURIG_LOCAL_*`/`DURIG_VERIFIER_*`
+  key), **#4999** (`scripts/clockin.mjs` probes a hardcoded `:8080`), **#5000** (`src/attention.mjs:435` orders a re-arm
+  that does not exist), **#4992** (`tools/channel-preflight.mjs:234` still prints "NO SHELL CAN START HERE" — queued to
+  impl, do NOT re-mint).
+- Local engine **UP and completing**; `cli.mjs config` says `DURIG_MAX_CONCURRENT_SEATS = "1"` while strata now serves
+  concurrency **2** → start with `DURIG_MAX_CONCURRENT_SEATS=2` so seats queue in durig, not inside the model.
+- **Re-measure strata every session, 0.2 s:** `nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv` then
+  `nvidia-smi --query-compute-apps=pid,gpu_name,used_memory --format=csv`. It decides whether a second model can load at
+  all, and it has flipped twice in three days.
 
 ## 5. THE HAND-BACK — one ruling, three options, all measured (the delegate decided none of them)
 
@@ -121,6 +128,57 @@ operator-owned, still present) · **12 `deferred` rows parked on the operator** 
 entries) · the host clock: `LocalRTC=yes` on a dual-boot box while every broker gate is `Date.now()` arithmetic
 (ROADMAP 234; `timedatectl set-local-rtc 0` is host-wide, so the operator's call) · `#4987`, `#4986`, `#4992`, `#4978`,
 `#4979` (open instrument defects) · `#4966`, `#4977`, `#4985`, `#4931` are **done and landed — do not re-do them**.
+
+## 7. The DeepInfra backup verifier — what the instruments say before anyone spends (operator asked; delegate measured, chose nothing)
+
+Rawest material, fetched keyless this session: `curl -s https://api.deepinfra.com/v1/models` → `http=200`, **173 models**,
+saved at `.spike/delegate-20261102/deepinfra-models.json` (the operator's docs page is the same list, prettier). Prices
+below are that file's `metadata.pricing` (`$ per Mtok in/out`), and the per-turn column uses **this rig's own** verifier
+prompt shape — p50 **55,538** / max **108,435** input tokens, cited from commit `ecdeb70f`, × 3,000 output
+(`DURIG_VERIFIER_MAX_TOKENS`):
+
+| candidate | $in / $out | ctx | cost per verify turn (p50) | in the curated catalog `buildModels` reads? |
+| --- | --- | --- | --- | --- |
+| `meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo` | 0.02 / 0.04 | 131,072 | **$0.0012** | no |
+| `openai/gpt-oss-20b` (reasoning) | 0.03 / 0.14 | 131,072 | $0.0021 | no |
+| **`openai/gpt-oss-120b`** (reasoning) | 0.037 / 0.17 | 131,072 | **$0.0026** | **no** |
+| **`google/gemma-3-4b-it`** | 0.05 / 0.10 | 131,072 | $0.0031 | **no** |
+| **`mistralai/Mistral-Small-3.2-24B-Instruct-2506`** | 0.075 / 0.20 | 128,000 | **$0.0048** | **YES — the only one of the four** |
+| **`google/gemma-4-26B-A4B-it`** (reasoning) | 0.07 / 0.34 | 262,144 | $0.0049 | **no** |
+| `deepseek-ai/DeepSeek-V4-Flash-0731` (reasoning, `prompt_cache`) | live 0.060 / 0.18 | 1,048,576 | $0.0039 | yes, at **0.09/0.18** — a stale price |
+
+**"Lowest price" is the wrong lever here, and the arithmetic is the reason.** The whole credible band is **$0.0012–$0.0049 per
+turn** — a 30-turn verify evening is **$0.04 to $0.15**. The gap between the cheapest 8B model and a 120B reasoning model is
+**a third of a cent per turn**. Spending the gate's real cost (a `gate.mjs` run with clean controls, k≥3) is orders of
+magnitude more expensive than the model choice, so qualify first and price-tie-break second.
+
+Three hard filters the rig imposes, all measured, none of them price:
+1. **ctx ≥ 128k.** Verifier prompts run p50 55.5k / max 108.4k. `DURIG_VERIFIER_CONTEXT` is declared **24,576** — below the
+   p50, the impossible pair D166 registered as **259**, still unfixed. Any DeepInfra row must set ctx honestly or the swap
+   just moves the failure.
+2. **Tool calling.** `rig.selfdev.json` gives the five verifier seats **no `tools` restriction**, so a verify leg runs the seat
+   loop with tools; the live catalog's `tags` do not state function-calling support for any candidate. Must be probed per
+   model, not assumed from the spec sheet.
+3. **A bounded system message.** D166 measured that requests without one inherit the host's "be as long as you want"
+   instruction and die at `finish=length`. That is host-side for LM Studio; a remote provider needs the same bounding
+   asserted, or the p50 becomes the budget instead of the prompt.
+
+And the substrate gap that decides the ordering: `src/providers/deepinfra-models.ts` `fallbackModels()` (16 entries) is what
+`buildModels` reads, and `fetchDeepInfraModels` (line 130) is imported nowhere — the test header says so. So three of the
+operator's four candidates resolve to **`no_model` before a request is made**, which is the 2026-10-19 outage class. Also
+**`mistralai/ministral-3-14b-reasoning` is not in the live DeepInfra catalog at all** — so §0a's fix must not "fix" the guard
+by adding it. Finally: **there is no spend cap and no cost ledger anywhere** (`grep -nE "SPEND|BUDGET|CAP_" src/config.mjs` →
+nothing; `grep -rn MAX_SPEND_USD src/*.mjs cli.mjs` → nothing; no `src/costsheet.mjs`) while `docs/SELFDEV.md` §0 asserts
+"hard caps and the cost recorded". Write the cap before pointing five seats at a metered API.
+
+**What the delegate needs from the operator to go further:** (a) `DEEPINFRA_API_KEY` in the *environment*, never in
+`durig.config.json` (`src/config.mjs:31,106` records a key that leaked there once); (b) a ruling that amends D137's model
+clause — a remote verifier is a *different engine*, which is a genuine independence gain over the single-family local rig,
+but only if reports keep saying which independence they actually got; (c) whether to pay for the qualification run
+(`node tools/model-probes/gate.mjs https://api.deepinfra.com/v1/openai <model> <label> --replicate 3 --plan` first, spend
+nothing, then the paid arm). Recommended shortlist for that run: `gpt-oss-120b` (reasoning, cheapest reasoning-capable),
+`Mistral-Small-3.2-24B` (zero substrate change), `DeepSeek-V4-Flash-0731` (1M ctx + prompt cache, and at 55k re-sent prefix
+the cache may beat headline price — D147 measured 8,757 cached tokens in 96 ms warm).
 
 ## Standing constraints
 

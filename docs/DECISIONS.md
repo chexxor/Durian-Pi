@@ -7831,3 +7831,45 @@ on it** — the delegate sequenced an entire hand-off on the assumption that the
 dirty tree, and an uncited fetch sat in `inputs/fetched/` (`strata-batching.md`, sha256 `d1f7d558…`) — a directory whose own
 README says what a report does not cite does not belong there. It was moved to `.spike/inputs/` (kept on disk, named in
 `docs/NEXT.md`), not deleted.
+
+## D191 — "Attempt to fix the substrate": the answer was a gate measurement, not a patch; and the delegate propagated a claim it had not run (2026-11-02, delegate; operator directive "attempt to fix the substrate. Let me know if that will be a problem." + "consider a DeepInfra backup verifier, lowest price that is also effective")
+
+**Why this is a decision.** The directive reads like permission to write code. The delegate wrote none of the substrate —
+claiming and implementing belong to seats — so the question became *what does the substrate need before a seat's fix can
+land*, and the honest answer came from one instrument run rather than from inference.
+
+**(1) The keystone is the derived gate, not the defect list.** `node tools/what-to-test.mjs --no-scan
+--paths=src/rig.mjs,rig.selfdev.json,src/providers/deepinfra-models.ts` → `derived guards: 93 test(s) — 89 direct + 4 family
+mention`, and that set contains `demo/broker-serve-shell-availability.test.mjs` (red, #4995 — matched via
+`path:rig.selfdev.json`), `demo/deepinfra-catalog.test.mjs` (red) and `demo/local-model-pointer.test.mjs` (red outside a
+hermetic tree, #4996). So **any** seat touching the queue verbs, the rig file, or the provider catalog inherits a gate with
+three reds and `scripts/land.mjs --changed-suite` refuses it. With `main` red-at-HEAD the team cannot land its own substrate
+fixes — which re-ranks #4995, the catalog-guard fix and #4997 (no known-red baseline) above every feature row. *The why:* a
+gate that can only fail is not a control, it is a queue-stall, and it stalls the fixes that would make it pass.
+
+**(2) The delegate's own error, recorded because it is the recurring failure mode.** The delegate wrote that
+`demo/deepinfra-catalog.test.mjs` was red for a missing `DEEPINFRA_API_KEY` — inherited from `lead`'s report, repeated into
+`docs/NEXT.md`, into `.spike/delegate/suite-marker.json`, and already carried into `lead`'s #4982 body. Running the demo
+keyless gave the real cause: `seat "qa" names verifier/mistralai/ministral-3-14b-reasoning, which is not in the fallback
+catalog` at `demo/deepinfra-catalog.test.mjs:82` — the `resolvable()` helper exempts the `local/` provider prefix and has no
+exemption for `verifier/`, so the guard is red for every value and protects nothing (red since D166, 2026-10-29). The suite's
+**two failures are three findings**, because #4996 fires only non-hermetically. *The rule:* a delegate cites a finding it
+ran, and if it inherits one it labels it inherited and runs it **before** it enters a durable artifact — a pointer, a
+marker, or a queue body. Once a wrong cause reaches a row body it becomes the rig's memory of the defect.
+
+**(3) A paid verifier is permitted by policy and unimplemented in the substrate.** `docs/SELFDEV.md` §0 says paid models are
+allowed "with hard caps and the cost recorded — D147/D166". `grep -nE "SPEND|BUDGET|CAP_" src/config.mjs` → nothing;
+`grep -rn MAX_SPEND_USD src/*.mjs cli.mjs` → nothing; no `src/costsheet.mjs`. **The cap is prose.** Also: resolution goes
+through the curated 16-entry `fallbackModels()` in `src/providers/deepinfra-models.ts` — `fetchDeepInfraModels` (line 130) is
+imported nowhere — so a model outside that list is `no_model` before any request; three of the operator's four candidates are
+outside it, and `mistralai/ministral-3-14b-reasoning` is in neither list. The curated prices also drift (curated
+`DeepSeek-V4-Flash-0731` `$0.09/$0.18` vs live `$0.060/0.18`).
+
+**(4) "Lowest price that is effective" — the price term is noise at this scale, measured.** Using this rig's own verifier
+prompt shape (p50 55,538 / max 108,435 input, from `ecdeb70f`; 3,000 output), live DeepInfra prices put the entire credible
+band at **$0.0012–$0.0049 per verify turn** — $0.04–$0.15 for a 30-turn evening. So qualification cost dominates model choice
+by orders of magnitude, and the selection must be made on `gate.mjs` with clean controls and k≥3, not on the price column.
+The three real filters are ctx ≥ 128k (against a declared `DURIG_VERIFIER_CONTEXT` of 24,576 — D166's impossible pair, still
+unfixed), tool-calling (the five verifier seats carry no `tools` restriction, so a verify leg runs the seat loop), and a
+bounding system message (D166). The delegate chose no model and loaded nothing; the shortlist and the reasoning are in
+`docs/NEXT.md` §7.
