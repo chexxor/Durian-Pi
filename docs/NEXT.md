@@ -13,8 +13,8 @@ the only verifier file that fits the one free card is the model with 0/16 clean 
 
 Older sessions live verbatim in `docs/NEXT-ARCHIVE.md` (link it, and the pointer test enforces that).
 
-**Pointer hygiene first:** **128 lines** (`wc -l`) / 129 counted entries — re-run `wc -l docs/NEXT.md` yourself, because
-this count goes false the moment anyone edits the file. The previous pointer was labelled **"D188 daytime"**, but **no `D188` entry exists in
+**Pointer hygiene first:** **131 lines** (`wc -l`) / 132 counted entries — measured AFTER the last edit to this file, and
+wrong for anyone who edits it after me. The previous pointer was labelled **"D188 daytime"**, but **no `D188` entry exists in
 `docs/DECISIONS.md`** (`grep -c D188 docs/DECISIONS.md` = 0) — that session's rulings live inside `D187`'s block and in the
 pointer text only. **This session's entry is `D189`** (verifier pre-flight outranks the window argument; `resume` has no
 re-arm path; the config surface is cwd-scoped). And `node scripts/test.mjs --red --all --json` — the command this file
@@ -24,12 +24,15 @@ demo (`demo/next-pointer.test.mjs`).
 
 ## Measured state at clock-out (2026-11-02T02:05Z, Linux/Fedora 44 on `Alex-Desktop-Win10`, node v24.22.1)
 
-- **`main = 43e26dcc`, 89 commits AHEAD of `origin/main` (`eea4effb`)** — 61 at the last clock-out, the team added 28 in
-  between. **Still no push grant.** That is a durability risk, not a cleanup item.
+- **`main = 51e3b9b1` (this session's own docs commit), 90 commits AHEAD of `origin/main` (`eea4effb`)** — 61 at the last
+  clock-out, the team added 28 more, and the delegate added 1. `#4977`'s commit `ac5e1d37` is on branch `item-4977`, **not**
+  on `main`. **Still no push grant.** That is a durability risk, not a cleanup item.
 - **SUITE: 243/244 in ~52 s** at `--jobs 8`, 244 demos, in the full tree (**187 `node_modules` entries + `vendor/pi-main`
   present** — NOT the thin 80-entry tree earlier pointers quoted). One red: `demo/deepinfra-catalog.test.mjs` (pre-existing
-  catalog/network). Verdict written to **`.spike/delegate/suite-marker.json`** so `scripts/clockin.mjs` prints it with its
-  sha and a STALE flag instead of anyone re-running the suite.
+  catalog/network). **Running the suite while a seat run is live manufactures reds** — measured 241/244 with
+  `seat-turn-shape` + `broker-stop-audit` red, both green standalone 40 s later. Verdict written to
+  **`.spike/delegate/suite-marker.json`** so `scripts/clockin.mjs` prints it with its sha and a STALE flag instead of anyone
+  re-running the suite.
 - **4,989 rows** — 3,782 `done` / 794 `cancelled` / 328 `held` / 65 `queued` / 12 `deferred` / 8 `claimed` = **413
   non-terminal** (was 414; `resume` cleared 2).
 - **Broker NOT resident** (`selfdev.sqlite.broker.json` absent). All 12 seats registered with `engine:"local"`; every
