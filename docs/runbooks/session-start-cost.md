@@ -3,9 +3,9 @@ runbook: session-start-cost
 symptom: "a session burns its first 30–60 minutes re-deriving rig state that an instrument already reports; the delegate 'verifies' numbers by hand that a tool prints in seconds"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-31
+last_verified: 2026-11-02
 verified_by: delegate
-evidence: "measured 2026-10-31 on `Alex-Desktop-Win10` (Linux, node v24.22.1): `cli.mjs queue --json` 1.5 s and 21,710,535 B; `tools/what-to-test.mjs --base=HEAD~1` 0.13 s → 6 derived tests against a 239-test suite; `tools/doc-integrity-guard.mjs` 0.10 s exit 0; `tools/instrument-provenance.mjs` 0.07 s exit 0; `tools/seat-turn-shape.mjs` 3.6 s, 58,566 entries read, 0 writes. One batched `send` to `lead` (8 min) produced rows #4947–#4950 plus three closures; one `impl` turn (70 min) produced three rows. Rows #4947–#4950 exist because a delegate MEASUREMENT was carried to a seat instead of a re-derivation."
+evidence: "measured 2026-10-31 on `Alex-Desktop-Win10` (Linux, node v24.22.1): `cli.mjs queue --json` 1.5 s and 21,710,535 B; `tools/what-to-test.mjs --base=HEAD~1` 0.13 s → 6 derived tests against a 239-test suite; `tools/doc-integrity-guard.mjs` 0.10 s exit 0; `tools/instrument-provenance.mjs` 0.07 s exit 0; `tools/seat-turn-shape.mjs` 3.6 s, 58,566 entries read, 0 writes. One batched `send` to `lead` (8 min) produced rows #4947–#4950 plus three closures; one `impl` turn (70 min) produced three rows. Rows #4947–#4950 exist because a delegate MEASUREMENT was carried to a seat instead of a re-derivation. Re-read 2026-11-02 (D189, same box): every Diagnose step above still costs the same, but TWO of its reads now print false verdicts — §5's served-window pair (LM Studio has no instance loaded at all) and `scripts/clockin.mjs`'s `## PROVIDER` line — see §7–§9 below."
 check_rule: null
 ---
 
@@ -192,3 +192,36 @@ node -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("
 #    same fact to `last_run_failed: model_error` and truncates the rest, so nobody found it for a session.
 #    Do NOT hand-query the store for anything else first; this read is the whole diagnosis for the compaction class.
 #    A `node:sqlite` readOnly open writes nothing, but the opener CREATES the file if the path is wrong — pin absolute.
+
+# 7. THE PROVIDER TRUTH — three reads, ~2 s, and the digest is NOT one of them. Measured 2026-11-02 (D189):
+curl -s "$(node -e 'console.log(JSON.parse(require("fs").readFileSync("durig.config.json","utf8")).DURIG_LOCAL_BASE_URL)')/v1/models"
+ss -ltnp | grep -E '47831|1234|18500'                                   # which ports actually LISTEN
+node tools/model-probes/probe-preflight.mjs                              # GO/REFUSE + per-GPU free + swap %
+#    `scripts/clockin.mjs` prints `local=NOT SET` and `local endpoint: DOWN (fetch failed)` on a box where the seat
+#    engine was up and serving an 8-minute seat turn minutes later. TWO causes, both in source: `describeConfig`
+#    (src/config.mjs:328-344) omits every DURIG_LOCAL_*/DURIG_VERIFIER_* key, so clockin.mjs:352 cannot see the base
+#    URL; and probeLocal() (clockin.mjs:306) hardcodes `STRATA_PORT || 8080`, so it probes a port this rig does not
+#    use. Do NOT spend a wake "fixing" a provider the digest says is down — rows #4977-#4979/#4985-#4987 are the same
+#    family (an instrument printing a confidently wrong verdict).
+
+# 8. SUITE VERDICT WITHOUT RUNNING THE SUITE — 0 s. Measured 2026-11-02: the suite is 52-58 s (244 demos, --jobs 8),
+#    and `node scripts/test.mjs --red` is NOT a command (no --red flag; exit 2 on the usage block). Write the marker:
+#      .spike/delegate/suite-marker.json  = {"pass":N,"total":M,"at":"ISO","main":"<sha>","note":"..."}
+#    and `scripts/clockin.mjs` prints `last suite: N/M at <time> (main <sha>)` with a STALE flag against current main.
+#    Name the DEPENDENCY SET in the note (187 node_modules entries + vendor/pi-main ≠ a thin 80-entry worktree).
+
+# 9. MAY A MODEL LOAD AT ALL — one read, and it outranks every window argument. Measured 2026-11-02:
+node tools/model-probes/probe-preflight.mjs
+#    → REFUSE: swap 79% used (max 50%) — zram is the ceiling here, not RAM, with GPU0 (A4000) 16,329 MiB FREE and
+#    GPU1 (3090) 94% full because the SEAT engine (`iq3_s`, `gpus:[1]`) now lives on the 3090. Re-derive the GPU
+#    assignment every session (0.2 s, `nvidia-smi --query-gpu=index,name,memory.used,memory.total`): the topology in
+#    `verifier-model-server.md` is from 2026-10-29 and has since flipped, which changes which verifier file can load
+#    at all (flint Q4_K_M 24.17 GB cannot fit the free 16 GB card; ministral Q6_K 11.09 GB can).
+
+# 10. BEFORE ANY WRITE VERB — 0.1 s, and it is the difference between a turn and a `no_model` death:
+test -f "$PWD/durig.config.json" && echo "config present" || echo "NO CONFIG IN THIS CWD"
+#    `durig.config.json` is gitignored, so NO worktree has one (`item-4977`, `seatroot/item-4955`: absent). A `send`
+#    whose cwd is a claimed worktree resolves a config-less rig and settles `{"settledStatus":"unanswered",
+#    "settledReason":"no_model","reply":null}` in <20 s with zero tokens. Dispatch write verbs from a tree that has the
+#    file (the operator checkout or the approved seat root), and pin DURIG_LOCAL_CONTEXT explicitly when the two
+#    private copies disagree (160000 vs 200000 — row #4970 HALF B is the operator's).

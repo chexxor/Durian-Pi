@@ -1349,3 +1349,71 @@ every exit code, per #4939.
   quoted "162 lines" in a pointer, then grew the pointer to 175 (`wc -l`) / 176 (`split("\n")`), so the number that was
   meant to prove a cap was being met had itself been invalidated by the edit that recorded it. Name the sha with the
   count (`175 wc -l / 176 counted at main = aa0faca2`), and re-run `wc -l` after the last edit rather than before it.
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-02, D189 — every number measured in this session, Linux/Fedora 44 on `Alex-Desktop-Win10`, node v24.22.1)
+
+- **A wake dispatched from a CLAIMED WORKTREE dies as `no_model` before the provider is ever contacted.**
+  `durig.config.json` is gitignored (`.gitignore:8`), so **no worktree has one** — measured: present in
+  `/home/chexxor/Git/Durian-Pi` and `/home/chexxor/Git/durian-dev/seatroot`, **absent** in `item-4977` and
+  `seatroot/item-4955`. Config precedence is env → `./durig.config.json` **in the waker's cwd**
+  (`src/config.mjs:7`), so a `send` run from a worktree resolves a config-less rig. Measured: `send devtools` from
+  `item-4977` → `{"settledStatus":"unanswered","settledReason":"no_model","reply":null}` in under 20 s, zero tokens;
+  the byte-identical brief from `seatroot` started a real turn that ran 8+ minutes of tool calls. One-line guard
+  before ANY write verb: `test -f "$PWD/durig.config.json" && echo ok`. This is the harder sibling of the D188
+  "the waker decides the ceiling" finding — drift changes a number, absence kills the wake.
+- **`scripts/clockin.mjs`'s `## PROVIDER` section is a DOUBLE FALSE NEGATIVE. Never prioritize off it.** Two
+  independent causes, both measured in source. (1) `describeConfig` (`src/config.mjs:328-344`, called at
+  `cli.mjs:2733`) prints a hard-coded 9 keys and omits every `DURIG_LOCAL_*`/`DURIG_VERIFIER_*` key even though they
+  are in `CONFIG_KEYS` (`src/config.mjs:118`) and loaded — so `clockin.mjs:352` prints `local=NOT SET`. (2)
+  `probeLocal()` (`clockin.mjs:306`) hardcodes `process.env.STRATA_PORT || 8080` and never reads
+  `DURIG_LOCAL_BASE_URL`, so it prints `DOWN (fetch failed)` about a port this rig does not use. Truth in the same
+  minute: `curl -s http://127.0.0.1:47831/v1/models` → `iq3_s` (`gpus:[1]`), `ss -ltnp` shows 47831/1234/18500
+  listening and **no 8080**, and the engine then served an 8-minute seat turn. Minted as rows via `lead` — do not
+  "fix" the provider the digest told you was down.
+- **`node scripts/test.mjs --red --all --json` does not exist.** There is no `--red` flag (`scripts/test.mjs:46-52`);
+  it exits 2 on the usage block. The fast red read is `node scripts/test.mjs --all --json` → read `failed[]`
+  (52–58 s at `--jobs 8`, 244 demos, in the 187-package + `vendor/pi-main` tree). **The cheaper read is a marker
+  file:** write `.spike/delegate/suite-marker.json` (`pass`,`total`,`at`,`main`,`note`) and `scripts/clockin.mjs`
+  prints the last verdict with its sha and a `STALE` flag for 5 s instead of re-running the suite. Written this
+  session at `43e26dcc`: `243/244`, one red (`deepinfra-catalog`, pre-existing).
+- **Re-derive the GPU topology every session; the runbook's assignment FLIPPED.** `iq3_s` now sits on **GPU1 = RTX
+  3090 at 23,020/24,576 MiB (94 % full)**, leaving **GPU0 = RTX A4000, 16,376 MiB, 47 MiB used** — the reverse of
+  `verifier-model-server.md`'s 2026-10-29 note. Consequence for the verifier dial, sized from the files on disk:
+  `flint-Q4_K_M.gguf` = **24,166,841,184 B** cannot load on the only free card, `Ministral-3-14B-Reasoning-Q6_K` =
+  **11,088,407,584 B** can. 0.2 s read: `nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv,noheader`.
+- **`tools/model-probes/probe-preflight.mjs` is the FIRST read for any verifier question, and it REFUSED this
+  session:** `REFUSE: swap 79% used (max 50%) — zram is the ceiling here, not RAM`, while GPU0 had 16,329 MiB free.
+  So "the operator should resize the verifier slot" was **not** the binding constraint. Cheapest lever, measured:
+  swap is diffuse and small (largest holder `strata-host` 1.5 GiB in swap; `plasma-discover` holds 1.7 GB RSS), so
+  closing long-lived desktop apps — not re-windowing a model — is the move that clears the floor.
+- **The rig's own attention notice still tells you to do the thing D187 recorded as destructive.** Read
+  `admitted_not_started … re-arm it with the resume/doctor verb (item 37(b))`; `cli.mjs resume` has no re-arm path —
+  `cli.mjs:1106-1122` settles with `abortSubmission` (`withdrawn`) or `conv.abort()` (`run-cancelled`). Measured at
+  01:47Z: `found: 2` → `impl #278592 queued → withdrawn`, `devtools #278704 placed → run-cancelled`. It is safe for
+  the *tree* (inventories unchanged, `resume` writes no files) and it does clear the notice, but it **destroys the
+  wake** — so re-brief afterwards, and never while a seat is running.
+- **A killed seat run leaves REAL work uncommitted in its worktree, and it is recoverable — read it before you
+  brief.** `devtools` stopped at 01:23:20Z with `M src/shellregistry.mjs`, `M tools/broker-serve.mjs`,
+  `?? tools/shell-availability.mjs` in `item-4977`. A continuation brief that does not say "`cat`/`git diff` what is
+  on disk FIRST, do not re-derive the design" spends the wake rebuilding work that already exists.
+- **`usage.output == 8192` + `stopReason: length` means the output budget, not the model.** `pm` submission
+  `#278816` settled `done` after 168,830 ms with `output: 8192` exactly, `rawStopReason: length` —
+  `DURIG_LOCAL_MAX_TOKENS` is unset in both config copies, so `src/providers/local.mjs:76` caps every local seat at
+  8192. This is #4980's premise re-measured on a fifth seat; check it before reading a truncated reply as a shape or
+  context failure.
+- **Speed-up: you already hold every row body — do not take a second queue dump.** `cli.mjs status` returns
+  `queueItems` for all 4,989 rows with `id/from/to/status/body/resultSummary` (23.6 MB in one read), so the duplicate
+  check that `cli.mjs check` would punish you for skipping costs 0 s and zero extra store access:
+  `node -e` a filter over the status JSON you just wrote. A second `cli.mjs queue` is another 22 MB and another
+  store open while a seat run is writing.
+- **Do NOT run the suite while a seat run is live — it manufactures reds.** Measured: with a `devtools` run writing the
+  store, `--all --json` returned **241/244** with `seat-turn-shape` and `broker-stop-audit` red on top of the real
+  `deepinfra-catalog`; both pass standalone 40 s later, and `seat-turn-shape`'s message is `the read must not modify
+  selfdev.sqlite` with the hash moved `32d7ad0..` → `69973a4..` and then sitting still — i.e. a *writer* moved it during
+  the demo's own readOnly read. The idle baseline is **243/244**. Before calling a suite red a regression, re-run that one
+  demo standalone and diff the store hash twice 5 s apart.
+- **`node scripts/test.mjs --all --json` is not pure JSON on stdout** — a progress line (`running 244 demos…`) precedes the
+  document, so `require(file)` throws `SyntaxError: Unexpected token 'r'`. Parse with
+  `JSON.parse(raw.slice(raw.indexOf("{")))`. The document's shape is `{ok, area, total, passed, failed[], timedOut[],
+  jobs, slowest[], ms, coverage[]}` — `passed` is the count (do not flatten `slowest` and call it the pass count, which is
+  how this session first mis-read 241 as 0).

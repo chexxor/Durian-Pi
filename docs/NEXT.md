@@ -1,198 +1,128 @@
-# NEXT — current priority and exact next command
+## NEXT SESSION (2026-11-02T02:10Z — D189, Linux: `#4977` is COMMITTED and VERIFIED FIXED on `item-4977`, NOT landed)
 
-<!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
+**Current item:** `#4977` (the broker pre-flight that falsely blocked the seat shell). `devtools` committed **`ac5e1d37
+fix(shell-availability): the broker preflight asks the registry, never vendored text (#4977)`** in worktree `item-4977`, and
+the delegate verified in that worktree that the `BLOCK seat-shell-availability` is now a `NOTE`. The row was still `claimed`
+at clock-out and **nothing is landed**.
+**Next command:** `node cli.mjs land item-4977 --merge --into main` — run from `/home/chexxor/Git/Durian-Pi`, **only after
+the operator names that landing** (§1). If the send died in the meantime, read `.spike/fix-20261102/send-devtools2.out`
+first and re-brief the `complete` leg only — the commit already exists.
+**Blocker:** the landing grant is the operator's and was not given this session; and behind it, the `qa` verify leg (`#4974`)
+is blocked on a ruling, not a fix — `tools/model-probes/probe-preflight.mjs` returns `REFUSE: swap 79% used (max 50%)`, and
+the only verifier file that fits the one free card is the model with 0/16 clean controls.
 
-## NEXT SESSION (2026-11-01T19:0xZ — D188 daytime, Linux: `item-4966` is LANDED — fix the verifier window, then the `qa` leg, then `scribe`'s re-arm)
+Older sessions live verbatim in `docs/NEXT-ARCHIVE.md` (link it, and the pointer test enforces that).
 
-**History:** everything this pointer supersedes is kept **verbatim** in `docs/NEXT-ARCHIVE.md`; re-derive the cut from
-`git log --oneline -- docs/NEXT.md` — never re-point by hand.
+**Pointer hygiene first:** **128 lines** (`wc -l`) / 129 counted entries — re-run `wc -l docs/NEXT.md` yourself, because
+this count goes false the moment anyone edits the file. The previous pointer was labelled **"D188 daytime"**, but **no `D188` entry exists in
+`docs/DECISIONS.md`** (`grep -c D188 docs/DECISIONS.md` = 0) — that session's rulings live inside `D187`'s block and in the
+pointer text only. **This session's entry is `D189`** (verifier pre-flight outranks the window argument; `resume` has no
+re-arm path; the config surface is cwd-scoped). And `node scripts/test.mjs --red --all --json` — the command this file
+queued as step 0 last session — **is not a command**: there is no `--red` flag (`scripts/test.mjs:46-52`), it exits 2 on
+the usage block. The runner takes `--area|--all|--list|--jobs|--timeout|--json`; the pointer gate is the `next-pointer`
+demo (`demo/next-pointer.test.mjs`).
 
-**Current item:** **#4966** (persona files) **was LANDED by the delegate** on `lead`'s ruling and the operator's
-standing grant: `node scripts/land.mjs item-4966 --db …/selfdev.sqlite` → **exit 0**, `main` = **`986a9e37` "merge: land
-item-4966 onto main"**, `git merge-base --is-ancestor refs/heads/item-4966 main` **exit 0**, tree clean, and
-`seatroot/linux` fast-forwarded to the same sha — so the 12 `prompts/<seat>.md` files are now IN the approved root
-(F5: a root left at an older main silently loses a seat's persona). Open around it: **#4974** (the `qa` verify leg, still
-`queued` — `lead` cannot park a row it minted and the delegate must not touch queue rows, so **#4982** (`impl`) or `pm`
-must move it), **#4970** (revised to "HALF B": the config-authoritative + bounding-policy questions, which are the
-operator's), **#4981** (`architect`, compaction *legibility*, ungated), **#4983** (`impl`, `held`), **#4977/#4978/#4979**
-(`devtools` instrument defects), **#4980** (`scribe` re-arm for its claimed **#4967**), plus a **fourth instrument
-defect this session found** (below) that needs its own row.
+## Measured state at clock-out (2026-11-02T02:05Z, Linux/Fedora 44 on `Alex-Desktop-Win10`, node v24.22.1)
 
-**Exact next command** (delegate, from `/home/chexxor/Git/Durian-Pi`; read the suite result before anything else):
+- **`main = 43e26dcc`, 89 commits AHEAD of `origin/main` (`eea4effb`)** — 61 at the last clock-out, the team added 28 in
+  between. **Still no push grant.** That is a durability risk, not a cleanup item.
+- **SUITE: 243/244 in ~52 s** at `--jobs 8`, 244 demos, in the full tree (**187 `node_modules` entries + `vendor/pi-main`
+  present** — NOT the thin 80-entry tree earlier pointers quoted). One red: `demo/deepinfra-catalog.test.mjs` (pre-existing
+  catalog/network). Verdict written to **`.spike/delegate/suite-marker.json`** so `scripts/clockin.mjs` prints it with its
+  sha and a STALE flag instead of anyone re-running the suite.
+- **4,989 rows** — 3,782 `done` / 794 `cancelled` / 328 `held` / 65 `queued` / 12 `deferred` / 8 `claimed` = **413
+  non-terminal** (was 414; `resume` cleared 2).
+- **Broker NOT resident** (`selfdev.sqlite.broker.json` absent). All 12 seats registered with `engine:"local"`; every
+  seat's `projection` is `[]` (empty since restart — "no work in flight", not a dead seat).
+- **LOCAL ENGINE: UP.** `curl -s http://127.0.0.1:47831/v1/models` → `{"object":"list","data":[{"id":"iq3_s","gpus":[1]}]}`;
+  it served a 25-minute `devtools` turn this session. It sits on **GPU1 (`RTX 3090`) at 23,020/24,576 MiB = 94 % full**.
+  **`scripts/clockin.mjs` prints `local=NOT SET` and `local endpoint: DOWN (fetch failed)` — FALSE TWICE** (it reads 9
+  config keys that exclude `DURIG_LOCAL_*`, and probes a hardcoded `:8080`). Never prioritize off that block.
+- **VERIFIER: not loadable right now, by the rig's own guard.** Both private configs declare
+  `DURIG_VERIFIER_MODEL=mistralai/ministral-3-14b-reasoning`, window 24576 / maxTokens 3000. LM Studio `:1234` is up with
+  **no instance loaded**. `node tools/model-probes/probe-preflight.mjs` → **`REFUSE: swap 79% used (max 50%) — zram is the
+  ceiling here, not RAM`** (`strata` 49.2 GiB RSS / 40.2 GiB shmem). The only free card is the **16 GB A4000**, so
+  `flint-Q4_K_M.gguf` (**24,166,841,184 B**) cannot load and `Ministral-3-14B-Reasoning-Q6_K` (**11,088,407,584 B**) can —
+  and ministral is the model with **0/16 clean controls** (`verifier-model-server.md`, D137). **This is the operator's call;
+  take these numbers to them, do not spend a cold load to re-discover them.**
 
-```bash
-node scripts/test.mjs --red --all --json          # fast red list; compare against this session's baseline
-git -C /home/chexxor/Git/durian-dev/seatroot merge --ff-only main   # rule 11: land, THEN re-point, THEN wake
-DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_LOCAL_CONTEXT=160000 \
-  DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status   # a bare `status` RESUMES sessions
-```
+## 0. THE ONE THING THAT MOVED — `#4977` is COMMITTED, VERIFIED, and NOT landed
 
-**Ready-to-send brief, and the seat-shape gate on the rest:** the `qa` verification brief for the merged tree is written
-and un-sent at `.spike/fix-20261101c/qa-4974-verify.md` (gitignored — promote it to `docs/` or `tools/` if it must
-survive a machine move; it demands artifact/tree identity — thin 80-package set vs the
-full 187-package + `vendor/pi-main` set — and names the 8192/24576 finding). Whether to spend that wake before the slot
-is resized is the operator's call, not the delegate's. `tools/seat-turn-shape.mjs` at clock-in said **ADMISSIBLE =
-`impl`, `qa`, `lead`, `qa2`** and predicted a turn ending on `user` for **`pm`** — so the pm verb that would move
-**#4974** is itself gated on pm's transcript shape, and a `reset` there destroys history. `scripts/clockin.mjs` after the
-landing reports `refs=10 worktrees=9 unmerged=3` — `item-4898 +1`, `item-4931 +2`, and `wip/seat-prompt-files +1`
-(`no-row`, the provenance branch #4966 was cut from; its content IS in main, the branch is not an ancestor).
+- `devtools` committed **`ac5e1d37 fix(shell-availability): the broker preflight asks the registry, never vendored text
+  (#4977)`** in worktree `/home/chexxor/Git/Durian-Pi/item-4977` (base `67aa0096` — **20+ commits behind `main`**).
+- **Verified by the delegate in that worktree:** `node tools/broker-serve.mjs --status` now prints
+  `NOTE seat-shell-availability: the seat shell tool "bash" CAN start on linux — /usr/bin/bash (registry: bash [spawns
+  bash]: CAN start (/usr/bin/bash) [preferred on this host] | powershell [spawns pwsh, powershell]: cannot start)` —
+  **the BLOCK is gone.** The other blocks in that run are artifacts of where it ran (`store-missing` — I passed no `--db`;
+  `live-tree-dirty` — the seat was mid-write).
+- **`#4977` was still `claimed` at clock-out** and the send was still live at 25 min
+  (`ps -p $(cat .spike/fix-20261102/send2.pid)`). **READ `.spike/fix-20261102/send-devtools2.out` first.** If the pid is
+  gone and `#4977` is still `claimed`, the run was killed a third time: `resume` cancels the submission and leaves
+  `ac5e1d37` alone, then re-brief for the `complete` + docs leg ONLY, and say in the brief "the commit exists, do not
+  re-implement".
+- **CONFLICT TO EXPECT when landing:** `devtools` edited `docs/runbooks/session-start-cost.md`,
+  `docs/runbooks/hygiene-and-dead-model-pointers.md` and `tools/README.md` **in its worktree** while I edited the same
+  `session-start-cost.md` in the operator checkout. Resolve by keeping both sections.
 
-**Blocker:** the verifier slot is loaded at **8192** (`--ctx-size 8192 --parallel 4`) against a declared
-`DURIG_VERIFIER_CONTEXT 24576` — LM Studio restores `8192×4` on relaunch — so `qa`/`qa2`/`auditor`/`advocate`/
-`designer` wakes die on the provider, not on their own work. `lead` cannot park **#4974** (`not yours to revise`) and
-the delegate must not touch queue rows, so **#4974 stays queued against a 400-returning server** until the operator
-resizes the slot or `pm`/`impl` (#4982) moves it. Second blocker: the broker has been down since
-`2026-10-30T04:55:33Z`, so every delivery is a `send` = a second-owner writer; serialize them.
+## 1. Land `#4977` — ASK FIRST (the operator has NOT granted this one)
 
-**Deferred rows audited, answers APPROVED, dispatch UNDER WAY (2026-11-01):** all **17** `deferred` rows (every one
-`deferredTo: "human"`) were read from a `cli.mjs queue` dump and audited against today's tree; the proposal document is
-`.spike/fix-20261101c/deferred-answers.md` (gitignored — promote it if it must survive a machine move). The shape of
-the answer set: **5 re-cuts** of work that was reviewed, reported DONE and then lost only from `refs/heads/` — it
-survives in **`refs/rescued/`** (485 refs: 33 named `rescued/item-<id>`, the rest `rescued/orphan-<sha>`), covering
-#4791/#4794/#4799/#4801 plus the unlanded `idle` verdict at `refs/rescued/item-4746 @81be8985`; **5 still-live builds**
-(#4789 the missing `deferred` stage — `src/queue-lifecycle.mjs:20` still has three stages, #4796 wake transition-memory,
-#4797 the holder-named refusal, #4354 and #4812 with a mandatory premise re-measure because their premises no longer
-reproduce); **5 that only need a CLOSE** because measurement answered them (#4817 gate re-measure, #4814 pointer
-numbers, #4813 the notice-is-a-third-thing finding, #4815 landed-by-content, #4805 cancelled-duplicate with survivor
-#4136). Delivery is `send`-only — `cli.mjs` has no operator queue verb — so `impl` (ADMISSIBLE) can take one batched
-brief, `qa2` (ADMISSIBLE) its own, and `pm`/`devtools` need a `resume` pass plus a shape re-check first (both AT RISK).
-The operator approved all of it ("I approve those re-cuts" / "Approved" ×3 / "D1" for the resume-first route). What the
-dispatch actually did: `cli.mjs resume` reported **`found: 0`** — the AT RISK seats are not resumable submissions, they
-are transcript-shaped, so D1 changed nothing. `qa2` send `#278316` **died with the strict Jinja alternation 500** ("After
-the optional system message, conversations should begin with a user message") even though `tools/seat-turn-shape.mjs`
-rated it ADMISSIBLE — its engine is the **`verifier`** role, and that template validates the whole conversation start,
-not the last turn. `cli.mjs reset qa2 --dry-run` → `{"wouldReset":true,"writes":0}` is the read-only look at the fix;
-the reset itself is HELD for the operator (D118: a blind reset destroyed in-flight work — though `qa2` holds no claimed
-row). `lead` was briefed twice: the first turn reported verbs and the queue stayed **4,984**; a second, shorter send that
-cited the measured count produced **4,986 rows, queued 64 → 66** — the two `devtools` rows for the `clockin.mjs`
-detached-worktree defect and the missing row-scoped queue read.
+- The standing grant covered `#4966` only, which is already landed. Ask, then:
+  `node cli.mjs land item-4977 --merge --into main` — run from `/home/chexxor/Git/Durian-Pi`; expect the doc conflict above.
+- Prove it after: `node tools/broker-serve.mjs --status --db ./selfdev.sqlite --show-queue --limit 20 --json 2>/dev/null |
+  node tools/parse-broker-status.mjs --check=admit` and confirm `seat-shell-availability` is a NOTE. **That is the gate on
+  the operator's `--start` decision (`#4970` HALF A)** — until it lands on `main`, every `send` stays a second store writer.
 
-```bash
-**DISPATCH OUTCOME (2026-11-02T01:20Z, all re-measured): the re-cut route WORKED.** `impl` landed **`7b9d824a merge: land refs/heads/item-4789`** (the `deferred` STAGE fix, `29d827b3`) and **`67aa0096 merge: land refs/heads/item-4799`** — the `refs/rescued/item-4790` re-cut, carrying `a318d8e7 fix(guard): a degraded-cwd seat may run a BARE READ verb (#4790)` and the inherited demo. Full suite at `main` = `67aa0096`: **`pass=243 fail=1, demos=244`** (`deepinfra-catalog.test.mjs`, pre-existing at `3fde09e3`); seatroot re-pointed. Queue: **4,988 — done 3780, queued 67, deferred 15, claimed 5**. `devtools` was **degenerate** (D77: `<tool_call>` emitted as message text naming `powershell` on a Linux host, so nothing ran, and the auto-reset lives in the dead broker supervisor); after my hand-reset (entry `278699`) it became productive in one turn — it claimed a row and cut `refs/heads/item-4977`. `qa2` hand-reset (entry `278701`) and NOT woken: every LM Studio model is `state=not-loaded`, GPU0 has 16.3 GB free, and a wake would cold-load ~13 GB at LM Studio's saved `8192x4` against a declared `DURIG_VERIFIER_CONTEXT 24576`. **New blocker:** with `DURIG_SEAT_ROOT` set, `send` refuses for ANY seat because `impl`'s persisted cwd is `/home/chexxor/Git/Durian-Pi/item-4789` — this rig mixes two claimed-worktree roots; unset the var and sends proceed.
+## 2. Mint the four instrument defects (brief is WRITTEN, deliberately NOT fired)
 
-# 1. confirm the dispatch, bounded and cheap (1.1 s): expect 4986 rows, queued 66
-DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --store selfdev.sqlite
-# 2. read-only look at the alternation-500 fix before anyone asks for a reset
-DURIG_NO_SERVE=1 DURIG_DB=./selfdev.sqlite node cli.mjs reset qa2 --dry-run
-# 3. the qa verify leg for the landed persona split (needs the operator's context risk-accept, or fix the engine first)
-DURIG_NO_SERVE=1 DURIG_DB=./selfdev.sqlite node cli.mjs send qa "$(cat .spike/fix-20261101c/qa-4974-verify.md)"
-```
-The briefs are gitignored: `.spike/fix-20261101c/{deferred-answers,impl-deferred-batch,devtools-deferred-batch,pm-deferred-batch,qa2-4814,lead-rows-and-rulings,lead-mint2,qa-4974-verify}.md` — promote `deferred-answers.md` if it must survive a machine move.
+- `.spike/fix-20261102/lead-instrument-defects.md` — **not sent**, because `devtools` was writing to the same store at that
+  minute and a second writer is the recorded crash class. Fire it the moment no run is live, **from a tree that carries
+  `durig.config.json`** (§4):
+  `cd /home/chexxor/Git/durian-dev/seatroot && DURIG_NO_SERVE=1 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite DURIG_LOCAL_CONTEXT=160000 timeout 1500 node cli.mjs send lead "$(cat /home/chexxor/Git/Durian-Pi/.spike/fix-20261102/lead-instrument-defects.md)"`
+- The four, with `file:line` already in the brief: `cli.mjs config`/`describeConfig` (`src/config.mjs:328-344`) omits every
+  `DURIG_LOCAL_*`/`DURIG_VERIFIER_*` key; `scripts/clockin.mjs:306,352` probes a hardcoded `:8080`; the
+  `admitted_not_started` notice says "re-arm" while `cli.mjs:1106-1122` cancels; and `#4979` (`doctor` prints
+  `bash: command not found` for the suggested `doctor --probe` while `--help` lists `doctor`).
+- **Duplicate check is done** — related open rows are `#4977 #4978 #4979 #4985 #4986 #4987 #4970 #4974 #4981 #4983`; the
+  bodies are already inside `status`'s `queueItems` (4,989 rows, one read), so re-checking costs 0 s and no second 22 MB dump.
 
-## What moved while the last pointer slept (`impl` ~2 h, then this delegate session — all measured)
+## 3. THEN the `qa` verify leg for the persona split — blocked on a RULING, not on a window
 
-* **#4966 LANDED**: `main` = `986a9e37`; `refs/heads/item-4966` @ `605ebf07` (five commits, from `wip/seat-prompt-files`,
-  which stays as provenance) is an ancestor of `main`. Sequence evidence: pre-merge `merge-tree` exit 0 (tree
-  `6cbfbb98`), land exit 0 with the store lock reserved (`held 1/1`, `liveHolders 0`), scratch cleaned, worktree/branch
-  inventories unchanged, **no push** (`origin/main` still `eea4effb`, 60+ behind). Ref trap: bare `item-4966` is
-  ambiguous (a directory of that name exists) — use `refs/heads/<name>`.
-* **The landing was NOT regression-checked by the tool**: `--changed-suite` **refused to advance main** — 129/242 derived
-  tests ran in the scratch and `demo/clockin-digest.test.mjs` failed THERE for an instrument reason, not a content one:
-  `scripts/clockin.mjs` runs `git rev-list --count main..(no branch)`, i.e. it derives landing debt from the **current
-  branch name**, which is `(no branch)` in a detached worktree. **That is a fourth instrument defect** and needs its own
-  `devtools` row (#4977/#4978/#4979 cover the other three). Landing then proceeded on the documented default path, and
-  the tool's own report says to run the suite on `main` separately — which is what this session did.
-* **Two of `main`'s four suite reds were fixed by this session** (the pointer file is delegate-owned):
-  `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` had been red on `main` since D186's re-cut because
-  `docs/NEXT.md` lost its `## NEXT SESSION` heading and its **in-section** link to `docs/NEXT-ARCHIVE.md` (the digest
-  extracts the pointer by line range, so an HTML comment above the section does not count). Both **PASS** now. Remaining
-  known reds: `demo/deepinfra-catalog.test.mjs`, `demo/local-model-pointer.test.mjs` (machine/network).
-* **Roster placement repaired**: `impl` had been persisted at `/home/chexxor/Git/Durian-Pi/item-4966`, `scribe` at
-  `/item-4967`. The bare documented repair printed `refreshed: <all 12 seats>` and **changed nothing** —
-  `seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT` (`cli.mjs:679`/`:794`) and `rig.selfdev.json` names **no**
-  `cwd`, so without the env var the field is omitted from the write (**#4979**). With it set all 12 seats persist
-  `/home/chexxor/Git/durian-dev/seatroot`, proven by the `--dry-run` "no drift" plus the bare-name worktree inventory
-  diff — not by the command's own report. `up` does not enforce the F12 guard (only `send`/`run`/`worktree`/`complete`
-  pass `enforceSeatRoot: true`), which is why it can re-point at all. The `item-4966` / `item-4967` worktrees are still
-  at the repo root but **registered**, so they are not `scripts/land.mjs`'s stray gate; `lead` ruled **do not route
-  deletion** — both branches are live artifacts; `docs/runbooks/leaked-worktrees.md` is the procedure (it flagged one
-  residue for that procedure: `item-4955`'s `.probe-cli`).
-* **Delegate first-pass on the artifact, THIN dependency set** (80 `node_modules` entries, no `vendor/pi-main`): the
-  five #4966 demos passed at `605ebf07` in that worktree, and `demo/seatguard.test.mjs` + `demo/seattools.test.mjs` +
-  `src/shellregistry.mjs` (`bash`, `degraded:false`) passed at `238ff91d` in the full 187-package tree.
+`#4974` is `queued impl->qa`. The previous pointer's plan ("fix the verifier window, then the `qa` leg") is **not
+executable as written**: the pre-flight refuses, and the only model that fits the free card is the 0/16-clean-controls
+ministral. Escalate the §Measured numbers and ask **which model earns the wake**; D137's rule is that a failing verifier
+is worse than none.
 
-## The operator's dials (all measured 2026-11-01, Linux)
+## 4. What this session measured so the next one does NOT re-derive it
 
-1. **Verifier window** — served `--ctx-size 8192`, declared `24576`. Read the pair in 0.1 s:
-   `ps -eo args | tr '\0' ' ' | grep -oE -- '--ctx-size [0-9]+|--max-context [0-9]+'` vs `durig.config.json`.
-2. **Two private `durig.config.json` copies disagree** (the file is gitignored, `.gitignore:8`, so git never shows it):
-   the operator checkout says `DURIG_LOCAL_CONTEXT 160000` (the D187 stopgap), the approved seat root says **`200000`**.
-   Precedence is env → `./durig.config.json` **in the cwd** (`src/config.mjs:7`), so every wake dispatched from the
-   root has been running at 200000 against an engine `--max-context 204800` — the condition D187 measured the four seat
-   deaths under — while reads taken from the checkout reported 160000. `lead` folded this into **#4970**. The delegate's
-   in-flight wake pinned `DURIG_LOCAL_CONTEXT=160000` explicitly and **edited neither file**.
-3. **Broker policy.** Down since `2026-10-30T04:55:33Z EXIT reason=deadline`. `tools/broker-serve.mjs --start`
-   currently refuses on a **false** shell verdict (#4977), so a grant needs the instrument fixed or an explicit ack.
-4. **Human answers still owed:** #4813 (pm, 2 deferred), #4354 (impl, 13), #4817 (devtools, 1), #4814 (qa2, 1).
+- **A wake dispatched from a claimed worktree dies as `no_model` in <20 s with zero tokens.** `durig.config.json` is
+  gitignored and **no worktree has one** (`item-4977`, `seatroot/item-4955`: absent); precedence is env →
+  `./durig.config.json` in the **waker's cwd** (`src/config.mjs:7`). Measured: identical brief from `item-4977` →
+  `{"settledStatus":"unanswered","settledReason":"no_model","reply":null}`; from `seatroot` → a real 12+ minute turn.
+  `test -f "$PWD/durig.config.json"` before ANY write verb, and pin `DURIG_LOCAL_CONTEXT` when the two private copies
+  disagree (**160000** operator checkout vs **200000** seat root — `#4970` HALF B, still the operator's).
+- **`resume` settled by cancelling, measured a third time:** `found: 2` → `impl #278592 queued→withdrawn`,
+  `devtools #278704 placed→run-cancelled`. It writes no files (12-line worktree + 13-line branch inventories byte-identical
+  before/after) and it does **not** re-arm — despite what the attention notice says.
+- **A killed run leaves real work uncommitted and recoverable.** The #4977 fix was sitting in the tree as
+  `M src/shellregistry.mjs`, `?? tools/shell-availability.mjs`. A continuation brief MUST order "read what is on disk
+  first, do not re-derive the design" or the wake rebuilds work that already exists.
+- **`output: 8192` + `stopReason: length` is the output budget, not the model.** `pm` `#278816` settled `done` after
+  168,830 ms with `output` exactly 8192 and `rawStopReason: length`; `DURIG_LOCAL_MAX_TOKENS` is unset, so
+  `src/providers/local.mjs:76` caps every local seat at 8192. Fifth seat on `#4980`'s premise.
+- **Re-measure the GPU topology every session (0.2 s, `nvidia-smi --query-gpu=index,name,memory.used,memory.total`)** — it
+  has FLIPPED since `verifier-model-server.md`'s 2026-10-29 note, and the flip decides which verifier file can load at all.
 
-## REPAIRED this session: roster placement — and the trap that hides the repair
+## 5. Still open from prior sessions — re-read before acting
 
-At clock-in, `impl` was persisted at `/home/chexxor/Git/Durian-Pi/item-4966` and `scribe` at `/item-4967` (worktrees in
-the operator's checkout, the D183/D184 class). The bare documented repair printed `refreshed: <all 12 seats>` and
-**changed nothing**: `seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT` (`cli.mjs:679`/`:794`) and
-`rig.selfdev.json` names **no** `cwd` for any seat, so without the env var the field is omitted from the write. With it
-set, the write landed — proof, not the command's own exit code:
+`#4970` (A: the operator's `--start` decision, gated on §1; B: the config drift, operator-owned, still present), `#4974`
+(§3), `#4981`/`#4983` (idle seats with queued work — a routing question for `lead`, not a wake for you), and `#4966` is
+**done and landed — do not re-do it.**
 
-```bash
-DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite \
-  node cli.mjs up rig.selfdev.json --refresh            # exit 0
-DURIG_NO_SERVE=1 DURIG_SEAT_ROOT=/home/chexxor/Git/durian-dev/seatroot DURIG_DB=…/selfdev.sqlite \
-  node cli.mjs up rig.selfdev.json --refresh --dry-run  # → "no drift"
-git worktree list --porcelain | grep '^worktree ' | sort | diff .spike/fix-20261101c/wt-before.txt -  # empty
-```
+## Standing constraints
 
-`up` does not enforce the F12 guard (only `send`/`run`/`worktree`/`complete` pass `enforceSeatRoot: true`) — which is
-why it can re-point at all; that is now **#4979**. The stray worktrees `item-4966` / `item-4967` still sit at the repo
-root; both branches are live artifacts, and `lead` ruled **do not route deletion** — `docs/runbooks/leaked-worktrees.md`
-is the procedure (it flagged one residue for that procedure: `item-4955`'s `.probe-cli`).
-
-## Rig state, re-measured 2026-11-01T18:4xZ — re-read, do not trust
-
-`main` = `refs/heads/seatroot/linux` = **`aa0faca2`** (the landing merge `986a9e37` plus the delegate's docs commits are
-landed locally;
-**not pushed** — `origin/main` = `eea4effb`, 60+ commits behind, no push grant). Store `selfdev.sqlite`
-**448,335,872 B, no `-wal`, no `genlock`**; `cli.mjs status` exits 0 with empty stderr, so D187's storage error did not
-recur and no repair was shown necessary. Rows **4,976** before `lead`'s turn (+8 minted); non-terminal 406 = `held 328 /
-queued 58 / deferred 17 / claimed 3`. Claimed: `scribe` **#4967** (worktree clean, **0 commits ahead, nothing
-committed** — the arm was cut by the 8192-token summarization budget: **re-arm (#4980), do not reset**), `impl`
-**#4955**, `qa` **#4890**. `attention`: `pm` deferred(2)+idle(4); `impl` deferred(13)+idle(16); `qa` idle(3); `lead` idle(10);
-`scribe` idle(2); `devtools` deferred(1)+idle(14); `auditor` **last_run_failed** (Jinja alternation 500 — that refusal
-belongs to the **verifier** engine, not the local strata seats); `security` idle(4); `qa2` deferred(1)+idle(2).
-Send gate (`tools/seat-turn-shape.mjs`, 0.73 s): **ADMISSIBLE = `impl`, `qa`, `lead`, `qa2`**; counted projection ends
-on `user` for `pm`(1), `advocate`(1), `designer`(1), `architect`(1), `scribe`(`user,user`); `auditor` ends on
-`assistant` with internal parity breaks. Both providers answer **and** complete at idle (local `ctx=160000 out=8192`,
-GPU1 23,047/24,576 MiB; verifier on GPU0 12,618/16,376 MiB). `git worktree list` = 9; branches = 10 (incl.
-`wip/seat-prompt-files`, superseded by `refs/heads/item-4966`). Operator checkout tree: clean.
-
-## Do not "fix" these on the strength of the docs
-
-- **Never two store writers at once** (D187: two concurrent `send` produced `Session failed after a storage error`);
-  serialize, or broker + `intent.mjs`. **`resume`/`doctor` cancels in-flight work** — never while a seat is running.
-- **`tools/broker-serve.mjs --status` prints two wrong verdicts on this host**: `BLOCK seat-shell-availability` (it
-  greps the vendored `programs ?? ["pwsh","powershell"]`, which belongs to `createPowerShellTool`, and applies it to the
-  registered shell — `src/shellregistry.mjs` reports **`bash`, `degraded:false`**, and `demo/seatguard.test.mjs` +
-  `demo/seattools.test.mjs` both PASS) and `NOTE stranded-intent` (the two spool files are
-  `{"op":"read","view":"health","from":"cli"}` leftovers). Now #4977/#4978.
-- **Declared ≠ served window**: verifier 24576 declared / 8192 served; local 160000 in one config copy / 200000 in the
-  other / engine `--max-context 204800`; `status.context.consumed` is the LAST model call's accounting and goes stale
-  after a reset. **`submissions.detail` is the first cause read** (`runbooks/session-start-cost.md` §2c): four seats
-  died of the 8192-token summarization budget (`DURIG_LOCAL_MAX_TOKENS` unset, `src/providers/local.mjs:76`), not of
-  conversation shape. `cli.mjs compact` has no `--dry-run`; `reset` does.
-- **`up --refresh` printing `refreshed: <all seats>` is NOT proof a cwd changed** — it writes no cwd without
-  `DURIG_SEAT_ROOT` in the invoking env. Prove with the dry run + the bare-name inventory diff.
-- **Brief a seat inside its `capabilities`**: `lead`/`pm` are coordinators (queue verbs, no shell, no file tools).
-  `lead` also reported its own authority boundary this turn — it **cannot** revise a row it neither sent nor received,
-  cannot revise a row once `held`, and cannot park a queued row it minted (fold into #3236/#3486/#3570 at `pm` claim).
-- **Not landable by hand:** `item-4931` 2 ahead / 23 behind; `item-4898` 1/44; `item-4930` 0/28; `item-4937` 0/25;
-  `item-4955` 0/17. Withheld `-D` on `item-4898` stays withheld.
-- Every 40-hex value in a seat transcript is redacted as `secret-shaped value`; `node --check` proves only the FIRST
-  path; `better-sqlite3` is absent — use `node:sqlite`; the store opener **CREATES** a file on READ (pin absolute);
-  `up --refresh --dry-run` never previews removals; scratch inside a worktree dies with it; `pgrep -f "cli.mjs send"`
-  matches your own `bash -c` line; do not `&&`-chain a probe whose output you then verify.
-- **A cheap clock-in read exists and was not used:** `scripts/clockin.mjs` (D126) prints POINTER / RIG / QUEUE / GIT /
-  RUNBOOKS / PROVIDER / READ MAP / COST in one budgeted pass — measured 6,936 B, exit 0 at the root, and it extracts the
-  pointer **by line range**, which is why the pointer must keep its `## NEXT SESSION` heading AND name
-  `docs/NEXT-ARCHIVE.md` *inside* that section. Run it before hand-assembling six instrument calls. **But it is broken
-  in a detached worktree**: it computes landing debt as `git rev-list --count main..$(branch)`, and the branch is
-  `(no branch)` there, so the script throws `git rev-list --count main..(no branch)` — which is what made
-  `demo/clockin-digest.test.mjs` fail inside `scripts/land.mjs`'s scratch and block a `--changed-suite` landing.
+- **Do not claim, complete, defer, or route queue rows yourself.** Routing and decomposition belong to `lead`.
+- **Do not land anything without the operator naming that landing.** §1 asks; nothing in this session was landed.
+- **No push without the operator's grant** — 89 ahead of `origin/main` at `43e26dcc`.
+- **Native host only** (Linux here; D131). **`DURIG_DB` for the CLI**, never `DURIAN_PI_DB` (D103).
+- **Never dispatch a write verb from a claimed worktree** (§4), and **never run `doctor`/`resume` while a seat is running**
+  (D187, re-measured this session).

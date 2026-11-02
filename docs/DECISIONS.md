@@ -7700,3 +7700,62 @@ into its text turn), and **#4973** (`impl`, held, `blockedBy=[4970]`). I sent `l
 **Standing constraints this session:** no push (61 commits ahead of `origin/main`, still unpushed); nothing landed —
 `item-4931` is still 2 ahead / 20 behind `main` and the granted landing fires only through #4966; the withheld
 `-D item-4898` condition is still unmet.
+
+## D189 (2026-11-02, Linux, `Alex-Desktop-Win10`): the clock-in digest's provider verdict is FALSE, and the rig's own pre-flight — not the verifier window — is what blocks a verifier wake
+
+**The decision.** The delegate did **not** spend the `qa` wake for `#4974` that the previous pointer queued as its step 3,
+and did not accept that pointer's framing ("fix the verifier window, then the `qa` leg"). It ran the rig's own guard
+first, and escalated numbers instead of spending a cold model load to discover them.
+
+**Why, in the order the evidence arrived (all measured this session):**
+
+1. `node tools/model-probes/probe-preflight.mjs` → **`REFUSE: swap 79% used (max 50%) — zram is the ceiling here, not
+   RAM`**, with GPU0 (`RTX A4000`) 16,329 MiB free and `strata` at 49.2 GiB RSS (40.2 GiB of it shmem). A load the box's
+   own pre-flight refuses is not a slot-size question, and the cheapest lever is host hygiene (largest swap holder
+   1.5 GiB; `plasma-discover` holds 1.7 GB RSS), not `--ctx-size`.
+2. **The GPU assignment has flipped** since `verifier-model-server.md`'s 2026-10-29 topology: the seat engine `iq3_s`
+   now sits on **GPU1 (`RTX 3090`) at 23,020/24,576 MiB (94 %)**, `gpus:[1]` per its own `/v1/models`, leaving
+   **GPU0 (`A4000`, 16,376 MiB) empty**. That decides which verifier file can load at all — `flint-Q4_K_M.gguf` is
+   **24,166,841,184 B** and cannot fit the only free card; `Ministral-3-14B-Reasoning-Q6_K` is **11,088,407,584 B** and
+   can. Anyone quoting the runbook's card assignment without re-measuring will propose the impossible one.
+3. **A correctly-windowed `ministral` is still not a verifier.** The same runbook records it **0/16 clean controls** — it
+   commits `VERDICT: DEFECT` on clean code and invents the mechanism. Waking `qa` on it to "verify" the landed persona
+   split would buy a confidently wrong verdict, which is D137's stated reason a failed verifier is worse than none. The
+   open question is not "when can we wake `qa`" but "which model earns the wake".
+
+**Why an escalation rather than a delegate call:** GPU spend and verifier capacity are the operator's to rule
+(`session-start-cost.md` → "Escalate to"). The delegate's job was to make the choice legible with numbers, not to make it.
+
+**Second durable fact — `cli.mjs resume` has no re-arm path; it settles by cancelling, and the rig's own attention text
+invites the opposite.** Measured: `resume` → `found: 2`, `impl #278592 queued → withdrawn`, `devtools #278704 placed →
+run-cancelled`; the code is `cli.mjs:1106-1122` (`abortSubmission`, then `conv.abort()`). D187 already recorded the
+destructive half, and the notice still reads "re-arm it with the resume/doctor verb (item 37(b))". Routed to `lead` as a
+wording/behaviour row rather than edited by the delegate — the instruments are `devtools`' family and decomposition is
+`lead`'s.
+
+**Third — the config surface is cwd-scoped and gitignored, so a wake dispatched from a claimed worktree resolves a
+config-less rig and dies as `no_model`.** `durig.config.json` is absent from every worktree (`item-4977`,
+`seatroot/item-4955`: none) while present in the operator checkout and the approved seat root; precedence is env →
+`./durig.config.json` in the **waker's** cwd (`src/config.mjs:7`). Measured: the same brief sent from `item-4977` settled
+`{settledStatus:"unanswered", settledReason:"no_model", reply:null}` in <20 s with zero tokens; from `seatroot` it ran a
+real 12+ minute turn. This is the mechanism under the D188 note "the waker decides a seat's context ceiling", and it is
+the harder case: drift changes a number, absence kills the wake. Hence the standing delegate practice — dispatch write
+verbs only from a tree that carries the config, and pin `DURIG_LOCAL_CONTEXT` when the two private copies disagree
+(160000 in the operator checkout vs 200000 in the seat root; `#4970` HALF B is still the operator's ruling).
+
+**What survived, proved rather than asserted.** The killed `devtools` run left real work uncommitted in `item-4977` — at
+01:5xZ: `M src/shellregistry.mjs`, `M tools/broker-serve.mjs`, `?? tools/shell-availability.mjs`,
+`?? demo/broker-serve-shell-availability.test.mjs`. `resume` wrote no files: the bare-name worktree and branch
+inventories (12 and 13 lines) are byte-identical before and after it. The continuation brief ordered "`cat`/`git diff`
+what is on disk FIRST, do not re-derive the design", which is the repair for a killed run — a re-brief that omits it
+spends the wake rebuilding work that already exists.
+
+**A docs gap, recorded honestly.** The previous pointer is labelled **"D188 daytime"** but **no `D188` entry exists in
+this file** (`grep -c D188 docs/DECISIONS.md` = 0). A pointer that cites a decision id the decisions file does not
+contain sends the next session hunting for a ruling nobody wrote down; the fix is this entry plus a pointer that says so.
+
+**Standing constraints at clock-out:** **no push** — `main` is **89** commits ahead of `origin/main` (`eea4effb`); the
+operator holds that grant and the delegate flags the durability risk rather than closing it. **No resident broker**
+(`selfdev.sqlite.broker.json` absent), and `tools/broker-serve.mjs --start` still refuses on the false shell verdict —
+which is why `#4977` was this session's chosen wake: it is the row that converts every future delivery from a
+second-owner `send` back into broker-delivered `intent.mjs`.
