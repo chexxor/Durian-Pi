@@ -208,6 +208,14 @@ checks (`confine`, `verify-scratch-per-tree`), Windows path fixtures (`write-tar
 with `passAgeMs: 420613`). OS-shaped failures are ROADMAP 185–189; a failure that survives on both OSes is a
 bug, not drift, and must not be filed under "Linux".
 
+**Re-attribution of the `clockin-digest` entry (2026-11-02, #4985, fixed at `c4db1fd9`):** it was neither
+docs-state nor OS-shaped. Its cause was the tool interpolating branch NAMES into a git range while the tree was
+DETACHED — `git rev-list --count main..(no branch)` → exit 128 (git 2.56.0 lists a literal `(no branch)` for a
+detached HEAD) — measured on Linux in a scratch worktree at `43e26dcc`, and it is what stopped the item-4966
+landing's `--changed-suite` at 129 of 242 derived tests. Moving a workspace onto a named branch (this runbook's
+own remedy, recorded in D173) hides it; the tool is now fixed, and `demo/clockin-digest.test.mjs` creates the
+detached tree itself so the failing shape is part of the test. The other entries in that list are untouched.
+
 ## Verify (the procedure worked when all of these hold)
 
 1. `sync-pi.mjs` reports `buildTree` = the pinned sha and the nine `@earendil-works/*` symlinks exist under
