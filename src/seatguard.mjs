@@ -83,7 +83,45 @@ async function persistedSeatCwd(api, context) {
  * guards (confine.mjs is the boundary). `process.cwd()` is the shared root because the guard runs
  * inside the broker/CLI process, which is started from the shared checkout.
  */
-async function sharedTreeRefusal(api, context, { path = null, command = null, shell = false, verb = null } = {}) {
+/**
+ * #4790: the READ verbs a degraded-cwd seat may still run. They OPEN NOTHING WRITABLE -- `status` and
+ * `queue` only read the store -- and refusing them created an IDLE-SEAT DEADLOCK, measured by two
+ * seats: after `complete_work` the cwd degrades to the shared checkout; the guard refuses EVERY shell
+ * command there; and `prepare_workspace` refuses because the seat holds no claimed item. SO AN IDLE
+ * SEAT COULD NOT RUN `status`, COULD NOT RUN `queue`, AND COULD NOT PREPARE A WORKSPACE TO GET OUT.
+ * The guard's own refusal message tells the seat to inspect from a correct cwd "one call later" --
+ * but there is no call it can make. The refusal was self-defeating.
+ *
+ * AN ALLOW LIST IS THE SAFE SHAPE HERE, AND IT IS THE OPPOSITE OF THE WRITE GUARD: for WRITES a verb
+ * list is wrong (a list is what let `>` through) because the default must be refuse and the list must
+ * name every refusal. FOR READS THE DEFAULT IS STILL REFUSE and this list names only what is
+ * PERMITTED -- so a verb nobody thought of stays refused. The default is the safety, not the list.
+ */
+const SHARED_CWD_READ_VERBS = new Set(["status", "queue"]);
+
+/**
+ * Whether a shell command is a BARE read-verb CLI invocation and NOTHING ELSE.
+ *
+ * A separator (`;`, `&&`, `|`, `&`, a newline) DISQUALIFIES it: chaining is exactly how a read verb
+ * becomes a write (`node cli.mjs status; Set-Content ...`). So is any other program or verb, and so is
+ * a redirect (`>`), which is why the whole string is matched rather than the first tokens found.
+ */
+export function isReadOnlyCliInvocation(command) {
+	const text = String(command ?? "").trim();
+	if (text === "") return false;
+	if (/[;&|<>\n]/.test(text)) return false; // chaining, piping, or a redirect: not a bare read
+	const tokens = text.split(/\s+/);
+	if (tokens.length < 3) return false;
+	if (!/(^|[\\/])node(\.exe)?$/i.test(tokens[0])) return false;
+	if (!/(^|[\\/])cli\.mjs$/i.test(tokens[1])) return false;
+	return SHARED_CWD_READ_VERBS.has(tokens[2].toLowerCase());
+}
+
+async function sharedTreeRefusal(
+	api,
+	context,
+	{ path = null, command = null, shell = false, verb = null } = {},
+) {
 	// Only a KNOWN persisted cwd can be "degraded": with no persisted cwd the root is a fallback
 	// (DURIG_SEAT_ROOT / process cwd) and a seat that never prepared a workspace is not our case.
 	const seatRoot = await persistedSeatCwd(api, context);
@@ -95,6 +133,10 @@ async function sharedTreeRefusal(api, context, { path = null, command = null, sh
 	// be wrong. From a degraded cwd there is exactly ONE useful action - prepare_workspace; a seat that
 	// wants to inspect can do it from a correct cwd one call later.
 	if (shell) {
+		// #4790: a BARE read-verb invocation opens nothing writable, so it is allowed even here. The
+		// default is still REFUSE -- this is an allow list, not a relaxation -- and a WRITE verb from
+		// the shared checkout is refused exactly as before (the paired assertion).
+		if (isReadOnlyCliInvocation(command)) return null;
 		return (
 			`refused by durig: your seat cwd IS the SHARED checkout (${seatRoot}), not an item worktree - a ` +
 			`shell command here can destroy the shared tree. The cwd degrades to the shared tree after ` +

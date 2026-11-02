@@ -211,6 +211,7 @@
    "demo/secretdetect.test.mjs",
    "demo/secretredact.test.mjs",
    "demo/secrets.test.mjs",
+   "demo/shared-cwd-read-verbs.test.mjs",
    "demo/shared-tree-on-main.test.mjs",
    "demo/shell-write-refusal.test.mjs",
    "demo/skill-admission-gate.test.mjs",
