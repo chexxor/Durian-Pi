@@ -13,7 +13,7 @@ the only verifier file that fits the one free card is the model with 0/16 clean 
 
 Older sessions live verbatim in `docs/NEXT-ARCHIVE.md` (link it, and the pointer test enforces that).
 
-**Pointer hygiene first:** **131 lines** (`wc -l`) / 132 counted entries — measured AFTER the last edit to this file, and
+**Pointer hygiene first:** **136 lines** (`wc -l`) / 137 counted entries — measured AFTER the last edit to this file, and
 wrong for anyone who edits it after me. The previous pointer was labelled **"D188 daytime"**, but **no `D188` entry exists in
 `docs/DECISIONS.md`** (`grep -c D188 docs/DECISIONS.md` = 0) — that session's rulings live inside `D187`'s block and in the
 pointer text only. **This session's entry is `D189`** (verifier pre-flight outranks the window argument; `resume` has no
@@ -58,11 +58,16 @@ demo (`demo/next-pointer.test.mjs`).
   bash]: CAN start (/usr/bin/bash) [preferred on this host] | powershell [spawns pwsh, powershell]: cannot start)` —
   **the BLOCK is gone.** The other blocks in that run are artifacts of where it ran (`store-missing` — I passed no `--db`;
   `live-tree-dirty` — the seat was mid-write).
-- **`#4977` was still `claimed` at clock-out** and the send was still live at 25 min
-  (`ps -p $(cat .spike/fix-20261102/send2.pid)`). **READ `.spike/fix-20261102/send-devtools2.out` first.** If the pid is
-  gone and `#4977` is still `claimed`, the run was killed a third time: `resume` cancels the submission and leaves
-  `ac5e1d37` alone, then re-brief for the `complete` + docs leg ONLY, and say in the brief "the commit exists, do not
-  re-implement".
+- **`#4977` was still `claimed` at clock-out** and its send was still live at **51+ min**
+  (`ps -p $(cat .spike/fix-20261102/send2.pid)`), with **two** commits on the branch — `ac5e1d37` (the fix) and
+  `5d65d59c docs(tools/README,runbooks): the rows that asserted the false shell BLOCK are corrected (#4977)` — and a **clean
+  worktree**. **READ `.spike/fix-20261102/send-devtools2.out` first.** If the pid is gone and `#4977` is still `claimed`, the
+  run was killed a third time: `resume` cancels the submission and leaves both commits alone, then re-brief for the
+  `complete` leg ONLY, and say in the brief "the commits exist, do not re-implement".
+- **The delivery channel is itself deprecated while no broker is resident:** every `send` prints
+  `send is DEPRECATED (opens a full writing harness = a second owner): prefer node intent.mjs <seat> --body-file <file>`
+  (D186.4). This rig still has to use `send` because `#4977`'s false `BLOCK seat-shell-availability` is what stops
+  `broker-serve --start` — which is why landing it is step 1 and not housekeeping.
 - **CONFLICT TO EXPECT when landing:** `devtools` edited `docs/runbooks/session-start-cost.md`,
   `docs/runbooks/hygiene-and-dead-model-pointers.md` and `tools/README.md` **in its worktree** while I edited the same
   `session-start-cost.md` in the operator checkout. Resolve by keeping both sections.
