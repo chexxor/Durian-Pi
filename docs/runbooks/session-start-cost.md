@@ -91,13 +91,19 @@ node -e 'console.log(require("fs").readFileSync("durig.config.json","utf8"))'   
 #    Read this pair BEFORE sending a verify leg (#4974 on `qa` is exactly such a wake), and name the dial you moved.
 # 5b. which shell can a seat actually start — 0.2 s, and it is NOT the broker-serve verdict:
 node -e 'import("./src/shellregistry.mjs").then(m=>console.log(m.seatShellSelection.name, "degraded:"+m.seatShellSelection.degraded))'
-#    Measured 2026-11-01: `bash degraded:false` on this Linux box, while `tools/broker-serve.mjs --status` prints
-#    `BLOCK seat-shell-availability … registered as "bash" and spawns [pwsh, powershell]`. That BLOCK is the instrument
-#    reading the VENDORED default (`vendor/pi-main/packages/durable/src/tools/bash.ts:169` `programs ?? ["pwsh",
-#    "powershell"]`, which belongs to createPowerShellTool) instead of the registry — `createBashTool` hands the string
-#    to env.exec. Proof the shell works: `node demo/seatguard.test.mjs` PASS and `node demo/seattools.test.mjs` PASS
-#    in the 187-package + vendor/pi-main tree at 238ff91d. Do NOT start a wake to "fix" the host on that BLOCK, and do
-#    not treat `--start` refusal as a host condition: it is an instrument defect (devtools family: #4938/#4949/#4959).
+#    Measured 2026-11-01: `bash degraded:false` on this Linux box, while `tools/broker-serve.mjs --status` printed
+#    `BLOCK seat-shell-availability … registered as "bash" and spawns [pwsh, powershell]`. That BLOCK was the
+#    instrument reading the VENDORED default (`vendor/pi-main/packages/durable/src/tools/bash.ts:169` `programs ??
+#    ["pwsh", "powershell"]`, which belongs to createPowerShellTool) instead of the registry — `createBashTool` hands
+#    the string to env.exec. It was fixed in `refs/heads/item-4977` (#4977): section 7 now asks
+#    `tools/shell-availability.mjs`, which asks `src/shellregistry.mjs`, and on this box `--status --no-probe` prints
+#    `NOTE … the seat shell tool "bash" CAN start on linux — /usr/bin/bash` (measured exit 0, thin worktree; the same
+#    command at `43e26dcc` still prints the BLOCK — that difference is the fix, and it is NOT yet on `main`).
+#    Proof the shell works: `node demo/seatguard.test.mjs` PASS and `node demo/seattools.test.mjs` PASS in the
+#    187-package + vendor/pi-main tree at 238ff91d, and again at `ac5e1d37` in the thin 80-entry worktree (the fix
+#    removed the vendor read, so a thin tree is now admissible for THIS instrument). If a `--status` BLOCK names a
+#    shell, believe it only when `shellPlan()` in the SAME tree says `degraded:true` — and pin the verdict with
+#    `node demo/broker-serve-shell-availability.test.mjs`.
 #    Same file, second wrong verdict: `NOTE stranded-intent` counts `op:"read"` health requests left by `cli.mjs status`
 #    (both 2026-11-01 spool files are `{"op":"read","view":"health","from":"cli"}`) because line 182 uses `pending`
 #    rather than the `intents` filter line 322 introduces. Read the spool files before concluding the channel is jammed.
