@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { fallbackModels } from "../src/providers/deepinfra-models.ts";
+import { isLocalProviderId } from "../src/providers/local.mjs";
 
 const list = fallbackModels();
 const byId = new Map(list.map((m) => [m.id, m]));
@@ -70,21 +71,97 @@ assert.ok(v41_1017.input.includes("image"), "vision input");
 // 6. Every seat model the selfdev rig names resolves. This is the regression guard
 // for the 2026-10-19 outage: the rig was pointed at -1017 while the catalog was
 // not, and four seats silently produced zero assistant turns (`no_model`).
-// `local/<id>` is a separately registered provider, not this catalog.
+//
+// A seat model names a PROVIDER, and this catalog is only one of them. `local/` and `verifier/` are
+// separately registered providers (src/providers/local.mjs — D166's cross-family author/verifier split), so
+// their ids are not this catalog's business. #5013: this guard exempted the `local/` LITERAL and not
+// `verifier/`, so from the moment any seat named a `verifier/...` model the guard was red for ANY value — a
+// guard that cannot be satisfied protects nothing, and it has been dead since D166 landed.
+//
+// So the exemption is READ FROM THE MODULE THAT BUILDS THOSE PROVIDERS (`isLocalProviderId` /
+// LOCAL_PROVIDER_IDS), not from a prefix list inside a test: a third local provider is exempt the moment it
+// is registered, and a prefix nobody registers still fails the guard. The guard asserts that a seat's model
+// is resolvable by SOMETHING the rig can register — it does not, and cannot, assert that the endpoint is up:
+// that lives in gitignored `durig.config.json` (#4996's mechanism), and a test must not depend on it.
 const rig = JSON.parse(readFileSync(new URL("../rig.selfdev.json", import.meta.url), "utf8"));
 const resolvable = (seatModel) => {
-	if (seatModel.startsWith("local/")) return true;
+	const slash = seatModel.indexOf("/");
+	if (slash > 0 && isLocalProviderId(seatModel.slice(0, slash))) return true; // a locally served provider, built by src/providers/local.mjs
 	const id = seatModel.startsWith("deepinfra/") ? seatModel.slice("deepinfra/".length) : seatModel;
 	return byId.has(id) || id === process.env.DURIG_MODEL;
 };
+const checkedSeats = [];
+const byProvider = new Map();
 for (const seat of rig.seats) {
 	if (!seat.model) continue;
+	checkedSeats.push(seat.name);
+	const provider = seat.model.includes("/")
+		? seat.model.slice(0, seat.model.indexOf("/"))
+		: "(default)";
+	byProvider.set(provider, (byProvider.get(provider) ?? 0) + 1);
 	assert.ok(
 		resolvable(seat.model),
-		`seat "${seat.name}" names ${seat.model}, which is not in the fallback catalog — it would resolve to no_model`,
+		`seat "${seat.name}" names ${seat.model}, which neither a registered provider nor the fallback catalog resolves — it would be no_model`,
 	);
 }
 
+// NON-VACUITY PAIR (#5013): the guard must still be able to BITE. Both real locally-served providers resolve,
+// while a prefix no rig registers and a catalog-absent model id both fail. A green that cannot go red is not
+// a guard — this is the half that was missing when the guard died silently on a provider rename.
+assert.equal(
+	resolvable("verifier/mistralai/ministral-3-14b-reasoning"),
+	true,
+	"the D166 shape resolves: a verifier provider is a provider, not a missing catalog entry",
+);
+assert.equal(
+	resolvable("local/iq3_s"),
+	true,
+	"the author provider still resolves (the half that was never broken)",
+);
+assert.equal(
+	resolvable("nosuchprovider/some-model"),
+	false,
+	"a prefix NOBODY registers still fails the guard — the exemption comes from the registry, not from a lenient prefix rule",
+);
+assert.equal(
+	resolvable("deepinfra/definitely-not-in-this-catalog-9x7"),
+	false,
+	"a model absent from the catalog still fails it — the 2026-10-19 outage shape, which no current seat exercises",
+);
+assert.ok(
+	checkedSeats.length >= 5,
+	`the loop actually checked ${checkedSeats.length} seat models — a guard over an empty selection is vacuous`,
+);
+assert.ok(
+	(byProvider.get("verifier") ?? 0) >= 1 && (byProvider.get("local") ?? 0) >= 1,
+	`real seats exercise BOTH exemptions (${[...byProvider]
+		.map(([k, v]) => `${k}=${v}`)
+		.join(", ")}) — the fix is not carried only by synthetic cases`,
+);
+
+// The class, pinned: this fix rotting back into a hardcoded provider name is exactly how it died once. The
+// check is scoped to the guard function's own body — a whole-file check matched its own assertion text on the
+// first run, which is a trap worth naming for whoever writes the next self-lock.
+const demoSrc = readFileSync(new URL(import.meta.url), "utf8");
+const guardAt = demoSrc.indexOf("const resolvable =");
+const guardBody = demoSrc.slice(guardAt, demoSrc.indexOf("};", guardAt));
+assert.ok(
+	guardBody.length > 200,
+	`the guard's own body is inspectable, not a one-liner (${guardBody.length} B)`,
+);
+assert.ok(
+	!guardBody.includes('"local/'),
+	'the exemption names NO provider prefix literal ("local/…") — it is read from src/providers/local.mjs',
+);
+assert.ok(
+	guardBody.includes("isLocalProviderId"),
+	"the guard asks the module that builds the providers",
+);
+
 console.log(
-	`DEEPINFRA CATALOG PASS (google/gemma-4-31B-it present: ${gemma4.contextWindow} ctx, $${gemma4.cost.input}/$${gemma4.cost.output}, reasoning=${gemma4.reasoning}, vision; deepseek-ai/DeepSeek-V4.1-Flash-1017 present: ${v41_1017.contextWindow} ctx; ${rig.seats.length} rig seats resolve; ${list.length} entries)`,
+	`DEEPINFRA CATALOG PASS (google/gemma-4-31B-it present: ${gemma4.contextWindow} ctx, $${gemma4.cost.input}/$${gemma4.cost.output}, reasoning=${gemma4.reasoning}, vision; deepseek-ai/DeepSeek-V4.1-Flash-1017 present: ${v41_1017.contextWindow} ctx; ${checkedSeats.length} rig seat models resolve across providers ${[
+		...byProvider,
+	]
+		.map(([k, v]) => `${k}=${v}`)
+		.join(", ")}; ${list.length} entries)`,
 );
