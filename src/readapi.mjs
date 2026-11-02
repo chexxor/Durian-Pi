@@ -140,6 +140,31 @@ export async function readQueueItems(storage, context = BACKGROUND_CONTEXT) {
 }
 
 /**
+ * ONE queue row by id (#4986).
+ *
+ * WHY A SEPARATE READ, stated honestly: the queue is ONE document (`RigQueue`, `value.items`), so the STORAGE
+ * read cannot be narrowed — reading one row reads the document. What CAN be narrowed, and what the rig was
+ * paying for, is the PRINT: `node cli.mjs queue` emitted **21,927,512 bytes** on this rig (measured in #4986,
+ * and the same reason `cli.mjs status` is 22 MB), and a 17-row audit therefore cost a 22 MB dump that blew
+ * through a seat's context before any row was read. A row-scoped read is the difference between "the tool read
+ * the store" and "the session paid for the store".
+ *
+ * `rows` is returned with the row so a caller can tell "this row is one of 2,000" from "this is the whole
+ * queue" — a narrow read that hides its own selectivity is how a partial view gets mistaken for the truth.
+ * `item: null` is a RESULT, not an exception: the caller decides whether an absent row is an error (the CLI
+ * exits 1 on it, because a typo'd id must not look like an empty queue).
+ */
+export async function readQueueRow(storage, id, context = BACKGROUND_CONTEXT) {
+	const items = await readQueueItems(storage, context);
+	const want = String(id);
+	return {
+		id: want,
+		item: items.find((i) => String(i.id) === want) ?? null,
+		rows: items.length,
+	};
+}
+
+/**
  * The rig-level control document (ROADMAP 131): `paused` and its provenance. Absent
  * store reads as NOT paused, so a first-run/legacy store is unpaused rather than
  * exceptional. Read-only: `status` renders it, it never writes it.

@@ -19,6 +19,7 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
   readLiveState,
   readQueueItems,
+  readQueueRow,
   readRigHealth,
   readSeatList,
   readSeatRoots,
@@ -32,7 +33,7 @@ import { conversationExhausted, readOlderEntries } from "./rigstory.mjs";
  * `readRigHealth` alone makes dozens of storage calls, and a per-call round-trip
  * through the ~1 s broker inbox would make `status` take minutes.
  */
-export const READ_VIEWS = ["seats", "queue", "roots", "health", "live", "entries", "feed", "document", "exhausted", "older"];
+export const READ_VIEWS = ["seats", "queue", "queue-row", "roots", "health", "live", "entries", "feed", "document", "exhausted", "older"];
 
 /** The non-secret config keys `readRigHealth` reads. The CLI sends ONLY these: the
  * broker must never receive the provider key that lives in the full config. */
@@ -53,6 +54,14 @@ export async function dispatchRead(storage, request, { dbPath, context = BACKGRO
   const view = request.view;
   if (view === "seats") return await readSeatList(storage, context);
   if (view === "queue") return await readQueueItems(storage, context);
+  // #4986: a row-scoped read, so an audit of a few rows costs those rows and not the whole store. The queue is
+  // ONE document, so this does not narrow the STORAGE read — it narrows the PAYLOAD, which is the half a session
+  // pays for (21,927,512 bytes was the full dump on this rig).
+  if (view === "queue-row") {
+    if (request.id === undefined || request.id === null || String(request.id) === "")
+      throw new Error("queue-row: needs an item id");
+    return await readQueueRow(storage, request.id, context);
+  }
   if (view === "roots") return await readSeatRoots(storage, context);
   if (view === "health") {
     return await readRigHealth(storage, dbPath, request.slots, {

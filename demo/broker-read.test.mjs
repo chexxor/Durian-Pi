@@ -34,7 +34,7 @@ import {
 } from "../src/broker.mjs";
 import { READ_VIEWS } from "../src/brokerread.mjs";
 import { readViaBroker, brokerAliveFor } from "../src/readclient.mjs";
-import { readQueueItems, readSeatList } from "../src/readapi.mjs";
+import { readQueueItems, readQueueRow, readSeatList } from "../src/readapi.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
 const dir = mkdtempSync(join(tmpdir(), "durig-read-"));
@@ -75,6 +75,7 @@ try {
   assert.deepEqual(READ_VIEWS, [
     "seats",
     "queue",
+    "queue-row", // #4986: one row by id, so an audit costs the rows it asked for (the full dump measured 21,927,512 B on this rig)
     "roots",
     "health",
     "live",
@@ -109,6 +110,20 @@ try {
   await drainIntentInbox(harness, storage, { dbPath, context: ctx });
   const readQueue = (await awaitIntentResult(dbPath, R_QUEUE, { timeoutMs: 2000 })).result.result;
   assert.deepEqual(readQueue, await readQueueItems(storage, ctx), "the broker's `queue` view equals the direct call");
+
+  // The row-scoped view travels the SAME spool path (#4986), so the routed and local forms of the narrow read
+  // are equal too — a narrow read that only works un-routed would quietly regress once a broker is resident.
+  const R_ROW = "read-queue-row-1";
+  writeIntent(dbPath, { op: "read", view: "queue-row", id: 7, requestId: R_ROW, from: "cli" });
+  await drainIntentInbox(harness, storage, { dbPath, context: ctx });
+  const readRow = (await awaitIntentResult(dbPath, R_ROW, { timeoutMs: 2000 })).result.result;
+  assert.deepEqual(
+    readRow,
+    await readQueueRow(storage, 7, ctx),
+    "the broker's `queue-row` view equals the direct readapi call — an id is a request parameter, not a second path",
+  );
+  assert.equal(readRow.item, null, "an absent row is a RESULT over the spool too (the empty fixture store)");
+  assert.equal(readRow.rows, 0, "and it reports the store size it scoped against");
 
   // 2. An UNKNOWN read view is dead-lettered by name, never applied — the view set is
   //    closed, exactly like the op set.
