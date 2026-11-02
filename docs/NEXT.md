@@ -13,7 +13,7 @@ the only verifier file that fits the one free card is the model with 0/16 clean 
 
 Older sessions live verbatim in `docs/NEXT-ARCHIVE.md` (link it, and the pointer test enforces that).
 
-**Pointer hygiene first:** **146 lines** (`wc -l`) / 147 counted entries — measured AFTER the last edit to this file, and
+**Pointer hygiene first:** **151 lines** (`wc -l`) / 152 counted entries — measured AFTER the last edit to this file, and
 wrong for anyone who edits it after me. The previous pointer was labelled **"D188 daytime"**, but **no `D188` entry exists in
 `docs/DECISIONS.md`** (`grep -c D188 docs/DECISIONS.md` = 0) — that session's rulings live inside `D187`'s block and in the
 pointer text only. **This session's entry is `D189`** (verifier pre-flight outranks the window argument; `resume` has no
@@ -24,9 +24,11 @@ demo (`demo/next-pointer.test.mjs`).
 
 ## Measured state at clock-out (2026-11-02T02:05Z, Linux/Fedora 44 on `Alex-Desktop-Win10`, node v24.22.1)
 
-- **`main = 51e3b9b1` (this session's own docs commit), 90 commits AHEAD of `origin/main` (`eea4effb`)** — 61 at the last
-  clock-out, the team added 28 more, and the delegate added 1. `#4977`'s commit `ac5e1d37` is on branch `item-4977`, **not**
-  on `main`. **Still no push grant.** That is a durability risk, not a cleanup item.
+- **`main` MOVED FIVE TIMES while I worked** (`43e26dcc` → `51e3b9b1` → `fb4cff7b` → `a8c4af21` → `fde5073f`, and
+  `devtools` was adding commits on `item-4985` the whole time). At the last read: **94 commits AHEAD of `origin/main`
+  (`eea4effb`)**, up from 61 at the previous clock-out. **Re-read it in 2 s rather than trusting this line:**
+  `git rev-parse --short main && git rev-list --count origin/main..HEAD`. **Still no push grant** — that is a durability
+  risk, not a cleanup item. `#4977`'s commits (`ac5e1d37`, `5d65d59c`) are on branch `item-4977`, **not** on `main`.
 - **SUITE: 243/244 in ~52 s** at `--jobs 8`, 244 demos, in the full tree (**187 `node_modules` entries + `vendor/pi-main`
   present** — NOT the thin 80-entry tree earlier pointers quoted). One red: `demo/deepinfra-catalog.test.mjs` (pre-existing
   catalog/network). **Running the suite while a seat run is live manufactures reds** — measured 241/244 with
