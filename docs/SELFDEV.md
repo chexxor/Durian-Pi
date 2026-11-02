@@ -1307,6 +1307,30 @@ every exit code, per #4939.
   (`node cli.mjs bogus` prints the full usage list). Triaging 17 deferred rows cost one 22 MB dump plus a filter script
   (`.spike/fix-20261101c/{queue.json,deferred.mjs}`). A `queue --id <id>[,<id>…]` filter would make this class ~20×
   cheaper — worth a row at `lead`/`pm`.
+- **A `reset` leaves the seat in exactly the shape `tools/seat-turn-shape.mjs` calls AT RISK.** After both resets the
+  window is `1 messages: user` (the handoff is an unanswered `user` turn) — that is what `pm`/`devtools` had been showing
+  all along, so AT RISK is often just "a reset handoff is pending", not corruption. For **local-role** seats
+  (`local/iq3_s`) a send then runs fine; for **verifier-role** seats it can 500 on a strict template. Read the model
+  from `rig.selfdev.json` per seat (`qa`, `qa2`, `advocate`, `auditor`, `designer` are verifier-role; the rest local).
+- **With the broker down, nobody resets a degenerate seat.** The D77 remedy (`src/degeneration.mjs` `assessRun` →
+  supervisor reset + `clearSeatCooldown` + `markDirty`) runs in the **broker supervisor**. `devtools` settled `done` after
+  emitting `<tool_call>…<function=powershell>` as message text on a LINUX host — no tool ran, no row touched, and no
+  automatic reset happened because the broker has been down since 2026-10-30. A delegate has to do it by hand
+  (`cli.mjs reset <seat> "<handoff naming the fault>"`; `cli.mjs serve --stop` → `"reason":"no broker is running"`
+  confirms the runbook's broker-stopped precondition trivially).
+- **`send` refuses for EVERY seat if `DURIG_SEAT_ROOT` is set and one seat's persisted cwd is outside it.** Measured:
+  `seat "impl" is pointed at a different worktree than DURIG_SEAT_ROOT: persisted cwd
+  "/home/chexxor/Git/Durian-Pi/item-4789"`. This rig has **two claimed-worktree conventions at once** — `item-4789 /
+  item-4966 / item-4967 / item-4937` at the repo root, `item-4898 / item-4930 / item-4931 / item-4955` under
+  `durian-dev/seatroot`. Unsetting `DURIG_SEAT_ROOT` lets sends proceed; `up --refresh` under the root would re-point
+  every seat, which is riskier while a seat holds a claim.
+- **Who wakes a seat changes its context ceiling.** `durig.config.json` is gitignored and this rig has two copies that
+  disagree — root `DURIG_LOCAL_CONTEXT 160000`, seatroot `200000` — and `send` runs the seat's turn inside the CLI
+  process, so the waking environment wins. Pin it explicitly (`DURIG_LOCAL_CONTEXT=…`) on every send, and expect a
+  seat's behaviour to differ between a broker wake and a delegate send.
+- **A cut `send` is not a failed turn.** Both `timeout 1800` and `timeout 2400` killed `impl` mid-turn with **no settle
+  JSON**, yet between those cuts it completed `#4789` (queue `done 3779→3780`, `deferred 16→15`) and cut a branch for the
+  next row. Judge a seat turn by row counts + branch/worktree inventory + the log, never by whether the CLI printed JSON.
 - **A brief that names a hazard can eat the turn you meant it to spend on work, and one `send` is one turn.** The `impl`
   batch brief (7 KB, 11 rows) said "one store writer at a time — the delegate will not send while you run"; impl spent
   part of the turn hashing `selfdev.sqlite` across 8 s to confirm no writer was live, and
