@@ -146,13 +146,82 @@ check(
 	!vendorGrepTokens.some((token) => codeOnly(brokerSrc).includes(token)),
 	vendorGrepTokens.filter((token) => codeOnly(brokerSrc).includes(token)).join(", ") || "clean",
 );
-// The pair that makes the check above non-vacuous: the SAME test applied to `main`'s copy of the
-// instrument must fail it. Without this the assertion could be satisfied by an empty file.
-const mainSrc = spawnSync("git", ["show", "main:tools/broker-serve.mjs"], { cwd: join(HERE, ".."), encoding: "utf8" }).stdout ?? "";
+// The pair that makes the check above non-vacuous: the SAME predicate applied to the instrument's PRE-FIX copy
+// must FAIL it. Without the pair the assertion above could be satisfied by an empty file.
+//
+// #4995 is about HOW this control was pinned. It used to ask git for `main`'s copy — and a control pinned to a
+// MOVING REF is unsatisfiable on its own landing day: while main still carried the defect the control was
+// green, and the moment #4977 landed (e2f85719) main's copy started PASSING the check, so the control went
+// permanently red and guarded nothing. The pinned artifact is now a frozen fixture (the house pattern: see
+// demo/fixtures/driver-prefix-110.mjs): immutable, readable in a detached landing scratch, and never dependent
+// on which ref the checkout happens to be on.
+const FIXTURE = join(HERE, "fixtures", "broker-serve-shell-pre-4977.txt");
+const preFixSrc = readFileSync(FIXTURE, "utf8");
+const fixtureLines = preFixSrc.split(/\r?\n/);
+const fixtureCodeLines = codeOnly(preFixSrc).split(/\r?\n/).filter((l) => l.trim()).length;
 check(
-	"the check is NOT vacuous — main's broker-serve.mjs FAILS it (it reads vendor/pi-main and holds a [pwsh, powershell] fallback)",
-	mainSrc.length > 0 && vendorGrepTokens.some((token) => codeOnly(mainSrc).includes(token)),
-	`main's copy has: ${vendorGrepTokens.filter((token) => codeOnly(mainSrc).includes(token)).join(", ") || "none"}`,
+	"the control has substance: the frozen pre-fix section is 15+ executable lines, not an empty stand-in",
+	fixtureCodeLines >= 15,
+	`code lines=${fixtureCodeLines}, bytes=${Buffer.byteLength(preFixSrc, "utf8")}`,
+);
+check(
+	"the check is NOT vacuous — the pinned PRE-FIX section (67aa0096, before #4977 landed) FAILS it",
+	vendorGrepTokens.some((token) => codeOnly(preFixSrc).includes(token)),
+	`the pinned copy has: ${vendorGrepTokens.filter((token) => codeOnly(preFixSrc).includes(token)).join(", ") || "none"}`,
+);
+
+// Per-token discrimination: each token is caught ON ITS OWN, so the guard cannot be quieted by moving one
+// literal into a comment. A control keyed to the CONJUNCTION of the tokens would pass on a partial regression.
+const reintroduction = {
+	"vendor/pi-main": '\tconst durable = join(REPO, "vendor/pi-main/packages/durable/src/tools/bash.ts");',
+	"programs ??": '\tconst at = src.indexOf("options?.programs ?? [");',
+	pwsh: '\tlet programs = ["pwsh", "powershell"];',
+	powershell: '\tlet programs = ["pwsh", "powershell"];',
+};
+for (const [token, line] of Object.entries(reintroduction)) {
+	check(
+		`a single reintroduced line carrying \`${token}\` in executable code is enough to fail the check`,
+		vendorGrepTokens.some((t) => codeOnly(line).includes(t)),
+		line.trim(),
+	);
+}
+
+// FIDELITY PAIR: the fixture must be the text it claims to be — a control the demo can silently re-edit is not
+// a control. When the pinned object is readable in this tree, the fixture body must appear in it VERBATIM. When
+// it is not (a grafted/shallow tree; a starter clone carries no history), this one assertion says SKIP loudly.
+// The anti-vacuity control above NEVER skips, so the demo cannot go green by losing the control.
+const HIST_REF = "67aa0096"; // the commit #4977 was cut from; its copy of the instrument still carried the defect
+const bodyAt = fixtureLines.findIndex((l) => !l.trim().startsWith("//"));
+const fixtureBody = fixtureLines.slice(bodyAt).join("\n");
+const hist = spawnSync("git", ["show", `${HIST_REF}:tools/broker-serve.mjs`], {
+	cwd: join(HERE, ".."),
+	encoding: "utf8",
+	maxBuffer: 1 << 26,
+});
+if (hist.status !== 0) {
+	console.log(
+		`  SKIP  fixture fidelity vs ${HIST_REF}:tools/broker-serve.mjs — that object is not readable in this tree (${String(hist.stderr ?? "").trim().slice(0, 80)})`,
+	);
+} else {
+	check(
+		`the frozen fixture is VERBATIM inside ${HIST_REF}:tools/broker-serve.mjs`,
+		hist.stdout.includes(fixtureBody),
+		`fixture body=${Buffer.byteLength(fixtureBody, "utf8")} B from line ${bodyAt + 1} of the fixture`,
+	);
+}
+
+// The class, not just the instance: pin the rule that killed the control, so the next reach for a moving ref
+// turns a demo red instead of turning main red after the landing.
+const demoSrc = readFileSync(join(HERE, "broker-serve-shell-availability.test.mjs"), "utf8");
+check(
+	"no control in this demo is pinned to a MOVING ref (`main:`/`HEAD:` in a git show) — #4995's class",
+	!/(show[^)]*\b(main|HEAD):)/.test(demoSrc),
+	"the anti-vacuity control reads the fixture; the history lookup uses the pinned sha",
+);
+check(
+	"the fixture carries its provenance sha, so the control can be regenerated rather than re-invented",
+	/67aa0096/.test(preFixSrc) && /git show 67aa0096:tools\/broker-serve\.mjs/.test(preFixSrc),
+	"header names the sha and the regenerate command",
 );
 
 console.log("\nThe D169 coordinator carve-out survives the rewrite (proven in both directions)");
