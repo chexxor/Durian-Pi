@@ -3,9 +3,9 @@ runbook: session-start-cost
 symptom: "a session burns its first 30–60 minutes re-deriving rig state that an instrument already reports; the delegate 'verifies' numbers by hand that a tool prints in seconds"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-31
-verified_by: delegate
-evidence: "measured 2026-10-31 on `Alex-Desktop-Win10` (Linux, node v24.22.1): `cli.mjs queue --json` 1.5 s and 21,710,535 B; `tools/what-to-test.mjs --base=HEAD~1` 0.13 s → 6 derived tests against a 239-test suite; `tools/doc-integrity-guard.mjs` 0.10 s exit 0; `tools/instrument-provenance.mjs` 0.07 s exit 0; `tools/seat-turn-shape.mjs` 3.6 s, 58,566 entries read, 0 writes. One batched `send` to `lead` (8 min) produced rows #4947–#4950 plus three closures; one `impl` turn (70 min) produced three rows. Rows #4947–#4950 exist because a delegate MEASUREMENT was carried to a seat instead of a re-derivation."
+last_verified: 2026-11-02
+verified_by: devtools
+evidence: "measured 2026-10-31 on `Alex-Desktop-Win10` (Linux, node v24.22.1): `cli.mjs queue --json` 1.5 s and 21,710,535 B; `tools/what-to-test.mjs --base=HEAD~1` 0.13 s → 6 derived tests against a 239-test suite; `tools/doc-integrity-guard.mjs` 0.10 s exit 0; `tools/instrument-provenance.mjs` 0.07 s exit 0; `tools/seat-turn-shape.mjs` 3.6 s, 58,566 entries read, 0 writes. One batched `send` to `lead` (8 min) produced rows #4947–#4950 plus three closures; one `impl` turn (70 min) produced three rows. Rows #4947–#4950 exist because a delegate MEASUREMENT was carried to a seat instead of a re-derivation. Re-measured 2026-11-02 in #4986: the census is **21,927,512 B**, and there is now a row-scoped read — measured on a fixture the same library wrote, the dump grows with the store (126,629 B at 60 rows, 1,114,112 B at 600 rows) while `queue --id`/`show <id>` stays flat at 2,201 B → 2,202 B: 57.5×, then 506× cheaper."
 check_rule: null
 ---
 
@@ -39,9 +39,10 @@ silently opens an empty `./rig.sqlite` (AGENTS.md step 4).
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-# 1. rows, not the census. 1.5 s, 21.7 MB → redirect; never read the queue into a terminal.
+# 1. rows, not the census. Ask for the rows BY ID first — it is one read and it costs only those rows.
+DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs show 4947 4948 4950 4949   # bodies verbatim; exit 1 + `missing` if an id is absent
+#    (the census is 21.9 MB: file it and filter it ONLY when you really want the whole store)
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs queue --json > .spike/<session>/q.json
-node .spike/fix-20261101/rows.mjs 4947 4948 4950 4949 4937 4931 4934 < .spike/<session>/q.json
 # 2. may I send at all, and what is the seat's REAL window? 0.4-3.6 s, ~58.6k entries, 0 writes.
 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node tools/seat-turn-shape.mjs   # prints `window N messages` + head marker + parity breaks per seat
 #    `AT RISK` here is a STRICT-ALTERNATING-TEMPLATE warning, NOT a do-not-send gate on this host: measured 2026-10-31,
@@ -109,7 +110,10 @@ git worktree list | grep ' locked$'                          # terse form: the l
 
 ## Do
 1. **Read rows, never the census.** The status line (`done 3,771 / cancelled 790 …`) is case-insensitive
-   noise and is not evidence; the named rows are. `queue --json` is 21.7 MB, so file it and filter it.
+   noise and is not evidence; the named rows are. Since #4986 the row-scoped read exists: `cli.mjs show <id…>`
+   (or `queue --id <id…>`) prints exactly those rows with bodies, and its cost is flat in the size of the
+   store (2,201 B measured at both 60 and 600 rows, against a dump of 126,629 B → 1,114,112 B). Reach for
+   `queue --json` — 21.9 MB — only when the question is actually about the whole store, and file it then.
 2. **Batch one brief per seat, not one brief per row.** Measured 2026-10-31: a single `send` to `lead`
    carrying three questions minted #4947, #4948, #4949, #4950, closed #4944–#4946 and revised #4923 — one
    8-minute turn. Three separate sends would have cost three turns and added context to a seat already at
