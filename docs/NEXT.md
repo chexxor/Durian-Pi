@@ -13,7 +13,7 @@ the only verifier file that fits the one free card is the model with 0/16 clean 
 
 Older sessions live verbatim in `docs/NEXT-ARCHIVE.md` (link it, and the pointer test enforces that).
 
-**Pointer hygiene first:** **136 lines** (`wc -l`) / 137 counted entries — measured AFTER the last edit to this file, and
+**Pointer hygiene first:** **146 lines** (`wc -l`) / 147 counted entries — measured AFTER the last edit to this file, and
 wrong for anyone who edits it after me. The previous pointer was labelled **"D188 daytime"**, but **no `D188` entry exists in
 `docs/DECISIONS.md`** (`grep -c D188 docs/DECISIONS.md` = 0) — that session's rulings live inside `D187`'s block and in the
 pointer text only. **This session's entry is `D189`** (verifier pre-flight outranks the window argument; `resume` has no
@@ -86,12 +86,22 @@ demo (`demo/next-pointer.test.mjs`).
   minute and a second writer is the recorded crash class. Fire it the moment no run is live, **from a tree that carries
   `durig.config.json`** (§4):
   `cd /home/chexxor/Git/durian-dev/seatroot && DURIG_NO_SERVE=1 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite DURIG_LOCAL_CONTEXT=160000 timeout 1500 node cli.mjs send lead "$(cat /home/chexxor/Git/Durian-Pi/.spike/fix-20261102/lead-instrument-defects.md)"`
-- The four, with `file:line` already in the brief: `cli.mjs config`/`describeConfig` (`src/config.mjs:328-344`) omits every
-  `DURIG_LOCAL_*`/`DURIG_VERIFIER_*` key; `scripts/clockin.mjs:306,352` probes a hardcoded `:8080`; the
-  `admitted_not_started` notice says "re-arm" while `cli.mjs:1106-1122` cancels; and `#4979` (`doctor` prints
-  `bash: command not found` for the suggested `doctor --probe` while `--help` lists `doctor`).
-- **Duplicate check is done** — related open rows are `#4977 #4978 #4979 #4985 #4986 #4987 #4970 #4974 #4981 #4983`; the
-  bodies are already inside `status`'s `queueItems` (4,989 rows, one read), so re-checking costs 0 s and no second 22 MB dump.
+- The three NEW defects the brief mints, each with the measurement and `file:line` already in it: `cli.mjs config` omits
+  every `DURIG_LOCAL_*`/`DURIG_VERIFIER_*` key (`describeConfig`, `src/config.mjs:328-344`, called at `cli.mjs:2733` —
+  measured: the printed config block has 9 keys and none of the endpoint keys); `scripts/clockin.mjs:306,352` probes a
+  hardcoded `:8080` and so prints `local endpoint: DOWN (fetch failed)` about a port this rig never uses; and the
+  `admitted_not_started` attention text telling the reader to **"re-arm it with the resume/doctor verb"** when
+  `cli.mjs:1106-1122` has no re-arm path (`abortSubmission` → `withdrawn`, `conv.abort()` → `run-cancelled`) — D187 already
+  recorded that, and the notice still contradicts it.
+- **Already-minted rows in the same family — do NOT re-mint them:** `#4985` (clockin landing-debt computed from a branch
+  name; **`devtools` is on it now**, branch `item-4985`, commit `bd7cccc0`), `#4986` (no row-scoped queue read — the 22 MB
+  dump), `#4987` (the suite's `seat-turn-shape` red — which is exactly the live-writer artifact this session measured:
+  241/244 with a run live vs 243/244 idle), `#4978` (broker-serve's false `NOTE stranded-intent`), `#4979`
+  (`up --refresh` reports success while writing nothing), `#4977` (this one), `#4970`, `#4974`, `#4981`, `#4983`.
+- **Duplicate check is done** — the row bodies are already inside `status`'s `queueItems` (4,989 rows, one read), so
+  re-checking costs 0 s and no second 22 MB dump. **Correction to a claim this file made earlier in this session:** it
+  cited `#4979` as "`doctor` prints `bash: command not found`" — that was **never measured**; `doctor` is an *alias* of
+  `resume` (`cli.mjs --help` line 10) and no `doctor --probe` form exists. Trust only the citations above.
 
 ## 3. THEN the `qa` verify leg for the persona split — blocked on a RULING, not on a window
 
