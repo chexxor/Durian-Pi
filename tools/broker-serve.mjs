@@ -46,7 +46,10 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..");
 const CLI = join(REPO, "cli.mjs");
-const IS_WINDOWS = process.platform === "win32";
+// (The shell-availability section used to hold `const IS_WINDOWS = process.platform === "win32"` to pick a
+// `where` vs `sh -c` PATH probe. It is gone with the grep: the registry's `programOnPath` does the PATH scan
+// host-generically, so the instrument no longer needs to know which OS family it is in to ask the question.
+// #4977.)
 
 // ---------------------------------------------------------------- usage
 
@@ -285,54 +288,59 @@ try {
 }
 finding("persisted-cwd-unreadable", "note", "this check validates the RIG FILE only: no CLI command prints a seat's persisted cwd (`ps` and `status` omit it), so a cleared rig-file field is NOT evidence the seat root is right. Read a seat's own `seat_root` tool result in `log <seat>` after a pass, or use `cli.mjs send <seat> seat_root`", "ROADMAP 221 asks for the missing read surface and for `up` to clear a cwd the rig file stops naming");
 
-// ROADMAP 217 asks for this block BY NAME: "today it refuses on a dead seat cwd and a dirty tree but would
-// happily start a broker whose seats cannot run a single command." Measured on this box 2026-10-28: the seat
-// shell is registered as `powershell`; the pinned pi-durable build spawns ["pwsh","powershell"] in order and
-// re-throws the LAST spawn error (`vendor/pi-main/packages/durable/src/tools/bash.ts:169`), and neither program
-// exists here. The store shows it firing, not just the risk: 3 `spawn powershell ENOENT` + 1 `spawn pwsh ENOENT`
-// entries, newest #274074 (conv 4930 = devtools) at 2026-10-28T17:09:07Z — inside the last broker pass. A seat
-// that cannot run `node demo/<name>.test.mjs` cannot satisfy the completion rule or the constitution's oracle.
+// ROADMAP 217 asked for this block BY NAME: "today it refuses on a dead seat cwd and a dirty tree but would
+// happily start a broker whose seats cannot run a single command." The verdict now comes from
+// `tools/shell-availability.mjs`, which asks the PRODUCT registry (`src/shellregistry.mjs`) — the same
+// registry `src/seattools.mjs` registers the seat shell from.
+//
+// WHAT WAS WRONG HERE (#4977, re-measured on Linux at 43e26dcc before this change): the section grepped
+// `vendor/pi-main/packages/durable/src/tools/bash.ts` for `programs ?? [...]`, took the first match — which
+// is `createPowerShellTool`'s default at bash.ts:169, ONE factory's fallback, not the registered tool's
+// list — PATH-probed those programs, and printed
+//   BLOCK seat-shell-availability: the seat shell tool is registered as "bash" and spawns [pwsh, powershell],
+//   NONE of which exists on linux
+// That sentence contradicts itself and has been FALSE ever since 217 landed: the registered tool IS `bash`
+// and the registry reports `degraded: false` on this box. It gated a broker restart on a grep of vendored
+// text, which is the class of fault the two conventions name — a cheap signal may ACCEPT but never DECIDE,
+// and an instrument may READ vendor/pi-main but must not GATE on its text, because that text moves under
+// the upstream pin. The block also told the operator to land 217, which is already landed.
+//
+// The evidence that made 217 REAL is historical and stays on the record: on 2026-10-28 the registered shell
+// WAS `powershell` here and the store shows 3 `spawn powershell ENOENT` + 1 `spawn pwsh ENOENT`, newest
+// #274074 (conv 4930 = devtools) at 2026-10-28T17:09:07Z. A seat that cannot run
+// `node demo/<name>.test.mjs` still cannot satisfy the completion rule or the constitution's oracle, and
+// the BLOCK still fires for a host where that is true — `demo/broker-serve-shell-availability.test.mjs`
+// asserts the refusal direction on an injected host, so the CONTROL does not depend on this box.
 try {
 	const { seatTools, toolRemovalsFor } = await import("../src/seattools.mjs");
-	const shellName = seatTools.shell?.name ?? "(no shell tool registered)";
-	const durable = join(REPO, "vendor/pi-main/packages/durable/src/tools/bash.ts");
-	let programs = ["pwsh", "powershell"];
-	if (existsSync(durable)) {
-		const src = readFileSync(durable, "utf8");
-		const at = src.indexOf("options?.programs ?? [");
-		const m = at >= 0 ? src.slice(at).match(/programs \?\? \[([^\]]*)\]/) : null;
-		if (m) programs = m[1].split(",").map((s) => s.trim().replace(/^"|"$/g, "")).filter(Boolean);
-	}
-	const probe = IS_WINDOWS ? ["where", []] : ["sh", ["-c", 'command -v "$1"', "probe"]];
-	const resolved = programs.filter((p) => spawnSync(probe[0], [...probe[1], p], { encoding: "utf8" }).status === 0);
-	if (resolved.length) finding("seat-shell-availability", "note", `the seat shell tool "${shellName}" resolves here (${resolved.join(", ")}) — still confirm the seat INSTRUCTION in ${RIG} names that tool`, "ROADMAP 217's second half: the per-seat instruction text is operator-owned");
-	else {
-		// D169 named the closed loop: 217 needs a woken seat, and the block refuses the wake *because* 217
-		// has not landed. The operator can rule on that, and the instrument has to be able to RECORD the
-		// ruling rather than only refuse it — but the exception is MEASURED, never asserted from a seat's
-		// name. toolRemovalsFor (src/seattools.mjs:249, COORDINATOR_REMOVALS) removes read/write/edit/shell/
-		// prepare_workspace from any seat declaring no WORKING_CAPABILITY, so for exactly those seats the
-		// absent shell guards an act that runs no command and lands no artifact. Admissible only when EVERY
-		// seat in the predicted first-pass wake set is a coordinator by that predicate.
-		// The spool carries more than intents: a `cli.mjs status` while a broker runs leaves an
-		// {"op":"read","view":"health",...} request, and readIntentFiles maps a missing `to` to the literal "?".
-		// Reading every spool file as an intent therefore invented a wake-set member "?(absent from
-		// rig.selfdev.json)" and made a measurable exception look inadmissible. An intent is a file with a
-		// real recipient and no `op` (a read request carries `op:"read"`).
-		const intents = pending.filter((p) => p.to !== "?" && p.op === "?");
-		const wakeSet = [...new Set(intents.map((p) => p.to))];
-		const needsShell = [];
-		for (const name of wakeSet) {
-			const seat = (rig?.seats ?? []).find((s) => s.name === name);
-			if (!seat) needsShell.push(`${name}(absent from ${RIG})`);
-			else if (!toolRemovalsFor(seat).includes(seatTools.shell)) needsShell.push(name);
-		}
-		if (wakeSet.length && !needsShell.length && flags.ackCoordinatorWake) {
-			finding("seat-shell-availability-acked", "note", `seat-shell-availability DOWNGRADED for this start: the absent shell (${programs.join(", ")}) guards NOTHING in the first-pass wake set (${wakeSet.join(", ")}) — the product's own toolRemovalsFor reports each as a coordinator: no shell, no write, no edit, no read, so this wake runs no command and lands no artifact. Bounded to ${flags.maxDurationS ?? "?"}s. FIRST PASS ONLY: routing can wake a file-capable seat, for which 217 is real and its persisted root is foreign (221) — watch one pass, then --stop and re-run --status.`, "ROADMAP 217 still owed: host-conditional shell tool in src/seattools.mjs + the operator-owned instruction text in " + RIG + "; demo/seattools.test.mjs:30 asserts the current choice and must be rewritten failing-first");
-		} else {
-			finding("seat-shell-availability", "block", `the seat shell tool is registered as "${shellName}" and spawns [${programs.join(", ")}], NONE of which exists on ${process.platform} — every seat shell call is a guaranteed spawn error, so a woken seat can edit but cannot run the demo suite (the constitution's oracle) or run git, and its completions are self-declared${wakeSet.length && !needsShell.length ? ` | a coordinator-scoped exception IS measurable for this wake set: ${wakeSet.join(", ")}` : ""}${needsShell.length ? ` | NOT admissible: these wake-set seats keep the shell tool: ${needsShell.join(", ")}` : ""}`, "ROADMAP 217: host-conditional shell tool in src/seattools.mjs (pi-durable already ships createBashTool; src/tui/durable/adapter.mjs:612 already installs it) + the operator-owned instruction text in " + RIG + "; demo/seattools.test.mjs:30 currently ASSERTS the no-bash choice and must be rewritten failing-first. For one bounded coordinator-scoped wake the operator may ack it: --ack-coordinator-wake with --max-duration <s>.");
-		}
-	}
+	const { seatShellVerdict } = await import("./shell-availability.mjs");
+	// D169 named the closed loop: 217 needs a woken seat, and the block refuses the wake *because* 217
+	// has not landed. The operator can rule on that, and the instrument has to be able to RECORD the
+	// ruling rather than only refuse it — but the exception is MEASURED, never asserted from a seat's
+	// name. toolRemovalsFor (src/seattools.mjs, COORDINATOR_REMOVALS) removes read/write/edit/shell/
+	// prepare_workspace from any seat declaring no WORKING_CAPABILITY, so for exactly those seats the
+	// absent shell guards an act that runs no command and lands no artifact. Admissible only when EVERY
+	// seat in the predicted first-pass wake set is a coordinator by that predicate — so the caller answers
+	// "does this seat keep the shell tool" and the verdict module only rules on it.
+	// The spool carries more than intents: a `cli.mjs status` while a broker runs leaves an
+	// {"op":"read","view":"health",...} request, and readIntentFiles maps a missing `to` to the literal "?".
+	// Reading every spool file as an intent therefore invented a wake-set member "?(absent from
+	// rig.selfdev.json)" and made a measurable exception look inadmissible. An intent is a file with a
+	// real recipient and no `op` (a read request carries `op:"read"`).
+	const wakeSet = [
+		...new Map(
+			pending
+				.filter((p) => p.to !== "?" && p.op === "?")
+				.map((p) => p.to)
+				.map((name) => {
+					const seat = (rig?.seats ?? []).find((s) => s.name === name);
+					// A seat absent from the rig file is NOT evidence it can skip a shell — unknown stays load-bearing.
+					return [name, { name, known: seat !== undefined, keepsShell: seat ? !toolRemovalsFor(seat).includes(seatTools.shell) : true }];
+				}),
+		).values(),
+	];
+	const verdict = seatShellVerdict({ rigPath: RIG, wakeSet, ackCoordinatorWake: flags.ackCoordinatorWake, maxDurationS: flags.maxDurationS });
+	finding(verdict.id, verdict.severity, verdict.detail, verdict.fix);
 } catch (err) {
 	finding("seat-shell-probe-failed", "note", `could not resolve the seat shell: ${err.message}`, "non-fatal for this preflight, load-bearing for the start: run tools/channel-preflight.mjs §7");
 }

@@ -19,8 +19,19 @@
 // mismatch, and what `demo/seattools.test.mjs` now pins.
 //
 // THE TWO QUESTIONS ARE KEPT APART, and that separation is the fix:
-//   * `canStart(host)` — can this shell's program actually be launched here;
+//   * `startOn(host)` — the program this shell would actually launch here, or null;
 //   * `preferredOn(host)` — which shell should this host get when more than one can start.
+//
+// #4977 ADDED THE THIRD THING THE REGISTRY OWNS: `programs`, the argv list the tool spawns, as DATA on
+// the candidate. `tools/broker-serve.mjs` used to GATE its `seat-shell-availability` BLOCK on a regex
+// read of `vendor/pi-main/packages/durable/src/tools/bash.ts`, where it picked up
+// `programs ?? ["pwsh", "powershell"]` — the default of `createPowerShellTool` (bash.ts:169), one
+// factory's default, not the registered tool's list — and printed it as the program list of the tool
+// that WAS registered (`bash` on this Linux box). The verdict was therefore confidently wrong, and it
+// was wrong in a way that no pin bump can prevent: the text it grepped moves with the upstream pin.
+// So the program list lives here, `startOn` reports WHERE the resolution landed, and `shellPlan()`
+// reports the `platform` it measured — an instrument may READ vendor/pi-main, it must not GATE on its
+// text, and a linux reading can never print a Windows default.
 // The 217 failure was a PREFERENCE (PowerShell, right for Windows) applied on a host where it could
 // not START, with the only startable candidate left unregistered.
 //
@@ -75,29 +86,41 @@ export function programOnPath(program, { env = process.env, platform = process.p
 	return null;
 }
 
-/** Every shell durian-pi CAN put in front of a seat: its name, its factory, and the two host rules. */
+/** The argv list each pi factory spawns, in order — the list the instruments used to grep out of vendored text (#4977). */
+const POWERSHELL_PROGRAMS = ["pwsh", "powershell"];
+const BASH_PROGRAMS = ["bash"];
+const firstPath = (host, programs) => programs.map((program) => host.programOnPath(program)).find(Boolean) ?? null;
+
+/** Every shell durian-pi CAN put in front of a seat: its name, its factory, the programs it spawns, and the two host rules. */
 export const SHELL_CANDIDATES = [
 	{
 		name: "powershell",
 		create: () => createPowerShellTool(),
+		// The argv list pi spawns, IN ORDER. This is the fact the instruments used to grep out of
+		// vendor/pi-main; keeping it here is what makes "which program does the registered tool run"
+		// answerable without reading vendored text (#4977).
+		programs: POWERSHELL_PROGRAMS,
 		// Native-Windows `bash` means an undeclared Git Bash dependency, so on a Windows host the seat
 		// shell IS PowerShell — the original ruling, kept here as a rule FOR WINDOWS rather than as a
 		// constant for every host.
 		preferredOn: (host) => host.platform === "win32",
-		canStart: (host) => ["pwsh", "powershell"].some((program) => host.programOnPath(program) !== null),
+		startOn: (host) => firstPath(host, POWERSHELL_PROGRAMS),
 		why: "pi starts `pwsh` then `powershell` as argv and re-throws the last spawn error, so one must resolve on PATH",
 	},
 	{
 		name: "bash",
 		create: () => createBashTool(),
+		// The command STRING goes to `env.exec`, so `bash` is the program pi is asked for; the rest of
+		// the chain is in `startOn` and is pi's own (`/bin/bash`, then PATH, then `sh -c`).
+		programs: BASH_PROGRAMS,
 		preferredOn: (host) => host.platform !== "win32",
-		canStart: (host) =>
-			host.programOnPath("bash") !== null ||
-			(host.platform !== "win32" && host.exists("/bin/bash")) ||
+		startOn: (host) =>
+			firstPath(host, BASH_PROGRAMS) ??
+			(host.platform !== "win32" && host.exists("/bin/bash") ? "/bin/bash (fixed path, not PATH)" : null) ??
 			// pi's `getShellConfig` falls back to `sh -c` for a STRING command, so on POSIX a `bash` tool
 			// call still runs with no bash anywhere. Recorded because it is what makes "no shell at all"
 			// unreachable on POSIX rather than merely unlikely — and it is pi's behaviour, not ours.
-			(host.platform !== "win32" && host.programOnPath("sh") !== null),
+			(host.platform !== "win32" ? host.programOnPath("sh") : null),
 		why: "the command goes to env.exec as a string, which pi resolves as /bin/bash, else bash on PATH, else sh -c",
 	},
 ];
@@ -112,25 +135,35 @@ export function shellToolNames() {
  *
  * Pure and injected, so the host-conditional rule can be asserted for `win32`, for this Linux box, and
  * for a host where nothing resolves, without owning three machines. `lookup` is the only seam a caller
- * needs in practice; `exists` is injectable because `canStart` asks about `/bin/bash` directly.
+ * needs in practice; `exists` is injectable because `startOn` asks about `/bin/bash` directly. The
+ * result carries `platform`, `programs` and `startedBy` (#4977) so an instrument can print the verdict
+ * without going and re-deriving the program list from anywhere else.
  */
 export function shellPlan({ platform = process.platform, env = process.env, exists = existsSync, lookup = programOnPath } = {}) {
 	const host = { platform, env, exists, programOnPath: (program) => lookup(program, { env, platform, exists }) };
 	// Preference first, availability second — availability never overrides preference when both hold.
 	const ranked = [...SHELL_CANDIDATES].sort((a, b) => Number(b.preferredOn(host)) - Number(a.preferredOn(host)));
+	const starts = new Map(ranked.map((candidate) => [candidate.name, candidate.startOn(host) ?? null]));
 	const tried = ranked.map((candidate) => ({
 		name: candidate.name,
 		preferred: candidate.preferredOn(host),
-		canStart: candidate.canStart(host),
+		canStart: starts.get(candidate.name) !== null,
+		startedBy: starts.get(candidate.name),
+		programs: candidate.programs,
 		why: candidate.why,
 	}));
-	const chosen = ranked.find((candidate) => candidate.canStart(host));
+	const chosen = ranked.find((candidate) => starts.get(candidate.name) !== null);
 	return {
+		// THE host this verdict describes, carried IN the verdict (#4977) so a printed verdict can never
+		// pair one host's program list with another host's name.
+		platform,
 		// NEVER undefined, deliberately: on a host where NOTHING can start the seat still gets the
 		// platform-preferred shell, so its failure is a named spawn error from a registered tool rather
 		// than a seat with no shell tool and no verb to reason about. Degrade to UNKNOWN, not to EMPTY.
 		name: (chosen ?? ranked[0]).name,
 		degraded: chosen === undefined,
+		programs: (chosen ?? ranked[0]).programs,
+		startedBy: chosen ? starts.get(chosen.name) : null,
 		tried,
 	};
 }
