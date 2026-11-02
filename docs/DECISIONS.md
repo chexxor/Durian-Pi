@@ -7954,3 +7954,66 @@ reports a suite **SKIP** attributed to the tree instead of counting it as a pass
 `demo/local-model-pointer.test.mjs` skip in a config-less scratch, and a silent skip is the opposite lie from a false red.
 *The rule:* after a landing, report the suite count **with the state of the store sidecars** beside it; a count without its
 condition is the "conditional red" defect wearing a green coat.
+
+## D193 — The operator rules: DeepInfra is the verifier provider, $4 is the pool, and the rig is not to be halted (operator ruling 2026-11-02T21:2xZ, Linux `chexxor@ThinkStation-P3`, node v24.22.1)
+
+Asked for recommendations on three open hand-backs, the operator granted two: **push** (executed: `e2f85719..0cc8c9c1`,
+`origin/main` verified at `0cc8c9c1` by `git ls-remote`, preceded by `node scripts/test.mjs --all --jobs 8` → **245/245 in
+49.0 s**) and, on the verifier question, *"I prefer to use DeepInfra for verifiers rather than halt the system and process. We
+have $4 available to spend on DeepInfra."* That is the ruling that D192(6) said only the operator could give. **The *why*, in
+the operator's own terms:** a halted rig is worth more lost than a metered provider costs — which reorders D147/D166's
+"hard caps and the cost recorded" from a precondition into a deadline.
+
+**(1) The ruling is not the mechanism, and the mechanism is already half-present.** A provider registers by setting
+`DURIG_VERIFIER_BASE_URL` (`src/providers/local.mjs:49-52` derives the id from the prefix) and its key variable is
+**`DURIG_VERIFIER_API_KEY`** (`local.mjs:88`, `:145-147`) — *not* `DEEPINFRA_API_KEY`, which is what `cli.mjs config` calls
+`set`. So the key the operator put in the environment is invisible to the verifier provider until either the config names the
+right variable or the provider layer resolves one. Recorded here because the naive move — "the key is set, therefore the
+provider can pay" — is false on this rig.
+
+**(2) The classification seam, with a failure shape instead of prose.** `isLocalProviderId` (`local.mjs:45`) is true for
+`verifier`, and that module's own header says the id means *"free context, cheap reset, no paid API"*. Point the id at
+`https://api.deepinfra.com/v1/openai` and every free-provider assumption survives — `broker-serve`'s provider probes included,
+which will keep reporting a free local-style provider that is actually billing. `lead` adopted this wording into **#5015** as
+the decision it wants the architect to make ("that is the classification decision I need you to make, not a cap number").
+
+**(3) Two existing config values are already wrong for every candidate in the credible set.**
+`DURIG_VERIFIER_MAX_TOKENS=3000` sits against reasoning-tagged models, and `local.mjs:71-75` records the measured failure mode
+("truncated MID-THOUGHT … a confident half-verdict — the worst possible failure for a seat whose job is to say 'no'").
+Reproduced live and cheaply on the exact vendor path: `openai/gpt-oss-20b` at `max_tokens=24` returned
+`finish_reason=length` with **empty content** — the truncation is real at 24 tokens, and a verifier verdict needs headroom.
+`DURIG_VERIFIER_CONTEXT=24576` meanwhile sits below the measured **p50 prompt of 55,538 input tokens** (D166's impossible pair,
+still unfixed). A tool-calling probe on the same model answered **`finish=tool_calls`** with correct arguments and a
+`reasoning_content` field, so tool use works and the reasoning tax is real.
+
+**(4) Priced against the pool, the model choice is a runway choice and the prompt is the lever.** At this rig's own shape
+(55,538 in / 3,000 out) and live catalog prices, **$4 buys 1,917 turns of `openai/gpt-oss-20b`, 1,559 of `gpt-oss-120b`,
+1,032 of `deepseek-ai/DeepSeek-V4-Flash-0731` (2,135 if ~80% of the prefix is cache-hit at $0.015/M), 839 of
+`mistralai/Mistral-Small-3.2-24B`, and only 406 of the shipped default `zai-org/GLM-5.3-Flash`.** So the default is not merely
+"the most expensive row" — it spends the pool in a fifth of the turns. And because input dominates, **bounding the verify prompt
+is a bigger lever than picking a cheaper model**, which is why the seam question includes whether the verify prompt is built to
+be *prefix-stable*: cached-prefix runway is fiction otherwise.
+
+**(5) The cap was prose, so the delegate built a ceiling before spending, and spent $0.04 under it.** `gate.mjs:96` posts
+`/chat/completions` with **no `authorization` header**, so no rig instrument can use a metered provider at all; and
+`grep -nE "SPEND|CAP_|MAX_SPEND" src/config.mjs` is empty. Before the first paid call: a ~60-line `--import` shim
+(gitignored `.spike/delegate-20261102/auth-ledger-shim.mjs`) that attaches the key, appends a **per-call ledger**
+(`spend.jsonl`: model, prompt/completion/cached tokens, `$`, running total) and **refuses any call whose projected cost crosses
+`DURIG_PROBE_CEILING_USD`**. `lead` folded that into #5015 as the *size* of the deliverable ("a ceiling and one row per metered
+generation — not a billing system") and pre-authorised **$0.10 per probe session with a hard stop-and-report of cents spent**.
+Useful accident: **DeepInfra returns `usage.estimated_cost` in every response** — a vendor-side per-call cost that the eventual
+ledger should carry instead of a price table the rig has to keep fresh.
+
+**(6) The gate's clean conditions earned their keep on the first metered arm.** `gate.mjs --whole-module --budget 120000
+--replicate 3` against `deepseek-ai/DeepSeek-V4-Flash-0731` (72 calls, **$0.0169**) scored **defect-named 3/8 on majority-of-3
+with the G2 floor NOT MET** (per-replicate spread **5/8, 2/8, 2/8**) and **FALSE-ALARM 8/8 on the clean-leading control and 8/8
+on clean-neutral**. Read plainly: this model asserts a defect in *every* clean file it is shown, and its hit rate is not
+reproducible. A price/runway table alone would have promoted it. *The rule:* no metered verifier goes into a seat config on the
+strength of price — the paired clean controls are what make the number mean anything, and D137's McNemar lesson (a single pass
+flips 4/8 per-item verdicts) is why k=3 was the right first arm.
+
+**(7) Outbound connectivity is a dependency, and it left the box for ~25 min.** `curl https://github.com` → `000`,
+`getent hosts api.deepinfra.com` → empty, `dig @1.1.1.1` → `communications error … timed out` through
+`nameserver 127.0.0.53` — **after** the push and the free catalog reads, while local Strata kept answering `/v1/models` in 6 ms,
+so seats never noticed and zero spend occurred during it. `docs/runbooks/README.md` has `local-provider-down.md` but nothing for
+general outbound loss; that gap is where a session wastes its budget guessing whether the vendor is gone or the wire is.

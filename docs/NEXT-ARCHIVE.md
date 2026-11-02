@@ -10333,3 +10333,58 @@ The operator's three options, with their prices:
    verb) and `#4995` (the only `main` red that is ours), and keep delivering by bounded `send`s. Slowest, and it is the only
    option that makes the next provider outage non-disabling.
 
+
+---
+
+**Cut from the live pointer 2026-11-02T22:4xZ (delegate, D192):** §7 “The DeepInfra backup verifier — the FREE arm is run, the PAID arm is still not authorised” moved VERBATIM below — superseded by the operator’s 21:2xZ ruling (“use DeepInfra for verifiers rather than halt; $4 available”) and by a keyed probe that ran. Its live-catalog field names and the curated-catalog column are restated in the new §7. Re-run the rest: `curl -s https://api.deepinfra.com/v1/models | wc -c`, `node cli.mjs config`.
+
+## 7. The DeepInfra backup verifier — the key is now in the environment, the FREE arm is run, the PAID arm is still not authorised (operator asked 2026-11-02T18:16Z; delegate measured, chose nothing)
+
+`DEEPINFRA_API_KEY` is in the **delegate's environment only**. Measured: `cli.mjs config` → `"DEEPINFRA_API_KEY": "set"`;
+`durig.config.json` is unchanged since **Oct 31 18:55** and holds no key, so the leak class `src/config.mjs:31,106` records
+stays closed. **Keep it that way** — env only, never the config file, and never in a seat body.
+
+- **The key unlocks no extra models.** `GET https://api.deepinfra.com/v1/models` with and without
+  `Authorization: Bearer …` both return **http 200, 116,968 B, 173 models** — byte-identical.
+- **Field names for whoever writes the catalog guard:** `metadata.context_length` (not `context_window`),
+  `metadata.pricing.{input_tokens,output_tokens,cache_read_tokens}`, `metadata.tags`, `metadata.description`.
+- **Correction to the §7 of the 09:30Z pointer (cut to the archive below):** it said the live catalog states no
+  function-calling support for any candidate. `metadata.tags` indeed does not, but `metadata.description` **does** for
+  `openai/gpt-oss-120b` ("native tool use, including function calling, browsing, and structured output generation") and for
+  `gpt-oss-20b`. Vendor marketing, so it still needs a live probe — but "nobody advertises it" is false and must not be reused.
+- Cost per verify turn at **this rig's** shape (p50 **55,538** in / **3,000** out = `DURIG_VERIFIER_MAX_TOKENS`), live prices
+  (`$`/Mtok), 2026-11-02T19:0xZ, keyless and keyed identical:
+
+| candidate | ctx | tags | $/turn @p50 | in the curated 16 `buildModels` reads? |
+|---|---|---|---|---|
+| `openai/gpt-oss-20b` | 131,072 | chat, reasoning_effort, reasoning | **$0.00209** | NO → `no_model` today |
+| `openai/gpt-oss-120b` | 131,072 | chat, reasoning_effort, reasoning | **$0.00256** | NO → `no_model` today |
+| `deepseek-ai/DeepSeek-V4-Flash-0731` | 1,048,576 | chat, **prompt_cache**, reasoning | $0.00387 → **$0.00137 if the 55.5k prefix is a cache hit** ($0.015/Mtok) | yes, at a stale $0.09/$0.18 |
+| `mistralai/Mistral-Small-3.2-24B-Instruct-2506` | 128,000 | chat, vlm, vision | $0.00477 | **yes — zero substrate change** |
+| **`zai-org/GLM-5.3-Flash` — the SHIPPED DEFAULT `DURIG_MODEL`** | 1,048,576 | chat, vlm, vision, prompt_cache, reasoning | **$0.00983** | yes |
+| `mistralai/ministral-3-14b-reasoning` — what the 5 verifier seats name | — | — | — | **absent from the live catalog entirely** |
+
+- **Why `#5015` is urgent, not administrative:** `cli.mjs config` resolves `DURIG_PROVIDER=deepinfra`,
+  `DURIG_MODEL=zai-org/GLM-5.3-Flash` (from `durig.config.default.json`) — **the most expensive row in the table, 3.8×
+  `gpt-oss-120b`** — and there is still **no spend cap and no cost ledger anywhere** (re-grep
+  `SPEND|BUDGET|CAP_` in `src/config.mjs`, `MAX_SPEND_USD` in `src/*.mjs cli.mjs`, and the absence of `src/costsheet.mjs`).
+  With a key now present, any event that clears a seat's rig-file model (the `#4826` model-change reset class, an
+  `up --refresh` slip, a newly granted seat) points that seat at a **metered** provider instead of erroring. All 12 seats in
+  `rig.selfdev.json` name an explicit model today (7 `local/iq3_s`, 5 `verifier/mistralai/ministral-3-14b-reasoning`), so
+  nothing inherits *right now* — that is a fact about this checkout at this hour, **not a protection**.
+- **Run vs not run, so the next session does not double-spend:** `node tools/model-probes/gate.mjs
+  https://api.deepinfra.com/v1/openai openai/gpt-oss-120b deepinfra-gptoss120b --plan` → exit 0, **spends nothing** (at the
+  default `--budget 10000` three of the eight corpus items SKIP in whole-module feeding; full fit/pair/leak tables in
+  `.spike/delegate-20261102/gate-plan-gptoss120b.txt`). **No paid arm, no tool-calling probe, no request that costs money was
+  sent.** `#5015` (`lead→architect`, held) is the gate in front of them.
+- **What the delegate needs from the operator (two rulings, unchanged from the 09:30Z pointer, now with prices):**
+  (1) a ruling that amends **D137's model clause** — a remote verifier is a genuinely different engine, which is an
+  independence gain over the single-family local rig, but reports must keep saying which independence they actually got;
+  (2) whether to **pay** for the qualification run — `gate.mjs … --replicate 3` plus a ~10⁻⁴-dollar tool-calling probe per
+  candidate — and in what order, since **#5015's cap and ledger do not exist yet**. Recommended shortlist for the paid arm:
+  `gpt-oss-120b` (cheapest reasoning-capable, ctx 131k), `DeepSeek-V4-Flash-0731` (1M ctx + prompt cache — at a 55.5k re-sent
+  prefix the cache, not the headline price, is the economy), `Mistral-Small-3.2-24B` (zero substrate change).
+- Do **not** wake the five `verifier/…` seats: `tools/broker-serve.mjs --status` still prints `BLOCK
+  provider-DURIG_VERIFIER_-unreachable: http://127.0.0.1:1234/v1 ECONNREFUSED` and `BLOCK
+  provider-verifier-completion-failed`. Strata still holds both GPUs and is the only engine serving seats.
+

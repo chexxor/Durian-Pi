@@ -1497,3 +1497,21 @@ landing gate's derived set for `scripts/land.mjs` includes `demo/clockin-digest.
 own archive` purely because a pointer rewrite had pushed the archive mention below line 30. **Keep the archive link in the
 pointer's top block**, and when a landing refuses on a docs assertion, read the failing test's assertion before touching the
 branch — the branch was fine (9/9 green after the pointer fix, `9ca6c755`).
+
+**7. A metered provider needs three things the rig does not have, and a delegate can supply two of them without touching source
+(2026-11-02, D193).** (a) **No probe can use a key**: `tools/model-probes/gate.mjs:96` posts `/chat/completions` with only
+`content-type` — so any "we compared providers" claim about a metered model is unkeyed or false (#5024). (b) **No cap, no
+ledger** (`grep -nE "SPEND|CAP_|MAX_SPEND" src/config.mjs` → nothing; #5015). (c) **The provider id lies about cost**:
+`isLocalProviderId` (`src/providers/local.mjs:45`) is true for `verifier`, whose header advertises "no paid API".
+What the delegate did instead of editing tracked source: a `--import` fetch shim (`.spike/delegate-20261102/auth-ledger-shim.mjs`)
+that attaches the key, writes a **shared per-call ledger** (every concurrent arm reads the same running total, which is what
+makes a *session* ceiling enforceable), and **refuses a call whose projected cost crosses `DURIG_PROBE_CEILING_USD`**.
+Speed-ups from the same arm: **DeepInfra returns `usage.estimated_cost`** (free vendor-side cost — do not rebuild a price
+table), the free fit/cost pre-flight is `gate.mjs … --plan` (spends nothing, prints per-item `frag~tok`/`whole~tok` so you can
+price the arm before launching it: a whole-module k=1 arm ≈ 273k input tokens ≈ **$0.01** at `gpt-oss-20b` prices), and
+`--replicate 3` is not optional on a metered arm — the first arm scored **5/8, 2/8, 2/8** across replicates on the same corpus.
+**Trap while doing this:** the documented `node --import tools/model-probes/no-headers-timeout-shim.mjs …` invocation fails on
+node v24.22.1 with `ERR_MODULE_NOT_FOUND` (a bare path is resolved as a package name) — use the `./`-prefixed form (#5026). And
+**outbound loss looks like a vendor outage**: `curl` → `000` + `getent hosts` empty + `dig` timing out at `127.0.0.53` is the
+wire, not the vendor; local Strata keeps answering in 6 ms, so seats never notice and you waste a budget diagnosing the wrong
+thing.
