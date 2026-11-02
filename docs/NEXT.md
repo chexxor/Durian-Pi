@@ -84,7 +84,37 @@ model independence without first running `tools/model-probes/gate.mjs <baseUrl> 
   `nvidia-smi --query-compute-apps=pid,gpu_name,used_memory --format=csv`. It has flipped twice in three days and it decides
   whether any second model can load at all.
 
-## 5. Still open, re-read before acting
+## 5. THE HAND-BACK — one ruling, three options, all measured (the delegate decided none of them)
+
+`lead` settled `done` and minted **#4995–#5004** (the six from this session's brief, plus `#5001` a cleanup guard that
+interpolated an unresolved junction root, `#5002` docs citing a non-existent `cli.mjs land` verb, and the two `pm` rows).
+`pm` then settled `done` and touched **#4805 #4815 #4813 #4785 #4897 #4900 #4989 #4826**, minted **#5005 #5006 #5007 #5010
+#5011**, asked **#5008 #5009** of `lead`, and **deferred #5003/#5004 back to `lead`** — because it holds no verb that parks a
+`queued` row addressed to qa/qa2/auditor: `hold_work(#4974)` → "addressed to qa, not you", `release_work(#4993)` → "only the
+sender or recipient may release it", `resume_work(#4799)` → "addressed to impl, not you", and `cancel_work` is terminal. That
+gap is registered as **#5007**.
+
+Measured consequence, and it is the finding of the hand-back: **parking the rows would not have cleared the start.**
+`tools/broker-serve.mjs:411-412` refuses `--start` on any `block` finding, and `--dry-run` right now prints
+`A start would be refused: provider-DURIG_VERIFIER_-unreachable, provider-verifier-completion-failed`. There is no
+provider-liveness gate in the wake path (`grep -n "reachable|preflight|ECONNREFUSED" src/broker.mjs src/driver.mjs` → only
+`src/broker.mjs:1473`, which classifies such errors AFTER a failed generation), so the broker would happily wake those seats
+into `Connection error.` — the instrument's BLOCK is a pre-flight judgement, not a wake gate.
+
+The operator's three options, with their prices:
+1. **Give the verifier slot a live provider on the existing engine** — point `DURIG_VERIFIER_BASE_URL/_MODEL` at strata
+   `http://127.0.0.1:47831/v1` `iq3_s`. Cheapest and it un-gates everything, BUT it makes the rig single-family, and
+   `demo/local-model-pointer.test.mjs` will (correctly) go red until the rig file's five `verifier/…` model strings change
+   with it. D137 is then satisfied only if every verify report says **independent by seat/transcript/execution, not by
+   model** — the wording `#4956`/`#4962` already used. Do not do this quietly; it is a product decision, not a config tweak.
+2. **Bypass the instrument** — `node cli.mjs serve --max-duration 1800` directly instead of `broker-serve --start`. Starts
+   tonight, costs six fast `Connection error.` failures plus the rows they deposit, and deliberately steps over a gate that
+   is correct in this instance.
+3. **Leave the broker down and fix the substrate first** — release `#5007` to impl (the missing non-terminal park/re-route
+   verb) and `#4995` (the only `main` red that is ours), and keep delivering by bounded `send`s. Slowest, and it is the only
+   option that makes the next provider outage non-disabling.
+
+## 6. Still open, re-read before acting
 
 `#4970` HALF B (the config-drift lever: `DURIG_LOCAL_CONTEXT` 160000 in this checkout vs 200000 in the seat root —
 operator-owned, still present) · **12 `deferred` rows parked on the operator** (`#4354`, `#4814`, `#4817`, plus 9 LANDING

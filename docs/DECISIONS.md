@@ -7814,6 +7814,19 @@ SELFDEV recipe (cap durig at the engine's slot count so seats queue in durig rat
 deposits rows — `#4982` is the queued row that parks `#4974`. Sequencing a wake onto a dead provider is the same defect
 ROADMAP 226 prices; the era-attribution half of `channel-preflight` §5 is the instrument that shows it before you pay.
 
+**Correction to that reasoning, measured after both seat turns — and the delegate's plan was wrong in a way worth keeping.**
+Parking the rows would **not** have cleared the start: `tools/broker-serve.mjs:411-412` refuses `--start` on *any*
+block-severity finding, and `--dry-run` prints `A start would be refused: provider-DURIG_VERIFIER_-unreachable,
+provider-verifier-completion-failed`. Yet the wake path itself has **no provider-liveness gate at all** — `src/broker.mjs:1473`
+merely classifies `ECONNREFUSED` after a generation already failed. So the rig holds a **pre-flight judgement on the instrument
+and no gate in the substrate**, and the two questions an operator actually has ("will the instrument let me start?" and "will a
+woken seat survive?") can disagree in either direction. `pm` reached the same place from the other side and registered the
+missing capability as **#5007**: there is no non-terminal verb for parking a `queued` row addressed to a third seat
+(`hold_work` refuses as "addressed to qa, not you", `release_work` as "only the sender or recipient may release it",
+`cancel_work` is terminal), so parking a hazard you did not mint is currently impossible for a seat. The durable rule:
+**when an instrument's BLOCK and the substrate's behaviour disagree, establish which one is load-bearing before sequencing work
+on it** — the delegate sequenced an entire hand-off on the assumption that the BLOCK was the gate.
+
 **Housekeeping that was a real gate, recorded so nobody re-trips it:** `scripts/land.mjs` counts **untracked** paths as a
 dirty tree, and an uncited fetch sat in `inputs/fetched/` (`strata-batching.md`, sha256 `d1f7d558…`) — a directory whose own
 README says what a report does not cite does not belong there. It was moved to `.spike/inputs/` (kept on disk, named in
