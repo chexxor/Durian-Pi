@@ -33,8 +33,11 @@ demo (`demo/next-pointer.test.mjs`).
   `seat-turn-shape` + `broker-stop-audit` red, both green standalone 40 s later. Verdict written to
   **`.spike/delegate/suite-marker.json`** so `scripts/clockin.mjs` prints it with its sha and a STALE flag instead of anyone
   re-running the suite.
-- **4,989 rows** — 3,782 `done` / 794 `cancelled` / 328 `held` / 65 `queued` / 12 `deferred` / 8 `claimed` = **413
-  non-terminal** (was 414; `resume` cleared 2).
+- **4,992 rows at clock-out (02:40Z, `main = a8c4af21`)** — 3,783 `done` / 795 `cancelled` / 328 `held` / 66 `queued` /
+  12 `deferred` / 8 `claimed` = **414 non-terminal**. It moved during the session (4,989/413 at the 02:05Z read) because
+  `devtools` was live; `scripts/clockin.mjs` re-reads it in 5 s, so trust that over this line. `## GIT` there reports
+  `refs=14 worktrees=15 unmerged=5`, and 12 seats / 16 attention notices. 12 `deferred` rows are **parked on the operator**
+  (`#4354` impl, `#4814` qa2, `#4817` devtools waiting on human) — that is an operator queue, not a routing failure.
 - **Broker NOT resident** (`selfdev.sqlite.broker.json` absent). All 12 seats registered with `engine:"local"`; every
   seat's `projection` is `[]` (empty since restart — "no work in flight", not a dead seat).
 - **LOCAL ENGINE: UP.** `curl -s http://127.0.0.1:47831/v1/models` → `{"object":"list","data":[{"id":"iq3_s","gpus":[1]}]}`;
