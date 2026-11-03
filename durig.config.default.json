@@ -1,5 +1,10 @@
 {
   "DURIG_DB": "./rig.sqlite",
   "DURIG_MAX_CONCURRENT_SEATS": "1",
-  "DURIG_OPTIMIZE": "off"
+  "DURIG_OPTIMIZE": "off",
+  "DURIG_LOCAL_CONTEXT": "200000",
+  "DURIG_LOCAL_MAX_TOKENS": "16384",
+  "DURIG_COMPACTION_MODEL_OVERRIDES": {
+    "local/iq3_s": { "reserveTokens": 20480 }
+  }
 }

@@ -8477,3 +8477,51 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
 - **Delegate error recorded:** the brief dispatched to `lead` claimed "`architect` is working #5015 right now" after
   that work had already landed — a stale ground-truth line that survived a `sed`/`python` edit because the replacement
   string did not match. A brief's ground-truth block must be **re-measured at dispatch**, not edited in place.
+
+## D201 — the operator RULED the three capacity levers: 200,000 is the declared window, `MAX_TOKENS` is a rig property, and the reserve becomes a per-class value (2026-11-03T22:0xZ, delegate applying the ruling, Linux `chexxor@ThinkStation-P3`, node v24.22.1, `main c486120b`)
+
+- **The ruling, in the operator's words:** *"Copy B window is authoritative. Max tokens env var is a rig property.
+  compaction reserve can be whatever you find best — I don't care as long as it does not break the agent flow."*
+  This closes the three questions `architect` parked on the operator (`#4970` HALF B, `docs/reviews/
+  architecture-capacity-rulings-2026-11-03.md` §3 Q1–Q3) and D197b's environment-prefix stopgap.
+- **How "Copy B" was read, stated so a misreading is visible in one line.** No document in this repo labels the two
+  private copies A and B — the shorthand is the operator's. Every record lists the pair in the SAME order
+  (`SELFDEV.md:1237-1243`, `:1327-1330`, `DECISIONS.md:8237-8240`, `#4970`'s own body, `NEXT.md §0.1`): **(A)** the
+  operator checkout `/home/chexxor/Git/Durian-Pi/durig.config.json` = `DURIG_LOCAL_CONTEXT 160000` (the D187 stopgap),
+  **(B)** the approved seat root `/home/chexxor/Git/durian-dev/seatroot/durig.config.json` = **`200000`**. Read that
+  way, **the authoritative declared window is 200,000 tokens**, which is also the value the operator already granted
+  as a prefix (D197b) and the value `architect` recommended. Corroborating, not deciding: the live engine is
+  `strata --serve … --max-context 204800` (measured this session, `ps -eo pid,args`, pid 345372, `:47831` LISTEN), so
+  200,000 is a declaration **under** the served authority while 160,000 is a policy ceiling that made 143k-token seats
+  un-sendable — a capability decision, which is why it was the operator's and not the delegate's.
+- **What the delegate changed, file by file (the rule: name the copy you edited).**
+  1. `durig.config.default.json` (**tracked**, so the value is armed in every item worktree — the same
+     "unarmed in worktrees" shape as the spend-cap defect, `#5037` scope item 3, `.gitignore:8`): added
+     `DURIG_LOCAL_CONTEXT "200000"`, `DURIG_LOCAL_MAX_TOKENS "16384"`, and
+     `DURIG_COMPACTION_MODEL_OVERRIDES {"local/iq3_s": {"reserveTokens": 20480}}`.
+  2. `durig.config.json` in the **operator checkout only** (gitignored): the stale `160000` → `200000`, so the copy
+     that *disagreed* with the authority no longer overrides the tracked default in that cwd. The seat root's copy
+     (Copy B) was **not touched** — it already carried the ruled value.
+  Proof the values are effective and not merely written: `DURIG_DB=./selfdev.sqlite node cli.mjs status --json` now
+  reports `window.denominator "declared", value 200000` for all seven local-class seats (was 160000 — `impl`
+  fraction **0.895 → 0.716**, `devtools` **0.886 → 0.709**), and `node cli.mjs config` prints
+  `DURIG_COMPACTION_MODEL_OVERRIDES {"local/iq3_s":{"reserveTokens":20480}}` with
+  `defaultsSource …/durig.config.default.json`. Full suite with the change in the tree:
+  **248/248, `failed: []`, 58.3 s** (`node scripts/test.mjs --all --jobs 8`, operator checkout, 187 `node_modules`
+  entries + `vendor/pi-main`, i.e. the vendor dependency set — not comparable to a thin worktree).
+- **The reserve, ruled by the delegate under the operator's grant, per class and not globally.** Local class
+  `reserveTokens = 20,480` (the knee `architect` computed at §2: `0.8 × 20,480 = 16,384 = maxTokens`, so the
+  summarization output budget `min(⌊0.8R⌋, maxTokens)` goes **13,107 → 16,384** without buying an oversized reserve),
+  with pi's `keepRecentTokens 20000` / `backgroundTokens 32768` left alone. The constraint set holds with the served
+  capacity named: band `200,000 − 20,480 = 179,520`; `band + maxTokens = 195,904 ≤ 204,800` (margin **8,896** where
+  `R = 16,384` left 4,800); background tier `179,520 − 32,768 = 146,752 > 0`; and `R ≥ maxTokens`.
+  **It is a `modelOverrides` entry, not `DURIG_COMPACTION_RESERVE_TOKENS`**, precisely because of the operator's
+  "does not break the agent flow" clause: the global key would have applied 20,480 to the **verifier class**, whose
+  declared window is 24,576 — a 4,096-token band, i.e. compaction every turn. The verifier class is therefore
+  **left on pi's defaults on purpose**, and its reserve stays unrouted until the pointer re-point lands
+  (`#5024`/`#5036`: nothing listens on `:1234`, so arming a knob for a dead provider is folklore, not capacity).
+- **What this unblocks, and what it does not.** It makes `#4970` HALF B answerable (its decisions 1–4 are design
+  rulings the architect already drafted), and it removes the per-verb prefix D197b had to carry — a control that
+  fails by omission. It does **not** build any guard: the declared-vs-served `check`, the dispatch-time pre-flight,
+  the cause classes and the spend cap at the provider seam are still the team's build (`#4973`, `#5037`), and the
+  delegate changed no source under `src/`.
