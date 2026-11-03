@@ -203,3 +203,63 @@ Not "unset" (that silently folds verifier seats into the default provider — th
 turn per attempt). The least-lying pending state is **the seats parked with a named cause, the config left
 untouched, and the red recorded** — which is what this row asks `pm`/`lead` to hold, and it is why
 `docs/reviews/architecture-capacity-rulings-2026-11-03.md` exists.
+
+---
+
+## 7. The ruling: **BIND**, and the pointer's failure moves from generation time to **dispatch** time
+
+Lead's binary (#5025: "bind or retire"). **Ruling: BIND the pointer as one validated record, and RETIRE the
+free-provider assumptions that come with the `verifier` id.** Retiring the id outright is the reversible option
+and it is *worse* here: the rig has five seats and a cross-family invariant (D48/D119) that need a second
+provider, and renaming them onto `local/iq3_s` would buy a green signal that means nothing. What must be retired
+is the module header's promise — "**free context, cheap reset, no paid API**" — applied to a non-loopback
+endpoint. That classification is #5015's (D-5015.3) and is not re-decided here; this row decides what the
+pointer is and when it is allowed to fail.
+
+**Independent confirmation of lie #1.** My own dated snapshot of DeepInfra's catalog (2026-11-03, no key) holds
+**173 rows total, 91 chat-tagged**, and **no row matching `ministral` at all** — so `verifier/mistralai/ministral-3-14b-reasoning`
+resolves to nothing on either side, exactly as lead measured. This is also why the #5013 fix must **not** add that
+id to the curated DeepInfra file: it would make a wrong thing green by inventing a row for a model that does not
+exist (and would hand it a price from model memory — see D-5015.2's drift findings).
+
+### The invariants the pointer must satisfy (each one is a demo assertion, not a wish)
+
+| id | invariant (axis named) | what a violation looks like | the check that pins it |
+| --- | --- | --- | --- |
+| **P-I1 servability** | the pointer's model id must exist in the catalog of the **endpoint the pointer names** (`GET {baseUrl}/models`, or a dated snapshot with `priceAsOf`) | today: id absent from both providers; a guaranteed wire failure | extend `demo/local-model-pointer.test.mjs` to resolve the id against the named endpoint's model list, not just against the provider being registered |
+| **P-I2 window ≥ need** | `declaredContext (tokens) ≥ min(measured review need, brief bound)` — the rig's need is `qa` p50 **55,538** tokens | the impossible pair D166 registered as ROADMAP **259**: declared 24,576 < 55,538 | a `check` rule + demo comparing the declared window to the recorded per-seat prompt distribution |
+| **P-I3 geometry consistency** | `prompt + maxTokens ≤ served capacity (tokens)` | `DURIG_VERIFIER_CONTEXT 65536` declared against an 8,192-token server — "a request that cannot be served" | the same rule reads the **served** `--max-context` off the live process (`tools/model-probes/probe-preflight.mjs:92,158` already parses it) |
+| **P-I4 reasoning coherence** | if the model row is `reasoning`-tagged, `maxTokens ≥ 8192`; **never 3000** | `finish_reason=length` with empty content (D193(3)), `answerChars=0` at 1,200 and at 4,000 | assert on the pointer record; a reasoning row with a small budget is rejected at validation |
+| **P-I5 price truth** | a non-loopback pointer must carry a priced row from a **named, dated** source; `cost {0,0,0,0}` is invalid | the metered-that-claims-free lie | #5015 probe **P2**; do not fork a second assertion |
+| **P-I6 credential presence** | a non-loopback pointer needs a resolvable key (`DURIG_VERIFIER_API_KEY`); `"local-placeholder"` is invalid | a 401 that reads as a model failure | #5015 probe **P9** |
+| **P-I7 no silent fold** | with `DURIG_VERIFIER_BASE_URL` unset, a `verifier/x` pointer must be reported, **not** resolved as a model id under the default provider | a cross-family rig reading healthy while single-family | already locked for the resolution layer (`demo/local-model-pointer.test.mjs:70`); the gap is the **dispatch** path |
+
+### What happens to a seat whose pointer is invalid — this is the part that must change
+
+Today it faults at **generation** time: the provider is registered, the seat is woken, the turn starts, and the
+failure lands as `unanswered / model_error` **after** a `pi.user` entry was appended (the trap D196 counts:
+"1 more pi.user entry" per attempt, and each attempt moves the counted projection further from admissible —
+`docs/runbooks/session-start-cost.md` §2b). That must not be the answer, and the fix is not a better error
+string.
+
+**Ruling:** an invalid pointer is a **dispatch-time refusal**. Before a `send`/wake is admitted, the pointer
+record is validated against P-I1…P-I6; on failure the send is **refused with the store untouched** — no
+`pi.user` entry, no assistant turn, no provider request — and settles with a named, **non-retryable** cause class
+**`pointer_unresolvable`** (distinct from `spend_cap_exceeded` and `context_budget_exceeded`; the first three
+supervisor retries would otherwise spend again), the item **stays `claimed` and is parked** with block reason
+`dependency`, resolver the seat that owns the pointer, and a `reviewBy`. The seat is **not** marked degraded and
+is **not** re-woken, because a dead pointer is deterministic: retrying it costs a turn and changes nothing.
+Recovery path: fix or re-point the record (operator's config verb), re-validate, release the park. This is the
+same two-sided shape as D-5015.1's admission projection — **validate the shape before the store is dirtied;
+enforce the money and geometry exactly at the seam.**
+
+**Falsifiable acceptance for this ruling** (route to `qa`/devtools through `pm`, do not build here):
+`node demo/local-model-pointer.test.mjs` extended so that (a) pointing at an id the named endpoint does not serve
+produces `pointer_unresolvable` **and zero new `pi.user` rows** in the store, (b) a declared window below the
+recorded need is reported, (c) a reasoning row at `maxTokens 3000` is rejected at validation, (d) with the base
+URL unset the pointer is reported rather than folded into the default provider. Each of those four can fail,
+which is what makes it a control.
+
+**Sequencing unchanged from §5:** the pointer is bound only after D-5015's cap lands; until then the five
+`verifier/…` seats are **parked with a named cause**, `single-model-rig` stays red and labelled, and the least-lying
+pending state is "registered but not woken" — never "pointed at a dead socket and woken".
