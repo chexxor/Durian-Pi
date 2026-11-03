@@ -12,7 +12,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { fallbackModels } from "../src/providers/deepinfra-models.ts";
+import { fallbackModels, catalogRefusals } from "../src/providers/deepinfra-models.ts";
 import { isLocalProviderId } from "../src/providers/local.mjs";
 
 const list = fallbackModels();
@@ -158,10 +158,37 @@ assert.ok(
 	"the guard asks the module that builds the providers",
 );
 
+// 7. THE VALIDATION LAYER (#5047, acceptance P6b). The curated list lives in a VENDORED file (its own header
+//    says do not edit there), so the fix is not a quiet price edit: durig's seam re-prices the vendored rows from
+//    a DATED source and REFUSES a row it cannot price or whose own declared geometry could spend more than the
+//    operator's store cap in ONE call. The measured case: google/gemini-3.1-pro, 1,000,000 ctx at $2/$12 =
+//    $14.00 per maximal call = 3.50x the whole $4 grant (D193). No run-level or store-level cap can stop the
+//    FIRST call; only refusing to register the row does.
+{
+	const refused = catalogRefusals();
+	const gemini = refused.find((r) => r.model === "google/gemini-3.1-pro");
+	assert.ok(gemini, "google/gemini-3.1-pro is REFUSED registration: one maximal call costs 3.50x the store cap");
+	assert.equal(gemini.cause, "over-exposed");
+	assert.equal(gemini.maxCallExposureUsd, 14, "axis: USD per maximal call, computed from the row's OWN declared maxima");
+	assert.equal(byId.has("google/gemini-3.1-pro"), false, "and it is not in the list a seat resolves against");
+	assert.ok(
+		list.every((r) => r.maxCallExposureUsd <= 4),
+		`no registered row may be able to spend more than the $4 store cap in one call (worst here: ${Math.max(...list.map((r) => r.maxCallExposureUsd))})`,
+	);
+	const priced = list.find((r) => r.id === "deepseek-ai/DeepSeek-V4-Flash-0731");
+	assert.equal(priced.cost.input, 0.06, "the DATED source re-prices the curated row (the vendored row declared $0.09 in, 1.5x the catalog) — drift is corrected, not commented");
+	assert.equal(priced.priceSource, "deepinfra-catalog@2026-11-03", "every row names where its price came from (F8)");
+	assert.equal(priced.priceAsOf, "2026-11-03", "and when it was true");
+	const noCache = list.find((r) => r.id === "openai/gpt-oss-20b") ?? list.find((r) => r.id === "mistralai/Mistral-Small-3.2-24B-Instruct-2506");
+	assert.equal(noCache.cost.cacheRead, noCache.cost.input, "no published cache price = NO discount claimed (P6)");
+	const absent = list.filter((r) => r.catalogAbsent).map((r) => r.id);
+	assert.ok(absent.length >= 4, `rows the live catalog does not carry stay registered but are MARKED (${absent.length}) — a seat naming one cannot be served`);
+}
+
 console.log(
 	`DEEPINFRA CATALOG PASS (google/gemma-4-31B-it present: ${gemma4.contextWindow} ctx, $${gemma4.cost.input}/$${gemma4.cost.output}, reasoning=${gemma4.reasoning}, vision; deepseek-ai/DeepSeek-V4.1-Flash-1017 present: ${v41_1017.contextWindow} ctx; ${checkedSeats.length} rig seat models resolve across providers ${[
 		...byProvider,
 	]
 		.map(([k, v]) => `${k}=${v}`)
-		.join(", ")}; ${list.length} entries)`,
+		.join(", ")}; ${list.length} entries; ${catalogRefusals().length} row(s) refused by the validation layer)`,
 );
