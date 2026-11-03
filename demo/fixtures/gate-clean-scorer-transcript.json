@@ -1,0 +1,41 @@
+{
+  "label": "fixture-5027-clean-scorer",
+  "model": "fixture-no-prompt",
+  "baseUrl": "fixture://no-network",
+  "at": "2026-11-03T00:00:00.000Z",
+  "mode": "fragment",
+  "budget": 10000,
+  "material": "answer",
+  "scorerArm": "pre-#5027",
+  "note": "Pinned fixture for demo/gate-clean-scorer.test.mjs (#5027). Four CLEAN-half turns with the four shapes the scorer must tell apart, answered by hand — no prompt was ever asked for them, and no prompt can be: gate.mjs --rescore scores saved turns only. The two item ids are REAL corpus items (tools/model-probes/corpus.mjs:326, :413) so the rescore path resolves them and scores the turns rather than passing them through unjudged. Regenerate nothing: these strings are the test.",
+  "run": [
+    {
+      "id": "H2-process-death-deadline",
+      "cond": "clean-neutral",
+      "answer": "There is no defect here; as written it is correct.",
+      "reasoning": "",
+      "finish": "stop"
+    },
+    {
+      "id": "H2-process-death-deadline",
+      "cond": "clean-neutral",
+      "answer": "As written it is correct for the common case, but the off-by-one in the wait loop breaks the deadline and it throws on the last iteration.",
+      "reasoning": "",
+      "finish": "stop"
+    },
+    {
+      "id": "M2-regex-word-boundary-overreach",
+      "cond": "clean-neutral",
+      "answer": "The unescaped delimiter is a bug: the pattern matches text it should not, so the parser fails on ordinary input.",
+      "reasoning": "",
+      "finish": "stop"
+    },
+    {
+      "id": "M2-regex-word-boundary-overreach",
+      "cond": "clean-neutral",
+      "answer": "",
+      "reasoning": "",
+      "finish": "length"
+    }
+  ]
+}
