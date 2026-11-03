@@ -8330,3 +8330,118 @@ for, with the exact commands, rather than taken.
   `git merge-base --is-ancestor` proof + clean status, the one superseded ref removed with the sanctioned verb
   (`cli.mjs worktree prune-branch item-4898`, `patchEquivalent: 1`, recovery `git branch item-4898 9beb1ae3…`).
   Six locked item worktrees were kept on purpose, including `item-4997` kept one cycle as the landing audit trail.
+
+## D-5015 — a metered provider without a cost ledger is a system that cannot answer "how much did that cost", and the cap goes at the provider seam (2026-11-03, architect, Linux `chexxor@ThinkStation-P3`, item worktree `item-5015` off `main a65ba431`)
+
+**Full review, the numbers and the probes: `docs/reviews/architecture-spend-cap-2026-11-03.md`.** Acceptance
+instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tools/model-probes/spend-cap-acceptance.mjs --snapshot .spike/5015/catalog-2026-11-03.json` → **exit 1, 2/10 claims hold, 8 RED** (the failing-first record; the build is done when it exits 0). Spends nothing: a loopback stub answers every request.
+
+- **D-5015.1 — Status: DECIDED. The cap is enforced at the PROVIDER SEAM, not at the queue-admission seam.**
+  `cli.mjs:344-391` is the only place every run path (send, resume, doctor, subagent) plus **pi-durable's own
+  compaction summarization** reaches a model, and it already wraps every provider (`wrapProviderWithSlots`,
+  `wrapProviderWithTrace`). Admission-only enforcement is REFUTED by measurement: the failure D196 measured fires
+  **inside** the turn, and D196(2) counts **one `pi.user` entry per compaction attempt left in the author's
+  session** — an admission gate would not have stopped either, and each attempt costs tokens and dirties the head.
+  The provider seam cannot stop *queue* spend (100 dead-on-arrival wakes), so a **projection at admission** is added
+  as a second gate, computed from the ledger + the model row and **never writing a ledger row** (refused calls are
+  not money). Options considered: (a) admission-only — cheap, cannot see compaction/turn spend, rejected;
+  (b) provider seam + admission projection — chosen; (c) post-hoc stop-the-rig on the ledger — rejected, it is a
+  meter, not a guard, and the operator has 12 seats of live work to lose.
+- **D-5015.2 — Status: DECIDED (values proposed, pool is the operator's). Three caps, three axes.**
+  `DURIG_SPEND_CAP_CALL_USD` = **0.05 USD projected per call**; `DURIG_SPEND_CAP_RUN_USD` = **0.10 USD per run**
+  (the existing probe ceiling, `DURIG_PROBE_CEILING_USD`, renamed, and a **different axis** — a run total is not a
+  per-turn limit); `DURIG_SPEND_CAP_STORE_USD` = **4.00 USD cumulative over the ledger**, which is the operator's
+  granted pool (D193: "$4.00 cumulative of DeepInfra is available … I prefer to use DeepInfra for verifiers rather
+  than halt the system"). **Defaulting the store cap to 0 would be the inverse failure** — a gate that refuses the
+  operator's own paid gate plan halts the rig, which is what D193's `gate.mjs` ceiling bug did. Prices are **not a
+  model-memory constant**, and there are **two** price sources. The live catalog (fetched 2026-11-03, HTTP 200, no
+  key, 91 chat rows) and the **tracked curated fallback** `fallbackModels()`
+  (`src/providers/deepinfra-models.ts:147`, 16 rows) — and `buildModels` reads the **fallback** (`cli.mjs:327`)
+  while `fetchDeepInfraModels()` is **not wired in** (the file's own comments say so). Diffed against the dated
+  snapshot: `DeepSeek-V4.1-Flash` declares **$0.14/$0.28** where the catalog says **$0.20/$0.60** (output
+  under-declared **2.1×**); `DeepSeek-V4-Flash-0731` declares $0.09 vs $0.06; `Mistral-Small-3.2-24B-Instruct-2506`
+  declares ctx **131,072** where **128,000** is published; **4 of the 16 rows are absent from the live catalog**
+  (`DeepSeek-V3-0324`, `Qwen3-235B-A22B-Thinking-2507`, `Llama-3.3-70B-Instruct`,
+  `Llama-4-Maverick-17B-128E-Instruct-FP8`); and `google/gemini-3.1-pro` — 1,000,000 ctx at $2.00/$12.00 — makes
+  **one maximal call worth $14.00 = 3.50× the operator's entire $4 grant**, which no run- or store-level cap can
+  prevent and only a **per-call projection** refuses before the wire. The `$0` lie recurs at a third site:
+  `mapCatalogModel` uses `pricing.input_tokens ?? 0` / `output_tokens ?? 0` (`:101-102`) and invents
+  `context_length ?? 128_000` / `max_tokens ?? 4096` (`:116-117`). That file is **vendored** (`:1`
+  "VENDORED - do not edit here", pi-deepinfra v0.1.3), so the fix is a **durian-pi validation layer** that refuses
+  an unpriced or over-exposed row, not a quiet edit of a vendored price table. Probe **P6b**
+  (`tools/model-probes/spend-cap-acceptance.mjs`) re-runs the diff. Numbers and exposure tables in the review.
+- **D-5015.3 — Status: DECIDED. Locality is a property of the ENDPOINT, not of the provider id.**
+  `src/providers/local.mjs:159` forces `cost:{0,0,0,0}` on **every** row of any `local`/`verifier` provider, and
+  `cli.mjs:336` invents the same zero row plus `contextWindow 128_000 / maxTokens 8192` for an unknown
+  `DURIG_MODEL`. A `verifier/` provider pointed at `https://api.deepinfra.com/v1/openai` is therefore a metered
+  API that cannot be priced, cannot be refused, and **is billed anyway** — it is the same lie as a `verifier/`
+  pointer naming a model no provider serves (D193(1), D196, and #5025 below). Consequence: `isLocalProviderId`
+  (`src/providers/local.mjs:45`) stays a *key-resolution and free-context* predicate; the **cost** must come from a
+  named dated source or registration **refuses before any spend**.
+- **D-5015.4 — Status: DECIDED. `DURIG_VERIFIER_API_KEY` is the credential the verifier provider reads**
+  (`src/providers/local.mjs:88`), and `:145-147` falls back to the literal `"local-placeholder"`, which against a
+  metered host is a 401 that reads as a model failure. `cli.mjs config` advertises `DEEPINFRA_API_KEY` as the
+  `set/unset` key (`cli.mjs:917`) — a different variable. A metered provider must report a key and refuse at
+  startup when it has none; it must not be allowed to spend an empty credential.
+- **D-5015.5 — Status: DECIDED. A tripped cap is a named, NON-RETRYABLE cause class (`spend_cap_exceeded`), it
+  parks the item, and it is never reported on the money axis alone.** It is distinct from
+  `context_budget_exceeded` (the 38 occurrences, tokens) and from `model_error`; the supervisor retries provider
+  errors and its `repeated_failure` escalation needs 3 spends, so an unclassified money stop is a money-spending
+  loop. The refusal names cap + spent + projected in USD, and `stopReason:"length"` is recorded as
+  **NOT-FINISHED**, never as a verdict (D193(3): empty content, `finish_reason:length` at `max_tokens=24`).
+- **Consequences / known-unaccounted set.** Four tracked probes still post `/chat/completions` directly and are
+  pinned **on purpose** by the #5024 demo (`demo/probe-metered-ledger.test.mjs:422-447`):
+  `calibrate-verifier.mjs:42`, `cold-prefill.mjs:53`, `stream-probe.mjs:13`, `throughput.mjs:24,30` — re-confirmed
+  this session. Each migration narrows that pin **in the same commit**. `gate.mjs` has no import guard, so
+  `import` of it runs the gate and spends GPU/API; the guard demo is now `demo/probe-metered-ledger.test.mjs:398-403`
+  (landed `84edff3c`), so the "cleanest harness" no longer needs to shell out.
+
+## D-5025 — the `verifier/` pointer names a model no provider serves, on a dead socket, with a window below the review need; nothing local fits, so verification is local-same-family or metered-under-cap (2026-11-03, architect; decision, **no config edited, nothing loaded**)
+
+**Full review with the measurements: `docs/reviews/architecture-verifier-pointer-2026-11-03.md`.**
+
+- **Measured today:** nothing listens on `127.0.0.1:1234` (`curl` → HTTP 000, **exit 7**); the seat server answers
+  on `:47831` (`iq3_s`, `"gpus":[0,1]`, started with `--max-context 204800 --vram-reserve-mib 1536`); GPU0
+  **14,906/16,376 MiB**, GPU1 **22,758/24,576 MiB** free of 1,470 / 1,818 MiB; `probe-preflight.mjs` says `GO` with
+  `91 %` / `92 %` full and "largest resident process is strata at 51.1 GiB RSS (41.2 GiB shmem)". **The "free" MiB is
+  the seat engine's own reserve, not spare room.** Five seats name `verifier/mistralai/ministral-3-14b-reasoning`
+  (`rig.selfdev.json:50,65,95,139,153`); the seat-root config declares `_CONTEXT 24576 / _MAX_TOKENS 3000`.
+- **D-5025.1 — Nothing local fits, and bounding does not change that.** KV at the runbook's measured geometry
+  (160 KiB/token) is **3,840 MiB** at the declared 24,576 tokens, **8,678 MiB** at `qa`'s measured p50 review need
+  55,538 tokens, **20,480 MiB** at 131,072 — against 1,818 MiB free. Weights are the harder wall: the smallest
+  credible cross-family candidate is ~13 GB (`gpt-oss-20b`, MXFP4, vendor figure), and preflight refuses any load
+  that would leave <1 GiB on the card. **Rejected option: "serve a small model at a tiny window"** — it fails the
+  weights test and puts two engines on a card already 91 % occupied, the configuration under which the kernel
+  executed `strata-host` in the 2026-10-29 OOM incident.
+- **D-5025.2 — Therefore verification is binary, and both arms are named.** (a) the local seat model — honest but
+  same-family, `check` reports `single-model-rig` **fix-now**, and D48/D119 says a same-family verifier cannot
+  confirm a defect (it reproduces the author's error and its agreeable verdict is worthless); or (b) **metered
+  verification under D-5015's cap**, which is the operator's own ruling (D193). Option (c) — pointing verifier seats
+  at the author model to clear the red — is rejected: it clears a signal by destroying what the signal was for.
+  Until (b) is armed, the five verifier seats stay **parked with a named cause** and `single-model-rig` stays red and
+  labelled. **Not "unset"**: with `DURIG_VERIFIER_BASE_URL` unset, `resolveSeatModel` (`src/seatmodel.mjs:19`) folds
+  the whole `"verifier/x"` string into the default provider and the rig reads healthy while being single-family
+  (locked by `demo/local-model-pointer.test.mjs:70`).
+- **D-5025.3 — Window and output budget, once verification is served.** Declare `DURIG_VERIFIER_CONTEXT` = the
+  provider row's **published** `context_length`, **capped at 131,072 tokens**; never 1,048,576 — at the shipped
+  default row a maximal prompt is **$0.157**, 3.9 % of the $4 pool in one call, and it moves the compaction trigger
+  where nothing can reach it. Declare `DURIG_VERIFIER_MAX_TOKENS = 8192`, never 3000: D193(3) reproduced
+  `finish_reason:length` with **empty content**, and the runbook's arm table shows `answerChars=0` at 1,200 **and**
+  4,000. The pair must satisfy `prompt + maxTokens ≤ served capacity` — the class ROADMAP **259** says `check`
+  should catch, not a human reviewer. 131,072 covers `qa` p50 (55,538) and `designer` p50 (66,258) but **not**
+  `qa` p95 (251,311) or `auditor` p95 (329,252), so the window decision and the bounding policy are one decision.
+- **D-5025.4 — Bounding is in tokens, proved by a count.** Answer-first contract (with clean-control calibration,
+  because answer-first turns a defect-prior model decisively wrong 16/16 times), forced-choice scoring (~50-token
+  classifier verdict — the biggest wall-clock and money lever), a brief that names each file's **byte** size and
+  puts the reading cliff in the brief (a correct two-file brief still died on a 26,532-char file), the
+  context-fraction guard (ROADMAP 208 — seats have published **1.224** and **1.093** of their window, D150), and
+  `tools/seat-turn-shape.mjs` before any send. Prefix stability is a **USD** lever where the vendor publishes a
+  cache price, and a **no-op** where it does not: `gpt-oss-20b`, `gpt-oss-120b` and `Mistral-Small-3.2-24B` publish
+  **no `cache_read_tokens`** (measured 2026-11-03), so no cached runway may be quoted for them.
+- **D-5025.5 — Sequencing, with the gate that must not be skipped.** (1) D-5015's cap lands (acceptance probe exits
+  0) → (2) operator re-points the provider and sets `DURIG_VERIFIER_API_KEY` in the environment → (3) **gate before
+  flipping** (D137): one `gate.mjs --replicate 3` arm at `CAL_MAX_TOKENS=8000`, under
+  `DURIG_SPEND_CAP_RUN_USD=0.10`, the clean half of the verdict now meaningful only because #5027's negation-aware
+  scorer landed (`84edff3c`) — and D193(6)/(8) forbids promoting a model on one clean-side number → (4) only then
+  wake the five seats, one pre-flighted batched brief each. **Model choice is not decided here**; the rows above
+  price exposures, they do not elect a verifier.
