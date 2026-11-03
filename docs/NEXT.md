@@ -110,16 +110,17 @@ input-bound half capacity-independent, carried in **#5028**), **#4887** (queued 
   while its provider is dead — **`pm` is the only seat that is both tonight**. `status.context.consumed` is measured **pre-send**, so
   "at or over the band" is only true once the brief is appended (`impl` is 338 tokens under at rest).
 
-### 4. The three one-liners the operator asked for (`pm`, verbatim in substance — answer each in one line to unblock `pm`)
+### 4. The three one-liners the operator asked for (`pm`, verbatim in substance — answer each in one line, and `pm` can act)
 
-All three are `deferred … waiting on human` in `status.attention`, i.e. `pm`'s own claimed rows: **a one-line answer each lets `pm`
-`resume_work` and close or re-route them in a single turn.** `pm` could NOT run `docs/runbooks/stale-held-backlog.md` (no file/shell
-tools), so these are labelled as instrument-derived, not runbook-verified.
+Verified from the queue dump (**not** pm's guess): #4354 `deferred · to=impl · claimedBy=null · sender=pm`; #4814 `to=qa2`;
+#4817 `to=devtools` — each carries a `question` beginning `supervisor escalation:`. So the **release** verb belongs to
+`impl`/`qa2`/`devtools` (all un-sendable, §3), but `pm` as **sender** holds `cancel_work` on all three — which is why a one-line
+answer is actionable tonight without waking anyone.
 - **#4354** (`impl`, re-cut): *content-probe then cancel* — it belongs to the 70-of-89-already-on-main class; do not release it to `impl`.
 - **#4814** (`qa2`): *stays parked as CAPACITY* until `DURIG_VERIFIER_*` is re-pointed to DeepInfra and `gpt-oss-120b` is armed at
   `CAL_MAX_TOKENS=8000`; if it must move sooner, move it to a local-family seat and label the verify seat/transcript/execution.
-- **#4817** (`devtools`, already answered): the only verb owed is a **close** — its sender closes it by content probe, or it becomes the
-  first non-compaction release after the `DURIG_LOCAL_CONTEXT` ruling; do not wake `devtools` to do it.
+- **#4817** (`devtools`, already answered): the only verb owed is a **close** — `pm` as sender can close it by content probe, or it becomes
+  the first non-compaction release after the `DURIG_LOCAL_CONTEXT` ruling; do not wake `devtools` to do it.
 
 ### 5. Cheap reads, traps, and the probes this session leaves behind (gitignored — **#5022** is the promotion row)
 

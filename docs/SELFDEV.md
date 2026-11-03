@@ -1581,3 +1581,11 @@ deferred 14 · claimed 5` (5,030 rows).
 `secretTokens` from `src/secretdetect.mjs` returned `[{offset:1924, family:"high-entropy-token"}]`, which is the 49-char requestId
 I chose. Verify by reading the entry and re-running `secretTokens` (never print the match, never "rotate"), and fold the instance
 into held **#3128** / queued **#4922** rather than minting a row. Hygiene: with a `delegate-YYYYMMDD-word-word` id, expect a notice.
+
+**7. Read `sender` and `claimedBy` before saying who can act on a row — I nearly wrote it wrong.** #4354/#4814/#4817 surfaced in
+`status.attention` as `deferred … waiting on human`, and I first wrote "`pm`'s own claimed rows, so a one-line answer lets `pm`
+`resume_work` them". The queue dump says otherwise: `claimedBy=null`, `to=impl|qa2|devtools`, `sender=pm`, `question` starting
+`supervisor escalation:`. A `deferred` row is **addressed to a seat and escalated to the human**; `resume_work` belongs to the
+addressee (all three addressees un-sendable tonight), while the sender's only cross-boundary verb is `cancel_work`. So the answer
+unblocks a **close**, not a release. Read the three fields (`status`, `to`, `claimedBy`, `sender`) in the `queue --json` dump before
+recommending a verb.
