@@ -94,8 +94,8 @@ end their projections on `user` (do-not-send). No broker, no genlock slot, no ge
   seatroot`, branch `seatroot/linux`, ff'd to `73ece38c`; worktree 18 / branch 19 inventories byte-identical across
   the verb), env prefix as above, `--request-id d197-devtools`; reply `settledStatus done` / `stopReason stop` in ≈7
   min. Before it: projection ends `assistant`, consumed 143,426 vs band 183,616. After: ends `assistant` (7 items),
-  consumed **156,614**, no worktree or branch added, seat root clean. **Pushed on this session's grant:**
-  `origin/main` → `719f3114` (docs-only, `git ls-remote`); grant spent.
+  consumed **156,614**, no worktree or branch added, seat root clean. **Pushed on this session's grant:** three
+  docs-only commits; `origin/main` is at the commit that contains this file (verify with `git ls-remote`).
 
 - **SUITE MARKER:** `node scripts/test.mjs --all --jobs 8` = **245/245** at `main 1a8edb5d` + these docs (43.3 s, no
   broker / no genlock / no generating seat; axis: execution; `DEEPINFRA_API_KEY` set, `durig.config.json` present).
@@ -160,7 +160,9 @@ via `cancel_work`. The operator's D195 ask ("bring only #4354/#4814/#4817") was 
 
 - **Do not claim, complete, defer, route, or release queue rows yourself** — decomposition and routing belong to
   `pm`/`lead`; releasing belongs to recipient or sender (`src/rig.mjs:1223-1245`).
-- **No push without the operator's grant.** Tonight's grant was used: `origin/main` = `719f3114`, 0 ahead. Ask again.
+- **No push without the operator's grant.** Tonight's grant was used (three docs-only commits). **As of clock-out
+  `main` is 1 ahead of `origin/main`** — a 2-line staleness fix to this file — unpushed because the grant is spent.
+  Push it on the next grant before anything else.
 - **Native host only** (Linux; D131). **`DURIG_DB` for the CLI**, never `DURIAN_PI_DB` (D103). `test -f
   "$PWD/durig.config.json"` before a write verb (no worktree has one); **never `doctor`/`resume` while a seat is
   generating** (D187) — `doctor` is an **alias of `resume`** (`cli.mjs:3102`), one write verb.
