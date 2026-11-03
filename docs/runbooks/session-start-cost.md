@@ -272,3 +272,31 @@ test -f "$PWD/durig.config.json" && echo "config present" || echo "NO CONFIG IN 
 #     120k-token turn against the served endpoint all run on a free local provider (the 120k one answered 200 in 54.1 s).
 #     `compact`/`reset`/`doctor`/`resume` are **CLI/broker verbs, not seat tools** (`src/rig.mjs` exposes only
 #     `send_work`/`claim_work`/`complete_work`/`revise_work`) — do not spend a send asking a seat to do one.
+
+# 14. THE COMPACTION BAND — and why `compact` is a CAPACITY verb, never a SHAPE verb. Measured 2026-11-03 (D196), Linux:
+DURIG_DB=./selfdev.sqlite node cli.mjs status --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+ const j=JSON.parse(s.slice(s.indexOf("{")));
+ for(const[k,v]of Object.entries(j.context)){const band=v.window.value-16384; // each seat against ITS OWN window (verifier seats are 24,576)
+  console.log(k.padEnd(10),String(v.consumed).padStart(7),"/",v.window.value,"band",band,v.consumed>band?"OVER THE BAND":"under")}})'
+#    `thresholdCompaction` (vendor/pi-main/…/harness/generation.js) fires on `estimateContext(view, planned) >
+#    DURIG_LOCAL_CONTEXT − policy.reserveTokens`, and durian-pi sets NO compaction policy, so the pinned defaults apply
+#    (`reserveTokens 16384, keepRecentTokens 20000` — harness/agent.js:10-15). At 160000 the local band is **143,616**:
+#    `lead` 145,429 (over AT REST), `devtools` 143,426, `impl` 143,278 — and `planned` includes the send you are about to
+#    append, so "190 under at rest" is not a green light. Read §2c's `detail` FIRST; when it says `Summarization hit the
+#    token limit` the failing number is the summary's OUTPUT budget (§2c), and the operator's lever is #4970 HALF B.
+#    Two readings that mislead if taken alone: `status.context.consumed` is measured PRE-send and is usage-derived, so it
+#    can exceed the declared window after a reset (`architect` 218,645/160,000 = fraction 1.367, `advocate` 9.96) — it is
+#    not the live window; and a compaction-class failure costs **zero tokens** while still keeping the `pi.user` entry it
+#    was woken with, so every blind retry makes the next turn LESS admissible.
+#    A SUCCESSFUL compaction does not restore sendability either: `selectCut` keeps the most recent `keepRecentTokens`
+#    = 20,000 (harness/compaction.js:211-234), so the trailing `user` entries survive the cut. Live proof, same store:
+#    `impl` head marker `pi.compaction@278205` still projects `user,assistant,user,assistant,user`; `devtools` took
+#    `pi.compaction@279624` at 05:19Z and still reports a parity break. **Read the LAST element of the counted projection
+#    (§2b), never the head marker.** And `doctor` is an ALIAS of `resume` (`cli.mjs:3102`) — there is no read-only
+#    `doctor`; the read-only diagnosis is §2c.
+#    THE VERIFIER FAMILY IS WORSE BY CONSTRUCTION (same read, one line): `DURIG_VERIFIER_CONTEXT=24576 − 16384` is a band of
+#    **8,192** — the pinned reserve is two thirds of the declared window — and its summary output budget is
+#    `min(0.8·16384, DURIG_VERIFIER_MAX_TOKENS=3000)` = **3,000**. So any verifier seat above 8,192 consumed cannot take a
+#    turn without a compaction that cannot succeed at 3,000 tokens. Tonight: `qa` 20,110, `architect` 218,645,
+#    `advocate` 244,751 are over their own bands; the zeros are seats with no turn recorded. Re-pointing the verifier
+#    (#5024/#5015/#5025) must set the context AND the max-tokens pair together, or the same failure walks over to DeepInfra.

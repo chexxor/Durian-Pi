@@ -1544,3 +1544,40 @@ even though a command is named. Write the marker literally and keep a `cli.mjs` 
 a seat to run a CLI-only verb.** `compact`/`reset`/`doctor`/`resume` exist only in `cli.mjs`/the broker spool
 (`src/broker.mjs:442,548,656`); a seat's tool set is `send_work`/`claim_work`/`complete_work`/`revise_work`
 (`src/rig.mjs:632,768,932`). A send asking `pm` to compact `lead` spends a turn to produce nothing.
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-03, D196 — every number measured in this session, Linux `chexxor@ThinkStation-P3`, node v24.22.1)
+
+**1. A pointer is a priority list, not a diagnosis — re-measure the verb before you spend it.** `docs/NEXT.md` named
+`cli.mjs compact lead` as the next command. Before spending it I read `submissions.detail` for `lead`'s newest submission
+(**#280241**): `unanswered / model_error`, *"Compaction failed: Summarization hit the token limit; the summary is incomplete"*.
+The verb had already been spent and had already failed, and the same `detail` was on four seats on 2026-11-01 (§2c, D187). The
+2-second read in `docs/runbooks/session-start-cost.md` §2c outranks any copied-in recovery command. Pair it with the new band read
+(§14, one `status --json`, prints each seat's own band): at `DURIG_LOCAL_CONTEXT=160000` the band is **143,616**, and `lead` was at
+145,429 **at rest**.
+
+**2. `compact` fixes capacity, never shape — and `doctor` is not a read.** A successful compaction moves the *head marker*;
+sendability is the *last element of the counted projection*. `selectCut` keeps the most recent `keepRecentTokens` = 20,000
+(`harness/compaction.js:211-234`), so the trailing `user` entries survive: `impl` (head `pi.compaction@278205`) still projects
+`…user,assistant,user,assistant,user`, and `devtools` took `pi.compaction@279624` at 05:19Z and still reports a parity break. And
+`cli.mjs:3102` routes `"doctor"` and `"resume"` to the same `cmdResume()` — "doctor, then resume" is **one write verb**, which is
+why `devtools`' `admitted_not_started` #279623 was left alone rather than re-armed blind.
+
+**3. Three independent axes decide whether a send can work; none implies another.** (a) shape —
+`node tools/seat-turn-shape.mjs` (0.5 s, read-only); (b) the compaction band (§14); (c) provider liveness
+(`ss -ltn` on the base-URL port, `runbooks/session-start-cost.md` §7). `seat-turn-shape.mjs` reads **no provider state**, so it
+called `qa` ADMISSIBLE while nothing listens on `127.0.0.1:1234`; `pm` was the only seat admissible **and** reachable tonight.
+
+**4. Price a brief, not just a wake.** One 6,893-character brief to `pm` cost **+17,091 context tokens** (66,992 → 84,083 of
+160,000) — at that rate twelve briefs put the router at the band. Batch, and cite queue ids instead of re-explaining them.
+
+**5. Two pointer traps that cost a failed guard run each.** (a) `demo/next-pointer.test.mjs` ends the pointer section at the next
+line matching `^## `, so a heading **wrapped onto a second line that starts with `## `** makes the section body empty and the guard
+fails with *"the pointer must name the current item"* and `actual: ''` — keep the heading on one line. (b) `queue --json` is JSON
+**plus** a trailing `note:` line, so `json.load` dies at char ~22.2M; parse with `json.JSONDecoder().raw_decode` (or reuse
+`.spike/delegate-20261102/rows.mjs`). Census from that dump, 2026-11-03: `done 3791 · cancelled 795 · held 335 · queued 90 ·
+deferred 14 · claimed 5` (5,030 rows).
+
+**6. `secret_detected` fires on your own request-ids — third instance, still no real leak.** Entry **#280250** @1924:
+`secretTokens` from `src/secretdetect.mjs` returned `[{offset:1924, family:"high-entropy-token"}]`, which is the 49-char requestId
+I chose. Verify by reading the entry and re-running `secretTokens` (never print the match, never "rotate"), and fold the instance
+into held **#3128** / queued **#4922** rather than minting a row. Hygiene: with a `delegate-YYYYMMDD-word-word` id, expect a notice.

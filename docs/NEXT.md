@@ -101,6 +101,11 @@ input-bound half capacity-independent, carried in **#5028**), **#4887** (queued 
   a real completion on `local`. `probe-preflight.mjs` prints **GO** but GPU0 14,906/16,376 MiB and GPU1 22,848/24,576 MiB — **no local
   verifier model loads without evicting the seat engine**, which is why the operator's DeepInfra ruling is the only non-destructive
   route. The re-point stays **one change** with **#5024 + #5015 + #5025**; `DURIG_VERIFIER_*` was NOT touched.
+- **The verifier band is 8,192 by construction** (`DURIG_VERIFIER_CONTEXT=24576` − `reserveTokens 16384`; the pinned reserve is
+  two thirds of the declared window) and its summary output budget is `min(13,107, DURIG_VERIFIER_MAX_TOKENS=3000)` = **3,000**. So
+  even with the provider up, `qa` (20,110 consumed) could not take a second turn without a compaction that cannot succeed at 3,000
+  tokens. **The re-point must set context AND max-tokens as one pair**, or the §2 failure walks over to DeepInfra. Per-seat band
+  table for all of it: `docs/runbooks/session-start-cost.md` §14 (one `status --json` read, prints each seat's own band).
 - `pm`'s correction, accepted and load-bearing: `tools/seat-turn-shape.mjs` reads **no provider state**, so it called `qa` admissible
   while its provider is dead — **`pm` is the only seat that is both tonight**. `status.context.consumed` is measured **pre-send**, so
   "at or over the band" is only true once the brief is appended (`impl` is 338 tokens under at rest).
