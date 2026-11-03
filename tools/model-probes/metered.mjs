@@ -39,7 +39,35 @@ export const KEY_ENV_ORDER = ["DURIG_VERIFIER_API_KEY", "DURIG_LOCAL_API_KEY", "
 
 /** Ledger and ceiling come from the environment so no probe hard-codes a bill. */
 export const LEDGER_ENV = "DURIG_SPEND_LEDGER";
+/** The run cap's PROBE-SIDE spelling (#5024, shipped before the policy). #5015 §3 rules that one budget gets
+ * ONE name: a declared `DURIG_PROBE_CEILING_USD` IS `DURIG_SPEND_CAP_RUN_USD` for this process, and the build
+ * maps it rather than adding a third vocabulary the way `DURIG_VERIFIER_API_KEY`/`DEEPINFRA_API_KEY` once did. */
 export const CEILING_ENV = "DURIG_PROBE_CEILING_USD";
+
+// The three caps of D-5015.2, three axes. Defaults live in the TRACKED `durig.config.default.json` (#5047) so a
+// seat in an item worktree has a guard armed; here they come from the environment, per run.
+/** Per-call PROJECTED ceiling in USD: a call whose projection crosses it is refused before the wire. */
+export const CALL_CAP_ENV = "DURIG_SPEND_CAP_CALL_USD";
+/** Per-process cumulative USD (lead's standing pre-authorization, promoted to a key). */
+export const RUN_CAP_ENV = "DURIG_SPEND_CAP_RUN_USD";
+/** Cumulative USD over the ledger for this store: the operator's pool (D193). A seat may not raise it. */
+export const STORE_CAP_ENV = "DURIG_SPEND_CAP_STORE_USD";
+
+function capNumber(value) {
+	const n = Number(value);
+	return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** The caps in force for this call, with the ENV NAME each came from. A null cap is not armed - and a report
+ * that says "under the cap" while no cap is declared is the receipt-not-guard failure again. */
+export function capsFor(env = process.env) {
+	return {
+		callUsd: capNumber(env[CALL_CAP_ENV]),
+		runUsd: capNumber(env[RUN_CAP_ENV]) ?? capNumber(env[CEILING_ENV]),
+		runFrom: env[RUN_CAP_ENV] !== undefined ? RUN_CAP_ENV : CEILING_ENV,
+		storeUsd: capNumber(env[STORE_CAP_ENV]),
+	};
+}
 export const PRICE_JSON_ENV = "DURIG_PROBE_PRICE_JSON";
 export const PRICE_IN_ENV = "DURIG_PROBE_PRICE_USD_IN";
 export const PRICE_OUT_ENV = "DURIG_PROBE_PRICE_USD_OUT";
@@ -143,6 +171,38 @@ export function projectCostUsd({ price, body }) {
 	return Number(((inTok * price.in + outTok * price.out) / 1e6).toFixed(6));
 }
 
+/** Chars of everything that becomes prompt tokens in a built OpenAI payload: every message, every content part,
+ * every tool call, and the tool definitions. The probe-side `projectCostUsd` above reads only the first two
+ * messages, which is fine for a probe that sends two messages and WRONG for a seat payload that carries a whole
+ * replay window plus the tool schemas - a guard that under-prices is not a guard (#5015 F9). */
+export function requestPromptChars(body = {}) {
+	let chars = 0;
+	const add = (v) => {
+		if (typeof v === "string") chars += v.length;
+	};
+	for (const m of body?.messages ?? []) {
+		add(m?.content);
+		if (Array.isArray(m?.content))
+			for (const part of m.content) {
+				add(part?.text);
+				add(part?.thinking ?? part?.reasoning);
+				if (part?.input !== undefined) chars += JSON.stringify(part.input).length;
+			}
+		if (m?.tool_calls !== undefined) chars += JSON.stringify(m.tool_calls).length;
+	}
+	for (const key of ["tools", "functions"]) if (Array.isArray(body?.[key])) chars += JSON.stringify(body[key]).length;
+	return chars;
+}
+
+/** The SEAT-side projection: same price, same chars/3 estimate, but measured over the payload pi-ai actually
+ * built (see `requestPromptChars`). Axis: USD for one call at its declared maxima. */
+export function projectRequestUsd({ price, body }) {
+	if (!price) return null;
+	const inTok = Math.ceil(requestPromptChars(body) / 3);
+	const outTok = Number(body?.max_tokens ?? body?.max_completion_tokens ?? 0);
+	return Number(((inTok * price.in + outTok * price.out) / 1e6).toFixed(6));
+}
+
 export function ledgerPath(env = process.env) {
 	return env[LEDGER_ENV] || ".spike/gate/spend.jsonl";
 }
@@ -181,6 +241,30 @@ export class CeilingError extends Error {
 		super(msg);
 		this.name = "CeilingError";
 	}
+}
+
+/** The three-cap refusal (#5047, D-5015.1/D-5015.2). `spentUsd` is the ledger total (the store axis) and
+ * `runSpentUsd` this process has added (the run axis); the CALL axis has no history - it is this call alone.
+ * Every refusal names the cap KEY that fired, the cap, the spent total and the projected line, because a money
+ * stop the reader cannot act on is a wall, not a guard (#3663/#3795's rule: name the cause and the remedy).
+ * A refused call writes NO ledger row: money goes to the ledger, stops go to store/attention/stderr (#5015 §4). */
+export function assertCaps({ caps, spentUsd = 0, runSpentUsd = 0, projectedUsd, model, priceSource }) {
+	if (!caps) return;
+	const unpriced = projectedUsd === null;
+	const crossed = [];
+	if (caps.callUsd && (unpriced || projectedUsd > caps.callUsd))
+		crossed.push({ key: CALL_CAP_ENV, cap: caps.callUsd, axis: "one call, projected", spent: null });
+	if (caps.storeUsd && (unpriced || spentUsd + projectedUsd > caps.storeUsd))
+		crossed.push({ key: STORE_CAP_ENV, cap: caps.storeUsd, axis: `cumulative over the ledger (spent $${spentUsd.toFixed(6)})`, spent: spentUsd });
+	if (crossed.length === 0) return;
+	const named = crossed
+		.map((c) => `${c.key} $${c.cap.toFixed(4)} (${c.axis})`)
+		.join("; and ");
+	throw new CeilingError(
+		`REFUSED before sending (spend_cap_exceeded, durig's own cap - NOT the provider's): ${model} projects ` +
+			`${unpriced ? `UNKNOWN (priceSource=${priceSource}: an unpriced call cannot be proven under a cap)` : `$${projectedUsd.toFixed(6)}`} and would cross ${named}. ` +
+			`No request was sent and no ledger row was written. Remedy: point the seat at a priced row whose own maximal exposure is under the cap, or have the OPERATOR raise ${CALL_CAP_ENV}/${STORE_CAP_ENV} deliberately for a named run - a seat may not raise ${STORE_CAP_ENV}, it is the operator's pool.`,
+	);
 }
 
 /** The refusal. `ceilingUsd` null/0 means no ceiling is declared — then no projection is demanded, and the caller
@@ -278,11 +362,14 @@ export async function meteredChat({
 			`REFUSED before sending: ${baseUrl} is a metered host and ${auth.absentReason}. A probe that posts without a credential gets a 401 it will misread as a model failure.`,
 		);
 
-	const ceilingUsd = Number(env[CEILING_ENV] ?? "0");
+	const ceilingUsd = Number(env[CEILING_ENV] ?? env[RUN_CAP_ENV] ?? "0");
 	const { totalUsd: spentUsd, rows: rowsBefore, unknownCostRows } = spendTotalUsd(file);
 	const { price, priceSource, priceAsOf } = priceFor(model, env);
 	const projectedUsd = projectCostUsd({ price, body });
 	assertCeiling({ ceilingUsd, spentUsd, projectedUsd, model, priceSource });
+	// The other two axes (D-5015.2): a probe run shares one ledger with the store, so the store axis reads the
+	// same file total. The run axis is the ledger too - a probe session owns its own ledger file by convention.
+	assertCaps({ caps: capsFor(env), spentUsd, runSpentUsd: spentUsd, projectedUsd, model, priceSource });
 
 	const headers = {
 		"content-type": "application/json",
