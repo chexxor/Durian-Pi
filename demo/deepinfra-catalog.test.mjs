@@ -1,16 +1,21 @@
 // demo/deepinfra-catalog.test.mjs — the curated DeepInfra fallback catalog carries the
-// models the rigs name (#1936, the -1017 model move).
+// models the rigs name (#1936, the -1017 model move) and refuses the rows it cannot price (#5047).
 //
-// `buildModels` (cli.mjs) builds the provider's catalog from `fallbackModels()` plus a
-// synthesized entry for the rig-default MODEL_ID. The live catalog fetch
-// (`fetchDeepInfraModels`) is imported NOWHERE and is NOT wired into `buildModels`, so a
-// model id ABSENT from this list resolves to `no_model` before any request is made — the
-// exact blocker for a seat naming `google/gemma-4-31B-it` (the prepared qa2 seat).
+// `buildModels` (cli.mjs) builds the provider's catalog from `fallbackModels()` — and since #5047 from NOTHING
+// ELSE: the synthesized $0 row for an unlisted MODEL_ID is gone, because an unpriced row on a metered endpoint is
+// a lie about money (acceptance P2). So a model id ABSENT from this list resolves to `no_model` before any request
+// is made, with the price remedy on stderr — the same property that made a seat naming `google/gemma-4-31B-it`
+// (the prepared qa2 seat) a BLOCKER: presence here IS resolution.
 //
-// This proves the entry is present with the live-catalogue values, so the seat RESOLVES.
+// The live catalog fetch (`fetchDeepInfraModels`) is still NOT wired into `buildModels`; when it is, it goes
+// through the same exposure/pricing policy.
+//
 // Run: node demo/deepinfra-catalog.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import { fallbackModels, catalogRefusals } from "../src/providers/deepinfra-models.ts";
 import { isLocalProviderId } from "../src/providers/local.mjs";
@@ -183,6 +188,28 @@ assert.ok(
 	assert.equal(noCache.cost.cacheRead, noCache.cost.input, "no published cache price = NO discount claimed (P6)");
 	const absent = list.filter((r) => r.catalogAbsent).map((r) => r.id);
 	assert.ok(absent.length >= 4, `rows the live catalog does not carry stay registered but are MARKED (${absent.length}) — a seat naming one cannot be served`);
+}
+
+// 8. THE UNPRICED-MODEL PATH IS BEHAVIOUR AT THE SEAM, NOT A COMMENT (#5047, acceptance P2). `buildModels` used
+//    to synthesize `cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }` for any DURIG_MODEL the curated
+//    list lacks. Spawn the real CLI with such an id: the row must NOT exist, the process must not pretend the
+//    model resolved, and the line on stderr must say what to price.
+{
+	const repo = fileURLToPath(new URL("..", import.meta.url));
+	const r = spawnSync(process.execPath, ["cli.mjs", "optimize", "hello world"], {
+		cwd: repo,
+		encoding: "utf8",
+		env: {
+			...process.env,
+			DURIG_PROVIDER: "deepinfra",
+			DURIG_MODEL: "some/vendor-not-listed",
+			DURIG_DB: mkdtempSync(`${tmpdir()}/durig-5047-`),
+		},
+	});
+	assert.match(r.stderr, /"spend":"model-unpriced"/, "the refusal is reported at the seam, not silent");
+	assert.match(r.stderr, /deepinfra-prices\.json/, "the remedy names the dated price source to add the id to");
+	assert.match(r.stdout, /optimizer model not found/, "and the model genuinely does not resolve — no $0 row was handed to the caller");
+	assert.notEqual(r.status, 0, "a run on an unpriceable metered model exits nonzero instead of billing under a $0 label");
 }
 
 console.log(

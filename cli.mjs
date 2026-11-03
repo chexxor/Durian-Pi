@@ -42,7 +42,6 @@ import { fileURLToPath } from "node:url";
 // type-strips the TypeScript on import, so there is no build step.
 import {
   BASE_URL,
-  DEEPINFRA_COMPAT,
   PROVIDER_ID,
   fallbackModels,
 } from "./src/providers/deepinfra-models.ts";
@@ -320,24 +319,31 @@ function buildModels(live = null) {
         },
       },
     },
-    // Catalog from the extension module, plus a synthesized entry for the
-    // requested model when the curated fallback lacks it (fallback is a
-    // subset of DeepInfra's catalog; arbitrary DURIG_MODEL ids must work).
+    // Catalog from the extension module.
+    //
+    // #5047 (acceptance P2): the old fallback for a model the curated list lacks SYNTHESIZED a row carrying
+    // `cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }` on a METERED endpoint (BASE_URL is
+    // api.deepinfra.com). "arbitrary DURIG_MODEL ids must work" was the stated justification, and the rig paid
+    // for it twice over: `config`, the ledger and every cost read reported a FREE provider that was billing, and
+    // a spend cap had nothing to price. A row this rig cannot price is now NOT registered - the seat fails as
+    // no_model before any request, and the line below names the cause and what to set. Free BY DECLARATION is
+    // still available: put the id in src/providers/deepinfra-prices.json at $0 and it registers.
+    // The curated rows also pass through the exposure guard (#5015 P6b): a row whose own declared geometry can
+    // spend more than the operator's store cap in ONE call never reaches a seat.
     models: (() => {
-      const base = fallbackModels();
+      const base = fallbackModels({ storeCapUsd: Number(CFG.DURIG_SPEND_CAP_STORE_USD) });
       if (base.some((m) => m.id === MODEL_ID)) return base;
-      return [...base, {
-        id: MODEL_ID,
-        name: MODEL_ID,
-        api: "openai-completions",
-        provider: PROVIDER_ID,
-        baseUrl: BASE_URL,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128_000,
-        maxTokens: 8_192,
-        ...DEEPINFRA_COMPAT,
-      }];
+      process.stderr.write(
+        `${JSON.stringify({
+          spend: "model-unpriced",
+          provider: PROVIDER_ID,
+          model: MODEL_ID,
+          cause: "no dated price for this id",
+          remedy: `point DURIG_MODEL at a priced id (${base.map((m) => m.id).join(", ")}), or add ${MODEL_ID} to src/providers/deepinfra-prices.json from a dated catalog fetch (curl -s https://api.deepinfra.com/v1/openai/models); $0 is a legitimate declared price`,
+          effect: "no row is registered for it, so a seat naming it fails as no_model BEFORE any request",
+        })}\n`,
+      );
+      return base;
     })(),
     api: ocApi,
   });
