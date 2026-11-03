@@ -169,3 +169,109 @@ node -e 'import("./tools/model-probes/metered.mjs").then(m=>
 **Requested `reviewBy`: 2026-11-07.** `#4970` HALF B and `#5025` are both gated on Q1–Q3; the two items
 `#4973` (compaction build) and the verifier re-point are the work that cannot proceed without them, and every
 day they stay unruled the rig runs a compaction schedule nobody chose.
+
+---
+
+## 6. What #4970 HALF B can answer **without** the operator's number (decisions 2, 3, 4, and the mechanism for 1)
+
+Lead's row says: answer only what the operator's ruling makes answerable, park the rest. The **number** in
+decision 1 is the operator's (§3 Q1–Q3). Everything else in HALF B is a design ruling and is answered here, ADR-ready.
+**No D-number is hardcoded** — mint at land time (#3075/#3186).
+
+### ADR-ready: the ceiling's authority — HOW it is obtained, pinned, re-checked (decision 1's mechanism, not its value)
+
+- **Status:** DECIDED (mechanism). The **served** capacity (`--max-context`, read off the live process by
+  `tools/model-probes/probe-preflight.mjs:92,158`) is the **authority**; the **declared** `DURIG_LOCAL_CONTEXT`
+  is a **policy value that must be ≤ the authority**. A declaration above the authority is a defect, not a
+  capability. This follows the rig's own precedents named in the item: store-vs-config drift is **Labeled, not
+  gated** (#3252) and a cheap signal may **ACCEPT but never DECIDE** (#3575) — so the mechanism **reports a
+  mismatch loudly and refuses only the impossible pair** (`prompt + maxTokens > served`).
+- **Pinned how:** one tracked default (`durig.config.default.json`) plus a `check` rule that prints
+  `declared / served / blocking band / summary budget` per provider class, with **which file it read** named on
+  the line (the item's rule: any read of "the config" that does not say which copy it read is not reproducible).
+- **Re-checked how:** at dispatch, not only at start — the broker's wake path is where a stale declaration bites.
+- **Failure mode if only the declaration is trusted:** the 200,000-vs-204,800 pair this rig already has, where
+  `scribe` failed at 0.944 of the *new* window after the stopgap (`docs/DECISIONS.md:7665-7671`) — the number was
+  wrong about the machine, not about the policy.
+
+### ADR-ready: what happens when `prompt + summary budget` exceeds the ceiling (decision 2) — the order is the design
+
+**Options considered:** (a) cap the input (truncate); (b) chunk the summarization; (c) mask-first-then-summarize
+(pi-durable's existing `ContextEdit { action: "omit" | "replace" }`); (d) evict oldest; (e) refuse.
+**Decision: C → A → D → B → E, in that order, with the output budget reserved FIRST.**
+
+1. **Reserve the output budget before anything else.** `summaryBudget = min(⌊0.8·reserveTokens⌋, maxTokens)` is
+   computed (`compaction.ts:148`/`compaction.js:95`) and **subtracted from the ceiling before the summarizer's
+   prompt is chosen**. Today the order is inverted in effect: the summarizer is handed ~180k tokens and then dies
+   at 8,192 (`Summarization hit the token limit`, `compaction.ts:363`, on pm 275488 / impl 277348 / lead 277352).
+   A reservation is not a tuning knob; it is the precondition for the call being possible at all.
+2. **Mask before you summarize** (C): `omit`/`replace` bulky **tool results** first — masking is already
+   available (`docs/ROADMAP.md:1637`, item 92; `docs/DECISIONS.md:2892` "Mask before you summarize"; the ordering
+   requirement at `docs/ROADMAP.md:1726`). This is the cheapest lever in tokens and it is **lossy in the right
+   direction** (tool payloads are re-readable; a verdict is not).
+3. **Cap the input** (A) by bounding the summarization prompt to `ceiling − summaryBudget − keepRecent`, never by
+   truncating the *verdict-bearing* tail.
+4. **Evict oldest** (D) — `keepRecentTokens` is already that policy; make it explicit about which entries go.
+5. **Chunk the summarization** (B) only when 2–4 cannot make room: it multiplies calls (wall-clock locally,
+   USD metered — §2's $0.005–$0.021 per compaction) and must be counted against the spend cap.
+6. **Refuse** (E) — last, and **as a dispatch-time refusal with the store untouched**, settling `unanswered` with
+   a named cause class (`compaction_refused`), never as `model_error`. If refusal recurs, break the loop with the
+   **compaction-count cap + forced fresh re-anchor** already roadmapped as item 94
+   (`docs/ROADMAP.md:1883`, and D107's forced re-anchor) — the convergence guard, because an unbounded
+   compaction-then-fail cycle is the loop failure mode.
+
+**Failure modes here, each with its recovery:** *partial* (summary incomplete → the summary's own
+`stopReason=length` must be checked before the summary is trusted; an incomplete summary poisoning the next turn
+is the cascade case) · *loop* (count cap + fresh session, item 94) · *context* (compaction silently dropping
+required fields — the re-anchor brief must carry the constitution/role fields, and a compaction that cannot carry
+them must refuse rather than drop) · *hard* (summarizer call fails → settle `unanswered`, park the item, do not
+re-attempt blindly, because every attempt appends a `pi.user` entry).
+
+### ADR-ready: where the change is admissible (decision 3)
+
+- **Status:** DECIDED. **Durian-pi-side pre-flight + post-guard, in durian-pi; no vendored `compaction.ts` edit
+  in the first landing.** Options considered: (a) edit the vendored `compaction.ts` (fastest, but it breaks the
+  exact-pin re-mergeability precedent #3267 and puts a rig-specific policy inside upstream's algorithm); (b)
+  durian-pi-side guard only (chosen); (c) both (accept later, and only for the one thing a caller cannot do — if
+  the summarizer's own output reservation cannot be applied from outside, that becomes a scoped upstream PR with
+  a `PROVENANCE.md` note, not a local fork).
+- **Why (b) first, falsifiably:** the reservation, the masking order, the count cap and the refusal class are all
+  decidable **from the call site** — the guard computes `ceiling − summaryBudget − keepRecent` and either bounds
+  the request or refuses it, which is exactly the shape `#4971`'s "would compaction succeed here?" report already
+  reaches. If the probe shows a reservation is **not** reachable from the call site, that is the trigger for (c),
+  and it must be proven by a failing probe rather than assumed.
+- **The rule honoured:** a guard may **READ** `vendor/pi-main` but must not **GATE** on a grep of it (#4977). So
+  the probe reads the pinned numbers through durian-pi's own reported policy
+  (`src/config.mjs:494-498` prints them; `null` = pi's built-in default stands), never by grepping vendor source.
+
+### ADR-ready: the invariant (decision 4)
+
+> **No seat may be killed by its own compaction.** A seat approaching its ceiling must degrade **legibly**: the
+> rig prints, before the turn, the four numbers that decide the outcome — declared window, served capacity,
+> blocking band, summary budget — each with its **axis** and the file it read them from; and any compaction that
+> cannot run must settle the send with a named cause class and a park, leaving the store clean.
+
+Corollaries a demo can pin: (i) a compaction failure never leaves the counted projection ending on a bare
+`pi.user` entry with the item marked worked; (ii) `consumed` is always reported against **the band that applies to
+the tree the read came from** (the two-copy drift is a labeled condition, and a check that mixes them is a lie);
+(iii) a seat whose summary budget is below the corpus's real need is reported as **un-sendable-before-send**,
+not discovered mid-turn.
+
+---
+
+## 7. Does HALF B fold the compaction cluster? (it must not stand beside it)
+
+**Recommendation — and this is a scope call, so it is routed to `lead` through `pm`, not decided here:** HALF B
+should **fold**, not join, the existing cluster. Measured overlap:
+
+| backlog | what it already owns | relation to HALF B |
+| --- | --- | --- |
+| ROADMAP **92** / #1088, #2402 | masking via the existing `ContextEdit` (omit/replace), and the rule that it runs **before** summarization (`docs/ROADMAP.md:1637,1726,1877`) | **is** decision 2's step 2 — do not open a sixth row for it |
+| ROADMAP **94** / #1091, #2619 | compaction-**count** cap + forced fresh session past the cap; the warn→abort→settle→one-compaction shape | **is** decision 2's convergence guard and part of decision 4's legibility |
+| #2403 (D107 summarize-at-transition + cap-2 + forced re-anchor) | *when* to summarize | superseded in direction by mask-then-summarize; fold into 92/94 rather than running beside them |
+
+**What is genuinely new in HALF B, and therefore the only thing #4973 should be scoped to:** the
+**output-budget reservation order** (§6 decision 2 step 1, which is what actually killed four seats in one night),
+the **declared-vs-served `check`** (§6 decision 1), and the **dispatch-time pre-flight guard with a named cause
+class**. Everything else is already on the board. Duplicate intent in this cluster is expensive because each row
+re-implements the same `min(0.8·reserve, maxTokens)` arithmetic with different numbers.
