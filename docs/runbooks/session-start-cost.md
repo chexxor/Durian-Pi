@@ -331,3 +331,19 @@ node .spike/delegate-20261102/cleanrescore.mjs   # gitignored probe; row #5022 i
 #    gate.mjs:218 is unreachable for those phrasings) but it rescues 15 turns, not 468. **A probe like this turns
 #    "the scorer is broken" into "the scorer is broken by 15/552 turns of this kind", which is the only version a
 #    fix can be scored against.** Unpromoted probes are gone next session — that is row #5022.
+
+# 18. A SEAT CANNOT SEE YOUR `.spike/` — seed the evidence into the root you dispatch from. Measured 2026-11-03 (D197b):
+#    A brief that says "re-run `node .spike/…/probe.mjs`" is inert in the tree the seat wakes in: `.spike/` is
+#    gitignored, so it does not travel with `main`, and the seat's cwd is the cwd of the write-side command that
+#    wakes it (F12). What worked: copy the probe AND its inputs into the approved seat root's own gitignored
+#    `.spike/` at identical relative paths, then **run it there yourself before the send** —
+#      cp .spike/delegate-20261102/cleanrescore.mjs <seatroot>/.spike/delegate-20261102/
+#      cp .spike/gate/*.json <seatroot>/.spike/gate/            # 37 files, 14 MB
+#      cd <seatroot> && node .spike/delegate-20261102/cleanrescore.mjs | tail -1
+#    which printed the identical verdict (552 clean turns, CLEAN-PASSED 0, 15 flips) in a different tree — that is
+#    also an axis of independence for the claim (execution, not the operator's checkout). Keep it under `.spike/`
+#    (SELFDEV "keep the seat root clean"): nothing there is ever committed, and `git status` in the root stayed clean.
+#    Two dispatch facts measured in the same breath: `cli.mjs send` prints
+#    `send is DEPRECATED (opens a full writing harness = a second owner)` — legal only with **no broker up**, and with
+#    a broker the sanctioned form is `node intent.mjs <seat> --body-file <file>`; and the root's branch here is
+#    `seatroot/linux`, fast-forwarded with `git -C <seatroot> merge --ff-only main` before the dispatch.

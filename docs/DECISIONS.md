@@ -8228,3 +8228,32 @@ for, with the exact commands, rather than taken.
   200; D196 block copied VERBATIM to `docs/NEXT-ARCHIVE.md`, round-trip `diff` exit 0). **No suite run**, so `main` is
   unverified-green since `9f79f45c`; D195's push grant is spent (`origin/main` = `9f79f45c`) and `main` is 3 ahead +
   this commit — the next push needs a new grant.
+
+### (D197b) 2026-11-03 late afternoon: the operator GRANTED the two capacity numbers **as environment variables**, and the milestone's first send was dispatched under them (operator ruling 2026-11-03T17:0xZ, Linux `ThinkStation-P3`)
+
+- **The ruling, verbatim in substance:** *"I approve those two rulings to the env vars."* Read as: apply
+  `DURIG_LOCAL_CONTEXT=200000` and `DURIG_LOCAL_MAX_TOKENS=16384` **as a per-verb environment prefix**, not as an edit
+  to either gitignored `durig.config.json`. **The why that keeps the file untouched:** D195's ruling still stands —
+  hand-aligning the two private copies is drift with better numbers, and **#4970 HALF B (one source of truth for the
+  declared ceiling) stays open**, so the delegate edited no config anywhere. Consequence recorded honestly in the
+  pointer: any verb that does not carry the prefix re-enters the failure, because this checkout still declares 160000
+  (band 143,616) while the seat root's copy already declares 200000 (band 183,616).
+- **What that unblocked, and why it was worth the escalation:** `devtools` at 143,426 vs a band of 143,616 is a send
+  that dies for zero tokens and appends a `pi.user` entry; at 200,000 the same seat is 40k under its band. The send was
+  pre-flighted immediately before dispatch (`seat-turn-shape`: projection ends `assistant`, length 5) and dispatched
+  from the approved seat root (not the operator checkout — runbook *Do* §4: placement follows the serving process's
+  tree), pid **1919957**, requestId `d197-devtools` (under 40 chars, per the `secretdetect.mjs:37` threshold), reply at
+  `.spike/delegate-20261103b/send-devtools.out`.
+- **The evidence travels with the dispatch, not the prose.** A brief that names a `.spike/` probe is inert in the
+  seat's tree, so the probe and its 37 transcript inputs were copied into the seat root's gitignored `.spike/` at
+  identical paths and re-run there first — same verdict (552 clean turns, CLEAN-PASSED 0, 15 flips) in a different
+  tree. That copy is what makes #5027 verifiable by the next session: run the same probe, expect the number to move.
+- **Push granted and spent the same session:** `origin/main` `9f79f45c → 73ece38c` (4 commits, `git diff --name-only
+  origin/main..main` = 5 docs files only; verified by `git ls-remote`, `git rev-list --count origin/main..main` = 0),
+  then the approved seat root fast-forwarded `f25075c3 → 73ece38c` (`merge --ff-only`, branch `seatroot/linux`), with
+  worktree (18) and branch (19) inventories byte-identical across the verb.
+- **The next-priority recommendation handed to the operator, in one line each:** finish step (1) by re-scoring; then
+  the ungated-landing trio **#4997 / #5019 / #5020** (the rig currently lands with no green gate, and that is the
+  wall-clock multiplier it can act on without capacity), then step (2) as ONE change **#5015 + #5024 + #5025** (whose
+  values still need the operator's ruling), then step (3)'s ~$0.10 re-arm, which is the first metered arm whose
+  clean-side numbers mean anything. And the row that would stop this crisis recurring: **#4970 HALF B**.
