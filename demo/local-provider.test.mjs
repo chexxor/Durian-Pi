@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 
 import { CONFIG_KEYS } from "../src/config.mjs";
-import { createLocalProvider, localProviderSpec, LOCAL_PROVIDER_ID } from "../src/providers/local.mjs";
+import { createLocalProvider, localProviderSpec, LOCAL_PROVIDER_ID, VERIFIER_ENV_PREFIX, LOOPBACK_PLACEHOLDER_KEY } from "../src/providers/local.mjs";
 import { resolveSeatModel } from "../src/seatmodel.mjs";
 
 // 1. Off by default: no base URL, no provider, no change to behaviour.
@@ -27,6 +27,9 @@ assert.deepEqual(spec, {
 	id: "local",
 	prefix: "DURIG_LOCAL_",
 	baseUrl: "http://127.0.0.1:8080/v1",
+	// #5047 (D-5015.3): locality is read off the ENDPOINT, so the spec now carries it. This pin is FULL on
+	// purpose (see the note above), so the field was added here rather than slipping through a loose match.
+	endpoint: "loopback",
 	modelId: "qwen36",
 	contextWindow: 65536,
 	maxTokens: 8192,
@@ -93,7 +96,7 @@ assert.ok(authInput.auth.apiKey.resolve, "auth must expose a resolve function");
 // Unset env → placeholder
 const unsetCtx = { ctx: { env: async (k) => { if (k === "DURIG_LOCAL_API_KEY") return undefined; return undefined; } } };
 const unsetResult = await authInput.auth.apiKey.resolve(unsetCtx);
-assert.equal(unsetResult.auth.apiKey, "local-placeholder", "unset env must yield placeholder");
+assert.equal(unsetResult.auth.apiKey, LOOPBACK_PLACEHOLDER_KEY, "unset env on a LOOPBACK endpoint must yield the loopback placeholder (#5015 P9 scopes it to loopback)");
 assert.equal(unsetResult.source, "none", "unset env source must be 'none'");
 // Set env → real key
 const setCtx = { ctx: { env: async (k) => { if (k === "DURIG_LOCAL_API_KEY") return "my-secret"; return undefined; } } };
@@ -101,5 +104,83 @@ const setResult = await authInput.auth.apiKey.resolve(setCtx);
 assert.equal(setResult.auth.apiKey, "my-secret", "set env must yield real key");
 assert.equal(setResult.source, "DURIG_LOCAL_API_KEY", "set env source must name the var");
 
-console.log("LOCAL-PROVIDER TEST PASS");
+// 8. MONEY AND CREDENTIALS ARE CHECKED AT REGISTRATION, NOT AT THE WIRE (#5047, acceptance P2 + P9).
+//    A `verifier/` provider pointed at a NON-loopback host is a paid call wearing a free-class name. Before
+//    #5047 it was registered with cost {0,0,0} and authenticated with the loopback placeholder; both failures
+//    read as something else (`config` showed a free provider that was billing; a 401 filed as `model_error`).
+{
+	const meteredSpec = localProviderSpec(
+		{
+			DURIG_VERIFIER_BASE_URL: "https://api.deepinfra.com/v1/openai",
+			DURIG_VERIFIER_MODEL: "openai/gpt-oss-20b",
+		},
+		VERIFIER_ENV_PREFIX,
+	);
+	assert.equal(meteredSpec.endpoint, "metered", "locality is read off the ENDPOINT, not the provider id (D-5015.3)");
+	assert.equal(meteredSpec.price, null, "no declared price means price=null, NOT price 0 — an absent price is not a price");
+
+	const reports = [];
+	let unpriced = null;
+	createLocalProvider(meteredSpec, {
+		createProvider: (input) => ((unpriced = input), input),
+		api: { name: "fake-api" },
+		env: () => undefined,
+		report: (line) => reports.push(line),
+	});
+	assert.deepEqual(unpriced.models, [], "an unpriced, unkeyed metered endpoint registers NO model row: a seat naming it dies no_model BEFORE any request");
+	assert.equal(reports.length, 1, "the refusal is REPORTED, not silent and not a thrown trace");
+	assert.deepEqual(reports[0].causes, ["metered-endpoint-unpriced", "metered-endpoint-unkeyed"]);
+	assert.ok(/PRICE_USD_IN/.test(reports[0].remedy) && /DURIG_VERIFIER_API_KEY/.test(reports[0].remedy), "the remedy names the keys to set");
+
+	// Priced + keyed: registered, priced, and the row names where the price came from (F8).
+	let priced = null;
+	const pricedSpec = localProviderSpec(
+		{
+			DURIG_VERIFIER_BASE_URL: "https://api.deepinfra.com/v1/openai",
+			DURIG_VERIFIER_MODEL: "openai/gpt-oss-20b",
+			DURIG_VERIFIER_PRICE_USD_IN: "0.03",
+			DURIG_VERIFIER_PRICE_USD_OUT: "0.14",
+			DURIG_VERIFIER_PRICE_AS_OF: "2026-11-03",
+		},
+		VERIFIER_ENV_PREFIX,
+	);
+	createLocalProvider(pricedSpec, {
+		createProvider: (input) => ((priced = input), input),
+		api: { name: "fake-api" },
+		env: (name) => (name === "DURIG_VERIFIER_API_KEY" ? "k" : undefined),
+		report: () => {},
+	});
+	assert.equal(priced.models.length, 1, "a priced, keyed metered endpoint registers");
+	assert.deepEqual(priced.models[0].cost, { input: 0.03, output: 0.14, cacheRead: 0.03, cacheWrite: 0 }, "the DECLARED price reaches the row");
+	assert.equal(priced.models[0].priceSource, "DURIG_VERIFIER_PRICE_USD_IN/OUT");
+	assert.equal(priced.models[0].priceAsOf, "2026-11-03", "a dated price is a dated claim");
+	// The credential itself: a metered host with no resolvable key gets NO credential, never a placeholder.
+	const noKey = await priced.auth.apiKey.resolve({ ctx: { env: async () => undefined } });
+	assert.equal(noKey, undefined, "P9: no placeholder credential is ever offered to a metered host");
+
+	// Free BY DECLARATION: `0` is a legitimate declared price (a LAN-served free model is free on purpose).
+	let declaredFree = null;
+	const freeSpec = localProviderSpec(
+		{
+			DURIG_VERIFIER_BASE_URL: "http://192.168.1.20:8080/v1",
+			DURIG_VERIFIER_MODEL: "iq3_s",
+			DURIG_VERIFIER_PRICE_USD_IN: "0",
+			DURIG_VERIFIER_PRICE_USD_OUT: "0",
+		},
+		VERIFIER_ENV_PREFIX,
+	);
+	createLocalProvider(freeSpec, {
+		createProvider: (input) => ((declaredFree = input), input),
+		api: { name: "fake-api" },
+		env: () => "k",
+		report: () => {},
+	});
+	assert.equal(declaredFree.models.length, 1, "a non-loopback endpoint declared at $0 registers");
+	assert.equal(declaredFree.models[0].cost.input, 0, "declared zero stays zero");
+	assert.equal(declaredFree.models[0].endpoint, "metered", "and it stays declared as metered, so the cap still counts its calls");
+}
+
+console.log(
+	`LOCAL-PROVIDER TEST PASS (loopback placeholder scoped to loopback; a metered endpoint refuses registration unpriced/unkeyed with the cause and remedy reported; a declared price reaches the row with priceSource+priceAsOf; 0 = free BY DECLARATION)`,
+);
 process.exit(0);

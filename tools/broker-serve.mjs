@@ -190,9 +190,37 @@ if (pending.some((p) => p.ageMin != null && p.ageMin > 60)) {
 const specs = localProviderSpecs(CFG);
 console.log(`  local providers configured: ${specs.length ? "" : "none"}\n${specs.map((s) => `    ${s.id} (${s.prefix}) -> ${s.baseUrl} model=${s.modelId} ctx=${s.contextWindow} out=${s.maxTokens}`).join("\n")}`);
 for (const s of specs) {
-	// A key check, because `DURIG_*_API_KEY` is env-only (not a CONFIG_KEYS entry until #2114): a
-	// missing key is NOT fatal — src/providers/local.mjs falls back to "local-placeholder".
-	if (!process.env[s.apiKeyEnv]) finding(`provider-${s.id}-no-key`, "note", `${s.apiKeyEnv} is unset; the local provider will send "local-placeholder"`, "only a problem if that server actually requires a credential");
+	// #5047 (D-5015.3, P9): locality is the ENDPOINT's property, so this check asks what the URL is instead of
+	// assuming that a provider named `local`/`verifier` is free. A loopback server with no key is a note (it
+	// sends the loopback placeholder and works); a NON-loopback one with no key or no declared price is a block,
+	// because src/providers/local.mjs now refuses to register its model row and every seat naming it dies
+	// `no_model` before any request — which is the point, but the operator must be told WHERE.
+	const metered = s.endpoint === "metered";
+	if (!process.env[s.apiKeyEnv])
+		finding(
+			`provider-${s.id}-no-key`,
+			metered ? "block" : "note",
+			metered
+				? `${s.apiKeyEnv} is unset and ${s.baseUrl} is a METERED endpoint — src/providers/local.mjs will not send a placeholder credential there`
+				: `${s.apiKeyEnv} is unset; the loopback provider will send the loopback placeholder`,
+			metered
+				? `set ${s.apiKeyEnv}, or point ${s.prefix}BASE_URL at the local server it is meant to name (docs/runbooks/local-provider-down.md)`
+				: "only a problem if that server actually requires a credential",
+		);
+	if (metered && !s.price)
+		finding(
+			`provider-${s.id}-unpriced`,
+			"block",
+			`${s.baseUrl} is a metered endpoint with NO declared price — its model row would be a $0 lie (P2), so it is not registered and a seat naming ${s.id}/${s.modelId} fails as no_model`,
+			`declare ${s.prefix}PRICE_USD_IN/${s.prefix}PRICE_USD_OUT (0 = free by declaration) or set ${s.prefix}PRICE_JSON / DURIG_PRICE_JSON to a dated catalog snapshot`,
+		);
+	if (metered && s.price)
+		finding(
+			`provider-${s.id}-priced-metered`,
+			"note",
+			`${s.id}/${s.modelId} is a metered endpoint priced at $${s.price.in}/$${s.price.out} per Mtok (priceSource=${s.priceSource}, asOf=${s.priceAsOf ?? "UNDATED"}) — it is metered by the spend cap like any paid call`,
+			"an undated price is an undated claim: stamp it or re-fetch (D-5015 F8)",
+		);
 	let ids = null;
 	let err = null;
 	try {
