@@ -8004,15 +8004,48 @@ generation — not a billing system") and pre-authorised **$0.10 per probe sessi
 Useful accident: **DeepInfra returns `usage.estimated_cost` in every response** — a vendor-side per-call cost that the eventual
 ledger should carry instead of a price table the rig has to keep fresh.
 
-**(6) The gate's clean conditions earned their keep on the first metered arm.** `gate.mjs --whole-module --budget 120000
---replicate 3` against `deepseek-ai/DeepSeek-V4-Flash-0731` (72 calls, **$0.0169**) scored **defect-named 3/8 on majority-of-3
-with the G2 floor NOT MET** (per-replicate spread **5/8, 2/8, 2/8**) and **FALSE-ALARM 8/8 on the clean-leading control and 8/8
-on clean-neutral**. Read plainly: this model asserts a defect in *every* clean file it is shown, and its hit rate is not
-reproducible. A price/runway table alone would have promoted it. *The rule:* no metered verifier goes into a seat config on the
-strength of price — the paired clean controls are what make the number mean anything, and D137's McNemar lesson (a single pass
-flips 4/8 per-item verdicts) is why k=3 was the right first arm.
+**(6) Three paid arms ran, and I read the first one wrong — the correction is the durable part.**
+`gate.mjs --whole-module --budget 120000 --replicate 3`, $0.0945 total (161 calls, ledger `.spike/delegate-20261102/spend.jsonl`):
+`deepseek-ai/DeepSeek-V4-Flash-0731` **defect 3/8 majority, G2 floor NOT MET**, replicate spread **5/8, 2/8, 2/8**, 0/24
+truncated, $0.0169 · `openai/gpt-oss-120b` **defect 6/8 majority, G2 floor MET** (worst replicate 4/8), one UNSTABLE cell,
+0/24 truncated, ~$0.038 · `openai/gpt-oss-20b` **unscorable** — **16 of 24 prompts truncated (`finish=length`)**, six of eight
+defect items excluded as corpus bugs, $0.039 paid for nothing. I initially wrote (and this file said) that DeepSeek was
+disqualified by `FALSE-ALARM 8/8` on both clean controls. **That claim is withdrawn**: all three arms showed 8/8 on both clean
+controls while their defect halves disagreed, which is the signature of an instrument, not of three models (see (8)). What
+stands from the first arm is the defect side — a **not-reproducible hit rate** (5/8, 2/8, 2/8 on one corpus), which is what
+D137's McNemar lesson predicts and why k=3 was the right first arm. *The rule that survives:* a price/runway table never
+promotes a verifier, and neither does a single clean-side number until the scorer that produced it is proven.
 
-**(7) Outbound connectivity is a dependency, and it left the box for ~25 min.** `curl https://github.com` → `000`,
+**(7a) The instrument and the rig config share the same wrong output budget, and it cost $0.039.**
+`tools/model-probes/gate.mjs:83` defaults the *output* budget to `Number(process.env.CAL_MAX_TOKENS || 3000)` — the same 3,000
+that `DURIG_VERIFIER_MAX_TOKENS=3000` carries — under a comment (`:90-92`) that already records D134 ("at 900 the primary spent
+every token on reasoning and returned an EMPTY answer with `finish_reason=length`"). Knowing the failure mode did not change
+the default. `gpt-oss-20b` at k=3 whole-module therefore spent 16/24 calls producing nothing scoreable. A re-arm at
+`CAL_MAX_TOKENS=8000` is ≈ +$0.07 per k=1 pass at $0.5/M output — deliberately not spent (it exceeds `lead`'s $0.10 per-session
+pre-authorization, and the total had reached $0.0945).
+
+**(7b) `openai/gpt-oss-120b` is the only positive signal bought, and it is not yet a recommendation.** It is the sole arm that
+met the pre-registered G2 floor (6/8 majority-of-3, worst replicate 4/8, no truncations). It is **not** recommended into a seat
+config, because the clean half of the same evaluation is unreadable (8). Correct sequence: fix the scorer, land the cap/ledger
+(#5015) in the product rather than in a `.spike/` shim, then re-arm 120b once at k=3 with a real output budget.
+
+**(8) The gate's clean controls have never emitted a positive verdict — 0 of 552 clean turns across 24 runs, 2026-10-27→11-02.**
+Measured locally by re-scoring the instrument's own transcripts (`.spike/delegate-20261102/cleanrescore.mjs`,
+`cleanmech.mjs`; no writes, no spend). `scoreClean` (`gate.mjs:185-224`) reaches `CLEAN-PASSED` only when
+`declined && !assertedNow && !falseAlarm.length && named < 2`, but the `ASSERT` phrase list contains the **bare substrings
+`bug` and `defect`**, which sit *inside* `DECLINE`'s own phrases (`"no defect"`, `"no actual defect"`, `"no runtime defect"`) and
+inside any prose decline ("does not contain a runtime-breaking **defect**") — there is no negation handling, so "nothing here
+throws", "the code **never** crashes", "no path **fails**" all read as assertions. Counts: of 468 recorded FALSE-ALARMs, **57
+(12%) explicitly declined**, 22 of those also hit `namedMechanism>=2`, and **15 had nothing left once the decline phrase was
+stripped** (pure substring collision); ASSERT tokens surviving declination run `defect=382, throws=148, fails=137, crash=123,
+incorrect=118, race=105, never=80`; and **154 turns hit `namedMechanism>=2` measured over `answer+reasoning`** (`materialOf`,
+`:154`) — a reasoning model's hypotheticals ("if this were `+ 1` it would be off by one") mention the very mechanism that is
+absent. *The rule:* **every "false alarm" figure this rig has ever cited is artifact-saturated and cannot support "this model
+cries wolf"** — the defect side (HIT/MISS, G2, pairing) still carries signal, the clean side needs a negation-aware scorer and a
+re-score of the 24 existing transcripts before any of its numbers get restated. Filed to `lead` as the highest-value cheap fix
+beside #5024.
+
+**(9) Outbound connectivity is a dependency, and it left the box for ~25 min.** `curl https://github.com` → `000`,
 `getent hosts api.deepinfra.com` → empty, `dig @1.1.1.1` → `communications error … timed out` through
 `nameserver 127.0.0.53` — **after** the push and the free catalog reads, while local Strata kept answering `/v1/models` in 6 ms,
 so seats never noticed and zero spend occurred during it. `docs/runbooks/README.md` has `local-provider-down.md` but nothing for

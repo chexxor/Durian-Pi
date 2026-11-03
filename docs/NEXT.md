@@ -1,22 +1,18 @@
-## NEXT SESSION (2026-11-02T21:0xZ — D192, Linux: **three substrate fixes are ON `main` and the suite reads 245/245 — by WAL luck, not by fix**; the operator put `DEEPINFRA_API_KEY` in the environment and the **paid** verifier arm is still unauthorised)
+## NEXT SESSION (2026-11-02T23:5xZ — D193, Linux: **three substrate fixes are on `main` and PUSHED on the operator's grant, but the suite's 245/245 is WAL luck, not a fix**; and the operator has ruled the verifier moves to **DeepInfra, with $4 to spend**)
 
-**Current item:** the order `lead` ruled at 20:14Z, now that **#4995, #5013 and #4996 have all landed**: **#5019 (the WAL red,
-§1b) must LAND before #4997's baseline is frozen** — freezing a live defect as a standing exemption is the failure #4997 exists
-to prevent — and #4997's seed must **drop the three landed members** (245/245 at `9ca6c755`) while **keeping the WAL member with
-its mechanism**. In parallel: **#5020** (the generation lease missing on the non-broker path), **#5021/#5022** (devtools),
-**#5015** (`queued` to `architect` — the spend-cap/cost-ledger seam, released by `lead`), and **#5007/#4993**, still needing
-`pm`'s release. Second item is now a **ruling, not an option**: at 21:2xZ the operator said verifiers move to **DeepInfra
-rather than halting the rig, with $4 to spend** (§7 — arms running, **$0.035 spent** at 22:5xZ, ledger in `.spike/`).
-**Next command:** `node scripts/clockin.mjs` (~5 s), then `DURIG_DB=./selfdev.sqlite node cli.mjs status` plus one `queue
---json` read (§1e) to see whether `impl` has claimed **#5019/#5020** — nothing else in the substrate order is reachable until it
-does. `lead`'s reply to the delegate brief is saved at `.spike/delegate-20261102/lead-final.json`: it minted #5019–#5022,
-re-scoped #4997 (sha256 `5e133981e8ca36f0`) and #5015 (`51d4dc9b2dafc1fd`), and **released #5015** itself — to park it again
-`pm` must act: a sender cannot re-park its own row (#5007's asymmetry, demonstrated).
-**Blocker:** `main` reads **245/245 only because the WAL happens to be empty** — §1b is unfixed and #5019 unclaimed, so a seat
-on `src/readapi.mjs` still inherits the member in a 9-test derived gate; the broker start is still refused by the two verifier
-BLOCKs (`tools/broker-serve.mjs --dry-run`); and the paid DeepInfra arm needs **two operator rulings** only the operator can
-give (§7). Earlier pointer blocks moved VERBATIM to `docs/NEXT-ARCHIVE.md` — keep that link inside the pointer's first ~15% of
-lines or `demo/clockin-digest.test.mjs:251` refuses landings in the scratch (§0a.3).
+**Current item:** the order `lead` ruled at 20:14Z, now that **#4995, #5013 and #4996 have all landed** and `origin/main` =
+`0cc8c9c1`: **#5019 (the WAL red, §1b) must LAND before #4997's baseline is frozen** — freezing a live defect as a standing
+exemption is the failure #4997 exists to prevent — and #4997's seed must **drop the three landed members** while **keeping the WAL
+member with its mechanism**. In parallel: **#5020** (generation lease missing on the non-broker path), **#5021/#5022**,
+**#5024/#5025/#5026** (minted from the rulings brief), **#5015** (the spend-cap/ledger seam, `queued` to `architect`), and
+**#5007/#4993**, still needing `pm`'s release. Second item is now a **ruling, not an option**: verifiers move to **DeepInfra,
+$4 to spend, the rig is not to be halted** (§7 — three paid arms done, **$0.0945 spent**, and the gate's clean controls broken).
+**Next command:** `node scripts/clockin.mjs` (~5 s), then `DURIG_DB=./selfdev.sqlite node cli.mjs status` plus one `queue --json`
+read (§1e) to see whether `impl` has claimed **#5019/#5020** — nothing else in the substrate order is reachable until it does.
+**Blocker:** `main` reads **245/245 only because the WAL happens to be empty** (§1b unfixed, #5019 unclaimed); the broker start is
+still refused by the two verifier BLOCKs; and further paid probing is gated on #5015's cap plus the scorer fix (§7). Earlier
+pointer blocks moved VERBATIM to `docs/NEXT-ARCHIVE.md` — keep that link inside the pointer's first ~15% of lines or
+`demo/clockin-digest.test.mjs:251` refuses landings in the scratch (§0a.3).
 
 ### 0a. Three facts the delegate established by measurement, not by repeating a colleague — read before reusing tonight's red set
 
@@ -47,8 +43,8 @@ Failure: `AssertionError: the read must not modify …/selfdev.sqlite` — the d
 `readSeatShapes`, and its own connection changed the bytes.
 
     cp selfdev.sqlite{,-wal} .spike/delegate-20261102/store-copy.sqlite{,-wal}   # -wal = 2,912,872 B
-    DURIG_DB=.spike/delegate-20261102/store-copy.sqlite node demo/seat-turn-shape.test.mjs   → exit 1
-    # afterwards: store-copy.sqlite-wal NO LONGER EXISTS; the copy's db sha changed a40b7304 → 3e3d6931
+    DURIG_DB=.spike/delegate-20261102/store-copy.sqlite node demo/seat-turn-shape.test.mjs   → exit 1; afterwards the copy's
+    -wal NO LONGER EXISTS and its db sha changed a40b7304 → 3e3d6931 (no other writer was present)
 
 Mechanism: the reader opens the store **read-write**, so SQLite replays/truncates the WAL on open, which rewrites the db file
 the demo is hashing. So the guard is **red whenever the WAL is non-empty** (the normal state after any write) and green only
@@ -66,127 +62,131 @@ than hope for one, and **"flaky" banned as a label**; #4997's baseline must carr
 (`wrapProviderWithSlots`, `cli.mjs:287,354`). While devtools was generating (`cli.mjs log devtools` turns at 18:33:26Z,
 18:34:19Z, 18:34:55Z, 18:35:12Z), `ls -1 selfdev.sqlite.genlock*` printed nothing on **all 10 samples over 20 s**, and the
 delegate's own landing reported `liveHolders: 0`. A seat driven by the deprecated `cli.mjs send` (that is what runs on this
-box — it was alive for 95 min) is invisible to the mechanism the lander trusts. The landing was safe because the shared tree
-was clean and merges happen in a scratch — luck about file layout, not a guard. Registered as **#5020 → impl**: the fix is the
+box — alive for 95 min) is invisible to the mechanism the lander trusts; the landing was safe only because the shared tree was
+clean and merges happen in a scratch — luck about file layout, not a guard. Registered as **#5020 → impl**: the fix is the
 non-broker path taking the same slot the broker path takes; a `status` read that surfaces "a seat is generating with no slot"
 is the second half, never the guard.
 
 ### 1d. Re-measured at 19:0xZ, cheap, before anything else
 
 - `node scripts/clockin.mjs` (~5 s) — its `PROVIDER … local=NOT SET` and `local endpoint: DOWN (fetch failed)` lines are
-  **wrong on this box** and are `#4999` (a hardcoded `:8080` probe): `durig.config.json` names
-  `DURIG_LOCAL_BASE_URL=http://127.0.0.1:47831/v1`, which answers `/v1/models` in **5 ms** (likewise `broker-serve --status`
-  printed `provider-local-completion-failed: timeout after 20s` for that serving endpoint — **#5021**).
+  **wrong on this box** (`#4999`, a hardcoded `:8080` probe): `durig.config.json` names
+  `DURIG_LOCAL_BASE_URL=http://127.0.0.1:47831/v1`, which answers `/v1/models` in **5 ms**; `broker-serve --status` likewise
+  printed `provider-local-completion-failed: timeout after 20s` for that serving endpoint (**#5021**).
 - Strata is UP and owns both GPUs (0.2 s): `nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv` then
   `--query-compute-apps=pid,gpu_name,used_memory --format=csv`. It decides whether any second model can load.
-- `node tools/queue-drain-audit.mjs` (1.0 s) and `node tools/broker-serve.mjs --status` (2.8 s) rather than any remembered
-  count. The `stranded-intent` NOTE in `--status` is two `op:read view:health` requests from **2026-10-30** — stale reads.
-- A `send`-hosted seat is not a broker: there is no `selfdev.sqlite.broker.json`, and the `send` process holds no slot (§1c).
-  **Never run `doctor`/`resume` while one is generating** (D187).
+- `node tools/queue-drain-audit.mjs` (1.0 s) and `node tools/broker-serve.mjs --status` (2.8 s) rather than any remembered count;
+  the `stranded-intent` NOTE in `--status` is two `op:read view:health` requests from **2026-10-30** — stale reads.
+- A `send`-hosted seat is not a broker: no `selfdev.sqlite.broker.json`, and the `send` process holds no slot (§1c). **Never run
+  `doctor`/`resume` while one is generating** (D187).
 
 ### 1e. Probes the next session would otherwise lose (ROADMAP 233; the promotion row is **#5022** → devtools)
 
 - `.spike/delegate-20261102/rows.mjs <dump> [nonterminal|all|grep <re>]` — a row-scoped queue read over a `queue --json` dump
-  (`queue --help` prints the whole queue — 22,111,408 B for 5,018 rows — that is **#4986**, open, do not re-mint); and
-  `.spike/delegate-20261102/logcompact.mjs <seat> [n]` — compact `log` (kind, tool calls, ts, duration, tokens, stopReason:
-  raw `cli.mjs log` costs ~50 KB of context per turn in thinking blobs, this is ~3 KB).
+  (`queue --help` prints the whole queue — 22,111,408 B for 5,018 rows — that is **#4986**, open, do not re-mint);
+  `.spike/delegate-20261102/logcompact.mjs <seat> [n]` — compact `log` (raw `cli.mjs log` costs ~50 KB of context per turn in
+  thinking blobs, this is ~3 KB); and **new this session**: `.spike/delegate-20261102/auth-ledger-shim.mjs` (key + ceiling +
+  per-call ledger), `cleanrescore.mjs` and `cleanmech.mjs` (re-score `gate.mjs` transcripts offline). All four are #5022 material.
 
 ## 2. Three landing-gate traps, measured so the next session does not re-derive them
 
 1. **Land `item-4985`-class fixes BEFORE anything gated on them.** The first `--changed-suite` attempt STOPPED with
-   `demo/clockin-digest.test.mjs` failing in the **detached** landing scratch:
-   `Error: Command failed: git rev-list --count main..(no branch)` — the #4985 defect; landing that branch first cleared it.
+   `demo/clockin-digest.test.mjs` failing in the **detached** landing scratch: `Error: Command failed: git rev-list --count
+   main..(no branch)` — the #4985 defect; landing that branch first cleared it.
 2. **`demo/local-model-pointer.test.mjs` was non-hermetic — FIXED, landed (`item-4996`, `9ca6c755`)**: a hermetic core runs in
    every tree and the machine half **SKIPs with a reason** (and `scripts/land.mjs` now reports a SKIP instead of counting it).
-3. **No known-red baseline yet — that is #4997** (claimed by `devtools` at 20:11), re-scoped by `lead` (body sha256
-     `5e133981e8ca36f0`): its seed is the *remaining* reds (§1b, mechanism-named), never the three that landed (245/245 at
-     `9ca6c755`), and **#5019 must land first** or the baseline launders a live defect into a standing exemption.
+3. **No known-red baseline yet — that is #4997** (claimed by `devtools` at 20:11, body sha256 `5e133981e8ca36f0`): seed = the
+     *remaining* reds (§1b, mechanism-named), never the three landed; **#5019 must land first** or the baseline launders a live defect.
 
 ## 3. The verifier ruling (D190) — do not load a verifier model
 
-Measured, Linux, 08:00Z: `nvidia-smi --query-compute-apps` → strata pid 345372 holds **14,770 MiB on the A4000 AND 20,712
-MiB on the 3090** (`/v1/models` says `gpus:[0,1]`, `--max-context 204800`, 48 GiB RSS, 41.2 GiB shmem). Free VRAM is
-1,472 + 1,574 MiB. **LM Studio has no process at all.** So loading ministral = evicting the author engine, for the model at
-0/16 clean controls (D137). The operator's ruling, recorded in D190: keep the verifier provider dark, and run verify legs
-the way `#4956`/`#4962` already did — **independent by seat/transcript/execution, and say so in the report** — never claim
-model independence without first running `tools/model-probes/gate.mjs <baseUrl> <id> <label>`.
+Measured, Linux, 08:00Z: `nvidia-smi --query-compute-apps` → strata pid 345372 holds **14,770 MiB on the A4000 AND 20,712 MiB on
+the 3090** (`--max-context 204800`, 48 GiB RSS, 41.2 GiB shmem); free VRAM is 1,472 + 1,574 MiB and **LM Studio has no process at
+all**. So loading ministral = evicting the author engine, for the model at 0/16 clean controls (D137). D190: keep the verifier
+provider dark, and run verify legs the way `#4956`/`#4962` did — **independent by seat/transcript/execution, and say so**.
 
-**Amended 21:2xZ:** the operator ruled the verifier moves to a **metered remote engine** (§7), so "keep the verifier provider
-dark" no longer binds the *provider* choice — but the VRAM measurement stands (nothing is evicted locally) and the
-model-independence rule binds every report: only `gate.mjs` arms can say how much independence a DeepInfra verifier buys.
+**Amended 21:2xZ and again at 23:5xZ:** the operator ruled the verifier moves to a **metered remote engine** (§7), so "keep the
+provider dark" no longer binds the *provider* choice — the VRAM measurement stands (nothing is evicted locally). The
+model-independence rule still binds every report, **but note the instrument caveat before trusting an arm: `gate.mjs`'s clean-side
+numbers are void until the scorer is fixed (§7, D193(8))**, so no arm run so far — paid or local — can certify model independence.
 
 ## 5. THE HAND-BACK of 2026-11-02T09:30Z — moved VERBATIM to docs/NEXT-ARCHIVE.md (one ruling, three options)
 
 The operator chose none of the three options in words; the work has since walked **option 3** ("leave the broker down and fix
-the substrate first") by measurement: two substrate fixes landed, four rows minted, and the broker still refused by the two
-verifier BLOCKs. Its measurement still stands and is repeated here so nobody re-derives it: **parking provider-dead rows does
-not clear a `--start`** (`tools/broker-serve.mjs:411-412` refuses on ANY block finding) and **there is no liveness gate in
-the wake path** (`src/broker.mjs:1473` only classifies such errors after a generation failed) — so an ungated `cli.mjs
-serve` wakes those seats into `Connection error.`; the protection for them is the park, which is `pm`’s verb (#5007).
+the substrate first"). Two measurements from it remain load-bearing: **parking provider-dead rows does not clear a `--start`**
+(`tools/broker-serve.mjs:411-412` refuses on ANY block finding) and **there is no liveness gate in the wake path**
+(`src/broker.mjs:1473` classifies such errors only after a generation failed) — the protection is the park, `pm`'s verb (#5007).
 ## 6. Still open, re-read before acting
 
 `#4970` HALF B (the config-drift lever: `DURIG_LOCAL_CONTEXT` 160000 in this checkout vs 200000 in the seat root —
 operator-owned, still present) · **12 `deferred` rows parked on the operator** (`#4354`, `#4814`, `#4817`, plus 9 LANDING
-entries) · the host clock: `LocalRTC=yes` on a dual-boot box while every broker gate is `Date.now()` arithmetic
-(ROADMAP 234; `timedatectl set-local-rtc 0` is host-wide, so the operator's call) · `#4987`, `#4986`, `#4992`, `#4978`,
-`#4979` (open instrument defects) · `#4966`, `#4977`, `#4985`, `#4931` are **done and landed — do not re-do them**.
+entries) · the host clock: `LocalRTC=yes` on a dual-boot box while every broker gate is `Date.now()` arithmetic (ROADMAP 234;
+`timedatectl set-local-rtc 0` is host-wide, so the operator's call) · `#4987`, `#4986`, `#4992`, `#4978`, `#4979` (open
+instrument defects) · `#4966`, `#4977`, `#4985`, `#4931`, **#4995, #5013, #4996** are **done and landed — do not re-do them**.
 
 ## 7. The DeepInfra verifier — OPERATOR RULING 2026-11-02T21:2xZ: *"use DeepInfra for verifiers rather than halt the system; we have $4 available to spend"* (the paid arm is now authorised; the cap is still prose)
 
 Push was granted in the same breath and executed: `git push origin main` → `e2f85719..0cc8c9c1` (verified by `git ls-remote`),
-preceded by `node scripts/test.mjs --all --jobs 8` → **245/245 in 49.0 s** — stated with its condition (`ls selfdev.sqlite*`
-showed **no `-wal` sidecar**, so that green is the §1b lottery, not a fix). `origin/main` = `0cc8c9c1`, `0` ahead.
+preceded by `node scripts/test.mjs --all --jobs 8` → **245/245 in 49.0 s** — with its condition: **no `-wal` sidecar** was
+present, so that green is the §1b lottery, not a fix. `origin/main` = `0cc8c9c1`, `0` ahead.
 
 - **The operator's key is invisible to the verifier provider today.** A provider registers by setting
-  `DURIG_VERIFIER_BASE_URL` (id derived from the prefix, `src/providers/local.mjs:49-52`) and its key variable is
-  **`DURIG_VERIFIER_API_KEY`** (`local.mjs:88`, `:145-147`) — **not** `DEEPINFRA_API_KEY`, which is what `cli.mjs config` calls
-  `set`. Keep the key env-only; `durig.config.json` holds none (#4991 landed the gitignore).
-- **The classification seam #5015 is about, with a concrete failure shape:** `isLocalProviderId` (`local.mjs:45`) is true for
-  `verifier`, and that module's header says the id means *"free context, cheap reset, no paid API"*. Point the id at
-  `https://api.deepinfra.com/v1/openai` and every free-provider assumption — `broker-serve`'s provider probes included —
-  survives: **a metered endpoint behind a `verifier/` id is classified as free**.
-- **Two config values are already wrong for any candidate in the table:** `DURIG_VERIFIER_MAX_TOKENS=3000` against
-  reasoning-tagged models — `local.mjs:71-75` records the measured failure ("truncated MID-THOUGHT … a confident half-verdict
-  — the worst possible failure for a seat whose job is to say 'no'"), reproduced live in one probe call: at `max_tokens=24`,
-  `gpt-oss-20b` returned `finish_reason=length` with **empty content** — and `DURIG_VERIFIER_CONTEXT=24576` against a measured
-  **p50 prompt of 55,538 input tokens** (D166's impossible pair; symptom in `runbooks/verifier-serving-headroom.md`).
-- **Resolution still faults before any request for a non-curated model:** `cli.mjs:327` builds the catalog from
-  `fallbackModels()`; `fetchDeepInfraModels` is imported **nowhere**. Live catalog = **173** models; `gpt-oss-20b/-120b` are not
-  curated. Field names for whoever fixes the guard: `metadata.context_length`,
-  `metadata.pricing.{input_tokens,output_tokens,cache_read_tokens}`, `metadata.tags`, `metadata.description`.
+  `DURIG_VERIFIER_BASE_URL` (id from the prefix, `src/providers/local.mjs:49-52`) and its key variable is
+  **`DURIG_VERIFIER_API_KEY`** (`:88`, `:145-147`) — **not** `DEEPINFRA_API_KEY`, which is what `cli.mjs config` calls `set`.
+  Keep the key env-only; `durig.config.json` holds none (#4991 landed the gitignore).
+- **The classification seam #5015 is about:** `isLocalProviderId` (`local.mjs:45`) is true for `verifier`, whose module header
+  says the id means *"free context, cheap reset, no paid API"*. Point it at `https://api.deepinfra.com/v1/openai` and every
+  free-provider assumption — `broker-serve`'s probes included — survives: **metered, classified as free**.
+- **Two config values are already wrong for any candidate:** `DURIG_VERIFIER_MAX_TOKENS=3000` against reasoning-tagged models
+  (`local.mjs:71-75` records the failure — "a confident half-verdict — the worst possible failure for a seat whose job is to say
+  'no'"; reproduced live: at `max_tokens=24`, `gpt-oss-20b` returned `finish_reason=length` with **empty content**), and
+  `DURIG_VERIFIER_CONTEXT=24576` vs a measured **p50 prompt of 55,538 input tokens** (D166's impossible pair).
+- **Resolution faults before any request for a non-curated model:** `cli.mjs:327` builds from `fallbackModels()` and
+  `fetchDeepInfraModels` is imported **nowhere** (live catalog = **173** models; `gpt-oss-20b/-120b` uncurated). Fields for the
+  guard: `metadata.context_length`, `metadata.pricing.{input_tokens,output_tokens,cache_read_tokens}`, `metadata.tags`.
 - **Priced on this rig's own shape (55,538 in / 3,000 out), with the $4 question answered — turns the pool buys:**
 
-| candidate | ctx | $/turn | **$4 buys** | curated? |
-|---|---|---|---|---|
-| `openai/gpt-oss-20b` | 131,072 | **$0.00209** | **1,917 turns** | NO → `no_model` |
-| `openai/gpt-oss-120b` | 131,072 | $0.00256 | 1,559 | NO → `no_model` |
-| `deepseek-ai/DeepSeek-V4-Flash-0731` | 1,048,576 | $0.00387 (≈$0.00187 at 80% prefix-cache) | 1,032 → **2,135 cached** | yes, stale prices |
-| `mistralai/Mistral-Small-3.2-24B-Instruct-2506` | 128,000 | $0.00477 | 839 | yes |
-| **`zai-org/GLM-5.3-Flash` — the SHIPPED DEFAULT** | 1,048,576 | $0.00983 | **406** | yes |
+| candidate | ctx | $/turn | **$4 buys** |
+|---|---|---|---|
+| `openai/gpt-oss-20b` | 131,072 | **$0.00209** | **1,917 turns** |
+| `openai/gpt-oss-120b` | 131,072 | $0.00256 | 1,559 |
+| `deepseek-ai/DeepSeek-V4-Flash-0731` | 1,048,576 | $0.00387 (≈$0.00187 at 80% prefix-cache) | 1,032 → **2,135 cached** |
+| **`zai-org/GLM-5.3-Flash` — the SHIPPED DEFAULT** | 1,048,576 | $0.00983 | **406** |
 
-  The pool is **4.7× bigger** on the cheapest candidate than on the default, and the **55k prompt is the cost driver** —
-  bounding the verify prompt is a bigger lever than model choice. `mistralai/ministral-3-14b-reasoning` (what the 5 verifier
-  seats name) is **absent from the live catalog entirely**, and local serves only `iq3_s`.
-- **What has actually been spent, and the instrument that bounds it.** `gate.mjs:96` posts `/chat/completions` with **no
-  `authorization` header**, so the rig cannot probe a metered provider at all, and `grep -nE "SPEND|CAP_|MAX_SPEND"
-  src/config.mjs` is empty. Interim control (gitignored `.spike/delegate-20261102/auth-ledger-shim.mjs`, promotion candidate):
-  a fetch shim that attaches the key, appends a per-call ledger (`.spike/delegate-20261102/spend.jsonl`: model, in/out/cache
-  tokens, `$`, running total) and **refuses a call whose projected cost crosses `DURIG_PROBE_CEILING_USD`**. Already run, so no
-  one re-spends: keyed smoke (2 calls, **$0.000012**); tool-calling probe on `gpt-oss-20b` → **`finish=tool_calls`, correct
-  arguments, `reasoning_content` present** (the vendor also returns **`usage.estimated_cost`** — a free per-call cost signal for
-  #5015's ledger); and `gate.mjs … --whole-module --budget 120000 --replicate 3` on `gpt-oss-20b`, `gpt-oss-120b`,
-  `DeepSeek-V4-Flash-0731` under ceiling **$0.60** (a k=1 whole-module arm ≈ 273k input tokens ≈ $0.01). Transcripts in
-  `.spike/gate/run-*.json`; compare with `gate.mjs … --compare <run.json>`.
+  (`mistralai/Mistral-Small-3.2-24B-Instruct-2506`: $0.00477 / 839 turns.) The pool is **4.7× bigger** on the cheapest candidate
+  than on the default, and the **55k prompt is the cost driver** — bounding the verify prompt is a bigger lever than model
+  choice. `mistralai/ministral-3-14b-reasoning` (what the 5 verifier seats name) is **absent from the live catalog entirely**.
+- **Spent so far: $0.0945 across 161 metered calls** (per-call ledger `.spike/delegate-20261102/spend.jsonl`), bounded by a
+  gitignored `.spike/…/auth-ledger-shim.mjs` that attaches the key and **refuses a call whose projected cost crosses
+  `DURIG_PROBE_CEILING_USD`** — the cap is still prose in the product (#5015) and `gate.mjs:96` still posts
+  `/chat/completions` with **no `authorization` header** (#5024). Three k=3 whole-module arms (transcripts `.spike/gate/run-*.json`):
+
+| arm | defect items (majority-of-3) | G2 floor (bar 4/8) | truncated | cost |
+|---|---|---|---|---|
+| `openai/gpt-oss-120b` | **6/8** | **MET** (worst replicate 4/8) | 0/24 | ~$0.038 |
+| `deepseek-ai/DeepSeek-V4-Flash-0731` | 3/8 — spread **5/8, 2/8, 2/8** | NOT MET (worst 2/8) | 0/24 | $0.0169 |
+| `openai/gpt-oss-20b` | 1/2 scored — **arm unscorable** | NOT MET | **16/24** | $0.0394 |
+
+  Truncation cause is one env var: `gate.mjs:83` defaults output to `CAL_MAX_TOKENS || 3000` — the same wrong 3,000 as
+  `DURIG_VERIFIER_MAX_TOKENS`, under a comment (`:90-92`) that already records D134. For #5015's ledger: **every DeepInfra
+  response returns `usage.estimated_cost`**.
+- **The finding that outranks the table: the gate's clean controls have never emitted a positive verdict.** Re-scoring the
+  instrument's own transcripts (probes `.spike/…/cleanrescore.mjs`, `cleanmech.mjs`): **`CLEAN-PASSED` 0 times across 552 clean
+  turns in 24 runs, 2026-10-27→11-02.** `scoreClean` (`gate.mjs:185-224`) needs `declined && !assertedNow && named<2`, but
+  `ASSERT` holds bare `bug`/`defect` — inside `DECLINE`'s own phrases ("no defect") and any prose decline — with **no negation
+  handling**: 57 of 468 FALSE-ALARMs explicitly declined, 15 with nothing left after declination, **154 hit `namedMechanism>=2`
+  measured over `answer+reasoning`** (`:154`). So **every "false alarm" figure this rig has cited — including one I published in
+  D193(6) today and have corrected — is artifact-saturated**; the defect half (HIT/MISS, G2) still carries signal. Fix the scorer
+  and re-score the 24 transcripts **before** any model is chosen on clean-side evidence (detail in DECISIONS D193(8)).
 - **Outbound network left the box for ~25 min and came back** (`curl https://github.com` → `000`, `getent hosts
-  api.deepinfra.com` → empty, `dig @1.1.1.1` timing out through `nameserver 127.0.0.53`) **after** the push and the free catalog
-  reads; local Strata kept answering in **6 ms**, so seats never noticed. Zero spend happened during it, and there is **no
-  runbook for general outbound loss** (`local-provider-down.md` is the closest).
+  api.deepinfra.com` → empty, `dig @1.1.1.1` timing out through `nameserver 127.0.0.53`); local Strata kept answering in **6 ms**.
+  Zero spend during it; **no runbook exists for general outbound loss**.
 - **Still true:** do not wake the five `verifier/…` seats (`broker-serve --dry-run` → `BLOCK
   provider-DURIG_VERIFIER_-unreachable: http://127.0.0.1:1234/v1 ECONNREFUSED` + `BLOCK
   provider-verifier-completion-failed`), and do **not** edit the provider block of `durig.config.json` on a delegate's own
-  initiative — `runbooks/verifier-model-server.md` requires an explicit ask, because it changes what every seat's verifier
-  model *is* while the model key stays identical. The brief carrying the operator's ruling and these findings went to `lead` at
-  22:3xZ (`delegate-20261102-operator-rulings-metered-verifier`); the rows it asks for are `lead`'s to mint.
+  initiative — `runbooks/verifier-model-server.md` requires an explicit ask. Briefs to `lead`:
+  `delegate-20261102-operator-rulings-metered-verifier` (22:3xZ, minted #5024/#5025/#5026) and
+  `delegate-20261102-metered-arms-and-scorer` (the arms + the scorer defect). The rows are `lead`'s to mint.
 ## Standing constraints
 
 - **Do not claim, complete, defer, or route queue rows yourself.** Routing and decomposition belong to `lead`/`pm`.
