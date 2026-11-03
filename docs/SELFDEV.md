@@ -1630,3 +1630,22 @@ artifact-saturated") is the kind of claim a fix cannot be scored against, and it
 chars with a digit deposits a `secret_detected` notice against the seat and a "treat the store as compromised"
 warning — firings #280250 (`pm`), #280240 and #280207 (`lead`) are all this. `d197-devtools` is clean. Evidence for
 held **#3128** / queued **#4922**; no new row, no rotation.
+
+**7. A seat's item worktree is config-less AND schema-old, so a seat can be told a number it cannot check.** Measured
+2026-11-03 (D198) from `devtools`' own report: in `item-4997`, `node cli.mjs config` printed **no** `local` /
+context / max-token keys (gitignored `durig.config.json` is absent in every worktree, §10 of the session-start
+runbook), and its lockfile `@earendil-works/pi-durable` is **1.3.0 = schema v1** while the live store is **v2** — so
+`demo/seat-turn-shape.test.mjs` there exits 0 with `SKIP (ENVIRONMENTAL — not a behaviour red) … no store resolves in
+this tree`. Two consequences: (a) never treat a thin worktree's green/red as a verdict about the rig, and never ask a
+seat to seed a **known-red baseline** from it (that is #4997's measured hold reason — an exemption nobody can
+re-measure); (b) if the work is config- or store-dependent, re-point the seat's cwd to the deps-complete root first
+(fix the cwd **the rig file names**, then `up rig.selfdev.json --refresh --dry-run` — ROADMAP 210), don't fight it
+from the worktree.
+
+**8. A capacity ruling granted as environment variables must be repeated on every verb, and the number moves under
+you.** After one 7-minute `devtools` turn, `context.consumed` went **143,426 → 156,614**: over this checkout's
+declared band (160,000 − 16,384 = **143,616**) and under the seat root's (200,000 − 16,384 = **183,616**). So the
+prefix is not a nicety — omit it on the next `send`, `resume`/`doctor`, or broker pass and the summarization-cap
+failure returns by construction. Re-read `consumed` against **both** bands before each wake, and drive the durable
+fix (**#4970 HALF B**, one source of truth; **#4887**, no compaction-policy knob exists to set) instead of repeating
+the prefix forever.
