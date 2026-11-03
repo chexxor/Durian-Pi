@@ -8128,3 +8128,52 @@ for, with the exact commands, rather than taken.
 - **Standing practice now in the pointer and the pitfalls block: pre-flight every `send` with `tools/seat-turn-shape.mjs`** (1.1 s,
   read-only). Fold today's evidence into held **#4896** (instrument: was 6/12 seats, now 10/12), **#3128/#4922** (the secret-shape
   false positive), and promote the session's probes under **#5022** — an unpromoted probe is lost next session.
+
+### (D196) 2026-11-03: the pointer's own next command was DISPROVEN before it was spent, the real blocker is the
+### compaction summarization budget, and the delegate held the boundary rather than burn a wake — recorded because the
+### same cause was written down once, in a runbook, and then lost by the pointer.
+- **`compact lead` does not unblock the rig — measured twice over, not argued.** (a) It had already run: `lead`'s newest
+  submission (id **280241**, requestId `delegate-20261103-operator-order-scorer-cap-rearm`) sits `unanswered / model_error`
+  with the store's own `detail`: *“Compaction failed: Summarization hit the token limit; the summary is incomplete”*. (b) Even a
+  **successful** compaction leaves a seat un-sendable, because `selectCut` keeps the most recent `keepRecentTokens` = 20,000
+  tokens (`vendor/pi-main/packages/durable/dist/harness/compaction.js:211-234`), so the trailing `user` entries survive the cut —
+  `impl` carries head marker `pi.compaction@278205` and its counted projection still ends on `user`. **The why it was the wrong
+  verb: a compaction moves the head marker; sendability is decided by the LAST element of the counted projection**
+  (`docs/runbooks/session-start-cost.md` §2b). D195's step (1) was a plausible verb, not a measured one.
+- **The blocker, named at the lines.** durian-pi sets no compaction policy, so the pinned defaults apply (`reserveTokens 16384`,
+  `keepRecentTokens 20000`, `backgroundTokens 32768` — `harness/agent.js:10-15`), and with `DURIG_LOCAL_CONTEXT=160000` the
+  blocking band in `thresholdCompaction` (`harness/generation.js`) is **160,000 − 16,384 = 143,616**. Measured `status.context.consumed`:
+  `lead` 145,429 (already over), `devtools` 143,426, `impl` 143,278 — all three cross it on their next send. The summarization
+  request's **output** budget is `min(0.8·16384, model.maxTokens)` = `min(13,107, 8,192)` because `DURIG_LOCAL_MAX_TOKENS` is unset
+  and defaults to 8,192 (`src/providers/local.mjs:76,85`, budget at `compaction.js:95`); at that cap the summarizer returns
+  `stopReason=length` → `summaryFailure` prints exactly that sentence (`compaction.js:302-303`) → `failModelError` settles the whole
+  send `unanswered/model_error` with **zero tokens generated**. So for those seats the failure is neither the Jinja alternation nor a
+  window: it is a summarization output cap, and it fires **before** the seat's own provider call.
+- **Therefore `doctor`/`resume` on `devtools`'s `admitted_not_started` #279623 was NOT run.** Two reasons recorded: `doctor` is an
+  **alias of `resume`** (`cli.mjs:3102`), so D195's “doctor/resume to re-arm” is one write verb, not a read then a write; and re-arming
+  starts a turn at 143,426/160,000, i.e. inside the band above, which buys zero tokens and **one more `pi.user` entry**. Deliberate,
+  explained deviation from an operator-accepted plan, on measurement — escalated with the alternative commands instead of taken.
+- **The same `detail` was already recorded once.** `docs/runbooks/session-start-cost.md` §2c (D187, 2026-11-01) states that four seats
+  were un-sendable overnight and *every one* read “Compaction failed: Summarization hit the token limit…”. The pointer did not carry
+  that line, so a later session planned a verb the store had already reported as failing. **The rule: before executing a recovery verb
+  copied out of `docs/NEXT.md`, re-read that seat's `submissions.detail` (the §2c one-liner, ~2 s, `node:sqlite` read-only) — the pointer
+  is a priority list, not a diagnosis.** Rows already carrying this class, none of them built: **#4973** (held, gated on #4970),
+  **#4887** (queued/released — there is no compaction policy knob to set), **#4964** (held), **#4981** (queued), **#4970** (queued).
+- **#4970 HALF B is now load-bearing, not cosmetic.** D195 justified aligning `DURIG_LOCAL_CONTEXT` 160,000 → 200,000 by a answered
+  120,056-token prompt; the sharper consequence is that **the declared window is the compaction trigger**: 200,000 moves the band to
+  183,616 and all three saturated seats fall under it, with the engine already serving `--max-context 204800` (measured from its own
+  command line, plus `probe-preflight.mjs`: window 204800). Still **not** hand-aligned — the row stays open and the ruling is the
+  operator's; a per-verb `DURIG_LOCAL_CONTEXT=200000` in the environment of one `send` is the interim, and must be *named* when used.
+- **Verifier capacity, restated from sockets rather than a probe sample:** nothing LISTENs on `127.0.0.1:1234` (`ss -ltn` shows only
+  47831 and 18500), so the five `verifier/…` seats cannot take a turn at all; `probe-preflight.mjs` reports GPU0 14,906/16,376 MiB and
+  GPU1 22,848/24,576 MiB with the seat engine (`iq3_s`, `gpus:[0,1]`, 51.2 GiB RSS) holding both — **no local verifier model loads
+  without evicting the seat model**, which is the operational reason the operator's DeepInfra ruling is the way out. The re-point stays
+  one change with **#5024 + #5015 + #5025**, and the delegate edited no provider block.
+- **Delegate boundary held, and what was done instead of a wake:** pushed the four docs-only commits on the operator's grant
+  (`origin/main` `0cc8c9c1 → 9f79f45c`, verified by `git ls-remote`, 0 ahead); fast-forwarded the approved seat root
+  `43e26dcc → 9f79f45c` (clean, 0 ahead / 31 behind, no dependency-file change in the range, worktree and branch inventories
+  byte-identical before/after); dispatched **one** batched brief to `pm` — the only sendable router (projection ends on `assistant`,
+  0.419 of its window) — carrying these measurements plus the operator's order, asking only for `pm` verbs (mint the missing
+  `gate.mjs` scorer row, re-scope the compaction class, run the stale-held pass for #4354/#4814/#4817, dispose the three
+  still-registered landed worktrees) and instructing it **not** to wake `impl`/`lead`/`devtools`/`security`. No claim, complete,
+  defer, route, reset, compact, resume, or provider-block edit.
