@@ -8292,3 +8292,41 @@ for, with the exact commands, rather than taken.
 - **Why the delegate fixed the red rather than filing it:** it was caused by the delegate's own edit in the same
   session, and the pointer is the delegate's artifact (§ cut-the-pointer rule). Filing it as a seat task would have
   spent a wake on the delegate's mistake; repairing it and recording the coupling costs a paragraph.
+
+## D199 — step (1) landed, and the delegate landed it: what a landing proof has to survive
+
+- **The operator's grant of `DURIG_LOCAL_MAX_TOKENS=16384` is now a measured fact, not a hypothesis.** During the
+  #5027 build turn, `devtools` crossed its compaction band and **the compaction fired and succeeded**: head marker
+  `pi.compaction@279624 → pi.compaction@280362`, `context.consumed` **156,614 → 88,069**, counted projection still
+  ending `assistant`, and the row completed in the same turn. Under the unset default (8192) the identical
+  compaction died at the summary output cap and settled `unanswered/model_error` at zero counted tokens — which is
+  what killed `lead` and `devtools` twice before (the `279623`/`280241` submission pairs). Decision consequence: a
+  wake is now affordable, and the pre-flight is the shape+consumed pair in `session-start-cost.md` §20.
+- **Landing is the delegate's/operator's verb, and this one was taken deliberately.** The seat completed #5027; I
+  did **not** treat a green suite in its own worktree as landing evidence. Proof used: `git merge-tree --write-tree
+  main item-4997` clean (`changedInBoth: []`), then **two full `node scripts/test.mjs --all` runs** — **245/245 at
+  `93ae0145`** (operator checkout, vendor dependency set) → **246/246 at the merge** (`+1` = the new
+  `demo/gate-clean-scorer.test.mjs`, `failed: []` both sides) — then `scripts/land.mjs` (merge commit `84edff3c`),
+  then `git merge-base --is-ancestor item-4997 main` exit 0 and a clean tree. `land` is not `complete`: I said
+  `LANDED at 84edff3c` and did not touch the row's status.
+- **`--suite` is currently unsafe as a landing proof for ANY branch** (recorded as SELFDEV pitfall 10, runbook §21).
+  It runs the suite in a scratch worktree under `/tmp` with no `node_modules`, so
+  `demo/commit-discipline-personas.test.mjs` fails there with `ERR_MODULE_NOT_FOUND @earendil-works/pi-durable`
+  while passing in the operator checkout — proved by running that demo exit 0 here and exit 1 in a throwaway
+  detached worktree at plain `main`. So the lander was run without `--suite` and the two-suite proof replaced it.
+  The residual defect belongs to the known-red-baseline row **#4997** (still `held` by `devtools` with a measured
+  reason); this adds a concrete case for it.
+- **Clean-side numbers must name their axis AND their denominator** (D193(8) extended). My first independent tally
+  filtered `cond === "clean"` and showed **zero** flips — an axis error, because `gate.mjs`'s clean-side cell is
+  `cond !== "defect"` (clean **and** neutral). On the right axis the seat's table reproduced: `raw` → FALSE-ALARM
+  502 / CLEAN-PASSED 0 (553 cells); `strip+neg` → FALSE-ALARM 460 / CLEAN-PASSED 21 / AMBIGUOUS 5 (537 cells).
+  Independent axis here: re-scoring already-saved transcripts with no prompt, no GPU, no API.
+- **Cut the pointer instead of shrinking it.** `docs/NEXT.md` had hit its undocumented byte cap (runbook §19:
+  17,905 B → digest 21,002 B, red) and the fix was to **move the superseded D198 block verbatim into
+  `docs/NEXT-ARCHIVE.md`** (round-trip proof: re-prepending it re-hashed byte-identical to
+  `5406b90c0535052e1101d8590236331e14545c42d0c238c30cd226e49829b305`). The live pointer is back to 120 lines /
+  11,057 B — the same shape the rig kept for weeks — which removes the byte pressure rather than working around it.
+- **Cleanup discipline:** worktrees 18 → 8, branches 19 → 9, each removal preceded by
+  `git merge-base --is-ancestor` proof + clean status, the one superseded ref removed with the sanctioned verb
+  (`cli.mjs worktree prune-branch item-4898`, `patchEquivalent: 1`, recovery `git branch item-4898 9beb1ae3…`).
+  Six locked item worktrees were kept on purpose, including `item-4997` kept one cycle as the landing audit trail.

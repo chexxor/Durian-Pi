@@ -1649,3 +1649,12 @@ prefix is not a nicety — omit it on the next `send`, `resume`/`doctor`, or bro
 failure returns by construction. Re-read `consumed` against **both** bands before each wake, and drive the durable
 fix (**#4970 HALF B**, one source of truth; **#4887**, no compaction-policy knob exists to set) instead of repeating
 the prefix forever.
+10. **`--suite` is not a safe landing proof in a scratch tree.** `scripts/land.mjs … --suite` runs the suite in a
+    detached worktree under `/tmp` with **no `node_modules`**, so any demo importing a vendor package goes red
+    there and green in the operator checkout — a false blocker on every landing. Prove with two full
+    `node scripts/test.mjs --all` runs (base, then merge) and diff `failed[]`; keep the residual defect under
+    **#4997** (known-red baseline). See `docs/runbooks/land.md` and `session-start-cost.md` §21.
+11. **A probe that scrapes another module's source breaks on refactor.** `.spike/delegate-20261102/cleanrescore.mjs`
+    regex-extracted the DECLINE/ASSERT lists out of `gate.mjs` and crashed the moment #5027 moved them into
+    `tools/model-probes/assertscan.mjs`. Ship the selector inside the instrument (`gate.mjs --rescore`,
+    `GATE_SCORER=raw|strip|strip+neg`) and have probes **import** the list module instead.

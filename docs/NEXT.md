@@ -1,174 +1,120 @@
-## NEXT SESSION (2026-11-03T17:2xZ — D198, Linux: the operator GRANTED the two numbers (env vars, no file edit); step (1) ran — `send devtools` settled **done**, **#5027 is claimed**, the fix is designed, and `devtools` is now at **156,614**, so EVERY later verb needs the prefix)
+## NEXT SESSION (2026-11-03T19:5xZ — D199, Linux `chexxor@ThinkStation-P3`: **step (1) of the operator's order is DONE and LANDED** (`main 84edff3c`), the cleanup pass cut worktrees 18→8 / branches 19→9, and the operator's `MAX_TOKENS=16384` is now **proven** — a compaction fired mid-turn and survived)
 
-**What just happened (read this first):** one `send` to `devtools` under the operator-approved per-verb override
-`DURIG_LOCAL_CONTEXT=200000 DURIG_LOCAL_MAX_TOKENS=16384` — **no `durig.config.json` was edited anywhere**, so
-**#4970 HALF B (one source of truth for the declared ceiling) is still open and is still the row that ends this
-recurring crisis.** Settled `done` / `stopReason stop` in ~7 min, reply verbatim at
-`.spike/delegate-20261103b/send-devtools.out`. `devtools` independently confirmed the scorer mechanism, **released
-then claimed #5027 by id**, **held #4997 with a measured reason** (see §0.4), left #5024/#5026 queued deliberately
-(the ledger must not ship scoring a dead metric), and found the instrument for its own acceptance test:
-**`gate.mjs:354` is a re-score mode** — old/new numbers from the saved transcripts, no paid prompt. Its post-turn
-shape is still sendable: projection `user,assistant,user,assistant,assistant,user,assistant` (ends `assistant`).
-**The number that decides the next verb: `devtools` consumed is now 156,614 — over the 143,616 band of this
-checkout's 160,000 declaration, under the 183,616 band of 200,000.** Without the prefix, the next send is the §2
-failure by construction.
+**What just happened, in one paragraph.** `devtools` built #5027 on `refs/heads/item-4997` (`a0bd029f` fix +
+`e61ac4f5` dispositions), completed the row, and I **landed** it: `main` `93ae0145 → 84edff3c`
+(`scripts/land.mjs … --db ./selfdev.sqlite`, `lock {slots:1, held:1, waitedMs:1, reserved:true}`, tree clean,
+`git merge-base --is-ancestor item-4997 main` exit 0). Landing proof was **two full suite runs**, not `--suite`
+(see §2): **245/245 before → 246/246 after**, `failed: []` both sides, +1 demo. Then a cleanup pass: worktrees
+**18 → 8**, branches **19 → 9**, every removal proven an ancestor of `main` first, `main` unmoved by the prune,
+nothing forced, and the one superseded ref removed by the sanctioned verb (`worktree prune-branch item-4898`,
+`patchEquivalent:1`, recovery `git branch item-4898 9beb1ae3…`). **`main` is 4 ahead of `origin/main` and
+unpushed — tonight's push grant is spent; ask again.**
 
-**Current item:** the operator's order (D194/D195, unchanged) — **(1)** fix the `gate.mjs` clean-side scorer →
-**(2)** land the spend cap + cost ledger (#5015 with #5024/#5025/#5026) → **(3)** re-arm `openai/gpt-oss-120b` at
-`CAL_MAX_TOKENS=8000`. Step (1) is **claimed and designed**; the build has not happened yet.
-Everything before this block is VERBATIM in `docs/NEXT-ARCHIVE.md`.
-**Queue ids:** milestone **#5027** (**claimed by `devtools`**), **#5024/#5026** (queued→devtools), **#5015/#5025**
-(queued→architect), **#4997** (now **held** by devtools, with a reason), **#5019/#5020** (queued→impl),
-**#4981/#4970** (queued→architect) · held: **#5028/#5030** (→impl), **#5029** (→architect), **#4973/#4964** (→impl),
-**#4896, #3128/#4922** · deferred: **#4354 (impl), #4814 (qa2), #4817 (devtools)**, all `waiting on human` ·
-census 2026-11-03T17:1xZ: `done 3791 · cancelled 795 · held 335 · queued 90 · deferred 14 · claimed 5` (pre-send
-figures; #5027 moved claimed, #4997 moved held) — and `devtools` attention now reports **25 queued items addressed
-to it**. 89 non-terminal LANDING rows, **70 already fully on main** (`tools/queue-drain-audit.mjs` prints the list;
-it IS the per-row list #5004 asked for).
+**Current item:** the operator's order (D194/D195). **Step (1) — the `gate.mjs` clean-side scorer — is closed:
+built, verified by me independently, landed.** Step (2) is next: the spend cap + cost ledger **#5015** with
+**#5024** (auth header + spend recording) and **#5025** (the `verifier/` pointer decision), plus the trivial
+**#5026** docs fix. Step (3) is the `openai/gpt-oss-120b` re-arm at `CAL_MAX_TOKENS=8000` (`gate.mjs:83`
+`CAL_MAX_TOKENS || 3000`, verified on `main`). Everything before this block is VERBATIM in
+`docs/NEXT-ARCHIVE.md`.
 
-**Next command:** continue step (1), then the two legs below — in this order:
-1. **Pre-flight, always the same two reads (1.5 s total):** `node tools/seat-turn-shape.mjs | grep -A2 "seat devtools"`
-   (read the LAST projection element) and `status --json`'s `context.devtools.consumed` against **183,616**, not
-   143,616. As of 17:1xZ: ends `assistant`, consumed **156,614** ⇒ sendable **only with the prefix**.
-2. **The next verb is a second `devtools` wake to build what it just designed** — it already holds #5027, so do NOT
-   re-brief the problem; brief the build, and carry its own design back (strip each `DECLINE` phrase, then scan
-   `ASSERT` per occurrence with a negation window; score variants (i) stripping-only and (ii) +negation separately;
-   acceptance = re-score the SAME transcripts through **`gate.mjs:354`** reporting old AND new counts, plus a
-   hermetic `demo/fixtures/` test because the transcripts are gitignored). Dispatch from the approved seat root with
-   the prefix, and re-seed its `.spike/` if the transcripts moved (see runbook §18):
-   `cd /home/chexxor/Git/durian-dev/seatroot && DURIG_LOCAL_CONTEXT=200000 DURIG_LOCAL_MAX_TOKENS=16384 DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node /home/chexxor/Git/Durian-Pi/cli.mjs send devtools --body-file <brief> --request-id d198-devtools --no-stream`
-   (under 40 chars — §4). **Its cwd is `item-4997`, a thin config-less worktree on lockfile pi-durable 1.3.0**
-   (§0.4): if the fix needs the pinned vendor build or the real store, re-point the seat first (`up --refresh
-   --dry-run` after fixing the cwd the rig file names — ROADMAP 210), do not fight it from the worktree.
-3. **Then step (2) as ONE change, after one operator ruling:** #5015 (spend cap + cost ledger) + #5024
-   (`gate.mjs:96` sends no `authorization` header) + #5025 (the `verifier/` pointer names a model no provider serves
-   and declares 24,576 against a p50 of 55,538). Values still unrulled (D195's note): `DURIG_VERIFIER_MODEL=openai/
-gpt-oss-120b`, `DURIG_VERIFIER_MAX_TOKENS=8000`, `DURIG_VERIFIER_CONTEXT=131072`. Context **and** max-tokens move
-   together or the §2 failure walks over to DeepInfra (verifier band is 8,192 by construction today).
-4. **The leg that buys the most wall-clock: make landings gated again** — **#4997** (held by `devtools` with a reason
-   now — see §0.4), **#5019** (a *read* opens the store read-write, so WAL replay mutates the db bytes), **#5020**
-   (`send` takes no genlock lease, so `land.mjs` reports `liveHolders:0` beside a live writer). None needs capacity;
-   all three need `impl`/`devtools` to be sendable, which the override bought — `impl` still ends on `user`, so it is
-   a shape problem first (runbook §2b).
-5. **Push state:** this session's grant is **spent** — `origin/main` = **`1a8edb5d`** (`git ls-remote` agrees,
-   `git rev-list --count origin/main..main` = 0). Ask before the next one.
+**Queue ids that matter now:** #5027 **done** (author `devtools`) · **#5031 `queued` devtools→lead** — the
+re-cut of `item-4986` (the row-scoped queue read, still unlanded) · #5024 / #5026 / #5022 `queued`→**devtools** ·
+#5015 / #5025 `queued`→**architect** · #4997 (known-red baseline) still **held** by `devtools` with a measured
+reason · #5004 `deferred`→**pm** (70 zero-build-closable LANDING rows) · #4970 (the two local keys, one source of
+truth) `queued`→architect · deferred-and-waiting-on-human: #4354 (impl), #4814 (qa2), #4817 (devtools) ·
+census 2026-11-03T19:4xZ: `done 3792 · cancelled 795 · held 335 · queued 92 · deferred 14 · claimed 4` (5,032 rows).
 
-**Blocker:** the capacity fix exists **only as a per-verb environment prefix**, and it is now load-bearing rather
-than precautionary: `devtools` consumed **156,614**, which is over this checkout's declared band (**160,000 − 16,384
-= 143,616**) and under the seat root's (**200,000 − 16,384 = 183,616**). Any verb that does not carry the prefix —
-including `resume`/`doctor` and including a broker pass — re-enters the summarization-cap failure.
-**#4970 HALF B (one source of truth) and #4887 ("no compaction policy knob exists to set") are the durable fixes and
-both are still open.** Separately, still true and still the operator's: **nothing listens on `127.0.0.1:1234`**, so
-the five `verifier/…` seats cannot take a turn at all (band **8,192 by construction**, 3,000-token summary budget),
-which is why independent verification — the product's central claim — is currently offline. `impl` and `lead` still
-end their projections on `user` (do-not-send). No broker, no genlock slot, no generating process at clock-out.
+**Blocker:** three, all named, none of them mine to rule. (a) The push grant is spent — 4 commits sit unpushed.
+(b) `devtools` is the only seat sendable-by-shape **and** provider-live, and the capacity numbers are a per-verb
+prefix rather than a config fact (#4970). (c) Every *non-author review* leg is currently impossible: nothing listens
+on `127.0.0.1:1234` (five verifier seats, band 8,192) and `lead`/`pm` end their projections on `user`, which is why
+#5031 (the `item-4986` re-cut) and #5004 (70 zero-build-closable rows) are parked.
 
-### 0. What last session's pointer got wrong, measured this session
+### 0. The capacity ruling is now MEASURED, not assumed — this changes what a wake costs
 
-1. **"What blocks #5027–#5030 is decomposition" is FALSE for #5027.** `release_work` (`src/rig.mjs:1223-1245`) allows
-   **sender or recipient**; #5027 is `pm→devtools`, so `devtools` releases its own row on its own turn — which is
-   exactly what it did at 17:05. A `pm` wake to release it would have cost ~12 min and ≈17,000 context tokens.
-2. **`devtools` was sendable by the §2b boundary slot, with no repair.** D196's table recorded it as not
-   sendable-by-shape. Shape **mutates between reads** — re-run `seat-turn-shape.mjs` per seat per session; a
-   pointer's seat table is a snapshot, not a fact. `security` (ends `assistant`, 89,530 consumed) is a second
-   live-provider seat nobody listed; `pm` ends `assistant` (84,083); `qa` ends `assistant` but its provider is dead.
-   Everything else (`impl`, `lead`, `scribe`, `advocate`, `designer`, `auditor`, `qa2`, `architect`) ends on `user`.
-3. **The #5027 row's magnitude was overstated, and `devtools` accepted the correction and built its acceptance around
-   it.** The collision is **5 of 12** `DECLINE` phrases containing an `ASSERT` substring; **only 15 of the 468**
-   recorded FALSE-ALARMs flip once DECLINE phrases are stripped, the other 453 assert outside any decline phrase, so
-   the seat is scoring variant (i) stripping-only and variant (ii) +negation-window **separately**. Consequence for
-   step (3): do not read a scorer fix as certifying the arms' clean-side figures, and do not spend the ~$0.10 arm
-   before #5024's `authorization` header exists (`gate.mjs:96` posts unauthenticated).
-4. **NEW: a thin item worktree cannot see the rig, and that is now a routing fact, not a nitpick.** `devtools` ran in
-   `item-4997` — gitignored `durig.config.json` absent, so `node cli.mjs config` printed **no** local/context/max-token
-   keys and it could **not** verify the very numbers the operator had just granted; and its lockfile `pi-durable 1.3.0`
-   is **schema v1** against the live store's **v2**, which is why `demo/seat-turn-shape.test.mjs` exits 0 there with
-   `SKIP (ENVIRONMENTAL — not a behaviour red) … no store resolves in this tree`. That is #4997's measured hold reason
-   (seeding a known-red entry from a tree that cannot reproduce the member would freeze an exemption nobody can
-   re-measure), and it means the next wake must either re-point the seat's cwd to the deps-complete root or accept
-   that config- and store-dependent work is unmeasurable in it.
+- `devtools` crossed the band mid-turn and **a compaction fired and succeeded**: head marker
+  `pi.compaction@279624 → pi.compaction@280362`, `context.consumed` **156,614 → 88,069**, and the counted
+  projection still ends `assistant` (`user,assistant,assistant,user,assistant,user,assistant`). Under the old
+  default (`DURIG_LOCAL_MAX_TOKENS` unset ⇒ 8192) the same compaction died at the summary output cap and settled
+  `unanswered/model_error` at zero tokens. The summary budget is
+  `min(0.8·policy.reserveTokens, model.maxTokens)` = `min(13107, 16384)` with the operator's number.
+- **Still true:** the grant is a **per-verb environment prefix**, `DURIG_LOCAL_CONTEXT=200000
+  DURIG_LOCAL_MAX_TOKENS=16384`, because `durig.config.json` is gitignored and the two private copies drift
+  (`cli.mjs status` in *this* checkout still prints `devtools 88069 / 160000`). #4970 is the durable close.
+- **Cheap pre-flight before any wake (1.5 s, read-only):** `node tools/seat-turn-shape.mjs | grep -A2 "seat
+  devtools"` (read the LAST element of the counted projection) and `status --json`'s `context.devtools.consumed`
+  against **183,616** (the 200,000 band), not 143,616. As of clock-out: ends `assistant`, consumed 88,069 ⇒
+  **~95,500 of headroom with the prefix**. `impl` (143,278) and `lead` (145,429) remain over the 160,000-declared
+  band; `qa`/`advocate`/`auditor`/`designer`/`qa2` have a 24,576 window (band 8,192) and nothing on `:1234`.
 
-### 1. What moved this session (morning: zero sends, zero claims, zero config edits — then the operator granted the numbers and the afternoon dispatched one send and one claim)
+### 1. Next commands, in order
 
-- **The dispatch, so it is auditable:** `send devtools` from the approved seat root (`/home/chexxor/Git/durian-dev/
-  seatroot`, branch `seatroot/linux`, ff'd to `73ece38c`; worktree 18 / branch 19 inventories byte-identical across
-  the verb), env prefix as above, `--request-id d197-devtools`; reply `settledStatus done` / `stopReason stop` in ≈7
-  min. Before it: projection ends `assistant`, consumed 143,426 vs band 183,616. After: ends `assistant` (7 items),
-  consumed **156,614**, no worktree or branch added, seat root clean. **Pushed on this session's grant:** three
-  docs-only commits; `origin/main` is at the commit that contains this file (verify with `git ls-remote`).
+1. **Push on a fresh grant** (4 commits: `93ae0145`, `a0bd029f`, `e61ac4f5`, `84edff3c` — the last three are the
+   #5027 build and its landing). `git rev-list --count origin/main..main` = 4 as of clock-out.
+2. **Then step (2) with a third `devtools` wake** — it already holds #5024 and #5026 (`queued`→devtools). Brief
+   the build: the `authorization` header + spend recording at `tools/model-probes/gate.mjs:96` (no header today,
+   verified) and the shim docs at #5026; keep the **spend cap + ledger (#5015)** with `architect` unless the
+   operator re-addresses it. Exact next command, run from the approved seat root (already fast-forwarded to `main`,
+   and `cli.mjs` resolves there because it is a linked worktree of the same repo):
+   `cd /home/chexxor/Git/durian-dev/seatroot && DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite DURIG_LOCAL_CONTEXT=200000 DURIG_LOCAL_MAX_TOKENS=16384 node cli.mjs send devtools --body-file .spike/delegate-20261103c/brief-devtools-3.md --request-id d200-devtools --no-stream`
+   (request ids **under 40 chars**; seed the seat root's `.spike/` first if the brief names a probe — runbook §18;
+   `send` is legal only with **no broker up**, and there is none).
+3. **#5031 (the `item-4986` re-cut) is the one unlanded branch holding real value.** It is addressed to `lead`,
+   and `lead`'s projection ends on `user` — un-sendable. Either the operator re-addresses it to `devtools` (a
+   later wake) or a `lead` repair (reset/compact — a seat/capacity verb, the operator's call) unblocks it.
+   Measured by the seat and re-measured by me: `ahead=2`, base `43e26dcc`, `git merge-tree --write-tree main
+   item-4986` exit **1**, the **only** conflict is `docs/runbooks/session-start-cost.md` (front-matter
+   `evidence` + §1 + Do step 1, both sides edited the same lines — a union is the resolution), and
+   `demo/test-areas.json` must be **regenerated at re-cut time** (stale derived manifest, land.md).
+4. **Then step (3)'s ~$0.10 re-arm**, which is the first metered arm whose clean-side numbers mean something —
+   see §2 for how to read them.
 
-- **SUITE MARKER:** `node scripts/test.mjs --all --jobs 8` = **245/245** at `main 1a8edb5d` + these docs (43.3 s, no
-  broker / no genlock / no generating seat; axis: execution; `DEEPINFRA_API_KEY` set, `durig.config.json` present).
-  An **intermediate 244/245** reading is recorded too, with its cause measured, because it is a trap: the one red was
-  `demo/clockin-digest.test.mjs`, and **the pointer was the cause** — clockin embeds `docs/NEXT.md` **VERBATIM**
-  (`scripts/clockin.mjs:39,189,426`) against a **20,000 B** digest budget (`:37,463`), so a 17,003 B pointer made the
-  digest 20,100 B; trimming to 16,892 B turned it green. **Two caps, one undocumented coupling:** the pointer cap is
-  200 **lines** (`demo/next-pointer.test.mjs`), the digest cap is **bytes**. Worth a row: cap the pointer in bytes, or
-  make the digest summarize rather than embed — and this is exactly what the missing known-red baseline **#4997** exists
-  to absorb. Markers: `.spike/delegate/suite-marker.json`.
-- **Everything else this session is recorded in `docs/DECISIONS.md` (D197, D197b, D198) rather than repeated here:**
-  the gate re-read before touching it; the seat-root fast-forwards with byte-identical inventories; the band
-  re-derived from pinned source (`harness/agent.js:10-15`, `compaction.js:95,296-303`, `src/providers/local.mjs:76,85`);
-  provider truth (`/v1/models` → `iq3_s`, no listener on 1234, GPU0 14,906/16,376 MiB, GPU1 22,712/24,576 MiB);
-  and the `capped-run.mjs` = **memory** cap not **spend** cap trap.
+### 2. How I verified the scorer fix, and the number axis that nearly fooled me
 
-### 2. Per-seat state, re-measured 16:2xZ (the two numbers that decide a send are the LAST projection element and the seat's OWN band)
+- **Instrument, not reimplementation:** `gate.mjs --rescore` re-scores saved transcripts with no prompt. Three
+  arms ship now (`GATE_SCORER=raw|strip|strip+neg`, default `strip+neg`; `raw` reproduces the pre-fix scorer so
+  "before" is reproducible). My own runs in **this** checkout (vendor dependency set, my process) over the
+  transcripts with clean-side cells — 25 files — gave: `raw` → **FALSE-ALARM 502 / CLEAN-PASSED 0 /
+  TRUNCATED-EMPTY 51** (553 cells); `strip+neg` → **FALSE-ALARM 460 / CLEAN-PASSED 21 / AMBIGUOUS 5 /
+  TRUNCATED-EMPTY 51** (537 cells). That reproduces the seat's table on the `strip+neg` row exactly.
+- **THE AXIS:** the clean side here is **`cond !== "defect"`** (clean **and** neutral). My first tally filtered
+  `cond === "clean"` only and showed **zero** flips — an axis error, not a refutation. Name the denominator
+  before believing or reporting any clean-side number.
+- **Hermetic proof now exists:** `demo/gate-clean-scorer.test.mjs` + `demo/fixtures/gate-clean-scorer-transcript.json`
+  pin the five shapes × three arms and an end-to-end `--rescore`; it is the +1 in 246/246. The scorer lists live in
+  `tools/model-probes/assertscan.mjs` (importable — `gate.mjs` has no import guard, so importing it RUNS the gate
+  and spends GPU/API; that is why the scorer went untested for 24 runs).
+- **`--suite` is currently unusable for ANY landing**, and this is not the branch's fault: `land.mjs … --suite`
+  stopped on `demo/commit-discipline-personas.test.mjs` with `ERR_MODULE_NOT_FOUND
+  @earendil-works/pi-durable` from `/tmp/durig-discipline-personas-*`. I proved the cause is the landing shape, not
+  the merge: the same demo is **exit 0 in the operator checkout** (245/245 before) and **exit 1 in a throwaway
+  detached worktree at plain `main`**. So land without `--suite` and prove with **two full suite runs** and diff
+  `failed[]` (52 s each, never while a seat is generating). This is the #4985/#4995/#4996 instrument family and
+  worth a row; #4997 (known-red baseline, still held) is what absorbs it.
 
-| seat | provider | up? | projection ends | consumed / own band | verdict |
-|---|---|---|---|---|---|
-| `pm` | local | yes | `assistant` (6) | 84,083 / 143,616 | sendable |
-| `devtools` | local | yes | **`assistant` (5)** | **143,426 / 143,616** | sendable-by-shape, **blocked by the band** — the milestone seat |
-| `security` | local | yes | `assistant` (5) | 89,530 / 143,616 | sendable (unused) |
-| `impl` | local | yes | `user` (5) | 143,278 / 143,616 | DO NOT SEND (shape) and over on the next brief |
-| `lead` | local | yes | `user` (20) | **145,429 / 143,616 (over at rest)** | DO NOT SEND |
-| `scribe` | local | yes | `user` (2) | 91,123 / 143,616 | DO NOT SEND (shape) |
-| `qa` | verifier | **no** | `assistant` (4) | 20,110 / **8,192** | provider dead AND over its own band |
-| `auditor` | verifier | **no** | `assistant` (11) | 0 (stale) | provider dead; engine refused its template at line 48 |
-| `qa2` | verifier | **no** | `user` (1) | 0 (stale) | DO NOT SEND |
-| `advocate` | verifier | **no** | `user` (1) | 244,751 / 8,192 (stale) | DO NOT SEND |
-| `designer` | verifier | **no** | `user` (1) | 0 (stale) | DO NOT SEND |
-| `architect` | local | yes | `user` (1) | 218,645 (stale, post-reset artifact) | DO NOT SEND |
+### 3. Cheap reads this session leaves (gitignored — #5022 is the promotion row)
 
-`status.context.consumed` is usage-derived and **pre-send**: it goes stale at a reset/compaction (hence `architect`
-1.37 and `advocate` 9.96 fractions — not emergencies, §14 of the runbook) and it does **not** include the brief you
-are about to append (hence "`devtools` is 190 under" is not a green light).
+- `.spike/delegate-20261103c/`: `brief-devtools-2.md` (what was sent), `send-devtools-2.out` (**the whole settled
+  reply**), `land-item-4997*.out`, `suite-before.json` / `suite-after.json`, 51 `*.rescored.json`, `q-2.json`
+  (22 MB census), before/after inventories.
+- **`node .spike/delegate-20261102/cleanrescore.mjs` now CRASHES** — it scraped the DECLINE/ASSERT lists out of
+  `gate.mjs` with a regex and they moved to `assertscan.mjs`. Promote-and-rewrite it under **#5022** by
+  `import {DECLINE, ASSERT, assertedTokens} from "../../tools/model-probes/assertscan.mjs"`. A probe that scrapes
+  a module is a probe that breaks on refactor.
+- Landings this session proved the value of `tools/queue-drain-audit.mjs` (1.5 s): **70 of 89 non-terminal LANDING
+  rows are already fully on `main`** — closing them is `pm`'s verb (#5004, `deferred`), and `pm` is un-sendable.
 
-### 3. The three escalated rows — unchanged, no verb taken
+### 4. Standing constraints
 
-`#4354` (`to=impl`), `#4814` (`to=qa2`), `#4817` (`to=devtools`), all `deferred`, `sender=pm`, each carrying a
-`supervisor escalation:` question and `waiting on human`. All three addressees are still un-sendable (`impl` shape,
-`qa2` provider+shape, `devtools` needs the prefix), so the only close available without a wake is `pm` as **sender**
-via `cancel_work`. The operator's D195 ask ("bring only #4354/#4814/#4817") was served by the D196 `pm` brief.
-
-### 4. Cheap reads, traps, and probes this session leaves behind (gitignored — #5022 is the promotion row)
-
-- `.spike/delegate-20261103b/`: `brief-devtools.md` (what was sent), `send-devtools.out` (**the whole settled
-  reply**), `seat-turn-shape-1.txt`, `status-{1,2}.json`, `q-1.json`, `drain-audit-1.txt`, `suite-all*.json`,
-  `NEXT-pre-cut.md`, eight inventory files. The probe + 37 transcripts were **copied into the seat root's own
-  `.spike/`** so the seat could run them in its tree — that copy is what makes #5027 verifiable. Probe inventory and
-  promotion ask: runbook §17.
-- **New cheap read (0.3 s, read-only):** `node .spike/delegate-20261102/cleanrescore.mjs` — re-scores every
-  `.spike/gate/*.json` with the instrument's own lists. Run before and after the #5027 fix to price it.
-- **Request ids stay under 40 chars** (`src/secretdetect.mjs:37`, `high-entropy-token`); #280250 / #280240 / #280207
-  are that false-positive class — evidence for held **#3128** and queued **#4922**, no new row.
-- **`held` has two exits (`release_work` / `cancel_work`) and `queued` wakes its seat** — so "don't start the broker"
-  while seats are un-sendable is a constraint, not timidity (`docs/WORK-ITEM-LIFECYCLE.md:79-115`).
-- Wall-clock, unchanged from D196: 24.0% of 61,054 generations end in error holding 61.2 h; compaction has burned
-  **46.7 h** across 1,562 tasks (`tools/latency-budget.mjs`, 4.5 s, read-only).
-
-### 5. Standing constraints (unchanged) and where the push stands
-
-- **Do not claim, complete, defer, route, or release queue rows yourself** — decomposition and routing belong to
-  `pm`/`lead`; releasing belongs to recipient or sender (`src/rig.mjs:1223-1245`).
-- **No push without the operator's grant.** Tonight's grant was used (three docs-only commits). **As of clock-out
-  `main` is 1 ahead of `origin/main`** — a 2-line staleness fix to this file — unpushed because the grant is spent.
-  Push it on the next grant before anything else.
-- **Native host only** (Linux; D131). **`DURIG_DB` for the CLI**, never `DURIAN_PI_DB` (D103). `test -f
-  "$PWD/durig.config.json"` before a write verb (no worktree has one); **never `doctor`/`resume` while a seat is
-  generating** (D187) — `doctor` is an **alias of `resume`** (`cli.mjs:3102`), one write verb.
-- **Capacity is never a delegate or seat ruling.** **Every verification claim names its axis of independence.**
-  **`gate.mjs`'s clean-side numbers are void until #5027 lands** (D193(8)). **`inputs/fetched/` stays clean or the
-  lander refuses**; the moved `strata-batching.md` fetch still needs a manifest row or deletion (`.spike/inputs/`).
-- **The pointer has a hidden byte cap.** `demo/clockin-digest.test.mjs` fails if `docs/NEXT.md` exceeds ≈ 16,900 B,
-  because clockin embeds it verbatim into a 20,000 B digest. Keep the live file near or under **16.5 KB** when you
-  edit it, and re-run that demo — not just `next-pointer.test.mjs` — after any pointer edit.
+- **Do not claim, complete, defer, route, or release queue rows yourself** (`pm`/`lead` own routing; releasing
+  belongs to recipient or sender, `src/rig.mjs:1223-1245`). **Landing is the delegate's/operator's call**
+  (`land.md`), and `land` is NOT `complete`: say `LANDED at <sha>` or `ROUTED, NOT LANDED`.
+- **No push without the operator's grant.** Tonight's is spent; `main` is 4 ahead. Ask.
+- **Native host only** (Linux; D131). **`DURIG_DB` for the CLI**, never `DURIAN_PI_DB` (D103). Never `doctor`/
+  `resume` while a seat is generating (D187; `doctor` is an alias of `resume`, `cli.mjs:3102`).
+- **Capacity is never a delegate or seat ruling.** **Name the axis of independence and the denominator** for every
+  verification claim, and name the **tree + dependency set** for every suite verdict (land.md).
+- **The pointer has a byte cap:** keep `docs/NEXT.md` **≤ ~16.9 KB** and run **both** `demo/next-pointer.test.mjs`
+  and `demo/clockin-digest.test.mjs` after editing it (runbook §19).
+- **`inputs/fetched/` stays clean or the lander refuses** (untracked counts as dirty); the moved
+  `strata-batching.md` fetch still needs a manifest row or deletion (`.spike/inputs/`).

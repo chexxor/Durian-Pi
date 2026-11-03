@@ -367,3 +367,35 @@ runbooks keep the detail.
 `demo/next-pointer.test.mjs`, or have clockin **summarize** the pointer (first N lines of §0 only) instead of embedding
 it. Until then this coupling is a silent suite red caused by a documentation edit — precisely the class the known-red
 baseline (**#4997**) exists to absorb.
+
+### 20. The band the operator's `MAX_TOKENS` ruling opens is now **measured**, not inferred (2026-11-03, Linux, `devtools`)
+
+A compaction fired **mid-turn** and survived: the conversation head marker moved `pi.compaction@279624 →
+pi.compaction@280362`, `context.consumed` went **156,614 → 88,069**, and the counted projection still ended
+`assistant` (`user,assistant,assistant,user,assistant,user,assistant`). Before the ruling the same compaction died
+at the summary output cap and settled `unanswered/model_error` at zero counted tokens. The summary budget is
+`min(0.8 × policy.reserveTokens, model.maxTokens)` = `min(13,107, 16,384)` with `DURIG_LOCAL_MAX_TOKENS=16384`.
+**Cheap pre-flight pair before any wake (~1.5 s, read-only, run from the rig root):**
+`node tools/seat-turn-shape.mjs | grep -A2 "seat devtools"` (read the **last** element of the counted projection)
+and `status --json`'s `context.devtools.consumed` compared against **183,616** (= 200,000 − 16,384, the band *with
+the prefix*), not 143,616 (the 160,000-declared band). As of the D199 clock-out: ends `assistant`, 88,069 consumed
+⇒ **~95,500 of headroom with the prefix**.
+
+### 21. Verifying a clean-side **scorer** change: re-score saved transcripts, on the right axis, and land with two full suite runs
+
+- **Use the instrument, don't reimplement it:** `tools/model-probes/gate.mjs --rescore` re-scores saved transcripts
+  with no prompt, no GPU, no API. The arms are selectable (`GATE_SCORER=raw|strip|strip+neg`); **`raw` reproduces
+  the pre-fix scorer**, so a "before" number is reproducible rather than a remembered claim.
+- **Name the axis AND the denominator.** `gate.mjs`'s clean-side cell is **`cond !== "defect"`** — clean *and*
+  neutral. Tallying `cond === "clean"` alone reported **zero** flips for a fix that moves 15–21 turns (553 cells →
+  `raw` FALSE-ALARM 502 / CLEAN-PASSED 0; 537 cells → `strip+neg` FALSE-ALARM 460 / CLEAN-PASSED 21 / AMBIGUOUS 5).
+  A wrong axis looks exactly like a refutation.
+- **Do not import `gate.mjs` from a test** — it has no import guard, so importing it RUNS the gate (GPU, API spend).
+  That is why the scorer lists went untested for 24 runs; the fix moved them into
+  `tools/model-probes/assertscan.mjs` and the demo fixture-copies its transcript.
+- **`--suite` can be unusable for every landing while the tree has no installed dependencies.** `land.mjs … --suite`
+  stopped on `demo/commit-discipline-personas.test.mjs` with `ERR_MODULE_NOT_FOUND
+  @earendil-works/pi-durable` from `/tmp/durig-discipline-personas-*`; proved a landing-shape defect by running the
+  same demo **exit 0** in the operator checkout and **exit 1 in a throwaway detached worktree at plain `main`**.
+  Land without `--suite` and prove with **two full `node scripts/test.mjs --all` runs** (base, then merge) and diff
+  `failed[]` — 52 s each, and never while a seat is generating. Name the **tree + dependency set** with the count.
