@@ -257,3 +257,18 @@ test -f "$PWD/durig.config.json" && echo "config present" || echo "NO CONFIG IN 
 #     seat is writing): `node scripts/test.mjs --all --jobs 8 --json > before.json` before the landing, same after, and diff
 #     the `failed[]` arrays — 243/245 both sides was the evidence that nothing regressed. `main` red-at-HEAD (2 of 245) is
 #     why `--suite` cannot pass at all until a known-red baseline exists (minted 2026-11-02).
+
+# 13. PRE-FLIGHT A `send` THE WAY YOU PRE-FLIGHT A LANDING — measured 2026-11-03, Linux, `main` 0cc8c9c1.
+#     The two cheapest reads in this rig are the two nobody runs:
+#       node tools/seat-turn-shape.mjs                 # 1.1 s, read-only: every seat's `next send: ADMISSIBLE | AT RISK`
+#       DURIG_DB=./selfdev.sqlite node cli.mjs status  # seconds: the attention kinds carry the provider's CAUSE
+#     Measured: 10 of 12 seats `AT RISK` (6 with a counted-projection parity break), `pm` and `qa` admissible. A
+#     pre-flight costs ~1 s; a refused send costs a seat turn AND appends another `pi.user` entry, which makes the next
+#     turn less admissible. Run the first before every `send`, not after the third failure.
+#     The cause never appears in `cli.mjs log` for these turns — there is no error entry. It is in `status`'s attention
+#     detail (`src/readapi.mjs:317-328`, `src/attention.mjs:296`): `repeated_failure` → `model_error: terminated`, and for
+#     `auditor` the engine's own words, `While executing CallExpression at line 48, column 32`.
+#     And price the DISPROOF of a context hypothesis before you act on it: a tiny probe, a ~38k-token turn, and a
+#     120k-token turn against the served endpoint all run on a free local provider (the 120k one answered 200 in 54.1 s).
+#     `compact`/`reset`/`doctor`/`resume` are **CLI/broker verbs, not seat tools** (`src/rig.mjs` exposes only
+#     `send_work`/`claim_work`/`complete_work`/`revise_work`) — do not spend a send asking a seat to do one.

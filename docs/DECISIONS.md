@@ -8091,3 +8091,40 @@ entry — so the poison grows monotonically.** I paid that twice before reading 
 **Delegate boundary held:** I ran no `reset`, `compact`, `doctor`, or `resume`, and edited no provider block. `reset`/`compact`
 change what a seat's context *is* and the supervisor's escalation is explicitly addressed to the human, so the recovery is asked
 for, with the exact commands, rather than taken.
+
+### (D195) 2026-11-03: the operator ACCEPTED the delegate's recommendation set on the turn-intake failure, the verifier landing
+### shape, spend sequencing, and the parked backlog — recorded with the *why*, because most of these reverse the obvious move.
+- **`compact`, not `reset`, on `lead` — and only the delegate or the operator can do it.** `compact` summarizes older turns and
+  keeps the durable transcript (D165), which matters on a seat carrying ≥1,895 user turns and ≥1,595 errored assistant turns behind
+  `pi.reset@277390`; `reset` re-anchors and discards working context. The runbook's one refusal condition is a live generation lease,
+  and the box is verifiably quiet: no broker state, no `selfdev.sqlite.genlock*` slot, no `send`/`serve` process. **The why that
+  settles the actor question: `compact`/`reset`/`doctor`/`resume` are CLI/broker verbs, not seat tools** — the seat-facing set is
+  `send_work`/`claim_work`/`complete_work`/`revise_work` (`src/rig.mjs:632,768,932`) — so asking `pm` to compact `lead` would waste a
+  send on a verb `pm` does not have.
+- **Re-arm `devtools`** (`doctor`/`resume`): its `#4997` submission #279623 has sat `admitted_not_started` for 7,804 s — that, not
+  seat laziness, is why the baseline work looks stalled. Safe only because nothing is generating (D187).
+- **The DeepInfra verifier is NOT config'd this session — it lands as ONE change under #5015/#5024/#5025.** The operator ruled
+  DeepInfra (D193), but re-pointing `DURIG_VERIFIER_*` now would wake `qa`, `qa2`, `advocate`, `auditor`, `designer` on a model the rig
+  cannot certify (the clean-control scorer is broken, D193(8)) with `MAX_TOKENS=3000`, which I measured truncating reasoning models
+  mid-thought. Pointing it at **local** Strata as a stopgap is worse: the seat pointers carry the model *name*
+  (`verifier/mistralai/ministral-3-14b-reasoning`), which the local server does not serve — that is the `#5025` lie — and it would buy
+  self-verification while the config claims model independence. **Ruling: the destination stands, the sequence is one landing, not two.**
+  Values when it lands: `DURIG_VERIFIER_MODEL=openai/gpt-oss-120b`, `DURIG_VERIFIER_MAX_TOKENS=8000`, `DURIG_VERIFIER_CONTEXT=131072`,
+  key via `DURIG_VERIFIER_API_KEY` in the env. Interim posture: broker stays down, work routed by `send` to ADMISSIBLE seats.
+- **Push: GRANTED for the 3 docs-only commits, executed next session** (D168's grant was read-scope only). Deliberately **no history
+  rewrite**: `39d09f4f`'s message carries the DeepSeek disqualification that `e56b502c` retracts, and a trail showing the claim and its
+  correction is worth more than a clean-looking log.
+- **Re-arm 120b only after the scorer and the cap land — $0.10 authorized at that moment, `DURIG_PROBE_CEILING_USD=0.25` as
+  belt-and-braces until #5015 lands.** A re-arm scored by a broken scorer buys a number we would have to withdraw, which is exactly
+  today's lesson. Spend state at clock-out: **219 calls, $0.0945 of the operator's $4 pool.**
+- **Backlog triage: `pm` runs the `stale-held-backlog` pass; the operator sees only the three rows that genuinely need a human**
+  (#4354, #4814, #4817) with one-line recommendations each. Twelve rows one-at-a-time is operator minutes badly spent.
+- **#4970 HALF B: align this checkout's `DURIG_LOCAL_CONTEXT` 160,000 → 200,000** to match the seat root, since the engine answered a
+  120,056-token prompt in 54.1 s and 160,000 is an artificial ceiling — **but the row stays open**: aligning by hand is drift with
+  better numbers; the fix is one source of truth.
+- **Host clock: recommend `timedatectl set-local-rtc 0` (UTC).** Every broker gate is `Date.now()` arithmetic, so a dual-boot RTC skew
+  silently warps lease, budget and staleness gates. It is host-wide and visible to the Windows install, so it is the operator's call
+  and was recommended, not done.
+- **Standing practice now in the pointer and the pitfalls block: pre-flight every `send` with `tools/seat-turn-shape.mjs`** (1.1 s,
+  read-only). Fold today's evidence into held **#4896** (instrument: was 6/12 seats, now 10/12), **#3128/#4922** (the secret-shape
+  false positive), and promote the session's probes under **#5022** — an unpromoted probe is lost next session.

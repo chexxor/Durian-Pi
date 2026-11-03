@@ -1,24 +1,32 @@
-## NEXT SESSION (2026-11-02T23:5xZ — D193, Linux: **three substrate fixes are on `main` and PUSHED on the operator's grant, but the suite's 245/245 is WAL luck, not a fix**; and the operator has ruled the verifier moves to **DeepInfra, with $4 to spend**)
+## NEXT SESSION (2026-11-03T00:0xZ — D195, Linux: **the operator ACCEPTED the recommendation set; the rig cannot take turns until `compact lead` runs**)
 
-**Current item:** the order `lead` ruled at 20:14Z, now that **#4995, #5013 and #4996 have all landed** and `origin/main` =
-`0cc8c9c1`: **#5019 (the WAL red, §1b) must LAND before #4997's baseline is frozen** — freezing a live defect as a standing
-exemption is the failure #4997 exists to prevent — and #4997's seed must **drop the three landed members** while **keeping the WAL
-member with its mechanism**. In parallel: **#5020** (generation lease missing on the non-broker path), **#5021/#5022**,
-**#5024/#5025/#5026** (minted from the rulings brief), **#5015** (the spend-cap/ledger seam, `queued` to `architect`), and
-**#5007/#4993**, still needing `pm`'s release. Second item is now a **ruling, not an option**: verifiers move to **DeepInfra,
-$4 to spend, the rig is not to be halted** (§7 — three paid arms done, **$0.0945 spent**, and the gate's clean controls broken).
-**Next command:** `node tools/seat-turn-shape.mjs --seat <who>` (1.1 s) **before any `send`** — a refused send appends another
-user entry and the poison grows (D194) — then `DURIG_DB=./selfdev.sqlite node cli.mjs status` and one `queue --json` read (§1e)
-to see whether `impl` has claimed **#5019/#5020**.
-**Blocker:** the rig cannot take turns, and that gates everything else. `node tools/seat-turn-shape.mjs` → **10 of 12 seats
-`next send: AT RISK`** (only `pm`, `qa` admissible); `lead` shows **`repeated_failure` — 3 consecutive failed runs, supervisor
-escalates to the human** with cause `model_error: terminated`, and `auditor`'s cause is the engine's template raise
-(*"While executing CallExpression at line 48"*) — the alternation the held instrument **#4896** predicts. Two delegate sends were
-refused this way (#280227, #280240) and each **appended another user entry** — the poison grows. Recovery verbs (`compact` /
-`reset` / `doctor`) were NOT taken: they change what a seat's context *is*, and the escalation is addressed to the operator
-(D194). Also still true: `main` reads **245/245 only because the WAL happens to be empty** (§1b, #5019 unclaimed); the broker
-start is refused by the two verifier BLOCKs; further paid probing is gated on #5015's cap plus the scorer fix (§7). Earlier
-pointer blocks moved VERBATIM to `docs/NEXT-ARCHIVE.md` — keep that link inside the pointer's first ~15% of lines or
+**Current item:** **D195 — the operator accepted the delegate's recommendations and said act next session.** In order:
+**(1)** `compact lead` (**not** `reset`: ≥1,895 user turns of durable transcript; no live lease, no genlock slot, no `send`/`serve`
+process, so the direct path is allowed) — **`compact`/`reset`/`doctor`/`resume` are CLI/broker verbs, no seat has them**
+(`src/rig.mjs:632,768,932`), so do not spend a send asking `pm`; **(2)** `doctor`/`resume` to re-arm `devtools`'
+`admitted_not_started` submission **#279623** (7,804 s — that is why #4997 looks stalled); **(3)** pre-flight, then send the operator
+order (§7) to **`pm`** — the only healthy router besides `qa`; **(4)** **push the 4 docs-only commits (grant given)**, no history
+rewrite — `39d09f4f` carries the claim `e56b502c` retracts; **(5)** land the **`gate.mjs` scorer fix**, then **#5015's cap + ledger**
+(with #5024/#5025/#5026); **(6)** re-arm `openai/gpt-oss-120b` at `CAL_MAX_TOKENS=8000` (~$0.10, ceiling $0.25); **(7)** `pm` runs
+`stale-held-backlog` and brings **only #4354, #4814, #4817** with one-line recommendations. Also standing: **#5019 must land before
+#4997's baseline is frozen**, and #4997's seed drops the landed members (#4995/#5013/#4996) while keeping the WAL member by mechanism.
+**Queue ids:** #5019, #5020 (impl) · #4997 (devtools, after #5019) · #5015 (architect) · #5021/#5022/#5024/#5026 (devtools) · #5025
+(architect) · held #4896 (now 10/12 seats, not 6/12), #3128/#4922 (secret false positive), #5007/#4993/#5001 (pm).
+
+**Next command:** `DURIG_DB=./selfdev.sqlite node cli.mjs compact lead "D195 operator order: fix gate.mjs scoreClean (CLEAN-PASSED
+emitted 0 times in 552 clean turns), land #5015 cap+ledger, then re-arm openai/gpt-oss-120b at CAL_MAX_TOKENS=8000 (~$0.10 of $3.91
+left)"` — then `node tools/seat-turn-shape.mjs --seat lead` to confirm it came back ADMISSIBLE, `DURIG_DB=./selfdev.sqlite node
+cli.mjs doctor` / `resume` for #279623, `git push origin main`, and **before any send: `node tools/seat-turn-shape.mjs --seat <who>`**.
+
+**Blocker:** the rig cannot take turns until step (1) runs. `node tools/seat-turn-shape.mjs` → **10 of 12 seats `next send: AT RISK`**
+(only `pm`, `qa` admissible); `lead` is `repeated_failure` — **3 consecutive failed runs, supervisor escalates to the human** — cause
+`model_error: terminated`; `auditor`'s cause is the engine's template raise (*"CallExpression at line 48"*), the alternation held
+**#4896** predicts. Two sends were refused (#280227, #280240) and each **appended another user entry** — the poison grows. My
+context-saturation hypothesis was **disproved**: the endpoint answered a 120,056-token prompt, HTTP 200 in 54.1 s (D174's trap).
+Also: `main` reads **245/245 only because the WAL is empty** (§1b, #5019 unclaimed); the broker start is refused by the two verifier
+BLOCKs, and **`DURIG_VERIFIER_*` is deliberately NOT re-pointed yet** (§8). Earlier pointer blocks moved VERBATIM to
+`docs/NEXT-ARCHIVE.md` — keep that link inside the pointer's first ~15% of lines or `demo/clockin-digest.test.mjs:251` refuses
+landings in the scratch (§0a.3).
 `demo/clockin-digest.test.mjs:251` refuses landings in the scratch (§0a.3).
 
 ### 0a. Three facts the delegate established by measurement, not by repeating a colleague — read before reusing tonight's red set
@@ -101,26 +109,17 @@ non-broker path takes the same slot the broker path takes; a `status` read surfa
 
 ## 3. The verifier ruling (D190) — do not load a verifier model
 
-Measured, Linux, 08:00Z: `nvidia-smi --query-compute-apps` → strata pid 345372 holds **14,770 MiB on the A4000 AND 20,712 MiB on
-the 3090** (`--max-context 204800`, 48 GiB RSS, 41.2 GiB shmem); free VRAM is 1,472 + 1,574 MiB and **LM Studio has no process at
-all**. So loading ministral = evicting the author engine, for the model at 0/16 clean controls (D137). D190: keep the verifier
-provider dark, and run verify legs the way `#4956`/`#4962` did — **independent by seat/transcript/execution, and say so**.
+**Still binding:** every verification claim states its axis of independence - **seat, transcript, execution** - and says so, the
+way `#4956`/`#4962` did. **Now void as evidence:** `gate.mjs`'s clean-side numbers until the scorer is fixed (D193(8)) - no arm
+run so far, paid or local, can certify model independence. The D190 VRAM measurement and both amendments are VERBATIM in the archive.
 
-**Amended 21:2xZ and again at 23:5xZ:** the operator ruled the verifier moves to a **metered remote engine** (§7), so "keep the
-provider dark" no longer binds the *provider* choice — the VRAM measurement stands (nothing is evicted locally). The
-model-independence rule still binds every report, **but note the instrument caveat before trusting an arm: `gate.mjs`'s clean-side
-numbers are void until the scorer is fixed (§7, D193(8))**, so no arm run so far — paid or local — can certify model independence.
-
-## 5. THE HAND-BACK of 2026-11-02T09:30Z — moved VERBATIM to docs/NEXT-ARCHIVE.md (one ruling, three options)
-
-The operator has since ruled (D193: move to DeepInfra, do not halt). Two measurements from that hand-back stay load-bearing:
-**parking provider-dead rows does not clear a `--start`** (`tools/broker-serve.mjs:411-412` refuses on ANY block finding) and
-**there is no liveness gate in the wake path** (`src/broker.mjs:1473` classifies such errors only after a generation failed).
+## 5. The 09:30Z hand-back - VERBATIM in docs/NEXT-ARCHIVE.md. Two measurements from it stay load-bearing: **parking
+provider-dead rows does not clear a `--start`** (`tools/broker-serve.mjs:411-412` refuses on ANY block finding) and **there is no
+liveness gate in the wake path** (`src/broker.mjs:1473` classifies such errors only after a generation failed).
 ## 6. Still open, re-read before acting
 
-`#4970` HALF B (config drift: `DURIG_LOCAL_CONTEXT` 160000 here vs 200000 in the seat root — operator-owned) · **12 `deferred`
-rows parked on the operator** (`#4354`, `#4814`, `#4817` + 9 LANDING entries) · `LocalRTC=yes` on a dual-boot box while every
-broker gate is `Date.now()` arithmetic (ROADMAP 234, operator's call) · `#4987`, `#4986`, `#4992`, `#4978`, `#4979` open.
+**#4970** HALF B (`DURIG_LOCAL_CONTEXT` 160000 here vs 200000 in the seat root) - **12 `deferred` rows** (#4354, #4814, #4817 plus
+9 LANDING) - `LocalRTC=yes` while every broker gate is `Date.now()` (ROADMAP 234) - #4987, #4986, #4992, #4978, #4979, #5001 open.
 
 ## 7. The DeepInfra verifier — OPERATOR RULING 2026-11-02T21:2xZ: *"use DeepInfra for verifiers rather than halt the system; we have $4 available to spend"* (the paid arm is now authorised; the cap is still prose)
 
@@ -189,7 +188,7 @@ present, so that green is the §1b lottery, not a fix. `origin/main` = `0cc8c9c1
 ## Standing constraints
 
 - **Do not claim, complete, defer, or route queue rows yourself.** Routing and decomposition belong to `lead`/`pm`.
-- **No push without the operator's grant** — `main` is **6** ahead of `origin/main` (`e2f85719`).
+- **No push without the operator's grant.** GRANTED for the **4 docs-only commits** (D195) — nothing else.
 - **Native host only** (Linux here; D131). **`DURIG_DB` for the CLI**, never `DURIAN_PI_DB` (D103).
 - **`test -f "$PWD/durig.config.json"` before any write verb** (absent in every worktree; precedence env → `./durig.config.json`
   in the waker's cwd, `src/config.mjs:7`), and **never run `doctor`/`resume` while a seat is running** (D187).

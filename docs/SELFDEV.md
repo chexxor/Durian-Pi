@@ -1534,3 +1534,13 @@ D174 recorded this exact mis-hunt ("every session hunted its CONTEXT WINDOW… t
 **≥40 chars of letters+digits**, so `src/secretdetect.mjs:37` matches it and `cli.mjs status` will tell you to *"rotate the
 credential and treat the store as compromised"* about your own message id — verify by comparing against the env value rather
 than printing the match, and fold the instance into held **#3128** / queued **#4922** instead of minting a row.
+
+**9. Two pointer traps that cost me two failed guard runs, and the verb-ownership fact behind them (2026-11-03, D195).**
+`demo/next-pointer.test.mjs` does not just check the digest — it asserts the **top block contains the literal `**Blocker:**`**
+(`src/pointer.mjs:16` `BLOCKER_MARKER`, matched case-insensitively) **and** that `nextCmd` holds `node cli.mjs|scripts/…`
+(`:31-32`). So when a session's blocker is prose inside a §7 bullet, the guard fails with `the top block carries no '**Blocker:**'
+line` even though the blocker is written and true; and when the next command is `git push`, it fails with `names no next command`
+even though a command is named. Write the marker literally and keep a `cli.mjs` verb in the next-command line. Second: **do not ask
+a seat to run a CLI-only verb.** `compact`/`reset`/`doctor`/`resume` exist only in `cli.mjs`/the broker spool
+(`src/broker.mjs:442,548,656`); a seat's tool set is `send_work`/`claim_work`/`complete_work`/`revise_work`
+(`src/rig.mjs:632,768,932`). A send asking `pm` to compact `lead` spends a turn to produce nothing.

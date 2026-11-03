@@ -10388,3 +10388,24 @@ stays closed. **Keep it that way** — env only, never the config file, and neve
   provider-DURIG_VERIFIER_-unreachable: http://127.0.0.1:1234/v1 ECONNREFUSED` and `BLOCK
   provider-verifier-completion-failed`. Strata still holds both GPUs and is the only engine serving seats.
 
+Measured, Linux, 08:00Z: `nvidia-smi --query-compute-apps` → strata pid 345372 holds **14,770 MiB on the A4000 AND 20,712 MiB on
+the 3090** (`--max-context 204800`, 48 GiB RSS, 41.2 GiB shmem); free VRAM is 1,472 + 1,574 MiB and **LM Studio has no process at
+all**. So loading ministral = evicting the author engine, for the model at 0/16 clean controls (D137). D190: keep the verifier
+provider dark, and run verify legs the way `#4956`/`#4962` did — **independent by seat/transcript/execution, and say so**.
+
+**Amended 21:2xZ and again at 23:5xZ:** the operator ruled the verifier moves to a **metered remote engine** (§7), so "keep the
+provider dark" no longer binds the *provider* choice — the VRAM measurement stands (nothing is evicted locally). The
+model-independence rule still binds every report, **but note the instrument caveat before trusting an arm: `gate.mjs`'s clean-side
+numbers are void until the scorer is fixed (§7, D193(8))**, so no arm run so far — paid or local — can certify model independence.
+
+## 5. THE HAND-BACK of 2026-11-02T09:30Z — moved VERBATIM to docs/NEXT-ARCHIVE.md (one ruling, three options)
+
+The operator has since ruled (D193: move to DeepInfra, do not halt). Two measurements from that hand-back stay load-bearing:
+**parking provider-dead rows does not clear a `--start`** (`tools/broker-serve.mjs:411-412` refuses on ANY block finding) and
+**there is no liveness gate in the wake path** (`src/broker.mjs:1473` classifies such errors only after a generation failed).
+
+## 6. Still open, re-read before acting
+
+`#4970` HALF B (config drift: `DURIG_LOCAL_CONTEXT` 160000 here vs 200000 in the seat root — operator-owned) · **12 `deferred`
+rows parked on the operator** (`#4354`, `#4814`, `#4817` + 9 LANDING entries) · `LocalRTC=yes` on a dual-boot box while every
+broker gate is `Date.now()` arithmetic (ROADMAP 234, operator's call) · `#4987`, `#4986`, `#4992`, `#4978`, `#4979` open.
