@@ -8050,3 +8050,44 @@ beside #5024.
 `nameserver 127.0.0.53` — **after** the push and the free catalog reads, while local Strata kept answering `/v1/models` in 6 ms,
 so seats never noticed and zero spend occurred during it. `docs/runbooks/README.md` has `local-provider-down.md` but nothing for
 general outbound loss; that gap is where a session wastes its budget guessing whether the vendor is gone or the wire is.
+
+## D194 — The operator ordered "fix the scorer, land the cap/ledger, then re-arm 120b"; the rig cannot take the turns that would do it (delegate measurement 2026-11-03T05:0xZ, Linux `ThinkStation-P3`)
+
+The operator set the order at 04:4xZ. Attempting to deliver it found the rig unable to accept a turn, and the *instrument that
+predicts this already exists in the repo and is HELD*: `tools/seat-turn-shape.mjs` (registered as **#4896**, `pm→devtools`,
+`held`; premise row #4886). Measured, all read-only, 1.1 s:
+
+- **10 of 12 seats are `next send: AT RISK`** (lead, impl, advocate, scribe, devtools, auditor, designer, security, qa2,
+  architect); only `pm` and `qa` are ADMISSIBLE. `lead`'s counted projection ends `…user, user, user` with **6 parity breaks**,
+  and its scanned transcript carries **≥1,895 user turns and ≥1,595 errored assistant turns** hidden behind a `pi.reset@277390`
+  head marker — "a head marker HIDES these from the window, it does not remove them."
+- **`lead`: `repeated_failure` — "3 consecutive failed runs; the supervisor escalates it to the human"** — and its cause is
+  `last_run_failed: model_error: terminated`. Both of my sends (#280227, #280240) landed as `pi.user` entries and produced **no
+  assistant entry and no error text in the store**; the cause only appears through `cli.mjs status`'s `failureDetail`
+  (`src/readapi.mjs:317-328`, `src/attention.mjs:296`) — a submission record carries a *category*, the entry carries the
+  provider's message.
+- **The alternation mechanism is live on this engine, contra the instrument's own caveat.** For `auditor` the surfaced cause is
+  literal: `model_error: Engine protocol predict request returned 500 … While executing CallExpression at line 48, column 32 in
+  source` — the chat template's alternating user/assistant `raise_exception` at the same line the probe quotes. My counter-probe
+  was NOT sufficient to clear the engine: two adjacent `user` messages and an `assistant` with `content: null` both returned
+  **HTTP 200** from Strata, so tolerance is shape-specific and the instrument's finding is a *prediction*, not a verdict
+  (its header says exactly that, D174).
+- **What I had asserted and was wrong:** in the brief that failed I attributed `model_error` to **context saturation** on
+  `local/iq3_s` (turns at `in=119,865`, `DURIG_LOCAL_CONTEXT=160000`). Disproved by measurement: the endpoint answers a
+  **120,056-token** prompt with **HTTP 200 in 54.1 s**, and a 38k-token turn at `max_tokens=8192` returns normally
+  (`finish=stop`, 535 reasoning chars). D174's own words describe this exact error: *"every session hunted its CONTEXT WINDOW,
+  because the last visible error mentioned context. The real refusal was structural and arrived in ~30 ms with zero tokens."*
+  Recorded here as the second instance of that trap, this time against me.
+- **Side observations from the same reads, kept separate:** (a) `devtools` has `admitted_not_started: submission #279623 admitted
+  7,804 s ago, no run started and no slot held; re-arm it with the resume/doctor verb` — which is why `#4997` looks stalled;
+  (b) `secret_detected` fired on **my own request-id** in `lead`'s entry (#280207, #280240): `src/secretdetect.mjs:37`
+  `/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9+_=-]{40,}$/` matches a 51-char `delegate-YYYYMMDD-…` id, and the surfaced instruction is
+  "Rotate the credential and treat the store as compromised". Verified not-a-secret: the env key (32 chars) does not appear in
+  the entry. Evidence for held **#3128** and queued **#4922**, not a new row. (c) 6 seats sit `idle_with_queued_work` because the
+  broker is down; `impl` shows `last_run_failed: aborted`.
+*The rule:* **before any `send` to any seat, run `node tools/seat-turn-shape.mjs [--seat X]` (1.1 s).** The rig's own header says
+why: a send into an inadmissible seat costs a full round trip, returns `model_error` with no reply, **and appends another user
+entry — so the poison grows monotonically.** I paid that twice before reading the instrument.
+**Delegate boundary held:** I ran no `reset`, `compact`, `doctor`, or `resume`, and edited no provider block. `reset`/`compact`
+change what a seat's context *is* and the supervisor's escalation is explicitly addressed to the human, so the recovery is asked
+for, with the exact commands, rather than taken.

@@ -1515,3 +1515,22 @@ node v24.22.1 with `ERR_MODULE_NOT_FOUND` (a bare path is resolved as a package 
 **outbound loss looks like a vendor outage**: `curl` → `000` + `getent hosts` empty + `dig` timing out at `127.0.0.53` is the
 wire, not the vendor; local Strata keeps answering in 6 ms, so seats never notice and you waste a budget diagnosing the wrong
 thing.
+
+**8. Pre-flight a `send` the way you pre-flight a landing — and read the CAUSE, not the category (2026-11-03, D194).**
+Two delegate sends to `lead` returned `settledStatus: unanswered`, `settledReason: model_error`, `reply: null`, and **each one
+appended another `pi.user` entry**: a refused send makes the seat's next turn *less* admissible, monotonically. The rig already
+has the instrument for this and it costs **1.1 s read-only**: `node tools/seat-turn-shape.mjs [--seat <name>]` prints
+`next send: ADMISSIBLE | AT RISK` from the same replay the next provider call is built from (`src/compacteval.mjs replayView`).
+Measured on this box: **10 of 12 seats AT RISK**, `pm` and `qa` admissible, and `lead`'s counted projection ends
+`user, user, user`. **Trap:** `cli.mjs log` shows **no error entry at all** for these turns — the store keeps the user entry and
+nothing else. The provider's message surfaces only through `cli.mjs status`'s `failureDetail` (`src/readapi.mjs:317-328`,
+`src/attention.mjs:296`): `model_error: terminated` on `lead`, and on `auditor` the literal engine refusal
+`Engine protocol predict request returned 500 … While executing CallExpression at line 48, column 32` — the chat template's
+alternating user/assistant `raise_exception`. **Trap inside the trap:** the obvious hypothesis is context size, and it is usually
+wrong — `lead`'s turns were at `in=119,865` and I blamed `DURIG_LOCAL_CONTEXT=160000`, but the same endpoint answered a
+**120,056-token** prompt with **HTTP 200 in 54.1 s**, and a 38k-token turn at `max_tokens=8192` returned `finish=stop` normally.
+D174 recorded this exact mis-hunt ("every session hunted its CONTEXT WINDOW… the real refusal was structural and arrived in
+~30 ms with zero tokens"); it cost a session to learn it once. Also cheap to know: a `delegate-YYYYMMDD-…` request-id is
+**≥40 chars of letters+digits**, so `src/secretdetect.mjs:37` matches it and `cli.mjs status` will tell you to *"rotate the
+credential and treat the store as compromised"* about your own message id — verify by comparing against the env value rather
+than printing the match, and fold the instance into held **#3128** / queued **#4922** instead of minting a row.
