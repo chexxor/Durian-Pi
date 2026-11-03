@@ -6,7 +6,11 @@
 // committed. Provenance: byte-for-byte the same body as the spike file `.spike/gate/no-headers-timeout.mjs`, which stays
 // where the first measurement was taken.
 //
-// Usage: node --import tools/model-probes/no-headers-timeout-shim.mjs tools/model-probes/gate.mjs <baseUrl> <model> ...
+// Usage: node --import ./tools/model-probes/no-headers-timeout-shim.mjs tools/model-probes/gate.mjs <baseUrl> <model> ...
+// The `./` is NOT stylistic (#5026): node v24.22.1 resolves a bare `--import` argument as a PACKAGE name, so
+// `--import tools/model-probes/no-headers-timeout-shim.mjs` dies with `ERR_MODULE_NOT_FOUND: Cannot find package
+// 'tools'` before the probe ever starts. The shim's own usage line was the failing command until #5026; it is now
+// the one that runs, and demo/probe-shim-import-form.test.mjs runs both forms every suite so they cannot drift again.
 import http from "node:http";
 import https from "node:https";
 

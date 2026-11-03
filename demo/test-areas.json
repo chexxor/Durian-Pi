@@ -260,6 +260,8 @@
       "demo/genlock-priority.test.mjs",
       "demo/local-model-pointer.test.mjs",
       "demo/local-provider.test.mjs",
+      "demo/probe-metered-ledger.test.mjs",
+      "demo/probe-shim-import-form.test.mjs",
       "demo/second-local-provider.test.mjs",
       "demo/syncpi.test.mjs",
       "demo/test-areas.test.mjs",
