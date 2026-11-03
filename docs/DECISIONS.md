@@ -8445,3 +8445,35 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
   scorer landed (`84edff3c`) — and D193(6)/(8) forbids promoting a model on one clean-side number → (4) only then
   wake the five seats, one pre-flighted batched brief each. **Model choice is not decided here**; the rows above
   price exposures, they do not elect a verifier.
+
+## D200 — the metering plane is real: an accounted call path landed, the cap has an acceptance instrument, and `reset` is the repair verb that works
+
+- **Step (2) landed in two halves, and the split is the point.** `a65ba431` = #5024/#5026 (devtools): `gate.mjs` no
+  longer posts `/chat/completions` itself; the single accounted path is `tools/model-probes/metered.mjs` — an unkeyed
+  call to a non-loopback host is **refused before sending** naming the variable, the ledger is append-only JSONL with
+  14 pinned fields and a named `priceSource` (`snapshot:<file>`+date / `env` / `none`) with `usd: null` for unknown
+  (**never `$0.00`**), the run prints its bill from the ledger so an interrupted run still reports spend, and a declared
+  `DURIG_PROBE_CEILING_USD` raises `CeilingError` **with the stub's request count unchanged** (a guard, not a receipt).
+  `5d4992b6` = #5015/#5025 (architect): the cap design, three caps on three axes
+  (`_CALL_USD 0.05` / `_RUN_USD 0.10` / `_STORE_USD 4.00`), **locality is endpoint-based not id-based**
+  (`src/providers/local.mjs:159` forces `cost {0,0,0,0}` on every `verifier`/`local` row), and
+  `tools/model-probes/spend-cap-acceptance.mjs` run as a **failing-first record: exit 1, 2/11 PASS, 9 RED** — the
+  build (#5037) is done when it exits 0. A failing instrument shipped on `main` on purpose, with a demo that pins the
+  five still-unaccounted call sites (`calibrate-verifier.mjs:42`, `cold-prefill.mjs:53`, `stream-probe.mjs:13`,
+  `throughput.mjs:24,30`) so the next seat narrows the set rather than guessing it.
+- **A hazard worth the operator's attention, measured by the seat's probe:** the tracked curated price table
+  (`deepinfra-models.ts:147`, read by `buildModels` while `fetchDeepInfraModels` is wired in nowhere) carries
+  `google/gemini-3.1-pro` at 1,000,000 ctx / $2.00/$12.00 ⇒ **one maximal call ≈ $14.00 = 3.50× the entire $4 grant**,
+  4 of 16 curated rows are absent from the live catalog, and `mapCatalogModel:101-102` turns an unpriced live row into a
+  **$0** metered row. This is why the cap must sit at the provider seam, not in the probes.
+- **`reset` is the repair verb that works; `compact` is a no-op on this rig.** `compact architect` returned
+  `{"state":"no-op","summaryEntryId":null,"window":null,"policy":{}}` — the `DURIG_COMPACTION_*` keys exist
+  (`src/config.mjs:133-142`, the #4887/#4931 work) but are all `null`, and with `window: null` the verb cannot compute a
+  cut. After the authorized resets both seats ran real turns: `lead` **145,429 → 7,892** consumed; `architect`
+  **218,645 → 135,567** and its turn **compacted and survived** (`pi.compaction@281000`) — the operator's
+  `MAX_TOKENS=16384` grant doing its job on a second seat. A reset seat's projection is `(1) user` and `send` still
+  settles, which also settles an open question: this endpoint tolerates non-strict alternation (the 400-bracket lives
+  in the request builder, not the template).
+- **Delegate error recorded:** the brief dispatched to `lead` claimed "`architect` is working #5015 right now" after
+  that work had already landed — a stale ground-truth line that survived a `sed`/`python` edit because the replacement
+  string did not match. A brief's ground-truth block must be **re-measured at dispatch**, not edited in place.

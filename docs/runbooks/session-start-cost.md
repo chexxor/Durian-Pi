@@ -399,3 +399,31 @@ the prefix*), not 143,616 (the 160,000-declared band). As of the D199 clock-out:
   same demo **exit 0** in the operator checkout and **exit 1 in a throwaway detached worktree at plain `main`**.
   Land without `--suite` and prove with **two full `node scripts/test.mjs --all` runs** (base, then merge) and diff
   `failed[]` — 52 s each, and never while a seat is generating. Name the **tree + dependency set** with the count.
+
+### 22. Repairing a seat you cannot send to: `reset` works, `compact` does not, and the number lags by one turn (2026-11-03, Linux)
+
+Symptom shapes, all three measured on this rig: a seat whose **counted projection ends on `user`** (a strict
+alternating template refuses another user turn — `tools/seat-turn-shape.mjs` prints `AT RISK`), a seat whose last
+turn's `consumed` exceeds its declared window (`advocate` 244,751 / 24,576 = **9.96**; `architect` was 218,645 /
+160,000), and a seat whose provider is simply gone (nothing on `127.0.0.1:1234` for the five `verifier/…` seats — not
+repairable by any seat verb, see `verifier-model-server.md` and `verifier-serving-headroom.md`).
+
+`compact` is **not** the remedy on this rig while the knobs are unset: `compact architect` returned
+`{"state":"no-op","summaryEntryId":null,"window":null,"policy":{}}`. (This is the #4887 family — the three-state
+reporting from #4898 is what makes it legible rather than a bare "no entry was written".) The working verb is
+`reset`, and it is a **write** verb: no broker must be up, and a `--dry-run` preview (`{"wouldReset":true,
+"writes":0}`) costs nothing.
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs reset --dry-run <seat>
+DURIG_DB=./selfdev.sqlite node cli.mjs reset <seat> "<handoff naming the rows and the trunk sha>"
+node tools/seat-turn-shape.mjs | grep -A3 "seat <seat>"          # projection becomes (1): user
+DURIG_DB=./selfdev.sqlite node cli.mjs status --json | node -e '…project context…'   # still the OLD number
+```
+
+**Verify at the seat's next turn, not at the reset:** measured after real turns — `lead` 145,429 → **7,892**;
+`architect` 218,645 → **135,567** with `pi.compaction@281000` (a compaction that fired and survived, which is what the
+operator's `DURIG_LOCAL_MAX_TOKENS=16384` prefix buys). A handoff is not decoration: name the trunk sha, the row ids,
+and the constraints the seat must not re-derive (the delegate's briefs at
+`.spike/delegate-20261103c/brief-*.md` are the worked examples). Before resetting a seat that holds **claimed** rows,
+check first (`impl` holds #4799 and #4955, so it was left alone unasked).

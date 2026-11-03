@@ -1658,3 +1658,16 @@ the prefix forever.
     regex-extracted the DECLINE/ASSERT lists out of `gate.mjs` and crashed the moment #5027 moved them into
     `tools/model-probes/assertscan.mjs`. Ship the selector inside the instrument (`gate.mjs --rescore`,
     `GATE_SCORER=raw|strip|strip+neg`) and have probes **import** the list module instead.
+12. **`compact` is a no-op where the config knobs are unset; `reset` is the repair that works.** `cli.mjs compact
+    <seat>` returns `state: "no-op"`, `window: null`, `policy: {}` when `DURIG_COMPACTION_*` are all unset
+    (`src/config.mjs:133-142`) — it cannot compute a cut with no window. The authorized repair for an over-window or
+    un-sendable seat is `cli.mjs reset <seat> "<handoff>"` (preview with `--dry-run`, which writes nothing).
+    **`status.context.consumed` is one turn, not the head**: it keeps showing the old turn's number until the seat's
+    next turn, so verify a repair by the next turn's number (measured: `lead` 145,429 → 7,892, `architect`
+    218,645 → 135,567) and by `tools/seat-turn-shape.mjs`. See `session-start-cost.md` §22.
+13. **A seat's `complete_work` cleanup can refuse, so the delegate prunes landed worktrees by hand.** Observed:
+    `complete_work: workspace cleanup for #5015 failed: refusing to remove worktree …/item-5015:
+    junction/symlink detected at undefined/anthropic-ai-sdk` (a `undefined` path component in the guard — worth a row).
+    The delegate's safe sequence, run after every landing: `git merge-base --is-ancestor <br> main` →
+    `git -C <wt> status --porcelain` = 0 → `git worktree remove <wt>` → `git branch -d <br>` → `git worktree prune`.
+    **Locked** worktrees are another seat's cwd and stay.
