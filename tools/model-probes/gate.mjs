@@ -42,6 +42,11 @@ import { resolve } from "node:path";
 // importing it RUNS the gate and spends the operator's budget — so the scorer that decided 552 clean turns had
 // no way to be asked a question for free. The lists and the assertion scan are in assertscan.mjs; this file asks it.
 import { DECLINE, ASSERT, assertedTokens, declinedText, scorerArm, SCORER_ARMS } from "./assertscan.mjs";
+// #5024: the request itself is not this file's business any more. metered.mjs attaches the credential the provider
+// actually reads, refuses a call that would cross a declared ceiling BEFORE it is sent, and writes one ledger row
+// per call. gate.mjs used to post `headers: {"content-type": "application/json"}` and nothing else: no
+// authorization, no accounting, so every paid arm this rig ever ran produced a verdict and no bill.
+import { meteredChat, authFor, ledgerPath, spendTotalUsd, formatRunTotal, CEILING_ENV } from "./metered.mjs";
 
 const SYSTEM =
   "You are a code reviewer. Find the defect that makes this code fail at RUNTIME on Linux. Be specific about the mechanism. If you see several, list them ranked by severity.";
@@ -71,9 +76,12 @@ async function ask(baseUrl, model, code, file, userPrompt, maxTokens = Number(pr
     max_tokens: maxTokens,
   };
   const t0 = Date.now();
-  const r = await fetch(`${baseUrl}/chat/completions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
-  const d = await r.json();
+  // #5024: through meteredChat, so a keyed call carries `authorization`, an unkeyed call to a metered host is
+  // REFUSED with its cause named, a declared ceiling stops the call before it is sent, and every call lands in the
+  // spend ledger with its price source. Local (loopback) endpoints still work keyless — they cost nothing.
+  const sent = await meteredChat({ baseUrl, body, ledgerFile: LEDGER_FILE });
+  if (sent.status >= 400) throw new Error(`HTTP ${sent.status}: ${sent.text.slice(0, 200)}`);
+  const d = JSON.parse(sent.text);
   const msg = d.choices?.[0]?.message ?? {};
   return {
     text: (msg.content || "").trim(),
@@ -82,6 +90,7 @@ async function ask(baseUrl, model, code, file, userPrompt, maxTokens = Number(pr
     dt: (Date.now() - t0) / 1000,
     completion: d.usage?.completion_tokens ?? null,
     prompt: d.usage?.prompt_tokens ?? null,
+    usage: d.usage ?? null, // #5024: the token counts, in the transcript, next to the verdict they produced
   };
 }
 
@@ -327,6 +336,10 @@ const CONDS = ["defect", "clean", "clean-neutral"]; // the three conditions per 
 const rescore = flag("rescore");
 mkdirSync(resolve(".spike/gate"), { recursive: true });
 const out = flag("out") || resolve(`.spike/gate/run-${label.replace(/[^\w.-]/g, "_")}-${new Date().toISOString().replace(/[:.]/g, "")}.json`);
+// #5024: where the money is written, and what it is bounded by. Both are environment-declared on purpose: the
+// ceiling VALUE is architect's call (#5015), so this file enforces a declared one and never invents a number.
+const LEDGER_FILE = ledgerPath(process.env);
+const AUTH = authFor(process.env);
 // Written after EVERY item, not only at the end: a k-replicate whole-module arm costs tens of minutes of the
 // operator's GPU, and an interrupted session should keep everything it already paid for.
 function writeTranscript(final = false) {
@@ -353,7 +366,7 @@ if (rescore) {
   console.log(`\nRESCORE ${rescore} (label ${prev.label}, asked ${prev.at}, scored with arm ${prev.scorerArm ?? "pre-#5027"}) with the current scorer (arm ${SCORER_ARM}, arms available: ${SCORER_ARMS.join("|")}) — no new prompts.`);
   for (const r of run) if (r.score) console.log(`  ${r.cond.padEnd(13)} ${r.id}: ${r.score.verdict}`);
 } else {
-console.log(`\n${"=".repeat(78)}\nGATE RUN: ${label} (${model}) @ ${baseUrl}\n  feeding=${MODE} budget=${BUDGET} estTokens  material=${MATERIAL}  pair-comments=${PAIR_POLICY}  replicates=${REPS}${PROBE ? "  probe=on" : ""}\n${"=".repeat(78)}`);
+console.log(`\n${"=".repeat(78)}\nGATE RUN: ${label} (${model}) @ ${baseUrl}\n  feeding=${MODE} budget=${BUDGET} estTokens  material=${MATERIAL}  pair-comments=${PAIR_POLICY}  replicates=${REPS}${PROBE ? "  probe=on" : ""}\n  auth=${AUTH.present ? AUTH.keyEnv : "ABSENT — " + AUTH.absentReason}  ledger=${LEDGER_FILE}  ceiling=${process.env[CEILING_ENV] ?? "none declared"}\n${"=".repeat(78)}`);
 if (REPS === 1) {
   // ROADMAP 198: this line is the whole item. Nothing printed by a single pass is a measurement; it is one draw,
   // and on 2026-10-28 the same model flipped 4 of 8 defect cells between two draws of the same instrument.
@@ -583,3 +596,9 @@ if (cmp) {
 
 writeTranscript(true);
 console.log(`\ntranscript: ${rescore ? `${out}.rescored.json` : out}`);
+if (!rescore) {
+  // #5024: a paid run ends with its bill, on the same channel as the verdicts. The number is read back from the
+  // ledger rather than accumulated in memory, so an interrupted run still reports what it spent.
+  const totals = spendTotalUsd(LEDGER_FILE);
+  console.log(formatRunTotal({ rows: totals.rows, totalUsd: totals.totalUsd, unknownCostRows: totals.unknownCostRows, ceilingUsd: Number(process.env[CEILING_ENV] ?? "0") }) + `  (ledger: ${LEDGER_FILE})`);
+}
