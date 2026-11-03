@@ -1589,3 +1589,44 @@ into held **#3128** / queued **#4922** rather than minting a row. Hygiene: with 
 addressee (all three addressees un-sendable tonight), while the sender's only cross-boundary verb is `cancel_work`. So the answer
 unblocks a **close**, not a release. Read the three fields (`status`, `to`, `claimedBy`, `sender`) in the `queue --json` dump before
 recommending a verb.
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-03 afternoon, D197 — every number measured in this session, Linux `chexxor@ThinkStation-P3`, node v24.22.1)
+
+**1. `release_work` is sender OR recipient — check it before waking a coordinator.** `src/rig.mjs:1223-1245`
+refuses only when `item.to !== me && item.from !== me`. #5027 is `pm→devtools`, so **`devtools` releases its own
+held row inside its own turn**; the D196 pointer's "what blocks these rows is the router" framing would have bought a
+~12-minute `pm` wake (and ≈17,000 more pm context tokens, measured at D196) for a verb the recipient already holds.
+The one-line read is in `docs/runbooks/session-start-cost.md` §15. Same family: `revise_work` only touches a **queued**
+row, so a bad body must be released before it can be corrected.
+
+**2. A seat's sendability mutates within a day — a pointer's seat table is a snapshot, not a fact.** D196 recorded
+`devtools` as not sendable-by-shape; at 16:2xZ the same read gives
+`user,assistant,user,assistant,assistant` — it **ends on `assistant`**, so it is admissible at the §2b boundary slot.
+`security` (ends `assistant`, 89,530 consumed) was listed as "AT RISK" and is in fact a second live-provider seat
+nobody used. Re-run `node tools/seat-turn-shape.mjs` in the session that dispatches the send, and read only the last
+element of the counted projection.
+
+**3. `queued` wakes, `held` does not — so "no broker" is a safety property, not an absence of one.**
+`docs/WORK-ITEM-LIFECYCLE.md:112-115`. With 90 `queued` + 5 `claimed` rows and every wakeable seat either over its
+compaction band or ending on `user`, starting `run`/`serve` **spends those seats for you**: each refused send costs
+zero tokens and appends a `pi.user` entry, pushing the seat one step further from admissible. This is the cheapest
+way to lose a milestone's only usable seat, and it happens by doing the most normal-looking thing in this rig.
+
+**4. `tools/model-probes/capped-run.mjs` caps MEMORY, not SPEND.** Its name and its `--node-mem-max`/`--tasks` knobs
+read like the spend ceiling #5015 asks for. It is a cgroup `MemoryMax` guard (ROADMAP 260/261, after the kernel
+killed `strata-host`). The spend side is genuinely unbuilt on `main`: `git grep -ln DEEPINFRA_API_KEY main -- src tools`
+returns only `scripts/compact-eval.mjs` and `src/config.mjs`, and `grep -nE "SPEND|CAP_|MAX_SPEND" src/config.mjs` is
+empty. The only working ceiling+ledger is a gitignored probe, i.e. it does not exist for the next session.
+
+**5. Price an instrument defect before asking for its fix.** `gate.mjs`'s clean-side scorer really is unreachable for
+`CLEAN-PASSED` (5 of 12 `DECLINE` phrases contain an `ASSERT` substring, so `declined && !asserted` at
+`gate.mjs:218` cannot hold), but the re-score of all 18 stored gate transcripts prices it at **15 of 468** recorded
+false alarms, not 468. Carry the count, not the adjective: the row's framing ("every false-alarm figure is
+artifact-saturated") is the kind of claim a fix cannot be scored against, and it nearly ordered a paid re-arm
+(`CAL_MAX_TOKENS=8000`, ~$0.10) that the same fix cannot certify.
+
+**6. Keep request-ids under 40 characters.** The classifier at `src/secretdetect.mjs:37` is
+`high-entropy-token = ^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9+_=-]{40,}$`, so a `delegate-YYYYMMDD-word-word` id of 40+
+chars with a digit deposits a `secret_detected` notice against the seat and a "treat the store as compromised"
+warning — firings #280250 (`pm`), #280240 and #280207 (`lead`) are all this. `d197-devtools` is clean. Evidence for
+held **#3128** / queued **#4922**; no new row, no rotation.

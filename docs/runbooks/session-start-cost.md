@@ -3,7 +3,7 @@ runbook: session-start-cost
 symptom: "a session burns its first 30–60 minutes re-deriving rig state that an instrument already reports; the delegate 'verifies' numbers by hand that a tool prints in seconds"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-02
+last_verified: 2026-11-03
 verified_by: delegate
 evidence: "measured 2026-10-31 on `Alex-Desktop-Win10` (Linux, node v24.22.1): `cli.mjs queue --json` 1.5 s and 21,710,535 B; `tools/what-to-test.mjs --base=HEAD~1` 0.13 s → 6 derived tests against a 239-test suite; `tools/doc-integrity-guard.mjs` 0.10 s exit 0; `tools/instrument-provenance.mjs` 0.07 s exit 0; `tools/seat-turn-shape.mjs` 3.6 s, 58,566 entries read, 0 writes. One batched `send` to `lead` (8 min) produced rows #4947–#4950 plus three closures; one `impl` turn (70 min) produced three rows. Rows #4947–#4950 exist because a delegate MEASUREMENT was carried to a seat instead of a re-derivation. Re-read 2026-11-02 (D189, same box): every Diagnose step above still costs the same, but TWO of its reads now print false verdicts — §5's served-window pair (LM Studio has no instance loaded at all) and `scripts/clockin.mjs`'s `## PROVIDER` line — see §7–§9 below."
 check_rule: null
@@ -300,3 +300,34 @@ DURIG_DB=./selfdev.sqlite node cli.mjs status --json 2>/dev/null | node -e 'let 
 #    turn without a compaction that cannot succeed at 3,000 tokens. Tonight: `qa` 20,110, `architect` 218,645,
 #    `advocate` 244,751 are over their own bands; the zeros are seats with no turn recorded. Re-pointing the verifier
 #    (#5024/#5015/#5025) must set the context AND the max-tokens pair together, or the same failure walks over to DeepInfra.
+
+# 15. WHO HOLDS THE VERB ON A PARKED ROW — one field pair, 1.5 s, and it deletes a whole coordinator wake.
+#    Measured 2026-11-03 (D197), Linux, `main f25075c3`:
+#      src/rig.mjs:1223-1245 — `release_work` accepts **the sender OR the recipient** (`item.to !== me &&
+#      item.from !== me` is the refusal), and `held → queued` is its only forward edge besides `cancel_work`.
+#    So a `held` row addressed to a seat needs NO send to the coordinator that parked it: the recipient releases it
+#    inside its own turn. D196 spent a whole session thinking #5027 (pm→devtools) needed `pm` to move; `devtools`
+#    holds that verb. Read the pair, not the attention label:
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+ const j=JSON.parse(s.slice(s.indexOf("{")));for(const i of j.items) if(i.status==="held"||i.status==="deferred")
+  console.log(i.id, i.status, i.from+"→"+i.to)})' | sort -k2 | head -40   # 1.5 s; add `| grep -E "^(5027|5028|5029|5030) "` for a named set
+#    TWO consequences that are not obvious from either tool: (a) **a `queued` row wakes its seat automatically**
+#    (`docs/WORK-ITEM-LIFECYCLE.md:112-115`: queued always wakes, held never does), so while seats are un-sendable,
+#    starting `run`/`serve` spends those seats for you — "no broker" is a safety property, not an absence of one;
+#    (b) `revise_work` only works on a QUEUED row, so a body you want corrected must be released first.
+
+# 16. THE TWO LOCAL KEYS THAT DECIDE A WAKE — 0.2 s, and they are host files, not repo files. Measured 2026-11-03:
+#      DURIG_LOCAL_CONTEXT      (default 65536; this checkout declares 160000) → band = CONTEXT − 16384
+#      DURIG_LOCAL_MAX_TOKENS   (UNSET ⇒ 8192, src/providers/local.mjs:76,85)  → summary OUTPUT budget
+#    with the band and the summary budget both pinned in §14. `durig.config.json` is **gitignored and exists only in
+#    the operator checkout and the approved seat root**, and the two copies are independent — moving one and reporting
+#    the change as done is the #4970 drift. Name the file you edited, or use a per-verb environment prefix and say so.
+
+# 17. PRICE AN INSTRUMENT-FIX BEFORE BUILDING IT — 0.3 s, read-only. Measured 2026-11-03 over 18 gate transcripts:
+node .spike/delegate-20261102/cleanrescore.mjs   # gitignored probe; row #5022 is the promotion row
+#    Prints per-run clean tallies and `TOTAL clean turns 552 | recorded FALSE-ALARM 468 | recorded CLEAN-PASSED 0
+#    | declines mis-scored as FALSE-ALARM 15`. That last number is the SIZE of the #5027 defect: the substring
+#    collision is real (5 of 12 `DECLINE` phrases contain an `ASSERT` substring, so `declined && !asserted` at
+#    gate.mjs:218 is unreachable for those phrasings) but it rescues 15 turns, not 468. **A probe like this turns
+#    "the scorer is broken" into "the scorer is broken by 15/552 turns of this kind", which is the only version a
+#    fix can be scored against.** Unpromoted probes are gone next session — that is row #5022.

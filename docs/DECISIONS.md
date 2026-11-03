@@ -8177,3 +8177,54 @@ for, with the exact commands, rather than taken.
   `gate.mjs` scorer row, re-scope the compaction class, run the stale-held pass for #4354/#4814/#4817, dispose the three
   still-registered landed worktrees) and instructing it **not** to wake `impl`/`lead`/`devtools`/`security`. No claim, complete,
   defer, route, reset, compact, resume, or provider-block edit.
+
+### (D197) 2026-11-03 afternoon: the operator's order collapsed to ONE pre-flighted send, and the delegate did NOT spend it — the two config numbers are capacity, and the cost of guessing is the last sendable author seat (delegate, Linux `chexxor@ThinkStation-P3`, node v24.22.1, `main f25075c3`)
+
+- **What the milestone actually needs now, measured.** Step (1) (fix `gate.mjs`'s clean-side scorer, row **#5027**) is
+  reachable by a single verb: `cli.mjs send devtools --body-file .spike/delegate-20261103b/brief-devtools.md`. The
+  brief is written and priced; the approved seat root was fast-forwarded `9f79f45c → f25075c3` (clean, docs-only range
+  `git diff --name-only`, worktree 18 / branch 19 inventories byte-identical before/after), `local/iq3_s` answers
+  `/v1/models` with `--max-context 204800`, and `devtools`' counted projection ends on `assistant`. **The send was not
+  dispatched.** The why: at `DURIG_LOCAL_CONTEXT=160000` the compaction band is **143,616** and `devtools` is at
+  **143,426**, so a brief of real size crosses it, and a compaction-class failure settles `unanswered/model_error` at
+  **zero tokens while appending a `pi.user` entry** — which moves `devtools` off `assistant` and makes it another
+  `impl`/`lead`. Of the twelve seats, `devtools` is the only one that is sendable-by-shape, provider-live, and
+  addressed by the milestone's first row; burning it is not recoverable by a `compact` (§14: a successful compaction
+  does not restore the boundary slot). An un-sendable rig with one remaining author seat is a worse state than a
+  session that escalates.
+- **Why this is the operator's call and not mine.** The numbers are capacity (`session-start-cost.md`, "Escalate to":
+  *capacity is never a delegate or seat ruling*), and D195 already ruled that hand-aligning the two private
+  `durig.config.json` copies is drift with better numbers — the fix is one source of truth, row **#4970 HALF B**, still
+  open. So the ruling requested is exactly two values, with their effect computed from the pinned source rather than
+  asserted: `DURIG_LOCAL_CONTEXT 160000→200000` (band → 183,616, no compaction at all for `devtools`/`impl`) and
+  `DURIG_LOCAL_MAX_TOKENS unset(=8192)→16384` (summary output budget `min(⌊0.8·16384⌋,16384)=13,107`, from
+  `compaction.js:95` + `src/providers/local.mjs:76,85`). Taking only `MAX_TOKENS` would let the compaction *succeed*
+  and summarize away the seat's recent turns; taking only `CONTEXT` keeps `devtools`' context intact. Both, as one pair.
+- **`release_work` is sender OR recipient, which deletes a coordinator wake (`src/rig.mjs:1223-1245`).** D196's
+  pointer framed #5027–#5030 as blocked on `pm`; for #5027 (`pm→devtools`) that is false — the recipient releases its
+  own held row in its own turn, and `held → queued` has only that edge plus `cancel_work`. **The why it matters:**
+  the cheap verb was in the seat already, and a `pm` wake to obtain it costs ~12 minutes and ≈17,000 context tokens
+  (measured at D196) for a no-op. Recorded as `session-start-cost.md` §15 with the one-line read.
+- **A seat table in a pointer rots inside a day, so the sendability table in this pointer is marked as a re-measured
+  snapshot.** D196 listed `devtools` as not sendable-by-shape; at 16:2xZ the same 0.4 s read returns
+  `user,assistant,user,assistant,assistant`. Rule held: run `tools/seat-turn-shape.mjs` in the session that dispatches,
+  and read only the last element of the counted projection (never the head marker, never the `AT RISK` label).
+- **The scorer defect is real but smaller than the row claims, and that changes what step (3) can certify.** Re-running
+  the D193 rescore over all 18 `.spike/gate/*.json` transcripts: **552 clean turns, `FALSE-ALARM 468`,
+  `CLEAN-PASSED 0`, and only 15 of the 468 flip to CLEAN-PASSED once `DECLINE` phrases are stripped before the `ASSERT`
+  scan.** Mechanism confirmed from the shipped lists: **5 of 12 `DECLINE` phrases contain an `ASSERT` substring**
+  (`"no defect"`⊃`"defect"`, `"nothing wrong"`⊃`"wrong"`, `"no bug"`⊃`"bug"`, `"no runtime defect"`, `"no actual
+  defect"`), so `asserted` at `gate.mjs:193` is true for a canonical decline and `declined && !assertedNow` (`:218`) is
+  unreachable. The decision carried into the brief: fix it, but report both numbers, and do not read a scorer fix as
+  certifying the arms' clean-side figures — and step (3)'s ~$0.10 arm still cannot run at all until #5024's
+  `authorization` header exists, because `gate.mjs:96` posts unauthenticated.
+- **No broker was started, deliberately.** `queued` always wakes, `held` never does
+  (`docs/WORK-ITEM-LIFECYCLE.md:112-115`), and with 90 `queued` + 5 `claimed` rows every wakeable seat is over its own
+  band or ends on `user`. Starting the rig "to see where things stand" would spend the milestone's seat for nothing.
+- **Boundary held, and the evidence for each claim in this block:** zero sends, zero claims/completes/defers/routes/
+  releases, zero provider-block or config edits. Read-only store opens throughout (`status --json`, `queue --json`,
+  `submissions` via `node:sqlite` readOnly). `tools/doc-integrity-guard.mjs` 0 hard / 1 soft exit 0;
+  `tools/instrument-provenance.mjs` PROVENANCE CLEAN exit 0; `demo/next-pointer.test.mjs` PASS (pointer 161 lines, cap
+  200; D196 block copied VERBATIM to `docs/NEXT-ARCHIVE.md`, round-trip `diff` exit 0). **No suite run**, so `main` is
+  unverified-green since `9f79f45c`; D195's push grant is spent (`origin/main` = `9f79f45c`) and `main` is 3 ahead +
+  this commit — the next push needs a new grant.
