@@ -8257,3 +8257,38 @@ for, with the exact commands, rather than taken.
   wall-clock multiplier it can act on without capacity), then step (2) as ONE change **#5015 + #5024 + #5025** (whose
   values still need the operator's ruling), then step (3)'s ~$0.10 re-arm, which is the first metered arm whose
   clean-side numbers mean anything. And the row that would stop this crisis recurring: **#4970 HALF B**.
+
+## D198b — the operator's order step (1) ran and settled `done`; the fix is designed but un-built; and the pointer turned out to have a second, byte-sized cap (2026-11-03, delegate, Linux `chexxor@ThinkStation-P3`)
+
+- **What the seat did with the wake (its report, cross-checked against the rig, not restated from trust):**
+  `send devtools` under the operator-granted prefix settled `done` / `stopReason stop` in ≈7 min. Reading the store
+  afterwards: **#5027 `claimed` by `devtools`** (it released its own parked row by id, exactly the D196 correction),
+  **#4997 `held`** with a *measured* reason, **#5024/#5026 left `queued` deliberately** so a cost ledger does not ship
+  scoring a metric the scorer inflates. `tools/model-probes/gate.mjs` is unchanged on `main`, there is **no
+  `item-5027` branch**, and `item-4997` has **0 unlanded commits** — so this wake bought *design*, not code, which is
+  what the seat itself said it would do. **Boundary held:** no claim, complete, route, release or defer by the
+  delegate.
+- **The number that now decides every verb: `devtools` consumed 143,426 → 156,614.** That is **over** this checkout's
+  declared band (160,000 − 16,384 = 143,616) and **under** the seat root's (200,000 − 16,384 = 183,616). Because the
+  operator's grant was **environment variables only**, the fix is a per-verb prefix, not a property of the rig: omit
+  `DURIG_LOCAL_CONTEXT=200000 DURIG_LOCAL_MAX_TOKENS=16384` on the next `send`, `resume`/`doctor`, or broker pass and
+  the summarization-cap failure returns **by construction**. Durable fixes remain open and are the real close:
+  **#4970 HALF B** (one source of truth for the two local keys) and **#4887** (no compaction-policy knob is settable).
+- **New fact about seats, from the seat's own report and confirmed here:** a thin item worktree cannot see the rig.
+  In `item-4997`, `cli.mjs config` prints **no** local/context/max-token keys (gitignored `durig.config.json` is
+  absent in every worktree) and the lockfile pins `@earendil-works/pi-durable` **1.3.0 = schema v1** against the live
+  store's **v2**, so `demo/seat-turn-shape.test.mjs` exits 0 there with `SKIP (ENVIRONMENTAL — not a behaviour red)`.
+  Consequence for routing: a seat parked in an item worktree cannot re-measure a config- or store-dependent baseline —
+  which is #4997's hold reason — so re-point its cwd (fix the cwd the rig *file* names, then `up rig.selfdev.json
+  --refresh --dry-run`, ROADMAP 210) before asking it for that class of verification.
+- **A documentation edit broke a suite member, and the cause was worth recording as a trap.** Full suite at
+  `1a8edb5d` + a longer pointer read **244/245**: `demo/clockin-digest.test.mjs` failed with `digest is 21,002 B, over
+  its 20,000 B budget`. Mechanism, read from source: clockin embeds the pointer section of `docs/NEXT.md` **verbatim**
+  (`scripts/clockin.mjs:39,189,426`) against `DIGEST_BUDGET_BYTES = 20000` (`:37`, enforced `:463`), and the demo feeds
+  it the **live** file (`demo/clockin-digest.test.mjs:219`). The pointer guard caps **lines** (200), the digest caps
+  **bytes** — an undocumented coupling, so a dense 175-line pointer passes one guard and reddens the other. Trimmed to
+  16,647 B → **245/245** (jobs 8, 43.3 s, no broker / no genlock / no generating seat; axis: execution). Runbook
+  §19 carries the numbers and the row worth minting (cap the pointer in bytes, or make the digest summarize).
+- **Why the delegate fixed the red rather than filing it:** it was caused by the delegate's own edit in the same
+  session, and the pointer is the delegate's artifact (§ cut-the-pointer rule). Filing it as a seat task would have
+  spent a wake on the delegate's mistake; repairing it and recording the coupling costs a paragraph.

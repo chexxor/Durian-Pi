@@ -91,22 +91,21 @@ end their projections on `user` (do-not-send). No broker, no genlock slot, no ge
 ### 1. What moved this session (morning: zero sends, zero claims, zero config edits — then the operator granted the numbers and the afternoon dispatched one send and one claim)
 
 - **The dispatch, so it is auditable:** `send devtools` from the approved seat root (`/home/chexxor/Git/durian-dev/
-  seatroot`, branch `seatroot/linux`, ff'd `f25075c3 → 73ece38c`; worktree 18 / branch 19 inventories byte-identical
-  across the verb), env prefix as above, `--request-id d197-devtools`, reply `settledStatus done` / `stopReason stop`
-  in ≈7 min. Before it: `seat-turn-shape` ends `assistant`, consumed 143,426 vs band 183,616. After it: ends
-  `assistant` (7), consumed **156,614**, no worktree or branch added, seat root still clean.
-- **Pushed on this session's grant:** `origin/main` `9f79f45c → 73ece38c → 1a8edb5d` (docs-only, verified by
-  `git ls-remote`; `git rev-list --count origin/main..main` = 0). Grant spent.
+  seatroot`, branch `seatroot/linux`, ff'd to `73ece38c`; worktree 18 / branch 19 inventories byte-identical across
+  the verb), env prefix as above, `--request-id d197-devtools`; reply `settledStatus done` / `stopReason stop` in ≈7
+  min. Before it: projection ends `assistant`, consumed 143,426 vs band 183,616. After: ends `assistant` (7 items),
+  consumed **156,614**, no worktree or branch added, seat root clean. **Pushed on this session's grant:**
+  `origin/main` → `719f3114` (docs-only, `git ls-remote`); grant spent.
 
-- **SUITE MARKER (this session, and it names a real red at HEAD):** `node scripts/test.mjs --all --jobs 8` at
-  `main 1a8edb5d` = **244/245, `demo/clockin-digest.test.mjs` red, 43 s, no broker / no genlock / no generating
-  seat** (axis: execution; `DEEPINFRA_API_KEY` set, `durig.config.json` present in this checkout). Cause class,
-  measured: **the digest embeds `docs/NEXT.md`'s pointer VERBATIM** (`scripts/clockin.mjs:39,189,426`) against a
-  **20,000 B** budget (`:37,463`) — the pointer cap is 200 **lines** and the two caps are undocumented-coupled, so a
-  dense pointer silently breaks a suite member. This is exactly the missing known-red baseline **#4997** exists to
-  absorb, and the fix row to mint is "cap the pointer by BYTES, or have the digest summarize rather than embed".
-  Earlier marker: 245/245 at `f25075c3` (`DEEPINFRA_API_KEY` set + config present — both historical reds are
-  environment-caused, not code-caused). Full markers: `.spike/delegate/suite-marker.json`.
+- **SUITE MARKER:** `node scripts/test.mjs --all --jobs 8` = **245/245** at `main 1a8edb5d` + these docs (43.3 s, no
+  broker / no genlock / no generating seat; axis: execution; `DEEPINFRA_API_KEY` set, `durig.config.json` present).
+  An **intermediate 244/245** reading is recorded too, with its cause measured, because it is a trap: the one red was
+  `demo/clockin-digest.test.mjs`, and **the pointer was the cause** — clockin embeds `docs/NEXT.md` **VERBATIM**
+  (`scripts/clockin.mjs:39,189,426`) against a **20,000 B** digest budget (`:37,463`), so a 17,003 B pointer made the
+  digest 20,100 B; trimming to 16,892 B turned it green. **Two caps, one undocumented coupling:** the pointer cap is
+  200 **lines** (`demo/next-pointer.test.mjs`), the digest cap is **bytes**. Worth a row: cap the pointer in bytes, or
+  make the digest summarize rather than embed — and this is exactly what the missing known-red baseline **#4997** exists
+  to absorb. Markers: `.spike/delegate/suite-marker.json`.
 - **Everything else this session is recorded in `docs/DECISIONS.md` (D197, D197b, D198) rather than repeated here:**
   the gate re-read before touching it; the seat-root fast-forwards with byte-identical inventories; the band
   re-derived from pinned source (`harness/agent.js:10-15`, `compaction.js:95,296-303`, `src/providers/local.mjs:76,85`);
@@ -143,33 +142,31 @@ via `cancel_work`. The operator's D195 ask ("bring only #4354/#4814/#4817") was 
 
 ### 4. Cheap reads, traps, and probes this session leaves behind (gitignored — #5022 is the promotion row)
 
-- `.spike/delegate-20261103b/`: `brief-devtools.md` (the brief that was sent, 4,100 B), `send-devtools.out` (**the
-  whole settled reply**), `seat-turn-shape-1.txt`, `status-{1,2}.json`, `q-1.json` (22.2 MB), `drain-audit-1.txt`, `suite-all*.json`,
-  `NEXT-pre-cut.md`, eight inventory files. Re-runnable, unpromoted. The probe + 37 transcripts were **copied into the
-  seat root's own `.spike/`** so the seat could run them in its tree — that copy is what makes #5027 verifiable.
-- **New cheap read worth keeping (0.3 s, read-only):** `node .spike/delegate-20261102/cleanrescore.mjs` re-scores
-  every `.spike/gate/*.json` with the instrument's own lists and prints `TOTAL clean turns … recorded CLEAN-PASSED 0`.
-  Run it before designing the #5027 fix and again after, to price the fix.
-- **Request-id hygiene (measured from the classifier, `src/secretdetect.mjs:37`):** `high-entropy-token` is
-  `^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9+_=-]{40,}$`. Any request id ≥40 chars carrying a digit deposits a
-  `secret_detected` attention notice on the seat and a compromised-store warning. `pm` #280250 and `lead` #280240 /
-  #280207 are exactly this class (3rd–5th firing) — **keep ids under 40 chars** (`d197-devtools`). Evidence for held
-  **#3128** and queued **#4922**; no new row.
-- **`held` has exactly two exits** (`release_work` → `queued`, `cancel_work` → `cancelled`) and **`queued` rows wake
-  their seat** — so "don't start the broker" is a real constraint while seats are un-sendable, not timidity
-  (`docs/WORK-ITEM-LIFECYCLE.md:79-115`).
+- `.spike/delegate-20261103b/`: `brief-devtools.md` (what was sent), `send-devtools.out` (**the whole settled
+  reply**), `seat-turn-shape-1.txt`, `status-{1,2}.json`, `q-1.json`, `drain-audit-1.txt`, `suite-all*.json`,
+  `NEXT-pre-cut.md`, eight inventory files. The probe + 37 transcripts were **copied into the seat root's own
+  `.spike/`** so the seat could run them in its tree — that copy is what makes #5027 verifiable. Probe inventory and
+  promotion ask: runbook §17.
+- **New cheap read (0.3 s, read-only):** `node .spike/delegate-20261102/cleanrescore.mjs` — re-scores every
+  `.spike/gate/*.json` with the instrument's own lists. Run before and after the #5027 fix to price it.
+- **Request ids stay under 40 chars** (`src/secretdetect.mjs:37`, `high-entropy-token`); #280250 / #280240 / #280207
+  are that false-positive class — evidence for held **#3128** and queued **#4922**, no new row.
+- **`held` has two exits (`release_work` / `cancel_work`) and `queued` wakes its seat** — so "don't start the broker"
+  while seats are un-sendable is a constraint, not timidity (`docs/WORK-ITEM-LIFECYCLE.md:79-115`).
 - Wall-clock, unchanged from D196: 24.0% of 61,054 generations end in error holding 61.2 h; compaction has burned
   **46.7 h** across 1,562 tasks (`tools/latency-budget.mjs`, 4.5 s, read-only).
 
-### 5. Standing constraints (unchanged)
+### 5. Standing constraints (unchanged) and where the push stands
 
-- **Do not claim, complete, defer, route, or release queue rows yourself**; decomposition and routing belong to
-  `pm`/`lead`. (Releasing is the recipient's or sender's verb, never the delegate's.)
-- **No push without the operator's grant** — D195's is spent (`origin/main` = `9f79f45c`). Ask.
-- **Native host only** (Linux; D131). **`DURIG_DB` for the CLI**, never `DURIAN_PI_DB` (D103).
-  `test -f "$PWD/durig.config.json"` before any write verb (no worktree has one); **never `doctor`/`resume` while a
-  seat is generating** (D187), and remember `doctor` is an **alias of `resume`** (`cli.mjs:3102`) — one write verb.
-- **Capacity is never a delegate or seat ruling** (`session-start-cost.md`, Escalate to). **Every verification claim
-  names its axis of independence**, and **`gate.mjs`'s clean-side numbers are void until #5027 lands** (D193(8)).
-- **`inputs/fetched/` must stay clean or the lander refuses** (untracked counts as dirty); the moved
-  `strata-batching.md` fetch still needs a manifest row or deletion (`.spike/inputs/`).
+- **Do not claim, complete, defer, route, or release queue rows yourself** — decomposition and routing belong to
+  `pm`/`lead`; releasing belongs to recipient or sender (`src/rig.mjs:1223-1245`).
+- **No push without the operator's grant.** Tonight's grant was used: `origin/main` = `719f3114`, 0 ahead. Ask again.
+- **Native host only** (Linux; D131). **`DURIG_DB` for the CLI**, never `DURIAN_PI_DB` (D103). `test -f
+  "$PWD/durig.config.json"` before a write verb (no worktree has one); **never `doctor`/`resume` while a seat is
+  generating** (D187) — `doctor` is an **alias of `resume`** (`cli.mjs:3102`), one write verb.
+- **Capacity is never a delegate or seat ruling.** **Every verification claim names its axis of independence.**
+  **`gate.mjs`'s clean-side numbers are void until #5027 lands** (D193(8)). **`inputs/fetched/` stays clean or the
+  lander refuses**; the moved `strata-batching.md` fetch still needs a manifest row or deletion (`.spike/inputs/`).
+- **The pointer has a hidden byte cap.** `demo/clockin-digest.test.mjs` fails if `docs/NEXT.md` exceeds ≈ 16,900 B,
+  because clockin embeds it verbatim into a 20,000 B digest. Keep the live file near or under **16.5 KB** when you
+  edit it, and re-run that demo — not just `next-pointer.test.mjs` — after any pointer edit.

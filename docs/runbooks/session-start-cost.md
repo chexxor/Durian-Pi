@@ -347,3 +347,23 @@ node .spike/delegate-20261102/cleanrescore.mjs   # gitignored probe; row #5022 i
 #    `send is DEPRECATED (opens a full writing harness = a second owner)` — legal only with **no broker up**, and with
 #    a broker the sanctioned form is `node intent.mjs <seat> --body-file <file>`; and the root's branch here is
 #    `seatroot/linux`, fast-forwarded with `git -C <seatroot> merge --ff-only main` before the dispatch.
+
+## 19. The pointer has a second, undocumented cap — bytes, not lines (2026-11-03, D198; measured in Linux)
+
+`scripts/clockin.mjs` embeds the `## NEXT SESSION` section of `docs/NEXT.md` **verbatim** into the cold-start digest
+(`:39` "verbatim. Nothing else", printed at `:189`, read at `:426`) and the whole digest has a **20,000 B** budget
+(`DIGEST_BUDGET_BYTES`, `:37`; enforced at `:463`), which `demo/clockin-digest.test.mjs` asserts with the **live**
+`docs/NEXT.md` (`:219`). Measured the same hour: pointer 17,905 B → digest 21,002 B → **suite red**; pointer 17,003 B
+→ digest 20,100 B → **still red**; pointer 16,892 B → **green**. So the pointer's practical ceiling is ≈ **16.9 KB**,
+while `demo/next-pointer.test.mjs` only caps it at 200 **lines** — a dense 175-line pointer passes one guard and breaks
+the other.
+
+**Measure:** `wc -c docs/NEXT.md` before committing a pointer edit, then run **both** `node demo/next-pointer.test.mjs`
+**and** `node demo/clockin-digest.test.mjs` (35 s). If a session genuinely has more to hand off than 16.9 KB, cut the
+older section into `docs/NEXT-ARCHIVE.md` (the pointer cap rule) rather than shrinking the facts — DECISIONS.md and the
+runbooks keep the detail.
+
+**The row to mint** (delegate does not mint): either express the pointer cap in **bytes** in
+`demo/next-pointer.test.mjs`, or have clockin **summarize** the pointer (first N lines of §0 only) instead of embedding
+it. Until then this coupling is a silent suite red caused by a documentation edit — precisely the class the known-red
+baseline (**#4997**) exists to absorb.
