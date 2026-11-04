@@ -125,6 +125,31 @@ try {
   assert.equal(missingValue.code, 1, "`--id` with no value exits 1");
   assert.ok(JSON.parse(missingValue.stdout).error.includes("--id needs a value"), "and names what it needed");
 
+  // ─── C2. THE REFUSAL MUST BE CORRECTABLE (#5016) ───
+  // Refusing is only useful if the caller can fix the typo without opening `cli.mjs`. So STDERR carries the
+  // offending argument, EVERY known flag, and the usage line, while stdout keeps the machine contract. The known
+  // set is pinned here as an exact list: adding a flag to `QUEUE_FLAGS` without adding it here (and to §4A of
+  // docs/COMMANDS-AND-THE-BROKER.md, and to the accept lines above) goes RED, which is the point.
+  const KNOWN_FLAGS = ["--json", "--id"];
+  const refused = cli(["queue", "--zork"]);
+  assert.equal(refused.code, 1, "an unknown flag exits 1");
+  assert.ok(refused.stderr.includes("--zork"), `stderr names the argument it refused: ${refused.stderr.slice(0, 300)}`);
+  for (const flag of KNOWN_FLAGS) {
+    assert.ok(refused.stderr.includes(flag), `stderr LISTS the known flag ${flag} so the caller can correct the call: ${refused.stderr.slice(0, 300)}`);
+  }
+  assert.ok(refused.stderr.includes("usage:"), `and prints the usage line: ${refused.stderr.slice(0, 300)}`);
+  assert.ok(refused.stderr.length < 4096, `the correction itself is cheap: ${refused.stderr.length} B`);
+  for (const flag of KNOWN_FLAGS) {
+    assert.ok(String(JSON.parse(refused.stdout).error).includes(flag), "the machine half names the known set too");
+  }
+
+  // A bare positional is refused as well: `queue 5063` looks plausible, and on `main` it exited 0 and printed the
+  // whole document. There is no positional form, so there is nothing to accept.
+  const positional = cli(["queue", "7"]);
+  assert.equal(positional.code, 1, "a bare positional exits 1");
+  assert.ok(JSON.parse(positional.stdout).error.includes("7"), "and the refusal names the token it refused");
+  assert.ok(!("items" in JSON.parse(positional.stdout)), "a refused positional never answers with the document");
+
   // A KNOWN-but-absent id stays a loud RESULT+exit 1, not an empty queue (unchanged from #4986).
   const absent = cli(["queue", "--id", "999999"]);
   assert.equal(absent.code, 1, "an id matching nothing exits 1");
@@ -132,7 +157,7 @@ try {
   assert.equal(JSON.parse(absent.stdout).rows, ROWS, "while still reporting the store size, so `missing` is not read as `empty queue`");
 
   console.log(
-    `\nQUEUE-COMPAT-ARGS TEST PASS (${ROWS}-row fixture: \`queue\` and \`queue --json\` byte-identical at exit 0, the no-op cannot disturb \`--id\` scoping in either order, and the unknown stays refused and cheap — row=${stdoutBytes(idFirst)} B vs dump=${bareBytes} B)`,
+    `\nQUEUE-COMPAT-ARGS TEST PASS (${ROWS}-row fixture: \`queue\` and \`queue --json\` byte-identical at exit 0, the no-op cannot disturb \`--id\` scoping in either order, the unknown stays refused and cheap (row=${stdoutBytes(idFirst)} B vs dump=${bareBytes} B), and a refusal names the flag, every known flag (${KNOWN_FLAGS.join(" ")}) and the usage)`,
   );
 } finally {
   rmSync(dir, { recursive: true, force: true });

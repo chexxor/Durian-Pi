@@ -1088,21 +1088,50 @@ async function cmdPs() {
 // What stays REFUSED is anything not on this list. `main` ignores every argument (`cmdQueue()` takes none), so
 // today `queue --zork` exits 0 and prints the whole 22 MB document — that fail-open is the defect ROADMAP 228
 // names, and the fix is to refuse the UNKNOWN, not to refuse a documented form (which would be a new break).
-// The filter flags (#5071's `--status` / `--to` / `--no-body` / …) join this set IN THAT ROW, together with the
-// compat pin's matching lines — that demo is what makes "unknown" decidable by a reader instead of by this file.
-const QUEUE_NOOP_FLAGS = new Set(["--json"]);
+// The filter flags (`--status` / `--to` / `--no-body`, #5016) join this set with the compat pin's matching
+// accept lines in the SAME change — that demo is what makes "unknown" decidable by a reader instead of by this file.
+//
+// THE SURFACE IS ONE DECLARATIVE TABLE, and the refusal PRINTS that table (#5016). Why declarative: deciding
+// known/unknown inside a loop body leaves the set invisible, and an invisible set is how a row ends up refusing a
+// documented form (that is exactly what the first cut of this parser did to `--json`, #5063). A table is the thing
+// `docs/COMMANDS-AND-THE-BROKER.md` §4A and `demo/queue-compat-args.test.mjs` can both point at, so "unknown" is
+// decidable three ways. The shape is deliberately adoptable by other read verbs — but ONLY `queue` is changed
+// here: each verb's known set is its own measurement, and #5016's non-goals forbid a verb sweep.
+const QUEUE_FLAGS = {
+  // An accepted NO-OP, not a invention: `out()` has ALWAYS printed JSON, so `--json` changes no bytes. Refusing a
+  // documented form would be a new break; the pin asserts byte-identity, not merely exit 0.
+  "--json": { kind: "noop", usage: "[--json]" },
+  // One (or a few) rows by id (#4986). Payload-scoped: the queue is ONE document, so the STORAGE read is not
+  // narrowed — what narrows is what the caller prints and therefore what a session pays for.
+  "--id": { kind: "value", usage: "[--id <id> ...]", valueName: "id" },
+};
+const QUEUE_USAGE = `node cli.mjs queue ${Object.values(QUEUE_FLAGS).map((f) => f.usage).join(" ")}`;
+
+// What a bad argument costs: exit 1, a structured `ok:false` on STDOUT (the machine half, the shape pinned by
+// `demo/queue-compat-args.test.mjs`), and on STDERR the offending argument plus EVERY known flag (#5016: the
+// point of refusing is that the caller can correct the typo without opening the source). A refusal never prints
+// the document — that is the fail-open's cost, and it is asserted (~100 B against a 22 MB dump).
+function refuseQueueArgument(why) {
+  const known = Object.keys(QUEUE_FLAGS).join(", ");
+  process.stderr.write(`queue: ${why}\n  known flags: ${known}\n  usage: ${QUEUE_USAGE}\n`);
+  fail(`queue: ${why} (known flags: ${known})`);
+}
+
 async function cmdQueue(args = []) {
   const ids = [];
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
-    if (a === "--id") {
+    const spec = QUEUE_FLAGS[a];
+    // A bare positional (`queue 5063`) and a misplaced flag both land here: there is no positional form to
+    // silently accept, and `main` accepting one was part of the fail-open.
+    if (!spec) refuseQueueArgument(`unknown argument ${a}`);
+    if (spec.kind === "value") {
       const v = args[i + 1];
-      if (v === undefined || v.startsWith("--")) fail("queue --id needs a value");
+      if (v === undefined || v.startsWith("--")) refuseQueueArgument(`${a} needs a value`);
       ids.push(v);
       i += 1;
       continue;
     }
-    if (!QUEUE_NOOP_FLAGS.has(a)) fail(`queue: unknown argument ${a} (usage: queue [--json] [--id <id> ...])`);
     // a known no-op: it changes nothing, because the document is already JSON.
   }
   if (ids.length === 0) {
