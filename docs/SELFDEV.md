@@ -1830,7 +1830,13 @@ the prefix forever.
     `hostname` call**, and `hostnamectl` here reads transient `Alex-Desktop-Win10`, static unset, `/etc/hostname`
     empty (Fedora 44) — on the box that holds the checkout, worktrees and `.spike` evidence those entries cite.
     Before you sign a measurement with a host, run `hostnamectl` and `uname -r` in the same command as the
-    measurement; a carried-forward label is how a wrong box ends up in the durable record.
+    measurement; a carried-forward label is how a wrong box ends up in the durable record. **Ruled 2026-11-04: the
+    project does not reference a hostname at all** — sign `OS + distro + kernel + node` (the `AGENTS.md`
+    non-negotiable; `tools/rig-portability-audit.mjs` already prints exactly that), and note that our **code has no
+    host-identity dependence** — the only `hostname` hits in the tree are `new URL(baseUrl).hostname`
+    (`src/providers/local.mjs:62`, `tools/model-probes/metered.mjs:94`), which are network hosts. The dependence
+    was documentary: `ThinkStation-P3` sits 10× in `docs/DECISIONS.md`, 3× in `docs/NEXT-ARCHIVE.md`, 5× in
+    `docs/SELFDEV.md`; re-signing them is **#5085**'s, not a per-line churn.
 26. **A seat's model is pinned in the TRACKED rig file, so a provider re-point is a roster edit.**
     `rig.selfdev.json` names the model per seat (5 seats say `verifier/mistralai/ministral-3-14b-reasoning`) and
     `resolveSeatModel` (`src/seatmodel.mjs`) splits on the provider prefix, so changing `DURIG_VERIFIER_MODEL`

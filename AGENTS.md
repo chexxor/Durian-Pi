@@ -63,6 +63,24 @@ Then execute on that resulting promp.
    state read goes in `docs/runbooks/session-start-cost.md`, a new trap goes in the next `## Operational pitfalls`
    block of `docs/SELFDEV.md`, and a probe worth keeping gets a row from `lead` to promote it out of gitignored
    `.spike/` into `tools/` — an unpromoted probe is lost next session.
+6. **Write the session-closure response** — a deliverable, not a recap. The operator reads it once and decides from
+   it, so it carries the decisions, not the activity log. Required sections:
+   - **Value added** — what the project can do, prove, or safely do next that it could not at session start. One
+     line each, each with the evidence that shows it (a command you ran, a sha, a row state, a measured number).
+     Not a list of things you did.
+   - **Decisions and options for the operator** — for each real decision: the choice in one line, the options with
+     **pros and cons**, **your recommendation and why**, and what only the operator can do (grants, credentials,
+     capacity, scope) that you deliberately did not do. Never ask a question a probe could answer.
+   - **State the team is in** — landed / in flight / parked, with row ids and owners, and what the next session
+     runs first. `docs/NEXT.md` must already say the same thing; the response points into it, never contradicts it.
+   - **Unverified or at risk** — every claim you could not gate, what would falsify it, and the cheapest probe or
+     row that closes it. Say so rather than softening it.
+   - **Cost** — money spent (from the spend ledger, not guessed) and the wall-clock shape of the session, with the
+     next thing worth spending it on.
+   Add whatever else the operator would decide differently for knowing — an incident, a trap that cost time, a
+   request the team parked on the operator, a doc that is now false. Name the host by OS, distro and kernel
+   (**never `user@hostname`** — operator ruling 2026-11-04: the project must not depend on a hostname, and this
+   rig's hostname is transient).
 
 ## Non-negotiables
 
@@ -74,7 +92,10 @@ Then execute on that resulting promp.
 - **Native host OS only** — never `wsl`, `docker`, or `docker-compose`. Linux and Windows are both operating
   platforms for this rig (D131); run natively wherever it lives, and **name the OS in every measurement you
   report**: seat tool names, path fixtures and process-death semantics differ (`src/seatguard.mjs:122` registers
-  both `bash` and `powershell`; `docs/runbooks/workspace-move.md` Step 5).
+  both `bash` and `powershell`; `docs/runbooks/workspace-move.md` Step 5). Name it as **OS + distro + kernel +
+  node** (`Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1`) and **never `user@hostname`**: the project must
+  not reference a hostname (operator ruling 2026-11-04), hostnames here are transient and unmeasured labels have
+  already contaminated D197b–D204 (D205). Measure `uname -a && node -v` in the same command as the measurement.
 - **Never run a whole-filesystem search**; stay inside your workspace.
 
 ## Where to read further
