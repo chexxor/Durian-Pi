@@ -73,40 +73,53 @@ The git half of the landing is DONE (see "The landing" below) — do not re-merg
   model (`:1234` answers nothing; the granted class needs price + credential + roster — D205). Landing was
   therefore made on the delegate's own re-run of the seat's gates, with the artifact sha and ancestry proven.
 
-## pi-durable update chain (OPEN — this is the priority now)
+## pi-durable update chain (OPEN — the priority), and the #5089 landing receipt
 
-The operator ordered a **proper** update: identify what upstream changed, what it breaks, and accommodate the useful
-parts. The research is done and tracked (**`docs/PI-UPGRADE-DELTA-2026-11-04.md`**, D206); the **team** holds the
-build/link/migration rows. State at 2026-11-04T13:1xZ (`DURIG_DB=./selfdev.sqlite`):
+**The operator accepted all four recommendations (D207)**: push → delegate lands the docs-only #5089, `lead` lands
+#5090; the verifier key will be **supplied** (no same-vendor fallback); the box's hostname is left alone and **#5085**
+re-signs; the backup boundary is **`lead`'s** ruling.
 
-| row | what | status |
-|---|---|---|
-| **#5089** | `docs/runbooks/pi-pin-update.md` — the pin-move procedure | **done, NOT landed** (branch `item-5089` = `314ad20d`: runbook 230 lines + README index; `merge-tree main 314ad20d` exit 0, 0 conflicts) |
-| **#5090** | promote the store-behaviour gate into `tools/` | **done, NOT landed** (branch `item-5090` = `4c92d550`: `tools/store-behaviour-gate.mjs` + `demo/store-behaviour-gate.test.mjs` + area registration) |
-| **#5094** | make the pin a **tag** and drift a **finding** | queued → devtools |
-| **#5095 / #5096** | stage 1 pin `v1.4.0`; stage 2 pin `v1.5.0` + symbol migration | queued → devtools |
-| **#5083** | the landing **receipt** row | claimed → devtools |
+**#5089 is LANDED by the delegate, legally and with the receipt proven** — this is the worked example, don't redo it:
+the push made `main == origin/main = 211e912c` (the `docs/land.md` delegate precondition), the landing read and the
+merge happened in the **same turn**: `git merge-tree --write-tree main 314ad20d` → exit **0**, predicted tree
+**`aab732c6f69ece9d421dae7e68ce288102db1c1b`**, 0 conflicts → `git merge --no-ff 314ad20d` → **`main = bb2a3997`** whose
+`^{tree}` **equals** the prediction → `git merge-base --is-ancestor 314ad20d main` → **exit 0**. `git worktree remove
+item-5089` ran **after** the portability audit showed no seat cwd naming it. Seatroot mirror `1a3c57c8 → bb2a3997`.
+Gate at the merged sha: `check rig.selfdev.json` → **115 findings** (`duplicate-item 57, citation-unresolvable 56,
+verification-without-evidence 1, evidence-tree 1`) — the docs landing added **zero**.
 
-**Delegate-verified #5090 independently** (extracted both files into the checkout, ran them against current `main`'s
-CLI, then removed them — `git status` clean): `node demo/store-behaviour-gate.test.mjs` → **exit 0**, and it asserts
-**both directions** — the gate passes on the product's real refusal (4 verbs, `cause:no_store`, absolute `db`, target
-`-wal`/`-shm` absent after) **and** refuses a live-store name / in-tree path / existing file with named causes
-(`gate_target_refused`, `gate_target_exists`), and it has teeth (a fixture that *manufactures* a rig fails the gate
-naming it). Running the tool directly: `--target /tmp/delegate-verify-gate/absent.sqlite` → `ok:true, failures:[]`;
-`--target selfdev.sqlite` → `ok:false, cause:"gate_target_refused"` and the live store untouched
-(463,835,136 B — it has grown since the 11:30Z backup baseline of 463,142,912 B, which is the baseline the runbook
-step 1 records for any `checkpointWhen` growth report).
+**Row state at 2026-11-04T14:1xZ** (`DURIG_DB=./selfdev.sqlite node cli.mjs queue --json --id <id>`):
+`#5083 done`, `#5089 done+landed`, `#5090 done` (branch `item-5090` = **`4c92d550`**, delegate-verified: demo exit 0),
+`#5094 claimed → devtools`, `#5095`/`#5096 queued → devtools`. `lead` minted on `d016/d017/d018-lead` (all settled
+`done`): **#5110** land #5090 (expect **255** demos — a 254 count is a red, the demo did not register; findings
+baseline 115 **with the rig file named**), **#5111** `broker-serve`'s `/v1/models` probe sends no credential so a
+working provider reads as `unreachable: HTTP 401`, **#5112** bare `check` audits the wrong rig, **#5113** phantom seat
+roots (re-point then prune), **#5114** `citation-unresolvable` shape + **mint before you cite**, **#5115** cumulative
+`consumed` vs window, **#5116** backup boundaries, **#5118** verifier arming (**sequence changed: arm AFTER stage 1**),
+**#5119** the `land.md` amendment, **#5120** `.spike/` retention (author-only, deletes nothing, `.spike/backups/**`
+frozen while any pin stage is open). `lead` withdrew its "keep two backups" ruling once I measured **492 GB free**
+(`/dev/nvme1n1p3` btrfs, `/home`; `.spike/` itself is **10.5 GB**).
+**Priority as routed:** #5110 → #5113 → #5111 → #5112 → #5116 → #5094 → #5095, then #5096/#5118.
 
-**Rail for whoever moves the pin: the store is backed up** at `.spike/backups/20261104T1130Z/selfdev.sqlite`,
-sha256 `02da60e3a5bbb79a4148cfae6f6cf5d19f1a35ddde73bc4d5239759a2f5be952`, byte-identical at copy time, taken with the
-broker down. The live store is at `durable_schema = {singleton:1, version:2}` and released pi-durable ≤ 1.3.0 cannot
-re-open it, so **`sync-pi --unlink` is not a rollback**; the backup is the only one. Do **not** mint further backups
-without lead's ruling.
+**Ancestry settled (do not re-litigate):** `item-4955` = `d1c6d8a6`, `rev-list --count main..item-4955` = **0**,
+`is-ancestor` **exit 0**; `89f2b975` → **exit 0**; both leftover seatroot worktrees (`item-4955`, `item-5079`) are
+ancestors → prune is safe **only after** re-pointing (SELFDEV pitfall 24). There is **no second exhibit** for #5082;
+its class stands.
 
-**Open landing question (operator or lead):** #5089 (docs-only) and #5090 (tools + demo) are complete but unlanded,
-and the next stages (#5094-#5096) depend on the runbook being in the tree. `docs/land.md` permits the delegate to land
-a docs-only item only when `main == origin/main`, and `main` is **ahead of `origin/main`** right now — so either the
-operator pushes first, or lead lands them. See the operator-decision block below.
+**Backup rail unchanged:** `.spike/backups/20261104T1130Z/selfdev.sqlite`, sha256
+`02da60e3a5bbb79a4148cfae6f6cf5d19f1a35ddde73bc4d5239759a2f5be952`, 463,142,912 B at copy; live store has grown to
+**463,835,136 B**. Store is at `durable_schema v2`; released pi-durable ≤ 1.3.0 cannot re-open it, so **`sync-pi
+--unlink` is not a rollback**. `lead`'s ruling: a fresh backup at **every new-build boundary** (before stage 1 under
+`v1.4.0`, again before stage 2 under `v1.5.0`), recorded in the runbook's `Backups taken` table (#5116) and in each
+stage's completion.
+
+**Verifier class — what "armed" actually requires (measured 14:0xZ):** `DURIG_VERIFIER_BASE_URL =
+http://127.0.0.1:1234/v1` has **no listener** (`/v1/models` → `http=000`, `ss` count 0), and `DURIG_VERIFIER_API_KEY`
+is unset. So the key alone arms nothing: **an endpoint must exist as well.** When the operator supplies it, put it in
+**`~/.config/durig/env`** (outside every git tree, mode 600, loaded with `node --env-file=…`), never
+`durig.config.json` — gitignored still means *inside the tree*. Arming then moves three layers at once (price
+declaration, the credential, and the 5 `model` lines in the tracked `rig.selfdev.json`); half-arming turns
+`qa qa2 advocate auditor designer` into `no_model`. Row: **#5118**, and `lead` ruled it lands **after stage 1**.
 
 ## Local inference (Strata) — the 401 is FIXED, and the firewall is the next gate (measured 2026-11-04T12:1x–12:4xZ)
 
@@ -198,25 +211,19 @@ unauthorized* naming the variable.
 
 ## Operator decisions outstanding
 
-1. **Push, and then who lands #5089 / #5090** — `main` is **6 ahead** of `origin/main` (docs only: D206, the
-   pi-delta doc, the entry-point change, the runbook's state 5 + firewall section, the pitfalls, the pointer). The
-   delegate will not push without your grant. Both completed pi rows are **unlanded**, and #5094–#5096 need the
-   runbook in the tree, so the choice is: (a) you push, then the delegate lands the docs-only #5089 under
-   `docs/land.md` (its delegate clause requires `main == origin/main`, which a push restores) and lead lands #5090
-   with a gate run at the merged sha; or (b) lead lands both. Recommend (a): it is one push and it unblocks the pin
-   chain without stretching the landing rule.
-2. **`DURIG_VERIFIER_API_KEY`** — export it where the broker starts, so `lead`'s roster row can arm the verifier
-   class and W2's non-author review becomes real. Ruled 2026-11-04: **no same-vendor fallback** — the fallback chain
-   dies on `DEEPINFRA_API_KEY`, which is the producer's vendor, so a verifier that uses it is not independent.
-   Arming is three layers at once (price declaration, the key, and the 5 `model` lines in `rig.selfdev.json`), which
-   is why it is a row and not a paste.
-3. **The box's hostname** — the *project* rule is settled (no hostnames; sign OS+distro+kernel+node) and the code has
-   no host-identity dependence. What is left is whether to fix the **machine** (it reads transient `Alex-Desktop-Win10`
-   with no static hostname) or let **#5085** (`scribe`) re-sign the ~20 historical lines. Recommend leaving the box
-   alone and letting #5085 run: the record is what misleads.
-4. **Store backups** — one pre-pin backup exists (`.spike/backups/20261104T1130Z/`, sha256 in the pi section). The
-   store is ~442 MiB and growing. Whether a **second** backup is taken at the `v1.4.0` boundary is **lead's** call; the
-   delegate will not mint more without a ruling.
+1. **Push the landing** — `main` is **3 ahead** of `origin/main` (`bb2a3997` the #5089 landing merge, `ef5ffc88` D207 +
+   pitfalls, and the pointer commit that follows). Docs only. Nothing of mine is on `origin` without your grant, and
+   under `docs/land.md`'s delegate clause the next docs landing (#5119, #5116, #5120 — `lead` routed them to
+   `devtools` precisely because that clause binds me, not seats) will keep queueing behind the same grant.
+2. **The verifier needs an endpoint, not just a key.** Measured: `:1234` has no listener and
+   `DURIG_VERIFIER_API_KEY` is unset. To arm the class you must (a) point `DURIG_VERIFIER_BASE_URL` at something that
+   answers `/v1/models` — a second local engine, or Strata's key-protected share on another box — and (b) give me the
+   credential **without pasting it into chat**: run
+   `printf 'DURIG_VERIFIER_API_KEY=%s\n' '<the key>' >> ~/.config/durig/env && chmod 600 ~/.config/durig/env`.
+   Then `lead` arms it as **#5118** (three layers, and `lead` ruled *after stage 1*). **Recommendation:** do (a) now if
+   you can, because #5096 (stage 2, the riskiest landing) is the one that most wants an independent verifier.
+3. **Nothing else is blocked on you.** #5085 (hostname re-sign) is a `scribe` row you already cleared; the backup
+   boundary is `lead`'s and is ruled.
 
 ## CLOCK-OUT — 2026-11-04 afternoon delegate session (pi-delta research → local-provider 401 → firewall)
 
