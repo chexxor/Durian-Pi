@@ -29,6 +29,11 @@ import { ANSI } from "./ansi.mjs";
 // CLI's load (2026-10-17, lead #1164). Re-exported so every importer keeps ONE
 // definition.
 import { VERIFIER_TERMS, seatsAreVerifier } from "./verifierrole.mjs";
+// #5049: the over-window predicate lives with the MEASURE (src/context.mjs), not here, so `check` scores the
+// same rule the `context_over_window` notice applies — two spellings of a threshold is how #5047's notice/rule
+// pair un-paired. context.mjs is dependency-free, which is what makes importing it safe here; the verifierrole
+// lesson (a checkup.mjs that drags runtime deps is fatal to the whole CLI load) is why it stays that way.
+import { contextOverWindow } from "./context.mjs";
 import { describeFaults } from "./textintegrity.mjs";
 import { messageDefects } from "./commitmsg.mjs";
 
@@ -140,6 +145,11 @@ export const RULES = [
     id: "text-integrity",
     severity: "error",
     what: "a tracked file's newline structure COLLAPSED versus HEAD, or its encoding is broken (BOM / NUL / invalid UTF-8) — node --check is structurally blind to this class (#4305)",
+  },
+  {
+    id: "context-over-window",
+    severity: "fix-now",
+    what: "a seat's newest reported turn MOVED more tokens than its OWN window allows, on a head nothing has reset since — the fraction `status` prints was consumed by nothing (#5049)",
   },
 ];
 
@@ -420,7 +430,7 @@ export function runbookFrontMatterProblems(runbook) {
  *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main" }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -940,6 +950,38 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
         f.path,
         describeFaults(f.path, f.faults),
         `restore from HEAD (git show HEAD:${f.path}) and re-apply the intended edit — do not patch bytes`,
+      );
+    }
+  }
+
+  // #5049 (ROADMAP 208): the context fraction is on the health snapshot and NOTHING scored it, so a seat
+  // reading 9.96x its window was displayed and dropped. The rule scores the SAME map `status.context`
+  // prints (produced by `seatContextMap`), never a second computation of it.
+  //
+  // WHY IT STARTS GREEN instead of red-with-caveats (#3539: a rule as specified can start hundreds-red and
+  // be switched off): the two known false-alarm classes are excluded by the MEASURE's own state, not by a
+  // name allowlist — a turn behind a `pi.compaction`/`pi.reset` boundary (a seat compacted after a long turn
+  // legitimately prints a fraction over 1 until its NEXT turn, D199/D200) and a seat with no window in any
+  // denominator state (there is no fraction to score). Measured on the live store 2026-11-04: 12
+  // conversations carried entries, exactly one exceeded its declared 200,000 window, and that one sat behind a
+  // boundary — so the rule finds nothing today. Scored against the WRONG denominator it would find 7 of 12,
+  // which is what the denominator's state in the finding text exists to prevent. `fix-now`, not `error`: a
+  // seat over its window does not make the rig unable to work, and nothing here stops a seat (#3271 — a cheap
+  // signal may ACCEPT but never DECIDE; the stop actuator is #1781's row).
+  if (contextBySeat === null || contextBySeat === undefined) {
+    skipped.push({
+      id: "context-over-window",
+      why: "no per-seat context measure was supplied (the store could not be read, or the context read failed), so no fraction can be scored",
+    });
+  } else {
+    for (const [seatName, measure] of Object.entries(contextBySeat)) {
+      const over = contextOverWindow(measure);
+      if (!over.fired) continue;
+      add(
+        "context-over-window",
+        seatName,
+        `one turn MOVED ${over.consumed} tokens = ${over.fraction.toFixed(2)}x the ${over.denominator} window of ${over.windowValue}; axis: tokens the provider MOVED in one turn (cacheRead ${over.cacheRead} of them), NOT the live head; nothing reset the head after entry ${over.head?.usageEntryId ?? "?"}`,
+        `node cli.mjs compact ${rig} ${seatName} — the gate is the accumulation budget (keepRecentTokens), NOT the window, so read the exit code: 0 cut, 1 failed, 2 no-op (docs/runbooks/compact-a-seat.md); the window itself is DURIG_<PROVIDER>_CONTEXT`,
       );
     }
   }

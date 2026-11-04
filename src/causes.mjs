@@ -36,3 +36,19 @@ export function isSpendStopMessage(text) {
 export function spendCapNamed(text) {
 	return SPEND_CAP_KEYS.find((key) => String(text ?? "").includes(key)) ?? null;
 }
+
+/**
+ * One turn MOVED more tokens than the seat's window allows (#5049, ROADMAP 208).
+ *
+ * This is a NOTICE, not a stop. Nothing parks, retries or escalates on it, and `src/supervisor.mjs`
+ * must not start to: a cheap signal may ACCEPT but never DECIDE (#3271/#3575), and the actuator that
+ * would halt a seat is a separate, unbuilt row (#1781). The name lives here for the same reason
+ * `SPEND_CAUSE` does — the module that RAISES it (`src/attention.mjs`, `src/checkup.mjs` reading a
+ * context measure) and any module that later ACTS on it must agree on one spelling, so a reword
+ * cannot silently un-pair the notice from its rule (#5047's finding).
+ *
+ * What the notice must carry, because the number without them is a false alarm: the denominator's
+ * STATE (`measured | declared | advertised`, `src/context.mjs`) and the axis — one turn's moved
+ * tokens including `cacheRead`, not the live context head.
+ */
+export const CONTEXT_OVER_WINDOW_CAUSE = "context_over_window";

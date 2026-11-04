@@ -17,6 +17,7 @@
       "demo/compaction-harness.test.mjs",
       "demo/config.test.mjs",
       "demo/constitution.test.mjs",
+      "demo/context-over-window.test.mjs",
       "demo/control-plane-gate.test.mjs",
       "demo/converter.test.mjs",
       "demo/coordinator-queue.test.mjs",

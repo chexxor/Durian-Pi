@@ -17,7 +17,7 @@ import { SCAN_LIMIT, readSeatPages } from "./rigstory.mjs";
 import { computeMetrics } from "./metrics.mjs";
 import { computeAttention, countMalformedToolCalls } from "./attention.mjs";
 import { failureStreak } from "./supervisor.mjs";
-import { strandedMsSetting, declaredContextWindow } from "./config.mjs";
+import { strandedMsSetting, declaredContextWindow, compactionSettings } from "./config.mjs";
 import { contextConsumption } from "./context.mjs";
 import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
@@ -226,9 +226,6 @@ export async function readRigHealth(
 		storage,
 		seats.filter((seat) => !modelsBySeat[seat.name]),
 	);
-	// EVERY locally-served provider, not just the first: reading only `local/` left the verifier seat's
-	// declared window ABSENT, which a capacity reader sees as "unknown" rather than as wrong.
-	const localSpecs = localProviderSpecs(cfg);
 	// ROADMAP 131: the rig-level paused state (read-only).
 	const control = await readRigControl(storage);
 
@@ -350,28 +347,10 @@ export async function readRigHealth(
 		const partial = partialView(await readLiveState(storage, seat.conversationId));
 		if (partial?.hasContent) streaming[seat.name] = partial;
 	}
-	// ROADMAP 27 / #1192: the per-seat context-consumption measure, exposed on the health
-	// snapshot so `status`/`watch` and the TUI render it VERBATIM (the TUI owns no
-	// denominator logic). The three-state denominator travels with the value: `measured` is
-	// item 97's effective window (#1087) — reserved here and absent today; `declared` is the
-	// operator's config; `advertised` is the caller's catalog figure. The caller may supply
-	// any of the three per seat via `windowsBySeat`; `declared` otherwise falls back to
-	// `DURIG_CONTEXT_WINDOW`. See src/context.mjs for why the state is not optional.
-	const context = {};
-	for (const seat of seats) {
-		const supplied = windowsBySeat[seat.name] ?? {};
-		// An explicit, spec-supplied model wins over the persisted one (they agree today; the
-		// spec is the caller's deliberate answer).
-		const modelKey = modelsBySeat[seat.name] ?? agentModels[seat.name] ?? null;
-		context[seat.name] = contextConsumption(pages[seat.name] ?? [], {
-			measured: supplied.measured ?? null,
-			declared:
-				supplied.declared ??
-				declaredContextWindow(cfg, modelKey) ??
-				declaredLocalWindow(localSpecs, modelKey),
-			advertised: supplied.advertised ?? null,
-		});
-	}
+	// ROADMAP 208 / #5049: the same measure feeds the `context_over_window` notice, so the notice and
+	// the printed fraction can never disagree about which number was scored.
+	const context = seatContextMap({ pages, seats, cfg, modelsBySeat, agentModels, windowsBySeat });
+	const compactGate = compactGateMap({ seats, cfg, modelsBySeat, agentModels });
 	return {
 		seats,
 		queueItems,
@@ -398,6 +377,10 @@ export async function readRigHealth(
 				failureStreakByConv,
 				malformedCountByConv,
 				...(strandedMs === null ? {} : { strandedMs }),
+				// #5049: the context measure and the compaction verb's gate, so the notice scores the SAME
+				// number the `context` field prints, and its remedy text can say whether `compact` would cut.
+				contextBySeat: context,
+				compactGateBySeat: compactGate,
 			}),
 			...slotNotices,
 			// Metric notices join the attention channel instead of claiming a screen
@@ -415,6 +398,64 @@ export async function readRigHealth(
 		// Internal: watch derives highlights from these instead of re-scanning.
 		_pages: pages,
 	};
+}
+
+/**
+ * The per-seat context measure for a page map (ROADMAP 27 / #1192, re-shaped by ROADMAP 208 /
+ * #5049). One producer, two callers: `readRigHealth` (so `status`/`watch`/the TUI render it
+ * verbatim) and `check` (so the `context-over-window` rule scores the number the operator already
+ * sees rather than a second computation of it).
+ *
+ * The three-state denominator travels with the value: `measured` is item 97's effective window
+ * (#1087) — reserved and absent today; `declared` is the operator's config; `advertised` is the
+ * caller's catalog figure. The caller may supply any of the three per seat via `windowsBySeat`;
+ * `declared` otherwise falls back to `DURIG_CONTEXT_WINDOW` / the local provider spec. See
+ * src/context.mjs for why the state is not optional, and for the two blind spots (one turn's moved
+ * tokens including `cacheRead`, and the head state) that a guard must carry.
+ */
+export function seatContextMap({ pages, seats, cfg, modelsBySeat = {}, agentModels = {}, windowsBySeat = {} }) {
+	const localSpecs = localProviderSpecs(cfg);
+	const context = {};
+	for (const seat of seats) {
+		const supplied = windowsBySeat[seat.name] ?? {};
+		// An explicit, spec-supplied model wins over the persisted one (they agree today; the
+		// spec is the caller's deliberate answer).
+		const modelKey = modelsBySeat[seat.name] ?? agentModels[seat.name] ?? null;
+		context[seat.name] = contextConsumption(pages?.[seat.name] ?? [], {
+			measured: supplied.measured ?? null,
+			declared:
+				supplied.declared ??
+				declaredContextWindow(cfg, modelKey) ??
+				declaredLocalWindow(localSpecs, modelKey),
+			advertised: supplied.advertised ?? null,
+		});
+	}
+	return context;
+}
+
+/**
+ * The compaction verb's OWN gate per seat, so a context notice can say whether `compact <seat>`
+ * would cut or decline instead of pointing at a verb that might do nothing. The gate is the
+ * ACCUMULATION BUDGET (`keepRecentTokens`), not the window — that is what #4898 established, and
+ * it is why "over the window" and "compact will help" are different questions.
+ *
+ * Reported only when DURIG actually sets it (`DURIG_COMPACTION_KEEP_RECENT_TOKENS` or a
+ * per-model override). pi-durable's documented default is NOT substituted here: a number durig
+ * does not read must not become a number durig prints, so the gate stays null and the notice says
+ * `unknown`.
+ */
+export function compactGateMap({ seats, cfg, modelsBySeat = {}, agentModels = {} }) {
+	const settings = compactionSettings(cfg ?? {});
+	const gates = {};
+	for (const seat of seats) {
+		const modelKey = modelsBySeat[seat.name] ?? agentModels[seat.name] ?? null;
+		const override = modelKey ? settings.modelOverrides?.[modelKey] : null;
+		const fromOverride = Number.isFinite(override?.keepRecentTokens) ? override.keepRecentTokens : null;
+		const fromConfig = Number.isFinite(settings.keepRecentTokens) ? settings.keepRecentTokens : null;
+		const keep = fromOverride ?? fromConfig;
+		gates[seat.name] = { keepRecentTokens: keep, source: keep === null ? null : fromOverride !== null ? "model-override" : "declared" };
+	}
+	return gates;
 }
 
 /**
