@@ -12,9 +12,10 @@
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { NO_STORE_CAUSE } from "./causes.mjs";
 import { awaitIntentResult, brokerAlive, intentResultDir, readBrokerState, writeIntent } from "./broker.mjs";
 
 /** Is a live broker driving `dbPath`? The read verbs branch on this. */
@@ -54,10 +55,39 @@ export async function readViaBroker(dbPath, view, params = {}, { timeoutMs = 120
   return record.result;
 }
 
+/**
+ * The gate every read site passes through: is there a store at this path to read at all? (#4955)
+ *
+ * WHY IT EXISTS. The engine CANNOT open read-only. `@earendil-works/pi-durable`'s
+ * `openNodeSqliteDatabase` (dist/storage/sqlite/node.js) does `mkdir(dirname(path), {recursive: true})`
+ * then `new DatabaseSync(path, {timeout})`, and `NodeSqliteDatabaseOptions` offers only
+ * `walAutocheckpointPages`/`busyTimeoutMs` — no read-only mode, no create-disabling flag. `SqliteStorage.open`
+ * then migrates. So an ordinary READ at a wrong path produced a real 118,784 B store and answered
+ * `ok: true, seats: []`: the instrument manufactured its own subject and then reported it healthy
+ * (`tools/rig-portability-audit.mjs` #4923 read "0 seat roots" from a file it had just made). Creation is
+ * a property of the WRITE path; a read verb must refuse instead, naming the path it was pointed at.
+ *
+ * The error is structured (`code`, `db`) so surfaces render a cause and a field rather than matching prose.
+ */
+export function assertStoreReadable(dbPath) {
+  if (existsSync(dbPath)) return dbPath;
+  const abs = resolve(dbPath);
+  const err = new Error(
+    `no store at ${abs} - reading does not create one. ` +
+      "pi-durable's open mkdirs the parent and creates the file, so durian-pi refuses before opening. " +
+      "Create the rig with `node cli.mjs up <rig.json>`, or point DURIG_DB at the store you meant.",
+  );
+  err.code = NO_STORE_CAUSE;
+  err.db = abs;
+  throw err;
+}
+
 /** The direct-storage path: open the store, run `fn(storage)`, close it. Used ONLY
  * when no broker is alive, so the caller is the sole owner and the close checkpoint
- * contends with no one. */
+ * contends with no one. A missing store REFUSES (`assertStoreReadable`) rather than
+ * being created: this is the seam every CLI read verb runs through. */
 export async function readLocal(dbPath, fn) {
+  assertStoreReadable(dbPath);
   let storage;
   try {
     storage = await openNodeSqliteStorage(dbPath);

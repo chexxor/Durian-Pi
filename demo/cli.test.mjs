@@ -6,7 +6,7 @@
 // Run: node demo/cli.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -242,21 +242,26 @@ assert.doesNotThrow(
 
 	console.log("--- wrong-database guardrail ---");
 
-	// A second terminal that forgot DURIAN_PI_DB is the classic new-user trap: the
-	// default ./rig.sqlite is created on demand, so every read command answers
-	// ok with zero seats and looks healthy. The note must name the database.
+	// A second terminal that forgot DURIG_DB is the classic new-user trap. It used to be mitigated by
+	// warning after the fact: the default ./rig.sqlite was created on demand, so every read command
+	// answered ok with zero seats and looked healthy. #4955 closed the hole instead — a READ verb must
+	// not manufacture the rig it is observing, because an instrument that creates its own subject can then
+	// report that subject as fine (`tools/rig-portability-audit.mjs` read "0 seat roots" out of a file it
+	// had just made). The warning stays, now attached to a refusal.
 	const strayDb = join(dir, "stray", "rig.sqlite");
 	const strayEnv = { DURIG_PROVIDER: "faux", DURIG_DB: strayDb, PATH: process.env.PATH };
 	for (const args of [["ps"], ["status"], ["watch", "--once"]]) {
 		const res = cli(args, strayEnv);
-		assert.equal(res.code, 0, `${args[0]} on a fresh database still succeeds`);
+		assert.notEqual(res.code, 0, `${args[0]} refuses a database that does not exist (#4955)`);
 		const parsedRes = json(res);
-		assert.equal(parsedRes.ok, true, `${args[0]} keeps the JSON contract`);
-		assert.equal(parsedRes.db, strayDb, `${args[0]} names the database it used`);
+		assert.equal(parsedRes.ok, false, `${args[0]} does not answer ok:true about a rig it had to create`);
+		assert.equal(parsedRes.cause, "no_store", `${args[0]} reports the named cause, not prose to match`);
+		assert.equal(parsedRes.db, strayDb, `${args[0]} names the database it was pointed at`);
+		assert.ok(!existsSync(strayDb), `${args[0]} created a store at ${strayDb} while reading`);
 		assert.match(
 			res.stderr,
-			/note: no seats in .* If you meant a different rig/,
-			`${args[0]} warns instead of looking healthy on an empty rig`,
+			/no store at .* If you meant a different rig/,
+			`${args[0]} says the file is ABSENT, not empty, and still points at the fix`,
 		);
 	}
 
