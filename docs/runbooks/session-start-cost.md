@@ -3,10 +3,15 @@ runbook: session-start-cost
 symptom: "a session burns its first 30–60 minutes re-deriving rig state that an instrument already reports; the delegate 'verifies' numbers by hand that a tool prints in seconds"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-03
-verified_by: delegate
-evidence: "measured 2026-10-31 on `Alex-Desktop-Win10` (Linux, node v24.22.1): `cli.mjs queue --json` 1.5 s and 21,710,535 B; `tools/what-to-test.mjs --base=HEAD~1` 0.13 s → 6 derived tests against a 239-test suite; `tools/doc-integrity-guard.mjs` 0.10 s exit 0; `tools/instrument-provenance.mjs` 0.07 s exit 0; `tools/seat-turn-shape.mjs` 3.6 s, 58,566 entries read, 0 writes. One batched `send` to `lead` (8 min) produced rows #4947–#4950 plus three closures; one `impl` turn (70 min) produced three rows. Rows #4947–#4950 exist because a delegate MEASUREMENT was carried to a seat instead of a re-derivation. Re-read 2026-11-02 (D189, same box): every Diagnose step above still costs the same, but TWO of its reads now print false verdicts — §5's served-window pair (LM Studio has no instance loaded at all) and `scripts/clockin.mjs`'s `## PROVIDER` line — see §7–§9 below."
-check_rule: null
+last_verified: 2026-11-04
+verified_by: delegate, impl
+evidence: "measured 2026-10-31 on `Alex-Desktop-Win10` (Linux, node v24.22.1): `cli.mjs queue --json` 1.5 s and 21,710,535 B; `tools/what-to-test.mjs --base=HEAD~1` 0.13 s → 6 derived tests against a 239-test suite; `tools/doc-integrity-guard.mjs` 0.10 s exit 0; `tools/instrument-provenance.mjs` 0.07 s exit 0; `tools/seat-turn-shape.mjs` 3.6 s, 58,566 entries read, 0 writes. One batched `send` to `lead` (8 min) produced rows #4947–#4950 plus three closures; one `impl` turn (70 min) produced three rows. Rows #4947–#4950 exist because a delegate MEASUREMENT was carried to a seat instead of a re-derivation.
+  Re-read 2026-11-04 (impl, `item-4955` worktree, Linux node v24.22.1): the §Preconditions claim about a relative path was understated — a READ at an
+  absent path CREATED a 118,784 B store (measured: `readData(...) -> []` with the file present afterwards, `cli.mjs status -> {ok:true, seats:0}` exit 0).
+  Fixed in #4955 (`e2a3cb5a`); `node demo/read-no-create-store.test.mjs` exits 0 and `node scripts/test.mjs --all --jobs 8` is 250/250. NOT re-run from this
+  thin worktree: the live-store Diagnose reads above, because the pinned `pi-durable@1.3.0` here refuses the live store (`schema version 2 is newer than
+  supported version 1`) — from a worktree this shallow, those steps answer with that error, so run them in the seat root. Re-read 2026-11-02 (D189, same box): every Diagnose step above still costs the same, but TWO of its reads now print false verdicts — §5's served-window pair (LM Studio has no instance loaded at all) and `scripts/clockin.mjs`'s `## PROVIDER` line — see §7–§9 below."
+check_rule: "demo/read-no-create-store.test.mjs"
 ---
 
 # A session is spending its budget re-deriving state
@@ -32,8 +37,12 @@ verdict (D183). Meanwhile the read-only instruments cost **hundredths of a secon
 ## Preconditions
 Read-only. The broker may be down (it was, on 2026-10-31). None of the commands below opens a writing
 `Harness`; `queue --json` and the `tools/*.mjs` probes write 0 rows. Pin the store with an **absolute**
-`DURIG_DB` when your cwd is not the checkout — `src/config.mjs` reads only `DURIG_*`, so a relative path
-silently opens an empty `./rig.sqlite` (AGENTS.md step 4).
+`DURIG_DB` when your cwd is not the checkout — `src/config.mjs` reads only `DURIG_*`. It used to be worse than
+that: a relative path **silently created** an empty `./rig.sqlite` and the read answered `ok:true` about a rig
+the instrument had just manufactured (#4955). That half is closed — the store path is resolved absolutely and a
+READ verb refuses a path with no store, `{ok:false, cause:"no_store", db:<abs>}`, and creates nothing, not even
+the parent directory (pi-durable's open is what forces creation: `mkdir` + `new DatabaseSync`, with no read-only
+mode in the pinned version). `node cli.mjs config` prints the effective values and their source.
 
 ## Diagnose (read-only) — this is the whole clock-in read, and it costs ~7 s
 
@@ -168,6 +177,11 @@ guards exited 0. Re-check in one line that you are reading, not re-deriving: you
 should cost seconds, and the first artefact it produces should be a brief or a report, not a query.
 
 ## If it fails
+If an instrument answers `no store at <abs> - reading does not create one`, that is the instrument naming the
+file it was pointed at (#4955). Fix the pointer (`DURIG_DB`, or `node cli.mjs config` to see what is in effect);
+do not create the path to make the message go away — a store you manufactured is a subject you can then read as
+healthy, which is the defect, not the fix.
+
 If an instrument contradicts another instrument, **name the signal source and probe it directly** before
 minting or acting on anything — that is how the stale shell-name probe (#4938) and the single-sample
 provider probe (#4949) were separated instead of folded into one untestable row. If the state you need has
