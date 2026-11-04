@@ -1820,6 +1820,11 @@ the prefix forever.
     "linked-worktree"` (ROADMAP 221) — a woken seat told it is in a tree while every file tool aims at a path that
     does not exist. Run the audit (0.97 s, read-only) *after* a prune, not only after a machine move; the seat
     self-heals on its next `prepare_workspace`, and a brief that says so saves the seat a blind file verb.
+    **Order matters: re-point, then prune.** Measured 2026-11-04 after landing #5083 — `devtools`' cwd names
+    `seatroot/item-5079` and `impl`'s names `seatroot/item-4955`, and both branches are now fully merged into
+    `main`, so `git worktree remove` + `git branch -d` would be git-safe yet each removal strands a live seat's
+    recorded root. `git worktree list` alone hides this; the audit's `note: <seat>: root resolves but is outside
+    this checkout (<path>)` lines are the seat→root map, so read those BEFORE deciding what is prunable.
 25. **A host signature on a D-entry is a claim, and this rig repeated an unmeasured one for six entries.**
     `chexxor@ThinkStation-P3` appears in D197b–D204 and in the NEXT pointer; **no session transcript contains a
     `hostname` call**, and `hostnamectl` here reads transient `Alex-Desktop-Win10`, static unset, `/etc/hostname`
@@ -1834,3 +1839,12 @@ the prefix forever.
     (`DURIG_VERIFIER_PRICE_USD_IN/OUT`, or `local.mjs:250` refuses `metered-endpoint-unpriced`), the credential
     variable (`local.mjs:246` reads `DURIG_VERIFIER_API_KEY` **only** — no `DEEPINFRA_API_KEY` fallback, unlike
     the probe path at `metered.mjs:38`), and the 5 `model` lines applied with `up`. That is a row, never a paste.
+27. **Two cheap reads whose labels mislead, both measured 2026-11-04.** (a) `queue` accepts **`--json --id --status
+    --to --no-body` and nothing else** — `--limit` fails the call outright (`unknown argument --limit`) even though
+    it appears in the driving skill's copy; a census run that way returns nothing, and the shape to reach through is
+    `items[]` (there is no `total`). (b) `status`'s `context[seat].consumed` is **cumulative**, while `check`'s
+    `context-over-window` scores **one turn's moved tokens vs that seat's own window** (`src/checkup.mjs:973-985`),
+    and `status` prints each seat's own denominator (24,576 for the verifier seats, 200,000 for the gemini seats) —
+    so `advocate` at `consumed 244,751 / window 24,576 = 9.96x` with `head.state "behind-boundary"` is a green rule
+    and a red number at the same time. Say which measure you are quoting; do not use the rule as evidence a seat
+    fits, and do not call the number a rule failure.
