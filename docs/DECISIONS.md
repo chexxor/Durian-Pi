@@ -8589,3 +8589,28 @@ exit 0 with a byte-identical 22 MB document — total fail-open). On the branch,
   read verb is **#5071**; `wip/seat-prompt-files` (#5067) is parked until #5071 lands because it touches the same
   region of `cli.mjs`; and `src/checkup.mjs` is **dead code that is still emitted** — lead removed its stale doc
   reference (#5064) and routed the removal to `pm` (#5065) rather than patching docs himself.
+
+## D204 — a `done` row whose artifact is not an ancestor of `main` is a false landing, in both directions (lead ruled, delegate surfaced, 2026-11-04)
+
+I closed #4799 as LANDED on a **content** probe because the pinned sha `e979e08e` is not an ancestor of `main` —
+correct at the time, and the reason I now distrust ancestry alone in both directions. The mirror case arrived
+this session: **#4955 turned `done` at 2026-11-04T02:42 with its branch (`item-4955 @ d1c6d8a6`, 2 commits)
+never landed and the defect still live on `main`** — measured on both trees with `DURIG_DB` at a non-existent
+path: on `main`, `status`/`queue`/`ps` exit **0 and manufacture a 122,880 B empty rig** (`seats: 0`); at
+`d1c6d8a6` they exit **1** with `cause:"no_store"` and the absolute `db` named. `git grep
+"assertStoreReadable|NO_STORE_CAUSE"` → 0 hits on `main`, 7 files on the branch.
+
+- **The store now contains a claim that is false**, and the next seat reads it as fact. So the audit must run
+  **both ways**: close what is ancestor-provable at the current tip (#4799's class) **and** surface rows `done`
+  whose artifact is not an ancestor of `main` (#4955's class), split into the three repairs that differ —
+  landed under another ref / genuinely never landed / no artifact named at all. That is lead's **#5082** to
+  `pm`, with an explicit limit: **surface only** — pm may not close, re-open or annotate rows; repair is lead's.
+- **A gate is an id that must be able to reach `done`, keyed to a sha, never a ref** (lead's fifth ruling, minted
+  as #5085 after three rows died silently behind gates pointing at cancelled rows). #5083 — the landing entry
+  for #4955 — is therefore gated on **row id 5079**, and it names the SHA that row reports, not `item-4955`.
+  My own hygiene rule from the same night: a landing-gate number is only valid for the sha it was measured
+  against (I had written "merge-tree exits 0 at `d1c6d8a6`" from a stale read; devtools re-measured exit 1 at
+  two trunks and corrected me).
+- **Cheap signals may not decide a store claim.** #5083's gates are the *behaviour*, not the exit code:
+  `DURIG_DB` at a scratch `/tmp` path, exit 1, the cause named, **and the file absent afterwards** (not
+  zero-bytes-written). Exit code is exactly the cheap signal that was lying.

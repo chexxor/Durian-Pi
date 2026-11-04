@@ -1790,3 +1790,13 @@ the prefix forever.
      an error, but it is not free either: a shell write target built from a variable is *not checked* by the
      guard. When a seat's command writes through `"$var"`, the guard's protection silently degrades to nothing.
      Prefer literal paths or the edit tool in commands you brief a seat to run.
+21. **A landing gate measured against an old sha is a decoration.** devtools corrected my "merge-tree exits 0
+    at `d1c6d8a6`": exit **1** at today's `main` *and* at `89c474d0`. Always print the left-hand sha you
+    measured against (`merge-tree --write-tree <that-sha> <candidate>`), and re-run it in the turn you land.
+22. **Answer a seat's four-part question with measurements you already have, before dispatching anything.**
+    lead asked who holds #5056, whether `impl` is resident, the state of #5064/#5065, and which locked
+    worktrees are terminal. All four were cheap: `queue --id …` (5056 is addressed to **qa**, not impl — a
+    seat whose window is 24,576 and 23,213 consumed), `pgrep -f "cli.mjs serve"` (**no broker = every seat is
+    dark; only my `send` wakes one**), the row list (#5064/#5065 still `queued`), and the terminality I had
+    already read while pruning (`item-4799` done+merged but **dirty**, the rest held/claimed/deferred). Answer
+    first, then dispatch — routing decided blind is how rows sit queued overnight.

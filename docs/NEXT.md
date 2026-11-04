@@ -6,11 +6,11 @@
 
 Superseded session blocks are archived verbatim in `docs/NEXT-ARCHIVE.md`.
 
-**Current item:** the #4955 chain — lead owes a landing entry (or a re-cut row) after devtools' #5066 report;
-`item-4955 @ d1c6d8a6` is **not landing-ready**: `git merge-tree --write-tree main d1c6d8a6` exits **1**, one
-content conflict in `docs/runbooks/session-start-cost.md`.
-**Blocker:** that landing entry (mine to execute, lead's to issue). Separately, no verifier-class provider
-exists (nothing on `127.0.0.1:1234`), which gates #5052/#5055/#5058.
+**Current item:** **#5079** — devtools re-cuts `item-4955` onto today's trunk (union-resolve the
+`docs/runbooks/session-start-cost.md` conflict), then **#5083** is my landing entry (gated on row id **5079**,
+land the SHA it reports, never `d1c6d8a6`, never the ref).
+**Blocker:** none for the dispatch — but `main` moves under it (#5080/#5082/#5085/#5087 are queued), and there
+is no verifier-class provider (nothing on `127.0.0.1:1234`), which gates #5052/#5055/#5058.
 
 **ROADMAP 228 is delivered and in `main`.** `main = origin/main = 89c474d0`, 8 worktrees (5 locked),
 branches with unique work = 2 (`item-4955` ahead 2, `wip/seat-prompt-files` ahead 1). A delegate reading
@@ -22,15 +22,28 @@ The five things that landed since that pointer: `f9f8f389` (the three capacity r
 #5063, roadmap 228) and three docs commits. The rig kept working while I verified: #5039, #5063, #5074,
 #5064, #5065, #5066, #5069, #5071, #5056 and #5061 were all created or routed by seats during this session.
 
-**Exact next command** (from `/home/chexxor/Git/Durian-Pi`):
+**Exact next command** (from `/home/chexxor/Git/Durian-Pi`, after writing the brief):
 
 ```bash
-node tools/seat-turn-shape.mjs                     # 0 = quiescent
-node cli.mjs send devtools --body-file .spike/delegate-20261104/brief-devtools-3.md --request-id d006-devtools --no-stream
+node tools/seat-turn-shape.mjs                     # confirm no seat is generating
+cd /home/chexxor/Git/durian-dev/seatroot
+node cli.mjs send devtools --body-file .spike/delegate-20261104/brief-devtools-4.md --request-id d009-devtools --no-stream
 ```
 
-…once devtools is idle (it settled ~01:15 on 2026-11-04). The brief must be WRITTEN first; it asks for
-**#5066** (re-verify `item-4955 @ d1c6d8a6` against today's trunk, report only — lead lands, not us).
+The brief must be WRITTEN first: it carries **#5079** (re-cut; stop and defer if `cli.mjs`/`src/causes.mjs`
+conflict), then #5064/#5065 (the docs rows still queued). Then **#5080 → `impl`** — but `impl` is **dark**
+(no broker is up: nothing on `serve`, so no seat self-wakes; impl context 167,445/200,000 = 0.837, so reset
+it first).
+
+**Answers already owed to `lead`** (asked in its d008 turn, measured, not yet sent):
+1. **#5056 is addressed to `qa`, not `impl`** (`queued impl -> qa`), and qa's window is 24,576 with 23,213
+   consumed (0.945) — lead's ranking of that row cannot reach its addressee; #5080 (to impl) is the live route.
+2. **`impl` is dark**: the broker is down (no `serve` process), so nothing wakes it; say so and lead can keep
+   #5080 queued or let me send it.
+3. **#5064 and #5065 are still `queued` to devtools** — not done.
+4. **Locked worktrees and terminality:** `item-4799` = terminal (`done`, branch merged, **dirty** with two
+   untracked scratch files, so unlock + discard is an operator call); `item-4937` held, `item-4967` claimed,
+   `item-4997` held, `item-4970` deferred — **not** terminal, leave locked.
 
 ## Why this is the priority
 
@@ -124,3 +137,15 @@ unlanded pending lead's landing entry after #5066 reports.
 lead's ruling, landed by me). `demo/broker-stop-audit.test.mjs` (#5056) is a load-sensitive flake that
 reproduces at `main`; the discriminator is in SELFDEV pitfall 12. `tools/queue-rows.mjs` promoted out of
 `.spike/`.
+
+**Second clock-out, same day (#5071 landed).** Landed `4f1986ac` as `3ac59b55` after my own read: merge-tree
+exit 0 with the predicted tree byte-identical to the merge's, full suite 253/253 `failed: []` at the sha, and
+live verb probes — `queue`≡`queue --json` (22,470,935 B, `cmp` 0), `--id 5071` 16,168 B, `--status held --to
+devtools` 149,794 B (49 rows, all `held`), `--status held --no-body` 296,287 B (337 rows, `body` absent,
+notices retained), refusals 115–196 B naming the known set; every narrowed answer carries `rows`/`counts`/
+`attention` over the **un-projected** 5,078 rows plus `narrowed: "payload"`. Suite at merged main was 252/253
+with `broker-stop-audit` red — 5/5 pass standalone, the same check was red at `e3118fa0` before this diff, and
+`--area broker` is 62/62, so not attributable to #5071; lead re-ranked it as **#5080** and retired the
+"load-sensitive" label. Pruned `item-5071` + devtools' `item-5066` verify fork (proved its ref identical to
+`item-4955` before deleting). Pushed `89c474d0..3ac59b55` and `3ac59b55..ba768eeb`. Lead's turn minted
+#5079/#5083/#5082/#5080/#5087/#5085 and cancelled #5043/#5074/#5067 (see D204).
