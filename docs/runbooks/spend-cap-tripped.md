@@ -4,7 +4,7 @@ symptom: "an item parks with reason `spend_cap_exceeded`; a seat says `spend_cap
 writes: false
 precondition: "read-only"
 last_verified: 2026-11-04
-verified_by: implement
+verified_by: impl
 evidence: "#5047 (commits 6f3e14ba f88137b3 68bc73cb fb43b61e 894dac60 2142eafa 8740d3a3 4f6674b7 e5308cc1); `node tools/model-probes/spend-cap-acceptance.mjs --snapshot .spike/5015/catalog-2026-11-04.json` exits 0, 11/11"
 check_rule: "demo/spend-cap-guard.test.mjs; demo/probe-metered-ledger.test.mjs"
 ---
@@ -38,9 +38,14 @@ much it does, never the price ceiling it is bounded by) — a seat will not and 
 node -e 'import("./tools/model-probes/metered.mjs").then(m=>{const t=m.spendTotalUsd(m.ledgerPath(process.env));console.log(JSON.stringify({ledger:m.ledgerPath(process.env),rows:t.rows,totalUsd:t.totalUsd,unknownCostRows:t.unknownCostRows,caps:m.capsFor(process.env)},null,2))})'
 # 2. The rows behind that number, newest last.
 tail -20 .spike/gate/spend.jsonl
-# 3. Which cap fired, from the attention surface.
-DURIG_DB=./rig.sqlite node -e 'const D=require("better-sqlite3");const db=new D(process.env.DURIG_DB,{readonly:true});for(const r of db.prepare("select conv_id,kind,reason,detail from attention where kind=? order by raised_at desc limit 5").all("spend_cap_exceeded"))console.log(r)'
+# 3. Which cap fired, from the attention surface — attention is DERIVED, so read it from the read API, not from SQL.
+DURIG_DB=./selfdev.sqlite node cli.mjs status --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s.slice(s.indexOf("{")));for(const a of (j.attention||[]).filter(x=>x.kind==="spend_cap_exceeded"))console.log(a.seat, a.detail)})'
 ```
+There is no `attention` table to query and no `better-sqlite3` in this repo (measured 2026-11-04: the store's tables are
+`durable_schema, durable_metadata, record_ids, conversations, entries, submissions, documents, document_revisions,
+tasks`, and no package named `better-sqlite3` resolves in any `node_modules` here) — an earlier revision of this step
+printed a raw-SQL one-liner that could not run. Notices are computed by `src/attention.mjs` over entries and queue
+items, which is why `status`/`watch` are the surface that shows them.
 A paid probe run ends with its own bill (`tools/model-probes/gate.mjs` prints `formatRunTotal(...)` from the ledger,
 not from memory, so an interrupted run still reports what it spent). Read the refusal's `projected N` as a **bound**,
 not an estimate: an unpriced metered model projects to `Infinity`, which is why a cap fires on a row whose price is
