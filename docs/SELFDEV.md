@@ -1804,3 +1804,33 @@ the prefix forever.
     dark; only my `send` wakes one**), the row list (#5064/#5065 still `queued`), and the terminality I had
     already read while pruning (`item-4799` done+merged but **dirty**, the rest held/claimed/deferred). Answer
     first, then dispatch — routing decided blind is how rows sit queued overnight.
+23. **Arming a config value is not registering it, and the money plane has TWO env sources.**
+    `CONFIG_KEYS` (`src/config.mjs:111-146`) is a *declared inventory* — `mergeConfig` (`:181`) copies every key a
+    config file sets — so `DURIG_SPEND_LEDGER` written into `durig.config.json` **takes effect** while
+    `node cli.mjs config` prints **0 hits** for it (measured: the whole report is 718 B). Worse, `cli.mjs` builds
+    `spendEnv = { ...CFG, ...process.env }` (`cli.mjs:275`) but every `tools/model-probes/*` probe calls
+    `meteredChat({ env: process.env })`, so a **probe ignores the armed ledger path**: my bounded metered call
+    wrote `.spike/gate/spend.jsonl` (cwd-relative) while both checkouts' CLI path resolved the absolute
+    store-scoped file. Proof of either claim needs the path printed from the *same* source the consumer uses.
+    (`queue --id` takes the flag once per id: `--id 5079 --id 5083`; a space-separated id list is an unknown
+    argument — exit 1, 116 B, naming the known set.)
+24. **Pruning a worktree can manufacture a phantom seat root, and it looks green.** After I pruned
+    `seatroot/item-5071` on landing #5071, `devtools`' persisted `pi.agent.cwd` still named it, and
+    `node tools/rig-portability-audit.mjs` exited **1** with `seat-root-unresolvable … classifyGitRoot calls it
+    "linked-worktree"` (ROADMAP 221) — a woken seat told it is in a tree while every file tool aims at a path that
+    does not exist. Run the audit (0.97 s, read-only) *after* a prune, not only after a machine move; the seat
+    self-heals on its next `prepare_workspace`, and a brief that says so saves the seat a blind file verb.
+25. **A host signature on a D-entry is a claim, and this rig repeated an unmeasured one for six entries.**
+    `chexxor@ThinkStation-P3` appears in D197b–D204 and in the NEXT pointer; **no session transcript contains a
+    `hostname` call**, and `hostnamectl` here reads transient `Alex-Desktop-Win10`, static unset, `/etc/hostname`
+    empty (Fedora 44) — on the box that holds the checkout, worktrees and `.spike` evidence those entries cite.
+    Before you sign a measurement with a host, run `hostnamectl` and `uname -r` in the same command as the
+    measurement; a carried-forward label is how a wrong box ends up in the durable record.
+26. **A seat's model is pinned in the TRACKED rig file, so a provider re-point is a roster edit.**
+    `rig.selfdev.json` names the model per seat (5 seats say `verifier/mistralai/ministral-3-14b-reasoning`) and
+    `resolveSeatModel` (`src/seatmodel.mjs`) splits on the provider prefix, so changing `DURIG_VERIFIER_MODEL`
+    alone leaves 5 seats naming a model no registered row carries — they fail `no_model` before a request. A
+    verifier-class change therefore moves **three layers at once**: the price declaration
+    (`DURIG_VERIFIER_PRICE_USD_IN/OUT`, or `local.mjs:250` refuses `metered-endpoint-unpriced`), the credential
+    variable (`local.mjs:246` reads `DURIG_VERIFIER_API_KEY` **only** — no `DEEPINFRA_API_KEY` fallback, unlike
+    the probe path at `metered.mjs:38`), and the 5 `model` lines applied with `up`. That is a row, never a paste.

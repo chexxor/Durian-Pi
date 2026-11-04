@@ -8614,3 +8614,96 @@ path: on `main`, `status`/`queue`/`ps` exit **0 and manufacture a 122,880 B empt
 - **Cheap signals may not decide a store claim.** #5083's gates are the *behaviour*, not the exit code:
   `DURIG_DB` at a scratch `/tmp` path, exit 1, the cause named, **and the file absent afterwards** (not
   zero-bytes-written). Exit code is exactly the cheap signal that was lying.
+
+## D205 — the operator ruled four things in one sentence; two executed, one is blocked by a credential the rig refuses to put in a file, and the ledger fix is a DEFAULT derived from the store, not a path in a file (2026-11-04T07:1x–08:0xZ, delegate acting on accepted recommendations, Linux `Alex-Desktop-Win10` (transient hostname, static unset, `/etc/hostname` empty) Fedora 44 `7.2.14-200.fc44.x86_64`, node v24.22.1, git 2.56.0, `main = 7567a0ff`)
+
+The operator's instruction was "I accept your recommendations from the previous session. Please act on them."
+Acting turned out to split three ways — do it myself (a git disposal), do it in a **gitignored private config**
+(a rig-property value the operator granted), or **hand the product change to the team** (source, roster and
+demo surfaces). Recording which part went where is the point: the previous sessions' mistake was reading
+"accepted" as "the delegate should build it".
+
+- **Ruling 1 — caps stay `0.05 / 0.10 / 4.00`. Executed by not touching anything.** Re-read, not remembered:
+  `durig.config.default.json` (tracked) carries all three and `capsFor()` resolves
+  `{callUsd: 0.05, runUsd: 0.10, storeUsd: 4}` in both the operator checkout and the seat root. The evidence for
+  keeping them was the one metered ledger this box has ever produced — 219 rows / **$0.0945 total**, max call
+  **$0.00106** — so a 0.05 call cap is 47× the most expensive call ever recorded while still refusing a
+  `gemini-3.1-pro`-sized call by arithmetic. Changing a value is not a delegate call (D202).
+- **Ruling 1b — the ledger must be scoped to the store, not the cwd. Executed only as far as a private config
+  file can reach, and that limit is the finding.** `DURIG_SPEND_LEDGER =
+  /home/chexxor/Git/Durian-Pi/selfdev.sqlite.spend.jsonl` is now set in **both** gitignored copies (operator
+  checkout and `/home/chexxor/Git/durian-dev/seatroot`), and a probe that loads config the way `cli.mjs` does
+  prints that one absolute path from **both** cwds. Two holes that a paste cannot close, both measured:
+  1. `DURIG_SPEND_LEDGER` is **not in `CONFIG_KEYS`** (`src/config.mjs:111-146`), and because `mergeConfig` (`:181`)
+     copies every key a config file sets, an unregistered key **works** while `node cli.mjs config` prints **0 hits**
+     for it (the whole report is 718 B). An armed money value the rig cannot show its operator is the #2114 shape
+     one layer down.
+  2. **One money plane, two env sources.** `cli.mjs:275` builds `spendEnv = { ...CFG, ...process.env }`, but every
+     probe calls `meteredChat({ env: process.env })`, so a probe ignores the armed path: my bounded metered call
+     wrote `.spike/gate/spend.jsonl` (cwd-relative) while the seat path resolved the store-scoped file. So the
+     durable fix is **a default derived from `DURIG_DB`** (e.g. `<db>.spend.jsonl`) in the one function
+     `ledgerPath()` (`tools/model-probes/metered.mjs:206`, imported by `src/providers/spend.mjs`), not a literal in
+     a file — otherwise the two consumers can never be brought together. That is a row for `lead` to mint
+     (config-key registration + demo + the acceptance probe's `P6b` re-run), briefed with this evidence.
+- **Ruling 2 — `google/gemini-3.1-pro` stays refused; the vendored row is NOT hand-edited. Executed by not
+  touching anything**, and re-corroborated against the vendor rather than against our own file: a keyless
+  `https://api.deepinfra.com/v1/openai/models` fetch (173 models, no inference) prices it `input 2 / output 12`
+  per Mtok, so one call at its own declared maxima is `maxCallExposureUsd = $14.00 = 3.50 ×` the store cap
+  (`src/providers/deepinfra-models.ts:73, 175`). The stderr refusal is therefore **ruled state**, not an
+  outstanding question, and the `demo/deepinfra-catalog.test.mjs` pin stays. The cheapest correct state is the one
+  already in the tree — arming it would need the store cap ≥ $14, and making it *usable* would need a call cap
+  > $0.10, i.e. ruling 1 undone to buy a model nobody asked for.
+- **Ruling 3 — a metered verifier class is granted (`deepseek-ai/DeepSeek-V4-Flash-0731` declared at 24,576), and
+  it is NOT a config paste.** Three layers move together, and one of them is the operator's:
+  1. **price.** `localProviderSpec` classifies `api.deepinfra.com` as `endpoint: "metered"` and
+     `createLocalProvider` refuses with `metered-endpoint-unpriced` unless a price is declared
+     (`src/providers/local.mjs:250-253`). The keys it reads (`DURIG_VERIFIER_PRICE_USD_IN/_OUT/_USD_CACHE_READ/
+     _PRICE_AS_OF`) are **also not in `CONFIG_KEYS`**.
+  2. **credential.** The verifier provider reads **`DURIG_VERIFIER_API_KEY` and nothing else** (`local.mjs:246`);
+     absent ⇒ `metered-endpoint-unkeyed` ⇒ **no model row** ⇒ all five `verifier/…` seats fail `no_model` before a
+     request. `DEEPINFRA_API_KEY` **is present and works** (32 chars in the session env): one bounded call through
+     the accounted seam returned **HTTP 200, 12 prompt / 5 completion tokens, $0.000002**, ledgered with
+     `priceSource "env"`. But that fallback exists only on the *probe* path (`tools/model-probes/metered.mjs:38`).
+     So the operator's one-line action is to export `DURIG_VERIFIER_API_KEY` in the shell that starts the broker —
+     or `lead` rules a same-vendor key fallback at the credential seam, which is a real decision because that is
+     the code keeping a placeholder key away from a paid host (`local.mjs:80-84`). **The delegate did not
+     half-arm the endpoint**: with no key, arming would silently turn five dark seats into `no_model` seats.
+  3. **roster.** `rig.selfdev.json` (tracked) pins `verifier/mistralai/ministral-3-14b-reasoning` per seat and
+     `resolveSeatModel` splits on the provider prefix — so the model change is a **5-line roster edit applied with
+     `up`**, which is lead's to mint, not the delegate's to paste.
+  Cost, computed with the product's own exposure formula from the candidate block
+  (`.spike/delegate-20261104b/verifier-candidate-config.json`, offline probe
+  `.spike/delegate-20261104b/verifier-arm-probe.mjs`): `maxCallExposureUsd = $0.002015` < the $0.05 call cap,
+  **1,985** maximal turns before the $4 store cap, **49** before the $0.10 run cap, with the vendor's live catalog
+  pricing it identically (`0.06 / 0.18 / 0.015`, fetched 2026-11-04). What it unblocks is #5052/#5055/#5058 — all
+  three `queued` to **`qa`**, which sits at **0.818 of 24,576** behind an endpoint (`127.0.0.1:1234`) that answers
+  nothing. A second *local* verifier slot is not free: one `iq3_s` instance already spans **both** cards (3090
+  23,608/24,576 MiB, A4000 14,906/16,376 MiB, `gpus:[0,1]`), so a second build wake costs a build wake.
+- **Ruling 4 — `item-4799`'s dirty scratch worktree: discarded, executed by the delegate.** The method is the part
+  worth keeping, because the clean-only guard exists to make `--force` a habit-forming mistake: prove
+  `git merge-base --is-ancestor item-4799 main` (true) and the row `done`; **copy** the two untracked captures out
+  with `sha256sum` (`.lcs.txt` 730 B, `.ta.txt` 704 B — stderr of the area-manifest assertion, and the demo they
+  complain about, `demo/shared-cwd-read-verbs.test.mjs`, **is** mapped in `demo/test-areas.json` on `main`, so the
+  failure they record is already fixed on trunk); **then** make porcelain empty, then `worktree unlock` →
+  `worktree remove` (**no `--force`, no `git clean`**) → `worktree prune` → `git branch -d`. Worktrees 8 → 7, refs
+  9 → 8. A name-diff of the pre/post inventory (`docs/runbooks/workspace-move.md` Step 3) showed exactly that
+  removal and one addition (`seatroot/item-5079`, devtools' new tree) — nothing else moved.
+- **Two product findings this session manufactured or surfaced, both handed to the team rather than fixed by
+  hand.** (a) **Pruning a worktree can manufacture a phantom seat root**: after I pruned `seatroot/item-5071` on
+  landing #5071, `devtools`' persisted `pi.agent.cwd` still named it, and `tools/rig-portability-audit.mjs` exits
+  **1** with `seat-root-unresolvable … classifyGitRoot calls it "linked-worktree"` (ROADMAP 221) while the other 11
+  seats resolve. Run the audit after a prune, not only after a machine move. (b) **A 40-hex sha in a tool result
+  can trip the secret redactor**: devtools' own `git rev-parse f5bda0db^{tree}` came back as
+  `[redacted by durian-pi: secret-shaped value (high-entropy-token)]`, which costs a re-run and hides the artifact
+  id from the transcript (`docs/runbooks/tool-result-redacted.md`).
+- **A host signature is a claim, and this rig carried a wrong one for six D-entries.** D197b–D204 and the NEXT
+  pointer sign `Linux chexxor@ThinkStation-P3`; **no session transcript contains a `hostname` call**, and
+  `hostnamectl` on the box that holds the checkout, the worktrees and the `.spike` evidence those entries cite
+  reads transient **`Alex-Desktop-Win10`**, static unset, `/etc/hostname` empty (modified 2026-10-25). Fixing the
+  habit beats fixing the text: measure `hostnamectl && uname -r` inside the same command as the measurement, and
+  let #5085 (`scribe`) decide what to re-sign.
+- **What the delegate did NOT do.** No queue row claimed, completed, deferred, re-ranked or routed; no broker
+  started (2 read intents have been spooled 7,362 min — `resume` withholds them, routed to lead instead of run);
+  no seat re-pointed; no capacity value edited or prefixed; no `--force` and no `git add -A`; **no verifier-model
+  server touched** (nothing listens on `:1234`, and restarting it is an operator surface). The one metered call
+  spent **$0.000002** of the $4.00 store grant, deliberately, as the reachability receipt for ruling 3.
