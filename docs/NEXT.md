@@ -198,12 +198,70 @@ unauthorized* naming the variable.
 
 ## Operator decisions outstanding
 
-1. **Push or not** — `main` is 5 ahead of `origin/main` (the delegate will not push without your grant).
-2. **`DURIG_VERIFIER_API_KEY`** — export it where the broker starts (then `lead`'s roster row can arm the
-   verifier class and W2's non-author review becomes real), or rule that `lead` may allow a same-vendor fallback.
-3. **The hostname drift** — this box reads transient `Alex-Desktop-Win10` with no static hostname, and the
-   durable record says `ThinkStation-P3` for D197b–D204. `#5085` (`scribe`) can re-sign; you may want to fix the
-   box's static hostname instead.
+1. **Push, and then who lands #5089 / #5090** — `main` is **6 ahead** of `origin/main` (docs only: D206, the
+   pi-delta doc, the entry-point change, the runbook's state 5 + firewall section, the pitfalls, the pointer). The
+   delegate will not push without your grant. Both completed pi rows are **unlanded**, and #5094–#5096 need the
+   runbook in the tree, so the choice is: (a) you push, then the delegate lands the docs-only #5089 under
+   `docs/land.md` (its delegate clause requires `main == origin/main`, which a push restores) and lead lands #5090
+   with a gate run at the merged sha; or (b) lead lands both. Recommend (a): it is one push and it unblocks the pin
+   chain without stretching the landing rule.
+2. **`DURIG_VERIFIER_API_KEY`** — export it where the broker starts, so `lead`'s roster row can arm the verifier
+   class and W2's non-author review becomes real. Ruled 2026-11-04: **no same-vendor fallback** — the fallback chain
+   dies on `DEEPINFRA_API_KEY`, which is the producer's vendor, so a verifier that uses it is not independent.
+   Arming is three layers at once (price declaration, the key, and the 5 `model` lines in `rig.selfdev.json`), which
+   is why it is a row and not a paste.
+3. **The box's hostname** — the *project* rule is settled (no hostnames; sign OS+distro+kernel+node) and the code has
+   no host-identity dependence. What is left is whether to fix the **machine** (it reads transient `Alex-Desktop-Win10`
+   with no static hostname) or let **#5085** (`scribe`) re-sign the ~20 historical lines. Recommend leaving the box
+   alone and letting #5085 run: the record is what misleads.
+4. **Store backups** — one pre-pin backup exists (`.spike/backups/20261104T1130Z/`, sha256 in the pi section). The
+   store is ~442 MiB and growing. Whether a **second** backup is taken at the `v1.4.0` boundary is **lead's** call; the
+   delegate will not mint more without a ruling.
+
+## CLOCK-OUT — 2026-11-04 afternoon delegate session (pi-delta research → local-provider 401 → firewall)
+
+**Value delivered, each line an instrument read.**
+- **pi-durable update researched, not guessed:** `docs/PI-UPGRADE-DELTA-2026-11-04.md` — pin `2ec55d80…` stamped
+  **1.3.0**, upstream moved twice during the session (`fcebc099` → **`707888ec`**), **508 → 515 behind**, skipped
+  **v1.4.0** and **v1.5.0**; per-package commit counts; **9 symbol breaks** located to our files
+  (`documentState`/`viewState` → `Conversation.watch`, `watchEvents`/`AgentEvent*` →
+  `subscribeCommits`/`Harness.onState`, pi-ai's `Type` removal, `checkpointWhen`, `runFailure`);
+  **9 features** to accommodate; **5 rulings** needed, 4 taken by lead (D206). Verified by reading upstream
+  `CHANGELOG.md` and the migrations table at tip, and by `spec-compat-probe.mjs` (every import specifier still
+  resolves — the breakage is named exports, not paths).
+- **Store backed up BEFORE any pin work**, with the broker down: sha256 `02da60e3…`, `cmp` exit 0, 463,142,912 B.
+- **Local provider outage diagnosed and fixed at the leaf:** Strata now demands a bearer token on loopback;
+  `local.mjs` sends `LOOPBACK_PLACEHOLDER_KEY`, so 7 seats `model_error: 401` and one `send` came back with zero
+  tokens. Fixed with `~/.config/durig/env` (600, outside the repo) + `--env-file`; proven by the provider's own
+  completion path (`stopReason:"stop"`, 59 in / 36 out), by `cli.mjs config` printing **0** occurrences, and by
+  `send devtools d015` then running and completing **#5089 and #5090**.
+- **The pi harness reaches the same server** via `~/.pi/agent/models.json` `"apiKey": "!sed …"` — proven with the
+  variable **unset** in that shell: `pi --print --provider strata --model iq3_s` → `PI-STRATA-OK`.
+- **Firewall question answered with four measurements:** firewalld, zone `public` on `enp39s0`; the app's own
+  inference-only share listener is up on `0.0.0.0:47832` (`401` no key / `200` with key / never serves the UI);
+  `--query-port=47832/tcp` was **no** at 12:2xZ and **yes** by 13:0xZ; and `curl` to this host's own LAN address is
+  **not** evidence (a never-allowed port returned `HTTP 200` from itself) because that path uses `lo`, not
+  `enp39s0`. `--permanent --list-ports` lists neither 47831 nor 47832, so a reload/reboot drops them — recorded in
+  the runbook.
+- **Entry point and D206 updated** (`AGENTS.md`, `docs/DECISIONS.md`): the session-closure response is now a required
+  deliverable with decisions + pros/cons + recommendation, and hostnames are out of the project.
+- **Delegate-verified #5090** by extracting it against current `main` and running it: demo **exit 0**, tool
+  `ok:true` on a scratch target and `cause:"gate_target_refused"` when aimed at the live store, which stayed intact.
+
+**Left unverified, with the cheapest probe named.** (1) Whether a `firewall-cmd --reload` or reboot actually closes
+47832 — probe: re-run `firewall-cmd --query-port=47832/tcp` after the next reload (root not available to the
+delegate). (2) Whether `--permanent` acceptance of 47832 by the app is intended or a bug — probe: `--permanent
+--query-port=47832/tcp` now. (3) Whether the 7 local seats can *complete* work end-to-end after the key fix, beyond
+the two rows already done — probe: `cli.mjs ps` plus the row statuses above. (4) The delta doc's symbol list is a
+**read** of upstream source, not a compile — probe: `node scripts/test.mjs --all` at the `v1.4.0` pin (#5095's own
+first gate). (5) `#5083`'s receipt row is still open even though the merge is in `main` (measured
+`d1c6d8a6` is an ancestor of `main`); it needs devtools' completion.
+
+**Cost.** Money: this segment spent **$0** on metered calls (the only metered probe this session cost `$0.000002`,
+and local loopback calls are unledgered by design — see pitfall 23's ledger defect: the ledger **file does not exist**,
+so seat spend is not recorded at all). Wall-clock: the pi research was ~35 min; the local-provider diagnosis ~25 min;
+each seat `send` is 20–50 min, so the pi chain's remaining stages (#5094 → #5095 → #5096) are hours, not minutes —
+budget two sends per stage.
 
 ## CLOCK-OUT — 2026-11-04 delegate session (four rulings → D205 → `#5079` landed as `#5083`)
 
