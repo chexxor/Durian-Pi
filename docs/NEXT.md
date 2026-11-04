@@ -149,3 +149,11 @@ with `broker-stop-audit` red — 5/5 pass standalone, the same check was red at 
 "load-sensitive" label. Pruned `item-5071` + devtools' `item-5066` verify fork (proved its ref identical to
 `item-4955` before deleting). Pushed `89c474d0..3ac59b55` and `3ac59b55..ba768eeb`. Lead's turn minted
 #5079/#5083/#5082/#5080/#5087/#5085 and cancelled #5043/#5074/#5067 (see D204).
+- **The spend ledger is cwd-relative, so the store cap is per-checkout in practice.** `ledgerPath()` defaults to
+  `.spike/gate/spend.jsonl` (`tools/model-probes/metered.mjs:206`) and **nothing sets `DURIG_SPEND_LEDGER`**
+  (`durig.config*.json` has no such key). Measured: no `.spike/gate/spend.jsonl` exists in the operator checkout
+  or the seat root — correct, because loopback calls are deliberately **not ledgered**
+  (`src/providers/spend.mjs:11`), so tonight's local-engine turns wrote nothing. The gap only bites the first
+  time a seat makes a **metered** call: it accumulates a ledger next to its own worktree, invisible to every
+  other checkout. A store-scoped path (e.g. `./selfdev.sqlite.spend.jsonl`) is a one-key config change — lead's
+  call, not mine.
