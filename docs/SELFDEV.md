@@ -1681,9 +1681,13 @@ the prefix forever.
    checked out — the first line of `git worktree list` (`/home/chexxor/Git/Durian-Pi`) — then realign the mirror:
    `git rev-parse <mirror-tip>^{tree} <new-main>^{tree}` (equal ⇒ same content) and `git -C <seatroot> reset --hard
    <new-main>`. Proof the landing is real stays `git merge-base --is-ancestor <tip> main`.
-2. **`--json` does not guarantee pure JSON on stdout.** `scripts/test.mjs --json` prepends `running 249 test(s) …`, and
-   since #5047 every CLI start can print a spend refusal (`{"spend":"catalog-refused","model":…}`) **before** its JSON.
-   Parse from the first `{\n` (`s.slice(s.indexOf("{\n"))`); `require()`/`JSON.parse` of the whole file throws.
+2. **`scripts/test.mjs --json` is not pure JSON on stdout** — it prepends `running 249 test(s) …`, so parse from
+   the first `{\n` (`s.slice(s.indexOf("{\n"))`); `JSON.parse` of the whole file throws. Corrected the same day:
+   the **#5047 spend refusal is NOT on stdout** — `refuse()` writes to a report sink that defaults to
+   **stderr** (`src/providers/deepinfra-models.ts:155`), and `config` / `queue --id` are pure JSON on stdout
+   (`node cli.mjs config 2>/dev/null | head -3`). It fires when the **catalog is built** (a seat wake), and the
+   string you see inside a `--json` document is usually a **queue row body quoting it**. Do not repeat the
+   "prints on every CLI start" claim unverified — I did, and it survived into two docs.
 3. **`cli.mjs check` `pass:false` with ~106 findings is the store's hygiene state, not a landing regression.** Counted on
    merged `main`: `duplicate-item=55 citation-unresolvable=44` plus 7 rig findings (`store-missing-seat` for a `worker`
    seat the store does not hold, `stray-seat`, `no-verifier-seat`, `single-model-rig`, `seat-without-capabilities`,

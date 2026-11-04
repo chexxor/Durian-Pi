@@ -88,9 +88,9 @@ answer: the verifier class has no provider).
 - **`item-4799` (`/home/chexxor/Git/Durian-Pi/item-4799`, locked) is DIRTY** with two untracked scratch
   files (`.lcs.txt`, `.ta.txt`) while its row is `done` and its branch is merged. The clean-only guard
   refused removal on purpose. Disposition (discard vs commit) is the operator's.
-- **`gemini-3.1-pro` is still catalog-refused at registration** — the refusal line prints on every CLI
-  start (and breaks any test that requires pure JSON on stdout) until the operator drops the row or
-  re-windows it. Ask.
+- **`gemini-3.1-pro` is still catalog-refused at registration** — `refuse()` writes one JSON line to **stderr**
+  when the catalog is built (a seat wake), not to stdout; stdout stays pure JSON. It repeats until the operator
+  drops the row or lowers its declared window. Ask.
 - **`check`'s 108 findings** (18 `stale-claimed`, 12 `claim-lease-mismatch`, 9 `no-ack`, 9
   `claim-before-routing-gate`) are the team's store hygiene; route to `lead`/`pm`, never fix by hand.
 
