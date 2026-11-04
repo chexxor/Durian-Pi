@@ -146,6 +146,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [store-secret-detected.md](store-secret-detected.md) | a `secret_detected` notice: secret-shaped content is in the committed store | no |
 | [tool-result-redacted.md](tool-result-redacted.md) | a tool result shows a `[redacted by durian-pi: …]` marker instead of its text | no |
 | [store-probe-identity.md](store-probe-identity.md) | you are querying the store directly for a QUEUE item id, or a probe returned a plausible row whose namespace you have not checked | no |
+| [pi-pin-update.md](pi-pin-update.md) | the pinned pi must move (an ordered update, or a release we skipped); a fresh worktree refuses the live store with `Durable SQLite schema version 2 is newer than supported version 1`; or a `git grep` over `vendor/pi-main` returned **0 hits** and you are about to conclude something is absent upstream. **A backup is the only rollback — `sync-pi --unlink` cannot open our schema-v2 store** | yes (the pin, the vendored build, `node_modules`; the store only via the backup/restore ladder) |
 
 | [constitution-amendment.md](constitution-amendment.md) | you edited (or will edit) `constitution.txt`, or the 3 constitution-mirror demos fail their starter === constitution.txt assertion | no |
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language / emitting a tool call as text | yes |
@@ -191,6 +192,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Write guard / source files | write-corruption-recovery |
 | Constitution / starter mirror | constitution-amendment |
 | Worktrees | leaked-worktrees, prepare-workspace-etarget, worktree-unlinked-deps, prepare-workspace-refused |
+| The pinned pi: the pin file, the vendored clone, tag-vs-tip policy, sparse-built packages, the schema-v2 lockout, and why a stale clone's 0 hits is not evidence | pi-pin-update, worktree-unlinked-deps, prepare-workspace-etarget, cross-clone-object-recovery |
 | Git objects / shas cited from another machine | cross-clone-object-recovery, workspace-move |
 | Which model/quantization a provider is actually serving (variant activation, unload-by-`instance_id`, model-server lifetime vs a live run) | verifier-model-server, model-server-broker-race |
 | What a model call costs, where the money went, and what stops a call before it is sent (three cap axes, one ledger, locality of the endpoint) | spend-cap-tripped |
