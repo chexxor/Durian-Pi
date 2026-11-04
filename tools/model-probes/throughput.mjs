@@ -16,19 +16,27 @@
 // `cold-prefill.mjs` for prefill from here on; see docs/reviews/delivery-channel-linux-2026-10-28.md §2.
 import { performance } from "node:perf_hooks";
 import { randomUUID } from "node:crypto";
+import { meteredChat } from "./metered.mjs";
 
 const WORDS = "the rig keeps a queue of work items that seats claim verify and land while a broker watches for stalls";
 function fresh(n) { const tag = randomUUID().slice(0, 8); let s = `Case ${tag}: `; const w = WORDS.split(" "); for (let i = 0; i < n; i++) s += w[i % w.length] + " "; return s + "\nSummarize in one short sentence."; }
 async function once(baseUrl, model, content, maxTokens) {
   const t0 = performance.now();
-  const r = await fetch(`${baseUrl}/chat/completions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model, messages: [{ role: "user", content }], max_tokens: maxTokens, temperature: 0.2 }) });
-  const j = await r.json().catch(() => ({}));
-  return { ms: performance.now() - t0, usage: j.usage, finish: j.choices?.[0]?.finish_reason, err: r.ok ? null : `${r.status} ${JSON.stringify(j).slice(0, 160)}` };
+  // #5047 (acceptance P8): the accounted path. The prefill leg is a plain non-streaming call, so it fits the seam
+  // exactly - credential attached, caps projected before sending, one 14-field row after (note says which probe).
+  const call = await meteredChat({ baseUrl, body: { model, messages: [{ role: "user", content }], max_tokens: maxTokens, temperature: 0.2 }, env: process.env, note: "probe throughput.mjs (prefill leg)" });
+  const ms = performance.now() - t0;
+  let j = {};
+  try { j = JSON.parse(call.text) ?? {}; } catch { /* a non-JSON body is the err branch below, accounted with usd null */ }
+  return { ms, usage: j.usage, finish: j.choices?.[0]?.finish_reason, err: call.status === 200 ? null : `${call.status} ${String(call.text ?? "").slice(0, 160)}` };
 }
 async function streamed(baseUrl, model, content, maxTokens) {
   const t0 = performance.now();
-  const res = await fetch(`${baseUrl}/chat/completions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model, messages: [{ role: "user", content }], max_tokens: maxTokens, temperature: 0.2, stream: true }) });
-  if (!res.ok) return { err: `${res.status} ${(await res.text()).slice(0, 200)}` };
+  // #5047 (P8): taken RAW on purpose - this function's product IS the per-chunk clock, so the seam may not buffer
+  // the body. It still owns the accounting through `account(usage)`, called after the clock stops.
+  const call = await meteredChat({ baseUrl, body: { model, messages: [{ role: "user", content }], max_tokens: maxTokens, temperature: 0.2, stream: true }, env: process.env, raw: true, note: "probe throughput.mjs (decode leg, chunk-timed)" });
+  const res = call.res;
+  if (!res.ok) { const err = `${res.status} ${(await res.text()).slice(0, 200)}`; call.account(null, `probe throughput.mjs decode leg failed HTTP ${res.status}`); return { err }; }
   let first = null, last = t0, chunks = 0, finish = null, errLine = null;
   const dec = new TextDecoder(); let buf = "";
   for await (const raw of res.body) {
@@ -44,7 +52,12 @@ async function streamed(baseUrl, model, content, maxTokens) {
       if ((dl.content || dl.reasoning_content || dl.tool_calls)) { const now = performance.now(); if (first === null) first = now; last = now; chunks++; }
     }
   }
-  return { first: first === null ? null : (first - t0) / 1000, span: (last - (first ?? last)) / 1000, chunks, finish, errLine };
+  const out = { first: first === null ? null : (first - t0) / 1000, span: (last - (first ?? last)) / 1000, chunks, finish, errLine };
+  // Accounted AFTER the numbers are computed: the ledger append must not enter the measurement it documents. These
+  // servers send no `usage` on a stream (lesson 2 above), so the row is recorded with `usd: null` - UNKNOWN, never
+  // $0.00 - which is exactly what the ledger's `unknownCostRows` counter exists to surface.
+  call.account(null, "probe throughput.mjs decode leg: this server reports no usage block on a stream, so the cost is UNKNOWN");
+  return out;
 }
 async function measure(label, baseUrl, model, nWords) {
   const p = fresh(nWords);

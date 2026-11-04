@@ -168,6 +168,56 @@ const notice = computeAttention(
 assert.ok(notice, "computeAttention surfaces repeated_failure");
 assert.match(notice.detail, /3 consecutive failed runs/);
 
+/* --------- the `spend_cap_exceeded` CAUSE CLASS (#5047, acceptance P7) ---------
+   The failure this closes: a cap trip arrives as `model_error`, so the driver retries it (2 SDK retries), the
+   supervisor's repeated_failure escalation needs THREE spends to notice, and every one of those attempts costs
+   money against the cap that just stopped it. Naming the cause lets the notice and the escalation branch on it. */
+const SPEND_TEXT =
+	"spend_cap_exceeded (durig's own cap, out of budget under it - NOT the provider's): deepinfra/zai-org/GLM-5.3-Flash " +
+	"projects $0.000182 and would cross DURIG_SPEND_CAP_CALL_USD $0.0500 (one call, projected). No request was sent and " +
+	"no ledger row was written. Remedy: the OPERATOR raises the named cap deliberately for a named run.";
+
+const spendNotices = computeAttention(
+	[{ name: "worker", conversationId }],
+	[],
+	new Map([[conversationId, { status: "unanswered" }]]),
+	new Map([[conversationId, SPEND_TEXT]]),
+	{ nowMs, failureStreakByConv: new Map([[conversationId, 3]]) },
+);
+const spendNotice = spendNotices.find((n) => n.kind === "spend_cap_exceeded");
+assert.ok(spendNotice, "computeAttention NAMES the money cause instead of burying it in last_run_failed");
+assert.match(spendNotice.detail, /DURIG_SPEND_CAP_CALL_USD/, "and says WHICH cap fired");
+assert.match(spendNotice.detail, /not a model fault/);
+assert.match(spendNotice.detail, /only the OPERATOR raises a cap/);
+assert.equal(spendNotices.find((n) => n.kind === "last_run_failed"), undefined, "one notice per cause: the cap stop replaces the generic failed-run notice");
+assert.equal(spendNotices.find((n) => n.kind === "repeated_failure"), undefined, "and the streak notice, whose only cause is the same stop");
+
+const money = planEscalations({
+	seats: [{ name: "impl", conversationId: 9 }],
+	queueItems: [{ id: 7, to: "impl", status: "claimed", subject: "stuck" }],
+	failureStreakByConv: new Map([[9, 1]]),
+	errorByConv: new Map([[9, SPEND_TEXT]]),
+	nowMs,
+});
+assert.equal(money.length, 1, "a money stop parks the item on the FIRST failed run — waiting for a streak spends money against the same cap");
+assert.equal(money[0].reason, "spend_cap_exceeded", "the plan carries the cause class, not repeated_failure");
+assert.match(money[0].question, /DURIG_SPEND_CAP_CALL_USD/, "the human-facing question names the cap to raise");
+assert.match(money[0].question, /NOT retried/);
+assert.match(money[0].question, /spend\.jsonl/, "and points at the money record");
+assert.deepEqual(
+	planEscalations({
+		seats: [{ name: "impl", conversationId: 9 }],
+		queueItems: [{ id: 7, to: "impl", status: "claimed", subject: "stuck" }],
+		failureStreakByConv: new Map([[9, 1]]),
+		errorByConv: new Map([[9, "Connection error."]]),
+		nowMs,
+	}),
+	[],
+	"an ordinary failure still waits for the streak: the money stop is the exception, not a new default",
+);
+
 await harness.close(ctx);
-console.log("SUPERVISOR TEST PASS (repeated failure and a question parked on an unanswering seat escalate to the human, idempotently, through the existing defer channel)");
+console.log(
+	"SUPERVISOR TEST PASS (repeated failure and a question parked on an unanswering seat escalate to the human, idempotently, through the existing defer channel; a spend-cap stop is a NAMED cause that parks on the first failure and is not retried)",
+);
 process.exit(0);

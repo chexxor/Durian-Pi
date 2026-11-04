@@ -173,6 +173,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [resume-while-broker-runs.md](resume-while-broker-runs.md) | you want to run `resume`/`doctor` but the broker is up | no |
 | [request-trace.md](request-trace.md) | you need the ACTUAL request body durig sends (thinking / reasoning_effort / max_tokens / store), not the programmed config | no |
 | [per-row-marker.md](per-row-marker.md) | you must decide whether a held landing row's work actually landed on main, and choose a marker to probe for it — bare identifiers give false positives, whole added lines give false negatives | no |
+| [spend-cap-tripped.md](spend-cap-tripped.md) | an item parks with reason `spend_cap_exceeded`; a seat or a probe refuses **before** sending with a cap, spent and projected number; you want to know where the store's money went and what is still unconfirmed | no |
 | [verifier-independence.md](verifier-independence.md) | a verifier wants to edit the artefact it is verifying, or is about to report an `artifact`/SHA it did not run — a verifier's only write is a report; **or** a verify leg must state which kind of independence it has when author and verifier run the SAME model, and what a `local/` verifier re-point would break | no |
 
 ## Index (mechanism)
@@ -190,6 +191,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Worktrees | leaked-worktrees, prepare-workspace-etarget, worktree-unlinked-deps, prepare-workspace-refused |
 | Git objects / shas cited from another machine | cross-clone-object-recovery, workspace-move |
 | Which model/quantization a provider is actually serving (variant activation, unload-by-`instance_id`, model-server lifetime vs a live run) | verifier-model-server, model-server-broker-race |
+| What a model call costs, where the money went, and what stops a call before it is sent (three cap axes, one ledger, locality of the endpoint) | spend-cap-tripped |
 | Which model the rig NAMES vs which `.gguf` answers (dead pointer after a swap) | hygiene-and-dead-model-pointers, verifier-model-server |
 | A seat shell that cannot spawn on this host (217), and whether seat hygiene has ever been measured | hygiene-and-dead-model-pointers, workspace-move |
 | A delegate-written file that was never committed | transcript-recovery (`tools/transcript-recovery.mjs`), tracked-files-missing-on-disk |

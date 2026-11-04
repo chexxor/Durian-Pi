@@ -5,6 +5,7 @@
 // assumption: if the author family misses both and the verifier family catches them, the invariant is
 // earning its keep; if both miss them, no verifier choice fixes the blind spot.
 import { execFileSync } from "node:child_process";
+import { meteredChat } from "./metered.mjs";
 
 const SNIPPETS = [
   {
@@ -39,8 +40,15 @@ async function ask(baseUrl, model, code, file) {
     max_tokens: Number(process.env.CAL_MAX_TOKENS || 3000),
   };
   const t0 = Date.now();
-  const r = await fetch(`${baseUrl}/chat/completions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const d = await r.json();
+  // #5047 (acceptance P8): this probe used to post the wire path itself, with NO authorization header at all, so
+  // against a metered host every call came back 401 and the operator read that as "this model is a bad verifier".
+  // It also spent money nothing had heard about. `meteredChat` is the accounted path: it attaches the credential
+  // by env order, refuses an uncredentialed call to a metered host BEFORE sending, projects against the caps, and
+  // appends the row to the one ledger (`note` says which probe wrote it).
+  const call = await meteredChat({ baseUrl, body, env: process.env, note: "probe calibrate-verifier.mjs" });
+  if (call.status !== 200)
+    throw new Error(`HTTP ${call.status} ${String(call.text ?? "").slice(0, 160)} (accounted in the spend ledger)`);
+  const d = JSON.parse(call.text);
   const dt = (Date.now() - t0) / 1000;
   const msg = d.choices?.[0]?.message ?? {};
   const u = d.usage ?? {};

@@ -17,6 +17,11 @@
 //   mid-flight (dogfood F11), so the rig reads idle-healthy while a request sits
 //   unprocessed. Derived from already-persisted data only (no new write path,
 //   D24).
+// - "spend_cap_exceeded": the run was STOPPED BY THE RIG'S OWN SPEND CAP, not by a model
+//   fault (#5047). Same visible shape as a model error (an unanswered run), entirely
+//   different meaning: the next attempt costs the same money and meets the same cap. The
+//   notice names the cap and says who may raise it, because the operator's reflex would
+//   otherwise be "retry it".
 
 // How long an admitted submission may sit unstarted before it is judged
 // stranded. The submission record carries NO admission timestamp of its own
@@ -34,6 +39,8 @@ export const STRANDED_ADMITTED_MS = 30_000;
  */
 export const REPEATED_FAILURE_STREAK = 3;
 
+import { SPEND_CAUSE, isSpendStopMessage, spendCapNamed } from "./causes.mjs";
+
 /** Rejected-malformed-arguments tool calls after which a seat is surfaced as `malformed_tool_call`. */
 export const MALFORMED_TOOL_CALL_NOTICE = 2;
 
@@ -46,7 +53,8 @@ export const MALFORMED_TOOL_CALL_NOTICE = 2;
  */
 const MALFORMED_ARGUMENTS_MARKER = /\[error\] Validation failed for tool "/;
 
-/** Did this entry record a tool call the harness rejected as malformed arguments? */
+/** Did this entry record a tool call the harness rejected as malformed arguments? */
+
 function deferredTargetPhrase(deferredTo) {
 	if (!deferredTo) return "waiting on an answer";
 	if (deferredTo === "nobody") return "waiting on an answer — NO TARGET was recorded, so nobody has been asked";
@@ -377,7 +385,23 @@ export function computeAttention(
 			});
 		}
 		const streak = failureStreakByConv.get(seat.conversationId) ?? 0;
-		if (streak >= repeatedFailureStreak) {
+		// #5047: a run stopped by the rig's OWN cap is a money stop, not a model fault. Read from the entry's
+		// message (the same source `last_run_failed` quotes), because the submission record carries only the
+		// category `model_error` and the category is exactly what hides this cause. Reported INSTEAD of the streak
+		// notice: the streak is a symptom of the same cap, and two notices for one cause is noise that reads as two
+		// problems. Deliberately not a retry hint - the next attempt costs the same money and meets the same cap.
+		const stopText = errorByConv?.get(seat.conversationId);
+		if (isSpendStopMessage(stopText)) {
+			notices.push({
+				scope: "seat",
+				seat: seat.name,
+				kind: SPEND_CAUSE,
+				detail:
+					`the rig's own spend cap stopped this run${spendCapNamed(stopText) ? ` (${spendCapNamed(stopText)})` : ""}; ` +
+					`not a model fault and not retried - the item is parked. Money record: .spike/gate/spend.jsonl; ` +
+					`only the OPERATOR raises a cap, deliberately and for a named run (D193)`,
+			});
+		} else if (streak >= repeatedFailureStreak) {
 			notices.push({
 				scope: "seat",
 				seat: seat.name,
@@ -395,7 +419,7 @@ export function computeAttention(
 			});
 		}
 		const latest = latestByConv.get(seat.conversationId);
-		if (latest?.status === "unanswered") {
+		if (latest?.status === "unanswered" && !isSpendStopMessage(stopText)) {
 			notices.push({
 				scope: "seat",
 				seat: seat.name,

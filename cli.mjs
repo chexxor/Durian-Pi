@@ -42,11 +42,11 @@ import { fileURLToPath } from "node:url";
 // type-strips the TypeScript on import, so there is no build step.
 import {
   BASE_URL,
-  DEEPINFRA_COMPAT,
   PROVIDER_ID,
   fallbackModels,
 } from "./src/providers/deepinfra-models.ts";
 import { createLocalProvider, localProviderSpecs } from "./src/providers/local.mjs";
+import { wrapProviderWithSpend, capsFor, ledgerPath } from "./src/providers/spend.mjs";
 import {
   Constitution,
   Edges,
@@ -258,6 +258,30 @@ import { resetSeatContext } from "./src/reset.mjs";
 // the terminal. Off for commands that only read state, so `watch`/`status`
 // stay machine-clean; only `send` opts in.
 function buildModels(live = null) {
+  // #5047 — THE SPEND GUARD, installed beside the trace seam. `buildModels` builds ONE provider per process for
+  // every run path (`send`, `up`, `run`, `serve`, `optimize`, the optimizer), and pi-durable's COMPACTION task
+  // resolves its model through the same registry, so a wrapper here is the one position that covers all of them
+  // and cannot drift (D-5015.1 chose the provider seam over queue admission for exactly this reason: a compaction
+  // is a model call at the seat's own model, so it spends money, and admission-time accounting cannot see it).
+  //
+  // Caps and the ledger path are read the way every other rig value is read: env over config-file. The ledger is
+  // the SAME file the probes write, in the SAME row format (`tools/model-probes/metered.mjs` owns both) — a second
+  // ledger is the fork #5015 §3 forbids. `DURIG_SPEND_LEDGER` overrides the path for a run; the default is
+  // `.spike/gate/spend.jsonl`.
+  //
+  // The FAUX branch below is deliberately NOT wrapped: faux never opens a socket, and wrapping it would put a
+  // money guard in front of a provider that cannot spend money — whose model rows have no baseUrl, so the
+  // endpoint test that decides metering has nothing to read.
+  const spendEnv = { ...CFG, ...process.env };
+  const spendLedger = spendEnv.DURIG_SPEND_LEDGER || ledgerPath(spendEnv);
+  const spendCaps = capsFor(spendEnv);
+  const withSpend = (provider) =>
+    wrapProviderWithSpend(provider, {
+      caps: spendCaps,
+      ledger: spendLedger,
+      env: spendEnv,
+      getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+    });
   if ((CFG.DURIG_PROVIDER ?? "deepinfra") === "faux") {
     FAUX = fauxProvider({ models: [{ id: MODEL_ID }] });
     // #4658 (decision (a)): A TEST-ONLY DELAY KNOB, AND IT IS THE ONLY WAY A SPAWNED BROKER CAN HOLD A RUN.
@@ -320,24 +344,31 @@ function buildModels(live = null) {
         },
       },
     },
-    // Catalog from the extension module, plus a synthesized entry for the
-    // requested model when the curated fallback lacks it (fallback is a
-    // subset of DeepInfra's catalog; arbitrary DURIG_MODEL ids must work).
+    // Catalog from the extension module.
+    //
+    // #5047 (acceptance P2): the old fallback for a model the curated list lacks SYNTHESIZED a row whose cost
+    // block was all-zero - `input: 0, output: 0, cacheRead: 0` - on a METERED endpoint (BASE_URL is
+    // api.deepinfra.com). "arbitrary DURIG_MODEL ids must work" was the stated justification, and the rig paid
+    // for it twice over: `config`, the ledger and every cost read reported a FREE provider that was billing, and
+    // a spend cap had nothing to price. A row this rig cannot price is now NOT registered - the seat fails as
+    // no_model before any request, and the line below names the cause and what to set. Free BY DECLARATION is
+    // still available: put the id in src/providers/deepinfra-prices.json at $0 and it registers.
+    // The curated rows also pass through the exposure guard (#5015 P6b): a row whose own declared geometry can
+    // spend more than the operator's store cap in ONE call never reaches a seat.
     models: (() => {
-      const base = fallbackModels();
+      const base = fallbackModels({ storeCapUsd: Number(CFG.DURIG_SPEND_CAP_STORE_USD) });
       if (base.some((m) => m.id === MODEL_ID)) return base;
-      return [...base, {
-        id: MODEL_ID,
-        name: MODEL_ID,
-        api: "openai-completions",
-        provider: PROVIDER_ID,
-        baseUrl: BASE_URL,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128_000,
-        maxTokens: 8_192,
-        ...DEEPINFRA_COMPAT,
-      }];
+      process.stderr.write(
+        `${JSON.stringify({
+          spend: "model-unpriced",
+          provider: PROVIDER_ID,
+          model: MODEL_ID,
+          cause: "no dated price for this id",
+          remedy: `point DURIG_MODEL at a priced id (${base.map((m) => m.id).join(", ")}), or add ${MODEL_ID} to src/providers/deepinfra-prices.json from a dated catalog fetch (curl -s https://api.deepinfra.com/v1/openai/models); $0 is a legitimate declared price`,
+          effect: "no row is registered for it, so a seat naming it fails as no_model BEFORE any request",
+        })}\n`,
+      );
+      return base;
     })(),
     api: ocApi,
   });
@@ -359,16 +390,23 @@ function buildModels(live = null) {
     : deepinfra;
   // Live view sits OUTSIDE the slot gate: it labels the stream even while a
   // generation waits for a free slot, and never alters what consumers see.
+  //
+  // #5047: the spend guard is the OUTERMOST wrapper, and the ordering is not cosmetic. pi-ai runs the
+  // `onPayload` hooks in wrapper order (each wrapper chains the previous one), so with spend OUTSIDE the trace, a
+  // refused call is refused before the trace line is written — stderr never shows a payload for bytes that were
+  // never sent. It also sits outside the slot gate, so a refusal never takes a generation slot.
   models.setProvider(
-    wrapProviderWithTrace(
-      live
-        ? wrapProviderWithLiveView(gated, {
-            renderer: live,
-            getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
-          })
-        : gated,
-      // The same one trace seam as the faux branch above (ROADMAP 43c / #920, #2545).
-      { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
+    withSpend(
+      wrapProviderWithTrace(
+        live
+          ? wrapProviderWithLiveView(gated, {
+              renderer: live,
+              getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+            })
+          : gated,
+        // The same one trace seam as the faux branch above (ROADMAP 43c / #920, #2545).
+        { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
+      ),
     ),
   );
   // Register the locally-served providers AFTER the default: resolveSeatModel reads a provider prefix only
@@ -378,9 +416,11 @@ function buildModels(live = null) {
   // (D48/D119, ROADMAP 189), and the family ruling lives in docs/DECISIONS.md rather than here.
   for (const spec of localProviderSpecs(CFG)) {
     models.setProvider(
-      wrapProviderWithTrace(createLocalProvider(spec, { createProvider, api: ocApi }), {
-        getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
-      }),
+      withSpend(
+        wrapProviderWithTrace(createLocalProvider(spec, { createProvider, api: ocApi }), {
+          getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+        }),
+      ),
     );
   }
   return { models, providerId: "deepinfra" };
@@ -1429,15 +1469,29 @@ async function superviseOnce(harness, probeStorage, context) {
     );
     failureStreakByConv.set(seat.conversationId, failureStreak(page.items));
   }
-  const plans = planEscalations({ seats: seatList, queueItems: queueDoc?.value?.items, failureStreakByConv });
+  // Bounded page: the current run sits at the top. Read ONCE and shared by both passes below - the supervisor
+  // needs the run's ERROR MESSAGE (#5047: the submission record carries only the category `model_error`, and the
+  // category is exactly what hides a spend-cap stop from the escalation that should park it on the first failure
+  // instead of the third), and the degeneration guard needs the same entries.
+  const pages = await readSeatPages(probeStorage, context, seatList, SCAN_LIMIT);
+  const errorByConv = new Map();
+  for (const seat of seatList) {
+    for (const entry of pages[seat.name] ?? []) {
+      const msg = Array.isArray(entry?.model) ? entry.model[0] : null;
+      if (msg?.errorMessage) {
+        errorByConv.set(seat.conversationId, msg.errorMessage);
+        break; // newest first, so the first hit is the most recent failure
+      }
+    }
+  }
+  const plans = planEscalations({ seats: seatList, queueItems: queueDoc?.value?.items, failureStreakByConv, errorByConv });
   const escalations = await applyEscalations(harness, plans, context);
 
   // Degeneration guard (mitigations 1+2 for the F29 class): reset a seat whose CURRENT run
   // has outgrown its turn/context bound, or shows step-repetition / malformed tool calls.
   // Detection is pure (src/degeneration.mjs); the write is the existing reset boundary, and
   // it is idempotent (a page already ending in `pi.reset` is skipped) so a pass loop cannot
-  // re-reset a seat before it has run again. Bounded page: the current run sits at the top.
-  const pages = await readSeatPages(probeStorage, context, seatList, SCAN_LIMIT);
+  // re-reset a seat before it has run again.
   const assessmentsByConv = new Map();
   for (const seat of seatList) {
     assessmentsByConv.set(seat.conversationId, assessRun(pages[seat.name] ?? []));

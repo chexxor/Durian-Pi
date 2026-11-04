@@ -14,6 +14,7 @@
 // escalation lives here. `run --watch` runs this as a pass (bounded, idempotent).
 
 import { REPEATED_FAILURE_STREAK } from "./attention.mjs";
+import { SPEND_CAUSE, isSpendStopMessage, spendCapNamed } from "./causes.mjs";
 import { DEFERRED_TO_HUMAN, RigQueue, isTerminalItem } from "./rig.mjs";
 
 /** How long a question parked on another SEAT waits before the human is escalated. */
@@ -47,16 +48,23 @@ function deferredAgeMs(item, nowMs) {
  *     item — its run cannot make progress, so the item is parked on the human;
  *   - a question parked on ANOTHER SEAT beyond `deferredToSeatMs` without an answer — the edge
  *     that was supposed to answer is not, so it is escalated to the human.
+ *
+ * A THIRD, added by #5047, escalates on the FIRST failure rather than the third: a run stopped by the rig's own
+ * spend cap. Waiting for a streak here is not caution, it is a budget — each attempt costs money and meets the
+ * same cap, so the streak is guaranteed and the money is spent getting there. The cause is read from the run's
+ * error message (`errorByConv`), because the submission record only says `model_error`, and that category is
+ * exactly what hides the distinction.
  * Idempotent by construction: an item already owned by the human (`deferredTo === "human"`) is
  * never re-planned, so repeated passes are harmless.
  *
- * @param {{seats: Array<{name:string, conversationId:number|string}>, queueItems: Array, failureStreakByConv: Map<number|string, number>, nowMs?: number, repeatedFailureStreak?: number, deferredToSeatMs?: number}} input
+ * @param {{seats: Array<{name:string, conversationId:number|string}>, queueItems: Array, failureStreakByConv: Map<number|string, number>, errorByConv?: Map<number|string, string>, nowMs?: number, repeatedFailureStreak?: number, deferredToSeatMs?: number}} input
  * @returns {Array<{seat:string, itemId:number, reason:string, question:string}>}
  */
 export function planEscalations({
   seats,
   queueItems,
   failureStreakByConv,
+  errorByConv = new Map(),
   nowMs = Date.now(),
   repeatedFailureStreak = REPEATED_FAILURE_STREAK,
   deferredToSeatMs = DEFERRED_TO_SEAT_MS,
@@ -65,7 +73,9 @@ export function planEscalations({
   const escalatedItemIds = new Set();
   for (const seat of seats ?? []) {
     const streak = failureStreakByConv?.get(seat.conversationId) ?? 0;
-    if (streak < repeatedFailureStreak) continue;
+    const stopText = errorByConv?.get(seat.conversationId);
+    const spendStopped = isSpendStopMessage(stopText);
+    if (!spendStopped && streak < repeatedFailureStreak) continue;
     // The item a human can actually decide on: the seat's oldest non-terminal one. A `deferred`
     // item is excluded here — the queue scan below covers the ones parked on a seat.
     const held = (queueItems ?? [])
@@ -76,8 +86,10 @@ export function planEscalations({
     plans.push({
       seat: seat.name,
       itemId: held.id,
-      reason: "repeated_failure",
-      question: `supervisor escalation: ${seat.name} has failed ${streak} runs in a row and still holds #${held.id} (${held.subject}). It cannot make progress without a human decision.`,
+      reason: spendStopped ? SPEND_CAUSE : "repeated_failure",
+      question: spendStopped
+        ? `spend cap stopped ${seat.name}${spendCapNamed(stopText) ? ` at ${spendCapNamed(stopText)}` : ""}; #${held.id} (${held.subject}) is parked, NOT retried — every retry costs money and meets the same cap. The money record is .spike/gate/spend.jsonl; raising the cap is the operator's decision and only the operator's (D193), or point the seat at a cheaper/loopback row (a capacity ruling, D201).`
+        : `supervisor escalation: ${seat.name} has failed ${streak} runs in a row and still holds #${held.id} (${held.subject}). It cannot make progress without a human decision.`,
     });
   }
   for (const item of queueItems ?? []) {
