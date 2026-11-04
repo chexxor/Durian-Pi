@@ -57,10 +57,11 @@ only in its remedy text (**D137**). On 2026-10-29 `rig.selfdev.json` pointed all
 ```bash
 # 1. Is the failure the HOST, the registration, or the guard? All three are different files.
 sh -c 'for c in bash pwsh powershell; do printf "%s=%s\n" "$c" "$(command -v $c || echo ABSENT)"; done'
-grep -n "shell: create" src/seattools.mjs          # which tool is REGISTERED (measured: only powershell)
+grep -n "seatShellSelection" src/seattools.mjs    # the registration is HOST-CONDITIONAL since 217/#4849 — one registry, `seatShell` is what THIS host got
+node -e 'import("./src/shellregistry.mjs").then(m=>console.log(m.seatShellSelection.name, "degraded:"+m.seatShellSelection.degraded))'   # the AUTHORITATIVE read (measured 2026-11-02, this box: `bash degraded:false`, 0.11 s)
 grep -n "SHELL_TOOLS"  src/seatguard.mjs           # measured: :122 = new Set(["bash","powershell"])
-grep -n "programs = options" vendor/pi-main/packages/durable/src/tools/bash.ts   # :169 ["pwsh","powershell"]
-node tools/broker-serve.mjs --dry-run              # read-only; BLOCK seat-shell-availability when none spawn
+grep -n "programs = options" vendor/pi-main/packages/durable/src/tools/bash.ts   # :169 ["pwsh","powershell"] — that is createPowerShellTool's DEFAULT, one factory. Reading it is fine; GATING a host verdict on it was defect #4977
+node tools/broker-serve.mjs --dry-run              # read-only; asks the registry. BLOCKs only when shellPlan() reports degraded:true (this box: NOTE `"bash" CAN start on linux — /usr/bin/bash`)
 ```
 
 `seatguard`'s `SHELL_TOOLS` naming `bash` is **not** evidence a bash tool exists — it is the set of command
@@ -129,8 +130,8 @@ line names `…-Q6_K.gguf --ctx-size 8192 --parallel 4`; the demo prints
 
 | Claim | Command | Measured 2026-10-29 |
 |---|---|---|
-| seats have no spawnable shell here | `node tools/broker-serve.mjs --dry-run` | `BLOCK seat-shell-availability` — "spawns [pwsh, powershell], NONE of which exists on linux"; 1 blocking finding |
-| no seat ever ran `bash` | the `entries` scan above | `"toolName":"bash"` → **0**; `"toolName":"powershell"` → **20,340** |
+| the shell the registry registers CAN start here | `node -e 'import("./src/shellregistry.mjs").then(m=>console.log(m.seatShellSelection.name, "degraded:"+m.seatShellSelection.degraded))'` then `node tools/broker-serve.mjs --status --no-probe` | 2026-11-02 (box Linux, thin 80-entry worktree at `ac5e1d37`): `bash degraded:false`, and the preflight prints **`NOTE seat-shell-availability` — "bash" CAN start on linux — /usr/bin/bash**. Before #4977 the same command printed **`BLOCK`** with the self-contradicting line "spawns [pwsh, powershell], NONE of which exists on linux" — re-measured at `43e26dcc` (187 packages + vendor/pi-main), where it still does, because the fix is unlanded. The block direction is pinned on injected hosts by `node demo/broker-serve-shell-availability.test.mjs` (0.16 s, exit 0) |
+| no seat ever ran `bash` | the `entries` scan above | `"toolName":"bash"` → **0**; `"toolName":"powershell"` → **20,340** (the Windows era; that scan is NOT a current-host verdict) |
 | the pointer is currently consistent | `node demo/local-model-pointer.test.mjs` | `LOCAL MODEL POINTER PASS … pinned seats=12` |
 | the pointer CAN fail (the check is not vacuous) | the 2026-10-29 incident | it was RED while five seats named `verifier/recursivesi/flint` against a Ministral-only server (commit `93a14298`) |
 | nothing compares the rig to the loaded instance | `DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json` | 61 findings; `single-model-rig` **passes** — it is a string comparison |

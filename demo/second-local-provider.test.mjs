@@ -23,6 +23,7 @@ import {
 	LOCAL_PROVIDER_ID,
 	VERIFIER_PROVIDER_ID,
 	VERIFIER_ENV_PREFIX,
+	LOOPBACK_PLACEHOLDER_KEY,
 	createLocalProvider,
 	localProviderSpec,
 	localProviderSpecs,
@@ -101,7 +102,7 @@ assert.equal(built.models[0].maxTokens, 32768, "the declared budget must reach t
 assert.equal(built.models[0].api, "openai-completions", "LM Studio serves /v1/chat/completions, so the api stays");
 
 const unset = await built.auth.apiKey.resolve({ ctx: { env: async () => undefined } });
-assert.equal(unset.auth.apiKey, "local-placeholder", "a keyless local server still gets a placeholder");
+assert.equal(unset.auth.apiKey, LOOPBACK_PLACEHOLDER_KEY, "a keyless LOOPBACK server still gets the loopback placeholder");
 assert.equal(unset.source, "none");
 const set = await built.auth.apiKey.resolve({ ctx: { env: async (k) => (k === "DURIG_VERIFIER_API_KEY" ? "vk" : undefined) } });
 assert.equal(set.auth.apiKey, "vk", "the verifier reads its OWN key variable");

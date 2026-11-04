@@ -534,6 +534,23 @@ for (const branch of branches) {
 /* ───────── optional: prove the result in the scratch before advancing main ───────── */
 
 const suiteResults = [];
+// #4996: a demo that cannot judge prints `SKIP: <reason>` and exits 0. The lander COLLECTS those lines and
+// reports them, because the alternative is the failure this rig just paid twice: `demo/local-model-pointer`
+// reads machine state (`durig.config.json`, which is gitignored), so in the scratch worktree the lander builds
+// it was red for reasons the BRANCH did not cause, and a clean landing was refused. A skip is not a pass and is
+// not a failure — it is a fact about the TREE the suite ran in, and it has to be named as one. Silence here is
+// what let "the suite is red" and "the branch is bad" be read as the same sentence.
+const suiteSkips = [];
+const collectSkips = (test, stdout) => {
+	for (const line of String(stdout ?? "").split(/\r?\n/)) {
+		const m = /^SKIP: (.*)$/.exec(line.trim());
+		if (m) suiteSkips.push({ test, reason: m[1] });
+	}
+};
+const skipSummary = () =>
+	suiteSkips.length === 0
+		? "skipped 0"
+		: `SKIPPED ${suiteSkips.length} (a skip is a fact about the TREE the suite ran in, not about the branch): ${suiteSkips.map((s) => `demo/${s.test} — ${s.reason}`).join(" | ")}`;
 // #4936: what this pass actually covered, or null when no regression check ran. Declared out here so
 // EVERY report path — including a STOPPED mid-suite run and the final ok — carries the same statement.
 let suiteScope = null;
@@ -705,6 +722,7 @@ await (async () => {
 			child.stdout.on("data", (d) => { stdout += d; });
 			child.stderr.on("data", (d) => { stderr += d; });
 			child.on("close", (code) => {
+				collectSkips(test, stdout);
 				resolve({ test, exit: code ?? 1, stdout, stderr });
 			});
 		});
@@ -718,6 +736,7 @@ await (async () => {
 				error: `STOPPED: demo/${result.test} failed in the scratch worktree (exit ${result.exit}) — main was NOT advanced.`,
 				merged,
 				suite: suiteResults,
+				suiteSkips,
 				scratch: keepScratch ? scratch : null,
 			},
 			1,
@@ -766,6 +785,7 @@ await (async () => {
 	/* ── run serialized tests one at a time ── */
 	for (const test of serializedTests) {
 		const run = spawnSync(process.execPath, [join("demo", test)], { cwd: scratch, encoding: "utf8" });
+		collectSkips(test, run.stdout);
 		suiteResults.push({ test, exit: run.status ?? 1 });
 		if ((run.status ?? 1) !== 0) {
 			if (!keepScratch) removeScratch();
@@ -775,12 +795,18 @@ await (async () => {
 					error: `STOPPED: demo/${test} failed in the scratch worktree (exit ${run.status}) — main was NOT advanced.`,
 					merged,
 					suite: suiteResults,
+					suiteSkips,
 					scratch: keepScratch ? scratch : null,
 				},
 				1,
 			);
 		}
 	}
+
+	// #4996: say out loud what this tree could NOT judge, on the same channel the scope line uses (stdout is
+	// reserved for the JSON report). Zero skips is stated too — silence and "nothing was skipped" are not the
+	// same fact, and the last landing reads had no way to tell them apart.
+	console.error(`suite: ${skipSummary()}`);
 }
 })();
 
@@ -896,6 +922,9 @@ report(
 		// checking. The default stays off (the suite runs INSIDE the lock hold, so its runtime lands in
 		// the wait), but its ABSENCE now SAYS SO, with the reason and the remedy.
 		suite: wantSuite || wantChangedSuite ? suiteResults : "not run — neither --suite nor --changed-suite was passed; the gate is opt-in, so this landing was NOT regression-checked. Re-run with --suite (the full gate) or --changed-suite (the derived subset, which is NOT the gate), or run the suite on main separately",
+		// #4996: the checks this tree could not judge, kept OUT of the pass count and not treated as failures.
+		// The reason names what the tree lacks, so a reader can tell "the branch is bad" from "the scratch is bare".
+		suiteSkips,
 		// #4936: a subset number with no statement of what it did NOT cover is not a measurement
 		// (#3743's four-state probe, #4858's rule). `null` means the FULL gate ran — every area covered.
 		suiteScope,

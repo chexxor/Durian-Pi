@@ -17,6 +17,16 @@
 //   mid-flight (dogfood F11), so the rig reads idle-healthy while a request sits
 //   unprocessed. Derived from already-persisted data only (no new write path,
 //   D24).
+// - "spend_cap_exceeded": the run was STOPPED BY THE RIG'S OWN SPEND CAP, not by a model
+//   fault (#5047). Same visible shape as a model error (an unanswered run), entirely
+//   different meaning: the next attempt costs the same money and meets the same cap. The
+//   notice names the cap and says who may raise it, because the operator's reflex would
+//   otherwise be "retry it".
+// - "context_over_window": ONE TURN moved more tokens than the seat's window allows (#5049,
+//   ROADMAP 208). The fraction already existed in `status.context` and NOTHING consumed it, so a
+//   seat reading 9.96x its window was displayed and dropped. The notice carries the denominator's
+//   STATE and the axis, and it stays silent on the two known artifacts (a measure behind a
+//   compaction/reset boundary, and a seat with no declared window). Notice only: it decides nothing.
 
 // How long an admitted submission may sit unstarted before it is judged
 // stranded. The submission record carries NO admission timestamp of its own
@@ -34,6 +44,14 @@ export const STRANDED_ADMITTED_MS = 30_000;
  */
 export const REPEATED_FAILURE_STREAK = 3;
 
+import { SPEND_CAUSE, isSpendStopMessage, spendCapNamed, CONTEXT_OVER_WINDOW_CAUSE } from "./causes.mjs";
+import { contextOverWindow } from "./context.mjs";
+
+/** Thousands separator for token counts in operator text — 244751 and 244,751 are different reads. */
+function tokens(n) {
+	return Number.isFinite(n) ? n.toLocaleString("en-US") : String(n ?? "unknown");
+}
+
 /** Rejected-malformed-arguments tool calls after which a seat is surfaced as `malformed_tool_call`. */
 export const MALFORMED_TOOL_CALL_NOTICE = 2;
 
@@ -46,7 +64,8 @@ export const MALFORMED_TOOL_CALL_NOTICE = 2;
  */
 const MALFORMED_ARGUMENTS_MARKER = /\[error\] Validation failed for tool "/;
 
-/** Did this entry record a tool call the harness rejected as malformed arguments? */
+/** Did this entry record a tool call the harness rejected as malformed arguments? */
+
 function deferredTargetPhrase(deferredTo) {
 	if (!deferredTo) return "waiting on an answer";
 	if (deferredTo === "nobody") return "waiting on an answer — NO TARGET was recorded, so nobody has been asked";
@@ -352,7 +371,7 @@ export function computeAttention(
 	queueItems,
 	latestByConv,
 	errorByConv = new Map(),
-	{ nowMs = Date.now(), seatsWithSlot = new Set(), strandedMs = STRANDED_ADMITTED_MS, failureStreakByConv = new Map(), repeatedFailureStreak = REPEATED_FAILURE_STREAK, malformedCountByConv = new Map(), malformedToolCallNotice = MALFORMED_TOOL_CALL_NOTICE } = {},
+	{ nowMs = Date.now(), seatsWithSlot = new Set(), strandedMs = STRANDED_ADMITTED_MS, failureStreakByConv = new Map(), repeatedFailureStreak = REPEATED_FAILURE_STREAK, malformedCountByConv = new Map(), malformedToolCallNotice = MALFORMED_TOOL_CALL_NOTICE, contextBySeat = null, compactGateBySeat = {} } = {},
 ) {
 	const notices = [];
 	for (const seat of seats) {
@@ -377,7 +396,23 @@ export function computeAttention(
 			});
 		}
 		const streak = failureStreakByConv.get(seat.conversationId) ?? 0;
-		if (streak >= repeatedFailureStreak) {
+		// #5047: a run stopped by the rig's OWN cap is a money stop, not a model fault. Read from the entry's
+		// message (the same source `last_run_failed` quotes), because the submission record carries only the
+		// category `model_error` and the category is exactly what hides this cause. Reported INSTEAD of the streak
+		// notice: the streak is a symptom of the same cap, and two notices for one cause is noise that reads as two
+		// problems. Deliberately not a retry hint - the next attempt costs the same money and meets the same cap.
+		const stopText = errorByConv?.get(seat.conversationId);
+		if (isSpendStopMessage(stopText)) {
+			notices.push({
+				scope: "seat",
+				seat: seat.name,
+				kind: SPEND_CAUSE,
+				detail:
+					`the rig's own spend cap stopped this run${spendCapNamed(stopText) ? ` (${spendCapNamed(stopText)})` : ""}; ` +
+					`not a model fault and not retried - the item is parked. Money record: .spike/gate/spend.jsonl; ` +
+					`only the OPERATOR raises a cap, deliberately and for a named run (D193)`,
+			});
+		} else if (streak >= repeatedFailureStreak) {
 			notices.push({
 				scope: "seat",
 				seat: seat.name,
@@ -394,8 +429,37 @@ export function computeAttention(
 				detail: `${malformed} tool call(s) rejected as malformed arguments; the seat is emitting invalid argument shapes`,
 			});
 		}
+		// #5049 (ROADMAP 208): one turn moved more than the seat's window. The measure already existed and
+		// nothing read it — `status.context` printed a fraction of 9.96 and the number went nowhere. It is
+		// pushed BEFORE the failed-run branch on purpose: `last_run_failed` ends with `continue` (one notice per
+		// cause), and a seat under context pressure is often a seat whose run just failed — suppressing the
+		// context fact there would hide the likely CAUSE of the failure. This notice ACCEPTS, it never DECIDES
+		// (#3271/#3575): nothing parks or retries on it, and the stop actuator is a different row (#1781).
+		const measure = contextBySeat?.[seat.name] ?? null;
+		if (measure) {
+			const gate = compactGateBySeat?.[seat.name] ?? null;
+			const over = contextOverWindow(measure, { keepRecentTokens: gate?.keepRecentTokens ?? null });
+			if (over.fired) {
+				notices.push({
+					scope: "seat",
+					seat: seat.name,
+					kind: CONTEXT_OVER_WINDOW_CAUSE,
+					detail:
+						`one turn MOVED ${tokens(over.consumed)} tokens = ${over.fraction.toFixed(2)}x the ${over.denominator} window of ${tokens(over.windowValue)}; ` +
+						`axis: tokens the provider MOVED in one turn (input+output+cacheRead+cacheWrite, cacheRead ${tokens(over.cacheRead)} of them), NOT the live head; ` +
+						`measure is current (no pi.compaction/pi.reset entry after entry ${over.head?.usageEntryId ?? "?"}); ` +
+						`the compact verb's gate is the accumulation budget: keepRecentTokens=${over.keepRecentTokens ?? "unknown"} willCut=${over.willCut ?? "unknown"}` +
+						(over.keepRecentTokens === null
+							? gate?.error
+								? ` (DURIG_COMPACTION_* is invalid, so the gate cannot be read: ${gate.error})`
+								: " (no DURIG_COMPACTION_* value is set here, so the gate is pi-durable's default and durig does not read it)"
+							: "") +
+						` — a notice, not a stop; remedies: docs/runbooks/context-over-window.md`,
+				});
+			}
+		}
 		const latest = latestByConv.get(seat.conversationId);
-		if (latest?.status === "unanswered") {
+		if (latest?.status === "unanswered" && !isSpendStopMessage(stopText)) {
 			notices.push({
 				scope: "seat",
 				seat: seat.name,

@@ -42,11 +42,11 @@ import { fileURLToPath } from "node:url";
 // type-strips the TypeScript on import, so there is no build step.
 import {
   BASE_URL,
-  DEEPINFRA_COMPAT,
   PROVIDER_ID,
   fallbackModels,
 } from "./src/providers/deepinfra-models.ts";
 import { createLocalProvider, localProviderSpecs } from "./src/providers/local.mjs";
+import { wrapProviderWithSpend, capsFor, ledgerPath } from "./src/providers/spend.mjs";
 import {
   Constitution,
   Edges,
@@ -57,7 +57,10 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { describeConfig, loadConfig, loadShippedDefaults, streamSettings } from "./src/config.mjs";
+import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings } from "./src/config.mjs";
+// The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
+// against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
+import { contextConsumption } from "./src/context.mjs";
 import { applyEscalations, applyResets, failureStreak, planEscalations, planResets } from "./src/supervisor.mjs";
 import { assessRun } from "./src/degeneration.mjs";
 import {
@@ -80,7 +83,7 @@ import { readCitations } from "./src/citation.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readQueueRow, readRigHealth, readSeatList, readSeatRoots } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readQueueRow, readRigHealth, readSeatList, readSeatRoots, seatContextMap } from "./src/readapi.mjs";
 import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -255,6 +258,30 @@ import { resetSeatContext } from "./src/reset.mjs";
 // the terminal. Off for commands that only read state, so `watch`/`status`
 // stay machine-clean; only `send` opts in.
 function buildModels(live = null) {
+  // #5047 — THE SPEND GUARD, installed beside the trace seam. `buildModels` builds ONE provider per process for
+  // every run path (`send`, `up`, `run`, `serve`, `optimize`, the optimizer), and pi-durable's COMPACTION task
+  // resolves its model through the same registry, so a wrapper here is the one position that covers all of them
+  // and cannot drift (D-5015.1 chose the provider seam over queue admission for exactly this reason: a compaction
+  // is a model call at the seat's own model, so it spends money, and admission-time accounting cannot see it).
+  //
+  // Caps and the ledger path are read the way every other rig value is read: env over config-file. The ledger is
+  // the SAME file the probes write, in the SAME row format (`tools/model-probes/metered.mjs` owns both) — a second
+  // ledger is the fork #5015 §3 forbids. `DURIG_SPEND_LEDGER` overrides the path for a run; the default is
+  // `.spike/gate/spend.jsonl`.
+  //
+  // The FAUX branch below is deliberately NOT wrapped: faux never opens a socket, and wrapping it would put a
+  // money guard in front of a provider that cannot spend money — whose model rows have no baseUrl, so the
+  // endpoint test that decides metering has nothing to read.
+  const spendEnv = { ...CFG, ...process.env };
+  const spendLedger = spendEnv.DURIG_SPEND_LEDGER || ledgerPath(spendEnv);
+  const spendCaps = capsFor(spendEnv);
+  const withSpend = (provider) =>
+    wrapProviderWithSpend(provider, {
+      caps: spendCaps,
+      ledger: spendLedger,
+      env: spendEnv,
+      getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+    });
   if ((CFG.DURIG_PROVIDER ?? "deepinfra") === "faux") {
     FAUX = fauxProvider({ models: [{ id: MODEL_ID }] });
     // #4658 (decision (a)): A TEST-ONLY DELAY KNOB, AND IT IS THE ONLY WAY A SPAWNED BROKER CAN HOLD A RUN.
@@ -317,24 +344,31 @@ function buildModels(live = null) {
         },
       },
     },
-    // Catalog from the extension module, plus a synthesized entry for the
-    // requested model when the curated fallback lacks it (fallback is a
-    // subset of DeepInfra's catalog; arbitrary DURIG_MODEL ids must work).
+    // Catalog from the extension module.
+    //
+    // #5047 (acceptance P2): the old fallback for a model the curated list lacks SYNTHESIZED a row whose cost
+    // block was all-zero - `input: 0, output: 0, cacheRead: 0` - on a METERED endpoint (BASE_URL is
+    // api.deepinfra.com). "arbitrary DURIG_MODEL ids must work" was the stated justification, and the rig paid
+    // for it twice over: `config`, the ledger and every cost read reported a FREE provider that was billing, and
+    // a spend cap had nothing to price. A row this rig cannot price is now NOT registered - the seat fails as
+    // no_model before any request, and the line below names the cause and what to set. Free BY DECLARATION is
+    // still available: put the id in src/providers/deepinfra-prices.json at $0 and it registers.
+    // The curated rows also pass through the exposure guard (#5015 P6b): a row whose own declared geometry can
+    // spend more than the operator's store cap in ONE call never reaches a seat.
     models: (() => {
-      const base = fallbackModels();
+      const base = fallbackModels({ storeCapUsd: Number(CFG.DURIG_SPEND_CAP_STORE_USD) });
       if (base.some((m) => m.id === MODEL_ID)) return base;
-      return [...base, {
-        id: MODEL_ID,
-        name: MODEL_ID,
-        api: "openai-completions",
-        provider: PROVIDER_ID,
-        baseUrl: BASE_URL,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128_000,
-        maxTokens: 8_192,
-        ...DEEPINFRA_COMPAT,
-      }];
+      process.stderr.write(
+        `${JSON.stringify({
+          spend: "model-unpriced",
+          provider: PROVIDER_ID,
+          model: MODEL_ID,
+          cause: "no dated price for this id",
+          remedy: `point DURIG_MODEL at a priced id (${base.map((m) => m.id).join(", ")}), or add ${MODEL_ID} to src/providers/deepinfra-prices.json from a dated catalog fetch (curl -s https://api.deepinfra.com/v1/openai/models); $0 is a legitimate declared price`,
+          effect: "no row is registered for it, so a seat naming it fails as no_model BEFORE any request",
+        })}\n`,
+      );
+      return base;
     })(),
     api: ocApi,
   });
@@ -356,16 +390,23 @@ function buildModels(live = null) {
     : deepinfra;
   // Live view sits OUTSIDE the slot gate: it labels the stream even while a
   // generation waits for a free slot, and never alters what consumers see.
+  //
+  // #5047: the spend guard is the OUTERMOST wrapper, and the ordering is not cosmetic. pi-ai runs the
+  // `onPayload` hooks in wrapper order (each wrapper chains the previous one), so with spend OUTSIDE the trace, a
+  // refused call is refused before the trace line is written — stderr never shows a payload for bytes that were
+  // never sent. It also sits outside the slot gate, so a refusal never takes a generation slot.
   models.setProvider(
-    wrapProviderWithTrace(
-      live
-        ? wrapProviderWithLiveView(gated, {
-            renderer: live,
-            getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
-          })
-        : gated,
-      // The same one trace seam as the faux branch above (ROADMAP 43c / #920, #2545).
-      { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
+    withSpend(
+      wrapProviderWithTrace(
+        live
+          ? wrapProviderWithLiveView(gated, {
+              renderer: live,
+              getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+            })
+          : gated,
+        // The same one trace seam as the faux branch above (ROADMAP 43c / #920, #2545).
+        { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
+      ),
     ),
   );
   // Register the locally-served providers AFTER the default: resolveSeatModel reads a provider prefix only
@@ -375,9 +416,11 @@ function buildModels(live = null) {
   // (D48/D119, ROADMAP 189), and the family ruling lives in docs/DECISIONS.md rather than here.
   for (const spec of localProviderSpecs(CFG)) {
     models.setProvider(
-      wrapProviderWithTrace(createLocalProvider(spec, { createProvider, api: ocApi }), {
-        getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
-      }),
+      withSpend(
+        wrapProviderWithTrace(createLocalProvider(spec, { createProvider, api: ocApi }), {
+          getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+        }),
+      ),
     );
   }
   return { models, providerId: "deepinfra" };
@@ -418,10 +461,14 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
       models,
       registry,
       env: makeSeatEnv(seatRoster),
-      // Only `stream` is configurable here; the rest of pi-durable's settings keep
-      // their built-in defaults, which were chosen deliberately and which nothing
-      // in durig's use argues against. See `streamSettings` for why this one matters.
-      settings: streamSettings(CFG),
+      // `stream` AND `compaction` are configurable here; everything else keeps pi-durable's
+      // built-in defaults, which were chosen deliberately and which nothing in durian-pi's use argues
+      // against. Compaction was added because the ABSENCE of a policy was a measured defect (#4898):
+      // the defaults (reserve 16384 / keepRecent 20000 / background 32768) sit above the whole
+      // verifier-class window of 24,576, so the policy fired too late to leave room to answer. ONE
+      // call site, and no second mechanism - pi-durable's `modelOverrides` layering does the per-model
+      // work. See `streamSettings` and `compactionSettings` for why each one matters.
+      settings: { ...streamSettings(CFG), ...compactionSettings(CFG) },
     },
     BACKGROUND_CONTEXT,
   );
@@ -1372,26 +1419,62 @@ async function cmdCompact(seatName, instructions) {
     const text = instructions !== undefined && instructions.trim() !== "" ? instructions : undefined;
     const taskId = await conv.compact(text, BACKGROUND_CONTEXT);
     // Drive the task to completion. Without this the verb would return a task id for work nobody
-    // runs — exactly the stub the item forbids.
-    await harness.waitForTask(taskId, BACKGROUND_CONTEXT);
+    // runs — exactly the stub the item forbids. The settled record is kept because it is where a
+    // FAILED compaction names its reason (#4898's three-state reporting).
+    const settled = await harness.waitForTask(taskId, BACKGROUND_CONTEXT);
 
     // PROVE the compaction happened, not merely that a task ran: pi-durable places a
-    // `pi.compaction` summary entry. Report its id (null would mean the task completed without
-    // compacting — e.g. nothing to compact — and must not be reported as success).
+    // `pi.compaction` summary entry. THREE STATES with distinct exit codes (#4898), because the old
+    // single message covered two opposite facts and misled four sessions: "no compaction entry was
+    // written" was printed for a NO-OP (nothing was worth cutting - pm at 184,507/200,000, task
+    // 275491) AND for a repair that did not work (qa2 at 18,453 of 24,576, task 275492). COMPACTED 0,
+    // FAILED 1, NO-OP 2 (not an error: the rig declined to spend a summarizer call).
     const after = await conv.entries({ order: "descending" }, 50, undefined, BACKGROUND_CONTEXT);
     const summary = after.items.find((e) => e.kind === CompactionEntry.kind);
-    if (!summary) {
-      fail(`compact: no compaction entry was written for seat ${seatName} (task ${taskId})`);
+    // The failure reason is whatever the platform reported, never a guess. `waitForTask`'s return shape
+    // could not be re-read in this worktree (it has no `node_modules` of its own and this seat's reads
+    // are confined to the worktree), so the reason is read from whichever field carries it and the
+    // report prints `unknown` when none does.
+    const failureReason = settled?.error ?? settled?.failure?.reason ?? settled?.reason ?? null;
+    // The seat's token count against the policy, so a NO-OP explains itself. The selection gate is the
+    // accumulation budget (`keepRecentTokens`), not the window - the window is context, and printing it
+    // is what lets an operator see WHY the gate sat where it does.
+    const consumption = contextConsumption(after.items, { declared: declaredContextWindow(CFG, seat.model ?? seat.modelId ?? null) });
+    const policy = compactionSettings(CFG).compaction ?? {};
+    const report = compactionReport({
+      consumed: consumption.consumed,
+      policy,
+      summaryEntry: summary ?? null,
+      failureReason,
+    });
+    if (report.state === "failed") {
+      fail(
+        `compact: ${report.reason} for seat ${seatName} (task ${taskId}) - consumed=${report.consumed}, ` +
+          `keepRecentTokens=${report.keepRecentTokens ?? "platform default"}, willCut=${report.willCut ?? "unknown"}` +
+          (summary ? "" : "; no pi.compaction entry among the newest 50 entries"),
+      );
     }
     out({
       ok: true,
       command: "compact",
+      state: report.state,
       seat: seatName,
       taskId,
       instructions: text ?? null,
-      summaryEntryId: summary.id,
+      summaryEntryId: report.summaryEntryId ?? null,
+      // The numbers beside the verdict: what the seat had consumed, the window it is measured against,
+      // the policy in force for it, and whether that policy would have cut anything at that count.
+      consumed: report.consumed,
+      window: consumption.window?.value ?? null,
+      windowDenominator: consumption.window?.denominator ?? null,
+      fraction: consumption.fraction,
+      policy,
+      willCut: report.willCut,
       db: DB_PATH,
     });
+    // A NO-OP exits 2 so a script can tell it apart from a compaction (0) and a failure (1). The
+    // `state` field carries the same fact even in a tree where a later dispatcher overwrites the code.
+    if (report.exitCode !== 0) process.exitCode = report.exitCode;
   } finally {
     await harness.close(BACKGROUND_CONTEXT);
   }
@@ -1416,15 +1499,29 @@ async function superviseOnce(harness, probeStorage, context) {
     );
     failureStreakByConv.set(seat.conversationId, failureStreak(page.items));
   }
-  const plans = planEscalations({ seats: seatList, queueItems: queueDoc?.value?.items, failureStreakByConv });
+  // Bounded page: the current run sits at the top. Read ONCE and shared by both passes below - the supervisor
+  // needs the run's ERROR MESSAGE (#5047: the submission record carries only the category `model_error`, and the
+  // category is exactly what hides a spend-cap stop from the escalation that should park it on the first failure
+  // instead of the third), and the degeneration guard needs the same entries.
+  const pages = await readSeatPages(probeStorage, context, seatList, SCAN_LIMIT);
+  const errorByConv = new Map();
+  for (const seat of seatList) {
+    for (const entry of pages[seat.name] ?? []) {
+      const msg = Array.isArray(entry?.model) ? entry.model[0] : null;
+      if (msg?.errorMessage) {
+        errorByConv.set(seat.conversationId, msg.errorMessage);
+        break; // newest first, so the first hit is the most recent failure
+      }
+    }
+  }
+  const plans = planEscalations({ seats: seatList, queueItems: queueDoc?.value?.items, failureStreakByConv, errorByConv });
   const escalations = await applyEscalations(harness, plans, context);
 
   // Degeneration guard (mitigations 1+2 for the F29 class): reset a seat whose CURRENT run
   // has outgrown its turn/context bound, or shows step-repetition / malformed tool calls.
   // Detection is pure (src/degeneration.mjs); the write is the existing reset boundary, and
   // it is idempotent (a page already ending in `pi.reset` is skipped) so a pass loop cannot
-  // re-reset a seat before it has run again. Bounded page: the current run sits at the top.
-  const pages = await readSeatPages(probeStorage, context, seatList, SCAN_LIMIT);
+  // re-reset a seat before it has run again.
   const assessmentsByConv = new Map();
   for (const seat of seatList) {
     assessmentsByConv.set(seat.conversationId, assessRun(pages[seat.name] ?? []));
@@ -2872,6 +2969,11 @@ async function cmdCheck(rigFile, human, rest = []) {
   // `VERIFY #N` item with no recorded evidence is an ack, not a re-run. Null
   // until read, so "could not read" stays distinguishable from "read and empty".
   let queueItems = null;
+  // #5049 (ROADMAP 208): the per-seat context measure, for the `context-over-window` rule. Null means
+  // "not read", which SKIPS the rule with its reason rather than passing it — and it is read through the
+  // SAME producer `status.context` uses (`seatContextMap`), so the rule can never score a number the
+  // operator was never shown.
+  let contextBySeat = null;
   if (!DB_EXISTED_AT_START) {
     stored = { reason: "absent" };
   } else {
@@ -2893,6 +2995,19 @@ async function cmdCheck(rigFile, human, rest = []) {
       stored = { reason: "read", text: constitution.value?.text ?? "" };
       storedSeats = (await readData(DB_PATH, "seats", {}, (s) => readSeatList(s))).map((s) => s.name);
       queueItems = await readData(DB_PATH, "queue", {}, (s) => readQueueItems(s));
+      // Its OWN try/catch: a context read that fails must skip one rule, not turn the whole audit into
+      // "store unreadable" (which would silently skip every store-backed rule, #3539's blind-pass shape).
+      // The page read is bounded by SCAN_LIMIT (24 entries/seat), the same bound `status` reads with.
+      try {
+        contextBySeat = await readData(DB_PATH, "context", {}, async (storage) => {
+          const roster = await readSeatList(storage);
+          const pages = await readSeatPages(storage, BACKGROUND_CONTEXT, roster);
+          return seatContextMap({ pages, seats: roster, cfg: CFG, modelsBySeat });
+        });
+      } catch (err) {
+        contextBySeat = null;
+        console.error(`check: the context read failed, so context-over-window is skipped: ${String(err?.message ?? err)}`);
+      }
     } catch (err) {
       stored = { reason: "unreadable", error: String(err?.message ?? err) };
     }
@@ -2933,6 +3048,7 @@ async function cmdCheck(rigFile, human, rest = []) {
     citations,
     sharedTreeBranch,
     sharedTreeLinked,
+    contextBySeat,
   });
   const seatCount = (spec.seats ?? []).length;
   if (human) {

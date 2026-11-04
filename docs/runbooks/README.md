@@ -152,6 +152,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [compaction-eval.md](compaction-eval.md) | a compaction threshold needs a MEASUREMENT: the compacted-vs-full delta or a model’s real window | no |
 | [write-corruption-recovery.md](write-corruption-recovery.md) | a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line | maybe |
 | [compact-a-seat.md](compact-a-seat.md) | a seat's context is saturated and a reset would lose durable context | yes |
+| [context-over-window.md](context-over-window.md) | a seat shows a `context_over_window` notice or `check` reports `context-over-window`; the `ctx` fraction prints over 1.0 and you need to know whether that number describes the seat's current head or a turn that already ended | no |
 | [format-before-commit.md](format-before-commit.md) | my diff shows whitespace or line-ending churn I did not intend | no |
 | [degeneration-guard.md](degeneration-guard.md) | a seat was auto-reset (`pi.reset` naming `degenerate-text=...`); tell a real loop from a false positive, or add a shape | no |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
@@ -173,6 +174,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [resume-while-broker-runs.md](resume-while-broker-runs.md) | you want to run `resume`/`doctor` but the broker is up | no |
 | [request-trace.md](request-trace.md) | you need the ACTUAL request body durig sends (thinking / reasoning_effort / max_tokens / store), not the programmed config | no |
 | [per-row-marker.md](per-row-marker.md) | you must decide whether a held landing row's work actually landed on main, and choose a marker to probe for it — bare identifiers give false positives, whole added lines give false negatives | no |
+| [spend-cap-tripped.md](spend-cap-tripped.md) | an item parks with reason `spend_cap_exceeded`; a seat or a probe refuses **before** sending with a cap, spent and projected number; you want to know where the store's money went and what is still unconfirmed | no |
 | [verifier-independence.md](verifier-independence.md) | a verifier wants to edit the artefact it is verifying, or is about to report an `artifact`/SHA it did not run — a verifier's only write is a report; **or** a verify leg must state which kind of independence it has when author and verifier run the SAME model, and what a `local/` verifier re-point would break | no |
 
 ## Index (mechanism)
@@ -183,6 +185,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Store / `pi.live` | store-corruption-recovery, store-secret-detected, store-probe-identity |
 | Tool results | tool-result-redacted |
 | Seats | seat-reset, compact-a-seat |
+| A turn moved more tokens than the seat's window (`context_over_window`, `check` rule `context-over-window`), and whether that fraction is current at all | context-over-window, compact-a-seat, seat-reset, compaction-eval |
 | Long-context eval | compaction-eval |
 | A verifier turn truncated at `length`, or refused in ~30 ms with zero tokens; KV cost and which GPU a model slot really owns | verifier-serving-headroom, compact-a-seat, hygiene-and-dead-model-pointers |
 | Write guard / source files | write-corruption-recovery |
@@ -190,6 +193,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Worktrees | leaked-worktrees, prepare-workspace-etarget, worktree-unlinked-deps, prepare-workspace-refused |
 | Git objects / shas cited from another machine | cross-clone-object-recovery, workspace-move |
 | Which model/quantization a provider is actually serving (variant activation, unload-by-`instance_id`, model-server lifetime vs a live run) | verifier-model-server, model-server-broker-race |
+| What a model call costs, where the money went, and what stops a call before it is sent (three cap axes, one ledger, locality of the endpoint) | spend-cap-tripped |
 | Which model the rig NAMES vs which `.gguf` answers (dead pointer after a swap) | hygiene-and-dead-model-pointers, verifier-model-server |
 | A seat shell that cannot spawn on this host (217), and whether seat hygiene has ever been measured | hygiene-and-dead-model-pointers, workspace-move |
 | A delegate-written file that was never committed | transcript-recovery (`tools/transcript-recovery.mjs`), tracked-files-missing-on-disk |

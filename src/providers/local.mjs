@@ -28,6 +28,8 @@
 //
 // Off unless the base URL names a server: no config, no provider, behaviour exactly as before.
 
+import { existsSync, readFileSync } from "node:fs";
+
 export const LOCAL_PROVIDER_ID = "local";
 export const VERIFIER_PROVIDER_ID = "verifier";
 
@@ -46,6 +48,86 @@ export function isLocalProviderId(id) {
 	return typeof id === "string" && LOCAL_PROVIDER_IDS.includes(id);
 }
 
+/**
+ * LOCALITY IS A PROPERTY OF THE ENDPOINT, NOT OF THE PROVIDER ID (D-5015.3).
+ *
+ * The id `local`/`verifier` says who BUILT the provider, not what it costs. A `verifier/<id>` seat pointed at
+ * `https://api.deepinfra.com/v1/openai` is a PAID call wearing a free-class name: it would be registered with
+ * `cost {0,0,0}` (so every cost read lies) and authenticated with the loopback placeholder (so it eats a 401
+ * that reads as a model failure). `local.mjs` did exactly that. So the question asked here is the only one that
+ * can be answered truthfully - what host is this URL - and the answer decides whether money is involved.
+ */
+export function isLoopbackBaseUrl(baseUrl) {
+	try {
+		const host = new URL(String(baseUrl)).hostname;
+		return (
+			host === "localhost" ||
+			host === "127.0.0.1" ||
+			host === "[::1]" ||
+			host === "::1" ||
+			host.endsWith(".local")
+		);
+	} catch {
+		// An unparseable URL is not proven free, so it is NOT loopback. Fail toward treating it as metered.
+		return false;
+	}
+}
+
+/** The two endpoint classes. Axis: money. `metered` means "a row for this endpoint must carry a price". */
+export function endpointClass(baseUrl) {
+	return isLoopbackBaseUrl(baseUrl) ? "loopback" : "metered";
+}
+
+/** The credential a LOOPBACK server gets when its key variable is unset. It is a placeholder because a keyless
+ * llama.cpp / strata server accepts anything and pi-ai rejects an empty string (docs/incidents/
+ * 2026-10-18-local-provider-empty-key.md), and it is scoped to loopback on purpose: against a metered host the
+ * same trick is a 401 that the rig misreads as a model failure (#5015 P9). */
+export const LOOPBACK_PLACEHOLDER_KEY = "no-key-required";
+
+/**
+ * The DECLARED price of a metered endpoint, with its source. `0` is a legitimate declared price (a LAN-served
+ * free model is free BY DECLARATION); an ABSENT price is not a price - it is the absence the guard exists for.
+ * Keys, in order: `<PREFIX>PRICE_USD_IN` / `<PREFIX>PRICE_USD_OUT` / `<PREFIX>PRICE_USD_CACHE_READ`, then a
+ * dated catalog snapshot in `<PREFIX>PRICE_JSON` or the shared `DURIG_PRICE_JSON` (DeepInfra catalog shape,
+ * `data[].metadata.pricing`, stamped `fetchedAt`). No third vocabulary: the caps keep their own keys and prices
+ * keep these.
+ */
+export function declaredPrice(cfg, spec) {
+	const prefix = spec?.prefix ?? LOCAL_ENV_PREFIX;
+	const inU = Number(cfg?.[`${prefix}PRICE_USD_IN`]);
+	const outU = Number(cfg?.[`${prefix}PRICE_USD_OUT`]);
+	if (Number.isFinite(inU) && Number.isFinite(outU) && inU >= 0 && outU >= 0) {
+		const cacheU = Number(cfg?.[`${prefix}PRICE_USD_CACHE_READ`]);
+		return {
+			price: { in: inU, out: outU, cacheRead: Number.isFinite(cacheU) && cacheU >= 0 ? cacheU : inU },
+			priceSource: `${prefix}PRICE_USD_IN/OUT`,
+			priceAsOf: cfg?.[`${prefix}PRICE_AS_OF`] ?? null,
+		};
+	}
+	for (const key of [`${prefix}PRICE_JSON`, "DURIG_PRICE_JSON"]) {
+		const file = cfg?.[key];
+		if (!file || !existsSync(file)) continue;
+		try {
+			const j = JSON.parse(readFileSync(file, "utf8"));
+			const hit = (j.data ?? []).find((m) => m.id === spec.modelId);
+			const p = hit?.metadata?.pricing;
+			if (!p || !Number.isFinite(Number(p.input_tokens)) || !Number.isFinite(Number(p.output_tokens))) continue;
+			return {
+				price: {
+					in: Number(p.input_tokens),
+					out: Number(p.output_tokens),
+					cacheRead: Number.isFinite(Number(p.cache_read_tokens)) ? Number(p.cache_read_tokens) : Number(p.input_tokens),
+				},
+				priceSource: `snapshot:${file}`,
+				priceAsOf: j.fetchedAt ?? j.at ?? null,
+			};
+		} catch {
+			continue; // an unreadable snapshot is no snapshot; the refusal below names the source that was tried
+		}
+	}
+	return { price: null, priceSource: "none", priceAsOf: null };
+}
+
 function providerIdForPrefix(prefix) {
 	return prefix.slice("DURIG_".length).replace(/_$/, "").toLowerCase();
 }
@@ -61,8 +143,9 @@ function labelForPrefix(prefix) {
  *
  * @param {Record<string, unknown>} cfg effective config (env > file > defaults)
  * @param {string} [prefix] which provider, e.g. VERIFIER_ENV_PREFIX
- * @returns {{id: string, prefix: string, baseUrl: string, modelId: string, contextWindow: number,
- *            maxTokens: number, apiKeyEnv: string} | null}
+ * @returns {{id: string, prefix: string, baseUrl: string, endpoint: "loopback"|"metered",
+ *            modelId: string, contextWindow: number, maxTokens: number, apiKeyEnv: string,
+ *            price?: {in:number,out:number,cacheRead:number}|null, priceSource?: string, priceAsOf?: string|null} | null}
  */
 export function localProviderSpec(cfg, prefix = LOCAL_ENV_PREFIX) {
 	const baseUrl = cfg?.[`${prefix}BASE_URL`];
@@ -74,9 +157,12 @@ export function localProviderSpec(cfg, prefix = LOCAL_ENV_PREFIX) {
 	// before it answers, capped at a budget meant for one that does not, gets truncated MID-THOUGHT and
 	// returns a confident half-verdict - the worst possible failure for a seat whose job is to say "no".
 	const maxTokens = Number(cfg[`${prefix}MAX_TOKENS`] ?? 8192);
+	const endpoint = endpointClass(baseUrl);
+	const priced = endpoint === "metered" ? declaredPrice(cfg, { prefix, modelId: String(cfg[`${prefix}MODEL`] ?? id) }) : null;
 	return {
 		id,
 		prefix,
+		endpoint,
 		baseUrl: String(baseUrl),
 		modelId: String(cfg[`${prefix}MODEL`] ?? id),
 		// A NaN here would travel as the ADVERTISED capacity and mis-report it, so fall back rather than
@@ -86,6 +172,10 @@ export function localProviderSpec(cfg, prefix = LOCAL_ENV_PREFIX) {
 		// Each server gets its OWN key variable: two local servers can hold different credentials, and naming
 		// the variable in the resolved source is what makes a missing key diagnosable instead of mysterious.
 		apiKeyEnv: `${prefix}API_KEY`,
+		// A metered endpoint carries its DECLARED price on the spec, so the registered row and every ledger row can
+		// name where the number came from (F8: an undated price is an undated claim). A loopback endpoint has NO
+		// price field at all: its free-ness is a property of the endpoint, not a claim about a vendor's price list.
+		...(priced ? { price: priced.price, priceSource: priced.priceSource, priceAsOf: priced.priceAsOf } : {}),
 	};
 }
 
@@ -127,40 +217,115 @@ export function declaredLocalWindow(specs, modelKey) {
  * @param {{createProvider: Function, api: object}} deps
  * @returns {object} a pi-ai Provider registered on the Models registry
  */
-export function createLocalProvider(spec, { createProvider, api }) {
+/**
+ * Build the pi-ai provider for a local server. `createProvider` and `api` are injected so the shape can be
+ * asserted in a demo without loading pi-ai.
+ *
+ * MONEY CHECKED AT REGISTRATION, NOT AT THE WIRE (D-5015.2/D-5015.3, probes P2 and P9). A `local/` or `verifier/`
+ * provider whose BASE URL is not loopback is a metered endpoint wearing a free-class name. Two lies used to
+ * follow from that, both silent: the row was registered with `cost {0,0,0}` (so `config`, the ledger and any
+ * cost read reported a free provider that was billing), and an unset key fell back to a placeholder credential
+ * (so a metered host returned a 401 the rig filed as `model_error` - see docs/runbooks/local-provider-down.md).
+ * Now the endpoint decides:
+ *   - loopback  -> free by locality, and the placeholder credential is legitimate (a keyless llama.cpp accepts
+ *     anything and pi-ai rejects an empty string, docs/incidents/2026-10-18-local-provider-empty-key.md);
+ *   - metered   -> the row must carry a DECLARED price (0 allowed, by declaration) and the key variable must
+ *     resolve. Otherwise the provider is registered with NO models, so a seat naming it dies as `no_model`
+ *     BEFORE any request, and the refusal is reported on stderr with the cause and the remedy.
+ * It is a refusal rather than a thrown error on purpose: one mis-pointed verifier pointer must not take down
+ * every verb of the rig, and `no_model` with a named remedy is the diagnosis the review asked for.
+ *
+ * @param {ReturnType<typeof localProviderSpec>} spec
+ * @param {{createProvider: Function, api: object, env?: (name: string) => (string|undefined),
+ *          report?: (line: object) => void}} deps
+ * @returns {object} a pi-ai Provider registered on the Models registry
+ */
+export function createLocalProvider(spec, { createProvider, api, env, report } = {}) {
+	const metered = endpointClass(spec.baseUrl) === "metered";
+	const keyEnv = spec.apiKeyEnv ?? `${spec.prefix ?? LOCAL_ENV_PREFIX}API_KEY`;
+	const declaredKey = env?.(keyEnv) ?? process.env[keyEnv];
+	const keyPresent = Boolean(declaredKey && String(declaredKey).trim());
+	const price = spec.price ?? null;
+	const causes = [];
+	if (metered && !price)
+		causes.push({
+			cause: "metered-endpoint-unpriced",
+			fix: `declare ${spec.prefix ?? ""}PRICE_USD_IN/${spec.prefix ?? ""}PRICE_USD_OUT (0 is a legitimate declared price) or point ${spec.prefix ?? ""}PRICE_JSON / DURIG_PRICE_JSON at a dated catalog snapshot`,
+		});
+	if (metered && !keyPresent)
+		causes.push({ cause: "metered-endpoint-unkeyed", fix: `set ${keyEnv}; the placeholder credential is for loopback servers only` });
+	if (causes.length > 0) {
+		const emit =
+			report ??
+			((line) => process.stderr.write(`${JSON.stringify(line)}\n`));
+		emit({
+			spend: "registration-refused",
+			provider: spec.id,
+			model: spec.modelId,
+			endpoint: endpointClass(spec.baseUrl),
+			host: safeHost(spec.baseUrl),
+			causes: causes.map((c) => c.cause),
+			remedy: causes.map((c) => c.fix).join("; "),
+			effect: `the provider registers NO model row, so a seat naming ${spec.id}/${spec.modelId} fails as no_model BEFORE any request`,
+		});
+	}
+	const models =
+		causes.length > 0
+			? []
+			: [
+					{
+						id: spec.modelId,
+						name: spec.modelId,
+						api: "openai-completions",
+						provider: spec.id,
+						baseUrl: spec.baseUrl,
+						input: ["text"],
+						// Free BY LOCALITY, or priced BY DECLARATION - never free by silence.
+						cost: metered
+							? { input: price.in, output: price.out, cacheRead: price.cacheRead, cacheWrite: 0 }
+							: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+						...(metered
+							? {
+								endpoint: "metered",
+								priceSource: spec.priceSource ?? "none",
+								priceAsOf: spec.priceAsOf ?? null,
+								// The NAME of the credential variable, carried so the ledger row can say which variable paid for
+								// the call. The VALUE never travels on a model row (#5015: a ledger that logs a key is a leak).
+								authKeyEnv: spec.apiKeyEnv ?? null,
+							}
+							: { endpoint: "loopback" }),
+						contextWindow: spec.contextWindow,
+						maxTokens: spec.maxTokens ?? 8192,
+					},
+				];
 	return createProvider({
 		id: spec.id,
 		name: labelForPrefix(spec.prefix ?? `DURIG_${spec.id.toUpperCase()}_`),
 		baseUrl: spec.baseUrl,
-		// Local servers accept any key, so resolve a constant. A literal here is not a secret: it is the
-		// placeholder the server documents, and keeping it out of config means no real credential ever lands
-		// in the repository.
 		auth: {
 			apiKey: {
-				name: "Local server (any key)",
-				// A keyless local server needs no credential, so the key comes from the ENVIRONMENT only - a
-				// literal here would put a secret in source. A non-secret placeholder is used when the env var
-				// is unset so that restart-proof local seats do not fail on an empty string.
+				name: metered ? keyEnv : "Local server (any key)",
+				// A keyless LOOPBACK server needs no credential, so the key comes from the ENVIRONMENT only - a
+				// literal here would put a secret in source. The placeholder exists so restart-proof local seats do
+				// not fail on an empty string, and it is scoped to loopback: against a metered host it is a 401 that
+				// reads as a model failure (P9), so a metered endpoint with no resolvable key resolves NO credential.
 				resolve: async ({ ctx }) => {
-					const envName = spec.apiKeyEnv ?? `${spec.prefix ?? LOCAL_ENV_PREFIX}API_KEY`;
-					const key = (await ctx?.env?.(envName)) ?? "local-placeholder";
-					return { auth: { apiKey: key }, source: key === "local-placeholder" ? "none" : envName };
+					const key = await ctx?.env?.(keyEnv);
+					if (key && String(key).trim()) return { auth: { apiKey: key }, source: keyEnv };
+					if (metered) return undefined;
+					return { auth: { apiKey: LOOPBACK_PLACEHOLDER_KEY }, source: "none" };
 				},
 			},
 		},
-		models: [
-			{
-				id: spec.modelId,
-				name: spec.modelId,
-				api: "openai-completions",
-				provider: spec.id,
-				baseUrl: spec.baseUrl,
-				input: ["text"],
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				contextWindow: spec.contextWindow,
-				maxTokens: spec.maxTokens ?? 8192,
-			},
-		],
+		models,
 		api,
 	});
+}
+
+function safeHost(baseUrl) {
+	try {
+		return new URL(String(baseUrl)).host;
+	} catch {
+		return String(baseUrl);
+	}
 }

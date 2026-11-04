@@ -27,6 +27,7 @@ costs a new session more tokens than a small task costs to do:
 node scripts/clockin.mjs              # or: npm run clockin
 node scripts/clockin.mjs --db <path>  # a specific store
 node scripts/clockin.mjs --json       # the same state as one JSON document
+node scripts/clockin.mjs --base <ref> # what to measure landing debt against (default: main)
 node scripts/clockin.mjs --no-git --no-runbooks   # skip the branch walk / staleness probe
 ```
 
@@ -47,7 +48,16 @@ measurements.
 3. `## QUEUE` — row counts by status and the `deferred` ids with their target seat, from the same
    `cli.mjs status` document (so the 21 MB `cli.mjs queue` dump is never run).
 4. `## GIT` — refs, worktrees, and **every unmerged branch joined to its queue row's status**, e.g.
-   `item-4746 +1 [#4746 done]`, which is what landing debt actually looks like.
+   `item-4746 +1 [#4746 done]`, which is what landing debt actually looks like. The line also names the tree it
+   measured and the ref it measured against: `refs=<n local branch refs> worktrees=<n|?> unmerged=<n> base=main@<sha8>
+   head=branch@<name>|head=detached@<sha8>`. Landing debt is computed from **refs and resolved shas only**
+   (`for-each-ref refs/heads/`, `rev-parse --verify --quiet <base>^{commit}`): a branch NAME never enters a git
+   range, because in a **detached** worktree — the shape `scripts/land.mjs --changed-suite` creates — git 2.56.0
+   lists a literal `(no branch)` entry for HEAD and `git rev-list --count main..(no branch)` dies (exit 128,
+   measured). That fatal is what stopped the item-4966 landing at 129 of 242 derived tests (**#4985**, fixed at
+   `c4db1fd9`). If `--base` cannot be resolved the section is SKIPPED and PRINTS why
+   (`base=<ref> UNRESOLVED` + a `RANGE NOT COMPUTED:` line) — never a crash, and never a silent `unmerged=0`;
+   one unresolvable branch prints `rev-list-failures=<n>` and the walk continues.
 5. `## RUNBOOKS` — one line from `.spike/stale-runbooks.mjs` plus the stale names.
 6. `## PROVIDER` — the resolved `DURIG_*` config (note: `cli.mjs config` puts these keys at the TOP level, not
    under a `config` object) and a live probe of the local endpoint (`127.0.0.1:$STRATA_PORT/v1/models`).

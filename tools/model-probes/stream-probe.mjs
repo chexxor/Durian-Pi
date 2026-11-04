@@ -4,14 +4,23 @@
 // It also reports reasoning vs answer tokens, because a thinking model that runs out of budget returns an
 // EMPTY answer with finish_reason=length — which looks like a tool-calling failure but is a budget failure.
 import { performance } from "node:perf_hooks";
+import { meteredChat } from "./metered.mjs";
 
 const arg = Object.fromEntries(process.argv.slice(2));
 async function stream(baseUrl, model, content, maxTokens, tools) {
   const body = { model, messages: [{ role: "user", content }], max_tokens: maxTokens, temperature: 0.2, stream: true, stream_options: { include_usage: true } };
   if (tools) { body.tools = tools; body.tool_choice = "auto"; }
   const t0 = performance.now();
-  const res = await fetch(`${baseUrl}/chat/completions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) return { error: `${res.status} ${(await res.text()).slice(0, 200)}` };
+  // #5047 (acceptance P8): the accounted path, taken RAW. This probe's product IS per-chunk timing, so it cannot
+  // let the seam buffer the body; `raw: true` hands back the response plus an `account(usage)` closure. The stream
+  // is still consumed here, the money is still recorded there - one ledger, one row format.
+  const call = await meteredChat({ baseUrl, body, env: process.env, raw: true, note: "probe stream-probe.mjs (streamed, chunk-timed)" });
+  const res = call.res;
+  if (!res.ok) {
+    const error = `${call.status} ${(await res.text()).slice(0, 200)}`;
+    call.account(null, `probe stream-probe.mjs failed HTTP ${call.status}`);
+    return { error };
+  }
   let ttft = null, last = t0, contentTok = 0, reasonTok = 0, chunks = 0, finish = null, usage = null, toolCalls = [];
   const dec = new TextDecoder(); let buf = "";
   for await (const raw of res.body) {
@@ -34,6 +43,8 @@ async function stream(baseUrl, model, content, maxTokens, tools) {
     }
   }
   const total = (performance.now() - t0) / 1000;
+  // Accounted AFTER the clock stops: the ledger append must not enter the measurement it is measuring.
+  call.account(usage);
   return { ttft: ttft === null ? null : (ttft - t0) / 1000, total, chunks, finish, usage, tools: toolCalls.filter(Boolean) };
 }
 const M = arg.m || "mistralai/ministral-3-14b-reasoning";

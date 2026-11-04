@@ -324,6 +324,35 @@ try {
   check("...and reports the suite result", (suiteOk.report?.suite ?? []).some((s) => s.test === "ok.test.mjs" && s.exit === 0));
   check("...and the branch is an ancestor of main",
     spawnSync("git", ["merge-base", "--is-ancestor", featE, "main"], { cwd: repo }).status === 0);
+  check("a run where nothing skipped says SO (#4996: silence is not the same fact as zero)",
+    JSON.stringify(suiteOk.report?.suiteSkips ?? null) === "[]", JSON.stringify(suiteOk.report?.suiteSkips));
+
+  console.log("\n4c. #4996: a demo that SKIPS is reported as skipped, attributed to the tree, and never as a pass");
+  // The defect this pins: `demo/local-model-pointer.test.mjs` read gitignored `durig.config.json`, so in every
+  // scratch worktree the lander builds it was RED for a reason the branch did not cause, and clean landings were
+  // refused ("STOPPED … failed in the scratch worktree"). The demo now skips WITH A REASON (`SKIP: …`, exit 0);
+  // the lander must surface that, or a skip becomes an invisible pass — which is the other way a landing lies.
+  writeFileSync(
+    join(repo, "demo", "skippy.test.mjs"),
+    "console.log('SKIP: no machine config in this tree — skipped, not passed');\nconsole.log('SKIPPED-CORE ran');\n",
+  );
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-m", "test: a demo that skips with a stated reason"]);
+  const featSkip = feature("feat-skip", "skip.txt", "from feat-skip\n");
+  const skipLand = land(repo, ["feat-skip", "--suite"]);
+  check("a skipping demo does NOT refuse the landing (a tree fact is not a branch failure)", skipLand.code === 0, skipLand.raw.slice(0, 300));
+  check("...and the report names the skip and its reason",
+    (skipLand.report?.suiteSkips ?? []).some((s) => s.test === "skippy.test.mjs" && /no machine config/.test(s.reason)),
+    JSON.stringify(skipLand.report?.suiteSkips));
+  check("...and the human line attributes it to the TREE, not the branch",
+    /SKIPPED 1/.test(skipLand.raw) && /not about the branch/.test(skipLand.raw), skipLand.raw.slice(-400));
+  check("...and the skip is NOT counted as a passing check: it is reported separately from the exit-code list",
+    (skipLand.report?.suite ?? []).some((s) => s.test === "skippy.test.mjs" && s.exit === 0) &&
+      (skipLand.report?.suiteSkips ?? []).length === 1,
+    JSON.stringify({ suite: skipLand.report?.suite, skips: skipLand.report?.suiteSkips }));
+  check("...and unrelated output lines are not mistaken for skips (the marker is the line start)",
+    !(skipLand.report?.suiteSkips ?? []).some((s) => /SKIPPED-CORE/.test(s.reason)),
+    JSON.stringify(skipLand.report?.suiteSkips));
 
   writeFileSync(join(repo, "demo", "bad.test.mjs"), "console.error('boom');\nprocess.exit(1);\n");
   git(repo, ["add", "."]);

@@ -3,9 +3,9 @@ runbook: format-before-commit
 symptom: "my diff shows whitespace or line-ending churn I did not intend"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-21
+last_verified: 2026-11-04
 verified_by: impl
-evidence: "#934 (the `format` verb + demo/format.test.mjs), #933 (prettier 3.9.10 pin + .prettierrc.json)"
+evidence: "#934 (the `format` verb + demo/format.test.mjs), #933 (prettier 3.9.10 pin + .prettierrc.json); #5049 re-ran `node demo/format.test.mjs` (exit 0) and measured the CR population: 20 of 763 tracked files carry CR bytes, `src/attention.mjs` the only one under `src/` (475 at main), and `format --check` reports touched and untouched files alike as `unformatted`"
 check_rule: null
 ---
 
@@ -55,6 +55,15 @@ operator-declared quiet window), so a tree-wide `format --check` is expected to 
 is NOT the gate today.
 
 ## If it fails
+- A changed file carries CR bytes → `tools/what-to-test.mjs` (the derived-suite selector the operator's
+  `scripts/land.mjs --changed-suite` uses) reports `BYTE SCAN FAIL … control byte 0x0d` for **every line** of that
+  file, sets `ok:false`, and the derived suite refuses — the change is forced onto the FULL GATE. Measured
+  2026-11-04 (over 764 tracked files, binary extensions excluded): 20 carry CR bytes, and **`src/attention.mjs` is the only one in `src/`** (475 CRs
+  at `main`; every other source file I touched had 0). Do NOT "fix" it by formatting one file inside an unrelated
+  item: `.prettierrc.json` sets `endOfLine: "lf"`, so `node cli.mjs format -- src/attention.mjs` rewrites all ~511
+  lines and buries the change's real diff in line-ending churn. Normalizing it is a FORMATTER.md-gated call for the
+  operator (the tree-wide normalize is deliberately deferred; `format --check` reports essentially every file,
+  touched or not, as `unformatted`). Report the CR file and let the operator schedule the normalize.
 - `format needs the pinned prettier devDependency` → run `npm ci`.
 - A file still reports `unformatted` after `format` → it is outside the checkout, so
   prettier found no `.prettierrc.json`; run the verb from inside the repo.

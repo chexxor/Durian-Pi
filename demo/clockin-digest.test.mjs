@@ -9,6 +9,10 @@
 // that reports a broker as live because a state file exists, has stopped doing the one job it exists for.
 //
 // Run: node demo/clockin-digest.test.mjs   (exit 0 = pass)
+//
+// Section 7 is the part that must not be skipped in review: the landing gate (`scripts/land.mjs --changed-suite`)
+// runs the suite in a DETACHED scratch worktree, and `git rev-list --count main..(no branch)` (fatal, exit 128,
+// measured on git 2.56.0) is what made THIS file red and stopped the item-4966 landing at 129/242 tests (#4985).
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -19,6 +23,7 @@ import { join } from "node:path";
 import {
 	DIGEST_BUDGET_BYTES,
 	POINTER_CAP_LINES,
+	branchDebt,
 	brokerLiveness,
 	pidAlive,
 	pointerSection,
@@ -332,9 +337,156 @@ try {
 		`docs/NEXT.md is ${live.length} lines; the cap is ${POINTER_CAP_LINES} — older sessions go VERBATIM to docs/NEXT-ARCHIVE.md`,
 	);
 
+	// 7. THE LANDING GATE'S TREE, NOT A COMFORTABLE ONE (#4985). `scripts/land.mjs --changed-suite` runs the
+	//    suite in a DETACHED scratch worktree (`git worktree add --detach .land-scratch-<pid> <main>`, at
+	//    land.mjs:483-497), and a green in a CHECKED-OUT tree proves nothing about that gate. Measured in a
+	//    detached scratch at `43e26dcc`, git 2.56.0:
+	//      `git branch --format='%(refname:short)'` → 15 lines, one of them the literal `(no branch)`
+	//      `git rev-list --count 'main..(no branch)'` → exit 128 `fatal: ambiguous argument`
+	//    The old debt walk interpolated branch NAMES into ranges, so that listing poisoned it, clockin exited 1,
+	//    and THIS file was the red that stopped the item-4966 landing at 129 of 242 derived tests. So the demo
+	//    builds the tree shape the gate builds and runs the tool inside it.
+	const scratch = join(ROOT, `.durig-test-wt-clockin-${process.pid}`); // gitignored pattern; unregistered in `finally`
+	const added = spawnSync("git", ["worktree", "add", "--detach", scratch, "HEAD"], { cwd: ROOT, encoding: "utf8" });
+	assert.equal(added.status, 0, `could not create the detached scratch worktree: ${(added.stderr ?? "").slice(0, 300)}`);
+	assert.equal(
+		spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: scratch, encoding: "utf8" }).stdout.trim(),
+		"HEAD",
+		"the scratch really is DETACHED — a control that is not the failing shape is not a control",
+	);
+	const inDetached = cli(["scripts/clockin.mjs", "--db", db, "--no-runbooks"], { DURIG_DB: db, DURIG_PI_DB: db }, scratch);
+	assert.equal(
+		inDetached.code,
+		0,
+		`the digest died in a DETACHED scratch tree (this is #4985, the shape the landing gate runs in): ${(inDetached.stderr ?? "").slice(0, 400)}`,
+	);
+	assert.ok(
+		inDetached.stdout.includes("## GIT"),
+		"the GIT section still prints in a detached tree — the fix is not 'skip the git walk', which would hide debt",
+	);
+	assert.match(
+		inDetached.stdout,
+		/head=detached@[0-9a-f]{7,10}/,
+		"the digest NAMES the tree shape it measured, so a landing-scratch reading is not mistaken for a live-checkout one",
+	);
+	assert.match(inDetached.stdout, /base=main@[0-9a-f]{8}/, "the base ref is resolved to a sha BEFORE any range is built");
+	assert.ok(!inDetached.stderr.includes("git rev-list"), "no git fatal escapes the digest");
+
+	// THE DISCRIMINATION PAIR: the range COMPUTES when the base resolves and is SKIPPED with a stated reason
+	// when it does not. Never a crash (that is what stopped the gate) and never a silent `unmerged=0` (a lie).
+	const noBase = cli(
+		["scripts/clockin.mjs", "--db", db, "--no-runbooks", "--base", "refs/heads/no-such-base"],
+		{ DURIG_DB: db, DURIG_PI_DB: db },
+		scratch,
+	);
+	assert.equal(
+		noBase.code,
+		0,
+		`an unresolvable --base must SKIP the range, not kill the digest: ${(noBase.stderr ?? "").slice(0, 400)}`,
+	);
+	assert.match(
+		noBase.stdout,
+		/^RANGE NOT COMPUTED: the base ref "refs\/heads\/no-such-base" does not resolve/m,
+		"the skip is printed as a line a session will read, not swallowed",
+	);
+	assert.ok(
+		/base=refs\/heads\/no-such-base UNRESOLVED/.test(noBase.stdout),
+		"the GIT line admits the base is unresolved instead of implying there is no debt",
+	);
+
+	// And the RULE, at unit level, so it does not depend on this git version's listing quirks: the branch list
+	// is namespace-pinned to refs/heads/ (a HEAD state is not a branch), and every operand of a git range is a
+	// RESOLVED sha — nothing that could read `(no branch)` ever reaches a range.
+	const calls = [];
+	const hex = (c) => c.repeat(40);
+	const fake = branchDebt({
+		items: [{ id: 4985, status: "done" }],
+		base: "main",
+		git: (args) => {
+			calls.push(args);
+			if (args[0] === "symbolic-ref") return "item-4985";
+			if (args[0] === "rev-parse" && args[1] === "--verify") return hex("a");
+			if (args[0] === "for-each-ref") return `${hex("b")} item-4985\n`;
+			if (args[0] === "rev-list") return "3";
+			if (args[0] === "worktree") return "worktree /x\nworktree /y\n";
+			return "";
+		},
+	});
+	assert.ok(
+		calls.some((a) => a[0] === "for-each-ref" && a.includes("refs/heads/")),
+		`the branch list must come from refs/heads/: ${JSON.stringify(calls.map((a) => a[0]))}`,
+	);
+	assert.ok(
+		!calls.some((a) => a[0] === "branch"),
+		"no `git branch` listing anywhere — that is the call that yields the literal `(no branch)` in a detached tree",
+	);
+	const ranges = calls.filter((a) => a[0] === "rev-list").map((a) => String(a[a.length - 1]));
+	assert.ok(ranges.length > 0, "the discriminating pair needs at least one range to inspect — otherwise this check is vacuous");
+	assert.ok(
+		ranges.every((r) => /^[0-9a-f]{40}\.\.[0-9a-f]{40}$/.test(r)),
+		`every range operand is a resolved sha, never a name: ${JSON.stringify(ranges)}`,
+	);
+	assert.deepEqual(
+		fake.debt,
+		["item-4985 +3 [#4985 done]"],
+		"the debt line keeps its shape (branch +ahead [#id status]) — the fix repaired the mechanism, it did not delete the section's content",
+	);
+	assert.equal(fake.worktrees, 2, "worktrees is counted from --porcelain records, not from line noise");
+	const skipCalls = [];
+	const skipped = branchDebt({
+		items: [],
+		base: "main",
+		git: (args) => {
+			skipCalls.push(args);
+			if (args[0] === "symbolic-ref") return "main";
+			if (args[0] === "rev-parse" && args[1] === "--verify") throw new Error("fatal: not a valid object name: 'main'.");
+			if (args[0] === "for-each-ref") return `${hex("b")} item-4985\n`;
+			if (args[0] === "worktree") return "worktree /x\n";
+			return "";
+		},
+	});
+	assert.match(skipped.skipped ?? "", /NOT computed/, "an unresolvable base SKIPS the range and says so");
+	assert.ok(
+		!skipCalls.some((a) => a[0] === "rev-list"),
+		"an unresolved base must never reach a git range — that is the fatal that stopped the landing gate",
+	);
+	assert.deepEqual(skipped.debt, [], "the skip does not invent debt rows");
+	assert.notEqual(skipped.skipped, null, "the skip reason is carried in the state, not only printed");
+	// And ONE bad range must degrade to a counted failure, not a dead digest — a dead digest is what stopped the
+	// landing gate mid-suite, and `git` fails for many reasons (a grafted branch, a bad object, a timeout).
+	let revListAttempts = 0;
+	const failing = branchDebt({
+		items: [],
+		base: "main",
+		git: (args) => {
+			if (args[0] === "symbolic-ref") return "main";
+			if (args[0] === "rev-parse" && args[1] === "--verify") return hex("a");
+			if (args[0] === "for-each-ref") return `${hex("b")} item-9999\n${hex("c")} item-9998\n`;
+			if (args[0] === "rev-list") {
+				revListAttempts++;
+				if (revListAttempts === 1) throw new Error("fatal: bad object");
+				return "2";
+			}
+			if (args[0] === "worktree") return "worktree /x\n";
+			return "";
+		},
+	});
+	assert.equal(failing.probeFailures, 1, "one unresolvable range is COUNTED (`rev-list-failures=1` in the digest), not fatal");
+	assert.equal(revListAttempts, 2, "the walk CONTINUES past the failing branch — one bad row must not hide the rest");
+	assert.deepEqual(failing.debt, ["item-9998 +2 [#9998 no-row]"], "the branches that DO resolve still report their debt");
+	assert.equal(failing.skipped, null, "a probe failure is not reported as a skip — the base resolved");
+
 	console.log(
-		"CLOCKIN DIGEST TEST PASS (body-free, within budget, broker resolved by PID not by file, pointer-only, fixture run clean)",
+		"CLOCKIN DIGEST TEST PASS (body-free, within budget, broker resolved by PID not by file, pointer-only, fixture run clean, and GREEN IN A DETACHED SCRATCH TREE with the range resolved to shas — #4985)",
 	);
 } finally {
+	// A scratch worktree is a REGISTRATION, not just a directory: leaving one behind is worktree rot, the leak
+	// the stray check counts (#4142 measures strays BY REGISTRATION, not by name). Drop the registration first,
+	// then prune, then the temp store.
+	spawnSync("git", ["worktree", "remove", "--force", join(ROOT, `.durig-test-wt-clockin-${process.pid}`)], {
+		cwd: ROOT,
+		encoding: "utf8",
+	});
+	spawnSync("git", ["worktree", "prune"], { cwd: ROOT, encoding: "utf8" });
 	rmSync(dir, { recursive: true, force: true });
 }

@@ -236,6 +236,7 @@ try {
 		"duplicate-item": "demo/duplicate-item.test.mjs",
 		"text-integrity": "demo/text-integrity-wiring.test.mjs",
 		"commit-message-encoding": "demo/commit-message-encoding.test.mjs",
+		"context-over-window": "demo/context-over-window.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(

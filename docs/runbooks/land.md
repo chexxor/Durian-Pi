@@ -5,7 +5,7 @@ writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
 last_verified: 2026-10-21
 verified_by: delegate
-evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679)"
+evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21"
 check_rule: null
 ---
 
@@ -249,8 +249,32 @@ ask "stop or not?" or "why did --suite fail?".
    git worktree remove --force "$PWD/.gate-check"; git worktree prune
    ```
    A scratch **outside** the repo fails for an unrelated reason (`ERR_MODULE_NOT_FOUND
-   '@earendil-works/...'`) — that is not the rule, so do not read it as a regression. Whatever the helper
-   reports, still prove the final result on `main`:
+   '@earendil-works/...'`) — that is not the rule, so do not read it as a regression.
+
+   **Second instance of the same tree-shape class (#4985, fixed at `c4db1fd9`).** A landing stopped the same
+   way — `STOPPED: demo/clockin-digest.test.mjs failed` — and the item-4966 landing entry recorded
+   `--changed-suite` running **129 of 242** derived tests in `.land-scratch-1026959` before the stop, which makes
+   that entry INSTRUMENT-caused, not branch-caused. The cause here was the TOOL, not a check rule:
+   `scripts/clockin.mjs` interpolated branch NAMES into a git range, and in a detached worktree git 2.56.0 lists a
+   literal `(no branch)` entry for HEAD. Measured in a scratch at `43e26dcc`:
+   `git branch --format='%(refname:short)'` → 15 lines, one of them `(no branch)`;
+   `git rev-list --count 'main..(no branch)'` → **exit 128** `fatal: ambiguous argument`. The general rule:
+   **anything that builds a git range out of a listing resolves to SHAS first, and treats a detached HEAD as a
+   normal tree — because the landing gate's tree IS detached.** A green in a checked-out tree proves nothing about
+   that gate. Prove this half in the same scratch shape:
+   ```bash
+   git worktree add --detach "$PWD/.gate-check" main
+   ( cd .gate-check && node demo/clockin-digest.test.mjs; echo "exit=$?" )   # 1 at 43e26dcc, 0 at c4db1fd9
+   git worktree remove --force "$PWD/.gate-check"; git worktree prune
+   ```
+   `demo/clockin-digest.test.mjs` now builds that tree itself and asserts it is detached
+   (`rev-parse --abbrev-ref HEAD` == `HEAD`), so the control cannot quietly degrade into the comfortable shape.
+   D173 saw this same fatal in a moved seat root and cleared it by MOVING THE TREE onto a branch — a workaround
+   that left the tool broken, which is why the gate still hit it. Name the dependency set when you report this
+   demo's verdict: a scratch OUTSIDE the repo is red for `ERR_MODULE_NOT_FOUND`, and a thin item worktree has no
+   `vendor/pi-main`, so three different causes can look alike.
+
+   Whatever the helper reports, still prove the final result on `main`:
    ```bash
    node scripts/suite.mjs        # 0 green / 1 real failure / 2 environmental
    node scripts/suite.mjs --jobs 8   # same verdict; 8 demos in parallel (~60s vs ~10min)
