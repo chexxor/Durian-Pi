@@ -107,6 +107,10 @@ try {
     // The shared tree is on its integration branch, so this rule RUNS and passes rather than
     // being skipped: the assertion below is "every rule ran and passed".
     sharedTreeBranch: "main",
+    // An EMPTY context map is a real "the store was read and no seat is over its window", so the
+    // #5049 rule RUNS and passes here rather than skipping. `null` would mean "not read" and skip it —
+    // that distinction is pinned in demo/context-over-window.test.mjs.
+    contextBySeat: {},
   });
   assert.deepEqual(ids(hardened), [], `hardened rig has no findings; got ${ids(hardened).join(", ")}`);
   assert.equal(hardened.exitCode, 0);

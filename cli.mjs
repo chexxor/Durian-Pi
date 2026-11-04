@@ -83,7 +83,7 @@ import { readCitations } from "./src/citation.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readRigHealth, readSeatList, readSeatRoots } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readRigHealth, readSeatList, readSeatRoots, seatContextMap } from "./src/readapi.mjs";
 import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -2939,6 +2939,11 @@ async function cmdCheck(rigFile, human, rest = []) {
   // `VERIFY #N` item with no recorded evidence is an ack, not a re-run. Null
   // until read, so "could not read" stays distinguishable from "read and empty".
   let queueItems = null;
+  // #5049 (ROADMAP 208): the per-seat context measure, for the `context-over-window` rule. Null means
+  // "not read", which SKIPS the rule with its reason rather than passing it — and it is read through the
+  // SAME producer `status.context` uses (`seatContextMap`), so the rule can never score a number the
+  // operator was never shown.
+  let contextBySeat = null;
   if (!DB_EXISTED_AT_START) {
     stored = { reason: "absent" };
   } else {
@@ -2960,6 +2965,19 @@ async function cmdCheck(rigFile, human, rest = []) {
       stored = { reason: "read", text: constitution.value?.text ?? "" };
       storedSeats = (await readData(DB_PATH, "seats", {}, (s) => readSeatList(s))).map((s) => s.name);
       queueItems = await readData(DB_PATH, "queue", {}, (s) => readQueueItems(s));
+      // Its OWN try/catch: a context read that fails must skip one rule, not turn the whole audit into
+      // "store unreadable" (which would silently skip every store-backed rule, #3539's blind-pass shape).
+      // The page read is bounded by SCAN_LIMIT (24 entries/seat), the same bound `status` reads with.
+      try {
+        contextBySeat = await readData(DB_PATH, "context", {}, async (storage) => {
+          const roster = await readSeatList(storage);
+          const pages = await readSeatPages(storage, BACKGROUND_CONTEXT, roster);
+          return seatContextMap({ pages, seats: roster, cfg: CFG, modelsBySeat });
+        });
+      } catch (err) {
+        contextBySeat = null;
+        console.error(`check: the context read failed, so context-over-window is skipped: ${String(err?.message ?? err)}`);
+      }
     } catch (err) {
       stored = { reason: "unreadable", error: String(err?.message ?? err) };
     }
@@ -3000,6 +3018,7 @@ async function cmdCheck(rigFile, human, rest = []) {
     citations,
     sharedTreeBranch,
     sharedTreeLinked,
+    contextBySeat,
   });
   const seatCount = (spec.seats ?? []).length;
   if (human) {
