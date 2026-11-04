@@ -1867,6 +1867,47 @@ the prefix forever.
     still means *inside the tree* where a backup, a worktree copy or a stray `git add -A` can sweep it. Verified
     after: `stopReason:"stop"`, `cli.mjs config` prints **0** occurrences of the value, `status.secretFindings`
     `[]`. Runbook: `docs/runbooks/local-provider-down.md` state 5.
+30. **The pi pin has no gate at all, and four claims about it were stale in the docs on the same day.** Measured
+    2026-11-04: `check` has **no rule** about the pin (grep `vendor|pi-main|pin` in `src/checkup.mjs` → zero hits);
+    `sync-pi.mjs --check` prints `"drift": true` and **exits 0** — `process.exit(1)` there fires only on a *thrown*
+    error (`scripts/sync-pi.mjs:231`), so drift is a printed field, never a verdict, and it compares against a
+    **remote** lookup that returns `null` offline with `reason: "upstream sha unavailable"` (:132) rather than
+    pretending up-to-date. `tools/vendor-pins.mjs` covers three vendored projects and **no pi**; and the pin file's
+    header comment says *"the update rail for this rule"* — but `--check` has no `--rule` mode, so the rail the file
+    promises does not exist (compare `tools/vendor-pins.mjs`, which does have one). Staleness measured in one hour:
+    tip was `fcebc099`/508 behind at 11:0xZ and **`707888ec`/515 behind at 12:3xZ**, and
+    `git -C vendor/pi-main rev-parse origin/main` still printed the **stale** `fcebc099` because that is a local
+    remote-tracking ref — `sync-pi --check` fetched and saw the new one. **Any upstream-facing claim needs a fetch in
+    the same command as the count.** Docs corrected: `docs/PI-UPGRADE-DELTA-2026-11-04.md` §2. Rows **#5094**
+    (pin a tag + make drift a finding), **#5095/#5096** (staged move `v1.4.0` then `v1.5.0`).
+31. **The spend ledger does not work, and all three defects are at the leaf — so they never surface as a failure.**
+    Measured 2026-11-04 by importing `src/spend.mjs` and calling its own functions: (a) `ledgerPath()` returns `""`
+    when `DURIG_DB` is unset, and **a worktree is a different store dir**, so `DURIG_SPEND_LEDGER` set in
+    `durig.config.json` at the checkout root is invisible to a seat process whose cwd is
+    `~/Git/durian-dev/worktrees/…` — a run with `process.cwd()` in a worktree writes **nothing** (file absent, exit
+    0, store fine); (b) `recordSpend` writes the line and swallows every error (`src/spend.mjs:54-59`, exit 0, no
+    file, no word); (c) **`DURIG_SPEND_LEDGER` is not in `CONFIG_KEYS`**, so `cli.mjs config` cannot show it — the
+    only way to find an armed key is to read the file. `status.secretFindings` is `[]`, but that is because it
+    searches `["apiKey","api_key","apiKeyEnv","token","password"]` and would miss `DURIG_LOCAL_API_KEY` even if one
+    were committed. Interim (done 2026-11-04, both private configs, mode 600, **not a commit**): paste an absolute
+    store-scoped path — `"DURIG_SPEND_LEDGER": "<abs>/selfdev.sqlite.spend.jsonl"`. The product fix is a **default
+    derived from the store path** plus registration in `CONFIG_KEYS` and a real-mode probe; rows **#5097-#5100**.
+32. **A cap is not a rate, and the money plane has two env sources.** `cap-exceeded` is evaluated **per call**
+    against `cost.total`; with the live caps (`0.05 / 0.10 / 4.00`) there is **no session or day ceiling anywhere in
+    the tree** (grep `daily|budget|session` → zero hits). And the caps reach a seat through TWO chains that can
+    disagree: `seat.mjs` re-reads `durig.config.json` into `process.env`, and `harness.mjs` re-reads the **rig**
+    config's provider entries into `DURIG_<NAME>_*` (itself a **second** read of a file that
+    `registerLocalProviderFromEnv` already read). So a cap edited in one place silently wins. Before changing a cap,
+    say *which* ceiling you mean (per-call / per-run / per-store-day) — that is a product row, not a paste.
+33. **A `verification` row grade is a row count, not evidence.** `verify` inserts
+    `{kind:"verification", refs:[itemId], body: verdict}`, so `check`'s `verification-without-evidence` passes when
+    the body is the single word `PASS`. Measured on the live store: **#1297** carries `verifiedBy qa`,
+    `verificationCount 1`, body `"PASS"` — and it is an **F13 UI** item (`src/fanout.mjs:7` marks F13
+    `status: "REMOVED"`), i.e. a F13-constituted item closed by a verifier that exists, citing an artifact whose tree
+    contains **no F13 code at all**. The row satisfies every rule and tells you nothing. Durable shape:
+    `verification-grade` scoring evidence *quality* (body length, named probe, cited commit/tree, and whether the
+    cited tree contains what the item names). Delegate practice for the same reason: an LLM's own summary is weak
+    evidence — re-measure cheap claims with the instrument.
 29. **The pi harness and the durig rig can share one local server, but they do not share a credential store.**
     pi's `~/.pi/agent/models.json` supports `"apiKey": "!command"` (run at request time, uncached) and `$NAME`
     interpolation; durig reads `DURIG_LOCAL_API_KEY` from the process environment only. Measured 2026-11-04: with

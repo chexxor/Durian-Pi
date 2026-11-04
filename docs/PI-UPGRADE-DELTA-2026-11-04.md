@@ -27,7 +27,7 @@ node .spike/delegate-20261104b/spec-compat-probe.mjs origin/main        # every 
 |---|---|
 | our pin | `2ec55d808d455b1a64a2bf7888198207a096120a`, `pinnedAt 2026-10-19T07:20Z`, stamped **1.3.0** |
 | upstream tip | `fcebc099565d8f30c15b321ff6a1af5f34d89400` = **1.5.0** |
-| behind | **508 commits** (0 ahead) — releases skipped: **v1.4.0 (2026-10-21)**, **v1.5.0 (2026-11-02)** |
+| behind | **508 commits** (0 ahead) as measured 11:0xZ — releases skipped: **v1.4.0 (2026-10-21)**, **v1.5.0 (2026-11-02)**. **CORRECTION same day:** at 12:3xZ tip is **`707888ec…`** and the gap is **515**; `git -C vendor/pi-main rev-parse origin/main` still printed `fcebc099` because that is a stale local remote-tracking ref — fetch in the same command as any upstream count. devtools caught this on #5089. |
 | per package | durable 55 · ai 65 · coding-agent 155 · chord 226 · tui 36 · agent 12 · mcp 19 · codemode 7 · telemetry 10 |
 | npm channel | `@earendil-works/pi-durable` `dist-tags.latest = 1.5.0` |
 | live `node_modules` | **symlinks into `vendor/pi-main/packages/*`** — the `--link` state is active, at the pinned build |
