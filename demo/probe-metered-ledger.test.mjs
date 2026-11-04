@@ -440,11 +440,29 @@ const STUB = `http://127.0.0.1:${server.address().port}`;
 				),
 			),
 	);
+	// #5047 narrowed this lock from "these four are still unaccounted" to EMPTY: every tracked probe that posts the
+	// wire path now goes through metered.mjs. The streamed ones (throughput, cold-prefill, stream-probe) take the
+	// seam `raw: true` because their product IS the per-chunk clock - the seam owns the credential, the caps and the
+	// row, and hands back the response so the timing stays honest. The lock stays as a NET, not a receipt: a new
+	// probe that posts its own fetch trips it.
 	assert.deepEqual(
 		unaccounted,
-		others,
-		"these probes are still unaccounted; if one is wired, this lock must be narrowed deliberately, not by accident",
+		[],
+		`every tracked probe must go through metered.mjs; still un-accounted: ${unaccounted.join(", ") || "none"}`,
 	);
+	// and the seam must still offer the raw form those three need, or the next migration re-forks the fetch
+	const metered = fs.readFileSync(
+		path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "tools", "model-probes", "metered.mjs"),
+		"utf8",
+	);
+	assert.ok(/raw/.test(metered) && /chatCompletionsUrl/.test(metered), "metered.mjs must keep the raw seam and the one URL builder");
+	for (const f of ["stream-probe.mjs", "throughput.mjs", "cold-prefill.mjs"]) {
+		const t = fs.readFileSync(
+			path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "tools", "model-probes", f),
+			"utf8",
+		);
+		assert.ok(/raw:\s*true/.test(t) && /\.account\(/.test(t), `${f} must take the seam raw AND account its own streamed usage`);
+	}
 }
 
 server.close();

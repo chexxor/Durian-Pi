@@ -223,7 +223,14 @@ export function readLedger(path) {
 
 /** THE SEAM #5015 builds on: the running total of every accounted call, read from the same file the guard refuses
  * against. A row with `usd: null` contributes nothing to the number and is counted in `unknown` instead — a total
- * that silently ignores unpriced calls is the receipt-not-guard failure again. */
+ * that silently ignores unpriced calls is the receipt-not-guard failure again.
+ *
+ * WHY THE PROBE PATH LEDGERS EVERY CALL, INCLUDING A LOOPBACK ONE. The seat guard (`src/providers/spend.mjs`
+ * #5047) deliberately does NOT: its ledger is a money record and a loopback call costs nothing, so a $0 row there
+ * is noise that reads as accounting. A probe is the opposite case: the operator pointed it at a host and declared
+ * a price for it, and the instrument exists to audit its own spend — a probe that quietly skipped its own calls is
+ * how the #5024 unauthenticated call survived. One ledger, one row format (P4 pins that); the DECISION to write
+ * differs by role, and says so in the row's `note` when it is a probe row. */
 export function spendTotalUsd(path) {
 	const rows = readLedger(path);
 	let total = 0;
@@ -346,6 +353,13 @@ export function formatRunTotal({ rows, totalUsd, unknownCostRows, ceilingUsd }) 
  * `fetchImpl` is injectable so a demo can stand a loopback stub in place of a provider — no probe test ever
  * reaches the network, and no test spends the operator's key.
  */
+/** The ONE place the wire path is spelled. A probe that must own its own fetch (streamed chunk timing) still
+ * gets its URL from here, so the endpoint vocabulary has a single owner and the #5024 lock - "no probe script may
+ * post /chat/completions itself" - has something to point at. */
+export function chatCompletionsUrl(baseUrl) {
+	return `${String(baseUrl).replace(/\/$/, "")}/chat/completions`;
+}
+
 export async function meteredChat({
 	baseUrl,
 	body,
@@ -353,6 +367,8 @@ export async function meteredChat({
 	fetchImpl = globalThis.fetch,
 	ledger,
 	ledgerFile,
+	raw = false,
+	note,
 }) {
 	const file = ledgerFile ?? ledgerPath(env);
 	const model = body?.model ?? "?";
@@ -377,11 +393,48 @@ export async function meteredChat({
 	};
 	if (auth.present) headers.authorization = auth.header;
 
-	const res = await fetchImpl(`${String(baseUrl).replace(/\/$/, "")}/chat/completions`, {
+	const res = await fetchImpl(chatCompletionsUrl(baseUrl), {
 		method: "POST",
 		headers,
 		body: JSON.stringify(body),
 	});
+	// Money is recorded from the CALLER's usage block, so a probe that streams (and must time the chunks itself)
+	// takes the response raw and calls `account(usage)` when it has parsed the usage out of the stream. Same row,
+	// same file, same totals either way - the seam is the accounting, not the fetch.
+	const account = (usage, noteOverride) => {
+		const usd = costUsd({ price, usage });
+		return appendLedger(
+			file,
+			ledgerRow({
+				at: new Date().toISOString(),
+				model,
+				baseUrl,
+				authKeyEnv: auth.present ? auth.keyEnv : null,
+				usage,
+				priceSource,
+				priceAsOf,
+				usd,
+				totalBefore: spentUsd,
+				status: res.status,
+				note: noteOverride ?? note ?? (usage ? undefined : "no usage block"),
+			}),
+		);
+	};
+	if (raw) {
+		return {
+			status: res.status,
+			res,
+			account,
+			usage: null,
+			ledgerRow: null,
+			price,
+			priceSource,
+			priceAsOf,
+			projectedUsd,
+			auth,
+			ledgerTotals: { rows: rowsBefore, totalUsd: spentUsd, unknownCostRows },
+		};
+	}
 	const text = await res.text();
 	let usage = null;
 	try {
@@ -389,32 +442,17 @@ export async function meteredChat({
 	} catch {
 		/* streaming or non-JSON: accounted with usd null and a note, never silently skipped */
 	}
-	const usd = costUsd({ price, usage });
-	const row = appendLedger(
-		file,
-		ledgerRow({
-			at: new Date().toISOString(),
-			model,
-			baseUrl,
-			authKeyEnv: auth.present ? auth.keyEnv : null,
-			usage,
-			priceSource,
-			priceAsOf,
-			usd,
-			totalBefore: spentUsd,
-			status: res.status,
-			note: usage ? undefined : "no usage block",
-		}),
-	);
+	const row = account(usage);
 	return {
 		status: res.status,
 		text,
 		usage,
+		account,
 		ledgerRow: row,
 		ledgerTotals: {
 			rows: rowsBefore + 1,
 			totalUsd: row.totalAfter,
-			unknownCostRows: unknownCostRows + (usd === null ? 1 : 0),
+			unknownCostRows: unknownCostRows + (row.usd === null ? 1 : 0),
 		},
 		auth,
 	};

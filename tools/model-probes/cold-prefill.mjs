@@ -23,6 +23,7 @@
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
+import { meteredChat } from "./metered.mjs";
 
 const BASE = process.argv[2] ?? "http://127.0.0.1:47831/v1";
 const MODEL = process.argv[3] ?? "iq3_s";
@@ -50,24 +51,33 @@ function unique(nWords) {
 
 async function turn(prompt) {
 	const t0 = performance.now();
-	const res = await fetch(`${BASE}/chat/completions`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		// `stream: true` is required for this server to report `usage` at all on a stream, and
-		// `stream_options.include_usage` is what carries it (LM Studio omits it — throughput.mjs
-		// lesson 2). The strata server also emits `timings`, which is the RAWEST material here:
-		// the engine's own prompt_ms / prompt_per_second / predicted_per_second. Prefer those over
-		// any inference from TTFT; inference is what produced the 5 tok/s artifact.
-		body: JSON.stringify({
+	// #5047 (acceptance P8): the accounted path, RAW - this probe measures TTFT off the stream itself, so the seam
+	// may not buffer the body, but it still owns the credential, the caps and the ledger row (`account` below).
+	const call = await meteredChat({
+		baseUrl: BASE,
+		body: {
 			model: MODEL,
 			messages: [{ role: "user", content: prompt }],
 			max_tokens: 8,
 			temperature: 0,
 			stream: true,
+			// `stream: true` is required for this server to report `usage` at all on a stream, and
+			// `stream_options.include_usage` is what carries it (LM Studio omits it — throughput.mjs
+			// lesson 2). The strata server also emits `timings`, which is the RAWEST material here:
+			// the engine's own prompt_ms / prompt_per_second / predicted_per_second. Prefer those over
+			// any inference from TTFT; inference is what produced the 5 tok/s artifact.
 			stream_options: { include_usage: true },
-		}),
+		},
+		env: process.env,
+		raw: true,
+		note: "probe cold-prefill.mjs (streamed, TTFT-timed)",
 	});
-	if (!res.ok) return { err: `HTTP ${res.status} ${(await res.text()).slice(0, 160)}` };
+	const res = call.res;
+	if (!res.ok) {
+		const err = `HTTP ${res.status} ${(await res.text()).slice(0, 160)}`;
+		call.account(null, `probe cold-prefill.mjs failed HTTP ${res.status}`);
+		return { err };
+	}
 	let first = null;
 	let usage = null;
 	let timings = null;
@@ -90,6 +100,9 @@ async function turn(prompt) {
 			if ((d.content || d.reasoning_content || d.tool_calls) && first === null) first = performance.now();
 		}
 	}
+	// Accounted AFTER the numbers are computed, from the server's own usage block when it sent one. A server that
+	// reports only `timings` gives no usage, so the row lands with `usd: null` - UNKNOWN, never a $0 claim.
+	call.account(usage);
 	return {
 		ttftMs: first === null ? null : first - t0,
 		promptTokens: usage?.prompt_tokens ?? timings?.prompt_n ?? null,
