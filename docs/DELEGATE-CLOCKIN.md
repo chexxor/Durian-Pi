@@ -89,6 +89,9 @@ measurements.
 - Do not read `docs/SELFDEV.md` whole. Use the `## READ MAP` section numbers.
 - Never print `cli.mjs status` or `cli.mjs queue` to a terminal or a tool result. Redirect to `.spike/` and
   aggregate with `python` (see `.spike/stale-runbooks.mjs`, `.spike/delegate/clockin.mjs` for the pattern).
+  For specific rows there is now a bounded read — `cli.mjs show <id…>` / `cli.mjs queue --id <id…>` (#4986)
+  prints exactly those rows with bodies and nothing else, and it exits 1 with `missing` if an id does not
+  exist, so a typo'd id cannot masquerade as an empty queue.
 - Do not re-derive facts the digest already reports (unmerged branches, stale runbooks, provider config) by hand.
 - In a time-boxed suite run, report **"reached N of 234"**, not "failed": a SIGTERM'd demo prints FAIL with
   `exit 143`. `demo/up-model-reset.test.mjs` did exactly that on 2026-10-25 and passes alone. The last known
@@ -109,9 +112,9 @@ measurements.
 ## 5. Where the boundary still sits
 
 The tool is now committed (`scripts/clockin.mjs` + `npm run clockin`), so a fresh clone gets it. What is still NOT
-done is the seat-facing half: `cli.mjs` has no brief form of its own, so a SEAT that runs `cli.mjs status` or
-`cli.mjs queue` still pays 22.7 MB / 21.2 MB. That belongs to `devtools` (§6), and the delegate did not build it
-into the CLI because the CLI is the seats' surface, not the delegate's.
+done is the seat-facing half: `cli.mjs` has no brief form of its own, so a SEAT that runs `cli.mjs status`
+still pays 22.7 MB. The queue half is closed (#4986: `queue --id` / `show <id>` reads rows, not the store —
+2,201 B flat against a 21.9 MB census). The `status` half still belongs to `devtools` (§6).
 
 ## 6. What this document still asks the team for
 

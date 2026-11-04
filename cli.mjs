@@ -83,7 +83,7 @@ import { readCitations } from "./src/citation.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readRigHealth, readSeatList, readSeatRoots, seatContextMap } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readQueueRow, readRigHealth, readSeatList, readSeatRoots, seatContextMap } from "./src/readapi.mjs";
 import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -1072,9 +1072,55 @@ async function cmdPs() {
 }
 
 // queue: every work item with status and transitions. A READ, routed the same way.
-async function cmdQueue() {
-  const items = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
-  out({ ok: true, command: "queue", items });
+//
+// #4986 — the row-scoped form. The full dump is the defect: `node cli.mjs queue` measured **21,927,512 bytes**
+// on this rig, so auditing 17 rows meant shipping 22 MB into a session, and the audit's own cost was the
+// complaint (same class as `cli.mjs status` at 22 MB and docs/NEXT.md at 394 KB before its split). `--id <id>`
+// (repeatable) reads those rows and prints ONLY them, bodies included — bodies are what an audit needs and what
+// makes the dump huge, so the fix is scoping, not truncation. An id that matches nothing is reported in
+// `missing` and exits 1: a typo'd id must not look like an empty queue.
+//
+// THE KNOWN-FLAG SURFACE (#5063, lead ruling option (a) — recorded so it is not re-litigated). `--json` is a
+// DOCUMENTED form, not an invented one: `docs/runbooks/session-start-cost.md` uses `queue --json` in Diagnose
+// step 1, in §15 and in its own front-matter `evidence:` line, and `docs/SELFDEV.md`, `tools/README.md` and
+// `docs/ROADMAP.md` 228 all quote it with a byte count. `out()` has ALWAYS printed JSON, so `--json` is an
+// honest NO-OP: byte-identical output at exit 0, pinned by `demo/queue-compat-args.test.mjs`.
+// What stays REFUSED is anything not on this list. `main` ignores every argument (`cmdQueue()` takes none), so
+// today `queue --zork` exits 0 and prints the whole 22 MB document — that fail-open is the defect ROADMAP 228
+// names, and the fix is to refuse the UNKNOWN, not to refuse a documented form (which would be a new break).
+// The filter flags (#5071's `--status` / `--to` / `--no-body` / …) join this set IN THAT ROW, together with the
+// compat pin's matching lines — that demo is what makes "unknown" decidable by a reader instead of by this file.
+const QUEUE_NOOP_FLAGS = new Set(["--json"]);
+async function cmdQueue(args = []) {
+  const ids = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i];
+    if (a === "--id") {
+      const v = args[i + 1];
+      if (v === undefined || v.startsWith("--")) fail("queue --id needs a value");
+      ids.push(v);
+      i += 1;
+      continue;
+    }
+    if (!QUEUE_NOOP_FLAGS.has(a)) fail(`queue: unknown argument ${a} (usage: queue [--json] [--id <id> ...])`);
+    // a known no-op: it changes nothing, because the document is already JSON.
+  }
+  if (ids.length === 0) {
+    const items = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
+    out({ ok: true, command: "queue", items });
+    return;
+  }
+  const items = [];
+  const missing = [];
+  let rows = null;
+  for (const id of ids) {
+    const row = await readData(DB_PATH, "queue-row", { id }, (storage) => readQueueRow(storage, id));
+    if (row?.item) items.push(row.item);
+    else missing.push(String(id));
+    if (Number.isFinite(row?.rows)) rows = row.rows;
+  }
+  out({ ok: missing.length === 0, command: "queue", ids, items, ...(rows === null ? {} : { rows }), ...(missing.length ? { missing } : {}) });
+  if (missing.length) process.exit(1);
 }
 
 // resume (alias: doctor): the deliberate way to advance admitted-but-not-progressing
@@ -3061,7 +3107,10 @@ usages:
   node cli.mjs send <seat> <text> [--stream]   steer a seat and wait for its reply
   node cli.mjs send <seat> --body-file <path>  the same, prompt from a file (- = stdin)
   node cli.mjs send <seat> <text> --no-stream   the same, without the live view
-  node cli.mjs queue           dump the work queue
+  node cli.mjs queue           dump the work queue (22 MB on a loaded rig — see the row-scoped form below)
+  node cli.mjs queue --json    accepted NO-OP: the document is already JSON, so the bytes do not change (#5063)
+  node cli.mjs queue --id <id> [--id <id>…]   ONE (or a few) queue rows, body included, nothing else printed
+  node cli.mjs show <id>       the same row-scoped read, as a verb
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs reset <seat> [handoff] [--dry-run]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary); --dry-run previews it and writes nothing
   node cli.mjs compact <seat> [instructions]   summarize a seat's older context into a summary entry (keeps the transcript)
@@ -3171,7 +3220,13 @@ try {
     const text = fromFile !== null ? fromFile : inline.join(" ");
     if (!text.trim()) fail("send needs <seat> <text>, or --body-file <path>");
     await cmdSend(args[0], text, { stream, requestId });
-  } else if (cmd === "queue") await cmdQueue();
+  } else if (cmd === "queue") await cmdQueue(rest);
+  else if (cmd === "show") {
+    // The ergonomic form for an audit (#4986): `show 4986` or `show 4986 4977`, bodies included, and nothing
+    // else printed. Same code path as `queue --id`, so the two views can never drift.
+    if (!rest.length) fail("show needs <item-id>");
+    await cmdQueue(rest.flatMap((id) => ["--id", id]));
+  }
   else if (cmd === "resume" || cmd === "doctor") await cmdResume();
   else if (cmd === "run") await cmdRun({ watch: rest.includes("--watch"), maxDurationMs: parseMaxDuration(rest) });
   else if (cmd === "serve") await cmdServe({ maxDurationMs: parseMaxDuration(rest), stop: rest.includes("--stop") });
