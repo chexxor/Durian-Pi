@@ -73,6 +73,41 @@ The git half of the landing is DONE (see "The landing" below) — do not re-merg
   model (`:1234` answers nothing; the granted class needs price + credential + roster — D205). Landing was
   therefore made on the delegate's own re-run of the seat's gates, with the artifact sha and ancestry proven.
 
+## pi-durable update chain (OPEN — this is the priority now)
+
+The operator ordered a **proper** update: identify what upstream changed, what it breaks, and accommodate the useful
+parts. The research is done and tracked (**`docs/PI-UPGRADE-DELTA-2026-11-04.md`**, D206); the **team** holds the
+build/link/migration rows. State at 2026-11-04T13:1xZ (`DURIG_DB=./selfdev.sqlite`):
+
+| row | what | status |
+|---|---|---|
+| **#5089** | `docs/runbooks/pi-pin-update.md` — the pin-move procedure | **done, NOT landed** (branch `item-5089` = `314ad20d`: runbook 230 lines + README index; `merge-tree main 314ad20d` exit 0, 0 conflicts) |
+| **#5090** | promote the store-behaviour gate into `tools/` | **done, NOT landed** (branch `item-5090` = `4c92d550`: `tools/store-behaviour-gate.mjs` + `demo/store-behaviour-gate.test.mjs` + area registration) |
+| **#5094** | make the pin a **tag** and drift a **finding** | queued → devtools |
+| **#5095 / #5096** | stage 1 pin `v1.4.0`; stage 2 pin `v1.5.0` + symbol migration | queued → devtools |
+| **#5083** | the landing **receipt** row | claimed → devtools |
+
+**Delegate-verified #5090 independently** (extracted both files into the checkout, ran them against current `main`'s
+CLI, then removed them — `git status` clean): `node demo/store-behaviour-gate.test.mjs` → **exit 0**, and it asserts
+**both directions** — the gate passes on the product's real refusal (4 verbs, `cause:no_store`, absolute `db`, target
+`-wal`/`-shm` absent after) **and** refuses a live-store name / in-tree path / existing file with named causes
+(`gate_target_refused`, `gate_target_exists`), and it has teeth (a fixture that *manufactures* a rig fails the gate
+naming it). Running the tool directly: `--target /tmp/delegate-verify-gate/absent.sqlite` → `ok:true, failures:[]`;
+`--target selfdev.sqlite` → `ok:false, cause:"gate_target_refused"` and the live store untouched
+(463,835,136 B — it has grown since the 11:30Z backup baseline of 463,142,912 B, which is the baseline the runbook
+step 1 records for any `checkpointWhen` growth report).
+
+**Rail for whoever moves the pin: the store is backed up** at `.spike/backups/20261104T1130Z/selfdev.sqlite`,
+sha256 `02da60e3a5bbb79a4148cfae6f6cf5d19f1a35ddde73bc4d5239759a2f5be952`, byte-identical at copy time, taken with the
+broker down. The live store is at `durable_schema = {singleton:1, version:2}` and released pi-durable ≤ 1.3.0 cannot
+re-open it, so **`sync-pi --unlink` is not a rollback**; the backup is the only one. Do **not** mint further backups
+without lead's ruling.
+
+**Open landing question (operator or lead):** #5089 (docs-only) and #5090 (tools + demo) are complete but unlanded,
+and the next stages (#5094-#5096) depend on the runbook being in the tree. `docs/land.md` permits the delegate to land
+a docs-only item only when `main == origin/main`, and `main` is **ahead of `origin/main`** right now — so either the
+operator pushes first, or lead lands them. See the operator-decision block below.
+
 ## Local inference (Strata) — the 401 is FIXED, and the firewall is the next gate (measured 2026-11-04T12:1x–12:4xZ)
 
 **The break:** the Strata server on `127.0.0.1:47831` now **demands an API key**; `src/providers/local.mjs` sends
@@ -96,10 +131,15 @@ request, uncached) instead of the literal `"local"` that caused the same 401. Ve
 
 **LAN access — what is true right now:** the app's own **inference-only share listener is UP** on
 `0.0.0.0:47832` (`/v1/models` `401` without a bearer token, `200` with; serves only `/v1/models`,
-`/v1/chat/completions`, `/v1/messages`, never the UI). The host server stays loopback-only on `47831`.
-**`firewall-cmd --query-port=47832/tcp` → `no`**, so a second computer is rejected; and `47831/tcp` is allowed in the
-**runtime** config only, so that allowance vanishes on the next `--reload`/reboot. Firewall state: firewalld active,
-zone `public` on `enp39s0`, services `dhcpv6-client mdns ssh`. **Trap, measured:** a same-host test through your own
+`/v1/chat/completions`, `/v1/messages`, never the UI). The host server stays loopback-only on `47831`. **A remote
+machine is now working (operator, 12:5xZ)** — the share port is open: runtime now lists
+`47832/tcp 47832/udp`, `--query-port=47832/tcp` → **yes**. Firewall state: firewalld active, zone `public` on
+`enp39s0`, services `dhcpv6-client mdns ssh`.
+**Still one-way:** `--permanent --list-ports` lists neither `47832` nor `47831`, so **a `firewall-cmd --reload` or a
+reboot silently closes the LAN path again** — `sudo firewall-cmd --permanent --add-port=47832/tcp && sudo
+firewall-cmd --reload` if the remote setup is meant to survive. (The `47831/tcp` runtime allowance I measured at
+12:2xZ was gone by 12:4xZ; firewalld's runtime view on this box moves under the app, so re-query before trusting
+any port claim.) **Trap, measured:** a same-host test through your own
 LAN IP passes even for a port in no allow list (`0.0.0.0:39999` → `HTTP 200`) because own-address traffic loops back
 over `lo` — only `--query-port`/`--list-all` or a second machine answers a firewall question.
 
