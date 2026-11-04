@@ -103,13 +103,28 @@ try {
     `and it stays BOUNDED beside the dump it replaces: row=${stdoutBytes(idFirst)} B vs dump=${bareBytes} B (${(bareBytes / stdoutBytes(idFirst)).toFixed(1)}x)`,
   );
 
+  // ─── B2. THE FILTER FLAGS ARE KNOWN, AND `--json` IS STILL A NO-OP BESIDE THEM (#5016) ───
+  // A no-op must stay a no-op under the new surface: the same filter with and without `--json` is byte-identical.
+  for (const form of [["--status", "queued"], ["--to", "devtools"], ["--no-body"], ["--status", "queued", "--to", "devtools"]]) {
+    const plain = cli(["queue", ...form]);
+    assert.equal(plain.code, 0, `queue ${form.join(" ")} is a KNOWN form and exits 0: ${plain.stdout.slice(0, 200)}`);
+    const withJson = cli(["queue", "--json", ...form]);
+    assert.equal(withJson.code, 0, `and stays known with the documented --json no-op in front: ${withJson.stdout.slice(0, 200)}`);
+    assert.equal(
+      Buffer.compare(Buffer.from(withJson.stdout, "utf8"), Buffer.from(plain.stdout, "utf8")),
+      0,
+      `--json changes NO bytes under the filter surface either (${form.join(" ")})`,
+    );
+  }
+
   // ─── C. THE REFUSAL HALF: the genuinely unknown stays refused, and pays nothing ───
   // `--zork` / `--jsonn` are nobody's planned flag; they are here so the ACCEPT lines above cannot be "fixed" by
   // accepting the world. On `main` these calls exit 0 and print the whole document — that is the fail-open being
-  // closed. NOTE: the filter flags #5071 introduces (`--status`, `--to`, `--no-body`, `--fields`, `--ids`) are NOT
-  // asserted here on purpose. They are unknown TODAY and become known IN THAT ROW; pinning them here would make
-  // this commit pre-write #5071's gate instead of leaving that row to add its own accept lines beside A/B.
-  for (const unknown of ["--zork", "--jsonn"]) {
+  // closed. NOTE: `--status`, `--to` and `--no-body` were UNKNOWN when this file was written (#5063) and became
+  // KNOWN in #5016 — in the same change that added the accept lines just above (B2) and the rows in
+  // docs/COMMANDS-AND-THE-BROKER.md §4A. `--fields` / `--ids` stay refused: no call site uses them, and inventing a
+  // flag because it looked likely is how a tool grows two spellings for one thing.
+  for (const unknown of ["--zork", "--jsonn", "--fields", "--ids"]) {
     const r = cli(["queue", unknown]);
     assert.equal(r.code, 1, `queue ${unknown} must exit 1 (unknown; not on the known list, and not a documented form)`);
     const j = JSON.parse(r.stdout);

@@ -164,6 +164,68 @@ export async function readQueueRow(storage, id, context = BACKGROUND_CONTEXT) {
 	};
 }
 
+// The CLOSED state vocabulary for a queue row (#5016) — measured, not guessed. On this rig's live store (5,077
+// rows) the distinct values are exactly `done 3805, cancelled 800, held 337, queued 116, deferred 15, claimed 4`,
+// and they are the same values the code already keeps in sets: `MID_ITEM_STATUSES` / `LIVE_STATUSES`
+// (src/broker.mjs), `TERMINAL_STATUSES` (src/checkup.mjs), `LANDING_QUEUE_STATUSES` below. A filter that accepts
+// `--status done2` would answer "no rows" to a typo — the same defect class as an unknown flag, since both turn a
+// mistake into an empty success. So the CLI refuses against THIS list and the demo pins it.
+export const QUEUE_STATUSES = ["queued", "claimed", "deferred", "held", "done", "cancelled"];
+
+/** Per-state counts over a row set: the census a narrowed view must not be mistaken for. */
+export function queueCounts(items) {
+	const counts = {};
+	for (const it of items) counts[it.status] = (counts[it.status] ?? 0) + 1;
+	return counts;
+}
+
+/**
+ * Narrow a row set by id / state / addressee (#5016). Groups AND together; values within one group OR
+ * (`--status queued --status held` means either). Pure and shared by the CLI, the broker view and the demos — a
+ * filter written twice is two truths, which is how a viewer and the census start to disagree.
+ * It narrows the PAYLOAD only: the queue is ONE document (`RigQueue.value.items`), so every caller has already
+ * read it whole. The output says so (`narrowed: "payload"`) rather than letting a small view imply a small read.
+ */
+export function filterQueueItems(items, { ids = null, statuses = null, to = null } = {}) {
+	const idSet = ids?.length ? new Set(ids.map(String)) : null;
+	const statusSet = statuses?.length ? new Set(statuses) : null;
+	const toSet = to?.length ? new Set(to) : null;
+	return items.filter(
+		(it) =>
+			(!idSet || idSet.has(String(it.id))) &&
+			(!statusSet || statusSet.has(it.status)) &&
+			(!toSet || toSet.has(it.to)),
+	);
+}
+
+/**
+ * The attention lines derivable from QUEUE ROWS ALONE (#5016), produced by the SAME `computeAttention` the
+ * `status` surface uses — the measure and the notice must not become two implementations (the same reason
+ * src/metrics.mjs reuses the notice predicate). Stated per kind, honestly: `deferred_awaiting_answer` reads only
+ * `status`/`to`/`deferredTo`, so it is emitted here. `idle_with_queued_work`, `last_run_failed`,
+ * `repeated_failure`, `admitted_not_started` and `malformed_tool_call` need live generation slots or submission
+ * records this read does not take, so emitting them would be a DIFFERENT claim from the one `status` makes — they
+ * are excluded, not approximated. A caller that wants the whole surface calls `readRigHealth`.
+ */
+export function queueAttention(items, seats) {
+	return computeAttention(seats ?? [], items, new Map(), new Map()).filter(
+		(a) => a.kind === "deferred_awaiting_answer",
+	);
+}
+
+/**
+ * The census a narrow queue read carries with it (#5016): how many rows exist, the per-state counts, and the
+ * row-derived attention — all computed over the FULL, UN-PROJECTED row set, BEFORE any projection. That order is
+ * the point: `--no-body` and the filters drop bytes from the ANSWER, never rows from the DERIVATION, so a smaller
+ * view cannot hide the rows that produce a notice. A partial queue read mistaken for the census is this rig's
+ * registered failure, and `readQueueRow` returning `rows` is the same correction at a smaller scale.
+ */
+export async function readQueueCensus(storage, context = BACKGROUND_CONTEXT) {
+	const items = await readQueueItems(storage, context);
+	const seats = await readSeatList(storage, context);
+	return { rows: items.length, counts: queueCounts(items), attention: queueAttention(items, seats) };
+}
+
 /**
  * The rig-level control document (ROADMAP 131): `paused` and its provenance. Absent
  * store reads as NOT paused, so a first-run/legacy store is unpaused rather than
