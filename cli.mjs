@@ -61,6 +61,7 @@ import { compactionReport, compactionSettings, declaredContextWindow, describeCo
 // The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
 // against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
 import { contextConsumption } from "./src/context.mjs";
+import { NO_STORE_CAUSE } from "./src/causes.mjs";
 import { applyEscalations, applyResets, failureStreak, planEscalations, planResets } from "./src/supervisor.mjs";
 import { assessRun } from "./src/degeneration.mjs";
 import {
@@ -144,7 +145,10 @@ try {
   process.exit(1);
 }
 const { config: CFG, source: CFG_SOURCE, defaultsSource: CFG_DEFAULTS_SOURCE } = cfgResult;
-const DB_PATH = CFG.DURIG_DB ?? "./rig.sqlite";
+// Resolved ONCE, absolutely (#4955, and the #4947 divergence class). A relative default (`./rig.sqlite`)
+// means the rig you read depends on which tree served the process; every surface now reports the absolute
+// path, so "which database did this answer come from" is answered by the output, not by memory.
+const DB_PATH = resolve(CFG.DURIG_DB ?? "./rig.sqlite");
 // Read commands must be able to tell "this rig is empty" apart from "you are
 // pointed at a database that did not exist a moment ago". Opening storage
 // creates the file on demand, so without this snapshot the default
@@ -233,7 +237,19 @@ function fail(error) {
   // The stack is the only thing that names the call site, and losing it is how a
   // crash like the driver's `unresolvable path` became untraceable. Keep the
   // one-line message by default (byte-stable for callers), full stack on request.
-  out({ ok: false, error: process.env.DURIG_DEBUG ? (error?.stack ?? String(error)) : String(error?.message ?? error) });
+  // A NAMED cause (`err.code`) and the store it was about (`err.db`) ride along when present, so a caller
+  // branches on WHY instead of on wording, and #4955's read refusal — where the path IS the answer — prints it
+  // as a field rather than only inside the sentence.
+  if (error?.code === NO_STORE_CAUSE) {
+    console.error(
+      `note: no store at ${error.db} - reading does not create one. If you meant a different rig, set DURIG_DB or create durig.config.json - run: node cli.mjs config`,
+    );
+  }
+  out({
+    ok: false,
+    error: process.env.DURIG_DEBUG ? (error?.stack ?? String(error)) : String(error?.message ?? error),
+    ...(error?.code === undefined ? {} : { cause: error.code, ...(error?.db === undefined ? {} : { db: error.db }) }),
+  });
   process.exit(1);
 }
 
@@ -3113,6 +3129,11 @@ async function cmdCheck(rigFile, human, rest = []) {
   let contextBySeat = null;
   if (!DB_EXISTED_AT_START) {
     stored = { reason: "absent" };
+    // The report says `store: "absent"` and skips the store-backed rules; a reader who is not looking at
+    // that field sees a clean rig. Say it on stderr, the same sentence the read verbs use (#4955).
+    console.error(
+      `note: no store at ${DB_PATH} - reading does not create one. If you meant a different rig, set DURIG_DB or create durig.config.json - run: node cli.mjs config`,
+    );
   } else {
     try {
       const constitution = await readData(
@@ -3147,6 +3168,13 @@ async function cmdCheck(rigFile, human, rest = []) {
       }
     } catch (err) {
       stored = { reason: "unreadable", error: String(err?.message ?? err) };
+      if (err?.code === NO_STORE_CAUSE) {
+        // `check` still audits the rig SPEC it was handed, so a missing store is a recorded skip rather than a
+        // stop — but it says so on stderr, or the report reads like a clean rig nobody ever looked at.
+        console.error(
+          `note: no store at ${err.db} - reading does not create one. If you meant a different rig, set DURIG_DB or create durig.config.json - run: node cli.mjs config`,
+        );
+      }
     }
   }
   const { auditRig, formatCheck } = await loadCheckup();

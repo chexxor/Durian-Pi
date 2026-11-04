@@ -153,6 +153,13 @@ try {
 	//    Note the distinction: a store that does not EXIST reports
 	//    constitution-not-applied as *skipped* (absent cannot be told from
 	//    unread), so this control needs a store that exists and was never upped.
+	// The store has to EXIST for that distinction, and since #4955 `ps` no longer creates it, so this
+	// control opens it once the way a WRITER does (an empty store, never upped).
+	{
+		const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
+		const made = await openNodeSqliteStorage(join(dir, "never-upped.sqlite"));
+		await made.close();
+	}
 	const created = cli(["ps"], "never-upped");
 	assert.equal(created.status, 0, `ps failed: ${created.text.slice(0, 300)}`);
 	const notApplied = cli(["check", STARTER], "never-upped");

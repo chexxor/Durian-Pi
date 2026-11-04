@@ -32,7 +32,10 @@ const opt = (name, dflt) => {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : dflt;
 };
-const DB = opt("--db", process.env.DURIG_DB || "./selfdev.sqlite");
+// Resolved absolutely (#4955, and the #4947 divergence class): a relative default made the audit's
+// answer depend on which tree served the process, and the CLI read it spawns used to CREATE the file
+// when the answer was "not here" - so the audit measured a store it had just manufactured (#4923).
+const DB = resolve(opt("--db", process.env.DURIG_DB || "./selfdev.sqlite"));
 const RIG = opt("--rig", "./rig.selfdev.json");
 const asJson = argv.includes("--json");
 const selfTest = argv.includes("--self-test");

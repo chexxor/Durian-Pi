@@ -27,11 +27,19 @@ function check(label, ok, detail = "") {
 }
 
 // An empty rig, read through the SAME path the entrypoint uses. With no broker alive
-// `readData` opens this store directly (and creates it), so the closure is exercised
-// end-to-end rather than against an injected fake. `readSeatList`/`readQueueItems` see
-// no seats and no queue, and `readRigHealth` returns a well-formed empty snapshot.
+// `readData` opens this store directly, so the closure is exercised end-to-end rather than
+// against an injected fake. `readSeatList`/`readQueueItems` see no seats and no queue, and
+// `readRigHealth` returns a well-formed empty snapshot.
+//
+// The store is created HERE, by this fixture, as a writer would: a read verb no longer
+// creates the store it reads (#4955), and this demo is about an EMPTY rig, not an absent one.
 const dir = mkdtempSync(join(tmpdir(), "durig-1607-"));
 const dbPath = join(dir, "empty.sqlite");
+{
+  const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
+  const made = await openNodeSqliteStorage(dbPath);
+  await made.close();
+}
 const cfg = { DURIG_MAX_CONCURRENT_SEATS: "2" };
 
 function freshUi() {
