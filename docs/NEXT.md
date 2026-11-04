@@ -45,9 +45,10 @@ The git half of the landing is DONE (see "The landing" below) — do not re-merg
    named cause + store file **absent** after, not zero-byte), and `.spike/` is gitignored, so it is lost next
    session otherwise.
 
-3. **Ask the operator one question: push or not.** `main = 2690e6ac` is **5 ahead of `origin/main`, unpushed**
-   (`760630c9` docs, `2690e6ac` the landing merge, and the three `item-4955` commits it carries). The delegate
-   does not hold that grant (AGENTS.md; D204).
+3. **Ask the operator one question: push or not.** `main` is **~7 ahead of `origin/main`, unpushed** — the
+   landing merge `2690e6ac`, the three `item-4955` commits it carries, and the docs commits on top. Measure it
+   rather than trusting this number: `git rev-list --count origin/main..main`. The delegate does not hold that
+   grant (AGENTS.md; D204).
 
 ## The landing (done, verified, do not redo)
 
@@ -55,11 +56,13 @@ The git half of the landing is DONE (see "The landing" below) — do not re-merg
   **not** `d1c6d8a6`, and note `f5bda0db` was the pre-amend sha of the same tree (the seat amended a wrong
   "255/255" claim out of its own merge message; an amend mints a sha, so **re-measure in the same turn you
   land**, and key on the sha the row reports).
-- **`#5083` executed by the delegate:** `git merge --no-ff 89f2b975` → **`main = 2690e6ac`**, tree
+- **`#5083` executed by the delegate:** `git merge --no-ff 89f2b975` → merge commit **`2690e6ac`**, tree
   `20c25a5277a149fe6b2cc56f49a2307e7abe81af`, **identical to the `merge-tree --write-tree` prediction** taken in
   the same turn (exit 0). `git merge-base --is-ancestor d1c6d8a6 main` → **0**, so the **false-landing condition
   that made #4955 unsatisfiable is repaired**. Seatroot mirror `seatroot/linux` fast-forwarded
-  (`git -C …/seatroot merge --ff-only main`) → also `2690e6ac`.
+  (`git -C …/seatroot merge --ff-only main`) → **level with `main` at clock-out** (re-measure with
+  `git -C ~/Git/durian-dev/seatroot rev-parse --short HEAD`). **Measure `git rev-parse --short main`** rather than
+  trusting this pointer — a pointer that cites its own tip goes stale the instant it is committed.
 - **Gates the delegate ran itself at the merged sha, not read from the seat:** full suite
   `node scripts/test.mjs --all --jobs 8 --json` → **254/254, `failed:[] timedOut:[]`**, 62.8 s; behaviour gate
   `DURIG_DB=/tmp/delegate-1104c/no-store-gate.sqlite` → `status`/`queue`/`ps`/`show 1` **exit 1, `cause
@@ -72,8 +75,8 @@ The git half of the landing is DONE (see "The landing" below) — do not re-merg
 
 ## State (measured 2026-11-04T09:1x–09:2xZ)
 
-- `main = 2690e6ac`, working tree clean. **5 ahead of `origin/main` — unpushed.** 8 worktrees, 6 `item-*`
-  branches, 9 head refs.
+- `main` = the docs commits on top of the landing merge **`2690e6ac`** (measure it), working tree clean, **ahead
+  of `origin/main` — unpushed.** 8 worktrees, 6 `item-*` branches, 9 head refs.
 - **Two branches are now fully merged and still cannot be pruned:** `item-5079` (devtools' persisted cwd names
   it) and `item-4955` (**impl**'s cwd names it). **Re-point, then prune** — `tools/rig-portability-audit.mjs`
   (0.9 s, read-only, **exit 1** with `seat-host-unaware`, ROADMAP 217) prints the seat→root map in its `note:`
