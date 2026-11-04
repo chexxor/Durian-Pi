@@ -1,11 +1,11 @@
 ---
 runbook: local-provider-down
-symptom: "a local seat (qa/devtools) fails to run: `No API key for provider: local` or `model_error: Connection error.`; `/v1/models` on 127.0.0.1:8080 does not list the model the seat's `local/<id>` names. NOTE the port may be OPEN and answering HTTP 200 while the provider is unusable - see Diagnose state 3"
+symptom: "a local seat fails to run: `model_error: 401 \"Invalid API key\"`, `model_error: Connection error.`, or `No API key for provider: local`; `/v1/models` on the configured port 401s or does not list the model the seat's `local/<id>` names. NOTE the port may be OPEN and answering while the provider is unusable — see Diagnose state 3 and the 2026-11-04 state 5"
 writes: false
 precondition: "none"
-last_verified: 2026-10-20
+last_verified: 2026-11-04
 verified_by: delegate
-evidence: "2026-10-20 reverse move (local DOWN) verified: up --refresh --dry-run named only qa+devtools, the real run recorded resetEntryId 153838/153841, `check rig.selfdev.json` ok:true, PolyStrata server+engine killed and :8080 refused (curl exit 7), `grep -c 'local/' rig.selfdev.json` = 0, and both replacement DeepInfra ids answered a real completion (HTTP 200). Earlier: 2026-10-18T19:10Z PolyStrata restart + live chat completion."
+evidence: "2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified."
 check_rule: null
 ---
 
@@ -60,6 +60,7 @@ against the `id` values returned by `/v1/models`:
 | `/v1/models` 200 and the configured id IS listed with `"status":{"value":"loaded"}` | state 2 - the provider is fine: the seat's failure is NOT the provider, look at the seat's log/keys |
 | `/v1/models` 200 and the configured id is ABSENT (a different id is listed) | state 3 - the port answers, the provider is unusable: this is the state a port probe cannot see. Restart with the config that serves the configured model (see the 2026-10-20 note in Evidence) |
 | `/v1/models` 200, configured id listed, `"status"` not `loaded` | state 4 - still loading or the load failed: poll, then read `server.err` |
+| **`/v1/models` 401 `{"error":"Invalid API key"}`** | **state 5 - the server DEMANDS a credential and the rig sent the loopback placeholder.** `src/providers/local.mjs` sends `LOOPBACK_PLACEHOLDER_KEY` (`"no-key-required"`) whenever the endpoint is loopback and `DURIG_LOCAL_API_KEY` does not resolve, because a *keyless* llama.cpp accepts anything. A server with a key set rejects it, and the seat's run ends `model_error: 401 "Invalid API key"` with no hint about the credential. Fix: supply the key (see Do 0). Measured 2026-11-04 on Strata `:47831` |
 
 A port probe (`netstat`, `Test-NetConnection`) can only tell states 1 from 2/3/4 - it cannot tell a dead
 provider from an unrelated listener. Use it to find the PID, not to conclude.
@@ -67,8 +68,24 @@ provider from an unrelated listener. Use it to find the PID, not to conclude.
   `"errorMessage":"Connection error."` is the server-down signature.
 - `"errorMessage":"No API key for provider: local"` is a DIFFERENT cause — the broker restarted without
   `DURIG_LOCAL_API_KEY` (see `broker-down-or-stalled.md`).
+- **`"errorMessage":"401 \"Invalid API key\""` is state 5** — the server wants a real key and got the placeholder.
+  The store spells it exactly like that in `attention[].detail` (`<seat> | model_error: 401 "Invalid API key"`), and
+  `log <seat>` shows `stopReason: "error"` with zero tokens.
 
 ## Do
+0. **State 5: give the rig the server's key, from a file that cannot be committed.** The key is a bearer token; it
+   must not sit in `durig.config.json` (gitignored, but inside the tree a backup, a worktree copy or a `git add -A`
+   can still sweep it) and never in source. Put it **outside the repo, mode 600**, and load it at launch:
+   ```bash
+   install -m 700 -d "$HOME/.config/durig"
+   (umask 077; printf 'DURIG_LOCAL_API_KEY=%s\n' '<key from the Strata app>' > "$HOME/.config/durig/env")
+   node --env-file="$HOME/.config/durig/env" cli.mjs serve      # and every `send`/`run` that opens a harness
+   ```
+   Verified 2026-11-04: `node --env-file` carries it into the verb, `cli.mjs config` prints **0** occurrences of the
+   value, and `status.secretFindings` stays `[]`. The provider sends it as a Bearer token; on a loopback endpoint
+   the model row keeps `cost: 0` (free by locality) and **no ledger row is written**.
+   `tools/broker-serve.mjs --status` is the cheap check (it fetches `/v1/models` and fails when the configured model
+   is not advertised) — run it with the same `--env-file` or it will report the 401.
 1. Confirm the model files and engine exist (they are outside this repo, under
    `C:\Users\Alex\dsh-Projects\PolyStrata-data`):
    ```bash
@@ -210,3 +227,75 @@ finish before concluding anything about resolution.**
 the reverse move a two-line change later. Restarting is `local-provider-down.md`'s Do section plus
 `run-swift-iq2_xs.bat` — note the ENGINE differs between the two local models (`strata.exe` for Swift 1.5,
 `strata-poly.exe` for the older Qwen pack), so an old log line naming the other engine is expected.
+
+## Reaching the same server from ANOTHER computer (measured 2026-11-04, Strata)
+
+The local model server binds **loopback only** — measured: `ss -ltnp` shows `127.0.0.1:47831` for the Strata host,
+and nothing on `0.0.0.0`. Three ways to reach it from a second machine, cheapest-correct first:
+
+1. **The app's own Share listener (recommended, built in).** Strata ships a *separate, key-protected listener for
+   inference only* (`host/server/local-share.mjs`): `createLocalShare({ host = "0.0.0.0", port = PORT + 1 })`,
+   serving exactly `/v1/models`, `/v1/chat/completions`, `/v1/messages`, gated on the app's API key, with CORS
+   preflight answered — it never serves the UI or the host APIs. With `PORT=47831` the URL is
+   **`http://<lan-ip>:47832/v1`** (`sharePort = findFreePort(STRATA_SHARE_PORT ?? PORT + 1)`), and it is **off until
+   enabled in the app** (measured: no listener on 47832 while the host was up on 47831). Then, from the other
+   computer: `Authorization: Bearer <the same key>`.
+2. **SSH tunnel (safest; keeps the server on loopback and encrypts the bearer token).** From the second machine:
+   `ssh -L 47831:127.0.0.1:47831 <user>@<this-box>` and point the client at `http://127.0.0.1:47831/v1`. Nothing new
+   listens on the LAN and the key never crosses the network in cleartext.
+3. **Rebind the host itself** (`STRATA_BIND=0.0.0.0`, read at `host/server/index.mjs` alongside `STRATA_PORT`).
+   **Not recommended:** that listener also carries the UI and the host APIs, and a key that is set for inference
+   does not necessarily gate them.
+
+**The trap that bites durig specifically:** `endpointClass()` (`src/providers/local.mjs:77`) calls any **non-loopback**
+URL `metered`, so a seat pointed at `http://<lan-ip>:47832/v1` is refused at registration with
+`metered-endpoint-unpriced` unless a price is declared — measured: the same config with
+`DURIG_LOCAL_PRICE_USD_IN=0 / _OUT=0` registers, `priceSource: "DURIG_LOCAL_PRICE_USD_IN/OUT"`, because **0 is a
+legitimate DECLARED price**. Two consequences: (a) a LAN URL costs a config change (a ruling, not a paste); (b) an
+SSH tunnel keeps the URL loopback, so it needs no price declaration at all — one more reason to prefer option 2.
+
+### Firewall on this host (measured 2026-11-04, Fedora 44) — what actually gates a LAN client
+
+`firewall-cmd` is readable **without root** for queries, and that is the only trustworthy answer:
+
+```bash
+firewall-cmd --state && firewall-cmd --get-active-zones   # running; public on enp39s0
+firewall-cmd --list-all                                    # RUNTIME
+firewall-cmd --permanent --list-all                        # what survives reload/reboot
+firewall-cmd --query-port=47832/tcp                        # exit 0 = yes, 1 = no
+```
+
+State found: `public` zone on `enp39s0`; services `dhcpv6-client mdns ssh`; runtime ports
+`47984/tcp 47989/tcp 48010/tcp 47831/tcp 47998-48002/udp 48010/udp`. Two facts matter:
+
+- **`47831/tcp` is allowed in the RUNTIME config only.** `--permanent --list-ports` does not list it, so that
+  allowance **disappears on the next `firewall-cmd --reload` or reboot**. If the rig depends on it, add it
+  permanently.
+- **The Share listener's port is NOT allowed.** The app's LAN share binds `0.0.0.0:47832`
+  (`sharePort = findFreePort(STRATA_SHARE_PORT ?? PORT + 1)`), it is up and key-gated (measured: `401` without a
+  bearer token, `200` with), and `firewall-cmd --query-port=47832/tcp` → **no**. A remote machine is rejected by
+  firewalld no matter how correct the server is.
+
+**A same-host test through your own LAN IP CANNOT answer this question — measured, and it is a trap.** With a
+throwaway listener on `0.0.0.0:39999` (a port in no allow list at all), `curl http://192.168.1.101:39999` returned
+**HTTP 200** from the same box, while `firewall-cmd --query-port=39999/tcp` says `no`. Traffic to your own address is
+looped back through `lo`, which firewalld accepts, so the packet never arrives on `enp39s0` and the zone is never
+consulted. Use `--query-port` / `--list-all`, or test from the second machine.
+
+To let another computer reach the **inference-only** listener (recommended over opening the host port, which also
+carries the UI and host APIs):
+
+```bash
+sudo firewall-cmd --permanent --add-port=47832/tcp
+sudo firewall-cmd --reload
+firewall-cmd --query-port=47832/tcp        # expect: yes
+```
+
+Then from the other computer:
+
+```bash
+curl -s -H "Authorization: Bearer <the key>" http://192.168.1.101:47832/v1/models
+```
+
+**No firewall change at all** is needed for the SSH-tunnel option above: `ssh` is already an allowed service, and the
+tunnel keeps the URL loopback (so durig also needs no price declaration).

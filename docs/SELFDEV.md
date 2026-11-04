@@ -1854,3 +1854,23 @@ the prefix forever.
     so `advocate` at `consumed 244,751 / window 24,576 = 9.96x` with `head.state "behind-boundary"` is a green rule
     and a red number at the same time. Say which measure you are quoting; do not use the rule as evidence a seat
     fits, and do not call the number a rule failure.
+28. **A loopback placeholder credential is only legitimate against a KEYLESS server, and the server can start
+    demanding a key without anything in this repo changing.** `src/providers/local.mjs` sends
+    `LOOPBACK_PLACEHOLDER_KEY` (`"no-key-required"`) whenever the endpoint is loopback and `DURIG_LOCAL_API_KEY`
+    does not resolve. Measured 2026-11-04: Strata on `127.0.0.1:47831` answers `/v1/models` with **401 `Invalid API
+    key`**, so all seven `local/iq3_s` seats (`pm impl lead scribe devtools security architect`) failed
+    `model_error: 401` — including a `send devtools` that came back `unsettled/unanswered` with **zero** tokens and
+    looked like a model fault. The registration path did **not** refuse (loopback needs no key by design), so
+    `check`, `config` and `/v1/models`-by-port all look fine; only the run shows it. Fix and its constraint:
+    `DURIG_LOCAL_API_KEY` from a **file outside the repo** (`~/.config/durig/env`, mode 600) loaded with
+    `node --env-file="$HOME/.config/durig/env" cli.mjs serve` — never in `durig.config.json`, because gitignored
+    still means *inside the tree* where a backup, a worktree copy or a stray `git add -A` can sweep it. Verified
+    after: `stopReason:"stop"`, `cli.mjs config` prints **0** occurrences of the value, `status.secretFindings`
+    `[]`. Runbook: `docs/runbooks/local-provider-down.md` state 5.
+29. **The pi harness and the durig rig can share one local server, but they do not share a credential store.**
+    pi's `~/.pi/agent/models.json` supports `"apiKey": "!command"` (run at request time, uncached) and `$NAME`
+    interpolation; durig reads `DURIG_LOCAL_API_KEY` from the process environment only. Measured 2026-11-04: with
+    `"apiKey": "!sed -n 's/^DURIG_LOCAL_API_KEY=//p' \"$HOME/.config/durig/env\""`, `pi --print --provider strata
+    --model iq3_s` answered while `DURIG_LOCAL_API_KEY` was **unset** in that shell (`env -u`), and the key stayed
+    out of both the repo and `models.json`. A literal `"apiKey": "local"` is what made pi 401 the same way the
+    seats did.
