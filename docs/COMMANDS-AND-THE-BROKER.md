@@ -132,6 +132,48 @@ Rule of thumb for a maintainer: **if you are adding a verb that mutates state, d
 
 ---
 
+## 4A. The `queue` argument surface: known flags, accepted no-ops, refusals (#5016)
+
+This table is the **authority on what is unknown**. The source (`cli.mjs` `QUEUE_FLAGS`) and
+`demo/queue-compat-args.test.mjs` are the other two views of the same fact; if you change one, change all three,
+because an invisible flag set is how a tool ends up refusing a documented form (measured, #5063).
+
+| Flag | Known? | What it does | Which half it narrows |
+|---|---|---|---|
+| *(no flags)* | known | the WHOLE document — `{ok, command, items}`, every row, bodies included. This is today's byte-for-byte default and a demo pins it unchanged, so anything parsing `queue` today keeps working | nothing: this is the census |
+| `--json` | known, **NO-OP** | nothing at all. `out()` has always printed JSON, so the bytes are identical to no flags; it is DOCUMENTED (`session-start-cost.md` Diagnose step 1 + its own `evidence:` line, `SELFDEV.md`, `tools/README.md`, ROADMAP 228) and delegate projections pipe it, so refusing it would be a new break | nothing |
+| `--id <id>` (repeatable) | known | one (or a few) rows, body included; an id matching nothing is reported in `missing` and exits 1, because a typo'd id must not look like an empty queue | **payload**, not storage: the queue is ONE document (`RigQueue.value.items`), so the storage read stays whole |
+| `--status <state>` (repeatable) | known (#5016) | prints only rows in that state; several values OR together, and it ANDs with `--to` and `--id`. The state is checked against the CLOSED vocabulary — `queued, claimed, deferred, held, done, cancelled` (`QUEUE_STATUSES` in `src/readapi.mjs`, measured off the live store) — so `--status done2` is refused by name instead of answering "no rows" to a typo | **payload** only. `rows`, `counts` and `attention` in the same answer stay the WHOLE store's |
+| `--to <seat>` (repeatable) | known (#5016) | prints only rows addressed to that seat | **payload** only, same caveat |
+| `--no-body` | known (#5016) | a VIEWER form: the `body` field is dropped and nothing else is. It announces itself — a `projection` header as the FIRST key of the payload and a `note:` line on stderr — because a truncated view that does not label itself becomes the record someone later trusts, and acting on a subject without its body is a registered failure of this rig. The counts and the attention lines are derived over the FULL rows BEFORE the trim, so dropping bodies cannot drop a notice | **payload** only, and never the derivation |
+| any other flag (`--zork`, `--fields`, `--ids`) | **refused** | exit 1; a structured `{"ok":false,"error":"queue: unknown argument --zork (known flags: …)"}` on stdout and, on stderr, the offending argument plus every known flag and the usage line. It never prints the document | n/a |
+| a bare positional (`queue 5063`) | **refused** | same — there is no positional form to silently accept | n/a |
+
+**A narrowed answer carries the census with it (#5016).** Every non-default `queue` answer includes `rows` (how many
+rows the store holds), `counts` (per-state, over all rows) and `attention` (the notices derivable from queue rows —
+today `deferred_awaiting_answer`, computed by the same `computeAttention` the `status` surface uses, so the measure
+and the notice are one implementation). Kinds that need live generation slots or submission records
+(`idle_with_queued_work`, `last_run_failed`, `repeated_failure`, `admitted_not_started`, `malformed_tool_call`) are
+**excluded** from this surface rather than approximated — emitting them from a row-only read would be a different
+claim from the one `status` makes. Those three keys come from the `queue-census` read view (a few hundred bytes even
+when a broker serves it), and the answer also says `narrowed: "payload"` so a small reply never implies a small
+read. A partial queue view mistaken for the census is this rig's registered failure; `rows`/`counts`/`attention` are
+what make the partiality visible instead of inferred.
+
+**Why the refusals exist.** Before #4986/#5063/#5016, `cmdQueue()` took no arguments at all, so *every* spelling
+exited 0 and printed the same ~22 MB document — measured at `e3118fa0`: `queue`, `queue --json`,
+`queue --status held`, `queue --to pm --json`, `queue --ids`, `queue --no-body`, `queue --fields id`,
+`queue --zork` all exit 0 with byte-identical output. A typo therefore cost the full document and reported
+success: that is the fail-open ROADMAP 228 names, and it is also how a wrong `DURIG_DB` came to manufacture a
+store (see §4 and `docs/runbooks/session-start-cost.md`).
+
+**The discipline, so this does not rot in either direction:** a flag becomes *known* only when a real call site
+uses it or a document names it, and the row that makes it known adds its **accept** line to the compat demo in the
+same change. A flag nobody uses stays refused, and the refusal is what proves the accept list is a set rather than
+a shrug.
+
+---
+
 ## 5. Why writes need care — the two constraints
 
 ### 5.1 The entry-id race (mechanical)

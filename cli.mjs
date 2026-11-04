@@ -83,7 +83,7 @@ import { readCitations } from "./src/citation.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readQueueRow, readRigHealth, readSeatList, readSeatRoots, seatContextMap } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES } from "./src/readapi.mjs";
 import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -1088,39 +1088,160 @@ async function cmdPs() {
 // What stays REFUSED is anything not on this list. `main` ignores every argument (`cmdQueue()` takes none), so
 // today `queue --zork` exits 0 and prints the whole 22 MB document — that fail-open is the defect ROADMAP 228
 // names, and the fix is to refuse the UNKNOWN, not to refuse a documented form (which would be a new break).
-// The filter flags (#5071's `--status` / `--to` / `--no-body` / …) join this set IN THAT ROW, together with the
-// compat pin's matching lines — that demo is what makes "unknown" decidable by a reader instead of by this file.
-const QUEUE_NOOP_FLAGS = new Set(["--json"]);
+// The filter flags (`--status` / `--to` / `--no-body`, #5016) join this set with the compat pin's matching
+// accept lines in the SAME change — that demo is what makes "unknown" decidable by a reader instead of by this file.
+//
+// THE SURFACE IS ONE DECLARATIVE TABLE, and the refusal PRINTS that table (#5016). Why declarative: deciding
+// known/unknown inside a loop body leaves the set invisible, and an invisible set is how a row ends up refusing a
+// documented form (that is exactly what the first cut of this parser did to `--json`, #5063). A table is the thing
+// `docs/COMMANDS-AND-THE-BROKER.md` §4A and `demo/queue-compat-args.test.mjs` can both point at, so "unknown" is
+// decidable three ways. The shape is deliberately adoptable by other read verbs — but ONLY `queue` is changed
+// here: each verb's known set is its own measurement, and #5016's non-goals forbid a verb sweep.
+const QUEUE_FLAGS = {
+  // An accepted NO-OP, not a invention: `out()` has ALWAYS printed JSON, so `--json` changes no bytes. Refusing a
+  // documented form would be a new break; the pin asserts byte-identity, not merely exit 0.
+  "--json": { kind: "noop", usage: "[--json]" },
+  // One (or a few) rows by id (#4986). Payload-scoped: the queue is ONE document, so the STORAGE read is not
+  // narrowed — what narrows is what the caller prints and therefore what a session pays for.
+  "--id": { kind: "value", usage: "[--id <id> ...]", valueName: "id" },
+  // Filters (#5016). Repeatable like `--id`; values inside a flag OR, flags AND. `--status` is validated against
+  // the CLOSED state vocabulary (src/readapi.mjs QUEUE_STATUSES, measured off the live store): `--status done2`
+  // would otherwise answer "no rows" to a typo, which is the same defect as an unknown flag — a mistake rendered
+  // as an empty success.
+  "--status": { kind: "value", usage: "[--status <state> ...]", valueName: "state", values: QUEUE_STATUSES },
+  "--to": { kind: "value", usage: "[--to <seat> ...]", valueName: "seat" },
+  // A VIEWER form (#5016): bodies out, everything else unchanged. It is NOT a quiet convenience — it prints a loud
+  // header in its own payload and on stderr, because a truncated view that does not announce itself becomes the
+  // record a later reader trusts, and acting on a subject without its body is a failure this rig has registered
+  // repeatedly. The attention/count derivation still runs over the FULL rows: projection is after derivation.
+  "--no-body": { kind: "flag", usage: "[--no-body]" },
+};
+const QUEUE_USAGE = `node cli.mjs queue ${Object.values(QUEUE_FLAGS).map((f) => f.usage).join(" ")}`;
+
+// What a bad argument costs: exit 1, a structured `ok:false` on STDOUT (the machine half, the shape pinned by
+// `demo/queue-compat-args.test.mjs`), and on STDERR the offending argument plus EVERY known flag (#5016: the
+// point of refusing is that the caller can correct the typo without opening the source). A refusal never prints
+// the document — that is the fail-open's cost, and it is asserted (~100 B against a 22 MB dump).
+function refuseQueueArgument(why) {
+  const known = Object.keys(QUEUE_FLAGS).join(", ");
+  process.stderr.write(`queue: ${why}\n  known flags: ${known}\n  usage: ${QUEUE_USAGE}\n`);
+  fail(`queue: ${why} (known flags: ${known})`);
+}
+
 async function cmdQueue(args = []) {
   const ids = [];
+  const statuses = [];
+  const to = [];
+  let noBody = false;
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
-    if (a === "--id") {
+    const spec = QUEUE_FLAGS[a];
+    // A bare positional (`queue 5063`) and a misplaced flag both land here: there is no positional form to
+    // silently accept, and `main` accepting one was part of the fail-open.
+    if (!spec) refuseQueueArgument(`unknown argument ${a}`);
+    if (spec.kind === "flag") {
+      noBody = true;
+      continue;
+    }
+    if (spec.kind === "value") {
       const v = args[i + 1];
-      if (v === undefined || v.startsWith("--")) fail("queue --id needs a value");
-      ids.push(v);
+      if (v === undefined || v.startsWith("--")) refuseQueueArgument(`${a} needs a value`);
+      // A closed vocabulary is only closed if the VALUE is checked too: an unrecognized state is refused by name,
+      // with the legal set printed, rather than filtering everything out and reporting an empty queue.
+      if (spec.values && !spec.values.includes(v))
+        refuseQueueArgument(`${a} takes a queue state, not "${v}" (states: ${spec.values.join(", ")})`);
+      if (a === "--id") ids.push(v);
+      else if (a === "--status") statuses.push(v);
+      else to.push(v);
       i += 1;
       continue;
     }
-    if (!QUEUE_NOOP_FLAGS.has(a)) fail(`queue: unknown argument ${a} (usage: queue [--json] [--id <id> ...])`);
     // a known no-op: it changes nothing, because the document is already JSON.
   }
-  if (ids.length === 0) {
+  const filtered = statuses.length > 0 || to.length > 0;
+  // `--no-body` drops the body FIELD from the answer — nothing else. The derivation above/below still runs over
+  // full rows, so a notice a body-bearing row produces survives the trim (asserted in
+  // demo/queue-filter-attention.test.mjs).
+  const stripBody = (it) => {
+    const { body, ...rest } = it;
+    return rest;
+  };
+  if (noBody) {
+    // Loud in the terminal too, not only in the payload: this form exists for a human skimming a 22 MB store, and
+    // the danger is that they forget which form they are looking at.
+    process.stderr.write(
+      "note: --no-body — BODIES ARE OMITTED from this view. Do not act on a subject you have not read in full: `node cli.mjs queue --id <id>` (or `show <id>`) prints the row with its body.\n",
+    );
+  }
+  // THE DEFAULT IS TODAY'S BYTES (#5016): no flags, or only the `--json` no-op, and the answer is the whole
+  // document — `{ok, command, items}`, unchanged — so anything that parses `queue` today keeps parsing it. Every
+  // extra key below appears ONLY once a caller asked for a narrower view.
+  if (ids.length === 0 && !filtered && !noBody) {
     const items = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
     out({ ok: true, command: "queue", items });
     return;
   }
-  const items = [];
-  const missing = [];
-  let rows = null;
-  for (const id of ids) {
-    const row = await readData(DB_PATH, "queue-row", { id }, (storage) => readQueueRow(storage, id));
-    if (row?.item) items.push(row.item);
-    else missing.push(String(id));
-    if (Number.isFinite(row?.rows)) rows = row.rows;
+
+  // THE DERIVATION ORDER (#5016). Counts, the row total and the attention lines are computed over the FULL,
+  // UN-PROJECTED row set — before filters, before `--no-body`. That is what keeps a small view from being a false
+  // green: bodies never carry a notice, so trimming them may not trim the notices, and a filter that shows 3 rows
+  // must still say how many rows exist. The census comes from its own read view (`queue-census`) so the answer is
+  // a few hundred bytes even when a broker serves it, instead of the 22 MB document the caller was avoiding.
+  const census = await readData(DB_PATH, "queue-census", {}, (storage) => readQueueCensus(storage));
+  const doc = {
+    // The header is the FIRST key, so a reader meets it before any row: this payload is a projection, and what it
+    // dropped is named.
+    ...(noBody
+      ? {
+          projection: {
+            noBody: true,
+            droppedFields: ["body"],
+            warning:
+              "bodies are OMITTED from this view. Do not act on a subject you have not read in full — read the row with `queue --id <id>` (or `show <id>`) first (#5016).",
+            derivedOver: `${census.rows} rows, bodies included`,
+          },
+        }
+      : {}),
+    ok: true,
+    command: "queue",
+    ...(ids.length ? { ids } : {}),
+    ...(filtered ? { filter: { ...(statuses.length ? { statuses } : {}), ...(to.length ? { to } : {}) } } : {}),
+    rows: census.rows,
+    counts: census.counts,
+    attention: census.attention,
+    // Mechanism honesty (#5016): filters and `--no-body` narrow the PAYLOAD, never the storage read — the queue is
+    // one document (`RigQueue.value.items`), so it is read whole every time. Saying which half moved is what stops
+    // a small answer from being mistaken for a small read.
+    narrowed: "payload",
+  };
+
+  if (ids.length > 0) {
+    const items = [];
+    const missing = [];
+    for (const id of ids) {
+      const row = await readData(DB_PATH, "queue-row", { id }, (storage) => readQueueRow(storage, id));
+      const item = row?.item ?? null;
+      // A requested row that the FILTER excludes is not "missing" — `missing` means the store has no such id, and
+      // blurring the two would make a filter look like a typo.
+      if (item && (statuses.length === 0 || statuses.includes(item.status)) && (to.length === 0 || to.includes(item.to)))
+        items.push(item);
+      else if (!item) missing.push(String(id));
+    }
+    // `ok:false` when an id matched nothing (#4986, unchanged): a caller that checks the flag must see the miss,
+    // not just a reader who notices `missing`.
+    out({ ...doc, ok: missing.length === 0, items: noBody ? items.map(stripBody) : items, ...(missing.length ? { missing } : {}) });
+    if (missing.length) {
+      process.stderr.write(`queue: no such id(s): ${missing.join(", ")} — the store has ${census.rows} rows\n`);
+      process.exit(1);
+    }
+    return;
   }
-  out({ ok: missing.length === 0, command: "queue", ids, items, ...(rows === null ? {} : { rows }), ...(missing.length ? { missing } : {}) });
-  if (missing.length) process.exit(1);
+
+  // A filter without ids reads the document (the storage read is whole either way) and then narrows what is
+  // printed. `rows`/`counts`/`attention` above are still the whole store's.
+  const all = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
+  const items = filterQueueItems(all, { statuses, to });
+  out({ ...doc, items: noBody ? items.map(stripBody) : items });
 }
 
 // resume (alias: doctor): the deliberate way to advance admitted-but-not-progressing
@@ -3110,6 +3231,8 @@ usages:
   node cli.mjs queue           dump the work queue (22 MB on a loaded rig — see the row-scoped form below)
   node cli.mjs queue --json    accepted NO-OP: the document is already JSON, so the bytes do not change (#5063)
   node cli.mjs queue --id <id> [--id <id>…]   ONE (or a few) queue rows, body included, nothing else printed
+  node cli.mjs queue --status <state> [--to <seat>…]  filter the printed rows; the counts/attention stay the whole store's (#5016)
+  node cli.mjs queue --no-body               VIEWER form: bodies omitted, loudly headed, notices still derived over full rows (#5016)
   node cli.mjs show <id>       the same row-scoped read, as a verb
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs reset <seat> [handoff] [--dry-run]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary); --dry-run previews it and writes nothing

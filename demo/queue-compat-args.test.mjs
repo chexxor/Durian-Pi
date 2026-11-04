@@ -103,13 +103,28 @@ try {
     `and it stays BOUNDED beside the dump it replaces: row=${stdoutBytes(idFirst)} B vs dump=${bareBytes} B (${(bareBytes / stdoutBytes(idFirst)).toFixed(1)}x)`,
   );
 
+  // ─── B2. THE FILTER FLAGS ARE KNOWN, AND `--json` IS STILL A NO-OP BESIDE THEM (#5016) ───
+  // A no-op must stay a no-op under the new surface: the same filter with and without `--json` is byte-identical.
+  for (const form of [["--status", "queued"], ["--to", "devtools"], ["--no-body"], ["--status", "queued", "--to", "devtools"]]) {
+    const plain = cli(["queue", ...form]);
+    assert.equal(plain.code, 0, `queue ${form.join(" ")} is a KNOWN form and exits 0: ${plain.stdout.slice(0, 200)}`);
+    const withJson = cli(["queue", "--json", ...form]);
+    assert.equal(withJson.code, 0, `and stays known with the documented --json no-op in front: ${withJson.stdout.slice(0, 200)}`);
+    assert.equal(
+      Buffer.compare(Buffer.from(withJson.stdout, "utf8"), Buffer.from(plain.stdout, "utf8")),
+      0,
+      `--json changes NO bytes under the filter surface either (${form.join(" ")})`,
+    );
+  }
+
   // ─── C. THE REFUSAL HALF: the genuinely unknown stays refused, and pays nothing ───
   // `--zork` / `--jsonn` are nobody's planned flag; they are here so the ACCEPT lines above cannot be "fixed" by
   // accepting the world. On `main` these calls exit 0 and print the whole document — that is the fail-open being
-  // closed. NOTE: the filter flags #5071 introduces (`--status`, `--to`, `--no-body`, `--fields`, `--ids`) are NOT
-  // asserted here on purpose. They are unknown TODAY and become known IN THAT ROW; pinning them here would make
-  // this commit pre-write #5071's gate instead of leaving that row to add its own accept lines beside A/B.
-  for (const unknown of ["--zork", "--jsonn"]) {
+  // closed. NOTE: `--status`, `--to` and `--no-body` were UNKNOWN when this file was written (#5063) and became
+  // KNOWN in #5016 — in the same change that added the accept lines just above (B2) and the rows in
+  // docs/COMMANDS-AND-THE-BROKER.md §4A. `--fields` / `--ids` stay refused: no call site uses them, and inventing a
+  // flag because it looked likely is how a tool grows two spellings for one thing.
+  for (const unknown of ["--zork", "--jsonn", "--fields", "--ids"]) {
     const r = cli(["queue", unknown]);
     assert.equal(r.code, 1, `queue ${unknown} must exit 1 (unknown; not on the known list, and not a documented form)`);
     const j = JSON.parse(r.stdout);
@@ -125,6 +140,31 @@ try {
   assert.equal(missingValue.code, 1, "`--id` with no value exits 1");
   assert.ok(JSON.parse(missingValue.stdout).error.includes("--id needs a value"), "and names what it needed");
 
+  // ─── C2. THE REFUSAL MUST BE CORRECTABLE (#5016) ───
+  // Refusing is only useful if the caller can fix the typo without opening `cli.mjs`. So STDERR carries the
+  // offending argument, EVERY known flag, and the usage line, while stdout keeps the machine contract. The known
+  // set is pinned here as an exact list: adding a flag to `QUEUE_FLAGS` without adding it here (and to §4A of
+  // docs/COMMANDS-AND-THE-BROKER.md, and to the accept lines above) goes RED, which is the point.
+  const KNOWN_FLAGS = ["--json", "--id"];
+  const refused = cli(["queue", "--zork"]);
+  assert.equal(refused.code, 1, "an unknown flag exits 1");
+  assert.ok(refused.stderr.includes("--zork"), `stderr names the argument it refused: ${refused.stderr.slice(0, 300)}`);
+  for (const flag of KNOWN_FLAGS) {
+    assert.ok(refused.stderr.includes(flag), `stderr LISTS the known flag ${flag} so the caller can correct the call: ${refused.stderr.slice(0, 300)}`);
+  }
+  assert.ok(refused.stderr.includes("usage:"), `and prints the usage line: ${refused.stderr.slice(0, 300)}`);
+  assert.ok(refused.stderr.length < 4096, `the correction itself is cheap: ${refused.stderr.length} B`);
+  for (const flag of KNOWN_FLAGS) {
+    assert.ok(String(JSON.parse(refused.stdout).error).includes(flag), "the machine half names the known set too");
+  }
+
+  // A bare positional is refused as well: `queue 5063` looks plausible, and on `main` it exited 0 and printed the
+  // whole document. There is no positional form, so there is nothing to accept.
+  const positional = cli(["queue", "7"]);
+  assert.equal(positional.code, 1, "a bare positional exits 1");
+  assert.ok(JSON.parse(positional.stdout).error.includes("7"), "and the refusal names the token it refused");
+  assert.ok(!("items" in JSON.parse(positional.stdout)), "a refused positional never answers with the document");
+
   // A KNOWN-but-absent id stays a loud RESULT+exit 1, not an empty queue (unchanged from #4986).
   const absent = cli(["queue", "--id", "999999"]);
   assert.equal(absent.code, 1, "an id matching nothing exits 1");
@@ -132,7 +172,7 @@ try {
   assert.equal(JSON.parse(absent.stdout).rows, ROWS, "while still reporting the store size, so `missing` is not read as `empty queue`");
 
   console.log(
-    `\nQUEUE-COMPAT-ARGS TEST PASS (${ROWS}-row fixture: \`queue\` and \`queue --json\` byte-identical at exit 0, the no-op cannot disturb \`--id\` scoping in either order, and the unknown stays refused and cheap — row=${stdoutBytes(idFirst)} B vs dump=${bareBytes} B)`,
+    `\nQUEUE-COMPAT-ARGS TEST PASS (${ROWS}-row fixture: \`queue\` and \`queue --json\` byte-identical at exit 0, the no-op cannot disturb \`--id\` scoping in either order, the unknown stays refused and cheap (row=${stdoutBytes(idFirst)} B vs dump=${bareBytes} B), and a refusal names the flag, every known flag (${KNOWN_FLAGS.join(" ")}) and the usage)`,
   );
 } finally {
   rmSync(dir, { recursive: true, force: true });

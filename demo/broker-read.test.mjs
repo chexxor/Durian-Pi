@@ -76,6 +76,7 @@ try {
     "seats",
     "queue",
     "queue-row", // #4986: one row by id, so an audit costs the rows it asked for (the full dump measured 21,927,512 B on this rig)
+    "queue-census", // #5016: the counts + row-derived attention over ALL rows, so a filtered or `--no-body` view can carry the census without shipping the document
     "roots",
     "health",
     "live",

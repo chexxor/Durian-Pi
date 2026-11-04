@@ -180,9 +180,22 @@ try {
 	const noValue = cli(["queue", "--id"]);
 	assert.equal(noValue.code, 1, "`--id` with no value fails");
 	assert.match(noValue.stderr + noValue.stdout, /--id needs a value/, "with the flag named");
-	const bogus = cli(["queue", "--status", "done"]);
-	assert.equal(bogus.code, 1, "an unimplemented filter fails loudly rather than returning the unfiltered dump");
-	assert.match(bogus.stderr + bogus.stdout, /unknown argument --status/, "and names the argument it refused");
+	// #5016 flipped a pin in this file: when #4986 wrote it, `--status` was refused as an UNIMPLEMENTED filter (the
+	// honest choice then — a flag that silently returned the unfiltered dump would have been the fail-open again).
+	// demo/queue-row-read.test.mjs keeps its own contract; the full filter surface (per state, per addressee, the
+	// census, `--no-body`) is pinned in demo/queue-filter-attention.test.mjs. These lines only keep this file honest.
+	const filtered = cli(["queue", "--status", "done"]);
+	assert.equal(filtered.code, 0, "a KNOWN filter exits 0 (#5016 implemented it)");
+	const filteredPayload = JSON.parse(filtered.stdout);
+	assert.deepEqual(filteredPayload.items, [], "this fixture has no `done` rows, and an empty answer is an honest empty answer");
+	assert.equal(filteredPayload.rows, ROWS, "while the row count still travels with it, so an empty subset is never read as an empty queue");
+	assert.ok(!("missing" in filteredPayload), "a filter that matches nothing is not reported as a missing id");
+	const queuedAll = cli(["queue", "--status", "queued"]);
+	assert.equal(queuedAll.code, 0, "the state the fixture does hold");
+	assert.equal(JSON.parse(queuedAll.stdout).items.length, ROWS, "and returns exactly those rows");
+	const bogus = cli(["queue", "--zork"]);
+	assert.equal(bogus.code, 1, "an argument nobody implemented still fails loudly rather than returning the unfiltered dump");
+	assert.match(bogus.stderr + bogus.stdout, /unknown argument --zork/, "and names the argument it refused");
 } finally {
 	rmSync(dir, { recursive: true, force: true });
 }
