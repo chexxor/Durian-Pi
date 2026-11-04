@@ -21,12 +21,23 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { join } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 
 import { CONTEXT_OVER_WINDOW_CAUSE } from "../src/causes.mjs";
 import { CONTEXT_DENOMINATORS, CONTEXT_HEAD_MARKERS, contextConsumption, contextOverWindow } from "../src/context.mjs";
 import { computeAttention } from "../src/attention.mjs";
 import { RULES, auditRig } from "../src/checkup.mjs";
+import { Router, compilePersona, registerSeat } from "../src/rig.mjs";
+import { readRigHealth, readSeatList, seatContextMap } from "../src/readapi.mjs";
+import { readSeatPages } from "../src/rigstory.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -189,6 +200,15 @@ assert.ok(
 	`the rule fires on a CURRENT over-window seat; got ${JSON.stringify(fired.findings.map((f) => f.id))}`,
 );
 assert.match(fired.findings.find((f) => f.id === "context-over-window").detail, /MOVED/, "and names the axis in the finding");
+// The fix string is operator-facing, so its SHAPE is pinned: `compact` takes <seat> as its first argument, not
+// <rig> <seat> — a fix line with the wrong argument order tells the operator to run a command that names the rig
+// file as a seat.
+assert.match(
+	fired.findings.find((f) => f.id === "context-over-window").fix,
+	/node cli\.mjs compact devtools/,
+	"the fix names the verb with the seat as its first argument",
+);
+assert.match(fired.findings.find((f) => f.id === "context-over-window").fix, /exit code: 0 cut, 1 failed, 2 no-op/, "and carries the exit-code truth (#4898)");
 
 const silent = auditRig({ ...auditInputs, contextBySeat: { devtools: behind } });
 assert.equal(
@@ -256,6 +276,99 @@ const naiveFires = live.filter((r) => !r.stale && r.consumed > 24_576).length;
 assert.equal(naiveFires, 7, "the wrong denominator would raise 7 of the 12 live conversations — the false alarm this design avoids");
 assert.equal(live.filter((r) => r.consumed > 200_000).length, 1, "exactly one conversation is over its declared window");
 assert.equal(live.filter((r) => r.consumed > 200_000 && !r.stale).length, 0, "and it is the stale one, so the guard is silent on the live rig today");
+
+/* ---------------- 6. the REAL read path: committed entries, real ids ---------------- */
+// Everything above is pure over hand-made entries, and a hand-made entry can lie about the two things this
+// guard leans on: REAL entry ids (the boundary comparison is `boundaryId > usageId`) and the real newest-first
+// page order `readSeatPages` returns. So this section runs the producer the operator actually uses —
+// `readRigHealth` over a store with committed entries — and asserts the notice arrives through it, then
+// disappears when a real `pi.compaction` entry is committed AFTER the measured turn.
+{
+	const dir = mkdtempSync(join(tmpdir(), "context-window-"));
+	try {
+		const dbPath = join(dir, "store.db");
+		const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
+		const models = createModels();
+		models.setProvider(faux.provider);
+		const registry = createRegistry();
+		registry.install(Router);
+		const storage = new MemoryStorage();
+		const harness = await Harness.open(storage, { models, registry }, BACKGROUND_CONTEXT);
+		let convId;
+		await harness.commit(async (tx) => {
+			const c = await tx.createConversation({ ownership: { kind: "ownerless" } });
+			await configure(tx, c.id, {
+				model: { provider: "faux", modelId: "faux-seat" },
+				instructions: compilePersona({ role: "worker" }),
+			});
+			await registerSeat(tx, "devtools", c.id, "worker");
+			convId = c.id;
+		}, BACKGROUND_CONTEXT);
+		await harness.commit(
+			async (tx) => {
+				await tx.appendEntry(convId, { kind: "pi.assistant", model: [{ role: "assistant", usage: OVER }] });
+			},
+			BACKGROUND_CONTEXT,
+		);
+		const cfg = { DURIG_CONTEXT_WINDOW: "200000", DURIG_COMPACTION_KEEP_RECENT_TOKENS: "20000" };
+		const health = await readRigHealth(storage, dbPath, 1, { cfg });
+		const live = health.attention.find((a) => a.kind === CONTEXT_OVER_WINDOW_CAUSE);
+		assert.ok(
+			live,
+			`the real read path raises the notice; attention was ${JSON.stringify(health.attention.map((a) => a.kind))}`,
+		);
+		assert.match(live.detail, /one turn MOVED 244,000 tokens = 1\.22x the declared window of 200,000/, "the fraction, the denominator's state and its value all reach the operator");
+		assert.match(live.detail, /keepRecentTokens=20000 willCut=true/, "and the remedy says the compact verb would actually cut");
+		assert.equal(health.context.devtools.head.state, "current", "the snapshot carries the head state next to the number");
+
+		// The gate is config-derived: with no DURIG_COMPACTION_* value the notice must NOT invent pi's default.
+		const noGate = await readRigHealth(storage, dbPath, 1, { cfg: { DURIG_CONTEXT_WINDOW: "200000" } });
+		assert.match(
+			noGate.attention.find((a) => a.kind === CONTEXT_OVER_WINDOW_CAUSE).detail,
+			/willCut=unknown/,
+			"no declared compaction budget, no invented gate",
+		);
+
+		// Commit a REAL compaction boundary after the measured turn: the number stays (hiding a measurement is
+		// worse than labelling it) but the notice goes silent, on real durable state rather than on my fixture.
+		await harness.commit(
+			async (tx) => {
+				await tx.appendEntry(convId, { kind: "pi.compaction", head: 1 });
+			},
+			BACKGROUND_CONTEXT,
+		);
+		const after = await readRigHealth(storage, dbPath, 1, { cfg });
+		assert.equal(after.context.devtools.head.state, "behind-boundary", "the store's own ids order the boundary after the turn");
+		assert.ok(after.context.devtools.head.boundaryEntryId > after.context.devtools.head.usageEntryId, "and the comparison is over real entry ids");
+		assert.equal(after.context.devtools.consumed, 244_000, "the measurement is still reported");
+		assert.equal(
+			after.attention.find((a) => a.kind === CONTEXT_OVER_WINDOW_CAUSE),
+			undefined,
+			"while the notice is silent",
+		);
+
+		// ONE producer: the map `check` scores is the map `status` printed. Two computations of a fraction is how
+		// a rule and a display drift apart and the operator stops believing either.
+		const roster = await readSeatList(storage);
+		const pages = await readSeatPages(storage, BACKGROUND_CONTEXT, roster);
+		const map = seatContextMap({ pages, seats: roster, cfg });
+		assert.deepEqual(map.devtools, after.context.devtools, "check scores the number the operator was shown, not a re-derivation");
+		const audit = auditRig({
+			...auditInputs,
+			storedSeats: ["devtools"],
+			contextBySeat: map,
+			modelsBySeat: { devtools: "faux/faux-seat" },
+		});
+		assert.equal(
+			audit.findings.filter((f) => f.id === "context-over-window").length,
+			0,
+			"and the rule agrees with the notice about the same store state",
+		);
+		await harness.close(BACKGROUND_CONTEXT);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}
 
 console.log(
 	`CONTEXT-OVER-WINDOW PASS (head state ${current.head.state}/${behind.head.state}; fires on fraction ${over.fraction?.toFixed(2)} with denominator ${over.denominator}; silent on the 9.9 artifact and with no window; rule ${rule.id}/${rule.severity} starts green over a ${live.length}-seat live population, ${naiveFires} avoided false alarms)`,

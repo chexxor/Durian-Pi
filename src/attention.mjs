@@ -449,7 +449,11 @@ export function computeAttention(
 						`axis: tokens the provider MOVED in one turn (input+output+cacheRead+cacheWrite, cacheRead ${tokens(over.cacheRead)} of them), NOT the live head; ` +
 						`measure is current (no pi.compaction/pi.reset entry after entry ${over.head?.usageEntryId ?? "?"}); ` +
 						`the compact verb's gate is the accumulation budget: keepRecentTokens=${over.keepRecentTokens ?? "unknown"} willCut=${over.willCut ?? "unknown"}` +
-						(over.keepRecentTokens === null ? " (no DURIG_COMPACTION_* value is set here, so the gate is pi-durable's default and durig does not read it)" : "") +
+						(over.keepRecentTokens === null
+							? gate?.error
+								? ` (DURIG_COMPACTION_* is invalid, so the gate cannot be read: ${gate.error})`
+								: " (no DURIG_COMPACTION_* value is set here, so the gate is pi-durable's default and durig does not read it)"
+							: "") +
 						` — a notice, not a stop; remedies: docs/runbooks/context-over-window.md`,
 				});
 			}

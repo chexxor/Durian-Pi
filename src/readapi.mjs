@@ -445,15 +445,31 @@ export function seatContextMap({ pages, seats, cfg, modelsBySeat = {}, agentMode
  * `unknown`.
  */
 export function compactGateMap({ seats, cfg, modelsBySeat = {}, agentModels = {} }) {
-	const settings = compactionSettings(cfg ?? {});
+	// `compactionSettings` FAILS LOUDLY on a malformed value (its documented rule: a key an operator wrote
+	// must never be quietly ignored). A bad budget must not take down `status`/`watch`, so the error is
+	// carried to the notice instead of thrown — the notice then says the gate is unreadable and why.
+	let settings = null;
+	let settingsError = null;
+	try {
+		settings = compactionSettings(cfg ?? {});
+	} catch (err) {
+		settingsError = String(err?.message ?? err);
+	}
+	// The policy is NESTED under `.compaction` (measured, not assumed: reading it flat returned `unknown`
+	// for a configured rig on the first run of this guard).
+	const policy = settings?.compaction ?? {};
 	const gates = {};
 	for (const seat of seats) {
 		const modelKey = modelsBySeat[seat.name] ?? agentModels[seat.name] ?? null;
-		const override = modelKey ? settings.modelOverrides?.[modelKey] : null;
+		const override = modelKey ? settings?.modelOverrides?.[modelKey] : null;
 		const fromOverride = Number.isFinite(override?.keepRecentTokens) ? override.keepRecentTokens : null;
-		const fromConfig = Number.isFinite(settings.keepRecentTokens) ? settings.keepRecentTokens : null;
+		const fromConfig = Number.isFinite(policy.keepRecentTokens) ? policy.keepRecentTokens : null;
 		const keep = fromOverride ?? fromConfig;
-		gates[seat.name] = { keepRecentTokens: keep, source: keep === null ? null : fromOverride !== null ? "model-override" : "declared" };
+		gates[seat.name] = {
+			keepRecentTokens: keep,
+			source: keep === null ? null : fromOverride !== null ? "model-override" : "declared",
+			...(settingsError ? { error: settingsError } : {}),
+		};
 	}
 	return gates;
 }

@@ -981,7 +981,7 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
         "context-over-window",
         seatName,
         `one turn MOVED ${over.consumed} tokens = ${over.fraction.toFixed(2)}x the ${over.denominator} window of ${over.windowValue}; axis: tokens the provider MOVED in one turn (cacheRead ${over.cacheRead} of them), NOT the live head; nothing reset the head after entry ${over.head?.usageEntryId ?? "?"}`,
-        `node cli.mjs compact ${rig} ${seatName} — the gate is the accumulation budget (keepRecentTokens), NOT the window, so read the exit code: 0 cut, 1 failed, 2 no-op (docs/runbooks/compact-a-seat.md); the window itself is DURIG_<PROVIDER>_CONTEXT`,
+        `node cli.mjs compact ${seatName} "fold the early turns into a summary" — the gate is the accumulation budget (keepRecentTokens), NOT the window, so read the exit code: 0 cut, 1 failed, 2 no-op (docs/runbooks/compact-a-seat.md); the effective window and budget are printed by \`node cli.mjs config\`; the window itself is DURIG_<PROVIDER>_CONTEXT (a capacity ruling, not a seat edit)`,
       );
     }
   }
