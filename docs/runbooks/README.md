@@ -152,6 +152,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [compaction-eval.md](compaction-eval.md) | a compaction threshold needs a MEASUREMENT: the compacted-vs-full delta or a model’s real window | no |
 | [write-corruption-recovery.md](write-corruption-recovery.md) | a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line | maybe |
 | [compact-a-seat.md](compact-a-seat.md) | a seat's context is saturated and a reset would lose durable context | yes |
+| [context-over-window.md](context-over-window.md) | a seat shows a `context_over_window` notice or `check` reports `context-over-window`; the `ctx` fraction prints over 1.0 and you need to know whether that number describes the seat's current head or a turn that already ended | no |
 | [format-before-commit.md](format-before-commit.md) | my diff shows whitespace or line-ending churn I did not intend | no |
 | [degeneration-guard.md](degeneration-guard.md) | a seat was auto-reset (`pi.reset` naming `degenerate-text=...`); tell a real loop from a false positive, or add a shape | no |
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
@@ -184,6 +185,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Store / `pi.live` | store-corruption-recovery, store-secret-detected, store-probe-identity |
 | Tool results | tool-result-redacted |
 | Seats | seat-reset, compact-a-seat |
+| A turn moved more tokens than the seat's window (`context_over_window`, `check` rule `context-over-window`), and whether that fraction is current at all | context-over-window, compact-a-seat, seat-reset, compaction-eval |
 | Long-context eval | compaction-eval |
 | A verifier turn truncated at `length`, or refused in ~30 ms with zero tokens; KV cost and which GPU a model slot really owns | verifier-serving-headroom, compact-a-seat, hygiene-and-dead-model-pointers |
 | Write guard / source files | write-corruption-recovery |
