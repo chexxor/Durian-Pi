@@ -269,6 +269,7 @@
       "demo/probe-shim-import-form.test.mjs",
       "demo/second-local-provider.test.mjs",
       "demo/spend-cap-guard.test.mjs",
+      "demo/store-behaviour-gate.test.mjs",
       "demo/syncpi.test.mjs",
       "demo/test-areas.test.mjs",
       "demo/test-runner-concurrency.test.mjs"
