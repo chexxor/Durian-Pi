@@ -43,8 +43,12 @@ import {
 	spendTotalUsd,
 } from "../../tools/model-probes/metered.mjs";
 
-/** The rig's own name for a money stop. Grep-me in src/supervisor.mjs and src/attention.mjs (probe P7). */
-export const SPEND_CAUSE = "spend_cap_exceeded";
+// The cause NAME lives in `src/causes.mjs` - one definition, imported by both the code that RAISES the stop and
+// the code that acts on it (attention reports it, the supervisor parks the item). Re-exported here because this is
+// where a reader looking for "who raises spend_cap_exceeded" lands first (probe P7 greps for the name here, in
+// src/supervisor.mjs and in src/attention.mjs).
+import { SPEND_CAUSE } from "../causes.mjs";
+export { SPEND_CAUSE } from "../causes.mjs";
 
 // The cap values and the ledger path ARE the policy; re-exported from here so the CLI has ONE import for the
 // money plane (`capsFor`, `ledgerPath`) instead of reaching into `tools/` from the product entry point. The

@@ -1469,15 +1469,29 @@ async function superviseOnce(harness, probeStorage, context) {
     );
     failureStreakByConv.set(seat.conversationId, failureStreak(page.items));
   }
-  const plans = planEscalations({ seats: seatList, queueItems: queueDoc?.value?.items, failureStreakByConv });
+  // Bounded page: the current run sits at the top. Read ONCE and shared by both passes below - the supervisor
+  // needs the run's ERROR MESSAGE (#5047: the submission record carries only the category `model_error`, and the
+  // category is exactly what hides a spend-cap stop from the escalation that should park it on the first failure
+  // instead of the third), and the degeneration guard needs the same entries.
+  const pages = await readSeatPages(probeStorage, context, seatList, SCAN_LIMIT);
+  const errorByConv = new Map();
+  for (const seat of seatList) {
+    for (const entry of pages[seat.name] ?? []) {
+      const msg = Array.isArray(entry?.model) ? entry.model[0] : null;
+      if (msg?.errorMessage) {
+        errorByConv.set(seat.conversationId, msg.errorMessage);
+        break; // newest first, so the first hit is the most recent failure
+      }
+    }
+  }
+  const plans = planEscalations({ seats: seatList, queueItems: queueDoc?.value?.items, failureStreakByConv, errorByConv });
   const escalations = await applyEscalations(harness, plans, context);
 
   // Degeneration guard (mitigations 1+2 for the F29 class): reset a seat whose CURRENT run
   // has outgrown its turn/context bound, or shows step-repetition / malformed tool calls.
   // Detection is pure (src/degeneration.mjs); the write is the existing reset boundary, and
   // it is idempotent (a page already ending in `pi.reset` is skipped) so a pass loop cannot
-  // re-reset a seat before it has run again. Bounded page: the current run sits at the top.
-  const pages = await readSeatPages(probeStorage, context, seatList, SCAN_LIMIT);
+  // re-reset a seat before it has run again.
   const assessmentsByConv = new Map();
   for (const seat of seatList) {
     assessmentsByConv.set(seat.conversationId, assessRun(pages[seat.name] ?? []));
