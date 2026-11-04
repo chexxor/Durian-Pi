@@ -30,6 +30,7 @@
 
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { assertStoreReadable } from "../../readclient.mjs";
 import { OPERATOR_SURFACE, beginOperatorWindow, releaseSeatStore, resolveSeatStore } from "./attach.mjs";
 import { assessStoreOwnership } from "../../storeownership.mjs";
 import { runOperatorWindow } from "./return.mjs";
@@ -88,6 +89,11 @@ export function stopBrokerForStore({ repo, dbPath, timeoutMs = settleBudgetMs() 
 				? { ok: false, reason: `a broker owns it: ${ownership.reasons.join("; ")}` }
 				: await probeWritable(dbPath);
 			if (probe.ok) return resolve({ ok: true, reason: null });
+			// Absence is NOT contention. Retrying an absent store burns the whole settle budget and then
+			// reports "still held by a writer", which sends the operator to look for a process that does not
+			// exist (#4955: a read of a wrong path used to CREATE the file, so this path could not even see
+			// the difference).
+			if (probe.missing) return resolve({ ok: false, reason: probe.reason });
 			if (Date.now() > deadline) {
 				return resolve({ ok: false, reason: `the store is still held by a writer: ${probe.reason}` });
 			}
@@ -99,10 +105,19 @@ export function stopBrokerForStore({ repo, dbPath, timeoutMs = settleBudgetMs() 
 
 /**
  * Can a WRITER open this store right now? Open + close the same durable storage the child opens,
- * with a short busy timeout so a transient lock is retried rather than misread. Read-only: it creates
- * nothing a healthy store does not already have (the WAL/pragma path runs on every open).
+ * with a short busy timeout so a transient lock is retried rather than misread.
+ *
+ * It does NOT probe an absent store: the engine's open CREATES the file (mkdir + `new DatabaseSync`), so
+ * a probe of a wrong path used to manufacture a 118,784 B rig and then report it as writable-and-free.
+ * Absence is reported apart (`missing: true`) so the caller stops retrying instead of misreading it as a
+ * lock (#4955).
  */
 async function probeWritable(dbPath, { busyTimeoutMs = 1_000 } = {}) {
+	try {
+		assertStoreReadable(dbPath);
+	} catch (err) {
+		return { ok: false, missing: true, reason: String(err?.message ?? err) };
+	}
 	try {
 		const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
 		const storage = await openNodeSqliteStorage(dbPath, { busyTimeoutMs });

@@ -33,14 +33,23 @@ function initRepo(dir) {
 
 const dir = mkdtempSync(join(tmpdir(), "durig-provenance-"));
 
-/** The CLI, with a scratch DB, parsed as JSON. */
+/** The CLI, with a scratch DB, parsed as JSON.
+ * The DB is created up front by this fixture: `metrics` is a READ verb, and since #4955 a read
+ * refuses a store that is not there instead of manufacturing one — and what this demo measures is
+ * provenance over a real (empty) rig, not the absent-store refusal. */
+const metricsDb = join(dir, "metrics.sqlite");
+{
+	const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
+	const made = await openNodeSqliteStorage(metricsDb);
+	await made.close();
+}
 function cliMetrics(env = {}) {
 	const r = spawnSync(process.execPath, ["cli.mjs", "metrics"], {
 		cwd: durigDir,
 		env: {
 			...process.env,
 			DURIG_PROVIDER: "faux",
-			DURIG_DB: join(dir, "metrics.sqlite"),
+			DURIG_DB: metricsDb,
 			...env,
 		},
 		encoding: "utf8",

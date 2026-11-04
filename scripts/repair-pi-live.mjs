@@ -7,6 +7,7 @@
 //   node repair-pi-live.mjs <db> <conversationId>
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { assertStoreReadable } from "../src/readclient.mjs";
 
 const db = process.argv[2];
 const conversationId = Number(process.argv[3]);
@@ -15,7 +16,17 @@ if (!db || !Number.isFinite(conversationId)) {
 	process.exit(2);
 }
 
+// Even a REPAIR tool refuses a store that is not there: the engine's open would create an empty one, and
+// "repaired" a database that never held the corrupt document (#4955). A typo in <db> must be loud.
+try {
+	assertStoreReadable(db);
+} catch (err) {
+	console.error(String(err?.message ?? err));
+	process.exit(1);
+}
+
 const storage = await openNodeSqliteStorage(db);
+
 try {
 	const page = await storage.scanDocuments(
 		{ scope: { kind: "conversation", conversationId }, at: "current", kind: "pi.live" },

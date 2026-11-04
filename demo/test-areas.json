@@ -225,6 +225,7 @@
     ],
     "readapi": [
       "demo/context-measure.test.mjs",
+      "demo/read-no-create-store.test.mjs",
       "demo/readapi-activity.test.mjs",
       "demo/readapi.test.mjs",
       "demo/viewmodel.test.mjs"

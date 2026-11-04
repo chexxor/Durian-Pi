@@ -22,6 +22,15 @@ export const SPEND_CAUSE = "spend_cap_exceeded";
 export const SPEND_CAP_KEYS = ["DURIG_SPEND_CAP_CALL_USD", "DURIG_SPEND_CAP_RUN_USD", "DURIG_SPEND_CAP_STORE_USD"];
 
 /**
+ * A READ was asked about a store that does not exist (#4955). Raised by the read seam
+ * (`src/readclient.mjs`), acted on far away: `cli.mjs` renders it as `{ok:false, cause, db}` plus the
+ * wrong-rig note, `src/tui/durable/enter.mjs` must NOT read it as "held by a writer" and retry, and
+ * `check` records it as a skip reason. The name exists so none of them pattern-matches prose, and so
+ * "no data" can never be printed as "nothing wrong".
+ */
+export const NO_STORE_CAUSE = "no_store";
+
+/**
  * Is this error message a MONEY stop from the rig's own cap (rather than a provider limit or a transport
  * failure)? Both tests are kept: the cause name, and the phrase the message carries so pi-ai's retry classifier
  * treats it as non-retryable (`pi-ai/utils/retry.js` NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN). A message can
