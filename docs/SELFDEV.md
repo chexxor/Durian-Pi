@@ -1767,3 +1767,26 @@ the prefix forever.
     `cmp` of `queue` vs `queue --json` at the candidate sha, (b) `queue --id 5069` bytes on the *live* store, and
     (c) `check` finding-count + the `context-over-window` row still being `pass` (proof the `cli.mjs` union kept #5049's
     wiring). merge-tree exit 0 and a green suite passed all of those silently.
+17. **Re-measure a landing gate in the same turn you act on it — a stale number in your own brief is how you
+     nearly land a conflict.** I wrote "merge-tree exits 0 at `d1c6d8a6`" into a seat brief from an earlier
+     measurement; devtools re-ran it at **two** trunks and got **exit 1** both times (one content conflict,
+     `docs/runbooks/session-start-cost.md`) and corrected me in writing. `merge-tree` verdicts transfer only
+     while the *left* side is the same sha — say which sha you measured against, or the number is decoration.
+18. **A seat's verify fork leaves a redundant branch, and `-d` will refuse it.** devtools forked
+     `d1c6d8a6` into `item-5066` to build a dependency set, then `complete_work` failed its cleanup
+     (`refusing to remove worktree …: junction/symlink detected at undefined/anthropic-ai-sdk`) — so the
+     worktree survived. After removing the worktree by hand, the ref still points at the *same* sha as
+     `item-4955`, and `git branch -d` refuses an unmerged ref. Prove the two shas identical
+     (`git rev-parse item-5066 item-4955`) and only then `-D` it. Never delete a fork before that proof.
+19. **The census instrument is now a narrowed queue read, not `status --json`.**
+     `node cli.mjs queue --status held --to devtools` returns `rows`, full `counts` and the `attention` lines
+     derived over all 5,078 rows in **149,794 B** (vs a 22,470,935 B dump); the census view itself is a few
+     hundred bytes. `status --json` is still **24,134,869 B** — dump it to a file and project `context[seat]`. Counts come from the
+     `queue-census` read view over the *un-projected* set, and every narrowed answer says
+     `narrowed: "payload"` — the storage read is still whole, so never read a small answer as a small read.
+     There is **no `--census` flag**; `queue-census` is a broker read view (a broker on old code refuses it —
+     restart the broker after landing).
+20. **Seat stderr is full of `durig guard: 1 write target(s) … could not be resolved (.d-$d.txt)`.** It is not
+     an error, but it is not free either: a shell write target built from a variable is *not checked* by the
+     guard. When a seat's command writes through `"$var"`, the guard's protection silently degrades to nothing.
+     Prefer literal paths or the edit tool in commands you brief a seat to run.

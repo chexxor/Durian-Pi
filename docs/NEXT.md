@@ -6,9 +6,11 @@
 
 Superseded session blocks are archived verbatim in `docs/NEXT-ARCHIVE.md`.
 
-**Current item:** #5066 — re-verify `item-4955 @ d1c6d8a6` (read verbs refuse instead of manufacturing a store).
-**Blocker:** devtools is the only seat with the context headroom for it and it must be idle first; separately,
-no verifier-class provider exists (nothing on `127.0.0.1:1234`), which gates #5052/#5055/#5058.
+**Current item:** the #4955 chain — lead owes a landing entry (or a re-cut row) after devtools' #5066 report;
+`item-4955 @ d1c6d8a6` is **not landing-ready**: `git merge-tree --write-tree main d1c6d8a6` exits **1**, one
+content conflict in `docs/runbooks/session-start-cost.md`.
+**Blocker:** that landing entry (mine to execute, lead's to issue). Separately, no verifier-class provider
+exists (nothing on `127.0.0.1:1234`), which gates #5052/#5055/#5058.
 
 **ROADMAP 228 is delivered and in `main`.** `main = origin/main = 89c474d0`, 8 worktrees (5 locked),
 branches with unique work = 2 (`item-4955` ahead 2, `wip/seat-prompt-files` ahead 1). A delegate reading
@@ -43,24 +45,29 @@ answer: the verifier class has no provider).
 
 ## State
 
-- **Trunk:** `main = origin/main = 89c474d0`. `git worktree list` first entry is the landing worktree; the
-  seat root mirror at `/home/chexxor/Git/durian-dev/seatroot` is realigned to the same sha (branch
-  `seatroot/linux`).
-- **Queue:** 5,076 rows — done 3,804 | cancelled 800 | held 337 | queued 117 | deferred 15 | claimed 3.
-- **`check` = 108 findings**, all store hygiene (#5063's count; it moved from 106 purely by row
-  accretion). `context-over-window` = `pass`. `instrument-provenance` = CLEAN.
+- **Trunk:** `main = origin/main = 3ac59b55` (#5071 landed this session). `git worktree list` first entry is
+  the landing worktree; the seat root mirror at `/home/chexxor/Git/durian-dev/seatroot` is realigned to the
+  same sha (branch `seatroot/linux`). Worktrees 8 (5 locked); branches holding unique work: `item-4955`
+  (ahead 2), `wip/seat-prompt-files` (ahead 1).
+- **Queue (live census, 834-class read):** 5,078 rows — done 3,806 | cancelled 800 | held 337 | queued 117 |
+  deferred 15 | claimed 3. Attention: 14 deferred items parked on questions, and **#4970 records NO TARGET**
+  (“nobody has been asked”) — route to `lead`/`pm`.
+- **`check` = 107 findings**, all store hygiene / rig shape (56 `duplicate-item`, 44 `citation-unresolvable`).
+  `context-over-window` = `pass`. `instrument-provenance` = CLEAN.
 - **Capacity (rig properties, D201 — never edit, never prefix):** context 200,000 / `MAX_TOKENS` 16,384 /
   `local/iq3_s` reserve 20,480. Spend caps armed 0.05 / 0.10 / 4.00 (D202).
-- **Seat context at last read:** devtools 95,555/200,000 (0.478), lead 63,098/200,000, pm 115,191 (0.576),
-  impl 167,445 (0.837 — reset before its next build wake), qa 23,213/24,576 (0.945).
+- **Seat context (`status --json` → `context[seat]`, #5049's map):** pm 114,617/200,000 = 0.573 `current`;
+  advocate 244,751/24,576 = 9.959 **`behind-boundary`** — the artifact the guard is designed to stay silent
+  about, now readable directly off `head.state`.
 - **GPU is the dispatch limit** — one 200k build wake at a time on this card.
 
 ## Watch-list (delegate)
 
-- **Land #4955 only after #5066 reports** — lead ruled "DO NOT land this row; I issue a landing entry only
-  after your report" and the delegate honors that even though `merge-tree` exits 0 at `d1c6d8a6` today.
-  The row is `done`, the worktree `seatroot/item-4955` is unlocked and clean: a `done` row with an unlanded
-  branch is exactly the shape that silently loses work, so keep it until the landing entry runs.
+- **Land #4955 only after lead's landing entry.** `merge-tree` exits **1** at `d1c6d8a6` (conflict:
+  `docs/runbooks/session-start-cost.md`) — my earlier "exit 0" was wrong, and devtools proved it at two
+  trunks. The row is `done` while the branch is unlanded, and the defect is live on `main` (a wrong
+  `DURIG_DB` manufactures a 122,880 B store; the branch refuses with `cause:"no_store"`). Keep
+  `seatroot/item-4955` (unlocked, clean) until the entry runs.
 - **`demo/broker-stop-audit.test.mjs` (#5056) is a REAL flake, not my imagination:** it failed 2/2 under
   `--jobs 8` at `ea4ace6c` AND 1/1 at `main` `e3118fa0` in the same load window, while passing 3/3
   standalone. Discriminator that settled it: run the full suite at `main` in the same load window. Land
