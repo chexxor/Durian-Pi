@@ -1722,3 +1722,48 @@ the prefix forever.
 - **Read the seat's `DONE` row body instead of waiting for its `send` to settle.** #5049 was `done`, with commands,
   exits, the failing-first capture and the unverified list in row **#5057**, while the seat's turn was still generating
   on the next row. `queue --json` to a file, then project the ids you need — never into your own context (21 MB).
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-03 late evening, D202 continued — the landing reads that caught what the suite could not)
+
+9. **A `merge-tree` exit 0 and a green full suite do NOT prove a re-cut is safe to land — check the verb's contract.**
+   The `#5039` re-cut merged `cli.mjs` cleanly (the row-scoped `queue --id` read on one side, `cmdCheck`/`seatContextMap`
+   from #5049 on the other), the full suite was **251/251 `failed: []`** twice over, and it still shipped a break:
+   `cmdQueue` now refused *every* non-`--id` argument, so `node cli.mjs queue --json` went from exit 0 to
+   `{"ok":false,"error":"queue: unknown argument --json"}` — a form documented in
+   `docs/runbooks/session-start-cost.md` (Diagnose step 1 **and** its front-matter evidence line). No demo pinned it,
+   because on `main` it was a no-op. **Delegate gate worth keeping (one minute, no GPU):** enumerate the verb's
+   documented forms and probe them on `main` and at the candidate sha, comparing exit codes *and* bytes — at `e3118fa0`
+   every form (`--json`, `--status held`, `--to pm`, `--ids`, `--no-body`, `--fields id`, `--zork`, even the
+   nonexistent `--id 5063`) exited 0 printing the identical **22,417,821 B**. `lead` ruled the shape in **#5074**:
+   *the fix for fail-open is not "refuse everything", and a compat pin for a documented form must land **before** the
+   refusal that could refuse it.*
+10. **`git merge-tree --write-tree main <ref>` can be permanently unsatisfiable — land the SHA.** `item-4986` is pinned
+    by a **locked** worktree (`seatroot/item-4986`), git refuses to force-update a checked-out branch, so the re-cut
+    lived on `item-5039` and the old ref's conflict set kept growing. A landing gate keyed to that ref can never close;
+    `lead` cancelled its own **#5040/#5041** for exactly this (a cancelled gate also never resolves to `done`, so the
+    dependent row sat unworkable). `merge.md` Do step 3 already takes a sha — use it, and gate on
+    `merge-tree main <sha>` + `merge-base --is-ancestor`.
+11. **`pgrep -f "send <seat>"` matches your own shell wrapper.** Twice this session I read `RUNNING` from a poll that was
+    grepping its own `bash -c` command line. The reliable read is the settled JSON in the send's out file
+    (`{"settledStatus":"done"}`) or `pgrep -af` filtered on `^node cli.mjs`.
+12. **A suite red on a candidate branch is not evidence about the branch — compare against `main` in the same load
+    window.** `demo/broker-stop-audit.test.mjs` failed 2/2 at `ea4ace6c` under `--jobs 8` and passed 3/3 standalone,
+    which reads like a flake but proves nothing. The discriminator that closed it in 48 s: run the *same* full suite at
+    `main` in the *same* load window — it failed there too (249/250 at `e3118fa0`). Same signature, same demo, unrelated
+    diff. That is #5056, and a landing entry that just says "suite red ⇒ blocked" will stall on it every time; a landing
+    entry that says "suite red unless the same red reproduces at `main` under the same `--jobs`" is honest. Re-run the
+    suite once more at the merged sha (it came back 252/252 at `89c474d0`) and say which runs you did.
+13. **The queue item object's key is `status`, not `state`.** Every projection that reads `.state` prints `undefined`
+    and looks like a store problem. Real keys: `id from to subject body status optimizedVia transitions resultSummary`;
+    a transition is `{at, event, by}`. `tools/queue-rows.mjs` now carries this, plus `--census`.
+14. **A `done` row with an unlanded branch is a silent work-loss, and it does not look like one.** #4955 turned `done`
+    at 02:42 while `item-4955 @ d1c6d8a6` (2 commits ahead of `main`) sat unverified against a trunk that had moved
+    twice. `git worktree list` + `git rev-list --count main..<branch>` is the census that catches it; the queue's status
+    column does not. Prune nothing with `ahead > 0`.
+15. **Speed-up: `queue --id <id>` (since #5063) is the delegate's cheap row read — 4,563 B instead of 22,432,332 B.**
+    Do not dump the whole queue to a file and grep it again unless you need the census. One row per call is now correct,
+    and unknown flags fail fast at ~103 B instead of silently handing you the 22 MB document.
+16. **Speed-up: the merge is only half a landing.** The three reads that actually decided #5039/#5063 were (a)
+    `cmp` of `queue` vs `queue --json` at the candidate sha, (b) `queue --id 5069` bytes on the *live* store, and
+    (c) `check` finding-count + the `context-over-window` row still being `pass` (proof the `cli.mjs` union kept #5049's
+    wiring). merge-tree exit 0 and a green suite passed all of those silently.

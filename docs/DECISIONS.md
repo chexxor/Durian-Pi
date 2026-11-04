@@ -8561,3 +8561,31 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
   above. (4) `google/gemini-3.1-pro` is now **refused at registration** (one maximal call = $14.00 = 3.50× the whole
   grant); whether that row should be dropped or its declared window lowered is a capacity ruling (D201), and the
   refusal prints on every CLI start until someone rules.
+
+## D203 — a documented verb form is a *known* flag: the compat pin lands before the refusal (lead ruled, delegate landed, 2026-11-04)
+
+ROADMAP 228 asked for row-scoped queue reads **and** an unknown-flag refusal. The re-cut branch (#5039) shipped
+both, and its own demo proved `queue --id 5063` returns 4,446 B out of 5,075 rows — but it also changed the
+**firing population** of a form every delegate script uses: `node cli.mjs queue --json`. On `main` that form exits
+**0** (and so does every other argument: `main`'s `cmdQueue()` takes no parameters at all, so all nine probed forms
+exit 0 with a byte-identical 22 MB document — total fail-open). On the branch, `--json` exited **1** with
+`{"ok":false,"error":"unknown argument --json"}`. Lead ruled, and the delegate landed on that ruling:
+
+- **The principle (#5074):** "The fix for fail-open is not 'refuse everything,' and a compat pin for a documented
+  form must land **before** the refusal." Refusing the whole arg surface would have broken the delegate's own
+  instrument (and every seat script) in the same commit that tried to make reading cheaper.
+- **What landed (#5063 @ `ea4ace6c`, merged as `89c474d0`):** `--json` is a **known, accepted, documented no-op**;
+  the known set is `{no args, --json, --id}`; `--id <id>` returns the row scope. Both halves are pinned by
+  `demo/queue-compat-args.test.mjs`, which fails-first on purpose — devtools ran the *pre-fix* parser
+  (`git show c2fc4032:cli.mjs`) over the same `src/` and got exit 1 / 94 B, so the pin would have gone red before
+  the fix. Live: `queue` and `queue --json` are `cmp`-identical (22,432,332 B); `queue --id 5069` is 4,563 B
+  (4,915x); `--zork` / `--jsonn` exit 1 at ~103 B **without emitting the document**.
+- **Attribution matters more than the label.** Lead pinned the refusing parser on the re-cut merge; devtools
+  measured it into `b5822eac` (item-4986's own commit) and showed `main` has no parameter list at all. That
+  changed what "compat" meant: accepting *everything* would be lead's wording taken literally, so devtools
+  audited **documented call sites** instead and deliberately did **not** pin #5071's flags as refused, because
+  pre-writing another row's gate is how the queue rots.
+- **What is still open, named so nobody reads 228 as finished:** the *complete* known/unknown table for every
+  read verb is **#5071**; `wip/seat-prompt-files` (#5067) is parked until #5071 lands because it touches the same
+  region of `cli.mjs`; and `src/checkup.mjs` is **dead code that is still emitted** — lead removed its stale doc
+  reference (#5064) and routed the removal to `pm` (#5065) rather than patching docs himself.
