@@ -8707,3 +8707,58 @@ demo surfaces). Recording which part went where is the point: the previous sessi
   no seat re-pointed; no capacity value edited or prefixed; no `--force` and no `git add -A`; **no verifier-model
   server touched** (nothing listens on `:1234`, and restarting it is an operator surface). The one metered call
   spent **$0.000002** of the $4.00 store grant, deliberately, as the reachability receipt for ruling 3.
+
+## D206 — the operator closed the push grant, ruled that the project references **no hostname**, and made the
+clock-out response a deliverable; then ordered the pi-durable update, whose real cost turned out to be 508 commits
+of unlooked-at drift (2026-11-04T09:4x–11:3xZ, delegate; Linux Fedora 44 `7.2.14-200.fc44.x86_64`, node v24.22.1,
+git 2.56.0 — signed by OS+distro+kernel, not by hostname)
+
+- **Push is closed out.** The operator pushed: after `git fetch origin`, `origin/main == main == 1a3c57c8`,
+  **0 ahead / 0 behind**. Every row body that says "unpushed, ask for the grant" is now stale — `lead` folded that
+  into its rows, and the D204 chain (land → prove ancestry → push) is complete.
+- **"The project should not need to reference a hostname."** Measured before acting, and the finding is that the
+  dependence is **documentary, not structural**: the only `hostname` uses in the tree are `new URL(baseUrl).hostname`
+  (`src/providers/local.mjs:62`, `tools/model-probes/metered.mjs:94`) — network hosts, untouched. What exists is
+  `ThinkStation-P3` written **10× into `docs/DECISIONS.md`, 3× into `docs/NEXT-ARCHIVE.md`, 5× into
+  `docs/SELFDEV.md`, 2× into `docs/NEXT.md`** — a label no transcript ever measured (D205). Convention now in
+  `AGENTS.md`: sign a measurement **OS + distro + kernel + node** (exactly what
+  `tools/rig-portability-audit.mjs` prints: `linux <kernel> node <v>`), never `user@host`. Historical re-signing is
+  **#5085/#5093**'s as one pass, not per-line churn. Do not conflate this with the audit finding
+  `seat-host-unaware` (ROADMAP 217), which is about the host **OS and shell**.
+- **The session-closure response is now part of the entry point** (operator directive, same ruling set). Clock-out
+  item 6 of `AGENTS.md` requires a report the operator decides from, not an activity log: **value added** (each
+  line with its evidence), **the operator's decisions with options, pros/cons and the delegate's recommendation**,
+  **the state the team is in**, **what is unverified and the cheapest probe that closes it**, and **cost**. The
+  rule that keeps it honest: the response points into the docs and **never contradicts them**.
+- **The update order, and the finding underneath it.** Operator: *"update our version of pi-durable … a proper
+  update which includes identifying changes and new features and ensuring we accommodate them appropriately."* The
+  delta is now a tracked artifact, **`docs/PI-UPGRADE-DELTA-2026-11-04.md`**, because the alternative was a
+  gitignored `.spike/` analysis lost next session. Headline numbers (all measured, refresh commands in that file):
+  pin **`2ec55d80…`** stamped 1.3.0 since **2026-10-19**; upstream tip **`fcebc099…` = 1.5.0**; **508 commits
+  behind, 0 ahead**; two releases skipped (**v1.4.0 2026-10-21**, **v1.5.0 2026-11-02**). **The removal that
+  matters most is one we are still calling** — `watchEvents()` and the whole `AgentEvent*` vocabulary are gone
+  upstream, and they are the input alphabet of `src/tui/durable/bridge.mjs` and `src/inflight.mjs` (the
+degeneration guard). **`lead`'s own framing is the durable lesson: the 508 commits were not the failure — the
+failure is that drift was only reported when someone chose to run `scripts/sync-pi.mjs`, so two releases went
+unnoticed for 16 days.** Row **#5094** makes drift a visible finding rather than a query.
+- **Store risk, measured and it cuts both ways.** Tip's `SQLITE_MIGRATIONS` is identical to the pin's (max version
+  **2**), and our live store is **already at version 2** (`durable_schema = {singleton:1, version:2}`, read-only
+  open) — so the update runs **no** new migration, **and** released pi-durable ≤ 1.3.0 **cannot reopen
+  `selfdev.sqlite`**: `sync-pi --unlink` is a trap, not an escape. The only rollback is a copy, so the delegate
+  took one before anything moved: **`.spike/backups/20261104T1130Z/selfdev.sqlite`, sha256
+  `02da60e3a5bbb79a4148cfae6f6cf5d19f1a35ddde73bc4d5239759a2f5be952`, `cmp`-identical, broker down, size baseline
+  `463,142,912 bytes`** (that number is also the baseline for the `checkpointWhen` store-growth report).
+- **Rulings `lead` made inside its authority** (recorded so a later session does not re-litigate them): **we pin a
+  TAG and never float on `main`**, staged `v1.4.0 → v1.5.0` (D129 had already ruled the published 1.4.0 not
+  drop-in); **`settings.restartLimit = 3`**, explicit and demo-asserted, with 1.5.0's "parked tasks end visibly"
+  semantics accepted as correct; **`checkpointWhen` fires on the transitions a reader acts on** (claim, complete,
+  defer, hold, release) rather than on prose or metric churn; **no same-vendor credential fallback**, because a
+  verifier that falls back to the producer's vendor is not independent — a gate that cannot run **fails with a
+  named cause**. Two stop rules were delegated to me to hold: stage 1 exists for **attribution, not ceremony**, and
+  **a green obtained by weakening `src/inflight.mjs`/`demo/guard.test.mjs` is a red in disguise**.
+- **What the delegate did and did not do here.** It did: the read-only research (drift, 55/65/155/226-commit
+  per-package counts, a specifier-resolution probe against the tip tree, the store-schema probe, the per-file
+  impact counts), the **backup**, two rulings written into `AGENTS.md`/`docs/SELFDEV.md`, one tracked research doc,
+  and the two dispatches that carry the operator's intent (`lead` `d012-lead`, settled `done`; `devtools`
+  `d014-devtools`, routed by `lead` to **#5089 → #5090 → #5094 → #5095 → #5096**). It did **not**: build or link a
+  vendor tree, edit `pi-main.pin.json`, touch `src/`, claim/complete/defer/route a row, or start the broker.
