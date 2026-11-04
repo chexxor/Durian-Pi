@@ -8525,3 +8525,39 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
   fails by omission. It does **not** build any guard: the declared-vs-served `check`, the dispatch-time pre-flight,
   the cause classes and the spend cap at the provider seam are still the team's build (`#4973`, `#5037`), and the
   delegate changed no source under `src/`.
+
+## D202 — the spend cap is a rig property, armed in the TRACKED default config, and the endpoint decides locality (2026-11-03T20:4xZ, delegate landing `#5047`, Linux `chexxor@ThinkStation-P3`, node v24.22.1, `main 203849c3`)
+
+- **What landed, and how I know.** `main = 203849c3` is the `--no-ff` merge of `item-5047 @ efe45e66` (10 commits,
+  26 files, +1984/−325); `git merge-base --is-ancestor efe45e66 main` is true. My landing read, run by me and not
+  quoted from the seat: the acceptance probe exits **0 with 11/11, 0 RED** (`P6b`: "over-cap rows: none; drifted rows:
+  none"); the full suite in the approved seat root at the merged sha is **249 passed, `"failed": []`, 44.6 s**;
+  `tools/instrument-provenance.mjs` is CLEAN after the curated slice moved to
+  `src/providers/vendor/pi-deepinfra/deepinfra-models.ts`.
+- **The decision worth keeping: money is a rig property, not a per-verb prefix.** The three caps
+  (`DURIG_SPEND_CAP_CALL_USD 0.05`, `DURIG_SPEND_CAP_RUN_USD 0.10`, `DURIG_SPEND_CAP_STORE_USD 4.00`) are armed in the
+  **tracked** `durig.config.default.json`, because `durig.config.json` is gitignored (`.gitignore:8`) and absent in
+  every item worktree — a cap declared only in a private copy is **unarmed exactly where seats work**. Same shape as
+  D201's capacity keys one commit earlier; the two together mean a fresh worktree is bounded and sized by the repo, not
+  by what the operator remembered to prefix.
+- **The values are still provisional, deliberately.** `impl` put it on the record at `#5047`: 0.05 / 0.10 / 4.00 are
+  the acceptance probe's proposals, and choosing them is an operator/architect ruling (D193). The delegate's only claim
+  is that they are **armed** and that the **store cap equals the operator's $4 grant and was not raised**. Changing a
+  value is not a delegate call and no seat is authorised to.
+- **Why the guard sits at the provider seam and why locality is the endpoint's property.** One wrap next to
+  `wrapProviderWithTrace` sees every billed path the rig owns — including pi-durable's compaction summarization, which
+  the seat-count view never showed. A `cost {0,0,0,0}` row on a **metered** host was the leak: free was a property
+  stamped on a *provider class*, so a metered endpoint inherited it. Locality is now derived from the endpoint
+  (loopback vs metered host), the placeholder credential is refused against a metered host, and an unpriceable metered
+  model registers **no** row — so it fails as `no_model` before a request rather than as a mystery $0.
+- **The refusal-before-spend rule, restated where it can be found:** money goes to the ledger, **stops** go to
+  store/attention/stderr. A projected crossing writes **no** ledger row; a tripped cap is the named non-retryable cause
+  `spend_cap_exceeded` (`src/causes.mjs`) and parks the item — without the named cause, the SDK's 2 retries plus the
+  supervisor's `repeated_failure` threshold make the failure mode a **spend loop**.
+- **What this does NOT settle, named so nobody reads it as done.** (1) No **verifier-family** review happened: this
+  window has nothing on `:1234`, so the landing rests on a non-author delegate re-running instruments, which is not the
+  `docs/runbooks/merge.md` W2 row. (2) No commit in `f9f8f389..item-5047` touched `docs/FEATURES.md` and the row carries
+  no "no feature surface" note — per `merge.md` that is routed to `pm`, not patched by the delegate. (3) The cap values
+  above. (4) `google/gemini-3.1-pro` is now **refused at registration** (one maximal call = $14.00 = 3.50× the whole
+  grant); whether that row should be dropped or its declared window lowered is a capacity ruling (D201), and the
+  refusal prints on every CLI start until someone rules.

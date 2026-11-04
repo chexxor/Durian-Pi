@@ -1671,3 +1671,54 @@ the prefix forever.
     The delegate's safe sequence, run after every landing: `git merge-base --is-ancestor <br> main` →
     `git -C <wt> status --porcelain` = 0 → `git worktree remove <wt>` → `git branch -d <br>` → `git worktree prune`.
     **Locked** worktrees are another seat's cwd and stay.
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-03 evening, D201/D202 — every number measured in this session, Linux `chexxor@ThinkStation-P3`, node v24.22.1)
+
+1. **The approved seat root is on branch `seatroot/linux`, NOT `main` — merging there lands on the mirror.** Measured:
+   `git status` in `/home/chexxor/Git/durian-dev/seatroot` → `On branch seatroot/linux`; `git merge --no-ff item-5047`
+   produced `4ed8096` on that mirror while `main` sat at `f9f8f389`, and `git push origin main` then pushed the
+   **un-landed** main (`c486120b..f9f8f389`) and reported success. Land in the worktree where `main` is actually
+   checked out — the first line of `git worktree list` (`/home/chexxor/Git/Durian-Pi`) — then realign the mirror:
+   `git rev-parse <mirror-tip>^{tree} <new-main>^{tree}` (equal ⇒ same content) and `git -C <seatroot> reset --hard
+   <new-main>`. Proof the landing is real stays `git merge-base --is-ancestor <tip> main`.
+2. **`--json` does not guarantee pure JSON on stdout.** `scripts/test.mjs --json` prepends `running 249 test(s) …`, and
+   since #5047 every CLI start can print a spend refusal (`{"spend":"catalog-refused","model":…}`) **before** its JSON.
+   Parse from the first `{\n` (`s.slice(s.indexOf("{\n"))`); `require()`/`JSON.parse` of the whole file throws.
+3. **`cli.mjs check` `pass:false` with ~106 findings is the store's hygiene state, not a landing regression.** Counted on
+   merged `main`: `duplicate-item=55 citation-unresolvable=44` plus 7 rig findings (`store-missing-seat` for a `worker`
+   seat the store does not hold, `stray-seat`, `no-verifier-seat`, `single-model-rig`, `seat-without-capabilities`,
+   `verification-without-evidence`, `evidence-tree`). Count findings **by id** before blaming or clearing a merge.
+4. **`tools/seat-turn-shape.mjs` opens `./selfdev.sqlite` relative to cwd.** In the seat root it prints `cannot read
+   ./selfdev.sqlite: no seat named null` — run it from the operator checkout (or pass the store it can find).
+5. **One build wake at a time on this card once the declared window is 200,000.** While a single seat generated,
+   `nvidia-smi` read 14.9 GB then 22.9 GB used at 41–62 % util; a 200k window costs ~5 GiB of KV per slot on top of
+   ~21 GiB of weights, so two concurrent `send` harnesses is the same mistake as the slot-under-provisioning entry in
+   `docs/runbooks/local-provider-down.md`. Serialize dispatch: queue + brief ready, dispatch only after the live turn
+   settles.
+6. **An item worktree cannot read the LIVE store at all on the lockfile set** — `pi-durable@1.3.0` refuses with
+   `Durable SQLite schema version 2 is newer than supported version 1`. So a seat's "no suite run" is not merely 8 tests
+   short: the end-to-end `status`/`check`-against-the-store path only exists in the vendor-set trees (operator checkout,
+   seat root). Cover that leg yourself; do not accept a seat's skip-with-reason as the positive path.
+7. **The store has no `attention` table, and `require("better-sqlite3")` resolves nowhere here.** Tables are
+   `durable_schema, durable_metadata, record_ids, conversations, entries, submissions, documents, document_revisions,
+   tasks`; attention is **derived**, so `status`/`watch` are the surface. A runbook Diagnose step that hand-opens the
+   store with `better-sqlite3` cannot run (found and fixed inside #5049 against #5047's own runbook).
+8. **`tools/what-to-test.mjs --base=main --json` can answer `ok:false` because a changed file carries CR bytes** —
+   `src/attention.mjs` is CRLF: 515 `control byte 0x0d` findings at the #5049 tip, **475 already at `main`**; 20 of 764
+   tracked files carry CR. That refusal means *run the full gate*, not *fix the file*: normalizing rewrites ~511 lines
+   and buries the change. Land on the full gate, report the pre-existing CRLF as its own question.
+
+**Speed-ups measured tonight.**
+- **Mint the acceptance probe before dispatching the build, then let its exit code be the row's definition of done.**
+  #5047 was routed with `tools/model-probes/spend-cap-acceptance.mjs` at exit 1 (2/11, 9 RED) and landed at exit 0
+  (11/11, 0 RED) — the whole 8-commit build became one command in the landing read, and the probe spends nothing
+  (loopback stub, literal fake key, no `gate.mjs` import). It needs a dated catalog snapshot:
+  `curl -s https://api.deepinfra.com/v1/openai/models` → `.spike/5015/catalog-<YYYY-MM-DD>.json` with `fetchedAt`
+  stamped (gitignored, so re-seed per tree; 173 models on 2026-11-03).
+- **Land, then run the suite in the seat root (44.6 s, 249 tests, `--jobs 8`).** `git merge-tree --write-tree main <br>`
+  prints the merged tree (`b9d894bf`), and the merge produced exactly that tree — so the seat-root verdict transfers to
+  the landing decision, and the seat root is the only tree holding `node_modules` + `vendor/pi-main`. No scratch
+  worktree, no dependency install.
+- **Read the seat's `DONE` row body instead of waiting for its `send` to settle.** #5049 was `done`, with commands,
+  exits, the failing-first capture and the unverified list in row **#5057**, while the seat's turn was still generating
+  on the next row. `queue --json` to a file, then project the ids you need — never into your own context (21 MB).
