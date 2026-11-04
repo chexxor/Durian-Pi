@@ -73,6 +73,43 @@ The git half of the landing is DONE (see "The landing" below) — do not re-merg
   model (`:1234` answers nothing; the granted class needs price + credential + roster — D205). Landing was
   therefore made on the delegate's own re-run of the seat's gates, with the artifact sha and ancestry proven.
 
+## Local inference (Strata) — the 401 is FIXED, and the firewall is the next gate (measured 2026-11-04T12:1x–12:4xZ)
+
+**The break:** the Strata server on `127.0.0.1:47831` now **demands an API key**; `src/providers/local.mjs` sends
+`LOOPBACK_PLACEHOLDER_KEY` (`"no-key-required"`) when `DURIG_LOCAL_API_KEY` does not resolve, so all **seven**
+`local/iq3_s` seats (`pm impl lead scribe devtools security architect`) failed `model_error: 401 "Invalid API key"`.
+A `send devtools` (`d014-devtools`) came back **unanswered with zero tokens** and read like a model fault. The
+registration path does **not** refuse (loopback needs no key by design), so `check`/`config`/port probes stay green
+while every run fails.
+
+**The fix (done, verified, no secret in the tree):** key in **`~/.config/durig/env`, mode 600, outside the repo**;
+load it with `node --env-file="$HOME/.config/durig/env" cli.mjs serve` — and every `send`/`run`/`broker-serve`
+that opens a harness. Verified: the provider's own path answered `stopReason:"stop"` (59 in / 36 out, cost 0 by
+locality); `cli.mjs config` prints **0** occurrences of the value; `status.secretFindings` `[]`; and
+`send devtools d015` is **running** and executing tools. **Never** put the key in `durig.config.json`: gitignored
+still means *inside the tree*.
+
+**The harness (this pi instance) reaches the same server.** `~/.pi/agent/models.json` provider `strata` now carries
+`"apiKey": "!sed -n 's/^DURIG_LOCAL_API_KEY=//p' \"$HOME/.config/durig/env\""` (a `!command`, evaluated per
+request, uncached) instead of the literal `"local"` that caused the same 401. Verified with the variable **unset**:
+`pi --print --provider strata --model iq3_s` → `PI-STRATA-OK`.
+
+**LAN access — what is true right now:** the app's own **inference-only share listener is UP** on
+`0.0.0.0:47832` (`/v1/models` `401` without a bearer token, `200` with; serves only `/v1/models`,
+`/v1/chat/completions`, `/v1/messages`, never the UI). The host server stays loopback-only on `47831`.
+**`firewall-cmd --query-port=47832/tcp` → `no`**, so a second computer is rejected; and `47831/tcp` is allowed in the
+**runtime** config only, so that allowance vanishes on the next `--reload`/reboot. Firewall state: firewalld active,
+zone `public` on `enp39s0`, services `dhcpv6-client mdns ssh`. **Trap, measured:** a same-host test through your own
+LAN IP passes even for a port in no allow list (`0.0.0.0:39999` → `HTTP 200`) because own-address traffic loops back
+over `lo` — only `--query-port`/`--list-all` or a second machine answers a firewall question.
+
+**Also found while verifying (a row for `lead` to mint, delegate did not edit it):**
+`tools/broker-serve.mjs:228` fetches `/v1/models` with **no auth header**, while its completion probe at `:255` does
+send one. On a key-protected loopback server that yields `BLOCK provider-DURIG_LOCAL_-unreachable: … HTTP 401` for a
+provider that works — the preflight now lies in the safe-looking direction. One-line fix: send
+`authorization: Bearer ${process.env[s.apiKeyEnv]}` on the models probe too, and treat `401/403` as *reachable but
+unauthorized* naming the variable.
+
 ## State (measured 2026-11-04T09:1x–09:2xZ)
 
 - `main` = the docs commits on top of the landing merge **`2690e6ac`** (measure it), working tree clean, **ahead
