@@ -1867,6 +1867,20 @@ the prefix forever.
     still means *inside the tree* where a backup, a worktree copy or a stray `git add -A` can sweep it. Verified
     after: `stopReason:"stop"`, `cli.mjs config` prints **0** occurrences of the value, `status.secretFindings`
     `[]`. Runbook: `docs/runbooks/local-provider-down.md` state 5.
+34. **Bare `cli.mjs check` in this checkout audits the WRONG rig, and its findings look authoritative.** With no
+    path argument `check` auto-discovers `rig.json` in cwd or a parent (`cli.mjs:3081-3095`, #491 C8) — and this repo
+    **tracks a 2-seat `rig.json`** (`pm`, `worker`, `model: null`, 431 B) beside `rig.selfdev.json` (12 seats).
+    Measured 2026-11-04: bare `check` → 120 findings including `no-verifier-seat`, `single-model-rig`
+    ("all 2 seats resolve to deepinfra/zai-org/GLM-5.3-Flash"), `store-missing-seat worker`,
+    `seat-without-capabilities pm, worker` — none of which describes this rig; `check rig.selfdev.json` → **115**.
+    Every `check` claim must name the rig file. The open question for lead: should a 2-seat `rig.json` be tracked at
+    the root of the selfdev checkout at all, or is it a test fixture that only belongs under `demo/`?
+35. **`citation-unresolvable` is growing faster than `duplicate-item`, and it is not my landing.** Measured at two
+    shas the same day: **44** at `2690e6ac`, **56** at `bb2a3997` — the +12 all sit on rows `#5019, #5093, #5095,
+    #5099, #5100, #5105`, i.e. rows `lead` minted hours ago citing refs that do not resolve from this checkout
+    (`duplicate-item` stayed 57). Cheapest probe before calling any citation finding real: `git cat-file -e <sha>` and
+    a `queue --id` lookup for the row id, in the same command. Cheapest durable fix: a `check` rule that prints the
+    citation *text* and the resolution that failed, not just the row subject.
 30. **The pi pin has no gate at all, and four claims about it were stale in the docs on the same day.** Measured
     2026-11-04: `check` has **no rule** about the pin (grep `vendor|pi-main|pin` in `src/checkup.mjs` → zero hits);
     `sync-pi.mjs --check` prints `"drift": true` and **exits 0** — `process.exit(1)` there fires only on a *thrown*

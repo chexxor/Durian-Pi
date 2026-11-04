@@ -8762,3 +8762,39 @@ unnoticed for 16 days.** Row **#5094** makes drift a visible finding rather than
   and the two dispatches that carry the operator's intent (`lead` `d012-lead`, settled `done`; `devtools`
   `d014-devtools`, routed by `lead` to **#5089 → #5090 → #5094 → #5095 → #5096**). It did **not**: build or link a
   vendor tree, edit `pi-main.pin.json`, touch `src/`, claim/complete/defer/route a row, or start the broker.
+
+## D207 — the operator accepted all four open recommendations; that converts them into actions, and one of them is a landing the entry point only permits after a push (2026-11-04T13:3xZ, delegate acting, Linux Fedora 44 `7.2.14-200.fc44.x86_64`, node v24.22.1, git 2.56.0, `main = 211e912c` → `bb2a3997`)
+
+- **What was accepted.** (1) Push, then the delegate lands the docs-only **#5089** and `lead` lands **#5090**;
+  (2) the operator **supplies `DURIG_VERIFIER_API_KEY`** out-of-band rather than ruling that `lead` may allow a
+  same-vendor fallback; (3) the **box is left alone** (transient hostname stays) and **#5085** re-signs the
+  ~20 historical lines instead; (4) a **second** store backup at the `v1.4.0` boundary is **`lead`'s** call, not the
+  delegate's.
+- **Why the push came first, in the rig's own words.** `docs/land.md` permits a delegate landing only for a
+  **docs-only item when `main == origin/main`**. The push (operator) made that true — measured
+  `main = origin/main = 211e912c`, `ahead 0 behind 0` — so the landing was available without stretching the rule, and
+  the runbook is what #5094–#5096 need in the tree.
+- **The landing, proven not asserted.** Landing read in the **same turn** as the merge:
+  `git merge-tree --write-tree main 314ad20d` → **exit 0**, predicted tree
+  **`aab732c6f69ece9d421dae7e68ce288102db1c1b`**, `0` conflict lines. `git merge --no-ff 314ad20d` →
+  **`main = bb2a3997`**, and `bb2a3997^{tree}` = **the same `aab732c6…`**. `git merge-base --is-ancestor 314ad20d main`
+  → **exit 0** (the D204 condition). Artifact keyed by **sha**, never a ref. The runbook is 17,168 bytes on disk.
+  `git worktree remove item-5089` after proving no seat's cwd names it — the portability audit's `note:` lines are the
+  seat→root map, and they showed **`devtools → item-5094`** (it had already moved to the next stage) and
+  **`impl → seatroot/item-4955`**, a phantom root from the worktree this session deleted (pitfall 24, still live).
+  Seatroot mirror fast-forwarded `1a3c57c8 → bb2a3997`.
+- **The gate re-run at the merged sha, and a measurement of my own that was wrong.** `check rig.selfdev.json` at
+  `bb2a3997` → **115 findings** (`duplicate-item 57, citation-unresolvable 56, verification-without-evidence 1,
+  evidence-tree 1`). The docs-only landing added **zero** findings; the movement is `citation-unresolvable`
+  **44 → 56** in one day as `lead` minted #5093–#5106. **Correction:** my first read of that number ran bare
+  `cli.mjs check`, which auto-discovers the **tracked 2-seat `rig.json`** (`pm`, `worker`, `model: null`) sitting in
+  this repo's root and audits *that* — it printed 120 findings including `no-verifier-seat`, `single-model-rig` and
+  `store-missing-seat worker`, none of which describe this rig. Always pass `rig.selfdev.json`.
+- **Verifier class, next act.** Acceptance means the credential arrives from the operator; the delegate's part is to
+  keep it **outside every git tree** (same rule as the local key: `~/.config/durig/env`, mode 600, loaded with
+  `node --env-file=…`, never `durig.config.json`), and then let `lead`'s roster row move **three layers at once** —
+  the price declaration, `DURIG_VERIFIER_API_KEY`, and the 5 `model` lines in the tracked `rig.selfdev.json`
+  (`resolveSeatModel` splits the provider prefix, so a variable alone leaves 5 seats failing `no_model`). Arming it
+  half-way turns `qa qa2 advocate auditor designer` into `no_model`, which is worse than honest absence.
+- **The boundary this decision did not move.** The delegate still did not claim/complete/route a row, build or link a
+  vendor tree, edit `pi-main.pin.json`, touch `src/`, or start the broker. #5090 is landed by `lead`, not here.
