@@ -65,6 +65,12 @@ on top of ~21 GiB of weights; `nvidia-smi` read 14.9 GB then 22.9 GB for a singl
 `lead` (does #4970 HALF B fold ROADMAP 92/94?) · #4955 `claimed` by `impl` · #4887 `queued` (parked then released by
 `impl` on purpose, to keep oldest-first off priority #1) · `advocate` still prints **244,751 / 24,576 = 9.96**.
 
+**One probe worth promoting (ask `lead` for the row, per `docs/SELFDEV.md` clock-out rule 5):**
+`.spike/delegate-20261104/rows.mjs` — a 20-line stdin projection of `queue --json` that prints the rows you name by id
+(subject + full body) and, with `--attention`, the store's derived notices (`{scope, seat, kind, detail}` — there is no
+`attention` table). It is what made a 21 MB queue read usable all session; gitignored `.spike/` means it is gone next
+session unless it becomes `tools/`.
+
 **Blocker:** the exclusive window for step 1 (a seat was generating); the operator's four rulings above; the dead
 verifier provider. Nothing else blocks. Broker was **down** all session (so `send` was legal), the local engine is
 `:47831` (`strata --serve --max-context 204800`), and `main` is **fully pushed**.
