@@ -46,6 +46,7 @@ import {
   fallbackModels,
 } from "./src/providers/deepinfra-models.ts";
 import { createLocalProvider, localProviderSpecs } from "./src/providers/local.mjs";
+import { wrapProviderWithSpend, capsFor, ledgerPath } from "./src/providers/spend.mjs";
 import {
   Constitution,
   Edges,
@@ -257,6 +258,30 @@ import { resetSeatContext } from "./src/reset.mjs";
 // the terminal. Off for commands that only read state, so `watch`/`status`
 // stay machine-clean; only `send` opts in.
 function buildModels(live = null) {
+  // #5047 — THE SPEND GUARD, installed beside the trace seam. `buildModels` builds ONE provider per process for
+  // every run path (`send`, `up`, `run`, `serve`, `optimize`, the optimizer), and pi-durable's COMPACTION task
+  // resolves its model through the same registry, so a wrapper here is the one position that covers all of them
+  // and cannot drift (D-5015.1 chose the provider seam over queue admission for exactly this reason: a compaction
+  // is a model call at the seat's own model, so it spends money, and admission-time accounting cannot see it).
+  //
+  // Caps and the ledger path are read the way every other rig value is read: env over config-file. The ledger is
+  // the SAME file the probes write, in the SAME row format (`tools/model-probes/metered.mjs` owns both) — a second
+  // ledger is the fork #5015 §3 forbids. `DURIG_SPEND_LEDGER` overrides the path for a run; the default is
+  // `.spike/gate/spend.jsonl`.
+  //
+  // The FAUX branch below is deliberately NOT wrapped: faux never opens a socket, and wrapping it would put a
+  // money guard in front of a provider that cannot spend money — whose model rows have no baseUrl, so the
+  // endpoint test that decides metering has nothing to read.
+  const spendEnv = { ...CFG, ...process.env };
+  const spendLedger = spendEnv.DURIG_SPEND_LEDGER || ledgerPath(spendEnv);
+  const spendCaps = capsFor(spendEnv);
+  const withSpend = (provider) =>
+    wrapProviderWithSpend(provider, {
+      caps: spendCaps,
+      ledger: spendLedger,
+      env: spendEnv,
+      getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+    });
   if ((CFG.DURIG_PROVIDER ?? "deepinfra") === "faux") {
     FAUX = fauxProvider({ models: [{ id: MODEL_ID }] });
     // #4658 (decision (a)): A TEST-ONLY DELAY KNOB, AND IT IS THE ONLY WAY A SPAWNED BROKER CAN HOLD A RUN.
@@ -321,8 +346,8 @@ function buildModels(live = null) {
     },
     // Catalog from the extension module.
     //
-    // #5047 (acceptance P2): the old fallback for a model the curated list lacks SYNTHESIZED a row carrying
-    // `cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }` on a METERED endpoint (BASE_URL is
+    // #5047 (acceptance P2): the old fallback for a model the curated list lacks SYNTHESIZED a row whose cost
+    // block was all-zero - `input: 0, output: 0, cacheRead: 0` - on a METERED endpoint (BASE_URL is
     // api.deepinfra.com). "arbitrary DURIG_MODEL ids must work" was the stated justification, and the rig paid
     // for it twice over: `config`, the ledger and every cost read reported a FREE provider that was billing, and
     // a spend cap had nothing to price. A row this rig cannot price is now NOT registered - the seat fails as
@@ -365,16 +390,23 @@ function buildModels(live = null) {
     : deepinfra;
   // Live view sits OUTSIDE the slot gate: it labels the stream even while a
   // generation waits for a free slot, and never alters what consumers see.
+  //
+  // #5047: the spend guard is the OUTERMOST wrapper, and the ordering is not cosmetic. pi-ai runs the
+  // `onPayload` hooks in wrapper order (each wrapper chains the previous one), so with spend OUTSIDE the trace, a
+  // refused call is refused before the trace line is written — stderr never shows a payload for bytes that were
+  // never sent. It also sits outside the slot gate, so a refusal never takes a generation slot.
   models.setProvider(
-    wrapProviderWithTrace(
-      live
-        ? wrapProviderWithLiveView(gated, {
-            renderer: live,
-            getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
-          })
-        : gated,
-      // The same one trace seam as the faux branch above (ROADMAP 43c / #920, #2545).
-      { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
+    withSpend(
+      wrapProviderWithTrace(
+        live
+          ? wrapProviderWithLiveView(gated, {
+              renderer: live,
+              getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+            })
+          : gated,
+        // The same one trace seam as the faux branch above (ROADMAP 43c / #920, #2545).
+        { getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null },
+      ),
     ),
   );
   // Register the locally-served providers AFTER the default: resolveSeatModel reads a provider prefix only
@@ -384,9 +416,11 @@ function buildModels(live = null) {
   // (D48/D119, ROADMAP 189), and the family ruling lives in docs/DECISIONS.md rather than here.
   for (const spec of localProviderSpecs(CFG)) {
     models.setProvider(
-      wrapProviderWithTrace(createLocalProvider(spec, { createProvider, api: ocApi }), {
-        getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
-      }),
+      withSpend(
+        wrapProviderWithTrace(createLocalProvider(spec, { createProvider, api: ocApi }), {
+          getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+        }),
+      ),
     );
   }
   return { models, providerId: "deepinfra" };

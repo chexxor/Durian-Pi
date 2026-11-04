@@ -285,7 +285,14 @@ export function createLocalProvider(spec, { createProvider, api, env, report } =
 							? { input: price.in, output: price.out, cacheRead: price.cacheRead, cacheWrite: 0 }
 							: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 						...(metered
-							? { endpoint: "metered", priceSource: spec.priceSource ?? "none", priceAsOf: spec.priceAsOf ?? null }
+							? {
+								endpoint: "metered",
+								priceSource: spec.priceSource ?? "none",
+								priceAsOf: spec.priceAsOf ?? null,
+								// The NAME of the credential variable, carried so the ledger row can say which variable paid for
+								// the call. The VALUE never travels on a model row (#5015: a ledger that logs a key is a leak).
+								authKeyEnv: spec.apiKeyEnv ?? null,
+							}
 							: { endpoint: "loopback" }),
 						contextWindow: spec.contextWindow,
 						maxTokens: spec.maxTokens ?? 8192,
