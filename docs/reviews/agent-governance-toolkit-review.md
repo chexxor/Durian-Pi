@@ -7,6 +7,19 @@
 Scope asked for by the operator: what here can improve durig's **security** and the **healing /
 self-recovery** of its agents.*
 
+> **⚠ PIN MOVED — this review is stale; every claim below is still keyed to `cfb44576` (delegate, 2026-11-05).**
+> The clone had been removed from this machine (`docs/COMPETITORS.md:30`), so its pin was unverifiable here until it
+> was **re-cloned shallow on 2026-11-05** at HEAD `a918f7634123b5b78e292302195260f786e69130` (short `a918f763`, commit
+> date 2026-11-04T07:28:00-08:00, MIT, shallow) — 18 days of upstream since our read. Reproduce with
+> `git -C vendor/eval/agent-governance-toolkit rev-parse HEAD && git -C vendor/eval/agent-governance-toolkit log -1 --format=%cI`.
+> **Nothing below was re-read at the new HEAD.** What the tree visibly grew (`ls` at `a918f763`; the surface was not
+> walked): per-harness packages `agent-governance-{claude-code,codex-cli,copilot-cli,opencode,antigravity-cli}`, a
+> top-level `policy-engine/` and `schemas/`, `docs/compliance/`, `docs/INDEPENDENCE.md`, `docs/adr/`, and
+> `agent-governance-python/agent-compliance/docs/{OWASP-COMPLIANCE.md, compliance/csa-atf-mapping.md,
+> analyst/cncf-sandbox-proposal.md}`. **The re-review is registered as ROADMAP 271** — the operator named this
+> project as prior art for seat sandboxing on 2026-11-05. Do not quote this review as current for anything in that
+> list.
+
 ## What it is
 
 AGT is a large (83 MB, ~930 in-tree Markdown files) **application-layer governance, identity, and SRE
