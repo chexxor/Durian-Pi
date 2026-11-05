@@ -9228,3 +9228,81 @@ open. (d) `docs/ROADMAP.md` must receive the resulting items as *registered, not
 **What only the operator can do.** Ratify the two product names (and the env/config prefix consequence); route the
 research prompt to the off-host research agent. Neither is delegated by silence, and nothing here was renamed
 unilaterally.
+
+---
+
+## D213 — Fast iteration is an architectural requirement: every piece must have a fast dev loop, and the slow part gets isolated behind a seam (operator ruling, 2026-11-05)
+
+**Decision.** The operator ruled that we **architect for fast development iteration on the whole thing**, which
+decomposes into three binding clauses:
+
+1. **Break the system into pieces that each have a fast iteration loop of their own.** A piece whose loop is slow is a
+   defect *in the architecture*, not a cost of doing business.
+2. **Where a part restricts fast iteration, isolate it** — behind a seam, behind a boundary, out of the default loop —
+   rather than letting its cost contaminate every change.
+3. **The LLM is expected to be the slowest part, and it must be made iterable anyway** — explicitly allowing multiple
+   techniques at once: prompt engineering, mocking, and smaller/faster models in test cases.
+
+This is now a **review lens on every design row**: a proposal that lengthens the loop must say by how much and what seam
+restores the fast path. Together with D212 (customization on the extension plane) it gives the rig two orthogonal
+invariants — *where* code lives, and *how fast you can change it*.
+
+**The measurement that reframes the operator's own hypothesis — and it is good news.** I ran the instruments instead of
+guessing (Linux Fedora 45 `7.2.15-300.fc45.x86_64` node v24.22.1, same command as every number below):
+
+- **The deterministic loop is already fast.** Full suite, parallel (`node scripts/test.mjs`, `DEFAULT_JOBS = min(8, cores)`
+  at `scripts/test.mjs:41`): **`257/258 passed in 57.0s`**. Per-area: `broker` 63 tests / **25.4 s**, `rig` 63 / **24.0 s**,
+  `tui` 46 / **12.4 s**, `toolchain` 16 / **11.1 s**, `worktree` 23 / **7.8 s**, `check` 12 / **6.3 s**, `readapi` 5 /
+  **3.8 s**, `guard` 24 / **2.0 s**, `docs` 6 / **1.2 s**. The single worst test is `demo/cli.test.mjs` at **20.1 s** — one
+  file is a third of the `rig` area's wall clock. **Correction to carry:** my own previous report recorded the suite as
+  **1672 s**. That figure was a degraded (sequential / cold-deps, seat-root) run; the honest headline for the same 258 tests
+  is **57 s parallel**, and the gap between 57 s and 1672 s is itself an iteration-cost finding — *how* you run the suite is a
+  first-class variable, not a constant.
+- **A mocked LLM already exists and is the fast path.** `@earendil-works/pi-ai/providers/faux` (`fauxProvider`,
+  `fauxText`, `fauxToolCall`, `fauxAssistantMessage`) is imported by **77 of 258** demos, and a **complete delegation loop**
+  (pm → `send_work` → worker claims → completes → DONE notice back to pm) runs in **0.301 s** with no network and no keys
+  (`node demo/offline.mjs`). So "make the LLM part iterable" is not a research question here — it is a *rule about which
+  plane a behavior test is allowed to run on*. (Trap carried in that file's header: scripted faux responses **drain in
+  global call order across conversations**, which is why ordering-sensitive tests are the ones that rot.)
+- **Inside the LLM, the cost is a tail, not the typical turn.** `tools/latency-budget.mjs` (cost 3.1 s over 63,172
+  generations, 47,353 tool tasks, 1,586 compactions): **model-call latency p50 52 ms, p95 9.0 s, p99 1.8 min, max 2.0 h**;
+  **tool-call latency p50 59 ms, p95 4.7 s, p99 2.9 min, max 28.8 min**; **compaction p50 23.2 s, p95 4.2 min, max 8.3 h**
+  (55.5 h of store lifetime). Generation buckets: 50.8% of runs finish in **0–5 s** and hold only **1.8%** of busy time,
+  while **185 runs (0.29%) exceed 10 minutes and hold 517.5 h = 64.6% of generation busy time**. The top of that tail is not
+  compute: ten generations of **~2,120 minutes** each (one per seat, `events=2–3`, `outcome=completed`) — a turn *staying
+  open*, not a turn working. So the LLM part becomes iterable by **bounding turn lifetime and killing waste**, not by
+  making typical calls faster.
+- **The biggest latency in the rig is not the model at all.** Item latency decomposition: **WAIT (claimable, unclaimed) =
+  72.4%**, WORK (claimed→done) = 13.0%, HELD = 5.9%; queue→done median 15.2 min, p95 9.3 h, max 295.3 h; and **308.7 h of
+  store lifetime had 0 generations in flight** (channel down or idle). Provider waste: **14,377 generations, 22.5 h busy**,
+  ending in refusals such as `402 You need positive balance` — the same class as this session's `401 Invalid API key`
+  no-`--env-file` trap. Fast iteration for the *team* therefore means **fail before the call** and **shrink the WAIT**, not
+  just faster tokens.
+
+**What the policy therefore binds (the seams named in the ruling):**
+
+- **The default loop must be hermetic.** One network-dependent test is enough to make the offline suite lie: today
+  `demo/deepinfra-catalog.test.mjs` is **red without `DEEPINFRA_API_KEY`** in this shell (and in every fresh worktree) — a
+  key-gated test inside the 57 s loop. Metered/vendor-catalog truth belongs in a separate, explicitly-invoked lane.
+- **Behavior tests of seats run on faux by default**; a real model is an *opt-in* lane with a declared budget, and
+  smaller/faster models are legitimate **in test cases** (the operator named this: test lanes may use a different model than
+  production; the cross-family author/verifier invariant is a *production* rule and does not forbid a cheap test model).
+- **Slow parts get a named boundary and a declared cost.** Every piece publishes its loop cost (seconds), and a gate fails
+  when a piece's loop exceeds its budget — `check` currently has **no timing rule at all** (`grep -noE
+  '"[a-z-]*(slow|latency|timeout|duration|budget)[a-z-]*"' src/checkup.mjs` → **zero hits**), and the only time bound in the
+  config vocabulary is `DURIG_STREAM_TIMEOUT_MS` (`src/config.mjs:129`). There is no turn-lifetime cap.
+- **Selection is a first-class instrument.** `--area` (manifest `demo/test-areas.json`, `src/testareas.mjs`, coverage rule
+  `demo/test-areas.test.mjs`) and `tools/what-to-test.mjs` (diff → derived tests) are how a change avoids paying 57 s; they
+  must be in the standard seat loop, not a luxury.
+- **Sleeps are a fast-iteration tax and are now counted**: **43 of 258** demos use `setTimeout` waits; polling/sleeping
+  belongs behind a fake clock or an event seam (`src/eventfeed.mjs` exists).
+
+**Research extension (the operator asked for it explicitly).** While researching competitors we must also read their
+**iteration architecture**: how fast can you change a piece and know you did not break it. The commissioned prompt
+`docs/reviews/base-agent-product-topology-research-prompt.md` gained question **8** (per-piece loop cost, hermetic vs
+live test planes, deterministic LLM doubles/replay, flaky-slow quarantine, incremental selection, and what they did about
+long-running/degenerate agent turns).
+
+**Division of labour.** The policy, the runbook (`docs/runbooks/slow-loop.md`), the roadmap registration
+(**282–287**) and the prompt update are the delegate's per `docs/runbooks/research-request.md`; the decomposition into
+rows, owners and sequencing belongs to `lead`/`pm`. Nothing was claimed or routed by the delegate.

@@ -50,12 +50,39 @@ node cli.mjs config                       # which db, provider, model are in eff
 node cli.mjs check <rig.json>             # audit the rig AND the store before running it
 node cli.mjs worktree <path>              # an isolated checkout for a work item (see below)
 node cli.mjs up <rig.json>                # create/refresh seats, edges, constitution
-node cli.mjs send pm "<task>" --body-file <file>
+node intent.mjs pm --body-file <file>     # the blessed delivery path: spool a message, broker delivers it (D102)
+node cli.mjs send pm "<task>" --body-file <file>   # DEPRECATED: opens a full writing harness; needs --body-file <path> with a SPACE
 node cli.mjs queue                        # did it route?
 node cli.mjs status                       # per-seat health + attention notices
 node cli.mjs log <seat> 20                # what actually happened
 node cli.mjs watch --once                 # a rig snapshot (human on a TTY, NDJSON piped)
 ```
+
+**A broker must be running for a seat to wake** (`node --env-file="$HOME/.config/durig/env"
+tools/broker-serve.mjs --start`); a spooled intent with the broker down is **pending, not lost**. A message never assigns
+work — only a queue row does, and only a seat can create one (`D102`).
+
+## The fast iteration loop (D213 — the operator's architecture policy)
+
+Verify the smallest thing that covers the change, and know what each loop costs (Linux Fedora 45 `7.2.15-300.fc45.x86_64`,
+node v24.22.1, measured 2026-11-05):
+
+```bash
+node scripts/test.mjs --list                    # areas + counts (0.1 s)
+node scripts/test.mjs --area <area>             # one area: 1.2 s (docs) → 25.4 s (broker); prints the 5 slowest files
+node tools/what-to-test.mjs --base=main --json  # the tests YOUR diff derives (plus scanFindings)
+node demo/offline.mjs                           # a whole pm→worker→done delegation loop on MOCKED models, in 0.3 s
+node scripts/test.mjs                           # the whole suite: 257/258 in 57.0 s — the merge gate, not the inner loop
+```
+
+The pieces are already separable (`demo/test-areas.json` + `src/testareas.mjs`; `demo/test-areas.test.mjs` fails any test the
+manifest does not cover, so nothing hides by omission). Seat/agent **behavior** is testable with no model at all on the
+`fauxProvider` plane — 77 of 258 demos do that, and scripted responses **drain in global call order across conversations**, which
+is why ordering-sensitive faux tests rot. "We can't test that, it needs the LLM" is not an acceptable answer here. A real
+model inside a test is an **opt-in lane with a declared budget** (a smaller/faster model is legitimate in test cases; the
+cross-family author/verifier rule is a production staffing rule, D210/D211). Anything needing a **key, the network, a model
+server, or a long sleep** belongs outside the default loop with its cost stated in seconds — `demo/deepinfra-catalog.test.mjs`
+is today's live example of that rule being violated. Diagnose with `docs/runbooks/slow-loop.md`.
 
 **Isolate the work.** Seats are confined to the `cwd` their rig declares. If a rig declares none,
 seats resolve to durig's own working tree and can overwrite the operator's uncommitted work. Give
@@ -90,4 +117,10 @@ The worktree is a detached checkout with `node_modules` bridged, so the demo sui
 
 `docs/QUICKSTART.md` (guided walkthrough) · `docs/FEATURES.md` (what exists, where, and its proof)
 · `docs/WORKFLOWS.md` (what durig is for) · `docs/SEAT-TOOLS.md` (the seat boundary) ·
-`docs/STATUS.md` (current state and owed decisions).
+`docs/STATUS.md` (current state and owed decisions) · `docs/runbooks/slow-loop.md` (what to run for a change, and how to
+isolate the slow part — D213).
+
+> **This skill is partly stale (2026-11-05).** It predates the broker era: it does not mention `DURIG_DB=./selfdev.sqlite`
+> for this rig's store, the broker/spool model, `tools/broker-serve.mjs`, `tools/channel-preflight.mjs`, or the
+> `rig.selfdev.json` self-dev rig, and its worktree examples use Windows paths. The current operating surface is in
+> `docs/runbooks/session-start-cost.md` and `.agents/skills/delegating-to-durian-pi/SKILL.md`. Registered as ROADMAP **288**.

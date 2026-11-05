@@ -58,6 +58,26 @@ than an abstraction:
 7. **Naming.** What naming conventions do these families use for *base product* vs *team/supervision layer*
    (e.g. `-core`, `-base`, `-runtime`, `-hub`, `-fleet`, `-swarm`, `-orchestrator`)? Five real examples with the
    project's own words, so a name we choose is not invented from taste.
+8. **Iteration architecture — how fast can you change a piece and know you did not break it?** (the operator's
+   fast-iteration policy, D213; this is now a required dimension of every competitor pass, not an afterthought) For each
+   system, with evidence:
+   - **Piece boundaries and loop cost** — what can be changed in isolation, and what is the measured time from edit to a
+     trustworthy signal for that piece (any published per-package / per-workspace test or build time).
+   - **Test planes** — is there a hermetic default lane (no keys, no network, no real model) versus an explicitly-invoked
+     live/metered lane? How do they keep credential-dependent and vendor-catalog checks out of the fast loop?
+   - **The LLM double** — do they test agent behavior against a **mocked or deterministic model** (scripted tool calls,
+     replayed transcripts, recorded fixtures)? How do they stop the mocked lane from going fake-green — what real-model
+     smoke test survives, and how often does it run?
+   - **Model substitution in tests** — do they run tests on a **smaller/faster** model than production, and how do they
+     justify that the asserted behavior is model-independent?
+   - **Prompt-as-code** — how are prompts versioned, diffed and regression-tested (golden outputs, evals, snapshots, a
+     prompt-change cost budget)? How is a prompt change signal obtained in seconds rather than a full agent run?
+   - **The long-turn tax** — what bounds a run: turn lifetimes, idle/step ceilings, budgets, cancellation? Any published
+     p95/p99 turn or run duration.
+   - **Flaky-slow quarantine** — do slow end-to-end tests get quarantined into a named lane, and what replaces their
+     coverage? Is selection driven by diff/dependency (Bazel/nx/turbo-style) or whole-suite?
+   - **Their own complaints** — issues/discussions about slow tests, flaky agent tests, or test cost are high-value here;
+     quote them.
 
 ## Deliverable
 
@@ -72,6 +92,9 @@ sections, **each as one fenced block with no narration glued to the title line**
   marked **unmapped**.
 - `## Proposed backlog items` — each with owner and acceptance; we register them in `docs/ROADMAP.md` as
   *registered, not scheduled*, or reject them in writing.
+- `## Iteration architecture` — one row per system from question 8: **fastest loop per piece | hermetic vs live test plane |
+  how the model is mocked or substituted in tests | prompt-regression technique | long-turn bound | slow-test quarantine**,
+  plus what we could adopt and **what it would cost us** (including any verification depth we would give up).
 
 ## Evidence discipline (non-negotiable — this is what killed a prior round)
 

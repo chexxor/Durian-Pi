@@ -29,7 +29,8 @@ three actors straight is the whole job:
 5. If this session is an **operating situation a runbook covers** — broker down/stalled, store
    corruption, a degenerate seat, leaked worktrees, a merge/conflict, session-start cost (**read
    `docs/runbooks/session-start-cost.md` before you hand-query `selfdev.sqlite` or decide how many seats to
-   wake**), or you need external research — read the matching `docs/runbooks/<symptom>.md` **before
+   wake**), a **slow verification loop** (`docs/runbooks/slow-loop.md` — read it before "just run the whole suite"),
+   or you need external research — read the matching `docs/runbooks/<symptom>.md` **before
    improvising**. The index (symptom → runbook) is `docs/runbooks/README.md`; read
    `docs/runbooks/research-request.md` before commissioning research.
 6. Resume from `NEXT.md`. Do not re-derive the priority from the 1300-line roadmap.
@@ -50,6 +51,14 @@ Create a deeper version of the task, not a bigger one. Before rewriting it:
 (4) say what, other than you or me, would show the result is right.
 Then rewrite the operator's prompt to ask for exactly that.
 Then execute on that resulting promp.
+
+**Fast iteration is an architectural requirement (D213).** Every piece must have a fast loop of its own. Verify a change by
+running the area it touches (`node scripts/test.mjs --area <area>` — 1.2–25.4 s per area) or the tests the diff derives
+(`tools/what-to-test.mjs`), not the whole suite by reflex; behavior tests of seats run on the mocked `fauxProvider` plane
+(`demo/offline.mjs`: a full pm→worker→done delegation loop in **0.3 s**, no network, no keys), and a real model in a test is
+an **opt-in lane with a declared budget** (smaller/faster models are legitimate in test cases). If a part restricts
+iteration — a key, a network, a model server, a sleep, a 20-minute turn — **isolate it behind a seam and state its cost in
+seconds** on the row that adds it. Diagnose with `docs/runbooks/slow-loop.md`.
 
 ## Clock out (before you stop)
 

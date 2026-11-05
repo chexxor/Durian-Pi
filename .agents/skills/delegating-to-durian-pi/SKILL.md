@@ -180,17 +180,44 @@ comparison is "seconds" vs "a session".
 | `node tools/edit-failure-rate.mjs` | seconds | How seats' edits actually fail (217's acceptance names it for its shell row). |
 | `node tools/vendor-pins.mjs --check` | seconds | The competitor pins are at their recorded shas (14 clones) — cite at a pin, never by re-fetching a URL (anchors rot). |
 | `node scripts/clockin.mjs` | 2.6 s | The clock-in digest, in one call. |
+| `node scripts/test.mjs --area <name>` / `node tools/what-to-test.mjs --base=main` | 1.2–25.4 s / seconds | What a change actually has to run. The full suite is **257/258 in 57.0 s** (`node scripts/test.mjs`), so "no time to test" is never true; the areas are `docs` 1.2 s · `guard` 2.0 s · `readapi` 3.8 s · `check` 6.3 s · `worktree` 7.8 s · `toolchain` 11.1 s · `tui` 12.4 s · `rig` 24.0 s · `broker` 25.4 s. `demo/offline.mjs` runs a full pm→worker→done delegation loop on **mocked** models in **0.3 s**. |
 | `DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json` | seconds | The rig's structural rules. **Always name the rig**: a bare `check` pairs `rig.json` and reports findings about a rig nobody runs. |
 
-Three habits that come with them: **name the host, OS and timezone on every measurement you report** (244 — a
-number without them cannot be compared across this rig's two machines); **a cited script is a durable artifact**
+Three habits that come with them: **name the OS (distro + kernel + node) and the timezone on every measurement you report**
+(244 — a number without them cannot be compared across this rig's two machines) and **never a hostname** (281: the probe is
+`uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`; `uname -a` leaks the
+transient label and has already caused a Linux measurement to be filed under Windows); **a cited script is a durable artifact**
 — if you build an instrument, commit it or move it into `tools/`, because eight instruments credited as landed in
 `docs/ROADMAP.md` are gone from disk and from git history entirely (233, recurred 2026-10-29); and **the
 verifier's capability is a measurement, not a config choice** (`docs/runbooks/verifier-model-server.md`).
+
+## Fast iteration is a review lens (D213 — operator ruling, 2026-11-05)
+
+The operator asked that the architecture be **broken into pieces that each have a fast dev loop**, that anything restricting
+iteration be **isolated**, and that the LLM part be made iterable anyway (prompt engineering, mocking, smaller/faster models
+**in test cases**). As delegate, that changes three of your moves:
+
+1. **When the complaint is "it's slow", measure before you propose.** `docs/runbooks/slow-loop.md` is the procedure; the
+   measured shape (2026-11-05) is that the deterministic suite costs **57 s**, the mocked delegation loop **0.3 s**, a model
+   call **p50 52 ms**, but **185 generations (0.29%) hold 64.6% of generation busy time** and **WAIT is 72.4% of item
+   latency**. The three slow things are different diseases — a slow suite, a stuck turn, a dead channel — and each has its
+   own instrument.
+2. **Review every design row for its loop cost.** A row that adds a piece (gate, lane, daemon, extension) should state the
+   seconds to iterate on it and the seam that keeps the fast path; if it needs a key, the network, a model server or a sleep,
+   it should say which lane it belongs to. A row that lengthens the loop without naming the compensation is a design gap —
+   park a question, do not silently accept it.
+3. **Commission iteration architecture in research passes, not just features.** `docs/runbooks/research-request.md` Do 1 now
+   requires it, and `docs/reviews/base-agent-product-topology-research-prompt.md` question **8** is the worked version: piece
+   boundaries and loop cost, hermetic vs live test planes, how the model is mocked or substituted in tests, prompt
+   regression technique, long-turn bounds, slow-test quarantine.
+
+**Never buy speed with verification depth.** Moving a check out of the default loop is a product decision (D91's fake-green
+hazard applies to speed-ups exactly as to features); propose it in the report and let the operator or `pm` decide.
 
 ## Where to read further
 
 `docs/SELFDEV.md` (the selfdev runbook) · `docs/NEXT.md` (current pointer) ·
 `docs/runbooks/README.md` (operating procedures, symptom-indexed — **read the matching one before a
 recovery or an external research request**) · `docs/QUICKSTART.md` · `docs/FEATURES.md` ·
-`docs/WORKFLOWS.md` · `docs/SEAT-TOOLS.md` · `docs/STATUS.md` (history).
+`docs/WORKFLOWS.md` · `docs/SEAT-TOOLS.md` · `docs/STATUS.md` (history) · `docs/runbooks/slow-loop.md` (the fast-iteration
+policy as a procedure — D213).

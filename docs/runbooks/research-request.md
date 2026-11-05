@@ -33,7 +33,11 @@ Check whether it has already been asked/answered: search `docs/reviews/` for the
 1. Write the prompt to `docs/reviews/<topic>-research-prompt.md`, in this shape (see the worked example
    `runbooks-research-prompt.md`):
    - **Context** — what the system is, the two audiences, and why the question arises.
-   - **Questions** — numbered, specific, each answerable.
+   - **Questions** — numbered, specific, each answerable. **A pass over competing *products* must also carry the
+     iteration-architecture questions (D213, `docs/runbooks/slow-loop.md`):** piece boundaries and their loop cost, hermetic
+     vs live test planes, how the model is mocked or substituted in tests, how prompt changes are regression-tested, what
+     bounds a long agent turn, and how slow tests are quarantined. Learning what a competitor *does* without learning how
+     fast they can *change* it leaves out the half of the comparison that decides our own architecture.
    - **Deliverable** — the exact report path and its required sections, **plus the copy-paste shape**: ask for each section
      as one fenced block with no narration, because what arrives in chat is what gets committed, and round 2's arrival had
      the agent's own narration glued to the title line (`docs/reviews/harness-tools-skills-public-harnesses-research.md`,
