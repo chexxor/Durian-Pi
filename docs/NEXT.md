@@ -41,11 +41,13 @@ iteration-architecture questions (**question 8** of
 `docs/reviews/base-agent-product-topology-research-prompt.md`). Both need `lead`'s decomposition; the research prompt needs the
 **operator** to route it (there is no channel from this rig to the off-host research agent).
 
-**Blocker:** **four**, and none of them is the delivery channel (`INTENT delivered=1`; the broker later self-exited at
-`--max-duration`, which is normal).
+**Blocker:** **four**, and none of them is the delivery channel (`INTENT delivered=1` three times — 22:07:56, 22:11:28,
+22:52:21; the broker was restarted at `22:52` as `pid=267510` with `--max-duration 900`, so it **self-exits ≈ 23:07** and an
+intent spooled while it is down is **pending, not lost**).
 **(a)** `lead` has not turned **D212**/**D213** into rows — max queue id is still **#5156**, and there is now **0 `queued`
-work**, so a woken seat has nothing to claim; if it is still 5156 after a wake, re-send the brief
-(`node intent.mjs lead --body-file <file>`, **space** after `--body-file`). **(b)** the **verifier provider is
+work**, so a woken seat has nothing to claim (measured: the 22:52 pass woke **9 seats** and fed `lead` *“there is nothing
+claimable for you … do not call `claim_work` expecting work”*, `log lead` event 289893); if it is still 5156 after a wake,
+re-send the brief (`node intent.mjs lead --body-file <file>`, **space** after `--body-file`). **(b)** the **verifier provider is
 temporarily lifted** (`6d2c50e2` removed `DURIG_VERIFIER_BASE_URL` from both host configs and re-pointed the 5 verifier seats at
 `local/qwen3.8-flash-next-iq3_s`), so `check` reports `single-model-rig` and `verification-without-evidence` as `fix-now` —
 honest and intended, but the cross-family author/verifier invariant cannot hold until the `:1234` model server is up
@@ -57,8 +59,8 @@ unusable: `tools/channel-preflight.mjs:57` spawns `cli.mjs` with **`DURIG_CONFIG
 and since `8160b8be` (**#5125**, landed by this session's merge of `item-5131`) `src/config.mjs` **refuses** a config file that
 sets keys no code reads — so every preflight now dies at `tools/channel-preflight.mjs:59` with
 `unknown config-file key(s): _readme, version, seats, edges, ownership, constitution in ./rig.selfdev.json`. Reproduced twice. Registered as ROADMAP **293**.
-**(d)** `broker-serve.mjs --dry-run` currently **refuses to start** this cwd: `BLOCK live-tree-dirty — 3 tracked file(s) are
-modified here` — so commit the docs before restarting the broker (F12/F23).
+**(d)** `broker-serve.mjs --dry-run` **refused this cwd** earlier (`BLOCK live-tree-dirty — 3 tracked file(s) modified
+here`, F12/F23); after the docs commits the same dry run reports **0 blocking, 3 noted** and the broker started clean.
 
 **Pointer hygiene (this section is what `scripts/clockin.mjs` prints, so it *is* the cost of a cold start):** the live file is
 capped at **cap 200** lines by `demo/next-pointer.test.mjs`; superseded history moves **verbatim** to
@@ -103,9 +105,9 @@ node --env-file="$HOME/.config/durig/env" tools/channel-preflight.mjs      # KNO
   already fully on `main`: **73** of 93 (pm-owned); orphan candidates **75**; unresolvable citations **33**; gate prose with no
   resolvable id **12**.
 - **Rig state (`scripts/clockin.mjs`, 7.0 s, 22,537 B):** `attention: 30`; **all ten seats' `last_run_failed` is `no_model`**,
-  yet `broker-serve.mjs --dry-run` resolves **all 12 seats to `local/qwen3.8-flash-next-iq3_s`** — so those records look stale,
-  which I could **not** prove without a real pass (the closing probe is one broker pass with a wake, which is an operator grant:
-  `--yes-pm-wakes`). `deferred_awaiting_answer` ≈ 190 rows across 10 seats, most `waiting on human`. `RUNBOOKS dated 40 |
+  yet `broker-serve.mjs --dry-run` resolves **all 12 seats to `local/qwen3.8-flash-next-iq3_s`**, and a real wake pass at
+  22:52 left the records unchanged — so they look stale, which I could **not** prove without a pass that has real work to run
+  (the closing probe is one broker pass over a **non-empty** queue). `deferred_awaiting_answer` ≈ 190 rows across 10 seats, most `waiting on human`. `RUNBOOKS dated 40 |
 stale 32`. `GIT refs=18 worktrees=16 unmerged=5` (`item-5145 +2`, `wip/seat-prompt-files +1`).
 - **Rows in flight:** **#5145 `done`** (`impl`; branch `item-5145` tip `39ee4fcc`, 2 commits, +806/−1, `git merge-tree` clean,
   0 behind / 2 ahead, `what-to-test --base=main` ok with 25 derived tests) — **unlanded**, and its own verification rows
