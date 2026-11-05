@@ -2991,7 +2991,14 @@ reach and, today, the parent environment's provider key).
 174. **OS-level backstop where hooks are not enough — native Windows first.** Evaluate restricted tokens,
     AppContainer, mandatory integrity levels, filesystem ACLs, job objects, WDAC (Windows) and user namespaces,
     Landlock, seccomp (Linux parity) for containing a short-lived `git`/`npm`/shell child, **never** WSL or
-    Docker. *Acceptance:* a named escape (a shell one-liner, an npm lifecycle script, a git hook, a
+    Docker.
+    *(Amendment, delegate 2026-11-05 — the ordering is stale and the operator's sandboxing directive reopens it.)*
+    "Native Windows first" predates **D131** (Linux is an operating platform, measured host: Fedora 44, kernel
+    `7.2.14-200.fc44.x86_64`), and `docs/reviews/zero-trust-zero-agent-research.md` rules the opposite ordering on
+    the merits: **Landlock is unprivileged, self-imposed at spawn, inherited by children, and carries TCP-port
+    rules since ABI v4**, which makes the spawn-time wrapper *more* achievable on Linux than on Windows, where the
+    report already rejects AppContainer and MIC relabelling. Read "first" as "the platform that had the escape
+    evidence", not as a queue order; 268 is the item that supplies the Linux escape evidence. *Acceptance:* a named escape (a shell one-liner, an npm lifecycle script, a git hook, a
     symlink/junction or a POSIX-vs-`C:/` path defect — both already bite us as open Linux demo defects) that the
     hook layer alone does not stop and the OS control does, with a failing-first test on both platforms.
 
@@ -5427,3 +5434,174 @@ rather than re-deriving it.
 *Blind spots:* never run this from the working checkout — 232's mitigation still holds (disposable clone
 `/home/chexxor/Git/Durian-Pi-ops`); and an OS-shaped suite failure must be **named as OS-shaped**, not counted as a
 regression (185–189), nor excused as "Linux" if it survives on both.
+
+## Seat sandboxing and permission raising (operator-directed 2026-11-05)
+
+**What raised it.** Operator directive, verbatim: *"I'd like to prioritize further improving the sandboxing of
+the members of the team in the rig … By 'sandboxing' I refer to restricting or controlling access to anything
+external to the agent itself, which includes the filesystem, network access, specific web domains, API keys,
+etc … we need to ensure that we are following the Pi practices of putting any customization to a bare-bones Pi
+harness (or pi-durable harness) in an extension/plugin … I'd prefer the permissioning system to be relatively
+flexible, so an agent can request more permissions, and a verifier can judge the request against a project
+policy and the task being worked to decide whether it is acceptable, then raise the seat's permissions."*
+
+**It is already on the roadmap — this tranche does not open the track, it closes the holes in it.** The track is
+**60** (least privilege) + **170–174** (§"OS-grade seat isolation and permissions", D130) + **132** (the API-key
+component) + **118** (the parked egress verification) + **M5** (D141, the milestone that sequences 171–174 first).
+The landed research is `docs/reviews/zero-trust-zero-agent-research.md`; the live rows are **#4829** (`security`,
+170's position — the gate for everything else, `queued`) and **#4833** (`lead`, decomposition of 171–174, `held`
+`blockedBy #4829`). **Every claim below was re-measured on Linux (Fedora 44, kernel
+`7.2.14-200.fc44.x86_64`, node v24.22.1) on 2026-11-05**; the `observed` baseline paragraph of the 170–174 section
+still holds, including the three gaps it names (no durable record, reach per seat not per claim, mediator in the
+subject's own process with no egress policy).
+
+**268. Seat egress is unmediated: there is no network, destination, or per-endpoint rule anywhere in the
+enforcement layer — and the key half of the operator's question is already closed, which changes what is left to
+build.**
+*(delegate; operator-directed; supersedes/re-points the parked **118**)* **What exists today, measured:**
+`grep -c -iE "network|socket|egress" src/confine.mjs` → **0**, so 118's 2026-10-17 premise is still true. The
+**credential** half is better than the 170–174 baseline paragraph implies: the seat execution environment forces
+`inheritEnv: false` and re-supplies only an allowlist (`src/confine.mjs:686-692`, `:491`), the allowlist is a
+12-name OS-runtime list (`:340-353`), and *"A name that looks like a credential never crosses, whatever
+allowlist was configured"* (`:365`); every seat env is built through `authorEnv`/`verifierEnv`, and an unknown
+conversation gets the **read-only** env, never an unconfined one (`src/seattools.mjs:303-311`). So a seat shell
+does **not** hold `DEEPINFRA_API_KEY`. **What is therefore actually missing is reach, not the key:** a seat's
+shell can open any host and any port this box can — including Strata's inference share on `0.0.0.0:47832`
+(`docs/NEXT.md`, measured 2026-11-04) and anything else on the LAN — and can exfiltrate the contents of any path
+the path rules let it read.
+**Peer mechanisms to copy** (pinned clones, see 271): Cloudflare Sandbox SDK starts the container with
+`enableInternet: false` and puts the *host* decision in the outer object ("Your Worker decides who gets a sandbox,
+which hosts it can reach, and which credentials stay out of it" — `vendor/eval/sandbox-sdk/README.md`;
+`docs/architecture.md:12,75` names outbound credential brokerage as the seam it does **not** own);
+`cplt` (Seatbelt + Landlock, **policy committed to the repository**), `Landrun` (**Landlock without root**),
+`nono` (capability-based shell on kernel primitives), `Fence` (OS-native network + filesystem restrictions),
+`yolo-cage` (anti-exfiltration) — all listed in `vendor/eval/awesome-agent-sandboxes/README.md` at the pin.
+**Applicability is filtered by D131 and the native-host rule:** the Landlock/seccomp/`bwrap` family fits
+(unprivileged, self-imposed at spawn, inherited by children, TCP-port rules since Landlock ABI v4 —
+`zero-trust-zero-agent-research.md`); the microVM/container/cloud family (E2B, Modal, Firecracker, Kubernetes
+`agent-sandbox`, Docker) is **rejected in writing** by D131 + the "never `wsl`/`docker`" non-negotiable, and must
+be named as rejected rather than left unsaid.
+*Owner:* `security` (the position, item 171's rule) then `impl`. · *Where:* the spawn seam already named by the
+research report (the Job-Object/process-group spawn point in `src/`, refine **174**), policy data per **173**,
+record per **172**; `docs/PM-ADAPTERS.md` carries the truthful statement 118 asked for. · *Acceptance:* a named
+escape probe — a seat shell reaching (a) a loopback port it was not given and (b) a LAN address — that **passes
+today and blocks after**, with the block recorded as an `avc`-shaped row (172); the deny-by-default posture plus
+a destination allowlist expressed as data, per **claim** not per seat; and the statement of what a seat shell can
+reach is re-tested, not re-asserted. · *Blind spots:* in-process mediation is **not** a security boundary (the
+report's ruling) — an OS-level backstop is the point, so a `beforeTool` regex list of blocked commands is not
+acceptance for this item; and a network namespace is the only thing that makes "exactly one destination" real,
+which is a per-run spawn decision, not a config string.
+
+**269. A seat that needs more reach has no way to ask for it, and nothing adjudicates a raise: the
+request → adjudicate → raise-with-expiry → revoke cycle the operator asked for.**
+*(delegate; operator-directed; sits behind 170/171/172/173 — mint it, do not build it before those)*
+Today reach is decided once, at `up`, by removing tools (`toolRemovalsFor`, `src/seattools.mjs:249-276`); a seat
+that hits a refusal can only read the block and `defer_work`. The operator's shape — the seat asks, **a verifier
+judges the ask against project policy and the task it is working**, and the grant is then raised — is exactly the
+**claim-scoped** grant **173** already wants, plus a *protocol* for changing policy data mid-run that 173 does not
+yet specify.
+**Non-negotiables the design inherits:** the adjudicator is a **cross-family** verifier (D48/D119 — and that
+verifier is currently dark, see **273**, so this item is gated on arming); a grant is scoped to the claim with an
+**expiry** and a revocation that is visible in 172's record; the spawn-time ruleset stays **monotonic**
+(unwidenable — the research report's ruling), so a raise means a **new spawn with a wider ruleset**, not widening
+a live one; per-call human prompting is **rejected** (the report; Android moved away from it) and `audit2allow`
+synthesis is accepted only as a proposed, diffed, narrowed, **signed** step, never auto-loaded.
+**Peer mechanisms:** SandBase Harness ("MCP tool permissions, approvals, and audit/replay") and AEGIS
+("deny-by-default policy") in the awesome list; and the negative evidence we already hold — copilot-cli **#3590**
+(`permissionDecision: "ask"` auto-approved) and **#2893** (`preToolUse` bypassed by a `timeout->allow` fallback),
+both fetched and title-checked per `docs/COMPETITORS.md:382`. **An ask path that fails open is the documented
+failure mode, so failing closed is the acceptance, not a nice-to-have.**
+*Owner:* `security` (position) + `architect` (the grant object: subject label, object, class, permission, TTL,
+policy version, adjudicating verifier) + `impl`. · *Where:* a seat-facing verb (ask), a verifier-facing verb
+(judge), policy data consulted by the existing `beforeTool` substrate, and 172's audit sink. · *Acceptance:*
+failing-first demos — (i) an unanswered request **denies**; (ii) a verifier **refusal** leaves it denied and
+records the reason; (iii) a verifier **approval** raises reach for that claim only, with a TTL, and the grant is
+queryable by subject and rule; (iv) after expiry the action is refused again and the revocation is in the record;
+(v) a seat cannot adjudicate its own request (the forged-stamp finding, #3969/#3975: capability removal is not
+authentication). · *Blind spots:* the spend cap is a budget, not a permission — do not let "raise permissions"
+quietly mean "raise caps"; and a grant that survives a `reset`/`fork`/`compact` is the same subject-identity hole
+172 names, so the grant must key on the identity 172 mints, not on the seat name.
+
+**270. The placement rule is real in practice and unenforced in code: rig-specific controls must ship as
+installed pi-durable extensions, and nothing says so or checks it.**
+*(delegate; operator directive)* **Observed baseline, and it is better than expected:** the guard is already an
+extension — `export const SeatGuard = defineExtension({ name: "durig.guard", hooks: [hook(ToolTask,
+{beforeTool}), hook(ToolTask, {afterTool: redactToolResult})] })` (`src/seatguard.mjs:526-531`), installed next to
+the Router (`durig.router`, `src/provenance.mjs:21-23`); `src/extensions.mjs` loads pi-durable extensions named by
+`DURIG_EXTENSIONS` with **deliberately no auto-discovery** ("which code runs in here must stay an explicit
+operator decision", `:6-16`), refuses an extension that declares none of `tools/sections/hooks/tasks/wraps`
+(`:26-31`, `:88-92`), and refuses a duplicate name (`:96-100`); and `:19-21` records that a pi **coding-agent**
+extension cannot load here (D21) — so "put it in a Pi extension" has a precise meaning in this tree and it is not
+the coding-agent API. **Measured gap:** this rig runs with `DURIG_EXTENSIONS: null` (`node cli.mjs config`), i.e.
+built-ins only, and there is no rule, check, or doc inventory that keeps a *new* control (egress policy, grant
+adjudicator, audit sink, credential broker) in an extension rather than welded into `cli.mjs`'s `openHarness` or
+a core write path. The consequence of getting it wrong is the one the report already rules: an in-process control
+that shares the subject's OS identity is an integrity control, not a boundary — so where it is installed is a
+security-relevant fact, not a style fact.
+*Owner:* `lead` (the invariant) + `devtools` (the instrument). · *Where:* a short invariant in
+`docs/PI-DURABLE-INTEGRATION.md` (or `docs/ARCHITECTURE`-adjacent) naming **which extension owns which control**,
+plus a `check` rule or `tools/` probe that reports the installed set and flags a control living outside one. ·
+*Acceptance:* the invariant doc names the owning extension for each of 268/269/172/173 before any of them is
+built; a demo shows that **uninstalling** the guard makes the policy absent **and the rig say so** (provenance
+already reports the active set, `src/provenance.mjs:79-90`) rather than silently running unguarded.
+
+**271. The sandbox prior art the operator named is now pinned but not consumed: three clones, one of them a
+moved pin, and 47 candidate projects with no adopt/reject call.**
+*(delegate pinned; review is seat work)* Pinned 2026-11-05 into `vendor/eval/` (gitignored) and into the tracked
+table by `node tools/vendor-pins.mjs --write docs/VENDOR-PINS.md`: **`cloudflare/sandbox-sdk` @ `61cac81b`
+(2026-11-02, Apache-2.0)**, **`microsoft/agent-governance-toolkit` @ `a918f763` (2026-11-04, MIT)** — the pin
+**moved** from `cfb44576` (2026-10-17), so `docs/reviews/agent-governance-toolkit-review.md` is 18 days of
+upstream stale and the tree has grown per-harness packages (`agent-governance-{claude-code,codex-cli,copilot-cli,
+opencode,antigravity-cli}`), a `policy-engine/`, `schemas/`, `docs/compliance/` and `docs/INDEPENDENCE.md` — and
+**`arjan/awesome-agent-sandboxes` @ `db6ffc0a` (2026-11-01), which has NO LICENSE FILE** (a curated link list, so
+nothing is copied, but the runbook says a missing licence is an escalation, so it is recorded as one).
+*Owner:* `security` + `architect` for the substrate-relevant reads, `scribe` for the review docs, `pm` to
+sequence. · *Acceptance:* one review per project carrying the runbook's required artifacts (generated header from
+`vendor-pins --format header`, surface-inventory table, "not read" list, per-standard adopt/adapt/reject table,
+durian-pi coverage matrix), a `docs/COMPETITORS.md` row each, `tools/vendor-pins.mjs --check` exit 0, and an
+explicit **rejection in writing** of the cloud/microVM family under D131 rather than silence. The follow-up
+commission is already written: `docs/reviews/agent-sandbox-substrate-research-prompt.md`.
+
+**272. The tree holds two price-file shapes with one name, and the owned one does not reach the seam that arms a
+metered class.**
+*(delegate, measured 2026-11-05 while pricing the operator's DeepInfra verifier ruling)* With
+`DURIG_VERIFIER_PRICE_JSON=src/providers/deepinfra-prices.json`, the product's own resolver returns
+`price: null, priceSource: "none"` — because `declaredPrice` reads `j.data[].metadata.pricing`
+(`src/providers/local.mjs:104-121`) while the file we vendored is `{fetchedAt, source, unit, note,
+rows:{ "<id>": {input,out,cacheRead,…} }}` (`src/providers/deepinfra-prices.json`, read by
+`src/providers/deepinfra-models.ts:51`). The live vendor catalog **does** have the shape the seam reads
+(`data[].metadata.pricing`, fetched 2026-11-05, HTTP 200, 174 ids, no inference), but carries no `fetchedAt`, so
+the price would land undated — which is exactly what `docs/runbooks/spend-cap-tripped.md:64` forbids.
+Practical consequence: **arming a metered class must use `DURIG_VERIFIER_PRICE_USD_IN/OUT/_CACHE_READ/_AS_OF`**,
+as `docs/runbooks/local-provider-down.md:253` already says — but a reader who reaches for `*_PRICE_JSON` and our
+own snapshot gets a silent "no price" and then `metered-endpoint-unpriced`.
+*Owner:* `devtools`. · *Acceptance:* either an adapter that reads the owned format, or a red demo that makes the
+mismatch **name the file and the expected shape**, and one canonical price-file format documented in the runbook.
+· *Probe worth promoting:* `.spike/delegate-20261105/verifier-arm-probe.mjs` (offline; prints the resolved spec,
+the price **and its source**, and `maxCallExposureUsd` against the three caps; never prints a credential) —
+`.spike/` is gitignored, so promote it to `tools/` or it is lost (233).
+
+**273. `rig.selfdev.json` pins a verifier model that no metered provider serves, so the operator's
+DeepInfra ruling cannot be pasted as-is; and the model that is priced is not the model that passed the gate.**
+*(delegate, measured 2026-11-05; the blocker inside **#5118**)* The tracked roster carries
+`verifier/mistralai/ministral-3-14b-reasoning` for `qa qa2 advocate auditor designer`. DeepInfra's live catalog,
+fetched with the operator's key at zero inference cost, has **174 ids and none of them is that model**
+(`ids.includes("mistralai/ministral-3-14b-reasoning") === false`; no id matches `/Ministral/i`). Meanwhile
+`durig.config.json` still points `DURIG_VERIFIER_BASE_URL` at `http://127.0.0.1:1234/v1`, a listener that answers
+nothing, so today the pointer is dead on both ends. **And the gate record contradicts the cheap pointer:**
+`deepseek-ai/DeepSeek-V4-Flash-0731` **did not meet the G2 floor** (defect 3/8 majority, replicate spread
+5/8 · 2/8 · 2/8, `docs/DECISIONS.md` §the 2026-11-02 paid arms), while **`openai/gpt-oss-120b` met it**
+(6/8, worst replicate 4/8, one unstable cell, ~$0.038) — and gpt-oss-120b **is** served by DeepInfra at
+`0.037 / 0.17` per Mtok (live catalog, fetched 2026-11-05), giving `maxCallExposureUsd = $0.001419` at the
+declared 24,576 window and 3,000 output budget — under the `$0.05` call cap, **2,818** maximal turns under the
+`$4.00` store cap (probe above; the DeepSeek arm computes to `$0.002015` / 1,985 turns, matching
+`docs/NEXT.md`).
+*Owner:* `lead` (the roster is lead's to mint, per the D207 ruling 3) + `devtools` (the plumbing half of
+**#5118**). · *Acceptance:* the armed class names a model id that exists in the served catalog **and** has a
+passing gate run on the corpus (D137: "gate before flipping, always"; `check`'s `single-model-rig` is a string
+comparison and clearing it without a gate is a green lie), `demo/local-model-pointer.test.mjs` stays green across
+rig↔config agreement, and the arming receipt **#5118** demands is printed (the `check rig.selfdev.json` finding
+delta with the file named, plus one metered probe bill with `priceSource` named and `usd` non-null). ·
+*Blind spots:* a gate arm against a metered endpoint goes through `meteredChat` (#5024), which **refuses** an
+unkeyed metered call and enforces `DURIG_PROBE_CEILING_USD` — so gating costs real money and needs an explicit
+ceiling, unlike a loopback arm.
