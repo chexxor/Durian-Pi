@@ -70,7 +70,7 @@ Run this first — all reads, no writes:
 
 ```bash
 cd ~/Git/Durian-Pi
-git status --short -- . && git rev-list --count refs/remotes/origin/main..main   # 22 ahead at 24fe6c98, 0 pushed
+git status --short -- . && git rev-list --count refs/remotes/origin/main..main   # 27 ahead at 6cd29bd2, 0 pushed
 DURIG_DB=./selfdev.sqlite node cli.mjs queue --id 5143 --id 5144 --id 5145 --id 5146 --id 5149 --id 5152 --id 5153 --id 5154 --id 5155 --id 5156
 DURIG_DB=./selfdev.sqlite node cli.mjs queue 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('max id',max(i['id'] for i in d['items']));[print(i['id'],i['status'],i.get('from'),'->',i.get('to'),str(i.get('subject'))[:90]) for i in d['items'] if i['id']>=5157]"   # >5156 = lead cut the D212/D213 rows; still 5156 = re-send the brief
 node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status   # up/down; a broker started with --max-duration SELF-EXITS
@@ -83,7 +83,8 @@ node --env-file="$HOME/.config/durig/env" tools/channel-preflight.mjs      # KNO
 
 ## State (measured 2026-11-05T22:2xZ, same host signature as above)
 
-- **Trunk:** `main` = `24fe6c98`, **22 commits ahead of `origin/main`, 0 pushed** (the push grant is the operator's).
+- **Trunk:** `main` = `6cd29bd2`, **27 commits ahead of `origin/main`, 0 pushed** (the push grant is the operator's; this
+  pointer's own commit makes it 28).
   Session-D commits: `497dddd3` (D213 + ROADMAP 282–288 + `docs/runbooks/slow-loop.md`), `e7287d9d` (ROADMAP 289), `4a787a71`
   (`AGENTS.md` — stop reading the 49k-token journal whole), `17991f37` (UAR-8 + SELFDEV session-D pitfalls), `24fe6c98`
   (the four pointers I invented in my own docs, corrected).
@@ -93,6 +94,9 @@ node --env-file="$HOME/.config/durig/env" tools/channel-preflight.mjs      # KNO
 - **Loop costs (the new baseline, in `docs/runbooks/slow-loop.md` front-matter):** `docs` 1.2 s/6 · `guard` 2.0 s/24 ·
   `readapi` 3.8 s/5 · `check` 6.3 s/12 · `worktree` 7.8 s/23 · `toolchain` 11.1 s/16 · `tui` 12.4 s/46 · `rig` 24.0 s/63
   (**`demo/cli.test.mjs` alone = 20.1 s**) · `broker` 25.4 s/63. Mocked delegation loop `node demo/offline.mjs` = **0.301 s**.
+  The **closing** run at `6cd29bd2` printed **256/258 in 48.8 s**: the credential red plus
+  `demo/seat-turn-shape.test.mjs:292`, whose real-store leg asserts the store's sha256 is unchanged across its own read and
+  therefore **cannot hold while a broker is live** — a live-lane test in the fast lane, added to ROADMAP 282 as an addendum.
 - **Cost shape** (`tools/latency-budget.mjs`, 3.1 s, 63,172 generations): model-call p50 **52 ms** / p95 **9.0 s** / p99 1.8 m /
   max 2.0 h; **50.8%** of generations ≤ 5 s hold **1.8%** of busy time; **185 (0.29%)** > 10 min hold **517.5 h = 64.6%**;
   compaction p50 23.2 s / p95 4.2 min / **55.5 h**; **WAIT 72.4% / WORK 13.0% / HELD 5.9%**; **308.7 h** with zero generations
