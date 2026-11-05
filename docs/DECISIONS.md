@@ -8798,3 +8798,81 @@ unnoticed for 16 days.** Row **#5094** makes drift a visible finding rather than
   half-way turns `qa qa2 advocate auditor designer` into `no_model`, which is worse than honest absence.
 - **The boundary this decision did not move.** The delegate still did not claim/complete/route a row, build or link a
   vendor tree, edit `pi-main.pin.json`, touch `src/`, or start the broker. #5090 is landed by `lead`, not here.
+
+## D208 — the operator picked **DeepInfra** for the verifier class and made **seat sandboxing** a priority; both changed existing rows, and in both cases the naive action was wrong (2026-11-05, delegate acting, Linux Fedora 44 `7.2.14-200.fc44.x86_64`, node v24.22.1, git 2.56.0, `main = 0d71bf53` → `294e1806`)
+
+- **Ruling A (operator, verbatim): "For the verifier, please have it use DeepInfra and its API Key that have stored
+  elsewhere in our workspace or system."** This is the answer to D207's open half — the class needed an **endpoint**,
+  not just a key, and a hosted vendor removes the "no listener on `:1234`" problem and the GPU-slot problem at once.
+  **What the delegate did:** staged the credential at the seam the tree already uses — `DURIG_VERIFIER_API_KEY`
+  appended to **`~/.config/durig/env`** (mode 600, outside every git tree, value never echoed, 32 chars), copied from
+  the `DEEPINFRA_API_KEY` already present in the session env. **Nothing was armed:** `DURIG_VERIFIER_BASE_URL` is
+  still `http://127.0.0.1:1234/v1` in `durig.config.json`, so no seat's model state moved. Reproduce with
+  `grep -o -E "^[A-Z_]+=" ~/.config/durig/env` (names only) and `ls -l`.
+- **Why the paste is wrong, and it is a measurement, not a caution.** (1) The tracked roster pointer
+  `verifier/mistralai/ministral-3-14b-reasoning` is **absent from DeepInfra's live catalog** — `GET
+  /v1/openai/models` with the operator's key returned **HTTP 200, 174 ids, 0.33 s, zero inference**, exact-membership
+  test `false`, no id matching `/Ministral/i`. (2) A metered class must be priced by
+  `DURIG_VERIFIER_PRICE_USD_IN/_OUT`, **not** by our own `src/providers/deepinfra-prices.json`: `declaredPrice` reads
+  `data[].metadata.pricing` (`src/providers/local.mjs:104-121`) while that file is `{fetchedAt,source,unit,note,rows{}}`,
+  and the product's own resolver returns `price: null, priceSource: "none"` when pointed at it →
+  `metered-endpoint-unpriced` → **no model row** (ROADMAP **272**). (3) **The priced model is not the gated model:**
+  `deepseek-ai/DeepSeek-V4-Flash-0731` did **not meet the G2 floor** (defect 3/8, spread 5/8·2/8·2/8), while
+  **`openai/gpt-oss-120b` met it** (6/8, worst replicate 4/8) and **is** served by DeepInfra at `0.037/0.17` per Mtok
+  → `maxCallExposureUsd $0.001419` at the declared 24,576/3,000, under the `$0.05` call cap, **2,818** maximal turns
+  under `$4.00` (offline probe `.spike/delegate-20261105/verifier-arm-probe.mjs`, worth promoting to `tools/`).
+  D137 still binds — **gate before flipping** — and a gate arm against a metered endpoint goes through `meteredChat`
+  (#5024), so it needs an explicit `DURIG_PROBE_CEILING_USD`: **a spend decision only the operator makes.**
+- **The independence caveat, said rather than assumed.** The author seats run `local/iq3_s`
+  (`Qwen3.8-Flash-Next … IQ3_S`), so a DeepInfra `gpt-oss-120b` verifier is **cross-family and cross-vendor** —
+  `lead`'s invariant holds. The **credential**, however, is the same DeepInfra account. That is an explicit named
+  variable, not the silent same-vendor fallback `lead` refused (#5118), so that ruling stands untouched; if
+  **account-level** independence is wanted, only the operator can mint a second key. Registered as ROADMAP **273**.
+- **A `CONFIG_KEYS` instruction in #5118 that conflicts with the tree, flagged not followed.** #5118 asks that
+  `DURIG_VERIFIER_API_KEY` be registered in `CONFIG_KEYS`; `src/config.mjs:120-124` says the opposite on purpose
+  ("the API-KEY variables are deliberately NOT config keys: a credential belongs in the environment, never in a file
+  that could be committed") and `assertNoSecrets` refuses a secret-shaped value in a config file (`:100-106`). The
+  delegate changed no source. **Suggested re-rule for `lead`:** register the **price** keys and `DURIG_SPEND_LEDGER`,
+  keep the **key** env-only, and prove unknown-key refusal on the price keys.
+- **Ruling B (operator, verbatim): "I'd like to prioritize further improving the sandboxing of the members of the
+  team in the rig"**, defined as control over *"anything external to the agent itself … the filesystem, network
+  access, specific web domains, API keys, etc."*, with two constraints: **every customization on top of a bare pi /
+  pi-durable harness lives in an extension/plugin**, and the permissioning should be **flexible** — a seat may
+  request more, **a verifier judges the ask against project policy and the task**, and the grant is then raised
+  (buildable later), taking inspiration from **SELinux / Fedora** OS- and container-level security.
+- **The answer to "is it on the roadmap?" is yes, and saying so is what stops a sixth parallel track.** ROADMAP **60**
+  + **170–174** (D130) + **132** + **118** + milestone **M5** (D141), the landed report
+  `docs/reviews/zero-trust-zero-agent-research.md`, and two live rows: **#4829** (`security`, 170's position — the
+  gate for 171–174, `queued`) and **#4833** (`lead`, its decomposition, `held blockedBy #4829`). What the operator
+  named that was **not** covered got registered today as **268–273** (egress unmediated; the request→adjudicate→
+  raise-with-expiry→revoke cycle; the extension-placement invariant; the pinned-but-unconsumed prior art; the two
+  arming blockers), plus a dated **amendment on 174**: "native Windows first" contradicts **D131** and the report's
+  own finding that **Landlock is more achievable on Linux** (unprivileged, self-imposed at spawn, inherited by
+  children, TCP-port rules since ABI v4).
+- **The baseline moved in the rig's favour, and the doc said otherwise.** The 170–174 baseline paragraph claims a
+  seat's shell has "the parent environment's provider key". **That is false today** and the delegate proved it:
+  `confinedEnv` forces `inheritEnv: false` and re-supplies only a 12-name OS allowlist
+  (`src/confine.mjs:491,686-692,340-353`), *"A name that looks like a credential never crosses, whatever allowlist
+  was configured"* (`:365`), and an unknown conversation gets the **read-only** env, never an unconfined one
+  (`src/seattools.mjs:303-311`). What is genuinely missing is **reach**: `grep -c -iE "network|socket|egress"
+  src/confine.mjs` → **0**. So the work is egress + audit + claim-scoped grants, not secret-hygiene re-work — and
+  that ordering is a decision, not an observation.
+- **Prior art pinned, not consumed.** `vendor/eval/` now holds `cloudflare/sandbox-sdk @ 61cac81b` (Apache-2.0),
+  `arjan/awesome-agent-sandboxes @ db6ffc0a` (**no LICENSE file** — recorded as the escalation class the runbook
+  names), and `microsoft/agent-governance-toolkit` **re-cloned at `a918f763` (2026-11-04)**, 18 days past the pin our
+  review cites (`cfb44576`), which is why that review carries a dated **PIN MOVED** note. `docs/VENDOR-PINS.md`
+  regenerated and `tools/vendor-pins.mjs --check` → **PASS, 17 clones**. A second-round research commission is
+  written and **awaits the operator to route it**: `docs/reviews/agent-sandbox-substrate-research-prompt.md`.
+- **Two contradictions found by running the instruments, so the next session does not re-derive them.** (a)
+  `tools/channel-preflight.mjs` §7 prints **"VERDICT: NO SHELL CAN START HERE"** on this Linux box while
+  `tools/broker-serve.mjs --status` prints **`seat-shell-availability … "bash" CAN start … /usr/bin/bash`**, and the
+  store's own newest shell evidence (entry **#285389**, 2026-11-04T21:05:31Z, `devtools`, `name=bash`,
+  `isError=false`) contradicts the preflight. One of the two is running Windows-era logic; **217** is the row that
+  owns the host-conditional shell. (b) `check rig.selfdev.json` moved **115 → 116** findings (`citation-unresolvable`
+  56 → 57) with **zero** contributed by this session's docs-only edits — proven by stashing the three tracked files
+  and re-running: **116 either way**.
+- **The boundary this decision did not move.** No row claimed/completed/routed, no `src/` edit, no arming, no pin
+  file touched, no broker started, no push (`git rev-list --count origin/main..main` = **7** at `294e1806`,
+  re-measure). The delegate's writes were: `docs/ROADMAP.md`, `docs/VENDOR-PINS.md`,
+  `docs/reviews/agent-governance-toolkit-review.md`, `docs/reviews/agent-sandbox-substrate-research-prompt.md`,
+  `docs/NEXT.md`, this entry, and the out-of-tree credential file.
