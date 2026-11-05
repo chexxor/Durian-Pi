@@ -63,14 +63,14 @@ its worktree is gone); **#5145 `done`** (`impl`, branch `item-5145` tip `39ee4fc
 **#4833 → #5152**, **#5136 → #5153**, **#5127**.
 
 
-**Hand these to `lead` (done — brief delivered via the broker 2026-11-05T20:3xZ; `.spike/` is gitignored, rewrite from D212
+**Hand these to `lead` (done — brief delivered via the broker 2026-11-05T20:3xZ, and a follow-up at 21:2xZ; `.spike/` is gitignored, rewrite from D212
 if the files are gone):** (1) the **model-id drift** — every tracked fixture still names `local/iq3_s`: re-cited from a grep
 run today, `src/providers/local.mjs:10`, `tools/model-probes/corpus.mjs:257`, `tools/model-probes/cold-prefill.mjs:29`,
 `tools/model-probes/stream-probe.mjs:71`, `tools/model-probes/throughput.mjs:74-75`, `demo/deepinfra-catalog.test.mjs:122`, `demo/local-provider.test.mjs:166`,
 `demo/probe-metered-ledger.test.mjs:140`, `durig.config.default.json` (the `"local/iq3_s"` compaction-override key, which
 silently stops matching when the id moves and reverts `reserveTokens` 20480 → 16384), and `docs/ROADMAP.md:82, 3319, 3334,
-3817`; **two of those probes also name the dead endpoint** `http://127.0.0.1:47831/v1` (`stream-probe.mjs:71`,
-`throughput.mjs:75`) — nothing answers it since the move to `:8080`, which is the
+3817`; **two of those probes also name the dead endpoint** `http://127.0.0.1:47831/v1`
+(`tools/model-probes/stream-probe.mjs:71`, `tools/model-probes/throughput.mjs:75`) — nothing answers it since the move to `:8080`, which is the
 `docs/runbooks/hygiene-and-dead-model-pointers.md` class. One server-side alias (`iq3_s` on `:8080`) fixes both halves for
 free and keeps every fixture truthful; that alias is an **operator/server** action. (2) **`package.json` still reads `"name":
 "durig"`**, so D103's acceptance (`git grep -i durig` → only deliberate alias sites) is unmet — `pm` should close that
@@ -80,7 +80,17 @@ the filesystem — the probe is `.spike/delegate-20261105c/cite-audit.mjs` (giti
 and the existing instrument to extend rather than duplicate is `src/citation.mjs` (ROADMAP 190, sha citations, proven by
 `demo/checkup-citation.test.mjs`).
 
+**Rows the team created since (all `lead`/`impl`-owned — the delegate filed none):** **#5155** `impl → qa` *"verify request:
+the git guard states what it checked — config scope refused + NOT-checked census"* and **#5156** `impl → lead` *"DONE #5145 …
+ROW 1/2 DONE, NOT YET LANDED"* — **both `deferred`**, unverified, unlanded. **#5144 has moved `claimed → deferred`**: the seat
+parked it rather than producing a branch. Artifact for #5145 as the seat attests: branch `item-5145`, tip **`39ee4fcc`** (2
+commits, 5 files, +806/−1), `merge-tree main item-5145` exit 0, `rev-list --left-right --count main...item-5145` = `0 2`,
+`what-to-test --base=main` ok:true / 25 derived tests / 0 scanFindings.
+
 **History:** superseded blocks move VERBATIM to `docs/NEXT-ARCHIVE.md`; this file is a pointer with a **cap 200** lines
+(and a ~16.9 KB ceiling imposed by the 20,000 B clock-in digest — `demo/clockin-digest.test.mjs`), gated by
+`demo/next-pointer.test.mjs` (0.3 s) — cut before you add.
+ this file is a pointer with a **cap 200** lines
 (and a ~16.9 KB ceiling imposed by the 20,000 B clock-in digest — `demo/clockin-digest.test.mjs`), gated by
 `demo/next-pointer.test.mjs` (0.3 s) — cut before you add.
 
@@ -93,9 +103,9 @@ counts it every run: **345 `held`** (276 older than 7 d), **93 non-terminal LAND
 `main`** (zero-build closable), **75 orphan candidates**, **33 rows whose citations resolve to no current row**, **12 whose
 gate prose cites no resolvable id**. That is a `pm` release/cancel pass plus a `lead` read of the orphan bodies — the held / landing / orphan
 classes, not the 162, are where the hygiene work is.
-## State (measured 2026-11-05T19:3x–20:0xZ, Linux Fedora 45 / kernel `7.2.15-300.fc45.x86_64` / node v24.22.1 / git 2.56.0)
+## State (measured 2026-11-05T21:3xZ, Linux Fedora 45 / kernel `7.2.15-300.fc45.x86_64` / node v24.22.1 / git 2.56.0 — hostname-free probe: `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v`)
 
-`main` @`886a726e` (roadmap 279–280) on top of the landings, **ahead of `refs/remotes/origin/main`: re-measure, 0 pushed** (this pointer's own docs commits move that number — re-measure, do not carry it) (the operator's push
+`main` @`3283806d` (roadmap 281 + the hostname-free probe) on top of the landings, **15 ahead of `refs/remotes/origin/main`, 0 pushed** (this pointer's own docs commits move that number — re-measure, do not carry it) (the operator's push
 grant of 2026-11-05 was not exercised — the delegate lands locally and reports; `git push origin main` is the operator's to
 run or grant). Landed this session by
 SHA: `item-5131 3a7abc99` → merge `807f24a0`, `item-5111 083d2da2` → merge `a978bcd9`; `item-5125 385e3973` is **subsumed**

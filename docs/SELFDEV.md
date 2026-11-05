@@ -2076,3 +2076,12 @@ the prefix forever.
    or priced by declaration — never free by silence"), and a seat's own turn is capped by `DURIG_SPEND_CAP_STORE_USD` at
    request time (`src/providers/spend.mjs`, `call-refused`). Cheap disambiguation: `node cli.mjs config | grep -i model` and
    `test -e "$DURIG_SPEND_LEDGER"` (absent = no metered request has ever run on this store).
+9. **`uname -a` prints the hostname, so the entry point's own host-measurement instruction was breaking the project's own
+   rule and writing a transient label into the record.** `AGENTS.md:106` said "Measure `uname -a && node -v`" three lines under
+   "**never `user@hostname`**". Measured 2026-11-05 (Linux Fedora 45 `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
+   **32** tracked files carry the hostname (`grep -rl <hostname> docs/ *.md | wc -l`) — 17 in `docs/DECISIONS.md`, 24 in
+   `docs/NEXT-ARCHIVE.md` — and row **#5156** shows a seat writing `Linux <name>-Win10 7.2.15-300.fc45.x86_64` for a Fedora
+   kernel, i.e. a Linux measurement one label away from being filed under Windows (D131: both OSes are live platforms here, and
+   seat tools and process-death semantics differ). Use the four-field, hostname-free probe instead:
+   `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`. Whether the existing
+   records get redacted is an **operator ruling** (ROADMAP **281**) — do not rewrite audit trail by silence.
