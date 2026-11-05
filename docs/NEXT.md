@@ -55,9 +55,9 @@ and `parentPath` exist, which is why the guard printed `undefined/anthropic-ai-s
 
 **Blocker:** nothing is blocked on the rig. **Two things sit with the operator:** (1) **routing the two research
 commissions** (D151 bars the delegate; the operator offered to route them — they are the current critical path), and
-(2) **the fit of the armed verifier** — #5131 met the G2 floor but recorded **`CLEAN-PASSED 0`** in every replicate
-(see *Verifier* below), and whether that model may flip the roster (#5136) is an operator/`lead` call, not a measurement
-the rig will answer on its own.
+(2) **the fit of the armed verifier** — #5131 met the G2 floor but recorded **`CLEAN-PASSED 0`** in every replicate,
+with the confabulation shown in the transcript (see *Verifier* below), and whether that model may flip the roster
+(#5136) is an operator/`lead` call, not a measurement the rig will answer on its own.
 
 ## Operator rulings of 2026-11-05 (full text and receipts in D210)
 
@@ -98,12 +98,20 @@ the rig will answer on its own.
   `DURIG_SPEND_LEDGER=<worktree>/.spike/gate/spend-5131.jsonl`, `DURIG_PROBE_PRICE_USD_IN=0.037/_OUT=0.17`,
   `--whole-module --budget 120000 --replicate 3`. **72 accounted calls, $0.0387 of the $0.15 ceiling**, ~$0.0009/call,
   `priceSource: "env"`, `authKeyEnv` named never valued. **Defect named 6/7 in all three replicates → G2 floor MET**
-  (bar ≥ 4/7; the earlier recorded arm was 6/8). **But**: `clean, leading prompt FALSE-ALARM 7–8/8, CLEAN-PASSED 0` and
-  `clean, neutral FALSE-ALARM 7–8/8` in **every** replicate — on this corpus the model never passes a clean control.
-  Historical context: the old scorer census was 502 FALSE-ALARM / 0 CLEAN-PASSED and the `assertscan.mjs` fix moved it to
-  460/21/5 **on saved transcripts**; this is a fresh arm, so it is about the model, not the old scorer.
+  (bar ≥ 4/7; the earlier recorded arm was 6/8). **But**: `clean FALSE-ALARM 7–8/8` and `clean-neutral FALSE-ALARM 7–8/8`
+  in **every** replicate — on this corpus the model never passes a clean control.
+  **Read the transcript, and the false alarms are the model, not the scorer** (delegate read of
+  `docs/evidence/2026-11-05-gate-arm-5131/arm.log`, on the branch): for `H2-process-death-deadline` the **clean** answer
+  asserts a defect — "`waitForProcessDeath()` treats *any* error from `process.kill(pid,0)` as 'process is dead'… EPERM"
+  — and 25 s later the **same model on the same file** answers `clean-neutral` with "No – there is nothing in this module
+  that will throw… the `waitForProcessDeath` implementation for POSIX correctly loops with `process.kill(pid, 0)` until
+  the timeout expires." For `H3-truthy-sentinel-dead-code` the clean answer repeats the defect cell's claim verbatim
+  ("`normalizeBlock` is used but never defined"). So it **confabulates a plausible defect when asked in the defect view's
+  framing**, and declines when asked neutrally — which makes the corpus framing a contributor and suggests the cheap fix
+  is a **differential** gate (require: asserts on defect, declines on clean-neutral) before any further model spend.
   **Open, and load-bearing for 269 (G7 — "adjudicator armed first") and for #5136: is a `CLEAN-PASSED 0` verifier fit to
-  adjudicate a capability grant, or to be the roster?** Close it by ruling, not by re-running the same corpus.
+  adjudicate a capability grant, or to be the roster?** Close it by ruling or by the differential probe, not by re-running
+  the same corpus.
 - **Nothing is armed.** `DURIG_VERIFIER_BASE_URL` is still `http://127.0.0.1:1234/v1`, measured **ECONNREFUSED** on both
   `/v1/models` and `/chat/completions` → `qa qa2 advocate auditor designer` cannot take a turn at all. **#5136 `held`**
   behind #5125 + #5131 + **#5095** (stage 1, `deferred`): arm early, flip late, so #5096 lands under a working verifier.

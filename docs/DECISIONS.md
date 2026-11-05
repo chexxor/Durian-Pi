@@ -9016,3 +9016,17 @@ unnoticed for 16 days.** Row **#5094** makes drift a visible finding rather than
   the delegate's action, so the honest state is: **helper-landable, base-currency unproven, and a `send` harness was
   generating** (`devtools` on #5134, store writes live) — which is the condition the runbook says not to land under.
   Recorded in `docs/NEXT.md` as the second command of the next pass rather than resolved under time pressure.
+- **The `CLEAN-PASSED 0` half, answered by reading the transcript instead of spending more.** From
+  `docs/evidence/2026-11-05-gate-arm-5131/arm.log` (on `item-5131`, promoted by the seat so the spend is re-checkable):
+  for **`H2-process-death-deadline`** the **clean** cell asserts — "`waitForProcessDeath()` treats *any* error from
+  `process.kill(pid, 0)` as 'process is dead'… On Linux `process.kill(pid,0)` throws when the caller lacks permission
+  (EPERM) even though the process is still running" — and 25 seconds later the **same model, on the same module**, answers
+  the neutral view: "No – there is nothing in this module that will throw an exception or otherwise break when it runs on a
+  non-Windows platform… The `waitForProcessDeath` implementation for POSIX correctly loops with `process.kill(pid, 0)`
+  until the timeout expires." For **`H3-truthy-sentinel-dead-code`** the clean answer restates the defect cell's claim
+  ("`normalizeBlock` is used but never defined") against the clean file. **Verdict: these are confabulations by the model
+  under the defect view's framing, not scorer over-firing** — the one answer the scorer called `AMBIGUOUS` was a correct
+  plain-language decline, so the scorer is lenient rather than trigger-happy here. Consequence for the decision, offered
+  not taken: the cheap next instrument is a **differential** gate (assert-on-defect **and** decline-on-clean-neutral, per
+  cell) rather than another model purchase; whether the armed model is fit for 269/G7 and whether #5136 flips remain
+  `lead`/operator rulings, and the delegate filed no row for the differential — it goes to `lead` with the rulings.
