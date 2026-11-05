@@ -15,6 +15,8 @@
       "demo/compact.test.mjs",
       "demo/compacteval.test.mjs",
       "demo/compaction-harness.test.mjs",
+      "demo/config-credential-surface.test.mjs",
+      "demo/config-unknown-key.test.mjs",
       "demo/config.test.mjs",
       "demo/constitution.test.mjs",
       "demo/context-over-window.test.mjs",
@@ -271,7 +273,8 @@
       "demo/spend-cap-guard.test.mjs",
       "demo/syncpi.test.mjs",
       "demo/test-areas.test.mjs",
-      "demo/test-runner-concurrency.test.mjs"
+      "demo/test-runner-concurrency.test.mjs",
+      "demo/verifier-arm-probe.test.mjs"
     ]
   }
 }

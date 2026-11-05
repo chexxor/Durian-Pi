@@ -1,0 +1,781 @@
+
+CORPUS: 8 items (3 mutants with execution proofs, 5 from git fix history)
+  PROOF M1-cell-budget-off-by-one: clean [3,4,"abc","aaaa"] != mutant [4,5,"abcd","aaaaa"]
+  PROOF M2-regex-word-boundary-overreach: clean null != mutant "refused by durig: would change the seat's working tree or HE"
+  PROOF M3-pause-still-claims: clean [] != mutant [{"name":"impl","reason":"queued"}]
+
+FEEDING: WHOLE MODULE (budget 120000 est. tokens)   scoring material: answer+reasoning
+  item                               file                   frag~tok whole~tok  decision
+  H1-npm-invocation                  src/worktree.mjs            447     22014  whole module
+  H2-process-death-deadline          src/job-object.mjs         1013      4096  whole module
+  H3-truthy-sentinel-dead-code       src/rig.mjs                1891     20768  whole module
+  H4-doc-proxy-escape                src/rig.mjs                2035     20912  whole module
+  H5-block-local-helper-swallowed    scripts/clockin.mjs        1992      4145  whole module
+  M1-cell-budget-off-by-one          src/textwidth.mjs           797      2086  whole module
+  M2-regex-word-boundary-overreach   src/confine.mjs              63      7139  whole module
+  M3-pause-still-claims              src/driver.mjs              960      1686  whole module
+
+MATCHED-PAIR ACCOUNTING (199) — policy: strip-both  (symmetric: the pair differs by the defect and nothing else)
+  item                               view      defect ch  clean ch    delta      d%  shown def  shown cln  cmt% def  cmt% cln
+  H1-npm-invocation                  fragment       2926      3568      642   21.9%       1205       1175     58.8%     67.1%
+  H1-npm-invocation                  whole         69702     70344      642    0.9%      59437      60079     14.7%     14.6%
+                                     the whole-module CLEAN side carries 41 comment line(s) containing this item's own rubric vocabulary — keep-both would LEAK the answer into a control, e.g.: // nothing was giving them one - so before this they worked in durig's LIVE tree | * Resolve a PORTABLE, shell-free way to run npm.
+  H2-process-death-deadline          fragment       2733      3472      739     27%       2733       3472        0%        0%
+  H2-process-death-deadline          whole         12166     12905      739    6.1%      11057      11796      9.1%      8.6%
+                                     the whole-module CLEAN side carries 1 comment line(s) containing this item's own rubric vocabulary — keep-both would LEAK the answer into a control, e.g.: // worktree is only removed once the tree is confirmed dead.
+  H3-truthy-sentinel-dead-code       fragment       7744      8131      387      5%       5105       5492     34.1%     32.5%
+  H3-truthy-sentinel-dead-code       whole         57993     58380      387    0.7%      56073      56460      3.3%      3.3%
+                                     the whole-module CLEAN side carries 1 comment line(s) containing this item's own rubric vocabulary — keep-both would LEAK the answer into a control, e.g.: // Build the INLINE STRUCTURED HEADER: item id + the decision-relevant
+  H4-doc-proxy-escape                fragment       8131      8731      600    7.4%       5492       5576     32.5%     36.1%
+  H4-doc-proxy-escape                whole         58380     58980      600      1%      56460      57060      3.3%      3.3%
+                                     the whole-module CLEAN side carries 1 comment line(s) containing this item's own rubric vocabulary — keep-both would LEAK the answer into a control, e.g.: * capability requirements (A2A-style advertised tags). Throws with a
+  H5-block-local-helper-swallowed    fragment       5722      5149     -573    -10%       5378       4805        6%      6.7%
+  H5-block-local-helper-swallowed    whole         13822     15442     1620   11.7%      11190      12810       19%       17%
+                                     the whole-module CLEAN side carries 0 comment line(s) containing this item's own rubric vocabulary — keep-both is leak-free for this item
+  M1-cell-budget-off-by-one          fragment       4193      4189       -4   -0.1%       2151       2147     48.7%     48.7%
+  M1-cell-budget-off-by-one          whole          9960      9956       -4      0%       5632       5628     43.5%     43.5%
+                                     the whole-module CLEAN side carries 35 comment line(s) containing this item's own rubric vocabulary — keep-both would LEAK the answer into a control, e.g.: // src/textwidth.mjs â€” measure text in terminal CELLS, not JavaScript code uni | // `String.length` is wrong for everything this UI actually renders: a CJK glyph
+  M2-regex-word-boundary-overreach   fragment        169       176        7    4.1%        169        176        0%        0%
+  M2-regex-word-boundary-overreach   whole         33535     33542        7      0%      19273      19280     42.5%     42.5%
+                                     the whole-module CLEAN side carries 51 comment line(s) containing this item's own rubric vocabulary — keep-both would LEAK the answer into a control, e.g.: // confine.mjs — the M3 boundary: a confining ExecutionEnv (security conditions  | // with no confinement at all (pi-durable env/node.ts:644) - and they never pass
+  M3-pause-still-claims              fragment      11015     11026       11    0.1%       2590       2601     76.5%     76.4%
+  M3-pause-still-claims              whole         14023     14034       11    0.1%       4550       4561     67.6%     67.5%
+                                     the whole-module CLEAN side carries 38 comment line(s) containing this item's own rubric vocabulary — keep-both would LEAK the answer into a control, e.g.: // write a row, and nothing wakes the recipient, so a routed chain dies after on | // nothing advancing it, and submits a wake. `durig run` loops it with
+
+==============================================================================
+GATE RUN: gpt-oss-120b-5131 (openai/gpt-oss-120b) @ https://api.deepinfra.com/v1/openai
+  feeding=whole budget=120000 estTokens  material=answer+reasoning  pair-comments=strip-both  replicates=3
+  auth=DURIG_VERIFIER_API_KEY  ledger=/home/chexxor/Git/durian-dev/seatroot/item-5131/.spike/gate/spend-5131.jsonl  ceiling=0.15
+==============================================================================
+
+##############################################################################
+REPLICATE 1 of 3
+##############################################################################
+
+--- H1-npm-invocation (hist, src/worktree.mjs) — whole module, ~22014 est. tok ---
+  defect        HIT groups=3/4 need=3  46.8s finish=stop completion=2273
+      **Defect:** The fallback logic that tries to locate the repository root in `removeClaimedWorktree` can loop forever.
+      
+      **Mechanism:** When `git rev‑parse --show‑toplevel` fails, the code falls back to walking up the directory tree:
+      
+      ```js
+      let candidate = resolved;
+      while (true) {
+          …
+          const parent = resolved.split(/[\\/]/);   // ← uses *resolved* instead of *candidate*
+          parent.pop();
+          if (parent.length === 0) break;
+          candidate = parent.join(...);
+      }
+      ```
+      
+      Because it always splits the original `resolved` path, `parent` never changes, `candidate` is repeatedly set to the same parent directory, a
+  clean         FALSE-ALARM  47.6s finish=stop completion=2343
+      **Defect:** `listWorktrees()` masks the *locked* flag.
+      
+      **Mechanism**  
+      The function builds each entry with  
+      
+      ```js
+      worktrees.push({ branch: null, locked: false, ...current });
+      ```
+      
+      `current` may contain `locked: true` (set when a “locked” line is read), but because the spread is **after** the defaults, the `locked: false` default overwrites the real value. Consequently every worktree is reported as *unlocked*.
+      
+      **Runtime manifestation**  
+      Code that decides whether a branch can be reused or a worktree can be removed (e.g. `prepareSeatWorkspace` and `removeClaimedWorktree`) queries `listWorktrees`. It sees no lock, assum
+  clean-neutral FALSE-ALARM  11.9s finish=stop completion=548
+      Yes – there is a runtime bug that shows up on Linux (and any platform).  
+      
+      In **`removeClaimedWorktree`** the code does:
+      
+      ```js
+      const entries = await readdir(worktree, { recursive: true, withFileTypes: true });
+      ```
+      
+      `fs.promises.readdir` does **not** accept a `recursive` option (only the callback‑based `fs.readdir` does, and even then it’s deprecated). Passing it causes Node to throw a `TypeError: options.recursive is not a valid option` the moment the function is called, aborting the removal flow.  
+      
+      The fix is to drop `recursive:true` and walk the directory tree manually (or use a library) while keeping `withFileTypes:true`. This 
+
+--- H2-process-death-deadline (hist, src/job-object.mjs) — whole module, ~4096 est. tok ---
+  clean         FALSE-ALARM  47.0s finish=stop completion=1226
+      **Defect:** `waitForProcessDeath()` treats *any* error from `process.kill(pid, 0)` as “process is dead”.  
+      
+      **Mechanism:** On Linux `process.kill(pid, 0)` throws when the caller lacks permission to signal the target (EPERM) even though the process is still running. The catch block (`catch { return true; }`) interprets this as termination, so the function returns **true** immediately.  
+      
+      **Manifestation:** The caller (e.g., the job‑object test) believes the spawned process has exited, skips the proper cleanup, and later operations (like waiting for the real death or cleaning up resources) fail, causing the test to crash or report a false‑positive “process died” on Linu
+  defect        HIT+PHANTOM groups=2/3 need=2 PHANTOM[taskkill|pidpromise]  36.0s finish=stop completion=2097
+      **Defect:** `runPS()` assumes a PowerShell executable is always present.  
+      It determines the executable with  
+      
+      ```js
+      const psPath = (await execFileP('where', ['pwsh'], {encoding:'buffer'})
+                       .then(() => 'pwsh')
+                       .catch(() => 'powershell')).trim();
+      ```
+      
+      On Linux the `where` command does not exist, so the promise is rejected and the fallback returns **`'powershell'`**. If neither **`pwsh`** nor **`powershell`** is installed (the usual case on Linux), the subsequent call  
+      
+      ```js
+      await execFileP(psPath, [...])
+      ```  
+      
+      fails with `ENOENT` (no such file or directory). The error
+  clean-neutral AMBIGUOUS  25.1s finish=stop completion=848
+      No – there is nothing in this module that will throw an exception or otherwise break when it runs on a non‑Windows platform. All Windows‑specific code (PowerShell scripts, `where`, `taskkill`, etc.) is guarded by `if (!isWindows)` checks, and the Linux path uses only standard Node APIs (`process.kill`, `mkdtemp`, `rm`, etc.). The `waitForProcessDeath` implementation for POSIX correctly loops with `process.kill(pid, 0)` until the timeout expires, so it behaves as intended. In short, the module runs without runtime errors on Linux.
+
+--- H3-truthy-sentinel-dead-code (hist, src/rig.mjs) — whole module, ~20768 est. tok ---
+  defect        HIT groups=2/3 need=2  80.1s finish=stop completion=2947
+      **Defect – `normalizeBlock` is never defined at runtime**  
+      
+      The module imports `normalizeBlock` from `./queue‑lifecycle.mjs` and later calls it (e.g. in **send_work** and **defer_work**). The file that actually defines the gate‑validation helper is `queue‑lifecycle.mjs`, but it exports `normalizeBlockedBy`, not `normalizeBlock`. Because the import name does not exist, Node throws a **`ReferenceError: normalizeBlock is not defined`** as soon as any tool that touches the gate logic runs (the first call is in `send_work`). This aborts the whole extension on Linux at runtime. The fix is to import the correct function (or rename the export) so the symbol exists.
+  clean         FALSE-ALARM  37.0s finish=stop completion=1892
+      **Defect:** `normalizeBlock` is used but never defined in this file – it’s imported from `"./queue‑lifecycle.mjs"` without any guarantee that the module actually exports it. When a tool (e.g. **send_work** or **defer_work**) passes a `block` argument, the code executes  
+      
+      ```js
+      const park = args.block ? normalizeBlock(args.block) : null;
+      ```  
+      
+      and later  
+      
+      ```js
+      ...(gateBlock ? { block: gateBlock } : {})
+      ```  
+      
+      If the imported module does not provide a `normalizeBlock` export, the call throws a **ReferenceError: normalizeBlock is not defined** at runtime. On Linux this crashes the extension as soon as a seat tries to se
+  clean-neutral FALSE-ALARM  52.1s finish=stop completion=2049
+      The code as‑written does not contain a Linux‑specific runtime defect; it compiles and runs correctly. All imports, async / await usage, and doc‑proxy handling are guarded, and no obvious “cannot read settled overlay” or missing‑module errors appear. In short – there’s no runtime‑crashing bug here.
+
+--- H4-doc-proxy-escape (hist, src/rig.mjs) — whole module, ~20912 est. tok ---
+  clean         FALSE-ALARM  44.2s finish=stop completion=2039
+      **Defect:** `normalizeBlock` is imported but never defined/exported, so when a caller supplies a `block` argument (e.g. `send_work` with a park) the code executes  
+      
+      ```js
+      const park = args.block ? normalizeBlock(args.block) : null;
+      ```
+      
+      and crashes with **`TypeError: normalizeBlock is not a function`** (or “cannot read property … of undefined”).  
+      
+      **Mechanism:** The import statement  
+      
+      ```js
+      import { normalizeBlock } from "./queue-lifecycle.mjs";
+      ```  
+      
+      assumes `queue‑lifecycle.mjs` exports a function named `normalizeBlock`. On Linux (Node.js) the module loads, but the export is missing, so the identifier i
+  defect        HIT groups=3/3 need=2  62.7s finish=stop completion=2301
+      **Defect – uncaught file‑system error in `peek_queue`**
+      
+      `peek_queue` always tries to write a markdown dump of the queue:
+      
+      ```js
+      const cwd = api.env?.cwd;
+      if (cwd) {
+          const file = join(cwd, ".durig", `queue-${scope}.md`);
+          mkdirSync(join(cwd, ".durig"), { recursive: true });
+          writeFileSync(file, [header, ...lines].join("\n") + "\n", "utf8");
+      }
+      ```
+      
+      If the seat’s working directory (`api.env.cwd`) exists but the process cannot create the `.durig` sub‑directory or write the file (e.g. running under a non‑writable directory on Linux, a read‑only mount, or lacking permission), `mkdirSync`/`writeFileSync` throws
+  clean-neutral FALSE-ALARM  41.9s finish=stop completion=1206
+      The code as written does not contain a runtime‑breaking defect on Linux. All imports resolve, the doc‑proxy handling follows the “snapshot inside the commit” rule, and the file‑system calls guard against missing directories. No undefined variables or mismatched argument orders appear. In short, the module should run without crashing.
+
+--- H5-block-local-helper-swallowed (hist, scripts/clockin.mjs) — whole module, ~4145 est. tok ---
+  defect        MISS groups=1/3 need=2  16.3s finish=stop completion=760
+      **Defect:** `branchDebt()` calls `git` directly (e.g. `git branch …`, `git rev‑list …`) without a `-C <repo>` or any `try/catch`. It therefore assumes the process’s current working directory is a Git repository.  
+      
+      **Mechanism:** When the script is invoked from a directory that isn’t a Git repo (or when the repo’s `.git` directory can’t be found), `execFileSync("git", …)` throws (stderr “fatal: not a git repository …”). Because the call isn’t wrapped in a `try…catch`, the exception propagates out of `main()` and aborts the program.  
+      
+      **Manifestation:** On Linux the script crashes with an uncaught exception such as  
+      
+      ```
+      Error: Command failed: git b
+  clean         FALSE-ALARM  57.7s finish=stop completion=1577
+      **Defect:** The default DB path is read from the wrong environment variable.
+      
+      ```js
+      const opts = {
+          db: process.env.DURIAN_PI_DB   // ← typo
+              || process.env.DURIG_DB
+              || "./selfdev.sqlite",
+          …
+      };
+      ```
+      
+      Later the child process is given the *correct* variable name:
+      
+      ```js
+      env: { …, DURIG_PI_DB: db, DURIG_DB: db },
+      ```
+      
+      On Linux (and any OS) if a user sets `DURIG_PI_DB` (the intended variable) the script ignores it, falls back to `"./selfdev.sqlite"` and then runs `cli.mjs` with a non‑existent or wrong database file. The CLI (`cli.mjs`) aborts, causing `execFileSync` to throw
+  clean-neutral FALSE-ALARM  29.2s finish=stop completion=927
+      Yes – the script assumes a global `fetch` API that only exists in recent Node releases (≥ 18).  
+      
+      In **`probeLocal()`** it does:
+      
+      ```js
+      const r = await fetch(`http://127.0.0.1:${port}/v1/models`, …);
+      ```
+      
+      If the script runs on a Linux box with an older Node version (e.g., Node 16, which ships without a built‑in `fetch`), the call throws a **`ReferenceError: fetch is not defined`** as soon as `main()` reaches the `await probeLocal()` line, aborting the whole program. The fix is to import a fetch polyfill (e.g., `import fetch from "node-fetch"`), or require Node 18+.
+
+--- M1-cell-budget-off-by-one (mut, src/textwidth.mjs) — whole module, ~2086 est. tok ---
+  clean         FALSE-ALARM  18.0s finish=stop completion=536
+      **Defect:** The module uses the **`/v` (Unicode‑set) flag** on several regular‑expression literals (e.g., `visibleCharacterPattern = /[…]/v`).  
+      
+      **Mechanism:** The `v` flag is a very recent V8/ECMAScript feature; many Linux Node runtimes (e.g., Node 18, early Node 20) do not recognise it. When the file is `require`‑d/`import`‑ed, the JavaScript engine throws a **`SyntaxError: Invalid regular expression flag 'v'`** during parsing, aborting module loading.  
+      
+      **Manifestation:** The program crashes immediately on start‑up (or when the module is first imported) on typical Linux environments, never reaching any of the exported functions. This is the single most severe run
+  defect        HIT groups=2/3 need=2  10.5s finish=stop completion=450
+      **Defect:** The module uses the **`/v` (Unicode‑sets) flag** in several regular‑expression literals (e.g., `visibleCharacterPattern = /…/v`).  
+      
+      **Mechanism:** The `/v` flag was added to the ECMAScript spec only recently and is not implemented in older V8 builds (e.g., the Node.js version that ships on many Linux distributions). When the file is parsed, V8 throws a `SyntaxError: Invalid regular expression: ...: Invalid flag 'v'`. This happens at module load time, before any function is called, so the whole package fails to import.  
+      
+      **Manifestation:** Running the code on a Linux environment with an unsupported Node version crashes with a `SyntaxError` on the first `/
+  clean-neutral FALSE-ALARM  14.9s finish=stop completion=657
+      Yes – it crashes at runtime on many Linux installations because the module uses the **`/v` RegExp flag**:
+      
+      ```js
+      const visibleCharacterPattern = /[^\p{Default_Ignorable_Code_Point}…]/v;
+      const spacingMarkPattern      = /\p{Spacing_Mark}/v;
+      const rgiEmojiPattern        = /^\p{RGI_Emoji}$/v;
+      ```
+      
+      The `v` (Unicode‑set) flag was added to the ECMAScript spec only recently (ES2024) and is supported only in the newest Node builds (≥ v20 with full‑icu). On typical Linux boxes that ship older Node (e.g. v16/v18) the parser throws **`SyntaxError: Invalid regular expression flag 'v'`** when the module is loaded, preventing any of the functions from being u
+
+--- M2-regex-word-boundary-overreach (mut, src/confine.mjs) — whole module, ~7139 est. tok ---
+  defect        TRUNCATED-EMPTY groups=0/0 need=2  60.5s finish=length completion=3000
+      
+  clean         FALSE-ALARM  75.2s finish=length completion=3000
+      **Defect:** `wrapper.exec` blindly spreads the `options` argument (`{ …options, cwd: confinedRoot, … }`). When a caller invokes `exec` without an `options` object (the common case – e.g. `env.exec(['git','status'])`), `options` is `undefined`. Object‑spread on `undefined` throws a **TypeError** (“Cannot convert undefined or null to object”), aborting the whole call before any policy check runs.
+      
+      **Mechanism:** The line  
+      
+      ```js
+      return base.exec(
+          command,
+          { ...options, cwd: confinedRoot, inheritEnv: false, env: pickEnv(options?.env, allowlist) },
+          context,
+      );
+      ```  
+      
+      forces a spread of `options`. If `options` is
+  clean-neutral FALSE-ALARM  41.9s finish=stop completion=2012
+      The module looks sound – there’s no obvious bug that would cause a runtime crash on Linux. All the functions are defined before they’re used (hoisting takes care of the `rebaseChecksOutBranch` reference), the async wrappers correctly propagate `Result` objects, and the path‑checking logic uses only Node APIs that behave the same on Linux. In short, the code should run without throwing on a Linux host.
+
+--- M3-pause-still-claims (mut, src/driver.mjs) — whole module, ~1686 est. tok ---
+  clean         FALSE-ALARM  40.8s finish=stop completion=1425
+      **Defect:** The default parameters that create mutable `Set` objects (`pendingConvIds = new Set()`, `busySeats = new Set()`, `stoppedConvIds = new Set()`) are evaluated **once at function definition time**. Every call to `selectWakes` (and any other function that re‑uses this pattern) receives the **same Set instance**.
+      
+      **Mechanism:** When a caller mutates one of those Sets (e.g., `pendingConvIds.add(id)`), the change is stored in the shared Set that will be seen by all subsequent calls that rely on the default. This silently corrupts the logic that decides which seats are “pending”, “busy”, or “stopped”. The corrupted state can make the driver think a seat is still pending or b
+  defect        HIT groups=2/3 need=2  61.6s finish=stop completion=2749
+      **Defect:** `selectWakes` (and the code that calls it) assumes that the arguments `pendingConvIds`, `busySeats` and `stoppedConvIds` are **`Set` objects** and calls the method `has` on them. The function’s signature gives them a default value of `new Set()`, but nothing prevents a caller from passing an ordinary array, plain object or any other iterable. When such a value is supplied, the first call to `pendingConvIds.has(convId)` (or `busySeats.has(name)`, `stoppedConvIds.has(convId)`) throws **`TypeError: pendingConvIds.has is not a function`**, aborting the whole driver run.
+      
+      **Mechanism:** `has` is a Set‑specific method; it does not exist on arrays or generic objects. The cod
+  clean-neutral FALSE-ALARM  14.0s finish=stop completion=750
+      The module does not contain a runtime‑breaking defect on Linux. All of the syntax is valid (including the trailing comma in the `.some()` call, which is allowed in modern Node), the default parameters are evaluated correctly on each call, and the code only uses standard ES‑module features that work on Linux‑based Node installations. Any failures would have to come from the external `storage` or `harness` objects, not from the code shown.
+
+##############################################################################
+REPLICATE 2 of 3
+##############################################################################
+
+--- H1-npm-invocation (hist, src/worktree.mjs) — whole module, ~22014 est. tok ---
+  clean         FALSE-ALARM  9.9s finish=stop completion=444
+      **Defect:** `ensureIgnored` (and a few later callers) use `await readFile(...)` and `await writeFile(...)` but the module never imports `readFile`/`writeFile` from **node:fs/promises**. Only `readFileSync` is imported from `fs`.  
+      
+      **Mechanism:** At runtime the identifiers `readFile` and `writeFile` are undefined, so the first call to `ensureIgnored` throws a `ReferenceError: readFile is not defined` (or `writeFile`).  
+      
+      **Manifestation:** Any code path that invokes `ensureIgnored` – e.g. `createWorktree` (which calls `ensureIgnored` before adding the worktree) – crashes on Linux with an uncaught exception, aborting the whole operation. This is the single most severe 
+  clean-neutral FALSE-ALARM  37.2s finish=stop completion=1492
+      The module runs fine on Linux – there’s no hidden bug that will cause it to throw at runtime. All of the Node API calls (`fs/promises`, `child_process.execFile`, path handling, etc.) are used correctly, and the control‑flow logic (promises, error handling, string‑splitting, etc.) does not contain any undefined variables or platform‑specific assumptions that would break on a Linux host. In short, the code as written is safe to execute on Linux.
+  defect        HIT groups=3/4 need=3  46.9s finish=stop completion=1983
+      **Defect:** `removeClaimedWorktree` can enter an infinite loop while trying to locate the repository root.
+      
+      **Mechanism:**  
+      When the normal `git rev‑parse` calls fail, the code falls back to a manual upward walk:
+      
+      ```js
+      let candidate = resolved;
+      while (true) {
+          …
+          const parent = resolved.split(/[\\/]/);   // ← uses *resolved* (the original path)
+          parent.pop();
+          if (parent.length === 0) break;
+          candidate = parent.join(...);
+      }
+      ```
+      
+      The loop always splits the *original* `resolved` string instead of the current `candidate`. Consequently `candidate` never changes after the first iterati
+
+--- H2-process-death-deadline (hist, src/job-object.mjs) — whole module, ~4096 est. tok ---
+  clean-neutral FALSE-ALARM  17.8s finish=stop completion=719
+      Yes – the **`runPS` helper will crash on Linux**.
+      
+      ```js
+      async function runPS(script) {
+          const psPath = (await execFileP("where", ["pwsh"], { encoding: "buffer" })
+              .then(() => "pwsh")
+              .catch(() => "powershell"))
+              .trim()
+              .replace(/"/g, "");
+          return execFileP(psPath, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], …);
+      }
+      ```
+      
+      * **What happens:**  
+        On Linux the command `where` does not exist (it’s a Windows‑only utility). `execFileP("where", …)` therefore throws `ENOENT`. The `catch` falls back to the string `"powershell"`; the code then tries to execute `
+  clean         FALSE-ALARM  57.0s finish=stop completion=1640
+      **Defect:** The PowerShell helper used by `spawnInJob` calls a non‑existent method – it invokes `[JobApi]::Terminate($hJob)` even though the class only defines `TerminateJobObject`.  
+      
+      **Mechanism:** When the helper runs (on Windows) the call throws a PowerShell “method not found” error, the script exits with a non‑zero code and never writes the child PID. `spawnInJob` therefore never resolves `pidPromise`; the caller times‑out, the cleanup code tries to kill an undefined PID and the whole operation fails.  
+      
+      **Manifestation:** The function rejects (or hangs until the 15 s timeout) instead of returning a running process handle, causing the test suite to crash. This is
+  defect        HIT+PHANTOM groups=2/3 need=2 PHANTOM[taskkill|pidpromise]  70.7s finish=stop completion=2231
+      **Defect:** The PowerShell helper script built in `spawnInJob` calls a non‑existent static method – `[JobApi]::Terminate($hJob)`.  
+      
+      **Mechanism:** The C#‑style class `JobApi` defines `TerminateJobObject` (the Win32 API wrapper) but never defines a `Terminate` method. When the helper runs (the Windows branch of `spawnInJob`), PowerShell throws a *MethodNotFound* exception, the script exits with an error, and the promise `pidPromise` is rejected. The caller receives a rejected promise and the whole `spawnInJob` call fails.  
+      
+      **Manifestation:** On any platform where the Windows branch is exercised (e.g. when the module is imported on Linux and a test inadvertently forc
+
+--- H3-truthy-sentinel-dead-code (hist, src/rig.mjs) — whole module, ~20768 est. tok ---
+  clean         FALSE-ALARM  46.6s finish=stop completion=1964
+      **Defect:** The *paused* check in **`claim_work`** is wrong – it only blocks a claim when the rig is paused **and an `itemId` is supplied**.
+      
+      **Mechanism:**  
+      
+      ```js
+      const control = await tx.doc(RigControl);
+      const paused = control?.paused === true;
+      if (paused && args.itemId !== undefined) {
+          return { kind: "paused", … };
+      }
+      …
+      if (!paused) { … normal claim … }
+      …
+      if (paused) return { kind: "paused", … };
+      ```
+      
+      When the rig is paused and the caller **does not** pass `itemId`, the code falls through the `if (!paused)` block and proceeds to claim the oldest workable item. The later `if (paused)` guard
+  clean-neutral FALSE-ALARM  37.1s finish=stop completion=1511
+      The module as written does not contain a runtime‑breaking defect on Linux. All imports resolve, the async `api.commit` calls are correctly awaited, and every property access is guarded against `null`/`undefined`. The only places that could throw (e.g., missing export `normalizeBlock` or an undefined `seatHasReadTool`) depend on external modules that are assumed to exist in the project. In isolation, the code will load and run without crashing.
+  defect        HIT groups=2/3 need=2  73.6s finish=stop completion=2339
+      **Defect:** `normalizeBlock` is imported but never defined/exported.
+      
+      **Mechanism:**  
+      ```js
+      import { normalizeBlock } from "./queue-lifecycle.mjs";
+      …
+      const park = args.block ? normalizeBlock(args.block) : null;
+      ```
+      When the module is loaded Node resolves the import. On Linux (and any platform) the `queue‑lifecycle.mjs` file does not export a binding named `normalizeBlock`, so the import fails with a **`ReferenceError: Cannot access 'normalizeBlock' before initialization`** (or “`normalizeBlock is not exported`”). The error occurs at module‑initialisation time, before any tool runs, causing the whole rig to crash at start‑up.  
+      
+      **F
+
+--- H4-doc-proxy-escape (hist, src/rig.mjs) — whole module, ~20912 est. tok ---
+  clean-neutral FALSE-ALARM  62.8s finish=stop completion=2192
+      **No – the module runs as‑written.**  
+      
+      All imports resolve, the doc‑proxy helpers are used only inside `api.commit` callbacks, and every place a plain‑object snapshot is required the code does exactly that. The only “dangerous” calls (`writeFileSync`, `mkdirSync`, `join`, etc.) are guarded by existence checks, and the optional‑parameter handling (`inlineBody`, `blockedBy`, `tier`, etc.) never leads to a type error. In short, there’s no runtime‑crashing defect on Linux in the code you posted.
+  clean         FALSE-ALARM  53.4s finish=stop completion=2164
+      **Defect:** `normalizeBlock` is never defined in this module (or exported from `./queue‑lifecycle.mjs`). The code imports it
+      
+      ```js
+      import { normalizeBlock } from "./queue-lifecycle.mjs";
+      ```
+      
+      and later calls it in **send_work** and **defer_work**:
+      
+      ```js
+      const park = args.block ? normalizeBlock(args.block) : null;
+      ```
+      
+      If the imported file does not actually export a function named `normalizeBlock`, the import resolves to `undefined`. When the tool runs, the call `normalizeBlock(args.block)` throws a **TypeError: normalizeBlock is not a function** (or a ReferenceError if the import fails). This happens at runtime on Linu
+  defect        HIT groups=3/3 need=2  69.7s finish=stop completion=2702
+      **Defect:** The module imports a non‑existent function – `normalizeBlock` from `"./queue-lifecycle.mjs"` – but the file only exports `normalizeBlockedBy` (or doesn’t export `normalizeBlock` at all).  
+      
+      **Mechanism:** When `send_work`, `defer_work` or any code path that calls `enqueueItem` executes, it invokes `normalizeBlock(block)`. Because the imported identifier is `undefined`, Node throws a **TypeError** (`normalizeBlock is not a function`) at runtime.  
+      
+      **Manifestation:** The first tool that tries to enqueue a work item (e.g. `send_work` or `defer_work`) crashes the rig with the above TypeError, aborting the request and leaving the rig in an error state on Linux
+
+--- H5-block-local-helper-swallowed (hist, scripts/clockin.mjs) — whole module, ~4145 est. tok ---
+  clean         FALSE-ALARM  20.8s finish=stop completion=804
+      **Defect:** `branchDebt()` calls `gitSafe()` (which runs `git` via `execFileSync`) without any error handling.  
+      
+      **Mechanism:** If the current working directory is not a Git repository, or if the `git` binary is missing, `execFileSync` throws (e.g. `Error: spawn git ENOENT` or a non‑zero exit‑code). Because the call is not wrapped in `try…catch`, the exception propagates out of `main()` and aborts the whole script.  
+      
+      **Manifestation:** Running `clockin.mjs` on a Linux machine that isn’t inside a Git repo (or where `git` isn’t installed) crashes immediately with an uncaught exception, preventing any digest from being produced. This is the most severe runtime defect b
+  clean-neutral FALSE-ALARM  27.4s finish=stop completion=1165
+      **Yes – the code can crash on Linux because it assumes a modern Node runtime that provides the global `fetch` API (and `AbortSignal.timeout`).**  
+      
+      `probeLocal()` does:
+      
+      ```js
+      const r = await fetch(`http://127.0.0.1:${port}/v1/models`, {
+          signal: AbortSignal.timeout(4000),
+      });
+      ```
+      
+      In Node < 18 (the version still common on many Linux distributions) neither `fetch` nor `AbortSignal.timeout` exist, so the first line throws a `ReferenceError: fetch is not defined` (or `AbortSignal is undefined`). The exception propagates out of `main()`, causing the script to terminate with an uncaught error.  
+      
+      Thus the runtime defect i
+  defect        MISS groups=1/3 need=2  21.8s finish=stop completion=930
+      **Defect:** `branchDebt()` calls `execFileSync("git", …)` without any try‑catch. If the **git binary is missing or returns a non‑zero exit code** (e.g., the repository isn’t a git repo, the branch name is invalid, or git isn’t installed), `execFileSync` throws (`ENOENT` or `Error: Command failed`), the exception propagates out of `main()`, and the whole script aborts with an uncaught exception.  
+      
+      **How it manifests:** On a typical Linux environment where `git` isn’t on the PATH (or the repo isn’t a git repo), running `clockin.mjs` crashes immediately with a stack trace like:
+      
+      ```
+      Error: spawn git ENOENT
+          at ...
+      ```
+      
+      or “Command failed
+
+--- M1-cell-budget-off-by-one (mut, src/textwidth.mjs) — whole module, ~2086 est. tok ---
+  clean-neutral FALSE-ALARM  14.6s finish=stop completion=619
+      **Yes – the module crashes as soon as it is loaded on a typical Linux Node runtime.**  
+      
+      The source contains several regular‑expression literals that use the **`/v` flag** (e.g. `/[^\p{Default_Ignorable_Code_Point}\p{Control}\p{Format}\p{Nonspacing_Mark}\p{Enclosing_Mark}\p{Surrogate}]/v`). The `v` flag (Unicode‑set mode) is a very recent addition to the ECMAScript spec and is only supported by the newest V8 builds (Node 20 + with the appropriate flag). On most Linux installations that run Node 16 or Node 18, the parser does not recognise `/v` and throws a **`SyntaxError: Invalid regular expression: /…/v: Invalid flag`** at module load time.  
+      
+      Thus the defect is the 
+  clean         FALSE-ALARM  17.6s finish=stop completion=711
+      **Defect:** The module unconditionally creates `new Intl.Segmenter()` at load time, assuming the `Intl.Segmenter` constructor is always present.
+      
+      **Mechanism:** On many Linux builds of Node.js that are compiled with the “small‑ICU” data set (or older Node versions), the `Intl.Segmenter` API is not included. In those environments `Intl.Segmenter` is `undefined`, so the expression `new Intl.Segmenter()` throws a **TypeError** (“Intl.Segmenter is not a constructor”) as soon as the file is evaluated.
+      
+      **Manifestation:** Importing `src/textwidth.mjs` crashes immediately with the TypeError, preventing any of the exported functions (`textWidth`, `wrapLines`, etc.) from being
+  defect        HIT groups=2/3 need=2  15.8s finish=stop completion=557
+      **Defect:** The module unconditionally creates `new Intl.Segmenter()` and later calls `segmenter.segment(...)`. On Linux builds of Node that are compiled with the *small‑ICU* data set, `Intl.Segmenter` is **undefined** (it is only available when Node is built with full ICU).  
+      
+      **Mechanism:**  
+      ```js
+      const segmenter = new Intl.Segmenter();   // throws TypeError: Intl.Segmenter is not a constructor
+      ```
+      or, if the line somehow passes, any later `segmenter.segment(string)` call throws the same error because `segmenter` is `undefined`.  
+      
+      **Manifestation:** As soon as any exported function that uses the segmenter (`textWidth`, `firstCluster`, `slic
+
+--- M2-regex-word-boundary-overreach (mut, src/confine.mjs) — whole module, ~7139 est. tok ---
+  clean         FALSE-ALARM  47.7s finish=stop completion=1951
+      **Defect:** `confinedEnv`’s `exec` wrapper always spreads the `options` argument:
+      
+      ```js
+      return base.exec(
+          command,
+          { ...options, cwd: confinedRoot, inheritEnv: false,
+            env: pickEnv(options?.env, allowlist) },
+          context,
+      );
+      ```
+      
+      If the caller omits the `options` parameter (or passes `undefined/null`), the spread operator (`...options`) tries to convert `undefined`/`null` to an object and throws **`TypeError: Cannot convert undefined or null to object`**.  
+      
+      **Mechanism:** Object spread is not tolerant of `undefined`/`null`; it requires a real object. The wrapper does not guard against a missing `opti
+  clean-neutral FALSE-ALARM  32.5s finish=stop completion=1476
+      No, there is no runtime‑defect in this module that would cause it to crash on Linux. All imports exist in Node ≥ 18, the async‑/sync‑code paths handle errors correctly, and the logic that checks paths, environment variables, and command refusals never dereferences undefined values or calls APIs with illegal arguments. The code’s control flow, destructuring, and use of `await` are all safe for the Linux platform.
+  defect        TRUNCATED-EMPTY groups=0/0 need=2  100.0s finish=length completion=3000
+      
+
+--- M3-pause-still-claims (mut, src/driver.mjs) — whole module, ~1686 est. tok ---
+  clean-neutral FALSE-ALARM  27.8s finish=stop completion=939
+      **No – the module as written does not contain a Linux‑specific runtime defect.**  
+      
+      All the constructs used (`export`, default parameters, optional chaining, `Set`, `Array.prototype.some`, async/await, and the extra trailing comma in the `some` call) are valid ECMAScript 2020 syntax and behave identically on Linux Node.js as on any other platform. The code guards against undefined callbacks (`typeof … === "function"`), checks for `undefined` values before dereferencing, and never relies on platform‑specific APIs. Consequently, it will run without throwing a runtime error on Linux.
+  clean         FALSE-ALARM  8.8s finish=stop completion=416
+      **Defect:** `selectWakes` expects `pendingConvIds`, `busySeats` and `stoppedConvIds` to be `Set`s, but `driveOnce` forwards whatever it receives – often **`undefined`** – which overrides the function’s default‑parameter initialisers.  
+      
+      **Mechanism:** When `pendingConvIds` (or `busySeats`/`stoppedConvIds`) is `undefined`, the line  
+      
+      ```js
+      if (pendingConvIds.has(convId)) { … }
+      ```  
+      
+      calls `.has` on `undefined`, throwing a **TypeError** (“Cannot read property 'has' of undefined”).  
+      
+      **Manifestation:** At runtime the driver crashes the first time it processes a seat while any of those arguments are omitted or passed as `undefined` (
+  defect        HIT groups=2/3 need=2  22.2s finish=stop completion=861
+      **Defect:** `driveOnce` forwards the caller‑provided `pendingConvIds`, `busySeats` and `stoppedConvIds` straight into `selectWakes`.  
+      **Mechanism:** `selectWakes` declares those arguments with defaults (`new Set()`), but the defaults are **overridden** when the caller omits them – the destructuring receives `undefined`. Inside `selectWakes` the code does `pendingConvIds.has(convId)`, `busySeats.has(name)`, `stoppedConvIds.has(convId)`. If any of those parameters are `undefined` a **TypeError** (“Cannot read property ‘has’ of undefined”) is thrown at runtime.  
+      **Manifestation:** When `driveOnce` is invoked without explicitly passing the three Set arguments (the common case), the
+
+##############################################################################
+REPLICATE 3 of 3
+##############################################################################
+
+--- H1-npm-invocation (hist, src/worktree.mjs) — whole module, ~22014 est. tok ---
+  clean-neutral FALSE-ALARM  27.6s finish=stop completion=1177
+      **Defect:** All the `run()` calls are built on `promisify(execFile)`.  
+      `execFile` returns a **Buffer** for `stdout`/`stderr` unless an `encoding` option is supplied. The code never passes `{encoding:'utf8'}` (or uses `execFileSync` with encoding), yet it treats `result.stdout` as a **string** everywhere (`result.stdout.trim()`, `result.stdout.split('\n')`, etc.).
+      
+      **Manifestation:** When any async git command runs (e.g. `await run("git", ["-C", dir, "rev-parse", "--show-toplevel"])`), `run` resolves to `{ stdout: <Buffer …>, stderr: <Buffer …> }`. The first call to `stdout.trim()` throws:
+      
+      ```
+      TypeError: stdout.trim is not a function
+          at <module>
+  defect        HIT groups=3/4 need=3  39.4s finish=stop completion=1642
+      **Defect:** `removeClaimedWorktree()` calls  
+      
+      ```js
+      const entries = await readdir(worktree, { recursive: true, withFileTypes: true });
+      ```
+      
+      `fs.promises.readdir()` does **not** allow `recursive` and `withFileTypes` together – the two options are mutually exclusive. On Linux (and any platform) this throws a `TypeError: options.recursive and options.withFileTypes are mutually exclusive` as soon as the function runs, aborting work‑tree removal.  
+      
+      **Mechanism:** Node’s `fs.readdir` validates the options object and throws before any directory traversal occurs, so the subsequent symbolic‑link check never runs and the caller receives an uncaught exc
+  clean         FALSE-ALARM  29.0s finish=stop completion=1007
+      **Defect:** `removeClaimedWorktree()` calls  
+      
+      ```js
+      const entries = await readdir(worktree, { recursive: true, withFileTypes: true });
+      ```
+      
+      `fs.promises.readdir()` (the `readdir` imported from **node:fs/promises**) does **not** accept a `recursive` option – only `encoding` and `withFileTypes` are valid. On Linux (and any platform) Node throws a `TypeError: options.recursive is not a valid option` as soon as this line executes.
+      
+      **Why it matters:** The function is the final step for tearing down a claimed worktree. The exception aborts the whole removal process, leaving the worktree registered but not deleted, breaking cleanup, audits, and any 
+
+--- H2-process-death-deadline (hist, src/job-object.mjs) — whole module, ~4096 est. tok ---
+  defect        HIT+PHANTOM groups=2/3 need=2 PHANTOM[taskkill]  41.8s finish=stop completion=1733
+      **Defect:** The PowerShell helper script built in the Windows branch calls a method that doesn’t exist – `[JobApi]::Terminate($hJob)`.  
+      
+      **Mechanism:** The C#‑style class `JobApi` that is emitted via `Add‑Type` only defines `TerminateJobObject` (the Win32 API wrapper). Because the script later invokes `Terminate` (without the “JobObject” suffix), PowerShell throws a *MethodNotFound* exception, the script exits with a non‑zero code, and `spawnInJob` rejects its promise.  
+      
+      **Manifestation:** When `spawnInJob` is used (even on a Linux host that still loads the module), the Windows‑specific code path is compiled and the helper script is written. If that path is ever exe
+  clean-neutral FALSE-ALARM  21.1s finish=stop completion=941
+      Yes – the Linux branch of **`waitForProcessDeath`** can give a false‑positive “process is dead”.
+      
+      ```js
+      try {
+          process.kill(pid, 0);   // probe
+      } catch {
+          return true;            // treat any error as “dead”
+      }
+      ```
+      
+      `process.kill(pid, 0)` throws **`EPERM`** when the target process exists but the caller lacks permission to signal it (e.g., a different UID). The catch block treats *any* error (including `EPERM`) as “process not found”, so the function returns `true` even though the process is still running. On Linux the test suite spawns a child under the same user, but if the helper runs with reduced privileges (or the PID belon
+  clean         FALSE-ALARM  26.1s finish=stop completion=1160
+      **Defect:** `runPS()` uses the Windows‑only command **`where`** to locate *pwsh*:
+      
+      ```js
+      await execFileP("where", ["pwsh"], { encoding: "buffer" })
+      ```
+      
+      On Linux the `where` executable isn’t present, so `execFileP` rejects with ENOENT. The catch block then falls back to `"powershell"` – another binary that doesn’t exist on Linux – and the subsequent `execFileP(psPath, …)` also throws ENOENT. The function never handles this case, so any code that calls `runPS()` on Linux crashes with an unhandled promise rejection (or throws) at runtime.
+      
+      **Mechanism:** a Windows‑specific lookup command is used on a non‑Windows platform, causing `execFileP` to f
+
+--- H3-truthy-sentinel-dead-code (hist, src/rig.mjs) — whole module, ~20768 est. tok ---
+  clean-neutral FALSE-ALARM  29.5s finish=stop completion=1266
+      The module runs without any obvious runtime‑failure bug on Linux. All imports resolve, the async `api.commit` calls return plain objects (the code snapshots any doc proxies before leaving the commit), and every field access is guarded against `undefined`. No Node‑specific APIs are mis‑used (fs, path, etc.), and the control‑flow checks (e.g., the “paused” branch in `claim_work`) never dereference missing properties. In short, the code as written should start and execute correctly on a Linux environment.
+  defect        HIT groups=2/3 need=2  29.0s finish=stop completion=1268
+      **Defect:** `normalizeBlock` is imported from `./queue‑lifecycle.mjs` but that module never exports a function named `normalizeBlock`. When the `send_work` tool runs it calls  
+      
+      ```js
+      const park = args.block ? normalizeBlock(args.block) : null;
+      ```  
+      
+      and the imported identifier is `undefined`. The call therefore throws a **TypeError: normalizeBlock is not a function** (or “cannot read property … of undefined”) at runtime on Linux, aborting the tool execution. This is the single most severe runtime failure.
+  clean         FALSE-ALARM  26.3s finish=stop completion=770
+      **Defect:** `normalizeBlock` is never defined/imported.  
+      
+      **Mechanism:** At the top the code does `import { normalizeBlock } from "./queue‑lifecycle.mjs";` but the module only exports `normalizeBlockedBy`. When `send_work` (or any tool that supplies a `block` argument) executes, it calls `normalizeBlock(args.block)`. Because the identifier is undefined, Node throws a **ReferenceError** the moment the function is invoked.  
+      
+      **Manifestation:** Running the rig on Linux and invoking `send_work` with a `block` payload (or any code path that reaches that call) crashes with `ReferenceError: normalizeBlock is not defined`, aborting the transaction and breaking the tool. Thi
+
+--- H4-doc-proxy-escape (hist, src/rig.mjs) — whole module, ~20912 est. tok ---
+  defect        TRUNCATED-EMPTY groups=0/0 need=2  83.9s finish=length completion=3000
+      
+  clean-neutral FALSE-ALARM  33.5s finish=stop completion=1091
+      The code as written does not contain a Linux‑specific runtime defect; it will run correctly on Linux. All imports, filesystem calls, and async‑await patterns are valid, and no obvious `undefined`/type‑mismatch errors appear.
+  clean         FALSE-ALARM  67.1s finish=stop completion=2982
+      **Defect:** The router imports `normalizeBlock` from `./queue-lifecycle.mjs` but that file never exports a symbol called `normalizeBlock`.  
+      
+      **Mechanism:** When Node loads `src/rig.mjs` it evaluates the `import { normalizeBlock } …` line. Because the target module does not contain a matching export, the ES‑module loader throws at import time:
+      
+      ```
+      Error [ERR_MODULE_NOT_FOUND]: The requested module './queue-lifecycle.mjs' does not provide an export named 'normalizeBlock'
+      ```
+      
+      or a similar `ReferenceError`.  
+      
+      **Manifestation:** The whole rig crashes as soon as the module is required (e.g., on server start or the first tool call), pr
+
+--- H5-block-local-helper-swallowed (hist, scripts/clockin.mjs) — whole module, ~4145 est. tok ---
+  clean-neutral FALSE-ALARM  21.4s finish=stop completion=903
+      Yes – there is a runtime defect that can surface on a typical Linux box.
+      
+      `branchDebt()` calls `gitSafe()` (which is just `execFileSync("git", …)`) without any `try/catch`. If the `git` executable isn’t in `$PATH` or the current directory isn’t a Git repository, `execFileSync` throws a `Error` (ENOENT or non‑zero exit status). The exception bubbles out of `branchDebt()`, aborts `main()`, and the whole script crashes with an uncaught exception.  
+      
+      All other Git calls (`staleRunbooks`) are wrapped in `try/catch`, but the debt‑calculation path isn’t, so a missing Git or a non‑repo environment will cause a runtime failure on Linux.
+  defect        MISS groups=1/3 need=2  21.3s finish=stop completion=898
+      **Defect:** `runCli()` invokes the companion script with  
+      
+      ```js
+      execFileSync(process.execPath, ["cli.mjs", …], …)
+      ```  
+      
+      but it passes only the *basename* “cli.mjs”. On Linux the child process is started with the **current working directory** of the caller, not the directory that contains `clockin.mjs`. If the user runs `clockin.mjs` from any location other than the repository root, the OS cannot locate `cli.mjs` (`ENOENT`), causing the whole `clockin` command to abort with an uncaught exception.  
+      
+      **Mechanism:** `execFileSync` looks for “cli.mjs” in `process.cwd()`. Because the script never resolves the path (e.g. `resolve(dirname(import.me
+  clean         FALSE-ALARM  37.0s finish=stop completion=1211
+      **Defect:** Uncaught `execFileSync("git", …)` calls (in `branchDebt` and `staleRunbooks`) assume the `git` executable is present.  
+      
+      **Mechanism:** Both functions invoke `gitSafe`/`execFileSync` without a surrounding `try…catch`. If the `git` binary is not on the PATH (or the repository isn’t a git repo), `execFileSync` throws an `ENOENT` (or other) error that propagates out of `main`. The promise returned by `main` rejects and the process exits with an uncaught exception, e.g.:
+      
+      ```
+      Error: spawn git ENOENT
+          at ChildProcess.spawnSync (node:child_process:…)
+          …
+      ```
+      
+      **Manifestation:** Running `node scripts/clockin.mjs` on a Linu
+
+--- M1-cell-budget-off-by-one (mut, src/textwidth.mjs) — whole module, ~2086 est. tok ---
+  defect        HIT groups=3/3 need=2  20.2s finish=stop completion=706
+      **Defect:** The module creates an `Intl.Segmenter` at import time (`const segmenter = new Intl.Segmenter();`). On Linux builds of Node that are compiled with the *small* ICU data set, the `Intl.Segmenter` constructor does not exist. Importing the file therefore throws a **TypeError: Intl.Segmenter is not a constructor** (or “Intl.Segmenter is undefined”) before any function runs.
+      
+      **Mechanism:**  
+      1. The file is evaluated when required.  
+      2. `new Intl.Segmenter()` is executed.  
+      3. If the runtime’s ICU lacks the Segmenter feature, `Intl.Segmenter` is `undefined`.  
+      4. `new undefined` triggers a TypeError, aborting module loading.
+      
+      **Manifestati
+  clean-neutral FALSE-ALARM  27.1s finish=stop completion=1049
+      Yes. The module assumes that **`Intl.Segmenter`** is always available:
+      
+      ```js
+      const segmenter = new Intl.Segmenter();
+      ```
+      
+      On Linux systems that run an older Node.js version (e.g. Node 12 or early Node 14) the `Intl.Segmenter` constructor is not implemented. Importing the file throws a **`TypeError: Intl.Segmenter is not a constructor`** (or `undefined is not a constructor`) at module‑initialisation time, before any of the exported functions are called. The failure is therefore a runtime error caused by an unavailable global API, not by the algorithm itself. Adding a feature‑detect guard (e.g. `if (!Intl.Segmenter) throw new Error(...)` or providing a fall
+  clean         FALSE-ALARM  18.0s finish=stop completion=492
+      **Defect:** The module creates `const segmenter = new Intl.Segmenter();` at load time, assuming `Intl.Segmenter` exists. On many Linux Node builds (e.g., default Ubuntu/Debian binaries) the ICU data is minimal and `Intl.Segmenter` is not defined.  
+      
+      **Mechanism:** When the file is imported, `new Intl.Segmenter()` is evaluated. If `Intl.Segmenter` is `undefined`, the JavaScript engine throws a **TypeError** (“Intl.Segmenter is not a constructor”). This aborts module loading, so any call to `textWidth`, `wrapLines`, etc., crashes immediately.  
+      
+      **Manifestation:** Running the code (or any function that imports it) on a typical Linux Node environment results in an uncaug
+
+--- M2-regex-word-boundary-overreach (mut, src/confine.mjs) — whole module, ~7139 est. tok ---
+  clean-neutral FALSE-ALARM  64.8s finish=stop completion=1360
+      The module does not contain a runtime‑breaking defect on Linux. All imports exist, the control flow is sound, and every function is used with the arguments it expects. No undefined variables, missing properties, or platform‑specific calls (e.g., Windows‑only APIs) appear that would cause an exception when the code is executed under a typical Node.js environment on Linux. In short, the code as written should run without crashing.
+  defect        HIT groups=2/3 need=2  21.5s finish=stop completion=695
+      **Defect:** The `exec` wrapper spreads `options` without guarding against it being `undefined`.
+      
+      ```js
+      return base.exec(
+          command,
+          { ...options, cwd: confinedRoot, inheritEnv: false, env: pickEnv(options?.env, allowlist) },
+          context,
+      );
+      ```
+      
+      If a caller invokes `env.exec(command)` (or passes `null`), the spread operator tries to spread `undefined/null`, which throws **`TypeError: Cannot convert undefined or null to object`** at runtime on Linux (Node behaves the same on all platforms).  
+      
+      **Why it matters:** `exec` is a core method of the confined environment; many callers will omit the optional `options` argum
+  clean         TRUNCATED-EMPTY  101.5s finish=length completion=3000
+      
+
+--- M3-pause-still-claims (mut, src/driver.mjs) — whole module, ~1686 est. tok ---
+  defect        HIT groups=2/3 need=2  65.9s finish=stop completion=2064
+      **Defect:** `selectWakes` (and consequently `driveOnce`) assumes that the arguments `pendingConvIds`, `busySeats` and `stoppedConvIds` are **`Set` objects** and calls the method `has()` on them.  
+      
+      **Mechanism:** If a caller supplies a plain array, plain object, or any iterable that isn’t a `Set`, the call `pendingConvIds.has(convId)` (or `busySeats.has(name)`, `stoppedConvIds.has(convId)`) throws a **`TypeError: …has is not a function`** at runtime. This exception propagates out of `selectWakes`, aborting the whole driver loop on Linux (or any platform).  
+      
+      **Manifestation:** When the driver is invoked with the default parameters it works, but as soon as the caller p
+  clean-neutral FALSE-ALARM  23.7s finish=stop completion=965
+      The module as written does not contain a runtime‑time defect that would cause it to crash on Linux. All of the default parameters, optional‑chaining calls, Set usage, and async/await patterns are valid in Node’s ES‑module environment, and there are no references to undefined variables or illegal operations that would throw an exception under normal execution. If the surrounding services (`storage`, `harness`, etc.) behave as expected, the code will run without a runtime error.
+  clean         FALSE-ALARM  44.6s finish=stop completion=1537
+      **Defect:** `driveOnce` assumes the `pendingConvIds`, `busySeats` and `stoppedConvIds` arguments are always `Set`s, but it never gives them a default value.  
+      
+      **Mechanism:** Inside `driveOnce` the code does  
+      
+      ```js
+      if (pendingConvIds.has(seat.conversationId) …)   // and later busySeats.has(name)
+      ```  
+      
+      If the caller omits any of those arguments (or passes `undefined`), the call to `.has` is made on `undefined`, throwing a **TypeError** (`Cannot read property 'has' of undefined`).  
+      
+      **Manifestation:** On Linux (or any platform) a call such as  
+      
+      ```js
+      await driveOnce(harness, { seats, items, context, storage })
+ 
+
+==============================================================================
+SUMMARY gpt-oss-120b-5131 — replicate 1 of 3 (a SAMPLE; 198)
+  feeding: WHOLE MODULE (shown when ~est. tokens <= 120000)   scoring material: answer+reasoning   pair-comments: strip-both
+  control turns claiming an absent binding (import/undefined/ReferenceError): 2 — COUNTED as false alarms, the import block was on the page
+  defect items named:  6/7 scored (8 attempted)   (pre-registered PHANTOM present in 1)
+  CORPUS BUGS (rule G1 — EXCLUDED from the ranking): M2-regex-word-boundary-overreach:TRUNCATED-EMPTY
+  clean, leading prompt:   FALSE-ALARM 8/8, CLEAN-PASSED 0, AMBIGUOUS 0
+  clean, neutral prompt:   FALSE-ALARM 7/8
+  control claims EXCUSED as excerpt artifacts (ROADMAP 195, not counted as judgement failures): 0
+  truncated (finish=length): 2 of 24 prompts
+
+==============================================================================
+SUMMARY gpt-oss-120b-5131 — replicate 2 of 3 (a SAMPLE; 198)
+  feeding: WHOLE MODULE (shown when ~est. tokens <= 120000)   scoring material: answer+reasoning   pair-comments: strip-both
+  control turns claiming an absent binding (import/undefined/ReferenceError): 3 — COUNTED as false alarms, the import block was on the page
+  defect items named:  6/7 scored (8 attempted)   (pre-registered PHANTOM present in 1)
+  CORPUS BUGS (rule G1 — EXCLUDED from the ranking): M2-regex-word-boundary-overreach:TRUNCATED-EMPTY
+  clean, leading prompt:   FALSE-ALARM 8/8, CLEAN-PASSED 0, AMBIGUOUS 0
+  clean, neutral prompt:   FALSE-ALARM 8/8
+  control claims EXCUSED as excerpt artifacts (ROADMAP 195, not counted as judgement failures): 0
+  truncated (finish=length): 1 of 24 prompts
+
+==============================================================================
+SUMMARY gpt-oss-120b-5131 — replicate 3 of 3 (a SAMPLE; 198)
+  feeding: WHOLE MODULE (shown when ~est. tokens <= 120000)   scoring material: answer+reasoning   pair-comments: strip-both
+  control turns claiming an absent binding (import/undefined/ReferenceError): 3 — COUNTED as false alarms, the import block was on the page
+  defect items named:  6/7 scored (8 attempted)   (pre-registered PHANTOM present in 1)
+  CORPUS BUGS (rule G1 — EXCLUDED from the ranking): H4-doc-proxy-escape:TRUNCATED-EMPTY
+  control conditions dropped as corpus bugs: 1
+  clean, leading prompt:   FALSE-ALARM 7/7, CLEAN-PASSED 0, AMBIGUOUS 0
+  clean, neutral prompt:   FALSE-ALARM 8/8
+  control claims EXCUSED as excerpt artifacts (ROADMAP 195, not counted as judgement failures): 0
+  truncated (finish=length): 2 of 24 prompts
+
+==============================================================================
+REPLICATION (ROADMAP 198) — 3 passes of the same items, scorer and material
+  H1-npm-invocation                  defect        HIT | HIT | HIT                            cell=HIT          agreement 3/3
+  H1-npm-invocation                  clean         FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  H1-npm-invocation                  clean-neutral FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  H2-process-death-deadline          clean         FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  H2-process-death-deadline          defect        HIT+PHANTOM | HIT+PHANTOM | HIT+PHANTOM    cell=HIT          agreement 3/3
+  H2-process-death-deadline          clean-neutral AMBIGUOUS | FALSE-ALARM | FALSE-ALARM      cell=FALSE-ALARM  agreement 2/3
+  H3-truthy-sentinel-dead-code       defect        HIT | HIT | HIT                            cell=HIT          agreement 3/3
+  H3-truthy-sentinel-dead-code       clean         FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  H3-truthy-sentinel-dead-code       clean-neutral FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  H4-doc-proxy-escape                clean         FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  H4-doc-proxy-escape                defect        HIT | HIT | TRUNCATED-EMPTY                cell=HIT          agreement 2/3
+  H4-doc-proxy-escape                clean-neutral FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  H5-block-local-helper-swallowed    defect        MISS | MISS | MISS                         cell=MISS         agreement 3/3
+  H5-block-local-helper-swallowed    clean         FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  H5-block-local-helper-swallowed    clean-neutral FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  M1-cell-budget-off-by-one          clean         FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  M1-cell-budget-off-by-one          defect        HIT | HIT | HIT                            cell=HIT          agreement 3/3
+  M1-cell-budget-off-by-one          clean-neutral FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  M2-regex-word-boundary-overreach   defect        TRUNCATED-EMPTY | TRUNCATED-EMPTY | HIT    cell=TRUNCATED-EMPTY agreement 2/3
+  M2-regex-word-boundary-overreach   clean         FALSE-ALARM | FALSE-ALARM | TRUNCATED-EMPTY cell=FALSE-ALARM  agreement 2/3
+  M2-regex-word-boundary-overreach   clean-neutral FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  M3-pause-still-claims              clean         FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  M3-pause-still-claims              defect        HIT | HIT | HIT                            cell=HIT          agreement 3/3
+  M3-pause-still-claims              clean-neutral FALSE-ALARM | FALSE-ALARM | FALSE-ALARM    cell=FALSE-ALARM  agreement 3/3
+  unanimous cells per axis: defect 6/8   clean 7/8   clean-neutral 7/8
+  spread across replicates: defect named 6/7, 6/7, 6/7; false alarms (leading) 7-8/8; false alarms (neutral) 7-8/8
+
+==============================================================================
+SUMMARY gpt-oss-120b-5131 — MAJORITY-of-3 cells (198: THIS is the score that may inform a routing decision)
+  feeding: WHOLE MODULE (shown when ~est. tokens <= 120000)   scoring material: answer+reasoning   pair-comments: strip-both
+  control turns claiming an absent binding (import/undefined/ReferenceError): 2 — COUNTED as false alarms, the import block was on the page
+  defect items named:  6/7 scored (8 attempted)   (pre-registered PHANTOM present in 1)
+  CORPUS BUGS (rule G1 — EXCLUDED from the ranking): M2-regex-word-boundary-overreach:TRUNCATED-EMPTY
+  clean, leading prompt:   FALSE-ALARM 8/8, CLEAN-PASSED 0, AMBIGUOUS 0
+  clean, neutral prompt:   FALSE-ALARM 8/8
+  control claims EXCUSED as excerpt artifacts (ROADMAP 195, not counted as judgement failures): 0
+  truncated (finish=length): 2 of 24 prompts
+  G2 FLOOR in this arm (the bar is defined for the CONTROL family; this run is gpt-oss-120b-5131): control must name >= 4 of 7 (the pre-registered bar is 4 of 8; this arm shows 7). majority run: 6/7 MET; worst replicate: 6/7 MET.
+
+transcript: /home/chexxor/Git/durian-dev/seatroot/item-5131/.spike/gate/run-gpt-oss-120b-5131-2026-11-05T065147462Z.json
+spend: 72 accounted call(s), total $0.0387; ceiling $0.1500  (ledger: /home/chexxor/Git/durian-dev/seatroot/item-5131/.spike/gate/spend-5131.jsonl)
