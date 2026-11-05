@@ -273,7 +273,8 @@
       "demo/spend-cap-guard.test.mjs",
       "demo/syncpi.test.mjs",
       "demo/test-areas.test.mjs",
-      "demo/test-runner-concurrency.test.mjs"
+      "demo/test-runner-concurrency.test.mjs",
+      "demo/verifier-arm-probe.test.mjs"
     ]
   }
 }
