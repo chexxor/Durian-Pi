@@ -19,7 +19,10 @@ three actors straight is the whole job:
 ## Clock in (run this at the start of every session)
 
 1. Read **`docs/NEXT.md`** — the current priority, its queue id, and the exact next command.
-2. Read **`docs/SELFDEV.md`** — the runbook: which team, which store, which worktree, the loop.
+2. Read **the `docs/SELFDEV.md` headings, not the whole file** — `node scripts/clockin.mjs` prints them with line anchors.
+   The file is an append-only journal at **~195 KB / ~49,000 tokens** and grows every session (ROADMAP 289); it holds the
+   runbook (which team, which store, which worktree, the loop) **plus** 20 dated `## Operational pitfalls` blocks. Read the
+   runbook sections plus the pitfalls for the symptom you have — grep for the symptom, do not read it whole.
 3. `git status --short -- .` — know what is already uncommitted before you touch anything.
 4. `DURIG_DB=./selfdev.sqlite node cli.mjs status` — the team's attention and non-terminal work. Use
    `DURIG_DB` for the **CLI**: `src/config.mjs` (`CONFIG_KEYS`, `cli.mjs:142`) reads only `DURIG_*`, so
