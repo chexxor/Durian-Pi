@@ -322,12 +322,455 @@ const DENIED_COMMANDS = [
 			"branch), or rebase the other branch in a throwaway worktree and publish a `-rebased` ref. If you " +
 			"are already off your item branch, `git switch <your-item-branch>` first",
 	},
+	// #5145: `git config` — the one verb whose TARGET is not in the working tree. Its own entry, and its
+	// own reason per shape (scope file / command-valued key / `-f` path / another tree's config / an
+	// unreadable form). `gitSubcommand` already skips `-C <path>`, and the decision re-reads it, because
+	// for this verb the redirect is part of the question rather than a way to hide the verb.
+	{
+		check: (text, ctx) => gitConfigDecision(text, ctx) !== null,
+		// NOTE: a `check` predicate REPLACES the `re` test in refusalFor, so the message is computed by the
+		// same decision the check ran — re-running it is cheap (pure string work) and keeps ONE policy list.
+		why: (ctx, text) => gitConfigRefusal(gitConfigDecision(text, ctx) ?? {}),
+	},
+	// #5145: `git hash-object -w` writes an object into the SHARED object database; the bare form is the
+	// read docs/runbooks/tracked-files-missing-on-disk.md prescribes for comparing an index blob sha.
+	{
+		check: (text) =>
+			shellSegments(text).some((tokens) => {
+				if (tokens[0]?.toLowerCase() !== "git") return false;
+				const { sub, rest } = gitSubcommand(tokens.slice(1));
+				return sub?.toLowerCase() === "hash-object" && rest.some((t) => t === "-w" || t === "--write");
+			}),
+		why: "`hash-object -w` writes a loose object into the SHARED object database (the bare `git hash-object <path>` is a read and is allowed)",
+	},
+	// #5145 LAST, on purpose: the census. Every git subcommand is either in a claim list above or
+	// refused here, and the refusal says whether the guard NAMED it or never READ it, because those are
+	// different facts for the operator (`NOT checked` is the same vocabulary the write-target resolver's
+	// unresolved surface already prints in src/seatguard.mjs).
+	{
+		check: (text) => gitCensusVerb(text) !== null,
+		why: (ctx, text) => {
+			const verb = gitCensusVerb(text) ?? "?";
+			const named = GIT_REFUSED_NAMED.get(verb);
+			if (named)
+				return `\`git ${verb}\` ${named} — if a runbook tells you to run it, name the runbook in a defer_work and the operator runs it`;
+			return `\`git ${verb}\` was NOT checked by this guard — it is in no claim list in src/confine.mjs (${GIT_READ_CLAIMED.size} read subcommands, ${GIT_WRITING_CLAIMED.size} writing subcommands, ${GIT_REFUSED_NAMED.size} named refusals), and an unchecked git form is refused for a seat rather than passed — name the act in a defer_work, or use a listed read form`;
+		},
+	},
 ];
 
 /** True only when the operator set this in durig's own environment, which a seat cannot reach. */
 function operatorGranted(name) {
 	return process.env[name] === "1";
 }
+
+/**
+ * THE GIT CENSUS (#5145) - the guard states what it CHECKED.
+ *
+ * Up to this item the git surface was a DENY list, and everything not on it fell through as
+ * ALLOWED. Two things were wrong with that, and they are the same thing:
+ *
+ * 1. `git config --global/--system` was not on the list, so it was allowed. Its target is
+ *    `$HOME/.gitconfig` / `/etc/gitconfig` - OUTSIDE the repository, persistent, and read by every
+ *    later git invocation by every other seat on the host. The escalation is one command long and
+ *    the values are commands: `core.fsmonitor`, `core.hooksPath`, `alias.x '!...'`, `include.path`,
+ *    `credential.helper store`, `url.<base>.insteadOf` (the list the substrate research prompt
+ *    names, `docs/reviews/agent-sandbox-substrate-research-prompt.md:24-25`).
+ * 2. A subcommand nobody classified was allowed IN SILENCE. Silence is the defect: an operator
+ *    reading a clean run cannot tell "checked and allowed" from "never looked at it". Measured at
+ *    main, what that silence let through: `git commit-tree`, `git write-tree`, `git update-index`,
+ *    `git mktag`, `git mktree` all pass - which bypasses the #1317 commit-content gate outright,
+ *    because that gate is wired to the literal text `git commit` (GIT_COMMIT_RE in
+ *    src/seatguard.mjs) - and `git credential-store store` passes on the same fall-through.
+ *
+ * So the allow side is now a CLAIM, in two named sets, and anything outside them refuses with the
+ * words `NOT checked` in the message (the same vocabulary the write-target resolver's unresolved
+ * surface already uses in src/seatguard.mjs, so "unchecked" and "allowed" are not the same look).
+ * The census runs LAST in `refusalFor`, so the specific verb entries above keep their own reasons;
+ * a verb those entries judge (`push`, `rebase`, `branch`, `add`, `commit`, `checkout-index`,
+ * `config`, `hash-object`) is listed here as claimed-writing, and the entry above still owns it.
+ *
+ * WHY THE ALLOW SIDE IS NOT PURGED: the verbs kept are the ones a seat's PROCEDURES use. They were
+ * read out of docs/runbooks, not guessed - `git worktree` (84 mentions), `git update-ref` (4: a
+ * `refs/rescued/*` recovery in cross-clone-object-recovery.md:113, an `archived/*` anchor in
+ * leaked-worktrees.md:173, and publishing a `-rebased` ref in resolve-merge-conflict.md:67),
+ * `git bundle` (4), `git fsck` (9), `git hash-object` (2, as a READ in
+ * tracked-files-missing-on-disk.md:63), `git fetch` (4), `git remote` (3), `git clone` (1,
+ * competitor-review.md:98). Refusing a verb a runbook tells a seat to run sends the seat around the
+ * guard, which is the failure mode #4367 named. Each residual risk in that set is named where it is
+ * a risk (update-ref can move `refs/heads/main`; `git clone <target>` is not target-resolved);
+ * both are recorded as follow-ups rather than quietly kept.
+ *
+ * @type {ReadonlySet<string>}
+ */
+export const GIT_READ_CLAIMED = new Set([
+	"annotate",
+	"archive", // writes an archive where the seat may already write files, or to stdout
+	"attributes", // the git help -a "Guide" entries are documentation reads
+	"blame",
+	"cat-file",
+	"check-attr",
+	"check-ignore",
+	"check-mailmap",
+	"check-ref-format",
+	"cherry",
+	"cli",
+	"column",
+	"count-objects",
+	"describe",
+	"diff",
+	"diff-files",
+	"diff-index",
+	"diff-pairs",
+	"diff-tree",
+	"for-each-ref",
+	"fsck",
+	"get-tar-commit-id",
+	"grep",
+	"help",
+	"help",
+	"hooks",
+	"ignore",
+	"log",
+	"ls-files",
+	"ls-remote",
+	"ls-tree",
+	"mailmap",
+	"merge-base",
+	"merge-tree",
+	"modules",
+	"name-rev",
+	"patch-id",
+	"range-diff",
+	"reflog",
+	"repo",
+	"repository-layout",
+	"revisions",
+	"rev-list",
+	"rev-parse",
+	"shortlog",
+	"show",
+	"show-branch",
+	"show-index",
+	"show-ref",
+	"status",
+	"url-parse",
+	"var",
+	"verify-commit",
+	"verify-pack",
+	"verify-tag",
+	"version",
+	"whatchanged",
+]);
+/**
+ * Writing subcommands a seat may run, each because it is confined by the worktree boundary or by a
+ * rule above - NOT because nothing said otherwise. `archive`/`bundle`/`format-patch` write files
+ * where the seat may already write files; `init` writes a repo inside a directory the seat can
+ * already create; `update-ref` is runbook-prescribed (see the block above) and is the one entry here
+ * whose blast radius is wider than the worktree - it can move `refs/heads/main` - so it is named as
+ * an open surface, not hidden; `fetch`/`pull`/`clone` reach the network but do not move HEAD off the
+ * item branch (`push` is the write the operator holds, and it stays refused).
+ *
+ * @type {ReadonlySet<string>}
+ */
+export const GIT_WRITING_CLAIMED = new Set([
+	"add",
+	"am",	"apply",
+	"branch",
+	"bundle",
+	"cherry-pick",
+	"checkout-index", // path-aware: the entry above owns the target decision (#4374)
+	"clone",
+	"commit",
+	"config", // argument-aware: the entry above owns scope, target and command-valued keys (#5145)
+	"fetch",
+	"format-patch",
+	"hash-object", // `-w` is refused by its own entry; the bare form is a READ
+	"init",
+	"merge",
+	"mv",
+	"pull",
+	"rebase", // argument-aware: two positionals means it checks out another branch (#4129)
+	"remote",
+	"rerere",
+	"rm",
+	"tag",
+	"update-ref", // runbook-prescribed; can move any ref, including refs/heads/main - named as open
+	"worktree",
+]);
+
+/**
+ * Verbs this guard judges with their OWN entry in `DENIED_COMMANDS` above, so the census must not
+ * judge them a second time. They are a separate set rather than part of the writing list because
+ * most of them REFUSE: `reset`, `clean`, `stash`, `switch`, `revert`, `checkout` are the tree-diverging
+ * class, and `restore`/`checkout-index`/`rebase`/`branch`/`push`/`add`/`commit`/`config`/`hash-object`
+ * are argument- or path-aware. If they were absent from the census, the census would fire on them and
+ * overwrite a decision that was reached with evidence - the measured case is #4641's clean-path
+ * `git restore -- <path>`, which the tree-aware entry ALLOWS and a naive census would refuse.
+ */
+export const GIT_RULE_OWNED = new Set([
+	"add",
+	"branch",
+	"checkout",
+	"checkout-index",
+	"clean",
+	"commit",
+	"config",
+	"hash-object",
+	"push",
+	"rebase",
+	"reset",
+	"restore",
+	"revert",
+	"stash",
+	"switch",
+]);
+
+/**
+ * Git forms this guard looked at and said NO to, each with the reason in its own words. They are
+ * kept SEPARATE from the unchecked refusal on purpose: "checked and refused" and "cannot be read"
+ * are different facts, and a seat that is told the wrong one wastes its turn (the #3635 lesson - a
+ * refusal that does not say what it is about reads as a class of refusals).
+ */
+function nameMany(why, verbs) {
+	return verbs.map((v) => [v, why]);
+}
+
+export const GIT_REFUSED_NAMED = new Map([
+	...nameMany(
+		"is object-DB maintenance on the SHARED store, and `gc` deletes the unreachable commits other seats' citations point at (docs/runbooks/cross-clone-object-recovery.md exists because of exactly that)",
+		["gc", "repack", "prune", "prune-packed", "pack-refs", "maintenance", "commit-graph", "multi-pack-index"],
+	),
+	...nameMany(
+		"writes the index or the object database directly, past the `git add` path discipline AND past the #1317 commit-content gate, which is wired to the literal text `git commit`",
+		["update-index", "read-tree", "write-tree", "commit-tree", "mktag", "mktree", "index-pack", "pack-objects", "unpack-objects", "unpack-file"],
+	),
+	...nameMany("rewrites history", ["filter-branch", "replace", "replay", "fast-export", "fast-import", "recount"]),
+	...nameMany("moves HEAD or a ref symbolically - the checkout/switch class", ["symbolic-ref", "refs", "bisect"]),
+	...nameMany(
+		"is the credential subsystem: asking for, filling or approving a credential is not a seat's act, and `credential.helper store` writes one to disk",
+		["credential", "credential-cache", "credential-store"],
+	),
+	...nameMany("is a server role, not a seat verb", ["daemon", "http-backend", "fetch-pack", "send-pack", "update-server-info"]),
+	...nameMany("is interactive UI; a seat has no display, and the tools it launches edit files outside this boundary", [
+		"gitk",
+		"gui",
+		"citool",
+		"gitweb",
+		"instaweb",
+		"mergetool",
+		"difftool",
+	]),
+	...nameMany("talks to a foreign VCS or to mail transport, neither of which this rig has", [
+		"svn",
+		"p4",
+		"cvsimport",
+		"cvsexportcommit",
+		"cvsserver",
+		"quiltimport",
+		"imap-send",
+		"send-email",
+		"request-pull",
+	]),
+	...nameMany(
+		"is internal plumbing that other git commands drive; run the porcelain verb that wraps it",
+		[
+			"sh-setup",
+			"sh-i18n",
+			"merge-one-file",
+			"merge-index",
+			"merge-file", // WITHOUT -p it rewrites the first file in place
+			"last-modified",
+			"stripspace",
+			"interpret-trailers",
+			"fmt-merge-msg",
+			"mailinfo",
+			"mailsplit",
+			"pack-redundant",
+			"format-bundle",
+			"format-chunk",
+			"format-commit-graph",
+			"format-index",
+			"format-pack",
+			"format-signature",
+			"protocol-capabilities",
+			"protocol-common",
+			"protocol-http",
+			"protocol-pack",
+			"protocol-v2",
+		],
+	),
+	...nameMany("changes which paths the working tree materialises", ["sparse-checkout"]),
+	...nameMany("writes annotation refs (notes) on commits you did not make", ["notes"]),
+	...nameMany("runs an arbitrary command once per repository", ["for-each-repo"]),
+	...nameMany("writes a report of this host's configuration and environment", ["bugreport", "diagnose"]),
+	...nameMany("is a repository-level helper that is not a seat verb (it configures or clones outside the item)", ["scalar", "backfill", "history"]),
+]);
+
+/**
+ * `git config` - the ONE verb whose target is not in the repository (#5145).
+ *
+ * A config write is persistent, host-scoped or repo-wide, and read by every later git invocation by
+ * every other seat. The scope flags name the file: `--global` -> `$HOME/.gitconfig`, `--system` ->
+ * `/etc/gitconfig`, `--worktree` -> the repository's COMMON `config.worktree`. And several config
+ * VALUES are commands or redirections - `core.fsmonitor`, `core.hooksPath`, `alias.x '!...'`,
+ * `include.path`, `credential.helper store`, `url.<base>.insteadOf` (the escalation list in
+ * `docs/reviews/agent-sandbox-substrate-research-prompt.md:24-25`) - so a write of one of those keys
+ * is refused in EVERY scope, including "local": a linked worktree's local config is the repository's
+ * COMMON `.git/config`, which the rig itself writes for every seat (`claimWorktree` sets
+ * `rerere.enabled` that way). Measured, not assumed: the demo prints `git config --show-origin` for a
+ * seat-context write and shows which file it landed in.
+ *
+ * WHAT STAYS ALLOWED, and it is the part that keeps this belt usable: every config READ (`--get`,
+ * `--list`, `-l`, `--show-origin`, a bare single key, and yes `--global --get` - reading a file is
+ * not writing it), and repo-local writes of ordinary keys (`git config rerere.enabled true`,
+ * `git config user.name …`), which is how a seat sets its own identity in its own worktree.
+ */
+const GIT_CONFIG_SCOPES = new Map([
+	["--global", "`$HOME/.gitconfig`, which every later git by every seat on this host reads"],
+	["--system", "`/etc/gitconfig`, which every git invocation on this machine reads"],
+	["--worktree", "this repository's COMMON `config.worktree`, shared by every worktree in it"],
+]);
+
+/** Flags that make a `git config` call a WRITE. */
+const GIT_CONFIG_WRITE_FLAGS = new Set([
+	"--add",
+	"--replace-all",
+	"--unset",
+	"--unset-all",
+	"--edit",
+	"-e",
+	"--rename-section",
+	"--remove-section",
+	"--file",
+	"-f",
+]);
+
+/** Flags that make it a READ. */
+const GIT_CONFIG_READ_FLAGS = new Set([
+	"--get",
+	"--get-all",
+	"--get-regexp",
+	"--get-urlmatch",
+	"--list",
+	"-l",
+	"--show-origin",
+	"--show-scope",
+	"--name-only",
+	"--null",
+	"-z",
+	"--type",
+	"-t",
+	"--includes",
+	"-i",
+	"--no-includes",
+]);
+
+/** Flags whose VALUE is not a key name (so it must not count as a positional). */
+const GIT_CONFIG_VALUE_FLAGS = new Set(["-f", "--file", "-t", "--type"]);
+
+/** Keys whose VALUE is a command, an editor, or a path git later reads commands or files from. */
+const GIT_CONFIG_COMMAND_KEYS = [
+	/^alias\./i,
+	/^core\.hooksPath$/i,
+	/^core\.fsmonitor$/i,
+	/^core\.editor$/i,
+	/^core\.pager$/i,
+	/^core\.sshCommand$/i,
+	/^core\.gitProxy$/i,
+	/^core\.askPass$/i,
+	/^sequence\.editor\./i,
+	/^pager\./i,
+	/^include\.path$/i,
+	/^includeIf\..*\.path$/i,
+	/^credential\.helper$/i,
+	/^url\..*\.insteadOf$/i,
+	/^url\..*\.pushInsteadOf$/i,
+	/^mergetool\..*\.cmd$/i,
+	/^difftool\..*\.cmd$/i,
+];
+
+/**
+ * Decide one `git config` invocation. Returns null to allow, or a reason object. A form this cannot
+ * read returns `{ unchecked: ... }` so the caller refuses it with the `NOT checked` wording instead
+ * of passing it: fail-open-by-default is the defect this item is about.
+ */
+function gitConfigDecision(text, ctx = {}) {
+	const root = typeof ctx.root === "string" ? ctx.root : null;
+	for (const tokens of shellSegments(text)) {
+		const head = tokens[0]?.toLowerCase();
+		if (head !== "git" && head !== "git.exe") continue;
+		const { sub, rest } = gitSubcommand(tokens.slice(1));
+		if (!sub || sub.toLowerCase() !== "config") continue;
+		// git's own `-C <dir>` decides which repository "local" means.
+		let dir = typeof ctx.cwd === "string" ? ctx.cwd : process.cwd();
+		for (let i = 0; i < tokens.length - 1; i += 1) if (tokens[i] === "-C") dir = resolve(dir, tokens[i + 1]);
+		const lower = rest.map((t) => t.toLowerCase());
+		const scopes = lower.filter((t) => GIT_CONFIG_SCOPES.has(t));
+		const writeFlags = lower.filter((t) => GIT_CONFIG_WRITE_FLAGS.has(t));
+		// The VALUE of `-f/--file/-t/--type` is not a key name.
+		const valueIndices = new Set();
+		let fileFlag = null;
+		for (let i = 0; i < rest.length; i += 1) {
+			const flag = lower[i];
+			if (GIT_CONFIG_VALUE_FLAGS.has(flag)) {
+				valueIndices.add(i + 1);
+				if (flag === "-f" || flag === "--file") fileFlag = rest[i + 1] ?? "";
+			}
+			if (flag.startsWith("--file=")) fileFlag = rest[i].slice("--file=".length);
+		}
+		const positionals = rest.filter((t, i) => !t.startsWith("-") && !valueIndices.has(i));
+		const isWrite = writeFlags.length > 0 || positionals.length >= 2;
+		if (!isWrite) continue; // a read, or bare `git config` printing usage: nothing is changed
+		if (fileFlag !== null) {
+			const target = resolve(dir, fileFlag);
+			if (root === null) return { unchecked: "`git config -f <path>` with no seat root to resolve it against" };
+			if (!isInside(root, target)) return { file: target };
+		}
+		if (root !== null && !isInside(root, dir)) return { otherTree: dir };
+		if (scopes.length > 0) return { scopes: scopes.map((s) => [s, GIT_CONFIG_SCOPES.get(s)]) };
+		const key = positionals[0] ?? "";
+		if (GIT_CONFIG_COMMAND_KEYS.some((re) => re.test(key))) return { commandKey: key };
+		if (rest.some((t) => /[$`]/.test(t)))
+			return { unchecked: "a `git config` write with a computed argument (a variable or subexpression)" };
+	}
+	return null;
+}
+
+/** The refusal text for a config decision - every form says WHICH FILE it would have written. */
+function gitConfigRefusal(decision) {
+	const tail =
+		"a repo-local write of an ordinary key (`git config <key> <value>` in your own worktree) is allowed, and so is every read (`--get`, `--list`); a host-wide or repo-wide setting is the operator's to make - ask with defer_work";
+	if (decision.scopes) {
+		const where = decision.scopes.map(([flag, file]) => `\`${flag}\` writes ${file}`).join("; ");
+		return `\`git config\` scope write - ${where}. That is OUTSIDE this repository and persistent, and config values are commands: \`core.fsmonitor\`, \`core.hooksPath\`, \`alias.x '!…'\`, \`include.path\`, \`credential.helper store\` and \`url.<base>.insteadOf\` all turn one config line into code execution or remote redirection beyond the worktree - ${tail}`;
+	}
+	if (decision.commandKey) {
+		return `\`git config ${decision.commandKey}\` sets a key whose VALUE is a command or a path git later executes - and "local" here is the repository's COMMON \`.git/config\`, which every seat's git reads (measured: the write lands there, not in the worktree) - ${tail}`;
+	}
+	if (decision.file) {
+		return `\`git config -f\` writes \`${decision.file}\`, which is outside the seat's worktree - a config file is not a scratch file: later git invocations execute what it names - ${tail}`;
+	}
+	if (decision.otherTree) {
+		return `\`git -C ${decision.otherTree} config\` writes the config of a repository that is not this seat's worktree (for a linked worktree that is the SHARED \`.git/config\`, so it changes every other seat's git) - ${tail}`;
+	}
+	return `${decision.unchecked} was NOT checked by this guard - an unreadable mutating form is refused for a seat, not passed - ${tail}`;
+}
+
+/** The git subcommand that is in no claim list at all, or null. */
+function gitCensusVerb(text) {
+	for (const tokens of shellSegments(text)) {
+		const head = tokens[0]?.toLowerCase();
+		if (head !== "git" && head !== "git.exe") continue;
+		const { sub } = gitSubcommand(tokens.slice(1));
+		if (!sub) continue; // `git` alone, or only global options: no act to classify
+		const verb = sub.toLowerCase();
+		if (GIT_READ_CLAIMED.has(verb) || GIT_WRITING_CLAIMED.has(verb) || GIT_RULE_OWNED.has(verb)) continue;
+		return verb;
+	}
+	return null;
+}
+
 
 /**
  * Environment a seat's command may see.
@@ -463,7 +906,7 @@ function refusalFor(command, ctx = {}) {
 	for (const { re, why, unless, check } of DENIED_COMMANDS) {
 		if (!(check ? check(text, ctx) : re.test(text))) continue;
 		if (unless?.() === true) continue;
-		const detail = typeof why === "function" ? why(ctx) : why;
+		const detail = typeof why === "function" ? why(ctx, text) : why;
 		return `refused by durig: ${detail} — to test without your change, run the test RED BEFORE the fix, or use a throwaway detached worktree / temp copy (never revert the shared tree)`;
 	}
 	return null;
