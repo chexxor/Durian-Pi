@@ -54,7 +54,7 @@ deliberately **unchanged** (`http://127.0.0.1:1234/v1`), so **nothing is armed**
   self-imposed at spawn, inherited by children, TCP-port rules since ABI v4).
 - **Baseline (measured, not assumed).** Credential hygiene is **already done**: `confinedEnv` forces
   `inheritEnv: false`, re-supplies a 12-name OS allowlist, and "a name that looks like a credential never crosses"
-  (`src/confine.mjs:491,686-692,340-353,365`); an unknown conversation gets the **read-only** env, never an
+  (`src/confine.mjs:340-353,365,491,686-692`); an unknown conversation gets the **read-only** env, never an
   unconfined one (`src/seattools.mjs:303-311`). So 170–174's baseline paragraph ("a seat's shell has the parent
   provider key") is **false today**. What is missing is **reach**: `grep -c -iE "network|socket|egress"
   src/confine.mjs` → **0**; grants are per-seat, not per-claim with expiry; and refusals leave **no durable

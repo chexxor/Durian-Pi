@@ -181,7 +181,7 @@ as capability handles) that matters to us because pi itself ships codemode; unre
 
 - No project above was **run**; every enforcement claim is `observed-in-code` or `advertised`. Nothing here proves an
   enforcement claim **works** — that needs a probe, and the only rig-side measurement I ran this session is the
-  credential/egress baseline in D208 (`inheritEnv: false` + allowlist at `src/confine.mjs:491,686-692,340-353,365`;
+  credential/egress baseline in D208 (`inheritEnv: false` + allowlist at `src/confine.mjs:340-353,365,491,686-692`;
   `grep -c -iE "network|socket|egress" src/confine.mjs` → **0**).
 - The pi extensions target **bare pi**, not the rig's durable layer. Whether their seams survive
   `pi-durable`'s replay/attach lifecycle (a seat's conversation outlives a process) is **untested and load-bearing**

@@ -5662,7 +5662,7 @@ third layer that **drops network for headless/`-p`/subagent runs** — the same 
 sandbox with **`network=none`** and lets it reach the model **only through a host proxy** (observed hit counts in the
 pinned clone: `network=none` 1805, `gvisor`/`runsc` 1085/450, `seccomp` 1118, `no-new-privileges` 371, `cap_drop`,
 `read-only` 3007). The rig's own baseline stays the one measured in D208: credentials do not cross
-(`src/confine.mjs:491,686-692,340-353,665`), and `grep -c -iE "network|socket|egress" src/confine.mjs` → **0**.
+(`src/confine.mjs:340-353,365,491,686-692`), and `grep -c -iE "network|socket|egress" src/confine.mjs` → **0**.
 *Owner:* `security` (268's position) + `lead` (sequencing against 171–174). · *Acceptance:* 268's write-up names the
 chosen shape, what it can and cannot see (a proxy sees destinations, not what a tool did with a file), what it costs on
 **both** hosts (D131), and the failure mode of each — plus a stated answer to whether a **domain** allowlist is
