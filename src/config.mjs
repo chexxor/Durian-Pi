@@ -143,7 +143,60 @@ export const CONFIG_KEYS = [
 	"DURIG_COMPACTION_KEEP_RECENT_TOKENS",
 	"DURIG_COMPACTION_BACKGROUND_TOKENS",
 	"DEEPINFRA_API_KEY",
+	// The PRICE + ledger surface of the second provider class, registered by #5125. Read from the config layer by
+	// `declaredPrice` (src/providers/local.mjs:94-128), which resolves `<PREFIX>PRICE_USD_IN` / `_USD_OUT` /
+	// `_USD_CACHE_READ` / `_AS_OF`, then `<PREFIX>PRICE_JSON` or the shared `DURIG_PRICE_JSON`. Note the spelling:
+	// the cache-read key is `..._PRICE_USD_CACHE_READ`; registering a near-miss name would create an INERT key that
+	// reads as priced and is not, which is exactly the half-armed failure ROADMAP 272 records.
+	// WHY THE ASYMMETRY IS INTENTIONAL: a config key is auditable because it is IN a file (`durig.config.json` is
+	// gitignored but still inside the tree — gitignored is not outside), and a credential is auditable because it is
+	// NOT in a file. So the price of a class belongs to the inventory and the KEY that pays it does not; the value
+	// stays in `~/.config/durig/env` (mode 600, out of tree) and `assertNoSecretsInFile` refuses any secret-shaped
+	// value that tries to move in. See demo/config-credential-surface.test.mjs.
+	"DURIG_VERIFIER_PRICE_USD_IN",
+	"DURIG_VERIFIER_PRICE_USD_OUT",
+	"DURIG_VERIFIER_PRICE_USD_CACHE_READ",
+	"DURIG_VERIFIER_PRICE_AS_OF",
+	"DURIG_VERIFIER_PRICE_JSON",
+	"DURIG_PRICE_JSON",
+	// Where a metered run writes its bill (#5099 scoping key; `tools/model-probes/metered.mjs:41`, `cli.mjs:292`).
+	"DURIG_SPEND_LEDGER",
+	// The three caps are SET BY the tracked `durig.config.default.json` (#5047), so they are config-FILE keys by
+	// fact; the inventory simply did not say so. Registering them is what lets the unknown-key rule below be
+	// applied to the shipped artifact without starting red (the #3539 lesson: a gate that opens red gets disabled).
+	// `DURIG_PROBE_CEILING_USD` stays OUT on purpose: #5024 rules one budget gets one name, and the probe ceiling is
+	// mapped onto `DURIG_SPEND_CAP_RUN_USD` for that process (metered.mjs:43) rather than becoming a file key.
+	"DURIG_SPEND_CAP_CALL_USD",
+	"DURIG_SPEND_CAP_RUN_USD",
+	"DURIG_SPEND_CAP_STORE_USD",
 ];
+
+/**
+ * Refuse a config FILE that sets a key no code reads. Until #5125 the inventory above was DECLARED only: `git grep
+ * CONFIG_KEYS -- src cli.mjs` returned the declaration and nothing else, and the file's own comment admitted "there
+ * is NO unknown-key rule at load time". A typo'd or stale key in `durig.config.json` was therefore accepted and
+ * silently ignored — the accepted-and-ignored class of `--json` (#5071), where the tool reports success about a
+ * thing it never looked at.
+ *
+ * Scope, stated so it is not over-read: this guards FILE values only. The environment may carry any name (that is
+ * how credentials and per-run overrides reach a process — `mergeConfig` copies env wholesale), so an env-only
+ * setting such as `DURIG_LOCAL_PRICE_USD_IN` or `DURIG_PROBE_CEILING_USD` is not refused here.
+ *
+ * Names the key(s), the file, and the known inventory; NEVER a value (a mistyped key is often a mistyped
+ * credential). Throwing rather than warning is the ruling: a warning in a preflight is what this run keeps
+ * discovering that nobody reads.
+ */
+export function assertNoUnknownFileKeys(fileValues, source) {
+	const known = new Set(CONFIG_KEYS);
+	const unknown = Object.keys(fileValues ?? {}).filter((k) => !known.has(k));
+	if (unknown.length === 0) return;
+	throw new Error(
+		`unknown config-file key(s): ${unknown.join(", ")} in ${source ?? "(unknown)"} — no code reads these, so they ` +
+		`are silently ignored (the #5071 accepted-and-ignored class). Known config-file keys (CONFIG_KEYS, ` +
+		`src/config.mjs): ${CONFIG_KEYS.slice().sort().join(", ")}. Fix: remove the key, or register it in CONFIG_KEYS ` +
+		`if it is a real setting; a per-run value belongs in the ENVIRONMENT instead.`,
+	);
+}
 
 /**
  * Read the SHIPPED defaults file with the same resilience rules as loadConfig.
@@ -170,9 +223,13 @@ export async function loadShippedDefaults({ readFile, anchors = [] } = {}) {
 		try {
 			const values = JSON.parse(text) ?? {};
 			assertNoSecretsInFile(values, path);
+			// #5125: the SHIPPED defaults are held to the same inventory as the operator file — that is the whole
+			// point of a declared inventory, and it is why the three caps were registered rather than exempted.
+			assertNoUnknownFileKeys(values, path);
 			return { values, source: path };
 		} catch (err) {
 			if (err?.message?.includes("secret-looking value(s)")) throw err;
+			if (err?.message?.includes("unknown config-file key(s)")) throw err;
 			throw new Error(`invalid JSON in config file ${path}: ${err.message}`);
 		}
 	}
@@ -225,6 +282,8 @@ export async function loadConfig({ env = {}, readFile, defaults = {}, defaultsSo
 		// #700: the FILE is checked before merge, so an env value cannot mask a
 		// secret that is sitting in a shared, committed file.
 		assertNoSecretsInFile(fileValues, path);
+		// #5125: and the file may not carry a key nothing reads. Secret first, so a leak is named before a typo.
+		assertNoUnknownFileKeys(fileValues, path);
 		source = path;
 		break;
 	}
