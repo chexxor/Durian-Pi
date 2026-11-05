@@ -34,7 +34,12 @@ operator capacity ruling (D201); (b) give the local model a **dated $0 price row
 pins are fetched, not typed, and carry an `asOf`); (c) bring the verifier endpoint up (or lift the `verifier` provider out
 of `rig.selfdev.json` until #5153 lands) and drive the team the blessed way, `intent.mjs` + `cli.mjs serve`. **Recommend
 (b) + (c):** (a) buys a metered default this rig does not need when the same gate says the honest answer is a declared $0.
-Only the operator can do (a) and (c).
+Only the operator can do (a) and (c). **And (b) is not a host-env fix — tried and measured:** declaring
+`DURIG_LOCAL_PRICE_USD_IN=0/_OUT=0` in the launch env and naming the model with `DURIG_MODEL` (bare id, `provider/id`, and
+`DURIG_PROVIDER=local`) is refused as `model-unpriced` with `"provider":"deepinfra"` every time (the price lines were
+removed again afterwards — the host env is as the operator set it), so `DURIG_MODEL` cannot
+address the local provider class at all — it is looked up in the metered catalog. That makes (b) a code/pins row, not
+something a delegate can configure around.
 
 **Blocker:** the **delivery channel** — `send` is refused by the spend-cap gate (metered catalog row $14 max-call vs the $4
 store cap; a named local id has no dated price) **and** a broker start is refused while `DURIG_VERIFIER_BASE_URL`
@@ -45,7 +50,7 @@ Run this first — all reads, no writes:
 
 ```bash
 cd ~/Git/Durian-Pi
-git status --short -- . && git rev-list --count origin/main..main          # 12 ahead at 19:4xZ, 0 pushed
+git status --short -- . && git rev-list --count refs/remotes/origin/main..main   # 7 ahead at 20:0xZ, 0 pushed
 DURIG_DB=./selfdev.sqlite node cli.mjs queue --id 5143 --id 5144 --id 5145 --id 5146 --id 5149 --id 5152 --id 5153 --id 5154
 node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status  # 12 s: local CLEAN, verifier 2 BLOCKs
 DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 0.1 s; hygiene counts, pm-owned
@@ -83,10 +88,11 @@ counts it every run: **345 `held`** (276 older than 7 d), **93 non-terminal LAND
 `main`** (zero-build closable), **75 orphan candidates**, **33 rows whose citations resolve to no current row**, **12 whose
 gate prose cites no resolvable id**. That is a `pm` release/cancel pass plus a `lead` read of the orphan bodies — the held / landing / orphan
 classes, not the 162, are where the hygiene work is.
-## State (measured 2026-11-05T19:3x–19:4xZ, Linux Fedora 45 / node v24.22.1 / git 2.56.0)
+## State (measured 2026-11-05T19:3x–20:0xZ, Linux Fedora 45 / kernel `7.2.15-300.fc45.x86_64` / node v24.22.1 / git 2.56.0)
 
-`main` @`a978bcd9`, **12 ahead of `origin/main`, 0 pushed** (the operator's push grant of 2026-11-05 was not exercised —
-the delegate lands locally and reports; `git push origin main` is the operator's to run or grant). Landed this session by
+`main` @`1872d35f` (docs) on top of the landings, **7 ahead of `refs/remotes/origin/main`, 0 pushed** (the operator's push
+grant of 2026-11-05 was not exercised — the delegate lands locally and reports; `git push origin main` is the operator's to
+run or grant). Landed this session by
 SHA: `item-5131 3a7abc99` → merge `807f24a0`, `item-5111 083d2da2` → merge `a978bcd9`; `item-5125 385e3973` is **subsumed**
 (`merge-base --is-ancestor item-5125 item-5131` exit 0, `git diff 807f24a0 385e3973 -- src | wc -l` = **0**), so `main`
 carries all three rows' content. **Suite green on landed trunk, run from the seat root where the vendored deps are

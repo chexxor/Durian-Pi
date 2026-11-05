@@ -9033,8 +9033,9 @@ unnoticed for 16 days.** Row **#5094** makes drift a visible finding rather than
 
 ## D211 · 2026-11-05 (delegate session C, Linux Fedora 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): the verifier chain is landed and proven on trunk; the local model moved to the operator's Strata endpoint; and the binding constraint is now the **delivery channel**, not the backlog
 
-**What happened, measured in the same commands.** `main` moved `4c4a095a → 807f24a0 → a978bcd9`, **12 ahead of
-`origin/main`, 0 pushed** (the operator's standing push grant was not exercised — the delegate lands locally and reports).
+**What happened, measured in the same commands.** `main` moved `4c4a095a → 807f24a0 → a978bcd9`, **7 ahead of
+`refs/remotes/origin/main`, 0 pushed** (the operator's standing push grant was not exercised — the delegate lands locally
+and reports).
 Landed **by SHA** per `docs/runbooks/land.md`: `item-5131 3a7abc99` (#5131 arm the verifier for a bounded differential
 test) and `item-5111 083d2da2` (#5111 metered sends get their cap from the provider spec); `item-5125 385e3973` is
 **subsumed** by 5131 (`merge-base --is-ancestor item-5125 item-5131` exit 0; `git diff 807f24a0 385e3973 -- src | wc -l` =
@@ -9090,6 +9091,18 @@ waited over an hour — the delivery channel, not the backlog, is the critical p
 hand-typed into a vendor pin; (c) bring `:1234` up (or lift the `verifier` provider out of `rig.selfdev.json` until #5153
 lands) and drive through `intent.mjs` + `cli.mjs serve`. **Recommendation: (b) + (c).** `$0` was spent either way — the
 ledger `DURIG_SPEND_LEDGER` (`/tmp/durian-spend.jsonl`) **does not exist**, and both refusals precede any request.
+
+**(b) is a code/pins change, not a host-env change — measured, because it decides who can act.** The honest host config was
+tried first: declared `DURIG_LOCAL_PRICE_USD_IN=0` / `_OUT=0` in the launch env (the remedy `providers/local.mjs:253`
+offers — both lines removed again after the probe, so the host env is exactly as the operator set it; backups in
+`.spike/delegate-20261105c/`) and named the model with `DURIG_MODEL` (bare id, and `provider/id`, and `DURIG_PROVIDER=local` as well). Every form
+is refused as `model-unpriced` with **`"provider":"deepinfra"`** — `DURIG_MODEL` cannot address the **local** provider class
+at all; it is looked up in the metered catalog. So there is **no env-only way to point `send` at the local model**, and no
+way to give the local model its legitimate $0 price without touching the catalog/pins. Two findings go to `lead` with this as
+rows to file; the delegate filed neither: (i) the cap check applies the store cap to the **worst row in the fetched
+catalog**, not to the model the invocation will actually run — which is what turns a $14 `gemini` row into a refusal of a
+turn that never touches it; and (ii) `DURIG_MODEL` cannot name a local-provider model, so the documented setting cannot
+express the rig's own default staffing.
 
 **A new instrument carries a new leak (filed for `lead`, not fixed).** The provider check that just landed reads the
 **process env** (`checkup.mjs:94`, `providers/local.mjs:148`), not the **config-file precedence** the rig documents at
