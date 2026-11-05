@@ -11405,3 +11405,70 @@ with `broker-stop-audit` red — 5/5 pass standalone, the same check was red at 
   time a seat makes a **metered** call: it accumulates a ledger next to its own worktree, invisible to every
   other checkout. A store-scoped path (e.g. `./selfdev.sqlite.spend.jsonl`) is a one-key config change — lead's
   call, not mine.
+
+
+<!-- CUT 2026-11-05 (delegate): the two 2026-11-04 CLOCK-OUT logs moved VERBATIM from docs/NEXT.md (file was 290 lines, sha256 089b8ea00996 at cut). Reproduce the pre-cut file as: head -227 of the pre-cut NEXT.md + this block. -->
+
+## CLOCK-OUT — 2026-11-04 afternoon delegate session (pi-delta research → local-provider 401 → firewall)
+
+**Value delivered, each line an instrument read.**
+- **pi-durable update researched, not guessed:** `docs/PI-UPGRADE-DELTA-2026-11-04.md` — pin `2ec55d80…` stamped
+  **1.3.0**, upstream moved twice during the session (`fcebc099` → **`707888ec`**), **508 → 515 behind**, skipped
+  **v1.4.0** and **v1.5.0**; per-package commit counts; **9 symbol breaks** located to our files
+  (`documentState`/`viewState` → `Conversation.watch`, `watchEvents`/`AgentEvent*` →
+  `subscribeCommits`/`Harness.onState`, pi-ai's `Type` removal, `checkpointWhen`, `runFailure`);
+  **9 features** to accommodate; **5 rulings** needed, 4 taken by lead (D206). Verified by reading upstream
+  `CHANGELOG.md` and the migrations table at tip, and by `spec-compat-probe.mjs` (every import specifier still
+  resolves — the breakage is named exports, not paths).
+- **Store backed up BEFORE any pin work**, with the broker down: sha256 `02da60e3…`, `cmp` exit 0, 463,142,912 B.
+- **Local provider outage diagnosed and fixed at the leaf:** Strata now demands a bearer token on loopback;
+  `local.mjs` sends `LOOPBACK_PLACEHOLDER_KEY`, so 7 seats `model_error: 401` and one `send` came back with zero
+  tokens. Fixed with `~/.config/durig/env` (600, outside the repo) + `--env-file`; proven by the provider's own
+  completion path (`stopReason:"stop"`, 59 in / 36 out), by `cli.mjs config` printing **0** occurrences, and by
+  `send devtools d015` then running and completing **#5089 and #5090**.
+- **The pi harness reaches the same server** via `~/.pi/agent/models.json` `"apiKey": "!sed …"` — proven with the
+  variable **unset** in that shell: `pi --print --provider strata --model iq3_s` → `PI-STRATA-OK`.
+- **Firewall question answered with four measurements:** firewalld, zone `public` on `enp39s0`; the app's own
+  inference-only share listener is up on `0.0.0.0:47832` (`401` no key / `200` with key / never serves the UI);
+  `--query-port=47832/tcp` was **no** at 12:2xZ and **yes** by 13:0xZ; and `curl` to this host's own LAN address is
+  **not** evidence (a never-allowed port returned `HTTP 200` from itself) because that path uses `lo`, not
+  `enp39s0`. `--permanent --list-ports` lists neither 47831 nor 47832, so a reload/reboot drops them — recorded in
+  the runbook.
+- **Entry point and D206 updated** (`AGENTS.md`, `docs/DECISIONS.md`): the session-closure response is now a required
+  deliverable with decisions + pros/cons + recommendation, and hostnames are out of the project.
+- **Delegate-verified #5090** by extracting it against current `main` and running it: demo **exit 0**, tool
+  `ok:true` on a scratch target and `cause:"gate_target_refused"` when aimed at the live store, which stayed intact.
+
+**Left unverified, with the cheapest probe named.** (1) Whether a `firewall-cmd --reload` or reboot actually closes
+47832 — probe: re-run `firewall-cmd --query-port=47832/tcp` after the next reload (root not available to the
+delegate). (2) Whether `--permanent` acceptance of 47832 by the app is intended or a bug — probe: `--permanent
+--query-port=47832/tcp` now. (3) Whether the 7 local seats can *complete* work end-to-end after the key fix, beyond
+the two rows already done — probe: `cli.mjs ps` plus the row statuses above. (4) The delta doc's symbol list is a
+**read** of upstream source, not a compile — probe: `node scripts/test.mjs --all` at the `v1.4.0` pin (#5095's own
+first gate). (5) `#5083`'s receipt row is still open even though the merge is in `main` (measured
+`d1c6d8a6` is an ancestor of `main`); it needs devtools' completion.
+
+**Cost.** Money: this segment spent **$0** on metered calls (the only metered probe this session cost `$0.000002`,
+and local loopback calls are unledgered by design — see pitfall 23's ledger defect: the ledger **file does not exist**,
+so seat spend is not recorded at all). Wall-clock: the pi research was ~35 min; the local-provider diagnosis ~25 min;
+each seat `send` is 20–50 min, so the pi chain's remaining stages (#5094 → #5095 → #5096) are hours, not minutes —
+budget two sends per stage.
+
+## CLOCK-OUT — 2026-11-04 delegate session (four rulings → D205 → `#5079` landed as `#5083`)
+
+**Done, with evidence.** Operator rulings: caps untouched (re-read `durig.config.default.json` + `capsFor()`);
+`google/gemini-3.1-pro` stays refused (vendor catalog corroboration, `$14.00 = 3.50×` store cap); the ledger is
+store-scoped in both private configs (probe prints the same absolute path from both cwds); the scratch worktree
+`item-4799` was **discarded safely** — ancestry proven, its two untracked captures copied with `sha256sum` to
+`.spike/delegate-20261104b/item-4799-scratch/`, then `worktree unlock` → `worktree remove` (no `--force`) →
+`prune` → `branch -d`; worktrees 8, refs 9. The verifier class was **priced and proved reachable for $0.000002**
+but **not armed**, because arming without `DURIG_VERIFIER_API_KEY` turns five dark seats into `no_model` seats.
+**`#5079` → `#5083` landed** at `2690e6ac` with the merge tree equal to the prediction, ancestry proven, and the
+suite + behaviour gate re-run by the delegate at the merged sha. Docs: **D205** in `docs/DECISIONS.md` (all four
+rulings + who executes each), SELFDEV pitfalls 24–27 (re-point-before-prune; host labels are claims; a roster
+re-point is three layers; two cheap reads whose labels mislead).
+
+**Unverified / open.** `#5083` the **row** is still `queued` (a seat completes it — step 1). W2's non-author
+verifier review remains structurally unavailable until the credential lands. The **prune** of `item-5079` /
+`item-4955` is deferred until those seats' cwds are re-pointed. Nothing pushed. Broker left **down** (it was
+down when I arrived; nothing in this session needs it up — say so if you want it serving).

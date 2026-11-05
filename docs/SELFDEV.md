@@ -1929,3 +1929,40 @@ the prefix forever.
     --model iq3_s` answered while `DURIG_LOCAL_API_KEY` was **unset** in that shell (`env -u`), and the key stayed
     out of both the repo and `models.json`. A literal `"apiKey": "local"` is what made pi 401 the same way the
     seats did.
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-05, D208 — every number measured in this session, Linux Fedora 44 `7.2.14-200.fc44.x86_64`, node v24.22.1)
+
+1. **Never `import()` `tui.mjs` from a script.** `tui.mjs:106` is a top-level `await mode.run()` with **no
+   `import.meta.main` guard**, so `node -e 'import("./tui.mjs").then(m => m.openTuiStore(…))'` boots a **full
+   interactive Pi session**: it paints the alt-screen, initialises a model runtime and then **waits on a stdin that
+   never comes**. This session lost **~45 minutes** to exactly that, and the read it was meant to perform never ran.
+   For queue reads use `node cli.mjs queue --json --id <id>` / `node cli.mjs show <id> --json`, or open the store with
+   `node:sqlite` directly. If a call goes silent for minutes, suspect a TUI boot, not the network.
+2. **A `send` at `timeout 3600` gets killed while the seat keeps working.** `d20261105-security` exited **124**; the
+   row `#4829` is **`claimed`** and the seat produced tool results afterwards (store entries ~#285507–#285514).
+   Re-read the row before doing anything, and **never re-send the body** (the 10-second duplicate-intent class, #4075).
+   For a long ask, prefer `scripts/watch-completion.mjs` (the documented instrument) over holding the client open.
+3. **`cli.mjs queue --json --no-body` omits `title`, `dependsOn` and `blockedBy`.** Dropping `--no-body` returns them
+   (the payload is large — filter the ids you need). The projection key is `items[]`, with `counts`/`attention`
+   alongside; a `KeyError: 'items'` means you filtered to a state the projection reports differently.
+4. **`demo/seat-turn-shape.test.mjs` asserts the **live** `selfdev.sqlite` is byte-identical before and after its
+   read** — so it goes red whenever *anything* is writing the store, including your own in-flight `send`. Alone it
+   exits **0**. That is the same class as the load-sensitive `broker-stop-audit` flake (#5056): run the suite in a
+   **linked worktree** (#5065) with **no send in flight**, and if a suite red appears only under concurrency, prove
+   it by re-running the single demo alone before reporting a regression.
+5. **`docs/NEXT.md` is gated by a demo, and the gate is cheap to satisfy but easy to break by accretion.**
+   `demo/next-pointer.test.mjs` (0.3 s) requires: the first `## NEXT SESSION` before the first `## CLOCK-OUT`, a
+   `**Current item:**` phrase, a `#NNN` queue id, an exact command containing `node cli.mjs`, a `**Blocker:**` line,
+   a link to `docs/NEXT-ARCHIVE.md`, and **≤ 200 lines**. A session that adds status sections without cutting
+   history breaks it — it was red at `0d71bf53` (file at **290 lines**) and only the pointer's wording failed first.
+   **And the archive link must sit INSIDE the `## NEXT SESSION` section**, not in the file header:
+   `demo/clockin-digest.test.mjs` (7.4 s) prints the pointer by line range and asserts `NEXT-ARCHIVE.md` appears **in
+   that range**, so a link that lives above the heading fails it. Rewriting the pointer is exactly the edit that
+   moves that link out of range — run both demos (0.3 s + 7.4 s) before committing `docs/NEXT.md`.
+6. **Renaming a vendor pin's sha needs a dated note in the review that cited the old one.** Re-cloning
+   `microsoft/agent-governance-toolkit` moved `cfb44576 → a918f763` (18 days of drift), which silently invalidated a
+   landed review's citations. `tools/vendor-pins.mjs --check` → PASS proves the *pin*, not the *provenance*; a
+   3-line `> PIN MOVED (date, by whom, why)` block under the review heading keeps the citation trail intact.
+7. **A `sed -n 'X,Yp'` cut of `docs/NEXT.md` into the archive is the cheapest verbatim move** — record the pre-cut
+   line count and sha prefix in the divider so the cut is reproducible (`head -227` + the archived block reproduces
+   the 290-line file `089b8ea00996…`).
