@@ -40,6 +40,19 @@ DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite DURIG_NO_SERVE=1 \
 (and a ~16.9 KB ceiling imposed by the 20,000 B clock-in digest — `demo/clockin-digest.test.mjs`), gated by
 `demo/next-pointer.test.mjs` (0.3 s) — cut before you add.
 
+**Landing —** the three **`done`** verifier/provider branches are **unlanded**, and their preflight is already measured, so
+the next session does not re-derive it: `item-5125 385e3973`, `item-5131 3a7abc99` (**which subsumes 5125** —
+`git merge-base --is-ancestor item-5125 item-5131` exit 0, so one landing of 5131 carries both), `item-5111 083d2da2`.
+For all three against `main` @`2115decc`: `merge-tree --write-tree` **exit 0 (clean)** and
+`merge-base --is-ancestor main <branch>` **exit 1 (STALE base, fork = `1dff8590`)** — stale only because `main` moved by
+**docs commits** after the fork. `docs/runbooks/land.md` step 0b calls a stale base "a re-cut job for a seat", while the
+same runbook says `land` is the **delegate's/operator's** action; read both together — a helper landing
+(`node scripts/land.mjs item-5131 item-5111 --db ./selfdev.sqlite`, **never `--suite` while the tree is red**, then
+prove on `main` in a detached scratch) is defensible **only when no `send` harness is generating**, because the genlock
+makes a concurrent landing a wait, not a race. `#5132` (`channel-preflight` §7) is still **`queued`** and **never
+started**, `#5134` was **`claimed`** with its root cause already named (on node v24 `Dirent.path` is gone — only `name`
+and `parentPath` exist, which is why the guard printed `undefined/anthropic-ai-sdk`).
+
 **Blocker:** nothing is blocked on the rig. **Two things sit with the operator:** (1) **routing the two research
 commissions** (D151 bars the delegate; the operator offered to route them — they are the current critical path), and
 (2) **the fit of the armed verifier** — #5131 met the G2 floor but recorded **`CLEAN-PASSED 0`** in every replicate
@@ -153,6 +166,8 @@ and **zero findings name the two new prompt files**.
 - **Probes worth keeping are already in `tools/`**: `tools/verifier-arm-probe.mjs` (offline; prints the resolved spec,
   the price **and its source**, and `maxCallExposureUsd` against the three caps; never a credential). Promoted by #5125 —
   the old `.spike/` copy is gone by design.
+- **`git log --all --grep=secret_detected` for every redactor hit before attributing one** — this session's was
+  `pi.compaction` content, not a tool result.
 - **Next delegation, when the reports land:** `lead` re-gates #4833 and rules whether the **cheap belts** (the position's
   G10 — refuse `git config --global/--system`, value-level `looksLikeSecret` in `pickEnv`, push unresolved mutating
   forms into the existing "NOT checked" surface) proceed now. The delegate carries the ruling; it does not choose it.

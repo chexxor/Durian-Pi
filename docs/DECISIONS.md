@@ -9008,3 +9008,11 @@ unnoticed for 16 days.** Row **#5094** makes drift a visible finding rather than
   `src/`, `durig.config.json`, roster, or pin, armed nothing, vendored nothing, and commissioned no research. Its writes:
   `docs/DECISIONS.md`, `docs/NEXT.md`, `docs/NEXT-ARCHIVE.md`, the two research-prompt files, and briefs in gitignored
   `.spike/`. Spend attributable to this session: **$0.0387**, all of it the #5131 arm, ledgered by the seat that ran it.
+- **Landing preflight measured, landing deliberately NOT run.** `item-5131 3a7abc99` subsumes `item-5125 385e3973`
+  (`git merge-base --is-ancestor item-5125 item-5131` exit 0) and `item-5111 083d2da2` stands alone. Against
+  `main` @`2115decc` each is `git merge-tree --write-tree` **exit 0 (clean)** but
+  `git merge-base --is-ancestor main <branch>` **exit 1** — fork `1dff8590`, stale only because `main` moved by **docs
+  commits** afterwards. `docs/runbooks/land.md` 0b names a stale base a re-cut job for a seat while also making `land`
+  the delegate's action, so the honest state is: **helper-landable, base-currency unproven, and a `send` harness was
+  generating** (`devtools` on #5134, store writes live) — which is the condition the runbook says not to land under.
+  Recorded in `docs/NEXT.md` as the second command of the next pass rather than resolved under time pressure.
