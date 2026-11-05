@@ -455,3 +455,32 @@ ROADMAP **240**'s "how do we know a recipe worked?" question **remains open**: t
 `checks` field in the recipe reader exists at `goose · 775b3958` (checked 2026-10-28: `find vendor/eval/goose -name "*scraper*"` →
 nothing; `grep checks vendor/eval/goose/crates/goose/src/recipes/` → nothing). **Do not register a mechanism that cannot be
 found.** See the truncation note in `docs/reviews/harness-tools-skills-r3-delegate-notes-2026-10-28.md` §5.
+
+## The 2026-11-05 sandbox / permission sweep (ten clones: six pi extensions, one orchestrator, one macOS app, one Python backend seam, one sealed-sandbox runner)
+
+The operator named these while ordering **seat sandboxing** made a priority (D208 Ruling B), with two constraints:
+control anything external to a seat (filesystem, network, domains, credentials), and **every customization on top of a
+bare pi / pi-durable harness lives in an extension/plugin**. All ten are cloned under `vendor/eval/` (gitignored) and
+pinned in `docs/VENDOR-PINS.md` — `node tools/vendor-pins.mjs --check` → **PASS, 27 clones**. The mechanism read with
+the path-level citations lives in `docs/reviews/pi-sandbox-permission-prior-art-review.md`; this section carries only
+the **decision rows** and their durian-pi counterpart. Nothing here was run: `observed` = a path in the pinned clone,
+`advertised` = their prose.
+
+| decision | what they do (observed unless marked) | the durian-pi counterpart it changes |
+|---|---|---|
+| what the seat substrate **is** | four of six pi extensions depend on **`@anthropic-ai/sandbox-runtime`** — `pi-permission-modes 2.7.2` pins `0.0.81` exactly, `auto-permission-system 3.20.4` / `pi-secure-it 2.0.0` / `@erichll/pi-sandbox 0.29.2` take `^0.0.78`; `toolflow 4.0.0` has **no deps**; `pi-code-tool 0.6.2` uses `@pydantic/monty` | **ROADMAP 274** — 170's substrate position (#4829) must say adopt/adapt/reject of SRT by name, and pin it before quoting it |
+| a permission **grant as data** | `pi-auto-review/src/broker/types.ts`: `BoundaryGrant = {token, requestHash, sessionId, expiresAt, usesRemaining: 1}`; `BoundaryReview = {outcome: allow\|deny\|defer, riskLevel, userAuthorization, rationale}`; `policy-audit/{sqlite,store,report}.ts` | **ROADMAP 277** — 269's raise/expire/revoke cycle and the missing per-decision record (matches **246**) |
+| a **raise must not loosen** | `pi-secure-it/lib/project-trust.ts:1-10`: project policy "may only tighten the policy"; trust = the file's **SHA-256** recorded in a trust store, written only by an explicit command or an already-trusted file | lead's ruling "a capability raise is a NEW SPAWN (rulesets are monotonic)" now has a shipped anchor pattern; 269's acceptance should require the hash anchor |
+| **egress** mediation shape | `mudroom @ 2bea494`: the sandbox's "only way out" is an **allowlist proxy** that checks every host "and logs the connection"; `ironclaw @ 1b934bf`: `network=none` + model reachable **only via a host proxy** | **ROADMAP 276** — 268 must choose proxy-vs-in-process-guard and say what each cannot see |
+| mode = policy **bundle** | `pi-permission-modes` mode = `{label, hideTools, sandbox:{enabled, allowWrite, network:{allowedDomains}}, permission:{bash:{"*":"ask"}}}` with `defaultMode`/`cycleOrder`, plus `config-audit.ts` classifying drifted config as `stale\|redundant\|custom\|unknown` | 270's placement rule + 172/173's policy shape; our own config has no drift audit at all |
+| capability vs armed vs host-supported | `llm-sandbox @ a8f0d95`, `llm_sandbox/backends.py:1-6`: "Discovery never imports a backend SDK or probes the host. Capabilities describe features implemented by an adapter, **not protections enabled for a particular session or guarantees that the current host can run it**"; backends `docker\|podman\|bubblewrap\|wsl2_bubblewrap\|nsjail\|kubernetes\|windows_mxc` | **ROADMAP 275** — the exact distinction `tools/channel-preflight.mjs` §7 collapses ("NO SHELL CAN START HERE" on a host where `broker-serve --status` proves bash runs); fix is inside **217** (#5132, warning #5133) |
+| **grade** containment, fail-closed | `ironclaw` `ironctl scan` scores seven weighted dimensions (non-root 15, dropped caps 20, seccomp 15, network isolation 15, read-only rootfs 10, no `docker.sock` 15, no shared host namespaces 10); "any dimension it cannot observe is scored as insecure, never waved through" | **ROADMAP 278** — the rig asserts containment and never scores it; map the dimensions to a process-confined seat (Landlock/seccomp/egress/uid/caps), do not copy the container weights |
+| tell the **model** its boundaries | `pi-permission-modes/src/awareness.ts:275`: "If a command fails with a permission or network error without a prompt having appeared, the sandbox blocked it silently — ask the user for that step instead of retrying variants" | our refusals are invisible to the seat and leave no record; this is the cheapest seat-side complement to 268/277 |
+
+**Escalations carried, not resolved.** `aegis-orchestrator @ 0da464f` and `ironclaw @ 1b934bf` are **AGPL-3.0** —
+read-for-design-only, no code or schema may enter the tree without an operator ruling (the pin table's rule: "a copyleft
+or missing licence is an escalation … not a quiet copy"). `arjan/awesome-agent-sandboxes @ db6ffc0a` has **no license
+file**; the operator ruled it usable as a **link catalogue** (D209), so its links are index material while each linked
+project's own license still gates any clone. `mudroom`'s README carries its own dated comparison of **Docker Sandboxes,
+Apple `sandboxy` (`apple/containerization`), ArcBox, and Claude Code sandboxing** — four further candidates, with the
+caveat that the check date (**2026-09-30**) is theirs, not ours.

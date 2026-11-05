@@ -8876,3 +8876,60 @@ unnoticed for 16 days.** Row **#5094** makes drift a visible finding rather than
   re-measure). The delegate's writes were: `docs/ROADMAP.md`, `docs/VENDOR-PINS.md`,
   `docs/reviews/agent-governance-toolkit-review.md`, `docs/reviews/agent-sandbox-substrate-research-prompt.md`,
   `docs/NEXT.md`, this entry, and the out-of-tree credential file.
+
+## D209 — the operator granted the verifier model, the research sequencing, and the no-license link catalogue; the team then re-minted the arming chain around the grant (2026-11-05, delegate acting, Linux Fedora 44 `7.2.14-200.fc44.x86_64` node v24.22.1, `6e23742a` → this commit)
+
+- **Ruling C (operator, verbatim): "Yes, we can use openai/gpt-oss-120b on deepinfra."** This answers **#5127**, `lead`'s
+  row written for exactly this question: *"OPERATOR QUESTION (spend, parked for answer, not for work): approve a bounded
+  gate arm — `openai/gpt-oss-120b` at DeepInfra, ceiling $0.15, one corpus, k=3, through `metered.mjs`. D137: gate BEFORE
+  flipping the roster. Account-level independence DECLINED (my ruling), so no second key."* **The ceiling is `lead`'s
+  number, not the delegate's and not the operator's invention**: the operator accepted the delegate's recommendation,
+  whose stated shape was "arm it with the operator-set ceiling", and the only bounded arm ever put in front of them is
+  #5127's. Corroborated offline (no request sent): `maxCallExposureUsd $0.001419` at `0.037/0.17` per Mtok over the
+  declared `24,576/3,000` — so **$0.15 ≈ 105 maximal calls**, nowhere near binding at `k=3`. `DURIG_PROBE_CEILING_USD` is
+  a real enforced seam (`tools/model-probes/metered.mjs:45`, and `:43` rules it *is* `DURIG_SPEND_CAP_RUN_USD` for that
+  process), so honouring it needs **no config key**. If the operator wants a different figure, it is a one-line
+  re-route, not a re-design.
+- **`lead`'s account-level-independence refusal stands.** It ruled "DECLINED (my ruling), so no second key" inside
+  #5127; the operator did not overturn it. Restating the distinction the delegate measured so nobody re-litigates it:
+  the verifier is **cross-family and cross-vendor** to the author seats (`local/iq3_s` vs `openai/gpt-oss-120b` on
+  DeepInfra), and the **credential account is shared** — an explicit named variable, not the silent same-vendor fallback
+  #5118 refused. Only the operator can mint a second key; nobody asked them to.
+- **What the grant did to the queue (measured row transitions, not narration).** `pm` **released #5127 at
+  04:07:54Z**. `lead`, on `d20261105-lead2`, then **cancelled its own two rows with its own errors named**: **#5126**
+  ("RECORD, NOT WORK … the record belongs on #5118 itself, not as a claimable item") and **#5128** ("SUPERSEDED BY MY
+  OWN BOOKKEEPING ERROR, not by new facts … a parked roster row with unresolvable references is a trap for whoever claims
+  it"), **re-minting #5131** (the gate arm: `DURIG_PROBE_CEILING_USD=0.15`, one corpus, k=3, **MEASUREMENT ONLY: no
+  config write, no roster edit**) and **#5136** (the roster arm, `held`, gated on **#5125 + #5131 + #5095**), and it kept
+  its ruling verbatim: **"gate arm now, roster flip only after stage 1."** It also opened **#5132** (the
+  `channel-preflight` §7 contradiction, **inside 217**), **#5133** (`security`: *do not build #4829 on §7*), and
+  **#5134** (the worktree-removal message that lost its root: `… at undefined/anthropic-ai-sdk`) — the three items the
+  delegate handed it. Census after: **done 3812 | cancelled 809 | held 342 | queued 154 | deferred 16 | claimed 3**.
+- **Ruling D (operator): "I accept your recommendation"** — the recommendation was *route the substrate research **after**
+  #4829 lands, so the brief points at the real question*. So the commission at
+  `docs/reviews/agent-sandbox-substrate-research-prompt.md` is **approved and gated**, not forgotten: when #4829 lands its
+  substrate position, the delegate amends the prompt with 170's named enforcement point, 268's demonstrated escape, and
+  #4833's decomposition, **then the operator routes it** (the research agent is off-machine with no repo write access;
+  `docs/runbooks/research-request.md` Do 2 bars the delegate from commissioning it — D151).
+- **Ruling E (operator): "Yes, we can use it. It is just links to other projects."** — about
+  `arjan/awesome-agent-sandboxes @ db6ffc0a`, the pin with **no LICENSE file**. Recorded as a licensing ruling with a
+  working rule the delegate applies: **the catalogue's structure and links are usable as an index; every linked project
+  keeps its own license, so a per-item license check still gates any clone of a linked repo.** The pin stays pin-only and
+  the missing-license fact stays in the table — the ruling does not invent a license.
+- **Prior-art intake: ten more clones pinned, and what the first pass forced.** `pi-packages @ 06a3de5`,
+  `pi-permission-modes @ 652902a`, `auto-permission-system @ 284fd87`, `toolflow @ 553c128`, `pi-secure-it @ bcdd0f1`,
+  `pi-code-tool @ c686c03`, `aegis-orchestrator @ 0da464f`, `mudroom @ 2bea494`, `llm-sandbox @ a8f0d95`,
+  `ironclaw @ 1b934bf` → `tools/vendor-pins.mjs --check` **PASS, 27 clones**; index review
+  `docs/reviews/pi-sandbox-permission-prior-art-review.md`, decision rows in `docs/COMPETITORS.md`. Two are **AGPL-3.0**
+  (`aegis-orchestrator`, `ironclaw`) — read-for-design-only, no code or schema enters the tree without a ruling. The
+  finding that changes 170: **four of the six pi extensions already build on `@anthropic-ai/sandbox-runtime`**
+  (`0.0.81` exact in one, `^0.0.78` in three) — and **SRT is deliberately not vendored or read yet**, because quoting a
+  runtime whose pin you do not hold is 271's named anti-pattern. Registered **274–278** (the SRT decision, the
+  capability/armed/host-supported distinction our preflight collapses, the egress mediation shape, the grant/audit schema,
+  and a fail-closed containment grader). **Registration only — decomposition stays `lead`'s.**
+- **The boundary this decision did not move.** The delegate wrote **no config, no roster, no `src/`**, armed nothing
+  (`DURIG_VERIFIER_BASE_URL` still `http://127.0.0.1:1234/v1`), claimed/completed/routed **no row**, commissioned **no
+  research**, vendored **no SRT**, and pushed **nothing** (`origin/main` moved earlier **by the operator**: reflog
+  `update by push` at 2026-11-05T02:54:58Z, confirmed by `git ls-remote origin main`). Its writes: `docs/ROADMAP.md`,
+  `docs/VENDOR-PINS.md`, `docs/COMPETITORS.md`, the new review, `docs/NEXT.md`, `docs/SELFDEV.md`, this entry, and two
+  briefs in gitignored `.spike/`.

@@ -5561,6 +5561,11 @@ sequence. · *Acceptance:* one review per project carrying the runbook's require
 durian-pi coverage matrix), a `docs/COMPETITORS.md` row each, `tools/vendor-pins.mjs --check` exit 0, and an
 explicit **rejection in writing** of the cloud/microVM family under D131 rather than silence. The follow-up
 commission is already written: `docs/reviews/agent-sandbox-substrate-research-prompt.md`.
+*Consumed, in part, 2026-11-05 (delegate intake, first-pass only):* the operator named **ten more projects**, all
+cloned and pinned, and the first-pass mechanism read landed as
+`docs/reviews/pi-sandbox-permission-prior-art-review.md` (see **274–278** for what it forced). That review is an
+**index, not the per-project reviews this item's acceptance demands** — the runbook artifacts (surface inventory,
+adopt/adapt/reject table, coverage matrix) are still owed by seats.
 
 **272. The tree holds two price-file shapes with one name, and the owned one does not reach the seam that arms a
 metered class.**
@@ -5605,3 +5610,103 @@ delta with the file named, plus one metered probe bill with `priceSource` named 
 *Blind spots:* a gate arm against a metered endpoint goes through `meteredChat` (#5024), which **refuses** an
 unkeyed metered call and enforces `DURIG_PROBE_CEILING_USD` — so gating costs real money and needs an explicit
 ceiling, unlike a loopback arm.
+
+**274. The pi ecosystem already has a seat substrate, and 170's position has to rule on it by name: four of the six
+pinned pi sandbox extensions depend on `@anthropic-ai/sandbox-runtime` (SRT), which we have not pinned or read.**
+*(registered from the 2026-11-05 intake; the substrate call belongs to `security`'s 170, not to the delegate)*
+**Observed in the dependency manifests at the pins** (`vendor/eval/*/package.json`):
+`pi-permission-modes 2.7.2` → `@anthropic-ai/sandbox-runtime@0.0.81` (exact);
+`auto-permission-system 3.20.4` → `^0.0.78`; `pi-secure-it 2.0.0` → `^0.0.78`;
+`@erichll/pi-sandbox 0.29.2` → `^0.0.78` **plus** `@erichll/pi-auto-review@^0.28.0` — i.e. the OS/runtime substrate and a
+**model-backed approval broker** are already wired together as one pi package. `toolflow 4.0.0` has **no dependencies**
+(pure in-process gating), `pi-code-tool 0.6.2` depends on `@pydantic/monty` (interpreter-level). So "extension-carried
+control over a shared runtime" is the de-facto shape of the constraint the operator imposed (D208 Ruling B), and it is a
+live alternative to a durian-pi-written Landlock/seccomp substrate (170). **SRT is deliberately NOT vendored yet:**
+nobody has read its licence or its enforcement claims, and 271's anti-pattern is quoting a pin you do not hold.
+*Owner:* `security` (inside **#4829**, whose substrate position is the gate for 171–174) with `architect`. ·
+*Acceptance:* 170's position names SRT as a candidate and says **adopt / adapt / reject with reasons**, and if adopted or
+adapted, SRT is pinned via `tools/vendor-pins.mjs` **before** any claim about its behaviour enters a design doc; the
+version question (one exact pin vs a range, which the ecosystem itself disagrees about) is answered, not inherited. ·
+*Blind spots:* these extensions target **bare pi**; whether their seams survive pi-durable's replay/attach lifecycle (a
+seat conversation outlives a process, so a grant bound to a session id must mean the same thing after re-attach) is
+**untested and load-bearing for 269**.
+
+**275. Our own preflight conflates three different facts that `vndee/llm-sandbox` keeps separate by contract —
+capability, armed-for-this-session, and host-can-run-it — which is the defect shape behind ROADMAP 217.**
+*(registered from the 2026-11-05 intake)* **Observed** at `llm-sandbox @ a8f0d95`, `llm_sandbox/backends.py:1-6`
+(docstring, quotable): *"Backend registration and static adapter capabilities. Discovery never imports a backend SDK or
+probes the host. Capabilities describe features implemented by an adapter, **not protections enabled for a particular
+session or guarantees that the current host can run it.**"* The `BackendCapabilities` frozen dataclass (`:38-46`) carries
+`platforms, container_images, interactive, pooling, filesystem_isolation, network_isolation, seccomp,
+daemon_required`, and the backend set is visible at file level (`docker.py, podman.py, bubblewrap.py,
+wsl2_bubblewrap.py, nsjail.py, kubernetes.py, windows_mxc.py, local/, pool/, security/`) — one seam spanning Linux and
+**native Windows (`windows_mxc`)**, which is exactly D131's requirement. Contrast the rig: `tools/channel-preflight.mjs`
+§7 prints **"VERDICT: NO SHELL CAN START HERE"** on a Linux host where `tools/broker-serve.mjs --status` says `bash` CAN
+start (`/usr/bin/bash`) and the store proves live shell runs (entry **#285389**, `isError=false`). *Owner:* `devtools`
+— this is **inside 217**, and `lead` routed the immediate contradiction as **#5132** with the warning to `security` as
+**#5133** (do not build 170's position on §7). · *Acceptance:* each host-capability instrument reports the three states
+separately (declared / armed-now / host-supported), a demo asserts the distinction rather than a verdict string, and
+`--dry-run`-style previews state what they do **not** check (the workspace-move runbook's lesson). · *Blind spots:* none
+blocking; it is a schema-of-truth fix, not a mechanism.
+
+**276. 268 must choose an egress mediation shape, and the two shapes on the table are an allowlist proxy outside the
+sandbox and an in-process guard on the tool path — both already shipped somewhere, neither in this rig.**
+*(registered from the 2026-11-05 intake)* **Observed shapes:** `mudroom @ 2bea494` (MIT, Swift/macOS) documents its
+egress as the sandbox's **only way out** — an **allowlist proxy** that "checks every host against the project's
+allowlist and **logs the connection**" — over a copy-on-write clone of the repo, with writes reaching the real folder
+only through a per-file/per-hunk review that re-checks `base/` so the human's edits are never clobbered.
+`pi-secure-it @ bcdd0f1` (MIT) splits the other way: OS-level bash sandbox (`sandbox-exec` macOS / **bubblewrap** Linux)
+plus an **in-process tool guard** for the tools the OS sandbox cannot reach (`read/grep/find/ls/write/edit`), plus a
+third layer that **drops network for headless/`-p`/subagent runs** — the same split durian-pi already has
+(`src/confine.mjs` at spawn, `durig.guard` per tool). `ironclaw @ 1b934bf` (**AGPL — read-only**) runs its agent
+sandbox with **`network=none`** and lets it reach the model **only through a host proxy** (observed hit counts in the
+pinned clone: `network=none` 1805, `gvisor`/`runsc` 1085/450, `seccomp` 1118, `no-new-privileges` 371, `cap_drop`,
+`read-only` 3007). The rig's own baseline stays the one measured in D208: credentials do not cross
+(`src/confine.mjs:491,686-692,340-353,665`), and `grep -c -iE "network|socket|egress" src/confine.mjs` → **0**.
+*Owner:* `security` (268's position) + `lead` (sequencing against 171–174). · *Acceptance:* 268's write-up names the
+chosen shape, what it can and cannot see (a proxy sees destinations, not what a tool did with a file), what it costs on
+**both** hosts (D131), and the failure mode of each — plus a stated answer to whether a **domain** allowlist is
+enforceable at the layer chosen (`pi-permission-modes`' schema puts `sandbox.network.allowedDomains` in the same object
+as `sandbox.allowWrite`, observed at `src/config-audit.test.ts:34`). · *Blind spots:* nothing here is *measured* as
+working — every claim is observed-in-code or advertised; a rig-side probe is what would settle any of it.
+
+**277. No grant cycle is auditable until the rig has a per-decision record, and the closest shipped schema is
+`@erichll/pi-auto-review`'s `BoundaryRequest` / `BoundaryReview` / `BoundaryGrant` plus its SQLite audit store.**
+*(registered from the 2026-11-05 intake; it is 269's prerequisite, not a separate feature)* **Observed** at
+`pi-packages @ 06a3de5`, `packages/pi-auto-review/src/broker/types.ts`: `BoundarySurface = command |
+filesystem-read | filesystem-write | network | mcp | skill`; `BoundarySource = permission-system | sandbox-runtime`;
+`BoundaryRequest` carrying `operation, cwd, command, matchedPattern, resolvedPath, destinationHost/Port/Protocol,
+toolCallId, toolName, agentName, requesterSessionId, matchedPolicy`; `BoundaryReview = {outcome:
+allow|deny|defer, riskLevel: low|medium|high|critical, userAuthorization: unknown|low|medium|high, rationale}`; and
+**`BoundaryGrant = {token, requestHash, sessionId, expiresAt, usesRemaining: 1}`** — expiry and single-use as *data*,
+which is what lead's "a capability raise is a NEW SPAWN (rulesets are monotonic)" ruling needs. Files observed but not
+read: `src/broker/{grants,overrides,circuit-breaker,service}.ts`, `src/policy.ts` (>1k lines),
+`src/policy-audit/{classifier,report,sqlite,store}.ts`. Also observed: `pi-secure-it/lib/project-trust.ts:1-10` —
+*"trust it may only tighten the policy … A file is trusted when its **SHA-256** is recorded in the trust store"*, the
+monotonic-tightening + content-hash-anchor pattern; and `pi-permission-modes/src/awareness.ts:275`, which tells the
+model that a silent block means **ask, do not retry variants** (their `silentFailures` doc). *Owner:* `security` +
+`scribe` (269's cycle, 173's audit). · *Acceptance:* a decision-log schema (who asked, which policy matched, what the
+adjudicator decided with what rationale, what was granted with which scope/expiry/use-count, what was revoked) exists as
+a **row a reviewer can read**, matching ROADMAP **246**'s rule that a guard emits a per-decision record, not a log line;
+`check` gains a rule that a mediation without a record is a finding. · *Blind spots:* the pi packages bind grants to a
+**pi session id**; durian-pi's durable sessions outlive processes, so "same session" must be re-defined before copying
+the shape.
+
+**278. We assert containment and never grade it: `ironclaw`'s `ironctl scan` scores seven weighted dimensions
+fail-closed, and the rig has no equivalent for a seat.** *(registered from the 2026-11-05 intake; the project is
+**AGPL-3.0**, so the design is borrowable and the code is not)* **Observed** at `ironclaw @ 1b934bf`,
+`docs/blog/add-a-sandbox-isolation-score-badge-to-your-repo.md:26-46`: the scanner reads a sandbox's runtime
+configuration and grades **non-root user (15), dropped capabilities (20, "not the default set"), seccomp profile (15,
+"narrows the syscall surface"), network isolation (15, "no bridge egress; prefer `network=none`"), read-only root
+filesystem (10, "cannot be written for tamper or persistence"), no `docker.sock` exposure (15), no shared host
+namespaces (10)**; a typical quickstart container scores **23/100 (F)**, a hardened one **100/100 (A)**, and *"the scan
+is fail-closed: any dimension it cannot observe is scored as insecure, never waved through."* The rig's counterpart is
+thin: `check` counts findings and `channel-preflight` prints verdicts, but nothing scores the seat's actual posture, and
+the preflight already demonstrates the opposite failure (a hard verdict refuted by `broker-serve --status`).
+*Owner:* `devtools` (instrument) + `security` (which dimensions are true for a **process-confined** seat rather than a
+container — Landlock/seccomp/egress/uid/caps instead of docker knobs, per D131). · *Acceptance:* an instrument prints
+per-dimension state plus an overall grade, **fails closed on unobservable dimensions**, distinguishes the three states
+of **275**, and is wired into `check` or the preflight so a substrate regression goes red in the suite rather than in
+prose; the AGPL status is recorded wherever the dimension list is reused. · *Blind spots:* scoring a per-seat process
+sandbox is not scoring a container — mapping the dimensions is real design work, and copying their weights without that
+mapping would be a fake green.

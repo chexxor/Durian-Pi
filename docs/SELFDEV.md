@@ -1963,6 +1963,16 @@ the prefix forever.
    `microsoft/agent-governance-toolkit` moved `cfb44576 → a918f763` (18 days of drift), which silently invalidated a
    landed review's citations. `tools/vendor-pins.mjs --check` → PASS proves the *pin*, not the *provenance*; a
    3-line `> PIN MOVED (date, by whom, why)` block under the review heading keeps the citation trail intact.
-7. **A `sed -n 'X,Yp'` cut of `docs/NEXT.md` into the archive is the cheapest verbatim move** — record the pre-cut
+7. **`cli.mjs send` prints a DEPRECATION notice on every call** ("opens a full writing harness = a second owner:
+   prefer `node intent.mjs <seat> --body-file <file>` (the broker delivers) and `log`/`status` for the reply"), and the
+   notice is followed by the standing `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":
+   "over-exposed"…}` line, so **neither line is a failure signal** — read the JSON tail and then the row state. With the
+   broker **down**, `intent.mjs` has nothing to deliver through, so `send` remains the working delegate path; say which
+   state you are in rather than "fixing" the deprecation.
+8. **A `send` client's own `timeout` kills your observation, not the seat's work** (see pitfall 2) — and the client
+   output is **not** the answer: the authoritative read is the row (`queue --json --id`) plus `transitions`. On
+   2026-11-05 both sends exited **0** while the interesting facts were all in the rows: `pm` released #5127, `lead`
+   cancelled #5126/#5128 and re-minted #5131/#5136.
+9. **A `sed -n 'X,Yp'` cut of `docs/NEXT.md` into the archive is the cheapest verbatim move** — record the pre-cut
    line count and sha prefix in the divider so the cut is reproducible (`head -227` + the archived block reproduces
    the 290-line file `089b8ea00996…`).
