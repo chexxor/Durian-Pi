@@ -2085,3 +2085,36 @@ the prefix forever.
    seat tools and process-death semantics differ). Use the four-field, hostname-free probe instead:
    `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`. Whether the existing
    records get redacted is an **operator ruling** (ROADMAP **281**) — do not rewrite audit trail by silence.
+
+## Operational pitfalls and speed-ups (delegate session D, 2026-11-05 — the fast-iteration pass, D213; every number measured in this session: Linux Fedora 45 `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+1. **The suite costs 57 s, not 1672 s — and the gap is a variable you control.** `node scripts/test.mjs` (jobs = `min(8, cores)`,
+   `scripts/test.mjs:41`) → **257/258 in 57.0 s**. A previous session's report of **1672 s** was a degraded
+   (sequential / cold-dependency) shape. Always run from the seat root where vendored deps are linked
+   (`~/Git/durian-dev/seatroot`), and say which shape you ran when you quote a suite time.
+2. **`demo/deepinfra-catalog.test.mjs` is red without `DEEPINFRA_API_KEY`.** It is the *only* red demo, it is red for a
+   credential reason, and it is **not** a regression — do not bisect it. It is the poster child for ROADMAP 282: a
+   network/vendor check sitting inside the hermetic 57 s loop.
+3. **The inner loop is `--area`, never the whole suite.** `node scripts/test.mjs --list` prints the map; costs are
+   `docs` 1.2 s · `guard` 2.0 s · `readapi` 3.8 s · `check` 6.3 s · `worktree` 7.8 s · `toolchain` 11.1 s · `tui` 12.4 s ·
+   `rig` 24.0 s · `broker` 25.4 s. `demo/cli.test.mjs` alone is **20.1 s** (a third of `rig`). For a diff,
+   `node tools/what-to-test.mjs --base=main --json` returns the derived set. Full suite is the merge gate, not the inner loop.
+4. **"We can't test that without the LLM" is false here.** `node demo/offline.mjs` runs a full pm→worker→done delegation loop
+   on `fauxProvider` in **0.301 s**, no network, no keys; 77 of 258 demos already use faux. **Trap (documented in that file's
+   header):** scripted faux responses **drain in global call order across conversations** — count your turns or the script
+   drifts and the failure looks like a regression.
+5. **Before proposing "make the model faster", spend the 3.1 s on `tools/latency-budget.mjs`.** Model-call **p50 is 52 ms**;
+   **185 generations (0.29%) hold 517.5 h = 64.6%** of generation busy time (ten ~2,120-minute turns with `events=2–3`);
+   **WAIT is 72.4%** of item latency vs WORK 13.0%; **308.7 h** had zero generations in flight; compaction is **55.5 h**;
+   refused generations burned **22.5 h**. The three slow things — slow suite, stuck turn, dead channel — are three different
+   diseases with three different instruments. `docs/runbooks/slow-loop.md` is the procedure.
+6. **Do not read `docs/SELFDEV.md` whole: it is 195,532 B / 2,088 lines ≈ 49,000 tokens** and grows every session (20 dated
+   `## Operational pitfalls` blocks). `node scripts/clockin.mjs` prints every heading with a line anchor — grep for the
+   symptom. `scripts/clockin.mjs:9`'s own comment (`57,589 B / 749 lines`) is stale, which is why ROADMAP 289 wants generated
+   sizes. `AGENTS.md` no longer says "read it".
+7. **`.agents/skills/driving-durian-pi/SKILL.md` is a stale pre-broker artifact** (93 lines: teaches `cli.mjs send` as the
+   primary path, no broker/spool, no `DURIG_DB`, Windows path examples) next to a current 196-line
+   `delegating-to-durian-pi`. Read the latter plus `docs/runbooks/session-start-cost.md`. Registered as ROADMAP 288.
+8. **A broker started with `--max-duration N` self-exits at N; an intent spooled while it is down is *pending*, not lost.**
+   Re-check `tools/broker-serve.mjs --status` before concluding a send "didn't take". Deliveries are auditable:
+   `grep INTENT ./selfdev.sqlite.broker.log` → `INTENT delivered=1 dead=0 dup=0`.
