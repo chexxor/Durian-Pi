@@ -14,7 +14,7 @@
         "route",
         "plan"
       ],
-      "model": "local/iq3_s",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "thinkingLevel": "high",
       "instructionsFile": "prompts/pm.md"
     },
@@ -30,7 +30,7 @@
         "implement",
         "code"
       ],
-      "model": "local/iq3_s",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "thinkingLevel": "high",
       "instructionsFile": "prompts/impl.md"
     },
@@ -76,7 +76,7 @@
         "decide",
         "adjudicate"
       ],
-      "model": "local/iq3_s",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "thinkingLevel": "high",
       "instructionsFile": "prompts/lead.md"
     },
@@ -106,7 +106,7 @@
       "capabilities": [
         "implement"
       ],
-      "model": "local/iq3_s",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "thinkingLevel": "high",
       "instructionsFile": "prompts/scribe.md"
     },
@@ -121,7 +121,7 @@
       "capabilities": [
         "implement"
       ],
-      "model": "local/iq3_s",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "thinkingLevel": "high",
       "instructionsFile": "prompts/devtools.md"
     },
@@ -167,7 +167,7 @@
         "security",
         "review"
       ],
-      "model": "local/iq3_s",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "instructionsFile": "prompts/security.md"
     },
     {
@@ -184,7 +184,7 @@
         "design",
         "review"
       ],
-      "model": "local/iq3_s",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "thinkingLevel": "high",
       "instructionsFile": "prompts/architect.md"
     }
