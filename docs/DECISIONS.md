@@ -9304,5 +9304,19 @@ live test planes, deterministic LLM doubles/replay, flaky-slow quarantine, incre
 long-running/degenerate agent turns).
 
 **Division of labour.** The policy, the runbook (`docs/runbooks/slow-loop.md`), the roadmap registration
-(**282–287**) and the prompt update are the delegate's per `docs/runbooks/research-request.md`; the decomposition into
+(**282–289**, with the session's closing findings at **290–293**) and the prompt update are the delegate's per `docs/runbooks/research-request.md`; the decomposition into
 rows, owners and sequencing belongs to `lead`/`pm`. Nothing was claimed or routed by the delegate.
+
+**Addendum at session close (same day, delegate).** Applying the D213 lens to the rig's own state plane turned up the
+slowest thing in the system is not a build or a model but **work that no longer exists as work**: `queued` went **162 → 0**
+while `deferred` went **16 → 183**, every deferred row ending `{"event":"deferred","by":"supervisor","to":"human"}` with
+**171 inside the single hour 2026-11-05T20**, 67 of them `notice` rows, and `human` is **not a seat**
+(`intent.mjs human` → `unknown seat: human`). The rig then spends wakes to say so: the 22:52 pass woke **nine seats** and fed
+`lead` *"there is nothing claimable for you … do not call `claim_work` expecting work"* (`log lead`, event 289893). Two
+decisions follow, and both are recorded rather than acted on, because they are not the delegate's to take: **(1)** the
+delegate will not re-arm, release or cancel any of those 183 rows — `lead`/`pm` own it, briefed at 22:52
+(`INTENT delivered=1`); **(2)** the *measurement* that would tell the team whether the fix is a longer deferral timeout or
+simply waking seats for real work needs a broker pass over a **non-empty** queue, which is a spend/capacity grant
+(`--yes-pm-wakes`), so it is escalated rather than run. Registered as ROADMAP **292**, with the recency-read gap
+(**291**) and the crashing channel instrument (**293**) as its siblings — all three are D213's requirement ("every piece has
+a fast loop; isolate what restricts it") applied to the state plane rather than the code plane.
