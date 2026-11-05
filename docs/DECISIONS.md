@@ -8933,3 +8933,78 @@ unnoticed for 16 days.** Row **#5094** makes drift a visible finding rather than
   `update by push` at 2026-11-05T02:54:58Z, confirmed by `git ls-remote origin main`). Its writes: `docs/ROADMAP.md`,
   `docs/VENDOR-PINS.md`, `docs/COMPETITORS.md`, the new review, `docs/NEXT.md`, `docs/SELFDEV.md`, this entry, and two
   briefs in gitignored `.spike/`.
+
+## D210 — the operator's four rulings of 2026-11-05 (standing verifier spend, AGPL, research-before-design, push), and what the standing spend bought: **G2 MET at $0.0387 with `CLEAN-PASSED 0`** (2026-11-05, delegate acting, Linux Fedora 44 `7.2.14-200.fc44.x86_64` node v24.22.1, `main = 1dff8590`)
+
+- **Ruling F (operator, verbatim): "You can continue spending money on verifiers. I accept your recommendation."** Read as
+  **standing authority for the bounded terms already in front of them** — #5127's arm (`openai/gpt-oss-120b` at DeepInfra,
+  `DURIG_PROBE_CEILING_USD=0.15`, one corpus, k=3, through `tools/model-probes/metered.mjs`/`gate.mjs`, **gate before the
+  roster flip**, D137) — **not** as authority to arm the roster. `lead`'s account-level-independence refusal
+  ("DECLINED (my ruling), so no second key") stands; the operator did not overturn it.
+- **How it was exercised, and the ledger that proves it.** One batched delegate brief to `devtools` (dispatched from the
+  approved seat root `~/Git/durian-dev/seatroot`, fast-forwarded `bb2a3997 → 1dff8590`). **#5125 → `done`**
+  (`item-5125` `8160b8be` + `385e3973`: price/ledger keys into the config inventory with a demo that an **unknown key is
+  refused not ignored** and a demo that the credential surface reports only presence; the arming probe **promoted** out of
+  gitignored `.spike/` to `tools/verifier-arm-probe.mjs` + `demo/verifier-arm-probe.test.mjs`; `src/config.mjs` +59 lines,
+  7 files, 462 insertions). **#5131 → `done`**, the paid gate arm, run in `item-5131` with
+  `DURIG_PROBE_CEILING_USD=0.15 DURIG_SPEND_LEDGER=<worktree>/.spike/gate/spend-5131.jsonl
+  DURIG_PROBE_PRICE_USD_IN=0.037 DURIG_PROBE_PRICE_USD_OUT=0.17` and
+  `--whole-module --budget 120000 --replicate 3`.
+- **What the money bought (from the arm's own output, not narration).** `spend: 72 accounted call(s), total $0.0387;
+  ceiling $0.1500`; ledger rows carry `priceSource: "env"`, `authKeyEnv: "DURIG_VERIFIER_API_KEY"` (name, never value),
+  ~14.8k prompt + ~2.2k completion tokens ≈ **$0.0009/call**. Verdict: **defect named 6/7, 6/7, 6/7** across the three
+  replicates → **G2 floor MET** (majority run 6/7, worst replicate 6/7, against the pre-registered bar ≥ 4 of 7).
+  **The uncomfortable half, recorded rather than softened:** `clean, leading prompt: FALSE-ALARM 7–8/8, CLEAN-PASSED 0`
+  and `clean, neutral prompt: FALSE-ALARM 7–8/8` in **every** replicate — this model, on this corpus, never passes a clean
+  control. That is the same shape as the historical `502 FALSE-ALARM / 0 CLEAN-PASSED` census (#5022/#5027), which the
+  scorer fix (`tools/model-probes/assertscan.mjs`, `gate.mjs --rescore`) moved to 460/21/5 **on saved transcripts**;
+  this is a **fresh metered arm**, so it is evidence about the model at the gate, not about the old scorer.
+  **Whether a verifier with `CLEAN-PASSED 0` is fit to be the 269 adjudicator, and whether it is fit to arm the roster
+  (#5136), is a `lead`/operator ruling, not a delegate finding.** The G2 floor as written only scores the defect side;
+  the clean side is the open question this arm just measured.
+- **Delegate's own pre-flight, run in a different tree (an execution axis of independence).**
+  `tools/`-promoted probe, seat root at `1dff8590`: with `DURIG_VERIFIER_PRICE_JSON=src/providers/deepinfra-prices.json`
+  → `price: null, priceSource: "none"` (**ROADMAP 272 reproduced** — an arm on that path registers **no model row**); with
+  `DURIG_VERIFIER_PRICE_USD_IN=0.037 /_OUT=0.17 /_AS_OF=2026-11-05` → `priceSource` named,
+  `maxCallExposureUsd 0.001419`, `maximalTurnsUnderStoreCap 2818`, `keyPresentInEnv true`. `DURIG_VERIFIER_BASE_URL`
+  **was never touched**: still `http://127.0.0.1:1234/v1`, and measured **ECONNREFUSED** on both `/v1/models` and
+  `/chat/completions` — so `qa qa2 advocate auditor designer` remain **dark** (no turn possible) until #5136, and
+  `#5136` stays `held` behind #5125 + #5131 + #5095.
+- **Ruling G (operator, verbatim): "(a) but we can adopt AGPL if must."** Option (a) = the rule already applied: AGPL-3.0
+  prior art (`aegis-orchestrator`, `ironclaw` — licence read from each clone's own `LICENSE`) is
+  **read-for-design-only**, no code or schema enters the tree without a per-item ruling; **adoption is permitted only if
+  a mechanism is unobtainable otherwise**, which is an operator decision because our tree is MIT — so it needs a row that
+  names the obligation and the alternative, never a silent vendor. Supporting measurement, zero inference:
+  **`@anthropic-ai/sandbox-runtime` is Apache-2.0** (npm registry: `license = Apache-2.0`, versions `0.0.78`–`0.0.81`,
+  repository `anthropics/sandbox-runtime`), which **closes the licence half of ROADMAP 274's blocker**; the pin and the
+  adopt/adapt/reject call remain `security`'s inside 170, and **SRT is still not vendored**.
+- **Ruling H (operator, verbatim): "Yes, continue the research. We should have a thorough understanding of the domain
+  before we design a solution for our needs."** Two commissions are written and **READY TO ROUTE**, the operator routing
+  them (D151 + `docs/runbooks/research-request.md` Do 2 bar the delegate from commissioning):
+  `docs/reviews/agent-sandbox-substrate-research-prompt.md` (round 2, amended to carry the security position's measured
+  baseline, the ten-project intake, the SRT question, this licensing ruling, and `lead`'s "minimal Landlock ruleset and
+  its residue" ask) and `docs/reviews/agent-fleet-containment-domain-map-research-prompt.md` (new: the wider
+  domain/competitor map — who contains agent fleets at what fidelity, the six control axes, settled standards and
+  vocabulary, a failure catalogue with receipts, a licence map, and the gaps we must fill ourselves).
+  **Consequence for the queue, deliberately not executed by the delegate:** #4833 (`queued`, the decomposition of 171–174)
+  must be re-gated behind the reports, and `security`'s 170–174 position (committed at `item-4829 96f810f1`,
+  `docs/reviews/security-seat-sandbox-position.md`, 360 lines, row **#4829 still `claimed`** and unlanded) treated as
+  **provisional** until consumed. `lead` holds that ruling and had not yet been woken when this entry was written —
+  `docs/NEXT.md` carries it as the first command of the next session, because a second `send` while another seat's
+  harness owns the store is the two-writer class this rig has been corrupted by twice.
+- **Ruling I (operator, verbatim): "Push granted."** Exercised by the delegate: `git push origin main` moved
+  `6e23742a → 1dff8590`; `git ls-remote origin main` = `1dff8590`,
+  `git reflog show origin/main` = `update by push`, `git rev-list --count origin/main..main` = **0** afterwards. The
+  grant is per-ruling: seats still cannot push on their own initiative.
+- **The incident this session caused, with its receipts.** The first dispatch ran
+  `node cli.mjs send devtools …` **without** `node --env-file="$HOME/.config/durig/env"`, so the harness had no
+  `DURIG_LOCAL_API_KEY`: devtools submission **#285670** settled `unanswered / model_error: 401 "Invalid API key"` at zero
+  tokens, **and the same wake pass woke `security`, which died the same way** (entry **#285672**, 2026-11-05T05:37:26Z) —
+  so **one `send` is not one seat**. `cli.mjs resume` then printed **`{"found":0,"actions":[]}`**: an
+  `unanswered/model_error` submission is **not** an `admitted_not_started` one, so `resume` does not repair it and a
+  corrected re-send is the only path. Two rules fall out: **every delegate dispatch carries `--env-file`**, and a failed
+  wake is diagnosed from `submissions.detail` (§2c of `docs/runbooks/session-start-cost.md`) before anything is re-sent.
+- **The boundary this decision did not move.** The delegate claimed/completed/deferred/routed **no row**, wrote **no**
+  `src/`, `durig.config.json`, roster, or pin, armed nothing, vendored nothing, and commissioned no research. Its writes:
+  `docs/DECISIONS.md`, `docs/NEXT.md`, `docs/NEXT-ARCHIVE.md`, the two research-prompt files, and briefs in gitignored
+  `.spike/`. Spend attributable to this session: **$0.0387**, all of it the #5131 arm, ledgered by the seat that ran it.

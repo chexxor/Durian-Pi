@@ -1976,3 +1976,38 @@ the prefix forever.
 9. **A `sed -n 'X,Yp'` cut of `docs/NEXT.md` into the archive is the cheapest verbatim move** — record the pre-cut
    line count and sha prefix in the divider so the cut is reproducible (`head -227` + the archived block reproduces
    the 290-line file `089b8ea00996…`).
+
+## Operational pitfalls and speed-ups (delegating, 2026-11-05 second session, D210 — every number measured in this session, Linux Fedora 44 `7.2.14-200.fc44.x86_64`, node v24.22.1)
+
+1. **Every delegate `send` carries `--env-file`.** `node cli.mjs send devtools …` without
+   `--env-file="$HOME/.config/durig/env"` starts a harness with no `DURIG_LOCAL_API_KEY`; the submission settles
+   **`unanswered / model_error: 401 "Invalid API key"`** at zero tokens — and because one `send` wakes the addressee
+   **plus everything already queued for any seat it touches**, it killed `security`'s turn in the same pass (entry
+   **#285672**). `cli.mjs resume` then printed **`{"found":0,"actions":[]}`**: an `unanswered/model_error` submission is
+   *not* an `admitted_not_started` one, so **`resume` does not repair it**. Diagnose before re-sending —
+   `SELECT id, detail FROM submissions WHERE id = <submission>` (§2c of `docs/runbooks/session-start-cost.md`) — and
+   re-send once, corrected, with a fresh `--request-id`.
+2. **`cli.mjs show <id>` takes no `--json`.** It errors into the `queue` usage block. `cli.mjs queue --id <id> [--id …]`
+   is the read; there is no `--ids`.
+3. **Never run two `send`s at once.** Two harnesses against the same store interleaves their logs and is the two-writer
+   class this rig has been corrupted by twice. Sequence dispatches: dispatch, watch to settle (`tail -f <out>` watching
+   `turn complete` + `{"done":…}`), read the rows, then dispatch the next seat.
+4. **Price a paid probe from measured tokens, not from the declared window.** `tools/verifier-arm-probe.mjs` prints
+   `maxCallExposureUsd` from whatever `DURIG_*_CONTEXT`/`OUTPUT_MAX_TOKENS` say (0.001419/call at 24,576/3,000), but the
+   #5131 arm's **real** calls were ~14.8k prompt + ~2.2k completion = **$0.0009/call**, 72 calls = **$0.0387** of the
+   $0.15 ceiling. Get the real counts for free from the provider service log —
+   `journalctl --user -u <provider>.service --since … --until … -- -u | grep -oE '"prompt_tokens":[0-9]+|"completion_tokens":[0-9]+'`
+   — and set the ceiling from the sum, so the arm cannot die mid-replicate.
+5. **A dead verifier base URL is invisible in `status`.** `DURIG_VERIFIER_BASE_URL` was `http://127.0.0.1:1234/v1` with
+   **ECONNREFUSED** on both `/models` and `/chat/completions`, which means `qa qa2 advocate auditor designer` cannot take
+   a turn at all — while `cli.mjs status` prints nothing about it. One second of truth:
+   `curl -s -m 5 -o /dev/null -w "%{http_code}\n" "$DURIG_VERIFIER_BASE_URL/models"`.
+6. **Rewriting `docs/NEXT.md` has two coupled gates, and the second one is cryptic.** `demo/next-pointer.test.mjs`
+   (0.3 s) wants the current item / queue id / next command / blocker; `demo/clockin-digest.test.mjs` (~35 s) asserts the
+   digest **contains `NEXT-ARCHIVE.md` and the string `cap 200`**, so the live pointer must keep both strings — a rewrite
+   that drops the history line fails with "the pointer still links its own archive". Run both after any rewrite; the
+   live file's real ceiling is ~16.9 KB (the 20,000 B digest), not 16,384 B.
+7. **Seat sendability before every dispatch, not after a failure:** `node tools/seat-turn-shape.mjs` (1 s, offline) —
+   13 seats cost 160 ms. This session it flagged `scribe security advocate auditor designer qa2` as **AT RISK** (the
+   counted projection ends on `user`) and `qa` at 20,110/24,576 = 0.818. `security` being AT RISK matters directly when
+   its **#4829** must be closed.
