@@ -9030,3 +9030,85 @@ unnoticed for 16 days.** Row **#5094** makes drift a visible finding rather than
   not taken: the cheap next instrument is a **differential** gate (assert-on-defect **and** decline-on-clean-neutral, per
   cell) rather than another model purchase; whether the armed model is fit for 269/G7 and whether #5136 flips remain
   `lead`/operator rulings, and the delegate filed no row for the differential — it goes to `lead` with the rulings.
+
+## D211 · 2026-11-05 (delegate session C, Linux Fedora 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): the verifier chain is landed and proven on trunk; the local model moved to the operator's Strata endpoint; and the binding constraint is now the **delivery channel**, not the backlog
+
+**What happened, measured in the same commands.** `main` moved `4c4a095a → 807f24a0 → a978bcd9`, **12 ahead of
+`origin/main`, 0 pushed** (the operator's standing push grant was not exercised — the delegate lands locally and reports).
+Landed **by SHA** per `docs/runbooks/land.md`: `item-5131 3a7abc99` (#5131 arm the verifier for a bounded differential
+test) and `item-5111 083d2da2` (#5111 metered sends get their cap from the provider spec); `item-5125 385e3973` is
+**subsumed** by 5131 (`merge-base --is-ancestor item-5125 item-5131` exit 0; `git diff 807f24a0 385e3973 -- src | wc -l` =
+**0**), so one landing carried both rows' content. Full suite on landed trunk, run from the **seat root** where the
+vendored deps are installed: **`SUITE GREEN: pass=258 environmental=0 fail=0`, exit 0** (1672 s). The promoted instrument
+answers the split D210 asked for, on trunk and without a purchase: metered DeepInfra spec → **`verdict: ARMABLE`**
+(`priceSource: DURIG_VERIFIER_PRICE_USD_IN/OUT`, `maxCallExposureUsd 0.001419`); loopback class → **`NOT-ARMABLE`,
+`cause: metered-endpoint-unpriced`** (93 ms each). `#5145` (the git-guard "what did you CHECK" belt) is `done` at branch
+`item-5145` tip `39ee4fcc`, **unlanded**; `#5144` (the `pickEnv` value-level secret belt) is `claimed` and produced **no
+branch** — the seat's turn ended with an empty reply and its worktree is gone.
+
+**The operator's rulings were delivered and `lead` acted on them** (store receipts): with the grant for that purpose only,
+**#5127 cancelled** (verdict: `verifier-usable-for-no-gate-until-differential-test-exists`); **#4833 cancelled → #5152**
+(`architect`, `held`, gated on **#4829 + #5147 + #5148**) because the substrate design sits *before* research that does not
+exist yet; **#5136 cancelled → #5153** (`devtools`, `held`, gated on **#5146 + #5095**). New rows: **#5143** (land the
+verifier branches — now the delegate's action, so `pm` closes it on this evidence), **#5144/#5145** (the two cheap belts,
+`impl`), **#5146** (`devtools`, the differential gate `lead` filed for itself), **#5147/#5148** (the two research
+commissions, `held` for the operator to route), **#5149** (AGPL option (a) entry — the code is MIT, the research corpus is
+AGPL and only `vendor/eval/` touches it, so the gate is "no AGPL code in main's dependency closure"), **#5154** (the
+dispatch runbook: *what wakes a seat once the broker is down*).
+
+**The local model moved, and the rig's own instruments caught it before a seat did.** The endpoint the team was configured
+for, `http://127.0.0.1:47831/v1`, stopped answering mid-session; the operator's new server answers on
+`http://127.0.0.1:8080/v1` and advertises exactly one id, **`qwen3.8-flash-next-iq3_s`** (`n_ctx 204800`). Direct probes
+show it serves **both** `qwen3.8-flash-next-iq3_s` and the short `iq3_s`, normal `finish_reason: stop`, and tool-calling
+works. Two host config files were repointed (`durig.config.json`, `durian-dev/seatroot/durig.config.json`: one line each,
+`…/47831/v1` → `…/8080/v1`, backups in `.spike/delegate-20261105c/`), and `DURIG_LOCAL_MODEL` was set to the **advertised**
+id, with a matching `DURIG_COMPACTION_MODEL_OVERRIDES` key so the tuned `reserveTokens 20480` keeps applying. Proof it is
+right, from the rig's own preflight: `local: answers, advertises 1 model(s) including qwen3.8-flash-next-iq3_s` and
+`local: completes (finish=stop, prompt=57 tok, completion=28 tok)`.
+
+**Why the id, not the alias, was the half I could fix.** `checkup`/`providers/local.mjs` decide availability by comparing
+the endpoint's **advertised** ids to `DURIG_LOCAL_MODEL`; a name that answers `/chat/completions` but is not advertised is
+a **BLOCK** (`provider-DURIG_LOCAL_-model-absent`). Two tracked hazards stand regardless: every fixture still names
+`local/iq3_s` (`rig.selfdev.json` 9 seats, `src/model-provision.mjs:178`, `docs/ROADMAP.md:2360`) and the compaction
+override key `"local/iq3_s"` in `durig.config.default.json` **silently stops matching** if the id moves, reverting
+`reserveTokens` 20480 → pi-durable's 16384. The one-line fix for both halves is **server-side** (alias `iq3_s` on the new
+endpoint), which is the operator's to run; re-cutting the id across tracked fixtures is the team's row, and the delegate
+filed neither.
+
+**The landing of #5111 changed how the rig is driven, and that is the session's real finding.** Before it, a `send` with no
+explicit model registered a metered catalog row and ran. After it, the same command, same store, is refused **before any
+request**: `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed","capUsd":4,
+"maxCallExposureUsd":14}` — the store cap is applied to the worst **catalog** row, not to the model the turn will run; and
+naming the local id gives `{"spend":"model-unpriced","provider":"deepinfra","model":"qwen3.8-flash-next-iq3_s","cause":
+"no dated price for this id"}`, whose own remedy says **"$0 is a legitimate declared price"**. So **`send` is now blocked on
+this rig**. The blessed alternative is also blocked: `broker-serve --dry-run` ends *"A start would be refused:
+provider-DURIG_VERIFIER_-unreachable, provider-verifier-completion-failed"* (`http://127.0.0.1:1234/v1` ECONNREFUSED on
+`/v1/models` and `/chat/completions`), and that same dry-run says the true critical path in one line — **"2 intent(s) have
+waited over an hour — the delivery channel, not the backlog, is the critical path"**. The three exits are *not* equivalent:
+(a) raise `DURIG_SPEND_CAP_STORE_USD` (an operator capacity ruling, D201) buys a metered default this rig does not need;
+(b) a **dated $0 price row** for the local model answers the same gate honestly, and must be fetched/registered rather than
+hand-typed into a vendor pin; (c) bring `:1234` up (or lift the `verifier` provider out of `rig.selfdev.json` until #5153
+lands) and drive through `intent.mjs` + `cli.mjs serve`. **Recommendation: (b) + (c).** `$0` was spent either way — the
+ledger `DURIG_SPEND_LEDGER` (`/tmp/durian-spend.jsonl`) **does not exist**, and both refusals precede any request.
+
+**A new instrument carries a new leak (filed for `lead`, not fixed).** The provider check that just landed reads the
+**process env** (`checkup.mjs:94`, `providers/local.mjs:148`), not the **config-file precedence** the rig documents at
+`src/config.mjs:53` (`localContextFor`: "a declared 128k would otherwise admit a 200k request to a 128k server"). On an
+**unmodified** checkout it therefore probes the placeholder `http://127.0.0.1:1/v1`, answers `"no provider config to
+check"`, and prints `1300000/128000` — so the very hazard that comment names is uninstrumented for anyone who declares
+context in a config file. `DURIG_LOCAL_*` env keys are also **not** in the config-file allow-list (`CONFIG_KEYS`,
+`src/config.mjs`), which is a *good* trap — an unregistered config-file key is a hard error, the #5071 accepted-and-ignored
+class caught live when I tried one — but it means the check only sees half the config chain.
+
+**Queue hygiene, asked directly ("do the 162 `queued` rows need cleanup?") — no, not those, and no row was touched.** Of
+`queued` = **162**, **67 are `notice` rows** (terminal-status announcements registered as claimable work: 2,029 exist
+store-wide, 1,801 already `done`), so real queued work is **95** (`devtools 34, impl 18, lead 12, scribe 10, qa 8, security
+5, architect 4, pm 3, qa2 1`) and only **1** queued row is older than 7 days (#3350, `qa`, 17 d). The stale mass is the
+class `tools/queue-drain-audit.mjs` already counts: **345 `held`** (276 >7 d), **93 non-terminal LANDING rows of which 73
+are already fully on `main`** (zero-build closable), **75 orphan candidates**, **33 rows citing no current row**, **12 whose
+gate prose cites no resolvable id**. Those are `pm` releases/cancels plus a `lead` read of orphan bodies — routing and
+decomposition are the team's, and the delegate filed nothing.
+
+**Also measured, and worth its own cheap row:** `git worktree list` shows **7 item worktrees in the repo root** —
+`item-4829 4937 4967 4997` (`locked`) and `item-5083 5090 5094` (unlocked). They are the leaked-worktree class
+(`docs/runbooks/leaked-worktrees.md`) and they dirty the landing preflight (#3988).

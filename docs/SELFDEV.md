@@ -2011,3 +2011,44 @@ the prefix forever.
    13 seats cost 160 ms. This session it flagged `scribe security advocate auditor designer qa2` as **AT RISK** (the
    counted projection ends on `user`) and `qa` at 20,110/24,576 = 0.818. `security` being AT RISK matters directly when
    its **#4829** must be closed.
+
+## Operational pitfalls (delegate session C, 2026-11-05 — Linux Fedora 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+1. **`--body-file <path>` needs the space.** `cli.mjs:3328` is `const fileAt = rest.indexOf("--body-file")`, so
+   `--body-file=<path>` gives `fileAt = -1` and this CLI never reads the file; the seat instead receives a stub naming the
+   path (`the file you can read with your read tool at:` — emitter not found in this repo, so treat it as unfixed) and a
+   seat cannot read a delegate's `.spike/`. Cost: one full `lead` turn (990 s) plus a re-send.
+2. **Config-file keys are allow-listed; provider/env keys are not config-file keys.** Putting
+   `DURIG_LOCAL_COMPACTION_RESERVE_TOKENS` in `durig.config.json` is a **fatal** CLI error listing `CONFIG_KEYS` — the
+   #5071 accepted-and-ignored detector working, and it saved a silent no-op. `DURIG_MODEL`, `DURIG_LOCAL_*PRICE_USD_*` and
+   `DURIG_*_COMPACTION_*` must be in the **environment** (`--env-file="$HOME/.config/durig/env"`).
+3. **A suite run in a detached scratch tree is not a gate.** From `git worktree add --detach`,
+   `demo/commit-discipline-personas.test.mjs` dies with `ERR_MODULE_NOT_FOUND @earendil-works/pi-durable` — and it does the
+   same at the pre-landing commit, so it is a missing dep link, not a regression. Run the suite from
+   `~/Git/durian-dev/seatroot` (1672 s to `pass=258 environmental=0 fail=0` on this host).
+4. **After landing #5111, `send` is a spend decision, not a free verb.** An author `send` with no explicit model registers a
+   **metered** catalog row and is refused before any request when that row's `maxCallExposureUsd` (here **$14**, from
+   `google/gemini-3.1-pro` at 88,173/32,768) exceeds `DURIG_SPEND_CAP_STORE_USD` (**$4**); naming a local id instead is
+   refused as `model-unpriced` unless it has a **dated** price — and the remedy says **"$0 is a legitimate declared
+   price"**. Check `test -e "$DURIG_SPEND_LEDGER"` before claiming a turn cost anything: on this rig the file does not
+   exist, which is the proof that no metered request ran.
+5. **The verifier endpoint is now a broker-start gate, not just a seat-model note.** `broker-serve --dry-run` refuses a start
+   on `provider-DURIG_VERIFIER_-unreachable` + `provider-verifier-completion-failed`. So when `:1234` is down the **blessed**
+   path (`intent.mjs` + `serve`) is unavailable too — read the two refusals together, and run
+   `node tools/broker-serve.mjs --dry-run` (read-only, ~12 s) before planning any dispatch. Its own line
+   `NOTE stranded-intent … the delivery channel, not the backlog, is the critical path` is the cheapest pointer to that
+   state that exists.
+6. **`checkup`'s provider check reads the process env, not the config-file chain.** With context declared only in
+   `durig.config.json`, `checkup.mjs:94` / `providers/local.mjs:148` see nothing: on an unmodified checkout it probes
+   `http://127.0.0.1:1/v1`, prints `"no provider config to check"` and `1300000/128000`, so `src/config.mjs:53`
+   `localContextFor`'s named hazard (a 200k request to a 128k server) is uninstrumented for config-file users. Do not trust a
+   green provider line as evidence the *effective* window was checked.
+7. **Model ids move under the rig when the operator restarts a local server.** The endpoint advertised
+   `qwen3.8-flash-next-iq3_s` while every fixture named `iq3_s`; availability is decided by comparing **advertised** ids to
+   `DURIG_LOCAL_MODEL`, so a model that answers `/chat/completions` perfectly is still a **BLOCK**. Fastest read:
+   `curl -s "$DURIG_LOCAL_BASE_URL/v1/models"` next to `grep DURIG_LOCAL_ durig.config.json`. And `DURIG_COMPACTION_MODEL_OVERRIDES`
+   is keyed by `provider/modelId` — rename the id and the override silently reverts to pi-durable's default.
+8. **`queued` is not the backlog number to read.** Of 162 `queued`, **67 were `notice` rows** (terminal-status announcements
+   registered as claimable work). For hygiene, read `tools/queue-drain-audit.mjs` (0.1 s): `held` age, non-terminal LANDING
+   rows already fully on `main`, orphan candidates, unresolvable citations. And **age needs the first transition**, not the
+   last: `updated_at` for 261 rows sat at the 2026-10-27 re-seed, which would have made a 17-day row look fresh.

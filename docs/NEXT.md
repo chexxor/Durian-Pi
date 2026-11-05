@@ -1,149 +1,102 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-05T08:0xZ (delegate session — the operator's four rulings of 2026-11-05: standing verifier spend,
-AGPL option (a), **research before design**, push. All four are in **D210**; the verifier grant was exercised and is
-**measured** below). The superseded D208-era pointer moved VERBATIM to `docs/NEXT-ARCHIVE.md` (183 lines / 16,036 B, git
-blob `2f826aa02a54f453b9139ded5d15c7fa02b04a00` = `git show 1dff8590:docs/NEXT.md`).
+**Last update:** 2026-11-05T19:4xZ (delegate session C — the verifier chain **landed and is proven on trunk**, and the
+local model moved to the operator's new Strata endpoint (**D211**). The blocker now is the **delivery channel**, not the
+backlog: `send` is refused by the spend-cap gate and a broker start is refused while the verifier endpoint is down —
+both measured below, both need an operator ruling.) The superseded pointer moved VERBATIM to `docs/NEXT-ARCHIVE.md`.
 
-Host for everything below, measured in the same command as the measurements: **Linux Fedora 44**, kernel
-`7.2.14-200.fc44.x86_64`, node v24.22.1, git 2.56.0 (**never sign work with a hostname** — D205).
+Host for everything below, measured in the same command as the measurements: **Linux Fedora 45**, kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 (**never sign work with a hostname** — D205).
 
 ## NEXT SESSION
 
-**Current item:** the **substrate track** is **re-gated on external research** by the operator's ruling H — *"we should
-have a thorough understanding of the domain before we design a solution for our needs"*. So the design rows
-**#4829** (`security`, `claimed`, artifact committed but **unlanded**), **#4833** (`lead`, `queued`, the 171–174
-decomposition), and **274–278** do NOT proceed until the two research reports below land and are consumed. The verifier
-chain is a separate track and **moved this session**: **#5125 `done`**, **#5131 `done`**, **#5136 still `held`**.
+**Current item: restore a working delivery channel.** The queue is fine; **both verbs that reach a seat are now refused**,
+and each refusal is an instrument doing its job — so the fix is an operator ruling, not a workaround. Measured
+2026-11-05T19:3xZ on **Linux Fedora 45**, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0:
 
-Run this first — reads, then **one** send that carries the ruling `lead` has not yet received:
+1. **`cli.mjs send` → `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed","capUsd":4,
+   "maxCallExposureUsd":14}`** — an author `send` registers a **metered** catalog row whose one-maximal-call exposure is
+   **3.5× the $4 store cap**. Naming the local id instead gives `{"spend":"model-unpriced","provider":"deepinfra",
+   "model":"qwen3.8-flash-next-iq3_s","cause":"no dated price for this id"}` — the pins hold no dated row for a local id,
+   and the remedy line itself says **"$0 is a legitimate declared price"**. Both refusals land **before any request**, and
+   `DURIG_SPEND_LEDGER` (`/tmp/durian-spend.jsonl`) **does not exist**, so **$0 was spent**. The gate that fires is the one
+   that landed today as `083d2da2` (#5111, *"metered sends get their cap from the provider spec"*): byte-identical command
+   and store were accepted at 13:0xZ, refused at 19:3xZ.
+2. **A broker start would be refused:** `node tools/broker-serve.mjs --dry-run` ends `A start would be refused:
+   provider-DURIG_VERIFIER_-unreachable, provider-verifier-completion-failed` — `http://127.0.0.1:1234/v1` gives
+   ECONNREFUSED on `/v1/models` **and** `/chat/completions`. The same dry-run reports **2 stranded intents >1 h** ("the
+   delivery channel, not the backlog, is the critical path") and `supervisor: escalated` for **devtools, auditor, qa2**
+   (degeneration).
+
+**Three ways out, not equivalent:** (a) raise `DURIG_SPEND_CAP_STORE_USD` above the metered catalog's worst row — an
+operator capacity ruling (D201); (b) give the local model a **dated $0 price row** so a seat turn registers honestly — a
+`devtools` row, and note that hand-editing `src/providers/deepinfra-prices.json` is exactly what that file forbids (vendor
+pins are fetched, not typed, and carry an `asOf`); (c) bring the verifier endpoint up (or lift the `verifier` provider out
+of `rig.selfdev.json` until #5153 lands) and drive the team the blessed way, `intent.mjs` + `cli.mjs serve`. **Recommend
+(b) + (c):** (a) buys a metered default this rig does not need when the same gate says the honest answer is a declared $0.
+Only the operator can do (a) and (c).
+
+**Blocker:** the **delivery channel** — `send` is refused by the spend-cap gate (metered catalog row $14 max-call vs the $4
+store cap; a named local id has no dated price) **and** a broker start is refused while `DURIG_VERIFIER_BASE_URL`
+(`http://127.0.0.1:1234/v1`) answers ECONNREFUSED. Both need the operator (a)/(c) above; no seat can be woken until one is
+granted, so #5144 sits `claimed` and #5145/#4829 sit unlanded.
+
+Run this first — all reads, no writes:
 
 ```bash
 cd ~/Git/Durian-Pi
-git status --short -- . && git rev-list --count origin/main..main          # 0 at the time of writing
-DURIG_DB=./selfdev.sqlite node cli.mjs queue --id 4829 --id 4833 --id 5136 --id 5111 --id 5132 --id 5134
-DURIG_DB=./selfdev.sqlite node tools/seat-turn-shape.mjs | grep -E "^seat |next send"   # 1 s; never send to an AT-RISK seat blind
+git status --short -- . && git rev-list --count origin/main..main          # 12 ahead at 19:4xZ, 0 pushed
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --id 5143 --id 5144 --id 5145 --id 5146 --id 5149 --id 5152 --id 5153 --id 5154
+node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status  # 12 s: local CLEAN, verifier 2 BLOCKs
+DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 0.1 s; hygiene counts, pm-owned
 ```
 
-**Then** deliver the operator's rulings to `lead` (it owns the re-gating of #4833 and the retirement of #5127). The
-verbatim rulings are in **D210**; the brief that was prepared but NOT sent is
-`.spike/delegate-20261105b/brief-lead-1.md` (gitignored — if it is gone, rewrite it from D210). Dispatch **from the seat
-root** and **always with the env file** (see Traps):
+**Rows this session created (all `lead`-routed — do not re-create):** **#5143 `queued`** (`devtools`, land the verifier
+branches — **the delegate landed them by SHA instead**, so `pm` closes it on the evidence in D211); **#5144 `claimed`**
+(`impl`, the `pickEnv` secret-value belt — the seat took it, produced **no branch**, its turn ended with an empty reply and
+its worktree is gone); **#5145 `done`** (`impl`, branch `item-5145` tip `39ee4fcc`, **unlanded**); **#5146 `queued`**
+(`devtools`, the differential gate); **#5147/#5148 `held`** (the two research commissions, operator routing them);
+**#5149/#5154 `queued`** (`scribe`, AGPL entry, the dispatch runbook); **#5152 `held`** (`architect`, gated on **#4829 +
+#5147 + #5148**); **#5153 `held`** (`devtools`, gated on **#5146 + #5095**). Cancelled with the operator's grant:
+**#4833 → #5152**, **#5136 → #5153**, **#5127**.
 
-```bash
-cd ~/Git/durian-dev/seatroot && git merge --ff-only main
-DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite DURIG_NO_SERVE=1 \
-  node --env-file="$HOME/.config/durig/env" cli.mjs send lead --body-file <path-to-the-lead-brief>
-```
+**Hand these two to `lead` when a channel exists (`.spike/delegate-20261105c/` briefs are gitignored; rewrite from D211 if
+gone):** (1) the **instrument leak in the provider check that just landed** — `checkup.mjs:94` / `providers/local.mjs:148`
+read the **process env**, not the config-file precedence, so `src/config.mjs:53` `localContextFor` ("a declared 128k would
+otherwise admit a 200k request to a 128k server") is false again for anyone who declares context in a config file: on an
+**unmodified** checkout it probes `http://127.0.0.1:1/v1`, answers `"no provider config to check"`, and prints
+`1300000/128000`; and (2) the **model-id drift** — every tracked fixture still names `local/iq3_s` (`rig.selfdev.json` for
+9 seats, `src/model-provision.mjs:178`, `docs/ROADMAP.md:2360`, and the compaction-override key `"local/iq3_s"` in
+`durig.config.default.json`, which silently stops matching if the id moves and reverts `reserveTokens` 20480 → 16384).
+One server-side alias (`iq3_s` on the new endpoint) fixes both halves for free and keeps every fixture truthful.
 
 **History:** superseded blocks move VERBATIM to `docs/NEXT-ARCHIVE.md`; this file is a pointer with a **cap 200** lines
 (and a ~16.9 KB ceiling imposed by the 20,000 B clock-in digest — `demo/clockin-digest.test.mjs`), gated by
 `demo/next-pointer.test.mjs` (0.3 s) — cut before you add.
 
-**Landing —** the three **`done`** verifier/provider branches are **unlanded**, and their preflight is already measured, so
-the next session does not re-derive it: `item-5125 385e3973`, `item-5131 3a7abc99` (**which subsumes 5125** —
-`git merge-base --is-ancestor item-5125 item-5131` exit 0, so one landing of 5131 carries both), `item-5111 083d2da2`.
-For all three against `main` @`2115decc`: `merge-tree --write-tree` **exit 0 (clean)** and
-`merge-base --is-ancestor main <branch>` **exit 1 (STALE base, fork = `1dff8590`)** — stale only because `main` moved by
-**docs commits** after the fork. `docs/runbooks/land.md` step 0b calls a stale base "a re-cut job for a seat", while the
-same runbook says `land` is the **delegate's/operator's** action; read both together — a helper landing
-(`node scripts/land.mjs item-5131 item-5111 --db ./selfdev.sqlite`, **never `--suite` while the tree is red**, then
-prove on `main` in a detached scratch) is defensible **only when no `send` harness is generating**, because the genlock
-makes a concurrent landing a wait, not a race. `#5132` (`channel-preflight` §7) is still **`queued`** and **never
-started**, `#5134` was **`claimed`** with its root cause already named (on node v24 `Dirent.path` is gone — only `name`
-and `parentPath` exist, which is why the guard printed `undefined/anthropic-ai-sdk`).
+**Queue hygiene — the operator asked "do the 162 `queued` rows need cleanup?" Measured answer: no, not those.** No row was
+touched; the delegate has no transition authority (`pm` owns release/cancel). `queued` = **162**, but **67 are `notice`
+rows** (terminal-status announcements registered as claimable work; 2,029 exist store-wide, 1,801 already `done`), so real
+queued work is **95**: `devtools 34, impl 18, lead 12, scribe 10, qa 8, security 5, architect 4, pm 3, qa2 1`, and only
+**1** queued row is older than 7 days (#3350, `qa`, 17 d). The stale mass is elsewhere and `tools/queue-drain-audit.mjs`
+counts it every run: **345 `held`** (276 older than 7 d), **93 non-terminal LANDING rows of which 73 are already fully on
+`main`** (zero-build closable), **75 orphan candidates**, **33 rows whose citations resolve to no current row**, **12 whose
+gate prose cites no resolvable id**. That is a `pm` release/cancel pass plus a `lead` read of the orphan bodies — the held / landing / orphan
+classes, not the 162, are where the hygiene work is.
+## State (measured 2026-11-05T19:3x–19:4xZ, Linux Fedora 45 / node v24.22.1 / git 2.56.0)
 
-**Blocker:** nothing is blocked on the rig. **Two things sit with the operator:** (1) **routing the two research
-commissions** (D151 bars the delegate; the operator offered to route them — they are the current critical path), and
-(2) **the fit of the armed verifier** — #5131 met the G2 floor but recorded **`CLEAN-PASSED 0`** in every replicate,
-with the confabulation shown in the transcript (see *Verifier* below), and whether that model may flip the roster
-(#5136) is an operator/`lead` call, not a measurement the rig will answer on its own.
-
-## Operator rulings of 2026-11-05 (full text and receipts in D210)
-
-1. **Standing verifier spend** — *"You can continue spending money on verifiers. I accept your recommendation"* → the
-   bounded #5127 terms ($0.15 ceiling, one corpus, k=3, gate before the flip). **Exercised once**, ledgered, closed at
-   **$0.0387**. Roster untouched.
-2. **AGPL** — *"(a) but we can adopt AGPL if must."* → AGPL prior art stays **read-for-design-only**; adoption permitted
-   only if a mechanism is unobtainable otherwise, which is an operator decision (our tree is MIT). Measured:
-   **`@anthropic-ai/sandbox-runtime` is Apache-2.0** (npm, versions `0.0.78`–`0.0.81`, repo `anthropics/sandbox-runtime`)
-   → **274's licence blocker is closed**; the pin/adopt call is still `security`'s inside 170, and **SRT is not vendored**.
-3. **Research before design** — two commissions **READY TO ROUTE** (paths below).
-4. **Push granted** — the delegate pushed `main` `6e23742a → 1dff8590` (`ls-remote` confirms, reflog `update by push`).
-   Grant is per-ruling; seats still cannot push on their own initiative.
-
-## Research now gates the substrate design
-
-- `docs/reviews/agent-sandbox-substrate-research-prompt.md` — **round 2, amended this session**: the security position's
-  measured baseline (the belt-vs-boundary spine, F1–F5), the ten-project intake, the SRT question, the licensing ruling,
-  and `lead`'s ask — *"what is the minimal Landlock ruleset that admits git/node/sqlite/vendor-links `/tmp`/loopback
-  providers, and what demonstrably remains unmediated after it"*. 12 questions, 14 required sections, quote+URL+fetch-date
-  evidence discipline.
-- `docs/reviews/agent-fleet-containment-domain-map-research-prompt.md` — **new**: the domain/competitor map (who contains
-  agent fleets and at what fidelity; the six control axes — fs, egress, credentials, grant lifecycle, audit, posture;
-  settled standards/vocabulary + terminology collisions; a failure catalogue with title-checked receipts; a licence map
-  for MIT-compatibility and what AGPL adoption would oblige; the gaps we must fill ourselves).
-- **On landing, the delegate does the consumption** (`docs/runbooks/research-request.md` Do 3–5): commit the report
-  verbatim, re-fetch cited URLs into `inputs/fetched/` with a manifest, check every quote in our own copy, register or
-  explicitly reject each proposed ROADMAP item, add `docs/COMPETITORS.md` rows, cross-link, and write the follow-up
-  prompt. Then `lead` releases #4833.
-
-## Verifier (measured this session, not carried forward from the last one)
-
-- **#5125 `done`** → `item-5125` `8160b8be` + `385e3973` (7 files, 462 insertions): price/ledger keys registered in the
-  config inventory, a demo that an **unknown key is refused, not ignored**, a demo that the credential surface reports
-  only **presence**, and the arming probe **promoted** to `tools/verifier-arm-probe.mjs` + `demo/verifier-arm-probe.test.mjs`.
-  **Not on `main` yet** — landing needs a wake (push grant is open).
-- **#5131 `done`** — the paid gate arm, run in `item-5131` with `DURIG_PROBE_CEILING_USD=0.15`,
-  `DURIG_SPEND_LEDGER=<worktree>/.spike/gate/spend-5131.jsonl`, `DURIG_PROBE_PRICE_USD_IN=0.037/_OUT=0.17`,
-  `--whole-module --budget 120000 --replicate 3`. **72 accounted calls, $0.0387 of the $0.15 ceiling**, ~$0.0009/call,
-  `priceSource: "env"`, `authKeyEnv` named never valued. **Defect named 6/7 in all three replicates → G2 floor MET**
-  (bar ≥ 4/7; the earlier recorded arm was 6/8). **But**: `clean FALSE-ALARM 7–8/8` and `clean-neutral FALSE-ALARM 7–8/8`
-  in **every** replicate — on this corpus the model never passes a clean control.
-  **Read the transcript, and the false alarms are the model, not the scorer** (delegate read of
-  `docs/evidence/2026-11-05-gate-arm-5131/arm.log`, on the branch): for `H2-process-death-deadline` the **clean** answer
-  asserts a defect — "`waitForProcessDeath()` treats *any* error from `process.kill(pid,0)` as 'process is dead'… EPERM"
-  — and 25 s later the **same model on the same file** answers `clean-neutral` with "No – there is nothing in this module
-  that will throw… the `waitForProcessDeath` implementation for POSIX correctly loops with `process.kill(pid, 0)` until
-  the timeout expires." For `H3-truthy-sentinel-dead-code` the clean answer repeats the defect cell's claim verbatim
-  ("`normalizeBlock` is used but never defined"). So it **confabulates a plausible defect when asked in the defect view's
-  framing**, and declines when asked neutrally — which makes the corpus framing a contributor and suggests the cheap fix
-  is a **differential** gate (require: asserts on defect, declines on clean-neutral) before any further model spend.
-  **Open, and load-bearing for 269 (G7 — "adjudicator armed first") and for #5136: is a `CLEAN-PASSED 0` verifier fit to
-  adjudicate a capability grant, or to be the roster?** Close it by ruling or by the differential probe, not by re-running
-  the same corpus.
-- **Nothing is armed.** `DURIG_VERIFIER_BASE_URL` is still `http://127.0.0.1:1234/v1`, measured **ECONNREFUSED** on both
-  `/v1/models` and `/chat/completions` → `qa qa2 advocate auditor designer` cannot take a turn at all. **#5136 `held`**
-  behind #5125 + #5131 + **#5095** (stage 1, `deferred`): arm early, flip late, so #5096 lands under a working verifier.
-- **Independence:** cross-family/cross-vendor (`local/iq3_s` authors vs `openai/gpt-oss-120b` on DeepInfra), **same
-  account** — `lead` declined a second key and the operator did not overturn it. Key stays at `~/.config/durig/env`
-  (mode 600, out of tree; check with `grep -o -E "^[A-Z_]+=" ~/.config/durig/env`, names only).
-
-## Substrate state (what exists, and what is provisional)
-
-- **#4829 `claimed` → `security`.** Its deliverable is committed but **unlanded**: `item-4829 96f810f1`,
-  `docs/reviews/security-seat-sandbox-position.md`, 360 lines — a measured baseline table (egress, sibling-worktree
-  `rm -rf`, `git config --global …`, lifecycle scripts all **ALLOW**; the write-target resolver returns
-  `targets:[] unresolved:[]` for them), findings F1–F7, gates G1–G10, and the position's spine: **the boundary is the
-  spawn seam of every seat-initiated child**. The row was never closed (its generating turn ended `aborted` at
-  04:42:04Z, then a 401 at 05:37:26Z). Per ruling H it is **provisional** until the reports are consumed.
-- **#4833 `queued` → `lead`**, blockedBy #4829 — re-gate it on the reports; do not mint the 171–174 rows before.
-- **#5111 `claimed` → `devtools`** (the credential-less health probe): a `demo/broker-serve-provider-auth.test.mjs` was
-  passing in its worktree at the time of writing (`OK (3 listing hits, 2 completion hits, 3 carrying the credential)`).
-  **The defect is real and reproduced**: `node --env-file=… tools/broker-serve.mjs --status` prints `local: completes
-  (finish=stop, 57 tok/28 tok)` **and** `BLOCK provider-DURIG_LOCAL_-unreachable … HTTP 401` in the same run.
-- **#5132 / #5134 `queued` → `devtools`**; **#5133 → `security`**. `tools/channel-preflight.mjs` §7 still prints
-  "NO SHELL CAN START HERE" on a host where `broker-serve --status` prints `"bash" CAN start — /usr/bin/bash`.
-
-## State (measured 2026-11-05T05:2x–08:0xZ)
-
-Store `./selfdev.sqlite`; census **done 3812 | cancelled 809 | held 342 | queued 154 | deferred 16 | claimed 3** (re-read
-— it drifts). Worktrees: the operator checkout holds `item-4829/4937/4967/4997/5083/5090/5094`, the seat root holds
-`item-4955/4970/5079` plus this session's `item-5125` and `item-5131` (both under `~/Git/durian-dev/seatroot`, correct
-placement). Broker **down** (no broker state). Spend caps `0.05 / 0.10 / 4.00`; **this session's spend $0.0387**, all of
-it #5131, ledgered by the seat that ran it. Gates run here: `doc-integrity-guard` **0 hard / 1 soft**, `instrument-provenance`
-**clean (2 soft cite drifts)**, `review-cite-check --gate` **205 failing / 336 not failing** — a pre-existing baseline,
-and **zero findings name the two new prompt files**.
+`main` @`a978bcd9`, **12 ahead of `origin/main`, 0 pushed** (the operator's push grant of 2026-11-05 was not exercised —
+the delegate lands locally and reports; `git push origin main` is the operator's to run or grant). Landed this session by
+SHA: `item-5131 3a7abc99` → merge `807f24a0`, `item-5111 083d2da2` → merge `a978bcd9`; `item-5125 385e3973` is **subsumed**
+(`merge-base --is-ancestor item-5125 item-5131` exit 0, `git diff 807f24a0 385e3973 -- src | wc -l` = **0**), so `main`
+carries all three rows' content. **Suite green on landed trunk, run from the seat root where the vendored deps are
+installed: `SUITE GREEN: pass=258 environmental=0 fail=0`, exit 0** (1672 s). The promoted arm probe passes on trunk:
+`node tools/verifier-arm-probe.mjs --base=https://api.deepinfra.com/v1/openai --model=openai/gpt-oss-120b` with
+`DURIG_VERIFIER_PRICE_USD_IN=0.037/_OUT=0.17` → `endpoint: metered`, `priceSource: DURIG_VERIFIER_PRICE_USD_IN/OUT`,
+`maxCallExposureUsd 0.001419`, **`verdict: ARMABLE`** (93 ms); against the loopback class → **`NOT-ARMABLE`** with
+`cause: metered-endpoint-unpriced` — the split D210 asked for, answered by an instrument instead of by hand.
+`tools/deepinfra-catalog.mjs` says **catalog fresh (182 models, fetched 2026-10-28)**.
+Queue histogram: total **5156**, `done 3816, cancelled 812, held 345, queued 162, deferred 16, claimed 5`.
 
 ## Traps this session found (each cost real time — they belong in `docs/SELFDEV.md` too)
 
@@ -155,27 +108,43 @@ and **zero findings name the two new prompt files**.
 2. **`show <id>` takes no `--json`** — it errors into the `queue` usage block. Use `queue --id <id> [--id …]`.
 3. **Two `send`s at once is a two-writer hazard** — never dispatch a second seat while a `send` harness owns the store.
    That is why `lead` was left unwoken and this handoff exists.
-4. **Noise that is not a finding:** every CLI start prints
-   `{"spend":"catalog-refused","model":"google/gemini-3.1-pro",… maxCallExposureUsd 14 … capUsd 4}` — that is the
-   **vendored DeepInfra catalog** being priced (`src/providers/deepinfra-models.ts`), D201 working; and
-   `broker-serve --status`'s `NOTE stranded-intent: 2` are `{"op":"read","view":"health","from":"cli"}` files left by
-   `cli.mjs status` (§5b); and `lead`'s `secret_detected` at entry **#285629** (`pi.compaction` content) is the 40-hex
-   redactor class (#4922), not a leak.
+4. **`{"spend":"catalog-refused","model":"google/gemini-3.1-pro",… maxCallExposureUsd 14 … capUsd 4}` used to be noise —
+   it is now the finding, and the pointer was corrected to say so.** Last session it annotated a catalog row nothing used.
+   After #5111 (`083d2da2`) landed it **refuses the `send` itself** (§1 of NEXT SESSION): the store cap is applied to the
+   worst *catalog* row, not to the model the turn will actually run. Read it as a dispatch gate, not as noise. Also still
+   noise: `broker-serve --status`'s `NOTE stranded-intent: 2` (`{"op":"read","view":"health","from":"cli"}` files left by
+   `cli.mjs status`, §5b) and `lead`'s `secret_detected` at entry **#285629** (`pi.compaction` content, the 40-hex redactor
+   class #4922).
+5. **`--body-file=<path>` does not work; `--body-file <path>` does.** `cli.mjs:3328` is `const fileAt =
+   rest.indexOf("--body-file")`, so the `=` form gives `fileAt = -1` and **this CLI never reads the file**. What the seat
+   actually received was a stub — its user entry began `the file you can read with your read tool at:` followed by the path
+   — which I could not attribute to a source in this repo (grep for that phrase matches nothing outside `node_modules`), so
+   treat the emitter as unfixed. Either way a seat has no read access to a delegate's `.spike/`, and it cost a full
+   16-minute `lead` turn plus a re-send.
+6. **Config-file keys are allow-listed; provider keys are env-only.** Adding `DURIG_LOCAL_COMPACTION_RESERVE_TOKENS` to
+   `durig.config.json` is a **fatal** CLI error (`unknown config-file key(s) … no code reads these`, #5071) — that
+   accepted-and-ignored detector is real and saved a silent no-op. `DURIG_LOCAL_*PRICE_USD_*`,
+   `DURIG_*_COMPACTION_*` and `DURIG_MODEL` belong in the **environment** (`--env-file="$HOME/.config/durig/env"`).
+7. **A green suite needs the seat root, not a detached scratch.** Running the suite from a `git worktree add --detach`
+   scratch gave `ERR_MODULE_NOT_FOUND @earendil-works/pi-durable` in
+   `demo/commit-discipline-personas.test.mjs` — and the same failure reproduces at the pre-landing commit, so it is a
+   dependency-link artifact of the scratch, not a regression. Run the suite from `~/Git/durian-dev/seatroot`, where the
+   vendored deps are installed (1672 s on this host).
 
 ## Watch-list (delegate)
 
-- **AT RISK** (`seat-turn-shape`, projection ends on `user`): `scribe security advocate auditor designer qa2` — do not
-  re-send blind; `security` may need a `reset` with a handoff to close #4829. ADMISSIBLE: `devtools lead pm impl
-  architect qa` (re-measure first).
+- **AT RISK** (`seat-turn-shape`, counted projection ends on `user`): `scribe security advocate auditor designer qa2`
+   (`impl lead devtools` were counted-clean at 19:1xZ). Re-measure before any dispatch; `security` may need a `reset` with
+   a handoff to close **#4829**, whose artifact is committed on `item-4829` but **unlanded** (that worktree is `locked`).
 - `qa` window 20,110 / 24,576 = **0.818**; the verifier-band problem (§14 of `session-start-cost.md`) is unfixed —
   `DURIG_VERIFIER_CONTEXT 24576 − 16384 = 8,192`, so any verifier seat above 8,192 consumed cannot take a turn without a
-  compaction that cannot succeed at 3,000 summary tokens. **This must be settled before #5136 flips the roster**, or the
-  same failure walks over to DeepInfra.
+  compaction that cannot succeed at 3,000 summary tokens. **Settle this before #5153 (which replaced #5136) flips the
+  roster**, or the same failure walks over to DeepInfra.
 - **Probes worth keeping are already in `tools/`**: `tools/verifier-arm-probe.mjs` (offline; prints the resolved spec,
   the price **and its source**, and `maxCallExposureUsd` against the three caps; never a credential). Promoted by #5125 —
   the old `.spike/` copy is gone by design.
 - **`git log --all --grep=secret_detected` for every redactor hit before attributing one** — this session's was
   `pi.compaction` content, not a tool result.
-- **Next delegation, when the reports land:** `lead` re-gates #4833 and rules whether the **cheap belts** (the position's
-  G10 — refuse `git config --global/--system`, value-level `looksLikeSecret` in `pickEnv`, push unresolved mutating
-  forms into the existing "NOT checked" surface) proceed now. The delegate carries the ruling; it does not choose it.
+- **Next delegation, when a channel exists:** `lead` rules whether the **cheap belts** proceed — **#5145 landed-ready**
+  (`item-5145` @`39ee4fcc`, `done`, unlanded) and **#5144 claimed-but-unproduced**. The delegate carries rulings; it does
+  not choose them. The two research commissions **#5147/#5148** are the operator's to route (D151 bars the delegate).

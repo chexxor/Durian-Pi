@@ -448,3 +448,32 @@ operator's `DURIG_LOCAL_MAX_TOKENS=16384` prefix buys). A handoff is not decorat
 and the constraints the seat must not re-derive (the delegate's briefs at
 `.spike/delegate-20261103c/brief-*.md` are the worked examples). Before resetting a seat that holds **claimed** rows,
 check first (`impl` holds #4799 and #4955, so it was left alone unasked).
+
+## 20. The dispatch-channel preflight costs 12 s and is the cheapest true read of "can I wake anyone?" (2026-11-05, D211; measured in Linux)
+
+Before planning any dispatch, run the two reads that answer it directly instead of discovering the refusal mid-send:
+
+```bash
+node tools/broker-serve.mjs --dry-run        # ~12 s, READ-ONLY: preflight + the exact start command + findings
+test -e "$DURIG_SPEND_LEDGER" && echo "metered spend recorded" || echo "no metered request has ever run"
+curl -s -m 5 "$DURIG_LOCAL_BASE_URL/v1/models" | head -c 400   # the ids the endpoint ACTUALLY advertises
+grep -o '"DURIG_LOCAL_[A-Z_]*": *"[^"]*"' durig.config.json     # the ids the rig believes
+```
+
+What each one buys:
+
+- `broker-serve --dry-run` prints the checkup verdict **and** whether a start would be refused, so the two
+  `provider-DURIG_VERIFIER_-*` BLOCKs show up before you commit to a plan that needs the broker. It also prints
+  `NOTE stranded-intent: N … the delivery channel, not the backlog, is the critical path` — the single cheapest line that
+  says the rig is not delivering work, and `supervisor: escalated` per seat (degeneration) for free.
+- The ledger test is how you **prove $0 spent** rather than assert it: a `catalog-refused` / `model-unpriced` refusal
+  happens before any request, so on a rig whose `$DURIG_SPEND_LEDGER` file does not exist nothing metered ever ran. Do not
+  report a spend number you cannot see in that file.
+- The `curl`/`grep` pair catches the class that cost a session to find: an operator restarting a local server changes the
+  **advertised model id** (`qwen3.8-flash-next-iq3_s` vs the configured `iq3_s`) while the endpoint happily serves both via
+  `/chat/completions`. Availability is the intersection of those two lines, not the completion probe alone.
+
+For queue hygiene, `node tools/queue-drain-audit.mjs --db ./selfdev.sqlite` costs **0.1 s** and is the read that replaces a
+hand-count of `queued`: it separates `held` age, non-terminal LANDING rows already fully on `main`, orphan candidates and
+unresolvable citations — and `queued` itself is misleading because `notice` rows are counted as claimable work (67 of 162 on
+this rig, 2026-11-05).

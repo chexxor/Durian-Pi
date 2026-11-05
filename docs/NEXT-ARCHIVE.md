@@ -11660,3 +11660,134 @@ same-host test through your own LAN IP passes for any port (own-address traffic 
    and I route it; D151 bars me from commissioning it.
 4. **`arjan/awesome-agent-sandboxes` has no license file** — pin-only is allowed, consuming it is not. A licensing
    ruling, if you want that catalogue's contents used rather than its structure.
+
+---
+
+## Superseded live pointer, 2026-11-05T19:3xZ (delegate session C; superseded by the D211-era pointer — verifier branches LANDED, local model moved to the Strata endpoint)
+
+# NEXT.md — current state and next actions
+
+**Last update:** 2026-11-05T08:0xZ (delegate session — the operator's four rulings of 2026-11-05: standing verifier spend,
+AGPL option (a), **research before design**, push. All four are in **D210**; the verifier grant was exercised and is
+**measured** below). The superseded D208-era pointer moved VERBATIM to `docs/NEXT-ARCHIVE.md` (183 lines / 16,036 B, git
+blob `2f826aa02a54f453b9139ded5d15c7fa02b04a00` = `git show 1dff8590:docs/NEXT.md`).
+
+Host for everything below, measured in the same command as the measurements: **Linux Fedora 44**, kernel
+`7.2.14-200.fc44.x86_64`, node v24.22.1, git 2.56.0 (**never sign work with a hostname** — D205).
+
+## NEXT SESSION
+
+**Current item:** the **substrate track** is **re-gated on external research** by the operator's ruling H — *"we should
+have a thorough understanding of the domain before we design a solution for our needs"*. So the design rows
+**#4829** (`security`, `claimed`, artifact committed but **unlanded**), **#4833** (`lead`, `queued`, the 171–174
+decomposition), and **274–278** do NOT proceed until the two research reports below land and are consumed. The verifier
+chain is a separate track and **moved this session**: **#5125 `done`**, **#5131 `done`**, **#5136 still `held`**.
+
+Run this first — reads, then **one** send that carries the ruling `lead` has not yet received:
+
+```bash
+cd ~/Git/Durian-Pi
+git status --short -- . && git rev-list --count origin/main..main          # 0 at the time of writing
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --id 4829 --id 4833 --id 5136 --id 5111 --id 5132 --id 5134
+DURIG_DB=./selfdev.sqlite node tools/seat-turn-shape.mjs | grep -E "^seat |next send"   # 1 s; never send to an AT-RISK seat blind
+```
+
+**Then** deliver the operator's rulings to `lead` (it owns the re-gating of #4833 and the retirement of #5127). The
+verbatim rulings are in **D210**; the brief that was prepared but NOT sent is
+`.spike/delegate-20261105b/brief-lead-1.md` (gitignored — if it is gone, rewrite it from D210). Dispatch **from the seat
+root** and **always with the env file** (see Traps):
+
+```bash
+cd ~/Git/durian-dev/seatroot && git merge --ff-only main
+DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite DURIG_NO_SERVE=1 \
+  node --env-file="$HOME/.config/durig/env" cli.mjs send lead --body-file <path-to-the-lead-brief>
+```
+
+**History:** superseded blocks move VERBATIM to `docs/NEXT-ARCHIVE.md`; this file is a pointer with a **cap 200** lines
+(and a ~16.9 KB ceiling imposed by the 20,000 B clock-in digest — `demo/clockin-digest.test.mjs`), gated by
+`demo/next-pointer.test.mjs` (0.3 s) — cut before you add.
+
+**Landing —** the three **`done`** verifier/provider branches are **unlanded**, and their preflight is already measured, so
+the next session does not re-derive it: `item-5125 385e3973`, `item-5131 3a7abc99` (**which subsumes 5125** —
+`git merge-base --is-ancestor item-5125 item-5131` exit 0, so one landing of 5131 carries both), `item-5111 083d2da2`.
+For all three against `main` @`2115decc`: `merge-tree --write-tree` **exit 0 (clean)** and
+`merge-base --is-ancestor main <branch>` **exit 1 (STALE base, fork = `1dff8590`)** — stale only because `main` moved by
+**docs commits** after the fork. `docs/runbooks/land.md` step 0b calls a stale base "a re-cut job for a seat", while the
+same runbook says `land` is the **delegate's/operator's** action; read both together — a helper landing
+(`node scripts/land.mjs item-5131 item-5111 --db ./selfdev.sqlite`, **never `--suite` while the tree is red**, then
+prove on `main` in a detached scratch) is defensible **only when no `send` harness is generating**, because the genlock
+makes a concurrent landing a wait, not a race. `#5132` (`channel-preflight` §7) is still **`queued`** and **never
+started**, `#5134` was **`claimed`** with its root cause already named (on node v24 `Dirent.path` is gone — only `name`
+and `parentPath` exist, which is why the guard printed `undefined/anthropic-ai-sdk`).
+
+**Blocker:** nothing is blocked on the rig. **Two things sit with the operator:** (1) **routing the two research
+commissions** (D151 bars the delegate; the operator offered to route them — they are the current critical path), and
+(2) **the fit of the armed verifier** — #5131 met the G2 floor but recorded **`CLEAN-PASSED 0`** in every replicate,
+with the confabulation shown in the transcript (see *Verifier* below), and whether that model may flip the roster
+(#5136) is an operator/`lead` call, not a measurement the rig will answer on its own.
+
+
+---
+
+## Verbatim sections dropped from the live pointer, 2026-11-05T19:4xZ (D211 session — superseded by D211 and the State block above)
+
+## Operator rulings of 2026-11-05 (full text and receipts in D210)
+
+1. **Standing verifier spend** — *"You can continue spending money on verifiers. I accept your recommendation"* → the
+   bounded #5127 terms ($0.15 ceiling, one corpus, k=3, gate before the flip). **Exercised once**, ledgered, closed at
+   **$0.0387**. Roster untouched.
+2. **AGPL** — *"(a) but we can adopt AGPL if must."* → AGPL prior art stays **read-for-design-only**; adoption permitted
+   only if a mechanism is unobtainable otherwise, which is an operator decision (our tree is MIT). Measured:
+   **`@anthropic-ai/sandbox-runtime` is Apache-2.0** (npm, versions `0.0.78`–`0.0.81`, repo `anthropics/sandbox-runtime`)
+   → **274's licence blocker is closed**; the pin/adopt call is still `security`'s inside 170, and **SRT is not vendored**.
+3. **Research before design** — two commissions **READY TO ROUTE** (paths below).
+4. **Push granted** — the delegate pushed `main` `6e23742a → 1dff8590` (`ls-remote` confirms, reflog `update by push`).
+   Grant is per-ruling; seats still cannot push on their own initiative.
+
+## Research now gates the substrate design
+
+- `docs/reviews/agent-sandbox-substrate-research-prompt.md` — **round 2, amended this session**: the security position's
+  measured baseline (the belt-vs-boundary spine, F1–F5), the ten-project intake, the SRT question, the licensing ruling,
+  and `lead`'s ask — *"what is the minimal Landlock ruleset that admits git/node/sqlite/vendor-links `/tmp`/loopback
+  providers, and what demonstrably remains unmediated after it"*. 12 questions, 14 required sections, quote+URL+fetch-date
+  evidence discipline.
+- `docs/reviews/agent-fleet-containment-domain-map-research-prompt.md` — **new**: the domain/competitor map (who contains
+  agent fleets and at what fidelity; the six control axes — fs, egress, credentials, grant lifecycle, audit, posture;
+  settled standards/vocabulary + terminology collisions; a failure catalogue with title-checked receipts; a licence map
+  for MIT-compatibility and what AGPL adoption would oblige; the gaps we must fill ourselves).
+- **On landing, the delegate does the consumption** (`docs/runbooks/research-request.md` Do 3–5): commit the report
+  verbatim, re-fetch cited URLs into `inputs/fetched/` with a manifest, check every quote in our own copy, register or
+  explicitly reject each proposed ROADMAP item, add `docs/COMPETITORS.md` rows, cross-link, and write the follow-up
+  prompt. Then `lead` releases #4833.
+
+## Verifier (measured this session, not carried forward from the last one)
+
+- **#5125 `done`** → `item-5125` `8160b8be` + `385e3973` (7 files, 462 insertions): price/ledger keys registered in the
+  config inventory, a demo that an **unknown key is refused, not ignored**, a demo that the credential surface reports
+  only **presence**, and the arming probe **promoted** to `tools/verifier-arm-probe.mjs` + `demo/verifier-arm-probe.test.mjs`.
+  **Not on `main` yet** — landing needs a wake (push grant is open).
+- **#5131 `done`** — the paid gate arm, run in `item-5131` with `DURIG_PROBE_CEILING_USD=0.15`,
+  `DURIG_SPEND_LEDGER=<worktree>/.spike/gate/spend-5131.jsonl`, `DURIG_PROBE_PRICE_USD_IN=0.037/_OUT=0.17`,
+  `--whole-module --budget 120000 --replicate 3`. **72 accounted calls, $0.0387 of the $0.15 ceiling**, ~$0.0009/call,
+  `priceSource: "env"`, `authKeyEnv` named never valued. **Defect named 6/7 in all three replicates → G2 floor MET**
+  (bar ≥ 4/7; the earlier recorded arm was 6/8). **But**: `clean FALSE-ALARM 7–8/8` and `clean-neutral FALSE-ALARM 7–8/8`
+  in **every** replicate — on this corpus the model never passes a clean control.
+  **Read the transcript, and the false alarms are the model, not the scorer** (delegate read of
+  `docs/evidence/2026-11-05-gate-arm-5131/arm.log`, on the branch): for `H2-process-death-deadline` the **clean** answer
+  asserts a defect — "`waitForProcessDeath()` treats *any* error from `process.kill(pid,0)` as 'process is dead'… EPERM"
+  — and 25 s later the **same model on the same file** answers `clean-neutral` with "No – there is nothing in this module
+  that will throw… the `waitForProcessDeath` implementation for POSIX correctly loops with `process.kill(pid, 0)` until
+  the timeout expires." For `H3-truthy-sentinel-dead-code` the clean answer repeats the defect cell's claim verbatim
+  ("`normalizeBlock` is used but never defined"). So it **confabulates a plausible defect when asked in the defect view's
+  framing**, and declines when asked neutrally — which makes the corpus framing a contributor and suggests the cheap fix
+  is a **differential** gate (require: asserts on defect, declines on clean-neutral) before any further model spend.
+  **Open, and load-bearing for 269 (G7 — "adjudicator armed first") and for #5136: is a `CLEAN-PASSED 0` verifier fit to
+  adjudicate a capability grant, or to be the roster?** Close it by ruling or by the differential probe, not by re-running
+  the same corpus.
+- **Nothing is armed.** `DURIG_VERIFIER_BASE_URL` is still `http://127.0.0.1:1234/v1`, measured **ECONNREFUSED** on both
+  `/v1/models` and `/chat/completions` → `qa qa2 advocate auditor designer` cannot take a turn at all. **#5136 `held`**
+  behind #5125 + #5131 + **#5095** (stage 1, `deferred`): arm early, flip late, so #5096 lands under a working verifier.
+- **Independence:** cross-family/cross-vendor (`local/iq3_s` authors vs `openai/gpt-oss-120b` on DeepInfra), **same
+  account** — `lead` declined a second key and the operator did not overturn it. Key stays at `~/.config/durig/env`
+  (mode 600, out of tree; check with `grep -o -E "^[A-Z_]+=" ~/.config/durig/env`, names only).
+
