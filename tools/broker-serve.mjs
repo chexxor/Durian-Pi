@@ -223,29 +223,63 @@ for (const s of specs) {
 		);
 	let ids = null;
 	let err = null;
+	// #5111: what the SERVER said is kept separate from whether it answered at all. `HTTP 401` is an answer; it is
+	// not unreachability. Reported as `provider-...-unreachable` it made the preflight block on a wrong fact —
+	// measured on this host in a run that ALSO printed `local: completes (finish=stop, prompt=57 tok)`.
+	let httpStatus = null;
+	let listingIssue = null; // deferred until the completion probe can say whether inference works
 	try {
 		const ctrl = new AbortController();
 		const t = setTimeout(() => ctrl.abort(), 5000);
-		const res = await fetch(`${String(s.baseUrl).replace(/\/$/, "")}/models`, { signal: ctrl.signal });
+		// The SAME credential read the completion probe below uses — one vocabulary, never logged. A probe that asks
+		// an authenticated endpoint a question without the credential it will later send is not a probe.
+		const res = await fetch(`${String(s.baseUrl).replace(/\/$/, "")}/models`, {
+			signal: ctrl.signal,
+			...(process.env[s.apiKeyEnv] ? { headers: { authorization: `Bearer ${process.env[s.apiKeyEnv]}` } } : {}),
+		});
 		clearTimeout(t);
-		const body = await res.json();
+		const body = await res.json().catch(() => null);
 		ids = (body?.data ?? []).map((m) => m.id);
-		if (!res.ok) err = `HTTP ${res.status}`;
+		if (!res.ok) {
+			httpStatus = res.status;
+			err = `HTTP ${res.status}`;
+		}
 	} catch (e) {
 		err = e?.name === "AbortError" ? "timeout after 5s" : String(e?.cause?.code ?? e?.message ?? e);
 	}
-	if (err) finding(`provider-${s.prefix ?? "?"}-unreachable`, "block", `${s.baseUrl} did not answer /v1/models: ${err}`, "docs/runbooks/local-provider-down.md — a seat pointed at it fails with 'Connection error.', not a rig bug");
-	else if (ids && !ids.includes(s.modelId)) finding(`provider-${s.prefix ?? "?"}-model-absent`, "block", `${s.baseUrl} advertises [${ids.join(", ")}] but the config names '${s.modelId}'`, "point DURIG_" + `${(s.prefix ?? "LOCAL").toUpperCase()}_MODEL at an advertised id, or load that model`);
+	const named = (s.prefix ?? "LOCAL").toUpperCase();
+	if (err && httpStatus === null) {
+		// Only a NON-ANSWER is unreachability: connection refused, DNS failure, timeout.
+		finding(
+			`provider-${s.prefix ?? "?"}-unreachable`,
+			"block",
+			`${s.baseUrl} did not answer /v1/models: ${err}`,
+			"docs/runbooks/local-provider-down.md — a seat pointed at it fails with 'Connection error.', not a rig bug",
+		);
+	} else if (httpStatus === 401 || httpStatus === 403 || httpStatus === 404) {
+		listingIssue = httpStatus; // named after the completion probe runs, so the pair cannot contradict each other
+	} else if (httpStatus) {
+		finding(
+			`provider-${s.prefix ?? "?"}-models-http-${httpStatus}`,
+			"block",
+			`${s.baseUrl} ANSWERED /v1/models with HTTP ${httpStatus} — the endpoint is REACHABLE and the listing failed`,
+			"read the server's own response before concluding anything about the provider",
+		);
+	} else if (ids && !ids.includes(s.modelId))
+		finding(`provider-${s.prefix ?? "?"}-model-absent`, "block", `${s.baseUrl} advertises [${ids.join(", ")}] but the config names '${s.modelId}'`, "point DURIG_" + `${named}_MODEL at an advertised id, or load that model`);
 	else console.log(`    ${s.id}: answers, advertises ${ids?.length ?? "?"} model(s) including ${s.modelId}`);
 	// A 2026-10-28 addition, from a near-miss: `/v1/models` answering is NOT proof a seat turn will
 	// work. The store holds **18,309 entries** whose text contains "402" — "You need positive balance to
 	// do inference" — i.e. a provider that advertises models and then refuses inference, which reaches a
 	// seat as `model_error` on every generation. So probe one real completion. Cost measured here: 55
 	// prompt tokens, ~1.1 s prefill, one call.
+	// #5111: declared OUT here so that `--no-probe` — the fast preflight the runbooks name — still reaches the
+	// listing verdict below. An early draft of this fix sat that verdict inside the probe block, and `--no-probe`
+	// then reported NOTHING about a 401, which is strictly worse than the defect being fixed.
+	let cErr = null;
+	let status = 0;
+	let body = null;
 	if (!flags.noProbe) {
-		let cErr = null;
-		let status = 0;
-		let body = null;
 		try {
 			const ctrl = new AbortController();
 			const t = setTimeout(() => ctrl.abort(), 20000);
@@ -274,6 +308,31 @@ for (const s of specs) {
 			console.log(`    ${s.id}: completes (finish=${choice?.finish_reason ?? "?"}, prompt=${u?.prompt_tokens ?? "?"} tok, completion=${u?.completion_tokens ?? "?"} tok)`);
 		if (!cErr && choice && choice.message?.content == null)
 			finding(`provider-${s.id}-reasoning-only`, "note", `the completion returned content=null with reasoning_content and finish_reason=${choice.finish_reason} — a reasoning server that spends the token budget thinking`, "expected on our servers (D147); a seat's max_tokens must exceed the thinking budget, so a short budget reads like an empty answer");
+	}
+	// #5111, the half that makes the classification true rather than merely renamed: the listing answer is judged
+	// WITH the completion answer in hand, because a server can refuse a listing and still serve inference. A probe
+	// that blocks on the first while the second proves the opposite is a preflight that lies in the safe-looking
+	// direction — and every arming decision this run made was made against that preflight.
+	if (listingIssue) {
+		const completion = body?.choices?.[0];
+		const answers = !cErr && completion;
+		const unauthorized = listingIssue === 401 || listingIssue === 403;
+		const served = answers
+			? `and /chat/completions COMPLETES (finish=${completion.finish_reason}, prompt=${body?.usage?.prompt_tokens ?? "?"} tok) — inference WORKS, so this is a listing-scope answer, not an outage and not an unreachable provider`
+			: status
+				? `and /chat/completions also refused (${cErr})`
+				: "and no completion probe was run (--no-probe), so inference is unproven either way — a listing-scope answer either way, NOT an unreachable provider";
+		finding(
+			// The id KEEPS the `DURIG_LOCAL_` shape of the finding it replaces: a seat that has been reading
+			// `provider-DURIG_LOCAL_-unreachable` all week must see the corrected name in the same slot, not a new
+			// one it has to learn.
+			unauthorized ? `provider-${s.prefix ?? named}-unauthorized` : `provider-${s.prefix ?? named}-models-not-found`,
+			unauthorized && !answers ? "block" : "note",
+			`${s.baseUrl} ANSWERED /v1/models with HTTP ${listingIssue} — REACHABLE: the endpoint answered, ${served}. The listing ${unauthorized ? "refused the credential" : "path does not exist (a wrong path, or a server that does not implement /models)"}`,
+			unauthorized
+				? `export ${s.apiKeyEnv} — the variable the provider code itself reads (keep its value in the out-of-tree env file, mode 600). A 401/403 is an ANSWER and must never be reported as unreachable`
+				: `check the path: DURIG_${named}_BASE_URL should end at the /v1 root, not at a model or a version segment`,
+		);
 	}
 }
 
