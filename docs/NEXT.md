@@ -1,50 +1,47 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-05T19:4xZ (delegate session C — the verifier chain **landed and is proven on trunk**, and the
-local model moved to the operator's new Strata endpoint (**D211**). The blocker now is the **delivery channel**, not the
-backlog: `send` is refused by the spend-cap gate and a broker start is refused while the verifier endpoint is down —
-both measured below, both need an operator ruling.) The superseded pointer moved VERBATIM to `docs/NEXT-ARCHIVE.md`.
+**Last update:** 2026-11-05T20:4xZ (delegate session C closes. Two things moved this session: the **verifier chain landed and
+is proven on trunk** (**D211**), and the operator issued a **standing architecture ruling** — customization goes on the
+extension plane, and durian-pi ships as **two minimum products** (**D212**, `docs/ROADMAP.md` **279–280**). The
+delivery-channel "blocker" from the previous pointer was **half false and is corrected below**; the real remaining blocker is
+**verifier capacity**.) The superseded pointer moved VERBATIM to `docs/NEXT-ARCHIVE.md`.
 
 Host for everything below, measured in the same command as the measurements: **Linux Fedora 45**, kernel
 `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 (**never sign work with a hostname** — D205).
 
 ## NEXT SESSION
 
-**Current item: restore a working delivery channel.** The queue is fine; **both verbs that reach a seat are now refused**,
-and each refusal is an instrument doing its job — so the fix is an operator ruling, not a workaround. Measured
-2026-11-05T19:3xZ on **Linux Fedora 45**, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0:
+**Current item: the operator's architecture ruling (D212) — define and enforce the two minimum products.** Registered as
+`docs/ROADMAP.md` **279** (product definitions + names) and **280** (the test matrix that enforces them). Ruling, 2026-11-05:
+**any customization to durian-pi is served as an extension, never built into the base**; there is a **minimum coding agent
+on `pi-durable` that runs fine with zero extensions** (proposed name **`durian-core`**, derived from the family convention —
+`pi-agent-core`/`pi-coding-agent` — and D103's `<name>-pi` shape; **the operator ratifies names**); and **durian-pi** is the
+second minimum product, **a team of specialized agents that cooperate**. Whether the team shares **one base-agent instance**
+or each member has **its own instance and its own SQLite store** is **research-gated, not design-gated**: the prompt is
+written and waiting for the operator to route it (`docs/reviews/base-agent-product-topology-research-prompt.md`). Our rig's
+current shape, measured: **many processes, one store** — 12 seat processes, one broker, one `./selfdev.sqlite`. `lead` has
+the brief and owns decomposition; the delegate filed the two roadmap rows because `docs/runbooks/research-request.md` Do 3
+assigns registration to the delegate, and filed no queue rows.
 
-1. **`cli.mjs send` → `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed","capUsd":4,
-   "maxCallExposureUsd":14}`** — an author `send` registers a **metered** catalog row whose one-maximal-call exposure is
-   **3.5× the $4 store cap**. Naming the local id instead gives `{"spend":"model-unpriced","provider":"deepinfra",
-   "model":"qwen3.8-flash-next-iq3_s","cause":"no dated price for this id"}` — the pins hold no dated row for a local id,
-   and the remedy line itself says **"$0 is a legitimate declared price"**. Both refusals land **before any request**, and
-   `DURIG_SPEND_LEDGER` (`/tmp/durian-spend.jsonl`) **does not exist**, so **$0 was spent**. The gate that fires is the one
-   that landed today as `083d2da2` (#5111, *"metered sends get their cap from the provider spec"*): byte-identical command
-   and store were accepted at 13:0xZ, refused at 19:3xZ.
-2. **A broker start would be refused:** `node tools/broker-serve.mjs --dry-run` ends `A start would be refused:
-   provider-DURIG_VERIFIER_-unreachable, provider-verifier-completion-failed` — `http://127.0.0.1:1234/v1` gives
-   ECONNREFUSED on `/v1/models` **and** `/chat/completions`. The same dry-run reports **2 stranded intents >1 h** ("the
-   delivery channel, not the backlog, is the critical path") and `supervisor: escalated` for **devtools, auditor, qa2**
-   (degeneration).
+**Corrected blocker: the delivery channel is working; it was never doubly blocked.** A broker start is allowed and the
+blessed path is `node intent.mjs <seat> --body-file <file>` (`send` is deprecated — it opens a second writing harness). The
+`{"spend":"catalog-refused","model":"google/gemini-3.1-pro",…,"maxCallExposureUsd":14}` line **fires on every `cli.mjs`
+verb, including `reset --dry-run`, and is the DeepInfra catalog dropping one over-exposed row from the registered set
+(`src/providers/deepinfra-models.ts:146`, policy applied per row at `:166-177`) — it is not a verdict on the invocation, and
+last session's sentence "send is now blocked on this rig" was **false**: `DURIG_MODEL` is `zai-org/GLM-5.3-Flash`, a dated
+priced row that passes the guard. What really is refused is **naming a local id in the metered catalog**
+(`{"spend":"model-unpriced","provider":"deepinfra",…}`) — and that is correct, because the local class is priced *by
+locality*, never by a catalog row (`src/providers/local.mjs:150-190`: "free by locality, or priced by declaration — never
+free by silence"). The real remaining block is **verifier capacity**, below.
 
-**Three ways out, not equivalent:** (a) raise `DURIG_SPEND_CAP_STORE_USD` above the metered catalog's worst row — an
-operator capacity ruling (D201); (b) give the local model a **dated $0 price row** so a seat turn registers honestly — a
-`devtools` row, and note that hand-editing `src/providers/deepinfra-prices.json` is exactly what that file forbids (vendor
-pins are fetched, not typed, and carry an `asOf`); (c) bring the verifier endpoint up (or lift the `verifier` provider out
-of `rig.selfdev.json` until #5153 lands) and drive the team the blessed way, `intent.mjs` + `cli.mjs serve`. **Recommend
-(b) + (c):** (a) buys a metered default this rig does not need when the same gate says the honest answer is a declared $0.
-Only the operator can do (a) and (c). **And (b) is not a host-env fix — tried and measured:** declaring
-`DURIG_LOCAL_PRICE_USD_IN=0/_OUT=0` in the launch env and naming the model with `DURIG_MODEL` (bare id, `provider/id`, and
-`DURIG_PROVIDER=local`) is refused as `model-unpriced` with `"provider":"deepinfra"` every time (the price lines were
-removed again afterwards — the host env is as the operator set it), so `DURIG_MODEL` cannot
-address the local provider class at all — it is looked up in the metered catalog. That makes (b) a code/pins row, not
-something a delegate can configure around.
+**Blocker:** the **verifier provider is temporarily lifted** (`6d2c50e2` removed `DURIG_VERIFIER_BASE_URL` from both host
+config files and re-pointed the 5 verifier seats at `local/qwen3.8-flash-next-iq3_s`), so `check` reports `single-model-rig`
+and `verification-without-evidence` as `fix-now` — honest and intended, but the author/verifier cross-family invariant
+cannot hold until either the `:1234` model server is up (it answers ECONNREFUSED; the box has no GPU/RAM room: RTX A4000
+14637/16376 MiB, RTX 3090 23098/24576 MiB, Strata host holding 21852 MiB of the 3090) or the **metered** arm is approved
+(`tools/verifier-arm-probe.mjs` says `ARMABLE`, `maxCallExposureUsd 0.001419`). Restoring needs **both** an operator
+capacity grant (`docs/runbooks/verifier-model-server.md` — seats idle first) **and** `git revert 6d2c50e2`.
 
-**Blocker:** the **delivery channel** — `send` is refused by the spend-cap gate (metered catalog row $14 max-call vs the $4
-store cap; a named local id has no dated price) **and** a broker start is refused while `DURIG_VERIFIER_BASE_URL`
-(`http://127.0.0.1:1234/v1`) answers ECONNREFUSED. Both need the operator (a)/(c) above; no seat can be woken until one is
-granted, so #5144 sits `claimed` and #5145/#4829 sit unlanded.
 
 Run this first — all reads, no writes:
 
@@ -65,15 +62,23 @@ its worktree is gone); **#5145 `done`** (`impl`, branch `item-5145` tip `39ee4fc
 #5147 + #5148**); **#5153 `held`** (`devtools`, gated on **#5146 + #5095**). Cancelled with the operator's grant:
 **#4833 → #5152**, **#5136 → #5153**, **#5127**.
 
-**Hand these two to `lead` when a channel exists (`.spike/delegate-20261105c/` briefs are gitignored; rewrite from D211 if
-gone):** (1) the **instrument leak in the provider check that just landed** — `checkup.mjs:94` / `providers/local.mjs:148`
-read the **process env**, not the config-file precedence, so `src/config.mjs:53` `localContextFor` ("a declared 128k would
-otherwise admit a 200k request to a 128k server") is false again for anyone who declares context in a config file: on an
-**unmodified** checkout it probes `http://127.0.0.1:1/v1`, answers `"no provider config to check"`, and prints
-`1300000/128000`; and (2) the **model-id drift** — every tracked fixture still names `local/iq3_s` (`rig.selfdev.json` for
-9 seats, `src/model-provision.mjs:178`, `docs/ROADMAP.md:2360`, and the compaction-override key `"local/iq3_s"` in
-`durig.config.default.json`, which silently stops matching if the id moves and reverts `reserveTokens` 20480 → 16384).
-One server-side alias (`iq3_s` on the new endpoint) fixes both halves for free and keeps every fixture truthful.
+
+**Hand these to `lead` (done — brief delivered via the broker 2026-11-05T20:3xZ; `.spike/` is gitignored, rewrite from D212
+if the files are gone):** (1) the **model-id drift** — every tracked fixture still names `local/iq3_s`: re-cited from a grep
+run today, `src/providers/local.mjs:10`, `tools/model-probes/corpus.mjs:257`, `tools/model-probes/cold-prefill.mjs:29`,
+`tools/model-probes/stream-probe.mjs:71`, `tools/model-probes/throughput.mjs:74-75`, `demo/deepinfra-catalog.test.mjs:122`, `demo/local-provider.test.mjs:166`,
+`demo/probe-metered-ledger.test.mjs:140`, `durig.config.default.json` (the `"local/iq3_s"` compaction-override key, which
+silently stops matching when the id moves and reverts `reserveTokens` 20480 → 16384), and `docs/ROADMAP.md:82, 3319, 3334,
+3817`; **two of those probes also name the dead endpoint** `http://127.0.0.1:47831/v1` (`stream-probe.mjs:71`,
+`throughput.mjs:75`) — nothing answers it since the move to `:8080`, which is the
+`docs/runbooks/hygiene-and-dead-model-pointers.md` class. One server-side alias (`iq3_s` on `:8080`) fixes both halves for
+free and keeps every fixture truthful; that alias is an **operator/server** action. (2) **`package.json` still reads `"name":
+"durig"`**, so D103's acceptance (`git grep -i durig` → only deliberate alias sites) is unmet — `pm` should close that
+remainder **before** any new rename stacks a third prefix. (3) the **citation-integrity instrument**: a retracted pitfall in
+D211 cited three paths that do not exist in this repo, so every `path:line` token a commit *adds* should be checked against
+the filesystem — the probe is `.spike/delegate-20261105c/cite-audit.mjs` (gitignored; **promote it to `tools/` or it dies**),
+and the existing instrument to extend rather than duplicate is `src/citation.mjs` (ROADMAP 190, sha citations, proven by
+`demo/checkup-citation.test.mjs`).
 
 **History:** superseded blocks move VERBATIM to `docs/NEXT-ARCHIVE.md`; this file is a pointer with a **cap 200** lines
 (and a ~16.9 KB ceiling imposed by the 20,000 B clock-in digest — `demo/clockin-digest.test.mjs`), gated by
@@ -90,7 +95,7 @@ gate prose cites no resolvable id**. That is a `pm` release/cancel pass plus a `
 classes, not the 162, are where the hygiene work is.
 ## State (measured 2026-11-05T19:3x–20:0xZ, Linux Fedora 45 / kernel `7.2.15-300.fc45.x86_64` / node v24.22.1 / git 2.56.0)
 
-`main` @`1872d35f` (docs) on top of the landings, **8 ahead of `refs/remotes/origin/main`, 0 pushed** (this pointer's own docs commits move that number — re-measure, do not carry it) (the operator's push
+`main` @`886a726e` (roadmap 279–280) on top of the landings, **ahead of `refs/remotes/origin/main`: re-measure, 0 pushed** (this pointer's own docs commits move that number — re-measure, do not carry it) (the operator's push
 grant of 2026-11-05 was not exercised — the delegate lands locally and reports; `git push origin main` is the operator's to
 run or grant). Landed this session by
 SHA: `item-5131 3a7abc99` → merge `807f24a0`, `item-5111 083d2da2` → merge `a978bcd9`; `item-5125 385e3973` is **subsumed**
@@ -101,8 +106,13 @@ installed: `SUITE GREEN: pass=258 environmental=0 fail=0`, exit 0** (1672 s). Th
 `DURIG_VERIFIER_PRICE_USD_IN=0.037/_OUT=0.17` → `endpoint: metered`, `priceSource: DURIG_VERIFIER_PRICE_USD_IN/OUT`,
 `maxCallExposureUsd 0.001419`, **`verdict: ARMABLE`** (93 ms); against the loopback class → **`NOT-ARMABLE`** with
 `cause: metered-endpoint-unpriced` — the split D210 asked for, answered by an instrument instead of by hand.
-`tools/deepinfra-catalog.mjs` says **catalog fresh (182 models, fetched 2026-10-28)**.
-Queue histogram: total **5156**, `done 3816, cancelled 812, held 345, queued 162, deferred 16, claimed 5`.
+**There is no `tools/deepinfra-catalog.mjs` in this tree** — that sentence in the previous pointer was false, and the audit
+that caught it is in D211. The real pins: `src/providers/deepinfra-prices.json` carries `fetchedAt` **2026-11-03** and **16
+rows**; a live fetch of `https://api.deepinfra.com/v1/openai/models` returned **174** models today.
+Queue histogram: total **5156**, `done 3816, cancelled 812, held 345, queued 162, deferred 183, claimed 5` — `deferred`
+jumped **16 → 183** across the broker's first wake pass (all 10 seats woke on a local model), which is worth a `pm` look
+before anyone reads a rising `deferred` count as progress. Broker **up** (`--start --max-duration 900 --yes-pm-wakes`,
+`--dry-run` said `A start would be allowed` with 0 blocking, 4 noted).
 
 ## Traps this session found (each cost real time — they belong in `docs/SELFDEV.md` too)
 

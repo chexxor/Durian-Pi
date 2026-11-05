@@ -2038,17 +2038,41 @@ the prefix forever.
    `node tools/broker-serve.mjs --dry-run` (read-only, ~12 s) before planning any dispatch. Its own line
    `NOTE stranded-intent … the delivery channel, not the backlog, is the critical path` is the cheapest pointer to that
    state that exists.
-6. **`checkup`'s provider check reads the process env, not the config-file chain.** With context declared only in
-   `durig.config.json`, `checkup.mjs:94` / `providers/local.mjs:148` see nothing: on an unmodified checkout it probes
-   `http://127.0.0.1:1/v1`, prints `"no provider config to check"` and `1300000/128000`, so `src/config.mjs:53`
-   `localContextFor`'s named hazard (a 200k request to a 128k server) is uninstrumented for config-file users. Do not trust a
-   green provider line as evidence the *effective* window was checked.
+6. **RETRACTED — a pitfall this runbook asserted for a day was false, and the lesson is the instrument, not the sentence.**
+   It claimed `checkup`'s provider check "reads the process env, not the config-file chain", citing `checkup.mjs:94` /
+   `providers/local.mjs:148` / `src/config.mjs:53 localContextFor`. Measured 2026-11-05 (Linux Fedora 45,
+   node v24.22.1): `env -u DURIG_LOCAL_BASE_URL -u DURIG_LOCAL_MODEL -u DURIG_LOCAL_API_KEY node tools/broker-serve.mjs
+   --status` in a repo root with **nothing** in the environment reports `local: answers, advertises 1 model(s) including
+   qwen3.8-flash-next-iq3_s` — the check reads the **effective** config. `checkup.mjs:94` is a `runbook-unverified` finding
+   row, and **`localContextFor` does not exist** (`grep -rn localContextFor src/*.mjs` → no hits); the loader is
+   `src/providers/local.mjs:150-151`. What is real: a checkout with **no `durig.config.json` at all** (every fresh worktree,
+   gitignored) has no local provider to check — the already-known fresh-worktree false-red class. **Durable rule: before
+   writing any `path:line` into a doc, `test -e` the path; a wrong pointer reads as verified (D159 addendum).** The rig
+   already has a citation instrument for shas (`src/citation.mjs`, ROADMAP 190, `demo/checkup-citation.test.mjs`) — extend it
+   to `path:line` rather than adding a second probe.
 7. **Model ids move under the rig when the operator restarts a local server.** The endpoint advertised
    `qwen3.8-flash-next-iq3_s` while every fixture named `iq3_s`; availability is decided by comparing **advertised** ids to
    `DURIG_LOCAL_MODEL`, so a model that answers `/chat/completions` perfectly is still a **BLOCK**. Fastest read:
    `curl -s "$DURIG_LOCAL_BASE_URL/v1/models"` next to `grep DURIG_LOCAL_ durig.config.json`. And `DURIG_COMPACTION_MODEL_OVERRIDES`
-   is keyed by `provider/modelId` — rename the id and the override silently reverts to pi-durable's default.
+   is keyed by `provider/modelId` — rename the id and the override silently reverts to pi-durable's default. Two dead probes
+   came out of the same move: `tools/model-probes/stream-probe.mjs:71` and `throughput.mjs:75` still fetch
+   `http://127.0.0.1:47831/v1`, which nothing answers since the move to `:8080` — a probe that cannot reach its subject is
+   the `docs/runbooks/hygiene-and-dead-model-pointers.md` class, not a result. And the **config-file allow-list is a good
+   trap**: `"DURIG_LOCAL_COMPACTION_RESERVE_TOKENS"` in `durig.config.json` is a hard error (`unknown config-file key(s) …
+   no code reads these, so they are silently ignored`), while the four real keys are registered at `src/config.mjs:118-121`;
+   the tuned reserve belongs in `DURIG_COMPACTION_MODEL_OVERRIDES`, not in an invented key.
 8. **`queued` is not the backlog number to read.** Of 162 `queued`, **67 were `notice` rows** (terminal-status announcements
    registered as claimable work). For hygiene, read `tools/queue-drain-audit.mjs` (0.1 s): `held` age, non-terminal LANDING
    rows already fully on `main`, orphan candidates, unresolvable citations. And **age needs the first transition**, not the
    last: `updated_at` for 261 rows sat at the 2026-10-27 re-seed, which would have made a 17-day row look fresh.
+9. **A `spend` refusal line is not always a refusal of *your* invocation — read which object it names.** Every `cli.mjs`
+   verb, including `reset --dry-run` (which runs no model and makes no request), prints
+   `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed","capUsd":4,"maxCallExposureUsd":14}`.
+   That is the DeepInfra catalog dropping **one over-exposed vendor row** from the registered set — emitted at
+   `src/providers/deepinfra-models.ts:146`, policy applied row-by-row at `:166-177` — **not** a verdict on the model you are
+   about to run. Believing it was a hard block sent a whole session's plan toward raising the store cap. The checks that
+   actually bind: the model named by `DURIG_MODEL` must have a **dated** price row (else `{"spend":"model-unpriced"}`, and a
+   `local/` id never will — the local class is priced **by locality**, `src/providers/local.mjs:150-190`: "free by locality,
+   or priced by declaration — never free by silence"), and a seat's own turn is capped by `DURIG_SPEND_CAP_STORE_USD` at
+   request time (`src/providers/spend.mjs`, `call-refused`). Cheap disambiguation: `node cli.mjs config | grep -i model` and
+   `test -e "$DURIG_SPEND_LEDGER"` (absent = no metered request has ever run on this store).

@@ -85,7 +85,15 @@ Then execute on that resulting promp.
 ## Non-negotiables
 
 - **Do not do the team's work.** No claiming, completing, deferring, or routing queue items yourself.
-- **Ground every claim** in a retrieved passage or a command you actually ran; never assert from memory.
+- **Customization goes on the extension plane, never into the base** (operator architecture ruling, D212). durian-pi ships
+  as **two minimum products**: a base coding agent on `pi-durable` that works with **zero extensions** (proposed name
+  `durian-core`, pending operator ratification) and the **team** on top of it. A change that cannot be expressed as an
+  extension means the base is missing a **seam** — grow the seam, not the feature. Note the two planes are distinct: a
+  pi-durable extension and a pi-coding-agent extension cannot load into each other (`src/extensions.mjs` header).
+  Enforcement is `docs/ROADMAP.md` **279–280**; before calling something "the base", read D212.
+- **Ground every claim** in a retrieved passage or a command you actually ran; never assert from memory. **Before writing a
+  `path:line` citation into any doc, `test -e` the path** — a wrong pointer reads as verified (D159 addendum), and this
+  session shipped three citations to files that do not exist (D211 CORRECTION).
 - **Do not push or publish.** The operator holds that grant; the delegate may commit its own item's
   work (the commit boundary is scoped per item — stage explicit paths only, never `git add -A`).
   Push requires the operator's explicit grant (or `DURIAN_PI_ALLOW_PUSH=1` at launch).
@@ -100,7 +108,8 @@ Then execute on that resulting promp.
 
 ## Where to read further
 
-`docs/SELFDEV.md` (runbook) · `docs/NEXT.md` (current pointer) ·
+`docs/SELFDEV.md` (runbook) · `docs/NEXT.md` (current pointer) · `docs/DECISIONS.md` D212 (the extension-plane policy and
+the two minimum products) · `docs/ROADMAP.md` 279–280 (its product definitions and its gates) ·
 `docs/runbooks/README.md` (operating procedures — **read the matching one before a recovery or an
 external research request**) · `docs/Agent_Onboarding_Research.md` (why this entry point exists) ·
 `docs/QUICKSTART.md` · `docs/FEATURES.md` · `docs/ROADMAP.md`.

@@ -89,7 +89,7 @@ sections, **each as one fenced block with no narration glued to the title line**
 
 Written report only. **Do not modify code, do not open PRs, do not assume access to this repo.** Version-pinned:
 state the version/date of every system you describe — an "as of" date per row in the comparison table
-(`docs/runbooks/vendor-pin-refresh.md` is our habit; a competitor claim without a date rots into a false doc).
+(`docs/runbooks/pi-pin-update.md` is our habit; a competitor claim without a date rots into a false doc).
 
 ## Follow-up
 

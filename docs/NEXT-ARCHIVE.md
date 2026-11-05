@@ -11791,3 +11791,56 @@ with the confabulation shown in the transcript (see *Verifier* below), and wheth
   account** — `lead` declined a second key and the operator did not overturn it. Key stays at `~/.config/durig/env`
   (mode 600, out of tree; check with `grep -o -E "^[A-Z_]+=" ~/.config/durig/env`, names only).
 
+
+---
+
+## Superseded 2026-11-05T20:4xZ (delegate session C, part 2 — the delivery-channel pointer and the two retracted hand-offs; moved VERBATIM, corrections in D211 CORRECTION and D212)
+
+## NEXT SESSION
+
+**Current item: restore a working delivery channel.** The queue is fine; **both verbs that reach a seat are now refused**,
+and each refusal is an instrument doing its job — so the fix is an operator ruling, not a workaround. Measured
+2026-11-05T19:3xZ on **Linux Fedora 45**, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0:
+
+1. **`cli.mjs send` → `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed","capUsd":4,
+   "maxCallExposureUsd":14}`** — an author `send` registers a **metered** catalog row whose one-maximal-call exposure is
+   **3.5× the $4 store cap**. Naming the local id instead gives `{"spend":"model-unpriced","provider":"deepinfra",
+   "model":"qwen3.8-flash-next-iq3_s","cause":"no dated price for this id"}` — the pins hold no dated row for a local id,
+   and the remedy line itself says **"$0 is a legitimate declared price"**. Both refusals land **before any request**, and
+   `DURIG_SPEND_LEDGER` (`/tmp/durian-spend.jsonl`) **does not exist**, so **$0 was spent**. The gate that fires is the one
+   that landed today as `083d2da2` (#5111, *"metered sends get their cap from the provider spec"*): byte-identical command
+   and store were accepted at 13:0xZ, refused at 19:3xZ.
+2. **A broker start would be refused:** `node tools/broker-serve.mjs --dry-run` ends `A start would be refused:
+   provider-DURIG_VERIFIER_-unreachable, provider-verifier-completion-failed` — `http://127.0.0.1:1234/v1` gives
+   ECONNREFUSED on `/v1/models` **and** `/chat/completions`. The same dry-run reports **2 stranded intents >1 h** ("the
+   delivery channel, not the backlog, is the critical path") and `supervisor: escalated` for **devtools, auditor, qa2**
+   (degeneration).
+
+**Three ways out, not equivalent:** (a) raise `DURIG_SPEND_CAP_STORE_USD` above the metered catalog's worst row — an
+operator capacity ruling (D201); (b) give the local model a **dated $0 price row** so a seat turn registers honestly — a
+`devtools` row, and note that hand-editing `src/providers/deepinfra-prices.json` is exactly what that file forbids (vendor
+pins are fetched, not typed, and carry an `asOf`); (c) bring the verifier endpoint up (or lift the `verifier` provider out
+of `rig.selfdev.json` until #5153 lands) and drive the team the blessed way, `intent.mjs` + `cli.mjs serve`. **Recommend
+(b) + (c):** (a) buys a metered default this rig does not need when the same gate says the honest answer is a declared $0.
+Only the operator can do (a) and (c). **And (b) is not a host-env fix — tried and measured:** declaring
+`DURIG_LOCAL_PRICE_USD_IN=0/_OUT=0` in the launch env and naming the model with `DURIG_MODEL` (bare id, `provider/id`, and
+`DURIG_PROVIDER=local`) is refused as `model-unpriced` with `"provider":"deepinfra"` every time (the price lines were
+removed again afterwards — the host env is as the operator set it), so `DURIG_MODEL` cannot
+address the local provider class at all — it is looked up in the metered catalog. That makes (b) a code/pins row, not
+something a delegate can configure around.
+
+**Blocker:** the **delivery channel** — `send` is refused by the spend-cap gate (metered catalog row $14 max-call vs the $4
+store cap; a named local id has no dated price) **and** a broker start is refused while `DURIG_VERIFIER_BASE_URL`
+(`http://127.0.0.1:1234/v1`) answers ECONNREFUSED. Both need the operator (a)/(c) above; no seat can be woken until one is
+granted, so #5144 sits `claimed` and #5145/#4829 sit unlanded.
+
+**Hand these two to `lead` when a channel exists (`.spike/delegate-20261105c/` briefs are gitignored; rewrite from D211 if
+gone):** (1) the **instrument leak in the provider check that just landed** — `checkup.mjs:94` / `providers/local.mjs:148`
+read the **process env**, not the config-file precedence, so `src/config.mjs:53` `localContextFor` ("a declared 128k would
+otherwise admit a 200k request to a 128k server") is false again for anyone who declares context in a config file: on an
+**unmodified** checkout it probes `http://127.0.0.1:1/v1`, answers `"no provider config to check"`, and prints
+`1300000/128000`; and (2) the **model-id drift** — every tracked fixture still names `local/iq3_s` (`rig.selfdev.json` for
+9 seats, `src/model-provision.mjs:178`, `docs/ROADMAP.md:2360`, and the compaction-override key `"local/iq3_s"` in
+`durig.config.default.json`, which silently stops matching if the id moves and reverts `reserveTokens` 20480 → 16384).
+One server-side alias (`iq3_s` on the new endpoint) fixes both halves for free and keeps every fixture truthful.
+
