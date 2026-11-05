@@ -48,7 +48,8 @@ Run this first — all reads, no writes:
 ```bash
 cd ~/Git/Durian-Pi
 git status --short -- . && git rev-list --count refs/remotes/origin/main..main   # re-measure: 8 ahead at 20:1xZ, 0 pushed
-DURIG_DB=./selfdev.sqlite node cli.mjs queue --id 5143 --id 5144 --id 5145 --id 5146 --id 5149 --id 5152 --id 5153 --id 5154
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --id 5143 --id 5144 --id 5145 --id 5146 --id 5149 --id 5152 --id 5153 --id 5154 --id 5155 --id 5156
+DURIG_DB=./selfdev.sqlite node cli.mjs queue 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('max id',max(i[\"id\"] for i in d[\"items\"]));[print(i['id'],i['status'],i.get('from'),'->',i.get('to'),str(i.get('subject'))[:90]) for i in d['items'] if i['id']>=5157]"   # if max id is still 5156, lead has NOT yet cut the D212 rows — re-send the brief
 node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status  # 12 s: local CLEAN, verifier 2 BLOCKs
 DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 0.1 s; hygiene counts, pm-owned
 ```
