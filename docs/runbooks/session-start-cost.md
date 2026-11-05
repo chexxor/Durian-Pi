@@ -3,9 +3,10 @@ runbook: session-start-cost
 symptom: "a session burns its first 30–60 minutes re-deriving rig state that an instrument already reports; the delegate 'verifies' numbers by hand that a tool prints in seconds"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-04
+last_verified: 2026-11-05
 verified_by: delegate, impl, devtools
 evidence: "measured 2026-10-31 on `Alex-Desktop-Win10` (Linux, node v24.22.1): `cli.mjs queue --json` 1.5 s and 21,710,535 B; `tools/what-to-test.mjs --base=HEAD~1` 0.13 s → 6 derived tests against a 239-test suite; `tools/doc-integrity-guard.mjs` 0.10 s exit 0; `tools/instrument-provenance.mjs` 0.07 s exit 0; `tools/seat-turn-shape.mjs` 3.6 s, 58,566 entries read, 0 writes. One batched `send` to `lead` (8 min) produced rows #4947–#4950 plus three closures; one `impl` turn (70 min) produced three rows. Rows #4947–#4950 exist because a delegate MEASUREMENT was carried to a seat instead of a re-derivation.
+  Re-read 2026-11-05 (delegate, main checkout, Linux Fedora 45 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0): the ~7 s clock-in is still the cheap path, and `scripts/clockin.mjs` cost **6,998 ms / 22,537 B printed** at `24fe6c98`; what it CANNOT tell you is whether work exists — at that same commit `queue --status queued` printed `queued rows: 0` while `status` stayed calm and `last_run_failed` named `no_model` for all ten seats. New step 7 below closes that with two one-second reads.
   Re-read 2026-11-04 (impl, `item-4955` worktree, Linux node v24.22.1): the §Preconditions claim about a relative path was understated — a READ at an
   absent path CREATED a 118,784 B store (measured: `readData(...) -> []` with the file present afterwards, `cli.mjs status -> {ok:true, seats:0}` exit 0).
   Fixed in #4955 (`e2a3cb5a`); `node demo/read-no-create-store.test.mjs` exits 0 and `node scripts/test.mjs --all --jobs 8` is 250/250. NOT re-run from this
@@ -124,6 +125,18 @@ node -e 'import("./src/shellregistry.mjs").then(m=>console.log(m.seatShellSelect
 node tools/doc-integrity-guard.mjs; node tools/instrument-provenance.mjs
 node tools/what-to-test.mjs --base=<sha-before-the-diff>     # 0.13 s; derived guard set vs the 239-test suite
 git worktree list | grep ' locked$'                          # terse form: the lock flag is on the SAME line
+git worktree list | grep ' locked$'                          # terse form: the lock flag is on the SAME line
+# 7. the claimable head and the deferral wave — added 2026-11-05, both one queue read (~1 s each), neither in any
+#    existing instrument. A green `status` does NOT say whether work exists; these two do.
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --status queued | python3 -c "import json,sys;print('queued rows:',len(json.load(sys.stdin)['items']))"      # measured 0 = nothing is claimable
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --status deferred | python3 -c "import json,sys;print(len(json.load(sys.stdin)['items']))"                    # measured 183; each row's transitions[] carries {at,by,to,event}, so the wave is dateable WITHOUT any full-feed read
+#    Why this row exists: a broker started with --max-duration self-exits, and supervisor deferral parks rows on
+#    `human`, which is not a seat — so the histogram can read `done/cancelled/held/deferred` with **no `queued`**
+#    while `status` stays calm. Do NOT reach for `cli.mjs events --tail N` instead: `--tail 400` returned **15,425**
+#    events (2026-10-11 -> 2026-11-05), `events --since` wants a numeric cursor (`cli.mjs:3455`), and `queue` has no
+#    time flag at all (`unknown argument --since=…`) — ROADMAP 291.
+#    KNOWN-RED instrument: `tools/channel-preflight.mjs` throws since 8160b8be (#5125 via 807f24a0) because line 57
+#    passes the RIG file as DURIG_CONFIG — ROADMAP 293. Absence of preflight output is a crash, not health.
 ```
 
 ## Do
