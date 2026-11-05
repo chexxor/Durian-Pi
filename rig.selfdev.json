@@ -47,7 +47,7 @@
         "review"
       ],
       "instructionsFile": "prompts/qa.md",
-      "model": "verifier/mistralai/ministral-3-14b-reasoning"
+      "model": "local/qwen3.8-flash-next-iq3_s"
     },
     {
       "name": "qa2",
@@ -62,7 +62,7 @@
         "review"
       ],
       "instructionsFile": "prompts/qa2.md",
-      "model": "verifier/mistralai/ministral-3-14b-reasoning"
+      "model": "local/qwen3.8-flash-next-iq3_s"
     },
     {
       "name": "lead",
@@ -92,7 +92,7 @@
         "review",
         "advocate"
       ],
-      "model": "verifier/mistralai/ministral-3-14b-reasoning",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "instructionsFile": "prompts/advocate.md"
     },
     {
@@ -136,7 +136,7 @@
       "capabilities": [
         "verify"
       ],
-      "model": "verifier/mistralai/ministral-3-14b-reasoning",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "instructionsFile": "prompts/auditor.md"
     },
     {
@@ -150,7 +150,7 @@
       "capabilities": [
         "review"
       ],
-      "model": "verifier/mistralai/ministral-3-14b-reasoning",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "instructionsFile": "prompts/designer.md"
     },
     {
