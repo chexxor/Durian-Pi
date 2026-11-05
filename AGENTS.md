@@ -103,7 +103,13 @@ Then execute on that resulting promp.
   both `bash` and `powershell`; `docs/runbooks/workspace-move.md` Step 5). Name it as **OS + distro + kernel +
   node** (`Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1`) and **never `user@hostname`**: the project must
   not reference a hostname (operator ruling 2026-11-04), hostnames here are transient and unmeasured labels have
-  already contaminated D197b–D204 (D205). Measure `uname -a && node -v` in the same command as the measurement.
+  already contaminated D197b–D204 (D205). Measure host and node **in the same command as the measurement**, with a
+  **hostname-free** probe — `uname -a` prints the hostname, so the obvious command breaks this rule and has already written
+  a transient hostname into **32 tracked files** (measured 2026-11-05: `grep -rl <hostname> docs/ *.md | wc -l`; 17 of them
+  in `docs/DECISIONS.md`), including one host whose name reads `…-Win10` on a **Linux Fedora 45** box, which is exactly how a
+  false host attribution enters the record. Use:
+  `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → `Linux`,
+  `7.2.15-300.fc45.x86_64`, `Fedora Linux 45 (Forty Five)`, `v24.22.1`, `git version 2.56.0`.
 - **Never run a whole-filesystem search**; stay inside your workspace.
 
 ## Where to read further
