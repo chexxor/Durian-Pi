@@ -116,7 +116,7 @@ it used to assert — a test that passes because it no longer exercises the seam
   sequentially. Run from the seat root where deps are installed: `~/Git/durian-dev/seatroot`.
 - **A turn is open for minutes with `events=2–3`.** That is the long-tail shape (ten ~2,120-minute generations, 64.6% of
   busy time). `tools/latency-budget.mjs` names the generation ids; the class is degenerate-seat / channel state, so read
-  `docs/runbooks/degenerate-seat.md` and `docs/runbooks/broker-down.md` rather than optimizing prompts.
+  `docs/runbooks/degeneration-guard.md` and `docs/runbooks/broker-down-or-stalled.md` rather than optimizing prompts.
 - **You cannot tell what a change should run.** That is a missing area mapping, not a reason to run everything: fix
   `demo/test-areas.json` (the coverage rule will tell you if you got it wrong).
 
