@@ -9070,7 +9070,13 @@ right, from the rig's own preflight: `local: answers, advertises 1 model(s) incl
 **Why the id, not the alias, was the half I could fix.** `checkup`/`providers/local.mjs` decide availability by comparing
 the endpoint's **advertised** ids to `DURIG_LOCAL_MODEL`; a name that answers `/chat/completions` but is not advertised is
 a **BLOCK** (`provider-DURIG_LOCAL_-model-absent`). Two tracked hazards stand regardless: every fixture still names
-`local/iq3_s` (`rig.selfdev.json` 9 seats, `src/model-provision.mjs:178`, `docs/ROADMAP.md:2360`) and the compaction
+`local/iq3_s` — re-cited from a grep I ran, not from memory: `rig.selfdev.json` (7 seat model fields, now re-pointed by
+`94ea6f86`), `src/providers/local.mjs:10`, `tools/model-probes/corpus.mjs:257`, `tools/model-probes/cold-prefill.mjs:29`,
+`tools/model-probes/stream-probe.mjs:71`, `tools/model-probes/throughput.mjs:74-75`, `demo/deepinfra-catalog.test.mjs:122`,
+`demo/local-provider.test.mjs:166`, `demo/probe-metered-ledger.test.mjs:140`, and `docs/ROADMAP.md:82, 3319, 3334, 3817` —
+and **two of those probes name the dead endpoint too** (`stream-probe.mjs:71` and `throughput.mjs:75` fetch
+`http://127.0.0.1:47831/v1`, which nothing answers since the move to `:8080`; that is the
+`docs/runbooks/hygiene-and-dead-model-pointers.md` class, worth its own cheap row). Plus the compaction
 override key `"local/iq3_s"` in `durig.config.default.json` **silently stops matching** if the id moves, reverting
 `reserveTokens` 20480 → pi-durable's 16384. The one-line fix for both halves is **server-side** (alias `iq3_s` on the new
 endpoint), which is the operator's to run; re-cutting the id across tracked fixtures is the team's row, and the delegate
@@ -9079,8 +9085,13 @@ filed neither.
 **The landing of #5111 changed how the rig is driven, and that is the session's real finding.** Before it, a `send` with no
 explicit model registered a metered catalog row and ran. After it, the same command, same store, is refused **before any
 request**: `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed","capUsd":4,
-"maxCallExposureUsd":14}` — the store cap is applied to the worst **catalog** row, not to the model the turn will run; and
-naming the local id gives `{"spend":"model-unpriced","provider":"deepinfra","model":"qwen3.8-flash-next-iq3_s","cause":
+"maxCallExposureUsd":14}`. **Read that line for what it is: it fires on every `cli.mjs` verb, including
+`reset --dry-run`, which makes no request and runs no model** — it is the DeepInfra catalog dropping one over-exposed row
+from the registered set (`src/providers/deepinfra-models.ts:146` emits it, `:166-177` applies the policy row by row), not a
+verdict on the invocation. **So the sentence I wrote earlier here — "`send` is now blocked on this rig" — is false, and it
+was load-bearing for last session's plan.** `cli.mjs config` shows `DURIG_MODEL = zai-org/GLM-5.3-Flash`, a dated priced
+row that passes the guard, so `send` registers a model and would run; what is refused is naming a **local** id, because the
+harness catalog is the metered one (`cli.mjs:375-386`). And naming the local id gives `{"spend":"model-unpriced","provider":"deepinfra","model":"qwen3.8-flash-next-iq3_s","cause":
 "no dated price for this id"}`, whose own remedy says **"$0 is a legitimate declared price"**. So **`send` is now blocked on
 this rig**. The blessed alternative is also blocked: `broker-serve --dry-run` ends *"A start would be refused:
 provider-DURIG_VERIFIER_-unreachable, provider-verifier-completion-failed"* (`http://127.0.0.1:1234/v1` ECONNREFUSED on
@@ -9098,20 +9109,39 @@ offers — both lines removed again after the probe, so the host env is exactly 
 `.spike/delegate-20261105c/`) and named the model with `DURIG_MODEL` (bare id, and `provider/id`, and `DURIG_PROVIDER=local` as well). Every form
 is refused as `model-unpriced` with **`"provider":"deepinfra"`** — `DURIG_MODEL` cannot address the **local** provider class
 at all; it is looked up in the metered catalog. So there is **no env-only way to point `send` at the local model**, and no
-way to give the local model its legitimate $0 price without touching the catalog/pins. Two findings go to `lead` with this as
-rows to file; the delegate filed neither: (i) the cap check applies the store cap to the **worst row in the fetched
-catalog**, not to the model the invocation will actually run — which is what turns a $14 `gemini` row into a refusal of a
-turn that never touches it; and (ii) `DURIG_MODEL` cannot name a local-provider model, so the documented setting cannot
-express the rig's own default staffing.
+way to give the local model its legitimate $0 price without touching the catalog/pins. That is not a defect in itself — the
+local class is priced by *locality*, not by a row: `src/providers/local.mjs:150-190` gives a loopback endpoint **no price
+field at all** ("free by locality, or priced by declaration — never free by silence"), which is why the seats run at $0 and
+why a $0 *catalog* row is the wrong instrument for them. What is worth a row is narrower: (i) the catalog emits a
+`catalog-refused` line that reads like a refusal of the current invocation while actually reporting a dropped vendor row
+(it fired at me from `reset --dry-run`), and (ii) `DURIG_MODEL` cannot name a local-provider model, so the documented
+setting cannot express the rig's own default staffing.
 
-**A new instrument carries a new leak (filed for `lead`, not fixed).** The provider check that just landed reads the
-**process env** (`checkup.mjs:94`, `providers/local.mjs:148`), not the **config-file precedence** the rig documents at
-`src/config.mjs:53` (`localContextFor`: "a declared 128k would otherwise admit a 200k request to a 128k server"). On an
-**unmodified** checkout it therefore probes the placeholder `http://127.0.0.1:1/v1`, answers `"no provider config to
-check"`, and prints `1300000/128000` — so the very hazard that comment names is uninstrumented for anyone who declares
-context in a config file. `DURIG_LOCAL_*` env keys are also **not** in the config-file allow-list (`CONFIG_KEYS`,
-`src/config.mjs`), which is a *good* trap — an unregistered config-file key is a hard error, the #5071 accepted-and-ignored
-class caught live when I tried one — but it means the check only sees half the config chain.
+**CORRECTION, and it matters: the paragraph I wrote last session about a "provider-check instrument leak" is false, and I
+retracted it after re-running the probe.** I asserted the provider check reads the **process env** and not the config-file
+chain, and cited `checkup.mjs:94`, `providers/local.mjs:148` and `src/config.mjs:53 localContextFor`. Measured 2026-11-05
+(Linux Fedora 45, node v24.22.1): `env -u DURIG_LOCAL_BASE_URL -u DURIG_LOCAL_MODEL -u DURIG_LOCAL_API_KEY node
+tools/broker-serve.mjs --status` in the repo root — with **nothing** in the environment — reports
+`local: answers, advertises 1 model(s) including qwen3.8-flash-next-iq3_s` and `local: completes`. The check reads the
+**effective** config (env > file > defaults; `src/providers/local.mjs:150-151` reads `<PREFIX>BASE_URL` out of `CFG`).
+`checkup.mjs:94` is a `runbook-unverified` finding row, not env reading, and **there is no `localContextFor` anywhere in
+`src/`** (`grep -rn localContextFor src/*.mjs` → no hits). The observation that was probably real: a checkout with **no
+`durig.config.json` at all** — every fresh worktree — has no local provider to check; that is the already-recorded
+fresh-worktree false-red class (`docs/DECISIONS.md` above, "the known fresh-worktree false-red class"), not an env leak.
+**How it got written in the first place: two of the three citations in that paragraph name files that do not exist in this
+repo (`src/model-provision.mjs`, `tools/deepinfra-catalog.mjs`), and `localContextFor` is not a symbol here.** A
+file:line citation is only as good as `test -e` on the file, so the audit is now an instrument of its own:
+`.spike/delegate-20261105c/cite-audit.mjs` re-extracts every `path:line` token a commit *added* and checks it against the
+filesystem (45 tokens across this session's three docs commits: 30 resolve, 15 did not, and the 15 are what forced this
+correction). Promote it out of `.spike/` (`tools/`), and `lead` should consider a row: a docs gate that fails an added
+citation whose file is absent is the cheap version of ROADMAP 115/133 for *code* citations.
+
+The true config trap, restated so the real one survives: an **invented** key is a hard error —
+`"DURIG_LOCAL_COMPACTION_RESERVE_TOKENS"` in `durig.config.json` → `unknown config-file key(s) … no code reads these, so
+they are silently ignored (the #5071 accepted-and-ignored class)`. The four real ones are registered at
+`src/config.mjs:118-121` (`DURIG_LOCAL_BASE_URL/_MODEL/_CONTEXT/_MAX_TOKENS`), and the tuned reserve belongs in
+`DURIG_COMPACTION_MODEL_OVERRIDES`, keyed by the provider-qualified id — which is exactly the key that stops matching when
+the id moves.
 
 **Queue hygiene, asked directly ("do the 162 `queued` rows need cleanup?") — no, not those, and no row was touched.** Of
 `queued` = **162**, **67 are `notice` rows** (terminal-status announcements registered as claimable work: 2,029 exist
@@ -9125,3 +9155,76 @@ decomposition are the team's, and the delegate filed nothing.
 **Also measured, and worth its own cheap row:** `git worktree list` shows **7 item worktrees in the repo root** —
 `item-4829 4937 4967 4997` (`locked`) and `item-5083 5090 5094` (unlocked). They are the leaked-worktree class
 (`docs/runbooks/leaked-worktrees.md`) and they dirty the landing preflight (#3988).
+
+---
+
+## D212 — Architecture policy: customization lives on the extension plane; durian-pi ships as two minimum products (operator ruling, 2026-11-05)
+
+**Decision.** Three clauses, from the operator, and they are a **standing architecture policy**, not a feature:
+
+1. **Any customization to durian-pi is served as an extension, not as code built into the base.** A change that cannot
+   be expressed as an extension is evidence the base is missing an extension point — the base grows a *seam*, never a
+   *feature*.
+2. **Minimum product 1 — the base coding agent.** A minimum coding agent on top of `pi-durable` that "operates just
+   fine without the extensions". It must boot, hold a conversation, edit files, run commands, keep its own durable
+   history and recover from a crash with **zero durian-pi extensions loaded**.
+3. **Minimum product 2 — durian-pi, the team.** A team of specialized agents that cooperate (roles, a durable queue,
+   routing, review/verification, the landing path). It is *a consumer of* the base, sitting on the extension plane.
+
+**Naming (proposed here, operator ratifies — precedent: the last rename was an operator decision, D103).** Pi's own
+family names by role with a `pi-` prefix: `pi-ai`, `pi-agent-core`, `pi-coding-agent`, `pi-durable`, `pi-tui`,
+`pi-web-ui` (all live in `package.json` dependencies). This project's derivative convention was set by D103:
+`<name>-pi` for the product, `DURIAN_PI_*` for env, `<name>.config.json` for config — hence `durian-pi`. Following
+that, the base agent is **`durian-core`** (mirrors `pi-agent-core`'s role: the thing you build a product *on*), and the
+team product keeps the name **`durian-pi`**. Alternatives considered: `durian-agent` (mirrors `pi-coding-agent`, but
+names the *role* not the *substrate*, and the team is also agents — ambiguous); `pi-durian` (reads as an upstream pi
+family package, which it is not — this is downstream and depends on pi, misleading in the wrong direction);
+`durian-base` (true but not a name). `durian-core` was recommended because the distinction the policy needs is
+*substrate vs product*, which is exactly the `-core` distinction in the family this project already descends from.
+A rename touches env (`DURIAN_PI_*` → two prefixes), config file names, and `package.json` — which today still reads
+**`"name": "durig"`**, i.e. **D103's acceptance criterion (`git grep -i durig` returns only deliberate alias sites)
+is not met**, measured 2026-11-05: `node -e "console.log(require('./package.json').name)"` → `durig`, and the
+registered config vocabulary is still `DURIG_*` (`src/config.mjs` `CONFIG_KEYS`). That is a real open item for `pm`,
+not a new idea — it belongs in the same row as the naming decision.
+
+**The open design question, deliberately not decided.** Whether the team shares **one instance** of the base agent or
+each member runs **its own instance with its own SQLite database** is a prior-art question. The operator declined to
+guess; under the research-before-design ruling (D210) it goes to research first. Our own rig's current answer, measured
+2026-11-05 (Linux Fedora 45 7.2.15-300.fc45.x86_64 node v24.22.1) so the research compares against a real system:
+**one broker process** supervising **12 seat processes**, sharing **one SQLite store** (`./selfdev.sqlite`) plus the
+store's side files (`.broker.log`, `.broker.inbox/`); each seat is its **own OS process** with its **own worktree**, and
+its conversation history lives in the **shared** store. So we are "many processes, one store", not "one process per
+team" and not "one store per agent". The research prompt is commissioned and awaiting operator routing:
+`docs/reviews/base-agent-product-topology-research-prompt.md` (asks 7 questions: process topology, store topology, the
+base/team two-seam split, base-vs-extension policy in practice, per-agent memory/workspace ownership, documented
+failure modes, and naming conventions with five real examples; it demands ≤40-word verbatim quotes + URL + fetch date,
+because line ranges into an off-host agent's workspace are not portable — `docs/runbooks/research-request.md`).
+
+**What the boundary actually looks like today (measured, not asserted).** The extension mechanism is real and already
+used by the rig on itself: the config vocabulary registers `DURIG_EXTENSIONS` (`src/config.mjs:117`), the loader is
+`loadExtensions` (`src/extensions.mjs:57`) taking an explicit comma-separated path list (`src/extensions.mjs:31`), and
+the header states the trust boundary and the deliberate **absence of auto-discovery** — "which code runs in here must
+stay an explicit operator decision". durian-pi registers five extensions on its own seats: `durig.router`
+(`src/rig.mjs:617`, which carries `send_work`, `claim_work`, `complete_work`), `durig.seat-tools` (`src/seattools.mjs:238`,
+which carries `prepare_workspace`, `seat_root`), `coding-tools` (`src/tui/durable/adapter.mjs:607`), plus
+`src/seatguard.mjs` and the loader itself. So **the queue/role tool surface is already on the extension plane** — the
+good news for this policy. The gap is size: **5 of 59** `src/*.mjs` files register a `defineExtension` (counted with
+`grep -rln defineExtension src/ | wc -l` against `ls src/*.mjs | wc -l`), and the store, seat loop, broker and landing
+path are built in. Also note the two-plane trap the loader documents: a **pi-durable** extension and a **pi-coding-agent**
+extension are different things and cannot load into each other (`src/extensions.mjs`, header; ROADMAP 23) — any policy
+gate must say *which* plane it means.
+
+**Consequences the team must design in (decomposition is `lead`'s, not mine).** (a) The two minimum products need real
+definitions, not a burn-down: `docs/MVP.md` is a **rig** burn-down from 2026-10-08 and carries the D103 pre-rename
+banner, so it is the wrong home for a base-agent definition. (b) Testing must prove the policy rather than assert it:
+a **base-boot-with-zero-extensions** gate (boots, converses, edits, survives a kill/restart with
+`DURIG_EXTENSIONS` unset) and a **boundary gate** that refuses a new built-in customization the same way the docs gates
+refuse a stale citation — the code analogue of ROADMAP 115/133, and cheap enough to run in `check`. (c) Every seat
+turn already runs the *same* base with a different persona and extension list (`cli.mjs:463` loads per config), so the
+"each member has their own instance" question is partly settled by the process model and only the **store** half is
+open. (d) `docs/ROADMAP.md` must receive the resulting items as *registered, not scheduled*, and 128
+("Extensibility surface") is now **policy-mandated** rather than a research suggestion.
+
+**What only the operator can do.** Ratify the two product names (and the env/config prefix consequence); route the
+research prompt to the off-host research agent. Neither is delegated by silence, and nothing here was renamed
+unilaterally.
