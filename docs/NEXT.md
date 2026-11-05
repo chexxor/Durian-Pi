@@ -34,8 +34,9 @@ of 171–174 **plus** 268–273, in priority order) — the brief I prepared is 
 lines, gated by `demo/next-pointer.test.mjs` (0.3 s) — cut before you add.
 
 **Blocker:** nothing is blocked on the rig; **two things are blocked on the operator** — (1) the **push grant**
-(`main` is several commits ahead, unpushed; `git rev-list --count origin/main..main` = **8** at the time of writing,
-measure it), and (2) **the verifier arming spend decision**: arming `openai/gpt-oss-120b` on DeepInfra is metered, so
+(**the operator pushed through `6e23742a` at 2026-11-05T02:54:58Z** — `git reflog show origin/main` says `update by
+push`, `git ls-remote origin main` confirms the remote is at `6e23742a`; the delegate pushed nothing. Re-measure
+`git rev-list --count origin/main..main` — **1** at the time of writing), and (2) **the verifier arming spend decision**: arming `openai/gpt-oss-120b` on DeepInfra is metered, so
 an arm gate needs `DURIG_PROBE_CEILING_USD` — a dollar ceiling only the operator sets. `DURIG_VERIFIER_BASE_URL` is
 deliberately **unchanged** (`http://127.0.0.1:1234/v1`), so **nothing is armed** and no seat's model state moved.
 
@@ -168,10 +169,11 @@ same-host test through your own LAN IP passes for any port (own-address traffic 
 
 ## Operator decisions outstanding
 
-1. **Push grant.** `main` is ahead of `origin/main`, unpushed — measure
-   `git rev-list --count origin/main..main` (was **8** at `6e23742a`). Docs + pins + roadmap only; the delegate does
-   not hold the grant (AGENTS.md, D204), and under `docs/land.md` the docs landings `lead` routed to `devtools` keep
-   queueing behind it.
+1. **Push grant — exercised by you, not me, on 2026-11-05T02:5xZ.** `origin/main` moved `211e912c → 6e23742a`
+   (my ROADMAP/pins/research/DECISIONS commits). The delegate ran no `git push`; nothing in my env carries
+   `DURIAN_PI_ALLOW_PUSH`. What is still unpushed: measure `git rev-list --count origin/main..main` — **1** at
+   `1e75a17b` (the pointer re-cut + the SELFDEV pitfalls block). Under `docs/land.md` the docs landings `lead` routed
+   to `devtools` keep queueing behind this same grant.
 2. **Verifier arming spend.** Approve the candidate (`openai/gpt-oss-120b` on DeepInfra, $0.001419/call, 2,818 maximal
    turns) **and** set a `DURIG_PROBE_CEILING_USD` so the gate arm is ledgered; or rule a second key for
    account-level independence. Nothing is armed until you do.
