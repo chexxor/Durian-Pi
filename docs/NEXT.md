@@ -50,7 +50,7 @@ Run this first — all reads, no writes:
 
 ```bash
 cd ~/Git/Durian-Pi
-git status --short -- . && git rev-list --count refs/remotes/origin/main..main   # 7 ahead at 20:0xZ, 0 pushed
+git status --short -- . && git rev-list --count refs/remotes/origin/main..main   # re-measure: 8 ahead at 20:1xZ, 0 pushed
 DURIG_DB=./selfdev.sqlite node cli.mjs queue --id 5143 --id 5144 --id 5145 --id 5146 --id 5149 --id 5152 --id 5153 --id 5154
 node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status  # 12 s: local CLEAN, verifier 2 BLOCKs
 DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 0.1 s; hygiene counts, pm-owned
@@ -90,7 +90,7 @@ gate prose cites no resolvable id**. That is a `pm` release/cancel pass plus a `
 classes, not the 162, are where the hygiene work is.
 ## State (measured 2026-11-05T19:3x–20:0xZ, Linux Fedora 45 / kernel `7.2.15-300.fc45.x86_64` / node v24.22.1 / git 2.56.0)
 
-`main` @`1872d35f` (docs) on top of the landings, **7 ahead of `refs/remotes/origin/main`, 0 pushed** (the operator's push
+`main` @`1872d35f` (docs) on top of the landings, **8 ahead of `refs/remotes/origin/main`, 0 pushed** (this pointer's own docs commits move that number — re-measure, do not carry it) (the operator's push
 grant of 2026-11-05 was not exercised — the delegate lands locally and reports; `git push origin main` is the operator's to
 run or grant). Landed this session by
 SHA: `item-5131 3a7abc99` → merge `807f24a0`, `item-5111 083d2da2` → merge `a978bcd9`; `item-5125 385e3973` is **subsumed**
