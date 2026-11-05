@@ -2118,3 +2118,24 @@ the prefix forever.
 8. **A broker started with `--max-duration N` self-exits at N; an intent spooled while it is down is *pending*, not lost.**
    Re-check `tools/broker-serve.mjs --status` before concluding a send "didn't take". Deliveries are auditable:
    `grep INTENT ./selfdev.sqlite.broker.log` → `INTENT delivered=1 dead=0 dup=0`.
+
+9. **`tools/channel-preflight.mjs` has been *throwing* since `8160b8be` (#5125), and a crashing instrument looks like silence.**
+   `tools/channel-preflight.mjs:57` spawns `cli.mjs` with **`DURIG_CONFIG: RIG`** — the *rig* file passed as the *config* file.
+   Before #5125 that was harmless (the rig's own keys were accepted and ignored — the #5071 class); now `src/config.mjs`
+   **refuses** it, so every preflight dies at `tools/channel-preflight.mjs:59`:
+   `unknown config-file key(s): _readme, version, seats, edges, ownership, constitution in ./rig.selfdev.json`. Reproduced
+   twice this session. Do not read an empty/absent preflight verdict as channel health — run it and check the exit status.
+   Registered as ROADMAP 293. The general trap: **a new fail-closed rule silently turns every caller that relied on the old
+   leniency into a crash**, and the callers are in `tools/`, which the suite covers only if a demo actually invokes them.
+10. **`cli.mjs events --tail 400` returned 15,425 events spanning 2026-10-11 → 2026-11-05.** `--tail` does not bound the read
+    the way its name promises; `events --since` takes a numeric **cursor** (`cli.mjs:3455`), and `queue` has no time filter at
+    all (`queue --since=…` → `unknown argument`; known flags are `--json --id --status --to --no-body`). So the cheap answer to
+    "what moved in the last hour" does not exist — but `queue --json` **does** carry `transitions[].{at,by,to,event}` per row,
+    which is how the deferral wave below was dated without a full-feed read. Registered as ROADMAP 291.
+11. **The queue drained to *zero claimable rows* by *deferral*, not by completion, and the deferrals went to a non-seat.**
+    Bracketed by two runs of the same instrument: `queue-drain-audit` at session start said `deferred 16 · queued 162`; at close
+    `done 3816 · cancelled 812 · held 345 · deferred 183` and **no `queued`**. Every one of the 183 ends in
+    `{"event":"deferred","by":"supervisor","to":"human"}`, **171 inside the single hour 2026-11-05T20**, 67 of them `notice`
+    rows. `human` is not a seat (`rig.selfdev.json` registers 12; `intent.mjs human` → `unknown seat: human`), so the store now
+    says "nothing to do" while 528 rows are parked on a channel that cannot be woken — and `clockin` still prints a calm idle
+    rig. **Read the histogram, not the absence of red.** Registered as ROADMAP 292.

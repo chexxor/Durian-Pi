@@ -5735,3 +5735,113 @@ mapping would be a fake green.
 **288. The `driving-durian-pi` skill is a pre-broker artifact that teaches the deprecated verb as the primary path, while its sibling skill is current — two entry points, two truths about the same rig.** *(registered 2026-11-05 during the fast-iteration pass; a stale prompt is a fast-iteration defect because it makes the next operator re-derive what the instruments already know)* Measured (Linux Fedora 45, node v24.22.1): `.agents/skills/driving-durian-pi/SKILL.md` is **93 lines** and still says `node cli.mjs send pm "<task>" --body-file <file>` with no deprecation note, no broker, no spool, no `--yes-pm-wakes`, no `DURIG_DB=./selfdev.sqlite` for this rig's store, and its worktree examples are **Windows paths** (`C:/tmp/durig-dev/item-1`); `.agents/skills/delegating-to-durian-pi/SKILL.md` is **196 lines** and current (broker, spool, `intent.mjs`, the instrument table with measured costs). Both are tracked, both load, and a delegate that opens the wrong one gets a 2026-09 picture of a 2026-11 rig — which is how the `send`-without-`--env-file` `401` class keeps recurring. *Owner:* `scribe` (the rewrite) · `devtools` (a gate). · *Acceptance:* (1) the skill is rewritten to the current surface — store naming (`DURIG_DB` vs the `./rig.sqlite` default), broker + spool as the delivery model, `intent.mjs` as the blessed path with `send` marked deprecated, the preflight verbs, and OS-neutral path examples; (2) a check pairs **skill claims against the instruments they name** (every `tools/…` or `cli.mjs` verb in a tracked skill must exist in `git ls-files`/`--help`), same posture as `tools/instrument-provenance.mjs` (233) — a skill that names a removed verb is the prose version of a deleted suite member; (3) skills that carry a **cost column** keep it refreshed, since the point of that table is that seconds beat a session. · *Blind spots:* skills are prompt surface, so a rewrite changes seat behavior — it needs a dogfood read, not just a diff review; and a existence-only check will pass a skill whose commands exist but are **wrong for this rig** (right verb, wrong store), so (2) must also flag a tracked skill that names a database path not present in the tree.
 
 **289. The most expensive loop in the rig is not the model and not the suite — it is *learning how to operate the rig*: `docs/SELFDEV.md` is an append-only journal at 195,532 bytes / 2,088 lines (~49,000 tokens) that `AGENTS.md` tells every session to read, and nothing caps it.** *(registered 2026-11-05 under the fast-iteration ruling, **D213** — this is the "break the system into pieces that each have a fast loop" clause applied to the prompt surface itself)* Measured (Linux Fedora 45 `7.2.15-300.fc45.x86_64`, node v24.22.1, same command as the suite numbers): `wc -c docs/SELFDEV.md` = **195,532** (≈ **48,900 tokens**), `docs/NEXT.md` = **17,480**, `AGENTS.md` = **11,053**; `grep -c "^## "` over SELFDEV shows **20 separate `## Operational pitfalls…` blocks** appended session after session, and the file has roughly **tripled** since the instrument that reports it was written — `scripts/clockin.mjs:9` still carries the comment `docs/SELFDEV.md 57,589 B / 749 lines ~14,400 tok`. The instruments already *name* the problem (`clockin.mjs:232` prints **"SELFDEV (2088 lines, headings below) — read the section you need, not the file"** and then prints all 34 headings with line anchors; `docs/runbooks/session-start-cost.md` exists to stop exactly this read; `ROADMAP` carries its own **"never read whole; grep the item number"** instruction) but the **entry point still says "Read `docs/SELFDEV.md`"** with no bound, and **no gate fails on size** (`grep -rn "65_536\|MAX_BYTES" demo/*.test.mjs` finds only unrelated `contextWindow` fixtures). This is the piece with the worst iteration loop: every new delegate and every seat pays it, and its cost grows monotonically with successful work. *Owner:* `scribe` (the split) · `devtools` (the gate) · `lead` (what the entry point instructs). · *Acceptance:* (1) SELFDEV is **split into a stable runbook (the loop, the roles, the invariants) and an append-only pitfall journal**, and the entry point points at the runbook plus **"grep the journal for the symptom, do not read it whole"**; (2) the pitfall journal gets a **machine-usable index** — one line per pitfall with its symptom, its date, and its decision id — so `grep -i <symptom>` answers the question a full read was meant to answer, which is the same shape `docs/runbooks/README.md` already provides for runbooks; (3) a **size gate** fails the runbook when it exceeds a declared byte budget and *notes* the journal's growth so the trend is visible in `check`/`status`, with the same posture as `demo/next-pointer.test.mjs` capping the pointer; (4) `scripts/clockin.mjs`'s header comment and any quoted size are **generated, not typed**, so the instrument cannot lie the way its `57,589 B` comment now does; (5) consolidation is allowed to *delete* — a pitfall that has become a rule, a gate, or a runbook line is removed from the journal and cited by its new home, so the file's size tracks open knowledge rather than session count. · *Blind spots:* consolidation loses evidence — the dated prose of a pitfall is often the only record of *why* a rule exists (D103's banner rule that the audit trail stays truthful), so the split must keep the dated text reachable in the journal and move only the derived line, and a hard byte cap without a compaction path becomes a incentive to compress prose until it stops being executable (the research report's "prose you can run" standard).
+
+**290. Nothing resolves prose citations at whole-repo scale, so a delegate doc pass can invent a
+pointer and commit it.** *(the D213 iteration lens turned on the rig's own documentation plane)*
+**Observed** in this session's own work: `docs/runbooks/broker-down.md` (the file is
+`broker-down-or-stalled.md`), `docs/runbooks/degenerate-seat.md` (the close runbook is
+`degeneration-guard.md`), `docs/runbooks/seat-ram-pressure.md` (no such runbook — capacity cost is
+measured in `verifier-serving-headroom.md`) and `compaction-injected-content` at
+`src/citation.mjs:134` **in a file that is 124 lines long**, with no such finding class anywhere in
+`src/`. Every one of those was written by me inside ten minutes and would have been read by a later
+session as verified. The instrument exists — a 40-line resolver that collects every `path:line`
+token in a file and answers it against `fs.readdir(..., {recursive:true})` plus a line-count check —
+and it ran clean over the touched files afterwards (0 unresolvable `docs/runbooks/*.md` references).
+It lives in gitignored `.spike/delegate-20261105c/cite-audit.mjs`, so it is lost next session, which
+is the outcome `docs/SELFDEV.md`'s promote-out-of-`.spike` rule exists to prevent. Meanwhile
+`tools/review-cite-check.mjs --gate` is **red at 205 failing of 542 findings** (exit 1) — it checks
+that *findings the team already registered* still have evidence, not that *prose cites something real*.
+· *Prescribed:* promote the resolver into `tools/` (name it with the verb it performs, per D206's
+lesson that an unguessable instrument name costs the next session a probe), run it over every doc a
+commit touches, and gate on it only once the standing 205 are triaged so the gate stays informative.
+· *Blind spots:* the naive regex over-fires on prose that merely looks like a path (it reported
+`b/docs/ACCEPTANCE.md — MISSING` for text that contains no such token — a diff-style prefix in my
+own command transcript), so the gate must report counts before it reports verdicts; and a citation
+resolver that only checks **existence** still passes a pointer to a file that exists but does not
+say what the prose claims (the `docs/indexes/review-finding-index.md:21` class — a pointer to a rule
+that is not the rule you think you cited, which only `tools/review-cite-check.mjs`'s content check
+catches). Existence and meaning are two different gates.
+
+**291. The store has no recency read, so "what moved in the last hour" costs a full-feed read — the
+same cost family as D183/#4942/#5079, on the events plane.** **Observed** this session:
+`cli.mjs events --tail 400` returned **15,425 events** spanning 2026-10-11T21:07 to
+2026-11-05T20:58 — the flag does not bound the read the way its name promises — and
+`events --since` (`cli.mjs:3455-3460`) takes a **numeric cursor** (`--since <seq>`) that you can only
+obtain from a prior full read. `cli.mjs queue` has no time filter at all:
+`queue --since=2026-11-05T17:43:17` → `queue: unknown argument --since=... (known flags: --json,
+--id, --status, --to, --no-body)`. So the cheapest honest answer to "what did the team do today" is
+either a 15k-event dump or a per-row `show`. · *Cost if unfixed:* every session-start that wants
+recent activity pays the full-feed cost, which is exactly the class ROADMAP 289 registered for the
+onboarding read; and a deferral wave (item **292**) is only visible because the JSON happens to carry
+`transitions[].at` per row. · *Prescribed:* an `events --since=<ISO timestamp>` (or `--since=24h`)
+bound by the seq the timestamp first appears at — a bisection over the existing seq-ordered feed, no
+schema change — and `queue --touched-since=<ts>` filtering on `transitions[].at`.
+`tools/request-trace.mjs` already walks both tables in one process pass (`src/cursor.mjs:1-4` says
+exactly why: three separate scans each paid their own process boot and store round-trip), so the
+plumbing for a cheap recency read exists. · *Blind spots:* timestamp→seq bisection needs the feed to
+be seq-monotonic (it is per the `events` contract, but a gate should say so), and a
+timestamp-bounded read that silently returns nothing looks identical to "nothing happened" —
+the same false-completeness trap as a citation list capped at 15 findings
+(`docs/runbooks/delegate-doc-hygiene.md:3`), so it must print the scanned range with the count.
+
+**292. Supervisor deferral converts "no seat woke for this work" into "parked to a recipient the rig
+cannot wake", and it fired 171 times in one hour.** **Observed** in one session, both ends measured:
+at session start `DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --db ./selfdev.sqlite`
+reported `deferred 16` and `queued 162`; at close the same instrument reports
+`histogram: done 3816 · cancelled 812 · held 345 · deferred 183` — **zero `queued` rows**, an
+actionable queue that no longer exists. Every one of the 183 has the same last transition:
+`{"event":"deferred","by":"supervisor","to":"human"}`, and **171 of them are timestamped inside the
+single hour 2026-11-05T20** (`transitions[].at` — the queue JSON does carry it, contrary to how it
+reads at a glance). 67 of the 183 are `notice` rows. The recipient is not a seat:
+`node intent.mjs human --body-file ...` fails with `unknown seat: human`, and `rig.selfdev.json`
+registers 12 seats, none named `human`. So the deferral is addressed to a channel that cannot be
+woken, and the drain audit's `orphan candidates: 75` class is the same shape one level down.
+· *Cost if unfixed:* the store's headline state reads "nothing to do" while 528 rows
+(held 345 + deferred 183) are parked, and the next session's clock-in — which is a **green**
+`status`, `active=0 idle=0` — will report a healthy idle rig. That is the false-completeness failure
+mode in the most load-bearing place in the product: the rig's own account of whether work exists.
+· *Prescribed (a measurement first, per the operator's 2026-11-05 ruling, not a policy change):*
+before tuning the deferral, run the **wake-every-seat measurement** — dispatch a real row, wake the
+team, and publish `tools/latency-budget.mjs`'s `WAIT 72.4% / WORK 13.0% / HELD 5.9%` plus a
+channel-wakeup latency per role (ROADMAP **287**) — so the tuning is against observed claim-wakeup
+behaviour rather than a guess. Then: (a) a supervisor deferral must record **why** (no-claim vs
+no-wake vs no-seat) as a row fact, not only `by`/`to`; (b) deferring to a non-seat recipient must be
+refused at write time the way `intent.mjs` refuses it at send time — the same
+refuse-before-the-request posture as D201's spend catalog and item 5111's git guard; (c) `status`
+should not print a healthy-idle verdict when non-terminal rows are addressed to recipients that do
+not exist. · *Blind spots:* a longer deferral timeout trades away the thing D67 bought (a row that is
+claimable forever is a lie about attention), so any change needs the **idle-seat contract**
+(`docs/runbooks/broker-down-or-stalled.md`'s `no-work` rule) re-asserted in the same row — otherwise
+the fix is "keep rows queued so `status` looks busy", which is exactly the false-green D91 forbids;
+and `--yes-pm-wakes` exists because waking is a spend decision, so a wake-and-measure run is an
+operator grant, not a delegate action.
+
+**293. The channel instrument the runbooks tell you to run first has been *throwing* since a fail-closed
+config rule landed — and a crashing instrument reads as silence.** **Observed** twice this session:
+`node --env-file="$HOME/.config/durig/env" tools/channel-preflight.mjs` dies with an uncaught
+`Error: cli.mjs queue exit 1: {"ok":false,"error":"unknown config-file key(s): _readme, version, seats,
+edges, ownership, constitution in ./rig.selfdev.json — no code reads these, so they are silently
+ignored (the #5071 accepted-and-ignored class)…"}` at `tools/channel-preflight.mjs:59`. Cause, pinned:
+`tools/channel-preflight.mjs:57` spawns `cli.mjs` with **`env: {DURIG_DB: DB, DURIG_CONFIG: RIG}`** — the
+**rig** file handed to the **config** loader — which was tolerated until `8160b8be` (**#5125**, "a config
+file may not set a key no code reads") made it fatal; that sha reached `main` through
+`807f24a0 merge: land item-5131 onto main`, i.e. through a merge **this session** performed. The rig's
+health state is otherwise fine, which is the point: `broker-serve.mjs --dry-run` on the same store printed
+a normal finding set (`single-model-rig` NOTE, `seat-shell-availability` NOTE, `live-tree-dirty` BLOCK),
+so the failure is the *instrument*, not the channel. · *Cost if unfixed:* every
+`docs/runbooks/*` path that starts with the preflight (`docs/runbooks/broker-down-or-stalled.md`,
+`docs/runbooks/local-provider-down.md`, the delegate skill's first move) loses its provider/seat-model
+read at exactly the moment a situation is bad enough to need it, and since the throw is uncaught the
+operator sees a stack trace, not a verdict — the same legibility failure as a probe that prints nothing
+because it died. · *Prescribed:* stop overloading `DURIG_CONFIG` for rig selection. Either pass the
+config file the CLI would have found anyway (`DURIG_CONFIG` unset, `DURIG_DB` set) and keep `--rig` as
+the rig argument, or give `cli.mjs` an explicit `--rig <file>` and use it in the tool; then add a
+`toolchain`/`rig`-area demo that **runs the preflight against the tracked `rig.selfdev.json`** and
+asserts it exits 0 and prints a verdict — because a `tools/` script that only works in the field is not
+covered by any demo, which is what `docs/runbooks/slow-loop.md`'s "the loop that is missing is the one
+you did not know you had" clause is for. · *Blind spots:* the tempting fix — registering `_readme,
+version, seats, edges, ownership, constitution` in `CONFIG_KEYS` — would re-open the exact
+accepted-and-ignored class #5071 was raised for, so the gate must be "the rig file is not a config
+file", not "the config loader forgives rig keys"; and the vocabulary is mid-rename (D103: `DURIG_*` is
+live, `DURIAN_PI_*` half-applied), so the fix must be written against `CONFIG_KEYS`
+(`src/config.mjs`) rather than a hand-maintained list, or it rots in a release.
