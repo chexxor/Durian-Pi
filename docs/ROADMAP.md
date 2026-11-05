@@ -5796,8 +5796,12 @@ reads at a glance). 67 of the 183 are `notice` rows. The recipient is not a seat
 `node intent.mjs human --body-file ...` fails with `unknown seat: human`, and `rig.selfdev.json`
 registers 12 seats, none named `human`. So the deferral is addressed to a channel that cannot be
 woken, and the drain audit's `orphan candidates: 75` class is the same shape one level down.
-· *Cost if unfixed:* the store's headline state reads "nothing to do" while 528 rows
-(held 345 + deferred 183) are parked, and the next session's clock-in — which is a **green**
+· *Cost if unfixed, measured:* the store's headline state reads "nothing to do" while 528 rows
+(held 345 + deferred 183) are parked, **and the rig then pays a wake to say so** — at
+2026-11-05T22:52:52Z `PASS 5 ... woke=impl,qa,lead,scribe,devtools,auditor,security,qa2,architect` (9 seats) fed
+`lead` the instruction *"Your queue holds parked rows awaiting release — there is nothing claimable for you.
+Check `status` for which rows are parked; do not call `claim_work` expecting work."* (`log lead`, event 289893):
+nine seat turns spent learning that the backlog was parked the hour before. and the next session's clock-in — which is a **green**
 `status`, `active=0 idle=0` — will report a healthy idle rig. That is the false-completeness failure
 mode in the most load-bearing place in the product: the rig's own account of whether work exists.
 · *Prescribed (a measurement first, per the operator's 2026-11-05 ruling, not a policy change):*
