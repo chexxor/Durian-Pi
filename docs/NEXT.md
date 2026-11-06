@@ -4,7 +4,7 @@
 agent teams carry credentials and secrets **before** ruling ROADMAP **333**, with the hypothesis that "the best
 architecture would be a separate process or service that holds secrets", and named **oh-my-pi** mid-session. The sweep
 landed: **ten pinned clones read** plus two vendor docs labelled `advertised-elsewhere`; **D225** records what it binds;
-rows **334–342** are registered in `docs/ROADMAP.md`; pitfalls **55–59** added. The operator's session-G push grant was
+rows **334–343** are registered in `docs/ROADMAP.md`; pitfalls **55–59** added. The operator's session-G push grant was
 **spent** this session: `git push origin main` → **`4c3fd7cc..4620cecf`**, and `git rev-list --count
 refs/remotes/origin/main..main` → **0** afterwards. The session-**L** pointer is VERBATIM in `docs/NEXT-ARCHIVE.md`
 (heading at line 12409; the appended body is byte-identical to the file it replaced — `diff` of 149/149 lines →
@@ -60,7 +60,9 @@ not redirect broker traffic; no silent fallback), **334** (implement pi's `Crede
 **two types**), **338** (command-resolved TTL credential + an `auth check` probe; carrier `#5277` already queued for the
 prototype), **335** (a seat asks the operator for a missing secret instead of dying), **339** (keychain-first, stdin not
 argv). Free trio first: **336 → 337 → 341 ≈ half a day each, $0, gates are the existing canaries.** **340** and **342** await
-the operator (a new local listener / a new moving part).
+the operator (a new local listener / a new moving part). Smaller items for the same pass: **343** (`vendor-pins
+--freshness` prints the drift direction inverted — ~1 h, `devtools`, gate is a fixture test on a clone with no local tags)
+and the **312**-pattern promotion of the two probes named in Blocker 5.
 
 **Next command** (host signature measured with it — Linux, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
@@ -83,9 +85,12 @@ node scripts/test.mjs --area docs && node scripts/test.mjs --area check && node 
 ```
 
 **Push state:** `origin/main` = **`4620cecf`** — session L's five commits plus its D224 batch were pushed this session
-(`4c3fd7cc..4620cecf`), and the session-G grant is **spent**. This session's credential-research docs commit needs a
-**fresh per-batch operator grant** (D218), or `DURIAN_PI_ALLOW_PUSH=1` at launch. `git rev-list --count
-refs/remotes/origin/main..main` is the check.
+(`4c3fd7cc..4620cecf`), and the session-G grant is **spent**. Two local-only commits from this session need a **fresh
+per-batch operator grant** (D218), or `DURIAN_PI_ALLOW_PUSH=1` at launch: **`7eaaf131`** (the credential sweep, options +
+follow-up prompt, rows 334–342, D225, pitfalls 55–59, session-L pointer archived verbatim) and **`474f94f5`** (M12
+resolver-not-value, the five per-project review deltas, the D225 HEAD correction); a third commit adds row **343**
+(`vendor-pins --freshness` prints the drift direction inverted). `git rev-list --count refs/remotes/origin/main..main` is
+the check.
 
 **Blocker:**
 1. **311 still gates every further pass** — cleanup refuses with the unreadable `undefined/anthropic-ai-sdk…` string
@@ -103,7 +108,7 @@ refs/remotes/origin/main..main` is the check.
    model reply landed in `docs/reviews/`. The delegate did **not** commit or delete it; it needs a `scribe`/`lead` pass
    (rewrite-or-discard, and it is not citation-grade as it stands).
 7. `selfdev.sqlite.spend.jsonl` is untracked and not ignored (**310**). The **327** stop-file writer is still unidentified.
-8. **`docs/SELFDEV.md` is ~255 KB / ~64k tokens and `docs/ROADMAP.md` ~675 KB.** Read headings + grep the symptom
+8. **`docs/SELFDEV.md` is ~255 KB / ~64k tokens and `docs/ROADMAP.md` ~680 KB.** Read headings + grep the symptom
    (`scripts/clockin.mjs` prints the headings with anchors). Pitfalls **55–59** are this session's: the `/proc` path (55),
    the classifier floor (56), "a secrets service is not automatically a boundary" (57), bounded upstream reads (58), and
    roadmap rows are appended at the **end of the table**, not numerically adjacent (59).
