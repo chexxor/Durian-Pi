@@ -3,9 +3,9 @@ runbook: local-provider-down
 symptom: "a local seat fails to run: `model_error: 401 \"Invalid API key\"`, `model_error: Connection error.`, or `No API key for provider: local`; `/v1/models` on the configured port 401s or does not list the model the seat's `local/<id>` names. NOTE the port may be OPEN and answering while the provider is unusable — see Diagnose state 3 and the 2026-11-04 state 5"
 writes: false
 precondition: "none"
-last_verified: 2026-11-04
+last_verified: 2026-11-06
 verified_by: delegate
-evidence: "2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified."
+evidence: "2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified. 2026-11-06: state 6 (a LAN strata box passes /models and /health yet misses the preflight's 20s completion bound -> `START REFUSED`) and state 7 (per-box keys after a rotation: one 74-char `DURIG_LOCAL_API_KEY` 401s on BOTH boxes) found; ROADMAP 325/326." 
 check_rule: null
 ---
 
@@ -300,3 +300,49 @@ curl -s -H "Authorization: Bearer <the key>" http://192.168.1.101:47832/v1/model
 
 **No firewall change at all** is needed for the SSH-tunnel option above: `ssh` is already an allowed service, and the
 tunnel keeps the URL loopback (so durig also needs no price declaration).
+
+## 2026-11-06: state 6 — the port is OPEN, the model is LOADED, and the box still cannot serve a seat (325)
+
+This is the case where every "is it up?" read says yes. `/v1/models` answers in 2-3 ms and reports
+`"status": {"value": "loaded"}`, `/health` answers `{"status":"ok","loaded":true,"max_context":131072}`, and the rig's
+preflight still refuses to start:
+
+```
+NOTE   provider-local-priced-metered: local/<id> is a metered endpoint priced at $0/$0 per Mtok …
+BLOCK  provider-local-completion-failed: local: /chat/completions failed — timeout after 20s
+START REFUSED: provider-local-completion-failed
+```
+
+Read the box's own scheduler first — it is a **single slot**, and it tells you who is in it:
+
+```bash
+curl -s -H "Authorization: Bearer <key>" http://<lan-host>:8080/status
+# measured: {"busy":true,"queued":0,"phase":"answering","prompt_tokens":18978,"generated":5316,"max_tokens":16384,
+#            "thinking_budget":12288}   … and `generated` moved 5,316 -> 5,830 in 64 s  => ~8 tok/s
+```
+
+Then time a real completion **against the preflight's bound**, because that is the number the rig enforces:
+
+```bash
+node .spike/delegate-20261106/strata-endpoint-check.mjs   # prints ctx, /status, and ms-vs-20000ms PASS/FAIL
+```
+
+Measured on 2026-11-06 (Linux Fedora 45, node v24.22.1): the LAN box took **129.5 s** for a 31-token completion
+(`finish_reason: stop`) and timed out at 150 s and 45 s on other attempts; the loopback box took **1.4 s** on the same
+prompt. **Do not lower the gate by trial and error.** If a minute-scale seat turn is acceptable, raise
+`DURIG_STREAM_TIMEOUT_MS` deliberately (a capacity ruling — put the measured tok/s on the row that raises it). If it is
+not, keep the family on loopback: the flip is one `DURIG_LOCAL_BASE_URL` plus `DURIG_LOCAL_CONTEXT` (131072 on the LAN
+box, 200000 on loopback — take the number from `/health`'s `max_context`, not from memory) plus that box's key.
+
+**State 7 — after a credential rotation, which box holds which key.** One `DURIG_LOCAL_API_KEY` arms exactly one box.
+Measured: the rotated rig key (74 chars) was **401 on both boxes**, while pi's own per-provider entries
+(`~/.pi/agent/auth.json`: `strata.key`, `strata-server.key`) each answered **200** on their own box and **401** on the
+other. `cli.mjs status`, `check` and the roster stay green through all of this; the only instrument that caught it is the
+preflight completion probe. And when you diagnose it, **do not paste preflight output into a report** — the open
+**295** prints `DURIG_LOCAL_API_KEY`/`DURIG_VERIFIER_API_KEY` **values**.
+
+**The price footgun on this path (323).** A LAN URL is not loopback, so the family becomes `metered` and needs a DECLARED
+price (`0` is legitimate). But `CONFIG_KEYS` has no `DURIG_LOCAL_PRICE_*` keys, so putting them in `durig.config.json`
+makes **every** CLI verb exit `unknown config-file key(s) …`. Declare them in the **environment** (`~/.config/durig/env`,
+loaded with `node --env-file=…`), and remember the consequence: a start **without** `--env-file` then registers no model
+row and the whole author family goes dark with `registration-refused`.

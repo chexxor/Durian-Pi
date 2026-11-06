@@ -17,43 +17,50 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 
 ## NEXT SESSION
 
-**Current item: `lead` cuts `docs/ROADMAP.md` 294–322, and two things are now first: the idle backoff (300/313) and the
-worktree leak (311).** B7 is **signed** (D217), the 1b hostname scrub is **executed**, and 297's priced legs are **run** —
-they came back pointing the other way from the assumption on the table (**322**). Order the operator ruled stands: backoff
-before capacity.
+**Current item: `lead`'s owners work the rows cut from ROADMAP 294–326; the operator holds one live decision — the second
+strata box.** Queue at max id **`#5223`**: `38 queued, 9 claimed, 347 held, 174 deferred`; verifier-family spend
+**$0.22538 of the operator's $0.50 trigger (45.1%)**; worktrees 26.
 
-Queue at max id **`#5205`** (25 `queued`, 8 `claimed` at last read; the next session re-reads it below before
-any write).
+**The live operator decision (325).** The rig's qwen seats were pointed at the second strata box and the rig's own gate
+refused to start: `BLOCK provider-local-completion-failed: local: /chat/completions failed — timeout after 20s` →
+`START REFUSED: provider-local-completion-failed`. Measured on that box: `/health` ok, `/v1/models` reports the model
+**loaded**, `/status` shows a **single slot** serving another client at **~8 tok/s** (`generated` 5,316 → 5,830 in 64 s);
+a 31-token completion took **129.5 s**; loopback took **1.4 s** (`ctx` 204800 vs 131072, `images` true vs false).
+**Interim now in effect: the `local` family points at loopback** so the seven author seats run. The operator's choice:
+(a) stay on loopback, or (b) use the LAN box and **raise `DURIG_STREAM_TIMEOUT_MS` as a dated ruling**, accepting
+minute-scale seat turns while another client holds the slot. The gate was **not** lowered to make anything pass.
 
-**The 311 plan, with the cause now measured (three halves, one command each).**
-1. *Read the classification first, read-only:* `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` →
-   `total 26 = seat-root 8, **reapable 14**, live 2, locked 2, dirty 0`. The leak is unreaped **known**-state, not
-   unidentifiable.
-2. *Fix the message:* `src/worktree.mjs:1237` prints `${entry.path}/${entry.name}` and **`dirent.path` is `undefined` on
-   node v24** (property is `dirent.parentPath`) — that is the unreadable `undefined/…`.
-3. *Fix the threat model, which is the actual leak:* the guard throws on **any** symlink in a recursive walk, and the
-   entries it trips are `node_modules` package-manager links (`…at undefined/anthropic-ai-sdk`, 6 in `serve.err`;
-   10-57 links per live worktree measured). Any worktree that installs a dependency is **permanently unreapable**. Fix:
-   drop `node_modules` before the walk (or accept links that stay inside the worktree), and refuse only links pointing out
-   toward protected trees — keep what D60/Git-2.42 actually protect.
-4. *Give it a landing:* a **reap** verb fed by `worktree audit`'s `reapable` set, and `complete_work` cleanup failures into
-   attention instead of only stderr. Acceptance: after a pass, `git worktree list | wc -l` returns to seat count plus
-   declared roots (it went 17 → 26 in one day).
+**Two rows are already done — do not pay twice.** Queue `#5213` (qa: run 297's three priced legs) is **already run**
+(4 legs, $0.00184, finding on ROADMAP **322**; `DURIG_VERIFIER_MAX_TOKENS` is now **6000** by operator approval) — the
+measurement still owed is `#5214`/**317**. Queue `#5222` (pm: 319's scope question) is **answered**: option 1b approved and
+executed (45 occurrences on Linux-asserting lines, 5 left on OS-unstated lines).
+
+**Order the operator ruled still stands: backoff before capacity** — **313/300** land before any concurrency, verifier slot,
+or per-seat cap change. New rows this turn: **323** (`CONFIG_KEYS` has the VERIFIER price keys and not the LOCAL ones —
+a LAN local family can only be armed through `--env-file`, else it registers no model row and all 7 author seats go dark),
+**324** (the operator's **$0.50 verifier-family** threshold has no enforcer; the switch would make the rig single-model
+and drop D137's cross-family verifier), **325** (endpoint readiness vs the 20 s bound), **326** (a rotation darkens the rig
+invisibly; keys are per box).
 
 **Next command** (host signature measured with it — Linux, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
 
 ```bash
 cd ~/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node cli.mjs status          # if it times out: fresh heartbeatAt + frozen lastPassAt = 303, not a broken store
-DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit  # the reapable count, before anything else
-node intent.mjs lead --body-file .spike/delegate-20261106/brief-lead-4.md   # 311 plan + 321/322 + the B7 ruling
+DURIG_DB=./selfdev.sqlite node cli.mjs status          # empty/timeout + fresh heartbeatAt + frozen lastPassAt = 303, not a broken store
+node .spike/delegate-20261106/verifier-spend-tripwire.mjs   # family spend vs the operator's $0.50 trigger (free)
+node .spike/delegate-20261106/strata-endpoint-check.mjs     # is the LAN box inside the 20 s preflight bound yet? (free)
+node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --dry-run   # findings only; NEVER paste its output -- 295 prints credential VALUES
+node intent.mjs lead --body-file .spike/delegate-20261106/brief-lead-5.md    # 297/319 done, 323-326 to cut
 node scripts/test.mjs --area docs && node scripts/test.mjs --area check
 ```
 
-**Blocker:** **nothing is blocked on the operator right now** — B7, 1b, and 297 are closed. The one live constraint is
-procedural: the push grant is now **per-batch** (D218), so this batch waits for its own yes. Second-order: 311's fix is
-`lead`'s to cut, and until it lands, every pass adds worktrees.
+**Blocker:** (1) The strata-box capacity call above — operator's, and it decides whether the author family runs at
+second-GPU speed. (2) **The preflight prints credential VALUES (295)**: the current `DURIG_LOCAL_API_KEY`/
+`DURIG_VERIFIER_API_KEY` values are in a durable transcript; cut 295 before further preflights, rotation is the operator's.
+(3) `selfdev.sqlite.spend.jsonl` is untracked and not ignored (**310**) — a workspace move that skips it restarts the caps
+from zero. (4) The verifier switch at $0.50 is a ruling with a consequence not yet signed: single-model + no cross-family
+verifier (**324**).
 
 ## State (measured 2026-11-06T03:4xZ, same host signature as above)
 

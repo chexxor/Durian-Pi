@@ -198,6 +198,8 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Which model/quantization a provider is actually serving (variant activation, unload-by-`instance_id`, model-server lifetime vs a live run) | verifier-model-server, model-server-broker-race |
 | What a model call costs, where the money went, and what stops a call before it is sent (three cap axes, one ledger, locality of the endpoint) | spend-cap-tripped |
 | Which model the rig NAMES vs which `.gguf` answers (dead pointer after a swap) | hygiene-and-dead-model-pointers, verifier-model-server |
+| A strata/`local` endpoint answers `/v1/models` and `/health` (`loaded: true`) but the broker prints `BLOCK provider-local-completion-failed … timeout after 20s` and `START REFUSED` — the box is a single slot serving someone else at ~8 tok/s | local-provider-down (state 6), spend-cap-tripped |
+| After a credential rotation the seats go dark though `status`/`check` are green — one `DURIG_LOCAL_API_KEY` arms one box, and the old key 401s on both | local-provider-down (state 7) |
 | A woken seat dies `no_model` / `Model <provider>/<id> is not available` while `check` and the pointer demo are both green — the dead pointer is the **store's** per-conversation `pi.agent` pin (fix verb `up --refresh`, and it resets seat context) | hygiene-and-dead-model-pointers (Diagnose step 4, Do step 2b), seat-reset |
 | A seat shell that cannot spawn on this host (217), and whether seat hygiene has ever been measured | hygiene-and-dead-model-pointers, workspace-move |
 | A delegate-written file that was never committed | transcript-recovery (`tools/transcript-recovery.mjs`), tracked-files-missing-on-disk |
