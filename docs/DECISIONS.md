@@ -9636,3 +9636,74 @@ That closes the last held operator decisions except one, and each answer is now 
   `restore` and `checkout-index` against the shared tree, and `docs/runbooks/tracked-files-missing-on-disk.md` forbids `git restore .`
   there. **Standing rule from this:** a delegate commits its doc edits **before** any broker verb, and proves presence at clock-out by
   grepping its own phrase — a clean `git status` for a path is exactly what a lost edit looks like.
+
+## D223 — the authorized 600 s pass ran and is measured; `303` is now the default exit of every bounded pass, and the `wake-failed` burst at start is contention the retry already fixed (2026-11-06T18:0xZ, delegate acting; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+**What the operator's answers turned into work.** All six answers were acted on: the push grant was spent
+(`git push origin main` → `ffbd0e1e..4c3fd7cc`, `git rev-list --count refs/remotes/origin/main..main` → `0`); the credential
+rotation was verified **without spending a token** by a masked keycheck (`.spike/delegate-20261106c/keycheck.mjs`) that prints
+only booleans and advertised-model counts — `local` `127.0.0.1:8080/v1` → `200`, `models=1`, the pinned `qwen3.8-flash-next-iq3_s`
+present; `verifier` `api.deepinfra.com/v1/models` → `200`, `models=174`, the pinned `openai/gpt-oss-120b` present — so **D222
+item 6 is closed: the rotated keys are live on both planes and nothing needs re-keying**, and that probe is now a standing
+pre-flight (queue row **#5277** promotes it from gitignored `.spike/` into `tools/`, same disposition as 312). The answers were also handed to `lead` as a spooled brief
+(`.spike/delegate-20261106c/brief-lead-9.md`, request `…-lead9`, delivered — `intent.mjs` printed `delivered` and `lead` opened
+with it at `17:43:19Z`).
+
+**The pass (one, 600 s, as authorized) and what it moved.** `tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600`,
+`START pid=884989 … maxDurationMs=600000 idleExitMs=300000` at `17:40:43.462Z`. Queue: max id `#5270 → **#5285**`;
+`done 3857 → 3861`, `deferred 171 → 174`, `queued 59 → 54`, `claimed 13 → 14`, `held 363`, `cancelled 819`. Verifier-family
+spend `744/$0.29660 → 769/$0.31480` = **63.0 %** of the operator's $0.50 trigger (the pass cost **$0.01820**; headroom
+**$0.18520**) — the tripwire says the next pass is still allowed, and 321/317 remain the two rows that move that number.
+Worktrees `35 → **37**`, `reapable 19 → 16`, `stale 15 → 18`: 311 has **not** landed, so a pass still leaks two worktrees.
+
+**D1 — a bounded pass no longer stops itself; 303 is now the default, not the exception.** The broker logged
+`EXIT pid=884989 reason=deadline passes=-` at `17:57:50.731Z` — **17 min 7 s past its own 17:40:43Z deadline** — while
+`selfdev.sqlite.broker.json` kept a fresh `heartbeatAt` and a frozen `lastPassAt`, the same 303 signature as the previous
+session. `tools/broker-serve.mjs --stop` refused it in the grace window ("this broker is still processing a model turn. Wait
+~10 more minutes and run again, or run `cli.mjs resume` first"); `sqlite3` showed **no `*genlock*` table**, so there was nothing
+to hold; `kill 884989` removed it; `cli.mjs resume` → `resumed 0 seat(s); 0 still restricted`. This is now **7 reproductions in
+two sessions with 0 clean self-exits**, so the delegate's operating rule changes: **at `deadline + 2 min`, treat the broker as
+exited-but-lingering** — compare `heartbeatAt` vs `lastPassAt`, `kill` the pid from `selfdev.sqlite.broker.json`, `resume`, then
+`ls selfdev.sqlite.broker.stop` — and it did exactly that, leaving **no stop file** (327 did not reproduce this run).
+
+**D2 — the scary `wake-failed` burst at start is store contention that the retry already fixes; read the class, not the line count.**
+Nine of twelve seats (`pm,impl,qa,scribe,devtools,auditor,security,qa2,architect`) printed `wake-failed … Session failed after a
+storage error; close and reopen it` at `17:40:54.890Z`, and the same line carried `class=overload` with the cause chain inside
+`src/broker.mjs` (`classifyErrorText` walks `cause`, so the class *does* name contention even though the message does not). The
+`WAKE-RETRY` line and the nine `WAKE` lines that follow are **227 ms apart** (`17:40:54.890Z` → `17:40:55.213Z`): all nine woke
+on the first retry. **Ruling for delegates: do not treat 9/12 dark seats at start as an outage and do not add a client-side
+fallback** — the number to check is whether `WAKE` lines follow within a second. What *is* still missing is that the client-visible
+text names no cause, which is 78's concern and is recorded as a pitfall, not a new row.
+
+**D3 — 329's closed-store refusal is not limited to a wedged broker.** A read spooled at **`17:49:24.792Z`** (`op=read view=health
+from=cli`, requestId `15c71ce7-eb3a-4520-8a8c-d907dd939465`) was dead-lettered with `apply failed: SqliteStorage is closed` **while
+`lastPassAt` was advancing** (passes logged around it), and `watch --once --json` returned that refusal to the client in < 1 s at
+17:46Z. Dead-lettered reads grew **5 → 6**, 6/6 the same reason, 6/6 reads of `queue`/`health` from `cli`. So 329's fast-fail half
+already works when the inbox is being drained, and its 120 s dark half is a *drain* problem (nothing is applying ops) — the
+prescription stands (fast-fail with a named cause + publish the `dark` state), and the shape the operator approved in D222 item 4
+is unchanged. The row was amended rather than duplicated.
+
+**D4 — 330's lost-edit damage is bigger than my own file.** At clock-in the shared tree carried `M docs/ROADMAP.md` at
+**842,971 B / 8,432 lines** against a tracked blob of **639,339 B**: **203,632 B** of uncommitted prose expansion of the roadmap
+table (rows 303–328 rendered out of table form). By the time I edited that file at ~17:0xZ it matched the tracked slim again
+(`git diff --stat` empty), and it is now **646,985 B** = slim + my two rows. **No commit touched `docs/ROADMAP.md` between
+`ffbd0e1e` and `1950926a`**, so the expansion vanished with no `merge`/`rebase` in the log — mechanism unverified, size measured.
+Two rules follow: (a) at clock-in, `git diff --stat` **per path** is part of the inventory, and a 203 KB uncommitted doc delta is
+lane work to report, not noise to overwrite; (b) staging a doc path sweeps in whatever a lane left uncommitted in the shared tree —
+`1950926a` says "register 329-330" (+4/−1) only because the slim it landed on was someone else's uncommitted state.
+
+**D5 — the next spend is 311's, and it is a Windows-half item too.** `lead` opened the brief and turned the answers into carrier
+rows before the deadline. Read from the store (`cli.mjs queue --json --no-body`, broker down → the direct-SQLite fallback), the map
+is: **#5273** `impl` — "311 ANSWER, ungated (replaces #5256)": the junction ruling for #5001, the reap verb for #5030, and the
+operator-endorsed 311(ii) Windows/`verified-partial` rule — **still `queued`, nobody claimed it in 600 s**; **#5275** `architect` —
+ROADMAP **329** carrier, option (a) approved, option (b) (client-side store open) still refused; **#5276** `impl` — ROADMAP **330**
+carrier (find the verb, refuse it, no auto-stash, plus the completeness check); **#5278** `qa` — "VERIFY 311(ii) — Windows-side
+observation required to close the NTFS junction half; **parked** so a Linux-only green cannot close it"; **#5274** `pm` — queue
+surgery: close #5233 as operator-discharged, release-or-close the stale #5230, and release 311's carriers first; **#5277** `devtools`
+— promote the masked keycheck into `tools/`; **#5279** `scribe` — runbook for the undiscoverable `block` reason → constraint-kind
+pairing; **#5280** `pm` (held) — **KEEP-GATE: do NOT prune refs `item-4829` / `item-5147`**, they are the only carriers of a
+security-seat sandbox review; **#5281** `lead` (held) — the operator's seat-instruction wording proposal; **#5282/#5283** `pm` —
+measured `sync-pi` defects (its default report says `built: []` / `linked: null` on a fully built and linked tree; a UTF-8 BOM in
+`scripts/sync-pi.mjs` makes `node --check` red on a file that runs fine). Duplicates closed during the pass: **#5271**, **#5272**.
+**Ruling: the delegate does not claim, complete, or route any of these.** Next session runs a pass with 311 first and reads #5273's
+owner before spending more verifier family.
