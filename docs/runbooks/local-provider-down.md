@@ -5,7 +5,7 @@ writes: false
 precondition: "none"
 last_verified: 2026-11-04
 verified_by: delegate
-evidence: "2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified."
+evidence: "2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified. PARTIAL re-verification 2026-11-06T08:0xZ (host signature in docs/NEXT.md): the PORT pointers re-measured — `curl` to `127.0.0.1:47831` and `127.0.0.1:47832` both exit **7** (ECONNREFUSED, `HTTP 000`); `ps -eo pid,args` shows the live launch `-m serve.server … --host 0.0.0.0 --port 8080` and `ss -ltnp` shows **`0.0.0.0:8080`** owned by that serve.server pid; `curl http://127.0.0.1:8080/v1/models` answers `authentication_error: missing or wrong API key`. The firewall section is **NOT** re-verified: `firewall-cmd --state` returns a D-Bus `Did not receive a reply` error with exit **254**, so a delegate cannot answer those questions today. `last_verified` is left at 2026-11-04 because the Do/Verify sections were not re-run."
 check_rule: null
 ---
 
@@ -231,18 +231,39 @@ the reverse move a two-line change later. Restarting is `local-provider-down.md`
 
 ## Reaching the same server from ANOTHER computer (measured 2026-11-04, Strata)
 
-The local model server binds **loopback only** — measured: `ss -ltnp` shows `127.0.0.1:47831` for the Strata host,
-and nothing on `0.0.0.0`. Three ways to reach it from a second machine, cheapest-correct first:
+> **Ports are DERIVED at launch, so a port in this runbook is a pointer to a probe, never a value to paste.** Every
+> `47831`/`47832` below is what the **2026-11-04** launch bound. Re-measure in one command before you cite a port,
+> build a tunnel, or open a firewall hole:
+>
+> ```bash
+> ps -eo pid,args | grep -E 'serve\.server|strata --serve' | grep -v grep   # the launch's own --host/--port
+> ss -ltnp | grep -E ':(8080|4783[0-9])'                                    # what is actually LISTENing now
+> curl -s -w 'HTTP %{http_code}\n' http://127.0.0.1:<measured-port>/v1/models; echo "exit=$?"   # exit 7 = nothing there
+> ```
+>
+> **Re-measured 2026-11-06T08:0xZ** (same host as docs/NEXT.md; no hostname per D205): the live launch is
+> `-m serve.server … --host 0.0.0.0 --port 8080`; `ss -ltnp | grep 8080` → **`0.0.0.0:8080`** (python3.12, that
+> serve.server pid); an earlier `ss -ltn` the *same hour* showed `127.0.0.1:8080`, so the bind itself moves across a
+> restart — another reason to measure rather than quote. `curl` to **47831 and 47832 both exit 7** (ECONNREFUSED,
+> `HTTP 000`). So the sentence below about **loopback only** was TRUE of the 2026-11-04 launch and is **not true of the
+> 2026-11-06 launch** (it binds `0.0.0.0`), and the port literals throughout are the old launch's numbers kept for
+> their structure, not as current values.
+
+The local model server bound **loopback only** as measured 2026-11-04 — `ss -ltnp` showed `127.0.0.1:47831` for the
+Strata host and nothing on `0.0.0.0` (see the marker above: re-measure, this changed). Three ways to reach it from a
+second machine, cheapest-correct first:
 
 1. **The app's own Share listener (recommended, built in).** Strata ships a *separate, key-protected listener for
    inference only* (`host/server/local-share.mjs`): `createLocalShare({ host = "0.0.0.0", port = PORT + 1 })`,
    serving exactly `/v1/models`, `/v1/chat/completions`, `/v1/messages`, gated on the app's API key, with CORS
-   preflight answered — it never serves the UI or the host APIs. With `PORT=47831` the URL is
-   **`http://<lan-ip>:47832/v1`** (`sharePort = findFreePort(STRATA_SHARE_PORT ?? PORT + 1)`), and it is **off until
-   enabled in the app** (measured: no listener on 47832 while the host was up on 47831). Then, from the other
+   preflight answered — it never serves the UI or the host APIs. With the 2026-11-04 `PORT=47831` the URL was
+   **`http://<lan-ip>:47832/v1`** (`sharePort = findFreePort(STRATA_SHARE_PORT ?? PORT + 1)` — i.e. **the share port is
+   the serve port + 1**: derive it from the `--port` you just measured, do not copy this one), and it is **off until
+   enabled in the app** (measured 2026-11-04: no listener on 47832 while the host was up on 47831; measured
+   2026-11-06: no listener on either). Then, from the other
    computer: `Authorization: Bearer <the same key>`.
 2. **SSH tunnel (safest; keeps the server on loopback and encrypts the bearer token).** From the second machine:
-   `ssh -L 47831:127.0.0.1:47831 <user>@<this-box>` and point the client at `http://127.0.0.1:47831/v1`. Nothing new
+   `ssh -L <measured-port>:127.0.0.1:<measured-port> <user>@<this-box>` (2026-11-04: `ssh -L 47831:127.0.0.1:47831 …`) and point the client at `http://127.0.0.1:<measured-port>/v1`. Nothing new
    listens on the LAN and the key never crosses the network in cleartext.
 3. **Rebind the host itself** (`STRATA_BIND=0.0.0.0`, read at `host/server/index.mjs` alongside `STRATA_PORT`).
    **Not recommended:** that listener also carries the UI and the host APIs, and a key that is set for inference
@@ -256,6 +277,12 @@ legitimate DECLARED price**. Two consequences: (a) a LAN URL costs a config chan
 SSH tunnel keeps the URL loopback, so it needs no price declaration at all — one more reason to prefer option 2.
 
 ### Firewall on this host (measured 2026-11-04, Fedora 44) — what actually gates a LAN client
+
+> **Not re-verified 2026-11-06 — the instrument itself is unreachable to a delegate.** Re-running the block below that
+> day gave `firewall-cmd --state` → `Error: Did not receive a reply …` with **exit 254** for every verb (including
+> `--query-port=8080/tcp`), so the allow-list facts recorded here are **2026-11-04 facts whose ports are also stale**
+> (the launch moved to `:8080`, see the marker above). Treat every port in this section as `<measured-port>`, and if
+> `firewall-cmd` errors like that, say what is missing rather than re-asserting the numbers.
 
 `firewall-cmd` is readable **without root** for queries, and that is the only trustworthy answer:
 
