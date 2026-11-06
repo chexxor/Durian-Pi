@@ -9649,6 +9649,17 @@ pre-flight (queue row **#5277** promotes it from gitignored `.spike/` into `tool
 (`.spike/delegate-20261106c/brief-lead-9.md`, request `…-lead9`, delivered — `intent.mjs` printed `delivered` and `lead` opened
 with it at `17:43:19Z`).
 
+**CORRECTION to the headline of this decision, measured in the same session (pass 2).** “303 is now the default exit of every bounded pass” was generalized from one specimen. Pass 2 (`pid 905867`,
+`--yes-pm-wakes --max-duration 600`, started `18:12:59.778Z`) logged `2026-11-06T18:34:39.319Z EXIT pid=905867 reason=deadline passes=-` **by itself — 11m40s past its deadline, with no kill — and removed
+`selfdev.sqlite.broker.json` on its own.** The narrower rule: **the broker exits when the turn in flight finishes; a `kill` is required only when that turn is wedged** (pass 1 was wedged and needed the kill at
+17m07s; pass 2 was not). Two more over-claims corrected: pass 2 produced **0 `wake-failed` lines** (the burst is a contended-start symptom, not a certainty), and **no new dead letter** — the six present are dated
+`04:01:55Z, 08:57:13Z, 08:59:44Z, 09:00:22Z, 16:51:48Z, 17:49:24Z`, all before pass 2's window, so **`329` did not reproduce in pass 2**; its row stands on 1 specimen (17:49:24Z) plus 5 older letters. And
+**`pgrep -f` / `pkill -f broker-serve.mjs` do not see this process**: at 18:13Z `pgrep -af broker-serve.mjs | wc -l` → `0` while `broker.json` named pid `905867` and the log was advancing, so the delegate's
+`pkill` matched nothing and it believed the pass was stopped ~10 min before it ended. Detect with `ps -p <pid>` / `test -d /proc/<pid>` from the pid in `broker.json` (SELFDEV pitfall 49). Pass-2 result: queue max id
+`5285 → 5294`, `done 3861 → 3864`, `claimed 14 → 17`, `queued 54 → 56`, and `#5273` (ROADMAP 311) **still `queued` after two full passes and a lead instruction row (`#5286`, “CLAIM 5273 BY ID FIRST”) that is itself
+`queued`** — routing, not capacity. Verifier-family spend `+$0.03479` → `$0.34959` (69.9% of the $0.50 trigger, headroom `$0.15041`), 87 more calls, 24 `status error` calls at `$0.00000`; worktrees `37 → 41`
+(reapable `16 → 21`), which is why 311 stays the precondition for another pass.
+
 **The pass (one, 600 s, as authorized) and what it moved.** `tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600`,
 `START pid=884989 … maxDurationMs=600000 idleExitMs=300000` at `17:40:43.462Z`. Queue: max id `#5270 → **#5285**`;
 `done 3857 → 3861`, `deferred 171 → 174`, `queued 59 → 54`, `claimed 13 → 14`, `held 363`, `cancelled 819`. Verifier-family
