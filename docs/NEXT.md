@@ -1,14 +1,17 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-07T02:5xZ (delegate session **M** closes — the operator asked for competitor research on how
-agent teams carry credentials and secrets **before** ruling ROADMAP **333**, with the hypothesis that "the best
-architecture would be a separate process or service that holds secrets", and named **oh-my-pi** mid-session. The sweep
-landed: **ten pinned clones read** plus two vendor docs labelled `advertised-elsewhere`; **D225** records what it binds;
-rows **334–343** are registered in `docs/ROADMAP.md`; pitfalls **55–59** added. The operator's session-G push grant was
-**spent** this session: `git push origin main` → **`4c3fd7cc..4620cecf`**, and `git rev-list --count
-refs/remotes/origin/main..main` → **0** afterwards. The session-**L** pointer is VERBATIM in `docs/NEXT-ARCHIVE.md`
-(heading at line 12409; the appended body is byte-identical to the file it replaced — `diff` of 149/149 lines →
-`ARCHIVE-APPEND-VERBATIM-OK`.)
+**Last update:** 2026-11-07T04:4xZ (delegate session **N** closes on the operator's rulings: **333 is RULED = (b) as a
+user-swappable interface** — "*We should provide a recommended implementation, but leave a bare-bones implementation that
+pulled it from an env var or local file like Pi does*" (**D227**); **338 (`auth check`) approved — "Go ahead with it."**;
+**331 approved to land**; rotation rides the store (`modify()`), not a restart. Measured in the same turn: the seam already
+exists (`vendor/pi-main/packages/ai/src/models.ts:375` `credentials?: CredentialStore`, defaulted at `:407` to
+`new InMemoryCredentialStore()`, and **`cli.mjs:391` is the only live `createModels(` call site**), and **`Models.checkAuth()`
+already ships** (`models.ts:663-693` → `AuthCheck {source,type}` at `auth/types.ts:112-115`, no network call) — which makes
+338's presence/source half free. **D225's "stored-wins would break the family guarantee" is corrected in the record**:
+`resolve.ts:193-205` always calls our own resolver, so precedence is ours to write. Four decisions now wait on the operator,
+each with a recommendation, in **D227** A–D: the recommended backend, the store key shape, the precedence rule, and whether
+a seat may ever hold a value. The operator also named the next milestone — see (M) below — and granted push, used:
+`4620cecf..d1583c38` then `d1583c38..4f62ccf8`.)
 
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
@@ -16,7 +19,37 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 
 ## NEXT SESSION
 
-**Current item — three halves, and only one of them needs the operator.**
+**Current item — the milestone the operator named, then the build the ruling just opened.**
+
+**(M) THE MILESTONE: "ensuring LLM task completion."** The operator created
+`docs/reviews/ensuring-llm-task-completion-research.md` and ruled it "the next milestone we work on" (2026-11-07); it is
+tracked as **milestone source material, authored by the operator** — a raw model reply whose three references (two Anthropic
+pages, one vendor blog) were fetched by neither the delegate nor the team, so it is task material, not evidence. Read
+`docs/reviews/task-completion-milestone-intake-2026-11-07.md` **first**: it maps the doc's six proposals onto what the rig
+already runs (D105's per-item fresh context boundary `src/broker.mjs:55`, whose comment at `:112-114` already warns about a
+seat that "drift[s] into the compaction wall while the rig reported it healthy"; the pointer gate
+`demo/next-pointer.test.mjs`; the clock-in digest `demo/clockin-digest.test.mjs`; `demo/resume.test.mjs` is the CLI
+`resume`/`doctor` verb, not a handoff resume), names the seven new candidates **N1–N7** for `lead`/`pm` to mint as rows
+(**the delegate registered none**), and carries the free measurements: the harness resolves `{16384/20000/32768}` for
+**every** family (so the verifier's compaction threshold is `24576 − 16384 = 8192` while the policy keeps **20,000** recent
+tokens); the metered arm's `prompt_tokens` reach **24,358 = 99.1 % of its 24,576 window** (319 calls ≥ 8,192; 281 up- vs 322
+down-transitions > 2 k — a sawtooth); and the **free arm records no trajectory at all** (pitfall **61**; probe
+`.spike/delegate-20261107/trajectory.mjs`, 0.3 s). **Do not adopt the doc's 130k-token bands** — compute per family.
+**Run before the review, in order (all free):** (1) land **331** (approved) — band arithmetic on a schedule that reaches no
+seat is decoration; (2) promote the three `.spike/` instruments under **312** (compaction-policy probe, `/proc` canary for
+337, trajectory probe for N2); (3) drain the spool with a **bounded** broker start after reading the 6 dead letters, so
+`lead` can route; (4) settle how **#5273** (311) gets claimed — the doc's kill test and the 41 leaked worktrees are the same
+failure class; (5) `node scripts/test.mjs --area docs && node scripts/test.mjs --area guard` (1.0 s / 1.9 s).
+
+**(R) 333 IS RULED — (b) as an interface — so the credential work is now a build with a known order.** The ruling and the
+four follow-up decisions are in **D227**. Rows updated in place, not duplicated: **333** (the ruling, verbatim; open only for
+which backend is *recommended*), **334** (the seam: corrected citation — `read`/`list`/`modify`/`delete` at
+`vendor/pi-main/packages/ai/src/auth/types.ts:65-97`, swap point `models.ts:375`/`:407` at `cli.mjs:391`, and a stored
+credential never silences our resolver), **338** (approved; `checkAuth` + `list()` make presence and source free), **339**
+(an OS keychain is a candidate *backend*), **326** (rotation = `modify()`; the cadence is the operator's). **Build order
+spooled to `lead`: 331 → 338 (`checkAuth` first, then the paid usability probe) → 334 (bare-bones store + the backend
+selector in config) → 336/337/341 (already funded) → then 342's spike**, which measures "does a seat hold a value or a
+grant" before any backend beyond the bare-bones one is chosen.
 
 **(0) THE CREDENTIAL QUESTION IS RESEARCHED, NOT ANSWERED — 333 is still the operator's fork, and it gates one row
 (342) but nothing else.** Read `docs/reviews/credential-architecture-options-2026-11-07.md` (§2 the option table,
@@ -94,8 +127,9 @@ operator to say if they want a fresh grant per group. The check is `git rev-list
 **Blocker:**
 1. **311 still gates every further pass** — cleanup refuses with the unreadable `undefined/anthropic-ai-sdk…` string
    (`src/worktree.mjs:1237` reads `dirent.path`, undefined on node v24.22.1; the property is `parentPath`).
-2. **333 is open and operator-gated** (credentials, rotation, grants). It blocks only **342**; **336 / 337 / 341 / 334 /
-   338 / 335 / 339** proceed under any 333 answer.
+2. **333 is RULED (D227) — (b) as a swappable interface — and four narrower choices are open to the operator**: the
+   recommended backend, the store key shape, the precedence rule, and whether a seat may ever hold a value. None of them
+   block **331 / 334 / 336 / 337 / 338 / 341**; only **342**'s shape waits on the last one.
 3. **The $0.50 family threshold still has no rig-side enforcer (324)**; the delegate is the tripwire, headroom **$0.15041**.
    **321 before 324** (operator ruling), and 317's calibration (`#5214`) before further verifier spend.
 4. **303's root cause is open** (`#5231`/`#5260`, architect) — a broker past its deadline keeps heartbeating with closed
