@@ -1,14 +1,10 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-06T10:0xZ (delegate session **H** closes — the operator's four answers executed, the `local`
-family moved to the second strata box and **back to loopback** when the rig's own provider gate refused to start
-(**325**), three bounded broker passes ran, and the team decomposed the delegate's fifth `lead` brief into **20 new rows**
-(`#5224`–`#5243`) while **cancelling two duplicates** the delegate had flagged. Registered **323–328**; signed **D219**
-(the answers, the passes, 303 now 5/5) and **D220** (the strata box, the price-key trap, the $0.50 verifier-family rule).
-New measured defect: a **stop request survives its broker and steals the next run** — a `--max-duration 600` pass ended at
-`reason=stop passes=15`, 66 s in (**327**). Verifier-family spend is now **$0.27019 = 54.0 %** of the operator's $0.50
-trigger; worktrees **26 → 32**. The session-E and session-F pointers are VERBATIM in `docs/NEXT-ARCHIVE.md`.)
-
+**Last update:** 2026-11-06T19:2xZ (delegate session **K** closes — the operator's two answers were executed (credential
+rotation verified with a **zero-spend** masked keycheck; bounded pass #2 run), ROADMAP **331** was registered from a free probe
+that shows a seat's per-model compaction override **reaches nothing**, `D223` was **corrected** after pass 2 contradicted it, and
+pitfalls **47–50** were added. Local commits **`0bce3ed5`** and **`e3232d48`** are **unpushed** — the session-G grant was spent on
+`ffbd0e1e..4c3fd7cc`; a fresh operator grant is required. The session-E through session-J pointers are VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
@@ -16,24 +12,48 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 
 ## NEXT SESSION
 
-**Current item: `lead`/`pm` release ROADMAP 311's carriers FIRST (the operator set the pass order at D222: 311 → 300/313 →
-capacity knobs last).** Queue at max id **`#5270`**: `47 queued, 12 claimed, 361 held, 174 deferred, 817 cancelled, 3859 done`;
-verifier-family spend **$0.29660 of the operator's $0.50 trigger (59.3 %)**; worktrees **35** (`seat-root 8, reapable 19, live 7,
-locked 2`); **broker DOWN** (the 16:47Z `--max-duration 600` pass lingered past its 16:57:19Z deadline and was killed at
-17:17:31.518Z — **303** 6/6). **Do not run another pass before 311 lands** — that one pass took worktrees `32 → 35` and
-`reapable 15 → 19` while `worktree audit` returned `ok: true` (the audit reports the reapable set; no verb consumes it), and it
-cost **$0.02641** of family spend. **Before any start, `ls selfdev.sqlite.broker.stop`** (**327**), and `--stop` is not a reliable
-remedy for a linger: `serve --stop` returned `"stopped": false … did not exit within the stop grace` (**303**). New rows this
-session: **329** (a broker-routed read has no fast-fail and no named cause — `watch --once --human` printed **0 bytes for 90+ s**
-against a wedged broker, and mid-pass the same verb's read is dead-lettered as `apply failed: SqliteStorage is closed`) and
-**330** (an uncommitted doc edit in the shared tree was silently reverted mid-session; two lanes' doc work is gone). Routing that
-is already correct, do not re-mint: **#5255** (pm, the pass order), **#5261** (pm, 311 blocks the delegate's passes), **#5256**
-(impl, 311's junction ruling), **#5231**/**#5260** (architect, 303 root cause), **#5258**/**#5259** (impl, 327/328), **#5243**
-(pm, 295 re-registration), **#5214** (qa, 317 calibration), **#5227** (impl, 295 mask — live again). **Cut no rows yet for 329
-and 330** — the delegate registered them and `lead` has not minted carriers (`#5270` is still the max id as of 18:0xZ). **Lead's
-platform constraint, from #5255/#5256:** every number in this pointer is Linux-measured, but 311's second half is the **NTFS
-junction** threat model — a Linux-green suite proves the refusal message and the reap verb, **not** 311(ii); the carrier must
-carry a Windows-side observation or label 311(ii) verified-partial.
+**Current item — TWO halves, and only one of them costs money.**
+
+**(1) FREE, zero-spend, unblocked right now — ROADMAP 331 (the operator's compaction schedule).** The operator moved the pi-plane
+schedule (`~/.pi/agent/settings.json`: harness-wide `reserve 32000 / keep 16000`; `strata → 40960/24000`; `strata-server →
+26214/16000`; and `~/.pi/agent/models.json` `strata-server maxTokens 16384 → 24576`). It **cannot reach a seat**: seats resolve
+`local/…` or `verifier/…`, and `src/config.mjs:212-218 compactionSettings()` emits `modelOverrides` as a **sibling** of `compaction`
+while pi-durable reads it only from **inside** `settings.compaction` (`agent.ts:71`, `compaction.ts:262-263`). Measured by
+`node .spike/delegate-20261106c/compaction-policy-probe.mjs` (free, calls pi-durable's own `compactionPolicy`): **every family
+resolves the pi-durable defaults `16384 / 20000 / 32768`** — the configured `local/…: 20480` arrives nowhere, and
+`verifier/openai/gpt-oss-120b` (window 24,576, max 6,000) compacts above `24576 − 16384 = 8192` while keeping `20000` recent =
+**81 % of its whole window**. Next command for that half, in order: `node .spike/delegate-20261106c/compaction-policy-probe.mjs`
+(baseline) → the fix (`out.compaction = {...policy, ...(layered ? {modelOverrides: layered} : {})}`) → the gate, which is **a test
+that calls pi-durable's `compactionPolicy()` and asserts the configured numbers come back per family** (`demo/config.test.mjs` is
+area **`rig`** and **passes with the bug in place** — `node --test demo/config.test.mjs` → 1/1, 3.4 s — so it is not the gate;
+`node tools/what-to-test.mjs --paths=src/config.mjs,cli.mjs` derives **73 direct guards**) → then the values
+`local/qwen3.8-flash-next-iq3_s 40960/24000` (threshold `200000 − 40960 = 159,040`) and `verifier/openai/gpt-oss-120b
+4096/8192/8192` (threshold `24576 − 4096 = 20,480`). **Do not set harness-wide `DURIG_COMPACTION_RESERVE_TOKENS` before the nesting
+fix** — it would apply 40960 to a 24,576-window family (`contextWindow − reserve < 0`). Carriers: `lead` has not minted them; the
+brief is **spooled undelivered** as `delegate-20261106c-lead11` / `…-lead11b` in `selfdev.sqlite.broker.inbox/` and delivers on the
+next drain.
+
+**(2) THE PASS HALF IS STOPPED, and the stop is routing, not capacity.** Pass 1 (pid `884989`) and pass 2 (pid `905867`,
+`--yes-pm-wakes --max-duration 600`) both ran. Post-pass-2 queue: max id **`#5294`**, `3864 done, 17 claimed, 56 queued, 364 held,
+174 deferred, 819 cancelled`. **`#5273` (`impl`, the ROADMAP 311 carrier) is STILL `queued` after two full passes, and `lead`'s own
+instruction row `#5286` ("CLAIM 5273 BY ID FIRST", to `impl`) is `queued` too** — while `claimed` rose `14 → 17`, so seats are
+working and that one row is not being picked up. Worktrees grew **`35 → 37 → 41`** (`seat-root 8, reapable 21, live 9, locked 2,
+dirty 1`) — the leak 311 exists to stop. Family spend **`$0.34959` of the $0.50 trigger (69.9 %)**, headroom **`$0.15041`**; pass 2
+cost **$0.03479** for 3 `done` rows. **Do not start a third pass until `lead` says how `#5273` gets claimed.** Broker state:
+**DOWN, self-exited** `2026-11-06T18:34:39.319Z EXIT pid=905867 reason=deadline`, no `selfdev.sqlite.broker.stop` residue, and
+**`selfdev.sqlite.broker.json` is gone** (a clean exit removes it). Dead letters: **6**, dated `04:01:55Z, 08:57:13Z, 08:59:44Z,
+09:00:22Z, 16:51:48Z, 17:49:24Z` — **none from pass 2**, so **329 did not reproduce**; it stands on one 17:49:24Z specimen plus 5
+older letters, and its carrier `#5275` (`architect`) is still `queued`. `#5276` (`impl`, 330) and `#5277` (`devtools`, promote the
+keycheck probe) are `queued`; **`#5278` (qa, the Windows-side 311(ii) observation) stays `held`** — 311(ii) cannot be closed from
+Linux, and the keep-gate on refs **`item-4829` / `item-5147`** still applies to any 311 reap verb (`#5280`, `pm`, held).
+
+**Corrected at clock-out, do not re-learn it the expensive way:** `pgrep -f` / `pkill -f broker-serve.mjs` **do not see the broker**
+(`pgrep -af broker-serve.mjs | wc -l` → `0` at 18:13Z while pid `905867` was alive and logging) — use `ps -p <pid>` /
+`test -d /proc/<pid>` with the pid from `broker.json` (pitfall 49, D223 CORRECTION). And a bounded broker **exits on its own when the
+turn in flight finishes**: pass 2 self-exited 11m40s past its deadline with no kill; only a **wedged** turn needs `kill <pid>` (pass 1
+needed it at 17m07s). Pitfall **47** now carries a second `330` specimen: the delegate's own doc edit was replaced by a lane's between
+edit and commit, and the delegate's `git add` swept the lane's text into its own commit — **commit doc work immediately and grep the
+COMMIT, not the file.**
 
 **325 is ANSWERED — decision closed, no operator action pending.** The operator's answer (D222, item 3) is **(a) stay on
 loopback**; do **not** raise `DURIG_STREAM_TIMEOUT_MS`. So the seven author seats keep running on loopback (measured 1.4 s for a
