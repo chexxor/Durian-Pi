@@ -9470,9 +9470,11 @@ that text is **unidentified** and this row says so rather than naming a file it 
 7.35% / 2.5 h — which is the measurement 217's remaining half asks for).
 
 **Cost of the session so far, from the ledger not from guesswork:** the store ledger `selfdev.sqlite.spend.jsonl` **now
-exists**, correcting D214's "still does not exist": **365 calls, $0.13195** on 2026-11-06 at 02:20Z, and **411 calls,
-$0.15100** at the final read (03:45Z) — so a 30-minute idle wake pass costs about nine cents and the whole
-wake-and-measure effort cost fifteen (max single call $0.000879) — all of it the `verifier` arm (`openai/gpt-oss-120b`, priced 2026-11-06 at $0.037 in /
+exists**, correcting D214's "still does not exist": **365 calls, $0.13195** at 02:20Z, **411 calls, $0.15100** at 03:45Z,
+and **507 calls, $0.19027** at session close (04:18Z) — so a 30-minute idle wake pass costs about nine cents and the whole
+wake-and-measure effort cost nineteen, including a third bounded pass (`--max-duration 900`, pid 529183) run to prove the
+store-pin fix holds under load (#5192 → #5205, 13 more rows) and to reproduce the lingering-broker defect a second time
+(max single call $0.000879) — all of it the `verifier` arm (`openai/gpt-oss-120b`, priced 2026-11-06 at $0.037 in /
 $0.17 out per Mtok). Delegate-side probes remain separately ledgered in `.spike/delegate-20261106/spend-arm-*.jsonl`
 (~$0.00003 for the capability probes, under `DURIG_PROBE_CEILING_USD=0.15`). Wall clock: the two bounded passes are 20–25
 minutes each and dominate the session; the diagnosis that mattered took **one** dry-run read. The speed-up is recorded in
