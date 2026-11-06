@@ -3,8 +3,8 @@
 **Last update:** 2026-11-06T03:5xZ (delegate session **F** closes — the operator-granted wake-and-measure pass ran, and it
 **reversed the top blocker**. The empty queue was not a routing logjam: **11 of 12 seats were dying at wake with
 `no_model`** because per-conversation model pointers in `selfdev.sqlite` still named retired models while every check was
-green (ROADMAP **299**). `up --refresh` fixed the pins and the queue moved **#5156 → #5192**, **36 new rows**, **22
-`queued`**, 9 already `done`, claim-wait **p50 = 0.0 m** on 2026-11-06 against **230 m** on 2026-11-05 and **1,232 m** on
+green (ROADMAP **299**). `up --refresh` fixed the pins and the queue moved **#5156 → #5205**, **49 new rows**, **25
+`queued`**, 8 `claimed`, claim-wait **p50 = 0.0 m** on 2026-11-06 against **230 m** on 2026-11-05 and **1,232 m** on
 2026-11-03. Recorded as **`docs/DECISIONS.md` D215**, registered as **`docs/ROADMAP.md` 299–309**. The pass also found the
 expensive thing: on an **empty** queue the wake loop grinds **1,245 passes / 1,394 guard escalations / ~1,400 `pi.reset`
 records / 249 paid calls / $0.086 in 30 minutes**, and a reset erases a just-delivered operator ruling (**300**). The
@@ -17,8 +17,8 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 
 ## NEXT SESSION
 
-**Current item: `lead` cuts `docs/ROADMAP.md` 294–309 into rows and keeps cutting — the queue is alive (max id #5192, 22
-`queued`, 3 `claimed`), so the binding constraint is backoff, not supply.** Order matters and one rule is load-bearing:
+**Current item: `lead` cuts `docs/ROADMAP.md` 294–309 into rows and keeps cutting — the queue is alive (max id #5205, 25
+`queued`, 8 `claimed`), so the binding constraint is backoff, not supply.** Order matters and one rule is load-bearing:
 **backoff before capacity.** Any increase in concurrency (`DURIG_MAX_CONCURRENT_SEATS`, `durig.config.default.json` = 1,
 `durig.config.json` unset) or verifier context before ROADMAP **300** lands multiplies the idle storm this pass measured.
 Delegate's briefed order (cheapest and most visible first): **(1)** **300** idle-queue backoff — a woken seat that finds
@@ -73,17 +73,19 @@ reads the store itself and answered fully throughout. Do not write to the store 
 - **Roster:** 7 seats `local/qwen3.8-flash-next-iq3_s`, 5 seats `verifier/openai/gpt-oss-120b`
   (`https://api.deepinfra.com/v1/openai`), slot `24,576 / 3,000` deliberately unmoved (297). Dated price
   ($0.037 in / $0.17 out per Mtok, `DURIG_VERIFIER_PRICE_AS_OF=2026-11-06`) lives only in the **gitignored** host configs.
-- **Spend:** the store ledger `selfdev.sqlite.spend.jsonl` **now exists** — **411 calls, $0.15100**, all
-  `openai/gpt-oss-120b`, max single call $0.000879. Delegate probes remain separately ledgered in
+- **Spend:** the store ledger `selfdev.sqlite.spend.jsonl` **now exists** — **507 calls, $0.19027**, all
+  `openai/gpt-oss-120b`, max single call $0.000879. It is **untracked and not in `.gitignore`** (310): the caps read it, so a
+  workspace move that does not copy it silently restarts the caps from zero. Delegate probes remain separately ledgered in
   `.spike/delegate-20261106/spend-arm-*.jsonl` (~$0.00003, `DURIG_PROBE_CEILING_USD=0.15`).
 - **Suite:** 257/258 — the one failure is `demo/verifier-arm-probe.test.mjs` (ROADMAP **294**, red *because* the arm is
   legitimately priced; `run()` at `demo/verifier-arm-probe.test.mjs:15-22` scrubs only `API_KEY|SECRET|TOKEN$`, not the
   config-file layer). `check` findings 126: `citation-unresolvable` 67, `duplicate-item` 57,
   `verification-without-evidence` 1, `evidence-tree` 1; `single-model-rig` absent.
-- **Broker:** **stopped.** The second pass never reported: `PASS 1373` at 02:28:23, then 75 minutes of a fresh
-  `heartbeatAt` with `lastPassAt` frozen, no `genlock`, `serve --stop` → `"did not exit within the stop grace; no forced
-  kill"`, and only `kill` produced `EXIT pid=483056 reason=deadline passes=-` (303). `resume` after the stop found nothing
-  stranded. **Restart is the next session's first write:**
+- **Broker:** **stopped** (a third pass was run to prove the fix holds, and the loop is now off deliberately). Both passes
+  that had pending seat conversations **lingered past their deadline**: pid 483056 (`PASS 1373` at 02:28:23, alive 75 min,
+  `serve --stop` → `"did not exit within the stop grace; no forced kill"`) and pid 529183 (`PASS 544` at 04:04:04, alive 6 min
+  past a 900 s deadline). Only `kill` produced `EXIT … reason=deadline passes=-` (303). `resume` found nothing stranded. A
+  pass with **no** pending conversations exits on its own (`EXIT reason=max-duration passes=1245`). **Restart is the next session's first write:**
   `node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 1800`.
 - **Worktrees:** 17 entries. `item-4943` and `../durian-dev/seatroot/item-5111` still present; cleanup keeps refusing —
   `complete_work: workspace cleanup for #4829 / #5175 / #4943 failed: refusing to remove worktree … junction/symlink
