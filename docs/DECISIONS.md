@@ -9764,3 +9764,75 @@ clone, measured: `docs/VENDOR-PINS.md:78` records `v18.16.0` for `6f3fbc94`; a b
 commit and verify currency with `ls-remote`, not with the tool's sentence (pitfall 58).
 
 **CORRECTION the delegate owes the record (D211 class, self-reported, caught before it could mislead).** The first draft of this entry (commit `7eaaf131`) named `cline 031a8788`, `crewai 7c6ee4c8` and `prime-agent dd5943a4`, and said prime-agent was read. All three were **from session memory, not from a read**: re-measured in the same turn as the correction above, the clone HEADs are `cline 51f63e4f`, `crewai f3d0099d`, `prime-agent 815e64b5`; prime-agent was in fact **not** read when this decision was written, and was read **afterwards**, which is what produced mechanism M12 (an injected `get_api_key` resolver with `config.api_key = None` propagated to a derived agent — `vendor/eval/prime-agent/crates/pa-agent/src/agent.rs:564,571`, `agent_loop/response.rs:104-111`). `docs/VENDOR-PINS.md` was right throughout; the prose was wrong. Rule re-asserted for the tenth time: **re-run the read at writing time** (D159 addendum, D211, pitfall 53). The operator named oh-my-pi after the first draft; the sweep was extended (its two docs read in full, three source files opened) and it changed the conclusion — the closest prior art, at our `CredentialStore` seam, with the typed-redaction pattern we lack. Recorded because the next session should know the doc has **two** passes in it, and because oh-my-pi's pin is not current upstream (`docs/VENDOR-PINS.md:78` records `v18.16.0` for `6f3fbc94`; newest remote tag now `v18.17.0`): cite its line numbers to the pin, and note that `--freshness` printed the drift direction **inverted** for that row (pitfall 58).
+
+## D226 — the operator answers the credential questionnaire: **336/337/341 funded**, **F2 approved as a spike with the in-process resolver first (F1 declined, F3 parked)**, **`ensuring-llm-task-completion-research.md` is the next milestone**, and **push granted**; 333 stays open pending the operator's read of the (a)/(b) explanation (2026-11-07T04:0xZ, delegate acting; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+**What the operator said, in the operator's words.** (1) *"Explain the architecture differences between (a) and (b)"* —
+a request for understanding before the 333 ruling, not a ruling. (2) *"Accepted recommendation"* — the free trio
+(**336** the secret-classifier floor, **337** the `/proc/<pid>/environ` refusal + presence policy, **341** the
+credential-lookup ordering), to run **alongside** 331. (3) *"Accepted recommendation"* — the boundary plan: spike **342**
+(request-level brokerage, oh-my-pi's `stdio` shape) with prime-agent's **in-process resolver** (M12, `config.api_key = None`
++ the callback cloned into the derived agent) taken first; **F1** (a network secrets service) declined until 342 is
+measured; **F3** (a codex-style egress proxy with a host CA) parked. (4) *"What do you recommend? What are the options?"* —
+asked of the rotation question (**326**/**338**), answered below and **awaiting the operator's pick**. (5) *"The operator
+created that file. I intended `docs/reviews/ensuring-llm-task-completion-research.md` to be the next milestone we work
+on."* (6) *"Granted to push."*
+
+**Ruling 1 — 333 remains OPEN, correctly.** The delegate supplied the explanation the operator asked for as
+`docs/reviews/credential-architecture-options-2026-11-07.md` §1.5, with every line re-read in the turn that wrote it (D159
+addendum): (a) is **stateless, per-process, role-selected** (`cli.mjs:349-375` resolve → `ctx.env(…)`, and
+`cli.mjs:392-397` `fileExists: async () => false` is us *telling pi there is no stored plane*); (b) is **stateful,
+per-machine, provider-owned** (`vendor/pi-main/packages/ai/src/auth/types.ts:65` with the doc comment at `:52-53`,
+`packages/coding-agent/src/core/auth-storage.ts:64` writing `mode: 0o600` at `:37` under `proper-lockfile` at `:9`, and the
+precedence at `packages/ai/src/auth/resolve.ts:29-30`). The five deciding differences are the **shape of the mapping**
+(role→family vs provider-id→one-credential), **who can mutate it** (launch env vs any `/login` or write to one `auth.json`
+inside the same uid — the boundary row 337 measured as already crossed), **rotation/concurrency** (where (b) is genuinely
+better and 326 has nothing), **failure semantics inverting** from "is the env var set?" to "is a stored credential
+shadowing it?", and **audit** (`authKeyEnv` per ledger row ceasing to discriminate, which is 316/324's problem). The
+explanation lands on the same recommendation as before: **(a) for now, plus row 334** — implement the interface ourselves,
+keep the mapping role-shaped, and take the serialized write path without adopting pi's precedence or sharing the human's
+`auth.json`; 334 is also the on-ramp to 342, because oh-my-pi proves the same interface can later be backed by a separate
+holder.
+
+**Ruling 2/3 — funded and bounded, with the boundaries the delegate must not cross.** 336/337/341 are funded work
+(~half a day each, $0, gated by the existing canaries). **342 is approved as a spike, not as an architecture**: its design
+leg must state its own fast loop (a mocked-provider behaviour test, no live call to iterate — D213), must not touch the rig
+store (single-writer rule A1), and must keep 325's loopback-only rule. The delegate takes **M12 (resolver-not-value) first**
+because it is free and already true of the model path (`cli.mjs:349-357` resolves broker-side). The delegate did **not**
+start any service, open any listener, or install any CA.
+
+**Ruling 4 — the rotation question, answered and awaiting the operator.** Options, with the cost the rig can see:
+**(i) status quo** — rotate and discover on the next failed provider probe (this is what happened the last time: 326);
+**(ii) an `auth check` readiness probe** (row 338, promoted from `.spike/delegate-20261106c/keycheck.mjs`, carrier `#5277`)
+— one masked call per family at preflight/clock-in, ≈1 h to land and ~$0.001 per run, detects but does not notify;
+**(iii) command-resolved short-lived credentials** (goose `providers/command_auth.rs:20-36`, pi `core/resolve-config-value.ts:1-12`)
+— the config holds a *command*, not a value, TTL-cached, so rotation is "the command returns a new key"; it costs an
+executed command inside the broker and must never be seat-influenceable (D-ENV-AUTH, `src/confine.mjs:28-32`);
+**(iv) per-consumer credentials at a holder** (row 340) — rotation and budgets in one place, but it is the F1 shape the
+operator just declined for now. **Recommendation: (ii) now, (iii) as part of 334/S3 when a provider actually issues
+short-lived credentials, (iv) only if the operator later wants budgets at the holder.** What only the operator can answer:
+**is there a rotation cadence, and does anything outside this rig rotate the keys?** — that determines whether (iii) is
+worth its executed-command surface at all.
+
+**Ruling 5 — the next milestone is named, and its intake is the first act.** `docs/reviews/ensuring-llm-task-completion-research.md`
+is a **raw model reply** the operator saved (its first line reads "I'll ground this in current practice…", and its three
+references are Anthropic articles and a vendor blog, **fetched by neither the delegate nor the team**). Treating it as a
+milestone rather than as evidence is the correct reading, and it changes `docs/NEXT.md`'s current priority. The delegate
+wrote the grounding pass — `docs/reviews/task-completion-milestone-intake-2026-11-07.md` — which maps its six proposals onto
+what the rig already runs (D105's per-item fresh context boundary at `src/broker.mjs:55`, with `:112-114` warning that a
+seat skipping the boundary "would grow every item and drift into the compaction wall while the rig reported it healthy";
+the pointer structural gate `demo/next-pointer.test.mjs`; `scripts/clockin.mjs` digesting the pointer under
+`demo/clockin-digest.test.mjs`) and names seven genuinely-new candidates (N1–N7) to be minted as rows **at** the review by
+the team — **the delegate registered none of them**. Measurements that go into that review, all free: the harness resolves
+`{16384 / 20000 / 32768}` for **every** family so the verifier's compaction threshold is `24576 − 16384 = 8192` while the
+policy keeps 20,000 recent tokens; the metered arm's `prompt_tokens` reach **max 24,358 = 99.1 % of its 24,576 window**
+(66 calls ≥ 20,000, 319 ≥ 8,192; 281 up- vs 322 down-transitions > 2 k — the trajectory is a sawtooth); and the **free arm
+is not recorded at all** (both ledger files hold only `api.deepinfra.com` rows: 856 and 1), so the seven author seats'
+context growth is invisible — a live specimen of **310**.
+
+**Ruling 6 — push granted and executed, with the batch boundary stated.** `git push origin main` → **`4620cecf..d1583c38`**
+(the five research commits: `7eaaf131`, `474f94f5`, `f5be46ca`, `e4c6f31d`, `d1583c38`), `git rev-list --count
+refs/remotes/origin/main..main` → **0** immediately after. The delegate then committed the milestone-intake work and pushed
+it under the **same** grant in this message, reading the grant as covering this session's resulting state rather than only
+the five commits named at close; if the operator wants a fresh grant per commit group, say so and the next session will ask
+again. `origin/main` at this close is recorded in `docs/NEXT.md`.

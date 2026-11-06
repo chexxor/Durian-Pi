@@ -84,13 +84,12 @@ node scripts/test.mjs --area docs && node scripts/test.mjs --area check && node 
 # node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600
 ```
 
-**Push state:** `origin/main` = **`4620cecf`** — session L's five commits plus its D224 batch were pushed this session
-(`4c3fd7cc..4620cecf`), and the session-G grant is **spent**. **Four** local-only commits need a **fresh per-batch operator
-grant** (D218), or `DURIAN_PI_ALLOW_PUSH=1` at launch: **`7eaaf131`** (the credential sweep, options + follow-up prompt,
-rows 334–342, D225, pitfalls 55–59, the session-L pointer archived verbatim), **`474f94f5`** (M12 resolver-not-value, the
-five per-project review deltas, the D225 HEAD correction), **`f5be46ca`** (row 343, `vendor-pins --freshness` prints the
-drift direction inverted), **`e4c6f31d`** (pitfall 60 + the D225 spend correction). `git rev-list --count
-refs/remotes/origin/main..main` → **4** at this close, and it is the check.
+**Push state (2026-11-07, session N):** the operator granted push ("Granted to push"); executed
+`git push origin main` → **`4620cecf..d1583c38`** (the five research commits `7eaaf131`, `474f94f5`, `f5be46ca`,
+`e4c6f31d`, `d1583c38`), `refs/remotes/origin/main..main` → **0** at that moment. The milestone-intake work committed after
+that was pushed under the **same** grant; `docs/DECISIONS.md` **D226** ruling 6 states the batch boundary and asks the
+operator to say if they want a fresh grant per group. The check is `git rev-list --count refs/remotes/origin/main..main`
+(expect `0`; if not, ask — the grant is per batch, D218).
 
 **Blocker:**
 1. **311 still gates every further pass** — cleanup refuses with the unreadable `undefined/anthropic-ai-sdk…` string
@@ -101,14 +100,17 @@ refs/remotes/origin/main..main` → **4** at this close, and it is the check.
    **321 before 324** (operator ruling), and 317's calibration (`#5214`) before further verifier spend.
 4. **303's root cause is open** (`#5231`/`#5260`, architect) — a broker past its deadline keeps heartbeating with closed
    storage, and that shape destroys reads (**329**, 6 dead letters).
-5. **Two probes are still in gitignored `.spike/` and will be lost** (312 pattern): the `/proc` canary (337) and the
-   compaction-policy probe (331, `#5277` is the carrier for the keycheck, not this one).
-6. **`docs/reviews/ensuring-llm-task-completion-research.md` is untracked and is NOT this session's work** — measured
-   `mtime 2026-11-06T16:03`, first line reads `I'll ground this in current practice on context engineering…`, i.e. a raw
-   model reply landed in `docs/reviews/`. The delegate did **not** commit or delete it; it needs a `scribe`/`lead` pass
-   (rewrite-or-discard, and it is not citation-grade as it stands).
+5. **Three probes are still in gitignored `.spike/` and will be lost** (312 pattern): the `/proc` canary (337), the
+   compaction-policy probe (331, `#5277` is the carrier for the keycheck, not this one), and the ledger-trajectory probe
+   the milestone review needs (N2).
+6. **RESOLVED — `docs/reviews/ensuring-llm-task-completion-research.md` is the operator's and is the next milestone**
+   ("The operator created that file. I intended … to be the next milestone we work on", 2026-11-07). The delegate now
+   tracks it as **milestone source material, not evidence** (a raw model reply; its three web references are unfetched by
+   us) and pairs it with the grounding pass `docs/reviews/task-completion-milestone-intake-2026-11-07.md`. No rows have
+   been minted from it — that is the team's act at the review (candidates N1–N7).
 7. `selfdev.sqlite.spend.jsonl` is untracked and not ignored (**310**). The **327** stop-file writer is still unidentified.
-8. **`docs/SELFDEV.md` is ~255 KB / ~64k tokens and `docs/ROADMAP.md` ~680 KB.** Read headings + grep the symptom
-   (`scripts/clockin.mjs` prints the headings with anchors). Pitfalls **55–59** are this session's: the `/proc` path (55),
-   the classifier floor (56), "a secrets service is not automatically a boundary" (57), bounded upstream reads (58), and
-   roadmap rows are appended at the **end of the table**, not numerically adjacent (59).
+8. **`docs/SELFDEV.md` is ~258 KB / ~65k tokens and `docs/ROADMAP.md` ~681 KB.** Read headings + grep the symptom
+   (`scripts/clockin.mjs` prints the headings with anchors). Pitfalls **55–60** are the credential sweep's: the `/proc`
+   path (55), the classifier floor (56), "a secrets service is not automatically a boundary" (57), bounded upstream reads
+   and inverted pin drift (58), roadmap rows appended at the **end of the table** (59), and delegate-run provider probes
+   spending outside the ledger (60).

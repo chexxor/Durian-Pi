@@ -32,6 +32,58 @@ report the leak: `looksLikeSecret` (`src/config.mjs:73-82`) requires a known pre
 digit** (measured: a 32-char alnum classifies `false`). So today the control is *"a seat doesn't think to ask"*,
 which is not a control.
 
+## 1.5 What (a) and (b) actually change in the architecture (the operator asked, 2026-11-07; every line re-read this turn)
+
+**(a) env-only — the credential is an input to a process.** Our provider definitions resolve the key themselves:
+`cli.mjs:349-375` (`auth.apiKey.resolve` → `await ctx.env("DEEPINFRA_API_KEY")` → returns
+`{ auth: { apiKey: key }, source: "DEEPINFRA_API_KEY" }`), and the auth context we hand pi-durable is
+`cli.mjs:392-397` — `env: async (name) => process.env[name] ?? CFG[name]` and **`fileExists: async () => false`**, which
+is us *telling pi there is no stored-credential plane*. Shape: **stateless, per-process, role-selected**. The
+provider→credential mapping lives in durian-pi code, one entry per **role** (`local`, `verifier`), and it dies with the
+process. Rotation = restart. pi's account/OAuth machinery is simply absent, not disabled.
+
+**(b) a stored `CredentialStore` — the credential is state on the machine.** pi's interface is
+`vendor/pi-main/packages/ai/src/auth/types.ts:65`, documented at `:52-53`: *"App-owned credential storage, keyed by
+`Provider.id`, one credential per provider. `modify` is the only write path, so every mutation is a serialized
+read-modify-write; `Models.getAuth()` runs OAuth refresh inside `modify` so concurrent requests cannot double-refresh a
+rotated token"*. The shipped implementation is `packages/coding-agent/src/core/auth-storage.ts:64` (`auth.json` under the
+agent dir), writing with `mode: 0o600` (`:37`) under `proper-lockfile` (`:9`). The precedence rule is
+`packages/ai/src/auth/resolve.ts:29-30`: *"A stored credential owns the provider: ambient/env is consulted only when
+nothing is stored. No silent env fallback after a failed refresh or for a credential type without a matching handler."*
+Shape: **stateful, per-machine, provider-owned**.
+
+**The five differences that decide it — not the file format:**
+
+1. **Who owns the mapping, and in what shape.** (a) maps **role → family → credential**, which is exactly the invariant
+   D48/D119 protects (a verifier seat must not resolve like an author seat). (b) maps **provider id → one credential**,
+   machine-wide: an author seat and a verifier seat asking for `verifier` get the *same* credential. Expressing the
+   invariant under (b) means inventing a second provider id per role or a per-seat store — i.e. you re-implement (a) inside
+   (b).
+2. **Who can mutate it.** (a): only the launch environment (`--env-file`, the operator's shell). (b): any `/login` flow or
+   any write to one `auth.json` — shared by the human's interactive pi and 12 autonomous seats, protected only by mode
+   `0600`, i.e. by *uid*, which is the same trust boundary row **337** measured as already crossed (`/proc/<pid>/environ`).
+3. **Rotation and concurrency.** (b) is genuinely better here: serialized `modify` and refresh-inside-`modify` are what
+   **326** ("a rotation is invisible") has no equivalent of. (a) has no write path at all, so a mid-run rotation is
+   undetectable until a call fails. This is the strongest argument *for* a store, and it is an argument for the **
+   interface**, not for pi's file.
+4. **Failure semantics invert.** Today the debug question is "is the env var set?". Under (b) it becomes "is a stored
+   credential **shadowing** it?" — and because the shadowing is silent (`resolve.ts:30`, "no silent env fallback" cuts the
+   other way too), the rig would be debugging a plane it does not display. Row **334**'s "name the source per family" is
+   the precondition for ever adopting (b).
+5. **Audit changes meaning.** `selfdev.sqlite.spend.jsonl` rows carry `authKeyEnv` (measured: 856 rows, every one
+   `authKeyEnv: DURIG_VERIFIER_API_KEY`, `host: api.deepinfra.com`). Under (b) the honest label becomes "stored credential
+   for provider X", so per-seat attribution (**316**) and the $0.50 family cap (**324**) need a different discriminator —
+   which is precisely the per-consumer grant that **342** would create. (b) does **not** give you per-member scoping for
+   free; the sweep found no framework that does.
+
+**The middle that the research actually points at:** **(334)** — durian-pi implements `CredentialStore` itself, keeping the
+**role-shaped** mapping, and thereby gets (b)'s real benefits (one serialized write path, refresh/rotation visible,
+real-vs-redacted expressible as a type) **without** adopting pi's precedence or sharing the human's `auth.json`. That is
+also the on-ramp to **342**: oh-my-pi proves the *same* interface can later be backed by a separate holder
+(`RemoteAuthCredentialStore` selected by `OMP_AUTH_BROKER_URL`), so choosing 334 now does not foreclose the operator's
+separate-process idea — it is what makes that idea a store swap instead of a rewrite. Under any 333 answer, **336/337/341**
+(the funded trio) are unaffected: they are about reachability, not about where the value is kept.
+
 ## 2. Options
 
 Cost is stated the way the rig states everything else: delegate/seat wall-clock to build, and model spend

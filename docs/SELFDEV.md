@@ -2484,3 +2484,15 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     tracked). Quote the tripwire (`node .spike/delegate-20261106/verifier-spend-tripwire.mjs`, free) in any report, and
     treat probe cost as a **guess until a row appears**. Do not "fix" this by writing rows from a delegate script — the
     writer belongs in the metering path (141/145), and 310 is the row that owns the question.
+
+61. **The free arm records no token trajectory, so any context-window work is blind for seven of twelve seats.** Both
+    ledger files hold metered rows only — `selfdev.sqlite.spend.jsonl` = **856 rows, all `host: api.deepinfra.com`**, and the
+    default path named in `cli.mjs:286` (`.spike/gate/spend.jsonl`) = **1 row**, also metered. So `prompt_tokens` exists for
+    the three `verifier` seats and **not at all** for the seven `local` author seats, whose context growth is exactly what a
+    compaction or context-band change has to see. Two consequences: a design discussion that quotes "the p90 call is 19,480
+    tokens" is quoting the *verifier* arm only, and **310**'s two-ledger fork is live (different paths, neither tracked,
+    one written by the rig and one by probes). The fast probe (reads files only, ~0.3 s, no model):
+    `.spike/delegate-20261107/trajectory.mjs` — per-arm `prompt_tokens` percentiles, the count above each family's in-force
+    compaction threshold, and up/down turn transitions (the sawtooth test). Promote it under **312** before any
+    context-band row is scheduled. Fix the invisibility itself on **316** (the per-actor surface must carry tokens for both
+    arms, priced or not); do not solve it by asking the local server for usage it may not report.
