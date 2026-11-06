@@ -9867,3 +9867,50 @@ again. `origin/main` at this close is recorded in `docs/NEXT.md`.
 **B. What the store is keyed by.** pi keys by `Provider.id`, one credential per provider (`types.ts:52-53`). Our provider ids are **already role-shaped** — `LOCAL_PROVIDER_ID = "local"`, `VERIFIER_PROVIDER_ID = "verifier` (`src/providers/local.mjs:33-34`) and the metered provider id at `cli.mjs:350` — so role scoping survives pi's keying **as long as that 1:1 holds**. Options: **(i) keep provider-id keying and enforce role↔provider-id 1:1 as a `check` finding**; **(ii) ask pi upstream for a scoped key (`providerId + scope`)** — the pi-alignment-first ruling (D224) favours raising it, but it is an upstream dependency we'd then wait on; **(iii) invent a rig-side composite id** (`verifier#lead`) — pro: per-seat grants without touching pi, and it is 342's grant surface; con: it fakes identity with strings and will drift. **Recommendation: (i) now with a `check` assertion, (iii) only inside the 342 spike where the grant is the point, and (ii) as a question filed upstream, not a dependency.** A `check` finding is the cheap guarantee (307's precedent).
 **C. Precedence when a store entry and a `DURIG_*` env value both exist.** Options: **(i) pi's default** (stored wins, ambient consulted only when nothing is stored); **(ii) env wins** (an explicit launch-time value means "use this now", which is how rotation-by-restart works today); **(iii) fail loud** — refuse the provider and name both sources; **(iv) explicit-source-wins**: the config names the source per family (`DURIG_VERIFIER_CRED_SOURCE=env|store:<name>`) and a second, unrequested source is a refusal. **Recommendation: (iv), because 341's rule is "no silent fallback", and because the ledger's `authKeyEnv` column (`src/providers/local.mjs:294`, `authKeyEnv` carried so the row can say which variable paid) only means something if the source is chosen deliberately.** (i) is defensible for pi-ecosystem sameness but would silently out-rank an operator's launch-time rotation, which is the exact failure **326** records.
 **D. Does a seat ever hold the value?** This is 342's design fork and it is now the *only* credential question with a money/capacity dimension. Options: **(i) status quo** — the broker resolves at request time and the seat never holds a key for the model path (true today: `auth.apiKey.resolve` runs broker-side at `cli.mjs:353-358`, and pi's own OAuth design comment warns against handing a client a live refresh token, `auth/types.ts:118-127`); **(ii) hand seats a per-seat scoped credential** from the store — pro: works for consumers the broker cannot proxy (git, package registries, the seat's own shell); con: it puts a real value into a same-uid child, which 337 measured as readable through `/proc`; **(iii) hand seats a request-level grant** (the oh-my-pi `stdio` gateway shape, and prime-agent's `get_api_key` resolver, M12) — pro: the value never lands in the child; con: only covers consumers that ask rather than connect. **Recommendation: keep (i) for the model path, pilot (iii) for everything else, and treat (ii) as a fall-back that requires closing 337 first.** If the operator wants option (ii) anyway, that is a capacity/policy grant, not a technical one.
+
+## D228 — the operator ratifies the cleanup pass, takes the push themselves, and orders a recovered worktree landed (2026-11-07)
+
+The delegate reported the land+prune pass with five decisions and asked for a push grant. The operator's answers, verbatim
+where short: **"1. I git pushed. 2. Accept your recommendation. 3. Accepted. 4. Accepted. 5. Accepted."** plus
+**"item-5193 is still wanted, please land it."**
+
+**Ruling 1 — the operator executed the push.** Re-measured after their push: `git fetch` then `origin/main` =
+**`51f35497`**, and `git rev-list --count refs/remotes/origin/main..main` → **0**. Recorded so the *ask* stays cheap: a
+one-line "grant push?" is enough, and the operator may prefer to run it — the delegate must re-measure the range afterwards
+rather than assume its own `HEAD` is the remote's.
+
+**Ruling 2 — accepted: the three conflicted landings route to the team, not to the delegate.** `item-5208` (mints
+`## D221`, already used on main), `item-4846` (writes the placeholder `## D-<mint>`) and `item-4967` (a two-sided rewrite of
+`docs/runbooks/verifier-serving-headroom.md`) go to `lead`/`scribe` for the decision-number mint and the runbook
+adjudication. The brief is already spooled: `requestId 7a62c562-8198-4d1b-b6bd-232d8615585f`
+(`selfdev.sqlite.broker.inbox/0001794007524862-1218609-r6eeid.json`), undelivered because the broker is down.
+
+**Ruling 3 — accepted, with an explicit instruction: land `item-5193`.** The item is `done`, its branch tip (`cfbc4c5d`) was
+already an ancestor of `main`, and its worktree held the rig's only orphaned content: two uncommitted **tracked** edits
+(`docs/runbooks/delegate-doc-hygiene.md`, `docs/runbooks/local-provider-down.md`) existing nowhere else. The delegate
+committed the recovered text **as the #5193 session wrote it** (`1cac166b`, message states the recovery and that the prose is
+not the delegate's), landed it, and reclaimed the worktree and ref. Landing conflicted because `main` had moved both files
+since the branch base (the D205 host-label scrub `2a8ff993` and the state-6/7 entry `46c28b73`); the delegate resolved one
+hunk per file — the runbook front-matter `evidence:` line — as a **union** that keeps main's `last_verified: 2026-11-06`
+stamp and its host-label scrub while keeping the recovered PARTIAL re-verification, and added a clause saying that stamp
+covers the state-6/state-7 legs only. Merge `baab6ed8` (two parents), `main` advanced by `--ff-only`, `main = baab6ed8`.
+**Boundary stated for the record:** committing another session's saved work is normally a seat's job (the delegate does not
+do the team's work); it was done here on the operator's explicit instruction, with the authorship disclosed in the message,
+and both sides' body content re-checked present after the merge. The method is written up as pitfall **63**.
+
+**Ruling 4 — accepted: `item-4970` unlocked and reaped.** It was `done`, clean, and locked, which per `leaked-worktrees.md`
+means teardown never ran. `git worktree unlock` + `git worktree remove` + `git branch -d item-4970` (was `1ae15cb1`).
+
+**Ruling 5 — accepted: `wip/seat-prompt-files` is kept, not force-deleted.** Its ledger row says `SUPERSEDED-BY-EVENTS`
+(intent landed as re-cut `item-4966`) but it holds 1 unique patch, so only `-D` would remove it and no `-D` was granted.
+
+**State after the ratifications (measured, same command as the counts):** branches **24** (was 44 at pass start), worktrees
+**18**, `cli.mjs worktree audit` → `total 18, reapable 0, {seat-root 8, live 9, locked 1}` — the one lock is `item-5094`,
+held on purpose by its `KEEP-HELD` disposition row. **`dirty` is now 0**: there is no uncommitted work anywhere on the rig
+outside a seat's live tree. Gates after the merge: docs **6/6**, check **12/12**, guard **25/25**, `NEXT POINTER TEST PASS`.
+New rows from this exchange: **345** (the land helper's conflict message names a scratch tree it already removed).
+
+**Cost note the ledger cannot show:** this session spent **$0.00** because the delegate itself runs on the free arm —
+`PI_PROVIDER=strata PI_MODEL=qwen3.8-flash-next-iq3_s` — and the rig's spend ledger records **only metered provider calls**
+(pitfall **61**). So "the ledger did not move" is not evidence about the free arm's context growth, which is exactly the
+blind spot the milestone's context work has to close before it can be tuned.

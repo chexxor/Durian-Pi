@@ -1,6 +1,13 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-07T04:4xZ (delegate session **N** closes on the operator's rulings: **333 is RULED = (b) as a
+**Last update:** 2026-11-07T05:3xZ (delegate session **N2** — the operator **ratifies the cleanup pass** (D228): the push was
+executed by the operator, `item-5193` is ordered landed ("*item-5193 is still wanted, please land it*") and is now on `main`
+as `1cac166b` → merge `baab6ed8`; `item-4970` is unlocked and reaped; `wip/seat-prompt-files` is kept, not force-deleted;
+the three conflicted landings route to `lead`/`scribe`. Rig surface: **24 branches, 18 worktrees, `reapable 0`, `dirty 0`**.
+Two new artifacts from the pass: row **345** (the land helper's conflict message names a scratch tree it already deleted) and
+pitfall **63** (the sequence that lands a `done`-but-dirty worktree). Credential decision D227 A–D is still open — the
+recommendation is restated as a single package in the session report.) Previous close (session **N**, 04:4xZ): the
+operator's rulings: **333 is RULED = (b) as a
 user-swappable interface** — "*We should provide a recommended implementation, but leave a bare-bones implementation that
 pulled it from an env var or local file like Pi does*" (**D227**); **338 (`auth check`) approved — "Go ahead with it."**;
 **331 approved to land**; rotation rides the store (`modify()`), not a restart. Measured in the same turn: the seam already
@@ -18,11 +25,16 @@ land the ones that are done and clean them and their workspaces up?*" — done, 
 `leaked-worktrees.md` + `land.md`: **10 done branches landed** (each proven by
 `git merge-base --is-ancestor <tip> main` and a two-parent merge commit), **21 worktrees removed with zero refusals**,
 **18 merged refs `-d`'d**, `git worktree prune` clean, and the leak meter is now **`reapable: 0`**. Branches **44 → 26**,
-worktrees **41 → 20**, `main` advanced only by the landings. Three done branches are **not** landed and are escalated, not
+worktrees **41 → 20** at that moment, **24 branches / 18 worktrees** after the ratifications below), `main` advanced only by
+the landings. Three done branches are **not** landed and are escalated, not
 resolved (evidence in row 311's update and pitfall **62**): `item-4846` (writes `## D-<mint>`), `item-5208` (mints
 `## D221`, which main already uses) and `item-4967` (a two-sided runbook rewrite no test can adjudicate). One new row is
 registered from the pass: **344** (a patch-equivalent, non-ancestor ref that `prune-branch` and `-d` each refuse — the
 `verify-5180` specimen is left in place to reproduce it).
+**Ratified by the operator (D228):** the push was executed by the operator themselves; the three conflicted landings are
+accepted as a route to `lead`/`scribe`; `item-4970` was unlocked and reaped; `wip/seat-prompt-files` is kept (no `-D`); and
+**`item-5193` was ordered landed** — its recovered runbook work is now on `main` as `1cac166b` → merge `baab6ed8`, and the
+recovery method is pitfall **63**.
 
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
@@ -61,10 +73,10 @@ refs are all that remain): `item-4846`, `item-4967`, `item-5208` (needs a decisi
 call), `item-5094` + `impl-item-5094-recut` (**identical patch-ids** `323f8b98…`/`b8d62623…` — Step 0c says one claim, and
 the landed ledger row for it says **KEEP-HELD**, so the delegate neither landed nor deleted them), `verify-5180` (the 344
 specimen), `wip/seat-prompt-files` (ledger row `SUPERSEDED-BY-EVENTS`; removal needs a named `-D` grant — **yours**).
-**Kept worktrees (20): 8 seat-root (in use), 9 live (`claimed`/`held`/`deferred`), 2 `locked` (`item-5094` by disposition,
-`item-4970` a lingering lock = teardown never ran), 1 `dirty` (`item-5193`, `done`, holding 2 uncommitted tracked doc
-edits — `docs/runbooks/delegate-doc-hygiene.md`, `docs/runbooks/local-provider-down.md` — which exist nowhere else;
-committing them is a seat's work, discarding them is **your** decision, never the delegate's).** Re-check in one line each:
+**Worktree surface after the ratifications (measured): 18 trees — 8 seat-root (in use), 9 live
+(`claimed`/`held`/`deferred`), 1 `locked` (`item-5094`, held on purpose by its `KEEP-HELD` disposition row), and
+`dirty: 0` — the last orphan (`item-5193`) is landed, and `item-4970`'s lingering lock was reaped on the operator's
+acceptance.** Re-check in one line each:
 `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `reapable: 0`) and
 `git branch --format='%(refname:short)' | grep -v '^main$' | while read b; do a=$(git rev-list --count main..$b); [ "$a" -gt 0 ] && echo "$b ahead=$a"; done`.
 
@@ -145,10 +157,10 @@ node scripts/test.mjs --area docs && node scripts/test.mjs --area check && node 
 # node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600
 ```
 
-**Push state (2026-11-07, session N after the land+prune pass):** `origin/main` is at **`4f62ccf8`**; local is
-**25 commits ahead** (measured: `git rev-list --count refs/remotes/origin/main..main` = 25 — the 13 seat commits the pass
-landed, the 10 merge commits, `2dfd0f95` and the pass record), and the earlier grant is spent, so **the next push needs a
-fresh grant** (grants are per batch, D218). Nothing was pushed by the prune pass.
+**Push state (2026-11-07, after the ratifications):** the operator pushed themselves — `origin/main` = **`51f35497`**
+(measured after `git fetch`). Unpushed since then: the `item-5193` recovery commit `1cac166b`, the landing merge
+`baab6ed8`, and this record. Always re-measure rather than assuming your own `HEAD` is the remote's:
+`git fetch && git rev-list --count refs/remotes/origin/main..main`.
 
 **Blocker:**
 1. **311's message half is LANDED** (via `item-5111`/#5134 — `src/worktree.mjs:1242` now uses

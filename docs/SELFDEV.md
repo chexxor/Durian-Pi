@@ -2522,3 +2522,42 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     pass-safe workaround is a move-and-verify (md5 before, move out of the tree, land, move back, `md5sum -c`), not a
     commit and not an ignore edit; the broker was down so there was no concurrent writer. Check that first before
     assuming a landing refusal is about the branch.
+
+63. **Landing a `done` worktree that still holds uncommitted tracked edits: the sequence that survives the conflict.**
+    Done under the operator's instruction for `item-5193` on 2026-11-07 (D228 R3); every step measured on Linux Fedora 45,
+    kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. The situation: item `done`, branch tip already an ancestor of
+    `main`, worktree `dirty` with tracked edits that exist nowhere else. `docs/runbooks/branch-cleanup.md` says "resolve by
+    committing on its branch" and stops there — what actually happens next is a conflict, because `main` moved those same
+    files while the seat sat.
+
+    The sequence that worked, in order:
+    1. Read the orphan first: `git -C <wt> diff -- <paths>`. Never commit it unread; the content may be wanted, half-finished,
+       or superseded. Say in the commit message whose prose it is (the delegate did not write it).
+    2. Commit on the branch inside its worktree: `git -C <wt> add <explicit paths>` then `git -C <wt> commit -F <abs-path>` —
+       `-F` with an **absolute** path, because `git -C` changes the cwd and a relative `--file` fails with
+       "could not read log file".
+    3. Pre-flight the landing: `git merge-tree --write-tree --name-only main <branch>; echo $?` — `1` means it conflicts, and
+       the names are the conflicted paths. Expect runbook `evidence:` lines to collide: they are one long line every session
+       appends to, and a hostname scrub (`2a8ff993`) or a `last_verified` bump on `main` will hit the same line.
+    4. Do **not** try to resolve inside `scripts/land.mjs`'s scratch: on conflict it runs `removeScratch()` **before**
+       printing "The merge lives in the scratch worktree … Resolve it there" (registered as **345**). Make your own tree per
+       `docs/runbooks/resolve-merge-conflict.md`: `git worktree add --detach ../resolve-<item> main`, then
+       `git merge --no-ff <branch>`.
+    5. Resolve one hunk at a time as a **union** for journal/front-matter lines: keep `main`'s later `last_verified` and its
+       D205 host-label scrub, keep the incoming PARTIAL re-verification text, and add one clause naming which legs the stamp
+       actually covers. Then verify both sides survived (`grep -c` for each side's added heading → 1), that no markers remain
+       (`git grep -n '^<<<<<<<'` empty) and that no host label came back (`grep -n 'Win10\|Alex-Desktop'`).
+    6. Finish the merge with `git commit -F <msg>` — **not** `git merge --no-edit -m …`, which answers
+       "fatal: You have not concluded your merge (MERGE_HEAD exists)" once the paths are staged.
+    7. Advance `main` without forcing: `git merge --ff-only <merge-sha>` in the shared tree (the merge commit's first parent
+       is `main`, so this is a fast-forward and cannot lose work; never rebase `main`). Then `git worktree remove` the scratch
+       and `git worktree prune`.
+    8. Re-verify: `git merge-base --is-ancestor <branch> main` (exit 0), the area gates in the **installed** tree
+       (docs/check/guard), then reclaim the item's worktree and `git branch -d <branch>`.
+
+    Two traps inside that sequence. **(a) a detached scratch worktree has no `node_modules`,** so half the docs/check tests
+    fail there with `ERR_MODULE_NOT_FOUND: @earendil-works/pi-durable` — that is environmental, not the merge; the pure-node
+    gates (`demo/runbook-rules.test.mjs`, `demo/next-pointer.test.mjs`) do run, and the rest must run in the shared tree after
+    step 7. **(b) `git rerere` is enabled** and printed "Recorded preimage for …" / "Recorded resolution for …" during this
+    merge, so a future merge that touches the same runbook `evidence:` line may silently replay this resolution — read
+    `git rerere status` and `git rerere diff` before trusting a merge of those files.
