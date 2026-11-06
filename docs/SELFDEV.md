@@ -2496,3 +2496,29 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     compaction threshold, and up/down turn transitions (the sawtooth test). Promote it under **312** before any
     context-band row is scheduled. Fix the invisibility itself on **316** (the per-actor surface must carry tokens for both
     arms, priced or not); do not solve it by asking the local server for usage it may not report.
+
+62. **Before you land a `docs/DECISIONS.md` branch, check its decision NUMBER against main; and know the ref class no
+    tool can delete.** Both measured in the operator-directed land+prune pass on 2026-11-07 (Linux Fedora 45, kernel
+    `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0), and both are cheap to pre-flight per branch, not per pass.
+    **(a) a decisions branch can mint a number main already uses.** `item-5208`'s commit adds
+    `## D221 — a roadmap row is bounded by its acceptance check…` while main's ledger already has `## D221` and runs to
+    `D227`; `item-4846` instead writes the literal placeholder `## D-<mint>` meaning "mint at land time". Either way the
+    merge conflicts at the append point, and resolving it by taking a side **silently deletes one decision** — which is
+    the one thing an append-only journal must not do. Pre-flight every branch in the train, then land the clean ones first
+    (the runbook's landing-train order) and route the numbering collisions to the ledger owner rather than resolving them:
+    `git diff main...<branch> -- docs/DECISIONS.md | grep '^+## '` … then, for each number it claims,
+    `grep -c '^## D<NNN> ' docs/DECISIONS.md`. A `1` means collision. Nothing in the suite catches this, so per
+    `branch-cleanup.md` Step 0d it is not yours to resolve.
+    **(b) a patch-equivalent, non-ancestor ref is a dead end.** `verify-5180`: `git merge-base --is-ancestor` exits 1 and
+    `main..verify-5180` is 1 commit, but `git cherry main verify-5180` prints nothing (content already landed). The
+    sanctioned verb then refuses with *"it is already an ANCESTOR of \"main\" (git cherry prints nothing), so it is not a
+    patch-equivalent duplicate. Use `git branch -d`"* — and `git branch -d` answers *"not fully merged"*. The verb reads
+    "cherry prints nothing" as ancestry, which is exactly the patch-equivalence case it exists for, so the ref survives
+    every prune and re-prints forever. **Do not reach for `-D`** (the seat guard refuses it, #1211; it needs a named
+    operator grant). Registered as **344** with the fixture-repo gate; the specimen ref is left in place so the next
+    session can reproduce it.
+    **(c) the land helper's clean-tree gate counts store artifacts.** `scripts/land.mjs` refuses the whole train on
+    **untracked** paths — the blocker was `selfdev.sqlite.spend.jsonl`, which the rig writes itself (**310**). The
+    pass-safe workaround is a move-and-verify (md5 before, move out of the tree, land, move back, `md5sum -c`), not a
+    commit and not an ignore edit; the broker was down so there was no concurrent writer. Check that first before
+    assuming a landing refusal is about the branch.

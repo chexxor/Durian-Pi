@@ -13,6 +13,17 @@ each with a recommendation, in **D227** A–D: the recommended backend, the stor
 a seat may ever hold a value. The operator also named the next milestone — see (M) below — and granted push, used:
 `4620cecf..d1583c38` then `d1583c38..4f62ccf8`.)
 
+**Land+prune pass at the operator's request (2026-11-07T05:0xZ, session N).** "*I see we have a lot of branches, can you
+land the ones that are done and clean them and their workspaces up?*" — done, per `docs/runbooks/branch-cleanup.md` +
+`leaked-worktrees.md` + `land.md`: **10 done branches landed** (each proven by
+`git merge-base --is-ancestor <tip> main` and a two-parent merge commit), **21 worktrees removed with zero refusals**,
+**18 merged refs `-d`'d**, `git worktree prune` clean, and the leak meter is now **`reapable: 0`**. Branches **44 → 26**,
+worktrees **41 → 20**, `main` advanced only by the landings. Three done branches are **not** landed and are escalated, not
+resolved (evidence in row 311's update and pitfall **62**): `item-4846` (writes `## D-<mint>`), `item-5208` (mints
+`## D221`, which main already uses) and `item-4967` (a two-sided runbook rewrite no test can adjudicate). One new row is
+registered from the pass: **344** (a patch-equivalent, non-ancestor ref that `prune-branch` and `-d` each refuse — the
+`verify-5180` specimen is left in place to reproduce it).
+
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
 echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a hostname** — D205, ROADMAP 281).
@@ -40,6 +51,22 @@ seat is decoration; (2) promote the three `.spike/` instruments under **312** (c
 337, trajectory probe for N2); (3) drain the spool with a **bounded** broker start after reading the 6 dead letters, so
 `lead` can route; (4) settle how **#5273** (311) gets claimed — the doc's kill test and the 41 leaked worktrees are the same
 failure class; (5) `node scripts/test.mjs --area docs && node scripts/test.mjs --area guard` (1.0 s / 1.9 s).
+
+**(C) THE LAND+PRUNE PASS — state of the branch/worktree surface right now, and what to run first.** Landed (merge
+commits on `main`): `item-4829`, `item-4922`, `item-4943`, `item-5090`, **`item-5111`** (= #5134, the
+worktree-removal message fix — **half of row 311 is therefore now landed**: `src/worktree.mjs:1242`
+`entry.parentPath ?? entry.path ?? worktree`), `item-5145`, `item-5175` (the `item-5094` KEEP-HELD disposition row),
+`item-5209`, `item-5216`, `item-5217`. **Still off-main, on their refs, with their worktrees already reclaimed** (so the
+refs are all that remain): `item-4846`, `item-4967`, `item-5208` (needs a decision-number re-mint — the ledger owner's
+call), `item-5094` + `impl-item-5094-recut` (**identical patch-ids** `323f8b98…`/`b8d62623…` — Step 0c says one claim, and
+the landed ledger row for it says **KEEP-HELD**, so the delegate neither landed nor deleted them), `verify-5180` (the 344
+specimen), `wip/seat-prompt-files` (ledger row `SUPERSEDED-BY-EVENTS`; removal needs a named `-D` grant — **yours**).
+**Kept worktrees (20): 8 seat-root (in use), 9 live (`claimed`/`held`/`deferred`), 2 `locked` (`item-5094` by disposition,
+`item-4970` a lingering lock = teardown never ran), 1 `dirty` (`item-5193`, `done`, holding 2 uncommitted tracked doc
+edits — `docs/runbooks/delegate-doc-hygiene.md`, `docs/runbooks/local-provider-down.md` — which exist nowhere else;
+committing them is a seat's work, discarding them is **your** decision, never the delegate's).** Re-check in one line each:
+`DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `reapable: 0`) and
+`git branch --format='%(refname:short)' | grep -v '^main$' | while read b; do a=$(git rev-list --count main..$b); [ "$a" -gt 0 ] && echo "$b ahead=$a"; done`.
 
 **(R) 333 IS RULED — (b) as an interface — so the credential work is now a build with a known order.** The ruling and the
 four follow-up decisions are in **D227**. Rows updated in place, not duplicated: **333** (the ruling, verbatim; open only for
@@ -80,7 +107,7 @@ minted them; the briefs are **spooled undelivered** as `delegate-20261106c-lead1
 **(2) THE PASS HALF IS STILL STOPPED, and the stop is routing, not capacity** (unchanged ruling, D224 R5): **do not start a
 third pass until `lead`/`pm` say how `#5273` (the 311 carrier, `impl`) gets claimed** — it sat `queued` through two full
 passes while `claimed` rose 14 → 17. Worktrees **41** at session-L close (`seat-root 8, reapable 21, live 9, locked 2,
-dirty 1`) — the leak 311 exists to stop. Broker at this close: **down** ("no broker state"), `selfdev.sqlite.broker.json`
+dirty 1`) — the leak 311 exists to stop; re-measured after the land+prune pass in **(C)**: **20** worktrees, `reapable 0`. Broker at this close: **down** ("no broker state"), `selfdev.sqlite.broker.json`
 absent, **6 dead letters** in `selfdev.sqlite.broker.inbox.error` (same 6 as session L — no new ones), verifier provider
 **answers, 174 models including `openai/gpt-oss-120b`**, local provider configured but not probed in that run. Family
 spend **$0.34959 of the $0.50 trigger (69.9 %)**, headroom **$0.15041**; this session spent **$0.00123** (3 preflight
@@ -110,23 +137,25 @@ node .spike/delegate-20261106c/compaction-policy-probe.mjs # 331 baseline — fr
 node tools/vendor-pins.mjs --check                         # PIN CHECK PASS, 27 clones, incl. the review-audit clause (a review naming a present clone cites its HEAD + has a COMPETITORS entry)
 node tools/broker-serve.mjs --status                       # down? spool depth? provider reachability? — reads files, not the store, so it answers with the broker down. NOTE 295 is LANDED here: the preflight prints provider id/baseUrl/model/ctx/out, NOT values — do not re-report it as a leak
 ls selfdev.sqlite.broker.inbox.error | wc -l               # 6 at this close (no new dead letters)
-git worktree list | wc -l                                  # 311 leak meter: 41 at session-L close
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit | head -c 400   # 311 leak meter: reapable 0 after the 2026-11-07 pass (was 21 reapable / 41 worktrees)
+git rev-list --count refs/remotes/origin/main..main                   # 25 at this close; the push needs a FRESH grant (landed seat work is on local main only — single disk)
 DURIG_DB=./selfdev.sqlite node cli.mjs status --json > .spike/status-m.json   # only with the broker DOWN (329: a wedged broker makes this print nothing for 120 s)
 node scripts/test.mjs --area docs && node scripts/test.mjs --area check && node scripts/test.mjs --area guard
 # the pass, only when lead says #5273 is claimed:
 # node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600
 ```
 
-**Push state (2026-11-07, session N):** the operator granted push ("Granted to push"); executed
-`git push origin main` → **`4620cecf..d1583c38`** (the five research commits `7eaaf131`, `474f94f5`, `f5be46ca`,
-`e4c6f31d`, `d1583c38`), `refs/remotes/origin/main..main` → **0** at that moment. The milestone-intake work committed after
-that was pushed under the **same** grant; `docs/DECISIONS.md` **D226** ruling 6 states the batch boundary and asks the
-operator to say if they want a fresh grant per group. The check is `git rev-list --count refs/remotes/origin/main..main`
-(expect `0`; if not, ask — the grant is per batch, D218).
+**Push state (2026-11-07, session N after the land+prune pass):** `origin/main` is at **`4f62ccf8`**; local is
+**25 commits ahead** (measured: `git rev-list --count refs/remotes/origin/main..main` = 25 — the 13 seat commits the pass
+landed, the 10 merge commits, `2dfd0f95` and the pass record), and the earlier grant is spent, so **the next push needs a
+fresh grant** (grants are per batch, D218). Nothing was pushed by the prune pass.
 
 **Blocker:**
-1. **311 still gates every further pass** — cleanup refuses with the unreadable `undefined/anthropic-ai-sdk…` string
-   (`src/worktree.mjs:1237` reads `dirent.path`, undefined on node v24.22.1; the property is `parentPath`).
+1. **311's message half is LANDED** (via `item-5111`/#5134 — `src/worktree.mjs:1242` now uses
+   `entry.parentPath ?? entry.path ?? worktree`), so a cleanup refusal names the real path and link target instead of
+   `undefined/<name>`. **Two halves remain:** the guard is still tripped by ordinary `node_modules` symlinks, and there is
+   still **no reap verb or schedule fed by `cli.mjs worktree audit`** — today the delegate had to remove 21 `reapable`
+   trees by hand. Leak meter after the pass: **`reapable: 0`**, worktrees **20** (was 41). New companion row: **344**.
 2. **333 is RULED (D227) — (b) as a swappable interface — and four narrower choices are open to the operator**: the
    recommended backend, the store key shape, the precedence rule, and whether a seat may ever hold a value. None of them
    block **331 / 334 / 336 / 337 / 338 / 341**; only **342**'s shape waits on the last one.
