@@ -1,6 +1,6 @@
 # Delegate session 2026-10-29 (part 2) — the probe transport bug, the verifier's real deadline, and the hygiene condition on restarting the team
 
-**Delegate session; measurements are Linux (Fedora 7.2.11-200.fc42.x86_64, box `Alex-Desktop-Win10`, node v24.22.1),
+**Delegate session; measurements are Linux (Fedora 7.2.11-200.fc42.x86_64, box `label-withheld-per-D205`, node v24.22.1),
 stamps in Z.** Continuation of the flint-verifier session under the operator's "I approve your recommendations". Every
 number here came from a command run in this session unless a source is named. Durable record: **D164**. Pointer:
 `docs/NEXT.md` (rewritten in place). This session also **corrects a claim the previous session's pointer asserted**.

@@ -5,7 +5,7 @@ writes: true                 # model-server state only — load, unload, context
 precondition: "read-only through the Diagnose steps; loading/unloading or re-windowing a model needs the operator's grant AND the affected seats idle — never during a probe or gate run"
 last_verified: 2026-10-29
 verified_by: delegate
-evidence: "every endpoint, schema and number in the Diagnose/Do steps was executed 2026-10-29 on Linux (Fedora, box Alex-Desktop-Win10, node v24.22.1) against LM Studio's v1 REST API at http://127.0.0.1:1234; the memory numbers and the cgroup cap results in §probe discipline were re-measured the same day; commit c34bb232 carries the same evidence"
+evidence: "every endpoint, schema and number in the Diagnose/Do steps was executed 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1) against LM Studio's v1 REST API at http://127.0.0.1:1234; the memory numbers and the cgroup cap results in §probe discipline were re-measured the same day; commit c34bb232 carries the same evidence"
 evidence_addendum: "the section `Arming a metered verifier provider` was executed end-to-end 2026-11-06 (probe NOT-ARMABLE -> vendor price row -> ARMABLE, maxCallExposureUsd 0.001419; roster flip to verifier/openai/gpt-oss-120b; both pointer instruments green; check no longer reports single-model-rig). The :1234 LM Studio steps were NOT re-verified — that server has been down since 2026-10-29 — so last_verified deliberately stays 2026-10-29."
 check_rule: "demo/local-model-pointer.test.mjs is the offline half that fails when rig.selfdev.json and durig.config.json disagree; the live installed-vs-loaded half is docs/ROADMAP.md 261"
 ---
@@ -13,7 +13,7 @@ check_rule: "demo/local-model-pointer.test.mjs is the offline half that fails wh
 # Control the model server behind a provider (LM Studio at `:1234`)
 
 **Status:** delegate-written, partially verified. Verified: every endpoint, schema and number below was
-executed on **Linux (Fedora, box `Alex-Desktop-Win10`, node v24.22.1) on 2026-10-29**, against LM Studio's
+executed on **Linux (Fedora, box `label-withheld-per-D205`, node v24.22.1) on 2026-10-29**, against LM Studio's
 v1 REST API at `http://127.0.0.1:1234`. Unverified: anything about a different LM Studio version, and the
 capability verdict for `recursivesi/flint` (the gate run was still in flight at clock-out — see
 `docs/reviews/delegate-notes-2026-10-29-flint-verifier.md`).
@@ -450,7 +450,7 @@ It refuses at the floor named in **260** (< 10 GiB available, > 50 % swap, < 1 G
 - add real swap on disk (e.g. a 32 GB swap file) so a transient spike is absorbed instead of a server being executed;
 - run only one generation arm at a time, and never a corpus build or `npm test` from the main checkout alongside one.
 
-**Say which OS you measured on.** These numbers are Linux/Fedora on `Alex-Desktop-Win10`; `swappiness`, `min_free_kbytes`
+**Say which OS you measured on.** These numbers are Linux/Fedora on `label-withheld-per-D205`; `swappiness`, `min_free_kbytes`
 and the semantics of a killed process differ on Windows, and `src/seatguard.mjs:122` registers both `bash` and
 `powershell` for that reason.
 

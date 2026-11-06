@@ -4,7 +4,7 @@
 **Delegate, not a seat.** Nothing here is claimed, completed, or routed. The instrument and the alias table are the
 cheap halves ROADMAP **250** and **244** asked for; the corpus repair they expose is **seat work** and stays unclaimed.
 
-**Host and clock, per 244:** `Alex-Desktop-Win10`, Linux Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1,
+**Host and clock, per 244:** `label-withheld-per-D205`, Linux Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1,
 `2026-10-29T03:4x–04:0xZ` = Wed Oct 28 22:4x–23:0x **CDT (UTC−5)**. Every number below came from a command that is
 printed next to it.
 

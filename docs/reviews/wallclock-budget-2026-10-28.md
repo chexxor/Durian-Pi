@@ -1,6 +1,6 @@
 # Where this rig's wall-clock actually goes — measured 2026-10-28 (delegate)
 
-**Box and clock, because every number here is machine- and OS-specific:** Linux (`Alex-Desktop-Win10`, Fedora
+**Box and clock, because every number here is machine- and OS-specific:** Linux (`label-withheld-per-D205`, Fedora
 `7.2.11-200.fc44.x86_64`), `node v24.22.1`, store `./selfdev.sqlite` (274,068 records; 137,427 entries; 105,610
 tasks; 30,944 submissions), `date -u` at run = **2026-10-28T18:47:50Z**. Rig: `rig.selfdev.json` (12 seats, all on
 `local/iq3_s`; `DURIG_VERIFIER_*` configured but unused by any seat).

@@ -118,7 +118,7 @@ receive the text; the demos alone only prove the on-disk copies agree.
   returning the 3 constitution-mirror demos to green.
 - **Verify ran 2026-10-17 (#1287):** `node demo/starter.test.mjs`, `node demo/commit-model.test.mjs`,
   `node demo/seat-commit-instructions.test.mjs` all exit 0 (main `6c384ac`).
-- **Verify ran 2026-10-28 (delegate, Linux `Alex-Desktop-Win10`, node v24.22.1):** the operator-instructed
+- **Verify ran 2026-10-28 (delegate, Linux `label-withheld-per-D205`, node v24.22.1):** the operator-instructed
   `P2 Work protocol` amendment landed through this procedure. `node tools/mirror-constitution.mjs` re-mirrored
   `rig.starter.json` (2,693 → 3,643 chars, value span only, file 9,803 → 10,755 bytes); the three mirror demos exit 0;
   `check rig.selfdev.json` went from `constitution-not-applied` **error** (store 2,693 bytes vs file 3,643) to both

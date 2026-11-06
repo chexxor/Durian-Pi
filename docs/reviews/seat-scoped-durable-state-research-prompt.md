@@ -3,7 +3,7 @@
 **Ask:** hand this to the operator's research agent (it is off-host and has **no write access to this repo**, so ask it for
 *content to copy*, never commits or file writes). Report to `docs/reviews/seat-scoped-durable-state-research.md`.
 
-**Why this question, now (measured, this rig, Linux host `Alex-Desktop-Win10`, 2026-10-30T06:4xZ).** The operator asked
+**Why this question, now (measured, this rig, Linux host `label-withheld-per-D205`, 2026-10-30T06:4xZ).** The operator asked
 whether durian-pi should be re-architected so each seat is its own pi-durable instance with its own database. The delegate
 answered from the tree and the operator accepted the recommendation *not* to split, on condition the question is researched
 properly rather than left as chat opinion. Two measured facts motivate the question and two constrain the answer:

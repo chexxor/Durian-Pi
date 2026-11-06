@@ -5,7 +5,7 @@ writes: true                 # writes into .git only — packs and refs. It NEVE
 precondition: "read-only through Step 2; minting refs or installing packs needs the operator's grant"
 last_verified: 2026-10-29
 verified_by: delegate
-evidence: "docs/incidents/2026-10-26-worktree-and-scratch-sweep.md; docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md; docs/NEXT.md (2026-10-29, 'Applied under the grant: the pre-move clone's 3 packs → this checkout: 9,301 → 22,362 objects'); every number in 'Evidence' below was re-run 2026-10-29 on Linux (Fedora, box Alex-Desktop-Win10, node v24.22.1)"
+evidence: "docs/incidents/2026-10-26-worktree-and-scratch-sweep.md; docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md; docs/NEXT.md (2026-10-29, 'Applied under the grant: the pre-move clone's 3 packs → this checkout: 9,301 → 22,362 objects'); every number in 'Evidence' below was re-run 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1)"
 check_rule: null             # the *counting* half is ROADMAP 190 (cite store-native ids) + the citation family (250/252)
 ---
 
@@ -150,7 +150,7 @@ The operator, for three decisions this procedure cannot make: the **grant** to i
 
 ## Evidence
 
-All re-run on **Linux** (Fedora, `Alex-Desktop-Win10`, node v24.22.1) 2026-10-29: `git count-objects -v` →
+All re-run on **Linux** (Fedora, `label-withheld-per-D205`, node v24.22.1) 2026-10-29: `git count-objects -v` →
 `in-pack: 22362`, `packs: 2`, loose `267`; `git fsck --connectivity-only` → 3 dangling trees;
 `git fsck --unreachable` → **452 unreachable commits**, dated **2026-10-14 … 2026-10-21**, sample subjects
 `25008d8c docs(runbooks): merge.md documents the mid-merge WRITE refusal (#1274)`, `5e00ee7e feat(test):

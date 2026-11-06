@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-10-29
 verified_by: delegate
-evidence: "docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box Alex-Desktop-Win10, node v24.22.1); the failure counts are from this session's own mistakes"
+evidence: "docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1); the failure counts are from this session's own mistakes"
 check_rule: "not yet — see docs/ROADMAP.md **262**: `check` reports `runbook-front-matter` as SKIPPED, and `scripts/clockin.mjs:123` skips any runbook with no front matter, so a header-less runbook is currently invisible to both"
 ---
 

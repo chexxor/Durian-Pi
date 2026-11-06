@@ -70,7 +70,7 @@ except untracked `.scratch/` (1 worktree, `.git/worktrees` empty — unchanged f
   recoverable today, and that window is a function of nobody running a cleanup.
 - The spool grant (OPERATOR OWES item 5) is the single cheapest unblock: measured 0 rows for the whole blocking cluster.
 
-## 8. SAME DAY, SECOND SESSION (2026-10-29T03:4x–04:0xZ = 2026-10-28 22:4x–23:0x CDT, Linux, `Alex-Desktop-Win10`)
+## 8. SAME DAY, SECOND SESSION (2026-10-29T03:4x–04:0xZ = 2026-10-28 22:4x–23:0x CDT, Linux, `label-withheld-per-D205`)
 
 Resumed from the previous session's next step. **Built** ROADMAP 250's two delegate halves —
 `tools/review-cite-check.mjs` and the alias table `docs/reviews/harness-citation-registry.md` — registered **252**,

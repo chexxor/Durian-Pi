@@ -183,7 +183,7 @@ explicit slash invocation successfully injects `<skill-context name="wayfinder">
 
 ## 6. URLs probed live by the delegate (machine-readable for `tools/review-cite-check.mjs`)
 
-Probed **2026-10-29T03:55:36Z** (host-local Wed Oct 28 22:55 CDT, UTC−5) on `Alex-Desktop-Win10`, Linux Fedora
+Probed **2026-10-29T03:55:36Z** (host-local Wed Oct 28 22:55 CDT, UTC−5) on `label-withheld-per-D205`, Linux Fedora
 `7.2.11-200.fc42.x86_64`, `curl -sSL -m 20 -w '%{http_code} %{url_effective}'`. The three Goose site paths the round-2
 report cites as `[^4] [^9] [^10]` (and prints again in its §2 matrix rows 17–19) are **dead today, with no redirect** —
 so the §2 cells labelled `advertised-elsewhere` point at a page that does not exist, which is exactly ROADMAP **243**'s

@@ -8,7 +8,7 @@ answered the two questions that decide whether a start buys anything: **is there
 cheap: `tools/channel-preflight.mjs` (**1.9–2.0 s**, one queue read + one `ps` read + one `submissions`/`tasks`/`entries`
 read, store opened `readOnly:true`, no Harness opened — D11).
 
-**Host, named for every number here:** Linux (`Alex-Desktop-Win10`, Fedora), `node v24.22.1`, store `./selfdev.sqlite`
+**Host, named for every number here:** Linux (`label-withheld-per-D205`, Fedora), `node v24.22.1`, store `./selfdev.sqlite`
 (438,329,344 B), box local zone `America/Chicago` (CDT = UTC−5); all timestamps below are **Z**. Measured
 2026-10-28T19:20–19:23Z. Instrument output retained at `.spike/delegate/channel-preflight-2026-10-28.json`.
 

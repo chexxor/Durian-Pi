@@ -1,6 +1,6 @@
 # Delegate session 2026-10-29 — the verifier model, and the "review + merge before `done`" ruling
 
-**Delegate session, partially verified; Linux host `Alex-Desktop-Win10` (Fedora), node v24.22.1, UTC.** Every
+**Delegate session, partially verified; Linux host `label-withheld-per-D205` (Fedora), node v24.22.1, UTC.** Every
 number below came from a command run in this session; where a run was still in flight at clock-out it says so.
 Structure per `docs/runbooks/write-docs-critically.md` §Session notes.
 

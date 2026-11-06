@@ -6732,7 +6732,7 @@ This block is the one that opened the delivery channel — partly by acceptance 
 ## NEXT SESSION (2026-10-28T16:46Z — `tools/README.md` IS NOW THE INSTRUMENT INDEX (read it before writing a probe); THE CHANNEL IS PRICED AT FIVE BLOCKERS — 3 GRANTS, 1 CODE (217: **a Linux seat has no shell**), 1 DEFERRED; EDIT FAILS 11.5%, 71% ANCHOR MISSES; **AFTER ANY EDIT TO THIS POINTER, RUN `node scripts/clockin.mjs` AND TREAT ITS OVER-BUDGET WARNING AS A FAILED EDIT**)
 
 Prior sessions: `docs/NEXT-ARCHIVE.md`. The superseded `2026-10-28T16:14Z` block moved **VERBATIM** — 15,857 B,
-`sha256 b34faf0850c1`, 160 lines (whole, not folded). This box: **Linux** (`Alex-Desktop-Win10`,
+`sha256 b34faf0850c1`, 160 lines (whole, not folded). This box: **Linux** (`label-withheld-per-D205`,
 `7.2.11-200.fc44.x86_64`), `node v24.22.1`, `date -u` = 2026-10-28T16:46Z (this session ran ~15:40–16:46Z). Name the OS
 and the clock in every timestamp and measurement you publish.
 
@@ -7041,7 +7041,7 @@ cd /home/chexxor/Git/Durian-Pi && git worktree list --porcelain | tee .spike/wor
 # NEXT — current priority and exact next command
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces ([^1] [^2] [^3] …); it does not own them (ROADMAP 250) -->
 
-**Last updated:** 2026-10-29T05:5xZ = **2026-10-29 00:5x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is **Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1, Linux. Delegate session. **This session changed the verifier, and changed what `done` will mean.** The five verifier seats (what `src/verifierrole.mjs` actually matches — `qa`, `qa2`, `advocate`, `auditor`, `designer`; `docs/SELFDEV.md` names three and is wrong) now resolve to **`verifier/recursivesi/flint`** on LM Studio `:1234`, loaded at **65,536** with `DURIG_VERIFIER_MAX_TOKENS` 32,768 → **8,192**, and `check` flipped `single-model-rig` to **pass, found 0** — which is a **string comparison, not certification (D137)**. The operator's process ruling (review **and** merge to `main` before an item is completed) is registered as **ROADMAP 253**. Durable: **D163**, the runbook `docs/runbooks/verifier-model-server.md` (+ its symptom row in the index), and the skill's instrument table. Session notes, measurements, errors and speed proposals: **`docs/reviews/delegate-notes-2026-10-29-flint-verifier.md`**. **The seeded-bug gate did not complete** — see NEXT SESSION; the verdict is the operator's to weigh. **Prior sessions, in one line each:** round-4 research gate discharged and **250/251** registered (round 4's Task A is **not paste-able**); `tools/review-cite-check.mjs` + `docs/reviews/harness-citation-registry.md` built and **252** registered from its corpus census (**292 hard findings** over 127 files, 81 clean) with the durable rules in **D162**; **241** closed by the permission-plane design note, which registered **247/248/249**. Round 4 stays VERIFIED and unintegrated — see the HARNESS STUDY section. **Committed, not pushed (233 hygiene) — read `git log --oneline -3` rather than trusting shas in a pointer, because amending changes them.** Five pins (`codex d373d649`, `cline 51f63e4f`, `goose 775b3958`, `claude-code-docs 58d6da1e`, `copilot-cli 84ee80ea`); `tools/vendor-pins.mjs --check` PASS at 14 clones, re-run 2026-10-29T02:44Z. Read me first — do not re-derive the priority from the ~4,700-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200 lines** by `demo/next-pointer.test.mjs`, which also requires the `## NEXT SESSION` block below to carry a current item, a queue id, a `node cli.mjs` command and a `**Blocker:**` line — **rewrite it in place, do not restyle it.** Its two executable readers are `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` (the digest reads only this section, so **the `NEXT-ARCHIVE.md` link must stay inside the pointer body**). After editing: `node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs`.
+**Last updated:** 2026-10-29T05:5xZ = **2026-10-29 00:5x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is **Z** — ROADMAP 244). Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1, Linux. Delegate session. **This session changed the verifier, and changed what `done` will mean.** The five verifier seats (what `src/verifierrole.mjs` actually matches — `qa`, `qa2`, `advocate`, `auditor`, `designer`; `docs/SELFDEV.md` names three and is wrong) now resolve to **`verifier/recursivesi/flint`** on LM Studio `:1234`, loaded at **65,536** with `DURIG_VERIFIER_MAX_TOKENS` 32,768 → **8,192**, and `check` flipped `single-model-rig` to **pass, found 0** — which is a **string comparison, not certification (D137)**. The operator's process ruling (review **and** merge to `main` before an item is completed) is registered as **ROADMAP 253**. Durable: **D163**, the runbook `docs/runbooks/verifier-model-server.md` (+ its symptom row in the index), and the skill's instrument table. Session notes, measurements, errors and speed proposals: **`docs/reviews/delegate-notes-2026-10-29-flint-verifier.md`**. **The seeded-bug gate did not complete** — see NEXT SESSION; the verdict is the operator's to weigh. **Prior sessions, in one line each:** round-4 research gate discharged and **250/251** registered (round 4's Task A is **not paste-able**); `tools/review-cite-check.mjs` + `docs/reviews/harness-citation-registry.md` built and **252** registered from its corpus census (**292 hard findings** over 127 files, 81 clean) with the durable rules in **D162**; **241** closed by the permission-plane design note, which registered **247/248/249**. Round 4 stays VERIFIED and unintegrated — see the HARNESS STUDY section. **Committed, not pushed (233 hygiene) — read `git log --oneline -3` rather than trusting shas in a pointer, because amending changes them.** Five pins (`codex d373d649`, `cline 51f63e4f`, `goose 775b3958`, `claude-code-docs 58d6da1e`, `copilot-cli 84ee80ea`); `tools/vendor-pins.mjs --check` PASS at 14 clones, re-run 2026-10-29T02:44Z. Read me first — do not re-derive the priority from the ~4,700-line roadmap. History: **`docs/NEXT-ARCHIVE.md`**. This file is a **pointer, capped at 200 lines** by `demo/next-pointer.test.mjs`, which also requires the `## NEXT SESSION` block below to carry a current item, a queue id, a `node cli.mjs` command and a `**Blocker:**` line — **rewrite it in place, do not restyle it.** Its two executable readers are `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` (the digest reads only this section, so **the `NEXT-ARCHIVE.md` link must stay inside the pointer body**). After editing: `node demo/next-pointer.test.mjs && node demo/clockin-digest.test.mjs`.
 
 ## NEXT SESSION
 
@@ -7292,7 +7292,7 @@ memory discipline becomes mandatory after my arms helped OOM-kill the seats' ser
 # NEXT — current priority and exact next command
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces ([^1] [^2] [^3] …); it does not own them (ROADMAP 250) -->
 
-**Last updated:** 2026-10-29T05:1xZ = **2026-10-29 00:1x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is **Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1, Linux. **The state changed twice this session, in this order: the transport cause of `REQUEST FAILED fetch failed` was corrected, then the verifier variant changed and the gate FINISHED.**fc42.x86_64`, node v24.22.1, **Linux**. Delegate session, operator-approved continuation. **This session corrected a cause this pointer asserted wrongly.** The gate's
+**Last updated:** 2026-10-29T05:1xZ = **2026-10-29 00:1x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is **Z** — ROADMAP 244). Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1, Linux. **The state changed twice this session, in this order: the transport cause of `REQUEST FAILED fetch failed` was corrected, then the verifier variant changed and the gate FINISHED.**fc42.x86_64`, node v24.22.1, **Linux**. Delegate session, operator-approved continuation. **This session corrected a cause this pointer asserted wrongly.** The gate's
 `REQUEST FAILED fetch failed` rows are **Node's 300 s undici `headersTimeout`**, not memory pressure: `gate.mjs:96` calls
 non-streaming `fetch` and llama-server sends headers only when generation finishes. Matched pair, same body
 (`.spike/gate/timeout-hypothesis.out`): fetch → **300.8 s, cause `HeadersTimeoutError` [`UND_ERR_HEADERS_TIMEOUT`]**;
@@ -7491,7 +7491,7 @@ What the re-cut changed: **(a)** the restart gate is now known to be a CLOSED lo
 # NEXT — current priority and exact next command
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces ([^1] [^2] [^3] …); it does not own them (ROADMAP 250) -->
 
-**Last updated:** 2026-10-29T07:3xZ = **2026-10-29 02:3x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is **Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1, **Linux**. Delegate session, operator-approved continuation. **Three verifier measurements landed, and one retracts a claim this pointer made: the gate COMPLETED, but 3 of its 4 clean-side alarms were true statements about a stripped excerpt (D166).** A second cause this pointer asserted wrongly is also corrected: the gate's
+**Last updated:** 2026-10-29T07:3xZ = **2026-10-29 02:3x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is **Z** — ROADMAP 244). Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1, **Linux**. Delegate session, operator-approved continuation. **Three verifier measurements landed, and one retracts a claim this pointer made: the gate COMPLETED, but 3 of its 4 clean-side alarms were true statements about a stripped excerpt (D166).** A second cause this pointer asserted wrongly is also corrected: the gate's
 `REQUEST FAILED fetch failed` rows are **Node's 300 s undici `headersTimeout`**, not memory pressure — `gate.mjs:96` calls
 non-streaming `fetch`, and llama-server sends headers only when generation finishes. Matched pair, same body
 (`.spike/gate/timeout-hypothesis.out`): fetch → **300.8 s, cause `HeadersTimeoutError` [`UND_ERR_HEADERS_TIMEOUT`]**;
@@ -7699,7 +7699,7 @@ What the re-cut changed: **(a)** the operator opened a new class — *"make the 
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces ([^1] [^2] [^3] …); it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-29T20:1xZ = **2026-10-29 15:1x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here
-is **Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1, **Linux**. Delegate
+is **Z** — ROADMAP 244). Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc42.x86_64`, node v24.22.1, **Linux**. Delegate
 session, operator-approved continuation; the superseded 199-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md`.
 **The headline is structural, not another measurement: the restart condition is a CLOSED loop (D169).** Hygiene evidence
 needs **217**; 217 is seat work that needs a woken seat; `tools/broker-serve.mjs --dry-run` refuses the wake *because*
@@ -10022,7 +10022,7 @@ queued as step 0 last session — **is not a command**: there is no `--red` flag
 the usage block. The runner takes `--area|--all|--list|--jobs|--timeout|--json`; the pointer gate is the `next-pointer`
 demo (`demo/next-pointer.test.mjs`).
 
-## Measured state at clock-out (2026-11-02T02:05Z, Linux/Fedora 44 on `Alex-Desktop-Win10`, node v24.22.1)
+## Measured state at clock-out (2026-11-02T02:05Z, Linux/Fedora 44 on `label-withheld-per-D205`, node v24.22.1)
 
 - **`main` MOVED FIVE TIMES while I worked** (`43e26dcc` → `51e3b9b1` → `fb4cff7b` → `a8c4af21` → `fde5073f`, and
   `devtools` was adding commits on `item-4985` the whole time). At the last read: **94 commits AHEAD of `origin/main`
@@ -10463,7 +10463,7 @@ landings in the scratch (§0a.3).
   first two and `9/245` for `item-4996`. Use `refs/heads/<name>`: `item-<n>` is ambiguous (branch *and* directory).
 - **`origin/main` = `0cc8c9c1`, `0` ahead** (pushed on the operator's grant). Re-measure: `git rev-list --count origin/main..main`.
 - **Three landed items' worktrees are still registered and were NOT hand-cleaned**: `complete_work`'s cleanup refused for
-  `item-4995`/`item-5013` with `refusing to remove worktree …: junction/symlink detected at undefined/anthropic-ai-sdk` — that
+  `item-4995`/`item-5013` with `refusing to remove worktree …: junction/symlink detected at undefined/anthropic-ai-sdkhropic-ai-sdk` — that
   is **`#5001` firing live** — and `item-4996`'s outlived its landing. All three are disposition material for `pm`'s #5004 pass.
 
 ### 1b. THE NEW RED — `demo/seat-turn-shape.test.mjs:292` is red for any store with a non-empty WAL (A/B, mechanism named)
@@ -11580,7 +11580,7 @@ deliberately **unchanged** (`http://127.0.0.1:1234/v1`), so **nothing is armed**
   `main`** — re-measure, it drifts.
 - **Row state at 2026-11-05T03:2xZ:** `#4829 claimed → security`, `#4833 queued → lead` (blockedBy 4829),
   `#5094 claimed → devtools` (its worktree cleanup **fails**: `refusing to remove worktree
-  .../item-5094: junction/symlink detected at undefined/anthropic-ai-sdk` — the `undefined` is a diagnostic defect),
+  .../item-5094: junction/symlink detected at undefined/anthropic-ai-sdkhropic-ai-sdk` — the `undefined` is a diagnostic defect),
   `#5110–#5124` as `lead` routed them, **#5125/#5126 queued → devtools**, **#5127 held → pm**, **#5128 held →
   devtools**, **#5129 queued → security**, **#5130 queued → scribe**, `#5118 cancelled`. Chain as routed:
   **#5110 → #5113 → #5111 → #5112 → #5116 → #5094 → #5095**, then #5096; arming lands **after stage 1**.
@@ -11718,7 +11718,7 @@ same runbook says `land` is the **delegate's/operator's** action; read both toge
 prove on `main` in a detached scratch) is defensible **only when no `send` harness is generating**, because the genlock
 makes a concurrent landing a wait, not a race. `#5132` (`channel-preflight` §7) is still **`queued`** and **never
 started**, `#5134` was **`claimed`** with its root cause already named (on node v24 `Dirent.path` is gone — only `name`
-and `parentPath` exist, which is why the guard printed `undefined/anthropic-ai-sdk`).
+and `parentPath` exist, which is why the guard printed `undefined/anthropic-ai-sdkhropic-ai-sdk`).
 
 **Blocker:** nothing is blocked on the rig. **Two things sit with the operator:** (1) **routing the two research
 commissions** (D151 bars the delegate; the operator offered to route them — they are the current critical path), and

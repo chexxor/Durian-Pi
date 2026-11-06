@@ -4,7 +4,7 @@ symptom: "a verifier turn dies at `stopReason=length` mid-review, or a provider 
 writes: false
 precondition: "read-only"
 last_verified: 2026-10-30
-verified_by: delegate (Linux, box Alex-Desktop-Win10)
+verified_by: delegate (Linux, box label-withheld-per-D205)
 evidence: "measured 2026-10-30: 8192→16384→24576 on `mistralai/ministral-3-14b-reasoning`; the same 9,627-token probe HTTP 400 → HTTP 200; a 21,135-token completion in 19.1 s; `tools/seat-turn-shape.mjs` + `demo/seat-turn-shape.test.mjs`; D174"
 check_rule: null
 ---
