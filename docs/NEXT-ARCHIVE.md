@@ -5365,7 +5365,7 @@ cells) and **199** (a whole-module "matched pair" is not byte-matched: the clean
 −67% of the bytes). Already registered: 190, 191, 192, 193, 194, 196, 197, memory/security 161–184. **The delegate
 claimed, completed, deferred and routed nothing.**
 
-**The baseline, re-measured at 00:40Z on Linux** (`Linux Alex-Desktop-Win10 7.2.11-200.fc44.x86_64`, GNU/Linux —
+**The baseline, re-measured at 00:40Z on Linux** (`Linux label-withheld-per-D205 7.2.11-200.fc44.x86_64`, GNU/Linux —
 name the OS in every measurement): `node scripts/test.mjs` → **238/238 passed in 41.5s**;
 `DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json` → **`pass: true`, 0 errors, 62 findings**
 (`single-model-rig` 1, `verification-without-evidence` 1, `evidence-tree` 1, `citation-unresolvable` 5,
@@ -5547,7 +5547,7 @@ to `keep-both` with a loud NOTE. (2) `gate-side-by-side.mjs` was pairing against
 multi-replicate transcript instead of its scored cells; transcripts now persist `majority` rows and the comparison
 prints **which row scored each cell** ("majority row" / "cell table agreement 2/3" / "single-pass").
 
-**Baseline, re-measured this session on native Linux** (`Linux Alex-Desktop-Win10 7.2.11-200.fc44.x86_64`):
+**Baseline, re-measured this session on native Linux** (`Linux label-withheld-per-D205 7.2.11-200.fc44.x86_64`):
 `DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json` → **`pass: true`, 0 errors, 62 findings**
 (`single-model-rig` 1, `verification-without-evidence` 1, `evidence-tree` 1, `citation-unresolvable` 5,
 `duplicate-item` 54), `single-model-rig` **still present** — honest red, not an unfinished step. Suite:
@@ -5659,7 +5659,7 @@ released, only re-derived or cancelled** (ROADMAP 190, live side).
 capability-narrowed; evidence on `complete_work` at `checkup.mjs:736,790`); **independence is the undelivered
 half** — `single-model-rig` fix-now, all 12 seats on `local/iq3_s`.
 
-**Baseline, re-measured on native Linux** (`Linux Alex-Desktop-Win10 7.2.11-200.fc44.x86_64`) at the commit
+**Baseline, re-measured on native Linux** (`Linux label-withheld-per-D205 7.2.11-200.fc44.x86_64`) at the commit
 measured: `DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json` → **`pass: true`, 0 errors, 62
 findings** (`duplicate-item` 54, `citation-unresolvable` 5, `single-model-rig` 1,
 `verification-without-evidence` 1, `evidence-tree` 1). Suite **238/238 in 42.2 s** (`node scripts/test.mjs`).
@@ -5808,7 +5808,7 @@ D139's verifier-design ask is **still unsent** (broker down; `intent.mjs` spoofs
 `queued` **0** · `claimed` **0**; broker `{state: down, reason: "no broker state"}`; attention = 5 seats
 `deferred_awaiting_answer` (#4813 pm, #4354 impl, #4816 lead, #4817 devtools, #4814 qa2).
 
-**Baseline, re-measured on native Linux** (`Linux Alex-Desktop-Win10 7.2.11-200.fc44.x86_64`, git 2.56.0) at
+**Baseline, re-measured on native Linux** (`Linux label-withheld-per-D205 7.2.11-200.fc44.x86_64`, git 2.56.0) at
 `0159af9`: `check rig.selfdev.json` → **`pass: true`, 62 findings** (`duplicate-item` 54, `citation-unresolvable`
 5, `single-model-rig` 1, `verification-without-evidence` 1, `evidence-tree` 1), 0 errors; **238/238 in 41.9 s**;
 `scripts/clockin.mjs` 111 lines. Nothing restarted, loaded, sent, fetched or transitioned.
@@ -6391,7 +6391,7 @@ stale admin entries on this box per D107). Do not re-clone the seven. Do not quo
 ## NEXT SESSION (2026-10-28T15:37Z — CLOCK-OUT: THE CONSTITUTION PRECONDITION IS MET (P2 Work protocol is in the store the seats read); THE DELIVERY CHANNEL IS STILL PRICED, STILL NOT OPENED; ROADMAP 208–212 REGISTERED; PREFILL NUMBERS IN THE REPO ARE WRONG BY 25–400×)
 
 Prior sessions: `docs/NEXT-ARCHIVE.md`. The superseded `2026-10-28T14:48Z` block moved **VERBATIM** — 12,488 B,
-`sha256 f0335aa0b046`, 132 lines. This box: **Linux** (`Alex-Desktop-Win10`, `7.2.11-200.fc44.x86_64`), `node v24.22.1`,
+`sha256 f0335aa0b046`, 132 lines. This box: **Linux** (`label-withheld-per-D205`, `7.2.11-200.fc44.x86_64`), `node v24.22.1`,
 `date -u` = 2026-10-28T15:37Z (the amendment work ran 15:14–15:35Z). Name the OS and the clock in every timestamp and measurement you publish.
 
 **Current item: nothing is mid-flight, and nothing is claimed.** The seven-clone competitor sweep stays closed
@@ -6563,7 +6563,7 @@ clock-in digest past its own budget; the cut that follows is deliberately shorte
 ## NEXT SESSION (2026-10-28T16:14Z — THE EDITING QUESTION IS ANSWERED WITH OUR OWN NUMBERS (edit fails 11.5%, 71% of it anchor misses); THE PIN TABLE IS NOW 8 CLONES AND GREEN; **NEW HARD BLOCKER: ON LINUX A SEAT HAS NO SHELL**; ROADMAP 214–218 REGISTERED; THE CHANNEL IS STILL PRICED, STILL NOT OPENED)
 
 Prior sessions: `docs/NEXT-ARCHIVE.md`. The superseded `2026-10-28T15:37Z` block moved **VERBATIM** — 16,109 B,
-`sha256 ccabd1aa3d8c`, 164 lines. This box: **Linux** (`Alex-Desktop-Win10`, `7.2.11-200.fc44.x86_64`), `node v24.22.1`,
+`sha256 ccabd1aa3d8c`, 164 lines. This box: **Linux** (`label-withheld-per-D205`, `7.2.11-200.fc44.x86_64`), `node v24.22.1`,
 `date -u` = 2026-10-28T16:14Z (this session ran ~15:40–16:14Z). Name the OS and the clock in every timestamp and
 measurement you publish.
 
@@ -7903,7 +7903,7 @@ after files vanished is not green** (`scripts/suite.mjs:36`). **A `402` in a rec
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces ([^1] [^2] [^3] …); it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-29T21:1xZ = **2026-10-29 16:1x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here
-is **Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate
+is **Z** — ROADMAP 244). Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate
 session; the superseded 199-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (its entry carries a paste-ready
 proof diff). **Two live items now, and one is a new class.** (1) Unchanged: the restart gate is a **CLOSED loop** (D169)
 and needs exactly one ruling — a bounded `pm` wake. (2) Opened by the operator this session: *make the team and its
@@ -8106,7 +8106,7 @@ quote shas.**
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces ([^1] [^2] [^3] …); it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-30T05:0xZ = **2026-10-30 00:0x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is
-**Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session.
+**Z** — ROADMAP 244). Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session.
 The superseded 199-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (entry header at archive line 7898; proof:
 `tail -199 docs/NEXT-ARCHIVE.md | md5sum` = the pre-cut file, byte-identical).
 
@@ -8273,7 +8273,7 @@ rewrite a file from its own contents** (D170) — and **diff names, not counts**
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces ([^1] [^2] [^3] …); it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-30T06:2xZ = **2026-10-30 01:2x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is
-**Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session.
+**Z** — ROADMAP 244). Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session.
 The superseded 162-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (entry header at archive line 8102, body
 8103–8264).
 
@@ -8431,7 +8431,7 @@ file from its own contents** (D170) — and **diff names, not counts**. **Never 
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-30T07:3xZ = **2026-10-30 02:3x host-local** (`America/Chicago`, CDT = UTC−5; every stamp here is
-**Z** — ROADMAP 244). Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session.
+**Z** — ROADMAP 244). Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session.
 The superseded 153-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (entry marker at line 8265, body 8266–8422).
 
 **217 IS AUTHORED AND VERIFIED — IN A WORKTREE, AND IT HAS NOT LANDED.** Seat `impl` wrote `src/shellregistry.mjs` (new) and rewired
@@ -8558,7 +8558,7 @@ evidence there are none.** **Never read an exit code through a pipe.** **Append 
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-30T17:0xZ (**Z** — ROADMAP 244), host-local 2026-10-30 12:0x (`America/Chicago`, CDT = UTC−5).
-Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D174).
+Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D174).
 The superseded 122-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (entry marker line **8426**, body **8427–8549**).
 
 **THE VERIFIER LEG IS ALIVE, AND IT IS NOT THE WINDOW THAT WAS KILLING IT.** The seat request is refused **before** any window is
@@ -8701,7 +8701,7 @@ quoted heredoc + `cat >>`, not `printf`.** **A promoted instrument is "cited but
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-30T17:5xZ (**Z** — ROADMAP 244), host-local 2026-10-30 13:2x (`America/Chicago`, CDT = UTC−5).
-Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D174, D175).
+Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D174, D175).
 The superseded 141-line pointer is cut **verbatim** to `docs/NEXT-ARCHIVE.md` (entry marker line **8553**, body **8554–8695**).
 
 **A VERDICT NOW EXISTS ON #4849, AND IT EXISTS ONLY BECAUSE THE OPERATOR GRANTED GPU HEADROOM.** The verifier slot went
@@ -8866,7 +8866,7 @@ still live in `docs/NEXT.md`; only this section was superseded.
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-30T20:2xZ (**Z** — D177), host-local 2026-10-30 15:2x (`America/Chicago`, CDT = UTC−5).
-Box `Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D177).
+Box `label-withheld-per-D205`, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D177).
 Updated **in place** this session (197 lines, cap 200); the superseded 141-line pointer is cut **verbatim** to
 `docs/NEXT-ARCHIVE.md` (entry marker line **8697**, body **8698–8833**), and D176's "What landed this session" section
 was cut separately when D177 replaced it (marker **8835**, body **8839–8857**).
@@ -9067,7 +9067,7 @@ and **none** in the crash window). Before loading the 441 MB store: check `free 
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-30T21:5xZ (**D178**), host-local 2026-10-30 16:5x (`America/Chicago`, CDT = UTC−5).
-Box `Alex-Desktop-Win10`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D178).
+Box `label-withheld-per-D205`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D178).
 Updated **in place** (this file is the pointer, cap 200); the superseded 198-line pointer is cut **verbatim** to
 `docs/NEXT-ARCHIVE.md` (marker line **8860**, body **8862–9059**). Verbatim proof, re-runnable:
 `sed -n '8862,9059p' docs/NEXT-ARCHIVE.md | diff - <(git show HEAD:docs/NEXT.md)` prints nothing.
@@ -9269,7 +9269,7 @@ durable record you are appending to.** **LM Studio restores `8192×4` on relaunc
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-31T05:1xZ (**D181**), host-local 2026-10-31 00:1x (`America/Chicago`, CDT = UTC−5).
-Box `Alex-Desktop-Win10`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D181).
+Box `label-withheld-per-D205`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D181).
 Updated **in place** (this file is the pointer, cap 200); the superseded 199-line pointer is cut **verbatim** to
 `docs/NEXT-ARCHIVE.md` (marker line **9061**, body **9063–9261**). Verbatim proof, re-runnable:
 `sed -n '9063,9261p' docs/NEXT-ARCHIVE.md | diff - <(git show 7e64d33e:docs/NEXT.md)` prints nothing.
@@ -9461,7 +9461,7 @@ you authored, NEVER on `docs/NEXT-ARCHIVE.md` or a durable record you are append
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-31T07:0xZ (**D182**), host-local 2026-10-31 02:0x (`America/Chicago`, CDT = UTC−5).
-Box `Alex-Desktop-Win10`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D182).
+Box `label-withheld-per-D205`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D182).
 Updated **in place** (this file is the pointer, cap 200); the superseded 189-line pointer is cut **verbatim** to
 `docs/NEXT-ARCHIVE.md` (marker line **9263**, body **9265–9453**). Verbatim proof, re-runnable:
 `sed -n '9265,9453p' docs/NEXT-ARCHIVE.md | diff - <(git show de8429b1:docs/NEXT.md)` prints nothing.
@@ -9636,7 +9636,7 @@ NEVER on `docs/NEXT-ARCHIVE.md` or a durable record**; **LM Studio restores `819
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-31T08:5xZ (**D183**), host-local 2026-10-31 03:5x (`America/Chicago`, CDT = UTC−5).
-Box `Alex-Desktop-Win10`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D183).
+Box `label-withheld-per-D205`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D183).
 Updated **in place** — see the archive cut named inside NEXT SESSION below.
 
 ## NEXT SESSION
@@ -9799,7 +9799,7 @@ Studio restores `8192×4` on relaunch**.
 <!-- cite-ns: quoted — this pointer QUOTES other reports' footnote namespaces; it does not own them (ROADMAP 250) -->
 
 **Last updated:** 2026-10-31T20:0xZ (**D185**), host-local 2026-10-31 15:0x (`America/Chicago`, CDT = UTC−5).
-Box `Alex-Desktop-Win10`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D184).
+Box `label-withheld-per-D205`, kernel `7.2.11-200.fc44.x86_64`, node v24.22.1, **Linux**. Delegate session (D184).
 Updated **in place** — the archive cut is named inside NEXT SESSION below.
 
 ## NEXT SESSION

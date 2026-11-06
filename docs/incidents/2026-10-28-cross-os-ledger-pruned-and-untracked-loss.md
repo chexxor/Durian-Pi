@@ -1,6 +1,6 @@
 # 2026-10-28 — the first pass on this host pruned the cross-OS worktree ledger, and five never-committed instruments vanished from `demo/`/`tools/`/`src/`
 
-*Host:* `Alex-Desktop-Win10`, Linux (Fedora `7.2.11-200.fc44.x86_64`), btrfs `/home` subvolume, `timedatectl show` →
+*Host:* `label-withheld-per-D205`, Linux (Fedora `7.2.11-200.fc44.x86_64`), btrfs `/home` subvolume, `timedatectl show` →
 `NTP=yes NTPSynchronized=yes` **`LocalRTC=yes`**. *Repo:* `/home/chexxor/Git/Durian-Pi`, `main`, HEAD `1b737f2`
 (`2026-10-28 14:30 -0500`). *Delegate session.* **No source file and no queue transition was changed by this
 session**, and nothing here is inferred: each claim names the command that shows it.

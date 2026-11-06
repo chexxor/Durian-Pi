@@ -145,7 +145,7 @@ invisible to `--check`. Registered on ROADMAP **242**.
 
 The research sandbox states it plainly: *"no response headers. There is no shell, so no `sha256sum`"*
 (`docs/reviews/harness-tools-skills-public-harnesses-research-4.md`). Those columns are therefore **delegate-obtained,
-on this host** (`Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`, Linux, fetched 2026-10-29T03:10Z = 2026-10-28
+on this host** (`label-withheld-per-D205`, Fedora `7.2.11-200.fc44.x86_64`, Linux, fetched 2026-10-29T03:10Z = 2026-10-28
 22:10Z host-local, `America/Chicago` CDT; copies in gitignored `.spike/fetch-r4/`):
 
 | requested URL | final URL after redirect | HTTP | bytes | sha256 (first 16) | vs §1 pin |

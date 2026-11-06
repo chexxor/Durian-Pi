@@ -1,6 +1,6 @@
 # Delegate session notes — 2026-10-29T02:4x–03:3xZ (host-local 2026-10-28 21:4x–22:3x CDT)
 
-Host `Alex-Desktop-Win10` (Linux, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1), zone `America/Chicago` (CDT = UTC−5).
+Host `label-withheld-per-D205` (Linux, Fedora `7.2.11-200.fc44.x86_64`, node v24.22.1), zone `America/Chicago` (CDT = UTC−5).
 Item worked: **ROADMAP 241's second half** (the research gate the operator put in front of 232). Deliverable:
 `docs/reviews/codex-permission-model-and-guard-plane-2026-10-28.md`; register: **247**, **248**, 241 updated.
 

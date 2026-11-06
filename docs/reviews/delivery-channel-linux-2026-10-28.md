@@ -1,6 +1,6 @@
 # The delivery channel on Linux — can the broker be opened, and what does opening it cost?
 
-*Delegate review, measured 2026-10-28T15:05–15:20Z on **Linux** (`Alex-Desktop-Win10`, kernel `7.2.11-200.fc44.x86_64`,
+*Delegate review, measured 2026-10-28T15:05–15:20Z on **Linux** (`label-withheld-per-D205`, kernel `7.2.11-200.fc44.x86_64`,
 `node v24.22.1`, `date -u` = 2026-10-28T15:20Z).* Store `./selfdev.sqlite`, rig `rig.selfdev.json`.
 
 **The question.** Three sessions in a row ended with "the delivery channel is the critical path, not the backlog"

@@ -6,7 +6,7 @@ them, a seat does not, and none of them writes to the store, the rig, or the tre
 (`--write`, `--start`). Every instrument prints the **patterns and thresholds it counted**, because a count with
 no pattern is not evidence (D142). The product-side halves of these ideas are registered as ROADMAP items
 (`check` rules are the team's work, not the delegate's). **Every timing below is `real` from this box** — Linux
-(`Alex-Desktop-Win10`, Fedora `7.2.11-200.fc44.x86_64`), `node v24.22.1`, store `./selfdev.sqlite` (273,995 entries),
+(`label-withheld-per-D205`, Fedora `7.2.11-200.fc44.x86_64`), `node v24.22.1`, store `./selfdev.sqlite` (273,995 entries),
 2026-10-28T16:4xZ — and every **exit code was re-measured rather than copied from a draft**: that habit caught two stale
 rows in the same hour it wrote this table (`competitor-brief --check` is **0.03 s · exit 2**, not "0.11 s · exit 1").
 Re-measure a row when you touch its tool; a cost table that drifts is worse than no table.

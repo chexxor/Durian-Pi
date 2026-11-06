@@ -17,45 +17,33 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 
 ## NEXT SESSION
 
-**Current item: `lead` cuts `docs/ROADMAP.md` 294–312 into rows and keeps cutting — the queue is alive (max id #5205, 25
-`queued`, 8 `claimed`), so the binding constraint is backoff, not supply.** Order matters and one rule is load-bearing:
-**backoff before capacity.** Any increase in concurrency (`DURIG_MAX_CONCURRENT_SEATS`, `durig.config.default.json` = 1,
-`durig.config.json` unset) or verifier context before ROADMAP **300** lands multiplies the idle storm this pass measured.
-Delegate's briefed order (cheapest and most visible first): **(1)** **300** idle-queue backoff — a woken seat that finds
-"nothing claimable" must **SKIP with backoff**, not escalate-and-reset; **(2)** **299** the store-pin check — compare each
-seat's latest `pi.agent` revision's model against `rig.selfdev.json` and print the *effective* pin in
-`tools/broker-serve.mjs --status`; **(3)** **303** deadline-state honesty — a broker past `--max-duration` must answer
-reads and print its run block, and `--stop` must escalate instead of returning `"stopped": false`; **(4)** **294**
-fixture-isolate the one red demo; **(5)** **295/296** the preflight prints credential **values** and probes the paid
-endpoint with no ceiling or ledger; **(6)** **297** price three real verify legs **before** anyone touches the slot;
-**(7)** **301** the rig's own `next:` advice names instruments that do not exist; **(8)** **302** seats use `powershell`
-**20,296** times against `bash` **1,824** on a Linux host; **(9)** **282–293**, the **304–309** research intake, and the hygiene pair **311–312**.
+**Current item: `lead` cuts `docs/ROADMAP.md` 294–320 — Round 2 landed, the operator's answers are all in, and the
+binding constraint is still **backoff before capacity** (now an operator ruling, not a recommendation).** Queue at
+`#5205`, 25 `queued`, 8 `claimed`. Round 2 (`docs/reviews/base-agent-product-topology-followup-research.md`) supplies the
+policy material for **300**/**313** (no shipped product documents an idle policy; GitHub Code Quality's two-state Bugbot is
+the nearest precedent), the claim-time pin guard for **299**/**315**, the wedged-vs-idle rule for **303**/**314**, and the
+verifier-economics shape for **317**. Registered: **313–320**. Operator rulings this turn: backoff before capacity
+(**approved**), 297 measure-first (**accepted**), hostname option 1 (**accepted**, executed — and it reached 33 occurrences
+while the 49 `-Win10`-labelled Linux assertions sit outside its scope, **319**), seat shell = **withhold `powershell` on
+non-Windows hosts** (so **302**'s fix lands on **306**, not prompt text), credentials **rotated** by the operator (verified:
+the verifier arm still reports `ARMABLE`), push **approved** (`ef29516d..34324b62`, then the scrub commits). **B7 came back
+for explanation**: re-evaluated after Q12, the rejection should read *reject per-seat databases, affirm per-seat worktrees*
+(D216 carries the wording for his signature).
 
-**Blocker:** **verifier capacity is unpriced** — the armed arm runs an inherited `24,576 / 3,000` slot with zero
-measured legs, and the vendor's full 131,072 ctx would cost **$4.85 for one maximal call**, over the `$4.00` store cap, so
-raising the slot without moving the cap darkens the roster before any request (ROADMAP **297**; only the operator can move
-the cap). Closed this session and do not re-open: the **empty queue** (dead store pins, `up --refresh`, now #5192 / 22
-`queued`) and the **verifier family** (**"Metered arm"**, `ef29516d`, `single-model-rig` absent from `check`).
-
-Run this first — all reads, no writes:
+**Next command** (host signature measured with it — Linux, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
 
 ```bash
 cd ~/Git/Durian-Pi
-git status --short -- . && git rev-list --count refs/remotes/origin/main..main   # 0 = pushed
-DURIG_DB=./selfdev.sqlite node cli.mjs status                                    # attention + non-terminal work
-node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status        # state + genlock + spool age + providers
-cat selfdev.sqlite.broker.json                                                   # heartbeatAt FRESH + lastPassAt FROZEN = idle, not wedged (303)
-DURIG_DB=./selfdev.sqlite node cli.mjs queue 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('max id',max(int(i['id']) for i in d['items']));[print(i['id'],i['status'],i.get('from'),'->',i.get('to')) for i in d['items'] if int(i['id'])>=5157]"
-DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run   # modelMismatch/modelReset must be null (299)
-python3 -c "import json;L=[json.loads(l) for l in open('selfdev.sqlite.spend.jsonl')];print(len(L),'calls','$%.5f'%sum(r.get('usd',0) for r in L))"
-DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --config=./rig.selfdev.json --counts-only
-node scripts/test.mjs --area check && node scripts/test.mjs --area docs && node scripts/test.mjs --area guard
+DURIG_DB=./selfdev.sqlite node cli.mjs status   # if this times out, read selfdev.sqlite.broker.json: fresh heartbeatAt + frozen lastPassAt = 303, not a broken store
+node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status | tail -3   # pid from broker.json, never pgrep
+node intent.mjs lead --body-file .spike/delegate-20261106/brief-lead-3.md             # 313-320 + the ordering ruling
+node scripts/test.mjs --area docs && node scripts/test.mjs --area check
 ```
 
-**`cli.mjs status`/`queue` route through the broker.** If the broker is lingering past its deadline they time out at 120 s
-with `read health: timed out awaiting the broker's result` while the store is healthy — the discriminator is a **direct**
-read-only open (measured: `select count(*) from entries` → 150,347 in **111 ms**) and `tools/latency-budget.mjs`, which
-reads the store itself and answered fully throughout. Do not write to the store to "fix" that (303).
+**Blocker:** **B7 is unsigned** — the per-agent-database ruling is the operator's; until it is written, 279 stays open and
+the topology question can reopen. Cheap second blocker: 49 `-Win10`-labelled Linux assertions remain in the record because
+option 1's scope cannot reach them (**319**) — the operator accepts **1b** or accepts leaving them.
 
 ## State (measured 2026-11-06T03:4xZ, same host signature as above)
 

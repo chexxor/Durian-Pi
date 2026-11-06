@@ -1,6 +1,6 @@
 # Making the team definition cross-platform: what the rig carries, and what oh-my-pi actually does about this
 
-**Delegate-authored, 2026-10-29T20:4xZ.** Box `Alex-Desktop-Win10`, **Linux** (Fedora `7.2.11-200.fc44.x86_64`), node
+**Delegate-authored, 2026-10-29T20:4xZ.** Box `label-withheld-per-D205`, **Linux** (Fedora `7.2.11-200.fc44.x86_64`), node
 v24.22.1, store `./selfdev.sqlite`, rig `./rig.selfdev.json`. Operator direction that produced this note: *"work on those
 four findings now — we need to find a way to make the team and its definition cross-platform friendly … oh-my-pi claims to
 be cross-platform, so we should prioritize our learnings from their project."*

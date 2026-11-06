@@ -2293,3 +2293,24 @@ downstream of it. Then `node tools/latency-budget.mjs --db ./selfdev.sqlite --ri
 WAIT/WORK/HELD + provider-waste + tool-presence picture in one command instead of hand-written SQL (which failed twice
 against JSON-encoded `kind`/`status`). Cap the pass at `--max-duration 900` or less, and plan to **`kill` the pid from
 `<db>.broker.json`** when the deadline passes — `serve --stop` does not work on a lingering broker.
+
+## Operational pitfalls (2026-11-06, session G — Round 2 research, the operator's eight answers, the hostname scrub)
+
+10. **A scrub keyed on `uname -n` misses the mislabel that motivated it.** The hostname in the record is not
+    only this box's transient name: 49 tracked lines carry an *older* box's label — the one ending in `-Win10`
+    that asserts a **Linux** host (`docs/DECISIONS.md:6439`, `:6470`, `:6555`, `:7028`). Measure the scope
+    before running the scrub: `git grep -c <label>` per label, and check which lines carry the signature the
+    accepted rule keys on. Option 1 as accepted reached 33 occurrences and **zero** of those 49. Registered as
+    **319**; the extension (**1b**) needs the operator because it rewrites dated records.
+11. **Deleting a token from prose leaves a hole that reads as corruption.** v1 of the scrub stripped the
+    hostname and produced `` `` `` (empty backticks) and `box )`. A placeholder that states why
+    (`label-withheld-per-D205`) is the right shape; `git diff | grep -c '``'` → `0` is the check.
+12. **An operator credential rotation is invisible to you until a seat goes dark.** Verify it from your side
+    with the free pre-flight before believing any capability claim:
+    `node --env-file="$HOME/.config/durig/env" tools/verifier-arm-probe.mjs --family=VERIFIER …` → `ARMABLE`.
+    If it flips to `registration-refused … metered-endpoint-unkeyed`, the **gitignored host config** lost the
+    new key — a host-config fault, not a roster fault (session F pitfall 14 is the same failure from the other
+    direction: the env file not being loaded at all).
+13. **Do not name an instrument you have not listed.** A delegate command for `tools/decisions-citation-gate.mjs`
+    failed with `MODULE_NOT_FOUND` — the real instruments are `tools/doc-integrity-guard.mjs` and
+    `demo/checkup-citation.test.mjs`. That is **301**'s defect reproduced by the delegate, not just by the rig.
