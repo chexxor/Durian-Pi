@@ -232,7 +232,7 @@ branch. A **locked** worktree is an intentional keep; unlock one only when its i
 content qualifies above. This is a mechanical, read-only-to-the-store git operation; the broker may keep
 driving.
 
-### Disposition audit, measured 2026-10-31T19:0xZ (D185, Linux `Alex-Desktop-Win10`) — the METHOD, not just the answers
+### Disposition audit, measured 2026-10-31T19:0xZ (D185, Linux `label-withheld-per-D205`) — the METHOD, not just the answers
 
 Every verdict below came from a command in this pass, so re-run it rather than trusting the table.
 
@@ -454,3 +454,36 @@ three states, the re-attach recipe, and the never-amend-a-completed-branch rule)
 `docs/incidents/2026-10-19-terminal-worktree-mistaken-for-lost-work.md`. **If a seat asks "where is my
 worktree?", point it at §8a rather than re-explaining** — and check whether the item was merely
 terminal (normal) or live (a keep, never a force).
+
+## 2026-11-06: the refusal that never ends — `node_modules` symlinks and a Node API drift (311)
+
+Two facts that change which half you fix. Both measured on Linux Fedora 45, node v24.22.1, git 2.51→2.56.
+
+**The classification already exists — read it first, read-only:**
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit
+# measured: total 26 = seat-root 8, reapable 14, live 2, locked 2, dirty 0
+```
+
+Fourteen were `reapable` with `dirty 0`. Nothing consumes that set: there is no reap verb and no schedule
+that runs the audit. That is the leak, not unidentifiability.
+
+**If `serve.err` shows `refusing to remove worktree …: junction/symlink detected at undefined/<name>`:**
+the `undefined/` half is a **Node API drift** — `src/worktree.mjs:1237` prints `${entry.path}/${entry.name}`,
+and on node v24 `dirent.path` is `undefined` (the property is `dirent.parentPath`). The `<name>` half tells
+you the real cause: it is a **package-manager symlink under `node_modules`**. Confirm in one line, inside the
+worktree (never a whole-filesystem search):
+
+```bash
+node -e "const fs=require('fs');const d=process.argv[1];const es=fs.readdirSync(d,{recursive:true,withFileTypes:true});
+console.log(d,'entries',es.length,'symlinks',es.filter(e=>e.isSymbolicLink()).length)" <worktree>
+# measured: item-4973 17,795 entries / 10 symlinks; item-5179 55,886 / 57
+```
+
+The guard's threat model (a seat building a junction to escape confinement, Git 2.42 deleting *through* it) is
+correct; it is being tripped by ordinary dependency installs, so the worktree is permanently unreapable. Do not
+`rm -rf` around it by hand while a broker owns the store — the fix is (i) `entry.parentPath` in the message,
+(ii) removing `node_modules` before the walk or accepting links that stay inside the worktree, (iii) a reap
+verb fed by `worktree audit`. Until then: count worktrees at clock-in and clock-out (`git worktree list | wc -l`)
+and say which way it moved.

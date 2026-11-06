@@ -1033,7 +1033,7 @@ vendor). Landing `44fe9438` (the areas-manifest fix) clears the manifest-coverag
 one — which is why the landing was gated on #4948. Named the artifact set (package count + vendor link) with
 every exit code, per #4939.
 
-### Operational pitfalls found 2026-10-31 during the D184 landing and verify-routing session (Linux, `Alex-Desktop-Win10`, node v24.22.1) — the landing pass and its traps
+### Operational pitfalls found 2026-10-31 during the D184 landing and verify-routing session (Linux, `label-withheld-per-D205`, node v24.22.1) — the landing pass and its traps
 
 - **The store opener creates a file on READ**, and `*.sqlite` is gitignored (`.gitignore:2`), so an unqualified read
   silently stands up an empty rig that nobody can see in `git status`. The approved seat root carries one right now:
@@ -1073,7 +1073,7 @@ every exit code, per #4939.
   without fixing it. `lead` refused the re-point for exactly this reason (D184) — the instrument was about to be
   tuned to agree.
 
-### Operational pitfalls found 2026-10-31 evening during the verify leg (D185; Linux, `Alex-Desktop-Win10`, node v24.22.1) — the verify leg came back and corrected the delegate twice
+### Operational pitfalls found 2026-10-31 evening during the verify leg (D185; Linux, `label-withheld-per-D205`, node v24.22.1) — the verify leg came back and corrected the delegate twice
 
 - **Check a branch's BASE before you believe a verify leg.** `git merge-tree` exit 0 says the trees combine, not that
   the branch forked from where you are landing. `scribe` (#4957) refused to let its own green count as landing proof:
@@ -1350,7 +1350,7 @@ every exit code, per #4939.
   meant to prove a cap was being met had itself been invalidated by the edit that recorded it. Name the sha with the
   count (`175 wc -l / 176 counted at main = aa0faca2`), and re-run `wc -l` after the last edit rather than before it.
 
-## Operational pitfalls and speed-ups (delegating, 2026-11-02, D189 — every number measured in this session, Linux/Fedora 44 on `Alex-Desktop-Win10`, node v24.22.1)
+## Operational pitfalls and speed-ups (delegating, 2026-11-02, D189 — every number measured in this session, Linux/Fedora 44 on `label-withheld-per-D205`, node v24.22.1)
 
 - **A wake dispatched from a CLAIMED WORKTREE dies as `no_model` before the provider is ever contacted.**
   `durig.config.json` is gitignored (`.gitignore:8`), so **no worktree has one** — measured: present in
@@ -1476,7 +1476,7 @@ every exit code, per #4939.
    `src/sidecar.mjs:115`), which made `demo/seat-turn-shape.test.mjs:292` green-or-red on the WAL's accident. Probe the
    sidecars (`ls -la selfdev.sqlite*`) before trusting any file-hash immutability assertion. #5019.
 3. **`cli.mjs worktree` writes `.git/worktrees/<name>/` before its symlink gate refuses** (exit 1 on
-   `junction/symlink detected at undefined/anthropic-ai-sdk`, #5001), so the name stays `already registered` — but do **not**
+   `junction/symlink detected at undefined/anthropic-ai-sdkhropic-ai-sdk`, #5001), so the name stays `already registered` — but do **not**
    delete anything by hand: `git worktree prune` (stale-registration-only, and only after the `worktree list --porcelain` /
    `branch --list` / `ls .spike | wc -l` inventory of `runbooks/workspace-move.md`) restored 14/14/0 both times.
    `complete_work`'s own cleanup refuses for the same `undefined`-root reason (`src/repair.mjs:343-353`), which is how
@@ -1667,7 +1667,7 @@ the prefix forever.
     218,645 → 135,567) and by `tools/seat-turn-shape.mjs`. See `session-start-cost.md` §22.
 13. **A seat's `complete_work` cleanup can refuse, so the delegate prunes landed worktrees by hand.** Observed:
     `complete_work: workspace cleanup for #5015 failed: refusing to remove worktree …/item-5015:
-    junction/symlink detected at undefined/anthropic-ai-sdk` (a `undefined` path component in the guard — worth a row).
+    junction/symlink detected at undefined/anthropic-ai-sdkhropic-ai-sdk` (a `undefined` path component in the guard — worth a row).
     The delegate's safe sequence, run after every landing: `git merge-base --is-ancestor <br> main` →
     `git -C <wt> status --porcelain` = 0 → `git worktree remove <wt>` → `git branch -d <br>` → `git worktree prune`.
     **Locked** worktrees are another seat's cwd and stay.
@@ -1778,7 +1778,7 @@ the prefix forever.
      while the *left* side is the same sha — say which sha you measured against, or the number is decoration.
 18. **A seat's verify fork leaves a redundant branch, and `-d` will refuse it.** devtools forked
      `d1c6d8a6` into `item-5066` to build a dependency set, then `complete_work` failed its cleanup
-     (`refusing to remove worktree …: junction/symlink detected at undefined/anthropic-ai-sdk`) — so the
+     (`refusing to remove worktree …: junction/symlink detected at undefined/anthropic-ai-sdkhropic-ai-sdk`) — so the
      worktree survived. After removing the worktree by hand, the ref still points at the *same* sha as
      `item-4955`, and `git branch -d` refuses an unmerged ref. Prove the two shas identical
      (`git rev-parse item-5066 item-4955`) and only then `-D` it. Never delete a fork before that proof.
@@ -2283,7 +2283,7 @@ the prefix forever.
     row, so every seat naming it would fail as `no_model` — a self-inflicted repeat of 299. I reproduced it twice; the key
     was present the whole time.
 15. **`git worktree list | wc -l` is a cheap leak detector: 17 → 26 in one day of passes.** `complete_work` refused
-    cleanup on `#4829`, `#5175`, `#4943` with `junction/symlink detected at undefined/ant` — a correct refusal with an
+    cleanup on `#4829`, `#5175`, `#4943` with `junction/symlink detected at undefined/anthropic-ai-sdkhropic-ai-sdk` — a correct refusal with an
     unactionable message (**311**). Count worktrees at clock-in and clock-out, not only before a `--refresh`.
 
 **Speed-up for the next wake-and-measure effort (it cost ~2 h wall clock, most of it diagnosis).** Run
@@ -2314,3 +2314,11 @@ against JSON-encoded `kind`/`status`). Cap the pass at `--max-duration 900` or l
 13. **Do not name an instrument you have not listed.** A delegate command for `tools/decisions-citation-gate.mjs`
     failed with `MODULE_NOT_FOUND` — the real instruments are `tools/doc-integrity-guard.mjs` and
     `demo/checkup-citation.test.mjs`. That is **301**'s defect reproduced by the delegate, not just by the rig.
+
+14. **`worktree audit` already classifies the leak; nothing reaps it.** `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` is read-only and printed `total 26 = seat-root 8, reapable 14, live 2, locked 2, dirty 0` on 2026-11-06. The 17→26 growth is not unknown-state; it is unreaped-known-state (**311**).
+15. **The junction refusal fires on `node_modules`.** `removeClaimedWorktree` (`src/worktree.mjs:1229-1245`) throws on ANY symlink in a recursive walk, and dependency installs create them (10-57 per live worktree measured); the unreadable `undefined/…` half is `dirent.path` being **undefined on node v24** — use `dirent.parentPath`. So a worktree that installs a dependency is permanently unreapable. Fast discriminator: scan the worktree for symlinks yourself before blaming the guard.
+16. **Quote log lines verbatim.** The string `undefined/ant` in ROADMAP 311 and four other files was **my own truncation** of `undefined/anthropic-ai-sdk`, and it read as evidence. Mark elisions or paste the line (D159).
+17. **Group the spend ledger by `status` before calling a pass cheap.** 89 of 507 calls (17.6%) returned ≤5 completion tokens and account for **$0.05713 of $0.19027 (30%)** — they are `429 engine_overloaded` / `terminated` (**321**). The notes are in the ledger rows; nobody was reading them.
+18. **On a reasoning model, `finish_reason` is the signal, not HTTP status.** A 200 response with `finish_reason: "length"` at `max_tokens=1200` carried **no answer**; the same prompt at 4000 answered with 2,894 completion tokens. Test slot shape by reading `finish_reason` and the `reasoning_content` field (**322**).
+19. **A verify probe needs the HOST config, not just the env file.** `--env-file="$HOME/.config/durig/env"` supplies only the key; `DURIG_VERIFIER_BASE_URL`/prices live in gitignored `durig.config.json`. Without it the fetch target is literally `undefined/chat/completions`.
+20. **Stage explicit paths per item.** `git add -u $(git ls-files -m)`-style staging merged a corpus-wide scrub and a decision record into one commit on 2026-11-06 (D218). A mixed commit cannot be reverted or reviewed independently; name the paths.

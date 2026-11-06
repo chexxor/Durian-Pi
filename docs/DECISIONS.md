@@ -4869,7 +4869,7 @@ What is **not** delivered is independence: `check` still reports `single-model-r
 seats resolve to `local/iq3_s`. **M4 is not deferred-any-more-and-not-built**: it is parked on the
 operator's TUI Q2 and on dead local sessions, with 9 of the 19 `deferred` rows TUI-adjacent.
 
-**Baseline, re-measured on native Linux at the commit measured** (`Linux Alex-Desktop-Win10
+**Baseline, re-measured on native Linux at the commit measured** (`Linux label-withheld-per-D205
 7.2.11-200.fc44.x86_64`): `check rig.selfdev.json` → `pass: true`, **0 errors, 62 findings**
 (`duplicate-item` 54, `citation-unresolvable` 5, `single-model-rig` 1, `verification-without-evidence` 1,
 `evidence-tree` 1); `node scripts/test.mjs` → **238/238 in 42.2 s**. Matches the previous pointer exactly,
@@ -6036,7 +6036,7 @@ prose reference is ambiguous until it is quoted as a path.)*
 
 ## D161 — a research round's citation block is never merged as text: land a key-alias table first, and re-anchor at the pin, not at the URL
 
-**Delegate practice, not an operator grant** (delegate session 2026-10-29, Linux, `Alex-Desktop-Win10`; evidence in
+**Delegate practice, not an operator grant** (delegate session 2026-10-29, Linux, `label-withheld-per-D205`; evidence in
 `docs/reviews/harness-r4-verification-2026-10-29.md` and `inputs/fetched/MANIFEST.md` §4). Registered as ROADMAP **250**.
 
 **Measured first.** The *integrated* report, `docs/reviews/harness-tools-skills-public-harnesses-research.md`, carries
@@ -6436,7 +6436,7 @@ ministral measured, so the "which verifier" question is now evidence-shaped rath
 
 **D169 (2026-10-29). The seat-hygiene restart condition is a CLOSED loop, not a queue: hygiene needs 217, 217 needs a woken seat, the rig refuses the wake because 217 has not landed, and no queue row exists to change that — so the delegate escalates one priced, coordinator-scoped wake instead of bypassing the block.**
 *What was decided.* I do not lift `seat-shell-availability`, do not hand-patch `src/seattools.mjs`, and do not claim any item. The finding is the deliverable, plus one ask with its cost named: a **single bounded decomposition-only wake** of `pm` (deliver the spooled intents, let `pm` create rows for 217/232/233/235–262, stop). **GRANT 6 already grants decomposition "on next start", so the ruling still missing is narrower than "may `pm` work" — it is "may the channel run at all while 217 is unlanded", because the preflight refuses every start, not just seat work.** It is defensible on a fact about the rig rather than a preference: `pm` is a coordinator with **no `write`/`edit` and no need of a shell**, so the block — whose stated purpose is "a broker whose seats cannot run a single command" — is guarding an act that runs no command and produces no artifact, so nothing can reach `done` and no verifier is implicated. The guarantees that stay OFF are named in the same breath (253's evidence clause, the 256 rehearsal, 217's shell), and releases/claims remain `pm`'s verbs.
-*Why the loop is real, link by link, all re-measured today on Linux (box `Alex-Desktop-Win10`, node v24.22.1):* (1) hygiene evidence is 256's rehearsal and that instrument is `git`; (2) a seat has never run `git` here — `entries` shows `"toolName":"bash"` **0**, `"toolName":"powershell"` **20,340**, `pwsh` **0**, spawn errors `powershell ENOENT` **3** + `pwsh ENOENT` **1**, newest **#274090** (conv 4930 = `devtools`) whose own text reads *"PowerShell is not available? … Maybe the shell is pwsh on Linux?"* — so today's honest verdict on seat hygiene is **unmeasured**, not good; (3) the fix is 217, which is seat work in `src/seattools.mjs`, and the new instrument `tools/roadmap-queue-coverage.mjs` (0.9 s, one queue read) prints **4,821 rows, CLAIMABLE 0**, and that of the **63** registered items ≥ 200, **62 are named by no row**, while 253 is named only by `#1146`/`#1149` — both `done`; (4) rows exist only if `pm` decomposes, and `node tools/broker-serve.mjs --dry-run` refuses the start with **`BLOCK seat-shell-availability`**. Five intents sit in `selfdev.sqlite.broker.inbox/` waiting 65–1,398 min: spooling is not a wake.
+*Why the loop is real, link by link, all re-measured today on Linux (box `label-withheld-per-D205`, node v24.22.1):* (1) hygiene evidence is 256's rehearsal and that instrument is `git`; (2) a seat has never run `git` here — `entries` shows `"toolName":"bash"` **0**, `"toolName":"powershell"` **20,340**, `pwsh` **0**, spawn errors `powershell ENOENT` **3** + `pwsh ENOENT` **1**, newest **#274090** (conv 4930 = `devtools`) whose own text reads *"PowerShell is not available? … Maybe the shell is pwsh on Linux?"* — so today's honest verdict on seat hygiene is **unmeasured**, not good; (3) the fix is 217, which is seat work in `src/seattools.mjs`, and the new instrument `tools/roadmap-queue-coverage.mjs` (0.9 s, one queue read) prints **4,821 rows, CLAIMABLE 0**, and that of the **63** registered items ≥ 200, **62 are named by no row**, while 253 is named only by `#1146`/`#1149` — both `done`; (4) rows exist only if `pm` decomposes, and `node tools/broker-serve.mjs --dry-run` refuses the start with **`BLOCK seat-shell-availability`**. Five intents sit in `selfdev.sqlite.broker.inbox/` waiting 65–1,398 min: spooling is not a wake.
 *Why a coverage instrument and not prose:* four consecutive delegate sessions re-derived "0 claimable" with a hand regex over a 21 MB `queue` dump. The new tool prints its denominator and its limitation (it counts **names**, not ownership — a row can work an item without writing "ROADMAP <n>"), per **257**.
 *Also landed under GRANT 4 (233 hygiene), no queue item claimed:* the owed `docs/runbooks/hygiene-and-dead-model-pointers.md` (front-mattered; every Diagnose command executed today), the repaired runbook index (the previous session's row had been **merged into its neighbour**, losing its link and orphaning its symptom text; **3** duplicate `tool-result-redacted` rows and a duplicate `security-trust-boundary-review` row collapsed), and two promoted instruments — `tools/transcript-recovery.mjs` (239's named target; now prints without writing unless `--out`, measured both ways) and `tools/extract-pi-src.mjs` (83 pi sources from `@earendil-works/pi-durable` **1.3.0**, pin `2ec55d808d45`; recovered `src/tools/bash.ts` confirms **217**'s line numbers **168/169**). **239** and **254**'s rows were amended so they no longer cite gitignored scratch paths as tree claims.
 *Blind spots:* the coordinator exception is inferred from the tool surface and `docs/SELFDEV.md` (coordinators cannot read or write files), not from a run — the first bounded wake is the test of it; `roadmap-queue-coverage` sees only the `ROADMAP <n>` naming form, so a row that works an item silently reads as unrowed; and the provenance counter treats a just-created, unstaged `tools/` file as "cited but untracked" (the finding went 3 → 5 mid-session and back only after `git add`), so re-run it after staging, not before — and know that it also counts a *supersede-mention* of a scratch path as a live cite (7 mentions of `.spike/extract-pi-src.mjs` survive, in `docs/ROADMAP.md:4505`, `docs/reviews/harness-tools-skills-research.md:273` and the archive), so "UNTRACKED BUT CITED (1)" after a promotion is prose about history, not a missing file: grep before chasing it.
@@ -6467,7 +6467,7 @@ the second face of D169's loop: the loop was not only "no row exists", it was **
 predicted first-pass wake set it asks the product's own `toolRemovalsFor` (`src/seattools.mjs:249`, `COORDINATOR_REMOVALS`)
 whether that seat keeps the shell tool. A seat that loses its shell also loses `read`/`write`/`edit`/`prepare_workspace`, so
 for exactly those seats the absent shell guards an act that runs no command and lands no artifact. Applied to the live rig
-file (Linux, `Alex-Desktop-Win10`, node v24.22.1): **`pm` and `lead` are coordinators** (`keepsShell=false`); **the other ten
+file (Linux, `label-withheld-per-D205`, node v24.22.1): **`pm` and `lead` are coordinators** (`keepsShell=false`); **the other ten
 keep the shell** — so the downgrade is neither vacuous nor general, and it requires `--max-duration`. Measured behaviour:
 without the ack `--dry-run` exits **1**; with it, the finding becomes a NOTE; `--start` with the ack and no `--max-duration`
 exits **2**; and after the spool emptied of intents the ack **correctly declined** (an empty wake set is absence of evidence,
@@ -6552,7 +6552,7 @@ this host gets when more than one can start). The 217 failure was a *preference*
 the schema half is its own row, **#4879** (architect). impl held that boundary and said so. The measured cost of the split is visible in the gate: `tools/rig-portability-audit.mjs` went **2 findings → 1**, and the survivor is
 `seat-host-unaware` — i.e. **217 is genuinely half-closed**, and the instrument proves it rather than the prose claiming it.
 
-**Evidence (delegate-run, Linux host `Alex-Desktop-Win10`, 2026-10-30T07:0xZ, in `/home/chexxor/Git/durian-dev/seatroot`):** `seatTools.shell.name` resolves to **`bash`**; the audit run from that tree against the real store prints **1
+**Evidence (delegate-run, Linux host `label-withheld-per-D205`, 2026-10-30T07:0xZ, in `/home/chexxor/Git/durian-dev/seatroot`):** `seatTools.shell.name` resolves to **`bash`**; the audit run from that tree against the real store prints **1
 finding** (`seat-host-unaware`) and **`seat-shell-availability` is gone**, while the same command from the live checkout still prints 2 — because `main` does not have the change, and *that difference is the measurement*. GREEN:
 `demo/seattools.test.mjs`, `demo/seatguard.test.mjs`, `demo/ctxline.test.mjs` exit 0. **RED verified, not assumed:** the delegate reverted `src/seattools.mjs` + `src/seatguard.mjs` to HEAD and moved `src/shellregistry.mjs` aside —
 `demo/seatguard.test.mjs` then fails on a **substantive assertion** ("the degraded-cwd shell refusal NAMES the verb it refused and the shell registered on this host"), while `demo/seattools.test.mjs` fails **only by a missing import**.
@@ -7025,7 +7025,7 @@ lock what it creates, or the guard should scope to the seat being woken.
 
 ## D180 — `DURIG_SEAT_ROOT` is not only a guard input, it is the **root selector**; unsetting it to get past a drift refusal re-points the seat at a different checkout
 
-**Decision (2026-10-31, delegate, `Alex-Desktop-Win10` / Linux):** the next delegate must treat "unset
+**Decision (2026-10-31, delegate, `label-withheld-per-D205` / Linux):** the next delegate must treat "unset
 `DURIG_SEAT_ROOT`" as a **workspace write**, not as relaxing a check. I did it to get a wake through and it silently
 moved a seat from the approved root into the delegate's own repo.
 
@@ -7349,7 +7349,7 @@ cleanup pass is not free and does not converge: it deposits.
 
 ## D184 — the operator granted the landing and answered the capacity question; both were carried, and the landing was proved before and after in a NAMED tree
 
-Decided 2026-10-31T10:5xZ by the OPERATOR and executed by the delegate (`Alex-Desktop-Win10`, Linux, node
+Decided 2026-10-31T10:5xZ by the OPERATOR and executed by the delegate (`label-withheld-per-D205`, Linux, node
 v24.22.1). D183 named the open asks; this record is what was done with them and *why* each step was sequenced
 the way it was, because the next delegate inherits a `main` that moved under three branches.
 
@@ -7451,7 +7451,7 @@ a transcript filter as seat negligence twice. `security` worked around it by pri
 (`279e0d9861b4d6958cf1|f36af03dc00c96fcaa23`), which is the pattern to ask for: the value in halves **plus the
 command that prints it**, so the reader can re-derive the whole thing.
 
-## D185 (2026-10-31 evening, Linux, `Alex-Desktop-Win10`): the verify leg came back and corrected the delegate twice
+## D185 (2026-10-31 evening, Linux, `label-withheld-per-D205`): the verify leg came back and corrected the delegate twice
 
 **Context:** first legs run under the operator's confirmed routing (grant 19: local-model seats that did not author the
 artifact, **no new GPU capacity**). `scribe` returned #4957 (verify of the compaction build) and #4958 (the
@@ -7520,7 +7520,7 @@ uncached), `lead` 170 @163,686, `scribe` 175 @151,039, `security` 100 @89,530.
 
 ---
 
-## D186 (2026-10-31 evening, Linux, `Alex-Desktop-Win10`): the do-not-send gate is the projection's LAST counted entry, not `AT RISK`; and a landing moves `main` out from under the seat root
+## D186 (2026-10-31 evening, Linux, `label-withheld-per-D205`): the do-not-send gate is the projection's LAST counted entry, not `AT RISK`; and a landing moves `main` out from under the seat root
 
 **Recorded by:** delegate. Host: Linux, box `label-withheld-per-D205`, kernel `7.2.11-200.fc44.x86_64`, node
 v24.22.1, `America/Chicago` (CDT = UTC−5). Every number below was produced by a command in this session.
@@ -7640,7 +7640,7 @@ a shell outside the registry, gated behind #4966 so it starts green), F3→#4923
 D186.4's `send`-deprecation notice was carried to `lead` in the same round trip and was **not** minted — the notice
 names `intent.mjs`, which needs a resident broker, and no entry point says so.
 
-## D187 (2026-11-01 overnight, Linux, `Alex-Desktop-Win10`): the D186.1 do-not-send gate was a false diagnosis — the seats died of a summarization output budget, and the field that says so was never printed
+## D187 (2026-11-01 overnight, Linux, `label-withheld-per-D205`): the D186.1 do-not-send gate was a false diagnosis — the seats died of a summarization output budget, and the field that says so was never printed
 
 **What was falsified, and by what.** D186.1 above ("the do-not-send predicate is the counted projection's LAST entry")
 was a correlation, not a mechanism. The mechanism is recorded in the store in the `submissions` column `detail`: `pm`
@@ -7701,7 +7701,7 @@ into its text turn), and **#4973** (`impl`, held, `blockedBy=[4970]`). I sent `l
 `item-4931` is still 2 ahead / 20 behind `main` and the granted landing fires only through #4966; the withheld
 `-D item-4898` condition is still unmet.
 
-## D189 (2026-11-02, Linux, `Alex-Desktop-Win10`): the clock-in digest's provider verdict is FALSE, and the rig's own pre-flight — not the verifier window — is what blocks a verifier wake
+## D189 (2026-11-02, Linux, `label-withheld-per-D205`): the clock-in digest's provider verdict is FALSE, and the rig's own pre-flight — not the verifier window — is what blocks a verifier wake
 
 **The decision.** The delegate did **not** spend the `qa` wake for `#4974` that the previous pointer queued as its step 3,
 and did not accept that pointer's framing ("fix the verifier window, then the `qa` leg"). It ran the rig's own guard
@@ -7760,7 +7760,7 @@ operator holds that grant and the delegate flags the durability risk rather than
 which is why `#4977` was this session's chosen wake: it is the row that converts every future delivery from a
 second-owner `send` back into broker-delivered `intent.mjs`.
 
-## D190 (2026-11-02 morning, Linux, `Alex-Desktop-Win10`): the landing gate is the bottleneck once the model is not; a control pinned to `main` is a control that dies when you land
+## D190 (2026-11-02 morning, Linux, `label-withheld-per-D205`): the landing gate is the bottleneck once the model is not; a control pinned to `main` is a control that dies when you land
 
 **What was decided, and by whom.** The delegate put four questions to the operator (land which branches; wake which
 verifier; start the broker when; mint what). The operator answered "recommend answers… then accept them as the operator's
@@ -7921,7 +7921,7 @@ the demo forced to **construct** a non-empty WAL instead of hoping for one — t
 store is *right*.
 
 **(5) `#5001` fired live twice more, and the delegate still did not hand-clean.** Both `complete_work` calls refused their
-cleanup step with `refusing to remove worktree …: junction/symlink detected at undefined/anthropic-ai-sdk`
+cleanup step with `refusing to remove worktree …: junction/symlink detected at undefined/anthropic-ai-sdkhropic-ai-sdk`
 (`src/repair.mjs:343-353` passes `undefined` into `checkForSymlinks`, whose `path.join(root, …)` then prefixes the first
 component with the cwd). Three worktrees are now orphaned — `item-4985`, `item-4995`, `item-5013` (the latter two are
 landed-and-merged, so their refs are disposition material, not live work). The delegate ran `git worktree prune` only where the
@@ -8903,7 +8903,7 @@ unnoticed for 16 days.** Row **#5094** makes drift a visible finding rather than
   config write, no roster edit**) and **#5136** (the roster arm, `held`, gated on **#5125 + #5131 + #5095**), and it kept
   its ruling verbatim: **"gate arm now, roster flip only after stage 1."** It also opened **#5132** (the
   `channel-preflight` §7 contradiction, **inside 217**), **#5133** (`security`: *do not build #4829 on §7*), and
-  **#5134** (the worktree-removal message that lost its root: `… at undefined/anthropic-ai-sdk`) — the three items the
+  **#5134** (the worktree-removal message that lost its root: `… at undefined/anthropic-ai-sdkhropic-ai-sdk`) — the three items the
   delegate handed it. Census after: **done 3812 | cancelled 809 | held 342 | queued 154 | deferred 16 | claimed 3**.
 - **Ruling D (operator): "I accept your recommendation"** — the recommendation was *route the substrate research **after**
   #4829 lands, so the brief points at the real question*. So the commission at
@@ -9507,3 +9507,17 @@ minutes each and dominate the session; the diagnosis that mattered took **one** 
 - **R2-3 (the `broker-wedged` rule) invents a third kind when we already ship the discriminator.** `docs/MVP.md:40-41` records that `src/attention.mjs` emits exactly two notices — `idle_with_queued_work` and `last_run_failed` — and that "a seat actively running or settled-and-empty stays silent". Q12's claim that nobody distinguishes idle from wedged is about *supervisors*, not about us; the wedge rule should reuse `idle_with_queued_work` plus one new kind, not re-derive the taxonomy.
 
 **What is genuinely new to us** (counted in our own docs so nobody re-buys it): in `docs/COMPETITORS.md`, `Devin` **0**, `Jules` **0**, `Bugbot` **0**, `background agent` **0**, idle-policy language **0**; `Cursor` **3**, `Goose` **14**, `hook` **22** are partially held. So Q10 — no shipped product documents an idle policy, and GitHub Code Quality's two-state Bugbot is the closest design precedent — is net-new and is the most load-bearing thing the round bought, because it lands on **300** while our own measurement of the cost of not having it is still warm.
+
+## D217 — the operator signs the per-agent-database ruling, approves the 1b scrub extension, and approves the priced verify legs; the legs answer 297 in the opposite direction from the assumption on the table (2026-11-06T05:0xZ, delegate acting; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+**Ruling (B7, "Accepted").** **One durable store per team; per-seat databases are rejected. Per-seat workspaces — one worktree and one scratch root per seat (`src/seatroot.mjs`, `src/worktree.mjs`) — are affirmed as the isolation layer this product ships.** Reasons recorded with the ruling: (1) per-seat stores multiply every hazard measured in D215 by the seat count — twelve pin sets that can go stale (**299**), twelve cap ledgers that can silently reset (**310**), twelve dark read paths (**303**); (2) the isolation such stores would buy already exists at the layer shipped systems use — Round 2 **Q12** found the per-agent unit to be a **machine or workspace** in every vendor examined (Cursor: own VM with snapshot/resume; Jules: per-task VMs), never a database inside a team; (3) the hosted pattern of "one disposable VM per unattended task" is a fact about unattended modes and is not evidence for per-seat stores in an interactive team. **Closes the decision half of ROADMAP 279 and Round 1 B7**; the enforcement half (280/304/305/307) stays open, as does the rename question (still deferred by the operator).
+
+**Ruling (hostname scope, "2. a." = option 1b, approved) and its execution.** Replace the `-Win10`-suffixed label **only on lines that assert a Linux host**, leaving genuine Windows-era records intact. Executed the same turn: **24 files, 45 occurrences replaced** with `label-withheld-per-D205`; **5 occurrences remain**, all on lines that state no OS. Combined with option 1 (33 occurrences), D205's scrub is now complete for both hostnames in the record, and the forward-facing half is **320** (shape-only gate, B9's limit carried on the row).
+
+**Ruling ("3. Approved") — the three priced verify legs — and what they measured.** The legs ran against the metered arm (`openai/gpt-oss-120b` @ DeepInfra, priced 2026-11-06), ceiling `DURIG_PROBE_CEILING_USD=0.15`, ledgered to `.spike/delegate-20261106/spend-legs.jsonl`. Ground truth was measured rather than assumed: the review target is `src/worktree.mjs`'s real cleanup guard, which carries a defect this session confirmed independently. Results, in order: L1 (real code, `max_tokens=1200`) → `finish_reason: "length"`, **no answer**; L2 (same code with a planted data-loss defect, 1200) → **no answer**; L3 (full-file context, 15,837 in tokens, 1500) → **no answer**; L4 (same 911-token prompt, `max_tokens=4000`) → `finish_reason: "stop"`, **2,894 completion tokens**, **$0.00053**, **162.6 s**, and it independently named the real defect: *"`entry.path` is not a property of Node's `Dirent`; the error message will contain `undefined/...`"* — the exact Node-24 drift measured here — plus two further claims the team should check on their own merits. **Consequence for 297, stated against the assumption it overturns:** the 24,576 context slot consumed only **3,805 tokens**, so context was never the constraint; **`DURIG_VERIFIER_MAX_TOKENS=3000` is marginal** for a reasoning model. Raising output to 6,000 tokens costs **$0.00102** per call — ~4x under the store cap. And the operator's own framing ("maybe they are more efficient") is answered with the axis corrected: on this arm the expensive thing is **latency, not money** — a single review turn costs half a millicent and takes **2.7 minutes**. Registered as **322**; the dollar-share finding that came out of the same ledger read is **321**. n=1 per leg: this is a slot-shape measurement, not a calibration — **317** is the calibration.
+
+## D218 — the operator moves the push grant to per-batch, and requires the commit-boundary miss to be documented rather than just confessed (2026-11-06T05:0xZ)
+
+**Decision.** **"4. grant per-batch"** — the push grant is no longer per-session. Each batch of commits needs its own explicit grant; the delegate commits and stops. This session's batches were pushed on the earlier approval (`ef29516d..34324b62`, `34324b62..65422c03`); anything after this point waits for a per-batch yes.
+
+**Decision.** **"5. Ensure that is added to documentation"** — the miss from the last batch (staging the whole modified set, which merged the hostname scrub and the D216/ROADMAP record into one commit) is recorded as a durable pitfall in `docs/SELFDEV.md` §session G, not only as a confession in a report. The rule it instantiates: **stage explicit paths per item**, because a commit that mixes a corpus-wide sweep with a decision record cannot be reverted, reviewed, or cherry-picked independently — and `docs/AGENTS.md` already says exactly this. Recorded here so the next session finds the rule before it re-learns it.

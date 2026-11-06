@@ -17,33 +17,43 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 
 ## NEXT SESSION
 
-**Current item: `lead` cuts `docs/ROADMAP.md` 294–320 — Round 2 landed, the operator's answers are all in, and the
-binding constraint is still **backoff before capacity** (now an operator ruling, not a recommendation).** Queue at
-`#5205`, 25 `queued`, 8 `claimed`. Round 2 (`docs/reviews/base-agent-product-topology-followup-research.md`) supplies the
-policy material for **300**/**313** (no shipped product documents an idle policy; GitHub Code Quality's two-state Bugbot is
-the nearest precedent), the claim-time pin guard for **299**/**315**, the wedged-vs-idle rule for **303**/**314**, and the
-verifier-economics shape for **317**. Registered: **313–320**. Operator rulings this turn: backoff before capacity
-(**approved**), 297 measure-first (**accepted**), hostname option 1 (**accepted**, executed — and it reached 33 occurrences
-while the 49 `-Win10`-labelled Linux assertions sit outside its scope, **319**), seat shell = **withhold `powershell` on
-non-Windows hosts** (so **302**'s fix lands on **306**, not prompt text), credentials **rotated** by the operator (verified:
-the verifier arm still reports `ARMABLE`), push **approved** (`ef29516d..34324b62`, then the scrub commits). **B7 came back
-for explanation**: re-evaluated after Q12, the rejection should read *reject per-seat databases, affirm per-seat worktrees*
-(D216 carries the wording for his signature).
+**Current item: `lead` cuts `docs/ROADMAP.md` 294–322, and two things are now first: the idle backoff (300/313) and the
+worktree leak (311).** B7 is **signed** (D217), the 1b hostname scrub is **executed**, and 297's priced legs are **run** —
+they came back pointing the other way from the assumption on the table (**322**). Order the operator ruled stands: backoff
+before capacity.
+
+Queue at max id **`#5205`** (25 `queued`, 8 `claimed` at last read; the next session re-reads it below before
+any write).
+
+**The 311 plan, with the cause now measured (three halves, one command each).**
+1. *Read the classification first, read-only:* `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` →
+   `total 26 = seat-root 8, **reapable 14**, live 2, locked 2, dirty 0`. The leak is unreaped **known**-state, not
+   unidentifiable.
+2. *Fix the message:* `src/worktree.mjs:1237` prints `${entry.path}/${entry.name}` and **`dirent.path` is `undefined` on
+   node v24** (property is `dirent.parentPath`) — that is the unreadable `undefined/…`.
+3. *Fix the threat model, which is the actual leak:* the guard throws on **any** symlink in a recursive walk, and the
+   entries it trips are `node_modules` package-manager links (`…at undefined/anthropic-ai-sdk`, 6 in `serve.err`;
+   10-57 links per live worktree measured). Any worktree that installs a dependency is **permanently unreapable**. Fix:
+   drop `node_modules` before the walk (or accept links that stay inside the worktree), and refuse only links pointing out
+   toward protected trees — keep what D60/Git-2.42 actually protect.
+4. *Give it a landing:* a **reap** verb fed by `worktree audit`'s `reapable` set, and `complete_work` cleanup failures into
+   attention instead of only stderr. Acceptance: after a pass, `git worktree list | wc -l` returns to seat count plus
+   declared roots (it went 17 → 26 in one day).
 
 **Next command** (host signature measured with it — Linux, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
 
 ```bash
 cd ~/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node cli.mjs status   # if this times out, read selfdev.sqlite.broker.json: fresh heartbeatAt + frozen lastPassAt = 303, not a broken store
-node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status | tail -3   # pid from broker.json, never pgrep
-node intent.mjs lead --body-file .spike/delegate-20261106/brief-lead-3.md             # 313-320 + the ordering ruling
+DURIG_DB=./selfdev.sqlite node cli.mjs status          # if it times out: fresh heartbeatAt + frozen lastPassAt = 303, not a broken store
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit  # the reapable count, before anything else
+node intent.mjs lead --body-file .spike/delegate-20261106/brief-lead-4.md   # 311 plan + 321/322 + the B7 ruling
 node scripts/test.mjs --area docs && node scripts/test.mjs --area check
 ```
 
-**Blocker:** **B7 is unsigned** — the per-agent-database ruling is the operator's; until it is written, 279 stays open and
-the topology question can reopen. Cheap second blocker: 49 `-Win10`-labelled Linux assertions remain in the record because
-option 1's scope cannot reach them (**319**) — the operator accepts **1b** or accepts leaving them.
+**Blocker:** **nothing is blocked on the operator right now** — B7, 1b, and 297 are closed. The one live constraint is
+procedural: the push grant is now **per-batch** (D218), so this batch waits for its own yes. Second-order: 311's fix is
+`lead`'s to cut, and until it lands, every pass adds worktrees.
 
 ## State (measured 2026-11-06T03:4xZ, same host signature as above)
 
@@ -78,7 +88,7 @@ option 1's scope cannot reach them (**319**) — the operator accepts **1b** or 
 - **Worktrees: 17 → 26 during this day of passes** (count it at clock-in and clock-out — it is the cheapest leak
   detector). `item-4943` and `../durian-dev/seatroot/item-5111` still present; cleanup keeps refusing —
   `complete_work: workspace cleanup for #4829 / #5175 / #4943 failed: refusing to remove worktree … junction/symlink
-  detected at undefined/ant`. That message names no resolvable path, so nothing can act on it — registered as **311**.
+  detected at undefined/anthropic-ai-sdkhropic-ai-sdk`. That message names no resolvable path, so nothing can act on it — registered as **311**.
   The pass-measurement instruments (`.spike/delegate-20261106/pass-report.mjs`, `latency-pass.mjs`) are in gitignored
   scratch and need a row to be promoted into `tools/` — registered as **312**.
 - **Research (ROADMAP 298, satisfied on intake):** `docs/reviews/base-agent-product-topology-research.md` landed and is
