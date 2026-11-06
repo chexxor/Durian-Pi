@@ -149,6 +149,7 @@
       "demo/worktree-prune-branch.test.mjs",
       "demo/worktree-prune.test.mjs",
       "demo/worktree-recursive-carry.test.mjs",
+      "demo/worktree-removal-junction-message.test.mjs",
       "demo/worktree-reuse-deps.test.mjs",
       "demo/worktree-scratch.test.mjs",
       "demo/worktree-sweep.test.mjs",
