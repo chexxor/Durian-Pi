@@ -2422,6 +2422,13 @@ signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PR
     (reinforcing D221 pitfall 27): **write the doc, then commit it, then verify it is in the commit — before any broker verb**;
     `git diff -- <path>` immediately before committing and `git show --stat <sha>` immediately after. Never assume a doc edit
     survives a pass you have not committed it past.
+42. **`cli.mjs send` is deprecated, and it is the 329 hazard in disguise.** The delegate's brief-8 send (broker down) settled
+    `done`, and stderr said: `send is DEPRECATED (opens a full writing harness = a second owner): prefer
+    node intent.mjs <seat> --body-file <file>` (the broker delivers) and `log`/`status` for the reply`. With a broker **up**,
+    that second owner is exactly what poisons the broker's session (`src/readclient.mjs:3-11`) — so brief a seat with
+    `intent.mjs` while the rig is running and read the reply with `cli.mjs log <seat>`. Same send also printed
+    `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed",…}` — a catalog row, not an outage
+    (pitfall 32): confirm with `node demo/deepinfra-catalog.test.mjs` before treating it as the rig going dark.
 
 **Fast path for one bounded pass + its true result (~25 s of delegate time, plus the pass itself):**
 `node .spike/delegate-20261106/verifier-spend-tripwire.mjs` (free, decides whether to run at all) → `ls

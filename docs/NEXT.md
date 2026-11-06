@@ -29,7 +29,11 @@ against a wedged broker, and mid-pass the same verb's read is dead-lettered as `
 **330** (an uncommitted doc edit in the shared tree was silently reverted mid-session; two lanes' doc work is gone). Routing that
 is already correct, do not re-mint: **#5255** (pm, the pass order), **#5261** (pm, 311 blocks the delegate's passes), **#5256**
 (impl, 311's junction ruling), **#5231**/**#5260** (architect, 303 root cause), **#5258**/**#5259** (impl, 327/328), **#5243**
-(pm, 295 re-registration), **#5214** (qa, 317 calibration), **#5227** (impl, 295 mask — live again).
+(pm, 295 re-registration), **#5214** (qa, 317 calibration), **#5227** (impl, 295 mask — live again). **Cut no rows yet for 329
+and 330** — the delegate registered them and `lead` has not minted carriers (`#5270` is still the max id as of 18:0xZ). **Lead's
+platform constraint, from #5255/#5256:** every number in this pointer is Linux-measured, but 311's second half is the **NTFS
+junction** threat model — a Linux-green suite proves the refusal message and the reap verb, **not** 311(ii); the carrier must
+carry a Windows-side observation or label 311(ii) verified-partial.
 
 **325 is ANSWERED — decision closed, no operator action pending.** The operator's answer (D222, item 3) is **(a) stay on
 loopback**; do **not** raise `DURIG_STREAM_TIMEOUT_MS`. So the seven author seats keep running on loopback (measured 1.4 s for a
