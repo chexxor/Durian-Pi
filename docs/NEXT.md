@@ -75,8 +75,12 @@ grep -c "<a phrase only your own entry contains>" docs/SELFDEV.md   # 330: prove
 # node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600
 ```
 
-**Push state:** `origin/main` = `ffbd0e1e` (the operator's batch grant, spent). `926a7754` (`.gitignore` disposition) is
-**local-only** and needs a fresh per-batch grant (D218).
+**Push state:** `origin/main` = `ffbd0e1e` (the operator's batch grant, spent). `926a7754` (`.gitignore` disposition),
+`1950926a` (D222 + rows 329/330) and `d1ee4e30` (pitfall 42 + the pointer's platform constraint) are **local-only** and need a
+fresh per-batch grant (D218). `node tools/broker-serve.mjs --status` also shows **1 unread `[read]` intent still spooled
+(`042a2e70-…` waiting 20 min)** — that is one of the `watch --once` polls **329** describes, not a stuck write; it will drain on
+the next broker start, and the 5 dead-lettered ops in `selfdev.sqlite.broker.inbox.error/` all read
+`apply failed: SqliteStorage is closed`.
 
 
 
