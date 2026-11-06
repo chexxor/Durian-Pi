@@ -47,7 +47,7 @@
         "review"
       ],
       "instructionsFile": "prompts/qa.md",
-      "model": "local/qwen3.8-flash-next-iq3_s"
+      "model": "verifier/openai/gpt-oss-120b"
     },
     {
       "name": "qa2",
@@ -62,7 +62,7 @@
         "review"
       ],
       "instructionsFile": "prompts/qa2.md",
-      "model": "local/qwen3.8-flash-next-iq3_s"
+      "model": "verifier/openai/gpt-oss-120b"
     },
     {
       "name": "lead",
@@ -92,7 +92,7 @@
         "review",
         "advocate"
       ],
-      "model": "local/qwen3.8-flash-next-iq3_s",
+      "model": "verifier/openai/gpt-oss-120b",
       "instructionsFile": "prompts/advocate.md"
     },
     {
@@ -136,7 +136,7 @@
       "capabilities": [
         "verify"
       ],
-      "model": "local/qwen3.8-flash-next-iq3_s",
+      "model": "verifier/openai/gpt-oss-120b",
       "instructionsFile": "prompts/auditor.md"
     },
     {
@@ -150,7 +150,7 @@
       "capabilities": [
         "review"
       ],
-      "model": "local/qwen3.8-flash-next-iq3_s",
+      "model": "verifier/openai/gpt-oss-120b",
       "instructionsFile": "prompts/designer.md"
     },
     {
