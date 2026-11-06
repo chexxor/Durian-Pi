@@ -9,8 +9,16 @@ delegate report — every line reference and verdict below was produced by me in
 `294e1806fd21` (main tip at workspace preparation). Artifact set: **80 packages, no `vendor/pi-main`** (deps come
 from the lockfile: `@earendil-works/pi-durable` 1.3.0). The probes below import only `src/` modules plus that
 package, so they run in this set; a verdict that needs the deps-linked 187-package set is labelled as such.
-Host: Fedora 44, node v24.22.1, `bash` 5.x at `/usr/bin/bash`, no `pwsh`/`powershell` on PATH (D131: Linux is the
-rig's operating system).
+Host: Fedora 44, node v24.22.1 (D131: Linux is the rig's operating system). **Re-measured 2026-11-06T02:38Z in the
+same branch, tip `96f810f1` (main tip then `fca4e980`)** — the substrate probes in *Re-runnable probes* and G5(b) were
+re-run at that tree, not at `294e1806fd21`.
+
+**Shell datum, read from the product's own registry rather than inferred from a PATH list** (`node -e
+'import("./src/shellregistry.mjs").then(m=>{const s=m.seatShellSelection; …})'`, exit **0**):
+`{platform:"linux", name:"bash", degraded:false, programs:["bash"], startedBy:"/usr/bin/bash"}`. `pwsh` and
+`powershell` are absent on this host, and that absence is a **program-list fact, not a verdict**: the seat shell that
+actually starts here is `bash`. Stating the absence without the selection is what invites the inference that no shell
+starts — see **G11**, which refutes exactly that inference in a live instrument.
 
 **Secret scan first, per the runbook.** Class-pattern scan over the tracked tree, sanctioned carriers excluded
 (`docs/runbooks/leaked-secret.md:101`), exit **1 = clean**. No value is quoted anywhere in this document; the
@@ -281,6 +289,20 @@ owns host-level steps.
     `pickEnv` value-level `looksLikeSecret`, `git config --global/--system` refusal) may land **before** 174 and
     should, but each must be labelled in docs and in the record as a mistake-containment layer, so that a green
     belt demo is never cited as the boundary.
+11. **G11 — A substrate verdict carries its host and its tree; a negative it cannot verify prints UNKNOWN.** A
+    false "cannot" leaves a needed control unworked; a false "can" gets one skipped — both are security defects,
+    because the queue and the audit read instruments rather than reasoning. Live instance at writing time, named so
+    it can be re-checked: `tools/channel-preflight.mjs:468` prints the definitive **"NO SHELL CAN START HERE"** while
+    `src/shellregistry.mjs:179` selects `bash` at `/usr/bin/bash` (`degraded:false`, exit 0). The instrument derives
+    its program list from the pinned build default (`vendor/pi-main/packages/durable/src/tools/bash.ts:169`,
+    `options?.programs ?? ["pwsh", "powershell"]`) with the same Windows pair repeated as its own fallback at
+    `tools/channel-preflight.mjs:234`, and it never imports the registry —
+    `grep -c -E 'shellregistry|seatShellSelection' tools/channel-preflight.mjs` → **0**, exit **1**.
+    **That verdict is refuted; this position does not rest on it and must not be cited as its source.** The
+    instrument fix is a CODE change owned by #5133's carrier (cause, plus a demo pinning the printed program list to
+    `seatShellSelection.programs` per the reported platform, supplied in #5163) — it is **not** absorbed here. 172's
+    record rows inherit the gate: a row states host + tree + date, and an unverifiable claim is recorded as UNKNOWN,
+    never as a negative.
 
 ## Residual risk (named, not controls)
 
@@ -316,11 +338,32 @@ git grep -cE '^## (Scope|Non-goals|Gates|Citations)' -- docs/reviews/security-se
 git grep -cE '^## Threat model' -- docs/reviews/security-seat-sandbox-position.md                        # expect 1
 ```
 
+Host-carrying substrate probes — re-run before citing any of these; a verdict without a host, a tree and a date is
+stale by construction (G11):
+
+```bash
+node -e 'import("./src/shellregistry.mjs").then(m=>{const s=m.seatShellSelection;console.log(JSON.stringify({platform:s.platform,name:s.name,degraded:s.degraded,programs:s.programs,startedBy:s.startedBy}))})'
+# this tree, 2026-11-06: exit 0, {"platform":"linux","name":"bash","degraded":false,"programs":["bash"],"startedBy":"/usr/bin/bash"}
+# degraded:true is the UNKNOWN case — nothing can start, and the rig must SAY SO instead of asserting a host fact.
+grep -c -E 'shellregistry|seatShellSelection' tools/channel-preflight.mjs
+# 0 matches, exit 1 = the instrument still does not read the registry, so its §7 shell verdict stays refuted.
+```
+
+Seat-shell TCP reach, from a seat worktree with **no grant beyond the default** (measured 2026-11-06T02:38Z, branch
+`item-4829` @`96f810f1`): `127.0.0.1:8080` → **REACHABLE** — a port this seat was never given; `127.0.0.1:47832` →
+**ECONNREFUSED**, so the share named at `docs/NEXT.md:146-152` is **not listening today** and that figure is
+stale-by-measurement: re-measure when asserting it, never carry it forward. Conclusion for 268: **loopback egress is
+not gated by the grant** — this is G5(b)'s "passes today" half, measured rather than asserted. No LAN or TEST-NET
+host was touched by this probe, so G5(c) still needs its own escape run.
+
 ## Citations
 
 - **Measured in this tree by this seat** (exit codes named): secret class scan → 1 (clean);
   `grep -c -iE "network|socket|egress" src/confine.mjs` → **0**; egress/verdict probes → exit 0, tables above;
-  `git rev-parse --short=12 HEAD` → `294e1806fd21`; `git status --short` → empty.
+  `git rev-parse --short=12 HEAD` → `294e1806fd21`; `git status --short` → empty. Re-measurement pass
+  (2026-11-06T02:38Z, branch `item-4829` @`96f810f1`, main tip `fca4e980`): registry selection → exit 0 with the
+  linux/`bash` verdict above; `grep -c -E 'shellregistry|seatShellSelection' tools/channel-preflight.mjs` → **0**
+  (exit 1); loopback TCP reach → 8080 REACHABLE, 47832 ECONNREFUSED.
 - `src/confine.mjs:204-205, 228-311, 340-353, 364-365, 370-378, 491-493, 680-694, 712-715` ·
   `src/writetargets.mjs` header + `writeTargets` (`:152`) · `src/seatguard.mjs:455-525` (beforeTool chain,
   `shellWriteRefusal`), `:528-531` (`durig.guard`, `defineExtension`) · `src/seattools.mjs:241-276`
@@ -345,8 +388,17 @@ git grep -cE '^## Threat model' -- docs/reviews/security-seat-sandbox-position.m
   `awesome-agent-sandboxes @ db6ffc0a` **NO LICENSE FILE**; `sandbox-sdk @ 61cac81b` Apache-2.0),
   `tools/vendor-pins.mjs --check` → PASS at 17 clones (delegate-run 2026-11-05; not re-run in my worktree, which
   has no `vendor/` — stated as briefed-not-observed).
+- `src/shellregistry.mjs` — `selectSeatShell(host = {})`, the selection exported at `:179`, and its own claim that
+  "every consumer (CLI, broker, audit, preflight) reads the same object"; `src/seattools.mjs:214-232` (the host-
+  conditional seat shell comes from that one registry, #4849 / ROADMAP 217); `tools/channel-preflight.mjs:220`
+  (imports the tool NAME only), `:234` (the Windows fallback pair), `:468` (the §7 verdict G11 refutes);
+  `vendor/pi-main/packages/durable/src/tools/bash.ts:169` (`options?.programs ?? ["pwsh", "powershell"]`) — read
+  from the **shared checkout's** `vendor/`, which this item worktree does not carry (80-package set), so that line
+  reference is named as read-not-re-runnable-here; the two `tools/channel-preflight.mjs` lines above **are** re-
+  runnable here and are the load-bearing ones.
 - `docs/NEXT.md:146-152` (the `0.0.0.0:47832` share, its 401/200 bearer behaviour, and the runtime-only firewall
-  rule) — cited, **not** probed by me.
+  rule) — the **bearer behaviour is cited, not probed by me**; the **port itself I did probe**, 2026-11-06 at
+  loopback: ECONNREFUSED, i.e. nothing listens today, so the figure must be re-measured before it is asserted.
 - `docs/DECISIONS.md`: **D131** at `:4386` (Linux is the rig's OS; the measured host), **D141** at `:4818`
   (substrate before memory; security precedes), **D48** at `:1292` (shared-tree safety is structural);
   cross-family verification is D48/D119 discipline.
@@ -357,4 +409,7 @@ git grep -cE '^## Threat model' -- docs/reviews/security-seat-sandbox-position.m
 - Queue rows this position rules on: #4829 (this), #4833 (decomposition, held behind it), #4827 (memory write-gate
   position, separate), #4922 (redactor hazard, F6), #4940 (the `seat-host-unaware` finding's remedy — adjacent:
   it is about a host *declaration* with a real consumer, which is exactly what a per-claim sandbox needs, so
-  270's invariant doc and 174's spawn seam should share the host datum).
+  270's invariant doc and 174's spawn seam should share the host datum). Rows about the same host datum, kept
+  separate on purpose: **#5132/#5133** (fix the preflight instrument — the CODE change, not this paper), **#5163**
+  (its root cause and the programs-pinning demo), **#5160** (the release ruling that opened this row), **#5152**
+  (the 171–174 decomposition, which this row gates).
