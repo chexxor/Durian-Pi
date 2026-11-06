@@ -2263,3 +2263,33 @@ the prefix forever.
 10. **Capacity before backoff would multiply the churn.** `DURIG_MAX_CONCURRENT_SEATS` measured
     `durig.config.json=undefined`, `durig.config.default.json="1"`. Any answer to 265/**297** that raises concurrency or
     verifier context raises the 300 storm too, so 300's backoff is the cheap prerequisite — say that in the same row.
+11. **Broker-routed CLI reads go dark whenever seat conversations are pending — the store is usually fine.**
+    `cli.mjs status` and `cli.mjs queue` returned nothing, then `{… "error":"read health: timed out awaiting the broker's
+    result"}` after 120 s, at 04:04:36 mid-turn as well as for 75 minutes after pid 483056's deadline. The discriminator is
+    a read that bypasses the router: a direct read-only open answered `select count(*) from entries` → 150,347 in
+    **111 ms**, and `tools/latency-budget.mjs` answered fully throughout. With the broker down the same CLI reads return in
+    seconds. **Never write to the store to fix this** — and do not conclude "store corruption" from a CLI timeout
+    (**303**, `docs/runbooks/broker-down-or-stalled.md`).
+12. **`pgrep -f broker-serve.mjs` matches its own subshell.** Twice this session it printed a pid (524202, 538766) for a
+    broker that was already dead, which reads as "the broker is back". Trust the pid in `<db>.broker.json` with
+    `ps -o pid=,etime= -p <pid>` — and check `heartbeatAt` against `date -u +%FT%TZ` in the **same** command, because a
+    fresh heartbeat with a frozen `lastPassAt` is a different diagnosis than a dead process.
+13. **Two spend ledgers, and the advice text names the stale one.** `src/supervisor.mjs:91` and `src/attention.mjs:412`
+    send the operator to `.spike/gate/spend.jsonl` (gitignored; last line `2026-11-04T07:42:02.530Z`) while the ledger the
+    rig wrote today is `selfdev.sqlite.spend.jsonl` (507 calls, $0.19027 at close). Read the store-scoped file, and treat
+    any dollar figure that does not name its ledger path as unverified (**310**).
+14. **`registration-refused … metered-endpoint-unkeyed` from a CLI verb usually means *you* dropped the env file.**
+    Run `up` / `resume` without `--env-file="$HOME/.config/durig/env"` and the `verifier` provider registers **no** model
+    row, so every seat naming it would fail as `no_model` — a self-inflicted repeat of 299. I reproduced it twice; the key
+    was present the whole time.
+15. **`git worktree list | wc -l` is a cheap leak detector: 17 → 26 in one day of passes.** `complete_work` refused
+    cleanup on `#4829`, `#5175`, `#4943` with `junction/symlink detected at undefined/ant` — a correct refusal with an
+    unactionable message (**311**). Count worktrees at clock-in and clock-out, not only before a `--refresh`.
+
+**Speed-up for the next wake-and-measure effort (it cost ~2 h wall clock, most of it diagnosis).** Run
+`DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run` **before anything else** — that one ~10 s
+read named the entire failure class (`wouldRefresh[].changes.model = {from,to}` for 5 seats) and every other read was
+downstream of it. Then `node tools/latency-budget.mjs --db ./selfdev.sqlite --rig rig.selfdev.json` for the whole
+WAIT/WORK/HELD + provider-waste + tool-presence picture in one command instead of hand-written SQL (which failed twice
+against JSON-encoded `kind`/`status`). Cap the pass at `--max-duration 900` or less, and plan to **`kill` the pid from
+`<db>.broker.json`** when the deadline passes — `serve --stop` does not work on a lingering broker.

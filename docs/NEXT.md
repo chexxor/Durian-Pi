@@ -17,7 +17,7 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 
 ## NEXT SESSION
 
-**Current item: `lead` cuts `docs/ROADMAP.md` 294–309 into rows and keeps cutting — the queue is alive (max id #5205, 25
+**Current item: `lead` cuts `docs/ROADMAP.md` 294–312 into rows and keeps cutting — the queue is alive (max id #5205, 25
 `queued`, 8 `claimed`), so the binding constraint is backoff, not supply.** Order matters and one rule is load-bearing:
 **backoff before capacity.** Any increase in concurrency (`DURIG_MAX_CONCURRENT_SEATS`, `durig.config.default.json` = 1,
 `durig.config.json` unset) or verifier context before ROADMAP **300** lands multiplies the idle storm this pass measured.
@@ -29,7 +29,7 @@ reads and print its run block, and `--stop` must escalate instead of returning `
 fixture-isolate the one red demo; **(5)** **295/296** the preflight prints credential **values** and probes the paid
 endpoint with no ceiling or ledger; **(6)** **297** price three real verify legs **before** anyone touches the slot;
 **(7)** **301** the rig's own `next:` advice names instruments that do not exist; **(8)** **302** seats use `powershell`
-**20,296** times against `bash` **1,824** on a Linux host; **(9)** **282–293** and the **304–309** research intake.
+**20,296** times against `bash` **1,824** on a Linux host; **(9)** **282–293**, the **304–309** research intake, and the hygiene pair **311–312**.
 
 **Blocker:** **verifier capacity is unpriced** — the armed arm runs an inherited `24,576 / 3,000` slot with zero
 measured legs, and the vendor's full 131,072 ctx would cost **$4.85 for one maximal call**, over the `$4.00` store cap, so
@@ -87,9 +87,12 @@ reads the store itself and answered fully throughout. Do not write to the store 
   past a 900 s deadline). Only `kill` produced `EXIT … reason=deadline passes=-` (303). `resume` found nothing stranded. A
   pass with **no** pending conversations exits on its own (`EXIT reason=max-duration passes=1245`). **Restart is the next session's first write:**
   `node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 1800`.
-- **Worktrees:** 17 entries. `item-4943` and `../durian-dev/seatroot/item-5111` still present; cleanup keeps refusing —
+- **Worktrees: 17 → 26 during this day of passes** (count it at clock-in and clock-out — it is the cheapest leak
+  detector). `item-4943` and `../durian-dev/seatroot/item-5111` still present; cleanup keeps refusing —
   `complete_work: workspace cleanup for #4829 / #5175 / #4943 failed: refusing to remove worktree … junction/symlink
-  detected at undefined/ant`. The `undefined/ant` half of that message is itself a defect worth a row.
+  detected at undefined/ant`. That message names no resolvable path, so nothing can act on it — registered as **311**.
+  The pass-measurement instruments (`.spike/delegate-20261106/pass-report.mjs`, `latency-pass.mjs`) are in gitignored
+  scratch and need a row to be promoted into `tools/` — registered as **312**.
 - **Research (ROADMAP 298, satisfied on intake):** `docs/reviews/base-agent-product-topology-research.md` landed and is
   **verified** — a `## Delegate corrections` block at its foot records four citation defects it contains
   (`src/queuesync.mjs` and `docs/extensions.mjs` do not exist; the config keys are `DURIG_EXTENSIONS` /
